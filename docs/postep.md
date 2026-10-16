@@ -1,32 +1,66 @@
 # Financial Intel – postęp
 
-**Stan:** E0 (fundament, wersja 0.1.0) zrobiony na gałęzi `claude/e0-fundament`, PR #1 do `main` – CI zielone (Linux,
-E2E, Windows: build, smoke, test aktualizacji portable i instalatora); czeka na scalenie. Po scaleniu CI publikuje
-wydanie 0.1.0.
-**Następny krok:** odbiór E0 przez użytkownika (instalacja na Windows), potem komunikat „Przed etapem E1”.
+**Stan:** E0 zakończony – PR #1 scalony do `main` 16.10.2026, wydanie 0.1.0 publikuje CI. Gałąź następnego etapu:
+`claude/e1-model` (na razie tylko dokumenty).
+**Następny krok:** czekamy na komendę użytkownika do startu grupy A (E1, ewentualnie E1 + E2) – odpowiedzi na pytania
+z „Przed etapem E1” niżej.
+
+## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
+- Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
+- Bez komendy użytkownika nie zaczynam kolejnego etapu ani grupy.
+- Etapy, które mogą iść jednym ciągiem, są zgrupowane: w grupie bez pauzy między etapami (każdy etap i tak kończy się
+  testami, `/code-review` high, commitem i wpisem tutaj), jeden PR i jedno wydanie na grupę, potem pauza.
 
 ## Kolejka prac
 
 Czas = praca Claude Code w sesji (czytanie, pisanie, testy, poprawki), bez testowania przez użytkownika i bez czekania
-na CI. Model i thinking z górką (prośba użytkownika 16.10.2026). E0 zmierzony; szacunki E1–E9 przeliczone po E0.
+na CI. Model i thinking z górką. E0 zmierzony; reszta przeliczona na jego podstawie, z zapasem.
 
-| Etap | Model | Thinking | Czas Claude'a | Stan |
-| --- | --- | --- | --- | --- |
-| E0 Fundament → 0.1.0 | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | ✅ PR #1, CI zielone, czeka na scalenie |
-| E1 Model i silnik → 0.2.0 | Opus 5.5 | max | 2–3 h | ⏳ |
-| E2 Import mBank → 0.3.0 | Opus 5.5 | xhigh | 1,5–2,5 h | ⏳ (potrzebny CSV z mBanku) |
-| E3 Start i plan miesiąca → 0.4.0 | Opus 5.5 | xhigh | 2–3 h | ⏳ |
-| E4 Mostek i szybki wpis → **1.0.0** | Opus 5.5 | xhigh | 2–3 h | ⏳ |
-| 🏁 **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 9–13 h** | |
-| E5 ICTTJ i dokowanie | Opus 5.5 | max | 2–3 h | ⏳ |
-| E6 Radar i należności | Opus 5.5 | xhigh | 1,5–2 h | ⏳ |
-| E7 Dowództwo | Opus 5.5 | max | 2–3 h | ⏳ |
-| E8 Wywiad i raporty | Opus 5.5 | xhigh | 2,5–3,5 h | ⏳ |
-| E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 1,5–2 h | ⏳ |
-| **Całość E0–E9** | | | **ok. 21–30 h** | |
+| Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| – | E0 Fundament | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | 0.1.0 | – | ✅ scalony |
+| **A** | E1 Model i silnik (+ E2 Import mBank, gdy jest CSV) | Opus 5.5 | **max** | E1: 2–3 h · z E2: 3,5–5,5 h | 0.2.0 (z E2: 0.3.0) | odpowiedzi „Przed E1”; do E2 zanonimizowany CSV z mBanku | ⏳ czeka na komendę |
+| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | xhigh | 4–6 h | **1.0.0** | odbiór grupy A | ⏳ |
+| 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 9–13 h** | | | |
+| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 3,5–5 h | 1.1.0 | ścieżka folderu ICTTJ, zanonimizowana kopia `payouts/` | ⏳ |
+| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 4,5–6,5 h | 1.2.0 | akceptacja listy misji, osiągnięć i smaczków ICT | ⏳ |
+| **E** | E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 1,5–2 h | 1.3.0 | klucz API Claude | ⏳ |
+| | **Całość E0–E9** | | | **ok. 21–30 h** | | | |
 
-Dla porównania (prośba użytkownika 16.10): programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni,
-MVP ok. 2–3 miesięcy, całość ok. 4–6 miesięcy (szacunek zgrubny).
+Dlaczego tak: E1 (silnik pieniędzy) ma najwięcej reguł – sam albo z E2, gdy przed startem jest plik CSV; E3 i E4 to
+ekrany na gotowym silniku i razem dają wydanie 1.0.0; E5 i E6 to przepływy z zewnątrz (ICTTJ, pożyczki, należności);
+E7 i E8 to warstwa gry i analiz na gotowych danych – obie potrzebują wcześniej zaakceptowanych list.
+
+Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
+całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## Przed etapem E1 (grupa A)
+
+1. **Co trzeba wiedzieć**
+   - Zakres E1 (`plan.md`): pełne schematy zod wszystkich rekordów (operacja z podziałem paragonu, kontener, cel,
+     plan miesiąca, dokowanie, pożyczka, saldo, gra), kwoty w groszach, silnik `shared/calc/fleet.ts` z testami na
+     przykładach ze specyfikacji (dokowanie 5 000 zł, pensja z kadłuba, odkładka OC, przydział dzienny, „do zwrotu”,
+     pule Cele / Podatek), konta i kategorie w Ustawieniach, ekran Operacje (dodawanie, edycja z historią, usuwanie
+     z „Cofnij”, filtry, wyszukiwanie). Wydanie 0.2.0.
+   - E0 zakończony (0.1.0); w ICTTJ jest błąd do zgłoszenia (kopia konfliktu `journal.json`), FI ma go poprawionego.
+   - E2 można dołączyć do tej grupy, jeśli przed startem dostanę CSV z mBanku – wtedy wydanie 0.3.0.
+2. **Pytania z propozycją**
+   - **Kategorie startowe** (spec: 9 głównych z podkategoriami, do edycji). Propozycja podkategorii:
+     Jedzenie (zakupy spożywcze, na mieście, kawa i przekąski) · Dom (czynsz i opłaty, media, wyposażenie, chemia) ·
+     Auto (paliwo, serwis, ubezpieczenie, parking i opłaty) · Zwierzęta (karma, weterynarz, akcesoria) · Zdrowie
+     (leki, lekarz, sport) · Rozrywka i hobby (wyjścia, hobby, podróże) · Subskrypcje i łączność (telefon, internet,
+     streaming, aplikacje) · Osobiste (ubrania, kosmetyki, fryzjer) · Prezenty i inne (prezenty, inne). Do tego
+     kategoria systemowa „Gotówka” (wypłata z bankomatu – spec).
+   - **Konta startowe:** mBank i Portfel XTB, nazwy do zmiany, saldo otwarcia z datą wpisywane w Ustawienia → Konta
+     (rekord `balances/`); pełny kreator startu przyjdzie w E3.
+   - **Wygląd kwot na liście operacji:** wpływy zielone z „+”, wydatki bez koloru z „−”, zwrot towaru zielony
+     (czerwień tylko dla przekroczeń i alarmów).
+   - **Grupa A:** czy dołączasz CSV z mBanku teraz (E1 + E2 jednym ciągiem), czy E2 osobno później?
+3. **Co przygotować**
+   - Odbiór 0.1.0 na Windows (lista w sekcji E0 niżej).
+   - Jeśli E1 + E2: zanonimizowany plik CSV z historii rachunku mBanku (kilka miesięcy; nazwy kontrahentów mogą zostać,
+     numery kont i nazwiska zamaskuj) – trafi do `tests/fixtures/`.
+4. **Model, thinking, czas:** Opus 5.5 · **max** (silnik pieniędzy – najwięcej reguł); E1: 2–3 h, E1 + E2: 3,5–5,5 h.
 
 ## E0 – fundament (16.10.2026)
 
@@ -77,4 +111,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 16.10.2026 – przegląd punktów styku z ICTTJ (D54–D60): konto tradingowe tylko w ICTTJ, bez etapu „Okręt bojowy”,
   bez kosztów i bilansu tradingu; menu boczne potwierdzone (D44).
 - 16.10.2026 – „Przed etapem E0”: D61 (repozytorium publiczne), D62–D66; roadmapa z modelem i thinking z górką.
-- 16.10.2026 – E0 zrobiony (0.1.0), PR do `main`.
+- 16.10.2026 – E0 zrobiony (0.1.0), PR #1 scalony do `main`.
+- 16.10.2026 – zasady prowadzenia (D67): tabela po każdym kroku, bez komendy nie zaczynam etapu, grupy A–E.
