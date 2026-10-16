@@ -16,5 +16,6 @@
     "src/renderer/lib/format.ts",
     "tests/**/*",
     "scripts/**/*"
-  ]
+  ],
+  "exclude": ["tests/unit/data-store.test.ts"]
 }

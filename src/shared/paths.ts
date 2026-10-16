@@ -51,7 +51,8 @@ const CANONICAL: Record<FileKind, RegExp> = {
 
 /** Stem prefixes used to recognize copies made by sync tools (anything appended after a canonical stem). */
 const STEM_PREFIX: Record<FileKind, RegExp> = {
-  fi: /^(fi)(.+)$/,
+  // A separator after the short stem: "fi-PC", "fi (1)", "fi.sync-conflict-…" are copies, "firma.json" is not.
+  fi: /^(fi)([- (.].*)$/,
   ...(Object.fromEntries(COLLECTIONS.map((c) => [c, new RegExp(`^(${STEMS[LAYOUTS[c]]})(.+)$`)])) as Record<Collection, RegExp>)
 }
 

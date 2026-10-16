@@ -1,0 +1,299 @@
+// adapted from ICTTJ tests/update/windows-update.spec.ts @ 84a8339
+/**
+ * End-to-end update on Windows (CI): the current build (release/) finds the next version (release-next/,
+ * built with the following patch number) on a local stand-in for GitHub Releases, downloads it in the
+ * background and replaces itself – the portable exe in place, the installed app with the silent
+ * installer – then starts the new version. Each step has its own deadline; on failure the logs of the
+ * app and of the swap helper are printed into the CI log.
+ */
+import { createReadStream, existsSync, mkdtempSync, promises as fs, readFileSync, statSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { _electron as electron, chromium, expect, test, type Browser, type Page } from '@playwright/test'
+import { APP_EXE, PORTABLE, PRODUCT, SETUP, appProcessPaths, dump, powershell, readText, sha256, shots, sleep, stopApp } from './util'
+
+const FROM = resolve(process.env.FI_UPDATE_FROM ?? 'release')
+const TO = resolve(process.env.FI_UPDATE_TO ?? 'release-next')
+const NEXT = process.env.FI_UPDATE_TO_VERSION ?? ''
+const CURRENT = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version
+
+test.skip(process.platform !== 'win32' || !NEXT, 'Windows CI only: needs the next version built into release-next (ci.yml)')
+test.describe.configure({ mode: 'serial' })
+
+/** The per-user installation from the uninstall registry key written by the NSIS installer. */
+function installed(): { dir: string; version: string } | null {
+  const out = powershell(
+    `Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | Get-ItemProperty | Where-Object { $_.DisplayName -like '${PRODUCT} *' } | Select-Object -First 1 | ForEach-Object { $_.DisplayVersion + '|' + $_.UninstallString }`
+  )
+  const [version, uninstall] = out.split('|')
+  const uninstaller = /"([^"]+)"/.exec(uninstall ?? '')?.[1]
+  return version && uninstaller ? { version: version.trim(), dir: dirname(uninstaller) } : null
+}
+
+/** Version from package.json inside resources/app.asar (asar: 8-byte size pickle, JSON header pickle, files). */
+async function asarVersion(asar: string): Promise<string> {
+  const fd = await fs.open(asar, 'r')
+  try {
+    const head = Buffer.alloc(16)
+    await fd.read(head, 0, 16, 0)
+    const headerSize = head.readUInt32LE(4)
+    const json = Buffer.alloc(head.readUInt32LE(12))
+    await fd.read(json, 0, json.length, 16)
+    const entry = (JSON.parse(json.toString('utf8')) as { files: Record<string, { offset: string; size: number }> }).files['package.json']!
+    const pkg = Buffer.alloc(entry.size)
+    await fd.read(pkg, 0, entry.size, 8 + headerSize + Number(entry.offset))
+    return (JSON.parse(pkg.toString('utf8')) as { version: string }).version
+  } finally {
+    await fd.close()
+  }
+}
+
+let server: Server
+let storage: Server
+let base = ''
+const hits: string[] = []
+/**
+ * A private repository (the token path of the updater; the real repository is public – D61) – the API answers only with this token (the portable test), files come from the asset
+ * URL in the API, which redirects to GitHub's file storage (another host here: localhost vs 127.0.0.1); the storage
+ * refuses a request carrying the token, as GitHub's does, so a leaked Authorization header fails the update.
+ */
+const TOKEN = 'github_pat_ci_update_test_0123456789_abcdefghij'
+let privateToken: string | null = null
+const storageAuth: Array<string | null> = []
+
+test.beforeAll(async () => {
+  const files = [PORTABLE, SETUP]
+  const sums = (await Promise.all(files.map(async (f) => `${await sha256(join(TO, f))}  ${f}\n`))).join('')
+  storage = createServer((req, res) => {
+    storageAuth.push(req.headers.authorization ?? null)
+    if (req.headers.authorization) return void res.writeHead(400).end('only one auth mechanism allowed')
+    const name = decodeURIComponent(req.url ?? '/').replace(/^\/file\//, '')
+    if (name === 'SHA256SUMS.txt') return void res.end(sums)
+    if (!files.includes(name)) return void res.writeHead(404).end()
+    res.writeHead(200, { 'Content-Length': String(statSync(join(TO, name)).size), 'Content-Type': 'application/octet-stream' })
+    createReadStream(join(TO, name)).pipe(res)
+  })
+  await new Promise<void>((r) => storage.listen(0, 'localhost', r))
+  const storageBase = `http://localhost:${(storage.address() as AddressInfo).port}`
+  const names = [...files, 'SHA256SUMS.txt']
+  server = createServer((req, res) => {
+    const url = decodeURIComponent(req.url ?? '/')
+    hits.push(url)
+    if (privateToken && (url.startsWith('/repos/') || url.startsWith('/download/'))) {
+      const auth = req.headers.authorization
+      if (!auth || url.startsWith('/download/')) return void res.writeHead(404).end('{"message":"Not Found"}')
+      if (auth !== `Bearer ${privateToken}`) return void res.writeHead(401).end('{"message":"Bad credentials"}')
+    }
+    const asset = /^\/repos\/Clatir\/FinancialIntel\/releases\/assets\/(\d+)$/.exec(url)
+    if (asset) {
+      const name = names[Number(asset[1])]
+      if (!name || req.headers.accept !== 'application/octet-stream') return void res.writeHead(404).end()
+      return void res.writeHead(302, { Location: `${storageBase}/file/${encodeURIComponent(name)}` }).end()
+    }
+    if (url === '/repos/Clatir/FinancialIntel/releases/latest') {
+      const release = {
+        tag_name: `v${NEXT}`,
+        prerelease: false,
+        name: `Financial Intel ${NEXT}`,
+        body: `## Test aktualizacji\n- wersja ${NEXT} zbudowana w CI`,
+        published_at: new Date().toISOString(),
+        html_url: `https://github.com/Clatir/FinancialIntel/releases/tag/v${NEXT}`,
+        assets: [
+          ...files.map((f, i) => ({ name: f, size: statSync(join(TO, f)).size, browser_download_url: `${base}/download/${f}`, url: `${base}/repos/Clatir/FinancialIntel/releases/assets/${i}` })),
+          {
+            name: 'SHA256SUMS.txt',
+            size: Buffer.byteLength(sums),
+            browser_download_url: `${base}/download/SHA256SUMS.txt`,
+            url: `${base}/repos/Clatir/FinancialIntel/releases/assets/${files.length}`
+          }
+        ]
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(release))
+      return
+    }
+    const name = url.replace(/^\/download\//, '')
+    if (name === 'SHA256SUMS.txt') {
+      res.end(sums)
+      return
+    }
+    if (!files.includes(name)) {
+      res.writeHead(404).end()
+      return
+    }
+    res.writeHead(200, { 'Content-Length': String(statSync(join(TO, name)).size), 'Content-Type': 'application/octet-stream' })
+    createReadStream(join(TO, name)).pipe(res)
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+})
+
+test.afterAll(async () => {
+  for (const s of [server, storage]) {
+    s?.closeAllConnections()
+    await new Promise<void>((r) => (s ? s.close(() => r()) : r()))
+  }
+})
+
+function appEnv(root: string, token: string | null = null): Record<string, string> {
+  return {
+    ...(token ? { FI_UPDATE_TOKEN: token } : {}),
+    ...(process.env as Record<string, string>),
+    FI_USER_DATA: join(root, 'userData'),
+    FI_DATA_DIR: join(root, 'FinancialIntel'),
+    FI_MACHINE_NAME: 'CI-UPDATE',
+    // The proposal of the first-run screen: never the machine's OneDrive.
+    FI_DEFAULT_DATA_DIR: join(root, 'OneDrive', 'FinancialIntel'),
+    FI_UPDATE_URL: base,
+    FI_UPDATE_CHECK_DELAY_MS: '1000',
+    ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
+  }
+}
+
+/** The click starts quitting; the window may be gone before Playwright finishes the action. */
+const ignoreClosed = (e: unknown) => {
+  if (!/closed|Target|disconnected/i.test(String(e))) throw e
+}
+
+const devtoolsUp = (port: number) => fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)
+
+async function appPage(browser: Browser): Promise<Page> {
+  for (let i = 0; i < 240; i++) {
+    const page = browser
+      .contexts()
+      .flatMap((c) => c.pages())
+      .find((p) => p.url().includes('index.html'))
+    if (page) return page
+    await sleep(500)
+  }
+  throw new Error('Okno aplikacji nie pojawiło się w DevTools.')
+}
+
+test('portable: pobranie w tle, podmiana exe po zamknięciu i start nowej wersji', async () => {
+  test.setTimeout(12 * 60_000)
+  const root = mkdtempSync(join(tmpdir(), 'fi-upd-'))
+  const dir = join(root, 'Moje programy') // a space in the path, like most user folders
+  await fs.mkdir(dir, { recursive: true })
+  const exe = join(dir, PORTABLE)
+  await fs.copyFile(join(FROM, PORTABLE), exe)
+  const userData = join(root, 'userData')
+  const mainLog = join(userData, 'logs', 'main.log')
+  const nextHash = await sha256(join(TO, PORTABLE))
+  // The portable launcher passes its arguments to the app: DevTools endpoint for the test.
+  const port = 9300 + Math.floor(Math.random() * 600)
+  // This build checks a private repository: only with the token, files through the API and the storage without it.
+  privateToken = TOKEN
+  storageAuth.length = 0
+  const launcher = spawn(exe, [`--remote-debugging-port=${port}`], { env: appEnv(root, TOKEN), stdio: 'ignore' })
+  launcher.on('error', (e) => console.error('launcher', e))
+  let browser: Browser | null = null
+  let step = 'start aplikacji portable (DevTools)'
+  try {
+    await expect.poll(() => devtoolsUp(port), { timeout: 120_000, intervals: [1000] }).toBe(true)
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { noDefaults: true })
+    const page = await appPage(browser)
+    // The data folder is open: the bridge with the side menu.
+    await expect(page.getByTestId('page-bridge')).toBeVisible({ timeout: 60_000 })
+
+    step = 'sprawdzenie i pobranie w tle'
+    await expect.poll(() => readText(mainLog), { timeout: 60_000, intervals: [500] }).toMatch(/update ready|update download failed|update check failed/)
+    const ready = page.getByTestId('banner-update-ready')
+    await expect(ready).toBeVisible({ timeout: 30_000 })
+    await expect(ready).toContainText(`Wersja ${NEXT} jest pobrana`)
+    expect(await sha256(`${exe}.update`)).toBe(nextHash)
+    // The exe and SHA256SUMS.txt from the storage, without the token; no browser download link was used.
+    expect(storageAuth.length).toBeGreaterThanOrEqual(2)
+    expect(storageAuth.every((a) => a === null)).toBe(true)
+    expect(hits.filter((h) => h.startsWith('/download/'))).toEqual([])
+    await page.screenshot({ path: shots('90-aktualizacja-portable-gotowa') })
+
+    step = 'zamknięcie aplikacji i start pomocnika'
+    await page.getByTestId('banner-restart-update').click().catch(ignoreClosed)
+    await expect.poll(() => readText(mainLog), { timeout: 60_000, intervals: [500] }).toContain(`installing update ${NEXT} (portable, restart=true)`)
+
+    step = 'podmiana exe przez pomocnika'
+    await expect.poll(() => sha256(exe).catch(() => ''), { timeout: 180_000, intervals: [1000] }).toBe(nextHash)
+
+    step = 'start nowej wersji'
+    await expect.poll(() => readText(mainLog), { timeout: 120_000, intervals: [1000] }).toContain(`updated ${CURRENT} -> ${NEXT}`)
+    const helperLog = await readText(join(userData, 'logs', 'update.log'))
+    expect(helperLog).toContain('swapped')
+    expect(helperLog).toContain('restarted')
+    // The status window stays until the new version's window is there (the helper sees it).
+    await expect.poll(() => readText(join(userData, 'logs', 'update.log')), { timeout: 60_000, intervals: [1000] }).toContain('new window after')
+    expect(existsSync(`${exe}.update`)).toBe(false)
+    expect(existsSync(`${exe}.old`)).toBe(false)
+    await dump('portable: OK', userData, [dir])
+  } catch (e) {
+    console.log(`Nieudany etap: ${step}; zapytania do serwera: ${hits.join(', ')}`)
+    await dump(`portable: ${step}`, userData, [dir])
+    throw e
+  } finally {
+    privateToken = null
+    await browser?.close().catch(() => undefined)
+    await stopApp()
+  }
+})
+
+test('zainstalowana: cichy instalator nowej wersji w tym samym folderze i start nowej wersji', async () => {
+  test.setTimeout(12 * 60_000)
+  const root = mkdtempSync(join(tmpdir(), 'fi-inst-'))
+  const userData = join(root, 'userData')
+  const mainLog = join(userData, 'logs', 'main.log')
+  let step = 'instalacja bieżącej wersji (Setup /S)'
+  let installDir = ''
+  try {
+    const setup = spawnSync(join(FROM, SETUP), ['/S'], { stdio: 'ignore', timeout: 600_000 })
+    expect(setup.status).toBe(0)
+    await expect.poll(() => installed()?.version, { timeout: 120_000, intervals: [1000] }).toBe(CURRENT)
+    const before = installed()!
+    installDir = before.dir
+    const exe = join(before.dir, APP_EXE)
+    expect(existsSync(join(before.dir, `Uninstall ${PRODUCT}.exe`))).toBe(true)
+    expect(await asarVersion(join(before.dir, 'resources', 'app.asar'))).toBe(CURRENT)
+
+    step = 'sprawdzenie i pobranie w tle'
+    const app = await electron.launch({ executablePath: exe, env: appEnv(root) })
+    const page = await app.firstWindow()
+    await expect(page.getByTestId('page-bridge')).toBeVisible({ timeout: 60_000 })
+    await expect.poll(() => readText(mainLog), { timeout: 60_000, intervals: [500] }).toMatch(/update ready|update download failed|update check failed/)
+    const ready = page.getByTestId('banner-update-ready')
+    await expect(ready).toBeVisible({ timeout: 30_000 })
+    await expect(ready).toContainText(`Wersja ${NEXT} jest pobrana`)
+    expect(await sha256(join(userData, 'updates', SETUP))).toBe(await sha256(join(TO, SETUP)))
+    // Settings → Aktualizacje: this version, installed, the downloaded one waiting for a restart.
+    await page.getByTestId('nav-settings').click()
+    await page.getByTestId('settings-tab-updates').click()
+    await expect(page.getByTestId('current-version')).toHaveText(CURRENT)
+    await expect(page.getByTestId('restart-update')).toBeVisible()
+    await page.screenshot({ path: shots('91-aktualizacja-instalator-gotowa') })
+
+    step = 'zamknięcie aplikacji i start instalatora'
+    const closed = app.waitForEvent('close', { timeout: 120_000 })
+    await page.getByTestId('banner-restart-update').click().catch(ignoreClosed)
+    await closed
+    expect(await readText(mainLog)).toContain(`installing update ${NEXT} (installer, restart=true)`)
+
+    step = 'cicha instalacja nowej wersji'
+    await expect.poll(() => installed()?.version, { timeout: 300_000, intervals: [2000] }).toBe(NEXT)
+    expect(installed()!.dir.toLowerCase()).toBe(before.dir.toLowerCase())
+    await expect.poll(() => asarVersion(join(before.dir, 'resources', 'app.asar')).catch(() => ''), { timeout: 120_000, intervals: [2000] }).toBe(NEXT)
+
+    // --force-run: the installer starts the new version by itself.
+    step = 'start nowej wersji po instalacji'
+    await expect
+      .poll(() => appProcessPaths().some((p) => p.toLowerCase() === exe.toLowerCase()), { timeout: 180_000, intervals: [1000] })
+      .toBe(true)
+    // The status helper started with the installer saw the new window.
+    await expect.poll(() => readText(join(userData, 'logs', 'update.log')), { timeout: 120_000, intervals: [1000] }).toContain('new window after')
+    await dump('zainstalowana: OK', userData, [before.dir, join(userData, 'updates')])
+  } catch (e) {
+    console.log(`Nieudany etap: ${step}; zapytania do serwera: ${hits.join(', ')}`)
+    await dump(`zainstalowana: ${step}`, userData, [installDir || root, join(userData, 'updates')])
+    throw e
+  } finally {
+    await stopApp()
+  }
+})
