@@ -1,7 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** E0 (fundament, wersja 0.1.0) zrobiony na gałęzi `claude/e0-fundament`, PR do `main` – czeka na zielone CI
-(Linux + Windows) i scalenie. Po scaleniu CI publikuje wydanie 0.1.0.
+**Stan:** E0 (fundament, wersja 0.1.0) zrobiony na gałęzi `claude/e0-fundament`, PR #1 do `main` – CI zielone (Linux,
+E2E, Windows: build, smoke, test aktualizacji portable i instalatora); czeka na scalenie. Po scaleniu CI publikuje
+wydanie 0.1.0.
 **Następny krok:** odbiór E0 przez użytkownika (instalacja na Windows), potem komunikat „Przed etapem E1”.
 
 ## Kolejka prac
@@ -11,7 +12,7 @@ na CI. Model i thinking z górką (prośba użytkownika 16.10.2026). E0 zmierzon
 
 | Etap | Model | Thinking | Czas Claude'a | Stan |
 | --- | --- | --- | --- | --- |
-| E0 Fundament → 0.1.0 | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | ✅ PR, czeka na CI i scalenie |
+| E0 Fundament → 0.1.0 | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | ✅ PR #1, CI zielone, czeka na scalenie |
 | E1 Model i silnik → 0.2.0 | Opus 5.5 | max | 2–3 h | ⏳ |
 | E2 Import mBank → 0.3.0 | Opus 5.5 | xhigh | 1,5–2,5 h | ⏳ (potrzebny CSV z mBanku) |
 | E3 Start i plan miesiąca → 0.4.0 | Opus 5.5 | xhigh | 2–3 h | ⏳ |
