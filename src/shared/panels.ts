@@ -216,18 +216,8 @@ export function samePageLayout(a: PageLayout, b: PageLayout): boolean {
   return canon(a) === canon(b)
 }
 
-/** Names of pages in the Układ menu. */
+/** Names of the pages outside the screens' list (the screens: `PAGES` in renderer/features/screens/pages.tsx). */
 export const PAGE_LABELS: Record<string, string> = {
-  bridge: 'Mostek',
-  operations: 'Operacje',
-  import: 'Import',
-  month: 'Plan miesiąca',
-  cargo: 'Ładownia',
-  starmap: 'Mapa gwiezdna',
-  radar: 'Radar',
-  command: 'Dowództwo',
-  intel: 'Wywiad',
-  reports: 'Raporty',
   settings: 'Ustawienia',
   sync: 'Synchronizacja'
 }

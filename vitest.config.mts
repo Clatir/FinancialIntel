@@ -1,3 +1,4 @@
+// adapted from ICTTJ vitest.config.mts @ 84a8339
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'

@@ -3,16 +3,21 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { DateTime } from 'luxon'
 import type { BackupInfo } from '@shared/api'
-import { isIgnoredPath } from '@shared/paths'
+import { COLLECTIONS, SETTINGS_FILE, isIgnoredPath } from '@shared/paths'
 import { zipFolder } from './zip'
 
 /** Daily backups kept (decision D31). */
 export const DAILY_KEEP = 30
 export const MANUAL_KEEP = 5
 
-/** Everything that belongs to the data folder, without backups, history, presence and temp files. */
+/**
+ * The data: fi.json and the JSON records of the collections – never other files that happen to be in the folder (a
+ * backups folder or exported ZIPs chosen inside it would otherwise go into every backup).
+ */
 export function isDataFile(rel: string): boolean {
-  return !isIgnoredPath(rel)
+  if (isIgnoredPath(rel)) return false
+  if (rel === SETTINGS_FILE) return true
+  return rel.endsWith('.json') && COLLECTIONS.some((c) => rel.startsWith(`${c}/`))
 }
 
 async function list(dir: string): Promise<Array<{ name: string; path: string; mtimeMs: number; bytes: number }>> {
@@ -39,7 +44,7 @@ async function rotate(dir: string, keep: number): Promise<void> {
 }
 
 /**
- * Startup backup: a daily ZIP of the whole data folder (JSON records only – the folder is small), the last 30 kept.
+ * Startup backup: a daily ZIP of the data (`isDataFile`), the last 30 kept.
  * Returns the new file, or null when today's backup exists already.
  */
 export async function runBackups(root: string, backupsDir: string, now = new Date()): Promise<string | null> {

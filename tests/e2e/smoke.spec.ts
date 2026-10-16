@@ -152,3 +152,35 @@ test('panele: zwijanie, powiększenie, ukrywanie z menu Układ i osobne okno', a
     await app.close()
   }
 })
+
+test('folder danych: nigdy w folderze ICTTJ, bez drugiego FinancialIntel w trakcie synchronizacji', async () => {
+  const { app, page, userData, errors } = await launch({ usePreset: false })
+  try {
+    await expect(page.getByTestId('folder-setup')).toBeVisible()
+    const base = join(userData, '..')
+    const ictj = join(base, 'Dziennik')
+    await fs.mkdir(join(ictj, 'trades'), { recursive: true })
+    await fs.writeFile(join(ictj, 'journal.json'), '{}')
+    const proposal = join(base, 'OneDrive', 'FinancialIntel')
+    await fs.mkdir(join(proposal, 'transactions', '2026'), { recursive: true })
+    type Open = (dir: string, create: boolean) => Promise<{ ok: boolean; message?: string }>
+    const open = (dir: string) => page.evaluate((d) => (globalThis as unknown as { fi: { openDataDir: Open } }).fi.openDataDir(d, true), dir)
+
+    for (const dir of [ictj, join(ictj, 'trades')]) {
+      const res = await open(dir)
+      expect(res.ok).toBe(false)
+      expect(res.message).toContain('ICT Trade Journal')
+    }
+    expect(await fs.readdir(ictj)).toEqual(['journal.json', 'trades'])
+
+    // OneDrive has the folders but not fi.json yet: no new data (and no FinancialIntel\FinancialIntel).
+    await page.getByTestId('setup-default').click()
+    await expect(page.getByTestId('setup-message')).toContainText('bez pliku fi.json')
+    await expect(page.getByTestId('retry-folder')).toBeVisible()
+    await expect(page.getByTestId('create-here')).toHaveCount(0)
+    expect(await fs.readdir(proposal)).toEqual(['transactions'])
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

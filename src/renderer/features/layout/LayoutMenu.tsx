@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { PAGE_LABELS, hiddenPanels, isEmptyPageLayout, pageLayoutOf, samePageLayout } from '@shared/panels'
 import type { LayoutPreset } from '@shared/schema'
 import { Popover } from '../../components/Popover'
+import { pageDef } from '../screens/pages'
 import { IconCheck, IconClose, IconLayout } from '../../components/icons'
 import { cx } from '../../components/ui'
 import { useColumns } from '../../store/columns'
@@ -47,7 +48,7 @@ export function LayoutMenu() {
   const readOnly = useData((s) => s.status?.readOnly ?? true)
   const presets = useLayoutPresets()
   const hidden = hiddenPanels(page, panels)
-  const label = PAGE_LABELS[page] ?? page
+  const label = pageDef(page)?.label ?? PAGE_LABELS[page] ?? page
   return (
     <Popover
       label={

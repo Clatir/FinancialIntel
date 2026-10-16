@@ -59,21 +59,26 @@ export function formatZodError(error: z.ZodError): string {
     .join('; ')
 }
 
-/** Parse JSON text of a record file: JSON → migrations → schema validation. Never throws. */
-export function parseRecordText<K extends FileKind>(kind: K, text: string): ParseOutcome<K> {
+/**
+ * Parse JSON text of a record file: JSON → migrations → schema validation. Never throws. `idHint` = the id the file's
+ * name carries (`idFromPath`), used when the file has none.
+ */
+export function parseRecordText<K extends FileKind>(kind: K, text: string, idHint?: string | null): ParseOutcome<K> {
   let raw: unknown
   try {
     raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text)
   } catch (e) {
     return { ok: false, error: `Uszkodzony JSON: ${(e as Error).message}` }
   }
-  return parseRecordObject(kind, raw)
+  return parseRecordObject(kind, raw, idHint)
 }
 
-export function parseRecordObject<K extends FileKind>(kind: K, raw: unknown): ParseOutcome<K> {
+export function parseRecordObject<K extends FileKind>(kind: K, raw: unknown, idHint?: string | null): ParseOutcome<K> {
   let migrated
   try {
-    migrated = migrateRaw(kind, raw)
+    const withId =
+      idHint && raw && typeof raw === 'object' && !Array.isArray(raw) && typeof (raw as { id?: unknown }).id !== 'string' ? { ...(raw as object), id: idHint } : raw
+    migrated = migrateRaw(kind, withId)
   } catch (e) {
     if (e instanceof SchemaTooNewError) return { ok: false, error: e.message, tooNewVersion: e.fileVersion }
     return { ok: false, error: (e as Error).message }

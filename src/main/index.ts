@@ -1,18 +1,18 @@
 // adapted from ICTTJ src/main/index.ts @ 84a8339
 import { existsSync, promises as fs } from 'node:fs'
 import { hostname } from 'node:os'
-import { dirname, join, parse } from 'node:path'
+import { basename, dirname, join, parse } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, net, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
 import type { AppInfo, ChangeSet, HistoryKind, HistoryReason, OpenFolderResult, TrayPrefs } from '@shared/api'
-import { isIgnoredPath, type Collection } from '@shared/paths'
+import type { Collection } from '@shared/paths'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
 import { DataStore } from './datastore/store'
 import { FolderWatcher } from './datastore/watch'
 import { clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
-import { listBackups, manualBackup, runBackups } from './datastore/backup'
+import { isDataFile, listBackups, manualBackup, runBackups } from './datastore/backup'
 import { zipFolder } from './datastore/zip'
 import { Updater } from './update/updater'
 import { startPortableSwap, startSilentInstaller } from './update/apply'
@@ -248,9 +248,25 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
   try {
     let target = dir
     let kind = await DataStore.inspect(target)
-    if (kind === 'other' && createIfEmpty) {
+    if (kind === 'ictj' || (await insideIctj(dir))) {
+      return { ok: false, reason: 'not-data', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
+    }
+    // A folder of other files gets a FinancialIntel subfolder – not the proposal itself (already named so) and not a
+    // folder of FI data whose fi.json has not arrived yet.
+    if (kind === 'other' && createIfEmpty && basename(dir) !== DATA_FOLDER_NAME) {
       target = join(dir, DATA_FOLDER_NAME)
       kind = await DataStore.inspect(target)
+    }
+    if (kind === 'partial' || (kind === 'other' && createIfEmpty)) {
+      return {
+        ok: false,
+        reason: 'not-data',
+        dir: target,
+        message:
+          kind === 'partial'
+            ? 'W tym folderze są już dane Financial Intel, ale bez pliku fi.json – OneDrive pewnie jeszcze go pobiera. Poczekaj chwilę i spróbuj ponownie (nowe dane nie są tworzone, żeby nie rozdzielić budżetu).'
+            : `Folder ${DATA_FOLDER_NAME} zawiera inne pliki – wybierz pusty folder.`
+      }
     }
     if (kind === 'missing' || kind === 'empty') {
       if (!createIfEmpty) {
@@ -307,6 +323,12 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
     log('error', `open failed ${dir}`, e)
     return { ok: false, reason: 'error', dir, message: (e as Error).message }
   }
+}
+
+/** The folder or one of its parents up to the drive is an ICT Trade Journal data folder (journal.json). */
+async function insideIctj(dir: string): Promise<boolean> {
+  for (let d = dirname(dir), prev = dir; d !== prev; prev = d, d = dirname(d)) if ((await DataStore.inspect(d)) === 'ictj') return true
+  return false
 }
 
 function requireStore(): DataStore {
@@ -429,7 +451,7 @@ function registerIpc(): void {
       filters: [{ name: 'ZIP', extensions: ['zip'] }]
     })
     if (res.canceled || !res.filePath) return null
-    await zipFolder(s.root, res.filePath, (rel) => !isIgnoredPath(rel))
+    await zipFolder(s.root, res.filePath, isDataFile)
     return res.filePath
   })
   handle('copyText', async (text: string) => {

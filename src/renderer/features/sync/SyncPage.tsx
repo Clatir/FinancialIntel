@@ -50,7 +50,8 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
   const resolve = async (keep: 'canonical' | 'copy') => {
     setBusy(true)
     try {
-      await flushSaves()
+      // Unsaved local edits would be written over the version kept here (e.g. a kept copy of fi.json).
+      if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.')
       await api.resolveConflict(c.id, keep)
       toast('Konflikt rozstrzygnięty – odrzucona wersja jest w Koszu.', 'success')
     } catch (e) {
@@ -216,7 +217,10 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
     let untouched = 0
     const errors = new Set<string>()
     try {
-      await flushSaves()
+      if (!(await flushSaves())) {
+        toast('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.', 'error', 6000)
+        return
+      }
       const failedGroups = new Set<string>()
       for (const r of plan.resolutions) {
         // The newest copy of a file could not be kept: the older ones of that file stay (nothing newer is binned).

@@ -10,6 +10,7 @@ import {
   SETTINGS_FILE,
   classifyCanonical,
   detectConflictName,
+  idFromPath,
   isIgnoredPath,
   kindOfDir,
   recordRelPath,
@@ -24,6 +25,9 @@ import { pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atom
 import { mapLimit, walkFiles } from './fsutil'
 import { RecordHistory } from './history'
 import { zipFolder } from './zip'
+
+/** The settings file of an ICT Trade Journal data folder. */
+const ICTJ_FILE = 'journal.json'
 
 interface FileState {
   relPath: string
@@ -58,7 +62,11 @@ export interface DataStoreOptions {
   backupDir?: string | null
 }
 
-export type FolderKind = 'data' | 'empty' | 'other' | 'missing'
+/**
+ * 'partial' = FI's folders without fi.json (OneDrive has not synced it yet – never initialize over it);
+ * 'ictj' = the data folder of ICT Trade Journal (FI never writes there).
+ */
+export type FolderKind = 'data' | 'partial' | 'ictj' | 'empty' | 'other' | 'missing'
 
 type ViewKey = string
 
@@ -156,8 +164,10 @@ export class DataStore {
       return 'missing'
     }
     if (await pathExists(join(root, SETTINGS_FILE))) return 'data'
+    if (await pathExists(join(root, ICTJ_FILE))) return 'ictj'
     const entries = (await fs.readdir(root)).filter((n) => !n.startsWith('.') && n !== 'desktop.ini' && n !== 'Thumbs.db')
-    return entries.length === 0 ? 'empty' : 'other'
+    if (entries.length === 0) return 'empty'
+    return entries.some((n) => (COLLECTIONS as readonly string[]).includes(n)) ? 'partial' : 'other'
   }
 
   /** Create the folder layout and a default fi.json in an empty folder. */
@@ -301,7 +311,7 @@ export class DataStore {
       conflict: null,
       text
     }
-    const outcome = parseRecordText(kind, text)
+    const outcome = parseRecordText(kind, text, idFromPath(rel))
     if (outcome.ok) {
       return {
         ...base,

@@ -1,6 +1,7 @@
 // adapted from ICTTJ src/renderer/features/setup/FolderSetup.tsx @ 84a8339
 import { useEffect, useState } from 'react'
-import { api } from '../../lib/api'
+import { api, errorMessage } from '../../lib/api'
+import { toast } from '../../store/ui'
 import { openResult, useData } from '../../store/data'
 import { IconFolder, IconPlus } from '../../components/icons'
 
@@ -21,11 +22,14 @@ export function FolderSetup() {
     setBusy(true)
     try {
       await openResult(await fn())
+    } catch (e) {
+      toast(errorMessage(e), 'error', 7000)
     } finally {
       setBusy(false)
     }
   }
-  const unavailable = !!message && /niedostępny/.test(message)
+  // Unavailable, or FI data without fi.json yet (OneDrive still syncing): only a retry, never new data.
+  const unavailable = !!message && /niedostępny|pobiera/.test(message)
   return (
     <div className="flex h-full items-center justify-center bg-bg">
       <div className="w-[600px] animate-pop-in border border-line bg-panel" data-testid="folder-setup">
@@ -51,9 +55,12 @@ export function FolderSetup() {
                       Spróbuj ponownie
                     </button>
                   )}
-                  <button className={unavailable ? 'btn' : 'btn btn-accent'} disabled={busy} onClick={() => run(() => api.openDataDir(dir, true))} data-testid="create-here">
-                    <IconPlus size={13} /> Utwórz dane tutaj
-                  </button>
+                  {/* An unavailable folder (OneDrive not started yet) never gets new data: it would split the budget. */}
+                  {!unavailable && /pusty/.test(message) && (
+                    <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.openDataDir(dir, true))} data-testid="create-here">
+                      <IconPlus size={13} /> Utwórz dane tutaj
+                    </button>
+                  )}
                 </div>
               )}
             </div>

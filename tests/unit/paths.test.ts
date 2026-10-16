@@ -1,6 +1,6 @@
 // adapted from ICTTJ tests/unit/paths.test.ts @ 84a8339
 import { describe, expect, it } from 'vitest'
-import { classifyCanonical, COLLECTIONS, detectConflictName, isIgnoredPath, kindOfDir, LAYOUTS, recordRelPath, sanitizeRelPath, SETTINGS_FILE } from '@shared/paths'
+import { classifyCanonical, COLLECTIONS, detectConflictName, idFromPath, isIgnoredPath, kindOfDir, LAYOUTS, recordRelPath, sanitizeRelPath, SETTINGS_FILE } from '@shared/paths'
 
 const ID = '01K6H3Z0W8Q4M2N5P7R9S1T3V5'
 
@@ -120,3 +120,16 @@ describe('pliki konfliktów synchronizacji', () => {
     expect(detectConflictName(`transactions/2026-10-01_${ID}-PC.json`)).toBeNull()
   })
 })
+
+describe('id z nazwy pliku', () => {
+  const ID = '01JB2C3D4E5F6G7H8J9K0MNPQR'
+  it('układ „dated” i „id” (także kopia konfliktu); miesiąc i fi.json bez id', () => {
+    expect(idFromPath(`transactions/2026/2026-10-01_${ID}.json`)).toBe(ID)
+    expect(idFromPath(`transactions/2026/2026-10-01_${ID}-PC.json`)).toBe(ID)
+    expect(idFromPath(`goals/${ID}.json`)).toBe(ID)
+    expect(idFromPath('months/2026-10.json')).toBeNull()
+    expect(idFromPath('fi.json')).toBeNull()
+    expect(idFromPath('transactions/2026/readme.json')).toBeNull()
+  })
+})
+

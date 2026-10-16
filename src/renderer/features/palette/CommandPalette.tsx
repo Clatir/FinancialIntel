@@ -48,7 +48,10 @@ export function CommandPalette() {
         label: 'Kopia zapasowa teraz',
         run: () =>
           void flushSaves()
-            .then(() => api.backupNow())
+            .then((saved) => {
+              if (!saved) throw new Error('Nie udało się zapisać bieżących zmian – kopia wstrzymana. Spróbuj ponownie za chwilę.')
+              return api.backupNow()
+            })
             .then(
               (path) => toast(`Utworzono kopię: ${path}`, 'success', 6000),
               (e) => toast(errorMessage(e), 'error')

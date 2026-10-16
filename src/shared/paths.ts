@@ -117,6 +117,18 @@ export function detectConflictName(rel: string): ConflictName | null {
   return { kind, canonicalPath, source: guessConflictSource(m[2] ?? '') }
 }
 
+/**
+ * The record id a file's name carries ('dated' and 'id' layouts; for a sync copy, of its original): a file without an
+ * id gets this one when read, so it stays the same record on every read and every computer.
+ */
+export function idFromPath(rel: string): string | null {
+  const p = toPosix(rel)
+  const kind = classifyCanonical(p) ? kindOfDir(p) : detectConflictName(p)?.kind
+  if (!kind || kind === 'fi' || LAYOUTS[kind] === 'month') return null
+  const canonical = classifyCanonical(p) ? p : (detectConflictName(p)?.canonicalPath ?? p)
+  return new RegExp(`(${ULID})\\.json$`).exec(canonical)?.[1] ?? null
+}
+
 /** Relative path of a record of `collection` (the fields its layout names: `date`, `month`, `id`). */
 export function recordRelPath(collection: Collection, record: Record<string, unknown>): string {
   const id = String(record.id)

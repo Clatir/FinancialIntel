@@ -235,7 +235,7 @@ function FolderTab() {
               disabled={busy}
               onClick={() =>
                 run(async () => {
-                  await flushSaves()
+                  if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – kopia wstrzymana, żeby ich nie pominąć. Spróbuj ponownie za chwilę.')
                   const path = await api.backupNow()
                   toast(`Utworzono kopię: ${path}`, 'success', 6000)
                   await loadBackups()
@@ -283,7 +283,7 @@ function FolderTab() {
             disabled={busy}
             onClick={() =>
               run(async () => {
-                await flushSaves()
+                if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – eksport wstrzymany. Spróbuj ponownie za chwilę.')
                 const path = await api.exportZip()
                 if (path) toast(`Zapisano ZIP: ${path}`, 'success', 6000)
               })

@@ -1,3 +1,4 @@
+// adapted from ICTTJ playwright.update.config.ts @ 84a8339
 import { defineConfig } from '@playwright/test'
 
 /** Windows CI only: real update of the packaged app (tests/update, see .github/workflows/ci.yml). */

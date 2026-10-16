@@ -9,6 +9,20 @@ import { freshStore, readZip, sampleMonth, sampleTransaction } from './helpers'
 const DAY = 86400_000
 
 describe('kopie zapasowe', () => {
+  it('kopia zawiera tylko dane (fi.json i rekordy), nie inne pliki w folderze', async () => {
+    const store = await freshStore()
+    await store.saveRecord('transactions', sampleTransaction())
+    await fs.mkdir(join(store.root, 'kopie'), { recursive: true })
+    await fs.writeFile(join(store.root, 'kopie', 'stara.zip'), 'zip')
+    await fs.writeFile(join(store.root, 'Financial-Intel-2026-10-01.zip'), 'zip')
+    await fs.writeFile(join(store.root, 'transactions', 'notatka.txt'), 'x')
+    const file = await manualBackup(store.root, store.backupsDir)
+    const names = [...(await readZip(file)).keys()].sort()
+    expect(names.length).toBe(2)
+    expect(names[0]).toBe('fi.json')
+    expect(names[1]).toMatch(/^transactions\/\d{4}\/.+\.json$/)
+  })
+
   it('kopia dzienna: backups/daily/RRRR-MM-DD.zip raz na dzień, z danymi bez backups/, .history/ i .presence/', async () => {
     const store = await freshStore()
     const t = sampleTransaction()

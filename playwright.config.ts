@@ -1,3 +1,4 @@
+// adapted from ICTTJ playwright.config.ts @ 84a8339
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({

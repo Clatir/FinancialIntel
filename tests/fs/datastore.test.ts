@@ -38,6 +38,27 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     await expect(new DataStore(join(dir, 'inny'), { machineName: 'X' }).open()).rejects.toThrow(/fi\.json/)
   })
 
+  it('rodzaj folderu: dane FI bez fi.json (OneDrive jeszcze synchronizuje) i folder ICTTJ', async () => {
+    const dir = tempDir()
+    await fs.mkdir(join(dir, 'w-trakcie', 'transactions', '2026'), { recursive: true })
+    expect(await DataStore.inspect(join(dir, 'w-trakcie'))).toBe('partial')
+    await fs.mkdir(join(dir, 'ictj'))
+    await fs.writeFile(join(dir, 'ictj', 'journal.json'), '{}')
+    expect(await DataStore.inspect(join(dir, 'ictj'))).toBe('ictj')
+  })
+
+  it('plik bez id: id z nazwy pliku, to samo przy każdym odczycie', async () => {
+    const store = await freshStore()
+    const t = sampleTransaction()
+    const rel = recordRelPath('transactions', t as unknown as Record<string, unknown>)
+    const { id: _id, ...noId } = t as unknown as Record<string, unknown>
+    await writeFileAtomic(join(store.root, ...rel.split('/')), JSON.stringify(noId))
+    const again = new DataStore(store.root, { machineName: 'INNY' })
+    const snap = await again.open()
+    expect(snap.records.transactions.map((e) => e.record.id)).toEqual([t.id])
+    expect(snap.conflicts).toEqual([])
+  })
+
   it('zapis operacji: czytelny JSON z wcięciami pod ścieżką z datą, odczyt w nowej instancji', async () => {
     const store = await freshStore()
     const t = sampleTransaction({ note: 'zażółć gęślą jaźń' })

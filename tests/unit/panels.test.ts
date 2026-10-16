@@ -125,7 +125,6 @@ describe('układ paneli', () => {
   it('klucze localStorage i nazwy stron menu „Układ”', () => {
     expect(PANELS_STORAGE_KEY).toBe('fi.panels')
     expect(COLUMNS_STORAGE_KEY).toBe('fi.columns')
-    expect(PAGE_LABELS.bridge).toBe('Mostek')
     expect(PAGE_LABELS.settings).toBe('Ustawienia')
     expect(PAGE_LABELS.sync).toBe('Synchronizacja')
     expect(Object.keys(PAGE_LABELS)).not.toContain('journal')

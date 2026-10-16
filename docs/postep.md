@@ -45,6 +45,11 @@ Zrobione (kryteria z `plan.md`):
   skróty Ctrl+1…0, ściąga F1; Ustawienia: Okręt (nazwa okrętu, praca na kilku komputerach), Folder i kopie,
   Zasobnik i start, Aktualizacje; Synchronizacja (konflikty, pliki z błędami, usunięte wpisy, historia).
 - Testy: `tests/unit`, `tests/fs`, `tests/e2e` (smoke, panele, ustawienia, synchronizacja), `tests/update` (Windows CI).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione – m.in. folder ICTTJ nigdy nie staje się folderem FI
+  (`DataStore.inspect` 'ictj'), dane FI bez `fi.json` (OneDrive w trakcie) nie dostają nowych danych ani zagnieżdżonego
+  `FinancialIntel\FinancialIntel` ('partial'), niedostępny folder bez „Utwórz dane tutaj”, kopie i eksport tylko z danymi
+  (`isDataFile`), rekord bez id dostaje id z nazwy pliku (`idFromPath`), kopia / eksport / rozstrzygnięcie konfliktu
+  dopiero po zapisaniu zmian, plik `firma.json` nie jest kopią `fi.json`.
 - Poprawka względem ICTTJ: zachowanie kopii konfliktu pliku ustawień przekazuje nowe ustawienia do okna (w ICTTJ
   `journal.json` zostawał w oknie stary i autozapis mógł nadpisać zachowaną kopię – do zgłoszenia w ICTTJ).
 
