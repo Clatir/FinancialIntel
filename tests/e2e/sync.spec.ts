@@ -3,6 +3,9 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { launch } from './app'
 
+/** What the main process has on disk now (the watcher's rescan without waiting for it). */
+const rescan = () => (globalThis as unknown as { fi: { rescan(): Promise<void> } }).fi.rescan()
+
 test('zmiana fi.json z drugiego komputera, kopia konfliktu OneDrive i plik z błędem', async () => {
   const { page, app, dataDir, errors } = await launch()
   try {
@@ -13,7 +16,7 @@ test('zmiana fi.json z drugiego komputera, kopia konfliktu OneDrive i plik z bł
     // Another computer renamed the ship (OneDrive wrote the file): taken without asking (nothing edited here).
     const theirs = { ...fi, updatedAt: new Date(Date.now() + 1000).toISOString(), updatedBy: 'LAPTOP', settings: { ...fi.settings, shipName: 'Orzeł' } }
     await fs.writeFile(file, `${JSON.stringify(theirs, null, 2)}\n`)
-    await page.evaluate(() => window.fi.rescan())
+    await page.evaluate(rescan)
     await expect(page.getByTestId('menu-ship-name')).toHaveText('okręt Orzeł')
 
     // A copy made by OneDrive next to it: a conflict to resolve.
@@ -22,7 +25,7 @@ test('zmiana fi.json z drugiego komputera, kopia konfliktu OneDrive i plik z bł
     // A half-synced record: a problem, never overwritten.
     await fs.mkdir(join(dataDir, 'transactions', '2026'), { recursive: true })
     await fs.writeFile(join(dataDir, 'transactions', '2026', '2026-10-16_01JB0000000000000000000000.json'), '{ "id": ')
-    await page.evaluate(() => window.fi.rescan())
+    await page.evaluate(rescan)
     await expect(page.getByTestId('banner-sync')).toBeVisible()
     await expect(page.getByTestId('nav-sync')).toContainText('2')
 

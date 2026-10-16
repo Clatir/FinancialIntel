@@ -156,7 +156,7 @@ export interface FiApi {
   openDataDir(dir: string, createIfEmpty: boolean): Promise<OpenFolderResult>
   saveRecord<C extends Collection>(collection: C, record: RecordTypes[C]): Promise<RecordEntry<RecordTypes[C]>>
   deleteRecord(collection: Collection, id: string): Promise<void>
-  /** Kept versions of a record, newest first (`kind` 'fi', `id` 'fi' for the settings). */
+  /** Kept versions of a record, newest first (the settings: `kind` 'fi', `id` = the id of fi.json). */
   historyList(kind: HistoryKind, id: string): Promise<HistoryEntry[]>
   /** The record of one kept version (null when gone). */
   historyRead(kind: HistoryKind, id: string, file: string): Promise<unknown>
