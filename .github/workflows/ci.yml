@@ -1,0 +1,164 @@
+# adapted from ICTTJ .github/workflows/ci.yml @ 84a8339
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Testy (Linux, Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.12.0 = exact minimum (first 22.x with require() of ES modules by default),
+        # 24 = current LTS, 26 = next LTS. Catches dependencies that silently raise the minimum.
+        node: ['22.12.0', '24', '26']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # Release notes of the current version (shown in the app after updating) must exist.
+      - name: CHANGELOG.md has a section for this version
+        run: node scripts/release-notes.mjs > /dev/null
+
+  e2e:
+    name: E2E (Linux, Xvfb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install-deps chromium
+      - run: npm run build
+      - run: xvfb-run -a npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        continue-on-error: true
+        with:
+          name: e2e-zrzuty-linux
+          path: test-results/
+          retention-days: 3
+
+  node-gate:
+    name: Blokada zbyt starego Node (22.11)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.11.0'
+      # Without require(esm) the toolchain fails with a cryptic ERR_REQUIRE_ESM; npm ci must
+      # stop with the Polish instructions from scripts/check-node.mjs instead.
+      - name: npm ci stops with instructions
+        run: |
+          if npm ci > npm-ci.log 2>&1; then cat npm-ci.log; echo "npm ci should fail on Node 22.11"; exit 1; fi
+          grep -q "jest za stary" npm-ci.log
+
+  # The Windows build runs for pull requests, the default branch (releases) and by hand – a plain push to a working
+  # branch runs the Linux jobs only (its pull request runs the whole CI anyway).
+  windows:
+    name: Build exe + smoke test (Windows)
+    needs: [test, e2e, node-gate]
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      # An outdated system Node.js (like on the user's PC): build-windows.cmd must not depend on it.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20.12.0'
+          cache: npm
+      # The one-click build users run: pinned Node.js from .node-version downloaded into .tools\,
+      # npm ci, unit + filesystem tests on real NTFS, portable + installer.
+      - name: build-windows.cmd
+        shell: cmd
+        run: build-windows.cmd
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+      # Fast signal first: the portable swap helper started like the app starts it (no build needed).
+      - name: Update helper test (PowerShell swap)
+        run: npx playwright test -c playwright.update.config.ts tests/update/helper.spec.ts
+      - name: Smoke test of the packaged app
+        shell: pwsh
+        run: |
+          $env:FI_E2E_EXECUTABLE = (Resolve-Path 'release\win-unpacked\Financial Intel.exe').Path
+          npx playwright test
+      # Update test: the next patch version is built like a future release (release-next\); the
+      # portable and the installed build of this version must find it on a local stand-in for GitHub
+      # Releases, download it in the background, replace themselves and start the new version.
+      - name: Build the next version for the update test
+        shell: pwsh
+        run: |
+          $next = node scripts/next-version.mjs
+          # Quoted: PowerShell would split -c.directories... at the dot into two arguments.
+          npx electron-builder --win --x64 --publish never '-c.directories.output=release-next'
+          $code = $LASTEXITCODE
+          git checkout -- package.json
+          if ($code -ne 0) { exit $code }
+          "FI_UPDATE_TO_VERSION=$next" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Update test (portable + installer)
+        run: npx playwright test -c playwright.update.config.ts
+        env:
+          FI_UPDATE_FROM: ${{ github.workspace }}\release
+          FI_UPDATE_TO: ${{ github.workspace }}\release-next
+      # Every new version on the default branch becomes a GitHub release – the app updates itself from it
+      # (src/shared/update.ts). Bump "version" in package.json and add a CHANGELOG.md section to release.
+      - name: Publish v<version> (once per version)
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "v$version is already published – bump the version in package.json to release a new one."
+            exit 0
+          fi
+          node scripts/release-notes.mjs "$version" > notes.md
+          mkdir -p dist
+          cp release/Financial-Intel-portable.exe release/Financial-Intel-Setup.exe dist/
+          (cd dist && sha256sum *.exe > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          prerelease=""
+          case "$version" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "v$version" --target "$GITHUB_SHA" --title "Financial Intel $version" --notes-file notes.md $prerelease \
+            dist/*.exe dist/SHA256SUMS.txt
+      # A build of a pull request to try out before merging.
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: Financial-Intel-windows-${{ github.sha }}
+          path: |
+            release/Financial-Intel-portable.exe
+            release/Financial-Intel-Setup.exe
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        continue-on-error: true
+        with:
+          name: e2e-zrzuty-windows
+          path: test-results/
+          retention-days: 3
