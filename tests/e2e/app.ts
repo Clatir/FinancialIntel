@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 
 export interface Launched {
   app: ElectronApplication
@@ -50,6 +50,9 @@ export async function launch(
     if (m.type() === 'error') errors.push(`console: ${m.text()}`)
   })
   await page.waitForLoadState('domcontentloaded')
+  // The window is created hidden and shown on 'ready-to-show': a screenshot or a click before that fails on a cold
+  // start (the first test of a run), so every test starts with the window on screen.
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible())), { timeout: 30_000 }).toBe(true)
   // Stable screenshots: no transitions.
   await page.emulateMedia({ reducedMotion: 'reduce' })
   return { app, page, dataDir, userData, errors }
