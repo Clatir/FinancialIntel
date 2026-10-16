@@ -339,7 +339,7 @@ jak w ICTTJ (120–160 ms).
 **Prywatność**
 - Bez blokady i bez szyfrowania: pliki są czytelne, jak w ICTTJ.
 - Tryb ukrycia kwot włączany jednym skrótem maskuje kwoty w oknie i w dymku zasobnika.
-- Sieć służy tylko aktualizacjom (GitHub, token zapisany na komputerze). Bez telemetrii. Asystent AI ruszy dopiero
+- Sieć służy tylko aktualizacjom (GitHub). Bez telemetrii. Asystent AI ruszy dopiero
   po włączeniu.
 
 **Kopie zapasowe** – codziennie (30 ostatnich), przed każdym importem i przed migracją formatu, do tego kopie ręczne.
@@ -397,7 +397,7 @@ pisać od nowa. Decyzje techniczne podejmuje Claude, a użytkownik zatwierdza fu
 - Build: electron-builder, instalator NSIS i wersja przenośna (`Financial-Intel-Setup.exe`,
   `Financial-Intel-portable.exe`).
 - CI: GitHub Actions. Linux przy każdym wypchnięciu, Windows tylko dla PR, gałęzi głównej i ręcznie.
-- Aktualizacje: GitHub Releases z prywatnego repozytorium, token na każdym komputerze, sprawdzanie sumy SHA-256.
+- Aktualizacje: GitHub Releases z publicznego repozytorium (D61), bez tokena, sprawdzanie sumy SHA-256.
 
 **Moduły do przeniesienia z ICTTJ** (kopiowane i dostosowane, ścieżki względem `src/`)
 
@@ -419,7 +419,7 @@ pisać od nowa. Decyzje techniczne podejmuje Claude, a użytkownik zatwierdza fu
 - Globalny skrót (Electron `globalShortcut`), powiadomienia (Electron `Notification`), odsłuch odprawy (Web Speech API
   z polskim głosem Windows), dźwięki (WebAudio).
 
-**Repozytorium:** prywatne `Clatir/FinancialIntel`, identyfikator aplikacji `app.financialintel.desktop`.
+**Repozytorium:** publiczne `Clatir/FinancialIntel` (D61), identyfikator aplikacji `app.financialintel.desktop`.
 
 ## Plan etapów
 

@@ -5,7 +5,7 @@ Szacunek nie obejmuje testowania przez użytkownika.
 
 | Etap | Zakres | Model · thinking | Czas | Przygotuj |
 | --- | --- | --- | --- | --- |
-| E0 Fundament | repozytorium, stos, CI, instalator i portable, aktualizacje z tokenem, folder danych (zapis, historia, konflikty, kopie), zasobnik i autostart, menu boczne, puste ekrany, szkielet ustawień | Opus 5.5 · high | 3–4 h | puste repo, dostęp do `Clatir/TradingJournal`, token GitHub do aktualizacji |
+| E0 Fundament | repozytorium, stos, CI, instalator i portable, aktualizacje, folder danych (zapis, historia, konflikty, kopie), zasobnik i autostart, menu boczne, puste ekrany, szkielet ustawień | Opus 5.5 · high | 3–4 h | puste repo, dostęp do `Clatir/TradingJournal` |
 | E1 Model i silnik | schematy rekordów, kwoty w groszach, `calc/fleet.ts` z testami, konta i kategorie, ekran Operacje | Opus 5.5 · xhigh | 4–5 h | — |
 | E2 Import mBank | parser CSV, kreator importu, duplikaty, reguły kategorii, kategoryzacja grupowa, przelewy, potwierdzanie sald | Opus 5.5 · high | 3–4 h | przykładowy CSV z mBanku (zanonimizowany) |
 | E3 Start i plan miesiąca | kreator startu, Plan miesiąca, Ładownia, odkładki, przydział, debriefing z podziałem łupów | Opus 5.5 · high | 4 h | — |
@@ -23,7 +23,7 @@ Szacunek nie obejmuje testowania przez użytkownika.
 - Pierwsze uruchomienie: wybór lub utworzenie folderu danych; `fi.json` z `schemaVersion`.
 - Zapis atomowy, historia `.history/`, konflikty, kopie codzienne – przeniesione z ICTTJ, z testami `tests/fs`.
 - Start z Windows ukryty w zasobniku (przełącznik), jedna instancja, logi.
-- Aktualizacja z prywatnego repozytorium z tokenem działa (test jak w ICTTJ).
+- Aktualizacja z GitHub Releases działa (test jak w ICTTJ; repozytorium publiczne – D61).
 - Wygląd = tokeny ICTTJ; menu boczne i puste ekrany z panelami (zwijanie, powiększanie, odłączanie, układy).
 
 **E1 Model i silnik**

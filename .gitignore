@@ -1,0 +1,14 @@
+node_modules/
+out/
+release/
+release-next/
+dist/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+.tmp/
+scripts/output/
+*.tsbuildinfo
+.tools/
+/.forecast/
