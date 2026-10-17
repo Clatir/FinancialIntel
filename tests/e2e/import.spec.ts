@@ -88,6 +88,8 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.getByTestId('import-select-visible').click()
     await page.getByTestId('import-bulk-kind').selectOption('expense')
     await page.getByTestId('import-bulk-category').selectOption({ label: 'Rozrywka i hobby · hobby' })
+    // „Według przyjętego klucza”: the search kept as a keyword for the next imports.
+    await page.getByTestId('import-bulk-keyword').check()
     await page.getByTestId('import-bulk-apply').click()
     await expect(group(page, 'Chess.com 800-318-2827').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000602')
     await page.getByTestId('import-bulk-clear').click()
@@ -128,6 +130,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     expect(matches).toEqual(expect.arrayContaining(['bolt', 'tomaszxxx', 'lidl', 'biedronka', 'automat']))
     expect(matches).not.toContain('allegro')
     expect(fi.settings.import.rules.find((r: { match: string }) => r.match === 'automat')).toMatchObject({ mode: 'keyword', direction: 'out', categoryId: '01KDEFCAT00000000000000103' })
+    expect(fi.settings.import.rules.find((r: { match: string; mode: string }) => r.match === 'chess' && r.mode === 'keyword')).toMatchObject({ direction: 'out', categoryId: '01KDEFCAT00000000000000602' })
     expect(fi.settings.import.ownNames).toEqual(['JAN KAPITAN'])
     expect((await fs.readdir(join(dataDir, 'backups', 'pre-import'))).length).toBe(1)
     await expect(page.getByTestId('import-to-operations')).toBeVisible()
@@ -179,6 +182,22 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
       .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules.find((r: { match: string; direction: string }) => r.match === 'koleo' && r.direction === 'out')?.categoryId)
       .toBe('01KDEFCAT00000000000000304')
 
+    // Many operations at once (D76): the search's result ticked, one category, remembered for the brand; „Cofnij”.
+    await page.getByTestId('operations-search').fill('allegro')
+    await page.getByTestId('operations-tick-all').check()
+    await expect(page.getByTestId('operations-bulk-count')).toContainText('9 operacji')
+    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Osobiste · ubrania' })
+    await page.getByTestId('operations-bulk-remember').selectOption('brands')
+    await page.getByTestId('operations-bulk-apply').click()
+    const allegro = async () => new Set((await operations(dataDir)).filter((t) => /allegro/i.test(t.counterparty as string)).map((t) => t.categoryId))
+    await expect.poll(allegro).toEqual(new Set(['01KDEFCAT00000000000000801']))
+    await expect
+      .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules.find((r: { match: string }) => r.match === 'allegro')?.categoryId)
+      .toBe('01KDEFCAT00000000000000801')
+    await page.getByRole('button', { name: 'Cofnij' }).click()
+    await expect.poll(allegro).toEqual(new Set(['01KDEFCAT00000000000000800']))
+    await page.getByTestId('operations-search').fill('')
+
     // Settings → Import: the rules and the holder's names.
     await page.keyboard.press('Control+,')
     await page.getByTestId('settings-tab-import').click()
@@ -186,7 +205,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     // The rules of brands (the user's keyword apart); one deleted.
     const ruleCount = await page.getByTestId('import-rule').count()
     expect(ruleCount).toBeGreaterThan(5)
-    await expect(page.getByTestId('keyword-rule')).toHaveText([/automat/])
+    await expect(page.getByTestId('keyword-rule')).toHaveText([/chess/, /automat/])
     await page.getByTestId('import-rule').first().getByTestId('import-rule-delete').click()
     await expect(page.getByTestId('import-rule')).toHaveCount(ruleCount - 1)
     expect(errors).toEqual([])

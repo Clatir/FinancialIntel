@@ -25,6 +25,37 @@ export function rememberCategory(t: Transaction, label: string): void {
   toast(`Zapamiętano: „${t.counterparty}” → ${label}. Kolejne importy skategoryzują go same.`, 'success', 4500)
 }
 
+/**
+ * The category of operations remembered for their brands at once (D76: a bulk decision in Operacje teaches the
+ * import too); returns how many rules. Money in = a product return of that brand.
+ */
+export function rememberBrands(ops: readonly Transaction[], categoryId: string | null): number {
+  const rules = new Map<string, Parameters<typeof upsertRule>[1] & { hits: number }>()
+  for (const t of ops) {
+    const { brand } = ruleTargetOf({ counterparty: t.counterparty, title: t.title, operation: t.bank?.operation })
+    if (!brand.key || t.kind !== 'expense') continue
+    const direction = t.amount < 0 ? 'out' : 'in'
+    const key = `${brand.key}|${direction}`
+    const prev = rules.get(key)
+    if (prev) prev.hits++
+    else rules.set(key, { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId, refundable: false, household: false, counterAccountId: null, hits: 1 })
+  }
+  if (!rules.size) return 0
+  const now = new Date().toISOString()
+  updateSettings((f) => {
+    let next = f.settings.import.rules
+    for (const { hits, ...r } of rules.values()) next = upsertRule(next, r, { now, makeId: newId, hits })
+    return { ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next } } }
+  })
+  return rules.size
+}
+
+/** A search usable as a keyword: at least 3 letters, not an amount. */
+export const keywordOfSearch = (query: string): string | null => {
+  const q = query.trim()
+  return /^[-−+]?\d[\d\s.,]*$/.test(q) || normalizeKeyword(q).replace(/[^a-z?]/g, '').length < 3 ? null : q
+}
+
 export function deleteRule(id: string): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: f.settings.import.rules.filter((r) => r.id !== id) } } }))
 }

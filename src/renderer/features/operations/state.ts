@@ -3,9 +3,10 @@ import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
 import { emptyFilter, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
 import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type Transaction } from '@shared/schema'
-import { addRecord, discardDraft, useData } from '../../store/data'
-import { commitActiveField, navigate } from '../../store/ui'
+import { addRecord, discardDraft, replaceRecords, useData } from '../../store/data'
+import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteWithUndo } from '../history/actions'
+import { rememberBrands, saveKeywordRule } from '../import/rules'
 
 /** Filters of this computer (the period and the search start fresh: this month, empty). */
 const FILTER_KEY = 'fi.operations.filter'
@@ -37,25 +38,65 @@ function store(f: OperationsFilter): void {
 interface OperationsUi {
   filter: OperationsFilter
   selectedId: string | null
+  /** Operations ticked for a bulk change (D76); another filter clears them – nothing hidden is changed. */
+  ticked: Record<string, true>
 }
 
 export const useOperationsUi = create<OperationsUi>(() => ({
   filter: { ...emptyFilter(warsawNow().month), ...readStored() },
-  selectedId: null
+  selectedId: null,
+  ticked: {}
 }))
 
 export function setFilter(patch: Partial<OperationsFilter>): void {
   useOperationsUi.setState((s) => {
     const filter = { ...s.filter, ...patch }
     store(filter)
-    return { filter }
+    return { filter, ticked: {} }
   })
 }
 
 export function resetFilter(): void {
   const filter = emptyFilter(warsawNow().month)
   store(filter)
-  useOperationsUi.setState({ filter })
+  useOperationsUi.setState({ filter, ticked: {} })
+}
+
+export function tickOperations(ids: readonly string[], on: boolean): void {
+  useOperationsUi.setState((s) => {
+    const ticked = { ...s.ticked }
+    for (const id of ids) if (on) ticked[id] = true
+    else delete ticked[id]
+    return { ticked }
+  })
+}
+
+export const clearTicked = () => useOperationsUi.setState({ ticked: {} })
+
+/**
+ * One category for the ticked expenses (D76; operations split into parts and other kinds stay – counted), with „Cofnij”.
+ * `remember`: 'brands' = a rule of each brand for the import, 'keyword' = the search as a keyword rule.
+ */
+export function categorizeTicked(categoryId: string | null, remember: 'none' | 'brands' | 'keyword', label: string): void {
+  const ids = Object.keys(useOperationsUi.getState().ticked)
+  const map = useData.getState().records.transactions
+  const ticked = ids.map((id) => map[id]?.record).filter((t): t is Transaction => !!t)
+  const fit = ticked.filter((t) => t.kind === 'expense' && !t.splits.length)
+  const before = fit.filter((t) => t.categoryId !== categoryId)
+  replaceRecords(
+    'transactions',
+    before.map((t) => ({ ...t, categoryId }))
+  )
+  let note = ''
+  if (remember === 'brands') note = ` · reguły importu: ${rememberBrands(fit, categoryId)}`
+  if (remember === 'keyword') {
+    const query = useOperationsUi.getState().filter.query
+    const err = saveKeywordRule({ keyword: query, direction: 'out', kind: 'expense', categoryId })
+    note = err ? ` · słowo kluczowe: ${err}` : ` · słowo kluczowe „${query.trim()}”`
+  }
+  const skipped = ticked.length - fit.length
+  clearTicked()
+  toast(`${label}: ${before.length} ${before.length === 1 ? 'operacja' : 'operacji'}${skipped ? `, pominięte (nie wydatek albo podział): ${skipped}` : ''}${note}.`, 'success', 7000, before.length ? { label: 'Cofnij', run: () => replaceRecords('transactions', before) } : undefined)
 }
 
 /** Select an operation; an untouched new entry left behind is dropped (it was never written). */

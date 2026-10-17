@@ -15,6 +15,7 @@ import { Badge, Panel, cx } from '../../components/ui'
 import { confirmBalance } from '../balances/actions'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { KeywordRules } from './KeywordRules'
+import { keywordOfSearch, saveKeywordRule } from './rules'
 import { BULK_OPTIONS, OPTIONS, choiceFor, optionOf, type Option } from './options'
 import {
   acceptHints,
@@ -490,16 +491,34 @@ function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; labe
 }
 
 /** One decision, or „nie importuj”, for everything ticked (1.2.1). */
+/** The decisions a keyword rule can hold (`KeywordRules`): the search kept as a key for the next imports. */
+const KEYWORD_KIND: Partial<Record<Option, { kind: TxKind; direction: 'in' | 'out' | null }>> = {
+  expense: { kind: 'expense', direction: 'out' },
+  income: { kind: 'income', direction: 'in' },
+  transfer: { kind: 'transfer', direction: null }
+}
+
 function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const selected = useImport((s) => s.selected)
+  const query = useImport((s) => s.query)
   const [option, setOption] = useState<Option>('expense')
   const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [asKeyword, setAsKeyword] = useState(false)
   const nGroups = groups.filter((g) => selected.groups[g.group]).length
   const rows = selectedRowKeys(groups, selected).length
   if (!nGroups && !rows) return null
+  const keyword = keywordOfSearch(query)
+  const keywordKind = keyword ? KEYWORD_KIND[option] : undefined
   const apply = () => {
-    const { applied, unfit } = chooseSelected(groups, option, option === 'expense' || option === 'refundable' ? categoryId : null)
-    toast(unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`, unfit ? 'info' : 'success', 4000)
+    const category = option === 'expense' || option === 'refundable' ? categoryId : null
+    // The search as a key first: the file is planned again with it, the decisions of the ticked stay theirs.
+    let note = ''
+    if (asKeyword && keyword && keywordKind) {
+      const err = saveKeywordRule({ keyword, direction: keywordKind.direction, kind: keywordKind.kind, categoryId: category })
+      note = err ? ` Słowo kluczowe: ${err}` : ` Słowo kluczowe „${keyword}” zapamiętane.`
+    }
+    const { applied, unfit } = chooseSelected(groups, option, category)
+    toast((unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`) + note, unfit ? 'info' : 'success', 5000)
   }
   return (
     <div className="sticky top-0 z-10 mb-1 flex flex-wrap items-center gap-2 border border-accent/50 bg-raised px-2 py-1.5 text-[12px]" data-testid="import-bulk">
@@ -515,6 +534,12 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
         ))}
       </select>
       {(option === 'expense' || option === 'refundable') && <CategorySelect className="h-[24px] min-w-[170px] py-0" value={categoryId} onChange={setCategoryId} data-testid="import-bulk-category" />}
+      {keywordKind && (
+        <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają operacje z tym słowem w nazwie albo tytule same">
+          <input type="checkbox" checked={asKeyword} onChange={(e) => setAsKeyword(e.currentTarget.checked)} data-testid="import-bulk-keyword" />
+          zapamiętaj „{keyword}” jako słowo kluczowe
+        </label>
+      )}
       <button type="button" className="btn btn-accent h-[24px]" onClick={apply} data-testid="import-bulk-apply">
         Ustaw
       </button>

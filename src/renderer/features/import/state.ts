@@ -34,8 +34,11 @@ interface ImportSession {
   selected: { groups: Record<string, true>; rows: Record<string, true> }
   /** The rules the plan was made with: other rules now (a keyword added, a rule deleted) = plan again. */
   rulesUsed: readonly ImportRule[] | null
-  /** Themes decided by accepting what was offered („Przyjmij pewne”, the bank's hint) – a new proposal wins on a re-plan. */
-  accepted: Record<string, true>
+  /**
+   * Themes – and, after a re-plan, groups – decided by accepting what was offered („Przyjmij pewne”, the bank's hint):
+   * a new proposal (a keyword added) wins over them on a re-plan; the user's own choice does not change.
+   */
+  accepted: { themes: Record<string, true>; groups: Record<string, true> }
   busy: boolean
   done: ImportDone | null
 }
@@ -55,7 +58,7 @@ export const useImport = create<ImportSession>(() => ({
   query: '',
   selected: noSelection(),
   rulesUsed: null,
-  accepted: {},
+  accepted: { themes: {}, groups: {} },
   busy: false,
   done: null
 }))
@@ -93,7 +96,7 @@ export async function loadImportFile(name: string, bytes: Uint8Array): Promise<v
     const accountId = useImport.getState().accountId || importAccount()
     const deletedKeys = await deletedBankKeys()
     // Nothing is ticked by itself: pending operations the list no longer shows may only be filtered out of it.
-    useImport.setState({ fileName: name, file, error: null, accountId, deletedKeys, plan: planNow(file, accountId, deletedKeys), choices: emptyChoices(), query: '', selected: noSelection(), accepted: {}, done: null })
+    useImport.setState({ fileName: name, file, error: null, accountId, deletedKeys, plan: planNow(file, accountId, deletedKeys), choices: emptyChoices(), query: '', selected: noSelection(), accepted: { themes: {}, groups: {} }, done: null })
   } catch (e) {
     useImport.setState({ fileName: name, file: null, plan: null, error: e instanceof MbankFormatError ? e.message : `Nie udało się odczytać pliku: ${errorMessage(e)}`, done: null })
   }
@@ -148,7 +151,7 @@ export function replanImport(): void {
     if (!c) continue
     groups[g.group] = c
     remember[g.group] = own ? (choices.remember[g.group] ?? true) : (choices.rememberThemes[g.theme] ?? true)
-    if (!own && accepted[g.theme]) weak.add(g.group)
+    if (own ? accepted.groups[g.group] : accepted.themes[g.theme]) weak.add(g.group)
   }
   // A group whose proposal changed (another key) keeps the user's decision under the group of the same brand and
   // direction; an accepted offer gives way to the new proposal.
@@ -161,13 +164,25 @@ export function replanImport(): void {
         remember[n.group] = remember[g.group]!
       }
   }
-  const tickedGroups = Object.fromEntries(Object.keys(selected.groups).filter((k) => keys.has(k)).map((k) => [k, true as const]))
+  // The ticks follow their groups the same way.
+  const tickedGroups: Record<string, true> = {}
+  for (const g of before) {
+    if (!selected.groups[g.group]) continue
+    if (keys.has(g.group)) tickedGroups[g.group] = true
+    else for (const n of fresh) if (n.brand === g.brand && n.direction === g.direction) tickedGroups[n.group] = true
+  }
   for (const g of weak) if (!keys.has(g)) delete groups[g]
-  useImport.setState({ plan, choices: { ...choices, themes: {}, rememberThemes: {}, groups, remember }, selected: { groups: tickedGroups, rows: selected.rows }, accepted: {} })
+  const stillWeak = Object.fromEntries([...weak].filter((g) => keys.has(g)).map((g) => [g, true as const]))
+  useImport.setState({
+    plan,
+    choices: { ...choices, themes: {}, rememberThemes: {}, groups, remember },
+    selected: { groups: tickedGroups, rows: selected.rows },
+    accepted: { themes: {}, groups: stillWeak }
+  })
 }
 
 export function closeImport(): void {
-  useImport.setState({ fileName: null, file: null, error: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: {}, done: null })
+  useImport.setState({ fileName: null, file: null, error: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: { themes: {}, groups: {} }, done: null })
 }
 
 function patchChoices(fn: (c: ImportChoices) => ImportChoices): void {
@@ -180,6 +195,16 @@ function patchChoices(fn: (c: ImportChoices) => ImportChoices): void {
  */
 export function chooseGroup(group: string, choice: Choice, remember?: boolean): void {
   patchChoices((c) => ({ ...c, groups: { ...c.groups, [group]: choice }, remember: { ...c.remember, [group]: remember ?? c.remember[group] ?? true } }))
+  unaccept('groups', group)
+}
+
+/** The user's own choice: no longer an accepted offer. */
+function unaccept(kind: 'themes' | 'groups', key: string): void {
+  const { accepted } = useImport.getState()
+  if (!accepted[kind][key]) return
+  const next = { ...accepted[kind] }
+  delete next[key]
+  useImport.setState({ accepted: { ...accepted, [kind]: next } })
 }
 
 /** A group back to its theme's decision (or the proposal). */
@@ -189,6 +214,7 @@ export function clearGroup(group: string): void {
     delete groups[group]
     return { ...c, groups }
   })
+  unaccept('groups', group)
 }
 
 /**
@@ -197,12 +223,8 @@ export function clearGroup(group: string): void {
  */
 export function chooseTheme(theme: string, choice: Choice, remember?: boolean, accepted = false): void {
   patchChoices((c) => ({ ...c, themes: { ...c.themes, [theme]: choice }, rememberThemes: { ...c.rememberThemes, [theme]: remember ?? c.rememberThemes[theme] ?? true } }))
-  useImport.setState((s) => {
-    const next = { ...s.accepted }
-    if (accepted) next[theme] = true
-    else delete next[theme]
-    return { accepted: next }
-  })
+  if (accepted) useImport.setState((s) => ({ accepted: { ...s.accepted, themes: { ...s.accepted.themes, [theme]: true } } }))
+  else unaccept('themes', theme)
 }
 
 export function chooseRow(key: string, choice: Choice | null): void {
@@ -381,7 +403,7 @@ export async function runImport(): Promise<void> {
       }
     }))
     if (!(await flushSaves())) throw new Error('Część operacji nie zapisała się jeszcze – aplikacja ponawia zapis automatycznie.')
-    useImport.setState({ done: { counts: result.counts, backup, accountId: st.accountId, rules: learned }, file: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: {} })
+    useImport.setState({ done: { counts: result.counts, backup, accountId: st.accountId, rules: learned }, file: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: { themes: {}, groups: {} } })
     toast(`Zaimportowano: ${result.counts.created} nowych, ${result.counts.merged} połączonych z wpisami, ${result.counts.settled} rozliczonych.`, 'success', 6000)
   } catch (e) {
     toast(errorMessage(e), 'error', 8000)
