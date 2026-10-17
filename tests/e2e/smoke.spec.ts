@@ -28,8 +28,9 @@ test('pierwsze uruchomienie: propozycja folderu, fi.json, menu boczne i puste ek
     await page.screenshot({ path: shots('02-mostek') })
 
     // Every screen of the menu, by click and by Ctrl+digit.
+    await page.getByTestId('nav-operations').click()
+    await expect(page.getByTestId('page-operations')).toBeVisible()
     for (const [page_, stage] of [
-      ['operations', 'E1'],
       ['import', 'E2'],
       ['month', 'E3'],
       ['cargo', 'E3'],

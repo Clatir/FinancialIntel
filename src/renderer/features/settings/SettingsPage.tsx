@@ -7,16 +7,20 @@ import { fmtBytes } from '../../lib/format'
 import { flushSaves, openResult, updateSettings, useData } from '../../store/data'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
 import { UpdatesTab } from './UpdatesTab'
+import { AccountsTab } from './AccountsTab'
+import { CategoriesTab } from './CategoriesTab'
 import { IconFolder, IconPlus, IconSync } from '../../components/icons'
 import { Field, NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 
 /**
- * Tabs of the settings. E0 has the foundation's; the budget's (accounts, categories, layers, orders, notifications,
- * sounds, shortcuts, ICTTJ, import) come with their stages.
+ * Tabs of the settings: the foundation's and the budget's (E1: accounts, categories); layers, orders, notifications,
+ * sounds, shortcuts, ICTTJ and the import come with their stages.
  */
 export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'general', label: 'Okręt' },
+  { id: 'accounts', label: 'Konta' },
+  { id: 'categories', label: 'Kategorie' },
   { id: 'folder', label: 'Folder i kopie' },
   { id: 'system', label: 'Zasobnik i start' },
   { id: 'updates', label: 'Aktualizacje' }
@@ -50,6 +54,8 @@ export function SettingsPage() {
       <div className="min-w-0 flex-1 overflow-y-auto p-3">
         <div className="mx-auto flex max-w-[980px] flex-col gap-3">
           {tab === 'general' && <GeneralTab />}
+          {tab === 'accounts' && <AccountsTab />}
+          {tab === 'categories' && <CategoriesTab />}
           {tab === 'folder' && <FolderTab />}
           {tab === 'system' && <SystemTab />}
           {tab === 'updates' && <UpdatesTab />}

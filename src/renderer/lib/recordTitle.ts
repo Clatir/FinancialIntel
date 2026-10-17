@@ -8,8 +8,10 @@ export function recordTitle(kind: HistoryKind, record: unknown): string {
   const r = (record ?? {}) as Record<string, unknown>
   const named = (prefix: string) => `${prefix}${s(r.name) ? `: ${s(r.name)}` : ''}`
   switch (kind) {
-    case 'transactions':
-      return `Operacja ${s(r.date)}`
+    case 'transactions': {
+      const amount = typeof r.amount === 'number' ? ` ${r.amount > 0 ? '+' : r.amount < 0 ? '−' : ''}${(Math.abs(r.amount) / 100).toFixed(2).replace('.', ',')} zł` : ''
+      return `Operacja ${s(r.date)}${s(r.counterparty) ? `: ${s(r.counterparty)}` : ''}${amount}`
+    }
     case 'containers':
       return named('Kontener')
     case 'goals':
