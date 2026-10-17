@@ -7,14 +7,14 @@
  * The kept one gets what only the copies had. A copy whose own decision (kind, category, container…) differs from the
  * kept one's is a conflict – shown, not ticked by default; both docked = blocked (one docking to undo by hand).
  */
-import { daysBetween } from '../calc/dates'
+import { addDays } from '../calc/dates'
 import type { Docking, Transaction } from '../schema/records'
-import { closeAmount, MATCH_DAYS, similarCounterparty } from './reconcile'
+import { joinable, looseMatch, MATCH_DAYS } from './reconcile'
 
 export type DuplicateKind = 'same-row' | 'manual'
 
 export interface DuplicateGroup {
-  /** Stable key of the group (its ids, sorted) – „to nie duplikat” remembers it. */
+  /** Stable key of the group – the bank's row, or the two ids – „to nie duplikat” remembers it. */
   key: string
   kind: DuplicateKind
   keep: string
@@ -27,7 +27,10 @@ export interface DuplicateGroup {
   differs: '' | 'name' | 'amount' | 'both'
 }
 
+/** The key of a hand-typed operation and its copy (the two ids, sorted). */
 export const duplicateKey = (ids: readonly string[]): string => [...ids].sort().join('|')
+/** The key of a row of the bank imported more than once (whatever the number of copies). */
+export const rowKey = (accountId: string, bankKey: string): string => `row:${accountId}|${bankKey}`
 
 /** The user's own data of an operation (the kept one: the most of it). */
 function userContent(t: Transaction): number {
@@ -87,28 +90,31 @@ export function findDuplicates(txs: readonly Transaction[], dockings: readonly D
       (a, b) => Number(docked.has(b.id)) - Number(docked.has(a.id)) || userContent(b) - userContent(a) || b.updatedAt.localeCompare(a.updatedAt) || a.createdAt.localeCompare(b.createdAt)
     )
     const [keep, ...copies] = sorted as [Transaction, ...Transaction[]]
-    const key = duplicateKey(list.map((t) => t.id))
+    const key = rowKey(keep.accountId, keep.bank!.key)
     for (const t of list) inRowGroups.add(t.id)
     if (dismissed[key]) continue
     out.push({ key, kind: 'same-row', keep: keep.id, remove: copies.map((t) => t.id), conflict: conflicting(keep, copies), blocked: blockedOf(keep, copies), differs: '' })
   }
 
-  // A hand-typed operation and its copy from the bank: the same account and direction, ±3 days, the same amount (any
-  // name) or a close one with a similar name; the closest first, each side once.
-  const manual = txs.filter((t) => !t.bank && t.kind !== 'correction' && t.amount !== 0)
-  const banked = txs.filter((t) => t.bank && !inRowGroups.has(t.id))
+  // A hand-typed operation and its copy from the bank (`looseMatch`, the import's rule): the closest first, each side
+  // once. Bank operations by account and date, so each hand-typed one looks at its ±3 days only (years of history).
+  const manual = txs.filter(joinable)
+  const banked = new Map<string, Transaction[]>()
+  for (const t of txs) {
+    if (!t.bank || inRowGroups.has(t.id)) continue
+    const k = `${t.accountId}|${t.date}`
+    const list = banked.get(k)
+    if (list) list.push(t)
+    else banked.set(k, [t])
+  }
   const candidates: Array<{ own: Transaction; copy: Transaction; days: number; exact: boolean; similar: boolean }> = []
   for (const own of manual)
-    for (const copy of banked) {
-      if (copy.accountId !== own.accountId || Math.sign(copy.amount) !== Math.sign(own.amount)) continue
-      const days = Math.abs(daysBetween(own.date, copy.date))
-      if (days > MATCH_DAYS) continue
-      const exact = copy.amount === own.amount
-      const similar = similarCounterparty(own.counterparty, copy.bank!.counterparty || copy.counterparty)
-      if (!exact && !(similar && closeAmount(own.amount, copy.amount))) continue
-      if (dismissed[duplicateKey([own.id, copy.id])]) continue
-      candidates.push({ own, copy, days, exact, similar })
-    }
+    for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
+      for (const copy of banked.get(`${own.accountId}|${addDays(own.date, d)}`) ?? []) {
+        const m = looseMatch(own, { amount: copy.amount, date: copy.date, name: copy.bank!.counterparty || copy.counterparty })
+        if (!m || dismissed[duplicateKey([own.id, copy.id])]) continue
+        candidates.push({ own, copy, ...m })
+      }
   candidates.sort((a, b) => Number(b.exact) - Number(a.exact) || Number(b.similar) - Number(a.similar) || a.days - b.days || a.own.date.localeCompare(b.own.date))
   const used = new Set<string>()
   for (const c of candidates) {
@@ -140,8 +146,21 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
   }
   if (kind === 'same-row' && out.bank?.pending && copies.some((c) => c.bank && !c.bank.pending)) out = { ...out, bank: { ...out.bank, pending: false } }
   for (const c of copies) {
-    const undecided = out.kind === 'expense' && !out.categoryId && !out.splits.length
-    if (undecided && (c.categoryId || c.splits.length) && c.kind === 'expense') out = { ...out, categoryId: c.categoryId, splits: c.splits }
+    // Undecided (an expense without a category – a quick entry): the copy's whole decision, whatever its kind (XTB, an
+    // own transfer, a loan…), so a docking moved onto it stays right.
+    if (decision(out) == null && decision(c) != null)
+      out = {
+        ...out,
+        kind: c.kind,
+        categoryId: c.categoryId,
+        splits: c.splits,
+        refundable: c.refundable,
+        repaid: c.repaid,
+        counterAccountId: c.counterAccountId,
+        containerId: c.containerId,
+        goalId: c.goalId,
+        loanId: c.loanId
+      }
     out = {
       ...out,
       note: out.note.trim() ? out.note : c.note,

@@ -59,6 +59,8 @@ test('Duplikaty (D77): wpis ręczny pod inną nazwą łączony przy imporcie, wp
     await expect(page.getByTestId('duplicates')).toHaveCount(0)
     await page.getByRole('button', { name: 'Cofnij' }).click()
     await expect.poll(async () => (await operations()).length).toBe(270)
+    // The kept entry is as it was before the merge (no bank row), the copy is back.
+    await expect.poll(async () => (await operations()).find((t) => t.counterparty === 'Lidl')?.bank ?? null).toBeNull()
 
     // „To nie duplikat”: remembered, not offered again.
     await expect(page.getByTestId('duplicate-group')).toHaveCount(1)

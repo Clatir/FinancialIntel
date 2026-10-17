@@ -26,6 +26,22 @@ export const MATCH_DAYS = 3
 /** An amount a hand-typed operation may be off by (a typo, grosze left out): max(1 zł, 3%), the same direction. */
 export const closeAmount = (a: number, b: number): boolean => Math.sign(a) === Math.sign(b) && Math.abs(a - b) <= Math.max(100, Math.round(Math.max(Math.abs(a), Math.abs(b)) * 0.03))
 
+/** A hand-typed operation that may be joined with the bank's (a correction of a balance never is). */
+export const joinable = (t: Pick<Transaction, 'bank' | 'kind' | 'amount'>): boolean => !t.bank && t.kind !== 'correction' && t.amount !== 0
+
+/**
+ * One rule for the import and the duplicates panel (D77): a hand-typed operation and the bank's are the same one when
+ * on the same side, ±3 days apart, of the same amount (`exact`) or a close one under a similar name. Null = not.
+ */
+export function looseMatch(own: { amount: number; date: string; counterparty: string }, bank: { amount: number; date: string; name: string }): { days: number; exact: boolean; similar: boolean } | null {
+  if (Math.sign(own.amount) !== Math.sign(bank.amount)) return null
+  const days = Math.abs(daysBetween(own.date, bank.date))
+  if (days > MATCH_DAYS) return null
+  const exact = own.amount === bank.amount
+  const similar = similarCounterparty(own.counterparty, bank.name)
+  return exact || (similar && closeAmount(own.amount, bank.amount)) ? { days, exact, similar } : null
+}
+
 /** The same counterparty in other words: an empty one (a quick entry without it), one key in the other, a common word. */
 export function similarCounterparty(a: string, b: string): boolean {
   const ka = counterpartyKey(a)
@@ -47,7 +63,7 @@ export type RowPlan =
    * possible duplicate (1.2.1, D77): the same amount under another name, or a close amount (max(1 zł, 3%)) under a
    * similar one – joined too, so nothing comes in twice; the preview shows it to check.
    */
-  | { status: 'merge'; row: MbankRow; key: string; tx: Transaction; loose?: 'name' | 'amount' }
+  | { status: 'merge'; row: MbankRow; key: string; tx: Transaction; loose?: 'name' | 'amount'; ask?: boolean }
   | ({ status: 'new' } & PlannedRow)
   /** An operation the user deleted (its version is in the history): left out unless brought back. */
   | ({ status: 'deleted' } & PlannedRow)
@@ -123,7 +139,7 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   })
 
   // Operations typed by hand (the evening entries, D26): the same amount within ±3 days, a similar counterparty.
-  const manual = mine.filter((t) => !t.bank)
+  const manual = mine.filter(joinable)
   const candidates: Array<{ i: number; tx: Transaction; days: number; named: boolean }> = []
   file.rows.forEach((row, i) => {
     if (plans[i]) return
@@ -142,24 +158,26 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     plans[c.i] = { status: 'merge', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx }
   }
 
-  // Possible duplicates (D77): a hand-typed operation left over, ±3 days, the same amount under another name or a close
-  // amount under a similar name – the same amount first, then the closest date; each side once.
-  const loose: Array<{ i: number; tx: Transaction; days: number; exact: boolean }> = []
+  // Possible duplicates (D77): a hand-typed operation left over, the same amount under another name or a close amount
+  // under a similar name – the same amount first, then the closest date; each side once. Joined by default when
+  // surely the same (a similar name; or a card purchase a day apart at most), else only when ticked (ICTTJ: a possible
+  // duplicate is never taken by itself) – one not joined is still found later by the duplicates panel.
+  const loose: Array<{ i: number; tx: Transaction; days: number; exact: boolean; similar: boolean }> = []
   file.rows.forEach((row, i) => {
     if (plans[i]) return
     for (const tx of manual) {
-      if (used.has(tx.id) || Math.sign(tx.amount) !== Math.sign(row.amount)) continue
-      const days = Math.abs(daysBetween(tx.date, row.date))
-      if (days > MATCH_DAYS) continue
-      const exact = tx.amount === row.amount
-      if (exact || (closeAmount(tx.amount, row.amount) && similarCounterparty(tx.counterparty, row.counterparty || row.description))) loose.push({ i, tx, days, exact })
+      if (used.has(tx.id)) continue
+      const m = looseMatch(tx, { amount: row.amount, date: row.date, name: row.counterparty || row.description })
+      if (m) loose.push({ i, tx, ...m })
     }
   })
-  loose.sort((a, b) => Number(b.exact) - Number(a.exact) || a.days - b.days || a.i - b.i)
+  loose.sort((a, b) => Number(b.exact) - Number(a.exact) || Number(b.similar) - Number(a.similar) || a.days - b.days || a.i - b.i)
   for (const c of loose) {
     if (plans[c.i] || used.has(c.tx.id)) continue
     used.add(c.tx.id)
-    plans[c.i] = { status: 'merge', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount' }
+    const row = file.rows[c.i]!
+    const sure = c.similar || (c.days <= 1 && /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC)/.test(row.operation))
+    plans[c.i] = { status: 'merge', row, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount', ask: !sure }
   }
 
   const rows: RowPlan[] = file.rows.map((row, i) => {
@@ -372,7 +390,10 @@ export interface ImportChoices {
   rows: Record<string, Choice>
   /** Groups whose decision becomes a rule (`ImportRule`). */
   remember: Record<string, boolean>
-  /** Manual entries matched (`RowPlan.key`) that stay separate: the row is imported as a new operation. */
+  /**
+   * Manual entries matched (`RowPlan.key`): true = stay separate (the row is imported as a new operation); false =
+   * joined though the match asks (`ask`, a possible duplicate); missing = as proposed.
+   */
   noMerge: Record<string, boolean>
   /** Vanished pending operations (ids) to delete. */
   removeVanished: Record<string, boolean>
@@ -381,6 +402,9 @@ export interface ImportChoices {
   /** New rows (`RowPlan.key`) the user leaves out of this import (1.2.1): the next file brings them again. */
   skip: Record<string, boolean>
 }
+
+/** Is a matched hand-typed operation joined? `noMerge` false = ticked by the user (a possible duplicate that asks). */
+export const joins = (p: Extract<RowPlan, { status: 'merge' }>, choices: Pick<ImportChoices, 'noMerge'>): boolean => (p.ask ? choices.noMerge[p.key] === false : !choices.noMerge[p.key])
 
 export const choiceOf = (d: ImportDecision): Choice => ({ kind: d.kind, categoryId: d.categoryId, refundable: d.refundable, household: d.household, counterAccountId: d.counterAccountId })
 
@@ -445,7 +469,7 @@ export function buildImport(
       counts.excluded++
       continue
     }
-    if (p.status === 'merge' && !choices.noMerge[p.key]) {
+    if (p.status === 'merge' && joins(p, choices)) {
       counts.merged++
       update.push({
         ...p.tx,

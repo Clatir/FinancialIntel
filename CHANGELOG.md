@@ -19,6 +19,10 @@ Import z mBanku w tematach zamiast dziesiątek grup (zgłoszenie użytkownika, d
 - Operacje: zaznaczanie (ręcznie albo wszystkie widoczne po wyszukiwaniu i filtrach) i jedna kategoria dla
   zaznaczonych z „Cofnij” – z zapamiętaniem dla marek albo wyszukiwanego słowa.
 - Reguły uczą się po marce (sieć w każdym mieście to jedna reguła), reguły sprzed 1.2.1 działają dalej.
+- Bez podwójnych wpisów (jak w ICTTJ): operacja wpisana ręcznie łączy się z importem także pod inną nazwą albo przy
+  kwocie różnej o grosze („możliwy duplikat” – pewne łączone same, niepewne do zaznaczenia); panel „Duplikaty operacji”
+  scala zapisane już podwójnie (wpis ręczny + kopia z banku, ten sam wiersz banku z dwóch komputerów – zostaje nowszy)
+  z jednym „Cofnij” i „to nie duplikat”; w Operacjach odnośnik „Możliwe duplikaty”.
 
 ## 1.2.0
 

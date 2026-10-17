@@ -14,16 +14,25 @@ import { useAccounts, useCategories } from '../operations/pickers'
 
 const NO_DISMISSED: Record<string, string> = {}
 
+type Duplicates = { groups: DuplicateGroup[]; byId: Record<string, Transaction> }
+
+/** One computation for every screen showing it (the Operations link, the import panel): the last inputs and result. */
+let last: { inputs: readonly unknown[]; out: Duplicates } | null = null
+
 /** The duplicates among the saved operations (drafts left out): recomputed when the operations change. */
-export function useDuplicates(): { groups: DuplicateGroup[]; byId: Record<string, Transaction> } {
+export function useDuplicates(): Duplicates {
   const records = useData((s) => s.records.transactions)
   const drafts = useData((s) => s.drafts)
   const dismissed = useData((s) => s.fi?.settings.import.notDuplicates ?? NO_DISMISSED)
   const dockings = useRecordList('dockings')
   return useMemo(() => {
+    const inputs = [records, drafts, dismissed, dockings]
+    if (last && last.inputs.every((x, i) => x === inputs[i])) return last.out
     const byId: Record<string, Transaction> = {}
     for (const [id, e] of Object.entries(records)) if (!drafts[id]) byId[id] = e.record
-    return { groups: findDuplicates(Object.values(byId), dockings, dismissed), byId }
+    const out = { groups: findDuplicates(Object.values(byId), dockings, dismissed), byId }
+    last = { inputs, out }
+    return out
   }, [records, drafts, dismissed, dockings])
 }
 
@@ -54,18 +63,30 @@ export function DuplicatesPanel() {
     try {
       const now = new Date().toISOString()
       const kept: Transaction[] = []
+      const originals: Transaction[] = []
+      const moved: Array<{ id: string; from: string }> = []
       const ids: string[] = []
       for (const g of chosen) {
         const keep = byId[g.keep]
         const copies = g.remove.map((id) => byId[id]).filter((t): t is Transaction => !!t)
         if (!keep || !copies.length) continue
+        originals.push(keep)
         kept.push(mergeDuplicate(keep, copies, g.kind, now))
         // A copy's docking goes to the kept operation (blocked groups – both docked – are never merged here).
-        for (const d of dockings) if (g.remove.includes(d.transactionId)) updateRecord('dockings', d.id, (x) => ({ ...x, transactionId: g.keep }))
+        for (const d of dockings)
+          if (g.remove.includes(d.transactionId)) {
+            moved.push({ id: d.id, from: d.transactionId })
+            updateRecord('dockings', d.id, (x) => ({ ...x, transactionId: g.keep }))
+          }
         ids.push(...copies.map((t) => t.id))
       }
       replaceRecords('transactions', kept)
-      await deleteManyWithUndo('transactions', ids, 'duplikaty operacji', (n) => `Scalono duplikaty: usunięto ${n} ${plural(n, 'kopię', 'kopie', 'kopii')}.`)
+      // „Cofnij”: the kept operations as they were, the dockings back on their copies, then the copies themselves.
+      const undo = () => {
+        replaceRecords('transactions', originals)
+        for (const m of moved) updateRecord('dockings', m.id, (x) => ({ ...x, transactionId: m.from }))
+      }
+      await deleteManyWithUndo('transactions', ids, 'duplikaty operacji', (n) => `Scalono duplikaty: usunięto ${n} ${plural(n, 'kopię', 'kopie', 'kopii')}.`, undo)
       setToggled(new Set())
     } catch (e) {
       toast(errorMessage(e), 'error', 8000)

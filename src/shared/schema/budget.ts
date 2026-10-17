@@ -193,8 +193,15 @@ export const importSettingsSchema = z.looseObject({
    * merge key by key (an array would be one conflicting field).
    */
   log: z.record(isoDateTime, ulidSchema).catch({}).default({}),
-  /** Groups of operations the user said are no duplicates (`duplicateKey` → when, 1.2.1): not offered again. */
-  notDuplicates: z.record(z.string().max(200), isoDateTime).catch({}).default({})
+  /**
+   * Groups of operations the user said are no duplicates (`duplicateKey` / `rowKey` → when, 1.2.1): not offered again.
+   * One bad entry (a hand-edited fi.json) drops itself, not the others.
+   */
+  notDuplicates: z
+    .record(z.string(), z.unknown())
+    .catch({})
+    .default({})
+    .transform((r) => Object.fromEntries(Object.entries(r).filter((e): e is [string, string] => e[0].length <= 300 && typeof e[1] === 'string')))
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 

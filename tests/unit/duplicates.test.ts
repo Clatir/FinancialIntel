@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { categoryIndex } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
-import { duplicateKey, findDuplicates, mergeDuplicate } from '@shared/import/duplicates'
+import { duplicateKey, findDuplicates, mergeDuplicate, rowKey } from '@shared/import/duplicates'
 import type { MbankFile, MbankRow } from '@shared/import/mbank'
 import { buildImport, planImport, type ImportChoices } from '@shared/import/reconcile'
 import { defaultCategoryId, MBANK_ACCOUNT_ID, SCHEMA_VERSION, XTB_WALLET_ACCOUNT_ID, dockingSchema, transactionSchema, type Transaction } from '@shared/schema'
@@ -46,6 +46,16 @@ describe('import: wpis ręczny nie wchodzi drugi raz (D77)', () => {
     const result = buildImport(plan, empty(), { now: NOW, house: 0, makeId: id, rules: [] })
     expect(result.create).toEqual([])
     expect(result.update.find((t) => t.id === shop.id)).toMatchObject({ amount: -4999, date: '2026-10-12', categoryId: FOOD, counterparty: 'Biedronka' })
+    // Another name and a transfer, or two days apart: asks – joined only when ticked (ICTTJ: never by itself).
+    const gift = tx({ counterparty: 'Kino', date: '2026-10-08' })
+    const p2p = planImport(file([row({ operation: 'BLIK P2P-WYCHODZĄCY', counterparty: 'ANNA X', date: '2026-10-09' })]), MBANK_ACCOUNT_ID, [gift], ctx)
+    const asks = p2p.rows[0]!
+    expect(asks).toMatchObject({ status: 'merge', loose: 'name', ask: true })
+    expect(buildImport(p2p, empty(), { now: NOW, house: 0, makeId: id, rules: [] }).create).toHaveLength(1)
+    expect(buildImport(p2p, { ...empty(), noMerge: { [asks.key]: false } }, { now: NOW, house: 0, makeId: id, rules: [] }).create).toHaveLength(0)
+    // A correction of a balance is never a hand-typed purchase.
+    const correction = tx({ kind: 'correction', counterparty: 'Korekta salda' })
+    expect(planImport(file([row({ counterparty: 'SKLEP' })]), MBANK_ACCOUNT_ID, [correction], ctx).rows[0]!.status).toBe('new')
     // Too far off, another direction, over 3 days: a new operation.
     const far = planImport(file([row({ counterparty: 'LIDL', amount: -6000 }), row({ amount: 2500 }), row({ date: '2026-10-20' })]), MBANK_ACCOUNT_ID, [tx({ counterparty: 'Lidl' })], ctx)
     expect(far.rows.map((p) => p.status)).toEqual(['new', 'new', 'new'])
@@ -61,6 +71,11 @@ describe('duplikaty zapisanych operacji (D77)', () => {
     expect(mergeDuplicate(own, [copy], 'manual', NOW)).toMatchObject({ id: own.id, date: '2026-10-11', bank: { key: 'mbank:aa:0' }, categoryId: COFFEE, time: '08:10', note: 'z Anią', counterparty: 'Kawa' })
     const decided = { ...copy, categoryId: FOOD }
     expect(findDuplicates([own, decided], [])[0]?.conflict).toBe(true)
+    // An undecided quick entry takes the copy's whole decision (an XTB top-up), not only a category.
+    const quick = tx({ counterparty: 'xtb' })
+    const xtb = tx({ kind: 'trading', counterparty: 'xtb.com', bank: bank('mbank:dd:0', 'xtb.com') })
+    expect(findDuplicates([quick, xtb], [])[0]).toMatchObject({ keep: quick.id, conflict: false })
+    expect(mergeDuplicate(quick, [xtb], 'manual', NOW)).toMatchObject({ kind: 'trading', bank: { key: 'mbank:dd:0' } })
     // „To nie duplikat”: not offered again; another account or over 3 days: none.
     expect(findDuplicates([own, copy], [], { [duplicateKey([own.id, copy.id])]: NOW })).toEqual([])
     expect(findDuplicates([own, { ...copy, accountId: XTB_WALLET_ACCOUNT_ID }], [])).toEqual([])
@@ -71,6 +86,8 @@ describe('duplikaty zapisanych operacji (D77)', () => {
     const older = tx({ bank: bank('mbank:bb:0', 'LIDL', true), updatedAt: '2026-10-11T08:00:00.000Z' })
     const newer = tx({ bank: bank('mbank:bb:0', 'LIDL'), updatedAt: '2026-10-11T09:00:00.000Z' })
     expect(findDuplicates([older, newer], [])[0]).toMatchObject({ kind: 'same-row', keep: newer.id, remove: [older.id] })
+    // „To nie duplikat” for a row: the row, whatever the number of copies.
+    expect(findDuplicates([older, newer], [], { [rowKey(MBANK_ACCOUNT_ID, 'mbank:bb:0')]: NOW })).toEqual([])
     const categorized = { ...older, categoryId: FOOD }
     expect(findDuplicates([categorized, newer], [])[0]?.keep).toBe(categorized.id)
     expect(mergeDuplicate(categorized, [newer], 'same-row', NOW).bank?.pending).toBe(false)

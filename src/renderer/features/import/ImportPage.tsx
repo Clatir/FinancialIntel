@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
-import { importGroups, importThemes, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { importGroups, importThemes, joins, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
 import { TX_KIND_LABEL, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
@@ -140,7 +140,7 @@ function Summary() {
   if (!plan) return null
   const n = (status: RowPlan['status']) => plan.rows.filter((p) => p.status === status).length
   const merges = plan.rows.filter((p) => p.status === 'merge')
-  const merged = merges.filter((p) => !choices.noMerge[p.key]).length
+  const merged = merges.filter((p) => joins(p, choices)).length
   const deleted = plan.rows.filter((p) => p.status === 'deleted')
   const restored = deleted.filter((p) => choices.restoreDeleted[p.key]).length
   const excluded = plan.rows.filter((p) => (p.status === 'new' || (p.status === 'deleted' && choices.restoreDeleted[p.key])) && choices.skip[p.key]).length
@@ -219,12 +219,13 @@ function MatchesPanel() {
           <div className="flex flex-col gap-1">
             <span className="label">Wpisy ręczne z banku ({merges.length})</span>
             <p className="text-[11px] text-dim">
-              Ta sama kwota, data ±3 dni, podobny kontrahent – albo możliwy duplikat: ta sama kwota pod inną nazwą, prawie ta sama przy podobnej nazwie. Wpis
-              zachowuje Twoją kategorię i godzinę, bierze dane z banku – nic nie wchodzi dwa razy. Odznacz, jeśli to inna operacja.
+              Ta sama kwota, data ±3 dni, podobny kontrahent – albo możliwy duplikat: prawie ta sama kwota przy podobnej nazwie (łączony), ta sama kwota pod
+              inną nazwą (łączony przy zakupie kartą do dnia różnicy, inaczej zaznacz sam). Wpis zachowuje Twoją kategorię i godzinę, bierze dane z banku. Nie
+              połączony możliwy duplikat znajdziesz potem w „Duplikatach operacji”.
             </p>
             {merges.map((p) => (
               <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-merge">
-                <input type="checkbox" checked={!choices.noMerge[p.key]} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} />
+                <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-merge-join" />
                 <span className="min-w-0 truncate">
                   <span className="text-fg-strong">{p.tx.counterparty || '(bez kontrahenta)'}</span>
                   <span className="text-muted">
@@ -236,6 +237,7 @@ function MatchesPanel() {
                   {p.loose && (
                     <span className="ml-1 text-accent" data-testid="import-merge-loose">
                       możliwy duplikat – {p.loose === 'name' ? 'inna nazwa' : `wpis ${plnText(p.tx.amount)} zł`}
+                      {p.ask ? ' · zaznacz, jeśli to ta sama operacja' : ''}
                     </span>
                   )}
                 </span>

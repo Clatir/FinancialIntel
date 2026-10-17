@@ -27,9 +27,9 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
-| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze (import i Operacje) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 1–1,5 h + 0,5 h) | 1.2.1 | ✅ wybór pomysłów (D75, D76) | ✅ zrobione, PR do `main` |
+| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze + duplikaty jak w ICTTJ | Opus 5.5 | **max** | zmierzone ok. 2 h (plan był 1–1,5 h + 0,5 h + 0,75 h) | 1.2.1 | ✅ wybór pomysłów (D75–D77) | ✅ zrobione, PR do `main` |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1** | | | **zmierzone ok. 11 h** | | | |
+| | **Całość E0–E8 + 1.2.1** | | | **zmierzone ok. 11,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -71,6 +71,9 @@ Zrobione (D75 – pomysły 1 + 3 + 4 + 2, D76 – wyszukiwarka i zaznaczanie dop
 - Wyszukiwarka, zaznaczanie grup i operacji, decyzja dla zaznaczonych, „Nie importuj”, wyszukiwane słowo jako
   słowo kluczowe (T90); w Operacjach zaznaczanie (ręcznie albo wszystkie widoczne) i kategoria dla zaznaczonych z
   „Cofnij” i zapamiętaniem dla marek albo słowa (T91).
+- Duplikaty jak w ICTTJ (D77): możliwy duplikat wpisu ręcznego w imporcie (inna nazwa, kwota różna o grosze; pewne
+  łączone same, niepewne do zaznaczenia), panel „Duplikaty operacji” (wpis ręczny + kopia z banku, ten sam wiersz banku
+  z dwóch komputerów – zostaje nowsza wersja), scalanie z jednym „Cofnij”, „to nie duplikat” (T92–T94).
 - Pomiar na pliku użytkownika (271 operacji): 81 grup → 80 grup marek w 36 tematach; 19 tematów rozpoznanych do
   przyjęcia jednym kliknięciem, 10 z podpowiedzią mBanku, do ręcznej decyzji głównie przelewy od i do osób. Na
   dłuższej historii łączenie marek daje więcej (ta sama sieć w wielu miastach).
@@ -86,7 +89,11 @@ Zrobione (D75 – pomysły 1 + 3 + 4 + 2, D76 – wyszukiwarka i zaznaczanie dop
   także reguł, bez szkicu nowego wpisu i bez niewidocznych operacji, kategoria wymagana, reguły marek zachowują
   „do zwrotu”, decyzje i zaznaczenia po przeliczeniu planu przenoszone po operacjach, słowo z Operacji w obu
   kierunkach, podpowiedź mBanku grupy jako przyjęta propozycja, odmiana „operacje”.
-- Testy: 353 unit + fs (`tests/unit/import-brands.test.ts`), E2E 15 (`tests/e2e/import.spec.ts` – tematy,
+- Trzeci przegląd `/code-review` high (duplikaty): 8 znalezisk, wszystkie poprawione – korekta salda nigdy nie łączona,
+  niepewny możliwy duplikat do zaznaczenia (nie sam), cała decyzja kopii przy scalaniu, „Cofnij” przywraca też zachowaną
+  operację i dokowania, odporny zapis „to nie duplikat”, szukanie w oknie ±3 dni i raz dla wszystkich ekranów, jedna
+  reguła dopasowania dla importu i panelu, decyzje w dokumentach.
+- Testy: 357 unit + fs (`tests/unit/import-brands.test.ts`, `duplicates.test.ts`), E2E 16 (`duplicates.spec.ts`) (`tests/e2e/import.spec.ts` – tematy,
   wyszukiwarka, zaznaczanie, „Nie importuj”, słowo kluczowe z wyszukiwania, „Przyjmij pewne”, Operacje: zaznaczenie
   znalezionych, kategoria, reguła marki, „Cofnij”).
 
@@ -94,6 +101,7 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.2.1, Windows):
 1. Import pełnej historii z mBanku: liczba tematów, „Przyjmij pewne”, trafność słownika i słów kluczowych.
 2. Własne słowo kluczowe (np. nazwa ulubionej cukierni) i wyszukiwarka z zaznaczaniem.
 3. Operacje: wyszukaj, zaznacz wszystkie widoczne, ustaw kategorię (z zapamiętaniem) i „Cofnij”.
+4. Wpis ręczny przed importem (np. wieczorem) – po imporcie jedna operacja; panel „Duplikaty operacji” na ekranie Import.
 
 ## E8 – Wywiad i raporty (17.10.2026)
 
@@ -615,5 +623,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 17.10.2026 – zamknięcie grupy D: 1.2.0, PR do `main`; plan etapów E0–E8 zamknięty (E9 wypada – D74); propozycja
   usprawnienia importu (1.2.1) czeka na wybór użytkownika; pauza.
 - 17.10.2026 – PR #6 scalony, wydanie 1.2.0 opublikowane; komenda startu 1.2.1 (D75: pomysły 1 + 3 + 4 + 2), w trakcie
-  dopisane wyszukiwarka i zaznaczanie (D76); klucz marki, słownik sieci, słowa kluczowe, tematy z „Przyjmij pewne”,
-  przegląd i poprawki; PR do `main`; pauza.
+  dopisane wyszukiwarka i zaznaczanie (D76) oraz duplikaty jak w ICTTJ (D77); klucz marki, słownik sieci, słowa
+  kluczowe, tematy z „Przyjmij pewne”, decyzje zbiorcze w imporcie i Operacjach, scalanie duplikatów; trzy przeglądy
+  i poprawki; PR #7 do `main`; pauza.

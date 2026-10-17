@@ -281,7 +281,11 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `ThemeRow`, `GroupRow`, `BulkBar` – słowo z wyszukiwania), `rules.ts` (`ruleFor` / `rememberCategory` po marce,
   `saveKeywordRule`, `rememberBrands`, `keywordOfSearch`).
 - Operacje (T91): `features/operations/state.ts` `ticked` / `tickOperations` / `categorizeTicked` (z „Cofnij”),
-  `OperationsPage.tsx` kolumna zaznaczenia, `TickAll`, `BulkBar` (`operations-bulk-*`).
+  `OperationsPage.tsx` kolumna zaznaczenia, `TickAll`, `BulkBar` (`operations-bulk-*`), `DuplicatesLink`.
+- Duplikaty (D77, T92–T94, wzór ICTTJ 1.19.1): `reconcile.ts` `joinable`, `looseMatch`, `closeAmount`, `merge.loose` /
+  `ask`, `joins`; `shared/import/duplicates.ts` (`findDuplicates`, `mergeDuplicate`, `duplicateKey` / `rowKey`);
+  `settings.import.notDuplicates`; renderer `features/import/DuplicatesPanel.tsx` (`useDuplicates`, scalanie,
+  `deleteManyWithUndo(…, onUndo)`); testy `tests/unit/duplicates.test.ts`, E2E `tests/e2e/duplicates.spec.ts`.
 - Testy: `tests/unit/import-brands.test.ts`, `import.test.ts`, E2E `tests/e2e/import.spec.ts`.
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
@@ -343,4 +347,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E7 Dowództwo (gra) → 1.2.0 (grupa D)
 - [x] E8 Wywiad i raporty → 1.2.0 (grupa D)
 - ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)
-- [x] 1.2.1 Grupowanie importu z mBanku (D75, D76)
+- [x] 1.2.1 Grupowanie importu z mBanku, decyzje zbiorcze, duplikaty (D75–D77)
