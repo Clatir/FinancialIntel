@@ -10,6 +10,7 @@ import { applyPageLayout } from '../../store/layout'
 import { Kbd } from '../../components/ui'
 import { PAGES } from '../screens/pages'
 import { SETTINGS_TABS } from '../settings/SettingsPage'
+import { startWizard } from '../wizard/state'
 import { newOperation } from '../operations/state'
 
 const GROUP =
@@ -33,6 +34,7 @@ export function CommandPalette() {
   const actions: Action[] = useMemo(
     () => [
       { id: 'new-operation', label: 'Nowa operacja', keys: 'Ctrl N', run: () => void newOperation() },
+      { id: 'wizard', label: 'Kreator startu budżetu', run: () => startWizard() },
       ...PAGES.map((p) => ({ id: `page-${p.page}`, label: `${p.label} – ${p.sub}`, keys: `Ctrl ${p.key}`, run: () => navigate({ page: p.page }) })),
       { id: 'sync', label: 'Synchronizacja i problemy', keys: 'Ctrl Shift Y', run: () => navigate({ page: 'sync' }) },
       ...SETTINGS_TABS.map((t) => ({ id: `settings-${t.id}`, label: `Ustawienia: ${t.label}`, run: () => navigate({ page: 'settings', tab: t.id }) })),

@@ -69,7 +69,7 @@ function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<st
   const s = useData.getState()
   if (!s.fi) return null
   const ownNames = [...s.fi.settings.import.ownNames, ...(file.client ? [file.client] : [])]
-  return planImport(file, accountId, records(s.records.transactions), { rules: s.fi.settings.import.rules, ownNames, categories: categoryIndex(s.fi.settings.categories) }, deletedKeys)
+  return planImport(file, accountId, records(s.records.transactions), { rules: s.fi.settings.import.rules, ownNames, categories: categoryIndex(s.fi.settings.categories), containers: records(s.records.containers) }, deletedKeys)
 }
 
 /** Keys of the bank's rows of deleted operations (their last versions in the history). */

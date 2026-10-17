@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import type { MachineConfig } from '@shared/api'
 import { DEFAULT_UPDATE_PREFS, type PendingUpdate } from '@shared/update'
+import { DEFAULT_MACHINE_PREFS, machinePrefsFrom } from '@shared/machine'
 import { writeFileAtomic } from './datastore/atomic'
 
 /** Per-machine settings (never synced): stored in %APPDATA%/Financial Intel/config.json. */
@@ -14,7 +15,8 @@ const DEFAULTS: MachineConfig = {
   updates: { prefs: { ...DEFAULT_UPDATE_PREFS }, pending: null, lastRunVersion: null, token: null, tokenEncrypted: false },
   // Closing hides to the tray (decision E0-4: notifications work in the background); start with Windows off until the
   // start wizard (E3) asks.
-  tray: { closeToTray: true, launchAtLogin: false, notified: false }
+  tray: { closeToTray: true, launchAtLogin: false, notified: false },
+  prefs: DEFAULT_MACHINE_PREFS
 }
 
 /** What the renderer may see: everything but the GitHub token (encrypted, or plain text without safeStorage). */
@@ -66,7 +68,8 @@ export class ConfigStore {
         ...raw,
         recentDirs: Array.isArray(raw.recentDirs) ? raw.recentDirs.filter((d) => typeof d === 'string').slice(0, 8) : [],
         updates: loadUpdates(raw.updates),
-        tray: loadTray(raw.tray)
+        tray: loadTray(raw.tray),
+        prefs: machinePrefsFrom(raw.prefs)
       }
     } catch {
       this.config = { ...DEFAULTS }

@@ -241,3 +241,33 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zostają), kwoty pomnożone przez współczynnik 0,6–1,4 losowany osobno dla każdego kontrahenta (nie do odwrócenia),
   część wierszy usunięta; format pliku (BOM, CRLF, pola opisu) bez zmian – `.gitattributes` `tests/fixtures/** -text`.
   Napisy testów pochodzące z pliku używają nazw zanonimizowanych.
+
+### E3 – start i plan miesiąca (17.10.2026)
+- **T45** Pierwszy miesiąc budżetu: pensja w miesiącu startu jest pomniejszona o koszty netto tego miesiąca sprzed startu
+  (bez opłat okresowych – te są zbiorników), więc reszta miesiąca ma tyle energii, ile zostało z pensji; dzienny
+  przydział liczy cały miesiąc (T30).
+- **T46** Plan miesiąca: miesiąc bez własnego planu korzysta z ostatniego wcześniejszego; pierwsza zmiana (pensja,
+  koperta, łupy) tworzy jego własny plan – kopię pensji i kopert, bez decyzji o łupach – i nie zmienia innych miesięcy.
+  Puste pole koperty = kategoria bez koperty w tym miesiącu.
+- **T47** Propozycje (D70) z pełnych miesięcy historii (od pierwszego objętego w całości, bez bieżącego): pensja –
+  średnie koszty netto 6 mies. w górę do 100 zł; koperty – średnie wydatki kategorii głównej z 3 mies., do 10 zł, bez
+  płatności kontenerów (połączonych albo do tego samego odbiorcy); cel kadłuba w kreatorze – średnie z 12 mies. jak
+  silnik (T27), przy mniej niż 3 pełnych miesiącach – koszty przyjęte w kreatorze.
+- **T48** Stałe opłaty z historii: ten sam odbiorca (kontrahent, a bez niego tytuł – `payeeKey`) prawie w każdym
+  z ostatnich pełnych miesięcy (co najmniej 3; najwyżej jedna płatność ponad liczbę miesięcy; kwoty ±15% mediany) albo
+  2–3 płatności co 11–13 miesięcy; kwota = ostatnia płatność; każdą propozycję trzeba potwierdzić.
+- **T49** Kontener ma odbiorcę w banku (`container.counterparty`, addytywnie): import łączy jego płatności
+  (`containerId`; kategoria kontenera, gdy nie ma innej decyzji – reguła wygrywa), dodanie kontenera łączy płatności
+  tego odbiorcy od 1. dnia miesiąca startu budżetu, a w edytorze kontenera jest „Połącz płatności”. Silnik i debriefing
+  liczą jako ładownię tylko płatności połączone; nie są wydatkami kopert. W Operacjach wydatek ma pole „Ładownia”.
+- **T50** Nowy kontener jest formularzem do „Dodaj do ładowni”: ponad linią zanurzenia najpierw ostrzeżenie
+  z symulacją (masa ładunku i zasięg przy kosztach powiększonych o miesięczną część kontenera) i potwierdzenie;
+  zmiany istniejącego zapisują się od razu; zrzut = archiwizacja (symulacja w edytorze).
+- **T51** Kreator startu stosuje odpowiedzi razem przy „Uruchom budżet”: saldo otwarcia każdego konta na początek dnia =
+  saldo teraz − operacje tego dnia już w budżecie (kolejność salda i importu nie ma znaczenia); konto bez salda otwarcia
+  wymaga salda (0, gdy puste); start = dziś; podział środków według dokowania (kadłub do poprawienia, reszta w osłonach;
+  cele z Mapą gwiezdną, E5); plan bieżącego miesiąca; wybrane kontenery; skrót szybkiego wpisu i start z Windows (D64).
+  Działający budżet nie uruchamia kreatora drugi raz.
+- **T52** Łupy (D18): decyzja do 7. dnia następnego miesiąca zapisana w planie zakończonego miesiąca (następny miesiąc –
+  koperty codzienne, cele, reszta do osłon); „Miesiąc zamknięty na plus” = koszty netto ≤ pensja, z krótką animacją
+  i dźwiękiem raz na komputer; debriefing od pierwszego miesiąca budżetu.

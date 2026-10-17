@@ -132,7 +132,8 @@ test('Ustawienia: konta z saldem otwarcia i potwierdzeniem (korekta), kategorie'
     await auto.getByTestId('category-name').press('Enter')
     const renamed = page.locator('[data-testid="category-row"][data-name="Auto i transport"]')
     await renamed.getByTestId('category-add-sub').click()
-    await expect(renamed.getByTestId('subcategory')).toHaveCount(5)
+    // paliwo, serwis, ubezpieczenie, parking i opłaty, przejazdy (D69) + the new one.
+    await expect(renamed.getByTestId('subcategory')).toHaveCount(6)
     await page.screenshot({ path: join('test-results', 'screens', '04-kategorie.png') })
     await expect
       .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.categories.filter((c: { name: string }) => c.name === 'Auto i transport' || c.name === 'nowa').length)

@@ -1,6 +1,7 @@
 // adapted from ICTTJ src/preload/index.ts @ 84a8339
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ChangeSet, DetachEvent, DetachPayload, FiApi } from '@shared/api'
+import type { ChangeSet, DetachEvent, DetachPayload, FiApi, QuickData, QuickResult } from '@shared/api'
+import type { MachinePrefs } from '@shared/machine'
 import type { UpdateState } from '@shared/update'
 
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(`fi:${channel}`, ...args)
@@ -67,7 +68,23 @@ const api: FiApi = {
   detachReady: () => invoke('detachReady'),
   onDetachProps: (cb) => listen<[DetachPayload]>('detachProps', cb),
   detachEmit: (event) => invoke('detachEmit', event),
-  detachFullscreen: (on) => invoke('detachFullscreen', on)
+  detachFullscreen: (on) => invoke('detachFullscreen', on),
+  setMachinePrefs: (patch) => invoke('setMachinePrefs', patch),
+  onMachinePrefs: (cb) => listen<[MachinePrefs]>('machinePrefs', cb),
+  quickShortcutState: () => invoke('quickShortcutState'),
+  quickOpen: () => invoke('quickOpen'),
+  onQuickRequest: (cb) => listen<[]>('quickRequest', cb),
+  quickData: (data) => invoke('quickData', data),
+  onQuickAdd: (cb) => listen<[unknown]>('quickAdd', cb),
+  quickResult: (result) => invoke('quickResult', result),
+  onQuickData: (cb) => listen<[QuickData | null]>('quickData', cb),
+  quickAdd: (draft) => invoke('quickAdd', draft),
+  quickRefresh: () => invoke('quickRefresh'),
+  onQuickResult: (cb) => listen<[QuickResult]>('quickResult', cb),
+  quickClose: () => invoke('quickClose'),
+  setTrayStatus: (text) => invoke('setTrayStatus', text),
+  notify: (n) => invoke('notify', n),
+  onNotificationClick: (cb) => listen<[string]>('notificationClick', cb)
 }
 
 contextBridge.exposeInMainWorld('fi', api)

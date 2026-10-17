@@ -8,16 +8,31 @@ import { parseAmountInput, parseClockInput, parseDateInput } from '../lib/format
 import { toast } from '../store/ui'
 import { cx } from './ui'
 
-/** 123456 → "1 234,56" (grouped, comma), 1200 → "12,00". */
-export function plnText(grosze: number, group = true): string {
+/** What a hidden amount shows (Ctrl+$, D30). */
+export const AMOUNT_MASK = '•••'
+let amountsHidden = false
+
+/** The hiding of amounts of this computer: every `plnText` masks them (the app's tree renders again on a change). */
+export function setAmountsHidden(on: boolean): void {
+  amountsHidden = on
+}
+
+/** 123456 → "1 234,56" (grouped, comma), 1200 → "12,00" – always the number (the fields being typed in). */
+export function formatPln(grosze: number, group = true): string {
   const abs = Math.abs(grosze)
   const zl = String(Math.floor(abs / 100))
   const int = group ? zl.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : zl
   return `${grosze < 0 ? '−' : ''}${int},${String(abs % 100).padStart(2, '0')}`
 }
 
+/** An amount as the screens show it: the number, or the mask while the amounts are hidden. */
+export function plnText(grosze: number, group = true): string {
+  return amountsHidden ? AMOUNT_MASK : formatPln(grosze, group)
+}
+
 /** A signed amount as the lists show it: „+” for money in, „−” for money out (D68). */
 export function signedPln(grosze: number): string {
+  if (amountsHidden) return AMOUNT_MASK
   return grosze > 0 ? `+${plnText(grosze)}` : plnText(grosze)
 }
 
@@ -58,7 +73,7 @@ export const AmountField = forwardRef<
       aria-label={rest['aria-label']}
       data-testid={rest['data-testid']}
       onFocus={(e) => {
-        setDraft(value == null ? '' : plnText(value, false))
+        setDraft(value == null ? '' : formatPln(value, false))
         const el = e.currentTarget
         requestAnimationFrame(() => el.select())
       }}

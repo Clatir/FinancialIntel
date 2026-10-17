@@ -3,7 +3,7 @@ import { existsSync, promises as fs } from 'node:fs'
 import { hostname } from 'node:os'
 import { basename, dirname, join, parse } from 'node:path'
 import { Readable } from 'node:stream'
-import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, net, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
 import type { AppInfo, ChangeSet, HistoryKind, HistoryReason, OpenFolderResult, TrayPrefs } from '@shared/api'
 import type { Collection } from '@shared/paths'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
@@ -18,6 +18,8 @@ import { Updater } from './update/updater'
 import { startPortableSwap, startSilentInstaller } from './update/apply'
 import { setupDetach } from './detach'
 import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
+import { QuickEntry } from './quick'
+import { patchMachinePrefs, type MachinePrefs } from '@shared/machine'
 
 // Test hooks: isolated user data and a preselected data folder (no dialogs in E2E runs).
 if (process.env.FI_USER_DATA) app.setPath('userData', process.env.FI_USER_DATA)
@@ -43,6 +45,9 @@ let watcher: FolderWatcher | null = null
 let presenceTimer: NodeJS.Timeout | null = null
 let updater: Updater | null = null
 let tray: AppTray | null = null
+let quick: QuickEntry | null = null
+/** Notifications shown and not closed yet (a dropped reference loses its click). */
+const notifications = new Set<Notification>()
 /** The app really quits (from the tray, an update, the system): closing the window then closes it, not hides it. */
 let quitting = false
 /** Started hidden (with the system) from a maximized window: maximize when first shown – maximize() would show it now. */
@@ -76,6 +81,11 @@ function appTray(): AppTray {
   tray ??= new AppTray({
     title: APP_TITLE,
     show: showMainWindow,
+    quick: () => quick?.show(),
+    today: () => {
+      showMainWindow()
+      mainWindow?.webContents.send('fi:notificationClick', 'today')
+    },
     quit: quitApp,
     updateReady: () => !!updater?.isReady,
     restartForUpdate: () => {
@@ -519,6 +529,34 @@ function registerIpc(): void {
     return requireUpdater().tokenChanged()
   })
   handle('dismissUpdateNotice', () => requireUpdater().dismissNotice())
+  handle('setMachinePrefs', async (patch: unknown) => {
+    const prefs = patchMachinePrefs(config.get().prefs, patch)
+    await config.update({ prefs })
+    quick?.applyShortcut(prefs.quickShortcut)
+    broadcastPrefs(prefs)
+    return prefs
+  })
+  handle('setTrayStatus', (text: unknown) => {
+    tray?.setStatus(typeof text === 'string' && text ? text.slice(0, 200) : null)
+  })
+  handle('notify', (n: { title?: unknown; body?: unknown; tag?: unknown; silent?: unknown }) => {
+    if (!Notification.isSupported()) return
+    const note = new Notification({ title: String(n?.title ?? APP_TITLE).slice(0, 120), body: String(n?.body ?? '').slice(0, 500), silent: n?.silent === true })
+    const tag = String(n?.tag ?? '')
+    note.on('click', () => {
+      showMainWindow()
+      mainWindow?.webContents.send('fi:notificationClick', tag)
+    })
+    note.on('close', () => notifications.delete(note))
+    notifications.add(note)
+    note.show()
+  })
+}
+
+/** The preferences of this computer to every window of the app (the main one, the quick entry, detached panels). */
+function broadcastPrefs(prefs: MachinePrefs): void {
+  const wins = [mainWindow, ...(quick?.windows() ?? []), ...(detach?.windows() ?? [])]
+  for (const w of wins) if (w && !w.isDestroyed()) w.webContents.send('fi:machinePrefs', prefs)
 }
 
 function createWindow(): void {
@@ -637,8 +675,9 @@ function createWindow(): void {
   })
   win.on('closed', () => {
     mainWindow = null
-    // Detached panels belong to the main window (and would keep the app running).
+    // Detached panels and the quick entry belong to the main window (and would keep the app running).
     detach?.closeAll()
+    quick?.destroy()
   })
   // A reloaded renderer knows nothing about windows opened before.
   win.webContents.on('did-finish-load', () => detach?.closeAll())
@@ -674,6 +713,19 @@ app.whenReady().then(async () => {
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()
   createWindow()
+  quick = new QuickEntry({
+    main: () => mainWindow,
+    preload: join(__dirname, '../preload/index.js'),
+    devUrl: process.env.ELECTRON_RENDERER_URL ?? null,
+    load: (w) => (process.env.ELECTRON_RENDERER_URL ? w.loadURL(`${process.env.ELECTRON_RENDERER_URL}?quick=1`) : w.loadFile(join(__dirname, '../renderer/index.html'), { query: { quick: '1' } })),
+    log
+  })
+  quick.applyShortcut(config.get().prefs.quickShortcut)
+  // Created hidden a moment after the start: the shortcut then shows it at once.
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) quick?.ensure()
+  }, 3000).unref?.()
+  tray?.refresh()
   const u = updater
   void u.init().then(
     () => u.startAuto(updateCheckDelayMs()),
@@ -693,6 +745,7 @@ app.on('window-all-closed', () => {
 // Last step of quitting (data flushed, folder closed): a downloaded update is installed now; the
 // installer / swap helper finishes after this process has exited.
 app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
   updater?.applyOnQuit()
   log('info', 'koniec pracy')
 })

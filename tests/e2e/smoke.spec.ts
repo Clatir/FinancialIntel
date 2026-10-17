@@ -32,9 +32,13 @@ test('pierwsze uruchomienie: propozycja folderu, fi.json, menu boczne i puste ek
     await expect(page.getByTestId('page-operations')).toBeVisible()
     await page.getByTestId('nav-import').click()
     await expect(page.getByTestId('page-import')).toBeVisible()
+    // Plan miesiąca and Ładownia are real screens from E3.
+    for (const page_ of ['month', 'cargo']) {
+      await page.getByTestId(`nav-${page_}`).click()
+      await expect(page.getByTestId(`page-${page_}`)).toBeVisible()
+      await expect(page.getByTestId('page-stage')).toHaveCount(0)
+    }
     for (const [page_, stage] of [
-      ['month', 'E3'],
-      ['cargo', 'E3'],
       ['starmap', 'E5'],
       ['radar', 'E6'],
       ['command', 'E7'],

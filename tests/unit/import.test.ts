@@ -92,6 +92,21 @@ describe('rozpoznawanie wierszy', () => {
   })
 })
 
+describe('ładownia w imporcie', () => {
+  it('płatność kontrahenta kontenera należy do ładowni: kontener i jego kategoria, reguła wygrywa z kategorią', () => {
+    const file = fixture()
+    const containers = [{ id: '01K6H3Z0W8Q4M2N5P7R9S1T3V1', name: 'Spotify', counterparty: 'SPOTIFY', categoryId: defaultCategoryId(7, 3), archived: false }]
+    const spotify = file.rows.find((r) => r.counterparty === 'Spotify' && r.amount < 0)!
+    expect(classifyRow(spotify, { ...ctx(), containers }).decision).toMatchObject({ containerId: containers[0]!.id, categoryId: defaultCategoryId(7, 3), reason: 'opłata z ładowni: Spotify' })
+    const rule: ImportRule = { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V2', match: 'spotify', mode: 'exact', direction: 'out', label: 'Spotify', kind: 'expense', categoryId: defaultCategoryId(6, 2), refundable: false, household: false, counterAccountId: null, learned: true, hits: 1, updatedAt: NOW }
+    expect(classifyRow(spotify, { ...ctx([rule]), containers }).decision).toMatchObject({ containerId: containers[0]!.id, categoryId: defaultCategoryId(6, 2), source: 'rule' })
+    // An archived container, or money in from that counterparty: no link.
+    expect(classifyRow(spotify, { ...ctx(), containers: [{ ...containers[0]!, archived: true }] }).decision.containerId).toBeNull()
+    const plan = planImport(withRows(file, [spotify]), MBANK_ACCOUNT_ID, [], { ...ctx(), containers })
+    expect(buildImport(plan, emptyChoices(), { now: NOW, house: 0, makeId, rules: [] }).create[0]).toMatchObject({ containerId: containers[0]!.id, kind: 'expense' })
+  })
+})
+
 describe('import: plan, zapis, kolejne importy', () => {
   it('pierwszy import pliku użytkownika: 269 nowych operacji w grupach po kontrahencie; drugi import tego samego – nic nowego', () => {
     const f = fixture()

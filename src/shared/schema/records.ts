@@ -121,6 +121,8 @@ export const containerSchema = z.looseObject({
   dueDay: z.number().int().min(1).max(31).default(1),
   accountId: ulidSchema.nullable().default(null),
   categoryId: ulidSchema.nullable().default(null),
+  /** The payee as the bank writes it: its payments belong to the container (the import links them) – cargo, not an envelope. */
+  counterparty: z.string().max(300).default(''),
   /** Months in the hold (null = open). */
   from: isoMonth.nullable().default(null),
   until: isoMonth.nullable().default(null),

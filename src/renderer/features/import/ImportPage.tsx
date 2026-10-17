@@ -2,6 +2,7 @@ import { useMemo, useState, type DragEvent } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import type { Choice, RowPlan } from '@shared/import/reconcile'
 import { useData } from '../../store/data'
+import { useWizard } from '../wizard/state'
 import { useFleet } from '../../store/fleet'
 import { navigate } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
@@ -489,6 +490,7 @@ export function ImportPage() {
   const last = Object.entries(lastImport ?? {})
     .map(([id, at]) => `${accounts.find((a) => a.id === id)?.name ?? '?'}: ${new Date(at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}`)
     .join(' · ')
+  const wizard = useWizard((w) => w.active)
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-import">
       <div className="flex shrink-0 items-baseline gap-3 border-b border-line px-4 py-2.5">
@@ -496,6 +498,11 @@ export function ImportPage() {
         <span className="text-[12px] text-muted">CSV z mBanku</span>
         <span className="flex-1" />
         {last && <span className="text-[11px] text-dim">ostatni import – {last}</span>}
+        {wizard && (
+          <button className="btn btn-accent h-[24px] self-center" onClick={() => navigate({ page: 'wizard' })} data-testid="import-back-to-wizard">
+            Wróć do kreatora
+          </button>
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="main" tracks={['minmax(320px, 1fr)', 'minmax(420px, 2fr)']} className="grid min-h-full items-start">

@@ -12,8 +12,10 @@ import '@fontsource/jetbrains-mono/latin-500.css'
 import './styles/index.css'
 import { App } from './app/App'
 import { DetachedApp } from './features/detach/DetachedApp'
+import { QuickApp } from './features/quick/QuickApp'
 
-// A panel opened in its own window runs only that panel, without the data store and saves.
-const detached = new URLSearchParams(location.search).has('detached')
+// A panel opened in its own window runs only that panel, without the data store and saves; so does the quick entry.
+const params = new URLSearchParams(location.search)
+const root = params.has('quick') ? <QuickApp /> : params.has('detached') ? <DetachedApp /> : <App />
 
-createRoot(document.getElementById('root') as HTMLElement).render(<StrictMode>{detached ? <DetachedApp /> : <App />}</StrictMode>)
+createRoot(document.getElementById('root') as HTMLElement).render(<StrictMode>{root}</StrictMode>)

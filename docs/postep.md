@@ -2,8 +2,8 @@
 
 **Stan:** grupa A (E1 + E2) scalona – PR #3, wydanie 0.3.0. Grupa B (E3 + E4 → 1.0.0) w toku na gałęzi
 `claude/grupa-b` (komenda użytkownika 17.10.2026, odpowiedzi D69–D70).
-**Następny krok:** E3 – obliczenia planu, Plan miesiąca, Ładownia, kreator startu; potem E4 – Mostek, szybki wpis,
-zasobnik, ukrycie kwot, powiadomienia, dźwięki; PR i wydanie 1.0.0, pauza.
+**Następny krok:** E3 zrobiony; E4 – Mostek, szybki wpis, zasobnik, ukrycie kwot, powiadomienia, dźwięki; PR i wydanie
+1.0.0, pauza.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -35,6 +35,29 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## E3 – start i plan miesiąca (17.10.2026)
+
+Zrobione (kryteria z `plan.md`):
+- Kreator startu (paleta „Kreator startu budżetu”, baner, dopóki budżet nie działa): salda teraz, historia z mBanku
+  (import i powrót do kreatora), pensja ze średnich i cele warstw, ładownia z powtarzających się płatności i koperty
+  ze średnich, podział obecnych środków według dokowania, okręt, rozkazy, skrót szybkiego wpisu, start z Windows (T51).
+- Plan miesiąca (Ctrl+4): pensja z propozycją, podział pensji (ładownia, odkładki, koperty planowe i codzienne,
+  niezaplanowane), dzienny przydział (energia dziś), koperty wobec limitów, debriefing – plan i fakt (FVG kopert),
+  „Miesiąc zamknięty na plus”, podział łupów do 7. dnia (T46, T52); pierwszy miesiąc: pensja bez tego, co wydał przed
+  startem (T45).
+- Ładownia (Ctrl+5): kontenery (stały, abonament, rata; cykl; płatność; konto; kategoria; odbiorca w banku), linia
+  zanurzenia, odkładki ze stanem zbiornika i zaległością wobec planu, symulacja dodania i zrzutu, propozycje z historii
+  (T48–T50); import i Operacje łączą płatności z kontenerem (T49).
+- Przejazdy (D69): Auto · przejazdy, reguły startowe Bolt → Rozrywka i hobby, KOLEO → Auto · przejazdy.
+- Przegląd `/code-review` high: 9 znalezisk – poprawione: Enter w szybkim wpisie zapisywał stary szkic, kreator z palety
+  mógł zrestartować działający budżet, konto bez salda liczyło historię od zera, odbiorca bez kontrahenta (sam tytuł)
+  nie łączył się z kontenerem, opłata okresowa sprzed startu zmniejszała pierwszą pensję, łupy debriefingu nigdy ujemne,
+  zbędne przeliczenia propozycji, zieleń tylko dla kwot; podłączenie zasobnika, powiadomień i stanu skrótu – w E4.
+- Testy: 271 unit + fs (`tests/unit/plan.test.ts`), E2E 10 (`tests/e2e/month.spec.ts` – kreator, plan, ładownia).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.0.0): kreator startu na prawdziwych danych (pensja, koperty, ładownia),
+Plan miesiąca i Ładownia.
 
 ## Przed etapem E3 (grupa B)
 

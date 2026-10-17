@@ -1,7 +1,8 @@
 // adapted from ICTTJ src/renderer/app/Banners.tsx @ 84a8339
 import { useState, type ReactNode } from 'react'
 import { useData } from '../store/data'
-import { navigate } from '../store/ui'
+import { navigate, useUi } from '../store/ui'
+import { startWizard } from '../features/wizard/state'
 import { dismissUpdateNotice, downloadUpdate, restartToUpdate, useUpdate } from '../store/update'
 import { openExternalSafe } from '../features/settings/UpdatesTab'
 import { IconCheck, IconSync, IconWarn } from '../components/icons'
@@ -75,6 +76,8 @@ export function Banners() {
   const conflicts = useData((s) => s.conflicts.length)
   const problems = useData((s) => s.problems.filter((p) => p.kind !== 'unknown-file').length)
   const updates = useUpdateBanners()
+  const budgetStart = useData((s) => (s.fi ? s.fi.settings.budget.start : undefined))
+  const page = useUi((s) => s.route.page)
   const items: BannerItem[] = []
   if (status?.readOnlyReason) items.push({ key: 'ro', text: status.readOnlyReason })
   const others = status?.otherMachines ?? []
@@ -90,6 +93,14 @@ export function Banners() {
       key: 'sync',
       text: `${conflicts ? `Konflikty synchronizacji: ${conflicts}. ` : ''}${problems ? `Pliki z błędami: ${problems}.` : ''}`,
       actions: [{ label: 'Rozstrzygnij', onClick: () => navigate({ page: 'sync' }), accent: true }]
+    })
+  // A folder without a running budget: the start wizard (spec, „Kreator startu”) – not while it runs.
+  if (budgetStart === null && page !== 'wizard' && !status?.readOnly)
+    items.push({
+      key: 'wizard',
+      icon: <IconWarn size={14} className="shrink-0 text-accent" />,
+      text: 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
+      actions: [{ label: 'Kreator startu', onClick: startWizard, accent: true, testId: 'banner-wizard-start' }]
     })
   items.push(...updates)
   if (!items.length) return null

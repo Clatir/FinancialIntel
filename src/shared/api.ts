@@ -4,6 +4,7 @@ import type { Collection, FileKind } from './paths'
 import type { RecordTypes } from './records'
 import type { SettingsFile } from './schema'
 import type { PendingUpdate, UpdatePrefs, UpdateState } from './update'
+import type { MachinePrefs } from './machine'
 
 export interface RecordEntry<T> {
   record: T
@@ -121,6 +122,8 @@ export interface MachineConfig {
     tokenEncrypted: boolean
   }
   tray: TrayPrefs
+  /** The shortcut, notifications, sounds and the hiding of amounts of this computer (`shared/machine.ts`). */
+  prefs: MachinePrefs
 }
 
 export interface TrayPrefs {
@@ -216,6 +219,56 @@ export interface FiApi {
   detachEmit(event: DetachEvent): Promise<void>
   /** Full screen of this (detached) window: switch on / off, or toggle when no value; answers the new state. */
   detachFullscreen(on?: boolean): Promise<boolean>
+  /** Preferences of this computer (shortcut, notifications, sounds, hidden amounts): a patch, the result for all windows. */
+  setMachinePrefs(patch: Partial<MachinePrefs>): Promise<MachinePrefs>
+  onMachinePrefs(cb: (prefs: MachinePrefs) => void): () => void
+  /** The quick entry's global shortcut: registered, or taken by another program. */
+  quickShortcutState(): Promise<{ accelerator: string; registered: boolean }>
+  /** Show the quick entry window (the tray, the palette, the bridge). */
+  quickOpen(): Promise<void>
+  /** Main window: the quick window wants its data (categories, today's energy…) – answer with `quickData`. */
+  onQuickRequest(cb: () => void): () => void
+  quickData(data: QuickData | null): Promise<void>
+  /** Main window: an operation typed in the quick window to add – answer with `quickResult`. */
+  onQuickAdd(cb: (draft: unknown) => void): () => void
+  quickResult(result: QuickResult): Promise<void>
+  /** Quick window: its data, adding an operation (the main window saves it), closing. */
+  onQuickData(cb: (data: QuickData | null) => void): () => void
+  quickAdd(draft: unknown): Promise<void>
+  /** Quick window: its renderer is ready – the data again (the first answer may have come before it listened). */
+  quickRefresh(): Promise<void>
+  onQuickResult(cb: (result: QuickResult) => void): () => void
+  quickClose(): Promise<void>
+  /** The tray's tooltip: today's energy (null = only the app's name). */
+  setTrayStatus(text: string | null): Promise<void>
+  /** A Windows notification; clicking it shows the window and sends `tag` back. */
+  notify(n: { title: string; body: string; tag: string; silent?: boolean }): Promise<void>
+  onNotificationClick(cb: (tag: string) => void): () => void
+}
+
+/** What the quick entry window shows (sent by the main window, which owns the data). */
+export interface QuickData {
+  categories: Array<{ id: string; label: string; mainId: string; envelope: 'daily' | 'planned' | null }>
+  accounts: Array<{ id: string; name: string }>
+  /** The account used last on this computer. */
+  accountId: string
+  /** Today's energy left (null = no plan this month) and the envelopes left. */
+  energyLeft: number | null
+  envelopesLeft: Record<string, number>
+  quietHours: { from: string; to: string }
+  impulseThreshold: number
+  /** The officer: the category used last with a counterparty (its key) and the recent counterparties. */
+  lastCategory: Record<string, string>
+  counterparties: string[]
+  /** The house receivable now (a household member's money repays it). */
+  house: number
+  hideAmounts: boolean
+  readOnly: boolean
+}
+
+export interface QuickResult {
+  ok: boolean
+  message: string
 }
 
 /** A panel shown in its own window: what to draw (a known kind) and its data (plain JSON, sent again on change). */

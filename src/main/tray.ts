@@ -15,6 +15,10 @@ export const HIDDEN_ARG = '--hidden'
 export interface TrayDeps {
   title: string
   show: () => void
+  /** The quick entry window (E4); null = not available. */
+  quick: (() => void) | null
+  /** „Raport wachty dnia”: the window on today's operations. */
+  today: () => void
   quit: () => void
   /** A downloaded update waits for the restart. */
   updateReady: () => boolean
@@ -24,6 +28,7 @@ export interface TrayDeps {
 
 export class AppTray {
   private tray: Tray | null = null
+  private status: string | null = null
 
   constructor(private readonly d: TrayDeps) {}
 
@@ -37,7 +42,7 @@ export class AppTray {
     try {
       const image = nativeImage.createFromPath(icon).resize({ width: 16, height: 16 })
       this.tray = new Tray(image)
-      this.tray.setToolTip(this.d.title)
+      this.tray.setToolTip(this.tooltip())
       this.tray.on('click', () => this.d.show())
       this.tray.on('double-click', () => this.d.show())
       this.refresh()
@@ -49,13 +54,26 @@ export class AppTray {
     }
   }
 
+  private tooltip(): string {
+    return this.status ? `${this.d.title}\n${this.status}` : this.d.title
+  }
+
+  /** The tooltip's second line: today's energy (masked while the amounts are hidden – the window decides). */
+  setStatus(text: string | null): void {
+    this.status = text
+    if (this.active) this.tray!.setToolTip(this.tooltip())
+  }
+
   /** The menu again (an update became ready). */
   refresh(): void {
     if (!this.active) return
     const ready = this.d.updateReady()
+    const quick = this.d.quick
     this.tray!.setContextMenu(
       Menu.buildFromTemplate([
+        ...(quick ? [{ label: 'Szybki wpis', click: () => quick() }] : []),
         { label: 'Otwórz', click: () => this.d.show() },
+        { label: 'Raport wachty dnia', click: () => this.d.today() },
         ...(ready ? [{ label: 'Uruchom ponownie i zaktualizuj', click: () => this.d.restartForUpdate() }] : []),
         { type: 'separator' },
         { label: 'Zakończ', click: () => this.d.quit() }
