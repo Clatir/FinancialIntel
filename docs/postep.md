@@ -1,10 +1,11 @@
 # Financial Intel – postęp
 
-**Stan:** grupa D (E7 + E8 → 1.2.0) w toku na gałęzi `claude/grupa-d` (komenda 17.10.2026 – D73; bez asystenta AI –
-D74, E9 wypada). **1.1.0 wydane** (PR #5 scalony), **1.0.0 wydane** (PR #4). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
+**Stan:** grupa D (E7 + E8 → 1.2.0) zrobiona na gałęzi `claude/grupa-d`, PR do `main` – scalenie przy zielonym CI
+(D71); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. **1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
 (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy
 czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** E7 zrobiony (sekcja niżej); E8 Wywiad i raporty bez pauzy; zamknięcie grupy D – wydanie 1.2.0.
+**Następny krok:** pauza – czeka wybór użytkownika: usprawnienie grupowania importu z mBanku (propozycja niżej, 1.2.1),
+kalibracja progów gry po pierwszym miesiącu.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -15,7 +16,7 @@ czytają folder przez `tests/e2e/files.ts`.
 ## Kolejka prac
 
 Czas = praca Claude Code w sesji (czytanie, pisanie, testy, poprawki), bez testowania przez użytkownika i bez czekania
-na CI. Model i thinking z górką. E0 oraz grupy B i C zmierzone zegarem sesji; reszta przeliczona na ich podstawie, z zapasem.
+na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesji.
 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -24,9 +25,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B i C zmierzone zegarem sesji; 
 | **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 4–6 h) | **1.0.0** | ✅ odpowiedzi (D69, D70) | ✅ wydane (PR #4), czeka na odbiór na Windows |
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
-| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 2–3 h | 1.2.0 | ✅ komenda i propozycje (D73) | 🔄 w toku |
+| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ zrobione, PR do `main` |
+| 1.2.1 | Grupowanie importu z mBanku (propozycja) | Opus 5.5 | **max** | ok. 1 h | 1.2.1 | wybór pomysłów (1–6) | ⏳ czeka na decyzję |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8** | | | **ok. 10,5–11,5 h** | | | |
+| | **Całość E0–E8** | | | **zmierzone ok. 9,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -40,6 +42,17 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## Propozycja: grupowanie importu z mBanku (1.2.1, zgłoszenie użytkownika 17.10.2026)
+
+1. **Co trzeba wiedzieć** – import grupuje po kluczu kontrahenta z całą nazwą (miasto, numer sklepu), więc jedna sieć
+   daje wiele grup; zmiana w E2 (import), bez AI.
+2. **Pytania z propozycją** – które pomysły: (1) klucz marki bez miast, numerów i dopisków kartowych, (2) wbudowany
+   słownik sieci z kategoriami, (3) reguły na słowa kluczowe w nazwie i tytule (zestaw startowy + własne),
+   (4) grupowanie wielopoziomowe (marka / słowo / kategoria mBanku) z „Zaakceptuj pewne”, (5) łączenie podobnych nazw do
+   zatwierdzenia, (6) propozycja reguły po decyzji z liczbą objętych wierszy. Propozycja: 1 + 3 + 4 (+ 2).
+3. **Co przygotować** – nic; przydatny zanonimizowany fragment CSV z problematycznymi nazwami (jak przy E2).
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1 h.
 
 ## E8 – Wywiad i raporty (17.10.2026)
 
@@ -558,3 +571,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
   i poprawki; zgłoszenie użytkownika o grupowaniu importu – pomysły podane, czeka na wybór.
 - 17.10.2026 – E8 (Wywiad: krzywa majątku z BOS / CHoCH, Killzones, FVG, Order Block, zasięg, dziennik; Raporty i eksport
   CSV / Excel / PDF / ZIP, raport wachty w niedzielę), przegląd i poprawki.
+- 17.10.2026 – zamknięcie grupy D: 1.2.0, PR do `main`; plan etapów E0–E8 zamknięty (E9 wypada – D74); propozycja
+  usprawnienia importu (1.2.1) czeka na wybór użytkownika; pauza.

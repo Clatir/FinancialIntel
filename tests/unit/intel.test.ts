@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { balancesAt, goalsReachedIn, yearWealth, killzoneGrid, logAccuracy, nextWeekEnvelopes, rangeForecast, spendingByMonth, structureOf, wealthCurve, weekNumbers, yearNumbers } from '@shared/calc/intel'
 import { createDefaultSettings } from '@shared/defaults'
+import type { FleetEvent } from '@shared/calc/fleet'
 import { balanceSchema, defaultCategoryId, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Transaction } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
@@ -50,9 +51,9 @@ describe('przegląd roczny', () => {
     const txs = [tx('2025-12-31', -zl(100)), tx('2026-01-02', -zl(50)), tx('2026-12-31', zl(300))]
     expect(yearWealth(txs, [opening], [MBANK_ACCOUNT_ID], '2026', '2027-02-01')).toEqual({ start: zl(900), end: zl(1150) })
     expect(yearWealth(txs, [opening], [MBANK_ACCOUNT_ID], '2026', '2026-06-01')).toEqual({ start: zl(900), end: zl(850) })
-    const log = [
-      { date: '2025-11-03', kind: 'income' as const, amount: 0, moves: { goals: { G1: zl(600) } } },
-      { date: '2026-03-03', kind: 'income' as const, amount: 0, moves: { goals: { G1: zl(500), G2: zl(100) } } }
+    const log: FleetEvent[] = [
+      { date: '2025-11-03', kind: 'income', amount: 0, moves: { goals: { G1: zl(600) } } },
+      { date: '2026-03-03', kind: 'income', amount: 0, moves: { goals: { G1: zl(500), G2: zl(100) } } }
     ]
     const goals = [{ id: 'G1', name: 'Laptop', target: zl(1000) }, { id: 'G2', name: 'Wakacje', target: zl(5000) }]
     expect(goalsReachedIn(log, goals, '2026')).toEqual(['Laptop'])
