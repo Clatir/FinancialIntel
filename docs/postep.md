@@ -179,6 +179,11 @@ Zrobione (zakres z „Przed etapem E5”, odpowiedzi D72):
   - domyślna pierwsza rata istniejącego dnia (31 → koniec miesiąca), kwota spłaty = to, co należne teraz;
   - każda nowa zaległa rata = nowe przypomnienie; kolory zaległości w akcencie.
 - Testy: 310 unit + fs (`tests/unit/loans.test.ts`), E2E 13 (`tests/e2e/radar.spec.ts`).
+- CI Windows w PR #5 złapał dwa błędy, których Linux nie pokazał:
+  - pole kwoty zaznaczało tekst w następnej klatce, a `select()` przenosi fokus – spóźniona klatka (okno odświeżane
+    z opóźnieniem) zabierała fokus następnemu polu i wpisana tam liczba trafiała do kwoty (pożyczka 2 zł zamiast
+    600 zł); teraz zaznacza tylko, gdy pole nadal ma fokus (odtworzone lokalnie przed poprawką i sprawdzone po niej);
+  - test ICTTJ porównywał ścieżki z „/”, a Windows podaje je z „\”.
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.1.0, Windows):
 1. Radar: najbliższe pensje, opłaty okresowe ze stanem zbiorników.

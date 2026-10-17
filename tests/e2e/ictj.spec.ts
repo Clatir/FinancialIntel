@@ -150,7 +150,9 @@ test('ICTTJ: podpowiedź folderu, dokowanie z mBanku i na Portfel XTB, pula Cele
     await page.getByTestId('nav-open-ictj').click()
     await expect.poll(async () => (await fs.readFile(join(userData, 'logs', 'main.log'), 'utf8')).includes(`ICTTJ: start ${exe}`)).toBe(true)
     // FI never wrote in the ICTTJ folder.
-    expect((await fs.readdir(ictj, { recursive: true })).filter((f) => String(f).endsWith('.json')).sort()).toEqual(
+    // Relative paths with „/” on every system (Windows lists them with „\”).
+    const files = (await fs.readdir(ictj, { recursive: true })).map((f) => String(f).replace(/\\/g, '/'))
+    expect(files.filter((f) => f.endsWith('.json')).sort()).toEqual(
       ['journal.json', `forecasts/01KPRGN0000000000000000001.json`, `payouts/${old.slice(0, 4)}/${old}_${W2}.json`, `payouts/${today.slice(0, 4)}/${today}_${R1}.json`, `payouts/${today.slice(0, 4)}/${today}_${W1}.json`].sort()
     )
     expect(errors).toEqual([])

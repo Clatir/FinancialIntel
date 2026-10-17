@@ -23,6 +23,8 @@ nadciąga w ciągu 90 dni.
   edytorze operacji wybór pożyczki.
 - Odprawa i powiadomienia: zaległa rata po 3 dniach, PIT-38 14 i 3 dni przed terminem, należność domu starsza niż
   30 dni – powiadomienia z przełącznikami (Ustawienia → Powiadomienia i dźwięki).
+- Poprawka: pole kwoty nie zabiera już fokusu następnemu polu, gdy okno odświeża się z opóźnieniem (np. tuż po
+  pokazaniu) – wpisana tam wartość nie trafia do kwoty.
 
 ## 1.0.0
 

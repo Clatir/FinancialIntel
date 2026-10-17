@@ -72,7 +72,11 @@ export const AmountField = forwardRef<
       onFocus={(e) => {
         setDraft(value == null ? '' : formatPln(value, false))
         const el = e.currentTarget
-        requestAnimationFrame(() => el.select())
+        // Selected once the draft is in – only while the field still has the focus: `select()` focuses it, so a late
+        // frame (a throttled window) would pull the focus, and the next field's typing, back into this one.
+        requestAnimationFrame(() => {
+          if (document.activeElement === el) el.select()
+        })
       }}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
