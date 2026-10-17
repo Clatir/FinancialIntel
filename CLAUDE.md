@@ -93,6 +93,45 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Ikona: `node scripts/make-icon.mjs` (`CHROMIUM_PATH=…` jeśli trzeba) → `resources/icon.png`.
 
+## Kod (E1 – model i silnik, grupa A → 0.3.0)
+- Schematy: `shared/schema/records.ts` (operacja `transactionSchema` – `TX_KINDS`, `splitSchema` podział paragonu,
+  `bankRowSchema` wiersz z banku; kontener, cel, plan miesiąca z `lootSchema`, dokowanie z `ICTJ_POOLS`, pożyczka,
+  saldo 'opening' / 'confirmation', miesiąc gry), `shared/schema/budget.ts` (stałe id `fixedId` – `MBANK_ACCOUNT_ID`,
+  `XTB_WALLET_ACCOUNT_ID`, `CASH_CATEGORY_ID`, `defaultCategoryId`; `openEnum` – wartości nowszej wersji zachowane,
+  T33; konta `defaultAccounts`, kategorie `defaultCategories` wg D68 + `envelopeKind`, `layersSchema`, `ordersSchema`,
+  `budgetStartSchema`, `importRuleSchema` / `importSettingsSchema` → `settingsSchema`).
+- Obliczenia: `shared/calc/dates.ts` (daty warszawskie), `operations.ts` (`partsOf`, `splitEvenly` – grosze z resztą
+  w ostatniej części, `categoryIndex`, `costOf` / `incomeOf`, `isNight`, `asksImpulse`), `fleet.ts` (`computeFleet` →
+  `FleetState`: warstwy, koperty, zdarzenia, alarmy; `dockAmount`, `paySalary`, `sinkingSchedule` /
+  `sinkingInstallment`, `dailyAllowance`, `rangeMonths`, `shipClass`, `cargoMass`, `layersSum` – T24–T32),
+  `balances.ts` (`openingOf`, `balanceAt` na koniec dnia, `lastConfirmation`, `planConfirmation`).
+  `shared/operationsView.ts` (oznaczenia, filtr, wyszukiwanie bez polskich znaków `fold` i po kwocie, sumy).
+- Renderer: `store/fleet.ts` (`useFleet` – silnik liczony raz, `useMinute`), `components/fields.tsx` (`plnText`,
+  `signedPln`, `AmountField` / `DateField` / `TimeField` – zapis po wyjściu z pola), `features/operations/`
+  (`OperationsPage`, `OperationEditor`, `pickers`, `state` – filtr w localStorage `fi.operations.filter`,
+  `newOperation`, `deleteOperation` z „Cofnij”), `features/balances/actions.ts` (`setOpening`, `confirmBalance` →
+  korekta), Ustawienia `AccountsTab` / `CategoriesTab`; `store/ui.ts` `commitActiveField` (T34), `store/data.ts`
+  `addRecords` / `replaceRecords`.
+- Testy: `tests/unit/fleet.test.ts` (przykłady ze specyfikacji, niezmiennik suma warstw = salda kont),
+  `balances.test.ts`, `operations-view.test.ts`, `settings-defaults.test.ts`; E2E `tests/e2e/operations.spec.ts`.
+
+## Kod (E2 – import z mBanku, grupa A → 0.3.0)
+- `shared/import/text.ts` (`decodeText`: BOM UTF-8 / UTF-16, UTF-8, Windows-1250; `parseCsv`), `mbank.ts`
+  (`parseMbank` – „Lista operacji” / „Historia rachunku”, `#Klient`, okres, pominięte wiersze nie-PLN;
+  `splitDescription` – kontrahent, rodzaj operacji, tytuł, nierozliczona; `rowKeys` – T35), `classify.ts`
+  (`counterpartyKey`, `upsertRule`, `matchRule`, `hintFor` – kategoria mBanku jako podpowiedź, `isOwnName`,
+  `classifyRow` – T37), `reconcile.ts` (`planImport` → known / settle / merge / new / deleted + zniknięte;
+  `buildImport` → nowe, zmienione, usunięte, reguły, liczniki – T36, T39–T41), `shared/fold.ts`.
+- Main: `datastore/backup.ts` `importBackup` (`backups/pre-import`, 10), IPC `fi:importBackup`, `fi:pickImportFile`
+  (CSV do 20 MB).
+- Renderer `features/import/`: `ImportPage.tsx` (plik, konto, podsumowanie, dopasowania, grupy z wyjątkami
+  wierszy, wynik, saldo z banku), `state.ts` (sesja importu, decyzje, `acceptHints`, `runImport`: tylko do odczytu →
+  zapis zmian → kopia → plan od nowa → `buildImport` → zapis → reguły i nazwiska), `rules.ts` (`ruleFor`,
+  `rememberCategory` – „Zapamiętaj” w edytorze operacji, `deleteRule`, `setOwnNames`); Ustawienia → Import z banku
+  `features/settings/ImportTab.tsx`.
+- Testy: `tests/unit/mbank.test.ts`, `import.test.ts`, `tests/fs/backup.test.ts`, E2E `tests/e2e/import.spec.ts`;
+  plik `tests/fixtures/mbank/lista_operacji.csv` (zanonimizowany – T44; nowy plik testowy tylko tak).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -143,8 +182,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 
 ## Etapy (szczegóły i kryteria: `docs/plan.md`)
 - [x] E0 Fundament → 0.1.0
-- [ ] E1 Model danych i silnik budżetu
-- [ ] E2 Import z mBanku
+- [x] E1 Model danych i silnik budżetu → 0.3.0 (grupa A)
+- [x] E2 Import z mBanku → 0.3.0 (grupa A)
 - [ ] E3 Kreator startu i plan miesiąca
 - [ ] E4 Mostek i szybki wpis → wydanie 1.0.0
 - [ ] E5 ICTTJ i dokowanie
