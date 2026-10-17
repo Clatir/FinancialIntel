@@ -10,6 +10,7 @@ import { applyPageLayout } from '../../store/layout'
 import { Kbd } from '../../components/ui'
 import { PAGES } from '../screens/pages'
 import { SETTINGS_TABS } from '../settings/SettingsPage'
+import { newOperation } from '../operations/state'
 
 const GROUP =
   '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted'
@@ -31,6 +32,7 @@ export function CommandPalette() {
 
   const actions: Action[] = useMemo(
     () => [
+      { id: 'new-operation', label: 'Nowa operacja', keys: 'Ctrl N', run: () => void newOperation() },
       ...PAGES.map((p) => ({ id: `page-${p.page}`, label: `${p.label} – ${p.sub}`, keys: `Ctrl ${p.key}`, run: () => navigate({ page: p.page }) })),
       { id: 'sync', label: 'Synchronizacja i problemy', keys: 'Ctrl Shift Y', run: () => navigate({ page: 'sync' }) },
       ...SETTINGS_TABS.map((t) => ({ id: `settings-${t.id}`, label: `Ustawienia: ${t.label}`, run: () => navigate({ page: 'settings', tab: t.id }) })),

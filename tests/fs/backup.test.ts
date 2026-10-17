@@ -2,7 +2,7 @@
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DAILY_KEEP, MANUAL_KEEP, listBackups, manualBackup, runBackups } from '../../src/main/datastore/backup'
+import { DAILY_KEEP, IMPORT_KEEP, MANUAL_KEEP, importBackup, listBackups, manualBackup, runBackups } from '../../src/main/datastore/backup'
 import { DataStore } from '../../src/main/datastore/store'
 import { freshStore, readZip, sampleMonth, sampleTransaction } from './helpers'
 
@@ -96,5 +96,18 @@ describe('kopie zapasowe', () => {
     expect(list.find((b) => b.kind === 'pre-migration')?.name).toBe('20261015T080000Z_v0-v1.zip')
     for (const b of list) expect(b.bytes).toBeGreaterThan(0)
     expect(await listBackups(join(root, 'nie-ma'))).toEqual([])
+  })
+
+  it('kopia przed importem: ZIP danych w backups/pre-import, 10 ostatnich (spec, „Kopie zapasowe”)', async () => {
+    const store = await freshStore()
+    await store.saveRecord('transactions', sampleTransaction({ note: 'przed importem' }))
+    const files: string[] = []
+    for (let i = 0; i < IMPORT_KEEP + 2; i++) files.push(await importBackup(store.root, store.backupsDir, new Date(Date.UTC(2026, 9, 17, 8, 0, i))))
+    const left = (await fs.readdir(join(store.backupsDir, 'pre-import'))).sort()
+    expect(left).toHaveLength(IMPORT_KEEP)
+    expect(files.at(-1)!.endsWith(left.at(-1)!)).toBe(true)
+    const zipped = await readZip(files.at(-1)!)
+    expect([...zipped.keys()].some((k) => k.startsWith('transactions/'))).toBe(true)
+    expect((await listBackups(store.backupsDir)).filter((b) => b.kind === 'pre-import')).toHaveLength(IMPORT_KEEP)
   })
 })

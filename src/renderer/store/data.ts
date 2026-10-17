@@ -8,7 +8,7 @@ import { chooser, merge3, pathKey, type Path, type Side } from '@shared/merge'
 import { changedPaths, decideRemote, decideRemoteRemoval, isoMs, newerChoice, newerFields, relatedPaths, type RemoteMode } from '@shared/remoteChanges'
 import { api, errorMessage } from '../lib/api'
 import { useRemote, type PendingRemote } from './remote'
-import { toast } from './ui'
+import { commitActiveField, toast } from './ui'
 
 type EntryMap<C extends Collection> = Record<string, RecordEntry<RecordTypes[C]>>
 type AnyMap = Record<string, RecordEntry<RecordTypes[Collection]>>
@@ -513,6 +513,37 @@ export function addRecord<C extends Collection>(collection: C, record: RecordTyp
   if (!opts.draft) scheduleSave(collection, record.id, 0)
 }
 
+/** Many new records at once (an import): one change of the state, each saved right after. */
+export function addRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): void {
+  if (folderReadOnly() || !records.length) return
+  set((s) => {
+    const map = { ...mapOf(s, collection) }
+    for (const r of records) map[r.id] = { record: r, relPath: '', readOnly: false } as RecordEntry<RecordTypes[Collection]>
+    return withMap(s, collection, map)
+  })
+  for (const r of records) scheduleSave(collection, r.id, 0)
+}
+
+/** Many changed records at once (an import's merges and settled rows): each like `updateRecord`, one change of the state. */
+export function replaceRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): void {
+  if (folderReadOnly() || !records.length) return
+  const current = get().records[collection] as EntryMap<C>
+  const changed = records.filter((r) => current[r.id] && !current[r.id]!.readOnly)
+  for (const r of changed) {
+    const key = keyOf(collection, r.id)
+    if (!dirty.has(key) && !bases.has(key) && !get().drafts[r.id]) bases.set(key, current[r.id]!.record)
+    stampEdits(key, current[r.id]!.record, r, false)
+  }
+  set((s) => {
+    const map = { ...mapOf(s, collection) }
+    for (const r of changed) map[r.id] = { ...map[r.id]!, record: r } as RecordEntry<RecordTypes[Collection]>
+    const drafts = { ...s.drafts }
+    for (const r of changed) delete drafts[r.id]
+    return { ...withMap(s, collection, map), drafts }
+  })
+  for (const r of changed) scheduleSave(collection, r.id, 0)
+}
+
 /** Drop an untouched draft (never written to disk). */
 export function discardDraft(collection: Collection, id: string): void {
   if (!get().drafts[id]) return
@@ -565,6 +596,8 @@ export function updateSettings(updater: (f: SettingsFile) => SettingsFile, opts:
  * whose earlier save failed. Resolves to true when nothing is left unsaved.
  */
 export async function flushSaves(): Promise<boolean> {
+  // A field still being typed in (window closing, Ctrl+S): its value first.
+  commitActiveField()
   for (const key of new Set([...timers.keys(), ...dirty.keys()])) {
     const t = timers.get(key)
     if (t) clearTimeout(t)

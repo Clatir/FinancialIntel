@@ -1,32 +1,182 @@
 # Financial Intel – postęp
 
-**Stan:** E0 (fundament, wersja 0.1.0) zrobiony na gałęzi `claude/e0-fundament`, PR #1 do `main` – CI zielone (Linux,
-E2E, Windows: build, smoke, test aktualizacji portable i instalatora); czeka na scalenie. Po scaleniu CI publikuje
-wydanie 0.1.0.
-**Następny krok:** odbiór E0 przez użytkownika (instalacja na Windows), potem komunikat „Przed etapem E1”.
+**Stan:** grupa A (E1 + E2) zakończona 17.10.2026 na gałęzi `claude/e1-model` – PR do `main`, wydanie 0.3.0 po
+scaleniu. **Pauza** (D67).
+**Następny krok:** odbiór 0.3.0 i odpowiedzi na „Przed etapem E3” niżej, potem grupa B (E3 + E4 → 1.0.0) – tylko na
+komendę użytkownika.
+
+## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
+- Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
+- Bez komendy użytkownika nie zaczynam kolejnego etapu ani grupy.
+- Etapy, które mogą iść jednym ciągiem, są zgrupowane: w grupie bez pauzy między etapami (każdy etap i tak kończy się
+  testami, `/code-review` high, commitem i wpisem tutaj), jeden PR i jedno wydanie na grupę, potem pauza.
 
 ## Kolejka prac
 
 Czas = praca Claude Code w sesji (czytanie, pisanie, testy, poprawki), bez testowania przez użytkownika i bez czekania
-na CI. Model i thinking z górką (prośba użytkownika 16.10.2026). E0 zmierzony; szacunki E1–E9 przeliczone po E0.
+na CI. Model i thinking z górką. E0 zmierzony; reszta przeliczona na jego podstawie, z zapasem.
 
-| Etap | Model | Thinking | Czas Claude'a | Stan |
-| --- | --- | --- | --- | --- |
-| E0 Fundament → 0.1.0 | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | ✅ PR #1, CI zielone, czeka na scalenie |
-| E1 Model i silnik → 0.2.0 | Opus 5.5 | max | 2–3 h | ⏳ |
-| E2 Import mBank → 0.3.0 | Opus 5.5 | xhigh | 1,5–2,5 h | ⏳ (potrzebny CSV z mBanku) |
-| E3 Start i plan miesiąca → 0.4.0 | Opus 5.5 | xhigh | 2–3 h | ⏳ |
-| E4 Mostek i szybki wpis → **1.0.0** | Opus 5.5 | xhigh | 2–3 h | ⏳ |
-| 🏁 **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 9–13 h** | |
-| E5 ICTTJ i dokowanie | Opus 5.5 | max | 2–3 h | ⏳ |
-| E6 Radar i należności | Opus 5.5 | xhigh | 1,5–2 h | ⏳ |
-| E7 Dowództwo | Opus 5.5 | max | 2–3 h | ⏳ |
-| E8 Wywiad i raporty | Opus 5.5 | xhigh | 2,5–3,5 h | ⏳ |
-| E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 1,5–2 h | ⏳ |
-| **Całość E0–E9** | | | **ok. 21–30 h** | |
+| Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| – | E0 Fundament | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | 0.1.0 | – | ✅ scalony |
+| **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ PR do `main`, czeka na scalenie i odbiór |
+| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | 4–6 h | **1.0.0** | odbiór 0.3.0, odpowiedzi na „Przed etapem E3” | ⏳ na komendę |
+| 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 10–12 h** | | | |
+| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 3,5–5 h | 1.1.0 | ścieżka folderu ICTTJ, zanonimizowana kopia `payouts/` | ⏳ |
+| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 4,5–6,5 h | 1.2.0 | akceptacja listy misji, osiągnięć i smaczków ICT | ⏳ |
+| **E** | E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 1,5–2 h | 1.3.0 | klucz API Claude | ⏳ |
+| | **Całość E0–E9** | | | **ok. 20–26 h** | | | |
 
-Dla porównania (prośba użytkownika 16.10): programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni,
-MVP ok. 2–3 miesięcy, całość ok. 4–6 miesięcy (szacunek zgrubny).
+Dlaczego tak: E1 (silnik pieniędzy) ma najwięcej reguł – sam albo z E2, gdy przed startem jest plik CSV; E3 i E4 to
+ekrany na gotowym silniku i razem dają wydanie 1.0.0; E5 i E6 to przepływy z zewnątrz (ICTTJ, pożyczki, należności);
+E7 i E8 to warstwa gry i analiz na gotowych danych – obie potrzebują wcześniej zaakceptowanych list. Grupa B podniesiona
+z xhigh do max (z górką): 1.0.0 to pierwsza wersja do codziennego użytku na prawdziwych pieniądzach, kreator dzieli
+obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed zapisem.
+
+Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
+całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## Przed etapem E3 (grupa B)
+
+1. **Co trzeba wiedzieć**
+   - Zakres grupy B → wydanie **1.0.0** (MVP, D51):
+     - E3 Start i plan miesiąca: kreator startu (konta i salda, import historii, propozycja pensji i celów warstw ze
+       średnich kosztów, podział obecnych środków), ekran Plan miesiąca (pensja → ładownia, odkładki, koperty planowe
+       i codzienne, dzienny przydział), Ładownia (kontenery, linia zanurzenia, symulacja zasięgu), debriefing
+       z podziałem łupów i „Miesiąc zamknięty na plus”;
+     - E4 Mostek i szybki wpis: Mostek (odprawa, stan okrętu, koperty, do zwrotu, ostatnie operacje), szybki wpis
+       w małym oknie nad wszystkimi (globalny skrót, podgląd energii, cisza nocna, dziennik kapitański, do zwrotu,
+       podział paragonu), zasobnik z energią dziś, tryb ukrycia kwot, powiadomienia i dźwięki.
+   - Grupa A (0.3.0) gotowa: model danych, silnik warstw, Operacje, konta i kategorie, import z mBanku – czeka na
+     scalenie i odbiór.
+   - Otwarte: kategorie mBanku bywają nietrafne (dlatego są tylko podpowiedzią); przejazdy (Bolt, KOLEO) mBank
+     przypisuje do „Przejazdy” i „Podróże”, a w kategoriach startowych nie ma na nie miejsca (pytanie niżej).
+2. **Pytania z propozycją**
+   - **Pensja w kreatorze:** średnie koszty netto (wszystko: ładownia, odkładki, koperty) z ostatnich 6 pełnych
+     miesięcy, zaokrąglone w górę do 100 zł; cel osłon = 3 pensje, kadłub = 6 × średnie koszty (spec); wszystko do
+     poprawienia.
+   - **Podział obecnych środków:** propozycja według kolejności dokowania (osłony do celu → kadłub → cele), kwoty do
+     poprawienia przed zapisem.
+   - **Koperty pierwszego miesiąca:** średnie wydatki kategorii z 3 ostatnich pełnych miesięcy, zaokrąglone do 10 zł;
+     codzienne i planowe jak w Ustawienia → Kategorie.
+   - **Ładownia z historii:** kreator pokaże powtarzające się płatności (ten sam kontrahent i podobna kwota co miesiąc
+     albo co rok) jako propozycje kontenerów – każdą trzeba potwierdzić.
+   - **Szybki wpis:** skrót Ctrl+Alt+B (spec), okno na środku ekranu, Enter zapisuje, Esc zamyka; kategoria z listy
+     z wyszukiwaniem, „oficer” podpowiada kategorię ostatnio użytą u tego kontrahenta.
+   - **Ukrycie kwot:** Ctrl+$ jak w ICTTJ (okno i dymek zasobnika).
+   - **Odprawa poranna:** przy pierwszym otwarciu okna po 5:00 (koniec ciszy nocnej) – powiadomienie Windows
+     z energią dziś i alarmami, pełna odprawa na Mostku.
+   - **Dźwięki:** domyślnie włączone i ciche (30%), osobno dla wpisu, dokowania, alarmu i awansu.
+   - **Przejazdy:** nowa podkategoria „Auto · przejazdy (taxi, pociąg, komunikacja)” i podpowiedź mBanku „Przejazdy”
+     → ta podkategoria.
+3. **Co przygotować**
+   - Odbiór 0.3.0 na Windows (listy E1 i E2 niżej), najlepiej z pełnym plikiem z mBanku – uwagi do rozpoznawania
+     i reguł.
+   - Stałe opłaty i opłaty okresowe (OC, przeglądy, abonamenty roczne) z kwotą i miesiącem – do Ładowni w kreatorze.
+4. **Model, thinking, czas:** Opus 5.5 · **max** (z górką – uzasadnienie pod tabelą) · 4–6 h.
+
+## E2 – import z mBanku (17.10.2026)
+
+Zrobione (kryteria z `plan.md`):
+- Plik z mBanku – „Lista operacji” albo „Historia rachunku” – w UTF-8 albo Windows-1250 (`shared/import/text.ts`,
+  `mbank.ts`): nagłówek rozpoznany po kolumnach, opis rozbity na kontrahenta, rodzaj operacji i tytuł, transakcje
+  nierozliczone, właściciel rachunku z `#Klient`, okres pliku; wiersze w innej walucie pominięte z informacją.
+- Ekran Import (Ctrl+3): wybór albo upuszczenie pliku, konto budżetu, podsumowanie (nowe, znane, rozliczone,
+  połączone, usunięte), podgląd i decyzje przed zapisem.
+- Ponowny import nakładającego się okresu nie tworzy duplikatów (T35); nierozliczona operacja, która wróciła
+  rozliczona (inna kwota albo data), przejmuje dane banku; zniknięta autoryzacja karty – propozycja usunięcia (T40).
+- Wpis ręczny i wiersz z banku = jedna operacja (ta sama kwota, ±3 dni, podobny kontrahent – T36): zostaje kategoria,
+  godzina i notatki użytkownika, dochodzą dane banku; połączenie można odznaczyć.
+- Kategoryzacja grupami po kontrahencie i kierunku: wydatek z kategorią, do zwrotu, wpływ, od domownika, przelew
+  własny, XTB; wyjątki dla pojedynczych wierszy. Rozpoznane same: XTB, przelewy własne (nazwisko z pliku
+  i z ustawień), bankomat → Gotówka, zwrot towaru, opłaty banku (T37). Kategoria mBanku tylko jako podpowiedź (D68) –
+  „Przyjmij podpowiedzi mBanku” ustawia je jednym kliknięciem, ale nie tworzy reguł.
+- Reguły uczą się z decyzji (T38): „zapamiętaj” przy grupie (domyślnie zaznaczone przy własnej decyzji) i „Zapamiętaj”
+  w edytorze operacji; Ustawienia → Import z banku: reguły z usuwaniem, nazwiska właściciela rachunku.
+- Wpłata od domownika spłaca najpierw należność „do zwrotu” – także z zakupów w tym samym pliku – a nadwyżka jest
+  przychodem (T41).
+- Operacja usunięta przez użytkownika nie wraca z kolejnym importem; można ją zaimportować mimo to (T39).
+- Kopia `backups/pre-import` przed zapisem (10 ostatnich); import zablokowany w folderze tylko do odczytu (T42).
+- Saldo z banku po imporcie (i w Ustawienia → Konta): saldo otwarcia albo korekta do wyjaśnienia z alarmem.
+- Plik testowy `tests/fixtures/mbank/lista_operacji.csv` z eksportu użytkownika, zanonimizowany (T44).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione – m.in. usunięta operacja wracała z kolejnym
+  importem, podpowiedzi mBanku tworzyły reguły, zniknięte autoryzacje były zaznaczone same (także przy historii
+  rachunku, która nie ma nierozliczonych), wpłata domownika nie spłacała zakupów „do zwrotu” z tego samego pliku,
+  zmiana konta kasowała decyzje grup, import w folderze tylko do odczytu, mocniejsza anonimizacja pliku testowego,
+  wspólny kod (`fold`, `upsertRule`, kopie). Nowy test wykrył jeszcze, że rozliczenie nierozliczonej porównywało
+  nazwę zmienioną przez użytkownika – teraz porównuje nazwę z banku (`bank.counterparty`).
+- Testy: 257 unit + fs, E2E 9 (import, Operacje ×3, smoke ×4, synchronizacja).
+
+Do sprawdzenia przez użytkownika (po wydaniu 0.3.0):
+1. Import (Ctrl+3) → „Wybierz plik CSV” → pełny plik z mBanku (Lista operacji albo Historia rachunku), konto mBank.
+2. Grupy: rozpoznane (XTB, przelewy własne, Gotówka), kategorie dla największych grup, „Przyjmij podpowiedzi mBanku”
+   dla reszty – sprawdź, które podpowiedzi są nietrafne – i „Importuj”.
+3. Ten sam plik drugi raz → nic nowego; wpis ręczny z wieczora + import następnego dnia → jedna operacja.
+4. Operacje → operacja z banku → inna kategoria → „Zapamiętaj”; Ustawienia → Import z banku → reguła na liście.
+5. Na końcu importu „Saldo w banku teraz” → saldo otwarcia; po kolejnym imporcie inna kwota → korekta w Operacjach.
+6. Folder danych → `backups/pre-import` – kopia sprzed importu.
+
+## Przed etapem E1 (grupa A)
+
+1. **Co trzeba wiedzieć**
+   - Zakres E1 (`plan.md`): pełne schematy zod wszystkich rekordów (operacja z podziałem paragonu, kontener, cel,
+     plan miesiąca, dokowanie, pożyczka, saldo, gra), kwoty w groszach, silnik `shared/calc/fleet.ts` z testami na
+     przykładach ze specyfikacji (dokowanie 5 000 zł, pensja z kadłuba, odkładka OC, przydział dzienny, „do zwrotu”,
+     pule Cele / Podatek), konta i kategorie w Ustawieniach, ekran Operacje (dodawanie, edycja z historią, usuwanie
+     z „Cofnij”, filtry, wyszukiwanie). Wydanie 0.2.0.
+   - E0 zakończony (0.1.0); w ICTTJ jest błąd do zgłoszenia (kopia konfliktu `journal.json`), FI ma go poprawionego.
+   - E2 można dołączyć do tej grupy, jeśli przed startem dostanę CSV z mBanku – wtedy wydanie 0.3.0.
+2. **Pytania z propozycją**
+   - **Kategorie startowe** (spec: 9 głównych z podkategoriami, do edycji). Propozycja podkategorii:
+     Jedzenie (zakupy spożywcze, na mieście, kawa i przekąski) · Dom (czynsz i opłaty, media, wyposażenie, chemia) ·
+     Auto (paliwo, serwis, ubezpieczenie, parking i opłaty) · Zwierzęta (karma, weterynarz, akcesoria) · Zdrowie
+     (leki, lekarz, sport) · Rozrywka i hobby (wyjścia, hobby, podróże) · Subskrypcje i łączność (telefon, internet,
+     streaming, aplikacje) · Osobiste (ubrania, kosmetyki, fryzjer) · Prezenty i inne (prezenty, inne). Do tego
+     kategoria systemowa „Gotówka” (wypłata z bankomatu – spec).
+   - **Konta startowe:** mBank i Portfel XTB, nazwy do zmiany, saldo otwarcia z datą wpisywane w Ustawienia → Konta
+     (rekord `balances/`); pełny kreator startu przyjdzie w E3.
+   - **Wygląd kwot na liście operacji:** wpływy zielone z „+”, wydatki bez koloru z „−”, zwrot towaru zielony
+     (czerwień tylko dla przekroczeń i alarmów).
+   - **Grupa A:** czy dołączasz CSV z mBanku teraz (E1 + E2 jednym ciągiem), czy E2 osobno później?
+3. **Co przygotować**
+   - Odbiór 0.1.0 na Windows (lista w sekcji E0 niżej).
+   - Jeśli E1 + E2: zanonimizowany plik CSV z historii rachunku mBanku (kilka miesięcy; nazwy kontrahentów mogą zostać,
+     numery kont i nazwiska zamaskuj) – trafi do `tests/fixtures/`.
+4. **Model, thinking, czas:** Opus 5.5 · **max** (silnik pieniędzy – najwięcej reguł); E1: 2–3 h, E1 + E2: 3,5–5,5 h.
+
+## E1 – model i silnik (17.10.2026)
+
+Zrobione (kryteria z `plan.md`):
+- Pełne schematy zod wszystkich rekordów (`shared/schema/records.ts`): operacja (rodzaje: wydatek, wpływ, przelew
+  własny, XTB, PIT-38, pożyczka, korekta; podział paragonu, do zwrotu, plan / impuls, dziennik kapitański, zwrot
+  należności, dane z banku), kontener (cykl, odkładka), cel, plan miesiąca (pensja, koperty, łupy), dokowanie (pula
+  ICTTJ, podział), pożyczka, saldo (otwarcie / potwierdzenie), miesiąc gry; migracje gotowe (`SCHEMA_VERSION` 1 –
+  pola dodane z domyślnymi wartościami, fi.json z E0 czyta się bez zmian).
+- Ustawienia w fi.json (`shared/schema/budget.ts`): konta (mBank, Portfel XTB – stałe id), kategorie wg D68 (stałe id),
+  warstwy (osłony 3 pensje, kadłub 6 miesięcy), rozkazy (min. osłony, linia zanurzenia 40%, cisza nocna 23–5, próg
+  dziennika 200 zł, firewall), start budżetu, import (reguły – E2).
+- Silnik `shared/calc/fleet.ts` (czysta funkcja, nic nie zapisuje; T24–T32): salda kont, dokowanie, pensja z alarmem
+  żółtym / czerwonym, odkładki, dzienny przydział, łupy, do zwrotu i należności, pule Cele / Podatek, firewall, koszty
+  netto, zasięg, klasa okrętu, masa ładunku; niezmiennik „suma warstw = salda kont” sprawdzany w każdym teście.
+  Testy na przykładach ze specyfikacji (`tests/unit/fleet.test.ts`): dokowanie 5 000 zł (+3 360 / +1 640, zasięg
+  6,5 → 7,8), pensja 4 000 zł z osłon 2 500 (żółty alarm), OC 11 × 103,33 + 103,37, przydział (przeniesienie i
+  zmniejszenie), do zwrotu i zwrot z nadwyżką, pule Cele i Podatek.
+- Ekran Operacje: lista (filtry okres / konto / rodzaj / kategoria / oznaczenia, wyszukiwanie bez polskich znaków i po
+  kwocie, sumy, salda kont), edytor (rodzaj i kierunek, kwota, data i godzina, konto, kontrahent, kategoria, podział
+  paragonu, do zwrotu, zwrot należności, konto docelowe przelewu, dziennik kapitański, dane z banku), historia zmian,
+  usuwanie z „Cofnij”, Ctrl+N. Kwoty wg D68.
+- Ustawienia → Konta (saldo otwarcia na początek dnia, „Saldo w banku teraz” → potwierdzenie albo korekta do
+  wyjaśnienia) i Kategorie (nazwy, koperta codzienna / planowa / bez, podkategorie, archiwizacja).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione – m.in. wpisana kwota nie ginie przy Ctrl+N ani
+  przy zmianie ekranu (T34), kierunek wybrany przed kwotą i znak części paragonu, potwierdzenie salda sprzed salda
+  otwarcia, „Koszty” na liście jak w silniku, świeży zegar po powrocie z zasobnika, wartości ustawień z nowszej wersji
+  zachowane (T33), silnik liczony raz dla wszystkich paneli.
+- Testy: 237 unit + fs, E2E `tests/e2e/operations.spec.ts` (3) + E0 (5).
+
+Do sprawdzenia przez użytkownika (po wydaniu grupy A):
+1. Operacje (Ctrl+2): Ctrl+N, kwota, kategoria, „Podziel paragon”, „Do zwrotu”, wpływ (zielony z „+”).
+2. Ustawienia → Konta: „Saldo w banku teraz” dla mBanku → saldo otwarcia; drugi raz inna kwota → korekta w Operacjach.
+3. Ustawienia → Kategorie: zmiana nazwy, podkategoria, koperta codzienna / planowa.
 
 ## E0 – fundament (16.10.2026)
 
@@ -77,4 +227,9 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 16.10.2026 – przegląd punktów styku z ICTTJ (D54–D60): konto tradingowe tylko w ICTTJ, bez etapu „Okręt bojowy”,
   bez kosztów i bilansu tradingu; menu boczne potwierdzone (D44).
 - 16.10.2026 – „Przed etapem E0”: D61 (repozytorium publiczne), D62–D66; roadmapa z modelem i thinking z górką.
-- 16.10.2026 – E0 zrobiony (0.1.0), PR do `main`.
+- 16.10.2026 – E0 zrobiony (0.1.0), PR #1 scalony do `main`.
+- 16.10.2026 – zasady prowadzenia (D67): tabela po każdym kroku, bez komendy nie zaczynam etapu, grupy A–E.
+- 17.10.2026 – start grupy A (E1 + E2, D68), CSV z mBanku od użytkownika; E1 zrobiony od zera (model, silnik,
+  Operacje, konta, kategorie), przegląd i poprawki.
+- 17.10.2026 – E2 (import z mBanku), przegląd i poprawki; zamknięcie grupy A: 0.3.0, PR do `main`; „Przed etapem E3”
+  (grupa B → 1.0.0, model max); pauza.

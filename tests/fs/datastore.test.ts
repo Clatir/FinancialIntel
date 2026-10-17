@@ -4,10 +4,10 @@ import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DataStore, ReadOnlyError } from '../../src/main/datastore/store'
 import { writeFileAtomic } from '../../src/main/datastore/atomic'
-import { SCHEMA_VERSION, type Transaction } from '@shared/schema'
+import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Transaction } from '@shared/schema'
 import { COLLECTIONS, recordRelPath } from '@shared/paths'
 import { createDefaultSettings } from '@shared/defaults'
-import { exists, freshStore, readJson, readZip, sampleGoal, sampleMonth, sampleTransaction, tempDir } from './helpers'
+import { exists, freshStore, readJson, readZip, sampleGame, sampleGoal, sampleMonth, sampleTransaction, tempDir } from './helpers'
 
 const txPath = (t: Transaction) => recordRelPath('transactions', t)
 
@@ -233,7 +233,7 @@ describe('migracje i wersje schematu', () => {
     await fs.mkdir(join(root, 'transactions', '2026'), { recursive: true })
     const legacyFi = JSON.stringify({ settings: { shipName: 'Stary okręt' } }, null, 2)
     await fs.writeFile(join(root, 'fi.json'), legacyFi)
-    const legacy = { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V5', date: '2026-03-16', amount: -1200, note: 'stara' }
+    const legacy = { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V5', date: '2026-03-16', accountId: MBANK_ACCOUNT_ID, amount: -1200, note: 'stara' }
     const rel = `transactions/2026/2026-03-16_${legacy.id}.json`
     await fs.writeFile(join(root, rel), JSON.stringify(legacy, null, 2))
 
@@ -292,7 +292,7 @@ describe('migracje i wersje schematu', () => {
 
   it('pojedynczy stary plik zsynchronizowany później jest migrowany, a oryginał zachowany w backups/', async () => {
     const store = await freshStore()
-    const legacy = { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V6', date: '2026-03-18', amount: 5000 }
+    const legacy = { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V6', date: '2026-03-18', accountId: MBANK_ACCOUNT_ID, amount: 5000 }
     const rel = `transactions/2026/2026-03-18_${legacy.id}.json`
     await fs.mkdir(join(store.root, 'transactions', '2026'), { recursive: true })
     await fs.writeFile(join(store.root, rel), JSON.stringify(legacy))
@@ -467,18 +467,19 @@ describe('zmiany z zewnątrz (synchronizacja)', () => {
 describe('rekordy zapisywane przez aplikację i import', () => {
   it('saveGenerated: wiele naraz, bez wersji w .history/, pola użytkownika (keep) zostają przy przepisaniu', async () => {
     const store = await freshStore()
-    const a = sampleMonth('2026-03', { days: { '2026-03-02': 'A' } })
-    const b = sampleMonth('2026-04')
+    const a = sampleGame('2026-03', { '2026-03-02': 'ok' })
+    const b = sampleGame('2026-04')
     const change = await store.saveGenerated('game', [a, b])
     expect(change?.upserts.map((u) => u.entry.record.id).sort()).toEqual([a.id, b.id].sort())
     expect(change?.upserts.map((u) => u.entry.relPath).sort()).toEqual(['game/2026-03.json', 'game/2026-04.json'])
     // The user writes a note – a normal save.
     await store.saveRecord('game', { ...a, userNote: 'moja' })
     // The app rewrites the month: the note stays, nothing goes to the history by the app's write.
-    await store.saveGenerated('game', [{ ...a, days: { '2026-03-02': 'B' } }], ['userNote'])
+    const broken = sampleGame('2026-03', { '2026-03-02': 'broken' }).days
+    await store.saveGenerated('game', [{ ...a, days: broken }], ['userNote'])
     const snap = await new DataStore(store.root, { machineName: 'X' }).open()
     const saved = snap.records.game.find((e) => e.record.id === a.id)!.record
-    expect(saved).toMatchObject({ days: { '2026-03-02': 'B' }, userNote: 'moja' })
+    expect(saved).toMatchObject({ days: { '2026-03-02': { status: 'broken' } }, userNote: 'moja' })
     expect(snap.records.game).toHaveLength(2)
     // Only the user's own save may have kept a version.
     expect((await store.historyList('game', a.id)).length).toBeLessThanOrEqual(1)

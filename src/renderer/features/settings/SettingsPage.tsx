@@ -7,16 +7,22 @@ import { fmtBytes } from '../../lib/format'
 import { flushSaves, openResult, updateSettings, useData } from '../../store/data'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
 import { UpdatesTab } from './UpdatesTab'
+import { AccountsTab } from './AccountsTab'
+import { CategoriesTab } from './CategoriesTab'
+import { ImportTab } from './ImportTab'
 import { IconFolder, IconPlus, IconSync } from '../../components/icons'
 import { Field, NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 
 /**
- * Tabs of the settings. E0 has the foundation's; the budget's (accounts, categories, layers, orders, notifications,
- * sounds, shortcuts, ICTTJ, import) come with their stages.
+ * Tabs of the settings: the foundation's and the budget's (E1: accounts, categories; E2: the import's rules); layers,
+ * orders, notifications, sounds, shortcuts and ICTTJ come with their stages.
  */
 export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'general', label: 'Okręt' },
+  { id: 'accounts', label: 'Konta' },
+  { id: 'categories', label: 'Kategorie' },
+  { id: 'import', label: 'Import z banku' },
   { id: 'folder', label: 'Folder i kopie' },
   { id: 'system', label: 'Zasobnik i start' },
   { id: 'updates', label: 'Aktualizacje' }
@@ -50,6 +56,9 @@ export function SettingsPage() {
       <div className="min-w-0 flex-1 overflow-y-auto p-3">
         <div className="mx-auto flex max-w-[980px] flex-col gap-3">
           {tab === 'general' && <GeneralTab />}
+          {tab === 'accounts' && <AccountsTab />}
+          {tab === 'categories' && <CategoriesTab />}
+          {tab === 'import' && <ImportTab />}
           {tab === 'folder' && <FolderTab />}
           {tab === 'system' && <SystemTab />}
           {tab === 'updates' && <UpdatesTab />}
@@ -121,7 +130,7 @@ function TwoComputersPanel() {
 
 // ---------------------------------------------------------------- folder
 
-const BACKUP_KIND: Record<BackupInfo['kind'], string> = { daily: 'dzienna', manual: 'ręczna', 'pre-migration': 'przed migracją' }
+const BACKUP_KIND: Record<BackupInfo['kind'], string> = { daily: 'dzienna', manual: 'ręczna', 'pre-import': 'przed importem', 'pre-migration': 'przed migracją' }
 
 function FolderTab() {
   const status = useData((s) => s.status)
@@ -254,7 +263,8 @@ function FolderTab() {
         }
       >
         <p className="mb-2 text-[11.5px] text-muted">
-          Przy każdym starcie raz dziennie ZIP całego folderu danych (zostaje 30 ostatnich); przed migracją formatu zawsze. Folder:{' '}
+          Przy każdym starcie raz dziennie ZIP całego folderu danych (zostaje 30 ostatnich); przed każdym importem z banku (10 ostatnich) i przed
+          migracją formatu zawsze. Folder:{' '}
           <span className="num">{backups?.dir}</span>
         </p>
         {backups && backups.files.length === 0 && <span className="text-[11.5px] text-dim">Brak kopii.</span>}

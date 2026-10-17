@@ -1,9 +1,10 @@
 /**
- * fi.json: the folder's settings. E0 holds what the foundation needs (ship name, sync mode, layout presets); the
- * budget's settings (accounts, categories, layers, orders, import rules) come with their stages. Unknown fields are
- * kept (`z.looseObject`), so an older version never drops what a newer one wrote.
+ * fi.json: the folder's settings – the foundation's (ship name, sync mode, layout presets) and the budget's
+ * (`budget.ts`: accounts, categories, layers, orders, the start, import rules). Unknown fields are kept
+ * (`z.looseObject`), so an older version never drops what a newer one wrote.
  */
 import { z } from 'zod'
+import { budgetSettingsShape } from './budget'
 import { isoDateTime, recordBase, ulidSchema } from './common'
 
 /**
@@ -44,7 +45,8 @@ export const settingsSchema = z.looseObject({
     .array(layoutPresetSchema.nullable().catch(null))
     .transform((xs) => xs.filter((x): x is LayoutPreset => x != null))
     .catch([])
-    .default([])
+    .default([]),
+  ...budgetSettingsShape
 })
 export type Settings = z.infer<typeof settingsSchema>
 

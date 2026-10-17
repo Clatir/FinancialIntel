@@ -102,6 +102,23 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   ukryciu dymek. Start z Windows: przełącznik w ustawieniach, domyślnie wyłączony – włącza go kreator startu (E3).
 - **D65** Menu boczne pokazuje wszystkie ekrany; ekrany po wydaniu 1.0 (E5+) przygaszone z dopiskiem etapu.
 - **D66** Ikona generowana skryptem (`scripts/make-icon.mjs`): radar i okręt w kolorze akcentu `#e8a33d` na `#0b0d10`.
+- **D67** (16.10.2026) Po każdym kroku zaktualizowana tabela postępu z modelem i thinking z górką i szacowanym czasem
+  pracy Claude'a; bez komendy użytkownika nie zaczyna się kolejnego etapu; etapy, które mogą iść jednym ciągiem, są
+  zgrupowane (A: E1 [+ E2], B: E3 + E4, C: E5 + E6, D: E7 + E8, E: E9) – w grupie bez pauzy, jeden PR i jedno wydanie.
+
+### Przed etapem E1 (17.10.2026)
+- **D68** Odpowiedzi na „Przed etapem E1” (wszystko zgodnie z propozycją):
+  - kategorie startowe: Jedzenie (zakupy spożywcze, na mieście, kawa i przekąski), Dom (czynsz i opłaty, media,
+    wyposażenie, chemia), Auto (paliwo, serwis, ubezpieczenie, parking i opłaty), Zwierzęta (karma, weterynarz,
+    akcesoria), Zdrowie (leki, lekarz, sport), Rozrywka i hobby (wyjścia, hobby, podróże), Subskrypcje i łączność
+    (telefon, internet, streaming, aplikacje), Osobiste (ubrania, kosmetyki, fryzjer), Prezenty i inne (prezenty,
+    inne) + systemowa „Gotówka” (wypłata z bankomatu); codzienne: Jedzenie, Rozrywka i hobby, Osobiste, Gotówka;
+  - konta startowe: mBank i Portfel XTB (nazwy do zmiany), saldo otwarcia z datą w Ustawienia → Konta (rekord
+    `balances/`); pełny kreator startu w E3;
+  - kwoty na liście operacji: wpływy zielone z „+”, wydatki bez koloru z „−”, zwrot towaru zielony; czerwień tylko
+    dla przekroczeń i alarmów;
+  - grupa A = E1 + E2 jednym ciągiem (CSV z mBanku dostarczony); E1 i E2 robione od zera na modelu z thinking max;
+  - kategorie mBanku w CSV nie zawsze są trafne – najwyżej słaba podpowiedź, nigdy wpisywana sama.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -139,3 +156,77 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zewnętrznych źródeł (bez protokołu plików – FI nie ma screenów).
 - **T23** CI: Linux (Node 22.12 / 24 / 26, typecheck, testy, build) + E2E na Linuksie pod Xvfb przy każdym wypchnięciu;
   Windows (build-windows.cmd, smoke, test aktualizacji portable i instalatora, wydanie) dla PR, gałęzi domyślnej i ręcznie.
+
+### E1 – model i silnik (17.10.2026)
+- **T24** Wydatek opłacony z pieniędzy celu (`goalId`) nie jest miesięcznym kosztem netto (nie podnosi celu kadłuba
+  ani nie skraca zasięgu); płaci go cel, brak w celu – osłony.
+- **T25** Start warstw: `settings.budget.start` (kreator E3), inaczej najwcześniejsze saldo otwarcia; historia sprzed
+  startu służy tylko statystykom. Saldo otwarcia = na początek swojego dnia, potwierdzenie salda = na koniec dnia
+  (`shared/calc/balances.ts`); konto otwarte po starcie wpływa do osłon w dniu otwarcia.
+- **T26** Dokowanie bez rekordu = kolejność domyślna liczona przez silnik w chwili wpływu (cele warstw z planu
+  miesiąca – brak planu = ostatni wcześniejszy – i średnich kosztów sprzed miesiąca); rekord `dockings/*` tylko dla
+  zmienionego podziału albo wpisu ICTTJ (pula). Nieznany cel osłon (brak pensji) albo kadłuba (brak kosztów) →
+  pieniądze zostają w osłonach.
+- **T27** Średnie koszty netto: pełne miesiące kalendarzowe (od pierwszego w całości objętego danymi), ostatnie 12;
+  przy mniej niż 3 pełnych miesiącach – `layers.assumedCosts`, jeśli ustawione. Średnie wpływy (ostrzeżenie o pensji):
+  6 pełnych miesięcy, wpływy = przychody bez zwrotów należności + wypłaty z XTB.
+- **T28** Energia = pieniądze pensji miesiąca; wydatek ponad nią idzie z osłon (czerwony alarm „energia
+  wyczerpana”); bez pensji (brak planu) wydatki idą prosto z osłon. Niewydana energia na koniec miesiąca = łupy:
+  decyzja w planie miesiąca (`loot`) do 7. dnia, inaczej 8. dnia do osłon; część „na następny miesiąc” powiększa
+  koperty codzienne.
+- **T29** Odkładki: rata = plan (kwota opłaty równo na miesiące cyklu, reszta w ostatnim – 11 × 103,33 + 103,37) plus
+  równa część braku zbiornika wobec planu (opłata dodana późno) albo minus część nadwyżki; opłata idzie ze zbiornika,
+  brak – z energii (żółty alarm).
+- **T30** Energia dziś = (koperty codzienne − wydatki codzienne przed dziś) / dni do końca miesiąca z dzisiejszym,
+  w dół do grosza; wydatek bez kategorii liczy się jako codzienny (ostrożnie), płatności kontenerów i z celów nie.
+- **T31** Przelew własny, korekta salda, pożyczka zaciągnięta zmieniają tylko osłony (para przelewów między kontami
+  budżetu się znosi); dopłata do XTB idzie z osłon, a gdy osłony po dopłacie byłyby poniżej celu albo kadłub nie jest
+  pełny – czerwony alarm „firewall” (przy włączonym rozkazie).
+- **T32** Brakujące pieniądze (wydatek ponad energię, do zwrotu, dopłata do XTB): osłony → kadłub → osłony poniżej
+  zera (deficyt, czerwony alarm). Cele nigdy nie są ruszane same.
+- **T33** Pozycje ustawień z wartością ze znanego zbioru (rodzaj konta, format importu, koperta, kategoria
+  systemowa, rodzaj / tryb / kierunek reguły importu) przyjmują dowolny tekst: starsza wersja na drugim komputerze
+  zachowuje wartość wpisaną przez nowszą; nieznana wartość = brak. Pozycja bez id albo nazwy jest pomijana.
+- **T34** Pola edytowane jako szkic (kwota, data, godzina, nazwy) zapisują się po wyjściu z pola; zmiana ekranu,
+  wybór innego wpisu i `flushSaves` najpierw zdejmują fokus z pola (`commitActiveField`) – wpisana wartość nie ginie.
+
+### E2 – import z mBanku (17.10.2026)
+- **T35** Tożsamość wiersza z banku: `bank.key` = `mbank:<odcisk FNV-1a: konto, data, opis (wielkie litery,
+  pojedyncze spacje), kwota>:<n>`, n = kolejne wystąpienie identycznego wiersza w pliku (dwa takie same zakupy jednego
+  dnia to dwie operacje). Ten sam wiersz w kolejnym pliku (nakładające się okresy) ma ten sam klucz – „znana”.
+  Nierozliczona, która wróciła rozliczona (opis bez dopisku, kwota ± max(5 zł, 10%), data ±3 dni, podobna nazwa
+  kontrahenta z banku `bank.counterparty`) – „rozliczona”: przejmuje kwotę, datę i dane banku; nazwa kontrahenta
+  zmieniona przez użytkownika zostaje.
+- **T36** Łączenie z wpisem ręcznym (operacja bez `bank`, to samo konto): ta sama kwota, data ±3 dni, podobny
+  kontrahent (pusty, jeden klucz zawiera drugi albo wspólne słowo z co najmniej 4 liter); najpierw najbliższa data,
+  potem wpis z nazwą; każda strona najwyżej raz. Wpis zachowuje kategorię, godzinę, notatki i swoją nazwę, dostaje datę
+  i dane banku; w podglądzie „nie łącz”.
+- **T37** Kolejność rozpoznawania nowego wiersza: reguła (dokładny klucz przed fragmentem, reguła drugiego kierunku
+  się nie liczy) → rozpoznanie wbudowane (XTB → konto tradingowe; „PRZELEW WŁASNY” albo przelew z nazwiskiem
+  właściciela – `#Klient` pliku i `settings.import.ownNames` – → przelew własny; wypłata z bankomatu / BLIK → wydatek
+  „Gotówka”; przychodzący „ZWROT” → ujemny wydatek w kategorii z reguły zakupów tego kontrahenta; opłaty i prowizje
+  banku → wydatek bez kategorii) → bez decyzji. Kategoria mBanku tylko podpowiada najbliższą kategorię startową
+  (istniejącą, niezarchiwizowaną); „Przyjmij podpowiedzi mBanku” ustawia je jednym kliknięciem bez zapamiętania.
+- **T38** Reguły: klucz kontrahenta (`counterpartyKey`: małe litery bez znaków diakrytycznych, bez form prawnych,
+  numerów sklepów i terminali) + kierunek; uczą się z decyzji grupy z zaznaczonym „zapamiętaj” (domyślnie przy
+  własnej decyzji) i z „Zapamiętaj” w edytorze operacji (`upsertRule`: ta sama reguła zmienia się, licznik trafień
+  rośnie). Reguły i nazwiska właściciela w Ustawienia → Import z banku.
+- **T39** Operacja usunięta przez użytkownika (ostatnia wersja w `.history/` z `bank.key`) nie wraca z kolejnym
+  importem – wiersz „usunięty, pominięty”, chyba że użytkownik zaznaczy „importuj mimo to”.
+- **T40** Zniknięte nierozliczone (autoryzacja karty anulowana przez bank): tylko przy „Liście operacji” z okresem
+  pliku (historia rachunku nie ma nierozliczonych), proponowane do usunięcia, nigdy zaznaczone same – lista mogła być
+  filtrowana.
+- **T41** Należność domu w imporcie liczona po dacie przez cały plik: zakupy „do zwrotu” z pliku ją zwiększają, wpłata
+  od domownika spłaca ją najpierw (`repaid`), reszta to przychód (D20) – jak w silniku warstw.
+- **T42** Import: konto pliku wybierane na ekranie (domyślnie pierwsze konto z importem mBanku; zmiana konta zachowuje
+  decyzje grup); przed zapisem zapis bieżących zmian, potem kopia `backups/pre-import/<czas>.zip` (10 ostatnich),
+  plan liczony jeszcze raz na aktualnych danych; w folderze tylko do odczytu import zablokowany;
+  `settings.import.lastImport` = czas ostatniego importu. Plik CSV do 20 MB, czytany w procesie głównym, dekodowany
+  w oknie.
+- **T43** Operacja z banku zapisuje wiersz źródłowy w `transaction.bank` (format, klucz, opis, kontrahent, rodzaj
+  operacji, kategoria mBanku, nierozliczona, czas importu) – addytywnie, bez zmiany `SCHEMA_VERSION`.
+- **T44** Plik testowy z prawdziwego eksportu tylko zanonimizowany skryptem trzymanym poza repozytorium (zawiera
+  zastępowane dane): osoby, miejsca, terminale i część usług zastąpione, daty przesunięte o 52 tygodnie (dni tygodnia
+  zostają), kwoty pomnożone przez współczynnik 0,6–1,4 losowany osobno dla każdego kontrahenta (nie do odwrócenia),
+  część wierszy usunięta; format pliku (BOM, CRLF, pola opisu) bez zmian – `.gitattributes` `tests/fixtures/** -text`.
+  Napisy testów pochodzące z pliku używają nazw zanonimizowanych.
