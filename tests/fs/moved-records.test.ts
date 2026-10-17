@@ -6,7 +6,8 @@ import { DataStore } from '../../src/main/datastore/store'
 import { createDefaultSettings } from '@shared/defaults'
 import { newerSide } from '@shared/conflicts'
 import type { Collection } from '@shared/paths'
-import type { Transaction } from '@shared/schema'
+import type { RecordTypes } from '@shared/records'
+import { balanceSchema, dockingSchema, MBANK_ACCOUNT_ID, type Transaction } from '@shared/schema'
 import { readJson, sampleTransaction, tempDir } from './helpers'
 
 /**
@@ -27,6 +28,17 @@ async function twoComputers(): Promise<{ a: DataStore; b: DataStore; root: strin
 }
 
 const entry = (over: Partial<Transaction> = {}): Transaction => sampleTransaction({ date: '2026-10-01', amount: 100, note: '', ...over })
+
+/** A valid record of another dated collection (a docking, a balance). */
+function datedOf<C extends 'dockings' | 'balances'>(c: C): RecordTypes[C] {
+  const t = entry()
+  const common = { schemaVersion: t.schemaVersion, id: t.id, createdAt: t.createdAt, updatedAt: t.updatedAt, date: t.date }
+  const record =
+    c === 'dockings'
+      ? dockingSchema.parse({ ...common, transactionId: t.id })
+      : balanceSchema.parse({ ...common, accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: 100 })
+  return record as RecordTypes[C]
+}
 
 async function filesOf(root: string, id: string, collection: Collection = 'transactions'): Promise<string[]> {
   const out: string[] = []
@@ -52,7 +64,7 @@ describe('wpis przeniesiony zmianą daty na innym komputerze', () => {
   it('to samo dla innych kolekcji z datą w ścieżce (dokowania, salda), przeniesienie do innego roku', async () => {
     const { a, b } = await twoComputers()
     for (const c of ['dockings', 'balances'] as const) {
-      const first = await a.saveRecord(c, entry())
+      const first = await a.saveRecord(c, datedOf(c))
       await b.refresh([first.entry.relPath])
       const moved = await a.saveRecord(c, { ...first.entry.record, date: '2027-01-04' })
       expect(moved.entry.relPath.startsWith(`${c}/2027/2027-01-04_`)).toBe(true)

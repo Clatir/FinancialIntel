@@ -1,0 +1,103 @@
+/**
+ * Operations as the budget sees them: the lines of a (split) receipt, categories and their envelopes, what counts as a
+ * net cost and as income, the captain's log marks. Pure; used by the layers' engine (fleet.ts) and the screens.
+ */
+import type { Category, EnvelopeKind, Orders } from '../schema/budget'
+import type { Transaction } from '../schema/records'
+import { inClockWindow } from './dates'
+
+export interface Part {
+  amount: number
+  categoryId: string | null
+  refundable: boolean
+}
+
+export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0)
+
+/**
+ * Lines of an operation: its split receipt (a sum that does not match the amount – a file edited by hand – leaves the
+ * rest as one more line of the operation's own category), or the operation itself as one line.
+ */
+export function partsOf(t: Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'>): Part[] {
+  if (!t.splits.length) return [{ amount: t.amount, categoryId: t.categoryId, refundable: t.refundable }]
+  const parts: Part[] = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable }))
+  const rest = t.amount - sum(parts.map((p) => p.amount))
+  if (rest !== 0) parts.push({ amount: rest, categoryId: t.categoryId, refundable: t.refundable })
+  return parts
+}
+
+/** Split `amount` grosze into `n` parts: equal parts rounded down, the rest in the last one (T3). */
+export function splitEvenly(amount: number, n: number): number[] {
+  if (n <= 0) return []
+  const base = Math.trunc(amount / n)
+  return Array.from({ length: n }, (_, i) => (i < n - 1 ? base : amount - base * (n - 1)))
+}
+
+// ------------------------------------------------------------------ categories
+
+export interface CategoryIndex {
+  byId: ReadonlyMap<string, Category>
+  /** Main categories in their order (archived too). */
+  mains: Category[]
+  /** The main category of a (sub)category; null for an unknown id. */
+  mainOf(id: string | null | undefined): Category | null
+  /** Whose envelope a category's spending counts against (its main category's setting). */
+  envelopeOf(id: string | null | undefined): EnvelopeKind | null
+  childrenOf(id: string): Category[]
+  /** „Jedzenie · zakupy spożywcze”; an unknown id = „(usunięta kategoria)”. */
+  label(id: string | null | undefined): string
+}
+
+export function categoryIndex(categories: readonly Category[]): CategoryIndex {
+  const byId = new Map(categories.map((c) => [c.id, c]))
+  const mainOf = (id: string | null | undefined): Category | null => {
+    const c = id ? byId.get(id) : undefined
+    if (!c) return null
+    return c.parentId ? (byId.get(c.parentId) ?? c) : c
+  }
+  return {
+    byId,
+    mains: categories.filter((c) => !c.parentId || !byId.has(c.parentId)),
+    mainOf,
+    envelopeOf: (id) => mainOf(id)?.envelope ?? null,
+    childrenOf: (id) => categories.filter((c) => c.parentId === id),
+    label: (id) => {
+      if (!id) return ''
+      const c = byId.get(id)
+      if (!c) return '(usunięta kategoria)'
+      const parent = c.parentId ? byId.get(c.parentId) : undefined
+      return parent ? `${parent.name} · ${c.name}` : c.name
+    }
+  }
+}
+
+// ------------------------------------------------------------------ costs and income
+
+/**
+ * Net cost of an operation (grosze, > 0 = a cost, < 0 = a product return): expenses minus product returns, without
+ * own transfers, XTB top-ups, purchases for the house („do zwrotu”) and PIT-38 (spec). An expense paid from a goal's
+ * money is not a monthly cost either (T24).
+ */
+export function costOf(t: Transaction): number {
+  if (t.kind !== 'expense' || t.goalId) return 0
+  return -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)) || 0
+}
+
+/** Income of an operation for the statistics (the salary warning): deliveries, without repaid receivables. */
+export function incomeOf(t: Transaction): number {
+  if (t.kind === 'income') return Math.max(0, t.amount - t.repaid)
+  if (t.kind === 'trading') return Math.max(0, t.amount)
+  return 0
+}
+
+// ------------------------------------------------------------------ the captain's log marks
+
+/** A purchase in the quiet hours (D40): only operations with a known time (an import has none). */
+export function isNight(t: Pick<Transaction, 'time' | 'kind' | 'amount'>, orders: Pick<Orders, 'quietHours'>): boolean {
+  return t.kind === 'expense' && t.amount < 0 && t.time != null && inClockWindow(t.time, orders.quietHours.from, orders.quietHours.to)
+}
+
+/** From the threshold the captain's log asks „plan czy impuls?” (D41). */
+export function asksImpulse(t: Pick<Transaction, 'kind' | 'amount'>, orders: Pick<Orders, 'impulseThreshold'>): boolean {
+  return t.kind === 'expense' && t.amount < 0 && -t.amount >= orders.impulseThreshold
+}

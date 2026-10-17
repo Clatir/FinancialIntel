@@ -6,7 +6,18 @@ import yauzl from 'yauzl'
 import { DataStore } from '../../src/main/datastore/store'
 import { createDefaultSettings } from '@shared/defaults'
 import { newId } from '@shared/ids'
-import { SCHEMA_VERSION, type Goal, type MonthPlan, type Transaction } from '@shared/schema'
+import {
+  gameMonthSchema,
+  goalSchema,
+  MBANK_ACCOUNT_ID,
+  monthPlanSchema,
+  SCHEMA_VERSION,
+  transactionSchema,
+  type GameMonth,
+  type Goal,
+  type MonthPlan,
+  type Transaction
+} from '@shared/schema'
 
 export const CREATED = '2026-01-01T00:00:00.000Z'
 
@@ -21,28 +32,32 @@ export async function freshStore(root = join(tempDir(), 'dane'), machineName = '
   return store
 }
 
-/** A valid operation ('dated' layout: `transactions/RRRR/RRRR-MM-DD_<id>.json`). E0 schemas keep unknown fields. */
+const base = () => ({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: CREATED, updatedAt: CREATED })
+
+/**
+ * A valid operation ('dated' layout: `transactions/RRRR/RRRR-MM-DD_<id>.json`), the schema's defaults filled in. An
+ * invalid override (a test of the validation) is kept as it is.
+ */
 export function sampleTransaction(over: Partial<Transaction> = {}): Transaction {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    id: newId(),
-    createdAt: CREATED,
-    updatedAt: CREATED,
-    date: '2026-03-16',
-    amount: -4599,
-    note: '',
-    ...over
-  }
+  const raw = { ...base(), date: '2026-03-16', accountId: MBANK_ACCOUNT_ID, amount: -4599, note: '', ...over }
+  return transactionSchema.safeParse(raw).data ?? (raw as Transaction)
 }
 
 /** A valid month plan ('month' layout: `months/RRRR-MM.json`). */
 export function sampleMonth(month = '2026-03', over: Partial<MonthPlan> = {}): MonthPlan {
-  return { schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: CREATED, updatedAt: CREATED, month, note: '', ...over }
+  const raw = { ...base(), month, salary: 0, note: '', ...over }
+  return monthPlanSchema.safeParse(raw).data ?? (raw as MonthPlan)
 }
 
 /** A valid goal ('id' layout: `goals/<id>.json`). */
 export function sampleGoal(over: Partial<Goal> = {}): Goal {
-  return { schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: CREATED, updatedAt: CREATED, name: 'Wakacje', target: 500000, ...over }
+  return goalSchema.parse({ ...base(), name: 'Wakacje', target: 500000, ...over })
+}
+
+/** A valid month of the command ('month' layout: `game/RRRR-MM.json`); `days` = date → status. */
+export function sampleGame(month = '2026-03', days: Record<string, 'ok' | 'broken'> = {}, over: Partial<GameMonth> = {}): GameMonth {
+  const rated = Object.fromEntries(Object.entries(days).map(([d, status]) => [d, { status, frozenAt: CREATED, violations: [] }]))
+  return gameMonthSchema.parse({ ...base(), month, days: rated, ...over })
 }
 
 export async function readJson(path: string): Promise<Record<string, unknown>> {

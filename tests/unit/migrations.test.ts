@@ -4,13 +4,13 @@ import { migrateRaw, readSchemaVersion, SchemaTooNewError } from '@shared/migrat
 import { parseRecordObject, parseRecordText, serializeRecord } from '@shared/records'
 import { createDefaultSettings } from '@shared/defaults'
 import { COLLECTIONS } from '@shared/paths'
-import { DEFAULT_SHIP_NAME, SCHEMA_VERSION, type Transaction } from '@shared/schema'
+import { DEFAULT_SHIP_NAME, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Transaction } from '@shared/schema'
 
 const ID = '01K6H3Z0W8Q4M2N5P7R9S1T3V5'
 const NOW = '2026-10-01T10:00:00.000Z'
 
 const transaction = (over: Record<string, unknown> = {}): Transaction =>
-  ({ schemaVersion: SCHEMA_VERSION, id: ID, createdAt: NOW, updatedAt: NOW, date: '2026-10-01', amount: -4599, ...over }) as Transaction
+  ({ schemaVersion: SCHEMA_VERSION, id: ID, createdAt: NOW, updatedAt: NOW, date: '2026-10-01', accountId: MBANK_ACCOUNT_ID, amount: -4599, ...over }) as Transaction
 
 describe('migracje schematu', () => {
   it('wersja pliku: liczba całkowita ≥ 0, inaczej v0', () => {
@@ -23,7 +23,7 @@ describe('migracje schematu', () => {
   })
 
   it('rekord bez schemaVersion (v0) → bieżący, z id i czasami; dane zostają', () => {
-    const r = parseRecordText('transactions', JSON.stringify({ date: '2026-10-01', amount: -4599, note: 'ręcznie' }))
+    const r = parseRecordText('transactions', JSON.stringify({ date: '2026-10-01', accountId: MBANK_ACCOUNT_ID, amount: -4599, note: 'ręcznie' }))
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.migrated).toBe(true)
@@ -35,7 +35,7 @@ describe('migracje schematu', () => {
   })
 
   it('v0 z id i czasami: zachowane', () => {
-    const r = parseRecordText('goals', JSON.stringify({ id: ID, name: 'Wakacje', createdAt: NOW, updatedAt: NOW }))
+    const r = parseRecordText('goals', JSON.stringify({ id: ID, name: 'Wakacje', target: 500000, createdAt: NOW, updatedAt: NOW }))
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.value).toMatchObject({ schemaVersion: SCHEMA_VERSION, id: ID, name: 'Wakacje', createdAt: NOW, updatedAt: NOW })
@@ -76,9 +76,9 @@ describe('migracje schematu', () => {
     expect(r.ok && r.migrated).toBe(false)
     expect(r.ok && (r.value as Record<string, unknown>).futureField).toEqual({ a: 1 })
     const fi = createDefaultSettings(NOW)
-    const s = parseRecordText('fi', serializeRecord('fi', { ...fi, settings: { ...fi.settings, accounts: [{ id: 'a' }] } }))
+    const s = parseRecordText('fi', serializeRecord('fi', { ...fi, settings: { ...fi.settings, futureSetting: [{ id: 'a' }] } }))
     expect(s.ok && s.migrated).toBe(false)
-    expect(s.ok && (s.value.settings as Record<string, unknown>).accounts).toEqual([{ id: 'a' }])
+    expect(s.ok && (s.value.settings as Record<string, unknown>).futureSetting).toEqual([{ id: 'a' }])
   })
 
   it('zapis: wcięcie 2 spacje i końcowy znak nowej linii', () => {
@@ -97,8 +97,8 @@ describe('migracje schematu', () => {
     if (!wrong.ok) expect(wrong.error).toMatch(/Niepoprawna struktura/)
     // The layout fields: a dated record needs its date, a monthly one its month.
     expect(parseRecordObject('transactions', transaction({ date: '1.10.2026' })).ok).toBe(false)
-    expect(parseRecordObject('months', { schemaVersion: SCHEMA_VERSION, id: ID, createdAt: NOW, updatedAt: NOW, month: '2026-13' }).ok).toBe(false)
-    expect(parseRecordObject('months', { schemaVersion: SCHEMA_VERSION, id: ID, createdAt: NOW, updatedAt: NOW, month: '2026-10' }).ok).toBe(true)
+    expect(parseRecordObject('months', { schemaVersion: SCHEMA_VERSION, id: ID, createdAt: NOW, updatedAt: NOW, month: '2026-13', salary: 0 }).ok).toBe(false)
+    expect(parseRecordObject('months', { schemaVersion: SCHEMA_VERSION, id: ID, createdAt: NOW, updatedAt: NOW, month: '2026-10', salary: 0 }).ok).toBe(true)
     expect(parseRecordText('transactions', '[1, 2]').ok).toBe(false)
     expect(parseRecordText('transactions', 'null').ok).toBe(false)
   })

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChangeSet, FolderStatus, RecordEntry, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import { COLLECTIONS } from '@shared/paths'
-import { SCHEMA_VERSION, type SettingsFile, type Transaction } from '@shared/schema'
+import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type SettingsFile, type Transaction } from '@shared/schema'
 
 // The renderer store talks to the main process through window.fi (preload); here it is a mock.
 const api = {
@@ -50,15 +50,17 @@ function load(tx: Transaction, opts: { readOnly?: boolean; remoteChanges?: 'merg
   store.applySnapshot(snapshot)
 }
 
-const transaction = (id = ID): Transaction => ({
-  schemaVersion: SCHEMA_VERSION,
-  id,
-  createdAt: '2026-03-16T07:00:00.000Z',
-  updatedAt: '2026-03-16T07:00:00.000Z',
-  date: '2026-03-16',
-  amount: -4599,
-  note: ''
-})
+const transaction = (id = ID): Transaction =>
+  transactionSchema.parse({
+    schemaVersion: SCHEMA_VERSION,
+    id,
+    createdAt: '2026-03-16T07:00:00.000Z',
+    updatedAt: '2026-03-16T07:00:00.000Z',
+    date: '2026-03-16',
+    accountId: MBANK_ACCOUNT_ID,
+    amount: -4599,
+    note: ''
+  })
 const saved = (t: Transaction): RecordEntry<Transaction> => ({
   record: { ...t, updatedAt: '2026-03-16T08:00:00.000Z' },
   relPath: `transactions/${t.date.slice(0, 4)}/${t.date}_${t.id}.json`,
