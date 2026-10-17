@@ -6,7 +6,7 @@ import type { PageDef } from './pages'
 
 /** Panels of each screen as planned (docs/specyfikacja.md, „Ekrany”); E0 shows them empty. */
 const PANELS: Record<PageDef['page'], string[][]> = {
-  bridge: [['Odprawa', 'Stan okrętu'], ['Koperty', 'Do zwrotu'], ['Ostatnie operacje']],
+  bridge: [['Odprawa', 'Stan okrętu'], ['Koperty', 'Rozliczenia z domownikami'], ['Ostatnie operacje']],
   operations: [['Lista operacji'], ['Szczegóły']],
   import: [['Plik z mBanku', 'Podgląd'], ['Dopasowania', 'Kategoryzacja']],
   month: [['Pensja', 'Podział pensji'], ['Dzienny przydział', 'Debriefing']],

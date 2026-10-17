@@ -18,7 +18,8 @@ import { Badge, Kbd, cx } from '../../components/ui'
 import { WEEKDAY_PL, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
-import { categorizeTicked, clearTicked, newOperation, resetFilter, selectOperation, setFilter, tickOperations, useOperationsUi } from './state'
+import { categorizeTicked, clearTicked, financeTicked, newOperation, resetFilter, selectOperation, setFilter, tickOperations, useOperationsUi } from './state'
+import { useMembers } from '../household/actions'
 
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
@@ -174,7 +175,7 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
         <span className="ml-2 text-[11px] text-dim">{account}</span>
       </span>
       <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')}>
-        {t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'do zwrotu' : 'bez kategorii') : category}
+        {t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : 'bez kategorii') : category}
       </span>
       <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
         {shownMarks.map((m) => (
@@ -230,8 +231,10 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const ticked = useOperationsUi((s) => s.ticked)
   const query = useOperationsUi((s) => s.filter.query)
   const cats = useCategories()
+  const members = useMembers()
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [remember, setRemember] = useState<'none' | 'brands' | 'keyword'>('none')
+  const [financer, setFinancer] = useState<string>('')
   // Only what the list shows: an operation that left it (edited, deleted, changed elsewhere) is not changed.
   const shown = visible.filter((t) => ticked[t.id])
   const n = shown.length
@@ -259,6 +262,35 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
         data-testid="operations-bulk-apply"
       >
         Ustaw
+      </button>
+      {/* Who finances them (D80 g): a household member or me again. */}
+      <select className="input h-[24px] w-[170px] py-0" value={financer} onChange={(e) => setFinancer(e.currentTarget.value)} aria-label="Kto finansuje zaznaczone" data-testid="operations-bulk-financer">
+        <option value="">— finansuje… —</option>
+        <option value="-">ja (mój wydatek)</option>
+        {members
+          .filter((m) => !m.archived)
+          .map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+      </select>
+      <button
+        type="button"
+        className="btn h-[24px]"
+        disabled={!financer}
+        onClick={() => {
+          const id = financer === '-' ? null : financer
+          financeTicked(
+            shown.map((t) => t.id),
+            id,
+            id ? `Finansuje ${members.find((m) => m.id === id)?.name ?? 'domownik'}` : 'Mój wydatek'
+          )
+          setFinancer('')
+        }}
+        data-testid="operations-bulk-finance"
+      >
+        Ustaw finansującego
       </button>
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
         Odznacz
@@ -394,7 +426,7 @@ export function OperationsPage() {
           <span className="text-muted">
             Wydatki <span className="num text-fg-strong" data-testid="operations-outflow">{plnText(-sums.outflow)} zł</span>
           </span>
-          <span className="text-muted" title="Wydatki minus zwroty towaru (bez przelewów własnych, XTB i zakupów do zwrotu)">
+          <span className="text-muted" title="Wydatki minus zwroty towaru (bez przelewów własnych, XTB i wydatków finansowanych przez domowników)">
             Koszty <span className="num text-fg-strong">{plnText(sums.costs)} zł</span>
           </span>
           <DuplicatesLink />

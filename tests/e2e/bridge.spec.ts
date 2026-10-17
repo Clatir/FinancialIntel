@@ -11,6 +11,7 @@ const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
 const GROCERIES = '01KDEFCAT00000000000000101'
 const AUTO = '01KDEFCAT00000000000000300'
+const HOUSE = '01KDEFMEM00000000000000001'
 
 
 const operations = (dataDir: string) => records(dataDir, 'transactions')
@@ -79,14 +80,15 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     await quick.getByTestId('quick-save').click()
     await expect.poll(async () => (await operations(dir)).filter((t) => t.amount === -8000).map((t) => [t.time, t.logNote])).toEqual([['23:40', 'apteka nocna']])
 
-    // A household member's money repays the house receivable first.
+    // A household member's money repays what they owe first (D80): the first member („Dom”) owes for Lidl.
     quick = await quickWindow(app, page)
     await quick.getByRole('radio', { name: 'Wpływ' }).click()
     await quick.getByTestId('quick-amount').fill('200')
     await quick.getByTestId('quick-amount').press('Tab')
-    await quick.getByTestId('quick-household').check()
+    await quick.getByTestId('quick-payer').selectOption({ label: 'Dom' })
+    await expect(quick.getByTestId('quick-preview-member')).toContainText('wyrównuje 120,00 zł')
     await quick.getByTestId('quick-save').click()
-    await expect.poll(async () => (await operations(dir)).filter((t) => t.kind === 'income').map((t) => [t.amount, t.repaid])).toEqual([[20000, 12000]])
+    await expect.poll(async () => (await operations(dir)).filter((t) => t.kind === 'income').map((t) => [t.amount, t.memberId, t.repaid])).toEqual([[20000, HOUSE, 0]])
     await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')
 
     // Esc closes without saving.

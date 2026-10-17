@@ -40,16 +40,16 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
     await page.getByRole('radio', { name: 'Wpływ' }).click()
     await typeAmount(page, 'operation-amount', '200')
     await page.getByTestId('operation-counterparty').fill('Domownik')
-    await expect(page.locator('[data-testid="operation-row"]', { hasText: 'Domownik' }).getByTestId('operation-amount-cell')).toHaveText('+200,00')
-    await expect(page.locator('[data-testid="operation-row"]', { hasText: 'Domownik' }).getByTestId('operation-amount-cell')).toHaveClass(/text-up/)
+    await expect(page.locator('[data-testid="operation-row"]', { hasText: /Domownik/ }).getByTestId('operation-amount-cell')).toHaveText('+200,00')
+    await expect(page.locator('[data-testid="operation-row"]', { hasText: /Domownik/ }).getByTestId('operation-amount-cell')).toHaveClass(/text-up/)
 
-    // A split receipt: the own part and the house part („do zwrotu”).
+    // A split receipt: the own part and a household member's part (D80).
     await page.locator('[data-testid="operation-row"]', { hasText: 'Biedronka' }).click()
     await page.getByTestId('operation-split').click()
     await expect(page.getByTestId('split-line')).toHaveCount(2)
     await typeAmount(page, page.getByTestId('split-amount').nth(0), '35,99')
     await typeAmount(page, page.getByTestId('split-amount').nth(1), '10')
-    await page.getByTestId('split-refundable').nth(1).check()
+    await page.getByTestId('split-financer').nth(1).selectOption({ label: 'Dom' })
     await expect(page.getByTestId('split-rest')).toHaveCount(0)
     await expect
       .poll(async () => ((await operations(dataDir)).find((t) => t.counterparty === 'Biedronka')?.splits as Array<{ amount: number; refundable: boolean }>)?.map((s) => [s.amount, s.refundable]))
@@ -57,7 +57,7 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
         [-3599, false],
         [-1000, true]
       ])
-    await expect(page.locator('[data-testid="operation-row"]', { hasText: 'Biedronka' })).toContainText('do zwrotu')
+    await expect(page.locator('[data-testid="operation-row"]', { hasText: 'Biedronka' })).toContainText('domownik')
 
     // Search without Polish letters, by amount; the sums follow the list.
     await page.getByTestId('operations-search').fill('bied')
@@ -68,7 +68,7 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
     await expect(page.getByTestId('operations-outflow')).toHaveText('−45,99 zł')
 
     // An edit keeps the previous version in the history.
-    await page.locator('[data-testid="operation-row"]', { hasText: 'Domownik' }).click()
+    await page.locator('[data-testid="operation-row"]', { hasText: /Domownik/ }).click()
     await typeAmount(page, 'operation-amount', '250')
     await expect.poll(async () => (await operations(dataDir)).find((t) => t.counterparty === 'Domownik')?.amount).toBe(25000)
     await page.getByTestId('history-open').click()

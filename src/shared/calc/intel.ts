@@ -8,7 +8,7 @@ import type { Balance, Transaction } from '../schema/records'
 import type { Category, Orders } from '../schema/budget'
 import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthRange, mondayOf, weekdayOf } from './dates'
 import type { FleetEvent } from './fleet'
-import { settleHousehold } from './household'
+import { financedBy, settleHousehold } from './household'
 import { asksImpulse, categoryIndex, costOf, incomeOf, partsOf, sum } from './operations'
 
 // ------------------------------------------------------------------ the wealth curve
@@ -294,6 +294,8 @@ export interface YearNumbers {
   costs: number
   income: number
   categories: Array<{ id: string; cost: number }>
+  /** What household members financed in the year (D80): apart from the costs, by member. */
+  financed: Array<{ memberId: string; amount: number }>
 }
 
 /** A year in numbers (the year's review, spec: in January); `start` = the budget's (the household's balances – D80). */
@@ -307,7 +309,8 @@ export function yearNumbers(transactions: readonly Transaction[], categories: re
     months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]! })),
     costs: sum(spend.totals),
     income: sum(income),
-    categories: [...spend.rows.map((r) => ({ id: r.id, cost: r.total })), { id: 'cargo', cost: sum(spend.cargo) }].filter((c) => c.cost > 0).sort((a, b) => b.cost - a.cost)
+    categories: [...spend.rows.map((r) => ({ id: r.id, cost: r.total })), { id: 'cargo', cost: sum(spend.cargo) }].filter((c) => c.cost > 0).sort((a, b) => b.cost - a.cost),
+    financed: financedBy(transactions.filter((t) => t.date.startsWith(`${year}-`)))
   }
 }
 

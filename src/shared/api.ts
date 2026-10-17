@@ -289,8 +289,11 @@ export interface QuickData {
   /** The officer: the category used last with a counterparty (its key) and the recent counterparties. */
   lastCategory: Record<string, string>
   counterparties: string[]
-  /** The house receivable now (a household member's money repays it). */
-  house: number
+  /**
+   * The household (D80): the active members, what each owes now (their money repays it first) and their advance (a
+   * purchase they finance takes it first); `inflow` – what their money beyond their debt is by default.
+   */
+  members: Array<{ id: string; name: string; owed: number; deposit: number; inflow: 'ask' | 'advance' | 'income' }>
   hideAmounts: boolean
   readOnly: boolean
 }

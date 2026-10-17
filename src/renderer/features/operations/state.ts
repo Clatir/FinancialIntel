@@ -115,6 +115,33 @@ export function categorizeTicked(visibleIds: readonly string[], categoryId: stri
   )
 }
 
+/**
+ * Who finances the ticked expenses (D80 g): a household member (not my cost, not the energy's) or me again. A split
+ * receipt keeps its lines (each says it) – skipped, as other kinds of operations.
+ */
+export function financeTicked(visibleIds: readonly string[], memberId: string | null, label: string): void {
+  const { ticked } = useOperationsUi.getState()
+  const data = useData.getState()
+  const ops = visibleIds
+    .filter((id) => ticked[id] && !data.drafts[id])
+    .map((id) => data.records.transactions[id]?.record)
+    .filter((t): t is Transaction => !!t)
+  const fit = ops.filter((t) => t.kind === 'expense' && !t.splits.length)
+  const before = fit.filter((t) => t.refundable !== !!memberId || (memberId != null && t.memberId !== memberId))
+  replaceRecords(
+    'transactions',
+    before.map((t) => ({ ...t, refundable: !!memberId, memberId }))
+  )
+  const skipped = ops.length - fit.length
+  clearTicked()
+  toast(
+    `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział paragonu): ${skipped}` : ''}.`,
+    'success',
+    7000,
+    before.length ? { label: 'Cofnij', run: () => replaceRecords('transactions', before) } : undefined
+  )
+}
+
 /** Select an operation; an untouched new entry left behind is dropped (it was never written). */
 export function selectOperation(id: string | null): void {
   // The field being typed in saves first: a new entry with a typed amount is no longer untouched.
@@ -166,7 +193,7 @@ export async function deleteOperation(t: Transaction, label: string): Promise<vo
   await deleteWithUndo('transactions', t.id, label, `Usunięto: ${label}.`)
 }
 
-/** Operacje with the purchases „do zwrotu” of the whole history (the bridge, the radar). */
+/** Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80). */
 export function openRefundables(): void {
   setFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })
   navigate({ page: 'operations' })

@@ -13,11 +13,27 @@ interface Line {
   amount: number
   categoryId: string | null
   refundable: boolean
+  /** Who finances the line (D80); null with `refundable` = the first member. */
+  memberId: string | null
 }
 
 const blank = (data: QuickData | null): QuickDraft => {
   const { date, time } = warsawNow()
-  return { kind: 'expense', amount: 0, categoryId: null, accountId: data?.accountId ?? '', date, time, counterparty: '', note: '', impulse: null, logNote: '', household: false, splits: [] }
+  return { kind: 'expense', amount: 0, categoryId: null, accountId: data?.accountId ?? '', date, time, counterparty: '', note: '', impulse: null, logNote: '', household: false, memberId: null, advance: false, splits: [] }
+}
+
+/** A household member to pick (D80): „ja” = my own purchase. */
+function MemberPick({ data, value, onChange, none, testId, compact }: { data: QuickData; value: string | null; onChange: (id: string | null) => void; none: string; testId?: string; compact?: boolean }) {
+  return (
+    <select className={cx('input', compact ? 'h-[22px] w-[92px] py-0 text-[11px]' : 'min-w-0 flex-1')} value={value ?? ''} onChange={(e) => onChange(e.currentTarget.value || null)} aria-label="Domownik" data-testid={testId}>
+      <option value="">{none}</option>
+      {data.members.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.name}
+        </option>
+      ))}
+    </select>
+  )
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -30,7 +46,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * The quick entry window (spec, „Szybki wpis”): an expense, an income or a purchase for the house in a few keys –
+ * The quick entry window (spec, „Szybki wpis”): an expense, an income or a purchase a household member finances in a few keys –
  * the amount, the officer's category, the account, the time; today's energy after it before saving; a split receipt;
  * the captain's log from the threshold and the quiet hours' confirmation. Enter saves, Esc closes.
  */
@@ -86,14 +102,28 @@ export function QuickApp() {
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
     if (!data || d.amount <= 0) return null
-    if (d.kind === 'income') return <span>Wpływ – dokuje w warstwach okrętu{d.household ? ' (najpierw spłaca należność domu)' : ''}.</span>
-    const parts: Line[] = lines.length > 1 ? lines : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable' }]
+    if (d.kind === 'income') {
+      const m = d.household ? data.members.find((x) => x.id === d.memberId) : undefined
+      if (!m) return <span>Wpływ – dokuje w warstwach okrętu.</span>
+      // A household member's money (D80): what they owe first, the rest their advance or income.
+      const back = Math.min(d.amount, m.owed)
+      const rest = d.amount - back
+      return (
+        <span data-testid="quick-preview-member">
+          Od: {m.name}
+          {back ? ` – wyrównuje ${money(back)} (ma oddać ${money(m.owed)})` : ''}
+          {rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${d.advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'}` : ''}.
+        </span>
+      )
+    }
+    const parts: Line[] = lines.length > 1 ? lines : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null }]
     let daily = 0
     const planned = new Map<string, number>()
-    let house = 0
+    const financed = new Map<string, number>()
     for (const p of parts) {
       if (p.refundable) {
-        house += p.amount
+        const id = p.memberId ?? data.members[0]?.id ?? ''
+        financed.set(id, (financed.get(id) ?? 0) + p.amount)
         continue
       }
       const c = p.categoryId ? cats.get(p.categoryId) : undefined
@@ -117,7 +147,18 @@ export function QuickApp() {
         </div>
       )
     }
-    if (house) out.push(<div key="house">Do zwrotu {money(house)} – nie zjada energii, dom odda.</div>)
+    // Financed by household members (D80): not my energy – their advance first, the rest the shields lend.
+    for (const [id, v] of financed) {
+      const m = data.members.find((x) => x.id === id)
+      const fromDeposit = Math.min(v, m?.deposit ?? 0)
+      out.push(
+        <div key={`member:${id}`} data-testid="quick-preview-financed">
+          Finansuje {m?.name ?? 'domownik'}: {money(v)} – nie zjada energii
+          {fromDeposit ? `; z zaliczki ${money(fromDeposit)}` : ''}
+          {v > fromDeposit ? `; pożyczają osłony ${money(v - fromDeposit)}, ma oddać` : ''}.
+        </div>
+      )
+    }
     return out
   }, [data, d, lines, cats, money])
 
@@ -179,11 +220,11 @@ export function QuickApp() {
           <Segmented
             size="sm"
             value={d.kind}
-            onChange={(kind: Kind) => set({ kind, household: false })}
+            onChange={(kind: Kind) => set({ kind, household: false, memberId: kind === 'refundable' ? (data.members[0]?.id ?? null) : null, advance: false })}
             options={[
               { value: 'expense', label: 'Wydatek' },
               { value: 'income', label: 'Wpływ' },
-              { value: 'refundable', label: 'Do zwrotu' }
+              { value: 'refundable', label: 'Za domownika' }
             ]}
             aria-label="Rodzaj"
           />
@@ -208,8 +249,13 @@ export function QuickApp() {
                 <button
                   type="button"
                   className="btn h-[24px] shrink-0 px-1.5"
-                  title="Podziel paragon: kilka kategorii albo część domowa"
-                  onClick={() => setLines([{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable' }, { amount: 0, categoryId: null, refundable: false }])}
+                  title="Podziel paragon: kilka kategorii albo część domownika"
+                  onClick={() =>
+                    setLines([
+                      { amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null },
+                      { amount: 0, categoryId: null, refundable: false, memberId: null }
+                    ])
+                  }
                   data-testid="quick-split"
                 >
                   <IconPlus size={11} />
@@ -222,20 +268,29 @@ export function QuickApp() {
               )}
             </Row>
           )}
+          {d.kind === 'refundable' && lines.length <= 1 && (
+            <Row label="Finansuje">
+              <MemberPick data={data} value={d.memberId} onChange={(memberId) => set({ memberId })} none="— wybierz domownika —" testId="quick-financer" />
+            </Row>
+          )}
           {d.kind !== 'income' && lines.length > 1 && (
             <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2" data-testid="quick-lines">
               {lines.map((l, i) => (
                 <div key={i} className="grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-1.5">
                   <AmountField value={l.amount} onChange={(v) => setLines(lines.map((x, j) => (j === i ? { ...x, amount: v ?? 0 } : x)))} aria-label={`Część ${i + 1}`} />
                   <CategoryPick data={data} value={l.categoryId} onChange={(categoryId) => setLines(lines.map((x, j) => (j === i ? { ...x, categoryId } : x)))} />
-                  <label className="flex items-center gap-1 text-[11px] text-muted">
-                    <input type="checkbox" checked={l.refundable} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, refundable: e.currentTarget.checked } : x)))} />
-                    dom
-                  </label>
+                  <MemberPick
+                    data={data}
+                    compact
+                    none="ja"
+                    value={l.refundable ? (l.memberId ?? data.members[0]?.id ?? null) : null}
+                    onChange={(memberId) => setLines(lines.map((x, j) => (j === i ? { ...x, refundable: !!memberId, memberId } : x)))}
+                    testId="quick-line-financer"
+                  />
                 </div>
               ))}
               <div className="flex items-center gap-2 text-[11px]">
-                <button className="text-accent hover:underline" onClick={() => setLines([...lines, { amount: Math.max(0, d.amount - lines.reduce((a, l) => a + l.amount, 0)), categoryId: null, refundable: false }])}>
+                <button className="text-accent hover:underline" onClick={() => setLines([...lines, { amount: Math.max(0, d.amount - lines.reduce((a, l) => a + l.amount, 0)), categoryId: null, refundable: false, memberId: null }])}>
                   + część
                 </button>
                 <button className="text-dim hover:text-fg-strong" onClick={() => setLines([])}>
@@ -261,11 +316,30 @@ export function QuickApp() {
               {night && <span className="text-[11px] text-accent">cisza nocna</span>}
             </div>
           </Row>
-          {d.kind === 'income' && data.house > 0 && (
-            <label className="flex items-center gap-1.5 text-[11.5px] text-muted">
-              <input type="checkbox" checked={d.household} onChange={(e) => set({ household: e.currentTarget.checked })} data-testid="quick-household" />
-              Od domownika – najpierw spłaca należność domu ({money(data.house)})
-            </label>
+          {d.kind === 'income' && data.members.length > 0 && (
+            <Row label="Od domownika">
+              <div className="flex items-center gap-1.5">
+                <MemberPick
+                  data={data}
+                  value={d.household ? d.memberId : null}
+                  onChange={(memberId) => set({ household: !!memberId, memberId, advance: data.members.find((m) => m.id === memberId)?.inflow === 'advance' })}
+                  none="— nie —"
+                  testId="quick-payer"
+                />
+                {d.household && d.memberId && (
+                  <Segmented
+                    size="sm"
+                    value={d.advance ? 'advance' : 'income'}
+                    onChange={(v) => set({ advance: v === 'advance' })}
+                    options={[
+                      { value: 'income', label: 'przychód' },
+                      { value: 'advance', label: 'zaliczka' }
+                    ]}
+                    aria-label="Reszta wpłaty domownika"
+                  />
+                )}
+              </div>
+            </Row>
           )}
           <Row label="Notatka">
             <input className="input" value={d.note} onChange={(e) => set({ note: e.currentTarget.value })} maxLength={500} data-testid="quick-note" />

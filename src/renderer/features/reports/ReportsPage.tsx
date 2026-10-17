@@ -10,6 +10,7 @@ import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, A
 import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekNumbers, yearNumbers, yearWealth } from '@shared/calc/intel'
 import { setReportTab, setWatchMonday, useReportsUi, type ReportTab } from './state'
 import { debriefing, planFor } from '@shared/calc/plan'
+import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
 import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
 import { formatPln } from '@shared/format'
@@ -106,7 +107,7 @@ function WatchReport() {
   const monday = useReportsUi((s) => s.watchMonday) ?? defaultWatchMonday(fleet.today, warsawNow().time)
   const setMonday = setWatchMonday
   const sunday = addDays(monday, 6)
-  const w = useMemo(() => weekNumbers(transactions, settings.categories, monday), [transactions, settings, monday])
+  const w = useMemo(() => weekNumbers(transactions, settings.categories, monday, fleet.start), [transactions, settings, monday, fleet.start])
   const kz = useMemo(() => killzoneGrid(transactions, monday, sunday), [transactions, monday, sunday])
   const top = [...kz.cells.values()].sort((a, b) => b.cost - a.cost)[0] ?? null
   const week = isoWeekOf(monday)
@@ -189,6 +190,13 @@ function WatchReport() {
   )
 }
 
+/** What household members financed (D80): the sum and each member's part („640,00 zł (Mama 400,00 zł · Tata 240,00 zł)”). */
+function financedText(rows: ReadonlyArray<{ memberId: string; amount: number }>, money: (g: number) => string, members: ReadonlyArray<{ id: string; name: string }>): string {
+  if (!rows.length) return '—'
+  const total = rows.reduce((a, r) => a + r.amount, 0)
+  return rows.length === 1 ? `${money(total)} (${memberName(rows[0]!.memberId, members)})` : `${money(total)} (${rows.map((r) => `${memberName(r.memberId, members)} ${money(r.amount)}`).join(' · ')})`
+}
+
 /** The debriefing's content: on the screen and in the PDF the same. */
 function useDebrief(month: string) {
   const fleet = useFleet()!
@@ -222,6 +230,7 @@ function useDebrief(month: string) {
 
 function DebriefReport() {
   const fleet = useFleet()!
+  const settings = useData((s) => s.fi!.settings)
   const cats = useCategories()
   const first = fleet.start ? monthOf(fleet.start) : fleet.month
   const months = monthRange(first, fleet.month).reverse()
@@ -236,6 +245,8 @@ function DebriefReport() {
         ['Pensja od siebie', b.salary == null ? '—' : money(b.salary)],
         ['Koszty netto', money(b.costs)],
         ['Ładownia i odkładki', money(b.cargo)],
+        // What household members financed (D80): not my costs, shown apart.
+        ['Sfinansowane przez domowników', financedText(b.financed, money, settings.household.members)],
         ['Miesiąc zamknięty na plus', b.plus == null ? '—' : b.plus ? 'tak' : 'nie'],
         ['Łupy (energia na koniec miesiąca)', b.loot == null ? 'miesiąc trwa' : money(b.loot)]
       ]
@@ -351,7 +362,7 @@ function YearReport() {
   const thisYear = fleet.today.slice(0, 4)
   // In January the review of the year just closed (spec).
   const [year, setYear] = useState(() => (fleet.today.slice(5, 7) === '01' ? String(Number(thisYear) - 1) : thisYear))
-  const y = useMemo(() => yearNumbers(transactions, settings.categories, year), [transactions, settings, year])
+  const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.start), [transactions, settings, year, fleet.start])
   const today = fleet.today
   const wealth = useMemo(() => yearWealth(transactions, balances, settings.accounts.map((a) => a.id), year, today), [transactions, balances, settings, year, today])
   const achievements = (game?.input.game ?? []).flatMap((g) => g.achievements).filter((a) => (a.day ?? '').startsWith(year) && (ACHIEVEMENTS as readonly string[]).includes(a.id))
@@ -361,6 +372,7 @@ function YearReport() {
       title: 'Rok w liczbach',
       lines: [
         ['Koszty netto', money(y.costs)],
+        ['Sfinansowane przez domowników', financedText(y.financed, money, settings.household.members)],
         ['Wpływy', money(y.income)],
         ['Majątek na początku (31.12 roku wcześniej)', money(wealth.start)],
         [`Majątek na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(wealth.end)],
@@ -416,9 +428,9 @@ function ExportPanel() {
   const plans = useRecordList('months')
   const [from, setFrom] = useState(`${fleet.today.slice(0, 4)}-01-01`)
   const [to, setTo] = useState(fleet.today)
-  const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to)
+  const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members)
   const months = () =>
-    monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
+    monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today, start: fleet.start }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
   const csv = { name: 'CSV', extensions: ['csv'] }
   return (
