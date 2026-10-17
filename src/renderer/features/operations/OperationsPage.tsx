@@ -8,7 +8,7 @@ import { useFleet } from '../../store/fleet'
 import { useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
 import { usePanels } from '../../store/panels'
-import { plnText } from '../../components/fields'
+import { plnText, signedPln } from '../../components/fields'
 import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../../components/icons'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
@@ -27,11 +27,6 @@ const MONTHS_PL = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec',
 const monthLabel = (m: string) => `${MONTHS_PL[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
 
 const TONE_CLASS = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
-
-/** A signed amount as the list shows it: „+” for money in, „−” for money out (D68). */
-export function signedPln(grosze: number): string {
-  return grosze > 0 ? `+${plnText(grosze)}` : plnText(grosze)
-}
 
 function PeriodBar({ period }: { period: PeriodFilter }) {
   const month = period.kind === 'month' ? period.month : warsawNow().month

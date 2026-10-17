@@ -11,6 +11,8 @@ import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
 import { AccountSelect, CategorySelect, useAccounts } from './pickers'
 import { deleteOperation, rememberAccount } from './state'
+import { rememberCategory, ruleFor } from '../import/rules'
+import { useCategories } from './pickers'
 
 /** The kinds on the first row of the editor; the rest under „inne”. */
 const MAIN_KINDS: TxKind[] = ['expense', 'income', 'transfer', 'trading']
@@ -64,6 +66,8 @@ export function OperationEditor({ id }: { id: string }) {
   const orders = useData((s) => s.fi?.settings.orders)
   const fleet = useFleet()
   const accounts = useAccounts()
+  const cats = useCategories()
+  const rules = useData((s) => s.fi?.settings.import.rules)
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
@@ -221,6 +225,17 @@ export function OperationEditor({ id }: { id: string }) {
                   Podziel paragon
                 </button>
               </div>
+              {t.bank && t.counterparty && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
+                <button
+                  type="button"
+                  className="self-start text-[11.5px] text-accent hover:underline"
+                  onClick={() => rememberCategory(t, cats.label(t.categoryId))}
+                  title="Kolejne importy z banku dadzą temu kontrahentowi tę kategorię"
+                  data-testid="operation-remember"
+                >
+                  Zapamiętaj: „{t.counterparty}” → {cats.label(t.categoryId)}
+                </button>
+              )}
               {outgoing && (
                 <Toggle
                   checked={t.refundable}

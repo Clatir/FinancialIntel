@@ -100,7 +100,7 @@ export type HistoryKind = FileKind
 export interface BackupInfo {
   name: string
   path: string
-  kind: 'daily' | 'manual' | 'pre-migration'
+  kind: 'daily' | 'manual' | 'pre-import' | 'pre-migration'
   bytes: number
   mtimeMs: number
 }
@@ -182,6 +182,10 @@ export interface FiApi {
   copyText(text: string): Promise<void>
   listBackups(): Promise<{ dir: string; files: BackupInfo[] }>
   backupNow(): Promise<string>
+  /** The backup before an import from the bank (backups/pre-import); returns its path. */
+  importBackup(): Promise<string>
+  /** Choose a bank's export file (CSV): its name and bytes (decoded by the renderer); null = cancelled. */
+  pickImportFile(): Promise<{ name: string; bytes: Uint8Array } | null>
   /** Change the backups folder on this machine: 'pick' shows a dialog, 'default' = backups/ in the data folder. */
   setBackupDir(mode: 'pick' | 'default'): Promise<string | null>
   showPath(absPath: string): Promise<void>

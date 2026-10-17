@@ -12,7 +12,7 @@ import { DataStore } from './datastore/store'
 import { FolderWatcher } from './datastore/watch'
 import { clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
-import { isDataFile, listBackups, manualBackup, runBackups } from './datastore/backup'
+import { importBackup, isDataFile, listBackups, manualBackup, runBackups } from './datastore/backup'
 import { zipFolder } from './datastore/zip'
 import { Updater } from './update/updater'
 import { startPortableSwap, startSilentInstaller } from './update/apply'
@@ -341,6 +341,9 @@ function requireUpdater(): Updater {
   return updater
 }
 
+/** A bank's export is small (a year of operations ≈ 100 KB); anything far bigger is not one. */
+const IMPORT_MAX_BYTES = 20 * 1024 * 1024
+
 function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Promise<R> | R): void {
   ipcMain.handle(`fi:${channel}`, async (_e: IpcMainInvokeEvent, ...args: unknown[]) => {
     try {
@@ -464,6 +467,25 @@ function registerIpc(): void {
   handle('backupNow', async () => {
     const s = requireStore()
     return manualBackup(s.root, s.backupsDir)
+  })
+  handle('importBackup', async () => {
+    const s = requireStore()
+    return importBackup(s.root, s.backupsDir)
+  })
+  handle('pickImportFile', async () => {
+    const res = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Plik CSV z mBanku (lista operacji albo historia rachunku)',
+      properties: ['openFile'],
+      filters: [
+        { name: 'CSV z banku', extensions: ['csv', 'txt'] },
+        { name: 'Wszystkie pliki', extensions: ['*'] }
+      ]
+    })
+    const path = res.canceled ? undefined : res.filePaths[0]
+    if (!path) return null
+    const st = await fs.stat(path)
+    if (st.size > IMPORT_MAX_BYTES) throw new Error(`Plik ma ${Math.round(st.size / 1024 / 1024)} MB – to nie wygląda na wyciąg z banku (limit ${IMPORT_MAX_BYTES / 1024 / 1024} MB).`)
+    return { name: basename(path), bytes: new Uint8Array(await fs.readFile(path)) }
   })
   handle('setBackupDir', async (mode: 'pick' | 'default') => {
     const s = requireStore()

@@ -16,6 +16,11 @@ export function plnText(grosze: number, group = true): string {
   return `${grosze < 0 ? '−' : ''}${int},${String(abs % 100).padStart(2, '0')}`
 }
 
+/** A signed amount as the lists show it: „+” for money in, „−” for money out (D68). */
+export function signedPln(grosze: number): string {
+  return grosze > 0 ? `+${plnText(grosze)}` : plnText(grosze)
+}
+
 /** An amount in złoty: grosze in and out (decision T3); `null` = empty. */
 export const AmountField = forwardRef<
   HTMLInputElement,

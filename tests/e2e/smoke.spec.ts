@@ -30,8 +30,9 @@ test('pierwsze uruchomienie: propozycja folderu, fi.json, menu boczne i puste ek
     // Every screen of the menu, by click and by Ctrl+digit.
     await page.getByTestId('nav-operations').click()
     await expect(page.getByTestId('page-operations')).toBeVisible()
+    await page.getByTestId('nav-import').click()
+    await expect(page.getByTestId('page-import')).toBeVisible()
     for (const [page_, stage] of [
-      ['import', 'E2'],
       ['month', 'E3'],
       ['cargo', 'E3'],
       ['starmap', 'E5'],

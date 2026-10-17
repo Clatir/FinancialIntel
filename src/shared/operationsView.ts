@@ -5,6 +5,7 @@
 import type { Account, Orders } from './schema/budget'
 import type { Transaction, TxKind } from './schema/records'
 import { asksImpulse, costOf, isNight, type CategoryIndex } from './calc/operations'
+import { fold } from './fold'
 
 /** Marks of an operation (spec, „Ekrany”: do zwrotu, plan lub impuls, noc) and of its origin. */
 export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual'] as const
@@ -57,14 +58,7 @@ export function inPeriod(date: string, p: PeriodFilter): boolean {
   return (p.from == null || date >= p.from) && (p.to == null || date <= p.to)
 }
 
-/** Lower case without Polish letters' marks: „Żabka” is found by „zabka”. */
-export function fold(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/ł/g, 'l')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-}
+export { fold }
 
 /** The amount typed in the search („12,49”, „1 234.5”) as grosze, or null. */
 function queryAmount(q: string): number | null {

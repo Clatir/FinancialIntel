@@ -12,6 +12,7 @@ import { CommandPalette } from '../features/palette/CommandPalette'
 import { PAGES, pageDef } from '../features/screens/pages'
 import { PlaceholderPage } from '../features/screens/PlaceholderPage'
 import { OperationsPage } from '../features/operations/OperationsPage'
+import { ImportPage } from '../features/import/ImportPage'
 import { Toasts } from '../components/Toasts'
 import { IconGear, IconSync } from '../components/icons'
 import { cx } from '../components/ui'
@@ -185,6 +186,7 @@ function Page({ route }: { route: Route }) {
   if (route.page === 'settings') return <SettingsPage />
   if (route.page === 'sync') return <SyncPage />
   if (route.page === 'operations') return <OperationsPage />
+  if (route.page === 'import') return <ImportPage />
   const def = pageDef(route.page)
   return def ? <PlaceholderPage key={def.page} def={def} /> : null
 }

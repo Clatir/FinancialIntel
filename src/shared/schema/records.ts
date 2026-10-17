@@ -53,6 +53,8 @@ export const bankRowSchema = z.looseObject({
   key: z.string().min(1).max(300),
   /** The bank's description, whitespace collapsed. */
   description: z.string().max(2000).default(''),
+  /** The counterparty as the bank wrote it (an operation still showing it takes the new one when the row settles). */
+  counterparty: z.string().max(300).default(''),
   /** Type of the operation („ZAKUP PRZY UŻYCIU KARTY W KRAJU”, „PRZELEW WEWNĘTRZNY PRZYCHODZĄCY”…). */
   operation: z.string().max(200).default(''),
   /** The bank's own category: a weak hint only (often wrong). */

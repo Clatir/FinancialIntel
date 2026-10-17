@@ -9,6 +9,8 @@ import { zipFolder } from './zip'
 /** Daily backups kept (decision D31). */
 export const DAILY_KEEP = 30
 export const MANUAL_KEEP = 5
+/** Backups before an import from the bank (spec, „Kopie zapasowe”; T20). */
+export const IMPORT_KEEP = 10
 
 /**
  * The data: fi.json and the JSON records of the collections – never other files that happen to be in the folder (a
@@ -58,18 +60,28 @@ export async function runBackups(root: string, backupsDir: string, now = new Dat
   return file
 }
 
-/** Full backup on demand (backups/manual, last 5 kept). */
-export async function manualBackup(root: string, backupsDir: string, now = new Date()): Promise<string> {
-  const dir = join(backupsDir, 'manual')
+/** A ZIP of the data named by its time in `backups/<kind>`, the newest `keep` kept. */
+async function datedBackup(root: string, backupsDir: string, kind: 'manual' | 'pre-import', keep: number, now: Date): Promise<string> {
+  const dir = join(backupsDir, kind)
   const file = join(dir, `${DateTime.fromJSDate(now).toFormat('yyyy-LL-dd_HHmmss')}.zip`)
   await zipFolder(root, file, isDataFile)
-  await rotate(dir, MANUAL_KEEP)
+  await rotate(dir, keep)
   return file
+}
+
+/** Full backup on demand (backups/manual, last 5 kept). */
+export function manualBackup(root: string, backupsDir: string, now = new Date()): Promise<string> {
+  return datedBackup(root, backupsDir, 'manual', MANUAL_KEEP, now)
+}
+
+/** The data before an import (backups/pre-import, the last 10 kept): the import can always be undone by hand. */
+export function importBackup(root: string, backupsDir: string, now = new Date()): Promise<string> {
+  return datedBackup(root, backupsDir, 'pre-import', IMPORT_KEEP, now)
 }
 
 export async function listBackups(backupsDir: string): Promise<BackupInfo[]> {
   const out: BackupInfo[] = []
-  for (const kind of ['daily', 'manual', 'pre-migration'] as const) {
+  for (const kind of ['daily', 'manual', 'pre-import', 'pre-migration'] as const) {
     for (const f of await list(join(backupsDir, kind))) out.push({ ...f, kind })
   }
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs)

@@ -6,3 +6,5 @@
 *.webp binary
 *.ico binary
 *.zip binary
+# Bank exports as the bank writes them (CRLF, BOM): never normalized.
+tests/fixtures/** -text

@@ -25,7 +25,7 @@ const GROCERIES = defaultCategoryId(1, 1)
 
 describe('lista operacji', () => {
   const zabka = tx('2026-10-14', -1189, { counterparty: 'Żabka', categoryId: GROCERIES, time: '23:40' })
-  const bolt = tx('2026-10-15', -1249, { counterparty: 'Bolt', bank: { format: 'mbank', key: 'k1', description: 'Bolt ZAKUP PRZY UŻYCIU KARTY - INTERNET', operation: '', category: 'Przejazdy', pending: true, importedAt: '2026-10-16T08:00:00.000Z' } })
+  const bolt = tx('2026-10-15', -1249, { counterparty: 'Bolt', bank: { format: 'mbank', key: 'k1', description: 'Bolt ZAKUP PRZY UŻYCIU KARTY - INTERNET', counterparty: 'Bolt', operation: '', category: 'Przejazdy', pending: true, importedAt: '2026-10-16T08:00:00.000Z' } })
   const salary = tx('2026-10-10', 500000, { kind: 'income', counterparty: 'Domownik' })
   const wallet = tx('2026-09-30', -2500, { accountId: XTB_WALLET_ACCOUNT_ID, counterparty: 'Allegro', categoryId: FOOD, refundable: true })
   const all = [zabka, bolt, salary, wallet]
