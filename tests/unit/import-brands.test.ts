@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { categoryIndex } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
 import { brandOf, keywordIn, keywordMatches, normalizeKeyword, tokens, words } from '@shared/import/brands'
-import { classifyRow, findRule } from '@shared/import/classify'
+import { classifyRow, findRule, ruleTargetOf } from '@shared/import/classify'
 import { parseMbank, type MbankRow } from '@shared/import/mbank'
-import { buildImport, importGroups, importThemes, planImport, type Choice, type ImportChoices } from '@shared/import/reconcile'
+import { buildImport, importGroups, importThemes, planImport, searchGroups, type Choice, type ImportChoices } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
-import { defaultCategoryId, MBANK_ACCOUNT_ID, type ImportRule } from '@shared/schema'
+import { CASH_CATEGORY_ID, defaultCategoryId, MBANK_ACCOUNT_ID, type ImportRule } from '@shared/schema'
 
 const FIXTURE = join(__dirname, '..', 'fixtures', 'mbank', 'lista_operacji.csv')
 const fixture = () => parseMbank(decodeText(new Uint8Array(readFileSync(FIXTURE))))
@@ -74,6 +74,43 @@ describe('klucz marki (D75, pomysł 1)', () => {
     expect(brandOf('WROCLAW').key).toBe('wroclaw')
     expect(brandOf('Toalety Dworzec PKP').brand).toBeNull()
     expect(brandOf('ORANGE JAN', { dictionary: false })).toEqual({ key: 'orangejan', brand: null })
+  })
+})
+
+describe('marka a rodzaj operacji (przegląd 1.2.1)', () => {
+  it('bankomat w sklepie sieci to nie zakupy; przelew: sieć tylko od początku nazwy, nazwisko-miasto zostaje; kod sklepu znika', () => {
+    const zabkaRule = rule({ match: 'zabka', categoryId: GROCERIES })
+    const atm = classifyRow(row({ operation: 'WYPŁATA W BANKOMACIE', counterparty: 'BANKOMAT ZABKA Z1234 KRAKOW' }), ctx([zabkaRule]))
+    expect(atm.decision).toMatchObject({ categoryId: CASH_CATEGORY_ID, source: 'builtin', reason: 'wypłata z bankomatu → Gotówka' })
+    expect(atm.brand.brand).toBeNull()
+    const transfer = (counterparty: string) => ruleTargetOf({ counterparty, title: 'PRZELEW', operation: 'PRZELEW ZEWNĘTRZNY WYCHODZĄCY' }).brand
+    expect(transfer('ANNA BIEDRONKA').brand).toBeNull()
+    expect(transfer('PGE OBRÓT S.A.').key).toBe('pge')
+    expect(transfer('JAN KALISZ').key).not.toBe(transfer('JAN KONIN').key)
+    expect(brandOf('SKLEP ABC Z6512').key).toBe(brandOf('SKLEP ABC').key)
+  })
+
+  it('wyszukiwanie: liczba to kwota albo tekst (data); nazwa – cała grupa', () => {
+    const groups = importGroups(planImport(fixture(), MBANK_ACCOUNT_ID, [], ctx()))
+    const byDate = searchGroups(groups, '15.08.2025')
+    expect(byDate.size).toBeGreaterThan(0)
+    for (const [, rows] of byDate) if (rows !== 'all') expect(rows.every((r) => r.row.date === '2025-08-15')).toBe(true)
+    expect(searchGroups(groups, 'bolt').get(groups.find((g) => g.brand === 'bolt')!.group)).toBe('all')
+  })
+
+  it('jedna marka w dwóch grupach z różnymi decyzjami: reguła z decyzji większej grupy, trafienia razem', () => {
+    const old = rule({ match: 'orlenstacja', categoryId: defaultCategoryId(3, 2) })
+    const file = { format: 'lista' as const, client: null, account: null, period: null, skipped: [], rows: [row({ counterparty: 'ORLEN STACJA 123' }), row({ counterparty: 'ORLEN STACJA 123', date: '2026-10-02' }), row({ counterparty: 'ORLEN' })] }
+    const p = planImport(file, MBANK_ACCOUNT_ID, [], ctx([old]))
+    const groups = importGroups(p).filter((g) => g.brand === 'orlen')
+    expect(groups.map((g) => g.rows.length).sort()).toEqual([1, 2])
+    const choices = emptyChoices()
+    for (const g of groups) {
+      choices.groups[g.group] = expense(g.rows.length === 2 ? GROCERIES : PARKING)
+      choices.remember[g.group] = true
+    }
+    const result = buildImport(p, choices, { now: NOW, house: 0, makeId, rules: [old] })
+    expect(result.rules.filter((r) => r.match === 'orlen')).toEqual([expect.objectContaining({ categoryId: GROCERIES, hits: 3 })])
   })
 })
 

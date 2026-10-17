@@ -74,13 +74,18 @@ export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction:
   return best
 }
 
+/** An ATM withdrawal (by the type of operation). */
+const ATM = /WYPŁATA (W|Z) BANKOMA|WYPLATA (W|Z) BANKOMA|WYPŁATA GOTÓWKI|WYPLATA GOTOWKI|BLIK WYPŁATA|BLIK WYPLATA/
+
 /**
  * What the rule of an operation is looked up and remembered by: an imported row, or an operation in Operacje. A person
- * paid or paying by phone (BLIK P2P) is no chain of the dictionary, whatever their name.
+ * paid or paying by phone (BLIK P2P) and an ATM in a shop („BANKOMAT ŻABKA”) are no chain of the dictionary; the
+ * other side of a transfer is one only by the start of its name, with no city cut (often a person).
  */
 export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string }): { target: RuleTarget; brand: BrandMatch } {
-  const name = o.counterparty || o.operation || ''
-  const brand = brandOf(name, { dictionary: !/^BLIK P2P/.test(o.operation ?? '') })
+  const op = o.operation ?? ''
+  const name = o.counterparty || op
+  const brand = brandOf(name, { dictionary: !/^BLIK P2P/.test(op) && !ATM.test(op), transfer: /^(PRZELEW|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|PRZEKAZ|OBCIĄŻENIE|OBCIAZENIE)/.test(op) })
   return { brand, target: { brand: brand.key, key: counterpartyKey(name), name: words(o.counterparty), title: words(o.title) } }
 }
 
@@ -260,7 +265,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (isXtb(row)) return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
   if (/^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(op) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(op) && isOwnName(row.counterparty, ctx.ownNames)))
     return out(decision('transfer', 'przelew własny'))
-  if (/WYPŁATA (W|Z) BANKOMA|WYPLATA (W|Z) BANKOMA|WYPŁATA GOTÓWKI|WYPLATA GOTOWKI|BLIK WYPŁATA|BLIK WYPLATA/.test(op))
+  if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
   if (/^ZWROT/.test(op) && direction === 'in') {
     // A product return: a negative expense of the purchase's category (spec) – the purchases' rule says which, else the

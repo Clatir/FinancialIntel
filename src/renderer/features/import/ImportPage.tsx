@@ -29,9 +29,10 @@ import {
   hintable,
   loadImportFile,
   pickImportFile,
-  replanImport,
+  replanIfRulesChanged,
   runImport,
   selectImport,
+  selectedRowKeys,
   setImportAccount,
   setImportQuery,
   setNoMerge,
@@ -424,10 +425,11 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
 function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; label: string; status: ThemeStatus; found: Map<string, NewRow[] | 'all'>; searching: boolean }) {
   const decided = useImport((s) => s.choices.themes[t.theme])
   const remember = useImport((s) => s.choices.rememberThemes[t.theme] ?? false)
-  const allChecked = useImport((s) => t.groups.every((g) => s.selected.groups[g.group]))
+  const shown = t.groups.filter((g) => found.has(g.group))
+  // The groups shown (in a search: the ones found) – the tick of the theme is theirs.
+  const allChecked = useImport((s) => shown.every((g) => s.selected.groups[g.group]))
   const cats = useCategories()
   const [open, setOpen] = useState(status === 'todo')
-  const shown = t.groups.filter((g) => found.has(g.group))
   const expanded = open || searching
   const proposed = t.basis.kind === 'proposal' ? t.basis.choice : nothing(t.direction)
   const choice = decided ?? proposed
@@ -468,7 +470,7 @@ function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; labe
             <button
               type="button"
               className="text-accent hover:underline"
-              onClick={() => chooseTheme(t.theme, { ...nothing('out'), categoryId: t.basis.kind === 'hint' ? t.basis.categoryId : null }, false)}
+              onClick={() => chooseTheme(t.theme, { ...nothing('out'), categoryId: t.basis.kind === 'hint' ? t.basis.categoryId : null }, false, true)}
               data-testid="import-theme-hint"
             >
               {cats.label(t.basis.categoryId)}?
@@ -492,10 +494,9 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const selected = useImport((s) => s.selected)
   const [option, setOption] = useState<Option>('expense')
   const [categoryId, setCategoryId] = useState<string | null>(null)
-  const nGroups = Object.keys(selected.groups).length
-  const nRows = Object.keys(selected.rows).length
-  if (!nGroups && !nRows) return null
-  const rows = groups.filter((g) => selected.groups[g.group]).reduce((s, g) => s + g.rows.length, 0) + nRows
+  const nGroups = groups.filter((g) => selected.groups[g.group]).length
+  const rows = selectedRowKeys(groups, selected).length
+  if (!nGroups && !rows) return null
   const apply = () => {
     const { applied, unfit } = chooseSelected(groups, option, option === 'expense' || option === 'refundable' ? categoryId : null)
     toast(unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`, unfit ? 'info' : 'success', 4000)
@@ -695,7 +696,7 @@ export function ImportPage() {
   const plan = useImport((s) => s.plan)
   const rules = useData((s) => s.fi?.settings.import.rules)
   // A keyword added or a rule deleted (here, in the settings, on another computer): the open file planned again.
-  useEffect(() => replanImport(), [rules])
+  useEffect(() => replanIfRulesChanged(rules), [rules])
   const done = useImport((s) => s.done)
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()

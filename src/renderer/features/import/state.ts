@@ -5,7 +5,7 @@ import { newId } from '@shared/ids'
 import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
 import { buildImport, importGroups, planImport, type Choice, type ImportChoices, type ImportGroup, type ImportPlan, type ImportTheme } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
-import { MBANK_ACCOUNT_ID, type Transaction } from '@shared/schema'
+import { MBANK_ACCOUNT_ID, type ImportRule, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { addRecords, deleteRecord, flushSaves, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -32,6 +32,10 @@ interface ImportSession {
   query: string
   /** Groups (`ImportGroup.group`) and single rows (`RowPlan.key`) ticked for a bulk action. */
   selected: { groups: Record<string, true>; rows: Record<string, true> }
+  /** The rules the plan was made with: other rules now (a keyword added, a rule deleted) = plan again. */
+  rulesUsed: readonly ImportRule[] | null
+  /** Themes decided by accepting what was offered („Przyjmij pewne”, the bank's hint) – a new proposal wins on a re-plan. */
+  accepted: Record<string, true>
   busy: boolean
   done: ImportDone | null
 }
@@ -50,6 +54,8 @@ export const useImport = create<ImportSession>(() => ({
   choices: emptyChoices(),
   query: '',
   selected: noSelection(),
+  rulesUsed: null,
+  accepted: {},
   busy: false,
   done: null
 }))
@@ -60,6 +66,7 @@ const records = <T,>(map: Record<string, { record: T }>): T[] => Object.values(m
 function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<string>): ImportPlan | null {
   const s = useData.getState()
   if (!s.fi) return null
+  useImport.setState({ rulesUsed: s.fi.settings.import.rules })
   const ownNames = [...s.fi.settings.import.ownNames, ...(file.client ? [file.client] : [])]
   return planImport(file, accountId, records(s.records.transactions), { rules: s.fi.settings.import.rules, ownNames, categories: categoryIndex(s.fi.settings.categories), containers: records(s.records.containers) }, deletedKeys)
 }
@@ -86,7 +93,7 @@ export async function loadImportFile(name: string, bytes: Uint8Array): Promise<v
     const accountId = useImport.getState().accountId || importAccount()
     const deletedKeys = await deletedBankKeys()
     // Nothing is ticked by itself: pending operations the list no longer shows may only be filtered out of it.
-    useImport.setState({ fileName: name, file, error: null, accountId, deletedKeys, plan: planNow(file, accountId, deletedKeys), choices: emptyChoices(), query: '', selected: noSelection(), done: null })
+    useImport.setState({ fileName: name, file, error: null, accountId, deletedKeys, plan: planNow(file, accountId, deletedKeys), choices: emptyChoices(), query: '', selected: noSelection(), accepted: {}, done: null })
   } catch (e) {
     useImport.setState({ fileName: name, file: null, plan: null, error: e instanceof MbankFormatError ? e.message : `Nie udało się odczytać pliku: ${errorMessage(e)}`, done: null })
   }
@@ -112,33 +119,55 @@ export function setImportAccount(accountId: string): void {
   })
 }
 
+/** Plan again when the rules are not the ones the plan was made with (a keyword added here, in the settings, elsewhere). */
+export function replanIfRulesChanged(rules: readonly ImportRule[] | undefined): void {
+  const { plan, rulesUsed } = useImport.getState()
+  if (plan && rules && rules !== rulesUsed) replanImport()
+}
+
 /**
  * The plan once more (the rules changed – a keyword added, a rule deleted – or the operations did): the decisions stay;
  * a group whose proposal changed (another key) keeps its decision under the group of the same brand and direction.
  */
 export function replanImport(): void {
-  const { file, accountId, deletedKeys, plan: old, choices } = useImport.getState()
+  const { file, accountId, deletedKeys, plan: old, choices, selected, accepted } = useImport.getState()
   if (!file || !old) return
   const plan = planNow(file, accountId, deletedKeys)
   if (!plan) return
+  const before = importGroups(old)
   const fresh = importGroups(plan)
   const keys = new Set(fresh.map((g) => g.group))
-  const groups = { ...choices.groups }
-  const remember = { ...choices.remember }
-  for (const g of importGroups(old)) {
-    const c = choices.groups[g.group]
-    if (!c || keys.has(g.group)) continue
+  // A theme's decision becomes its groups' own: themes are keyed by the proposal, so other groups may join the theme
+  // now – they must not take a decision the user never saw for them.
+  const groups: Record<string, Choice> = {}
+  const remember: Record<string, boolean> = {}
+  const weak = new Set<string>()
+  for (const g of before) {
+    const own = choices.groups[g.group]
+    const c = own ?? choices.themes[g.theme]
+    if (!c) continue
+    groups[g.group] = c
+    remember[g.group] = own ? (choices.remember[g.group] ?? true) : (choices.rememberThemes[g.theme] ?? true)
+    if (!own && accepted[g.theme]) weak.add(g.group)
+  }
+  // A group whose proposal changed (another key) keeps the user's decision under the group of the same brand and
+  // direction; an accepted offer gives way to the new proposal.
+  for (const g of before) {
+    const c = groups[g.group]
+    if (!c || keys.has(g.group) || weak.has(g.group)) continue
     for (const n of fresh)
       if (n.brand === g.brand && n.direction === g.direction && !groups[n.group]) {
         groups[n.group] = c
-        remember[n.group] = choices.remember[g.group] ?? true
+        remember[n.group] = remember[g.group]!
       }
   }
-  useImport.setState({ plan, choices: { ...choices, groups, remember } })
+  const tickedGroups = Object.fromEntries(Object.keys(selected.groups).filter((k) => keys.has(k)).map((k) => [k, true as const]))
+  for (const g of weak) if (!keys.has(g)) delete groups[g]
+  useImport.setState({ plan, choices: { ...choices, themes: {}, rememberThemes: {}, groups, remember }, selected: { groups: tickedGroups, rows: selected.rows }, accepted: {} })
 }
 
 export function closeImport(): void {
-  useImport.setState({ fileName: null, file: null, error: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), done: null })
+  useImport.setState({ fileName: null, file: null, error: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: {}, done: null })
 }
 
 function patchChoices(fn: (c: ImportChoices) => ImportChoices): void {
@@ -162,9 +191,18 @@ export function clearGroup(group: string): void {
   })
 }
 
-/** A decision for a whole theme (1.2.1): every group of it without its own decision; remembered by brand like a group's. */
-export function chooseTheme(theme: string, choice: Choice, remember?: boolean): void {
+/**
+ * A decision for a whole theme (1.2.1): every group of it without its own decision; remembered by brand like a group's.
+ * `accepted` = what was offered taken as it is (a new proposal wins over it on a re-plan).
+ */
+export function chooseTheme(theme: string, choice: Choice, remember?: boolean, accepted = false): void {
   patchChoices((c) => ({ ...c, themes: { ...c.themes, [theme]: choice }, rememberThemes: { ...c.rememberThemes, [theme]: remember ?? c.rememberThemes[theme] ?? true } }))
+  useImport.setState((s) => {
+    const next = { ...s.accepted }
+    if (accepted) next[theme] = true
+    else delete next[theme]
+    return { accepted: next }
+  })
 }
 
 export function chooseRow(key: string, choice: Choice | null): void {
@@ -201,11 +239,10 @@ export function selectImport(target: { groups?: readonly string[]; rows?: readon
 
 export const clearImportSelection = () => useImport.setState({ selected: noSelection() })
 
-/** The ticked rows: of the ticked groups and the ticked ones apart. */
-export function selectedRowKeys(groups: readonly ImportGroup[]): string[] {
-  const { selected } = useImport.getState()
-  const keys = new Set(Object.keys(selected.rows))
-  for (const g of groups) if (selected.groups[g.group]) for (const p of g.rows) keys.add(p.key)
+/** The ticked rows (of the plan): of the ticked groups and the ticked ones apart, each once. */
+export function selectedRowKeys(groups: readonly ImportGroup[], selected = useImport.getState().selected): string[] {
+  const keys = new Set<string>()
+  for (const g of groups) for (const p of g.rows) if (selected.groups[g.group] || selected.rows[p.key]) keys.add(p.key)
   return [...keys]
 }
 
@@ -237,18 +274,6 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
   return { applied, unfit }
 }
 
-/** The ticked rows out of this import (or back in). */
-export function skipSelected(groups: readonly ImportGroup[], on: boolean): number {
-  const keys = selectedRowKeys(groups)
-  patchChoices((c) => {
-    const skip = { ...c.skip }
-    for (const k of keys) if (on) skip[k] = true
-    else delete skip[k]
-    return { ...c, skip }
-  })
-  return keys.length
-}
-
 export const setSkip = (keys: readonly string[], on: boolean) =>
   patchChoices((c) => {
     const skip = { ...c.skip }
@@ -256,6 +281,13 @@ export const setSkip = (keys: readonly string[], on: boolean) =>
     else delete skip[k]
     return { ...c, skip }
   })
+
+/** The ticked rows out of this import (or back in). Returns how many. */
+export function skipSelected(groups: readonly ImportGroup[], on: boolean): number {
+  const keys = selectedRowKeys(groups)
+  setSkip(keys, on)
+  return keys.length
+}
 
 /**
  * Where a theme stands: 'todo' – groups without any proposal wait for the user; 'check' – recognized (a chain, a
@@ -280,7 +312,7 @@ export function acceptSure(themes: readonly ImportTheme[]): number {
   let n = 0
   for (const t of themes) {
     if (t.basis.kind !== 'proposal' || themeStatus(t, choices) !== 'check') continue
-    chooseTheme(t.theme, t.basis.choice, true)
+    chooseTheme(t.theme, t.basis.choice, true, true)
     n++
   }
   return n
@@ -292,7 +324,7 @@ export const hintable = (themes: readonly ImportTheme[], c: ImportChoices) => th
 /** „Przyjmij podpowiedzi mBanku”: the bank's category for the expense themes it hints at – no rules (D68). */
 export function acceptHints(themes: readonly ImportTheme[]): number {
   const todo = hintable(themes, useImport.getState().choices)
-  for (const t of todo) if (t.basis.kind === 'hint') chooseTheme(t.theme, { kind: 'expense', categoryId: t.basis.categoryId, refundable: false, household: false, counterAccountId: null }, false)
+  for (const t of todo) if (t.basis.kind === 'hint') chooseTheme(t.theme, { kind: 'expense', categoryId: t.basis.categoryId, refundable: false, household: false, counterAccountId: null }, false, true)
   return todo.length
 }
 
@@ -349,7 +381,7 @@ export async function runImport(): Promise<void> {
       }
     }))
     if (!(await flushSaves())) throw new Error('Część operacji nie zapisała się jeszcze – aplikacja ponawia zapis automatycznie.')
-    useImport.setState({ done: { counts: result.counts, backup, accountId: st.accountId, rules: learned }, file: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection() })
+    useImport.setState({ done: { counts: result.counts, backup, accountId: st.accountId, rules: learned }, file: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: {} })
     toast(`Zaimportowano: ${result.counts.created} nowych, ${result.counts.merged} połączonych z wpisami, ${result.counts.settled} rozliczonych.`, 'success', 6000)
   } catch (e) {
     toast(errorMessage(e), 'error', 8000)

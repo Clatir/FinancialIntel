@@ -1,11 +1,12 @@
 # Financial Intel – postęp
 
-**Stan:** 1.2.1 – grupowanie importu z mBanku (D75) w toku na gałęzi `claude/import-1.2.1`. **1.2.0 wydane** (PR #6),
-**1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie
-0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście (plik usuwany w trakcie odczytu), więc job
-Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** dokończyć 1.2.1 (klucz marki, słownik sieci, słowa kluczowe, tematy z „Przyjmij pewne”), testy,
-przegląd, wydanie; potem pauza (kalibracja progów gry po pierwszym miesiącu).
+**Stan:** 1.2.1 – grupowanie importu z mBanku (D75, D76) zrobione na gałęzi `claude/import-1.2.1`, PR do `main` –
+scalenie przy zielonym CI (D71). **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4); bez
+asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
+na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
+1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
+**Następny krok:** pauza – odbiór 1.2.1 na prawdziwej historii z mBanku; potem kalibracja progów gry po pierwszym
+miesiącu albo pomysły 5 i 6 z propozycji importu (łączenie podobnych nazw, propozycja reguły z liczbą wierszy).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -26,9 +27,9 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
-| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) | Opus 5.5 | **max** | ok. 1–1,5 h | 1.2.1 | ✅ wybór pomysłów (D75) | 🔧 w toku |
+| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i zaznaczanie | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.1 | ✅ wybór pomysłów (D75, D76) | ✅ zrobione, PR do `main` |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8** | | | **zmierzone ok. 9,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1** | | | **zmierzone ok. 10,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -56,6 +57,35 @@ całość ok. 4–6 miesięcy (szacunek zgrubny).
    - słowa kluczowe działają tylko na wydatki (wpływ z tytułem „kręgle” to zwrot od znajomego – do Twojej decyzji).
 3. **Co przygotować** – nic.
 4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1–1,5 h.
+
+## 1.2.1 – grupowanie importu z mBanku (17.10.2026)
+
+Zrobione (D75 – pomysły 1 + 3 + 4 + 2, D76 – wyszukiwarka i zaznaczanie dopisane w trakcie):
+- Klucz marki: sieć w każdym mieście, pod operatorem płatności i z końcówką domeny to jedna grupa; reguły uczą się
+  po marce, reguły sprzed 1.2.1 działają dalej (T85, T87).
+- Słownik ponad 200 sieci i usług z kategoriami i 30 słów kluczowych nazwy albo tytułu; własne słowa kluczowe
+  (Ustawienia → Import z banku i ekran importu – plik liczony od nowa od razu) (T86).
+- Tematy (kategoria / podpowiedź mBanku / rodzaj operacji) z sekcjami „Do decyzji”, „Rozpoznane – sprawdź”,
+  „Gotowe”, decyzja tematu dla wszystkich jego marek, „Przyjmij pewne” z zapamiętaniem, podpowiedzi mBanku dla
+  całych tematów bez reguł (T88, T89).
+- Wyszukiwarka, zaznaczanie grup i operacji, decyzja dla zaznaczonych, „Nie importuj” (T90).
+- Pomiar na pliku użytkownika (271 operacji): 81 grup → 80 grup marek w 36 tematach; 19 tematów rozpoznanych do
+  przyjęcia jednym kliknięciem, 10 z podpowiedzią mBanku, do ręcznej decyzji głównie przelewy od i do osób. Na
+  dłuższej historii łączenie marek daje więcej (ta sama sieć w wielu miastach).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione:
+  - reguła sieci nie łapie wypłaty z bankomatu w tej sieci (bankomat bez słownika);
+  - przelew do osoby: sieć tylko od początku nazwy, nazwiska-miasta nie są wycinane („JAN KALISZ” ≠ „JAN KONIN”);
+  - kilka grup jednej marki z różnymi decyzjami – reguła z decyzji większej grupy;
+  - plan od nowa: decyzje tematów przechodzą na grupy, zaznaczenie bez nieistniejących grup; plan od nowa tylko po
+    zmianie reguł (nie przy każdym wejściu na ekran);
+  - liczba w wyszukiwarce to kwota albo tekst (data, numer); znaczek tematu przy wyszukiwaniu dotyczy znalezionych;
+  - kody sklepów („Z6512”) znikają z klucza; licznik zaznaczonych bez podwójnego liczenia; porządki w kodzie.
+- Testy: 353 unit + fs (`tests/unit/import-brands.test.ts`), E2E 15 (`tests/e2e/import.spec.ts` – tematy,
+  wyszukiwarka, zaznaczanie, „Nie importuj”, słowo kluczowe, „Przyjmij pewne”).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.2.1, Windows):
+1. Import pełnej historii z mBanku: liczba tematów, „Przyjmij pewne”, trafność słownika i słów kluczowych.
+2. Własne słowo kluczowe (np. nazwa ulubionej cukierni) i wyszukiwarka z zaznaczaniem.
 
 ## E8 – Wywiad i raporty (17.10.2026)
 
@@ -576,3 +606,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
   CSV / Excel / PDF / ZIP, raport wachty w niedzielę), przegląd i poprawki.
 - 17.10.2026 – zamknięcie grupy D: 1.2.0, PR do `main`; plan etapów E0–E8 zamknięty (E9 wypada – D74); propozycja
   usprawnienia importu (1.2.1) czeka na wybór użytkownika; pauza.
+- 17.10.2026 – PR #6 scalony, wydanie 1.2.0 opublikowane; komenda startu 1.2.1 (D75: pomysły 1 + 3 + 4 + 2), w trakcie
+  dopisane wyszukiwarka i zaznaczanie (D76); klucz marki, słownik sieci, słowa kluczowe, tematy z „Przyjmij pewne”,
+  przegląd i poprawki; PR do `main`; pauza.

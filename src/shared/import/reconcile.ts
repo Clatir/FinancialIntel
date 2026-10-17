@@ -224,7 +224,12 @@ export interface ImportTheme {
 export function importGroups(plan: ImportPlan | null): ImportGroup[] {
   if (!plan) return []
   const byGroup = new Map<string, NewRow[]>()
-  for (const p of plan.rows) if (p.status === 'new') byGroup.set(p.group, [...(byGroup.get(p.group) ?? []), p])
+  for (const p of plan.rows) {
+    if (p.status !== 'new') continue
+    const list = byGroup.get(p.group)
+    if (list) list.push(p)
+    else byGroup.set(p.group, [p])
+  }
   const out: ImportGroup[] = []
   for (const [group, rows] of byGroup) {
     const first = rows[0]!
@@ -239,7 +244,6 @@ export function importGroups(plan: ImportPlan | null): ImportGroup[] {
     const most = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null
     const [hint, bankCategory] = (most(hints)?.split('|') ?? [null, '']) as [string | null, string]
     const source = weakest.decision.source
-    const sig = group.slice(group.indexOf('|', group.indexOf('|') + 1) + 1)
     const dates = rows.map((p) => p.row.date).sort()
     out.push({
       group,
@@ -258,7 +262,7 @@ export function importGroups(plan: ImportPlan | null): ImportGroup[] {
       byTitle: first.decision.byTitle,
       hint,
       bankCategory,
-      theme: source !== 'none' ? `${first.direction}|=${sig}` : hint ? `${first.direction}|hint:${hint}` : `${first.direction}|op:${opKindOf(first.row.operation)}`
+      theme: source !== 'none' ? `${first.direction}|=${proposalSig(first.decision)}` : hint ? `${first.direction}|hint:${hint}` : `${first.direction}|op:${opKindOf(first.row.operation)}`
     })
   }
   return out.sort((a, b) => b.rows.length - a.rows.length || a.label.localeCompare(b.label))
@@ -290,7 +294,7 @@ export function importThemes(groups: readonly ImportGroup[]): ImportTheme[] {
 
 /**
  * The import's search (1.2.1): every word in the group's names and categories – the whole group – or in a row's
- * description, title and date (dd.mm.rrrr) – only those rows; an amount („12,49”) finds the rows of that amount.
+ * description, title and date (dd.mm.rrrr) – only those rows; an amount („12,49”) also finds the rows of that amount.
  * Groups not found are left out of the map.
  */
 export function searchGroups(groups: readonly ImportGroup[], query: string, labelOf: (categoryId: string | null) => string = () => ''): Map<string, NewRow[] | 'all'> {
@@ -305,12 +309,12 @@ export function searchGroups(groups: readonly ImportGroup[], query: string, labe
   const has = (text: string) => ws.every((w) => text.includes(w))
   for (const g of groups) {
     const groupText = fold([g.label, ...g.names, g.bankCategory, g.reason, labelOf(g.proposed.categoryId)].join(' \u0001 '))
-    if (amount == null && has(groupText)) {
+    if (has(groupText)) {
       out.set(g.group, 'all')
       continue
     }
     const rows = g.rows.filter((p) => {
-      if (amount != null) return Math.abs(p.row.amount) === amount
+      if (amount != null && Math.abs(p.row.amount) === amount) return true
       const d = p.row.date
       return has(`${groupText} \u0001 ${fold([p.row.description, p.row.title, p.row.category, `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`].join(' \u0001 '))}`)
     })
@@ -469,8 +473,9 @@ export function buildImport(
 
   // Rules learned from the groups the user decided (spec: the rules learn from the user's decisions), by the brand: a
   // decision of a theme teaches every brand in it. Nothing new to learn when the group's own rule or the app's own
-  // recognition says the same; a keyword of a title is about that payment, not the counterparty.
-  let rules: ImportRule[] = [...opts.rules]
+  // recognition says the same; a keyword of a title is about that payment, not the counterparty. One brand split
+  // into groups with other decisions: the decision of the most operations is the rule.
+  const learned = new Map<string, { g: ImportGroup; c: Choice; rows: number; total: number }>()
   for (const g of groups) {
     const own = choices.groups[g.group]
     const c = own ?? choices.themes[g.theme]
@@ -478,6 +483,13 @@ export function buildImport(
     if (!c || !g.brand || g.byTitle || !imported) continue
     if (!(own ? choices.remember[g.group] : choices.rememberThemes[g.theme])) continue
     if ((g.source === 'rule' || g.source === 'builtin') && sameChoice(c, g.proposed)) continue
+    const key = `${g.brand}|${g.direction}`
+    const prev = learned.get(key)
+    const total = (prev?.total ?? 0) + imported
+    learned.set(key, !prev || imported > prev.rows ? { g, c, rows: imported, total } : { ...prev, total })
+  }
+  let rules: ImportRule[] = [...opts.rules]
+  for (const { g, c, total } of learned.values())
     rules = upsertRule(
       rules,
       {
@@ -490,8 +502,7 @@ export function buildImport(
         household: c.kind === 'income' && c.household,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null
       },
-      { now: opts.now, makeId: opts.makeId, hits: imported }
+      { now: opts.now, makeId: opts.makeId, hits: total }
     )
-  }
   return { create, update, remove, rules, counts }
 }

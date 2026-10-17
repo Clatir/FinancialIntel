@@ -1,5 +1,22 @@
 # Financial Intel – zmiany
 
+## 1.2.1
+
+Import z mBanku w tematach zamiast dziesiątek grup (zgłoszenie użytkownika, decyzja D75) – bez AI, na stałych listach.
+
+- Jedna sieć to jedna grupa: klucz marki bez miasta, numeru sklepu, operatora płatności („SumUp *”, „PAYPRO SA *”) i
+  końcówki domeny („ALLEGRO.PL”, „Allegro” i „PAYPRO SA *ALLEGRO” razem).
+- Słownik ponad 200 sieci i usług z kategoriami (Biedronka, Lidl, Żabka, Orlen, McDonald's, Netflix, PKP…) i 30 słów
+  kluczowych nazwy albo tytułu („apteka”, „stacja paliw”, „weterynarz”, „parking”, „kolacja” w tytule przelewu);
+  własne słowa kluczowe w Ustawieniach → Import z banku i na ekranie importu.
+- Tematy: grupy z tą samą kategorią (albo tą samą podpowiedzią mBanku, tym samym rodzajem operacji) pod jednym
+  tematem – decyzja tematu obejmuje wszystkie jego marki; sekcje „Do decyzji”, „Rozpoznane – sprawdź”, „Gotowe”.
+- „Przyjmij pewne”: rozpoznane tematy jako Twoja decyzja, zapamiętane jako reguły marek – kolejny import pokaże je jako
+  gotowe; „Przyjmij podpowiedzi mBanku” działa na całe tematy (bez reguł).
+- Wyszukiwarka (nazwa, tytuł, kategoria, data, kwota), zaznaczanie grup i operacji (także „zaznacz znalezione”),
+  jedna decyzja dla zaznaczonych i „Nie importuj” – pominięte operacje wrócą z kolejnym plikiem.
+- Reguły uczą się po marce (sieć w każdym mieście to jedna reguła), reguły sprzed 1.2.1 działają dalej.
+
 ## 1.2.0
 
 Gra i wywiad (grupa D: etapy E7 i E8) – Dowództwo ocenia każdy dzień, a Wywiad i Raporty czytają strukturę własnych

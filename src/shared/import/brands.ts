@@ -10,6 +10,9 @@
 import { fold } from '../fold'
 import { counterpartyKey, withoutLegalForms } from './names'
 
+/** A shop's code („Z6512”). */
+const STORE_CODE = /^[a-z]{1,2}\d{2,}$/
+
 export interface Token {
   /** Folded, for matching. */
   word: string
@@ -24,7 +27,8 @@ export function tokens(text: string): Token[] {
     if (!raw) continue
     const folded = fold(raw)
     for (const part of folded.split(/[^a-z0-9?]+/)) {
-      const word = part.replace(/([a-z?])\d{3,}$/, '$1')
+      // A shop's code („Z6512”) stays whole (`brandOf` drops it); a number glued to a word goes.
+      const word = STORE_CODE.test(part) ? part : part.replace(/([a-z?])\d{3,}$/, '$1')
       if (word) out.push({ word, text: part === folded ? raw.replace(/(\p{L})\d{3,}$/u, '$1') : word })
     }
   }
@@ -555,8 +559,6 @@ const PROCESSOR = /^(sumup|paypro|payu|paypal|przelewy24|p24|dotpay|tpay|sq|iz|i
 const SHOPIFY = /^sp (?=[a-z?]{2})/
 const WWW = /(^|[^a-z0-9])www\./g
 const DOMAIN = /\.(pl|com|eu|net|org|co|io|de|uk|app|shop|store|me|tv|fm|gg|info|biz)(?=$|[^a-z0-9])/g
-/** A shop's code („Z6512”). */
-const STORE_CODE = /^[a-z]{1,2}\d{2,}$/
 
 export interface BrandMatch {
   /** The key the import groups and remembers by: the chain's id, else the name without its city, numbers and processor. */
@@ -579,14 +581,16 @@ function withoutCities(ws: readonly string[]): string[] {
 }
 
 /**
- * The brand of a counterparty's name. `dictionary` false = only the cleaned name (a person paid by BLIK P2P is no
- * chain, whatever their name).
+ * The brand of a counterparty's name. `dictionary` false = only the cleaned name (a person paid by BLIK P2P, an ATM
+ * in a shop); `transfer` = the name of a transfer's other side, often a person: a chain only at the start of the
+ * name („PGE OBRÓT”, not „ANNA BIEDRONKA”), and no city is cut („JAN KALISZ” is not „JAN KONIN”).
  */
-export function brandOf(name: string, opts: { dictionary?: boolean } = {}): BrandMatch {
+export function brandOf(name: string, opts: { dictionary?: boolean; transfer?: boolean } = {}): BrandMatch {
   const cleaned = withoutLegalForms(fold(name)).trim().replace(WWW, '$1').replace(DOMAIN, ' ').replace(PROCESSOR, '').replace(SHOPIFY, '')
   const ws = words(cleaned)
-  if (opts.dictionary !== false) for (const b of BRAND_PATTERNS) if (b.patterns.some((p) => find(ws, p) >= 0)) return { key: b.brand.id, brand: b.brand }
-  let rest = withoutCities(ws)
+  if (opts.dictionary !== false)
+    for (const b of BRAND_PATTERNS) if (b.patterns.some((p) => find(ws, opts.transfer ? { ...p, start: true } : p) >= 0)) return { key: b.brand.id, brand: b.brand }
+  let rest = opts.transfer ? [...ws] : withoutCities(ws)
   while (rest.length > 1 && COUNTRY.has(rest.at(-1)!)) rest = rest.slice(0, -1)
   const key = rest
     .filter((w) => !/^\d+$/.test(w) && !STORE_CODE.test(w))
