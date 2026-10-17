@@ -66,7 +66,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
   (pożyczki), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
-  `format.ts` (kwoty), później `calc/game.ts` (oceny dni, stopnie, misje) i `calc/intel.ts` (analizy ICT),
+  `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), później `calc/intel.ts` (analizy ICT),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
   powiadomienia w `index.ts`, `tray.ts`, `update/`, `config.ts` (ustawienia komputera w userData), `log.ts`; od E5
@@ -234,6 +234,20 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   linia „Dług” w stanie okrętu, cele odprawy `loan` / `pit38` → Radar, `house` → zakupy „do zwrotu”.
 - Testy: `tests/unit/loans.test.ts`, E2E `tests/e2e/radar.spec.ts`.
 
+## Kod (E7 – Dowództwo, grupa D → 1.2.0)
+- Shared: `calc/game.ts` – `rateDay` (stan na koniec dnia, naruszenia zwykłe / poważne, smaczki – T75), `advanceGame`
+  (zamrażanie, misje, stopnie, osiągnięcia – T76–T79; stałe id `gameMonthId` / `missionId` / `rankChangeId`),
+  `chooseMission` / `missionStatus` / `missionText`, `promotionProgress`, `rankOf`, `gameView` (pasek dni, seria,
+  rekord, dziennik wachty); `schema/records.ts` – `gameDaySchema` (+ `cls`, `cargo`, `tags`), `gameMissionSchema`;
+  `schema/budget.ts` – `settings.game` (start i progi), `settings.import.log`; `calc/dates.ts` – `warsawEndOf`,
+  `isoWeekOf`, `mondayOf`, `mondayOfWeek`; `calc/fleet.ts` – `EnvelopeState.today`, `CLASS_FROM`; `calc/briefing.ts` –
+  pozycja `mission`, `silverBullet`.
+- Renderer: `store/game.ts` (`useGameAdvance` – start i zamrażanie w tle, `useGame`, `useGameCelebrations` /
+  `celebrationsOf` – T80), `features/command/` – `CommandPage.tsx` (Dowództwo, Ctrl+8: stopień, klasa, seria, misja,
+  osiągnięcia, rozkazy i progi, dziennik wachty; `Insignia`), `Celebration.tsx` (ekran awansu, toasty); Mostek – misja
+  i Silver Bullet w odprawie; `EnvelopeBars` `elapsed` (Equilibrium) i `Meter` `tick`; Mapa gwiezdna – znaczek DOL.
+- Testy: `tests/unit/game.test.ts`, E2E `tests/e2e/command.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -290,6 +304,6 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E4 Mostek i szybki wpis → wydanie 1.0.0 (grupa B)
 - [x] E5 ICTTJ i dokowanie → 1.1.0 (grupa C)
 - [x] E6 Radar i należności → 1.1.0 (grupa C)
-- [ ] E7 Dowództwo (gra)
+- [x] E7 Dowództwo (gra) → 1.2.0 (grupa D)
 - [ ] E8 Wywiad i raporty
 - ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)

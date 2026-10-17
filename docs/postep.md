@@ -4,7 +4,7 @@
 D74, E9 wypada). **1.1.0 wydane** (PR #5 scalony), **1.0.0 wydane** (PR #4). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
 (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy
 czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** E7 Dowództwo (gra), potem E8 Wywiad i raporty bez pauzy; zamknięcie grupy D – wydanie 1.2.0.
+**Następny krok:** E7 zrobiony (sekcja niżej); E8 Wywiad i raporty bez pauzy; zamknięcie grupy D – wydanie 1.2.0.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -40,6 +40,35 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## E7 – Dowództwo (17.10.2026)
+
+Zrobione (zakres i odpowiedzi z „Przed etapem E7” – D73):
+- Ocena każdego dnia od startu gry (pierwszy pełny dzień po uruchomieniu 1.2.0) i zamrożenie 24 h po końcu dnia, w tle:
+  naruszenia zwykłe i poważne, smaczki ICT dnia, klasa okrętu (T75, T76).
+- Stopnie Kadet → Admirał (30 z 35, misja = 3 dni, degradacja przy 3. poważnym w miesiącu), seria i rekord, misje
+  tygodniowe dobierane do słabego punktu (9 w puli), 13 ukrytych osiągnięć (T77–T79).
+- Dowództwo (Ctrl+8): stopień z postępem, klasa z drabiną zasięgu, seria z paskiem 35 dni i oceną dnia „na razie”, misja
+  tygodnia z postępem, osiągnięcia, rozkazy i progi gry (do zmiany), dziennik wachty.
+- Ekran awansu i wyższej klasy z animacją i dźwiękiem; degradacja, osiągnięcia i misje jako toasty (T80).
+- Odprawa: misja tygodnia, Silver Bullet (10–11 NY); koperty: Equilibrium (Premium / Discount); Mapa gwiezdna: DOL.
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione:
+  - święta tylko ze zdarzeń z ostatnich 14 dni (pamięć „widzianych” nie odtwarza starych), kilka naraz jako jeden toast;
+  - degradacja nie jako „Błąd”, bez liczby na sztywno; niższa klasa tylko w dzienniku (D73);
+  - ładunek: wzrost masy względem poprzedniego zamrożonego dnia zamiast `updatedAt` (zmiana nazwy, scalenie);
+  - degradacja działa też po obniżeniu progu; wybór misji „import” z danych sprzed poniedziałku;
+  - dziennik importów jako obiekt (scalanie z drugiego komputera po kluczach);
+  - święta z dziennika wachty (bez drugiego wyprowadzenia, daty warszawskie); progi klas z jednego miejsca.
+- Testy: 328 unit + fs (`tests/unit/game.test.ts` – 17), E2E 14 (`tests/e2e/command.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.2.0, Windows):
+1. Dowództwo: data startu gry (jutro po pierwszym uruchomieniu), ocena dnia „na razie”, misja od pierwszego pełnego tygodnia.
+2. Po kilku dniach: dziennik wachty, seria, pasek dni; próg gry – do kalibracji po pierwszym miesiącu.
+
+Otwarte (zgłoszenie użytkownika 17.10.2026): import historii z mBanku daje za dużo grup – pomysły bez AI (klucz marki
+bez miast i numerów sklepów, słownik sieci, reguły na słowa kluczowe w nazwie i tytule, grupowanie wielopoziomowe,
+łączenie podobnych nazw, nauka reguł z decyzji); propozycja: 1 + 3 + 4 jako osobna zmiana po grupie D (1.2.1) –
+czeka na wybór użytkownika.
 
 ## Przed etapem E7 (grupa D)
 
@@ -504,3 +533,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 17.10.2026 – Windows CI w PR #5 złapał błąd pola kwoty (fokus) i ścieżki w teście – poprawione; PR #5 scalony,
   wydanie 1.1.0 opublikowane; komenda startu grupy D z propozycjami „Przed etapem E7” (D73), bez asystenta AI (D74 –
   E9 wypada).
+- 17.10.2026 – E7 (Dowództwo: ocena i zamrażanie dni, stopnie, misje, osiągnięcia, dziennik wachty, smaczki ICT), przegląd
+  i poprawki; zgłoszenie użytkownika o grupowaniu importu – pomysły podane, czeka na wybór.

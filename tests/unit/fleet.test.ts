@@ -253,7 +253,7 @@ describe('dzienny przydział (energia dziś)', () => {
     expect(day2.alarms.find((a) => a.kind === 'daily-over')?.amount).toBe(zl(198))
     const day3 = fleet({ ...input, now: '2026-10-03T08:00:00+02:00' })
     expect(day3.daily?.allowance).toBe(Math.floor(zl(2760) / 29))
-    expect(day3.envelopes.find((e) => e.categoryId === AUTO)).toEqual({ categoryId: AUTO, kind: 'planned', limit: zl(500), spent: zl(400), left: zl(100) })
+    expect(day3.envelopes.find((e) => e.categoryId === AUTO)).toEqual({ categoryId: AUTO, kind: 'planned', limit: zl(500), spent: zl(400), left: zl(100), today: 0 })
     expect(day3.envelopes.find((e) => e.categoryId === FOOD)?.spent).toBe(zl(40))
     // Energy money: 6 000 − 40 − 250 − 50 − 400 (the purchase for the house is not from the energy).
     expect(day3.energy).toBe(zl(5260))

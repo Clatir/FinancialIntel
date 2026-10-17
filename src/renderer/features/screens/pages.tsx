@@ -25,7 +25,7 @@ export const PAGES: readonly PageDef[] = [
   { page: 'cargo', label: 'Ładownia', sub: 'stałe koszty', icon: (s) => <IconBox size={s} />, stage: 'E3', key: '5', ready: true },
   { page: 'starmap', label: 'Mapa gwiezdna', sub: 'cele', icon: (s) => <IconStar size={s} />, stage: 'E5', key: '6', ready: true },
   { page: 'radar', label: 'Radar', sub: '90 dni', icon: (s) => <IconRadar size={s} />, stage: 'E6', key: '7', ready: true },
-  { page: 'command', label: 'Dowództwo', sub: 'rozkazy i stopnie', icon: (s) => <IconRank size={s} />, stage: 'E7', key: '8', ready: false },
+  { page: 'command', label: 'Dowództwo', sub: 'rozkazy i stopnie', icon: (s) => <IconRank size={s} />, stage: 'E7', key: '8', ready: true },
   { page: 'intel', label: 'Wywiad', sub: 'analizy ICT', icon: (s) => <IconChart size={s} />, stage: 'E8', key: '9', ready: false },
   { page: 'reports', label: 'Raporty', sub: 'odprawy i eksport', icon: (s) => <IconReport size={s} />, stage: 'E8', key: '0', ready: false }
 ]

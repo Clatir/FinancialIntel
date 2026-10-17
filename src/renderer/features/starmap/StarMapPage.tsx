@@ -33,6 +33,8 @@ export function StarMapPage() {
   const monthly = fleet ? goalInflow(fleet.log, fleet.started ? fleet.start : null, fleet.month) : null
   const etas = useMemo(() => (fleet ? goalEtas(active.map((g) => ({ id: g.id, amount: amounts.get(g.id) ?? 0, target: g.target })), monthly, fleet.month) : {}), [fleet, active, amounts, monthly])
   const [dragged, setDragged] = useState<string | null>(null)
+  // Draw on Liquidity (D73, ICT): the first goal not reached yet – where the next delivery for the goals flows.
+  const dol = active.find((g) => g.target > 0 && (amounts.get(g.id) ?? 0) < g.target)?.id ?? null
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const forecast = snap.status === 'ok' ? chosenForecast(snap.forecasts, forecastId) : null
   const total = active.reduce((n, g) => n + (amounts.get(g.id) ?? 0), 0)
@@ -73,6 +75,7 @@ export function StarMapPage() {
                         setDragged(null)
                       }}
                       scenario={g.source === 'ictj' && forecast && forecast.id === g.ictj?.forecastId ? forecast.name : null}
+                      dol={g.id === dol}
                     />
                   ))}
                   <div
@@ -163,7 +166,8 @@ function GoalRow({
   onDragStart,
   onDragEnd,
   onDrop,
-  scenario
+  scenario,
+  dol
 }: {
   goal: Goal
   index: number
@@ -177,6 +181,7 @@ function GoalRow({
   onDragEnd: () => void
   onDrop: () => void
   scenario: string | null
+  dol: boolean
 }) {
   const ictj = g.source === 'ictj'
   const noTarget = g.target <= 0
@@ -210,6 +215,11 @@ function GoalRow({
         {ictj && (
           <Badge tone="accent" title={scenario ? `Cel scenariusza „${scenario}” w ICTTJ (tylko do odczytu)` : 'Cel z prognozy ICTTJ (tylko do odczytu)'}>
             ICTTJ
+          </Badge>
+        )}
+        {dol && (
+          <Badge title="Draw on Liquidity – tu popłynie następna dostawa do celów" data-testid="starmap-dol">
+            DOL
           </Badge>
         )}
         <span className="flex gap-0.5">

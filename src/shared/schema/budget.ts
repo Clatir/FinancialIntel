@@ -183,7 +183,12 @@ export const importSettingsSchema = z.looseObject({
   ownNames: z.array(z.string().trim().min(1).max(120)).catch([]).default([]),
   rules: lenientList(importRuleSchema).catch([]).default([]),
   /** Last import per account (a reminder of an overdue import, E4). */
-  lastImport: z.record(ulidSchema, isoDateTime).catch({}).default({})
+  lastImport: z.record(ulidSchema, isoDateTime).catch({}).default({}),
+  /**
+   * The imports (E7: the mission „Łączność z bazą”): time → account, the last 100. A record, so two computers' imports
+   * merge key by key (an array would be one conflicting field).
+   */
+  log: z.record(isoDateTime, ulidSchema).catch({}).default({})
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 
@@ -197,6 +202,24 @@ export const ictjSettingsSchema = z.looseObject({
   skipped: z.array(z.string().max(100)).catch([]).default([])
 })
 export type IctjSettings = z.infer<typeof ictjSettingsSchema>
+
+// ------------------------------------------------------------------ the game (E7)
+
+/** The command's start and thresholds (D73): one for the folder, changed in Dowództwo. */
+export const gameSettingsSchema = z.looseObject({
+  /** The first rated day: the first full day after 1.2.0 ran (set once, by the first computer); null = not yet. */
+  start: isoDate.nullable().catch(null).default(null),
+  /** A promotion: this many compliant days within the last `windowDays`, counted since the last change of rank. */
+  promoteDays: z.number().int().min(1).max(366).catch(30).default(30),
+  windowDays: z.number().int().min(1).max(366).catch(35).default(35),
+  /** A planned envelope over its limit by more than this % is a serious violation. */
+  seriousEnvelopePct: z.number().int().min(0).max(500).catch(20).default(20),
+  /** This many serious violations in a calendar month demote. */
+  demoteSerious: z.number().int().min(1).max(31).catch(3).default(3),
+  /** A mission done counts as this many compliant days. */
+  missionDays: z.number().int().min(0).max(30).catch(3).default(3)
+})
+export type GameSettings = z.infer<typeof gameSettingsSchema>
 
 // ------------------------------------------------------------------ items added by later versions
 
@@ -252,6 +275,7 @@ export const budgetSettingsShape = {
   budget: budgetStartSchema.prefault({}),
   import: importSettingsSchema.prefault({}),
   ictj: ictjSettingsSchema.prefault({}),
+  game: gameSettingsSchema.prefault({}),
   /** `SEEDS` already added to this folder. */
   seeded: z.array(z.string().max(60)).catch([]).default([])
 }
