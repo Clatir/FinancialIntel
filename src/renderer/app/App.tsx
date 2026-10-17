@@ -13,6 +13,16 @@ import { PAGES, pageDef } from '../features/screens/pages'
 import { PlaceholderPage } from '../features/screens/PlaceholderPage'
 import { OperationsPage } from '../features/operations/OperationsPage'
 import { ImportPage } from '../features/import/ImportPage'
+import { MonthPage } from '../features/month/MonthPage'
+import { CargoPage } from '../features/cargo/CargoPage'
+import { WizardPage } from '../features/wizard/WizardPage'
+import { BridgePage } from '../features/bridge/BridgePage'
+import { loadMachinePrefs, toggleHideAmounts, useMachine } from '../store/machine'
+import { initQuickHost } from '../store/quickHost'
+import { initNotifier } from '../store/notifier'
+import { useFleet } from '../store/fleet'
+import { api } from '../lib/api'
+import { plnText, setAmountsHidden } from '../components/fields'
 import { Toasts } from '../components/Toasts'
 import { IconGear, IconSync } from '../components/icons'
 import { cx } from '../components/ui'
@@ -69,6 +79,9 @@ function useGlobalHotkeys(): void {
       } else if (k === 'y' && e.shiftKey) {
         e.preventDefault()
         navigate({ page: 'sync' })
+      } else if (e.key === '$' || (e.shiftKey && e.code === 'Digit4')) {
+        e.preventDefault()
+        toggleHideAmounts()
       } else if (e.key === ',') {
         e.preventDefault()
         navigate({ page: 'settings' })
@@ -187,17 +200,38 @@ function Page({ route }: { route: Route }) {
   if (route.page === 'sync') return <SyncPage />
   if (route.page === 'operations') return <OperationsPage />
   if (route.page === 'import') return <ImportPage />
+  if (route.page === 'month') return <MonthPage />
+  if (route.page === 'cargo') return <CargoPage />
+  if (route.page === 'wizard') return <WizardPage />
+  if (route.page === 'bridge') return <BridgePage />
   const def = pageDef(route.page)
   return def ? <PlaceholderPage key={def.page} def={def} /> : null
 }
 
+/** Today's energy in the tray's tooltip (masked with the amounts). */
+function TrayStatus() {
+  const fleet = useFleet()
+  useMachine((s) => s.prefs.hideAmounts)
+  const text = fleet?.daily ? `Energia dziś: ${plnText(fleet.daily.left)} zł` : null
+  useEffect(() => {
+    void api.setTrayStatus(text)
+  }, [text])
+  return null
+}
+
 export function App() {
   const phase = useData((s) => s.phase)
+  // Ctrl+$ (D30): every amount of the tree renders masked; the change renders the whole tree again (no memoized parts).
+  const hideAmounts = useMachine((s) => s.prefs.hideAmounts)
+  setAmountsHidden(hideAmounts)
   const route = useUi((s) => s.route)
   useGlobalHotkeys()
   useBackNavigation()
   useEffect(() => {
     void boot()
+    void loadMachinePrefs()
+    initQuickHost()
+    initNotifier()
     initUpdates()
   }, [])
 
@@ -211,7 +245,7 @@ export function App() {
     )
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full" data-amounts={hideAmounts ? 'hidden' : 'shown'}>
       <SideMenu route={route} />
       <div className="flex min-w-0 flex-1 flex-col">
         <PageBar />
@@ -224,6 +258,7 @@ export function App() {
         </main>
       </div>
       <CommandPalette />
+      <TrayStatus />
       <ShortcutsHelp />
       <RemoteChangesDialog />
       <Toasts />

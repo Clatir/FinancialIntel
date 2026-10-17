@@ -2,11 +2,11 @@
 import { create } from 'zustand'
 
 /** Screens of the side menu (docs/specyfikacja.md, „Ekrany”). */
-export type Page = 'bridge' | 'operations' | 'import' | 'month' | 'cargo' | 'starmap' | 'radar' | 'command' | 'intel' | 'reports' | 'settings' | 'sync'
+export type Page = 'bridge' | 'operations' | 'import' | 'month' | 'cargo' | 'starmap' | 'radar' | 'command' | 'intel' | 'reports' | 'settings' | 'sync' | 'wizard'
 
 export type Route = { page: Exclude<Page, 'settings'> } | { page: 'settings'; tab?: SettingsTab }
 
-export type SettingsTab = 'general' | 'accounts' | 'categories' | 'import' | 'folder' | 'system' | 'updates'
+export type SettingsTab = 'general' | 'accounts' | 'categories' | 'layers' | 'import' | 'notify' | 'folder' | 'system' | 'updates'
 
 export interface Toast {
   id: number

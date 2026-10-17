@@ -5,6 +5,7 @@
  */
 import { fold } from '../fold'
 import type { Category, ImportRule } from '../schema/budget'
+import type { Container } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId } from '../schema/budget'
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
@@ -87,7 +88,7 @@ const MBANK_HINTS: Record<string, [number, number]> = {
   'zajecia dodatkowe': [6, 2],
   'sport i hobby': [6, 2],
   'multimedia, ksiazki i prasa': [6, 2],
-  przejazdy: [3, 0],
+  przejazdy: [3, 5],
   paliwo: [3, 1],
   'serwis i czesci': [3, 2],
   'ubezpieczenie auta': [3, 3],
@@ -131,6 +132,8 @@ export interface ImportDecision {
   /** Money from a household member: it repays the house receivable first (D20). */
   household: boolean
   counterAccountId: string | null
+  /** A payment of a container of the cargo (its counterparty): the cargo's, not an envelope's spending. */
+  containerId: string | null
   /** Where the decision came from: a rule, the app's own recognition, or nothing yet (the user decides). */
   source: 'rule' | 'builtin' | 'none'
   ruleId: string | null
@@ -143,6 +146,8 @@ export interface ClassifyContext {
   /** The account holder's names: the file's `#Klient` and the ones in the settings. */
   ownNames: readonly string[]
   categories: CategoryIndex
+  /** The cargo's containers: a payment to one of their counterparties belongs to it. */
+  containers?: ReadonlyArray<Pick<Container, 'id' | 'name' | 'counterparty' | 'categoryId' | 'archived'>>
 }
 
 const isXtb = (row: MbankRow) => /\bxtb\b|x-trade brokers/i.test(`${row.counterparty} ${row.description}`)
@@ -162,6 +167,7 @@ const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = 
   refundable: false,
   household: false,
   counterAccountId: null,
+  containerId: null,
   source: 'builtin',
   ruleId: null,
   reason,
@@ -170,6 +176,28 @@ const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = 
 
 /** The decision for one row and the bank's category as a hint. */
 export function classifyRow(row: MbankRow, ctx: ClassifyContext): { decision: ImportDecision; hint: string | null; key: string; direction: Direction } {
+  const out = decideRow(row, ctx)
+  if (out.decision.kind !== 'expense' || out.direction !== 'out') return out
+  // A payment of a container of the cargo (the same payee – the counterparty, else the title – as `plan.ts` names it):
+  // paid from the cargo (a periodic fee from its tank).
+  const payee = counterpartyKey(row.counterparty || row.title)
+  const c = payee ? ctx.containers?.find((x) => !x.archived && counterpartyKey(x.counterparty) === payee) : undefined
+  if (!c) return out
+  const d = out.decision
+  const known = d.source !== 'none'
+  return {
+    ...out,
+    decision: {
+      ...d,
+      containerId: c.id,
+      categoryId: d.categoryId ?? usable(c.categoryId ?? '', ctx.categories),
+      source: known ? d.source : 'builtin',
+      reason: known ? d.reason : `opłata z ładowni: ${c.name}`
+    }
+  }
+}
+
+function decideRow(row: MbankRow, ctx: ClassifyContext): { decision: ImportDecision; hint: string | null; key: string; direction: Direction } {
   const key = counterpartyKey(row.counterparty || row.operation)
   const direction = directionOf(row)
   const hint = hintFor(row.category, ctx.categories)

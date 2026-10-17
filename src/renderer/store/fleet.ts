@@ -61,3 +61,9 @@ export function useFleet(): FleetState | null {
   const now = useMinute()
   return useMemo(() => (fi ? fleetOf(fi, records, now) : null), [fi, records, now])
 }
+
+/** The ship's state now outside React (the quick entry, the tray's tooltip, the notifications). */
+export function fleetNow(): FleetState | null {
+  const s = useData.getState()
+  return s.fi ? fleetOf(s.fi, s.records, Math.floor(Date.now() / 60_000) * 60_000) : null
+}

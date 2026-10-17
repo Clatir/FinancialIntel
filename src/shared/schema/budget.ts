@@ -8,7 +8,7 @@ import { clockTime, grosze, isoDate, isoDateTime, ulidSchema } from './common'
 import { TX_KINDS } from './records'
 
 /** Fixed id of a default item: a valid ULID `01KDEF<kind><number>`. */
-const fixedId = (kind: 'ACC' | 'CAT', n: number) => `01KDEF${kind}${String(n).padStart(17, '0')}`
+const fixedId = (kind: 'ACC' | 'CAT' | 'REG', n: number) => `01KDEF${kind}${String(n).padStart(17, '0')}`
 
 /**
  * A value of a known set that a newer version may extend (a new kind of account, a new system category): any string
@@ -81,7 +81,7 @@ export const CASH_CATEGORY_ID = fixedId('CAT', 10)
 const DEFAULT_CATEGORY_TREE: Array<{ n: number; name: string; envelope: EnvelopeKind; subs: string[] }> = [
   { n: 1, name: 'Jedzenie', envelope: 'daily', subs: ['zakupy spożywcze', 'na mieście', 'kawa i przekąski'] },
   { n: 2, name: 'Dom', envelope: 'planned', subs: ['czynsz i opłaty', 'media', 'wyposażenie', 'chemia'] },
-  { n: 3, name: 'Auto', envelope: 'planned', subs: ['paliwo', 'serwis', 'ubezpieczenie', 'parking i opłaty'] },
+  { n: 3, name: 'Auto', envelope: 'planned', subs: ['paliwo', 'serwis', 'ubezpieczenie', 'parking i opłaty', 'przejazdy'] },
   { n: 4, name: 'Zwierzęta', envelope: 'planned', subs: ['karma', 'weterynarz', 'akcesoria'] },
   { n: 5, name: 'Zdrowie', envelope: 'planned', subs: ['leki', 'lekarz', 'sport'] },
   { n: 6, name: 'Rozrywka i hobby', envelope: 'daily', subs: ['wyjścia', 'hobby', 'podróże'] },
@@ -187,11 +187,59 @@ export const importSettingsSchema = z.looseObject({
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 
+// ------------------------------------------------------------------ items added by later versions
+
+const starterRule = (n: number, match: string, label: string, categoryId: string): ImportRule => ({
+  id: fixedId('REG', n),
+  match,
+  mode: 'exact',
+  direction: 'out',
+  label,
+  kind: 'expense',
+  categoryId,
+  refundable: false,
+  household: false,
+  counterAccountId: null,
+  learned: true,
+  hits: 0,
+  updatedAt: '2026-10-17T00:00:00.000Z'
+})
+
+/**
+ * Items a version adds to every folder once (D69): a new default category, a starter rule. `settings.seeded`
+ * remembers what was added, so an archived category or a deleted rule never comes back.
+ */
+const SEEDS: ReadonlyArray<{ id: string; category?: () => Category; rule?: ImportRule }> = [
+  { id: 'category:auto-przejazdy', category: () => defaultCategories().find((c) => c.id === defaultCategoryId(3, 5))! },
+  // Taxi rides are going out, trains are travel (D69).
+  { id: 'rule:bolt', rule: starterRule(1, 'bolt', 'Bolt', defaultCategoryId(6)) },
+  { id: 'rule:koleo', rule: starterRule(2, 'koleo', 'KOLEO', defaultCategoryId(3, 5)) }
+]
+
+type Seedable = { categories: Category[]; import: ImportSettings; seeded: string[] }
+
+/** The settings with the seeds not added yet (the same object when there is nothing to add). */
+export function seedSettings<T extends Seedable>(s: T): T {
+  const todo = SEEDS.filter((x) => !s.seeded.includes(x.id))
+  if (!todo.length) return s
+  let categories = s.categories
+  let rules = s.import.rules
+  for (const x of todo) {
+    const c = x.category?.()
+    if (c && !categories.some((y) => y.id === c.id) && categories.some((y) => y.id === c.parentId)) categories = [...categories, c]
+    const r = x.rule
+    if (r && !rules.some((y) => y.id === r.id || (y.match === r.match && (y.direction ?? r.direction) === r.direction))) rules = [...rules, r]
+  }
+  return { ...s, categories, import: { ...s.import, rules }, seeded: [...s.seeded, ...todo.map((x) => x.id)] }
+}
+
 export const budgetSettingsShape = {
   accounts: lenientList(accountSchema).catch(defaultAccounts).default(defaultAccounts),
   categories: lenientList(categorySchema).catch(defaultCategories).default(defaultCategories),
   layers: layersSchema.prefault({}),
   orders: ordersSchema.prefault({}),
   budget: budgetStartSchema.prefault({}),
-  import: importSettingsSchema.prefault({})
+  import: importSettingsSchema.prefault({}),
+  /** `SEEDS` already added to this folder. */
+  seeded: z.array(z.string().max(60)).catch([]).default([])
 }

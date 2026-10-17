@@ -59,10 +59,13 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 
 ## Architektura
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
-  pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/game.ts` (oceny dni, stopnie, misje),
-  `calc/intel.ts` (analizy ICT), `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
-- `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `ictj/` (odczyt ICTTJ), `tray.ts`,
-  `shortcut.ts` (globalny skrót), `notify.ts`, `update/`, `config.ts` (ustawienia komputera w userData), `log.ts`.
+  pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
+  `calc/briefing.ts` (odprawa, Daily Bias), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  `format.ts` (kwoty), później `calc/game.ts` (oceny dni, stopnie, misje) i `calc/intel.ts` (analizy ICT),
+  `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
+- `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
+  powiadomienia w `index.ts`, `tray.ts`, `update/`, `config.ts` (ustawienia komputera w userData), `log.ts`; od E5
+  `ictj/` (odczyt ICTTJ).
 - `src/preload` – `window.fi` (contextBridge); okno z contextIsolation, sandbox, CSP; jedna instancja aplikacji.
 - `src/renderer` – React; `store/` (zustand, autozapis jak ICTTJ), `features/<ekran>/`, `components/` (z ICTTJ).
 - **Stany warstw nigdy nie są zapisywane** – liczy je `calc/fleet.ts` z rekordów, deterministycznie (wzór:
@@ -132,6 +135,60 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/mbank.test.ts`, `import.test.ts`, `tests/fs/backup.test.ts`, E2E `tests/e2e/import.spec.ts`;
   plik `tests/fixtures/mbank/lista_operacji.csv` (zanonimizowany – T44; nowy plik testowy tylko tak).
 
+## Kod (E3 – start i plan miesiąca, grupa B → 1.0.0)
+- `shared/calc/plan.ts`:
+  - historia: `firstFullMonth`, `fullMonthsBefore`, `costsByMonth`; odbiorca `payeeKey` (kontrahent, bez niego tytuł);
+  - propozycje (D70, T47–T48): `proposeSalary` (6 mies., w górę do 100 zł), `proposeEnvelopes` (3 mies., do 10 zł,
+    bez płatności kontenerów), `recurringPayments` (stałe opłaty z historii);
+  - plan i debriefing: `planFor` (ostatni wcześniejszy plan – T46), `salarySplit` (ładownia, odkładki `sinkingOf`,
+    koperty, niezaplanowane), `debriefing` (plan i fakt, łupy, „na plus”), `lootDecision` / `lootDeadline` (7. dzień –
+    T52);
+  - ładownia: `monthlyShare`, `simulateCargo` (masa i zasięg przed / po – T50), `unlinkedPayments`.
+- `shared/calc/start.ts` (kreator – T51): `openingFromNow` (saldo otwarcia z salda teraz), `startTargets`, `startSplit`
+  (`dockAmount`); `fleet.ts` – pensja pierwszego miesiąca bez wydanego przed startem (T45).
+- Kontener ma odbiorcę `container.counterparty` (T49): `classifyRow` ustawia `containerId`, dodanie kontenera łączy
+  płatności. Reguły i kategoria startowe D69 – `settings.seeded` + `seedSettings` w `settingsSchema` (raz na folder).
+- Renderer:
+  - `features/wizard/` – `state.ts` (`WIZARD_STEPS`, `startWizard` – nie przy działającym budżecie, `finishWizard`),
+    `WizardPage.tsx`; baner kreatora w `app/Banners.tsx`;
+  - `features/month/` – `actions.ts` (`editPlan` = własny plan miesiąca, `setSalary`, `setEnvelope(s)`, `decideLoot`),
+    `MonthPage.tsx` (pensja, podział, przydział, koperty, debriefing z łupami, „na plus” raz – `fi.month.plus.<mies.>`),
+    `EnvelopeBars.tsx` (także Mostek);
+  - `features/cargo/` – `actions.ts` (`addContainer` + `linkPayments`, `patchContainer`, `deleteContainer`),
+    `CargoPage.tsx` (kontenery, linia zanurzenia, zbiorniki, symulacja, propozycje);
+  - `OperationEditor` – pole „Ładownia” (`operation-container`); `components/meters.tsx`, `store/records.ts`
+    (`useRecordList`), `lib/format.ts` (`monthLabel`, `dayLabel`, `plDate`).
+- Testy: `tests/unit/plan.test.ts`, E2E `tests/e2e/month.spec.ts`; `tests/e2e/seed.ts` – folder z rekordami dla E2E
+  (kod współdzielony importowany względnie).
+
+## Kod (E4 – Mostek i szybki wpis, grupa B → 1.0.0)
+- Shared:
+  - `machine.ts` – ustawienia komputera (`config.json` → `prefs`: `quickShortcut`, `hideAmounts`, `notify`,
+    `sounds`), `machinePrefsFrom`, `patchMachinePrefs`, `shortcutLabel` (T53);
+  - `calc/briefing.ts` – `dailyBias` / `BIAS_LABEL`, `briefing` (pozycje odprawy z kluczami; `money` – formatter, także
+    z ukryciem kwot), `alarmText`, `nextPaymentOf` (T57);
+  - `notify.ts` – `dueNotices` (T56); `format.ts` – `formatPln` (jeden format kwot); `fleet.ts` `activeIn`.
+- Main:
+  - `quick.ts` – `QuickEntry`: okno `?quick=1` tworzone ukryte 3 s po starcie, `globalShortcut`; IPC `fi:quickOpen`,
+    `quickData`, `quickResult`, `quickAdd`, `quickRefresh`, `quickClose`, `quickShortcutState` (T54);
+  - `index.ts` – `setMachinePrefs` + `broadcastPrefs` (`fi:machinePrefs` do wszystkich okien), `notify` (Notification,
+    kliknięcie → `fi:notificationClick`), `setTrayStatus`;
+  - `tray.ts` – `setStatus` (druga linia dymku), menu: Szybki wpis, Otwórz, Raport wachty dnia (T59).
+- Renderer:
+  - `features/bridge/BridgePage.tsx` – Mostek; `BridgeFleet` / `bridgeFleet`, `BridgeDetached` (panele w osobnym oknie,
+    zdarzenie `open` prowadzi główne okno – T60);
+  - `features/quick/QuickApp.tsx` – okno szybkiego wpisu (`main.tsx`: `?quick`); `store/quickHost.ts` – strona głównego
+    okna (`quickData`, `quickTransaction`, zapis);
+  - `store/notifier.ts` – `check` co minutę, przy pokazaniu okna i przy pierwszym ruchu w oknie; `openTag`; klucze
+    wysłanych w localStorage `fi.notify.sent`;
+  - `store/machine.ts` – `useMachine`, `loadMachinePrefs`, `setMachinePrefs`, `toggleHideAmounts`;
+  - `components/fields.tsx` – `setAmountsHidden` / `amountsHidden` / `AMOUNT_MASK`: `plnText` i `signedPln` maskują,
+    flagę ustawia `App` (i `DetachedApp`) przy każdym renderze – nic nie jest memoizowane (T55);
+  - `lib/sounds.ts` – `playSound` (WebAudio, T58); `components/ShortcutField.tsx`; `features/settings/MachineTabs.tsx`
+    (`LayersTab`, `NotifyTab` – T61); `App.tsx` – Ctrl+$, `TrayStatus`; paleta – kreator, szybki wpis, ukrycie kwot.
+- Testy: `tests/unit/notify.test.ts`, `briefing.test.ts`, E2E `tests/e2e/bridge.spec.ts` (okno szybkiego wpisu po
+  URL `quick=1`, otwierane `page.evaluate('window.fi.quickOpen()')`).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -184,8 +241,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E0 Fundament → 0.1.0
 - [x] E1 Model danych i silnik budżetu → 0.3.0 (grupa A)
 - [x] E2 Import z mBanku → 0.3.0 (grupa A)
-- [ ] E3 Kreator startu i plan miesiąca
-- [ ] E4 Mostek i szybki wpis → wydanie 1.0.0
+- [x] E3 Kreator startu i plan miesiąca → 1.0.0 (grupa B)
+- [x] E4 Mostek i szybki wpis → wydanie 1.0.0 (grupa B)
 - [ ] E5 ICTTJ i dokowanie
 - [ ] E6 Radar i należności
 - [ ] E7 Dowództwo (gra)

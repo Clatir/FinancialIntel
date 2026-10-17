@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** grupa A (E1 + E2) zakończona 17.10.2026 na gałęzi `claude/e1-model` – PR do `main`, wydanie 0.3.0 po
-scaleniu. **Pauza** (D67).
-**Następny krok:** odbiór 0.3.0 i odpowiedzi na „Przed etapem E3” niżej, potem grupa B (E3 + E4 → 1.0.0) – tylko na
-komendę użytkownika.
+**Stan:** grupa B (E3 + E4) zrobiona na gałęzi `claude/grupa-b` – PR #4 do `main`; po scaleniu CI wyda **1.0.0**
+(MVP). Grupa A scalona (PR #3, 0.3.0).
+**Następny krok:** pauza – scalenie PR #4 i odbiór 1.0.0 na Windows; potem odpowiedzi na „Przed etapem E5” i komenda
+startu grupy C (E5 + E6).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -14,18 +14,21 @@ komendę użytkownika.
 ## Kolejka prac
 
 Czas = praca Claude Code w sesji (czytanie, pisanie, testy, poprawki), bez testowania przez użytkownika i bez czekania
-na CI. Model i thinking z górką. E0 zmierzony; reszta przeliczona na jego podstawie, z zapasem.
+na CI. Model i thinking z górką. E0 i grupa B zmierzone zegarem sesji; reszta przeliczona na ich podstawie, z zapasem.
 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | – | E0 Fundament | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | 0.1.0 | – | ✅ scalony |
-| **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ PR do `main`, czeka na scalenie i odbiór |
-| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | 4–6 h | **1.0.0** | odbiór 0.3.0, odpowiedzi na „Przed etapem E3” | ⏳ na komendę |
-| 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 10–12 h** | | | |
-| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 3,5–5 h | 1.1.0 | ścieżka folderu ICTTJ, zanonimizowana kopia `payouts/` | ⏳ |
-| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 4,5–6,5 h | 1.2.0 | akceptacja listy misji, osiągnięć i smaczków ICT | ⏳ |
-| **E** | E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 1,5–2 h | 1.3.0 | klucz API Claude | ⏳ |
-| | **Całość E0–E9** | | | **ok. 20–26 h** | | | |
+| **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ scalony (PR #3) |
+| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 4–6 h) | **1.0.0** | ✅ odpowiedzi (D69, D70) | ✅ PR #4 do `main`, czeka na scalenie i odbiór |
+| 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
+| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 2–3 h | 1.1.0 | odpowiedzi na „Przed etapem E5”, ścieżka folderu ICTTJ | ⏳ czeka na komendę |
+| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 2,5–3,5 h | 1.2.0 | akceptacja listy misji, osiągnięć i smaczków ICT | ⏳ |
+| **E** | E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 1–1,5 h | 1.3.0 | klucz API Claude | ⏳ |
+| | **Całość E0–E9** | | | **ok. 13–16 h** | | | |
+
+Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
+dużo mniej niż plan 4–6 h, więc szacunki C–E są przeliczone w dół, nadal z zapasem.
 
 Dlaczego tak: E1 (silnik pieniędzy) ma najwięcej reguł – sam albo z E2, gdy przed startem jest plik CSV; E3 i E4 to
 ekrany na gotowym silniku i razem dają wydanie 1.0.0; E5 i E6 to przepływy z zewnątrz (ICTTJ, pożyczki, należności);
@@ -35,6 +38,117 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## Przed etapem E5 (grupa C)
+
+1. **Co trzeba wiedzieć**
+   - Zakres grupy C → wydanie 1.1.0:
+     - E5 ICTTJ i dokowanie: odczyt folderu ICTTJ (tylko `payouts/` i `forecasts/`, z obserwacją zmian), okno dokowania
+       z podziałem dostawy i dopasowanym kontem, pule Cele i Podatek, przypomnienie o brakującym wpisie w ICTTJ,
+       firewall dopłat do konta tradingowego (D59), Mapa gwiezdna (cele z prognozy ICTTJ i własne, priorytety, ETA),
+       przycisk „Otwórz ICTTJ”, powiadomienie „Nowa wypłata w ICTTJ do zadokowania”;
+     - E6 Radar i należności: Radar 90 dni (pensje, asteroidy, raty pożyczek, przypomnienie o PIT-38 – termin
+       30 kwietnia, bez kwoty), pożyczki w obie strony z harmonogramem, należność od domu, przypomnienia.
+   - Grupa B (1.0.0) gotowa – PR #4 czeka na scalenie i odbiór (lista w sekcji E4 niżej).
+   - W ICTTJ nic się nie zmienia; FI tylko czyta (D60).
+2. **Pytania z propozycją**
+   - **Folder ICTTJ:** FI podpowiada ścieżkę zapisaną w ustawieniach ICTTJ na tym komputerze (czyta tylko ścieżkę),
+     zatwierdzasz ją w Ustawienia → ICTTJ albo wskazujesz folder ręcznie; ustawienie każdego komputera osobno.
+   - **Wypłaty sprzed startu budżetu:** pomijane (są już w saldach otwarcia), widoczne na liście jako „sprzed startu”.
+   - **Dopasowanie do mBanku:** ta sama kwota w PLN, wpływ od XTB do 3 dni roboczych po dacie wpisu w ICTTJ (wypłaty
+     z piątku przychodzą w poniedziałek–wtorek); bez pary po 3 dniach roboczych – propozycja Portfela XTB (D56)
+     do potwierdzenia przy dokowaniu.
+   - **Okno dokowania:** tylko dla wypłat z ICTTJ i wpływów od XTB; podział proponowany według kolejności (osłony →
+     kadłub → cele, D13), do zmiany przed zapisem, z animacją i dźwiękiem dokowania. Inne wpływy (od domownika jako
+     przychód, zwroty) dokują same według kolejności, bez okna.
+   - **Pula Cele:** prosto do celów z prognozy ICTTJ według ich kolejności, potem do własnych celów FI; co się nie
+     zmieści – do osłon jako „wolne do decyzji”.
+   - **Mapa gwiezdna:** cele ICTTJ tylko do odczytu (nazwa, kwota), własne cele FI z kwotą, terminem i priorytetem;
+     jedna lista priorytetów dla obu rodzajów (przeciąganie, nowe na końcu); ETA ze średnich dostaw do celów
+     z ostatnich 6 miesięcy.
+   - **„Otwórz ICTTJ”:** uruchamia zainstalowany ICTTJ; wersję portable wskazujesz raz (plik .exe) w ustawieniach
+     komputera.
+   - **Pożyczka udzielona:** kwota wychodzi z osłon (spec), raty według harmonogramu wracają do osłon; zaległa rata –
+     przypomnienie po 3 dniach.
+   - **Pożyczka wzięta:** otrzymana kwota trafia do osłon, ale zasięg liczy osłony pomniejszone o pozostały dług;
+     raty – kontener ładowni na czas spłaty.
+   - **PIT-38 na radarze:** od 1 lutego, powiadomienie 14 i 3 dni przed 30 kwietnia (jak asteroidy).
+   - **Należność od domu:** w odprawie, gdy najstarszy niespłacony zakup „do zwrotu” ma ponad 30 dni.
+3. **Co przygotować**
+   - Odbiór 1.0.0 na Windows (lista w sekcji E4 niżej).
+   - Ścieżka do folderu danych ICTTJ na każdym komputerze (FI czyta tylko `payouts/` i `forecasts/`).
+   - Pliki testowe przygotuję sam na podstawie schematu ICTTJ – bez Twoich danych; zanonimizowana kopia `payouts/`
+     potrzebna tylko wtedy, gdy masz wpisy nietypowe.
+   - Bieżące pożyczki (kwota, raty, terminy) – do wpisania po wydaniu 1.1.0.
+4. **Model, thinking, czas:** Opus 5.5 · **max** (z górką – przepływy prawdziwych pieniędzy z zewnątrz i zmiany
+   w silniku: dokowanie, pule, pożyczki) · 2–3 h.
+
+## E4 – Mostek i szybki wpis (17.10.2026)
+
+Zrobione (kryteria z `plan.md`):
+- Mostek (Ctrl+1): odprawa – energia dziś, Daily Bias, alarmy miesiąca, asteroidy w 14 dni, zaległy import, salda,
+  łupy, „Odsłuchaj” głosem systemu (T57); stan okrętu – osłony z minimum, energia, kadłub, cele, zbiorniki, podatek,
+  łupy, zasięg, klasa, masa ładunku; koperty, do zwrotu, ostatnie operacje. Odprawa, Stan okrętu i Koperty odłączane
+  na drugi monitor (T60).
+- Szybki wpis (Ctrl+Alt+B w całym systemie; też przycisk na Mostku, paleta i menu zasobnika): małe okno nad
+  wszystkimi, na ekranie od razu; wydatek, wpływ, do zwrotu, kwota, kontrahent z „oficerem”, kategoria, podział
+  paragonu, konto, data i godzina, wpływ od domownika; podgląd energii dziś i koperty przed zapisem; cisza nocna
+  z potwierdzeniem i krótkim wpisem, dziennik kapitański od progu; Enter zapisuje, Esc zamyka (T54).
+- Zasobnik: energia dziś w dymku; menu Szybki wpis, Otwórz, Raport wachty dnia, Zakończ (T59).
+- Ukrycie kwot Ctrl+$: w oknie, dymku, odprawie, powiadomieniach i oknach odłączonych, osobno na każdym komputerze
+  (T55).
+- Powiadomienia Windows z przełącznikami: odprawa, wieczorne dopisanie, energia i koperty, przekroczenia, asteroidy,
+  import, salda, debriefing (T56); dźwięki: wpis, dokowanie, alarm, awans, miesiąc na plus – z głośnością (T58).
+- Ustawienia: Warstwy i rozkazy (`fi.json`), Powiadomienia i dźwięki (ten komputer) ze skrótem szybkiego wpisu (T53,
+  T61).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione:
+  - kliknięte powiadomienie nie jest nadpisywane przejściem na Mostek;
+  - odprawa także dla okna zostawionego na ekranie przez noc;
+  - asteroidy tylko w czasie trwania kontenera;
+  - przekroczenie przy wyłączonych przekroczeniach nie udaje „na wyczerpaniu”;
+  - data ostatniego importu po warszawsku;
+  - debriefing także wtedy, gdy 1. dnia komputer był wyłączony (do 7. dnia);
+  - niedzielne salda nie po potwierdzeniu w tym tygodniu;
+  - suwak głośności zapisuje po puszczeniu, skrót rejestrowany tylko przy zmianie;
+  - jeden format kwot dla ekranów, odprawy i powiadomień (`shared/format.ts`).
+- Testy: 278 unit + fs (`tests/unit/notify.test.ts`, `briefing.test.ts`), E2E 11 (`tests/e2e/bridge.spec.ts` – Mostek,
+  szybki wpis, ukrycie kwot, osobne okno, ustawienia komputera).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.0.0, Windows):
+1. Po aktualizacji baner „Kreator startu” → kreator na prawdziwych danych (salda teraz, import historii, pensja,
+   warstwy, ładownia, koperty) → „Uruchom budżet”.
+2. Mostek: odprawa, Daily Bias, stan okrętu, koperty; „Odsłuchaj” (polski głos: Ustawienia Windows → Czas i język →
+   Mowa).
+3. Ctrl+Alt+B z innego programu (np. platformy tradingowej) → szybki wpis → Enter; zakup z godziną po 23:00 →
+   potwierdzenie i krótki wpis.
+4. Zasobnik: energia dziś w dymku; Ctrl+$ ukrywa kwoty także tam.
+5. Powiadomienia: rano odprawa po otwarciu okna, o 21:00 dopisanie wydatków; Ustawienia → Powiadomienia i dźwięki –
+   przełączniki, głośność, skrót.
+6. Panel „Stan okrętu” → „Otwórz w osobnym oknie” na drugim monitorze.
+7. Plan miesiąca i Ładownia (lista w sekcji E3 niżej).
+
+## E3 – start i plan miesiąca (17.10.2026)
+
+Zrobione (kryteria z `plan.md`):
+- Kreator startu (paleta „Kreator startu budżetu”, baner, dopóki budżet nie działa): salda teraz, historia z mBanku
+  (import i powrót do kreatora), pensja ze średnich i cele warstw, ładownia z powtarzających się płatności i koperty
+  ze średnich, podział obecnych środków według dokowania, okręt, rozkazy, skrót szybkiego wpisu, start z Windows (T51).
+- Plan miesiąca (Ctrl+4): pensja z propozycją, podział pensji (ładownia, odkładki, koperty planowe i codzienne,
+  niezaplanowane), dzienny przydział (energia dziś), koperty wobec limitów, debriefing – plan i fakt (FVG kopert),
+  „Miesiąc zamknięty na plus”, podział łupów do 7. dnia (T46, T52); pierwszy miesiąc: pensja bez tego, co wydał przed
+  startem (T45).
+- Ładownia (Ctrl+5): kontenery (stały, abonament, rata; cykl; płatność; konto; kategoria; odbiorca w banku), linia
+  zanurzenia, odkładki ze stanem zbiornika i zaległością wobec planu, symulacja dodania i zrzutu, propozycje z historii
+  (T48–T50); import i Operacje łączą płatności z kontenerem (T49).
+- Przejazdy (D69): Auto · przejazdy, reguły startowe Bolt → Rozrywka i hobby, KOLEO → Auto · przejazdy.
+- Przegląd `/code-review` high: 9 znalezisk – poprawione: Enter w szybkim wpisie zapisywał stary szkic, kreator z palety
+  mógł zrestartować działający budżet, konto bez salda liczyło historię od zera, odbiorca bez kontrahenta (sam tytuł)
+  nie łączył się z kontenerem, opłata okresowa sprzed startu zmniejszała pierwszą pensję, łupy debriefingu nigdy ujemne,
+  zbędne przeliczenia propozycji, zieleń tylko dla kwot; podłączenie zasobnika, powiadomień i stanu skrótu – w E4.
+- Testy: 271 unit + fs (`tests/unit/plan.test.ts`), E2E 10 (`tests/e2e/month.spec.ts` – kreator, plan, ładownia).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.0.0): kreator startu na prawdziwych danych (pensja, koperty, ładownia),
+Plan miesiąca i Ładownia.
 
 ## Przed etapem E3 (grupa B)
 
@@ -233,3 +347,7 @@ Do sprawdzenia przez użytkownika (Windows 11):
   Operacje, konta, kategorie), przegląd i poprawki.
 - 17.10.2026 – E2 (import z mBanku), przegląd i poprawki; zamknięcie grupy A: 0.3.0, PR do `main`; „Przed etapem E3”
   (grupa B → 1.0.0, model max); pauza.
+- 17.10.2026 – PR #3 scalony (0.3.0); odpowiedzi D69 (przejazdy) i D70; start grupy B na komendę użytkownika.
+- 17.10.2026 – E3 (kreator startu, Plan miesiąca, Ładownia), przegląd i poprawki; E4 (Mostek, szybki wpis, zasobnik,
+  ukrycie kwot, powiadomienia, dźwięki), przegląd i poprawki; zamknięcie grupy B: 1.0.0, PR #4 do `main`; „Przed
+  etapem E5” (grupa C, model max); pauza.

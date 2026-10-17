@@ -1,0 +1,386 @@
+import { useMemo, useState, type ReactNode } from 'react'
+import { BIAS_LABEL, briefing, dailyBias, type BriefingItem } from '@shared/calc/briefing'
+import { SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
+import { sum } from '@shared/calc/operations'
+import { amountTone } from '@shared/operationsView'
+import { shortcutLabel } from '@shared/machine'
+import type { DetachEvent } from '@shared/api'
+import { useData } from '../../store/data'
+import { useFleet } from '../../store/fleet'
+import { useMachine } from '../../store/machine'
+import type { DetachSpec } from '../../store/detach'
+import { useRecordList } from '../../store/records'
+import { navigate } from '../../store/ui'
+import { api } from '../../lib/api'
+import { AMOUNT_MASK, amountsHidden, plnText, signedPln } from '../../components/fields'
+import { Meter } from '../../components/meters'
+import { Columns } from '../../components/layout'
+import { Badge, Empty, Panel, cx } from '../../components/ui'
+import { dayLabel, plDate } from '../../lib/format'
+import { useCategories } from '../operations/pickers'
+import { newOperation, selectOperation, setFilter } from '../operations/state'
+import { EnvelopeBars } from '../month/EnvelopeBars'
+import { startWizard } from '../wizard/state'
+
+const zl = (grosze: number) => `${plnText(grosze)} zł`
+const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).replace('.', ',')} mies.`)
+
+/** What the bridge's panels draw – in the main window and in their own windows (D45) alike, as plain JSON. */
+export type BridgeFleet = Pick<
+  FleetState,
+  'today' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily'
+>
+
+export const bridgeFleet = (f: FleetState): BridgeFleet => ({
+  today: f.today,
+  started: f.started,
+  total: f.total,
+  shields: f.shields,
+  hull: f.hull,
+  goals: f.goals,
+  energy: f.energy,
+  tanks: f.tanks,
+  taxHold: f.taxHold,
+  loot: f.loot,
+  costs: f.costs,
+  range: f.range,
+  shipClass: f.shipClass,
+  cargo: f.cargo,
+  envelopes: f.envelopes,
+  daily: f.daily
+})
+
+/** A detached panel of the bridge (`features/detach/DetachedApp.tsx`). */
+export type BridgeDetachProps =
+  | { panel: 'briefing'; fleet: BridgeFleet; items: BriefingItem[] }
+  | { panel: 'state'; fleet: BridgeFleet }
+  | { panel: 'envelopes'; rows: BridgeFleet['envelopes']; labels: Record<string, string> }
+
+/** Where a click on the bridge leads: a briefing line (by its kind) or the cargo's mass. */
+type BridgeTarget = BriefingItem['kind'] | 'cargo'
+
+function openTarget(t: BridgeTarget): void {
+  if (t === 'asteroid' || t === 'cargo') navigate({ page: 'cargo' })
+  else if (t === 'import') navigate({ page: 'import' })
+  else if (t === 'balances') navigate({ page: 'settings', tab: 'accounts' })
+  else if (t === 'start') startWizard()
+  else navigate({ page: 'month' })
+}
+
+/** A click in a detached panel: the main window goes there. */
+const onBridgeEvent = (e: DetachEvent) => {
+  if (e.type === 'open' && typeof e.target === 'string') openTarget(e.target as BridgeTarget)
+}
+const emitTarget = (target: BridgeTarget) => void api.detachEmit({ type: 'open', target })
+
+/** The briefing read aloud with a Polish voice of the system (D49), when the system has one. */
+function speak(text: string): boolean {
+  const synth = window.speechSynthesis
+  if (!synth) return false
+  synth.cancel()
+  const u = new SpeechSynthesisUtterance(text)
+  u.lang = 'pl-PL'
+  const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith('pl'))
+  if (voice) u.voice = voice
+  synth.speak(u)
+  return true
+}
+
+/**
+ * Mostek (spec, „Ekrany”): the morning briefing, the ship's state (the shields, today's energy, the hull, the range,
+ * the cargo's mass, the class), the envelopes, what the house owes and the latest operations. The metaphor always
+ * with the real name and the amount (D34).
+ */
+export function BridgePage() {
+  const fleet = useFleet()
+  const fi = useData((s) => s.fi)
+  const containers = useRecordList('containers')
+  const balances = useRecordList('balances')
+  const transactions = useRecordList('transactions')
+  const shortcut = useMachine((s) => s.prefs.quickShortcut)
+  // The briefing's texts carry amounts (`zl` masks them while hidden – Ctrl+$): written again on a change.
+  const hidden = useMachine((s) => s.prefs.hideAmounts)
+  const cats = useCategories()
+  const items = useMemo(() => {
+    if (!fleet || !fi) return []
+    const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
+    const confirmed = balances.filter((b) => b.kind === 'confirmation').map((b) => b.date).sort().at(-1) ?? null
+    const label = (id: string) => containers.find((c) => c.id === id)?.name ?? cats.label(id)
+    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl })
+  }, [fleet, fi, containers, balances, cats, hidden])
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
+  const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
+  const specs = useMemo(() => {
+    if (!view) return null
+    const spec = (props: BridgeDetachProps): DetachSpec => ({ kind: 'bridge', props, onEvent: onBridgeEvent })
+    return {
+      briefing: spec({ panel: 'briefing', fleet: view, items }),
+      state: spec({ panel: 'state', fleet: view }),
+      envelopes: spec({ panel: 'envelopes', rows: view.envelopes, labels })
+    }
+  }, [view, items, labels])
+  if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
+  const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 10)
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-testid="page-bridge">
+      <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
+        <h1 className="text-[15px] font-medium text-fg-strong">Mostek</h1>
+        <span className="text-[12px] text-muted" data-testid="ship-name">
+          okręt <span className="text-accent">{fi.settings.shipName}</span>
+        </span>
+        {fleet.shipClass && (
+          <Badge tone="accent" title={`Klasa według zasięgu: ${fmtRange(fleet.range)}`} data-testid="ship-class">
+            {SHIP_CLASS_LABEL[fleet.shipClass]}
+          </Badge>
+        )}
+        <span className="flex-1" />
+        <button className="btn h-[26px]" onClick={() => void newOperation()} title="Nowa operacja (Ctrl+N)">
+          Nowa operacja
+        </button>
+        <button className="btn btn-accent h-[26px]" onClick={() => void api.quickOpen()} title="Szybki wpis – okno nad wszystkimi" data-testid="bridge-quick">
+          Szybki wpis{shortcut ? ` · ${shortcutLabel(shortcut)}` : ''}
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <Columns id="bridge" tracks={['minmax(360px,1fr)', 'minmax(360px,1fr)']} className="grid min-h-full items-start">
+          <div className="flex min-w-0 flex-col">
+            <BriefingPanel fleet={view} items={items} detach={specs.briefing} />
+            {fleet.started && (
+              <Panel title="Stan okrętu" testId="bridge-state" detach={specs.state}>
+                <ShipState fleet={view} onOpen={openTarget} />
+              </Panel>
+            )}
+          </div>
+          <div className="flex min-w-0 flex-col">
+            <Panel title="Koperty" testId="bridge-envelopes" detach={specs.envelopes}>
+              <Envelopes rows={fleet.envelopes} />
+            </Panel>
+            <Receivables fleet={fleet} />
+            <Panel title="Ostatnie operacje" testId="bridge-recent">
+              {!recent.length ? (
+                <Empty>Brak operacji – szybki wpis albo import z mBanku.</Empty>
+              ) : (
+                <div className="flex flex-col text-[12px]">
+                  {recent.map((t) => {
+                    const tone = amountTone(t)
+                    return (
+                      <button
+                        key={t.id}
+                        className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 text-left last:border-b-0 hover:bg-hover"
+                        onClick={() => {
+                          setFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+                          navigate({ page: 'operations' })
+                          selectOperation(t.id)
+                        }}
+                        data-testid="bridge-recent-row"
+                      >
+                        <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(t.date).slice(0, 5)}</span>
+                        <span className="min-w-0 flex-1 truncate text-fg-strong">{t.counterparty || t.title || '—'}</span>
+                        <span className="w-[130px] truncate text-[11px] text-dim">{t.categoryId ? cats.label(t.categoryId) : ''}</span>
+                        <span className={cx('num w-[100px] text-right', tone === 'up' ? 'text-up' : tone === 'muted' ? 'text-muted' : tone === 'accent' ? 'text-accent' : 'text-fg')}>{signedPln(t.amount)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </Panel>
+          </div>
+        </Columns>
+      </div>
+    </div>
+  )
+}
+
+/** The briefing read aloud: the hidden amounts are not read either. */
+function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
+  const [spoken, setSpoken] = useState(true)
+  const say = () => {
+    const hidden = amountsHidden()
+    const bias = dailyBias(fleet)
+    const d = fleet.daily
+    const parts = [`Odprawa, ${dayLabel(fleet.today)}.`]
+    if (d && !hidden) parts.push(`Energia na dziś: ${Math.floor(Math.max(0, d.left) / 100)} złotych.`)
+    if (bias) parts.push(`Daily Bias: ${BIAS_LABEL[bias]}.`)
+    for (const i of items) parts.push(i.text.replaceAll(`${AMOUNT_MASK} zł`, 'kwota ukryta').replace(/zł/g, 'złotych'))
+    if (!items.length) parts.push('Bez alarmów.')
+    setSpoken(speak(parts.join(' ')))
+  }
+  return { spoken, say }
+}
+
+function SpeakButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="btn h-[22px]" onClick={onClick} title="Przeczytaj odprawę głosem systemu" data-testid="briefing-speak">
+      Odsłuchaj
+    </button>
+  )
+}
+
+function BriefingPanel({ fleet, items, detach }: { fleet: BridgeFleet; items: BriefingItem[]; detach: DetachSpec }) {
+  const { spoken, say } = useSpeech(fleet, items)
+  return (
+    <Panel title={`Odprawa – ${dayLabel(fleet.today)}`} name="Odprawa" testId="bridge-briefing" detach={detach} actions={<SpeakButton onClick={say} />}>
+      <BriefingBody fleet={fleet} items={items} spoken={spoken} onOpen={openTarget} />
+    </Panel>
+  )
+}
+
+function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; items: BriefingItem[]; spoken: boolean; onOpen: (t: BridgeTarget) => void }) {
+  const bias = dailyBias(fleet)
+  const d = fleet.daily
+  return (
+    <div className="flex flex-col gap-2 text-[12px]">
+      {fleet.started && (
+        <div className="flex items-baseline gap-3">
+          <div className="flex flex-col">
+            <span className="label">Energia dziś</span>
+            <span className={cx('num text-[24px] leading-tight', d && d.left < 0 ? 'text-down' : 'text-fg-strong')} data-testid="bridge-energy">
+              {d ? zl(d.left) : '—'}
+            </span>
+            <span className="text-[11px] text-dim">{d ? `przydział ${zl(d.allowance)} · podstawowy ${zl(d.base)}` : 'bez planu tego miesiąca'}</span>
+          </div>
+          {bias && (
+            <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-down' : bias === 'bullish' ? 'text-accent' : 'text-muted')} data-testid="bridge-bias" title="Daily Bias (spec, Wywiad)">
+              {bias === 'bullish' ? '▲' : bias === 'bearish' ? '▼' : '◆'} {BIAS_LABEL[bias]}
+            </span>
+          )}
+        </div>
+      )}
+      {!fleet.started && (
+        <div className="flex items-center gap-3 border border-accent/40 bg-accent-soft px-3 py-2">
+          <span className="flex-1 text-fg-strong">Budżet jeszcze nie wystartował.</span>
+          <button className="btn btn-accent h-[24px]" onClick={() => onOpen('start')} data-testid="bridge-wizard">
+            Kreator startu
+          </button>
+        </div>
+      )}
+      <div className="flex flex-col" data-testid="briefing-items">
+        {fleet.started && !items.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
+        {items
+          .filter((i) => i.kind !== 'start')
+          .map((i) => (
+            <button key={i.key} className="flex items-start gap-2 py-0.5 text-left hover:text-fg-strong" onClick={() => onOpen(i.kind)} data-testid="briefing-item" data-kind={i.kind}>
+              <span className={cx('mt-[5px] h-[6px] w-[6px] shrink-0', i.level === 'red' ? 'bg-down' : i.level === 'yellow' ? 'bg-accent' : 'bg-line-strong')} />
+              <span className={cx(i.level === 'red' ? 'text-down' : 'text-fg')}>{i.text}</span>
+            </button>
+          ))}
+      </div>
+      {!spoken && <span className="text-[11px] text-dim">Brak głosu systemu do odsłuchu.</span>}
+    </div>
+  )
+}
+
+function Envelopes({ rows, labels }: { rows: BridgeFleet['envelopes']; labels?: Record<string, string> }) {
+  return rows.length ? <EnvelopeBars rows={rows} labels={labels} /> : <Empty>Bez kopert w planie tego miesiąca.</Empty>
+}
+
+/** A bridge panel in its own window (a second monitor, D45): clicks lead the main window. */
+export function BridgeDetached({ props }: { props: BridgeDetachProps }) {
+  return (
+    <div className="min-h-0 flex-1 overflow-auto" data-testid="detached-bridge" data-panel-kind={props.panel}>
+      {props.panel === 'briefing' && <DetachedBriefing fleet={props.fleet} items={props.items} />}
+      {props.panel === 'state' && <ShipState fleet={props.fleet} onOpen={emitTarget} />}
+      {props.panel === 'envelopes' && <Envelopes rows={props.rows} labels={props.labels} />}
+    </div>
+  )
+}
+
+function DetachedBriefing({ fleet, items }: { fleet: BridgeFleet; items: BriefingItem[] }) {
+  const { spoken, say } = useSpeech(fleet, items)
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-end">
+        <SpeakButton onClick={say} />
+      </div>
+      <BriefingBody fleet={fleet} items={items} spoken={spoken} onOpen={emitTarget} />
+    </div>
+  )
+}
+
+function Line({ metaphor, name, value, children, testId }: { metaphor: string; name: string; value: ReactNode; children?: ReactNode; testId?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5" data-testid={testId}>
+      <div className="flex items-baseline gap-2">
+        <span className="text-fg-strong">{metaphor}</span>
+        <span className="text-[11px] text-dim">· {name}</span>
+        <span className="num ml-auto text-fg-strong">{value}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTarget) => void }) {
+  const s = fleet.shields
+  const goals = sum(fleet.goals.map((g) => g.amount))
+  const tanks = sum(fleet.tanks.map((t) => t.amount))
+  return (
+    <div className="flex flex-col gap-2 text-[12px]">
+      <Line metaphor="Osłony" name="bufor na pensje" value={<>{zl(s.amount)}{s.target != null && <span className="text-dim"> / {zl(s.target)}</span>}</>} testId="state-shields">
+        <Meter value={s.amount} max={s.target} mark={s.min != null && s.target ? s.min / s.target : undefined} />
+        {s.free > 0 && <span className="text-[11px] text-muted">wolne do decyzji: {zl(s.free)}</span>}
+      </Line>
+      <Line metaphor="Energia" name="pensja miesiąca do wydania" value={zl(fleet.energy)} testId="state-energy" />
+      <Line metaphor="Kadłub" name="fundusz awaryjny" value={<>{zl(fleet.hull.amount)}{fleet.hull.target != null && <span className="text-dim"> / {zl(fleet.hull.target)}</span>}</>} testId="state-hull">
+        <Meter value={fleet.hull.amount} max={fleet.hull.target} />
+      </Line>
+      {fleet.goals.length > 0 && <Line metaphor="Układy gwiezdne" name="cele" value={zl(goals)} />}
+      {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" value={zl(tanks)} />}
+      {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" value={zl(fleet.taxHold)} />}
+      {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" value={zl(fleet.loot.amount)} />}
+      <div className="grid grid-cols-3 gap-2 border-t border-line pt-2">
+        <div className="flex flex-col">
+          <span className="label">Zasięg</span>
+          <span className="num text-[14px] text-fg-strong" data-testid="state-range">
+            {fmtRange(fleet.range)}
+          </span>
+          <span className="text-[10.5px] text-dim">(osłony + kadłub) / koszty</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="label">Klasa</span>
+          <span className="text-[14px] text-fg-strong">{fleet.shipClass ? SHIP_CLASS_LABEL[fleet.shipClass] : '—'}</span>
+          <span className="text-[10.5px] text-dim">średnie koszty {fleet.costs.average != null ? zl(fleet.costs.average) : '—'}</span>
+        </div>
+        <button className="flex flex-col text-left hover:text-accent" onClick={() => onOpen('cargo')}>
+          <span className="label">Masa ładunku</span>
+          <span className={cx('num text-[14px]', fleet.cargo.over ? 'text-down' : 'text-fg-strong')}>{fleet.cargo.pct != null ? `${fleet.cargo.pct.toFixed(1).replace('.', ',')}%` : '—'}</span>
+          <span className="text-[10.5px] text-dim">linia {fleet.cargo.limitPct}%</span>
+        </button>
+      </div>
+      <div className="text-[11px] text-dim">Suma kont budżetu: {zl(fleet.total)}</div>
+    </div>
+  )
+}
+
+function Receivables({ fleet }: { fleet: FleetState }) {
+  const r = fleet.receivables
+  return (
+    <Panel title="Do zwrotu" testId="bridge-receivables">
+      <div className="flex flex-col gap-1 text-[12px]">
+        <div className="flex items-baseline gap-2">
+          <span className="text-muted">Należność domu (zakupy „do zwrotu”)</span>
+          <span className="num ml-auto text-fg-strong" data-testid="bridge-house">
+            {zl(r.house)}
+          </span>
+        </div>
+        {r.total > r.house && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-muted">Pożyczki udzielone</span>
+            <span className="num ml-auto">{zl(r.total - r.house)}</span>
+          </div>
+        )}
+        <button
+          className="self-start text-[11.5px] text-accent hover:underline"
+          onClick={() => {
+            setFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })
+            navigate({ page: 'operations' })
+          }}
+        >
+          zakupy „do zwrotu” ›
+        </button>
+        <p className="text-[11px] text-dim">Wpłata domownika najpierw spłaca należność (szybki wpis: „Wpływ” → od domownika).</p>
+      </div>
+    </Panel>
+  )
+}

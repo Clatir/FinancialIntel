@@ -59,11 +59,14 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     // Recognized by the app: XTB, own transfers; the bank's categories only hints.
     await expect(group(page, 'xtb.com').getByTestId('import-group-kind')).toHaveValue('trading')
     await expect(group(page, 'JAN KAPITAN').getByTestId('import-group-kind')).toHaveValue('transfer')
-    await expect(group(page, 'Bolt').getByTestId('import-group-category')).toHaveValue('')
-    await expect(group(page, 'Bolt').getByTestId('import-group-hint')).toHaveText('Auto?')
+    await expect(group(page, 'Orlen').getByTestId('import-group-category')).toHaveValue('')
+    await expect(group(page, 'Orlen').getByTestId('import-group-hint')).toHaveText('Auto · paliwo?')
+    // Starter rules (D69): Bolt → Rozrywka i hobby, KOLEO → Auto · przejazdy.
+    await expect(group(page, 'Bolt').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000600')
+    await expect(group(page, 'KOLEO').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000305')
 
-    // Decisions by group: Bolt → Auto · parking i opłaty would be wrong – the user picks Auto; Tomasz is a household member.
-    await group(page, 'Bolt').getByTestId('import-group-category').selectOption({ label: 'Auto' })
+    // Decisions by group: the user narrows Bolt to „wyjścia” (the starter rule learns it); Tomasz is a household member.
+    await group(page, 'Bolt').getByTestId('import-group-category').selectOption({ label: 'Rozrywka i hobby · wyjścia' })
     await expect(group(page, 'Bolt').getByTestId('import-group-remember')).toBeChecked()
     await group(page, 'TOMASZ xxx').getByTestId('import-group-kind').selectOption('household')
     await page.getByTestId('import-accept-hints').click()
@@ -80,7 +83,8 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     const merged = ops.find((t) => t.counterparty === 'Biedronka' && t.date === '2025-10-03' && t.amount === -1616)!
     expect(merged.time).toBe('18:40')
     expect((merged.bank as { description: string }).description).toContain('Biedronka')
-    expect(ops.filter((t) => t.counterparty === 'Bolt').every((t) => typeof t.categoryId === 'string')).toBe(true)
+    expect(new Set(ops.filter((t) => t.counterparty === 'Bolt').map((t) => t.categoryId))).toEqual(new Set(['01KDEFCAT00000000000000601']))
+    expect(new Set(ops.filter((t) => t.counterparty === 'KOLEO' && (t.amount as number) < 0).map((t) => t.categoryId))).toEqual(new Set(['01KDEFCAT00000000000000305']))
     expect(ops.filter((t) => t.kind === 'trading')).toHaveLength(26)
     const fi = JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8'))
     expect(fi.settings.import.rules.map((r: { match: string }) => r.match)).toEqual(expect.arrayContaining(['bolt', 'tomaszxxx']))
@@ -127,8 +131,8 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.getByTestId('operations-search').fill('koleo')
     await page.getByTestId('operation-row').first().click()
     await expect(page.getByTestId('operation-bank')).toContainText('KOLEO')
-    // The bank's hint was accepted, not remembered: Operacje offers to remember it.
-    await expect(page.getByTestId('operation-remember')).toHaveCount(1)
+    // Categorized by the starter rule: nothing to remember until the category changes.
+    await expect(page.getByTestId('operation-remember')).toHaveCount(0)
     await page.getByTestId('operation-category').selectOption({ label: 'Auto · parking i opłaty' })
     await page.getByTestId('operation-remember').click()
     await expect(page.getByTestId('operation-remember')).toHaveCount(0)
@@ -140,7 +144,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.keyboard.press('Control+,')
     await page.getByTestId('settings-tab-import').click()
     await expect(page.getByTestId('own-name')).toHaveText([/JAN KAPITAN/])
-    // Bolt and Tomasz from the import, KOLEO from Operacje; the accepted hints are no rules.
+    // Bolt and KOLEO (starter rules changed by the user), Tomasz from the import; the accepted hints are no rules.
     await expect(page.getByTestId('import-rule')).toHaveCount(3)
     await page.getByTestId('import-rule').first().getByTestId('import-rule-delete').click()
     await expect(page.getByTestId('import-rule')).toHaveCount(2)

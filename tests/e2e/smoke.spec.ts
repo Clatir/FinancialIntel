@@ -32,9 +32,13 @@ test('pierwsze uruchomienie: propozycja folderu, fi.json, menu boczne i puste ek
     await expect(page.getByTestId('page-operations')).toBeVisible()
     await page.getByTestId('nav-import').click()
     await expect(page.getByTestId('page-import')).toBeVisible()
+    // Plan miesiąca and Ładownia are real screens from E3.
+    for (const page_ of ['month', 'cargo']) {
+      await page.getByTestId(`nav-${page_}`).click()
+      await expect(page.getByTestId(`page-${page_}`)).toBeVisible()
+      await expect(page.getByTestId('page-stage')).toHaveCount(0)
+    }
     for (const [page_, stage] of [
-      ['month', 'E3'],
-      ['cargo', 'E3'],
       ['starmap', 'E5'],
       ['radar', 'E6'],
       ['command', 'E7'],
@@ -118,13 +122,13 @@ test('panele: zwijanie, powiększenie, ukrywanie z menu Układ i osobne okno', a
   const { app, page, errors } = await launch()
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    const panel = page.locator('section:not([hidden])[data-panel="bridge:Stan okrętu"]')
+    const panel = page.locator('section:not([hidden])[data-panel="bridge:Koperty"]')
     await expect(panel).toBeVisible()
 
     // Collapse by double-clicking the title, back again.
-    await panel.getByText('Stan okrętu', { exact: true }).dblclick()
+    await panel.getByText('Koperty', { exact: true }).dblclick()
     await expect(panel).toHaveAttribute('data-collapsed', '1')
-    await panel.getByText('Stan okrętu', { exact: true }).dblclick()
+    await panel.getByText('Koperty', { exact: true }).dblclick()
     await expect(panel).not.toHaveAttribute('data-collapsed', '1')
 
     // Maximize, Esc back.
@@ -135,17 +139,17 @@ test('panele: zwijanie, powiększenie, ukrywanie z menu Układ i osobne okno', a
 
     // Hide, then show again from the Układ menu.
     await panel.getByTestId('panel-hide').click()
-    await expect(page.locator('section[hidden][data-panel="bridge:Stan okrętu"]')).toHaveCount(1)
+    await expect(page.locator('section[hidden][data-panel="bridge:Koperty"]')).toHaveCount(1)
     await page.getByTestId('layout-menu').click()
-    await page.locator('[data-testid="layout-panel"][data-name="Stan okrętu"]').click()
-    await expect(page.locator('section[hidden][data-panel="bridge:Stan okrętu"]')).toHaveCount(0)
+    await page.locator('[data-testid="layout-panel"][data-name="Koperty"]').click()
+    await expect(page.locator('section[hidden][data-panel="bridge:Koperty"]')).toHaveCount(0)
     await page.keyboard.press('Escape')
 
     // Its own window (a second monitor).
     const [win] = await Promise.all([app.waitForEvent('window'), panel.getByTestId('panel-detach').click()])
     await win.waitForLoadState('domcontentloaded')
-    await expect(win.getByTestId('detached-title')).toHaveText('Stan okrętu')
-    await expect(win.getByTestId('detached-placeholder')).toContainText('etapie E4')
+    await expect(win.getByTestId('detached-title')).toHaveText('Koperty')
+    await expect(win.getByTestId('detached-bridge')).toContainText('Bez kopert')
     await expect(panel.getByTestId('panel-detached-note')).toBeVisible()
     await Promise.all([win.waitForEvent('close'), win.getByTestId('detached-attach').click().catch(() => undefined)])
     await expect(panel.getByTestId('panel-detached-note')).toBeHidden()

@@ -10,6 +10,9 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
     items: [
       ['Ctrl K', 'paleta komend'],
       ['Ctrl S', 'zapisz teraz (zapis i tak jest automatyczny)'],
+      ['Ctrl N', 'nowa operacja'],
+      ['Ctrl Alt B', 'szybki wpis – w całym systemie (zmiana: Ustawienia → Powiadomienia i dźwięki)'],
+      ['Ctrl $', 'ukryj / pokaż kwoty'],
       ['Esc / mysz „wstecz”', 'poprzednia strona (Ustawienia, Synchronizacja)'],
       ['? lub F1', 'ta ściąga']
     ]

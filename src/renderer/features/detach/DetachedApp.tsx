@@ -3,12 +3,17 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { DetachPayload } from '@shared/api'
 import { api } from '../../lib/api'
 import { DetachedContext } from '../../components/Panel'
+import { setAmountsHidden } from '../../components/fields'
 import { IconClose, IconMaximize, IconRestore } from '../../components/icons'
+import { loadMachinePrefs, useMachine } from '../../store/machine'
+import { BridgeDetached, type BridgeDetachProps } from '../bridge/BridgePage'
 
 /** Data of each kind of detached panel (sent by the main window as plain JSON). */
 export interface DetachProps {
   /** A panel of a screen not built yet (E0): its name and the stage that fills it. */
   placeholder: { text: string }
+  /** A panel of the bridge (the briefing, the ship's state, the envelopes). */
+  bridge: BridgeDetachProps
 }
 
 function view(payload: DetachPayload): ReactNode {
@@ -21,6 +26,8 @@ function view(payload: DetachPayload): ReactNode {
         </div>
       )
     }
+    case 'bridge':
+      return <BridgeDetached props={payload.props as DetachProps['bridge']} />
     default:
       return <div className="text-muted">Nieznany rodzaj panelu: {payload.kind}</div>
   }
@@ -34,6 +41,11 @@ function view(payload: DetachPayload): ReactNode {
 export function DetachedApp() {
   const [payload, setPayload] = useState<DetachPayload | null>(null)
   const [full, setFull] = useState(true)
+  // The hidden amounts of this computer (Ctrl+$) mask this window too.
+  setAmountsHidden(useMachine((s) => s.prefs.hideAmounts))
+  useEffect(() => {
+    void loadMachinePrefs()
+  }, [])
 
   useEffect(() => {
     const off = api.onDetachProps((p) => setPayload(p))

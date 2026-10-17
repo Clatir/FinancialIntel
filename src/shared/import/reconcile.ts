@@ -219,7 +219,7 @@ export function buildImport(
     const base =
       p.status === 'new' || p.status === 'deleted'
         ? choiceOf(p.decision)
-        : choiceOf({ kind: p.row.amount < 0 ? 'expense' : 'income', categoryId: null, refundable: false, household: false, counterAccountId: null, source: 'none', ruleId: null, reason: '' })
+        : choiceOf({ kind: p.row.amount < 0 ? 'expense' : 'income', categoryId: null, refundable: false, household: false, counterAccountId: null, containerId: null, source: 'none', ruleId: null, reason: '' })
     const c = choices.rows[p.key] ?? (group ? choices.groups[group] : undefined) ?? base
     const out = p.row.amount < 0
     let repaid = 0
@@ -246,6 +246,7 @@ export function buildImport(
         title: p.row.title,
         repaid,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null,
+        containerId: c.kind === 'expense' && out && (p.status === 'new' || p.status === 'deleted') ? p.decision.containerId : null,
         bank: bankOf(p)
       })
     )

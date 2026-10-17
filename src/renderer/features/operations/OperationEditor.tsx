@@ -4,6 +4,7 @@ import { asksImpulse, isNight, sum } from '@shared/calc/operations'
 import { TX_KIND_LABEL, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { updateRecord, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
+import { useRecordList } from '../../store/records'
 import { AmountField, DateField, plnText, TimeField } from '../../components/fields'
 import { Badge, Empty, Field, Segmented, TextArea, TextField, Toggle, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -236,6 +237,7 @@ export function OperationEditor({ id }: { id: string }) {
                   Zapamiętaj: „{t.counterparty}” → {cats.label(t.categoryId)}
                 </button>
               )}
+              {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId })} />}
               {outgoing && (
                 <Toggle
                   checked={t.refundable}
@@ -349,6 +351,28 @@ export function OperationEditor({ id }: { id: string }) {
         </div>
       )}
     </fieldset>
+  )
+}
+
+/** A payment of a container of the cargo: a fixed cost (not an envelope's spending) or a periodic fee from its tank. */
+function CargoSelect({ value, onChange }: { value: string | null; onChange: (id: string | null) => void }) {
+  const containers = useRecordList('containers')
+  const shown = containers.filter((c) => !c.archived || c.id === value)
+  if (!shown.length && !value) return null
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-[64px] shrink-0 text-[11.5px] text-muted">Ładownia</span>
+      <select className="input min-w-0 flex-1" value={value ?? ''} onChange={(e) => onChange(e.currentTarget.value || null)} aria-label="Kontener ładowni" data-testid="operation-container">
+        <option value="">— nie z ładowni —</option>
+        {shown.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+            {c.cycleMonths > 1 ? ' (ze zbiornika)' : ''}
+          </option>
+        ))}
+        {value && !containers.some((c) => c.id === value) && <option value={value}>(usunięty kontener)</option>}
+      </select>
+    </div>
   )
 }
 

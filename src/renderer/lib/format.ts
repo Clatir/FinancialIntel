@@ -148,3 +148,19 @@ export function parseDateInput(text: string, fallbackYear = new Date().getFullYe
 }
 
 export const WEEKDAY_PL = ['', 'pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd']
+
+const MONTH_PL = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
+const MONTH_PL_GEN = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia']
+
+/** '2026-10' → „październik 2026”. */
+export function monthLabel(month: string): string {
+  return `${MONTH_PL[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`
+}
+
+/** '2026-10-17' → „17 października”. */
+export function dayLabel(date: string): string {
+  return `${Number(date.slice(8, 10))} ${MONTH_PL_GEN[Number(date.slice(5, 7)) - 1] ?? ''}`.trim()
+}
+
+/** '2026-10-17' → „17.10.2026”. */
+export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`

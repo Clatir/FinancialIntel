@@ -154,7 +154,8 @@ export function shipClass(range: number): ShipClass {
   return 'flagship'
 }
 
-const activeIn = (c: Container, month: string) => !c.archived && (c.from == null || c.from <= month) && (c.until == null || month <= c.until)
+/** A container counts in this month: not archived, between its `from` and `until`. */
+export const activeIn = (c: Pick<Container, 'archived' | 'from' | 'until'>, month: string): boolean => !c.archived && (c.from == null || c.from <= month) && (c.until == null || month <= c.until)
 
 /** The cargo's mass: fixed costs a month (periodic fees by their monthly share) as a % of the salary; the load line 40%. */
 export function cargoMass(containers: readonly Container[], month: string, salary: number | null, limitPct: number): FleetState['cargo'] {
@@ -440,17 +441,23 @@ export function computeFleet(input: FleetInput): FleetState {
     if (Object.keys(ev.moves).length) log.push(ev)
   }
 
+  // The budget's first month started before the budget did: what it spent until the start came out of that month's
+  // salary already (T45), the start pays only the rest.
+  // A periodic fee is its tank's, never the salary's.
+  const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
+  const startMonthSpent = start ? sum(txs.filter((t) => monthOf(t.date) === monthOf(start) && t.date < start && !(t.containerId && periodicIds.has(t.containerId))).map(costOf)) : 0
   const payMonth = (m: string, date: string) => {
     const salary = salaryOf(m)
     if (salary != null && salary > 0) {
-      const pay = paySalary(salary, shields, hull)
+      const due = start && m === monthOf(start) ? Math.max(0, salary - startMonthSpent) : salary
+      const pay = paySalary(due, shields, hull)
       shields -= pay.fromShields
       hull -= pay.fromHull
       energy += pay.paid
       salaryOfMonth.set(m, pay)
       record({ date, kind: 'salary', amount: pay.paid, moves: { shields: -pay.fromShields, ...(pay.fromHull ? { hull: -pay.fromHull } : {}), energy: pay.paid } })
       if (pay.alarm === 'yellow') alarms.push({ kind: 'salary-from-hull', level: 'yellow', date, amount: pay.fromHull, ref: m })
-      if (pay.alarm === 'red') alarms.push({ kind: 'salary-partial', level: 'red', date, amount: salary - pay.paid, ref: m })
+      if (pay.alarm === 'red') alarms.push({ kind: 'salary-partial', level: 'red', date, amount: due - pay.paid, ref: m })
     }
     if (!salaryOfMonth.has(m)) return
     // The tanks of the periodic fees, from this month's energy.
