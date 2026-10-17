@@ -123,7 +123,8 @@ function fileEntries(groups: readonly ImportGroup[]): Map<string, Entry> & { bra
       }
   const brandsOf = new Map([...named].map(([w, b]) => [w, b.size]))
   for (const g of groups) {
-    if (g.chain || !g.brand) continue
+    // A chain, or the type of the operation for a name (no other side: „BLIK WYPŁATA ATM”, a bank's fee).
+    if (g.chain || !g.brand || g.rows.every((p) => !p.row.counterparty)) continue
     let e = out.get(g.brand)
     if (!e) {
       e = { brand: g.brand, label: g.label, names: [], count: 0, rules: [], words: [], head: g.rows[0]!.words, distinct: [], person: false, biggest: 0 }

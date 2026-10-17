@@ -94,7 +94,7 @@ test('Podobne nazwy i propozycja reguły (D78, 1.2.3): historia rachunku z datam
     await expect(page.getByTestId('import-done')).toBeVisible()
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, { timeout: 20_000 }).toBe(18)
     const saved = await records(dataDir, 'transactions')
-    expect(saved.filter((t) => /DATA TRANSAKCJI|TESTOWO/.test(String(t.counterparty)))).toEqual([])
+    expect(saved.filter((t) => /DATA TRANSAKCJI|testowo|\//i.test(String(t.counterparty)))).toEqual([])
     const mokka = saved.find((t) => t.counterparty === 'KAWIARNIA MOKKA' && t.amount === -1250)!
     expect((mokka.bank as { description: string }).description).toContain('DATA TRANSAKCJI: 2026-09-02')
     expect(errors).toEqual([])

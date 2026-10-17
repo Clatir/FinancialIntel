@@ -608,6 +608,10 @@ const COUNTRY = new Set(['pl', 'pol', 'polska', 'poland'])
 
 /** Card processors and platforms written before the shop („SumUp *PRACOWNIA”, „PAYPRO SA *ALLEGRO”, „GOOGLE *YouTube”). */
 const PROCESSOR = /^(sumup|paypro|payu|paypal|przelewy24|p24|dotpay|tpay|sq|iz|izettle|zettle|stripe|google|int|zen|mypos|revolut)\s*\*\s*/
+const PROCESSOR_WRITTEN = new RegExp(PROCESSOR.source, 'i')
+
+/** A name as written without the card processor before the shop („SumUp *PRACOWNIA” → „PRACOWNIA”). */
+export const withoutProcessor = (name: string): string => name.trim().replace(PROCESSOR_WRITTEN, '')
 /** „SP FLARE AUDIO”: a Shopify shop. */
 const SHOPIFY = /^sp (?=[a-z?]{2})/
 const WWW = /(^|[^a-z0-9])www\./g

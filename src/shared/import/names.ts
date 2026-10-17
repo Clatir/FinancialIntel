@@ -16,22 +16,24 @@ const LEGAL = [
 ]
 
 /**
- * A name without what the bank adds to it (1.2.3): mBank's account history writes a card payment as „ŻABKA Z1234
- * /WARSZAWA DATA TRANSAKCJI: 2026-10-01” – the date of the transaction and any other date or time, a masked card
- * number and a reference tell nothing of the shop (every day would be another name); `town` = a card payment's name:
- * the town after „/” goes too (in capitals, as the bank writes it – never „JAN KOWALSKI / ANNA KOWALSKA” of a transfer
- * or a name typed by hand). Never empty: a name of nothing else stays as it was.
+ * A name without what the bank adds to it (1.2.3): mBank's account history writes a card payment as „Apteka Na
+ * Rynku   /Testowo    DATA TRANSAKCJI: 2026-10-01” (the shop in 19 characters, the town in 10) – the date of the
+ * transaction and any other date or time, a masked card number and a reference tell nothing of the shop (every day
+ * would be another name); `town` = a card payment's name: in a name the bank dated so, the town right after the last
+ * „/” goes too (never „JAN KOWALSKI / ANNA KOWALSKA” of a transfer, nor „Czynsz/mieszkanie” or „AC/DC” typed by
+ * hand). Never empty: a name of nothing else stays as it was.
  */
 export function cleanBankName(name: string, opts: { town?: boolean } = {}): string {
-  let s = name
-    .replace(/\bDATA\s+(TRANSAKCJI|OPERACJI|WYKONANIA|KSI[EĘ]GOWANIA|WALUTY)\b\s*:?\s*[\d.\-/]*/gi, ' ')
+  let s = name.replace(/\bDATA\s+(TRANSAKCJI|OPERACJI|WYKONANIA|KSI[EĘ]GOWANIA|WALUTY)\b\s*:?\s*[\d.\-/]*/gi, ' ')
+  const dated = s !== name
+  s = s
     .replace(/\b\d{4}[-./]\d{1,2}[-./]\d{1,2}\b/g, ' ')
     .replace(/\b\d{1,2}[-./]\d{1,2}[-./]\d{2,4}\b/g, ' ')
     .replace(/\b\d{1,2}:\d{2}(:\d{2})?\b/g, ' ')
     .replace(/\b\d{4,6}[X*]{4,}\d{0,4}\b/gi, ' ')
     .replace(/\bREF\b\.?\s*:?\s*[A-Z0-9-]*\d[A-Z0-9-]*/gi, ' ')
-  // The town after „/” at the end: capitals only.
-  if (opts.town) s = s.replace(/\s\/\s*[A-ZĄĆĘŁŃÓŚŹŻ?][A-ZĄĆĘŁŃÓŚŹŻ?\s.'-]*$/u, ' ')
+  // The town at the end, right after „/” (the bank keeps 10 characters of it; a phone or a website, sometimes nothing).
+  if (opts.town && dated) s = s.trimEnd().replace(/\/(?!\s)[^/]*$/, ' ')
   // Nothing cut: the name as written („Sp. z o.o.” keeps its dot); else without what the cut left at the end.
   if (s === name) return name.trim()
   return s.replace(/\s+/g, ' ').replace(/[\s,;:/-]+$/, '').trim() || name.trim()

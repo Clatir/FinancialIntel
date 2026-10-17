@@ -102,8 +102,8 @@ function withoutAddress(name: string): string {
 }
 
 
-/** A card payment or its return: the account history writes the shop in the title. */
-const PURCHASE = /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA|ZWROT)/
+/** A card payment or its return („POS ZWROT TOWARU”): the account history writes the shop in the title. */
+const PURCHASE = /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA|ZWROT|POS ZWROT)/
 
 /** Transfers and payments between people: the head holds „name, title” (and maybe the name again, an address). */
 const TRANSFER_LIKE = /^(PRZELEW|BLIK P2P|ZLECENIE|POLECENIE|WPŁATA|WPLATA|PRZEKAZ|UZNANIE|OBCIĄŻENIE|OBCIAZENIE)/

@@ -5,9 +5,9 @@
  * (as in the settings), for this file and the next imports.
  */
 import { fold } from '../fold'
-import { isCityWord, isGenericWord, isKeywordWord, keywordMatches, sameWord, tokens, words } from './brands'
+import { isCityWord, isGenericWord, isKeywordWord, keywordMatches, sameWord, tokens, withoutProcessor, words } from './brands'
 import { withoutLegalForms } from './names'
-import { findRule } from './classify'
+import { findRule, isFeeOperation } from './classify'
 import { choiceOf, opKindOf, sameChoice, type Choice, type ImportChoices, type ImportGroup } from './reconcile'
 import type { ImportRule } from '../schema/budget'
 
@@ -108,7 +108,8 @@ function candidates(groups: readonly ImportGroup[], g: ImportGroup, rules: reado
   const who = [...people, ...ownNames.flatMap((n) => words(n))]
   const out = new Map<string, string>()
   for (const p of g.rows)
-    for (const text of person ? [p.row.title] : [p.row.counterparty, p.row.title])
+    // The shop's name without the processor before it („SumUp *PRACOWNIA”: „sumup” names hundreds of shops).
+    for (const text of person ? [p.row.title] : [withoutProcessor(p.row.counterparty), p.row.title])
       for (const t of tokens(text)) {
         const w = t.word
         if (out.has(w) || w.length < 4 || !/^[a-z]+$/.test(w) || isGenericWord(w) || isCityWord(w) || places.has(w) || who.some((x) => formOf(w, x))) continue
@@ -134,6 +135,9 @@ export function keywordProposals(
   // An expense without a category teaches nothing; a loan, XTB, the tax are decided operation by operation (a keyword
   // holds an expense, money in or an own transfer – as in the settings).
   if ((choice.kind === 'expense' && !choice.categoryId) || !KEYWORD_KINDS.includes(choice.kind)) return []
+  // A bank's fee without a name: its title tells of another operation („PROWIZJA ZA ZAKUP” – the shop of the purchase),
+  // not of what was decided (as `ruleTargetOf` reads it).
+  if (group.rows.every((p) => !p.row.counterparty && isFeeOperation(p.row.operation))) return []
   const { choices } = ctx
   const others = groups
     .filter((g) => g.group !== group.group && g.direction === group.direction && !choices.groups[g.group] && !choices.themes[g.theme])

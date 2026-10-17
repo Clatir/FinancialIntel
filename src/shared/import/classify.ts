@@ -94,6 +94,9 @@ const ATM = /WYPŁATA (W|Z) BANKOMA|WYPLATA (W|Z) BANKOMA|WYPŁATA GOTÓWKI|WYPL
  * other side of a transfer is one only by the start of its name, with no city cut (often a person). A name the user
  * merged into another (1.2.2) is that one – a chain's, when merged into a chain.
  */
+/** A bank's fee, interest or tax (no shop, no person – `opKindOf` 'fee'). */
+export const isFeeOperation = (operation: string): boolean => /^(PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK)/.test(operation)
+
 export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string; bankName?: string }, aliases: BrandAliases = {}): { target: RuleTarget; brand: BrandMatch } {
   const op = o.operation ?? ''
   const name = o.counterparty || op
@@ -104,6 +107,9 @@ export function ruleTargetOf(o: { counterparty: string; title: string; operation
   // The name as versions before 1.2.3 read it – an import's row says it ('' = the type of operation named it), an
   // operation saved before still has it: their rules' keys (a chain's is the chain's either way).
   const shop = !opts.transfer && opts.dictionary
+  // A bank's fee without a name tells of another operation in its title („PROWIZJA ZA ZAKUP” – the shop of the
+  // purchase): no keyword of the title decides it (1.2.3).
+  const fee = !o.counterparty && isFeeOperation(op)
   const before = o.bankName !== undefined ? o.bankName || op : name
   const legacy =
     before !== name || cleanBankName(before, { town: shop }) !== before
@@ -111,7 +117,7 @@ export function ruleTargetOf(o: { counterparty: string; title: string; operation
       : undefined
   return {
     brand,
-    target: { brand: key, raw: found.key, ...(legacy ? { legacy } : {}), key: counterpartyKey(name), name: words(cleanBankName(o.counterparty, { town: shop })), title: words(o.title) }
+    target: { brand: key, raw: found.key, ...(legacy ? { legacy } : {}), key: counterpartyKey(name), name: words(cleanBankName(o.counterparty, { town: shop })), title: fee ? [] : words(o.title) }
   }
 }
 
@@ -297,7 +303,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     return out(decision('transfer', 'przelew własny'))
   if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
-  if (/^ZWROT/.test(op) && direction === 'in') {
+  if (/^(POS )?ZWROT/.test(op) && direction === 'in') {
     // A product return: a negative expense of the purchase's category (spec) – the purchases' rule says which, else the
     // chain's category.
     const bought = findRule(ctx.rules, target, 'out')

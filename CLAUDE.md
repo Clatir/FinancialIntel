@@ -313,12 +313,15 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 
 ## Kod (1.2.3 – poprawka podobnych nazw, D79)
 - `shared/import/names.ts` `cleanBankName(name, {town})` – bez „DATA TRANSAKCJI: …”, dat, godzin, numeru karty, „Ref”;
-  `town` = miasto po „/” (wielkie litery, tylko nazwa sklepu); `counterpartyKey(name, raw)`, `brandOf(…, {raw})` – klucze
-  sprzed 1.2.3; `mbank.ts` – kontrahent bez dopisków, sklep z tytułu historii (`PURCHASE`), `MbankRow.bankName` /
-  `BankRow.bankName` (nazwa jak czytały ją wcześniejsze wersje, '' = rodzaj operacji); `classify.ts` `RuleTarget.legacy`.
+  `town` = miasto po ostatnim „/” (bank: sklep w 19 znakach + „/Miasto”), tylko w nazwie sklepu z dopiskiem daty;
+  `counterpartyKey(name, raw)`, `brandOf(…, {raw})` – klucze sprzed 1.2.3; `mbank.ts` – kontrahent bez dopisków, sklep
+  z tytułu historii (`PURCHASE`, też `POS ZWROT`), `MbankRow.bankName` / `BankRow.bankName` (nazwa jak czytały ją
+  wcześniejsze wersje, '' = rodzaj operacji); `classify.ts` `RuleTarget.legacy`, `isFeeOperation` (prowizja bez nazwy:
+  tytuł nie decyduje – T104); `brands.ts` `withoutProcessor`.
 - `similar.ts` – słowo z nazw ponad `MAX_BRANDS_OF_WORD` (4) marek nie wyróżnia, `isKindWord` (rodzaje miejsc), bez
-  „Połącz wszystkie”; `learn.ts` – słowa ponad połowy marek pomijane, `ENDINGS` (polskie końcówki); `rules.ts`
-  `inactiveAlias` / `removeInactive` / `unmergeAll`, `saveKeywordRule` odrzuca słowa ogólne.
+  „Połącz wszystkie”, bez grup nazwanych rodzajem operacji; `learn.ts` – słowa ponad połowy marek pomijane, `ENDINGS`
+  (polskie końcówki); `rules.ts` `inactiveAlias` / `removeInactive` / `unmergeAll`, `saveKeywordRule` odrzuca słowa
+  ogólne.
 - Testy: `tests/unit/import-similar.test.ts` („dopiski banku”), `mbank.test.ts`, E2E `learning.spec.ts` na
   `tests/fixtures/mbank/historia_rachunku.csv` (syntetyczna historia rachunku).
 

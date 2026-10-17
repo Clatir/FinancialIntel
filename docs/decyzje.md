@@ -206,7 +206,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   - (6) nauka z decyzji – po decyzji dla grupy aplikacja proponuje regułę na słowo („wszystko zawierające ‚cukiernia’”)
     i od razu pokazuje, ile innych operacji obejmie.
 - **D79** (17.10.2026) Zgłoszenie użytkownika po 1.2.2: rozpoznawanie podobnych transakcji nie działa – wiele nazw ma
-  datę transakcji, a to samo słowo w nazwach (Wrocław, „bar”) łączy niezwiązane transakcje. Poprawka 1.2.3: nazwy bez
+  datę transakcji, a to samo słowo w nazwach (nazwa miasta, „bar”) łączy niezwiązane transakcje. Poprawka 1.2.3: nazwy bez
   dopisków banku, ostrożniejsze podobieństwo i propozycje, łączenie tylko parami, „Rozłącz wszystkie”.
 
 ## Decyzje techniczne (Claude)
@@ -598,11 +598,13 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T99** Pomiar 1.2.2: na pliku użytkownika (271 operacji) 2 pary podobnych nazw (obie trafne) i propozycje słowa przy
   4 grupach; syntetyczna historia (4000 operacji, ~1000 marek, 400 reguł) – podobne nazwy 64 ms, propozycja ok. 30 ms.
 - **T100** Dopiski banku (`shared/import/names.ts` `cleanBankName`, D79): z nazwy znika „DATA TRANSAKCJI: …” (i
-  operacji, wykonania, księgowania, waluty), każda data i godzina, zamaskowany numer karty i „Ref …”; miasto po „/” na
-  końcu (historia rachunku mBanku: „SKLEP /MIASTO DATA TRANSAKCJI: RRRR-MM-DD”) tylko w nazwie sklepu i tylko wielkimi
-  literami – nigdy druga osoba wspólnego konta w przelewie („JAN KOWALSKI / ANNA KOWALSKA”) ani nazwa wpisana ręcznie;
-  nazwa bez niczego innego zostaje. Parser: kontrahent bez dopisków, płatność kartą z historii (`ZAKUP`, `BLIK ZAKUP`,
-  `PŁATNOŚĆ`, `TRANSAKCJA`, `ZWROT` bez nadawcy) – sklep z tytułu, bez tytułu; `description` bez zmian, więc klucz wiersza
+  operacji, wykonania, księgowania, waluty), każda data i godzina, zamaskowany numer karty i „Ref …”; miasto po
+  ostatnim „/” na końcu (historia rachunku mBanku: sklep w 19 znakach, zaraz za nim „/Miasto” w 10 znakach dowolną
+  wielkością liter – albo telefon, strona, nic – potem „DATA TRANSAKCJI: RRRR-MM-DD”) tylko w nazwie sklepu z tym
+  dopiskiem daty i bez spacji po „/” – nigdy druga osoba wspólnego konta w przelewie („JAN KOWALSKI / ANNA KOWALSKA”)
+  ani nazwa wpisana ręcznie („Czynsz/mieszkanie”, „AC/DC”); nazwa bez niczego innego zostaje. Parser: kontrahent bez
+  dopisków, płatność kartą z historii (`ZAKUP`, `BLIK ZAKUP`, `PŁATNOŚĆ`, `TRANSAKCJA`, `ZWROT`, `POS ZWROT` bez
+  nadawcy) – sklep z tytułu, bez tytułu; `description` bez zmian, więc klucz wiersza
   (`rowIdentity`) ten sam co we wcześniejszych importach. `brandOf` czyści też nazwy zapisane wcześniej (Operacje),
   `counterpartyKey` – bez miasta. Reguły nauczone przed 1.2.3: `MbankRow.bankName` / `BankRow.bankName` = nazwa
   dokładnie tak, jak czytały ją wcześniejsze wersje ('' = nazwał ją rodzaj operacji), `RuleTarget.legacy` = jej klucze
@@ -621,5 +623,19 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   -owego) – inne przedłużenie to inne słowo („roma” – „roman”), a propozycja go nie pokazuje. Słowo kluczowe złożone
   tylko ze słów ogólnych i słów banku („data”, „sklep”) jest odrzucane (`saveKeywordRule`); rodzaje miejsc nie.
 - **T103** Test E2E na syntetycznej historii rachunku (`tests/fixtures/mbank/historia_rachunku.csv`, bez danych
-  użytkownika): sklep z trzech dni w jednej grupie, sklepy jednego miasta bez par, zapisane nazwy bez dopisków, opis z
-  banku z datą.
+  użytkownika, w formacie banku: sklep w 19 znakach, „/Miasto”, daty DD.MM.RRRR): sklep z trzech dni w jednej grupie,
+  sklepy jednego miasta bez par, zapisane nazwy bez dopisków, opis z banku z datą.
+- **T104** Sprawdzenie na prawdziwej historii rachunku użytkownika (1023 operacje, 727 płatności z „DATA TRANSAKCJI”;
+  plik tylko do odczytu poza repozytorium) przed wydaniem 1.2.3 pokazało format, którego pierwsza wersja poprawki nie
+  znała (miasto bez spacji przed „/” i małymi literami) – stąd T100 w obecnej postaci, oraz:
+  - grupa nazwana rodzajem operacji (bez nadawcy: bankomat, prowizja) nie jest „podobną nazwą” (`similar.ts`);
+  - prowizja banku bez nazwy (`isFeeOperation` – PROWIZJA, OPŁATA, ODSETKI, PODATEK; to samo co `opKindOf` 'fee'): jej
+    tytuł mówi o innej operacji (sklep zakupu), więc słowo kluczowe tytułu jej nie decyduje (`ruleTargetOf` – tytuł
+    pusty) i propozycja słowa się z niej nie uczy;
+  - „POS ZWROT TOWARU” = zwrot towaru (sklep z tytułu, kategoria zakupów sklepu);
+  - propozycja słowa czyta nazwę sklepu bez pośrednika płatności przed nią (`withoutProcessor` – ta sama lista co
+    `brandOf`), więc nie podsuwa „sumup”;
+  - forma prawna ucięta przez bank („… SP. Z”) zostaje częścią nazwy – nazwa z pełną formą to para „podobnych nazw”
+    (zmiana klucza zgubiłaby reguły i połączenia zapisane na nim).
+  Wynik: 4 pary podobnych nazw (wszystkie trafne), 193 grupy, propozycje słowa przy 43 grupach – bez miast, słów banku i
+  pośredników; lista operacji użytkownika (271) bez zmian (1 trafna para).

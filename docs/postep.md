@@ -6,8 +6,8 @@ wspólne słowa łączyły niezwiązane) zrobiona na gałęzi `claude/import-1.2
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.2.3 na prawdziwej historii rachunku z mBanku (najlepiej z plikiem od użytkownika
-do sprawdzenia); potem kalibracja progów gry po pierwszym miesiącu (na prawdziwych danych).
+**Następny krok:** pauza – odbiór 1.2.3 w aplikacji (sprawdzone już na prawdziwej historii rachunku użytkownika –
+T104); potem kalibracja progów gry po pierwszym miesiącu (na prawdziwych danych).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -68,7 +68,7 @@ całość ok. 4–6 miesięcy (szacunek zgrubny).
 ## 1.2.3 – poprawka podobnych nazw (17.10.2026)
 
 Zgłoszenie użytkownika (D79): rozpoznawanie podobnych transakcji nie działa – wiele nazw ma datę transakcji, a to samo
-słowo (Wrocław, „bar”) łączy niezwiązane. Przyczyna: historia rachunku mBanku pisze płatność kartą jako „SKLEP /MIASTO
+słowo (nazwa miasta, „bar”) łączy niezwiązane. Przyczyna: historia rachunku mBanku pisze płatność kartą jako „SKLEP /MIASTO
 DATA TRANSAKCJI: RRRR-MM-DD” (sklep w tytule); dopiski zostawały w nazwie – jeden sklep rozpadał się na nazwy, a
 sklepy, którym po odjęciu słów ogólnych zostawały tylko dopiski, wyglądały na „podobne”; propozycje słowa podsuwały
 „data” / „transakcji”. Na pierwszym pliku użytkownika (lista operacji) tych dopisków nie było, dlatego pomiar w 1.2.2
@@ -90,7 +90,15 @@ Zrobione:
   operacji, tytuł bez obcinania adresu), stare klucze w Operacjach (`BankRow.bankName`), nieaktywne połączenia zamiast
   „rozłącz wszystko”, przymiotnikowe końcówki, mniej pracy dla sieci, reguła na nazwie z dopiskami nie jest „inną
   nazwą”; świadomie bez zmian: próg 4 marek dla słowa (sieć z 5+ oddziałami – propozycja słowa albo „Połącz nazwy”).
-- Testy: 368 unit + fs, E2E 17 (`tests/e2e/learning.spec.ts` na `tests/fixtures/mbank/historia_rachunku.csv`).
+- Sprawdzenie na prawdziwej historii rachunku użytkownika (T104, przed scaleniem): miasto było pisane bez spacji przed
+  „/” i małymi literami („…/Miasto”) – poprawione (miasto tylko w nazwie z datą transakcji, nazwy wpisane ręcznie
+  całe); bankomat i prowizja nie są parą, prowizja nie bierze decyzji sklepu z tytułu, „POS ZWROT TOWARU” = zwrot
+  towaru, propozycje bez pośredników płatności. Wynik: 4 trafne pary, propozycje przy 43 grupach bez miast i słów banku.
+  Drugi przegląd `/code-review` high (9 znalezisk): poprawione – miasto tylko w nazwie z datą (nie „Czynsz/mieszkanie”,
+  „AC/DC”, długie miasta znów ucinane), jeden warunek prowizji (`isFeeOperation`), pośrednik zdejmowany zamiast listy
+  słów ogólnych, cięta forma prawna wycofana (zmieniała klucze reguł); świadomie bez zmian: „POS ZWROT” w temacie „inne”
+  (wpływ – nie trafia do decyzji zbiorczej zakupów).
+- Testy: 369 unit + fs, E2E 17 (`tests/e2e/learning.spec.ts` na `tests/fixtures/mbank/historia_rachunku.csv`).
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.2.3, Windows):
 1. Ustawienia → Import z banku → „Połączone nazwy”: „Usuń nieaktywne” (połączenia z 1.2.2) i ewentualnie słowa kluczowe
@@ -720,4 +728,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
   poprawki; PR #8 scalony, wydanie 1.2.2 opublikowane; pauza.
 - 17.10.2026 – zgłoszenie użytkownika (D79): podobne nazwy nie działają na historii rachunku (daty w nazwach, wspólne
   słowa); poprawka 1.2.3 – nazwy bez dopisków banku, ostrożniejsze podobieństwo i propozycje; przegląd i poprawki; PR
-  do `main`.
+  #9 do `main`; użytkownik przysłał historię rachunku – sprawdzenie na niej (T104), poprawki formatu banku, prowizji,
+  zwrotu towaru i pośredników, drugi przegląd.
