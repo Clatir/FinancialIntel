@@ -271,3 +271,44 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T52** Łupy (D18): decyzja do 7. dnia następnego miesiąca zapisana w planie zakończonego miesiąca (następny miesiąc –
   koperty codzienne, cele, reszta do osłon); „Miesiąc zamknięty na plus” = koszty netto ≤ pensja, z krótką animacją
   i dźwiękiem raz na komputer; debriefing od pierwszego miesiąca budżetu.
+
+### E4 – Mostek i szybki wpis (17.10.2026)
+- **T53** Ustawienia komputera w `config.json` → `prefs` (skrót szybkiego wpisu, ukrycie kwot, powiadomienia, dźwięki –
+  nigdy w folderze na OneDrive): odczyt tolerancyjny (brak albo zła wartość = domyślna), zmiana łatką jednej sekcji;
+  proces główny zapisuje i rozsyła wynik wszystkim oknom (główne, szybki wpis, panele odłączone); skrót rejestrowany
+  ponownie tylko wtedy, gdy go ustawiono (także ten sam – ponowna próba po zwolnieniu przez inny program).
+- **T54** Szybki wpis: osobne okno (bez ramki, nad wszystkimi, bez paska zadań) tworzone ukryte 3 s po starcie, więc
+  skrót pokazuje je od razu, na ekranie z kursorem. Dane ma główne okno: szybki wpis dostaje zwięzły stan (kategorie,
+  konta, energia dziś i koperty, cisza nocna, próg dziennika, ostatnie kategorie kontrahentów, należność domu, ukrycie
+  kwot) i odsyła szkic, a zapisuje główne okno (autozapis i historia jak każdy wpis; folder tylko do odczytu – odmowa
+  w oknie). Enter zapisuje, Esc zamyka; zakup w ciszy nocnej – potwierdzenie i krótki wpis (D40), od progu dziennika
+  „Plan czy impuls?” (D41), wpływ od domownika najpierw spłaca należność domu (T41). Skrót zajęty przez inny program –
+  informacja w Ustawieniach; szybki wpis jest też na Mostku, w palecie i w menu zasobnika.
+- **T55** Ukrycie kwot (Ctrl+$, D30) – ustawienie komputera: kwoty ekranów, dymku zasobnika, odprawy, powiadomień
+  i paneli odłączonych pisane jako `•••`; pole kwoty pokazuje liczbę dopiero w trakcie edycji; odprawa czytana głosem
+  pomija kwoty.
+- **T56** Powiadomienia (D70, specyfikacja „Powiadomienia”): liczone co minutę i przy pokazaniu okna, każde raz na
+  komputerze (klucz zapamiętany w oknie na 60 dni), ciche – dźwięk tylko z ustawień aplikacji (alarm); nic w ciszy
+  nocnej i przed startem budżetu.
+  - Odprawa: pierwsze pokazanie okna po ciszy nocnej (z zasobnika, start) albo pierwszy ruch w oknie, które zostało na
+    ekranie przez noc („po 5:00” z D70 = koniec ciszy nocnej z rozkazów); okno pokazane dla odprawy przechodzi na
+    Mostek, chyba że otworzyło je kliknięcie innego powiadomienia.
+  - Wieczorne dopisanie od godziny z ustawień (21:00). Przydział dnia: przekroczenie (alarm) albo poniżej 20%; koperta:
+    przekroczenie albo ponad 80% (raz w miesiącu) – przekroczenie nigdy nie udaje „na wyczerpaniu”.
+  - Asteroida: 14 i 3 dni przed płatnością, tylko płatność w czasie trwania kontenera. Import: po 3 dniach od daty
+    warszawskiej ostatniego. Salda: w niedzielę, gdy nie potwierdzone od poniedziałku. Debriefing: przy pierwszym
+    spojrzeniu od 1. do 7. dnia (termin łupów), od drugiego miesiąca budżetu; raport wachty w niedzielę – z Raportami (E8).
+  - Kliknięcie otwiera ekran sprawy (Operacje dnia, Ładownia, Import, Konta, Plan miesiąca, Mostek).
+- **T57** Odprawa i Daily Bias (specyfikacja „Wywiad” – na Mostku już w 1.0.0): Bullish – energia dziś co najmniej
+  podstawowy przydział i koperty w limitach; Bearish – energia poniżej połowy podstawowego przydziału albo osłony poniżej
+  minimum; inaczej Neutral. Pozycje odprawy: alarmy silnika z bieżącego miesiąca (wyczerpana energia i braki zbiorników
+  zsumowane), asteroidy w 14 dni z kwotą i stanem zbiornika, zaległy import (ponad 3 dni), salda (ponad 7 dni), łupy do
+  decyzji. „Odsłuchaj” – głos systemu pl-PL (D49).
+- **T58** Dźwięki syntezowane WebAudio (bez plików i licencji): wpis, dokowanie, alarm, awans, „Miesiąc zamknięty na
+  plus”; włącznik, głośność (zapis po puszczeniu suwaka, z próbką) i przełącznik każdego zdarzenia – na komputer.
+- **T59** Zasobnik: druga linia dymku „Energia dziś: …” (z ukryciem kwot); menu: Szybki wpis, Otwórz, Raport wachty
+  dnia (Operacje z dzisiejszymi wpisami), aktualizacja, Zakończ.
+- **T60** Panele Mostka (Odprawa, Stan okrętu, Koperty) odłączane na drugi monitor (D45): okno dostaje dane jako JSON
+  (wycinek stanu okrętu, pozycje odprawy, nazwy kopert), a kliknięcie w nim prowadzi główne okno.
+- **T61** Ustawienia: „Warstwy i rozkazy” w `fi.json` (wspólne dla komputerów: cele warstw, przyjęte koszty, rozkazy)
+  i „Powiadomienia i dźwięki” w `config.json` (ten komputer: skrót, ukrycie kwot, powiadomienia, dźwięki).
