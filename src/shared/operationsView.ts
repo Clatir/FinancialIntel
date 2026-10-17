@@ -61,7 +61,8 @@ export function inPeriod(date: string, p: PeriodFilter): boolean {
 export { fold }
 
 /** The amount typed in the search („12,49”, „1 234.5”) as grosze, or null. */
-function queryAmount(q: string): number | null {
+/** A search that is an amount („12,49”, „-150”): grosze, else null. */
+export function queryAmount(q: string): number | null {
   const t = q.replace(/\s/g, '').replace(',', '.').replace(/^[-−+]/, '')
   if (!/^\d+(\.\d{1,2})?$/.test(t)) return null
   return Math.round(Number(t) * 100)

@@ -158,9 +158,13 @@ export type BudgetStart = z.infer<typeof budgetStartSchema>
  */
 export const importRuleSchema = z.looseObject({
   id: ulidSchema,
-  /** Normalized counterparty (`counterpartyKey`): the whole key ('exact') or a fragment of it ('contains'). */
+  /**
+   * 'exact': the brand key (`brandOf`, 1.2.1) or the whole name's key (`counterpartyKey`, rules learned before);
+   * 'contains': a fragment of either; 'keyword': folded words in the name or the title (`normalizeKeyword`, the last
+   * word may go on – „cukierni” = cukiernia). An older version ignores a mode it does not know.
+   */
   match: z.string().min(1).max(200),
-  mode: openEnum(['exact', 'contains'] as const).default('exact'),
+  mode: openEnum(['exact', 'contains', 'keyword'] as const).default('exact'),
   /** Money in or out; null = both. */
   direction: openEnum(['in', 'out'] as const).nullable().default(null),
   /** The counterparty as the bank writes it (for the list of rules). */

@@ -1,11 +1,11 @@
 # Financial Intel – postęp
 
-**Stan:** grupa D (E7 + E8 → 1.2.0) zrobiona na gałęzi `claude/grupa-d`, PR do `main` – scalenie przy zielonym CI
-(D71); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. **1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
-(plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy
-czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – czeka wybór użytkownika: usprawnienie grupowania importu z mBanku (propozycja niżej, 1.2.1),
-kalibracja progów gry po pierwszym miesiącu.
+**Stan:** 1.2.1 – grupowanie importu z mBanku (D75) w toku na gałęzi `claude/import-1.2.1`. **1.2.0 wydane** (PR #6),
+**1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie
+0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście (plik usuwany w trakcie odczytu), więc job
+Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
+**Następny krok:** dokończyć 1.2.1 (klucz marki, słownik sieci, słowa kluczowe, tematy z „Przyjmij pewne”), testy,
+przegląd, wydanie; potem pauza (kalibracja progów gry po pierwszym miesiącu).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -25,8 +25,8 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 4–6 h) | **1.0.0** | ✅ odpowiedzi (D69, D70) | ✅ wydane (PR #4), czeka na odbiór na Windows |
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
-| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ zrobione, PR do `main` |
-| 1.2.1 | Grupowanie importu z mBanku (propozycja) | Opus 5.5 | **max** | ok. 1 h | 1.2.1 | wybór pomysłów (1–6) | ⏳ czeka na decyzję |
+| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
+| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) | Opus 5.5 | **max** | ok. 1–1,5 h | 1.2.1 | ✅ wybór pomysłów (D75) | 🔧 w toku |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | | **Całość E0–E8** | | | **zmierzone ok. 9,5 h** | | | |
 
@@ -43,16 +43,19 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
 
-## Propozycja: grupowanie importu z mBanku (1.2.1, zgłoszenie użytkownika 17.10.2026)
+## Przed etapem 1.2.1 – grupowanie importu z mBanku (17.10.2026)
 
-1. **Co trzeba wiedzieć** – import grupuje po kluczu kontrahenta z całą nazwą (miasto, numer sklepu), więc jedna sieć
-   daje wiele grup; zmiana w E2 (import), bez AI.
-2. **Pytania z propozycją** – które pomysły: (1) klucz marki bez miast, numerów i dopisków kartowych, (2) wbudowany
-   słownik sieci z kategoriami, (3) reguły na słowa kluczowe w nazwie i tytule (zestaw startowy + własne),
-   (4) grupowanie wielopoziomowe (marka / słowo / kategoria mBanku) z „Zaakceptuj pewne”, (5) łączenie podobnych nazw do
-   zatwierdzenia, (6) propozycja reguły po decyzji z liczbą objętych wierszy. Propozycja: 1 + 3 + 4 (+ 2).
-3. **Co przygotować** – nic; przydatny zanonimizowany fragment CSV z problematycznymi nazwami (jak przy E2).
-4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1 h.
+1. **Co trzeba wiedzieć** – import grupuje dziś po całej nazwie kontrahenta: na pliku użytkownika 271 operacji to 81
+   grup, z czego 49 jednoosobowych (ta sama sieć w kilku miastach, operator płatności przed nazwą, końcówka domeny).
+   Zmiana dotyczy tylko importu (E2) i reguł; bez AI – stałe listy i dopasowanie całych słów.
+2. **Co użytkownik musi powiedzieć** – wybór z propozycji: ✅ 1 + 3 + 4 + 2 (D75). Rozstrzygam sam (T-decyzje):
+   - rozpoznanie sieci i słowa kluczowe działają jak dzisiejsze rozpoznanie XTB czy bankomatu – kategoria widoczna w
+     podglądzie wchodzi z importem, można ją zmienić; kategoria mBanku nadal tylko podpowiedzią (D68);
+   - „Przyjmij pewne” przyjmuje rozpoznane tematy jako Twoją decyzję i zapamiętuje je jako reguły – kolejny import
+     pokaże je od razu jako gotowe;
+   - słowa kluczowe działają tylko na wydatki (wpływ z tytułem „kręgle” to zwrot od znajomego – do Twojej decyzji).
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1–1,5 h.
 
 ## E8 – Wywiad i raporty (17.10.2026)
 

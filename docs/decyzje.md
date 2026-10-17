@@ -183,6 +183,15 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     z prawdziwymi kwotami (ukrycie kwot dotyczy ekranu).
 - **D74** (17.10.2026) Bez asystenta AI: etap E9 „Pierwszy oficer” wypada (zastępuje D53 i grupę E z D67); grupa D
   (1.2.0) zamyka plan etapów. Sieć tylko do aktualizacji.
+- **D75** (17.10.2026) Grupowanie importu z mBanku (1.2.1, zgłoszenie użytkownika: za dużo grup, ta sama firma pod
+  wieloma nazwami, podmiot wprost w nazwie albo tytule – „cukiernia”, „stacja benzynowa”), bez AI – zaakceptowane
+  pomysły z propozycji (1 + 3 + 4 + 2):
+  - klucz marki zamiast całej nazwy: bez miasta, numeru sklepu, prefiksu operatora płatności („SumUp *”) i końcówki
+    domeny;
+  - wbudowany słownik sieci z kategoriami;
+  - słowa kluczowe w nazwie i tytule: zestaw startowy + własne;
+  - grupowanie wielopoziomowe (temat = kategoria / rodzaj / podpowiedź mBanku → marki → operacje) z „Przyjmij pewne”.
+  Na razie bez łączenia podobnych nazw (5) i propozycji reguły z liczbą wierszy (6).
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.

@@ -3,6 +3,7 @@ import { TX_KIND_LABEL, type ImportRule, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { Panel, TextField } from '../../components/ui'
+import { KeywordRules } from '../import/KeywordRules'
 import { deleteRule, setOwnNames } from '../import/rules'
 import { useAccounts, useCategories } from '../operations/pickers'
 
@@ -11,7 +12,8 @@ const NO_NAMES: string[] = []
 
 /**
  * Ustawienia → Import (E2): the rules the import learned from the user's decisions (a wrong one is deleted here, the
- * next decision in the import or in Operacje writes it again) and the account holder's names (own transfers).
+ * next decision in the import or in Operacje writes it again), the user's keywords (1.2.1) and the account holder's
+ * names (own transfers).
  */
 export function ImportTab() {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
@@ -26,13 +28,14 @@ export function ImportTab() {
     if (r.kind === 'transfer') return `${kind}${r.counterAccountId ? ` · ${accounts.find((a) => a.id === r.counterAccountId)?.name ?? '?'}` : ''}`
     return kind
   }
-  const sorted = [...rules].sort((a, b) => b.hits - a.hits || a.label.localeCompare(b.label))
+  const sorted = rules.filter((r) => r.mode !== 'keyword').sort((a, b) => b.hits - a.hits || a.label.localeCompare(b.label))
   return (
     <>
       <Panel title="Reguły importu">
         <p className="mb-2 text-[11.5px] text-muted">
-          Powstają z Twoich decyzji przy imporcie z mBanku („zapamiętaj”) i z przycisku „Zapamiętaj” w Operacjach. Kategoria mBanku nie tworzy reguł – jest
-          tylko podpowiedzią. Usunięta reguła wróci, gdy znów zdecydujesz za kontrahenta.
+          Powstają z Twoich decyzji przy imporcie z mBanku („zapamiętaj”, „Przyjmij pewne”) i z przycisku „Zapamiętaj” w Operacjach – dla marki: sieć w
+          każdym mieście to jedna reguła. Kategoria mBanku nie tworzy reguł – jest tylko podpowiedzią. Usunięta reguła wróci, gdy znów zdecydujesz za
+          kontrahenta.
         </p>
         {sorted.length === 0 && <span className="text-[11.5px] text-dim">Brak reguł – pojawią się po pierwszym imporcie.</span>}
         <div className="flex flex-col" data-testid="import-rules">
@@ -50,6 +53,9 @@ export function ImportTab() {
             </div>
           ))}
         </div>
+      </Panel>
+      <Panel title="Słowa kluczowe">
+        <KeywordRules />
       </Panel>
       <Panel title="Twoje nazwiska w banku">
         <p className="mb-2 text-[11.5px] text-muted">
