@@ -16,7 +16,8 @@ const DEFAULTS: MachineConfig = {
   // Closing hides to the tray (decision E0-4: notifications work in the background); start with Windows off until the
   // start wizard (E3) asks.
   tray: { closeToTray: true, launchAtLogin: false, notified: false },
-  prefs: DEFAULT_MACHINE_PREFS
+  prefs: DEFAULT_MACHINE_PREFS,
+  ictj: { dir: null, exe: null }
 }
 
 /** What the renderer may see: everything but the GitHub token (encrypted, or plain text without safeStorage). */
@@ -31,6 +32,12 @@ function loadTray(raw: unknown): MachineConfig['tray'] {
     launchAtLogin: typeof t.launchAtLogin === 'boolean' ? t.launchAtLogin : false,
     notified: typeof t.notified === 'boolean' ? t.notified : false
   }
+}
+
+function loadIctj(raw: unknown): MachineConfig['ictj'] {
+  const t = (raw && typeof raw === 'object' ? raw : {}) as Partial<MachineConfig['ictj']>
+  const path = (v: unknown) => (typeof v === 'string' && v.length > 0 && v.length < 1000 ? v : null)
+  return { dir: path(t.dir), exe: path(t.exe) }
 }
 
 function loadUpdates(raw: unknown): MachineConfig['updates'] {
@@ -69,7 +76,8 @@ export class ConfigStore {
         recentDirs: Array.isArray(raw.recentDirs) ? raw.recentDirs.filter((d) => typeof d === 'string').slice(0, 8) : [],
         updates: loadUpdates(raw.updates),
         tray: loadTray(raw.tray),
-        prefs: machinePrefsFrom(raw.prefs)
+        prefs: machinePrefsFrom(raw.prefs),
+        ictj: loadIctj(raw.ictj)
       }
     } catch {
       this.config = { ...DEFAULTS }

@@ -108,3 +108,9 @@ export async function deleteOperation(t: Transaction, label: string): Promise<vo
   if (useOperationsUi.getState().selectedId === t.id) useOperationsUi.setState({ selectedId: null })
   await deleteWithUndo('transactions', t.id, label, `Usunięto: ${label}.`)
 }
+
+/** Operacje with the purchases „do zwrotu” of the whole history (the bridge, the radar). */
+export function openRefundables(): void {
+  setFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })
+  navigate({ page: 'operations' })
+}

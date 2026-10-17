@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
-import { computeFleet, type FleetState } from '@shared/calc/fleet'
+import { computeFleet, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import type { RecordEntry } from '@shared/api'
 import { useData } from './data'
 
@@ -37,21 +37,29 @@ type Fi = NonNullable<ReturnType<typeof useData.getState>['fi']>
 /** One computation for every screen that asks (the list, the editor…) until the records, settings or minute change. */
 let memo: { fi: Fi; records: Records; now: number; state: FleetState } | null = null
 
+const inputOf = (fi: Fi, records: Records, now: number): FleetInput => ({
+  settings: fi.settings,
+  transactions: recordsOf(records.transactions),
+  containers: recordsOf(records.containers),
+  goals: recordsOf(records.goals),
+  months: recordsOf(records.months),
+  dockings: recordsOf(records.dockings),
+  loans: recordsOf(records.loans),
+  balances: recordsOf(records.balances),
+  now: new Date(now)
+})
+
 function fleetOf(fi: Fi, records: Records, now: number): FleetState {
   if (memo && memo.fi === fi && memo.records === records && memo.now === now) return memo.state
-  const state = computeFleet({
-    settings: fi.settings,
-    transactions: recordsOf(records.transactions),
-    containers: recordsOf(records.containers),
-    goals: recordsOf(records.goals),
-    months: recordsOf(records.months),
-    dockings: recordsOf(records.dockings),
-    loans: recordsOf(records.loans),
-    balances: recordsOf(records.balances),
-    now: new Date(now)
-  })
+  const state = computeFleet(inputOf(fi, records, now))
   memo = { fi, records, now, state }
   return state
+}
+
+/** The engine's input now (a preview of a change: the docking window). */
+export function fleetInputNow(): FleetInput | null {
+  const s = useData.getState()
+  return s.fi ? inputOf(s.fi, s.records, Date.now()) : null
 }
 
 /** The ship's state now (shared/calc/fleet.ts) from the records in memory; recomputed when they change. */

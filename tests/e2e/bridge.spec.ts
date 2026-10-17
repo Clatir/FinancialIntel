@@ -1,9 +1,10 @@
-import { mkdtempSync, promises as fs } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
+import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
 const ACC = '01KDEFACC00000000000000001'
@@ -11,18 +12,8 @@ const FOOD = '01KDEFCAT00000000000000100'
 const GROCERIES = '01KDEFCAT00000000000000101'
 const AUTO = '01KDEFCAT00000000000000300'
 
-const json = async (path: string) => JSON.parse(await fs.readFile(path, 'utf8'))
 
-async function operations(dataDir: string): Promise<Array<Record<string, unknown>>> {
-  const root = join(dataDir, 'transactions')
-  const out: Array<Record<string, unknown>> = []
-  for (const y of await fs.readdir(root).catch(() => []))
-    for (const f of await fs.readdir(join(root, y)).catch(() => [])) {
-      const text = await fs.readFile(join(root, y, f), 'utf8').catch(() => null)
-      if (text) out.push(JSON.parse(text))
-    }
-  return out
-}
+const operations = (dataDir: string) => records(dataDir, 'transactions')
 
 /** The quick entry window (created hidden at the start or on its first opening). */
 async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {

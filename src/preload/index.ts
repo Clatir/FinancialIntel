@@ -2,6 +2,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ChangeSet, DetachEvent, DetachPayload, FiApi, QuickData, QuickResult } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
+import type { IctjSnapshot } from '@shared/ictj'
 import type { UpdateState } from '@shared/update'
 
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(`fi:${channel}`, ...args)
@@ -84,7 +85,15 @@ const api: FiApi = {
   quickClose: () => invoke('quickClose'),
   setTrayStatus: (text) => invoke('setTrayStatus', text),
   notify: (n) => invoke('notify', n),
-  onNotificationClick: (cb) => listen<[string]>('notificationClick', cb)
+  onNotificationClick: (cb) => listen<[string]>('notificationClick', cb),
+  ictjState: () => invoke('ictjState'),
+  ictjSuggest: () => invoke('ictjSuggest'),
+  ictjPickDir: () => invoke('ictjPickDir'),
+  ictjSetDir: (dir) => invoke('ictjSetDir', dir),
+  ictjOpen: () => invoke('ictjOpen'),
+  ictjProgram: () => invoke('ictjProgram'),
+  ictjPickExe: (mode) => invoke('ictjPickExe', mode),
+  onIctj: (cb) => listen<[IctjSnapshot]>('ictj', cb)
 }
 
 contextBridge.exposeInMainWorld('fi', api)

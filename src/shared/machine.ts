@@ -33,6 +33,12 @@ export interface NotifyPrefs {
   balances: boolean
   /** The debriefing from the 1st of the month (the watch report on Sunday comes with Raporty, E8). */
   debriefing: boolean
+  /** A new payout in ICTTJ to dock (E5). */
+  ictj: boolean
+  /** An installment of a loan 3 days late (E6). */
+  loans: boolean
+  /** PIT-38: 14 and 3 days before 30 April (E6). */
+  pit38: boolean
 }
 
 export interface SoundPrefs {
@@ -56,7 +62,7 @@ export const DEFAULT_QUICK_SHORTCUT = 'Control+Alt+B'
 export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   quickShortcut: DEFAULT_QUICK_SHORTCUT,
   hideAmounts: false,
-  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, importOverdue: true, balances: true, debriefing: true },
+  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, importOverdue: true, balances: true, debriefing: true, ictj: true, loans: true, pit38: true },
   // Sounds on and quiet (D70).
   sounds: { enabled: true, volume: 0.3, events: { entry: true, docking: true, alarm: true, promotion: true, plus: true } }
 }
@@ -85,7 +91,10 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
       asteroid: bool(n.asteroid, d.notify.asteroid),
       importOverdue: bool(n.importOverdue, d.notify.importOverdue),
       balances: bool(n.balances, d.notify.balances),
-      debriefing: bool(n.debriefing, d.notify.debriefing)
+      debriefing: bool(n.debriefing, d.notify.debriefing),
+      ictj: bool(n.ictj, d.notify.ictj),
+      loans: bool(n.loans, d.notify.loans),
+      pit38: bool(n.pit38, d.notify.pit38)
     },
     sounds: {
       enabled: bool(s.enabled, d.sounds.enabled),

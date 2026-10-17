@@ -55,7 +55,7 @@ export function CargoPage() {
   const proposals = useMemo(() => (month ? recurringPayments(transactions, month, containers) : []), [transactions, month, containers])
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const sim = (change: { add?: ContainerDraft; drop?: string }) =>
-    simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers }, change)
+    simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)
   const current = selected ? containers.find((c) => c.id === selected) : undefined
   const visible = sorted.filter((c) => showArchived || !c.archived)
 

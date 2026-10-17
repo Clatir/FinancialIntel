@@ -20,6 +20,8 @@ import { setupDetach } from './detach'
 import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
 import { QuickEntry } from './quick'
 import { patchMachinePrefs, type MachinePrefs } from '@shared/machine'
+import { IctjSource } from './ictj/source'
+import { findIctjExe, suggestIctjDir } from './ictj/locate'
 
 // Test hooks: isolated user data and a preselected data folder (no dialogs in E2E runs).
 if (process.env.FI_USER_DATA) app.setPath('userData', process.env.FI_USER_DATA)
@@ -46,6 +48,7 @@ let presenceTimer: NodeJS.Timeout | null = null
 let updater: Updater | null = null
 let tray: AppTray | null = null
 let quick: QuickEntry | null = null
+let ictj: IctjSource | null = null
 /** Notifications shown and not closed yet (a dropped reference loses its click). */
 const notifications = new Set<Notification>()
 /** The app really quits (from the tray, an update, the system): closing the window then closes it, not hides it. */
@@ -216,6 +219,20 @@ function createUpdater(): Updater {
     }
   })
 }
+
+/** The ICTTJ folder of this computer, read only (D60, D72); its snapshots go to the main window, which owns the budget. */
+function ictjSource(): IctjSource {
+  ictj ??= new IctjSource({
+    onSnapshot: (snap) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:ictj', snap)
+    },
+    log
+  })
+  return ictj
+}
+
+/** The ICTTJ folder chosen on this computer (FI_ICTJ_DIR in test runs). */
+const ictjDirOf = (): string | null => process.env.FI_ICTJ_DIR || config.get().ictj.dir
 
 function send(change: ChangeSet | null): void {
   if (change && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:change', change)
@@ -540,6 +557,54 @@ function registerIpc(): void {
   handle('setTrayStatus', (text: unknown) => {
     tray?.setStatus(typeof text === 'string' && text ? text.slice(0, 200) : null)
   })
+  handle('ictjState', () => ictjSource().snapshot)
+  // Only the path from ICTTJ's own config.json (FI_ICTJ_APPDATA in test runs).
+  handle('ictjSuggest', () => suggestIctjDir(process.env.FI_ICTJ_APPDATA || app.getPath('appData')))
+  handle('ictjPickDir', async () => {
+    const res = await dialog.showOpenDialog(mainWindow!, { title: 'Folder danych ICT Trade Journal (tylko do odczytu)', properties: ['openDirectory'] })
+    return res.canceled ? null : (res.filePaths[0] ?? null)
+  })
+  handle('ictjSetDir', async (dir: unknown) => {
+    const next = typeof dir === 'string' && dir ? dir : null
+    if (next) {
+      const kind = await DataStore.inspect(next)
+      if (kind === 'data') throw new Error('To folder danych Financial Intel – wskaż folder ICT Trade Journal.')
+      if (kind !== 'ictj') throw new Error('W tym folderze nie ma danych ICT Trade Journal (brak pliku journal.json).')
+    }
+    await config.update({ ictj: { ...config.get().ictj, dir: next } })
+    log('info', `ICTTJ: folder ${next ? 'wybrany' : 'wyłączony'}`)
+    return ictjSource().setDir(next)
+  })
+  handle('ictjProgram', () => findIctjExe(config.get().ictj.exe))
+  handle('ictjPickExe', async (mode: 'pick' | 'clear') => {
+    if (mode === 'clear') await config.update({ ictj: { ...config.get().ictj, exe: null } })
+    else {
+      const res = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Program ICT Trade Journal (plik .exe)',
+        properties: ['openFile'],
+        filters: [
+          { name: 'Program', extensions: ['exe'] },
+          { name: 'Wszystkie pliki', extensions: ['*'] }
+        ]
+      })
+      const exe = res.canceled ? undefined : res.filePaths[0]
+      if (exe) await config.update({ ictj: { ...config.get().ictj, exe } })
+    }
+    return findIctjExe(config.get().ictj.exe)
+  })
+  handle('ictjOpen', async () => {
+    const { exe } = await findIctjExe(config.get().ictj.exe)
+    if (!exe) return { ok: false, message: 'Nie znaleziono ICT Trade Journal na tym komputerze – wskaż jego plik .exe (wersja portable) w Ustawienia → ICTTJ.' }
+    // Test runs: the program is only named, not started.
+    if (process.env.FI_ICTJ_LAUNCH === 'dry') {
+      log('info', `ICTTJ: start ${exe} (próba)`)
+      return { ok: true, message: exe }
+    }
+    const err = await shell.openPath(exe)
+    if (err) return { ok: false, message: `Nie udało się uruchomić ICT Trade Journal: ${err}` }
+    log('info', 'ICTTJ uruchomiony')
+    return { ok: true, message: exe }
+  })
   handle('notify', (n: { title?: unknown; body?: unknown; tag?: unknown; silent?: unknown }) => {
     if (!Notification.isSupported()) return
     const note = new Notification({ title: String(n?.title ?? APP_TITLE).slice(0, 120), body: String(n?.body ?? '').slice(0, 500), silent: n?.silent === true })
@@ -710,6 +775,7 @@ app.whenReady().then(async () => {
   await config.load()
   updater = createUpdater()
   registerIpc()
+  void ictjSource().setDir(ictjDirOf())
   applyLoginItem(trayView(), log)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()
@@ -737,6 +803,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   log('info', 'zamykanie: okno zamknięte')
   tray?.destroy()
+  ictj?.stop()
   quitting = true
   void closeStore()
     .catch(() => undefined)

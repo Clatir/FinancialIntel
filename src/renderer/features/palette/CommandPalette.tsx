@@ -13,6 +13,8 @@ import { SETTINGS_TABS } from '../settings/SettingsPage'
 import { startWizard } from '../wizard/state'
 import { toggleHideAmounts } from '../../store/machine'
 import { newOperation } from '../operations/state'
+import { openIctj } from '../../store/ictj'
+import { openFirstDocking } from '../dock/state'
 
 const GROUP =
   '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted'
@@ -38,6 +40,8 @@ export function CommandPalette() {
       { id: 'wizard', label: 'Kreator startu budżetu', run: () => startWizard() },
       { id: 'quick', label: 'Szybki wpis (okno nad wszystkimi)', run: () => void api.quickOpen() },
       { id: 'hide-amounts', label: 'Ukryj / pokaż kwoty', keys: 'Ctrl $', run: () => toggleHideAmounts() },
+      { id: 'open-ictj', label: 'Otwórz ICT Trade Journal', run: () => void openIctj(() => navigate({ page: 'settings', tab: 'ictj' })) },
+      { id: 'dock', label: 'Dokowanie: następna dostawa z XTB', run: () => (openFirstDocking() ? navigate({ page: 'bridge' }) : toast('Brak dostaw do zadokowania.')) },
       ...PAGES.map((p) => ({ id: `page-${p.page}`, label: `${p.label} – ${p.sub}`, keys: `Ctrl ${p.key}`, run: () => navigate({ page: p.page }) })),
       { id: 'sync', label: 'Synchronizacja i problemy', keys: 'Ctrl Shift Y', run: () => navigate({ page: 'sync' }) },
       ...SETTINGS_TABS.map((t) => ({ id: `settings-${t.id}`, label: `Ustawienia: ${t.label}`, run: () => navigate({ page: 'settings', tab: t.id }) })),

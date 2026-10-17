@@ -12,7 +12,9 @@ import { useData } from './data'
 import { fleetNow } from './fleet'
 import { useMachine } from './machine'
 import { navigate } from './ui'
+import { useIctj } from './ictj'
 import { setFilter } from '../features/operations/state'
+import { deliveriesNow, openDockingTag } from '../features/dock/state'
 
 const SENT_KEY = 'fi.notify.sent'
 
@@ -52,8 +54,15 @@ export function openTag(tag: string): void {
   else if (tag === 'import') navigate({ page: 'import' })
   else if (tag === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (tag === 'debriefing' || tag === 'low' || tag === 'overrun') navigate({ page: 'month' })
-  else navigate({ page: 'bridge' })
+  else if (tag === 'radar') navigate({ page: 'radar' })
+  else {
+    navigate({ page: 'bridge' })
+    if (tag === 'dock' || tag.startsWith('dock:')) openDockingTag(tag)
+  }
 }
+
+/** Several new payouts at once (the folder chosen for the first time): one notification for them. */
+const DOCK_GROUP = 3
 
 function check(opened: boolean, shown = false): void {
   const s = useData.getState()
@@ -83,7 +92,9 @@ function check(opened: boolean, shown = false): void {
     time,
     opened,
     // The hidden amounts (Ctrl+$) stay hidden in the notifications too.
-    money: (g) => `${plnText(g)} zł`
+    money: (g) => `${plnText(g)} zł`,
+    deliveries: deliveriesNow(),
+    ictjProblem: null
   })
   const already = sent()
   const fresh: Notice[] = notices.filter((n) => !already[n.key])
@@ -92,8 +103,10 @@ function check(opened: boolean, shown = false): void {
     fresh.map((n) => n.key),
     fleet.today
   )
+  const docks = fresh.filter((n) => n.tag === 'dock')
+  const toasts = docks.length >= DOCK_GROUP ? [...fresh.filter((n) => n.tag !== 'dock'), { key: 'dock:group', tag: 'dock' as const, title: 'Nowe wypłaty w ICTTJ do zadokowania', body: `${docks.length} wpisów czeka na dokowanie (Mostek).` }] : fresh
   // Silent toasts: the app's own sounds (switches and volume of this computer) are the only ones – the alarm's here.
-  for (const n of fresh) void api.notify({ title: n.title, body: n.body, tag: n.tag, silent: true })
+  for (const n of toasts) void api.notify({ title: n.title, body: n.body, tag: n.target ?? n.tag, silent: true })
   if (fresh.some((n) => n.alarm)) playSound('alarm')
   // The window brought back from the tray for the morning briefing: the bridge (a fresh start opens there anyway) –
   // unless a notification's click brought it back to its own screen.
@@ -124,6 +137,10 @@ export function initNotifier(): void {
   }
   for (const ev of ['pointerdown', 'pointermove', 'keydown'] as const) window.addEventListener(ev, touched, { capture: true, passive: true })
   setInterval(() => check(false), 60_000)
+  // A new payout in ICTTJ: at once (the folder's watcher), not at the next minute.
+  useIctj.subscribe((st, prev) => {
+    if (st.snap !== prev.snap) setTimeout(() => check(false), 500)
+  })
   // After the folder loads: a first look (and the briefing when the window is on screen).
   const unsub = useData.subscribe((s) => {
     if (s.phase !== 'ready') return

@@ -276,7 +276,7 @@ describe('zakup „do zwrotu” i wpłata domownika (D20, D21)', () => {
     expect(s.energy).toBe(plain.energy)
     expect(s.daily?.spentBefore).toBe(0)
     expect(s.shields.amount).toBe(plain.shields.amount - zl(150))
-    expect(s.receivables).toEqual({ house: zl(150), loans: {}, total: zl(150) })
+    expect(s.receivables).toEqual({ house: zl(150), houseSince: '2026-10-05', loans: {}, total: zl(150) })
     expect(costOf(bought)).toBe(0)
   })
 

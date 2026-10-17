@@ -8,7 +8,7 @@ import { envelopeKind, type Category, type EnvelopeKind } from '../schema/budget
 import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { counterpartyKey } from '../import/classify'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
-import { cyclePosition, sinkingSchedule, type FleetEvent } from './fleet'
+import { cyclePosition, rangeMonths, sinkingSchedule, type FleetEvent } from './fleet'
 import { categoryIndex, costOf, partsOf, sum } from './operations'
 
 /** Months of the salary's average (D70). */
@@ -364,7 +364,7 @@ export interface CargoSimulation {
  * shields and the hull over the average costs plus (or minus) the container's monthly weight.
  */
 export function simulateCargo(
-  o: { shields: number; hull: number; costs: number | null; salary: number | null; limitPct: number; month: string; containers: readonly Container[] },
+  o: { shields: number; hull: number; costs: number | null; salary: number | null; limitPct: number; month: string; containers: readonly Container[]; debt?: number },
   change: { add?: Pick<Container, 'amount' | 'cycleMonths'>; drop?: string }
 ): CargoSimulation {
   const live = o.containers.filter((c) => activeIn(c, o.month))
@@ -375,7 +375,8 @@ export function simulateCargo(
   const before = sum(live.map(monthlyShare))
   const dropped = change.drop ? live.find((c) => c.id === change.drop) : undefined
   const delta = (change.add ? monthlyShare(change.add) : 0) - (dropped ? monthlyShare(dropped) : 0)
-  const range = (costs: number | null) => (costs != null && costs > 0 ? (o.shields + o.hull) / costs : null)
+  // The range as the bridge counts it (a taken loan's debt off – D72).
+  const range = (costs: number | null) => rangeMonths(o.shields, o.hull, costs, o.debt ?? 0)
   return {
     before: mass(before),
     after: mass(before + delta),
