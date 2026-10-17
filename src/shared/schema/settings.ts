@@ -4,7 +4,7 @@
  * (`z.looseObject`), so an older version never drops what a newer one wrote.
  */
 import { z } from 'zod'
-import { budgetSettingsShape } from './budget'
+import { budgetSettingsShape, seedSettings } from './budget'
 import { isoDateTime, recordBase, ulidSchema } from './common'
 
 /**
@@ -47,7 +47,7 @@ export const settingsSchema = z.looseObject({
     .catch([])
     .default([]),
   ...budgetSettingsShape
-})
+}).transform(seedSettings)
 export type Settings = z.infer<typeof settingsSchema>
 
 export const settingsFileSchema = z.looseObject({

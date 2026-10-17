@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** grupa A (E1 + E2) zakończona 17.10.2026 na gałęzi `claude/e1-model` – PR do `main`, wydanie 0.3.0 po
-scaleniu. **Pauza** (D67).
-**Następny krok:** odbiór 0.3.0 i odpowiedzi na „Przed etapem E3” niżej, potem grupa B (E3 + E4 → 1.0.0) – tylko na
-komendę użytkownika.
+**Stan:** grupa A (E1 + E2) scalona – PR #3, wydanie 0.3.0. Grupa B (E3 + E4 → 1.0.0) w toku na gałęzi
+`claude/grupa-b` (komenda użytkownika 17.10.2026, odpowiedzi D69–D70).
+**Następny krok:** E3 – obliczenia planu, Plan miesiąca, Ładownia, kreator startu; potem E4 – Mostek, szybki wpis,
+zasobnik, ukrycie kwot, powiadomienia, dźwięki; PR i wydanie 1.0.0, pauza.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -20,7 +20,7 @@ na CI. Model i thinking z górką. E0 zmierzony; reszta przeliczona na jego pods
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | – | E0 Fundament | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | 0.1.0 | – | ✅ scalony |
 | **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ PR do `main`, czeka na scalenie i odbiór |
-| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | 4–6 h | **1.0.0** | odbiór 0.3.0, odpowiedzi na „Przed etapem E3” | ⏳ na komendę |
+| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | 4–6 h | **1.0.0** | ✅ odpowiedzi (D69, D70) | ⏳ w toku |
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 10–12 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 3,5–5 h | 1.1.0 | ścieżka folderu ICTTJ, zanonimizowana kopia `payouts/` | ⏳ |
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 4,5–6,5 h | 1.2.0 | akceptacja listy misji, osiągnięć i smaczków ICT | ⏳ |

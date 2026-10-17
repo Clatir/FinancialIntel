@@ -70,7 +70,7 @@ describe('fi.json – konta, kategorie, warstwy i rozkazy (E1)', () => {
     const subsOf = (name: string) => categories.filter((c) => c.parentId === main.find((m) => m.name === name)?.id).map((c) => c.name)
     expect(subsOf('Jedzenie')).toEqual(['zakupy spożywcze', 'na mieście', 'kawa i przekąski'])
     expect(subsOf('Dom')).toEqual(['czynsz i opłaty', 'media', 'wyposażenie', 'chemia'])
-    expect(subsOf('Auto')).toEqual(['paliwo', 'serwis', 'ubezpieczenie', 'parking i opłaty'])
+    expect(subsOf('Auto')).toEqual(['paliwo', 'serwis', 'ubezpieczenie', 'parking i opłaty', 'przejazdy'])
     expect(subsOf('Zwierzęta')).toEqual(['karma', 'weterynarz', 'akcesoria'])
     expect(subsOf('Zdrowie')).toEqual(['leki', 'lekarz', 'sport'])
     expect(subsOf('Rozrywka i hobby')).toEqual(['wyjścia', 'hobby', 'podróże'])
@@ -92,7 +92,12 @@ describe('fi.json – konta, kategorie, warstwy i rozkazy (E1)', () => {
     expect(layers).toEqual({ shieldSalaries: 3, hullMonths: 6, assumedCosts: null })
     expect(orders).toEqual({ minShieldSalaries: 1, cargoLimitPct: 40, quietHours: { from: '23:00', to: '05:00' }, impulseThreshold: 20000, firewall: true })
     expect(budget).toEqual({ start: null, initial: null })
-    expect(imp).toEqual({ ownNames: [], rules: [], lastImport: {} })
+    expect(imp).toMatchObject({ ownNames: [], lastImport: {} })
+    // Starter rules (D69): taxi rides are going out, trains are „przejazdy”.
+    expect(imp.rules.map((r) => [r.match, r.direction, r.kind, r.categoryId])).toEqual([
+      ['bolt', 'out', 'expense', defaultCategoryId(6)],
+      ['koleo', 'out', 'expense', defaultCategoryId(3, 5)]
+    ])
   })
 
   it('fi.json z E0 (bez kont i kategorii) dostaje domyślne przy odczycie – takie same na każdym komputerze', () => {
@@ -102,7 +107,32 @@ describe('fi.json – konta, kategorie, warstwy i rozkazy (E1)', () => {
     expect(a.settings.shipName).toBe('Sokół')
     expect(a.settings.accounts).toEqual(b.settings.accounts)
     expect(a.settings.categories).toEqual(b.settings.categories)
-    expect(a.settings.categories).toHaveLength(39)
+    expect(a.settings.categories).toHaveLength(40)
+  })
+
+  it('fi.json z 0.3.0 dostaje raz podkategorię „przejazdy” i reguły startowe (D69); usunięte nie wracają', () => {
+    const fi = createDefaultSettings()
+    const older = JSON.parse(serializeRecord('fi', fi))
+    // 0.3.0 wrote its 39 categories and no rules – and nothing about seeds.
+    older.settings.categories = older.settings.categories.filter((c: { id: string }) => c.id !== defaultCategoryId(3, 5))
+    older.settings.import.rules = [{ id: '01K6H3Z0W8Q4M2N5P7R9S1T3V9', match: 'bolt', direction: 'out', kind: 'expense', categoryId: defaultCategoryId(3), updatedAt: '2026-10-17T08:00:00.000Z' }]
+    delete older.settings.seeded
+    const a = settingsFileSchema.parse(older).settings
+    expect(a.categories.find((c) => c.id === defaultCategoryId(3, 5))).toMatchObject({ name: 'przejazdy', parentId: defaultCategoryId(3) })
+    // The user's own decision for Bolt stays; KOLEO gets the starter rule.
+    expect(a.import.rules.map((r) => [r.match, r.categoryId])).toEqual([
+      ['bolt', defaultCategoryId(3)],
+      ['koleo', defaultCategoryId(3, 5)]
+    ])
+    expect(a.seeded).toEqual(['category:auto-przejazdy', 'rule:bolt', 'rule:koleo'])
+    // Saved and read again: nothing more; the KOLEO rule deleted and „przejazdy” archived by the user stay so.
+    const saved = JSON.parse(serializeRecord('fi', { ...fi, settings: a }))
+    saved.settings.import.rules = saved.settings.import.rules.filter((r: { match: string }) => r.match !== 'koleo')
+    saved.settings.categories = saved.settings.categories.map((c: { id: string }) => (c.id === defaultCategoryId(3, 5) ? { ...c, archived: true } : c))
+    const b = settingsFileSchema.parse(saved).settings
+    expect(b.import.rules.map((r) => r.match)).toEqual(['bolt'])
+    expect(b.categories.filter((c) => c.id === defaultCategoryId(3, 5))).toEqual([expect.objectContaining({ archived: true })])
+    expect(b.seeded).toEqual(a.seeded)
   })
 
   it('wartości z nowszej wersji (inny rodzaj konta, nowa kategoria systemowa) zostają i wracają do pliku bez zmian', () => {

@@ -87,7 +87,7 @@ const MBANK_HINTS: Record<string, [number, number]> = {
   'zajecia dodatkowe': [6, 2],
   'sport i hobby': [6, 2],
   'multimedia, ksiazki i prasa': [6, 2],
-  przejazdy: [3, 0],
+  przejazdy: [3, 5],
   paliwo: [3, 1],
   'serwis i czesci': [3, 2],
   'ubezpieczenie auta': [3, 3],
