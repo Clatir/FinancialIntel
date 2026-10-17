@@ -4,8 +4,10 @@
  * confirm, the loot waiting for a decision. Pure; the bridge, the notifications and the spoken briefing use it.
  */
 import { formatPln } from '../format'
+import { ICTJ_POOL_LABEL } from '../ictj'
 import type { Container } from '../schema/records'
 import { addMonths, daysBetween, daysInMonth, firstDayOf, warsawNow } from './dates'
+import type { Delivery } from './dock'
 import { activeIn, cyclePosition, type Alarm, type FleetState } from './fleet'
 
 /** The Daily Bias (spec, „Wywiad”): Bullish – today's energy at least the base allowance and the envelopes on plan;
@@ -25,8 +27,8 @@ export const BIAS_LABEL: Record<DailyBias, string> = { bullish: 'Bullish', beari
 
 export interface BriefingItem {
   level: 'red' | 'yellow' | 'info'
-  /** What the item is about (the screen it leads to). */
-  kind: 'alarm' | 'asteroid' | 'import' | 'balances' | 'loot' | 'start'
+  /** What the item is about (the screen it leads to; 'dock' – the docking window of the delivery in `key`). */
+  kind: 'alarm' | 'asteroid' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj'
   text: string
   /** Stable key (the notifications send each once). */
   key: string
@@ -85,6 +87,37 @@ export interface BriefingInput {
   label: (id: string) => string
   /** Formats an amount with its currency (default '1 240,00 zł'; the hidden amounts mask them). */
   money?: (grosze: number) => string
+  /** Deliveries from the trading account (`calc/dock.ts`, E5). */
+  deliveries?: readonly Delivery[]
+  /** The ICTTJ folder chosen on this computer cannot be read: why. */
+  ictjProblem?: string | null
+}
+
+/** An XTB inflow without its ICTTJ entry is recalled this long. */
+export const MISSING_ENTRY_DAYS = 30
+
+/** '2026-10-16' → '16.10' (the briefing's and the notifications' short date). */
+export const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
+
+/** The line of a delivery in the briefing (null = nothing to say). */
+function deliveryItem(d: Delivery, today: string, zl: (grosze: number) => string): BriefingItem | null {
+  const e = d.entry
+  if (d.state === 'pending') {
+    const text = e
+      ? e.kind === 'withdrawal'
+        ? d.wallet
+          ? `Wypłata z ICTTJ ${zl(d.amount)} (${dm(d.date)}, pula ${ICTJ_POOL_LABEL[e.pool]}) bez pary w mBanku – zadokuj na Portfelu XTB albo poczekaj na import.`
+          : `Wypłata z ICTTJ ${zl(d.amount)} (pula ${ICTJ_POOL_LABEL[e.pool]}) do zadokowania.`
+        : `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}) do potwierdzenia – firewall.`
+      : `Wpływ z XTB ${zl(d.amount)} (${dm(d.date)}) do zadokowania${d.missingEntry ? ' – dopisz wypłatę w ICTTJ' : ''}.`
+    return { level: 'yellow', kind: 'dock', key: `dock:${d.key}`, text }
+  }
+  const what = e?.kind === 'return' ? 'Zwrot do masy' : 'Wypłata'
+  if (d.state === 'waiting' && e) return { level: 'info', kind: 'dock', key: `dock:${d.key}`, text: `${what} z ICTTJ ${zl(d.amount)} (${dm(d.date)}) czeka na import z mBanku.` }
+  if (d.state === 'docked' && d.mismatch) return { level: 'yellow', kind: 'dock', key: `dock:${d.key}`, text: `${what} w ICTTJ z ${dm(d.date)} ma inną kwotę niż operacja w banku – sprawdź wpis w ICTTJ.` }
+  if (d.state === 'docked' && d.missingEntry && daysBetween(d.date, today) <= MISSING_ENTRY_DAYS)
+    return { level: 'info', kind: 'ictj', key: `ictj:${d.key}`, text: `Wpływ z XTB ${zl(d.amount)} z ${dm(d.date)} bez wpisu w ICTTJ – dopisz wypłatę w ICTTJ.` }
+  return null
 }
 
 /** Days after which an import is overdue, and a balance confirmation is due (spec, „Powiadomienia”). */
@@ -140,5 +173,10 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     items.push({ level: 'info', kind: 'balances', key: `balances:${f.today}`, text: confirmed == null ? 'Potwierdź salda kont z bankiem (raz w tygodniu).' : `Salda potwierdzone ${confirmed} dni temu – sprawdź z bankiem.` })
   if (f.loot.month && f.loot.amount > 0)
     items.push({ level: 'yellow', kind: 'loot', key: `loot:${f.loot.month}`, text: `Łupy z poprzedniego miesiąca: ${zl(f.loot.amount)} – podział do 7. dnia, potem trafią do osłon.` })
+  for (const d of o.deliveries ?? []) {
+    const item = deliveryItem(d, f.today, zl)
+    if (item) items.push(item)
+  }
+  if (o.ictjProblem) items.push({ level: 'info', kind: 'ictj', key: `ictj:folder:${f.today}`, text: `ICTTJ: ${o.ictjProblem}` })
   return items
 }

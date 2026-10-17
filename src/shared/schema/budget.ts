@@ -187,6 +187,17 @@ export const importSettingsSchema = z.looseObject({
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 
+// ------------------------------------------------------------------ ICT Trade Journal (E5)
+
+/** What the folder keeps of ICTTJ (the same on every computer; the folder's path is the computer's – T12). */
+export const ictjSettingsSchema = z.looseObject({
+  /** The forecast scenario whose goals are the ship's ICTTJ goals (null = the one changed last in ICTTJ). */
+  forecastId: z.string().max(100).nullable().catch(null).default(null),
+  /** ICTTJ entries that are not to be docked (the money went elsewhere). */
+  skipped: z.array(z.string().max(100)).catch([]).default([])
+})
+export type IctjSettings = z.infer<typeof ictjSettingsSchema>
+
 // ------------------------------------------------------------------ items added by later versions
 
 const starterRule = (n: number, match: string, label: string, categoryId: string): ImportRule => ({
@@ -240,6 +251,7 @@ export const budgetSettingsShape = {
   orders: ordersSchema.prefault({}),
   budget: budgetStartSchema.prefault({}),
   import: importSettingsSchema.prefault({}),
+  ictj: ictjSettingsSchema.prefault({}),
   /** `SEEDS` already added to this folder. */
   seeded: z.array(z.string().max(60)).catch([]).default([])
 }

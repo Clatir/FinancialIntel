@@ -95,7 +95,8 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['asteroid', 'Asteroida (opłata okresowa) – 14 i 3 dni przed terminem'],
   ['importOverdue', 'Zaległy import z mBanku – po 3 dniach'],
   ['balances', 'Potwierdzenie sald – w niedzielę'],
-  ['debriefing', 'Debriefing – 1. dnia miesiąca']
+  ['debriefing', 'Debriefing – 1. dnia miesiąca'],
+  ['ictj', 'Nowa wypłata w ICTTJ do zadokowania']
 ]
 
 /** Ustawienia → Powiadomienia i dźwięki (config.json – this computer only): the quick entry's shortcut too. */

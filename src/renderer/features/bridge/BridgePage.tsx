@@ -21,6 +21,9 @@ import { useCategories } from '../operations/pickers'
 import { newOperation, selectOperation, setFilter } from '../operations/state'
 import { EnvelopeBars } from '../month/EnvelopeBars'
 import { startWizard } from '../wizard/state'
+import { DockPanel } from '../dock/DockPanel'
+import { openDocking, useDeliveries } from '../dock/state'
+import { useIctj } from '../../store/ictj'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).replace('.', ',')} mies.`)
@@ -56,22 +59,26 @@ export type BridgeDetachProps =
   | { panel: 'state'; fleet: BridgeFleet }
   | { panel: 'envelopes'; rows: BridgeFleet['envelopes']; labels: Record<string, string> }
 
-/** Where a click on the bridge leads: a briefing line (by its kind) or the cargo's mass. */
+/** Where a click on the bridge leads: a briefing line (by its kind; its key names a delivery) or the cargo's mass. */
 type BridgeTarget = BriefingItem['kind'] | 'cargo'
 
-function openTarget(t: BridgeTarget): void {
+function openTarget(t: BridgeTarget, key?: string): void {
   if (t === 'asteroid' || t === 'cargo') navigate({ page: 'cargo' })
   else if (t === 'import') navigate({ page: 'import' })
   else if (t === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (t === 'start') startWizard()
+  else if (t === 'dock') {
+    navigate({ page: 'bridge' })
+    if (key?.startsWith('dock:')) openDocking(key.slice('dock:'.length))
+  } else if (t === 'ictj') navigate({ page: 'settings', tab: 'ictj' })
   else navigate({ page: 'month' })
 }
 
 /** A click in a detached panel: the main window goes there. */
 const onBridgeEvent = (e: DetachEvent) => {
-  if (e.type === 'open' && typeof e.target === 'string') openTarget(e.target as BridgeTarget)
+  if (e.type === 'open' && typeof e.target === 'string') openTarget(e.target as BridgeTarget, typeof e.key === 'string' ? e.key : undefined)
 }
-const emitTarget = (target: BridgeTarget) => void api.detachEmit({ type: 'open', target })
+const emitTarget = (target: BridgeTarget, key?: string) => void api.detachEmit({ type: 'open', target, ...(key ? { key } : {}) })
 
 /** The briefing read aloud with a Polish voice of the system (D49), when the system has one. */
 function speak(text: string): boolean {
@@ -101,13 +108,15 @@ export function BridgePage() {
   // The briefing's texts carry amounts (`zl` masks them while hidden – Ctrl+$): written again on a change.
   const hidden = useMachine((s) => s.prefs.hideAmounts)
   const cats = useCategories()
+  const deliveries = useDeliveries()
+  const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
   const items = useMemo(() => {
     if (!fleet || !fi) return []
     const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
     const confirmed = balances.filter((b) => b.kind === 'confirmation').map((b) => b.date).sort().at(-1) ?? null
     const label = (id: string) => containers.find((c) => c.id === id)?.name ?? cats.label(id)
-    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl })
-  }, [fleet, fi, containers, balances, cats, hidden])
+    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem })
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem])
   const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
   const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
   const specs = useMemo(() => {
@@ -151,6 +160,7 @@ export function BridgePage() {
                 <ShipState fleet={view} onOpen={openTarget} />
               </Panel>
             )}
+            {fleet.started && <DockPanel />}
           </div>
           <div className="flex min-w-0 flex-col">
             <Panel title="Koperty" testId="bridge-envelopes" detach={specs.envelopes}>
@@ -226,7 +236,7 @@ function BriefingPanel({ fleet, items, detach }: { fleet: BridgeFleet; items: Br
   )
 }
 
-function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; items: BriefingItem[]; spoken: boolean; onOpen: (t: BridgeTarget) => void }) {
+function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; items: BriefingItem[]; spoken: boolean; onOpen: (t: BridgeTarget, key?: string) => void }) {
   const bias = dailyBias(fleet)
   const d = fleet.daily
   return (
@@ -260,7 +270,7 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
         {items
           .filter((i) => i.kind !== 'start')
           .map((i) => (
-            <button key={i.key} className="flex items-start gap-2 py-0.5 text-left hover:text-fg-strong" onClick={() => onOpen(i.kind)} data-testid="briefing-item" data-kind={i.kind}>
+            <button key={i.key} className="flex items-start gap-2 py-0.5 text-left hover:text-fg-strong" onClick={() => onOpen(i.kind, i.key)} data-testid="briefing-item" data-kind={i.kind}>
               <span className={cx('mt-[5px] h-[6px] w-[6px] shrink-0', i.level === 'red' ? 'bg-down' : i.level === 'yellow' ? 'bg-accent' : 'bg-line-strong')} />
               <span className={cx(i.level === 'red' ? 'text-down' : 'text-fg')}>{i.text}</span>
             </button>

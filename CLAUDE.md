@@ -96,7 +96,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/*`, `tests/fs/*` (folder danych, historia, kopie, watcher, aktualizacje), `tests/e2e/smoke.spec.ts`,
   `tests/update/*` (tylko Windows CI). Zmienne testowe: `FI_USER_DATA`, `FI_DATA_DIR`, `FI_MACHINE_NAME`,
   `FI_DEFAULT_DATA_DIR` (propozycja folderu), `FI_UPDATE_URL`, `FI_UPDATE_CHECK_DELAY_MS`, `FI_UPDATE_TOKEN`,
-  `FI_E2E_EXECUTABLE`; Windows CI: `FI_UPDATE_FROM` / `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E
+  `FI_E2E_EXECUTABLE`, od E5 `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` / `FI_ICTJ_LAUNCH`; Windows CI: `FI_UPDATE_FROM` /
+  `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E
   `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Ikona: `node scripts/make-icon.mjs` (`CHROMIUM_PATH=…` jeśli trzeba) → `resources/icon.png`.
 
@@ -193,6 +194,33 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/notify.test.ts`, `briefing.test.ts`, E2E `tests/e2e/bridge.spec.ts` (okno szybkiego wpisu po
   URL `quick=1`, otwierane `page.evaluate('window.fi.quickOpen()')`).
 
+## Kod (E5 – ICTTJ i dokowanie, grupa C → 1.1.0)
+- Shared:
+  - `ictj.ts` – typy i parsery plików ICTTJ (`parseIctjPayout` → grosze, wydatki pominięte; `parseIctjForecast` → cele
+    z miesiącem; `chosenForecast`, `ICTJ_POOL_LABEL`, `EMPTY_ICTJ`);
+  - `calc/dock.ts` – `deliveries` (wpis ↔ operacja `trading`: kwota, −3 dni … +3 dni robocze; Portfel XTB po oknie
+    i imporcie; wpływ bez wpisu; stany pending / waiting / docked / skipped / before-start – T63), `withDocking` /
+    `previewDocking` (podział silnikiem), `addWorkingDays`;
+  - `calc/goals.ts` – `syncIctjGoals` (cele scenariusza jako rekordy z id ICTTJ – T66), `byPriority`, `renumber`,
+    `goalInflow`, `goalEtas` (T67); `calc/fleet.ts` – `dockingsByTx`, pula Cele najpierw cele ICTTJ, zwrot z puli
+    Podatek z rezerwy (T65);
+  - `schema/budget.ts` – `settings.ictj {forecastId, skipped}`; `schema/records.ts` – `goal.ictj {forecastId, goalId,
+    currency, amount, version}`; `machine.ts` – `notify.ictj`.
+- Main `ictj/`: `reader.ts` (`readIctjFolder`), `source.ts` (`IctjSource`: obserwacja, odczyt co 30 s, `fi:ictj`),
+  `locate.ts` (`suggestIctjDir`, `findIctjExe`); IPC `fi:ictjState`, `ictjSuggest`, `ictjPickDir`, `ictjSetDir`,
+  `ictjOpen`, `ictjProgram`, `ictjPickExe`; `config.json` → `ictj {dir, exe}` (T62).
+- Renderer:
+  - `store/ictj.ts` (`useIctj`, `initIctj`, `setIctjDir`, `openIctj`); `store/fleet.ts` `fleetInputNow`;
+  - `features/dock/` – `state.ts` (`useDeliveries`, `deliveriesNow`, `openDocking`, `openDockingTag`), `actions.ts`
+    (`dockDelivery`, `walletOperation`, `dockingOf`, `skipEntry`), `DockingDialog.tsx` (okno dokowania z animacją),
+    `DockPanel.tsx` (Mostek → „Dokowanie”);
+  - `features/starmap/` – `StarMapPage.tsx` (Mapa gwiezdna), `actions.ts` (`addGoal`, `patchGoal`, `archiveGoal`,
+    `moveGoal`), `sync.ts` (`useIctjGoalSync` w `App`);
+  - `features/settings/IctjTab.tsx` (Ustawienia → ICTTJ); menu boczne „Otwórz ICTTJ”; `PAGES` – pole `ready`.
+- Testy: `tests/unit/dock.test.ts`, `tests/fs/ictj.test.ts`, E2E `tests/e2e/ictj.spec.ts` (`FI_ICTJ_APPDATA`,
+  `FI_ICTJ_LAUNCH=dry`, `FI_ICTJ_DIR` – T69); E2E czytają folder przez `tests/e2e/files.ts` (pomija pliki znikające
+  w trakcie odczytu i pliki tymczasowe).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -247,7 +275,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E2 Import z mBanku → 0.3.0 (grupa A)
 - [x] E3 Kreator startu i plan miesiąca → 1.0.0 (grupa B)
 - [x] E4 Mostek i szybki wpis → wydanie 1.0.0 (grupa B)
-- [ ] E5 ICTTJ i dokowanie
+- [x] E5 ICTTJ i dokowanie → 1.1.0 (grupa C)
 - [ ] E6 Radar i należności
 - [ ] E7 Dowództwo (gra)
 - [ ] E8 Wywiad i raporty

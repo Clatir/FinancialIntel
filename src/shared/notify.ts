@@ -3,9 +3,10 @@
  * shows each once (`key`, remembered on this computer). Nothing during the quiet hours; the morning briefing waits for
  * the first opening of the window after them.
  */
-import { briefing, type BriefingInput } from './calc/briefing'
+import { briefing, dm, type BriefingInput } from './calc/briefing'
 import { dayOfMonth, daysBetween, inClockWindow, monthOf, weekdayOf } from './calc/dates'
 import type { FleetState } from './calc/fleet'
+import { ICTJ_POOL_LABEL } from './ictj'
 import type { NotifyPrefs } from './machine'
 
 export interface Notice {
@@ -14,9 +15,11 @@ export interface Notice {
   title: string
   body: string
   /** Where clicking it leads (App routes it). */
-  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'import' | 'balances' | 'debriefing'
+  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'import' | 'balances' | 'debriefing' | 'dock'
   /** An alarm: its sound. */
   alarm?: boolean
+  /** What exactly a click opens (a delivery: `dock:<key>`); else the tag's screen. */
+  target?: string
 }
 
 export interface NotifyInput extends Omit<BriefingInput, 'fleet'> {
@@ -77,5 +80,16 @@ export function dueNotices(o: NotifyInput): Notice[] {
   // The debriefing of the month just closed: from the 1st, at the first look until the loot's deadline (the 7th).
   if (p.debriefing && dayOfMonth(today) <= 7 && f.start && monthOf(f.start) < f.month)
     out.push({ key: `debriefing:${f.month}`, tag: 'debriefing', title: 'Debriefing miesiąca', body: 'Miesiąc zamknięty – wynik wobec planu i podział łupów (Plan miesiąca).' })
+  // A new payout in ICTTJ (spec: at once): each entry once, still to dock.
+  if (p.ictj)
+    for (const d of o.deliveries ?? []) {
+      const e = d.entry
+      if (!e || (d.state !== 'pending' && d.state !== 'waiting')) continue
+      out.push(
+        e.kind === 'withdrawal'
+          ? { key: `ictj:${e.id}`, tag: 'dock', target: `dock:${d.key}`, title: 'Nowa wypłata w ICTTJ do zadokowania', body: `${o.money(e.amount)} · pula ${ICTJ_POOL_LABEL[e.pool]} · ${dm(e.date)}` }
+          : { key: `ictj:${e.id}`, tag: 'dock', target: `dock:${d.key}`, title: 'Zwrot do masy w ICTTJ', body: `${o.money(e.amount)} – potwierdź w Financial Intel (firewall).` }
+      )
+    }
   return out
 }

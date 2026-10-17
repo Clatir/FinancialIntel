@@ -4,7 +4,7 @@
 **1.0.0 wydane** (PR #4 scalony). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
 (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy
 czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** E5 – ICTTJ i dokowanie, potem E6 – Radar i należności (bez pauzy, jeden PR).
+**Następny krok:** E5 zrobiony (sekcja niżej); E6 – Radar i należności (bez pauzy, ten sam PR).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -83,6 +83,42 @@ całość ok. 4–6 miesięcy (szacunek zgrubny).
    - Bieżące pożyczki (kwota, raty, terminy) – do wpisania po wydaniu 1.1.0.
 4. **Model, thinking, czas:** Opus 5.5 · **max** (z górką – przepływy prawdziwych pieniędzy z zewnątrz i zmiany
    w silniku: dokowanie, pule, pożyczki) · 2–3 h.
+
+## E5 – ICTTJ i dokowanie (17.10.2026)
+
+Zrobione (zakres z „Przed etapem E5”, odpowiedzi D72):
+- Odczyt ICTTJ tylko do odczytu: `payouts/` (wypłaty z pulą, zwroty do masy; wydatki pominięte) i `forecasts/` (cele
+  scenariuszy), z obserwacją zmian i odczytem co 30 s; nowszy format ICTTJ albo zepsuty plik = ostrzeżenie (T62).
+- Ustawienia → ICTTJ: podpowiedź folderu (ścieżka, której ICTTJ używa na tym komputerze), „Wskaż folder…”, wyłączenie;
+  scenariusz celów (domyślnie zmieniony ostatnio); program ICTTJ – zainstalowany znaleziony sam, portable wskazany raz.
+- Dopasowanie wypłat do wpływów z XTB w mBanku (kwota, do 3 dni roboczych), Portfel XTB po oknie i nowym imporcie,
+  wpływ z XTB bez wpisu z przypomnieniem, wpisy sprzed startu pominięte, „Pomiń wpis” (T63).
+- Okno dokowania: źródło z pulą, dopasowane konto (albo nowa operacja na Portfelu XTB), podział proponowany silnikiem
+  według kolejności dokowania do zmiany przed zapisem, firewall przy zwrocie do masy, animacja i dźwięk, „Cofnij”;
+  Mostek → panel „Dokowanie” i pozycje odprawy (T64, T68).
+- Silnik: pula Cele najpierw do celów ICTTJ, zwrot z puli Podatek z rezerwy podatkowej (T65).
+- Mapa gwiezdna (Ctrl+6): cele ICTTJ (tylko do odczytu) i własne na jednej liście priorytetów (przeciąganie, strzałki),
+  kwota wobec celu, termin, ETA z tempa ostatnich miesięcy, archiwum (T66, T67).
+- „Otwórz ICTTJ” w menu bocznym i palecie; powiadomienie „Nowa wypłata w ICTTJ do zadokowania” (T68).
+- Przegląd `/code-review` high: 10 znalezisk, 9 poprawionych:
+  - wybór folderu w trakcie odczytu poprzedniego czyta nowy od razu; zatrzymanie nie zostawia obserwatorów;
+  - Portfel XTB proponowany dopiero, gdy import z mBanku sięga za okno dopasowania (bez podwójnego liczenia);
+  - dwa dokowania jednej operacji – silnik i okno biorą to samo (wcześniejsze);
+  - zadokowana dostawa bez operacji w folderze nie tworzy drugiej operacji;
+  - zwrot do masy nazwany zwrotem w odprawie; zarchiwizowany cel znika z zapisanego podziału;
+  - kliknięcie powiadomienia otwiera tę wypłatę, nie pierwszą z listy; jedna krótka data dla odprawy i powiadomień.
+  Pominięte świadomie: pamięć podręczna plików ICTTJ po czasie modyfikacji – folder ma kilkadziesiąt małych plików,
+  ponowny odczyt co 30 s kosztuje ułamek sekundy.
+- Testy: 301 unit + fs (`tests/unit/dock.test.ts`, `tests/fs/ictj.test.ts`), E2E 12 (`tests/e2e/ictj.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.1.0, Windows):
+1. Ustawienia → ICTTJ: „Użyj tego folderu” (albo „Wskaż folder…”) na każdym komputerze; liczba wypłat się zgadza.
+2. Mostek → „Dokowanie”: wypłata z ICTTJ z wpływem z mBanku (po imporcie) → okno → „Zadokuj”; podział w osłonach /
+   kadłubie / celach jak oczekujesz.
+3. Wypłata na Portfel XTB (bez wpływu w mBanku) → po 3 dniach roboczych i imporcie: „Zadokuj na Portfelu XTB”.
+4. Mapa gwiezdna: cele z prognozy ICTTJ (wybrany scenariusz w Ustawieniach), własny cel, kolejność, ETA.
+5. „Otwórz ICTTJ” w menu bocznym (wersja portable: wskaż plik .exe w Ustawienia → ICTTJ).
+6. Nowa wypłata wpisana w ICTTJ przy otwartym FI → powiadomienie i pozycja na Mostku.
 
 ## E4 – Mostek i szybki wpis (17.10.2026)
 
@@ -355,3 +391,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 17.10.2026 – PR #4 scalony, wydanie 1.0.0 opublikowane; przy sprawdzaniu wyszło, że 0.3.0 nie zostało wydane (E2E
   na `main` – wyścig w pomocniku testu operacji, poprawiony w grupie C); D71 (scalanie bez pytania przy zielonym CI)
   i D72 (odpowiedzi na „Przed etapem E5”); start grupy C na komendę użytkownika.
+- 17.10.2026 – E5 (odczyt ICTTJ, dokowanie z oknem, Portfel XTB, pule Cele i Podatek, Mapa gwiezdna, „Otwórz ICTTJ”,
+  powiadomienie o nowej wypłacie), przegląd i poprawki; dalej E6 bez pauzy.

@@ -140,9 +140,23 @@ export const goalSchema = z.looseObject({
   target: grosze.min(0),
   /** 1 = filled first (D19). */
   priority: z.number().int().min(1).max(999).default(1),
-  /** 'ictj' = a goal of an ICTTJ forecast (read only there, E5). */
+  /**
+   * 'ictj' = a goal of an ICTTJ forecast (E5): its name and target follow ICTTJ (read only), its id is the ICTTJ goal's
+   * own (two computers never make two of one goal); `archived` = gone from the chosen scenario.
+   */
   source: z.enum(['own', 'ictj']).default('own'),
-  ictj: z.looseObject({ forecastId: z.string().max(100), goalId: z.string().max(100) }).nullable().default(null),
+  ictj: z
+    .looseObject({
+      forecastId: z.string().max(100),
+      goalId: z.string().max(100),
+      /** The scenario's currency and the goal's amount there (× 100): a goal of a non-PLN scenario has no target in FI. */
+      currency: z.string().max(3).catch('PLN').default('PLN'),
+      amount: z.number().nullable().catch(null).default(null),
+      /** `updatedAt` of the scenario the record follows: an older copy of it (still syncing) changes nothing. */
+      version: z.string().max(40).catch('').default('')
+    })
+    .nullable()
+    .default(null),
   deadline: isoMonth.nullable().default(null),
   archived: z.boolean().default(false),
   achievedAt: isoDateTime.nullable().default(null),

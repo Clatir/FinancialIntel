@@ -339,3 +339,41 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   (wycinek stanu okrętu, pozycje odprawy, nazwy kopert), a kliknięcie w nim prowadzi główne okno.
 - **T61** Ustawienia: „Warstwy i rozkazy” w `fi.json` (wspólne dla komputerów: cele warstw, przyjęte koszty, rozkazy)
   i „Powiadomienia i dźwięki” w `config.json` (ten komputer: skrót, ukrycie kwot, powiadomienia, dźwięki).
+
+### E5 – ICTTJ i dokowanie (17.10.2026)
+- **T62** Odczyt ICTTJ (`src/main/ictj/`, tylko do odczytu): `reader.ts` czyta wyłącznie kanoniczne pliki
+  `payouts/RRRR/RRRR-MM-DD_ULID.json` i `forecasts/ULID.json` (kopie narzędzi synchronizacji, pliki tymczasowe i reszta
+  folderu są pomijane); kwoty ICTTJ (PLN, liczby) → grosze `Math.round(× 100)`; wydatki pominięte; nieznany rodzaj,
+  nieznana pula (→ zwykłe dokowanie), plik nieczytelny albo nowszy `schemaVersion` – ostrzeżenie, nie błąd.
+  `source.ts`: obserwacja `payouts/` i `forecasts/` (gdy istnieją) i ponowny odczyt co 30 s; do okna idzie tylko
+  zmieniony stan (`fi:ictj`); odczyt folderu, który przestał być wybrany, niczego nie publikuje. Folder i program ICTTJ
+  to ustawienia komputera (`config.json` → `ictj {dir, exe}`); podpowiedź folderu = tylko ścieżka z
+  `%APPDATA%\ICT Trade Journal\config.json` (`dataDir`, w trybie demo `lastRealDir`; też Beta); program: wybrany .exe,
+  inaczej `%LOCALAPPDATA%\Programs\ICT Trade Journal\` albo rejestr (`Uninstall` → `InstallLocation`).
+- **T63** Dostawy (`shared/calc/dock.ts` `deliveries`): wpis ICTTJ ↔ operacja `trading` tej samej kwoty w groszach,
+  data od 3 dni przed wpisem do 3 dni roboczych po nim (pon–pt, bez świąt), najbliższa data, każda raz; zwrot do masy
+  paruje z wypływem do XTB. Bez pary – „czeka na import”; po 3 dniach roboczych **i** z importem mBanku późniejszym niż
+  okno → propozycja Portfela XTB (bez nowego importu dalej czeka – inaczej wpływ policzyłby się dwa razy). Wpływ z XTB
+  bez wpisu → do zadokowania zwykłą kolejnością + przypomnienie (gdy ICTTJ czytany na tym komputerze, 30 dni). Wpisy
+  sprzed startu pominięte; „Pomiń wpis” = `settings.ictj.skipped` (z powrotem: „przywróć”).
+- **T64** Dokowanie = rekord `dockings/*` (pula i `ictjEntryId` wpisu; `split` tylko po zmianie w oknie – bez zmian
+  liczy kolejność dokowania na nowo, gdy dojdą starsze dane); dwa dokowania jednej operacji (dwa komputery naraz) –
+  liczy się wcześniejsze, tak samo w silniku i w oknie (`dockingsByTx`). Dostawa bez pary w banku tworzy przy
+  dokowaniu operację na Portfelu XTB z dniem wpisu; „Cofnij”; ponowne otwarcie zadokowanej = zmiana podziału (bez nowej
+  operacji, gdy jej nie ma w folderze). Okno liczy propozycję samym silnikiem (`withDocking`), pokazuje firewall zwrotu.
+- **T65** Silnik: pula Cele – najpierw cele z prognozy ICTTJ, potem własne, każde wg listy priorytetów (D72); zwrot do
+  masy z puli Podatek wraca z rezerwy podatkowej, bez firewalla.
+- **T66** Cele ICTTJ jako rekordy `goals/<id celu ICTTJ>.json` (`source: 'ictj'`; nazwa, kwota i miesiąc z ICTTJ – w FI
+  tylko do odczytu); `ictj.version` = `updatedAt` scenariusza: starsza kopia scenariusza (OneDrive w trakcie) nic nie
+  zmienia; cel zniknięty albo wyłączony w scenariuszu → `archived` (zachowuje środki, nowe nie trafiają). Scenariusz celów:
+  `settings.ictj.forecastId` (null = zmieniony ostatnio w ICTTJ); scenariusz w innej walucie niż PLN → cele bez kwoty
+  w PLN (kwota oryginalna do wglądu); brak scenariusza → bez zmian.
+- **T67** Mapa gwiezdna: lista priorytetów = `priority` 1…n (przeciąganie i strzałki); ETA (`goalEtas`) przy średniej
+  wpłat do celów z ostatnich pełnych miesięcy budżetu (do 6, z dziennika silnika – `goalInflow`), cele po kolei; nowy
+  cel własny na końcu listy; archiwizacja z „Cofnij”.
+- **T68** Powiadomienie „Nowa wypłata w ICTTJ do zadokowania” (`notify.ictj`, ten komputer): raz na wpis, od razu po
+  zmianie w folderze ICTTJ; 3 i więcej naraz = jedno zbiorcze; kliknięcie otwiera okno tej dostawy. Odprawa: dostawy do
+  zadokowania i czekające na import, rozbieżna kwota, wpływ bez wpisu w ICTTJ, niedostępny folder. Mostek: panel
+  „Dokowanie”; menu boczne: „Otwórz ICTTJ”; Ustawienia → ICTTJ.
+- **T69** Zmienne testowe: `FI_ICTJ_DIR` (folder ICTTJ bez ustawień), `FI_ICTJ_APPDATA` (gdzie szukać config.json ICTTJ),
+  `FI_ICTJ_LAUNCH=dry` (bez uruchamiania programu).

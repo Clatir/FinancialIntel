@@ -17,6 +17,10 @@ import { MonthPage } from '../features/month/MonthPage'
 import { CargoPage } from '../features/cargo/CargoPage'
 import { WizardPage } from '../features/wizard/WizardPage'
 import { BridgePage } from '../features/bridge/BridgePage'
+import { StarMapPage } from '../features/starmap/StarMapPage'
+import { useIctjGoalSync } from '../features/starmap/sync'
+import { DockingDialog } from '../features/dock/DockingDialog'
+import { initIctj, openIctj } from '../store/ictj'
 import { loadMachinePrefs, toggleHideAmounts, useMachine } from '../store/machine'
 import { initQuickHost } from '../store/quickHost'
 import { initNotifier } from '../store/notifier'
@@ -24,7 +28,7 @@ import { useFleet } from '../store/fleet'
 import { api } from '../lib/api'
 import { plnText, setAmountsHidden } from '../components/fields'
 import { Toasts } from '../components/Toasts'
-import { IconGear, IconSync } from '../components/icons'
+import { IconExternal, IconGear, IconSync } from '../components/icons'
 import { cx } from '../components/ui'
 import { PageBar } from './PageBar'
 import { Banners } from './Banners'
@@ -173,13 +177,21 @@ function SideMenu({ route }: { route: Route }) {
             label={p.label}
             sub={p.sub}
             keys={`Ctrl ${p.key}`}
-            dim={p.mvp ? undefined : `etap ${p.stage} – po wydaniu 1.0`}
+            dim={p.ready ? undefined : `etap ${p.stage} – w przygotowaniu`}
             testId={`nav-${p.page}`}
           />
         ))}
       </div>
       <div className="flex-1" />
       <div className="flex flex-col border-t border-line py-1">
+        <NavItem
+          active={false}
+          onClick={() => void openIctj(() => navigate({ page: 'settings', tab: 'ictj' }))}
+          icon={<IconExternal size={16} />}
+          label="Otwórz ICTTJ"
+          sub="ICT Trade Journal"
+          testId="nav-open-ictj"
+        />
         <NavItem active={route.page === 'sync'} onClick={() => navigate({ page: 'sync' })} icon={<IconSync size={16} />} label="Synchronizacja" badge={issues} testId="nav-sync" />
         <NavItem active={route.page === 'settings'} onClick={() => navigate({ page: 'settings' })} icon={<IconGear size={16} />} label="Ustawienia" keys="Ctrl ," testId="nav-settings" />
         <button
@@ -204,6 +216,7 @@ function Page({ route }: { route: Route }) {
   if (route.page === 'cargo') return <CargoPage />
   if (route.page === 'wizard') return <WizardPage />
   if (route.page === 'bridge') return <BridgePage />
+  if (route.page === 'starmap') return <StarMapPage />
   const def = pageDef(route.page)
   return def ? <PlaceholderPage key={def.page} def={def} /> : null
 }
@@ -227,9 +240,11 @@ export function App() {
   const route = useUi((s) => s.route)
   useGlobalHotkeys()
   useBackNavigation()
+  useIctjGoalSync()
   useEffect(() => {
     void boot()
     void loadMachinePrefs()
+    initIctj()
     initQuickHost()
     initNotifier()
     initUpdates()
@@ -258,6 +273,7 @@ export function App() {
         </main>
       </div>
       <CommandPalette />
+      <DockingDialog />
       <TrayStatus />
       <ShortcutsHelp />
       <RemoteChangesDialog />

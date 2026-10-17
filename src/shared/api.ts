@@ -5,6 +5,7 @@ import type { RecordTypes } from './records'
 import type { SettingsFile } from './schema'
 import type { PendingUpdate, UpdatePrefs, UpdateState } from './update'
 import type { MachinePrefs } from './machine'
+import type { IctjSnapshot } from './ictj'
 
 export interface RecordEntry<T> {
   record: T
@@ -124,6 +125,14 @@ export interface MachineConfig {
   tray: TrayPrefs
   /** The shortcut, notifications, sounds and the hiding of amounts of this computer (`shared/machine.ts`). */
   prefs: MachinePrefs
+  /** ICT Trade Journal on this computer (D72): its data folder (read only) and its program chosen by hand (portable). */
+  ictj: { dir: string | null; exe: string | null }
+}
+
+/** ICTTJ's program on this computer: chosen by hand (a portable copy) or found installed. */
+export interface IctjProgram {
+  exe: string | null
+  source: 'chosen' | 'installed' | null
 }
 
 export interface TrayPrefs {
@@ -244,6 +253,20 @@ export interface FiApi {
   /** A Windows notification; clicking it shows the window and sends `tag` back. */
   notify(n: { title: string; body: string; tag: string; silent?: boolean }): Promise<void>
   onNotificationClick(cb: (tag: string) => void): () => void
+  /** The ICTTJ folder of this computer as read now (payouts and forecast goals, D72). */
+  ictjState(): Promise<IctjSnapshot>
+  /** The folder ICTTJ itself uses on this computer (only its path is read), to confirm; null = none found. */
+  ictjSuggest(): Promise<string | null>
+  /** A folder chosen in a dialog (not used yet); null = cancelled. */
+  ictjPickDir(): Promise<string | null>
+  /** Use this folder on this computer (null = none): it must hold ICTTJ's data; read and watched from now on. */
+  ictjSetDir(dir: string | null): Promise<IctjSnapshot>
+  /** Start ICTTJ (the chosen program, else the installed one); `ok: false` = not found – choose its .exe. */
+  ictjOpen(): Promise<{ ok: boolean; message: string }>
+  ictjProgram(): Promise<IctjProgram>
+  /** Choose ICTTJ's .exe in a dialog ('pick'; cancelled = unchanged) or forget the choice ('clear'). */
+  ictjPickExe(mode: 'pick' | 'clear'): Promise<IctjProgram>
+  onIctj(cb: (snap: IctjSnapshot) => void): () => void
 }
 
 /** What the quick entry window shows (sent by the main window, which owns the data). */

@@ -11,13 +11,14 @@ import { AccountsTab } from './AccountsTab'
 import { CategoriesTab } from './CategoriesTab'
 import { ImportTab } from './ImportTab'
 import { LayersTab, NotifyTab } from './MachineTabs'
+import { IctjTab } from './IctjTab'
 import { IconFolder, IconPlus, IconSync } from '../../components/icons'
 import { Field, NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 
 /**
  * Tabs of the settings: the foundation's and the budget's (accounts, categories, layers and orders, the import's rules)
- * and this computer's (notifications, sounds, the quick entry's shortcut); ICTTJ comes with E5.
+ * and this computer's (notifications, sounds, the quick entry's shortcut, the ICTTJ folder and program – E5).
  */
 export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'general', label: 'Okręt' },
@@ -25,6 +26,7 @@ export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'categories', label: 'Kategorie' },
   { id: 'layers', label: 'Warstwy i rozkazy' },
   { id: 'import', label: 'Import z banku' },
+  { id: 'ictj', label: 'ICTTJ' },
   { id: 'notify', label: 'Powiadomienia i dźwięki' },
   { id: 'folder', label: 'Folder i kopie' },
   { id: 'system', label: 'Zasobnik i start' },
@@ -63,6 +65,7 @@ export function SettingsPage() {
           {tab === 'categories' && <CategoriesTab />}
           {tab === 'layers' && <LayersTab />}
           {tab === 'import' && <ImportTab />}
+          {tab === 'ictj' && <IctjTab />}
           {tab === 'notify' && <NotifyTab />}
           {tab === 'folder' && <FolderTab />}
           {tab === 'system' && <SystemTab />}

@@ -164,6 +164,16 @@ export function cargoMass(containers: readonly Container[], month: string, salar
   return { monthly, pct, limitPct, over: pct != null && pct > limitPct }
 }
 
+/**
+ * The docking of each operation: two computers docking one delivery before OneDrive brought the other's file give two
+ * records – the earlier (by its creation, then id) counts, the same in the engine and in the docking window.
+ */
+export function dockingsByTx(dockings: readonly Docking[]): Map<string, Docking> {
+  const out = new Map<string, Docking>()
+  for (const d of [...dockings].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))) if (!out.has(d.transactionId)) out.set(d.transactionId, d)
+  return out
+}
+
 // ------------------------------------------------------------------ the whole state
 
 export interface FleetInput {
@@ -285,7 +295,7 @@ export function computeFleet(input: FleetInput): FleetState {
   const containers = input.containers ?? []
   const goalsAll = [...(input.goals ?? [])].sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
   const plans = [...(input.months ?? [])].sort((a, b) => a.month.localeCompare(b.month))
-  const dockingByTx = new Map((input.dockings ?? []).map((d) => [d.transactionId, d]))
+  const dockingByTx = dockingsByTx(input.dockings ?? [])
   const loansById = new Map((input.loans ?? []).map((l) => [l.id, l]))
   const txs = input.transactions.filter((t) => t.date <= today)
 
@@ -367,7 +377,7 @@ export function computeFleet(input: FleetInput): FleetState {
   const alarms: Alarm[] = []
   const log: FleetEvent[] = []
 
-  const activeGoals = () => goalsAll.filter((g) => !g.archived).map((g) => ({ id: g.id, amount: goalAmount.get(g.id) ?? 0, target: g.target }))
+  const activeGoals = () => goalsAll.filter((g) => !g.archived).map((g) => ({ id: g.id, amount: goalAmount.get(g.id) ?? 0, target: g.target, ictj: g.source === 'ictj' }))
   const addGoal = (id: string, v: number, moves: Moves) => {
     goalAmount.set(id, (goalAmount.get(id) ?? 0) + v)
     moves.goals = { ...moves.goals, [id]: (moves.goals?.[id] ?? 0) + v }
@@ -391,10 +401,14 @@ export function computeFleet(input: FleetInput): FleetState {
     if (split.hull) moves.hull = (moves.hull ?? 0) + split.hull
     for (const [id, g] of Object.entries(split.goals)) addGoal(id, g, moves)
   }
-  /** Straight into the goals by priority (the ICTTJ pool „Cele”); what they do not need stays in the shields. */
+  /**
+   * Straight into the goals (the ICTTJ pool „Cele”): the goals of the ICTTJ forecast first – the money was set aside
+   * for them – then the own ones, each by the common priority list (D72); what they do not need stays in the shields.
+   */
   const fillGoals = (v: number, moves: Moves) => {
     let rest = v
-    for (const g of activeGoals()) {
+    const goals = activeGoals()
+    for (const g of [...goals.filter((x) => x.ictj), ...goals.filter((x) => !x.ictj)]) {
       const take = Math.min(rest, Math.max(0, g.target - g.amount))
       if (take > 0) addGoal(g.id, take, moves)
       rest -= take
@@ -550,6 +564,16 @@ export function computeFleet(input: FleetInput): FleetState {
             moves.taxHold = amt
           } else dock(amt, t.date, moves)
         } else if (amt < 0) {
+          // The tax money going back to the trading capital (an ICTTJ return of the pool „Podatek”): out of the tax
+          // hold, not the budget's money – no firewall.
+          const d = dockingByTx.get(t.id)
+          if (d?.pool === 'tax') {
+            const fromHold = Math.min(-amt, Math.max(0, taxHold))
+            taxHold -= fromHold
+            if (fromHold) moves.taxHold = -fromHold
+            if (-amt > fromHold) drawShields(-amt - fromHold, moves)
+            break
+          }
           // A top-up of the trading account: only from „wolne do decyzji” with full shields and hull (D23, firewall).
           const tg = targetsAt(t.date)
           const allowed = tg.shields != null && tg.hull != null && shields + amt >= tg.shields && hull >= tg.hull
