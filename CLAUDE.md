@@ -16,8 +16,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   postępu (etap / grupa, model i thinking **z górką**, szacowany czas pracy Claude'a, stan) → pauza (użytkownik zmienia
   model / thinking).
 - **Bez komendy użytkownika nie zaczynaj kolejnego etapu ani grupy** (D67). Grupy etapów idących jednym ciągiem (A: E1
-  [+ E2], B: E3 + E4, C: E5 + E6, D: E7 + E8, E: E9) – w grupie bez pauzy między etapami, jeden PR i wydanie na grupę;
-  tabela w `docs/postep.md`.
+  [+ E2], B: E3 + E4, C: E5 + E6, D: E7 + E8; E9 wypada – D74, bez asystenta AI) – w grupie bez pauzy między etapami,
+  jeden PR i wydanie na grupę; tabela w `docs/postep.md`.
 - **Scalanie (D71):** PR grupy scalam sam, gdy CI (Linux i Windows) jest zielone, nie ma konfliktu ani otwartych uwag
   i nic nie czeka na decyzję użytkownika. Po scaleniu sprawdź, czy CI na `main` wydało wersję (wydanie publikuje job
   Windows; czerwone E2E na `main` = brak wydania – tak przepadło 0.3.0).
@@ -292,4 +292,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E6 Radar i należności → 1.1.0 (grupa C)
 - [ ] E7 Dowództwo (gra)
 - [ ] E8 Wywiad i raporty
-- [ ] E9 Pierwszy oficer (opcjonalnie)
+- ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)
