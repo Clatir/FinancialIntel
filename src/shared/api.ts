@@ -1,5 +1,6 @@
 // adapted from ICTTJ src/shared/api.ts @ 84a8339
 /** Contract between the main process (data folder owner) and the renderer. */
+import type { XlsxSheet } from './export/xlsx'
 import type { Collection, FileKind } from './paths'
 import type { RecordTypes } from './records'
 import type { SettingsFile } from './schema'
@@ -191,6 +192,11 @@ export interface FiApi {
   rescan(): Promise<void>
   /** ZIP of the whole data folder (without backups). */
   exportZip(): Promise<string | null>
+  /** A text file (CSV) saved where the user says; its path, or null when cancelled (E8). */
+  saveTextFile(defaultName: string, content: string, filter: { name: string; extensions: string[] }): Promise<string | null>
+  saveXlsx(defaultName: string, sheets: XlsxSheet[]): Promise<string | null>
+  /** A report's self-contained HTML printed to an A4 PDF. */
+  savePdf(defaultName: string, html: string): Promise<string | null>
   copyText(text: string): Promise<void>
   listBackups(): Promise<{ dir: string; files: BackupInfo[] }>
   backupNow(): Promise<string>

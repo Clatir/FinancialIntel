@@ -66,7 +66,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
   (pożyczki), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
-  `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), później `calc/intel.ts` (analizy ICT),
+  `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
   powiadomienia w `index.ts`, `tray.ts`, `update/`, `config.ts` (ustawienia komputera w userData), `log.ts`; od E5
@@ -248,6 +248,20 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   i Silver Bullet w odprawie; `EnvelopeBars` `elapsed` (Equilibrium) i `Meter` `tick`; Mapa gwiezdna – znaczek DOL.
 - Testy: `tests/unit/game.test.ts`, E2E `tests/e2e/command.spec.ts`.
 
+## Kod (E8 – Wywiad i raporty, grupa D → 1.2.0)
+- Shared: `calc/intel.ts` – `balancesAt` (sumy narastające), `wealthCurve`, `structureOf` (BOS / CHoCH – T81),
+  `killzoneGrid`, `spendingByMonth`, `rangeForecast`, `logAccuracy` (T82), `weekNumbers`, `nextWeekEnvelopes`,
+  `yearNumbers`, `yearWealth`, `goalsReachedIn`, `defaultWatchMonday` / `WATCH_TIME` (T83); `export/budget.ts` –
+  `toCsv` / `plnCell`, `operationRows` / `operationsCsv` / `operationsSheet`, `monthRows` / `monthsCsv` / `monthsSheet`,
+  `reportHtml` (T84); `export/xlsx.ts` (z ICTTJ); `notify.ts` – tag `reports`, `notify.watch`.
+- Main: `export/pdf.ts`, `export/xlsx.ts` (z ICTTJ); IPC `fi:saveTextFile`, `fi:saveXlsx`, `fi:savePdf`.
+- Renderer: `features/intel/` – `IntelPage.tsx` (Wywiad, Ctrl+9), `charts.tsx` (`WealthChart` – lightweight-charts
+  z markerami i drawdownem, `KillzoneMap` – SVG); `features/reports/` – `ReportsPage.tsx` (Raporty, Ctrl+0: odprawa,
+  raport wachty, debriefing i przegląd roczny z PDF, eksport), `state.ts` (`useReportsUi`, `openWatchReport`);
+  `features/bridge/BridgePage.tsx` – `useBriefingItems` (wspólne z Raportami).
+- Testy: `tests/unit/intel.test.ts`, `export.test.ts`, E2E `tests/e2e/intel.spec.ts` (okno zapisu podstawione przez
+  `app.evaluate`).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -305,5 +319,5 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E5 ICTTJ i dokowanie → 1.1.0 (grupa C)
 - [x] E6 Radar i należności → 1.1.0 (grupa C)
 - [x] E7 Dowództwo (gra) → 1.2.0 (grupa D)
-- [ ] E8 Wywiad i raporty
+- [x] E8 Wywiad i raporty → 1.2.0 (grupa D)
 - ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)

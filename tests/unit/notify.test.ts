@@ -48,6 +48,13 @@ describe('powiadomienia (spec, D70)', () => {
     expect(dueNotices(input(f, '21:05', { prefs: { ...DEFAULT_MACHINE_PREFS.notify, evening: false } }))).toEqual([])
   })
 
+  it('raport wachty w niedzielę od 18:00, raz w tygodniu (E8)', () => {
+    const f = fleetAt('2026-10-18T08:00:00.000Z')
+    expect(dueNotices(input(f, '17:59')).map((n) => n.tag)).not.toContain('reports')
+    expect(dueNotices(input(f, '18:30')).filter((n) => n.tag === 'reports').map((n) => [n.key, n.title])).toEqual([['watch:2026-10-18', 'Raport wachty']])
+    expect(dueNotices(input(f, '18:30', { prefs: { ...DEFAULT_MACHINE_PREFS.notify, watch: false } })).map((n) => n.tag)).not.toContain('reports')
+  })
+
   it('przekroczenie (dźwięk alarmu) i koperta ponad 80%, raz na miesiąc i kategorię', () => {
     const f = fleetAt('2026-10-14T08:00:00.000Z', [['2026-10-05', 260, AUTO], ['2026-10-14', 900, FOOD]])
     const n = dueNotices(input(f, '12:00'))

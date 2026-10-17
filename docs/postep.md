@@ -41,6 +41,27 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
 
+## E8 – Wywiad i raporty (17.10.2026)
+
+Zrobione (zakres i odpowiedzi z „Przed etapem E7” – D73):
+- Wywiad (Ctrl+9): krzywa majątku tydzień po tygodniu z drawdownem i oznaczeniami BOS / CHoCH, Killzones wydatków
+  (dzień × godzina), FVG kopert dowolnego miesiąca, wydatki w czasie z ładownią jako Order Block, prognoza zasięgu bez
+  wypłat, trafność dziennika kapitańskiego; okres 3 / 6 / 12 miesięcy (T81, T82).
+- Raporty (Ctrl+0): odprawa, raport wachty (tydzień w liczbach, dni gry, killzone, misja, koperty na najbliższe dni),
+  debriefing z FVG, grą, dziennikiem i łupami, przegląd roczny; PDF debriefingu i przeglądu; eksport CSV i Excel
+  (operacje, miesiące) i pełna kopia ZIP; powiadomienie „Raport wachty” w niedzielę od 18:00 (T83, T84).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione:
+  - salda tygodni liczone sumami narastającymi (bez kwadratowego kopiowania), analizy przeliczane z dniem, nie co minutę;
+  - przegląd roczny: majątek na granicach roku, cele osiągnięte w tym roku (z dziennika silnika);
+  - szczyt krzywej od pierwszego punktu; CSV odporny na formuły (apostrof);
+  - powiadomienie otwiera raport bieżącego tygodnia (stan Raportów poza stroną); łupy z częścią do osłon;
+  - koperty na najbliższe dni – tylko do końca miesiąca, z liczbą dni; usunięty martwy kod.
+- Testy: 342 unit + fs (`tests/unit/intel.test.ts`, `export.test.ts`), E2E 15 (`tests/e2e/intel.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.2.0, Windows):
+1. Wywiad: krzywa majątku z historią z importu, Killzones (wpisy z godziną), FVG poprzedniego miesiąca.
+2. Raporty: raport wachty, debriefing i przegląd roczny do PDF, eksport CSV / Excel – otwarcie w Excelu.
+
 ## E7 – Dowództwo (17.10.2026)
 
 Zrobione (zakres i odpowiedzi z „Przed etapem E7” – D73):
@@ -59,7 +80,7 @@ Zrobione (zakres i odpowiedzi z „Przed etapem E7” – D73):
   - degradacja działa też po obniżeniu progu; wybór misji „import” z danych sprzed poniedziałku;
   - dziennik importów jako obiekt (scalanie z drugiego komputera po kluczach);
   - święta z dziennika wachty (bez drugiego wyprowadzenia, daty warszawskie); progi klas z jednego miejsca.
-- Testy: 328 unit + fs (`tests/unit/game.test.ts` – 17), E2E 14 (`tests/e2e/command.spec.ts`).
+- Testy: 327 unit + fs (`tests/unit/game.test.ts` – 17), E2E 14 (`tests/e2e/command.spec.ts`).
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.2.0, Windows):
 1. Dowództwo: data startu gry (jutro po pierwszym uruchomieniu), ocena dnia „na razie”, misja od pierwszego pełnego tygodnia.
@@ -535,3 +556,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
   E9 wypada).
 - 17.10.2026 – E7 (Dowództwo: ocena i zamrażanie dni, stopnie, misje, osiągnięcia, dziennik wachty, smaczki ICT), przegląd
   i poprawki; zgłoszenie użytkownika o grupowaniu importu – pomysły podane, czeka na wybór.
+- 17.10.2026 – E8 (Wywiad: krzywa majątku z BOS / CHoCH, Killzones, FVG, Order Block, zasięg, dziennik; Raporty i eksport
+  CSV / Excel / PDF / ZIP, raport wachty w niedzielę), przegląd i poprawki.

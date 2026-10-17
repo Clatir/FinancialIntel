@@ -108,27 +108,10 @@ function speak(text: string): boolean {
 export function BridgePage() {
   const fleet = useFleet()
   const fi = useData((s) => s.fi)
-  const containers = useRecordList('containers')
-  const balances = useRecordList('balances')
   const transactions = useRecordList('transactions')
   const shortcut = useMachine((s) => s.prefs.quickShortcut)
-  // The briefing's texts carry amounts (`zl` masks them while hidden – Ctrl+$): written again on a change.
-  const hidden = useMachine((s) => s.prefs.hideAmounts)
   const cats = useCategories()
-  const deliveries = useDeliveries()
-  const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
-  const game = useGameRecords()
-  const items = useMemo(() => {
-    if (!fleet || !fi) return []
-    const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
-    const confirmed = balances.filter((b) => b.kind === 'confirmation').map((b) => b.date).sort().at(-1) ?? null
-    const label = (id: string) => containers.find((c) => c.id === id)?.name ?? cats.label(id)
-    // This week's mission of the command (E7).
-    const week = isoWeekOf(fleet.today)
-    const m = game.flatMap((g) => g.missions).find((x) => x.week === week)
-    const mission = m ? { week, title: missionTitle(m.template), text: missionText(m, cats.label, zl) } : null
-    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem, mission })
-  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game])
+  const items = useBriefingItems(fleet)
   const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
   const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
   const specs = useMemo(() => {
@@ -292,6 +275,30 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
       {!spoken && <span className="text-[11px] text-dim">Brak głosu systemu do odsłuchu.</span>}
     </div>
   )
+}
+
+/** The morning briefing's items (the bridge, the reports): the texts carry amounts – written again when they hide (Ctrl+$). */
+export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
+  const fi = useData((s) => s.fi)
+  const containers = useRecordList('containers')
+  const balances = useRecordList('balances')
+  const hidden = useMachine((s) => s.prefs.hideAmounts)
+  const cats = useCategories()
+  const deliveries = useDeliveries()
+  const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
+  const game = useGameRecords()
+  return useMemo(() => {
+    if (!fleet || !fi) return []
+    const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
+    const confirmed = balances.filter((b) => b.kind === 'confirmation').map((b) => b.date).sort().at(-1) ?? null
+    const label = (id: string) => containers.find((c) => c.id === id)?.name ?? cats.label(id)
+    // This week's mission of the command (E7).
+    const week = isoWeekOf(fleet.today)
+    const m = game.flatMap((g) => g.missions).find((x) => x.week === week)
+    const mission = m ? { week, title: missionTitle(m.template), text: missionText(m, cats.label, zl) } : null
+    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem, mission })
+    // `hidden`: the amounts of the texts mask on a change.
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game])
 }
 
 /** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */
