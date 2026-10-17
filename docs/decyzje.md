@@ -205,6 +205,9 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     tekstu (wspólne słowa, ucięta nazwa, literówka), lista „to chyba to samo” do zatwierdzenia;
   - (6) nauka z decyzji – po decyzji dla grupy aplikacja proponuje regułę na słowo („wszystko zawierające ‚cukiernia’”)
     i od razu pokazuje, ile innych operacji obejmie.
+- **D79** (17.10.2026) Zgłoszenie użytkownika po 1.2.2: rozpoznawanie podobnych transakcji nie działa – wiele nazw ma
+  datę transakcji, a to samo słowo w nazwach (Wrocław, „bar”) łączy niezwiązane transakcje. Poprawka 1.2.3: nazwy bez
+  dopisków banku, ostrożniejsze podobieństwo i propozycje, łączenie tylko parami, „Rozłącz wszystkie”.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -594,3 +597,29 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zwrotu, od domownika, przelew własny…).
 - **T99** Pomiar 1.2.2: na pliku użytkownika (271 operacji) 2 pary podobnych nazw (obie trafne) i propozycje słowa przy
   4 grupach; syntetyczna historia (4000 operacji, ~1000 marek, 400 reguł) – podobne nazwy 64 ms, propozycja ok. 30 ms.
+- **T100** Dopiski banku (`shared/import/names.ts` `cleanBankName`, D79): z nazwy znika „DATA TRANSAKCJI: …” (i
+  operacji, wykonania, księgowania, waluty), każda data i godzina, zamaskowany numer karty i „Ref …”; miasto po „/” na
+  końcu (historia rachunku mBanku: „SKLEP /MIASTO DATA TRANSAKCJI: RRRR-MM-DD”) tylko w nazwie sklepu i tylko wielkimi
+  literami – nigdy druga osoba wspólnego konta w przelewie („JAN KOWALSKI / ANNA KOWALSKA”) ani nazwa wpisana ręcznie;
+  nazwa bez niczego innego zostaje. Parser: kontrahent bez dopisków, płatność kartą z historii (`ZAKUP`, `BLIK ZAKUP`,
+  `PŁATNOŚĆ`, `TRANSAKCJA`, `ZWROT` bez nadawcy) – sklep z tytułu, bez tytułu; `description` bez zmian, więc klucz wiersza
+  (`rowIdentity`) ten sam co we wcześniejszych importach. `brandOf` czyści też nazwy zapisane wcześniej (Operacje),
+  `counterpartyKey` – bez miasta. Reguły nauczone przed 1.2.3: `MbankRow.bankName` / `BankRow.bankName` = nazwa
+  dokładnie tak, jak czytały ją wcześniejsze wersje ('' = nazwał ją rodzaj operacji), `RuleTarget.legacy` = jej klucze
+  (`raw`) – szukane po marce i nazwie połączonej, przed kluczem całej nazwy; także w Operacjach.
+- **T101** Podobne nazwy ostrożniej: słowo, które jest w nazwach więcej niż 4 różnych marek pliku (liczone też dla sieci),
+  nie wyróżnia nazwy (miasto, słowa banku, rodzaj lokalu) – sieć z 5 i więcej oddziałami spoza słownika łączy się więc
+  propozycją słowa albo „Połącz nazwy”, nie parą; miasta, rodzaje miejsc i instytucji (`isKindWord`: „pracownia”,
+  „szkoła”, „klub” – nie są ogólne dla słów kluczowych) i słowa banku też nie; „ta sama nazwa na początku” tylko dla
+  słowa wyróżniającego; reguła nauczona na nazwie z dopiskami sklepu z pliku nie jest „inną nazwą”. Łączenie wyłącznie
+  parami („Połącz wszystkie” usunięte – zła para mogła połączyć się bez czytania). Ustawienia → „Połączone nazwy”:
+  połączenia z 1.2.2 na nazwach z dopiskami oznaczone jako nieaktywne (nic już nie łączą) i „Usuń nieaktywne”, a także
+  „Rozłącz wszystkie” – oba z „Cofnij”.
+- **T102** Propozycja słowa: bez słów z nazw lub tytułów ponad połowy marek pliku (przy co najmniej 6 markach) i bez
+  słów banku; słowo łapie inne tylko z polską końcówką rzeczownika albo przymiotnika (-a, -e, -i, -o, -u, -y, -ie, -om,
+  -ów, -em, -ej, -ym, -im, -ich, -ych, -ego, -emu, -iej, -iem, -ach, -ami, -owi, -owie, -owa, -owy, -owe, -owej, -owym,
+  -owego) – inne przedłużenie to inne słowo („roma” – „roman”), a propozycja go nie pokazuje. Słowo kluczowe złożone
+  tylko ze słów ogólnych i słów banku („data”, „sklep”) jest odrzucane (`saveKeywordRule`); rodzaje miejsc nie.
+- **T103** Test E2E na syntetycznej historii rachunku (`tests/fixtures/mbank/historia_rachunku.csv`, bez danych
+  użytkownika): sklep z trzech dni w jednej grupie, sklepy jednego miasta bez par, zapisane nazwy bez dopisków, opis z
+  banku z datą.

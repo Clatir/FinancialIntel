@@ -1,5 +1,22 @@
 # Financial Intel – zmiany
 
+## 1.2.3
+
+Poprawka „Podobnych nazw” i propozycji słowa (zgłoszenie użytkownika, D79): w historii rachunku z mBanku nazwa sklepu
+ma dopiski banku („ŻABKA Z1234 /WROCŁAW DATA TRANSAKCJI: 2026-10-01”), przez co jeden sklep rozpadał się na wiele
+nazw, a niezwiązane sklepy wyglądały na „podobne”.
+
+- Nazwa sklepu bez dopisków banku: daty transakcji i innych dat, godziny, numeru karty, „Ref”, miasta po „/” – jeden
+  sklep to jedna grupa niezależnie od dnia; opis operacji z banku zostaje bez zmian (kolejne importy rozpoznają te same
+  wiersze). Przelewy na wspólne konto („JAN KOWALSKI / ANNA KOWALSKA”) zachowują całą nazwę. Reguły zapamiętane na
+  nazwach z dopiskami działają dalej, także w Operacjach.
+- „Podobne nazwy” ostrożniej: słowo z nazw wielu różnych firm (miasto, „bar”, słowa banku) nie łączy nazw; tylko
+  pojedyncze „Połącz” dla każdej pary (bez „Połącz wszystkie”). Ustawienia → Import z banku → „Połączone nazwy”:
+  połączenia z 1.2.2 zrobione na nazwach z datą są oznaczone jako nieaktywne – „Usuń nieaktywne”; do tego „Rozłącz
+  wszystkie”, oba z „Cofnij”.
+- Propozycja słowa bez słów banku i słów prawie wszystkich nazw pliku; słowo z końcówką tylko polską („kurs” → „kursy”,
+  ale nie „roma” → „roman”); zbyt ogólne słowo kluczowe („data”, „sklep”) jest odrzucane z wyjaśnieniem.
+
 ## 1.2.2
 
 Import z mBanku uczy się dalej (decyzja D78 – pomysły 5 i 6 z propozycji, nadal bez AI).

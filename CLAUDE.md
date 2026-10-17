@@ -311,6 +311,17 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   „Połączone nazwy” (`MergedNames`).
 - Testy: `tests/unit/import-similar.test.ts`, E2E `tests/e2e/learning.spec.ts`.
 
+## Kod (1.2.3 – poprawka podobnych nazw, D79)
+- `shared/import/names.ts` `cleanBankName(name, {town})` – bez „DATA TRANSAKCJI: …”, dat, godzin, numeru karty, „Ref”;
+  `town` = miasto po „/” (wielkie litery, tylko nazwa sklepu); `counterpartyKey(name, raw)`, `brandOf(…, {raw})` – klucze
+  sprzed 1.2.3; `mbank.ts` – kontrahent bez dopisków, sklep z tytułu historii (`PURCHASE`), `MbankRow.bankName` /
+  `BankRow.bankName` (nazwa jak czytały ją wcześniejsze wersje, '' = rodzaj operacji); `classify.ts` `RuleTarget.legacy`.
+- `similar.ts` – słowo z nazw ponad `MAX_BRANDS_OF_WORD` (4) marek nie wyróżnia, `isKindWord` (rodzaje miejsc), bez
+  „Połącz wszystkie”; `learn.ts` – słowa ponad połowy marek pomijane, `ENDINGS` (polskie końcówki); `rules.ts`
+  `inactiveAlias` / `removeInactive` / `unmergeAll`, `saveKeywordRule` odrzuca słowa ogólne.
+- Testy: `tests/unit/import-similar.test.ts` („dopiski banku”), `mbank.test.ts`, E2E `learning.spec.ts` na
+  `tests/fixtures/mbank/historia_rachunku.csv` (syntetyczna historia rachunku).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -372,3 +383,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)
 - [x] 1.2.1 Grupowanie importu z mBanku, decyzje zbiorcze, duplikaty (D75–D77)
 - [x] 1.2.2 Podobne nazwy i propozycja reguły z liczbą operacji (D78)
+- [x] 1.2.3 Poprawka podobnych nazw: dopiski banku w nazwach, wspólne słowa (D79)

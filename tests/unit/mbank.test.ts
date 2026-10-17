@@ -88,6 +88,7 @@ describe('CSV z mBanku – odczyt', () => {
       '01.10.2026;15.10.2026;',
       '#Data operacji;#Data księgowania;#Opis operacji;#Tytuł;#Nadawca/Odbiorca;#Numer konta;#Kwota;#Saldo po operacji;',
       '2026-10-01;2026-10-02;ZAKUP PRZY UŻYCIU KARTY;"ŻABKA Z1234 WARSZAWA";"";\'\';-12,34;1 000,00;',
+      '2026-10-02;2026-10-03;ZAKUP PRZY UŻYCIU KARTY;"BAR POD LIPA        /OLESNICA                DATA TRANSAKCJI: 2026-10-01";"";\'\';-20,00;980,00;',
       '2026-10-03;2026-10-03;PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY;"zwrot za obiad";"ANNA KOWALSKA  UL. TESTOWA 1";\'12105000000000000000000001\';50,00;1 050,00;',
       '2026-10-04;2026-10-04;ZAKUP PRZY UŻYCIU KARTY;"SHOP";"";\'\';-10,00 EUR;1 050,00;',
       ';',
@@ -97,12 +98,16 @@ describe('CSV z mBanku – odczyt', () => {
     const f = parseMbank(decodeText(cp1250(csv)))
     expect(f.format).toBe('historia')
     expect(f.rows.map((r) => [r.date, r.counterparty, r.title, r.amount, r.balanceAfter])).toEqual([
-      ['2026-10-01', 'ŻABKA Z1234 WARSZAWA', 'ŻABKA Z1234 WARSZAWA', -1234, 100000],
+      ['2026-10-01', 'ŻABKA Z1234 WARSZAWA', '', -1234, 100000],
+      ['2026-10-02', 'BAR POD LIPA', '', -2000, 98000],
       ['2026-10-03', 'ANNA KOWALSKA', 'zwrot za obiad', 5000, 105000]
     ])
-    expect(f.rows[1]!.operation).toBe('PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY')
-    expect(f.rows[1]!.accountNo).toBe('12105000000000000000000001')
-    expect(f.skipped).toEqual([{ line: 9, reason: 'kwota w EUR – FI prowadzi tylko PLN' }])
+    // The shop without the bank's additions (the town after „/”, the date of the transaction); the row's key as before.
+    expect(f.rows[1]).toMatchObject({ bankName: 'BAR POD LIPA /OLESNICA DATA TRANSAKCJI: 2026-10-01', description: 'ZAKUP PRZY UŻYCIU KARTY BAR POD LIPA /OLESNICA DATA TRANSAKCJI: 2026-10-01' })
+    expect(f.rows[0]!.bankName).toBeUndefined()
+    expect(f.rows[2]!.operation).toBe('PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY')
+    expect(f.rows[2]!.accountNo).toBe('12105000000000000000000001')
+    expect(f.skipped).toEqual([{ line: 10, reason: 'kwota w EUR – FI prowadzi tylko PLN' }])
   })
 
   it('nie CSV z mBanku: czytelny błąd', () => {

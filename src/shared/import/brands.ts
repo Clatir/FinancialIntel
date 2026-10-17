@@ -8,7 +8,7 @@
  * matches any letter.
  */
 import { fold } from '../fold'
-import { counterpartyKey, withoutLegalForms } from './names'
+import { cleanBankName, counterpartyKey, withoutLegalForms } from './names'
 
 /** A shop's code („Z6512”). */
 const STORE_CODE = /^[a-z]{1,2}\d{2,}$/
@@ -553,6 +553,7 @@ const GENERIC = new Set(
     'karta karty kartu terminal numer pay payment payments faktura faktury fakture rachunek rachunku zamowienie zamowienia dla przy pod nad oraz ' +
     'plus srodki srodkow tytul tytulem przekaz telefon telefonu nazwa adres kwota media visa mastercard debit ecommerce commerce ' +
     'rynek dworzec pasaz hala targ targowisko bazar park stare miasto nowe glowny glowna glowne gorny dolny centralny centralna ' +
+    'data transakcji transakcja operacji operacja wykonania ksiegowania waluty ref nr kod pln eur usd ' +
     'styczen stycznia luty lutego marzec marca kwiecien kwietnia maj maja czerwiec czerwca lipiec lipca sierpien sierpnia wrzesien wrzesnia ' +
     'pazdziernik pazdziernika listopad listopada grudzien grudnia'
   ).split(' ')
@@ -560,6 +561,18 @@ const GENERIC = new Set(
 
 /** A word no counterparty is told by (`GENERIC`), a number or a word of one or two letters. */
 export const isGenericWord = (word: string): boolean => word.replace(/[^a-z?]/g, '').length < 3 || GENERIC.has(word)
+
+/**
+ * A kind of place or institution („pracownia”, „szkola”, „klub”): it says what, not which – no similar names are told
+ * by it (1.2.3), though it may well be a keyword of the user's.
+ */
+const KINDS = new Set(
+  (
+    'pracownia pralnia szkola fundacja stowarzyszenie przedszkole urzad poczta biuro agencja instytut akademia uniwersytet ' +
+    'politechnika spoldzielnia wspolnota parafia klub osrodek zespol bank lokal przedsiebiorstwo zaklady uslug internetowy'
+  ).split(' ')
+)
+export const isKindWord = (word: string): boolean => KINDS.has(word)
 
 /** The first keyword of `KEYWORDS` in the words of a name or a title, and where (`at`, `length` words – „weterynaryjna”). */
 export function keywordIn(ws: readonly string[]): { keyword: Keyword; at: number; length: number } | null {
@@ -634,10 +647,14 @@ function withoutCities(ws: readonly string[]): string[] {
 /**
  * The brand of a counterparty's name. `dictionary` false = only the cleaned name (a person paid by BLIK P2P, an ATM
  * in a shop); `transfer` = the name of a transfer's other side, often a person: a chain only at the start of the
- * name („PGE OBRÓT”, not „ANNA BIEDRONKA”), and no city is cut („JAN KALISZ” is not „JAN KONIN”).
+ * name („PGE OBRÓT”, not „ANNA BIEDRONKA”), and no city is cut („JAN KALISZ” is not „JAN KONIN”). The bank's additions
+ * (a date of the transaction, the town after „/” – `cleanBankName`) are no part of it, unless `raw` (the key versions
+ * before 1.2.3 made – their rules still decide).
  */
-export function brandOf(name: string, opts: { dictionary?: boolean; transfer?: boolean } = {}): BrandMatch {
-  const cleaned = withoutLegalForms(fold(name)).trim().replace(WWW, '$1').replace(DOMAIN, ' ').replace(PROCESSOR, '').replace(SHOPIFY, '')
+export function brandOf(name: string, opts: { dictionary?: boolean; transfer?: boolean; raw?: boolean } = {}): BrandMatch {
+  // The town after „/” of a shop's name (not of a transfer's side, not of a person paid by BLIK).
+  const shop = !opts.transfer && opts.dictionary !== false
+  const cleaned = withoutLegalForms(fold(opts.raw ? name : cleanBankName(name, { town: shop }))).trim().replace(WWW, '$1').replace(DOMAIN, ' ').replace(PROCESSOR, '').replace(SHOPIFY, '')
   const ws = words(cleaned)
   if (opts.dictionary !== false)
     for (const b of BRAND_PATTERNS) if (b.patterns.some((p) => find(ws, opts.transfer ? { ...p, start: true } : p) >= 0)) return { key: b.brand.id, brand: b.brand, words: [] }
@@ -645,5 +662,5 @@ export function brandOf(name: string, opts: { dictionary?: boolean; transfer?: b
   while (rest.length > 1 && COUNTRY.has(rest.at(-1)!)) rest = rest.slice(0, -1)
   const kept = rest.filter((w) => !/^\d+$/.test(w) && !STORE_CODE.test(w))
   const key = kept.join('').replace(/[^a-z0-9]/g, '')
-  return key ? { key, brand: null, words: kept } : { key: counterpartyKey(name), brand: null, words: [] }
+  return key ? { key, brand: null, words: kept } : { key: counterpartyKey(name, opts.raw), brand: null, words: [] }
 }

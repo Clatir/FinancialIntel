@@ -21,53 +21,13 @@ const operations = (n: number) => countLabel(n, 'operacja', 'operacje', 'operacj
 
 const WHY: Record<SimilarWhy, string> = { words: 'te same słowa', cut: 'ucięta nazwa', typo: 'literówka', first: 'ta sama nazwa na początku' }
 
-/**
- * Merge the pairs' names (each connected set into the one with the user's rules, else the biggest); with „Cofnij”. Of
- * many pairs at once, one that would join two names with the user's rules (directly or through a third) is left for
- * the user to merge on its own – then the rule of the one merged into decides both.
- */
-function mergePairs(pairs: readonly SimilarPair[]): void {
-  const guard = pairs.length > 1
-  // Pairs that share a name are one set: „A ~ B”, „B ~ C” → A, B, C.
-  const parent = new Map<string, string>()
-  const ruled = new Set<string>()
-  const find = (k: string): string => {
-    const p = parent.get(k) ?? k
-    if (p === k) return k
-    const root = find(p)
-    parent.set(k, root)
-    return root
-  }
-  const sides = new Map<string, SimilarSide>()
-  let left = 0
-  for (const p of pairs) {
-    const [ra, rb] = [find(p.a.brand), find(p.b.brand)]
-    if (ra === rb) continue
-    const rulesA = ruled.has(ra) || p.a.rules.length > 0
-    const rulesB = ruled.has(rb) || p.b.rules.length > 0
-    if (guard && rulesA && rulesB) {
-      left++
-      continue
-    }
-    sides.set(p.a.brand, p.a)
-    sides.set(p.b.brand, p.b)
-    parent.set(ra, rb)
-    if (rulesA || rulesB) ruled.add(rb)
-  }
-  const sets = new Map<string, SimilarSide[]>()
-  for (const [k, side] of sides) {
-    const root = find(k)
-    sets.set(root, [...(sets.get(root) ?? []), side])
-  }
-  const merges = [...sets.values()].map((set) => {
-    const into = mergeTarget(set)
-    return { into: { key: into.brand, label: into.label }, from: set.filter((s) => s !== into).map((s) => ({ key: s.brand, label: s.label })) }
-  })
-  const undo = merges.length ? mergeNames(merges) : null
-  const names = merges.reduce((n, m) => n + m.from.length, 0)
-  const note = left ? ` Pominięte: ${left} – połączyłyby nazwy z różnymi regułami; połącz je pojedynczo.` : ''
-  if (!undo) toast(left ? note.trim() : 'Te nazwy są już połączone.', 'info', 5000)
-  else toast(`Połączono ${countLabel(names, 'nazwę', 'nazwy', 'nazw')} – kolejne importy też je połączą.${note}`, 'success', 6000, { label: 'Cofnij', run: undo })
+/** One pair's names as one: into the one with the user's rules, else the bigger; with „Cofnij” (each pair on its own – 1.2.3). */
+function mergePair(p: SimilarPair): void {
+  const into = mergeTarget([p.a, p.b])
+  const from = into === p.a ? p.b : p.a
+  const undo = mergeNames([{ into: { key: into.brand, label: into.label }, from: [{ key: from.brand, label: from.label }] }])
+  if (!undo) toast('Te nazwy są już połączone.', 'info', 4000)
+  else toast(`Połączono „${from.label}” z „${into.label}” – kolejne importy też je połączą.`, 'success', 6000, { label: 'Cofnij', run: undo })
 }
 
 function Side({ side, catLabel }: { side: SimilarSide; catLabel: (id: string | null) => string }) {
@@ -95,20 +55,11 @@ export function SimilarPanel() {
   if (!pairs.length) return null
   const catLabel = (id: string | null) => cats.label(id)
   return (
-    <Panel
-      title="Podobne nazwy"
-      actions={
-        pairs.length > 1 && (
-          <button className="btn h-[22px]" disabled={readOnly} onClick={() => mergePairs(pairs)} data-testid="similar-merge-all">
-            Połącz wszystkie ({pairs.length})
-          </button>
-        )
-      }
-    >
+    <Panel title="Podobne nazwy">
       <div className="flex flex-col gap-1 text-[12px]" data-testid="similar-names">
         <p className="text-[11.5px] text-muted">
-          Te nazwy wyglądają na jedną firmę albo osobę (inna kolejność słów, ucięta nazwa, literówka). „Połącz” – jedna grupa i jedna reguła, także w kolejnych
-          importach; połączenie cofniesz w Ustawieniach → Import z banku.
+          Te nazwy wyglądają na jedną firmę albo osobę (inna kolejność słów, ucięta nazwa, literówka). Sprawdź każdą parę: „Połącz” – jedna grupa i jedna reguła,
+          także w kolejnych importach; połączenie cofniesz w Ustawieniach → Import z banku.
         </p>
         {pairs.map((p) => (
           <div key={p.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="similar-pair" data-key={p.key}>
@@ -119,7 +70,7 @@ export function SimilarPanel() {
               <Badge>{WHY[p.why]}</Badge>
             </span>
             <span className="flex shrink-0 gap-1.5">
-              <button className="btn h-[22px]" disabled={readOnly} onClick={() => mergePairs([p])} data-testid="similar-merge">
+              <button className="btn h-[22px]" disabled={readOnly} onClick={() => mergePair(p)} data-testid="similar-merge">
                 Połącz
               </button>
               <button className="btn btn-ghost h-[22px]" disabled={readOnly} onClick={() => dismissSimilar(p.key)} data-testid="similar-dismiss">

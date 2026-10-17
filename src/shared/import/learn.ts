@@ -28,7 +28,8 @@ const isTransfer = (operation: string) => opKindOf(operation) === 'transfer'
  * Words of the file that say where or who, not what: the last word of the names of a chain and another brand, or of
  * three brands (a town – „DINO ŚWIEBODZICE”, „APTEKA ŚWIEBODZICE”; not „PIEKARNIA GRZYBEK”, „CUKIERNIA GRZYBEK”), and
  * the words of the names of the transfers' other sides (people – „JAN” in a title „ZA BILETY JAN”; in any form:
- * „PREZENT DLA ANNY” has „ANNA”). Computed once per plan's groups.
+ * „PREZENT DLA ANNY” has „ANNA”); and the words in the names and titles of most brands of the file (what the bank
+ * writes to every operation – 1.2.3). Computed once per plan's groups.
  */
 const NOT_WHAT = new WeakMap<readonly ImportGroup[], { places: Set<string>; people: string[] }>()
 function notWhat(groups: readonly ImportGroup[]): { places: Set<string>; people: string[] } {
@@ -37,8 +38,14 @@ function notWhat(groups: readonly ImportGroup[]): { places: Set<string>; people:
   const lastOf = new Map<string, { brands: Set<string>; chain: boolean }>()
   const places = new Set<string>()
   const people = new Set<string>()
+  const brandsOf = new Map<string, Set<string>>()
   for (const g of groups)
     for (const p of g.rows) {
+      for (const w of [...words(p.row.counterparty), ...words(p.row.title)]) {
+        const at = brandsOf.get(w)
+        if (at) at.add(g.brand)
+        else brandsOf.set(w, new Set([g.brand]))
+      }
       // The words of the name without its legal form („GRZYBEK SP. Z O.O.” is one word), numbers and codes.
       const all = words(withoutLegalForms(fold(p.row.counterparty))).filter((w) => /[a-z]{3}/.test(w))
       const ws = all.filter((w) => !isGenericWord(w))
@@ -53,6 +60,8 @@ function notWhat(groups: readonly ImportGroup[]): { places: Set<string>; people:
       lastOf.set(last, at)
     }
   for (const [w, at] of lastOf) if ((at.chain && at.brands.size >= 2) || at.brands.size >= 3) places.add(w)
+  const brands = new Set(groups.map((g) => g.brand)).size
+  if (brands >= 6) for (const [w, at] of brandsOf) if (at.size * 2 > brands) places.add(w)
   const out = { places, people: [...people] }
   NOT_WHAT.set(groups, out)
   return out
@@ -70,18 +79,23 @@ function formOf(word: string, name: string): boolean {
 /** The decisions a keyword rule holds. */
 const KEYWORD_KINDS: readonly string[] = ['expense', 'income', 'transfer']
 
-/** Letters a keyword's word may go on by and still be the same word (an ending: „cukierni” – „cukiernia”). */
-const ENDING = 2
+/**
+ * What a keyword's word may go on by and still be the same word – a Polish ending, folded („cukierni” – „cukiernia”,
+ * „kurs” – „kursy”), not just any letters („roma” – „roman” is another word).
+ */
+const ENDINGS = new Set(
+  ['a', 'e', 'i', 'o', 'u', 'y', 'ie', 'om', 'ow', 'em', 'ej', 'ym', 'im', 'ich', 'ych', 'ego', 'emu', 'iej', 'iem', 'ach', 'ami', 'owi', 'owie', 'owa', 'owy', 'owe', 'owej', 'owym', 'owego']
+)
 
 /**
- * How a keyword catches a row's words (a keyword's last word may go on): as the same word or its ending ('near'), only
- * inside a longer, other word ('far' – „auto” in „AUTOMATSPEC”), or not at all.
+ * How a keyword catches a row's words (a keyword's last word may go on): as the same word or with an ending ('near'),
+ * only inside a longer, other word ('far' – „auto” in „AUTOMATSPEC”, „roma” in „ROMAN”), or not at all.
  */
 function catchOf(ws: readonly string[], keyword: string): 'near' | 'far' | null {
   let far = false
   for (const w of ws) {
     if (!sameWord(w, keyword, true)) continue
-    if (w.length - keyword.length <= ENDING) return 'near'
+    if (w.length === keyword.length || ENDINGS.has(w.slice(keyword.length))) return 'near'
     far = true
   }
   return far ? 'far' : null

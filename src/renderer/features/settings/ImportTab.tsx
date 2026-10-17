@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { TX_KIND_LABEL, type BrandAlias, type ImportRule, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
+import { toast } from '../../store/ui'
+import { countLabel } from '../../lib/format'
 import { IconPlus } from '../../components/icons'
 import { Panel, TextField } from '../../components/ui'
 import { KeywordRules } from '../import/KeywordRules'
-import { clearDismissedSimilar, deleteRule, setOwnNames, unmergeName } from '../import/rules'
+import { clearDismissedSimilar, deleteRule, inactiveAlias, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
 import { useAccounts, useCategories } from '../operations/pickers'
 
 const NO_RULES: ImportRule[] = []
@@ -17,8 +19,42 @@ function MergedNames() {
   const aliases = useData((s) => s.fi?.settings.import.aliases ?? NO_ALIASES)
   const dismissed = useData((s) => Object.keys(s.fi?.settings.import.notSimilar ?? NO_DISMISSED).length)
   const list = Object.entries(aliases).sort((a, b) => b[1].at.localeCompare(a[1].at) || a[0].localeCompare(b[0]))
+  const inactive = list.filter(([, a]) => inactiveAlias(a)).length
   return (
-    <Panel title="Połączone nazwy">
+    <Panel
+      title="Połączone nazwy"
+      actions={
+        <div className="flex gap-1.5">
+          {inactive > 0 && (
+            <button
+              type="button"
+              className="btn h-[22px]"
+              title="Połączenia z 1.2.2 zrobione na nazwach z datą transakcji – nic już nie łączą"
+              onClick={() => {
+                const undo = removeInactive()
+                if (undo) toast(`Usunięto ${countLabel(inactive, 'nieaktywne połączenie', 'nieaktywne połączenia', 'nieaktywnych połączeń')}.`, 'success', 6000, { label: 'Cofnij', run: undo })
+              }}
+              data-testid="aliases-remove-inactive"
+            >
+              Usuń nieaktywne ({inactive})
+            </button>
+          )}
+          {list.length > 1 && (
+            <button
+              type="button"
+              className="btn h-[22px]"
+              onClick={() => {
+                const undo = unmergeAll()
+                if (undo) toast(`Rozłączono ${countLabel(list.length, 'nazwę', 'nazwy', 'nazw')} – każda wraca do własnej grupy.`, 'success', 6000, { label: 'Cofnij', run: undo })
+              }}
+              data-testid="aliases-unmerge-all"
+            >
+              Rozłącz wszystkie
+            </button>
+          )}
+        </div>
+      }
+    >
       <p className="mb-2 text-[11.5px] text-muted">
         Nazwy, które przy imporcie połączyłeś jako jedną firmę albo osobę („Podobne nazwy”, „Połącz nazwy”): jedna grupa i jedna reguła. Rozłączona nazwa
         wraca do własnej grupy (i do reguły, którą miała wcześniej).
@@ -30,6 +66,7 @@ function MergedNames() {
             <span className="truncate" title={`klucz: ${key} → ${a.to}`}>
               <span className="text-fg-strong">{a.label || key}</span>
               <span className="text-muted"> = {a.toLabel || a.to}</span>
+              {inactiveAlias(a) && <span className="text-dim"> · nieaktywne (nazwa z datą transakcji, 1.2.2)</span>}
             </span>
             <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => unmergeName(key)} data-testid="alias-unmerge">
               rozłącz

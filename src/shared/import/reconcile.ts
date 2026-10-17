@@ -484,6 +484,7 @@ export function buildImport(
     key: p.key,
     description: p.row.description,
     counterparty: p.row.counterparty,
+    ...(p.row.bankName !== undefined ? { bankName: p.row.bankName } : {}),
     operation: p.row.operation,
     category: p.row.category,
     pending: p.row.pending,
