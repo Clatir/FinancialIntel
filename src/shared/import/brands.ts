@@ -51,7 +51,8 @@ function pattern(src: string): Pattern {
   return { words: words(src.replace(/^\^|\*$/g, '')), prefix: src.endsWith('*'), start: src.startsWith('^') }
 }
 
-function sameWord(text: string, word: string, prefix: boolean): boolean {
+/** A word of a text is `word` (or goes on from it, `prefix`); a „?” of the text is any letter. */
+export function sameWord(text: string, word: string, prefix: boolean): boolean {
   if (prefix ? text.length < word.length : text.length !== word.length) return false
   for (let i = 0; i < word.length; i++) if (text[i] !== word[i] && text[i] !== '?') return false
   return true
@@ -384,6 +385,11 @@ export const BRANDS: readonly Brand[] = [
 
 const BRAND_PATTERNS = BRANDS.map((b) => ({ brand: b, patterns: b.patterns.map(pattern) }))
 
+const BRAND_BY_ID = new Map(BRANDS.map((b) => [b.id, b]))
+
+/** The chain of the dictionary with this brand key (a key merged into a chain by the user takes its category). */
+export const brandById = (id: string): Brand | null => BRAND_BY_ID.get(id) ?? null
+
 // ------------------------------------------------------------------ keywords
 
 export interface Keyword {
@@ -521,6 +527,40 @@ export const KEYWORDS: readonly Keyword[] = [
 
 const KEYWORD_PATTERNS = KEYWORDS.map((k) => ({ keyword: k, patterns: k.patterns.map(pattern) }))
 
+/** Every word of the keywords' patterns („kawiarni*”, „stacja paliw*”): it says what a place is, not which one. */
+const KEYWORD_WORDS = KEYWORD_PATTERNS.flatMap((k) => k.patterns.flatMap((p) => p.words.map((w, i) => ({ w, prefix: p.prefix && i === p.words.length - 1 }))))
+
+const KEYWORD_WORD_MEMO = new Map<string, boolean>()
+
+/** A word of a built-in keyword („kawiarnia”, „stacja”, „pizzeria”). */
+export function isKeywordWord(word: string): boolean {
+  let hit = KEYWORD_WORD_MEMO.get(word)
+  if (hit === undefined) KEYWORD_WORD_MEMO.set(word, (hit = KEYWORD_WORDS.some((k) => sameWord(word, k.w, k.prefix))))
+  return hit
+}
+
+/**
+ * Words that tell no counterparty apart (1.2.2): a shop, a firm, the bank's own words, a country, a month of a
+ * transfer's title („ZA PAŹDZIERNIK”), legal forms written out. Folded.
+ */
+const GENERIC = new Set(
+  (
+    'sklep sklepy sklepik kiosk market markety centrum salon studio firma uslugi usluga uslugowy uslugowa handel handlowy handlowa handlowe ' +
+    'ph phu fhu ppuh pphu phup ppu sc zaklad oddzial filia punkt sprzedaz hurtownia galeria dom polska polski polskie poland polsce ' +
+    'www com net online shop store express ekspres mini maxi super the and plac ulica aleja osiedle spolka akcyjna jawna komandytowa cywilna ' +
+    'grupa group company international service services serwis system systems tech partner partners center centre kraj kraju ' +
+    'zakup zakupy platnosc platnosci przelew przelewy przelewu blik zwrot zwrotu wplata wyplata oplata oplaty prowizja transakcja transakcje ' +
+    'karta karty kartu terminal numer pay payment payments faktura faktury fakture rachunek rachunku zamowienie zamowienia dla przy pod nad oraz ' +
+    'plus srodki srodkow tytul tytulem przekaz telefon telefonu nazwa adres kwota media visa mastercard debit ecommerce commerce ' +
+    'rynek dworzec pasaz hala targ targowisko bazar park stare miasto nowe glowny glowna glowne gorny dolny centralny centralna ' +
+    'styczen stycznia luty lutego marzec marca kwiecien kwietnia maj maja czerwiec czerwca lipiec lipca sierpien sierpnia wrzesien wrzesnia ' +
+    'pazdziernik pazdziernika listopad listopada grudzien grudnia'
+  ).split(' ')
+)
+
+/** A word no counterparty is told by (`GENERIC`), a number or a word of one or two letters. */
+export const isGenericWord = (word: string): boolean => word.replace(/[^a-z?]/g, '').length < 3 || GENERIC.has(word)
+
 /** The first keyword of `KEYWORDS` in the words of a name or a title, and where (`at`, `length` words – „weterynaryjna”). */
 export function keywordIn(ws: readonly string[]): { keyword: Keyword; at: number; length: number } | null {
   for (const k of KEYWORD_PATTERNS)
@@ -565,6 +605,17 @@ export interface BrandMatch {
   key: string
   /** The chain of the dictionary; null = not one of them. */
   brand: Brand | null
+  /** The words the key is made of (a name outside the dictionary; none for a chain): what similar names compare (1.2.2). */
+  words: string[]
+}
+
+const CITY_WORD_MEMO = new Map<string, boolean>()
+
+/** A word of a city's name („nowy”, „sacz”, „zdroj”): never a keyword of its own (1.2.2). */
+export function isCityWord(word: string): boolean {
+  let hit = CITY_WORD_MEMO.get(word)
+  if (hit === undefined) CITY_WORD_MEMO.set(word, (hit = CITIES.some((p) => p.words.some((w) => sameWord(word, w, false)))))
+  return hit
 }
 
 /** The words of a name without the cities in it – unless nothing would be left. */
@@ -589,12 +640,10 @@ export function brandOf(name: string, opts: { dictionary?: boolean; transfer?: b
   const cleaned = withoutLegalForms(fold(name)).trim().replace(WWW, '$1').replace(DOMAIN, ' ').replace(PROCESSOR, '').replace(SHOPIFY, '')
   const ws = words(cleaned)
   if (opts.dictionary !== false)
-    for (const b of BRAND_PATTERNS) if (b.patterns.some((p) => find(ws, opts.transfer ? { ...p, start: true } : p) >= 0)) return { key: b.brand.id, brand: b.brand }
+    for (const b of BRAND_PATTERNS) if (b.patterns.some((p) => find(ws, opts.transfer ? { ...p, start: true } : p) >= 0)) return { key: b.brand.id, brand: b.brand, words: [] }
   let rest = opts.transfer ? [...ws] : withoutCities(ws)
   while (rest.length > 1 && COUNTRY.has(rest.at(-1)!)) rest = rest.slice(0, -1)
-  const key = rest
-    .filter((w) => !/^\d+$/.test(w) && !STORE_CODE.test(w))
-    .join('')
-    .replace(/[^a-z0-9]/g, '')
-  return { key: key || counterpartyKey(name), brand: null }
+  const kept = rest.filter((w) => !/^\d+$/.test(w) && !STORE_CODE.test(w))
+  const key = kept.join('').replace(/[^a-z0-9]/g, '')
+  return key ? { key, brand: null, words: kept } : { key: counterpartyKey(name), brand: null, words: [] }
 }

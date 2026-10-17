@@ -17,7 +17,7 @@ import { queryAmount } from '../operationsView'
 import type { ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, upsertRule, type ClassifyContext, type DecisionSource, type Direction, type ImportDecision } from './classify'
+import { classifyRow, counterpartyKey, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
 import { rowKeys, type MbankFile, type MbankRow } from './mbank'
 
 /** Days around the bank's date a manual entry may be (spec: ±3). */
@@ -73,10 +73,14 @@ interface PlannedRow {
   row: MbankRow
   key: string
   group: string
-  /** The brand key (`brandOf`): a decision of the group is remembered by it. */
+  /** The brand key (`brandOf`, with the user's merges): a decision of the group is remembered by it. */
   brand: string
   /** The chain's name when the dictionary knows it. */
   brandLabel: string | null
+  /** The words of the name's own brand key (1.2.2: similar names compare them). */
+  words: string[]
+  /** What its rule is looked up by (1.2.2: a proposed keyword is tried on it). */
+  target: RuleTarget
   direction: Direction
   decision: ImportDecision
   hint: string | null
@@ -180,10 +184,12 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     plans[c.i] = { status: 'merge', row, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount', ask: !sure }
   }
 
+  const classified = file.rows.map((row, i) => (plans[i] ? null : classifyRow(row, ctx)))
+  shareMerged(classified, file.rows)
   const rows: RowPlan[] = file.rows.map((row, i) => {
     const p = plans[i]
     if (p) return p
-    const { decision, hint, brand, direction } = classifyRow(row, ctx)
+    const { decision, hint, brand, direction, target } = classified[i]!
     return {
       status: deletedKeys.has(keys[i]!) ? 'deleted' : 'new',
       row,
@@ -191,6 +197,8 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
       group: groupKey(brand.key, direction, decision),
       brand: brand.key,
       brandLabel: brand.brand?.label ?? null,
+      words: brand.words,
+      target,
       direction,
       decision,
       hint
@@ -202,6 +210,43 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   // Only a list of operations shows pending rows (the account history has the booked ones only).
   const vanished = period && file.format === 'lista' ? mine.filter((t) => t.bank?.pending && !used.has(t.id) && t.date >= period.from && t.date <= period.to) : []
   return { accountId, rows, vanished, period }
+}
+
+/**
+ * Names the user merged (1.2.2) are one counterparty, so one group: a row of one name nothing recognized takes what
+ * another name of it is recognized as most often – its rule, its chain, a keyword of its name („MOKKA” as „KAWIARNIA
+ * MOKKA”). The app's own recognition (an ATM, an own transfer), a keyword of a title and a container's payment are
+ * about their own operation: never passed on.
+ */
+function shareMerged(list: Array<Classified | null>, rows: readonly MbankRow[]): void {
+  const byBrand = new Map<string, number[]>()
+  list.forEach((c, i) => {
+    if (!c) return
+    const k = `${c.brand.key}|${c.direction}`
+    const at = byBrand.get(k)
+    if (at) at.push(i)
+    else byBrand.set(k, [i])
+  })
+  for (const at of byBrand.values()) {
+    if (new Set(at.map((i) => list[i]!.target.raw)).size < 2) continue
+    const donors = new Map<string, { i: number; n: number }>()
+    for (const i of at) {
+      const d = list[i]!.decision
+      if (d.source === 'none' || d.source === 'builtin' || d.byTitle || d.containerId) continue
+      const sig = proposalSig(d)
+      const prev = donors.get(sig)
+      donors.set(sig, { i: prev?.i ?? i, n: (prev?.n ?? 0) + 1 })
+    }
+    const best = [...donors.values()].sort((a, b) => b.n - a.n || a.i - b.i)[0]
+    if (!best) continue
+    const donor = list[best.i]!
+    const name = rows[best.i]!.counterparty || rows[best.i]!.description
+    for (const i of at) {
+      const c = list[i]!
+      // A container is linked by its exact payee (`classifyRow`), not passed on.
+      if (c.decision.source === 'none') list[i] = { ...c, decision: { ...donor.decision, containerId: null, ruleId: null, reason: `jak „${name}” (połączone nazwy)` } }
+    }
+  }
 }
 
 // ------------------------------------------------------------------ groups and themes (1.2.1, D75)
@@ -223,6 +268,8 @@ export interface ImportGroup {
   group: string
   brand: string
   direction: Direction
+  /** A chain of the dictionary (never offered as a similar name – 1.2.2). */
+  chain: boolean
   /** The chain's name, else the name the bank writes most often. */
   label: string
   /** The names the bank wrote (more than one = merged by the brand). */
@@ -294,6 +341,7 @@ export function importGroups(plan: ImportPlan | null): ImportGroup[] {
       group,
       brand: first.brand,
       direction: first.direction,
+      chain: first.brandLabel != null,
       label: first.brandLabel ?? most(names)!,
       names: [...names.keys()],
       rows,

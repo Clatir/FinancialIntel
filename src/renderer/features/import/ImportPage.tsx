@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
-import { importGroups, importThemes, joins, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { importThemes, joins, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
 import { TX_KIND_LABEL, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
@@ -16,23 +16,24 @@ import { confirmBalance } from '../balances/actions'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { DuplicatesPanel } from './DuplicatesPanel'
 import { KeywordRules } from './KeywordRules'
+import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { BULK_OPTIONS, OPTIONS, choiceFor, optionOf, type Option } from './options'
 import {
   acceptGroupHint,
   acceptHints,
   acceptSure,
-  chooseGroup,
   chooseRow,
   chooseSelected,
   chooseTheme,
   clearGroup,
   clearImportSelection,
   closeImport,
+  decideGroup,
   hintable,
   loadImportFile,
   pickImportFile,
-  replanIfRulesChanged,
+  replanIfChanged,
   runImport,
   selectImport,
   selectedRowKeys,
@@ -47,6 +48,7 @@ import {
   skipSelected,
   themeStatus,
   useImport,
+  useImportGroups,
   type ThemeStatus
 } from './state'
 
@@ -345,6 +347,7 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
   const skip = useImport((s) => s.choices.skip)
   const checked = useImport((s) => !!s.selected.groups[g.group])
   const selectedRows = useImport((s) => s.selected.rows)
+  const proposing = useImport((s) => s.lastDecided === g.group && !s.noProposal[g.group])
   const cats = useCategories()
   const [open, setOpen] = useState(false)
   const partial = Array.isArray(found)
@@ -372,7 +375,7 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
         <span className={cx('num shrink-0 text-right', g.sum > 0 ? 'text-up' : 'text-fg-strong')}>{signedPln(g.sum)}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-12">
-        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => chooseGroup(g.group, c)} testId="import-group" />
+        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} testId="import-group" />
         <Badge tone={g.source === 'none' && !own && !themeDecided ? 'warn' : 'default'} title={g.reason}>
           {badge}
         </Badge>
@@ -390,6 +393,7 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
         {!own && !themeDecided && g.source !== 'rule' && <span className="truncate text-[11px] text-dim">{g.reason}</span>}
         {g.byTitle && <span className="text-[11px] text-dim">z tytułu przelewu – bez reguły</span>}
       </div>
+      {own && proposing && <RuleProposal g={g} choice={own} />}
       {choice.kind === 'expense' && !choice.categoryId && g.hint && (
         <div className="mt-0.5 pl-12 text-[11px] text-dim">
           kategoria mBanku „{g.bankCategory}” →{' '}
@@ -512,11 +516,13 @@ const KEYWORD_KIND: Partial<Record<Option, { kind: TxKind; direction: 'in' | 'ou
 
 function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const selected = useImport((s) => s.selected)
+  const readOnly = useData((s) => !!s.status?.readOnly)
   const query = useImport((s) => s.query)
   const [option, setOption] = useState<Option>('expense')
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [asKeyword, setAsKeyword] = useState(false)
   const nGroups = groups.filter((g) => selected.groups[g.group]).length
+  const mergeable = namesToMerge(groups, selected.groups)
   const rows = selectedRowKeys(groups, selected).length
   if (!nGroups && !rows) return null
   const keyword = keywordOfSearch(query)
@@ -562,6 +568,18 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
       <button type="button" className="btn h-[24px]" onClick={() => skipSelected(groups, false)} data-testid="import-bulk-unskip">
         Importuj jednak
       </button>
+      {mergeable && (
+        <button
+          type="button"
+          className="btn h-[24px]"
+          disabled={readOnly}
+          title="Zaznaczone grupy to jedna firma albo osoba pod różnymi nazwami: jedna grupa i jedna reguła, także w kolejnych importach"
+          onClick={() => mergeSelectedNames(groups, selected.groups)}
+          data-testid="import-bulk-merge"
+        >
+          Połącz nazwy ({mergeable.length})
+        </button>
+      )}
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearImportSelection} data-testid="import-bulk-clear">
         Odznacz
       </button>
@@ -575,7 +593,7 @@ function ThemesPanel() {
   const query = useImport((s) => s.query)
   const cats = useCategories()
   const containers = useRecordList('containers')
-  const groups = useMemo(() => importGroups(plan), [plan])
+  const groups = useImportGroups()
   const themes = useMemo(() => importThemes(groups), [groups])
   const search = useDeferredValue(query)
   const found = useMemo(() => searchGroups(groups, search, (id) => cats.label(id)), [groups, search, cats])
@@ -733,8 +751,9 @@ function DonePanel() {
 export function ImportPage() {
   const plan = useImport((s) => s.plan)
   const rules = useData((s) => s.fi?.settings.import.rules)
-  // A keyword added or a rule deleted (here, in the settings, on another computer): the open file planned again.
-  useEffect(() => replanIfRulesChanged(rules), [rules])
+  const aliases = useData((s) => s.fi?.settings.import.aliases)
+  // A keyword added, a rule deleted, names merged (here, in the settings, on another computer): the open file planned again.
+  useEffect(() => replanIfChanged(rules, aliases), [rules, aliases])
   const done = useImport((s) => s.done)
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()
@@ -771,6 +790,7 @@ export function ImportPage() {
           </div>
           <div className="flex min-w-0 flex-col">
             <MatchesPanel />
+            {plan && <SimilarPanel />}
             <ThemesPanel />
             {!plan && (
               <Panel title="Kategoryzacja">

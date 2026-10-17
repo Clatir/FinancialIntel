@@ -1,19 +1,58 @@
 import { useState } from 'react'
-import { TX_KIND_LABEL, type ImportRule, type TxKind } from '@shared/schema'
+import { TX_KIND_LABEL, type BrandAlias, type ImportRule, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { Panel, TextField } from '../../components/ui'
 import { KeywordRules } from '../import/KeywordRules'
-import { deleteRule, setOwnNames } from '../import/rules'
+import { clearDismissedSimilar, deleteRule, setOwnNames, unmergeName } from '../import/rules'
 import { useAccounts, useCategories } from '../operations/pickers'
 
 const NO_RULES: ImportRule[] = []
 const NO_NAMES: string[] = []
+const NO_ALIASES: Record<string, BrandAlias> = {}
+const NO_DISMISSED: Record<string, string> = {}
+
+/** Names merged in the import (1.2.2, D78): one group and one rule; „rozłącz” = two again. */
+function MergedNames() {
+  const aliases = useData((s) => s.fi?.settings.import.aliases ?? NO_ALIASES)
+  const dismissed = useData((s) => Object.keys(s.fi?.settings.import.notSimilar ?? NO_DISMISSED).length)
+  const list = Object.entries(aliases).sort((a, b) => b[1].at.localeCompare(a[1].at) || a[0].localeCompare(b[0]))
+  return (
+    <Panel title="Połączone nazwy">
+      <p className="mb-2 text-[11.5px] text-muted">
+        Nazwy, które przy imporcie połączyłeś jako jedną firmę albo osobę („Podobne nazwy”, „Połącz nazwy”): jedna grupa i jedna reguła. Rozłączona nazwa
+        wraca do własnej grupy (i do reguły, którą miała wcześniej).
+      </p>
+      {list.length === 0 && <span className="text-[11.5px] text-dim">Brak połączonych nazw.</span>}
+      <div className="flex flex-col" data-testid="aliases">
+        {list.map(([key, a]) => (
+          <div key={key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="alias">
+            <span className="truncate" title={`klucz: ${key} → ${a.to}`}>
+              <span className="text-fg-strong">{a.label || key}</span>
+              <span className="text-muted"> = {a.toLabel || a.to}</span>
+            </span>
+            <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => unmergeName(key)} data-testid="alias-unmerge">
+              rozłącz
+            </button>
+          </div>
+        ))}
+      </div>
+      {dismissed > 0 && (
+        <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-dim">
+          Pary oznaczone „To nie to samo”: {dismissed}
+          <button type="button" className="text-muted hover:text-fg-strong hover:underline" onClick={clearDismissedSimilar} data-testid="similar-undismiss">
+            pokazuj znowu
+          </button>
+        </div>
+      )}
+    </Panel>
+  )
+}
 
 /**
  * Ustawienia → Import (E2): the rules the import learned from the user's decisions (a wrong one is deleted here, the
- * next decision in the import or in Operacje writes it again), the user's keywords (1.2.1) and the account holder's
- * names (own transfers).
+ * next decision in the import or in Operacje writes it again), the user's keywords (1.2.1), the names merged (1.2.2)
+ * and the account holder's names (own transfers).
  */
 export function ImportTab() {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
@@ -57,6 +96,7 @@ export function ImportTab() {
       <Panel title="Słowa kluczowe">
         <KeywordRules />
       </Panel>
+      <MergedNames />
       <Panel title="Twoje nazwiska w banku">
         <p className="mb-2 text-[11.5px] text-muted">
           Przelew z albo na rachunek o takiej nazwie to przelew własny (nie koszt, nie przychód). Import dopisuje tu właściciela rachunku z pliku mBanku.

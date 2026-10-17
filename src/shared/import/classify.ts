@@ -6,7 +6,8 @@
  */
 import { fold } from '../fold'
 import { counterpartyKey } from './names'
-import { brandOf, keywordIn, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
+import { resolveBrand, type BrandAliases } from './aliases'
+import { brandById, brandOf, keywordIn, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
 import type { Category, ImportRule } from '../schema/budget'
 import type { Container } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId } from '../schema/budget'
@@ -45,18 +46,22 @@ export function upsertRule(
   return out
 }
 
-/** What a rule is looked up by: the brand key, the key of the whole name (rules before 1.2.1), the words of name and title. */
+/**
+ * What a rule is looked up by: the brand key (with the user's merges – 1.2.2), the brand key as the name gives it, the
+ * key of the whole name (rules before 1.2.1), the words of name and title.
+ */
 export interface RuleTarget {
   brand: string
+  raw: string
   key: string
   name: readonly string[]
   title: readonly string[]
 }
 
 /**
- * The rule for a row: an exact rule of the brand key, then of the whole name's key (learned before 1.2.1), then the
- * longest „contains” fragment, then the longest keyword of the user (in the name or the title); a rule of the other
- * direction does not count.
+ * The rule for a row: an exact rule of the brand key, then of the brand the name was merged from (1.2.2), then of the
+ * whole name's key (learned before 1.2.1), then the longest „contains” fragment, then the longest keyword of the user
+ * (in the name or the title); a rule of the other direction does not count.
  */
 export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction): ImportRule | null {
   const usable = rules.filter((r) => (r.direction == null || r.direction === direction) && (TX_KINDS as readonly string[]).includes(r.kind))
@@ -64,10 +69,11 @@ export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction:
     const hits = key ? usable.filter((r) => r.mode === 'exact' && r.match === key) : []
     return hits.find((r) => r.direction === direction) ?? hits[0] ?? null
   }
-  const byKey = exact(t.brand) ?? (t.key !== t.brand ? exact(t.key) : null)
+  const byKey = exact(t.brand) ?? (t.raw !== t.brand ? exact(t.raw) : null) ?? (t.key !== t.brand && t.key !== t.raw ? exact(t.key) : null)
   if (byKey) return byKey
   let best: ImportRule | null = null
-  for (const r of usable) if (r.mode === 'contains' && r.match && (t.key.includes(r.match) || t.brand.includes(r.match)) && (!best || r.match.length > best.match.length)) best = r
+  for (const r of usable)
+    if (r.mode === 'contains' && r.match && (t.key.includes(r.match) || t.brand.includes(r.match) || t.raw.includes(r.match)) && (!best || r.match.length > best.match.length)) best = r
   if (best) return best
   for (const r of usable)
     if (r.mode === 'keyword' && r.match && (keywordMatches(t.name, r.match) || keywordMatches(t.title, r.match)) && (!best || r.match.length > best.match.length)) best = r
@@ -80,17 +86,20 @@ const ATM = /WYPŁATA (W|Z) BANKOMA|WYPLATA (W|Z) BANKOMA|WYPŁATA GOTÓWKI|WYPL
 /**
  * What the rule of an operation is looked up and remembered by: an imported row, or an operation in Operacje. A person
  * paid or paying by phone (BLIK P2P) and an ATM in a shop („BANKOMAT ŻABKA”) are no chain of the dictionary; the
- * other side of a transfer is one only by the start of its name, with no city cut (often a person).
+ * other side of a transfer is one only by the start of its name, with no city cut (often a person). A name the user
+ * merged into another (1.2.2) is that one – a chain's, when merged into a chain.
  */
-export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string }): { target: RuleTarget; brand: BrandMatch } {
+export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string }, aliases: BrandAliases = {}): { target: RuleTarget; brand: BrandMatch } {
   const op = o.operation ?? ''
   const name = o.counterparty || op
-  const brand = brandOf(name, { dictionary: !/^BLIK P2P/.test(op) && !ATM.test(op), transfer: /^(PRZELEW|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|PRZEKAZ|OBCIĄŻENIE|OBCIAZENIE)/.test(op) })
-  return { brand, target: { brand: brand.key, key: counterpartyKey(name), name: words(o.counterparty), title: words(o.title) } }
+  const found = brandOf(name, { dictionary: !/^BLIK P2P/.test(op) && !ATM.test(op), transfer: /^(PRZELEW|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|PRZEKAZ|OBCIĄŻENIE|OBCIAZENIE)/.test(op) })
+  const key = resolveBrand(aliases, found.key)
+  const brand = key === found.key ? found : { key, brand: brandById(key), words: found.words }
+  return { brand, target: { brand: key, raw: found.key, key: counterpartyKey(name), name: words(o.counterparty), title: words(o.title) } }
 }
 
 /** The rule for one key (exact, then „contains”) – `findRule` without the brand and the words. */
-export const matchRule = (rules: readonly ImportRule[], key: string, direction: Direction): ImportRule | null => findRule(rules, { brand: key, key, name: [], title: [] }, direction)
+export const matchRule = (rules: readonly ImportRule[], key: string, direction: Direction): ImportRule | null => findRule(rules, { brand: key, raw: key, key, name: [], title: [] }, direction)
 
 /** The bank's category → the starting category closest to it: a hint shown to the user, not applied by itself (D68). */
 const MBANK_HINTS: Record<string, [number, number]> = {
@@ -176,6 +185,8 @@ export interface ClassifyContext {
   categories: CategoryIndex
   /** The cargo's containers: a payment to one of their counterparties belongs to it. */
   containers?: ReadonlyArray<Pick<Container, 'id' | 'name' | 'counterparty' | 'categoryId' | 'archived'>>
+  /** Names the user merged (1.2.2): grouped and ruled as one. */
+  aliases?: BrandAliases
 }
 
 const isXtb = (row: MbankRow) => /\bxtb\b|x-trade brokers/i.test(`${row.counterparty} ${row.description}`)
@@ -211,6 +222,8 @@ export interface Classified {
   key: string
   /** The brand: the group of the import and the key a decision is remembered by (1.2.1). */
   brand: BrandMatch
+  /** What its rule is looked up by (the keyword a decision proposes is tried on it – 1.2.2). */
+  target: RuleTarget
   direction: Direction
 }
 
@@ -238,14 +251,14 @@ export function classifyRow(row: MbankRow, ctx: ClassifyContext): Classified {
 }
 
 function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
-  const { brand, target } = ruleTargetOf(row)
+  const { brand, target } = ruleTargetOf(row, ctx.aliases)
   const key = target.key
   const nameTokens = tokens(row.counterparty)
   const titleTokens = tokens(row.title)
   const direction = directionOf(row)
   const hint = hintFor(row.category, ctx.categories)
   const op = row.operation
-  const out = (d: ImportDecision): Classified => ({ key, brand, direction, hint, decision: d })
+  const out = (d: ImportDecision): Classified => ({ key, brand, target, direction, hint, decision: d })
   const rule = findRule(ctx.rules, target, direction)
   if (rule) {
     const kind = rule.kind as TxKind
