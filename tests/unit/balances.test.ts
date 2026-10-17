@@ -33,5 +33,7 @@ describe('salda kont', () => {
     expect(planConfirmation(MBANK_ACCOUNT_ID, 1350, '2026-09-30', txs, balances)).toEqual({ kind: 'correction', computed: 1400, diff: -50 })
     const confirmed = [...balances, bal('confirmation', '2026-09-30', 1350), bal('confirmation', '2026-09-15', 1)]
     expect(lastConfirmation(MBANK_ACCOUNT_ID, confirmed)?.date).toBe('2026-09-30')
+    // Before the opening: nothing to compare with, never a correction.
+    expect(planConfirmation(MBANK_ACCOUNT_ID, 2000, '2026-08-01', txs, balances)).toEqual({ kind: 'before-opening', opening: '2026-08-06' })
   })
 })

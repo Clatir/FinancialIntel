@@ -16,7 +16,7 @@
  * money on the accounts then; the history before serves the statistics only (average costs and income).
  */
 import type { Settings } from '../schema/settings'
-import type { EnvelopeKind } from '../schema/budget'
+import { envelopeKind, type EnvelopeKind } from '../schema/budget'
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawNow, warsawStamp } from './dates'
 import { categoryIndex, costOf, incomeOf, partsOf, splitEvenly, sum } from './operations'
@@ -722,7 +722,7 @@ export function computeFleet(input: FleetInput): FleetState {
         if (p.refundable) continue
         const cost = -p.amount
         const main = cats.mainOf(p.categoryId)
-        const kind = main ? main.envelope : 'daily'
+        const kind = main ? envelopeKind(main) : 'daily'
         if (main) {
           const s = spentBy.get(main.id) ?? { before: 0, today: 0 }
           if (t.date === today) s.today += cost
@@ -738,14 +738,15 @@ export function computeFleet(input: FleetInput): FleetState {
     }
     let dailyLimit = dailyExtra.get(month) ?? 0
     for (const main of cats.mains) {
-      if (!main.envelope) continue
+      const kind = envelopeKind(main)
+      if (!kind) continue
       const limit = plan.envelopes[main.id]
-      if (main.envelope === 'daily') dailyLimit += limit ?? 0
+      if (kind === 'daily') dailyLimit += limit ?? 0
       if (limit == null) continue
       const s = spentBy.get(main.id) ?? { before: 0, today: 0 }
       const spent = s.before + s.today
-      envelopes.push({ categoryId: main.id, kind: main.envelope, limit, spent, left: limit - spent })
-      if (main.envelope === 'planned' && spent > limit) alarms.push({ kind: 'envelope-over', level: spent > limit * 1.2 ? 'red' : 'yellow', date: today, amount: spent - limit, ref: main.id })
+      envelopes.push({ categoryId: main.id, kind, limit, spent, left: limit - spent })
+      if (kind === 'planned' && spent > limit) alarms.push({ kind: 'envelope-over', level: spent > limit * 1.2 ? 'red' : 'yellow', date: today, amount: spent - limit, ref: main.id })
     }
     const d = dailyAllowance({ limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, day: dayOfMonth(today), daysInMonth: daysInMonth(month) })
     daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday }

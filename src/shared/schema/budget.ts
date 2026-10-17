@@ -10,7 +10,16 @@ import { TX_KINDS } from './records'
 /** Fixed id of a default item: a valid ULID `01KDEF<kind><number>`. */
 const fixedId = (kind: 'ACC' | 'CAT', n: number) => `01KDEF${kind}${String(n).padStart(17, '0')}`
 
-/** Drop a malformed item instead of failing the whole settings (a hand-edited fi.json). */
+/**
+ * A value of a known set that a newer version may extend (a new kind of account, a new system category): any string
+ * is read and written back unchanged, so an older version on another computer never drops it; the code treats a value
+ * it does not know as „none”.
+ */
+function openEnum<const T extends readonly string[]>(_values: T) {
+  return z.custom<T[number] | (string & {})>((v) => typeof v === 'string' && v.length > 0 && v.length <= 60)
+}
+
+/** Drop a malformed item (no id, no name – a hand-edited fi.json) instead of failing the whole settings. */
 function lenientList<T extends z.ZodType>(item: T) {
   return z.array(item.nullable().catch(null)).transform((xs) => xs.filter((x): x is NonNullable<z.output<T>> => x != null))
 }
@@ -23,9 +32,9 @@ export type AccountKind = (typeof ACCOUNT_KINDS)[number]
 export const accountSchema = z.looseObject({
   id: ulidSchema,
   name: z.string().trim().min(1).max(40),
-  kind: z.enum(ACCOUNT_KINDS).default('bank'),
+  kind: openEnum(ACCOUNT_KINDS).default('bank'),
   /** The bank export the import reads for this account (E2). */
-  importFormat: z.enum(['mbank']).nullable().default(null),
+  importFormat: openEnum(['mbank'] as const).nullable().default(null),
   archived: z.boolean().default(false)
 })
 export type Account = z.infer<typeof accountSchema>
@@ -53,12 +62,18 @@ export const categorySchema = z.looseObject({
   /** null = a main category. */
   parentId: ulidSchema.nullable().default(null),
   /** Main categories only (subcategories take their parent's); null = outside the envelopes. */
-  envelope: z.enum(ENVELOPE_KINDS).nullable().default(null),
+  envelope: openEnum(ENVELOPE_KINDS).nullable().default(null),
   /** A category the app relies on: 'cash' = an ATM withdrawal (spec, „Przypadki szczególne”). */
-  system: z.enum(['cash']).nullable().default(null),
+  system: openEnum(['cash'] as const).nullable().default(null),
   archived: z.boolean().default(false)
 })
 export type Category = z.infer<typeof categorySchema>
+
+/** The envelope of a category as this version knows it (a value of a newer version = none). */
+export function envelopeKind(c: Pick<Category, 'envelope'> | null | undefined): EnvelopeKind | null {
+  const v = c?.envelope
+  return v === 'daily' ? 'daily' : v === 'planned' ? 'planned' : null
+}
 
 export const CASH_CATEGORY_ID = fixedId('CAT', 10)
 
@@ -145,12 +160,12 @@ export const importRuleSchema = z.looseObject({
   id: ulidSchema,
   /** Normalized counterparty (`counterpartyKey`): the whole key ('exact') or a fragment of it ('contains'). */
   match: z.string().min(1).max(200),
-  mode: z.enum(['exact', 'contains']).default('exact'),
+  mode: openEnum(['exact', 'contains'] as const).default('exact'),
   /** Money in or out; null = both. */
-  direction: z.enum(['in', 'out']).nullable().default(null),
+  direction: openEnum(['in', 'out'] as const).nullable().default(null),
   /** The counterparty as the bank writes it (for the list of rules). */
   label: z.string().max(200).default(''),
-  kind: z.enum(TX_KINDS).default('expense'),
+  kind: openEnum(TX_KINDS).default('expense'),
   categoryId: ulidSchema.nullable().default(null),
   refundable: z.boolean().default(false),
   /** A household member (D20): money from them proposes repaying the house receivable first. */

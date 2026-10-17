@@ -74,6 +74,8 @@ describe('lista operacji', () => {
     const ret = tx('2026-10-15', 775, { counterparty: 'KOLEO' })
     const own = tx('2026-10-15', -5000, { kind: 'transfer' })
     expect(sumOperations([zabka, bolt, salary, ret, own])).toEqual({ count: 5, inflow: 500775, outflow: 2438, costs: 2438 - 775 })
+    // Purchases for the house are money out, not costs.
+    expect(sumOperations([wallet])).toEqual({ count: 1, inflow: 0, outflow: 2500, costs: 0 })
     expect(amountTone(zabka)).toBe('plain')
     expect(amountTone(salary)).toBe('up')
     expect(amountTone(ret)).toBe('up')

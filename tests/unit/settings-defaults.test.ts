@@ -5,6 +5,7 @@ import {
   CASH_CATEGORY_ID,
   containerSchema,
   defaultCategoryId,
+  envelopeKind,
   goalSchema,
   MBANK_ACCOUNT_ID,
   monthPlanSchema,
@@ -102,6 +103,22 @@ describe('fi.json – konta, kategorie, warstwy i rozkazy (E1)', () => {
     expect(a.settings.accounts).toEqual(b.settings.accounts)
     expect(a.settings.categories).toEqual(b.settings.categories)
     expect(a.settings.categories).toHaveLength(39)
+  })
+
+  it('wartości z nowszej wersji (inny rodzaj konta, nowa kategoria systemowa) zostają i wracają do pliku bez zmian', () => {
+    const fi = createDefaultSettings()
+    const newer = {
+      ...fi,
+      settings: {
+        ...fi.settings,
+        accounts: [...fi.settings.accounts, { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V7', name: 'Konto maklerskie', kind: 'broker', importFormat: 'ing', archived: false, future: 1 }],
+        categories: [...fi.settings.categories, { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V8', name: 'Łupy', parentId: null, envelope: 'weekly', system: 'loot', archived: false }]
+      }
+    }
+    const parsed = settingsFileSchema.parse(JSON.parse(serializeRecord('fi', newer)))
+    expect(parsed.settings.accounts.at(-1)).toMatchObject({ kind: 'broker', importFormat: 'ing', future: 1 })
+    expect(parsed.settings.categories.at(-1)).toMatchObject({ envelope: 'weekly', system: 'loot' })
+    expect(envelopeKind(parsed.settings.categories.at(-1))).toBeNull()
   })
 
   it('pusta lista kategorii zostaje pusta; uszkodzona pozycja jest pomijana, reszta zostaje', () => {

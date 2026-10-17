@@ -30,6 +30,10 @@ export function confirmBalance(accountId: string, amount: number, date: string, 
   const plan = planConfirmation(accountId, amount, date, records(s.records.transactions), records(s.records.balances))
   const now = new Date().toISOString()
   const base = { schemaVersion: SCHEMA_VERSION, createdAt: now, updatedAt: now }
+  if (plan.kind === 'before-opening') {
+    toast(`${accountName}: saldo otwarcia jest na ${plan.opening} – później niż ${date}. Popraw datę salda otwarcia.`, 'error', 7000)
+    return plan
+  }
   if (plan.kind === 'opening') {
     setOpening(accountId, plan.amount, plan.date)
     toast(`${accountName}: saldo otwarcia ustawione na początek ${plan.date} (${plnText(plan.amount)} zł).`, 'success', 5000)

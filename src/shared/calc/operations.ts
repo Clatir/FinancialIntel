@@ -2,7 +2,7 @@
  * Operations as the budget sees them: the lines of a (split) receipt, categories and their envelopes, what counts as a
  * net cost and as income, the captain's log marks. Pure; used by the layers' engine (fleet.ts) and the screens.
  */
-import type { Category, EnvelopeKind, Orders } from '../schema/budget'
+import { envelopeKind, type Category, type EnvelopeKind, type Orders } from '../schema/budget'
 import type { Transaction } from '../schema/records'
 import { inClockWindow } from './dates'
 
@@ -59,7 +59,7 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
     byId,
     mains: categories.filter((c) => !c.parentId || !byId.has(c.parentId)),
     mainOf,
-    envelopeOf: (id) => mainOf(id)?.envelope ?? null,
+    envelopeOf: (id) => envelopeKind(mainOf(id)),
     childrenOf: (id) => categories.filter((c) => c.parentId === id),
     label: (id) => {
       if (!id) return ''

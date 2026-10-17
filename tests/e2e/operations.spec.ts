@@ -142,3 +142,31 @@ test('Ustawienia: konta z saldem otwarcia i potwierdzeniem (korekta), kategorie'
     await app.close()
   }
 })
+
+test('Operacje: wpisana kwota nie ginie przy Ctrl+N, kierunek wybrany przed kwotą zostaje', async () => {
+  const { app, page, dataDir, errors } = await launch()
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+2')
+    await page.keyboard.press('Control+n')
+    // Typed, the field not left yet: the next Ctrl+N applies it first (the entry is no longer untouched).
+    await page.getByTestId('operation-amount').fill('12')
+    await page.keyboard.press('Control+n')
+    await expect.poll(async () => (await operations(dataDir)).map((t) => t.amount)).toEqual([-1200])
+
+    // A product return chosen before its amount: saved as money in.
+    await page.getByRole('radio', { name: 'zwrot towaru' }).click()
+    await typeAmount(page, 'operation-amount', '7,75')
+    await expect.poll(async () => (await operations(dataDir)).map((t) => t.amount).sort((a, b) => Number(a) - Number(b))).toEqual([-1200, 775])
+
+    // Leaving the screen while typing keeps the value too.
+    await page.keyboard.press('Control+n')
+    await page.getByTestId('operation-amount').fill('3')
+    await page.keyboard.press('Control+1')
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await expect.poll(async () => (await operations(dataDir)).length).toBe(3)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

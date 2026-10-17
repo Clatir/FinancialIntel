@@ -9,6 +9,7 @@ import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Toggle, cx } from '../../components/ui'
 import { confirmBalance, setOpening } from '../balances/actions'
+import { toast } from '../../store/ui'
 import { useAccounts } from '../operations/pickers'
 
 const KIND_LABEL: Record<AccountKind, string> = { bank: 'konto bankowe', wallet: 'portfel z kartą', other: 'inne' }
@@ -80,6 +81,7 @@ function AccountRow({ account: a, opening, confirmed, balance, taken }: { accoun
               {KIND_LABEL[k]}
             </option>
           ))}
+          {!(ACCOUNT_KINDS as readonly string[]).includes(a.kind) && <option value={a.kind}>{a.kind} (nowsza wersja)</option>}
         </select>
         <label className="flex items-center gap-1.5 text-[11.5px] text-muted" title="Import historii z pliku CSV mBanku (ekran Import)">
           <input type="checkbox" checked={a.importFormat === 'mbank'} onChange={(e) => patchAccount(a.id, { importFormat: e.currentTarget.checked ? 'mbank' : null })} />
@@ -107,7 +109,16 @@ function AccountRow({ account: a, opening, confirmed, balance, taken }: { accoun
           data-testid="account-opening"
         />
         <span>zł na początek dnia</span>
-        <DateField className="w-[100px]" value={opening?.date ?? today} onChange={(date) => setOpening(a.id, opening?.amount ?? 0, date)} aria-label="Data salda otwarcia" data-testid="account-opening-date" />
+        <DateField
+          className="w-[100px]"
+          value={opening?.date ?? today}
+          onChange={(date) => {
+            if (date > today) return toast('Saldo otwarcia nie może być z przyszłości.', 'error')
+            setOpening(a.id, opening?.amount ?? 0, date)
+          }}
+          aria-label="Data salda otwarcia"
+          data-testid="account-opening-date"
+        />
         <span className="text-dim">– operacje od tego dnia są doliczane</span>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">

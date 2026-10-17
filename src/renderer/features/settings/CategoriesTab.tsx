@@ -1,5 +1,5 @@
 import { newId } from '@shared/ids'
-import type { Category, EnvelopeKind } from '@shared/schema'
+import { envelopeKind, type Category, type EnvelopeKind } from '@shared/schema'
 import { updateSettings } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Segmented, cx } from '../../components/ui'
@@ -67,7 +67,7 @@ export function CategoriesTab() {
                 />
                 <Segmented<EnvelopeKind | 'none'>
                   size="sm"
-                  value={main.envelope ?? 'none'}
+                  value={envelopeKind(main) ?? (main.envelope ? null : 'none')}
                   onChange={(v) => patchCategory(main.id, { envelope: v === 'none' ? null : v })}
                   options={[
                     { value: 'daily', label: 'codzienna' },

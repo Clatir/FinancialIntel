@@ -8,7 +8,7 @@ import { chooser, merge3, pathKey, type Path, type Side } from '@shared/merge'
 import { changedPaths, decideRemote, decideRemoteRemoval, isoMs, newerChoice, newerFields, relatedPaths, type RemoteMode } from '@shared/remoteChanges'
 import { api, errorMessage } from '../lib/api'
 import { useRemote, type PendingRemote } from './remote'
-import { toast } from './ui'
+import { commitActiveField, toast } from './ui'
 
 type EntryMap<C extends Collection> = Record<string, RecordEntry<RecordTypes[C]>>
 type AnyMap = Record<string, RecordEntry<RecordTypes[Collection]>>
@@ -565,6 +565,8 @@ export function updateSettings(updater: (f: SettingsFile) => SettingsFile, opts:
  * whose earlier save failed. Resolves to true when nothing is left unsaved.
  */
 export async function flushSaves(): Promise<boolean> {
+  // A field still being typed in (window closing, Ctrl+S): its value first.
+  commitActiveField()
   for (const key of new Set([...timers.keys(), ...dirty.keys()])) {
     const t = timers.get(key)
     if (t) clearTimeout(t)

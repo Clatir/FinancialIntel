@@ -4,7 +4,7 @@ import { newId } from '@shared/ids'
 import { emptyFilter, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
 import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type Transaction } from '@shared/schema'
 import { addRecord, discardDraft, useData } from '../../store/data'
-import { navigate } from '../../store/ui'
+import { commitActiveField, navigate } from '../../store/ui'
 import { deleteWithUndo } from '../history/actions'
 
 /** Filters of this computer (the period and the search start fresh: this month, empty). */
@@ -60,6 +60,8 @@ export function resetFilter(): void {
 
 /** Select an operation; an untouched new entry left behind is dropped (it was never written). */
 export function selectOperation(id: string | null): void {
+  // The field being typed in saves first: a new entry with a typed amount is no longer untouched.
+  commitActiveField()
   const prev = useOperationsUi.getState().selectedId
   if (prev && prev !== id && useData.getState().drafts[prev]) discardDraft('transactions', prev)
   useOperationsUi.setState({ selectedId: id })

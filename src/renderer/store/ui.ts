@@ -30,11 +30,23 @@ export const useUi = create<UiState>(() => ({
   toasts: []
 }))
 
+/**
+ * Apply what the focused field holds: the budget's fields (amount, date, names) keep a draft until they are left, so
+ * a change of screen or record leaves the field first – its value is saved, never dropped.
+ */
+export function commitActiveField(): void {
+  if (typeof document === 'undefined') return
+  const el = document.activeElement as HTMLElement | null
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) el.blur()
+}
+
 export function navigate(route: Route): void {
+  commitActiveField()
   useUi.setState((s) => ({ route, history: [...s.history.slice(-20), s.route] }))
 }
 
 export function goBack(): void {
+  commitActiveField()
   useUi.setState((s) => {
     const prev = s.history.at(-1)
     return prev ? { route: prev, history: s.history.slice(0, -1) } : { route: { page: 'bridge' } }

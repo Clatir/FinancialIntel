@@ -40,10 +40,14 @@ export type ConfirmationPlan =
   | { kind: 'match'; computed: number }
   /** A difference: a correction of `diff` (bank − operations) dated that day, to be explained. */
   | { kind: 'correction'; computed: number; diff: number }
+  /** The day is before the opening balance: nothing to compare with (the opening's date needs a look). */
+  | { kind: 'before-opening'; opening: string }
 
 /** What confirming `amount` as the balance at the end of `date` does. */
 export function planConfirmation(accountId: string, amount: number, date: string, transactions: readonly Transaction[], balances: readonly Balance[]): ConfirmationPlan {
-  if (!openingOf(accountId, balances)) {
+  const opening = openingOf(accountId, balances)
+  if (opening && date < opening.date) return { kind: 'before-opening', opening: opening.date }
+  if (!opening) {
     const first = transactions.filter((t) => t.accountId === accountId && t.date <= date).reduce<string | null>((m, t) => (m == null || t.date < m ? t.date : m), null)
     const start = first ?? date
     const moved = sum(transactions.filter((t) => t.accountId === accountId && t.date >= start && t.date <= date).map((t) => t.amount))

@@ -13,7 +13,11 @@ let timer: ReturnType<typeof setInterval> | null = null
 export function useMinute(): number {
   useEffect(() => {
     ticking++
-    if (!timer) timer = setInterval(() => useClockStore.setState({ now: Date.now() }), 60_000)
+    if (!timer) {
+      // The clock stood still while no screen used it (the app in the tray overnight): the time of now first.
+      useClockStore.setState({ now: Date.now() })
+      timer = setInterval(() => useClockStore.setState({ now: Date.now() }), 60_000)
+    }
     return () => {
       ticking--
       if (!ticking && timer) {
@@ -27,26 +31,33 @@ export function useMinute(): number {
 
 const recordsOf = <T,>(map: Record<string, RecordEntry<T>>): T[] => Object.values(map).map((e) => e.record)
 
+type Records = ReturnType<typeof useData.getState>['records']
+type Fi = NonNullable<ReturnType<typeof useData.getState>['fi']>
+
+/** One computation for every screen that asks (the list, the editor…) until the records, settings or minute change. */
+let memo: { fi: Fi; records: Records; now: number; state: FleetState } | null = null
+
+function fleetOf(fi: Fi, records: Records, now: number): FleetState {
+  if (memo && memo.fi === fi && memo.records === records && memo.now === now) return memo.state
+  const state = computeFleet({
+    settings: fi.settings,
+    transactions: recordsOf(records.transactions),
+    containers: recordsOf(records.containers),
+    goals: recordsOf(records.goals),
+    months: recordsOf(records.months),
+    dockings: recordsOf(records.dockings),
+    loans: recordsOf(records.loans),
+    balances: recordsOf(records.balances),
+    now: new Date(now)
+  })
+  memo = { fi, records, now, state }
+  return state
+}
+
 /** The ship's state now (shared/calc/fleet.ts) from the records in memory; recomputed when they change. */
 export function useFleet(): FleetState | null {
   const fi = useData((s) => s.fi)
   const records = useData((s) => s.records)
   const now = useMinute()
-  return useMemo(
-    () =>
-      fi
-        ? computeFleet({
-            settings: fi.settings,
-            transactions: recordsOf(records.transactions),
-            containers: recordsOf(records.containers),
-            goals: recordsOf(records.goals),
-            months: recordsOf(records.months),
-            dockings: recordsOf(records.dockings),
-            loans: recordsOf(records.loans),
-            balances: recordsOf(records.balances),
-            now: new Date(now)
-          })
-        : null,
-    [fi, records, now]
-  )
+  return useMemo(() => (fi ? fleetOf(fi, records, now) : null), [fi, records, now])
 }

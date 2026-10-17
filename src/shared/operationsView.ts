@@ -4,7 +4,7 @@
  */
 import type { Account, Orders } from './schema/budget'
 import type { Transaction, TxKind } from './schema/records'
-import { asksImpulse, isNight, type CategoryIndex } from './calc/operations'
+import { asksImpulse, costOf, isNight, type CategoryIndex } from './calc/operations'
 
 /** Marks of an operation (spec, „Ekrany”: do zwrotu, plan lub impuls, noc) and of its origin. */
 export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual'] as const
@@ -126,7 +126,7 @@ export interface OperationsSums {
   inflow: number
   /** Money out: expenses, top-ups of XTB, PIT-38, loans given (without own transfers and corrections). */
   outflow: number
-  /** Net costs of the list (expenses minus product returns). */
+  /** Net costs of the list as the layers count them (`costOf`: without purchases „do zwrotu” and goal spending). */
   costs: number
 }
 
@@ -138,7 +138,7 @@ export function sumOperations(rows: readonly Transaction[]): OperationsSums {
     if (t.kind === 'transfer' || t.kind === 'correction') continue
     if (t.amount > 0) inflow += t.amount
     else outflow += -t.amount
-    if (t.kind === 'expense') costs += -t.amount
+    costs += costOf(t)
   }
   return { count: rows.length, inflow, outflow, costs }
 }

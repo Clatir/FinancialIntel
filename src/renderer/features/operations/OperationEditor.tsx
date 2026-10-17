@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
 import { asksImpulse, isNight, sum } from '@shared/calc/operations'
 import { TX_KIND_LABEL, type Split, type Transaction, type TxKind } from '@shared/schema'
@@ -64,13 +64,26 @@ export function OperationEditor({ id }: { id: string }) {
   const orders = useData((s) => s.fi?.settings.orders)
   const fleet = useFleet()
   const accounts = useAccounts()
+  // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
+  const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
   const t = entry.record
   const readOnly = folderReadOnly || entry.readOnly
   const update = (fn: (r: Transaction) => Transaction) => updateRecord('transactions', id, fn)
   const patch = (p: Partial<Transaction>) => update((r) => ({ ...r, ...p }))
   const abs = Math.abs(t.amount)
-  const sign = t.amount < 0 ? -1 : t.amount > 0 ? 1 : DEFAULT_SIGN[t.kind]
+  const sign: 1 | -1 = t.amount < 0 ? -1 : t.amount > 0 ? 1 : t.kind === 'income' ? 1 : (zeroSign ?? DEFAULT_SIGN[t.kind])
+  const setDirection = (s: 1 | -1) => {
+    setZeroSign(s)
+    if (abs === 0 && t.splits.every((x) => x.amount === 0)) return
+    // The lines of a split receipt turn with it; money coming back is never „do zwrotu”.
+    update((r) => ({
+      ...r,
+      amount: s * Math.abs(r.amount),
+      refundable: s < 0 ? r.refundable : false,
+      splits: r.splits.map((x) => ({ ...x, amount: s * Math.abs(x.amount), refundable: s < 0 ? x.refundable : false }))
+    }))
+  }
   const directions = DIRECTIONS[t.kind]
   const outgoing = sign < 0
   const night = isNight(t, orders)
@@ -93,14 +106,22 @@ export function OperationEditor({ id }: { id: string }) {
         <Segmented
           size="sm"
           value={MAIN_KINDS.includes(t.kind) ? t.kind : null}
-          onChange={(k) => update((r) => withKind(r, k))}
+          onChange={(k) => {
+            setZeroSign(null)
+            update((r) => withKind(r, k))
+          }}
           options={MAIN_KINDS.map((k) => ({ value: k, label: k === 'trading' ? 'XTB' : TX_KIND_LABEL[k] }))}
           aria-label="Rodzaj operacji"
         />
         <select
           className={cx('input h-[22px] w-auto py-0 text-[11.5px]', OTHER_KINDS.includes(t.kind) && 'border-accent/60 text-accent')}
           value={OTHER_KINDS.includes(t.kind) ? t.kind : ''}
-          onChange={(e) => e.currentTarget.value && update((r) => withKind(r, e.currentTarget.value as TxKind))}
+          onChange={(e) => {
+            const k = e.currentTarget.value as TxKind | ''
+            if (!k) return
+            setZeroSign(null)
+            update((r) => withKind(r, k))
+          }}
           aria-label="Inny rodzaj"
           data-testid="operation-kind-other"
         >
@@ -116,7 +137,7 @@ export function OperationEditor({ id }: { id: string }) {
         <Segmented
           size="sm"
           value={outgoing ? 'out' : 'in'}
-          onChange={(d) => patch({ amount: (d === 'out' ? -1 : 1) * abs, refundable: d === 'out' ? t.refundable : false })}
+          onChange={(d) => setDirection(d === 'out' ? -1 : 1)}
           options={[
             { value: 'out', label: directions[0] },
             { value: 'in', label: directions[1] }
@@ -130,7 +151,14 @@ export function OperationEditor({ id }: { id: string }) {
           <AmountField
             className={cx('w-[140px]', t.amount > 0 && 'text-up')}
             value={abs}
-            onChange={(v) => patch({ amount: sign * (v ?? 0) })}
+            onChange={(v) =>
+              update((r) => ({
+                ...r,
+                amount: sign * (v ?? 0),
+                // The lines follow the sign chosen before the total was typed.
+                splits: r.splits.map((x) => ({ ...x, amount: sign * Math.abs(x.amount) }))
+              }))
+            }
             autoFocus={isDraft}
             aria-label="Kwota"
             data-testid="operation-amount"
@@ -203,7 +231,7 @@ export function OperationEditor({ id }: { id: string }) {
               )}
             </>
           ) : (
-            <SplitEditor t={t} update={update} />
+            <SplitEditor t={t} sign={sign} update={update} />
           )}
         </Section>
       )}
@@ -310,8 +338,7 @@ export function OperationEditor({ id }: { id: string }) {
 }
 
 /** A split receipt: lines with their own category, the house part „do zwrotu”; the lines sum to the amount. */
-function SplitEditor({ t, update }: { t: Transaction; update: (fn: (r: Transaction) => Transaction) => void }) {
-  const sign = t.amount < 0 ? -1 : 1
+function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update: (fn: (r: Transaction) => Transaction) => void }) {
   const rest = useMemo(() => t.amount - sum(t.splits.map((s) => s.amount)), [t])
   const setLine = (id: string, p: Partial<Split>) => update((r) => ({ ...r, splits: r.splits.map((s) => (s.id === id ? { ...s, ...p } : s)) }))
   return (
