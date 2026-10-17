@@ -1,84 +1,68 @@
-import { useMemo, useState, type DragEvent } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { warsawNow } from '@shared/calc/dates'
-import type { Choice, RowPlan } from '@shared/import/reconcile'
+import type { DecisionSource } from '@shared/import/classify'
+import { importGroups, importThemes, joins, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { TX_KIND_LABEL, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
+import { useRecordList } from '../../store/records'
 import { useWizard } from '../wizard/state'
 import { useFleet } from '../../store/fleet'
-import { navigate } from '../../store/ui'
+import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
-import { IconChevronDown, IconChevronRight, IconImport } from '../../components/icons'
+import { IconChevronDown, IconChevronRight, IconImport, IconSearch } from '../../components/icons'
 import { Columns } from '../../components/layout'
 import { Badge, Panel, cx } from '../../components/ui'
 import { confirmBalance } from '../balances/actions'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
+import { DuplicatesPanel } from './DuplicatesPanel'
+import { KeywordRules } from './KeywordRules'
+import { keywordOfSearch, saveKeywordRule } from './rules'
+import { BULK_OPTIONS, OPTIONS, choiceFor, optionOf, type Option } from './options'
 import {
+  acceptGroupHint,
   acceptHints,
+  acceptSure,
   chooseGroup,
   chooseRow,
+  chooseSelected,
+  chooseTheme,
+  clearGroup,
+  clearImportSelection,
   closeImport,
-  groupsOf,
+  hintable,
   loadImportFile,
   pickImportFile,
+  replanIfRulesChanged,
   runImport,
+  selectImport,
+  selectedRowKeys,
   setImportAccount,
+  setImportQuery,
   setNoMerge,
   setRemember,
+  setRememberTheme,
   setRemoveVanished,
   setRestoreDeleted,
+  setSkip,
+  skipSelected,
+  themeStatus,
   useImport,
-  type ImportGroup
+  type ThemeStatus
 } from './state'
 
 const day = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`
 const fullDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
 
-/** What a group or a row becomes, as offered by the direction of the money. */
-type Option = 'expense' | 'refundable' | 'refund' | 'income' | 'household' | 'transfer' | 'trading' | 'loan' | 'tax'
-
-const OPTIONS: Record<'in' | 'out', Array<{ value: Option; label: string }>> = {
-  out: [
-    { value: 'expense', label: 'Wydatek' },
-    { value: 'refundable', label: 'Do zwrotu (zakup dla domu)' },
-    { value: 'transfer', label: 'Przelew własny' },
-    { value: 'trading', label: 'XTB – dopłata do konta tradingowego' },
-    { value: 'loan', label: 'Pożyczka udzielona' },
-    { value: 'tax', label: 'Podatek PIT-38' }
-  ],
-  in: [
-    { value: 'income', label: 'Wpływ (przychód)' },
-    { value: 'household', label: 'Od domownika (najpierw zwrot należności)' },
-    { value: 'refund', label: 'Zwrot towaru (ujemny wydatek)' },
-    { value: 'transfer', label: 'Przelew własny' },
-    { value: 'trading', label: 'XTB – wypłata z konta tradingowego' },
-    { value: 'loan', label: 'Zwrot pożyczki' }
-  ]
+const SOURCE_LABEL: Record<DecisionSource, string> = { rule: 'reguła', builtin: 'rozpoznane', brand: 'sieć', keyword: 'słowo kluczowe', none: 'do decyzji' }
+const THEME_SOURCE: Record<DecisionSource, string> = { rule: 'Twoje reguły', builtin: 'rozpoznane', brand: 'sieci', keyword: 'słowa kluczowe', none: 'do decyzji' }
+const OP_LABEL: Record<'in' | 'out', Record<OpKind, string>> = {
+  out: { card: 'Zakupy bez rozpoznania', transfer: 'Przelewy wychodzące', fee: 'Opłaty banku', other: 'Inne wydatki' },
+  in: { card: 'Wpływy z zakupów', transfer: 'Wpływy przelewem', fee: 'Inne wpływy', other: 'Inne wpływy' }
 }
+const STATUS_LABEL: Record<ThemeStatus, string> = { todo: 'Do decyzji', check: 'Rozpoznane – sprawdź', done: 'Gotowe' }
 
-function optionOf(c: Choice, direction: 'in' | 'out'): Option {
-  if (c.kind === 'expense') return direction === 'in' ? 'refund' : c.refundable ? 'refundable' : 'expense'
-  if (c.kind === 'income') return c.household ? 'household' : 'income'
-  if (c.kind === 'transfer' || c.kind === 'trading' || c.kind === 'loan' || c.kind === 'tax') return c.kind
-  return direction === 'in' ? 'income' : 'expense'
-}
-
-function choiceFor(option: Option, prev: Choice): Choice {
-  const base: Choice = { kind: 'expense', categoryId: null, refundable: false, household: false, counterAccountId: null }
-  switch (option) {
-    case 'expense':
-    case 'refund':
-      return { ...base, categoryId: prev.kind === 'expense' ? prev.categoryId : null }
-    case 'refundable':
-      return { ...base, refundable: true, categoryId: prev.kind === 'expense' ? prev.categoryId : null }
-    case 'income':
-      return { ...base, kind: 'income' }
-    case 'household':
-      return { ...base, kind: 'income', household: true }
-    default:
-      return { ...base, kind: option }
-  }
-}
-
-const SOURCE_LABEL = { rule: 'reguła', builtin: 'rozpoznane', none: 'do decyzji' } as const
+const count = (n: number, one: string, few: string, many: string) => `${n} ${n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many}`
+const operations = (n: number) => count(n, 'operacja', 'operacje', 'operacji')
 
 function FilePanel() {
   const { fileName, file, error, accountId, busy } = useImport()
@@ -156,10 +140,11 @@ function Summary() {
   if (!plan) return null
   const n = (status: RowPlan['status']) => plan.rows.filter((p) => p.status === status).length
   const merges = plan.rows.filter((p) => p.status === 'merge')
-  const merged = merges.filter((p) => !choices.noMerge[p.key]).length
+  const merged = merges.filter((p) => joins(p, choices)).length
   const deleted = plan.rows.filter((p) => p.status === 'deleted')
   const restored = deleted.filter((p) => choices.restoreDeleted[p.key]).length
-  const created = n('new') + merges.length - merged + restored
+  const excluded = plan.rows.filter((p) => (p.status === 'new' || (p.status === 'deleted' && choices.restoreDeleted[p.key])) && choices.skip[p.key]).length
+  const created = n('new') + merges.length - merged + restored - excluded
   const removed = plan.vanished.filter((t) => choices.removeVanished[t.id]).length
   const known = n('known')
   const settledFlags = plan.rows.filter((p) => p.status === 'known' && p.settled).length
@@ -192,6 +177,14 @@ function Summary() {
               </span>
             </>
           )}
+          {excluded > 0 && (
+            <>
+              <span className="text-muted">pominięte przez Ciebie (nie importuj)</span>
+              <span className="num text-right text-muted" data-testid="import-count-excluded">
+                {excluded}
+              </span>
+            </>
+          )}
           {plan.vanished.length > 0 && (
             <>
               <span className="text-muted">do usunięcia (zniknęły z banku)</span>
@@ -202,7 +195,10 @@ function Summary() {
         <button className="btn btn-accent h-[30px] justify-center" disabled={busy || nothing || readOnly} onClick={() => void runImport()} data-testid="import-run">
           {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Nic nowego w tym pliku' : `Importuj (${created + merged + n('settle') + settledFlags + removed})`}
         </button>
-        <p className="text-[11px] text-dim">Grupy bez decyzji wejdą jako wydatki / wpływy bez kategorii – skategoryzujesz je później w Operacjach.</p>
+        <p className="text-[11px] text-dim">
+          Rozpoznane (sieci, słowa kluczowe, reguły) wejdą z pokazaną decyzją; tematy bez decyzji – jako wydatki / wpływy bez kategorii, skategoryzujesz je później w
+          Operacjach.
+        </p>
       </div>
     </Panel>
   )
@@ -222,10 +218,14 @@ function MatchesPanel() {
         {merges.length > 0 && (
           <div className="flex flex-col gap-1">
             <span className="label">Wpisy ręczne z banku ({merges.length})</span>
-            <p className="text-[11px] text-dim">Ta sama kwota, data ±3 dni, podobny kontrahent: wpis zachowuje Twoją kategorię i godzinę, bierze dane z banku.</p>
+            <p className="text-[11px] text-dim">
+              Ta sama kwota, data ±3 dni, podobny kontrahent – albo możliwy duplikat: prawie ta sama kwota przy podobnej nazwie (łączony), ta sama kwota pod
+              inną nazwą (łączony przy zakupie kartą do dnia różnicy, inaczej zaznacz sam). Wpis zachowuje Twoją kategorię i godzinę, bierze dane z banku. Nie
+              połączony możliwy duplikat znajdziesz potem w „Duplikatach operacji”.
+            </p>
             {merges.map((p) => (
               <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-merge">
-                <input type="checkbox" checked={!choices.noMerge[p.key]} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} />
+                <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-merge-join" />
                 <span className="min-w-0 truncate">
                   <span className="text-fg-strong">{p.tx.counterparty || '(bez kontrahenta)'}</span>
                   <span className="text-muted">
@@ -234,6 +234,12 @@ function MatchesPanel() {
                     {p.tx.time ? ` ${p.tx.time}` : ''} · {cats.label(p.tx.categoryId) || 'bez kategorii'}
                   </span>
                   <span className="text-dim"> ⟷ bank {fullDay(p.row.date)}: {p.row.counterparty || p.row.description}</span>
+                  {p.loose && (
+                    <span className="ml-1 text-accent" data-testid="import-merge-loose">
+                      możliwy duplikat – {p.loose === 'name' ? 'inna nazwa' : `wpis ${plnText(p.tx.amount)} zł`}
+                      {p.ask ? ' · zaznacz, jeśli to ta sama operacja' : ''}
+                    </span>
+                  )}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -292,85 +298,134 @@ function MatchesPanel() {
   )
 }
 
-function GroupRow({ g }: { g: ImportGroup }) {
-  const choice = useImport((s) => s.choices.groups[g.group]) ?? g.proposed
+/** A theme's name: its category (or kind, container), the bank's category it hints at, or the kind of operation. */
+function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, containerName: (id: string) => string): string {
+  const b = t.basis
+  if (b.kind === 'hint') return `mBank: ${b.bankCategories.join(', ') || 'kategoria'}`
+  if (b.kind === 'op') return OP_LABEL[t.direction][b.op]
+  if (b.containerId) return `Ładownia · ${containerName(b.containerId)}`
+  const c = b.choice
+  if (c.kind === 'expense') {
+    const cat = catLabel(c.categoryId) || 'bez kategorii'
+    return t.direction === 'in' ? `Zwroty · ${cat}` : c.refundable ? `Do zwrotu · ${cat}` : cat
+  }
+  if (c.kind === 'income') return c.household ? 'Od domownika' : 'Wpływy (przychód)'
+  if (c.kind === 'transfer') return 'Przelewy własne'
+  if (c.kind === 'trading') return t.direction === 'out' ? 'XTB – dopłaty do konta tradingowego' : 'XTB – wypłaty z konta tradingowego'
+  if (c.kind === 'loan') return 'Pożyczki'
+  if (c.kind === 'tax') return 'Podatek PIT-38'
+  return TX_KIND_LABEL[c.kind as TxKind] ?? c.kind
+}
+
+const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out' ? 'expense' : 'income', categoryId: null, refundable: false, household: false, counterAccountId: null })
+
+/** The kind and the category of a decision (a theme's, a group's). */
+function DecisionFields({ choice, direction, onChange, testId }: { choice: Choice; direction: 'in' | 'out'; onChange: (c: Choice) => void; testId: string }) {
+  const option = optionOf(choice, direction)
+  return (
+    <>
+      <select className="input h-[24px] w-[230px] py-0" value={option} onChange={(e) => onChange(choiceFor(e.currentTarget.value as Option, choice))} aria-label="Co to jest" data-testid={`${testId}-kind`}>
+        {OPTIONS[direction].map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {choice.kind === 'expense' && (
+        <CategorySelect className="h-[24px] min-w-[180px] flex-1 py-0" value={choice.categoryId} onChange={(categoryId) => onChange({ ...choice, categoryId })} data-testid={`${testId}-category`} />
+      )}
+    </>
+  )
+}
+
+function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inherited: Choice; themeDecided: boolean; found: NewRow[] | 'all' | undefined }) {
+  const own = useImport((s) => s.choices.groups[g.group])
   const remember = useImport((s) => s.choices.remember[g.group] ?? false)
-  const decided = useImport((s) => !!s.choices.groups[g.group])
   const rowChoices = useImport((s) => s.choices.rows)
+  const skip = useImport((s) => s.choices.skip)
+  const checked = useImport((s) => !!s.selected.groups[g.group])
+  const selectedRows = useImport((s) => s.selected.rows)
   const cats = useCategories()
   const [open, setOpen] = useState(false)
-  const option = optionOf(choice, g.direction)
-  const showCategory = choice.kind === 'expense'
-  const source = decided ? 'Twoja decyzja' : SOURCE_LABEL[g.source]
+  const partial = Array.isArray(found)
+  const shown = partial ? found : g.rows
+  const choice = own ?? inherited
+  const skipped = g.rows.filter((p) => skip[p.key]).length
+  const badge = own ? 'Twoja decyzja' : themeDecided ? 'jak temat' : SOURCE_LABEL[g.source]
   return (
-    <div className="border-b border-line/70 py-1.5 last:border-b-0" data-testid="import-group" data-group={g.group} data-label={g.label}>
+    <div className="border-t border-line/50 py-1 pl-6" data-testid="import-group" data-group={g.group} data-label={g.label}>
       <div className="flex items-center gap-2">
-        <button type="button" className="btn btn-ghost h-[22px] px-0.5" onClick={() => setOpen(!open)} aria-label={open ? 'Zwiń' : 'Pokaż operacje'}>
-          {open ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
+        <input type="checkbox" checked={checked} onChange={(e) => selectImport({ groups: [g.group] }, e.currentTarget.checked)} aria-label={`Zaznacz ${g.label}`} data-testid="import-group-select" />
+        <button type="button" className="btn btn-ghost h-[22px] px-0.5" onClick={() => setOpen(!open)} aria-label={open ? 'Zwiń' : 'Pokaż operacje'} data-testid="import-group-toggle">
+          {open || partial ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
         </button>
-        <span className="min-w-0 flex-1 truncate">
+        <span className={cx('min-w-0 flex-1 truncate', skipped === g.rows.length && 'line-through opacity-60')} title={g.names.length > 1 ? `Nazwy w banku: ${g.names.join(' · ')}` : undefined}>
           <span className="text-fg-strong">{g.label}</span>
           <span className="text-muted">
             {' '}
-            · {g.rows.length} {g.rows.length === 1 ? 'operacja' : g.rows.length < 5 ? 'operacje' : 'operacji'} · {day(g.from)}
+            · {operations(g.rows.length)}
+            {g.names.length > 1 ? ` · ${g.names.length} nazwy` : ''} · {day(g.from)}
             {g.from !== g.to ? `–${day(g.to)}` : ''}
+            {skipped > 0 ? ` · pominięte: ${skipped}` : ''}
           </span>
         </span>
         <span className={cx('num shrink-0 text-right', g.sum > 0 ? 'text-up' : 'text-fg-strong')}>{signedPln(g.sum)}</span>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-2 pl-6">
-        <select className="input h-[24px] w-[230px] py-0" value={option} onChange={(e) => chooseGroup(g.group, choiceFor(e.currentTarget.value as Option, choice))} aria-label="Co to jest" data-testid="import-group-kind">
-          {OPTIONS[g.direction].map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        {showCategory && (
-          <CategorySelect className="h-[24px] min-w-[180px] flex-1 py-0" value={choice.categoryId} onChange={(categoryId) => chooseGroup(g.group, { ...choice, categoryId })} data-testid="import-group-category" />
-        )}
-        <Badge tone={g.source === 'none' && !decided ? 'warn' : 'default'} title={g.reason}>
-          {source}
+      <div className="mt-1 flex flex-wrap items-center gap-2 pl-12">
+        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => chooseGroup(g.group, c)} testId="import-group" />
+        <Badge tone={g.source === 'none' && !own && !themeDecided ? 'warn' : 'default'} title={g.reason}>
+          {badge}
         </Badge>
-        {decided && (
-          <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają tego kontrahenta same">
+        {own && !g.byTitle && (
+          <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają tę markę same">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(g.group, e.currentTarget.checked)} data-testid="import-group-remember" />
             zapamiętaj
           </label>
         )}
-        {!decided && g.source !== 'rule' && <span className="truncate text-[11px] text-dim">{g.reason}</span>}
+        {own && (
+          <button type="button" className="text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => clearGroup(g.group)} data-testid="import-group-reset">
+            jak temat
+          </button>
+        )}
+        {!own && !themeDecided && g.source !== 'rule' && <span className="truncate text-[11px] text-dim">{g.reason}</span>}
+        {g.byTitle && <span className="text-[11px] text-dim">z tytułu przelewu – bez reguły</span>}
       </div>
-      {showCategory && !choice.categoryId && g.hint && (
-        <div className="mt-0.5 pl-6 text-[11px] text-dim">
+      {choice.kind === 'expense' && !choice.categoryId && g.hint && (
+        <div className="mt-0.5 pl-12 text-[11px] text-dim">
           kategoria mBanku „{g.bankCategory}” →{' '}
-          <button type="button" className="text-accent hover:underline" onClick={() => chooseGroup(g.group, { ...choice, categoryId: g.hint })} data-testid="import-group-hint">
+          <button type="button" className="text-accent hover:underline" onClick={() => acceptGroupHint(g.group, { ...choice, categoryId: g.hint })} data-testid="import-group-hint">
             {cats.label(g.hint)}?
           </button>
         </div>
       )}
-      {open && (
-        <div className="mt-1 flex flex-col pl-6" data-testid="import-group-rows">
-          {g.rows.map((p) => {
-            const own = rowChoices[p.key]
-            const c = own ?? choice
+      {(open || partial) && (
+        <div className="mt-1 flex flex-col pl-12" data-testid="import-group-rows">
+          {shown.map((p) => {
+            const mine = rowChoices[p.key]
+            const c = mine ?? choice
+            const out = skip[p.key]
             return (
-              <div key={p.key} className="grid grid-cols-[48px_minmax(0,1fr)_96px_200px] items-center gap-2 py-[1px] text-[11.5px]" data-testid="import-row">
+              <div key={p.key} className={cx('grid grid-cols-[18px_48px_minmax(0,1fr)_96px_200px_64px] items-center gap-2 py-[1px] text-[11.5px]', out && 'opacity-50')} data-testid="import-row">
+                <input type="checkbox" checked={!!selectedRows[p.key]} onChange={(e) => selectImport({ rows: [p.key] }, e.currentTarget.checked)} aria-label="Zaznacz operację" data-testid="import-row-select" />
                 <span className="num text-muted">{day(p.row.date)}</span>
-                <span className="min-w-0 truncate text-muted" title={p.row.description}>
+                <span className={cx('min-w-0 truncate text-muted', out && 'line-through')} title={p.row.description}>
                   {p.row.title || p.row.description}
                   {p.row.pending && <span className="ml-1 text-accent">nierozliczona</span>}
                 </span>
                 <span className={cx('num text-right', p.row.amount > 0 ? 'text-up' : 'text-fg')}>{signedPln(p.row.amount)}</span>
                 {c.kind === 'expense' ? (
                   <CategorySelect
-                    className={cx('h-[22px] py-0 text-[11px]', own && 'border-accent/60')}
+                    className={cx('h-[22px] py-0 text-[11px]', mine && 'border-accent/60')}
                     value={c.categoryId}
-                    emptyLabel={own ? '— bez kategorii —' : '(jak grupa)'}
+                    emptyLabel={mine ? '— bez kategorii —' : '(jak grupa)'}
                     onChange={(categoryId) => chooseRow(p.key, categoryId === choice.categoryId ? null : { ...c, categoryId })}
                   />
                 ) : (
                   <span />
                 )}
+                <button type="button" className="text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => setSkip([p.key], !out)} data-testid="import-row-skip">
+                  {out ? 'importuj' : 'pomiń'}
+                </button>
               </div>
             )
           })}
@@ -380,36 +435,228 @@ function GroupRow({ g }: { g: ImportGroup }) {
   )
 }
 
-function GroupsPanel() {
+function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; label: string; status: ThemeStatus; found: Map<string, NewRow[] | 'all'>; searching: boolean }) {
+  const decided = useImport((s) => s.choices.themes[t.theme])
+  const remember = useImport((s) => s.choices.rememberThemes[t.theme] ?? false)
+  const shown = t.groups.filter((g) => found.has(g.group))
+  // The groups shown (in a search: the ones found) – the tick of the theme is theirs.
+  const allChecked = useImport((s) => shown.every((g) => s.selected.groups[g.group]))
+  const cats = useCategories()
+  const [open, setOpen] = useState(status === 'todo')
+  const expanded = open || searching
+  const proposed = t.basis.kind === 'proposal' ? t.basis.choice : nothing(t.direction)
+  const choice = decided ?? proposed
+  return (
+    <div className="border-b border-line/70 py-1.5 last:border-b-0" data-testid="import-theme" data-theme={t.theme} data-label={label} data-status={status}>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={allChecked}
+          onChange={(e) => selectImport({ groups: shown.map((g) => g.group) }, e.currentTarget.checked)}
+          aria-label={`Zaznacz temat ${label}`}
+          data-testid="import-theme-select"
+        />
+        <button type="button" className="btn btn-ghost h-[22px] px-0.5" onClick={() => setOpen(!open)} aria-label={expanded ? 'Zwiń' : 'Pokaż marki'} data-testid="import-theme-toggle">
+          {expanded ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
+        </button>
+        <span className="min-w-0 flex-1 truncate">
+          <span className="font-medium text-fg-strong">{label}</span>
+          <span className="text-muted">
+            {' '}
+            · {count(t.groups.length, 'marka', 'marki', 'marek')} · {operations(t.count)}
+          </span>
+        </span>
+        <span className={cx('num shrink-0 text-right', t.sum > 0 ? 'text-up' : 'text-fg-strong')}>{signedPln(t.sum)}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 pl-6">
+        <DecisionFields choice={choice} direction={t.direction} onChange={(c) => chooseTheme(t.theme, c)} testId="import-theme" />
+        <Badge tone={status === 'todo' ? 'warn' : status === 'check' ? 'accent' : 'default'}>{decided ? 'Twoja decyzja' : THEME_SOURCE[t.source]}</Badge>
+        {decided && (
+          <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają marki tego tematu same">
+            <input type="checkbox" checked={remember} onChange={(e) => setRememberTheme(t.theme, e.currentTarget.checked)} data-testid="import-theme-remember" />
+            zapamiętaj
+          </label>
+        )}
+        {!decided && t.basis.kind === 'hint' && t.direction === 'out' && (
+          <span className="text-[11px] text-dim">
+            podpowiedź mBanku →{' '}
+            <button
+              type="button"
+              className="text-accent hover:underline"
+              onClick={() => chooseTheme(t.theme, { ...nothing('out'), categoryId: t.basis.kind === 'hint' ? t.basis.categoryId : null }, false, true)}
+              data-testid="import-theme-hint"
+            >
+              {cats.label(t.basis.categoryId)}?
+            </button>
+          </span>
+        )}
+      </div>
+      {expanded && (
+        <div className="mt-1 flex flex-col" data-testid="import-theme-groups">
+          {shown.map((g) => (
+            <GroupRow key={g.group} g={g} inherited={decided ?? g.proposed} themeDecided={!!decided} found={found.get(g.group)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One decision, or „nie importuj”, for everything ticked (1.2.1). */
+/** The decisions a keyword rule can hold (`KeywordRules`): the search kept as a key for the next imports. */
+const KEYWORD_KIND: Partial<Record<Option, { kind: TxKind; direction: 'in' | 'out' | null }>> = {
+  expense: { kind: 'expense', direction: 'out' },
+  income: { kind: 'income', direction: 'in' },
+  transfer: { kind: 'transfer', direction: null }
+}
+
+function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
+  const selected = useImport((s) => s.selected)
+  const query = useImport((s) => s.query)
+  const [option, setOption] = useState<Option>('expense')
+  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [asKeyword, setAsKeyword] = useState(false)
+  const nGroups = groups.filter((g) => selected.groups[g.group]).length
+  const rows = selectedRowKeys(groups, selected).length
+  if (!nGroups && !rows) return null
+  const keyword = keywordOfSearch(query)
+  const keywordKind = keyword ? KEYWORD_KIND[option] : undefined
+  const apply = () => {
+    const category = option === 'expense' || option === 'refundable' ? categoryId : null
+    // The search as a key first: the file is planned again with it, the decisions of the ticked stay theirs.
+    let note = ''
+    if (asKeyword && keyword && keywordKind) {
+      const err = saveKeywordRule({ keyword, direction: keywordKind.direction, kind: keywordKind.kind, categoryId: category })
+      note = err ? ` Słowo kluczowe: ${err}` : ` Słowo kluczowe „${keyword}” zapamiętane.`
+    }
+    setAsKeyword(false)
+    const { applied, unfit } = chooseSelected(groups, option, category)
+    toast((unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`) + note, unfit ? 'info' : 'success', 5000)
+  }
+  return (
+    <div className="sticky top-0 z-10 mb-1 flex flex-wrap items-center gap-2 border border-accent/50 bg-raised px-2 py-1.5 text-[12px]" data-testid="import-bulk">
+      <span className="text-fg-strong" data-testid="import-bulk-count">
+        Zaznaczone: {nGroups ? `${count(nGroups, 'grupa', 'grupy', 'grup')}, ` : ''}
+        {operations(rows)}
+      </span>
+      <select className="input h-[24px] w-[220px] py-0" value={option} onChange={(e) => setOption(e.currentTarget.value as Option)} aria-label="Decyzja dla zaznaczonych" data-testid="import-bulk-kind">
+        {BULK_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {(option === 'expense' || option === 'refundable') && <CategorySelect className="h-[24px] min-w-[170px] py-0" value={categoryId} onChange={setCategoryId} data-testid="import-bulk-category" />}
+      {keywordKind && (
+        <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają operacje z tym słowem w nazwie albo tytule same">
+          <input type="checkbox" checked={asKeyword} onChange={(e) => setAsKeyword(e.currentTarget.checked)} data-testid="import-bulk-keyword" />
+          zapamiętaj „{keyword}” jako słowo kluczowe
+        </label>
+      )}
+      <button type="button" className="btn btn-accent h-[24px]" onClick={apply} data-testid="import-bulk-apply">
+        Ustaw
+      </button>
+      <button type="button" className="btn h-[24px]" onClick={() => toast(`Nie importuję: ${operations(skipSelected(groups, true))}.`, 'info', 3500)} data-testid="import-bulk-skip">
+        Nie importuj
+      </button>
+      <button type="button" className="btn h-[24px]" onClick={() => skipSelected(groups, false)} data-testid="import-bulk-unskip">
+        Importuj jednak
+      </button>
+      <button type="button" className="btn btn-ghost h-[24px]" onClick={clearImportSelection} data-testid="import-bulk-clear">
+        Odznacz
+      </button>
+    </div>
+  )
+}
+
+function ThemesPanel() {
   const plan = useImport((s) => s.plan)
-  const groups = useMemo(() => groupsOf(plan), [plan])
-  const choices = useImport((s) => s.choices.groups)
+  const choices = useImport((s) => s.choices)
+  const query = useImport((s) => s.query)
+  const cats = useCategories()
+  const containers = useRecordList('containers')
+  const groups = useMemo(() => importGroups(plan), [plan])
+  const themes = useMemo(() => importThemes(groups), [groups])
+  const search = useDeferredValue(query)
+  const found = useMemo(() => searchGroups(groups, search, (id) => cats.label(id)), [groups, search, cats])
+  const [closed, setClosed] = useState<Record<ThemeStatus, boolean>>({ todo: false, check: false, done: true })
   if (!plan) return null
-  const hintable = groups.filter((g) => {
-    const c = choices[g.group] ?? g.proposed
-    return c.kind === 'expense' && !c.categoryId && g.hint
-  })
-  const undecided = groups.filter((g) => !choices[g.group] && g.source === 'none').length
+  const containerName = (id: string) => containers.find((c) => c.id === id)?.name ?? 'kontener'
+  const status = new Map(themes.map((t) => [t.theme, themeStatus(t, choices)]))
+  const sure = themes.filter((t) => t.basis.kind === 'proposal' && status.get(t.theme) === 'check')
+  const hints = hintable(themes, choices)
+  const searching = !!search.trim()
+  const visible = themes.filter((t) => t.groups.some((g) => found.has(g.group)))
+  const visibleGroups = visible.flatMap((t) => t.groups.filter((g) => found.get(g.group) === 'all').map((g) => g.group))
+  const visibleRows = visible.flatMap((t) => t.groups.flatMap((g) => {
+    const f = found.get(g.group)
+    return Array.isArray(f) ? f.map((p) => p.key) : []
+  }))
+  const counts = { todo: 0, check: 0, done: 0 }
+  for (const s of status.values()) counts[s]++
   return (
     <Panel
       title="Kategoryzacja"
       actions={
-        hintable.length > 0 ? (
-          <button className="btn h-[22px]" onClick={() => acceptHints(hintable)} title="Kategoria mBanku jako Twoja decyzja – sprawdź, bywa nietrafiona (np. XTB jako „Ubezpieczenia”)" data-testid="import-accept-hints">
-            Przyjmij podpowiedzi mBanku ({hintable.length})
-          </button>
-        ) : undefined
+        <div className="flex gap-1.5">
+          {sure.length > 0 && (
+            <button className="btn h-[22px]" onClick={() => acceptSure(sure)} title="Sieci ze słownika, słowa kluczowe i rozpoznanie aplikacji jako Twoja decyzja – zapamiętane dla kolejnych importów" data-testid="import-accept-sure">
+              Przyjmij pewne ({sure.length})
+            </button>
+          )}
+          {hints.length > 0 && (
+            <button className="btn h-[22px]" onClick={() => acceptHints(hints)} title="Kategoria mBanku jako decyzja tego importu, bez zapamiętania – sprawdź, bywa nietrafiona (np. XTB jako „Ubezpieczenia”)" data-testid="import-accept-hints">
+              Przyjmij podpowiedzi mBanku ({hints.length})
+            </button>
+          )}
+        </div>
       }
     >
-      <p className="mb-1 text-[11.5px] text-muted">
+      <p className="mb-1.5 text-[11.5px] text-muted" data-testid="import-themes-summary">
         {groups.length === 0
           ? 'Brak nowych operacji do kategoryzacji.'
-          : `Nowe operacje w ${groups.length} grupach po kontrahencie (${undecided} do decyzji). Decyzja dla grupy obejmuje wszystkie jej operacje i – z „zapamiętaj” – kolejne importy. Kategorie mBanku są tylko podpowiedzią.`}
+          : `Nowe operacje: ${count(groups.length, 'grupa', 'grupy', 'grup')} w ${count(themes.length, 'temacie', 'tematach', 'tematach')} – do decyzji ${counts.todo}, do sprawdzenia ${counts.check}, gotowe ${counts.done}. Decyzja tematu obejmuje wszystkie jego marki; marka i operacja mogą mieć własną. Kategorie mBanku są tylko podpowiedzią.`}
       </p>
+      {groups.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+          <div className="relative w-[260px]">
+            <IconSearch size={13} className="absolute top-1/2 left-2 -translate-y-1/2 text-dim" />
+            <input className="input pl-7" placeholder="Szukaj: nazwa, tytuł, kategoria, kwota…" value={query} onChange={(e) => setImportQuery(e.currentTarget.value)} data-testid="import-search" />
+          </div>
+          {searching && (
+            <span className="text-[11px] text-muted" data-testid="import-search-count">
+              znaleziono: {count(visibleGroups.length, 'grupa', 'grupy', 'grup')}
+              {visibleRows.length ? ` + ${operations(visibleRows.length)}` : ''}
+            </span>
+          )}
+          <button type="button" className="btn h-[22px]" onClick={() => selectImport({ groups: visibleGroups, rows: visibleRows }, true)} data-testid="import-select-visible">
+            Zaznacz {searching ? 'znalezione' : 'wszystkie'}
+          </button>
+          {searching && (
+            <button type="button" className="text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => setImportQuery('')}>
+              wyczyść
+            </button>
+          )}
+        </div>
+      )}
+      <BulkBar groups={groups} />
       <div className="flex flex-col" data-testid="import-groups">
-        {groups.map((g) => (
-          <GroupRow key={g.group} g={g} />
-        ))}
+        {(['todo', 'check', 'done'] as const).map((st) => {
+          const list = visible.filter((t) => status.get(t.theme) === st)
+          if (!list.length) return null
+          const isClosed = closed[st] && !searching
+          return (
+            <div key={st} className="mb-1" data-testid={`import-section-${st}`}>
+              <button type="button" className="flex w-full items-center gap-1 border-b border-line py-1 text-left text-[11px] uppercase tracking-wide text-muted hover:text-fg-strong" onClick={() => setClosed({ ...closed, [st]: !closed[st] })}>
+                {isClosed ? <IconChevronRight size={11} /> : <IconChevronDown size={11} />}
+                {STATUS_LABEL[st]} · {list.length}
+              </button>
+              {!isClosed &&
+                list.map((t) => <ThemeRow key={t.theme} t={t} label={themeLabel(t, (id) => cats.label(id), containerName)} status={st} found={found} searching={searching} />)}
+            </div>
+          )
+        })}
+        {searching && visible.length === 0 && <div className="p-3 text-center text-[12px] text-dim">Nic nie pasuje do „{search}”.</div>}
       </div>
     </Panel>
   )
@@ -467,6 +714,7 @@ function DonePanel() {
         <span>
           Nowe: <b className="num">{done.counts.created}</b> · połączone z wpisami: <b className="num">{done.counts.merged}</b> · rozliczone: <b className="num">{done.counts.settled}</b> · usunięte: <b className="num">{done.counts.removed}</b>
           {done.counts.skipped > 0 ? ` · pominięte (usunięte wcześniej): ${done.counts.skipped}` : ''}
+          {done.counts.excluded > 0 ? ` · nie importowane (Twój wybór): ${done.counts.excluded}` : ''}
           {done.rules > 0 ? ` · nowe reguły: ${done.rules}` : ''}
         </span>
         <span className="num truncate text-[11px] text-dim" title={done.backup}>
@@ -484,6 +732,9 @@ function DonePanel() {
 
 export function ImportPage() {
   const plan = useImport((s) => s.plan)
+  const rules = useData((s) => s.fi?.settings.import.rules)
+  // A keyword added or a rule deleted (here, in the settings, on another computer): the open file planned again.
+  useEffect(() => replanIfRulesChanged(rules), [rules])
   const done = useImport((s) => s.done)
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()
@@ -509,15 +760,21 @@ export function ImportPage() {
           <div className="flex min-w-0 flex-col">
             <FilePanel />
             <Summary />
+            {plan && (
+              <Panel title="Słowa kluczowe">
+                <KeywordRules />
+              </Panel>
+            )}
             <DonePanel />
+            {!plan && <DuplicatesPanel />}
             {(done || !plan) && <BalanceCheck />}
           </div>
           <div className="flex min-w-0 flex-col">
             <MatchesPanel />
-            <GroupsPanel />
+            <ThemesPanel />
             {!plan && (
               <Panel title="Kategoryzacja">
-                <div className="p-4 text-center text-[12px] text-dim">Wybierz plik CSV z mBanku – operacje pojawią się tu w grupach po kontrahencie.</div>
+                <div className="p-4 text-center text-[12px] text-dim">Wybierz plik CSV z mBanku – operacje pojawią się tu w tematach (kategoriach) i grupach marek.</div>
               </Panel>
             )}
           </div>

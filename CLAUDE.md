@@ -262,6 +262,32 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/intel.test.ts`, `export.test.ts`, E2E `tests/e2e/intel.spec.ts` (okno zapisu podstawione przez
   `app.evaluate`).
 
+## Kod (1.2.1 – grupowanie importu z mBanku, D75 / D76)
+- Shared `import/`:
+  - `names.ts` – `counterpartyKey` (klucz całej nazwy, re-eksport z `classify.ts`), `withoutLegalForms`;
+  - `brands.ts` – `tokens` / `words` (złożone słowa, „?” banku = dowolna litera), `brandOf` (klucz marki: domena,
+    operator płatności, miasta `CITIES`, kody sklepów; `dictionary` / `transfer`), `BRANDS` (słownik sieci, stałe id),
+    `KEYWORDS` + `keywordIn`, `keywordMatches` / `normalizeKeyword` (słowa użytkownika) – T85, T86;
+  - `classify.ts` – `ruleTargetOf` (marka, cała nazwa, słowa nazwy i tytułu; wspólne z Operacjami), `findRule`
+    (marka → cała nazwa → „zawiera” → słowo użytkownika), źródła `brand` / `keyword`, `byTitle` – T87;
+  - `reconcile.ts` – `groupKey` / `proposalSig` (marka | kierunek | propozycja), `importGroups`, `importThemes`
+    (`ThemeBasis`: propozycja / podpowiedź mBanku / rodzaj operacji), `searchGroups`, `ImportChoices.themes` /
+    `rememberThemes` / `skip`, nauka reguł po marce w `buildImport` – T88–T90.
+- Schemat: `importRuleSchema.mode` + `keyword` (addytywnie).
+- Renderer `features/import/`: `state.ts` (`chooseTheme`, `themeStatus`, `acceptSure`, `acceptHints` / `hintable`,
+  `replanImport` / `replanIfRulesChanged` – `rulesUsed`, wyszukiwanie `query`, zaznaczenie `selected`,
+  `chooseSelected`, `skipSelected` / `setSkip`), `options.ts` (opcje decyzji, `BULK_OPTIONS`, `fits`),
+  `KeywordRules.tsx` (słowa użytkownika – też w Ustawienia → Import), `ImportPage.tsx` (`ThemesPanel` z sekcjami,
+  `ThemeRow`, `GroupRow`, `BulkBar` – słowo z wyszukiwania), `rules.ts` (`ruleFor` / `rememberCategory` po marce,
+  `saveKeywordRule`, `rememberBrands`, `keywordOfSearch`).
+- Operacje (T91): `features/operations/state.ts` `ticked` / `tickOperations` / `categorizeTicked` (z „Cofnij”),
+  `OperationsPage.tsx` kolumna zaznaczenia, `TickAll`, `BulkBar` (`operations-bulk-*`), `DuplicatesLink`.
+- Duplikaty (D77, T92–T94, wzór ICTTJ 1.19.1): `reconcile.ts` `joinable`, `looseMatch`, `closeAmount`, `merge.loose` /
+  `ask`, `joins`; `shared/import/duplicates.ts` (`findDuplicates`, `mergeDuplicate`, `duplicateKey` / `rowKey`);
+  `settings.import.notDuplicates`; renderer `features/import/DuplicatesPanel.tsx` (`useDuplicates`, scalanie,
+  `deleteManyWithUndo(…, onUndo)`); testy `tests/unit/duplicates.test.ts`, E2E `tests/e2e/duplicates.spec.ts`.
+- Testy: `tests/unit/import-brands.test.ts`, `import.test.ts`, E2E `tests/e2e/import.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -321,3 +347,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E7 Dowództwo (gra) → 1.2.0 (grupa D)
 - [x] E8 Wywiad i raporty → 1.2.0 (grupa D)
 - ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)
+- [x] 1.2.1 Grupowanie importu z mBanku, decyzje zbiorcze, duplikaty (D75–D77)

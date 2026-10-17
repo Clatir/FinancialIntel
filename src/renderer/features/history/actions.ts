@@ -37,9 +37,10 @@ export async function deleteWithUndo(collection: Collection, id: string, label: 
 
 /**
  * Delete several records with one "Cofnij" (e.g. duplicates after an import): the undo restores each from the
- * version its deletion kept. A deletion that fails stops the rest; those already deleted still get the undo.
+ * version its deletion kept (after `onUndo` – what the caller changed with them, 1.2.1). A deletion that fails stops
+ * the rest; those already deleted still get the undo.
  */
-export async function deleteManyWithUndo(collection: Collection, ids: readonly string[], label: string, text: (n: number) => string): Promise<void> {
+export async function deleteManyWithUndo(collection: Collection, ids: readonly string[], label: string, text: (n: number) => string, onUndo?: () => void): Promise<void> {
   const deleted: string[] = []
   let error: unknown = null
   for (const id of ids) {
@@ -56,6 +57,8 @@ export async function deleteManyWithUndo(collection: Collection, ids: readonly s
       label: 'Cofnij',
       run: () =>
         void (async () => {
+          // What changed with the deletion (a merged record, a moved link) goes back first.
+          onUndo?.()
           let missing = 0
           for (const id of deleted) {
             const last = (await api.historyList(collection, id)).find((e) => e.reason === 'delete')

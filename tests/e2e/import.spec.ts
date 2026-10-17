@@ -16,6 +16,8 @@ async function answerFileDialog(app: ElectronApplication, path: string): Promise
 const operations = (dataDir: string) => records(dataDir, 'transactions')
 
 const group = (page: Page, label: string) => page.locator(`[data-testid="import-group"][data-label="${label}"]`).first()
+/** A group by its brand and direction (`ImportGroup.group` = brand|direction|proposal). */
+const brandGroup = (page: Page, brand: string, direction: 'in' | 'out') => page.locator(`[data-testid="import-group"][data-group^="${brand}|${direction}|"]`).first()
 
 test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, reguły, kopia, ponowny import, saldo', async () => {
   const { app, page, dataDir, errors } = await launch()
@@ -47,39 +49,88 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await expect(page.getByTestId('import-count-merge')).toHaveText('1')
     await expect(page.getByTestId('import-merge')).toContainText('Biedronka')
 
-    // Recognized by the app: XTB, own transfers; the bank's categories only hints.
+    // Themes (D75): the undecided first, the recognized to check, the user's rules done.
+    await expect(page.getByTestId('import-section-todo')).toBeVisible()
+    await expect(page.getByTestId('import-section-check')).toBeVisible()
+    await expect(page.getByTestId('import-section-done')).toBeVisible()
+    const search = page.getByTestId('import-search')
+
+    // Recognized by the app: XTB, own transfers; a chain of the dictionary (Orlen); the starter rules (D69).
+    await search.fill('xtb')
     await expect(group(page, 'xtb.com').getByTestId('import-group-kind')).toHaveValue('trading')
+    await search.fill('jan kapitan')
     await expect(group(page, 'JAN KAPITAN').getByTestId('import-group-kind')).toHaveValue('transfer')
-    await expect(group(page, 'Orlen').getByTestId('import-group-category')).toHaveValue('')
-    await expect(group(page, 'Orlen').getByTestId('import-group-hint')).toHaveText('Auto · paliwo?')
-    // Starter rules (D69): Bolt → Rozrywka i hobby, KOLEO → Auto · przejazdy.
+    await search.fill('orlen')
+    await expect(group(page, 'Orlen').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000301')
+    await search.fill('bolt')
     await expect(group(page, 'Bolt').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000600')
-    await expect(group(page, 'KOLEO').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000305')
+    await search.fill('koleo')
+    await expect(brandGroup(page, 'koleo', 'out').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000305')
 
     // Decisions by group: the user narrows Bolt to „wyjścia” (the starter rule learns it); Tomasz is a household member.
+    await search.fill('bolt')
     await group(page, 'Bolt').getByTestId('import-group-category').selectOption({ label: 'Rozrywka i hobby · wyjścia' })
     await expect(group(page, 'Bolt').getByTestId('import-group-remember')).toBeChecked()
-    await group(page, 'TOMASZ xxx').getByTestId('import-group-kind').selectOption('household')
+    await search.fill('tomasz')
+    await brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-kind').selectOption('household')
+    await search.fill('')
+
+    // The bank's hints for whole themes – no decision of the user, not remembered (D68); then the sure ones in one click.
     await page.getByTestId('import-accept-hints').click()
-    await expect(group(page, 'LIDL').getByTestId('import-group-category')).not.toHaveValue('')
-    // The bank's hints are no decision of the user: not remembered unless ticked (D68).
-    await expect(group(page, 'LIDL').getByTestId('import-group-remember')).not.toBeChecked()
+    await page.getByTestId('import-accept-sure').click()
+    await expect(page.getByTestId('import-section-check')).toHaveCount(0)
+    await search.fill('allegro')
+    await expect(group(page, 'Allegro').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000800')
+    await expect(page.locator('[data-testid="import-theme"]').filter({ has: group(page, 'Allegro') }).getByTestId('import-theme-remember')).not.toBeChecked()
+
+    // Search, tick, one decision for all of them: Chess.com → hobby; the station's toilets left out of this import.
+    await search.fill('chess')
+    await page.getByTestId('import-select-visible').click()
+    await page.getByTestId('import-bulk-kind').selectOption('expense')
+    await page.getByTestId('import-bulk-category').selectOption({ label: 'Rozrywka i hobby · hobby' })
+    // „Według przyjętego klucza”: the search kept as a keyword for the next imports.
+    await page.getByTestId('import-bulk-keyword').check()
+    await page.getByTestId('import-bulk-apply').click()
+    await expect(group(page, 'Chess.com 800-318-2827').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000602')
+    await page.getByTestId('import-bulk-clear').click()
+    await search.fill('toalety')
+    await page.getByTestId('import-select-visible').click()
+    await expect(page.getByTestId('import-bulk-count')).toContainText('3 operacje')
+    await page.getByTestId('import-bulk-skip').click()
+    await page.getByTestId('import-bulk-clear').click()
+    await expect(page.getByTestId('import-count-excluded')).toHaveText('3')
+    await expect(page.getByTestId('import-count-new')).toHaveText('265')
+
+    // A keyword of the user: the vending machines („AUTOMAT…”) are snacks – the open file is planned again.
+    await page.getByTestId('keyword-input').fill('automat')
+    await page.getByTestId('keyword-category').selectOption({ label: 'Jedzenie · kawa i przekąski' })
+    await page.getByTestId('keyword-add').click()
+    await search.fill('automat')
+    await expect(brandGroup(page, 'automatspec', 'out').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000103')
+    await search.fill('')
     await page.screenshot({ path: join('test-results', 'screens', '06-import.png') })
 
     await page.getByTestId('import-run').click()
-    await expect(page.getByTestId('import-done')).toContainText('Nowe: 268')
+    await expect(page.getByTestId('import-done')).toContainText('Nowe: 265')
     await expect(page.getByTestId('import-done')).toContainText('połączone z wpisami: 1')
-    await expect.poll(async () => (await operations(dataDir)).length, { timeout: 20_000 }).toBe(269)
+    await expect(page.getByTestId('import-done')).toContainText('nie importowane (Twój wybór): 3')
+    await expect.poll(async () => (await operations(dataDir)).length, { timeout: 20_000 }).toBe(266)
     const ops = await operations(dataDir)
     const merged = ops.find((t) => t.counterparty === 'Biedronka' && t.date === '2025-10-03' && t.amount === -1616)!
     expect(merged.time).toBe('18:40')
     expect((merged.bank as { description: string }).description).toContain('Biedronka')
     expect(new Set(ops.filter((t) => t.counterparty === 'Bolt').map((t) => t.categoryId))).toEqual(new Set(['01KDEFCAT00000000000000601']))
     expect(new Set(ops.filter((t) => t.counterparty === 'KOLEO' && (t.amount as number) < 0).map((t) => t.categoryId))).toEqual(new Set(['01KDEFCAT00000000000000305']))
+    expect(new Set(ops.filter((t) => /chess/i.test(t.counterparty as string)).map((t) => t.categoryId))).toEqual(new Set(['01KDEFCAT00000000000000602']))
+    expect(ops.filter((t) => /toalety/i.test(t.counterparty as string))).toEqual([])
     expect(ops.filter((t) => t.kind === 'trading')).toHaveLength(26)
     const fi = JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8'))
-    expect(fi.settings.import.rules.map((r: { match: string }) => r.match)).toEqual(expect.arrayContaining(['bolt', 'tomaszxxx']))
-    expect(fi.settings.import.rules.map((r: { match: string }) => r.match)).not.toContain('lidl')
+    const matches = fi.settings.import.rules.map((r: { match: string }) => r.match)
+    // The user's decisions and the accepted chains are rules (by brand); the bank's hints are not.
+    expect(matches).toEqual(expect.arrayContaining(['bolt', 'tomaszxxx', 'lidl', 'biedronka', 'automat']))
+    expect(matches).not.toContain('allegro')
+    expect(fi.settings.import.rules.find((r: { match: string }) => r.match === 'automat')).toMatchObject({ mode: 'keyword', direction: 'out', categoryId: '01KDEFCAT00000000000000103' })
+    expect(fi.settings.import.rules.find((r: { match: string; mode: string }) => r.match === 'chess' && r.mode === 'keyword')).toMatchObject({ direction: 'out', categoryId: '01KDEFCAT00000000000000602' })
     expect(fi.settings.import.ownNames).toEqual(['JAN KAPITAN'])
     expect((await fs.readdir(join(dataDir, 'backups', 'pre-import'))).length).toBe(1)
     await expect(page.getByTestId('import-to-operations')).toBeVisible()
@@ -92,15 +143,15 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.getByTestId('operation-row').first().click()
     await page.getByTestId('operation-delete').click()
     await page.getByTestId('operation-delete-confirm').click()
-    await expect.poll(async () => (await operations(dataDir)).length).toBe(268)
+    await expect.poll(async () => (await operations(dataDir)).length).toBe(265)
     await page.getByTestId('operations-search').fill('')
 
-    // …and the same file again (the next import overlaps): nothing new, the deleted one stays out.
+    // …and the same file again (the next import overlaps): the deleted one stays out, the ones left out come back.
     await page.keyboard.press('Control+3')
     await page.getByTestId('import-pick').click()
-    await expect(page.getByTestId('import-count-known')).toHaveText('268')
+    await expect(page.getByTestId('import-count-known')).toHaveText('265')
     await expect(page.getByTestId('import-count-deleted')).toHaveText('1')
-    await expect(page.getByTestId('import-run')).toBeDisabled()
+    await expect(page.getByTestId('import-count-new')).toHaveText('3')
     await page.getByTestId('import-close').click()
 
     // The balance from the bank: a difference becomes a correction to explain.
@@ -118,7 +169,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.keyboard.press('Control+2')
     await page.getByTestId('operations-period-menu').click()
     await page.getByTestId('operations-period-all').click()
-    await expect(page.getByTestId('operations-sums')).toContainText('269')
+    await expect(page.getByTestId('operations-sums')).toContainText('266')
     await page.getByTestId('operations-search').fill('koleo')
     await page.getByTestId('operation-row').first().click()
     await expect(page.getByTestId('operation-bank')).toContainText('KOLEO')
@@ -131,14 +182,36 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
       .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules.find((r: { match: string; direction: string }) => r.match === 'koleo' && r.direction === 'out')?.categoryId)
       .toBe('01KDEFCAT00000000000000304')
 
+    // Many operations at once (D76): the search's result ticked, one category, remembered for the brand; „Cofnij”.
+    await page.getByTestId('operations-search').fill('allegro')
+    await page.getByTestId('operations-tick-all').check()
+    await expect(page.getByTestId('operations-bulk-count')).toContainText('9 operacji')
+    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Osobiste · ubrania' })
+    await page.getByTestId('operations-bulk-remember').selectOption('brands')
+    await page.getByTestId('operations-bulk-apply').click()
+    const allegro = async () => new Set((await operations(dataDir)).filter((t) => /allegro/i.test(t.counterparty as string)).map((t) => t.categoryId))
+    await expect.poll(allegro).toEqual(new Set(['01KDEFCAT00000000000000801']))
+    await expect
+      .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules.find((r: { match: string }) => r.match === 'allegro')?.categoryId)
+      .toBe('01KDEFCAT00000000000000801')
+    await page.getByRole('button', { name: 'Cofnij' }).click()
+    await expect.poll(allegro).toEqual(new Set(['01KDEFCAT00000000000000800']))
+    // „Cofnij” takes the rule back too.
+    await expect
+      .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules.some((r: { match: string }) => r.match === 'allegro'))
+      .toBe(false)
+    await page.getByTestId('operations-search').fill('')
+
     // Settings → Import: the rules and the holder's names.
     await page.keyboard.press('Control+,')
     await page.getByTestId('settings-tab-import').click()
     await expect(page.getByTestId('own-name')).toHaveText([/JAN KAPITAN/])
-    // Bolt and KOLEO (starter rules changed by the user), Tomasz from the import; the accepted hints are no rules.
-    await expect(page.getByTestId('import-rule')).toHaveCount(3)
+    // The rules of brands (the user's keyword apart); one deleted.
+    const ruleCount = await page.getByTestId('import-rule').count()
+    expect(ruleCount).toBeGreaterThan(5)
+    await expect(page.getByTestId('keyword-rule')).toHaveText([/chess/, /automat/])
     await page.getByTestId('import-rule').first().getByTestId('import-rule-delete').click()
-    await expect(page.getByTestId('import-rule')).toHaveCount(2)
+    await expect(page.getByTestId('import-rule')).toHaveCount(ruleCount - 1)
     expect(errors).toEqual([])
   } finally {
     await app.close()

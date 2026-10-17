@@ -158,9 +158,13 @@ export type BudgetStart = z.infer<typeof budgetStartSchema>
  */
 export const importRuleSchema = z.looseObject({
   id: ulidSchema,
-  /** Normalized counterparty (`counterpartyKey`): the whole key ('exact') or a fragment of it ('contains'). */
+  /**
+   * 'exact': the brand key (`brandOf`, 1.2.1) or the whole name's key (`counterpartyKey`, rules learned before);
+   * 'contains': a fragment of either; 'keyword': folded words in the name or the title (`normalizeKeyword`, the last
+   * word may go on – „cukierni” = cukiernia). An older version ignores a mode it does not know.
+   */
   match: z.string().min(1).max(200),
-  mode: openEnum(['exact', 'contains'] as const).default('exact'),
+  mode: openEnum(['exact', 'contains', 'keyword'] as const).default('exact'),
   /** Money in or out; null = both. */
   direction: openEnum(['in', 'out'] as const).nullable().default(null),
   /** The counterparty as the bank writes it (for the list of rules). */
@@ -188,7 +192,16 @@ export const importSettingsSchema = z.looseObject({
    * The imports (E7: the mission „Łączność z bazą”): time → account, the last 100. A record, so two computers' imports
    * merge key by key (an array would be one conflicting field).
    */
-  log: z.record(isoDateTime, ulidSchema).catch({}).default({})
+  log: z.record(isoDateTime, ulidSchema).catch({}).default({}),
+  /**
+   * Groups of operations the user said are no duplicates (`duplicateKey` / `rowKey` → when, 1.2.1): not offered again.
+   * One bad entry (a hand-edited fi.json) drops itself, not the others.
+   */
+  notDuplicates: z
+    .record(z.string(), z.unknown())
+    .catch({})
+    .default({})
+    .transform((r) => Object.fromEntries(Object.entries(r).filter((e): e is [string, string] => e[0].length <= 300 && typeof e[1] === 'string')))
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 

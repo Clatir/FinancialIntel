@@ -1,11 +1,13 @@
-import { useDeferredValue, useEffect, useMemo, useRef } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, compareOperations, marksOf, matchesFilter, needsLog, sumOperations, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { useDuplicates } from '../import/DuplicatesPanel'
+import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { discardDraft, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
-import { useUi } from '../../store/ui'
+import { navigate, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
 import { usePanels } from '../../store/panels'
 import { plnText, signedPln } from '../../components/fields'
@@ -13,15 +15,15 @@ import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../.
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
 import { Badge, Kbd, cx } from '../../components/ui'
-import { WEEKDAY_PL } from '../../lib/format'
+import { WEEKDAY_PL, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
-import { useAccounts, useCategories } from './pickers'
-import { newOperation, resetFilter, selectOperation, setFilter, useOperationsUi } from './state'
+import { CategorySelect, useAccounts, useCategories } from './pickers'
+import { categorizeTicked, clearTicked, newOperation, resetFilter, selectOperation, setFilter, tickOperations, useOperationsUi } from './state'
 
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
 const ROW = 28
-const TEMPLATE = '78px 44px minmax(120px, 1.6fr) minmax(90px, 1fr) minmax(0, auto) 110px'
+const TEMPLATE = '16px 78px 44px minmax(120px, 1.6fr) minmax(90px, 1fr) minmax(0, auto) 110px'
 
 const MONTHS_PL = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
 const monthLabel = (m: string) => `${MONTHS_PL[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
@@ -142,6 +144,7 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
   const category = t.splits.length ? `${t.splits.length} części` : t.kind === 'expense' ? cats.label(t.categoryId) : TX_KIND_LABEL[t.kind]
   const account = accounts.find((a) => a.id === t.accountId)?.name ?? '?'
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split'].includes(m))
+  const ticked = useOperationsUi((s) => !!s.ticked[t.id])
   return (
     <div
       data-testid="operation-row"
@@ -153,6 +156,15 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
       )}
       style={{ top, height: ROW, gridTemplateColumns: TEMPLATE }}
     >
+      <input
+        type="checkbox"
+        checked={ticked}
+        disabled={draft}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => tickOperations([t.id], e.currentTarget.checked)}
+        aria-label="Zaznacz operację"
+        data-testid="operation-tick"
+      />
       <span className="num truncate text-fg">
         {t.date.slice(8, 10)}.{t.date.slice(5, 7)} <span className="text-dim">{WEEKDAY_PL[weekdayOf(t.date)]}</span>
       </span>
@@ -179,6 +191,78 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
       <span className={cx('num text-right font-medium', TONE_CLASS[tone])} data-testid="operation-amount-cell">
         {signedPln(t.amount)}
       </span>
+    </div>
+  )
+}
+
+/** Duplicates waiting (D77): to the import screen, where they are merged. */
+function DuplicatesLink() {
+  const n = useDuplicates().groups.length
+  if (!n) return null
+  return (
+    <button type="button" className="text-accent hover:underline" onClick={() => navigate({ page: 'import' })} title="Ta sama operacja dwa razy – scal na ekranie Import" data-testid="operations-duplicates">
+      Możliwe duplikaty: {n}
+    </button>
+  )
+}
+
+/** Tick every operation the filters and the search show (or none). */
+function TickAll({ rows }: { rows: readonly Transaction[] }) {
+  const drafts = useData((s) => s.drafts)
+  // A new entry being written is no operation yet.
+  const ids = useMemo(() => rows.filter((t) => !drafts[t.id]).map((t) => t.id), [rows, drafts])
+  const all = useOperationsUi((s) => ids.length > 0 && ids.every((id) => s.ticked[id]))
+  return (
+    <input
+      type="checkbox"
+      checked={all}
+      disabled={!ids.length}
+      onChange={(e) => tickOperations(ids, e.currentTarget.checked)}
+      title="Zaznacz wszystkie widoczne (wynik wyszukiwania i filtrów)"
+      aria-label="Zaznacz wszystkie widoczne"
+      data-testid="operations-tick-all"
+    />
+  )
+}
+
+/** One category for the ticked operations (D76), remembered for the import if the user wants. */
+function BulkBar({ visible }: { visible: readonly Transaction[] }) {
+  const ticked = useOperationsUi((s) => s.ticked)
+  const query = useOperationsUi((s) => s.filter.query)
+  const cats = useCategories()
+  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [remember, setRemember] = useState<'none' | 'brands' | 'keyword'>('none')
+  // Only what the list shows: an operation that left it (edited, deleted, changed elsewhere) is not changed.
+  const shown = visible.filter((t) => ticked[t.id])
+  const n = shown.length
+  if (!n) return null
+  const sum = shown.reduce((s, t) => s + t.amount, 0)
+  const keyword = keywordOfSearch(query)
+  const mode = remember === 'keyword' && !keyword ? 'none' : remember
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/50 bg-raised px-3 py-1.5 text-[12px]" data-testid="operations-bulk">
+      <span className="text-fg-strong" data-testid="operations-bulk-count">
+        Zaznaczone: {n} {plural(n, 'operacja', 'operacje', 'operacji')} · <span className="num">{signedPln(sum)} zł</span>
+      </span>
+      <span className="text-muted">kategoria</span>
+      <CategorySelect className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
+      <select className="input h-[24px] w-[250px] py-0" value={mode} onChange={(e) => setRemember(e.currentTarget.value as typeof remember)} aria-label="Zapamiętaj dla importu" data-testid="operations-bulk-remember">
+        <option value="none">bez zapamiętania</option>
+        <option value="brands">zapamiętaj dla ich marek (import)</option>
+        {keyword && <option value="keyword">zapamiętaj „{keyword}” jako słowo kluczowe</option>}
+      </select>
+      <button
+        type="button"
+        className="btn btn-accent h-[24px]"
+        disabled={!categoryId}
+        onClick={() => categoryId && categorizeTicked(shown.map((t) => t.id), categoryId, mode, cats.label(categoryId))}
+        data-testid="operations-bulk-apply"
+      >
+        Ustaw
+      </button>
+      <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
+        Odznacz
+      </button>
     </div>
   )
 }
@@ -313,6 +397,7 @@ export function OperationsPage() {
           <span className="text-muted" title="Wydatki minus zwroty towaru (bez przelewów własnych, XTB i zakupów do zwrotu)">
             Koszty <span className="num text-fg-strong">{plnText(sums.costs)} zł</span>
           </span>
+          <DuplicatesLink />
           <span className="flex-1" />
           {balances.map((a) => (
             <span key={a.id} className="text-muted" title={a.opening ? `Saldo otwarcia ${plnText(a.opening.amount)} zł na początek ${a.opening.date}` : 'Bez salda otwarcia – suma operacji (Ustawienia → Konta)'}>
@@ -325,7 +410,9 @@ export function OperationsPage() {
           ))}
         </div>
 
+        <BulkBar visible={rows} />
         <div className="grid h-[24px] shrink-0 items-center gap-x-2 border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: TEMPLATE }}>
+          <TickAll rows={rows} />
           <span>Data</span>
           <span>Godz.</span>
           <span>Kontrahent · konto</span>

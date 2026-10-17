@@ -183,6 +183,23 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     z prawdziwymi kwotami (ukrycie kwot dotyczy ekranu).
 - **D74** (17.10.2026) Bez asystenta AI: etap E9 „Pierwszy oficer” wypada (zastępuje D53 i grupę E z D67); grupa D
   (1.2.0) zamyka plan etapów. Sieć tylko do aktualizacji.
+- **D75** (17.10.2026) Grupowanie importu z mBanku (1.2.1, zgłoszenie użytkownika: za dużo grup, ta sama firma pod
+  wieloma nazwami, podmiot wprost w nazwie albo tytule – „cukiernia”, „stacja benzynowa”), bez AI – zaakceptowane
+  pomysły z propozycji (1 + 3 + 4 + 2):
+  - klucz marki zamiast całej nazwy: bez miasta, numeru sklepu, prefiksu operatora płatności („SumUp *”) i końcówki
+    domeny;
+  - wbudowany słownik sieci z kategoriami;
+  - słowa kluczowe w nazwie i tytule: zestaw startowy + własne;
+  - grupowanie wielopoziomowe (temat = kategoria / rodzaj / podpowiedź mBanku → marki → operacje) z „Przyjmij pewne”.
+  Na razie bez łączenia podobnych nazw (5) i propozycji reguły z liczbą wierszy (6).
+- **D76** (17.10.2026) Do 1.2.1 dochodzi (prośba użytkownika w trakcie pracy, doprecyzowana: „bulkowe dodawanie
+  transakcji według przyjętego klucza na podstawie wyniku wyszukiwania lub ręcznie”): wyszukiwarka na ekranie importu,
+  zaznaczanie grup i operacji (ręcznie albo wszystkie znalezione) z decyzją dla zaznaczonych, „Nie importuj”,
+  zapamiętanie wyszukiwanego słowa jako słowa kluczowego; to samo w Operacjach dla już zaimportowanych – zaznaczanie,
+  kategoria dla zaznaczonych z „Cofnij”, zapamiętanie dla marek albo jako słowo kluczowe.
+- **D77** (17.10.2026) Do 1.2.1 dochodzi (prośba użytkownika): rozwiązywanie konfliktów importu i duplikatów jak w
+  ICTTJ (1.19.1 „Duplikaty z importu”, 1.20.0 „Zaakceptuj nowsze”) – wpis ręczny, który pojawi się w imporcie, nie daje
+  podwójnej operacji; duplikaty już zapisane do scalenia z „Cofnij”.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -478,3 +495,57 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   dostaje apostrof), Excel – generator z ICTTJ @ 84a8339 (arkusze Operacje i Miesiące), PDF – samodzielny HTML bez
   skryptów drukowany przez ukryte okno (moduł z ICTTJ), pełna kopia ZIP (`exportZip` z E0). Pliki zawsze z prawdziwymi
   kwotami (D73).
+
+### 1.2.1 – grupowanie importu z mBanku (17.10.2026)
+- **T85** Klucz marki (`shared/import/brands.ts` `brandOf`): nazwa złożona do małych liter bez znaków diakrytycznych,
+  bez form prawnych, adresu `www.` i końcówki domeny, prefiksu operatora płatności („SumUp *”, „PAYPRO SA *”, „PAYU *”,
+  „GOOGLE *”…, „SP ” sklepu Shopify); sieć ze słownika = jej stałe id; inaczej słowa bez miast (ok. 130 miast i
+  kurortów, „?” w tekście banku = dowolna litera), kodów sklepów („Z6512”), liczb i kraju na końcu. Wyjątki: BLIK P2P i
+  bankomat – bez słownika; druga strona przelewu – sieć tylko od początku nazwy, bez wycinania miast (nazwiska).
+- **T86** Słownik sieci (`BRANDS`, ponad 200) i słowa kluczowe (`KEYWORDS`, 30 grup) – całe słowa, „*” = dłuższa
+  końcówka, „^” = początek nazwy, pierwsze pasujące wygrywa (najpierw frazy szczególne: schronisko dla zwierząt,
+  toaleta na dworcu). Kategorie przez miejsce w drzewie startowym; kategoria zarchiwizowana albo usunięta = brak
+  propozycji. Taksówki jak Bolt (D69) – Rozrywka i hobby. Słowa tylko dla wydatków; słowo z tytułu przelewu
+  (`byTitle`) dotyczy tej płatności – nigdy nie uczy reguły kontrahenta.
+- **T87** Kolejność rozpoznania (rozszerza T37): reguła użytkownika (dokładna marka → dokładna cała nazwa sprzed
+  1.2.1 → „zawiera” → słowo kluczowe użytkownika, najdłuższe) → rozpoznanie wbudowane → zwrot towaru: reguła zakupów,
+  inaczej kategoria sieci → wydatek: sieć ze słownika → słowo kluczowe → bez decyzji. Reguła słowa ma tryb `keyword`
+  (addytywnie w `mode`; starsza wersja go pomija).
+- **T88** Grupa = marka + kierunek + propozycja (`groupKey`, `proposalSig`); temat (`importThemes`) = ta sama propozycja,
+  albo – bez propozycji – ta sama podpowiedź mBanku, albo ten sam rodzaj operacji. Decyzja: wiersz → grupa → temat →
+  propozycja. Stan tematu: do decyzji (bez propozycji), do sprawdzenia (sieć, słowo, rozpoznanie), gotowe (Twoja
+  decyzja albo same reguły). Propozycje sieci i słów wchodzą z importem jak rozpoznanie wbudowane (widoczne w
+  podglądzie); kategoria mBanku nadal tylko podpowiedzią (D68).
+- **T89** Nauka reguł po marce: decyzja grupy albo tematu z „zapamiętaj” → reguła dokładna klucza marki; bez reguły,
+  gdy własna reguła albo rozpoznanie mówi to samo, gdy decyzja pochodzi z tytułu albo gdy wszystkie operacje grupy są
+  pominięte; kilka grup jednej marki – decyzja grupy z największą liczbą operacji, trafienia razem. „Przyjmij pewne” =
+  propozycje tematów do sprawdzenia jako decyzja z zapamiętaniem; „Przyjmij podpowiedzi mBanku” – bez.
+- **T90** Wyszukiwarka i zaznaczanie (D76): słowa w nazwach, kategorii mBanku i powodzie grupy (cała grupa) albo w
+  opisie, tytule i dacie operacji (tylko te operacje), liczba także jako kwota; zaznaczenie grup i operacji w sesji
+  importu; decyzja dla zaznaczonych tylko tam, gdzie pasuje do kierunku pieniędzy; „Nie importuj” (`choices.skip`) –
+  operacja nie powstaje, kolejny plik pokaże ją znów jako nową. Zmiana reguł przy otwartym pliku (słowo kluczowe,
+  usunięta reguła, inny komputer) = plan od nowa: decyzje tematów przechodzą na ich grupy, grupa ze zmienioną
+  propozycją zachowuje Twoją decyzję pod tą samą marką i kierunkiem – przyjęta propozycja („Przyjmij pewne”,
+  podpowiedź mBanku) ustępuje nowej propozycji (np. nowemu słowu kluczowemu).
+- **T91** Operacje – decyzja zbiorcza (D76): zaznaczenie w sesji, każda zmiana filtrów i wyszukiwania je czyści, a
+  zmiana dotyczy tylko zaznaczonych widocznych na liście (nigdy szkicu nowego wpisu); kategoria tylko dla wydatków
+  bez podziału (reszta policzona jako pominięta), musi być wybrana; „Cofnij” przywraca operacje i reguły importu
+  zapisane razem z nimi. Zapamiętanie: reguła każdej marki (zachowuje „do zwrotu”) albo wyszukiwanie jako słowo
+  kluczowe (oba kierunki, gdy wśród zaznaczonych są zwroty). W imporcie słowo z wyszukiwania zapisuje się przed decyzją;
+  plan liczony od nowa przenosi decyzje i zaznaczenia po operacjach (nie po marce), podpowiedź mBanku dla grupy to
+  przyjęta propozycja, nie decyzja.
+- **T92** Możliwy duplikat przy imporcie (D77, `looseMatch` – jedna reguła dla importu i panelu): wpis ręczny (nie korekta
+  salda) po tej samej stronie, ±3 dni, ta sama kwota pod inną nazwą albo kwota różna o najwyżej max(1 zł, 3%) przy
+  podobnej nazwie – po ścisłym dopasowaniu (T36), najpierw ta sama kwota, potem podobna nazwa i bliższa data, każda
+  strona raz. Łączony sam, gdy pewny (podobna nazwa; albo zakup kartą najwyżej dzień obok), inaczej pyta (`ask` – łączy
+  dopiero zaznaczony, jak w ICTTJ możliwy duplikat nie jest brany sam); nie połączony znajdzie potem panel duplikatów.
+- **T93** Duplikaty zapisanych operacji (`shared/import/duplicates.ts`): ten sam wiersz banku dwa razy na jednym koncie
+  (import na dwóch komputerach przed synchronizacją) – zostaje zadokowana, potem z większą liczbą danych użytkownika, potem
+  nowsza wersja („Zaakceptuj nowsze”); wpis ręczny + kopia z banku – zostaje wpis i bierze datę, kwotę i wiersz banku.
+  Zachowana bierze z kopii to, czego nie ma (cała decyzja, gdy sama jej nie ma – także XTB, przelew własny; notatki,
+  godzina, dziennik). Inna decyzja w kopii = konflikt (niezaznaczony), obie zadokowane = zablokowane. Szukanie po koncie i
+  dacie (±3 dni), wynik liczony raz dla wszystkich ekranów.
+- **T94** Panel „Duplikaty operacji” na ekranie Import (bez otwartego pliku) i odnośnik „Możliwe duplikaty: N” w
+  Operacjach: scalanie zaznaczonych, dokowania kopii przepinane na zachowaną, kopie usuwane z jednym „Cofnij”, które
+  przywraca też zachowaną operację i dokowania; „to nie duplikat” zapamiętane w folderze (`settings.import.notDuplicates`:
+  para id albo wiersz banku → czas; zły wpis odpada sam, nie wszystkie).
