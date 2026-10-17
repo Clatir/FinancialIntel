@@ -18,6 +18,7 @@ import { KeywordRules } from './KeywordRules'
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { BULK_OPTIONS, OPTIONS, choiceFor, optionOf, type Option } from './options'
 import {
+  acceptGroupHint,
   acceptHints,
   acceptSure,
   chooseGroup,
@@ -381,7 +382,7 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
       {choice.kind === 'expense' && !choice.categoryId && g.hint && (
         <div className="mt-0.5 pl-12 text-[11px] text-dim">
           kategoria mBanku „{g.bankCategory}” →{' '}
-          <button type="button" className="text-accent hover:underline" onClick={() => chooseGroup(g.group, { ...choice, categoryId: g.hint })} data-testid="import-group-hint">
+          <button type="button" className="text-accent hover:underline" onClick={() => acceptGroupHint(g.group, { ...choice, categoryId: g.hint })} data-testid="import-group-hint">
             {cats.label(g.hint)}?
           </button>
         </div>
@@ -517,6 +518,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
       const err = saveKeywordRule({ keyword, direction: keywordKind.direction, kind: keywordKind.kind, categoryId: category })
       note = err ? ` Słowo kluczowe: ${err}` : ` Słowo kluczowe „${keyword}” zapamiętane.`
     }
+    setAsKeyword(false)
     const { applied, unfit } = chooseSelected(groups, option, category)
     toast((unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`) + note, unfit ? 'info' : 'success', 5000)
   }

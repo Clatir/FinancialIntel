@@ -3,7 +3,7 @@ import { computeFleet } from '@shared/calc/fleet'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
-import { buildImport, importGroups, planImport, type Choice, type ImportChoices, type ImportGroup, type ImportPlan, type ImportTheme } from '@shared/import/reconcile'
+import { buildImport, importGroups, planImport, sameChoice, type Choice, type ImportChoices, type ImportGroup, type ImportPlan, type ImportTheme } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
 import { MBANK_ACCOUNT_ID, type ImportRule, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
@@ -153,30 +153,50 @@ export function replanImport(): void {
     remember[g.group] = own ? (choices.remember[g.group] ?? true) : (choices.rememberThemes[g.theme] ?? true)
     if (own ? accepted.groups[g.group] : accepted.themes[g.theme]) weak.add(g.group)
   }
-  // A group whose proposal changed (another key) keeps the user's decision under the group of the same brand and
-  // direction; an accepted offer gives way to the new proposal.
+  // A group whose proposal changed (another key) passes the user's decision on by its operations: a new group whose
+  // every operation had the same decision takes it as its own, the others row by row; an accepted offer gives way to
+  // the new proposal. The ticks follow the operations the same way.
+  const rows = { ...choices.rows }
+  const carried = new Map<string, { c: Choice; remember: boolean }>()
+  const tickedRows = { ...selected.rows }
+  const fromGroups = new Set<string>()
   for (const g of before) {
+    if (keys.has(g.group)) continue
     const c = groups[g.group]
-    if (!c || keys.has(g.group) || weak.has(g.group)) continue
-    for (const n of fresh)
-      if (n.brand === g.brand && n.direction === g.direction && !groups[n.group]) {
-        groups[n.group] = c
-        remember[n.group] = remember[g.group]!
+    if (c && !weak.has(g.group)) for (const p of g.rows) carried.set(p.key, { c, remember: remember[g.group]! })
+    if (selected.groups[g.group])
+      for (const p of g.rows) {
+        tickedRows[p.key] = true
+        fromGroups.add(p.key)
       }
+    delete groups[g.group]
+    delete remember[g.group]
   }
-  // The ticks follow their groups the same way.
+  for (const n of fresh) {
+    if (groups[n.group]) continue
+    const got = n.rows.map((p) => carried.get(p.key))
+    const first = got[0]
+    if (first && got.every((x) => x && sameChoice(x.c, first.c))) {
+      groups[n.group] = first.c
+      remember[n.group] = first.remember
+    } else
+      n.rows.forEach((p, i) => {
+        const x = got[i]
+        if (x && !rows[p.key]) rows[p.key] = x.c
+      })
+  }
   const tickedGroups: Record<string, true> = {}
-  for (const g of before) {
-    if (!selected.groups[g.group]) continue
-    if (keys.has(g.group)) tickedGroups[g.group] = true
-    else for (const n of fresh) if (n.brand === g.brand && n.direction === g.direction) tickedGroups[n.group] = true
-  }
-  for (const g of weak) if (!keys.has(g)) delete groups[g]
+  for (const g of before) if (selected.groups[g.group] && keys.has(g.group)) tickedGroups[g.group] = true
+  for (const n of fresh)
+    if (!tickedGroups[n.group] && n.rows.every((p) => fromGroups.has(p.key))) {
+      tickedGroups[n.group] = true
+      for (const p of n.rows) delete tickedRows[p.key]
+    }
   const stillWeak = Object.fromEntries([...weak].filter((g) => keys.has(g)).map((g) => [g, true as const]))
   useImport.setState({
     plan,
-    choices: { ...choices, themes: {}, rememberThemes: {}, groups, remember },
-    selected: { groups: tickedGroups, rows: selected.rows },
+    choices: { ...choices, themes: {}, rememberThemes: {}, groups, remember, rows },
+    selected: { groups: tickedGroups, rows: tickedRows },
     accepted: { themes: {}, groups: stillWeak }
   })
 }
@@ -196,6 +216,12 @@ function patchChoices(fn: (c: ImportChoices) => ImportChoices): void {
 export function chooseGroup(group: string, choice: Choice, remember?: boolean): void {
   patchChoices((c) => ({ ...c, groups: { ...c.groups, [group]: choice }, remember: { ...c.remember, [group]: remember ?? c.remember[group] ?? true } }))
   unaccept('groups', group)
+}
+
+/** The bank's hint taken for one group: an offer accepted, not the user's decision – no rule (D68). */
+export function acceptGroupHint(group: string, choice: Choice): void {
+  chooseGroup(group, choice, false)
+  useImport.setState((s) => ({ accepted: { ...s.accepted, groups: { ...s.accepted.groups, [group]: true } } }))
 }
 
 /** The user's own choice: no longer an accepted offer. */

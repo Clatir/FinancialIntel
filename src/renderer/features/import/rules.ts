@@ -29,7 +29,7 @@ export function rememberCategory(t: Transaction, label: string): void {
  * The category of operations remembered for their brands at once (D76: a bulk decision in Operacje teaches the
  * import too); returns how many rules. Money in = a product return of that brand.
  */
-export function rememberBrands(ops: readonly Transaction[], categoryId: string | null): number {
+export function rememberBrands(ops: readonly Transaction[], categoryId: string): number {
   const rules = new Map<string, Parameters<typeof upsertRule>[1] & { hits: number }>()
   for (const t of ops) {
     const { brand } = ruleTargetOf({ counterparty: t.counterparty, title: t.title, operation: t.bank?.operation })
@@ -38,7 +38,7 @@ export function rememberBrands(ops: readonly Transaction[], categoryId: string |
     const key = `${brand.key}|${direction}`
     const prev = rules.get(key)
     if (prev) prev.hits++
-    else rules.set(key, { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId, refundable: false, household: false, counterAccountId: null, hits: 1 })
+    else rules.set(key, { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId, refundable: direction === 'out' && t.refundable, household: false, counterAccountId: null, hits: 1 })
   }
   if (!rules.size) return 0
   const now = new Date().toISOString()

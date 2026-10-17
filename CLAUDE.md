@@ -278,7 +278,10 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `replanImport` / `replanIfRulesChanged` – `rulesUsed`, wyszukiwanie `query`, zaznaczenie `selected`,
   `chooseSelected`, `skipSelected` / `setSkip`), `options.ts` (opcje decyzji, `BULK_OPTIONS`, `fits`),
   `KeywordRules.tsx` (słowa użytkownika – też w Ustawienia → Import), `ImportPage.tsx` (`ThemesPanel` z sekcjami,
-  `ThemeRow`, `GroupRow`, `BulkBar`), `rules.ts` (`ruleFor` / `rememberCategory` po marce, `saveKeywordRule`).
+  `ThemeRow`, `GroupRow`, `BulkBar` – słowo z wyszukiwania), `rules.ts` (`ruleFor` / `rememberCategory` po marce,
+  `saveKeywordRule`, `rememberBrands`, `keywordOfSearch`).
+- Operacje (T91): `features/operations/state.ts` `ticked` / `tickOperations` / `categorizeTicked` (z „Cofnij”),
+  `OperationsPage.tsx` kolumna zaznaczenia, `TickAll`, `BulkBar` (`operations-bulk-*`).
 - Testy: `tests/unit/import-brands.test.ts`, `import.test.ts`, E2E `tests/e2e/import.spec.ts`.
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)

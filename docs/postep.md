@@ -27,9 +27,9 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
-| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i zaznaczanie | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.1 | ✅ wybór pomysłów (D75, D76) | ✅ zrobione, PR do `main` |
+| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze (import i Operacje) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 1–1,5 h + 0,5 h) | 1.2.1 | ✅ wybór pomysłów (D75, D76) | ✅ zrobione, PR do `main` |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1** | | | **zmierzone ok. 10,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1** | | | **zmierzone ok. 11 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -68,7 +68,9 @@ Zrobione (D75 – pomysły 1 + 3 + 4 + 2, D76 – wyszukiwarka i zaznaczanie dop
 - Tematy (kategoria / podpowiedź mBanku / rodzaj operacji) z sekcjami „Do decyzji”, „Rozpoznane – sprawdź”,
   „Gotowe”, decyzja tematu dla wszystkich jego marek, „Przyjmij pewne” z zapamiętaniem, podpowiedzi mBanku dla
   całych tematów bez reguł (T88, T89).
-- Wyszukiwarka, zaznaczanie grup i operacji, decyzja dla zaznaczonych, „Nie importuj” (T90).
+- Wyszukiwarka, zaznaczanie grup i operacji, decyzja dla zaznaczonych, „Nie importuj”, wyszukiwane słowo jako
+  słowo kluczowe (T90); w Operacjach zaznaczanie (ręcznie albo wszystkie widoczne) i kategoria dla zaznaczonych z
+  „Cofnij” i zapamiętaniem dla marek albo słowa (T91).
 - Pomiar na pliku użytkownika (271 operacji): 81 grup → 80 grup marek w 36 tematach; 19 tematów rozpoznanych do
   przyjęcia jednym kliknięciem, 10 z podpowiedzią mBanku, do ręcznej decyzji głównie przelewy od i do osób. Na
   dłuższej historii łączenie marek daje więcej (ta sama sieć w wielu miastach).
@@ -80,12 +82,18 @@ Zrobione (D75 – pomysły 1 + 3 + 4 + 2, D76 – wyszukiwarka i zaznaczanie dop
     zmianie reguł (nie przy każdym wejściu na ekran);
   - liczba w wyszukiwarce to kwota albo tekst (data, numer); znaczek tematu przy wyszukiwaniu dotyczy znalezionych;
   - kody sklepów („Z6512”) znikają z klucza; licznik zaznaczonych bez podwójnego liczenia; porządki w kodzie.
+- Drugi przegląd `/code-review` high (decyzje zbiorcze, Operacje): 10 znalezisk, wszystkie poprawione – „Cofnij”
+  także reguł, bez szkicu nowego wpisu i bez niewidocznych operacji, kategoria wymagana, reguły marek zachowują
+  „do zwrotu”, decyzje i zaznaczenia po przeliczeniu planu przenoszone po operacjach, słowo z Operacji w obu
+  kierunkach, podpowiedź mBanku grupy jako przyjęta propozycja, odmiana „operacje”.
 - Testy: 353 unit + fs (`tests/unit/import-brands.test.ts`), E2E 15 (`tests/e2e/import.spec.ts` – tematy,
-  wyszukiwarka, zaznaczanie, „Nie importuj”, słowo kluczowe, „Przyjmij pewne”).
+  wyszukiwarka, zaznaczanie, „Nie importuj”, słowo kluczowe z wyszukiwania, „Przyjmij pewne”, Operacje: zaznaczenie
+  znalezionych, kategoria, reguła marki, „Cofnij”).
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.2.1, Windows):
 1. Import pełnej historii z mBanku: liczba tematów, „Przyjmij pewne”, trafność słownika i słów kluczowych.
 2. Własne słowo kluczowe (np. nazwa ulubionej cukierni) i wyszukiwarka z zaznaczaniem.
+3. Operacje: wyszukaj, zaznacz wszystkie widoczne, ustaw kategorię (z zapamiętaniem) i „Cofnij”.
 
 ## E8 – Wywiad i raporty (17.10.2026)
 

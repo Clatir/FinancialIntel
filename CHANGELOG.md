@@ -14,7 +14,10 @@ Import z mBanku w tematach zamiast dziesiątek grup (zgłoszenie użytkownika, d
 - „Przyjmij pewne”: rozpoznane tematy jako Twoja decyzja, zapamiętane jako reguły marek – kolejny import pokaże je jako
   gotowe; „Przyjmij podpowiedzi mBanku” działa na całe tematy (bez reguł).
 - Wyszukiwarka (nazwa, tytuł, kategoria, data, kwota), zaznaczanie grup i operacji (także „zaznacz znalezione”),
-  jedna decyzja dla zaznaczonych i „Nie importuj” – pominięte operacje wrócą z kolejnym plikiem.
+  jedna decyzja dla zaznaczonych i „Nie importuj” – pominięte operacje wrócą z kolejnym plikiem; wyszukiwane słowo
+  można zapamiętać jako słowo kluczowe dla kolejnych importów.
+- Operacje: zaznaczanie (ręcznie albo wszystkie widoczne po wyszukiwaniu i filtrach) i jedna kategoria dla
+  zaznaczonych z „Cofnij” – z zapamiętaniem dla marek albo wyszukiwanego słowa.
 - Reguły uczą się po marce (sieć w każdym mieście to jedna reguła), reguły sprzed 1.2.1 działają dalej.
 
 ## 1.2.0

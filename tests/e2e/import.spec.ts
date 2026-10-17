@@ -196,6 +196,10 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
       .toBe('01KDEFCAT00000000000000801')
     await page.getByRole('button', { name: 'Cofnij' }).click()
     await expect.poll(allegro).toEqual(new Set(['01KDEFCAT00000000000000800']))
+    // „Cofnij” takes the rule back too.
+    await expect
+      .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules.some((r: { match: string }) => r.match === 'allegro'))
+      .toBe(false)
     await page.getByTestId('operations-search').fill('')
 
     // Settings → Import: the rules and the holder's names.

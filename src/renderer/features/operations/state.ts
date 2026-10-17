@@ -3,7 +3,8 @@ import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
 import { emptyFilter, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
 import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type Transaction } from '@shared/schema'
-import { addRecord, discardDraft, replaceRecords, useData } from '../../store/data'
+import { addRecord, discardDraft, replaceRecords, updateSettings, useData } from '../../store/data'
+import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteWithUndo } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
@@ -74,15 +75,20 @@ export function tickOperations(ids: readonly string[], on: boolean): void {
 export const clearTicked = () => useOperationsUi.setState({ ticked: {} })
 
 /**
- * One category for the ticked expenses (D76; operations split into parts and other kinds stay – counted), with „Cofnij”.
- * `remember`: 'brands' = a rule of each brand for the import, 'keyword' = the search as a keyword rule.
+ * One category for the ticked expenses the list shows (D76; operations split into parts and other kinds stay –
+ * counted), with „Cofnij” – of the operations and of the import rules written with them. `remember`: 'brands' = a rule
+ * of each brand for the import, 'keyword' = the search as a keyword rule.
  */
-export function categorizeTicked(categoryId: string | null, remember: 'none' | 'brands' | 'keyword', label: string): void {
-  const ids = Object.keys(useOperationsUi.getState().ticked)
-  const map = useData.getState().records.transactions
-  const ticked = ids.map((id) => map[id]?.record).filter((t): t is Transaction => !!t)
-  const fit = ticked.filter((t) => t.kind === 'expense' && !t.splits.length)
+export function categorizeTicked(visibleIds: readonly string[], categoryId: string, remember: 'none' | 'brands' | 'keyword', label: string): void {
+  const { ticked, filter } = useOperationsUi.getState()
+  const data = useData.getState()
+  const ops = visibleIds
+    .filter((id) => ticked[id] && !data.drafts[id])
+    .map((id) => data.records.transactions[id]?.record)
+    .filter((t): t is Transaction => !!t)
+  const fit = ops.filter((t) => t.kind === 'expense' && !t.splits.length)
   const before = fit.filter((t) => t.categoryId !== categoryId)
+  const rulesBefore = data.fi?.settings.import.rules ?? null
   replaceRecords(
     'transactions',
     before.map((t) => ({ ...t, categoryId }))
@@ -90,13 +96,23 @@ export function categorizeTicked(categoryId: string | null, remember: 'none' | '
   let note = ''
   if (remember === 'brands') note = ` · reguły importu: ${rememberBrands(fit, categoryId)}`
   if (remember === 'keyword') {
-    const query = useOperationsUi.getState().filter.query
-    const err = saveKeywordRule({ keyword: query, direction: 'out', kind: 'expense', categoryId })
-    note = err ? ` · słowo kluczowe: ${err}` : ` · słowo kluczowe „${query.trim()}”`
+    // Purchases and their returns alike: the keyword holds for both directions when both are ticked.
+    const direction = fit.some((t) => t.amount > 0) ? null : 'out'
+    const err = saveKeywordRule({ keyword: filter.query, direction, kind: 'expense', categoryId })
+    note = err ? ` · słowo kluczowe: ${err}` : ` · słowo kluczowe „${filter.query.trim()}”`
   }
-  const skipped = ticked.length - fit.length
+  const skipped = ops.length - fit.length
   clearTicked()
-  toast(`${label}: ${before.length} ${before.length === 1 ? 'operacja' : 'operacji'}${skipped ? `, pominięte (nie wydatek albo podział): ${skipped}` : ''}${note}.`, 'success', 7000, before.length ? { label: 'Cofnij', run: () => replaceRecords('transactions', before) } : undefined)
+  const undo = () => {
+    replaceRecords('transactions', before)
+    if (remember !== 'none' && rulesBefore) updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: rulesBefore } } }))
+  }
+  toast(
+    `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział): ${skipped}` : ''}${note}.`,
+    'success',
+    7000,
+    before.length || remember !== 'none' ? { label: 'Cofnij', run: undo } : undefined
+  )
 }
 
 /** Select an operation; an untouched new entry left behind is dropped (it was never written). */

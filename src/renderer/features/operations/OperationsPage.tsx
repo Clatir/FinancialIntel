@@ -14,7 +14,7 @@ import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../.
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
 import { Badge, Kbd, cx } from '../../components/ui'
-import { WEEKDAY_PL } from '../../lib/format'
+import { WEEKDAY_PL, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
 import { categorizeTicked, clearTicked, newOperation, resetFilter, selectOperation, setFilter, tickOperations, useOperationsUi } from './state'
@@ -196,13 +196,16 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
 
 /** Tick every operation the filters and the search show (or none). */
 function TickAll({ rows }: { rows: readonly Transaction[] }) {
-  const all = useOperationsUi((s) => rows.length > 0 && rows.every((t) => s.ticked[t.id]))
+  const drafts = useData((s) => s.drafts)
+  // A new entry being written is no operation yet.
+  const ids = useMemo(() => rows.filter((t) => !drafts[t.id]).map((t) => t.id), [rows, drafts])
+  const all = useOperationsUi((s) => ids.length > 0 && ids.every((id) => s.ticked[id]))
   return (
     <input
       type="checkbox"
       checked={all}
-      disabled={!rows.length}
-      onChange={(e) => tickOperations(rows.map((t) => t.id), e.currentTarget.checked)}
+      disabled={!ids.length}
+      onChange={(e) => tickOperations(ids, e.currentTarget.checked)}
       title="Zaznacz wszystkie widoczne (wynik wyszukiwania i filtrów)"
       aria-label="Zaznacz wszystkie widoczne"
       data-testid="operations-tick-all"
@@ -217,24 +220,32 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const cats = useCategories()
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [remember, setRemember] = useState<'none' | 'brands' | 'keyword'>('none')
-  const n = Object.keys(ticked).length
+  // Only what the list shows: an operation that left it (edited, deleted, changed elsewhere) is not changed.
+  const shown = visible.filter((t) => ticked[t.id])
+  const n = shown.length
   if (!n) return null
-  const sum = visible.filter((t) => ticked[t.id]).reduce((s, t) => s + t.amount, 0)
+  const sum = shown.reduce((s, t) => s + t.amount, 0)
   const keyword = keywordOfSearch(query)
   const mode = remember === 'keyword' && !keyword ? 'none' : remember
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/50 bg-raised px-3 py-1.5 text-[12px]" data-testid="operations-bulk">
       <span className="text-fg-strong" data-testid="operations-bulk-count">
-        Zaznaczone: {n} {n === 1 ? 'operacja' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'operacje' : 'operacji'} · <span className="num">{signedPln(sum)} zł</span>
+        Zaznaczone: {n} {plural(n, 'operacja', 'operacje', 'operacji')} · <span className="num">{signedPln(sum)} zł</span>
       </span>
       <span className="text-muted">kategoria</span>
-      <CategorySelect className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} data-testid="operations-bulk-category" />
+      <CategorySelect className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
       <select className="input h-[24px] w-[250px] py-0" value={mode} onChange={(e) => setRemember(e.currentTarget.value as typeof remember)} aria-label="Zapamiętaj dla importu" data-testid="operations-bulk-remember">
         <option value="none">bez zapamiętania</option>
         <option value="brands">zapamiętaj dla ich marek (import)</option>
         {keyword && <option value="keyword">zapamiętaj „{keyword}” jako słowo kluczowe</option>}
       </select>
-      <button type="button" className="btn btn-accent h-[24px]" onClick={() => categorizeTicked(categoryId, mode, cats.label(categoryId) || 'bez kategorii')} data-testid="operations-bulk-apply">
+      <button
+        type="button"
+        className="btn btn-accent h-[24px]"
+        disabled={!categoryId}
+        onClick={() => categoryId && categorizeTicked(shown.map((t) => t.id), categoryId, mode, cats.label(categoryId))}
+        data-testid="operations-bulk-apply"
+      >
         Ustaw
       </button>
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
