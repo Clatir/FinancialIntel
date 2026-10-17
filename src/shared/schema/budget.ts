@@ -182,6 +182,31 @@ export const importRuleSchema = z.looseObject({
 })
 export type ImportRule = z.infer<typeof importRuleSchema>
 
+/** Names the user said are one counterparty (1.2.2, D78): this brand key is grouped and ruled as `to`. */
+export const brandAliasSchema = z.looseObject({
+  to: z.string().min(1).max(200),
+  /** The merged name and the one it was merged into, as the bank wrote them (for the list in the settings). */
+  label: z.string().max(200).catch('').default(''),
+  toLabel: z.string().max(200).catch('').default(''),
+  at: z.string().max(40).catch('').default('')
+})
+export type BrandAlias = z.infer<typeof brandAliasSchema>
+
+/** A record of the settings one bad entry of which (a hand-edited fi.json) drops itself, not the others. */
+const lenientRecord = <T extends z.ZodType>(value: T) =>
+  z
+    .record(z.string(), z.unknown())
+    .catch({})
+    .default({})
+    .transform((r) => {
+      const out: Record<string, z.infer<T>> = {}
+      for (const [k, v] of Object.entries(r)) {
+        const parsed = k.length > 0 && k.length <= 300 ? value.safeParse(v) : null
+        if (parsed?.success) out[k] = parsed.data
+      }
+      return out
+    })
+
 export const importSettingsSchema = z.looseObject({
   /** The account holder's names as the bank writes them: transfers to / from them are own transfers. */
   ownNames: z.array(z.string().trim().min(1).max(120)).catch([]).default([]),
@@ -201,7 +226,14 @@ export const importSettingsSchema = z.looseObject({
     .record(z.string(), z.unknown())
     .catch({})
     .default({})
-    .transform((r) => Object.fromEntries(Object.entries(r).filter((e): e is [string, string] => e[0].length <= 300 && typeof e[1] === 'string')))
+    .transform((r) => Object.fromEntries(Object.entries(r).filter((e): e is [string, string] => e[0].length <= 300 && typeof e[1] === 'string'))),
+  /**
+   * Names merged by the user (1.2.2, D78): a brand key → the key it is one with („MOKKA CAFE” = „KAWIARNIA MOKKA”) –
+   * one group in the import, one rule. A record, so two computers' merges join key by key.
+   */
+  aliases: lenientRecord(brandAliasSchema).transform((r) => Object.fromEntries(Object.entries(r).filter(([k, a]) => a.to !== k))),
+  /** Pairs of names the user said are not one (`pairKey` → when, 1.2.2): not offered again. */
+  notSimilar: lenientRecord(z.string().max(40))
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 

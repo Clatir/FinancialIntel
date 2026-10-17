@@ -5,7 +5,7 @@ import { useData } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { TextField } from '../../components/ui'
 import { CategorySelect, useCategories } from '../operations/pickers'
-import { deleteRule, saveKeywordRule } from './rules'
+import { deleteRule, ruleDecisionText, saveKeywordRule } from './rules'
 
 const NO_RULES: ImportRule[] = []
 
@@ -34,7 +34,7 @@ export function KeywordRules() {
     setError(err)
     if (!err) setWord('')
   }
-  const decision = (r: ImportRule) => (r.kind === 'expense' ? (cats.label(r.categoryId) || 'bez kategorii') : r.kind === 'income' ? 'wpływ (przychód)' : r.kind === 'transfer' ? 'przelew własny' : r.kind)
+  const decision = (r: ImportRule) => ruleDecisionText(r, (id) => cats.label(id))
   return (
     <div className="flex flex-col gap-1.5 text-[12px]" data-testid="keyword-rules">
       <p className="text-[11.5px] text-muted">

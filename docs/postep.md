@@ -1,12 +1,12 @@
 # Financial Intel – postęp
 
-**Stan:** 1.2.1 – grupowanie importu z mBanku (D75, D76) zrobione na gałęzi `claude/import-1.2.1`, PR do `main` –
-scalenie przy zielonym CI (D71). **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4); bez
-asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
+**Stan:** 1.2.2 – podobne nazwy i propozycja reguły (D78, pomysły 5 i 6 z propozycji importu) zrobione na gałęzi
+`claude/import-1.2.2`, PR do `main` – scalenie przy zielonym CI (D71). **1.2.1 wydane** (PR #7), **1.2.0 wydane**
+(PR #6), **1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.2.1 na prawdziwej historii z mBanku; potem kalibracja progów gry po pierwszym
-miesiącu albo pomysły 5 i 6 z propozycji importu (łączenie podobnych nazw, propozycja reguły z liczbą wierszy).
+**Następny krok:** pauza – odbiór 1.2.1 i 1.2.2 na prawdziwej historii z mBanku; potem kalibracja progów gry po
+pierwszym miesiącu (na prawdziwych danych).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -27,9 +27,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
-| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze + duplikaty jak w ICTTJ | Opus 5.5 | **max** | zmierzone ok. 2 h (plan był 1–1,5 h + 0,5 h + 0,75 h) | 1.2.1 | ✅ wybór pomysłów (D75–D77) | ✅ zrobione, PR do `main` |
+| 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze + duplikaty jak w ICTTJ | Opus 5.5 | **max** | zmierzone ok. 2 h (plan był 1–1,5 h + 0,5 h + 0,75 h) | 1.2.1 | ✅ wybór pomysłów (D75–D77) | ✅ wydane (PR #7) |
+| 1.2.2 | Podobne nazwy (5) + propozycja reguły z liczbą operacji (6) | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.2 | ✅ wybór „opcja 2” (D78) | ✅ zrobione, PR do `main` |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1** | | | **zmierzone ok. 11,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1 + 1.2.2** | | | **zmierzone ok. 12,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -43,6 +44,60 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## Przed etapem 1.2.2 – podobne nazwy i propozycja reguły (17.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.2.1 wydane (PR #7): marki, słownik sieci, słowa kluczowe, tematy, decyzje zbiorcze,
+   duplikaty. Zostały pomysły 5 i 6 z propozycji (D75: „na razie bez”); użytkownik wybrał je jako „opcję 2” (D78).
+   Zmiana dotyczy tylko importu i reguł; bez AI, bez sieci.
+2. **Co użytkownik musi powiedzieć** – wybór ✅ (D78). Rozstrzygam sam (T-decyzje, do zmiany na życzenie):
+   - podobne nazwy tylko spoza słownika sieci (sieci ze słownika łączą się już same), także z markami Twoich reguł
+     z wcześniejszych importów („MOKKA CAFE” ⟷ reguła „KAWIARNIA MOKKA”); nic nie łączy się samo – „Połącz” albo
+     „To nie to samo”, oba zapamiętane (połączone nazwy kolejne importy grupują razem, odrzucona para nie wraca);
+     połączenie można cofnąć w Ustawieniach → Import z banku;
+   - do tego ręczne „Połącz nazwy” dla zaznaczonych grup (gdy podobieństwo nie wystarcza – „MOKKA DWORZEC” i „MOKKA
+     ARKADIA”);
+   - propozycja reguły: po Twojej decyzji dla grupy słowa z jej nazwy (przy przelewach – z tytułu), które są też w innych
+     operacjach pliku bez Twojej decyzji, z liczbą operacji, które reguła zmieni; kliknięcie = Twoje słowo kluczowe
+     (jak w Ustawieniach), plik liczony od nowa od razu.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1–1,5 h.
+
+## 1.2.2 – podobne nazwy i propozycja reguły (17.10.2026)
+
+Zrobione (D78 – pomysły 5 i 6 z propozycji importu):
+- „Podobne nazwy” na ekranie importu: pary nazw spoza słownika sieci, które wyglądają na jedną firmę albo osobę (te same
+  słowa w innej kolejności albo jedno więcej, ucięta nazwa, literówka – nie u osób, ta sama nazwa na początku), także z
+  markami Twoich reguł z wcześniejszych importów; „Połącz” / „Połącz wszystkie” z „Cofnij”, „To nie to samo”
+  zapamiętane (T95, T96).
+- Połączone nazwy (`settings.import.aliases`): jedna grupa i jedna reguła w tym i kolejnych importach i w Operacjach,
+  także gdy rozpoznana jest tylko jedna z nazw; nazwa połączona z siecią ze słownika jest tą siecią; Ustawienia → Import z
+  banku: lista z „rozłącz” i powrót odrzuconych par (T95).
+- „Połącz nazwy” dla zaznaczonych grup, gdy podobieństwo nie wystarcza (T97).
+- Propozycja reguły pod grupą, której decyzję zmieniłeś ostatnio: słowa z nazwy (przelew – z tytułu) z liczbą innych
+  operacji pliku, którym reguła zmieni decyzję; kliknięcie = Twoje słowo kluczowe z całą decyzją, plik liczony od nowa;
+  bez miejscowości, imion i nazwisk (także odmienionych), bez słów łapiących inne słowa (T98).
+- Pomiar na pliku użytkownika (271 operacji): 2 pary podobnych nazw – ta sama osoba w odwrotnej kolejności i ta sama
+  restauracja pod dwiema nazwami; propozycje słowa przy 4 grupach (nazwa restauracji, „apteka” przy innej kategorii niż
+  wbudowana). Długa historia (syntetycznie 4000 operacji, ~1000 marek, 400 reguł): podobne nazwy 64 ms, propozycja
+  ok. 30 ms (T99).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione – odmiana imion zbyt szeroka („karma” jak „Karol”),
+  reguła całej nazwy sprzed 1.2.1 jako „podobna nazwa”, „Połącz nazwy” w folderze tylko do odczytu, propozycja po
+  decyzji zbiorczej, słowo kluczowe z decyzją pożyczki / XTB, dwie grupy po połączeniu nazw z różnym rozpoznaniem,
+  pętla połączeń z dwóch komputerów, grupy liczone dwa razy przy przeliczeniu planu, porządki.
+- Drugi przegląd `/code-review` high: 8 znalezisk, wszystkie poprawione – literówka u osób, miejscowość tylko przy sieci
+  albo trzech markach (bez formy prawnej), wspólne rozpoznanie bez kontenera, „Połącz wszystkie” bez sklejania dwóch
+  reguł, przycisk „Połącz nazwy” tylko gdy można, „Te nazwy są już połączone”, wspólny opis decyzji reguły, porównanie
+  słów i pamięć słów kluczowych / miast z `brands.ts`.
+- Testy: 364 unit + fs (`tests/unit/import-similar.test.ts`), E2E 17 (`tests/e2e/learning.spec.ts` – połącz parę,
+  „Połącz nazwy” z „Cofnij”, propozycja słowa z liczbą operacji, „nie, dziękuję”, rozłączenie w Ustawieniach, „To nie to
+  samo” i powrót odrzuconych par).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.2.2, Windows):
+1. Import pełnej historii z mBanku: „Podobne nazwy” – czy pary są trafne; „Połącz” i potem jedna grupa.
+2. Decyzja dla grupy z nazwą, która jest też w innych operacjach (np. własna nazwa kawiarni) – propozycja słowa z
+   liczbą operacji, kliknięcie i inne grupy od razu z tą kategorią.
+3. Ustawienia → Import z banku → „Połączone nazwy”: rozłączenie.
 
 ## Przed etapem 1.2.1 – grupowanie importu z mBanku (17.10.2026)
 
@@ -626,3 +681,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
   dopisane wyszukiwarka i zaznaczanie (D76) oraz duplikaty jak w ICTTJ (D77); klucz marki, słownik sieci, słowa
   kluczowe, tematy z „Przyjmij pewne”, decyzje zbiorcze w imporcie i Operacjach, scalanie duplikatów; trzy przeglądy
   i poprawki; PR #7 do `main`; pauza.
+- 17.10.2026 – PR #7 scalony, wydanie 1.2.1 opublikowane; użytkownik wybrał „opcję 2” – pomysły 5 i 6 (D78): podobne
+  nazwy z połączeniem zapamiętanym w folderze, „Połącz nazwy”, propozycja reguły z liczbą operacji; dwa przeglądy i
+  poprawki; PR do `main`; pauza.

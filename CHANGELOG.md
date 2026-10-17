@@ -1,5 +1,21 @@
 # Financial Intel – zmiany
 
+## 1.2.2
+
+Import z mBanku uczy się dalej (decyzja D78 – pomysły 5 i 6 z propozycji, nadal bez AI).
+
+- „Podobne nazwy”: nazwy spoza słownika sieci, które wyglądają na jedną firmę albo osobę – inna kolejność słów („JAN
+  NOWAK” i „NOWAK JAN”), jedno słowo więcej („MOKKA” i „KAWIARNIA MOKKA”), ucięta nazwa, literówka, ta sama nazwa na
+  początku („MOKKA DWORZEC”, „MOKKA GALERIA”) – także z markami Twoich reguł z wcześniejszych importów. Nic nie łączy
+  się samo: „Połącz” (jedna grupa i jedna reguła, także w kolejnych importach i w Operacjach) albo „To nie to samo”
+  (para nie wraca); „Połącz wszystkie” i „Cofnij”.
+- „Połącz nazwy” dla zaznaczonych grup – gdy podobieństwo nie wystarcza; dwie różne sieci ze słownika nie łączą się.
+- Ustawienia → Import z banku: lista połączonych nazw z „rozłącz” i powrót odrzuconych par.
+- Propozycja reguły: po Twojej decyzji dla grupy słowa z jej nazwy (przy przelewie – z tytułu), które mają też inne
+  operacje pliku, z liczbą operacji, które reguła zmieni („„kurs” · jeszcze 3 operacje”); kliknięcie = Twoje słowo
+  kluczowe z całą decyzją, plik liczony od nowa od razu. Bez nazw miejscowości, imion i nazwisk, bez słów, które
+  złapałyby inne słowa („auto” – „AUTOMATSPEC”).
+
 ## 1.2.1
 
 Import z mBanku w tematach zamiast dziesiątek grup (zgłoszenie użytkownika, decyzja D75) – bez AI, na stałych listach.

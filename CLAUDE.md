@@ -288,6 +288,29 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `deleteManyWithUndo(…, onUndo)`); testy `tests/unit/duplicates.test.ts`, E2E `tests/e2e/duplicates.spec.ts`.
 - Testy: `tests/unit/import-brands.test.ts`, `import.test.ts`, E2E `tests/e2e/import.spec.ts`.
 
+## Kod (1.2.2 – podobne nazwy i propozycja reguły, D78)
+- Shared `import/`:
+  - `aliases.ts` – połączone nazwy (`settings.import.aliases`: klucz marki → `{to, label, toLabel, at}`), `resolveBrand`
+    (pętla z dwóch komputerów → pierwszy klucz pętli), `withMerged` (łańcuchy o jednym kroku), `pairKey` – T95;
+  - `similar.ts` – `similarity` ('words' / 'cut' / 'typo' – nie u osób / 'first'), `similarPairs` (nazwy pliku spoza
+    słownika i marki reguł exact spoza pliku, koszyki po słowach i początku / końcu klucza, `notSimilar`), `mergeTarget`,
+    `editDistance` – T96;
+  - `learn.ts` – `keywordProposals` (słowa z nazwy / tytułu przelewu bez ogólnych, miast, miejscowości z pliku, osób i
+    właściciela; liczba operacji innych grup bez decyzji użytkownika, którym słowo zmieni decyzję – `findRule`; bez słów
+    łapiących inne słowa) – T98;
+  - `brands.ts` – `BrandMatch.words`, `brandById`, `isGenericWord`, `isKeywordWord`, `isCityWord`, `sameWord`;
+    `classify.ts` – `RuleTarget.raw`, `ruleTargetOf(…, aliases)`, `ClassifyContext.aliases`, `Classified.target`;
+    `reconcile.ts` – `PlannedRow.words` / `target`, `ImportGroup.chain`, `shareMerged` (połączone nazwy dzielą
+    rozpoznanie).
+- Schemat: `settings.import.aliases`, `settings.import.notSimilar` (addytywnie, `lenientRecord`).
+- Renderer `features/import/`: `Learning.tsx` (`SimilarPanel` – „Podobne nazwy”, `mergePairs`, `namesToMerge` /
+  `mergeSelectedNames` – „Połącz nazwy” w `BulkBar`, `RuleProposal` – pod grupą `lastDecided`), `state.ts`
+  (`useImportGroups`, `planInputs` – plan od nowa po zmianie reguł albo połączeń, `decideGroup`, `closeProposal`,
+  `ownNamesWith`), `rules.ts` (`mergeNames` / `unmergeName` z „Cofnij”, `dismissSimilar`, `clearDismissedSimilar`,
+  `ruleDecisionText`, `saveKeywordRule` z całą decyzją; reguły Operacji przez połączenia); Ustawienia → Import z banku –
+  „Połączone nazwy” (`MergedNames`).
+- Testy: `tests/unit/import-similar.test.ts`, E2E `tests/e2e/learning.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -348,3 +371,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E8 Wywiad i raporty → 1.2.0 (grupa D)
 - ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)
 - [x] 1.2.1 Grupowanie importu z mBanku, decyzje zbiorcze, duplikaty (D75–D77)
+- [x] 1.2.2 Podobne nazwy i propozycja reguły z liczbą operacji (D78)

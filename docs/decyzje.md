@@ -200,6 +200,11 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **D77** (17.10.2026) Do 1.2.1 dochodzi (prośba użytkownika): rozwiązywanie konfliktów importu i duplikatów jak w
   ICTTJ (1.19.1 „Duplikaty z importu”, 1.20.0 „Zaakceptuj nowsze”) – wpis ręczny, który pojawi się w imporcie, nie daje
   podwójnej operacji; duplikaty już zapisane do scalenia z „Cofnij”.
+- **D78** (17.10.2026) 1.2.2 – pozostałe pomysły z propozycji importu (wybór użytkownika „opcja 2”):
+  - (5) podobne nazwy łączone w jedną grupę – literówki i warianty nazw spoza słownika sieci, prosta miara podobieństwa
+    tekstu (wspólne słowa, ucięta nazwa, literówka), lista „to chyba to samo” do zatwierdzenia;
+  - (6) nauka z decyzji – po decyzji dla grupy aplikacja proponuje regułę na słowo („wszystko zawierające ‚cukiernia’”)
+    i od razu pokazuje, ile innych operacji obejmie.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -549,3 +554,43 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   Operacjach: scalanie zaznaczonych, dokowania kopii przepinane na zachowaną, kopie usuwane z jednym „Cofnij”, które
   przywraca też zachowaną operację i dokowania; „to nie duplikat” zapamiętane w folderze (`settings.import.notDuplicates`:
   para id albo wiersz banku → czas; zły wpis odpada sam, nie wszystkie).
+- **T95** Połączone nazwy (D78, `shared/import/aliases.ts`, `settings.import.aliases`: klucz marki → klucz, z którym jest
+  jedną, z nazwami do listy w Ustawieniach): reguła szuka najpierw marki po połączeniu, potem marki z nazwy, potem całej
+  nazwy (reguła połączonej nazwy działa dalej, gdy ta druga nie ma swojej); nazwa połączona z siecią ze słownika jest tą
+  siecią (jej kategoria). Łańcuchy zawsze o jednym kroku (`withMerged` przepina wcześniejsze połączenia); para połączona
+  na dwóch komputerach w przeciwne strony (pętla) daje wszystkim jej nazwom jeden klucz – pierwszy w kolejności. Rekord,
+  więc dwa komputery scalają się po kluczach; zły wpis odpada sam. To samo w Operacjach („Zapamiętaj”, decyzja
+  zbiorcza). „Cofnij” w komunikacie przywraca tylko zmienione klucze; „rozłącz” w Ustawieniach → Import z banku. Zmiana
+  połączeń liczy otwarty plik od nowa (jak zmiana reguł). Połączone nazwy to jedna grupa także wtedy, gdy rozpoznana
+  jest tylko jedna z nich: operacje bez rozpoznania biorą najczęstsze rozpoznanie pozostałych nazw (reguła, sieć, słowo
+  nazwy – „jak „KAWIARNIA MOKKA” (połączone nazwy)”); rozpoznanie aplikacji (bankomat, przelew własny), słowo z tytułu
+  i płatność kontenera (łączona po dokładnym odbiorcy) nie przechodzą.
+- **T96** Podobne nazwy (D78, `shared/import/similar.ts`): tylko nazwy spoza słownika sieci, z pliku między sobą i z markami
+  Twoich reguł spoza pliku (etykieta reguły = nazwa z banku). Rodzaje: „ucięta nazwa” (krótszy klucz ≥ 12 znaków jest
+  początkiem dłuższego), „te same słowa” (słowa wyróżniające jednej nazwy w drugiej – bez ogólnych: „sklep”, „rynek”,
+  miesiące, słowa wbudowanych słów kluczowych; osoba – przelew – co najmniej dwa słowa; jedno słowo ostatnie w obu nazwach
+  to raczej miejscowość dwóch sklepów, chyba że to cała jedna nazwa), „literówka” (odległość edycji ≤ 1 przy kluczu ≥ 6
+  znaków, ≤ 2 przy ≥ 12; nie przy osobach – „MARIA” i „MARTA KOWALSKA” to dwie osoby), „ta sama nazwa na początku”
+  (pierwsze słowo ≥ 5 liter, nie przy osobach). Reguła całej nazwy sprzed 1.2.1, która już rozpoznaje nazwę z pliku, nie
+  jest „inną nazwą”. Porównywane tylko nazwy ze wspólnym słowem, początkiem albo końcem klucza (historia z lat ma setki
+  nazw); najwyżej 60 par. Cel połączenia: nazwa z regułą, potem z większą liczbą operacji, potem dłuższy klucz.
+  „Połącz wszystkie” pomija parę, która połączyłaby dwie nazwy z regułami (wprost albo przez trzecią) – taką łączy się
+  pojedynczo i wtedy decyduje reguła nazwy, w którą łączy. „To nie to samo”: `settings.import.notSimilar` (para kluczy →
+  czas), powrót w Ustawieniach.
+- **T97** „Połącz nazwy” dla zaznaczonych grup (co najmniej dwie marki, najwyżej jedna sieć ze słownika – inaczej przycisku
+  nie ma): gdy podobieństwo nie wystarcza; z siecią – łączy się w nią; inaczej cel jak w T96. Nazwy połączone już
+  wcześniej (np. na drugim komputerze) – komunikat „Te nazwy są już połączone”, bez „Cofnij”.
+- **T98** Propozycja reguły (D78, `shared/import/learn.ts`): tylko pod grupą, której decyzję użytkownik zmienił ostatnio
+  pojedynczo (nie decyzja zbiorcza, nie podpowiedź mBanku), do „nie, dziękuję” albo kolejnej decyzji; do 3 słów. Słowa z
+  nazwy (przelew – z tytułu: druga strona to często osoba), co najmniej 4 litery, bez ogólnych, miast, miejscowości z
+  pliku (ostatnie słowo nazw – bez formy prawnej – sieci i innej marki albo trzech marek, nie słowo kluczowe: „DINO
+  ŚWIEBODZICE”, ale nie „PIEKARNIA GRZYBEK” i „CUKIERNIA GRZYBEK”), osób (słowa nazw stron przelewów i właściciela
+  rachunku – także w innej formie: imię bez końcowej samogłoski + do 3 liter końcówki, „ANNY” = „ANNA”, ale „KARMA” ≠
+  „KAROL”), bez Twoich słów. Tylko decyzje, które trzyma słowo kluczowe: wydatek (też do zwrotu), wpływ (też od
+  domownika), przelew własny – pożyczka, XTB i podatek są decyzją dla każdej operacji. Liczba = operacje innych grup tego kierunku bez
+  Twojej decyzji i nie pominięte, którym reguła słowa zmieni decyzję (dokładna reguła marki i dłuższe słowo mają
+  pierwszeństwo – `findRule`); słowo, które złapałoby inne, dłuższe słowo (więcej niż 2 litery końcówki – „auto” →
+  „AUTOMATSPEC”), nie jest proponowane. Przyjęta propozycja = Twoje słowo kluczowe z całą decyzją grupy (kategoria, do
+  zwrotu, od domownika, przelew własny…).
+- **T99** Pomiar 1.2.2: na pliku użytkownika (271 operacji) 2 pary podobnych nazw (obie trafne) i propozycje słowa przy
+  4 grupach; syntetyczna historia (4000 operacji, ~1000 marek, 400 reguł) – podobne nazwy 64 ms, propozycja ok. 30 ms.

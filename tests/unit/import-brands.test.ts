@@ -65,7 +65,7 @@ describe('klucz marki (D75, pomysł 1)', () => {
     // Not in the dictionary: the name without the city, the shop code, the processor, the domain.
     expect(brandOf('SPP JELENIA GORA').key).toBe('spp')
     expect(brandOf('SPP WROCLAW').key).toBe('spp')
-    expect(brandOf('KAWIARNIA POD LIPA KRAKOW 12345')).toEqual({ key: 'kawiarniapodlipa', brand: null })
+    expect(brandOf('KAWIARNIA POD LIPA KRAKOW 12345')).toEqual({ key: 'kawiarniapodlipa', brand: null, words: ['kawiarnia', 'pod', 'lipa'] })
     expect(brandOf('SumUp *PRACOWNIA').key).toBe('pracownia')
     expect(brandOf('SP FLARE AUDIO').key).toBe('flareaudio')
     expect(brandOf('Chess.com 800-318-2827').key).toBe('chess')
@@ -73,7 +73,7 @@ describe('klucz marki (D75, pomysł 1)', () => {
     // A city alone stays a name; a station's toilet is no train ticket; a person paid by BLIK is no chain.
     expect(brandOf('WROCLAW').key).toBe('wroclaw')
     expect(brandOf('Toalety Dworzec PKP').brand).toBeNull()
-    expect(brandOf('ORANGE JAN', { dictionary: false })).toEqual({ key: 'orangejan', brand: null })
+    expect(brandOf('ORANGE JAN', { dictionary: false })).toEqual({ key: 'orangejan', brand: null, words: ['orange', 'jan'] })
   })
 })
 
@@ -153,7 +153,7 @@ describe('słowa kluczowe (D75, pomysł 3)', () => {
 
 describe('reguły po marce i słowach (1.2.1)', () => {
   it('kolejność: dokładna marka, dokładna cała nazwa (reguły sprzed 1.2.1), „zawiera”, Twoje słowo; potem słownik i słowa', () => {
-    const target = { brand: 'dino', key: 'dinojeleniagora', name: words('DINO JELENIA GORA 4'), title: [] }
+    const target = { brand: 'dino', raw: 'dino', key: 'dinojeleniagora', name: words('DINO JELENIA GORA 4'), title: [] }
     const old = rule({ match: 'dinojeleniagora', categoryId: defaultCategoryId(1, 3) })
     const brandRule = rule({ match: 'dino', categoryId: GROCERIES })
     const contains = rule({ match: 'jelenia', mode: 'contains', categoryId: defaultCategoryId(9, 2) })
