@@ -19,7 +19,7 @@ na CI. Model i thinking z górką. E0 zmierzony; reszta przeliczona na jego pods
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | – | E0 Fundament | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | 0.1.0 | – | ✅ scalony |
-| **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | zmierzone ok. 4,5 h (E1 ok. 2 h, E2 ok. 2,5 h) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ PR do `main`, czeka na scalenie i odbiór |
+| **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ PR do `main`, czeka na scalenie i odbiór |
 | **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | 4–6 h | **1.0.0** | odbiór 0.3.0, odpowiedzi na „Przed etapem E3” | ⏳ na komendę |
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 10–12 h** | | | |
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 3,5–5 h | 1.1.0 | ścieżka folderu ICTTJ, zanonimizowana kopia `payouts/` | ⏳ |
