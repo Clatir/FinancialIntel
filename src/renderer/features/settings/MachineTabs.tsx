@@ -99,6 +99,7 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['ictj', 'Nowa wypłata w ICTTJ do zadokowania'],
   ['loans', 'Rata pożyczki 3 dni po terminie (własna albo spłata od dłużnika)'],
   ['pit38', 'PIT-38 – 14 i 3 dni przed 30 kwietnia'],
+  ['house', 'Domownik nie oddał za zakupy – po 30 dniach od najstarszego'],
   ['watch', 'Raport wachty – w niedzielę od 18:00']
 ]
 

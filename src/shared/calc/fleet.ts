@@ -9,8 +9,10 @@
  * - hull (kadłub) – the emergency fund; goals – savings by priority;
  * - energy – this month's salary (envelopes, cargo, tanks); what is left at the month's end is the loot (D18);
  * - tanks (odkładki) – periodic fees filled monthly from the energy;
- * - tax hold – the ICTTJ pool „Podatek”, outside the budget until PIT-38 is paid.
- * Receivables (purchases „do zwrotu”, loans given) are not money on the accounts: they are counted beside.
+ * - tax hold – the ICTTJ pool „Podatek”, outside the budget until PIT-38 is paid;
+ * - deposit – the household members' advances (D80): their money on my accounts, never mine to spend.
+ * Receivables (what household members owe – `calc/household.ts` – and the loans given) are not money on the accounts:
+ * they are counted beside.
  *
  * The layers start on the budget's first day (`settings.budget.start`, else the earliest opening balance) with the
  * money on the accounts then; the history before serves the statistics only (average costs and income).
@@ -19,6 +21,7 @@ import type { Settings } from '../schema/settings'
 import { envelopeKind, type EnvelopeKind } from '../schema/budget'
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawNow, warsawStamp } from './dates'
+import { settleHousehold, type MemberBalance, type MemberFlow } from './household'
 import { debtOf, loanStates, type LoanState } from './loans'
 import { categoryIndex, costOf, incomeOf, partsOf, splitEvenly, sum } from './operations'
 
@@ -188,6 +191,21 @@ export function dockingsByTx(dockings: readonly Docking[]): Map<string, Docking>
   return out
 }
 
+/**
+ * The budget's first day: the start wizard's (`settings.budget.start`), else the earliest opening balance – each
+ * account's latest one up to `today` (none = all).
+ */
+export function budgetStartOf(settings: Pick<Settings, 'budget'>, balances: readonly Balance[] = [], today?: string): string | null {
+  if (settings.budget.start) return settings.budget.start
+  const latest = new Map<string, Balance>()
+  for (const b of balances) {
+    if (b.kind !== 'opening' || (today != null && b.date > today)) continue
+    const prev = latest.get(b.accountId)
+    if (!prev || b.date > prev.date || (b.date === prev.date && b.updatedAt > prev.updatedAt)) latest.set(b.accountId, b)
+  }
+  return [...latest.values()].map((o) => o.date).sort()[0] ?? null
+}
+
 // ------------------------------------------------------------------ the whole state
 
 export interface FleetInput {
@@ -234,7 +252,10 @@ export interface Moves {
   energy?: number
   taxHold?: number
   loot?: number
+  /** What household members owe (+ lent, − paid back) – beside the money (D80). */
   house?: number
+  /** The household members' advances (D80). */
+  deposit?: number
   goals?: Record<string, number>
   tanks?: Record<string, number>
   loans?: Record<string, number>
@@ -273,12 +294,15 @@ export interface FleetState {
   energy: number
   tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; due: number }>
   taxHold: number
+  /** The household members' advances held on the accounts (D80): a layer, never the ship's money. */
+  deposit: number
   loot: { month: string | null; amount: number }
   /**
-   * Not money on the accounts, counted beside: the house (purchases „do zwrotu” – `houseSince` = the oldest not repaid,
-   * repaid oldest first) and the loans given still open (by loan; an operation without its loan record by `-`).
+   * Not money on the accounts, counted beside: what the household members owe (`house` all of them, `houseSince` the
+   * oldest purchase still owed; `members` – each member's balance both ways, their advance too – D80) and the loans
+   * given still open (by loan; an operation without its loan record by `-`).
    */
-  receivables: { house: number; houseSince: string | null; loans: Record<string, number>; total: number }
+  receivables: { house: number; houseSince: string | null; members: MemberBalance[]; loans: Record<string, number>; total: number }
   /** The loans with their schedules and payments (`calc/loans.ts`, E6). */
   loans: LoanState[]
   /** What the taken loans still want back (E6): the range counts the shields less it (D72). */
@@ -345,6 +369,11 @@ export function computeFleet(input: FleetInput): FleetState {
   })
   const total = sum(accounts.map((a) => a.balance))
 
+  // ---------------------------------------------------------------- the household (D80)
+  // Its balances from the budget's start (the layers'), the same ledger for the screens and the statistics.
+  const budgetStart = budgetStartOf(settings, input.balances, today)
+  const household = settleHousehold(input.transactions, { until: today, from: budgetStart })
+
   // ---------------------------------------------------------------- statistics from the whole history
   const dataDates = [...txs.map((t) => t.date), ...[...openings.values()].map((o) => o.date)].sort()
   const coverage = dataDates[0] ?? null
@@ -355,7 +384,7 @@ export function computeFleet(input: FleetInput): FleetState {
     const m = monthOf(t.date)
     const c = costOf(t)
     if (c) costsByMonth.set(m, (costsByMonth.get(m) ?? 0) + c)
-    const i = incomeOf(t)
+    const i = incomeOf(t, household)
     if (i) incomeByMonth.set(m, (incomeByMonth.get(m) ?? 0) + i)
   }
   const costsFor = (m: string): FleetState['costs'] => {
@@ -384,7 +413,7 @@ export function computeFleet(input: FleetInput): FleetState {
   }
 
   // ---------------------------------------------------------------- the layers
-  const start = settings.budget.start ?? ([...openings.values()].map((o) => o.date).sort()[0] ?? null)
+  const start = budgetStart
   const started = start != null && start <= today
   let shields = 0
   let hull = 0
@@ -392,19 +421,7 @@ export function computeFleet(input: FleetInput): FleetState {
   let taxHold = 0
   let loot = 0
   let lootMonth: string | null = null
-  let house = 0
-  /** The house's purchases not repaid yet, oldest first (the repayments take the oldest first). */
-  const houseQueue: Array<{ date: string; amount: number }> = []
-  const repayHouse = (v: number) => {
-    let rest = v
-    while (rest > 0 && houseQueue.length) {
-      const head = houseQueue[0]!
-      const take = Math.min(rest, head.amount)
-      head.amount -= take
-      rest -= take
-      if (!head.amount) houseQueue.shift()
-    }
-  }
+  let deposit = 0
   const goalAmount = new Map<string, number>()
   const tanks = new Map<string, number>()
   const loanOpen = new Map<string, number>()
@@ -493,6 +510,30 @@ export function computeFleet(input: FleetInput): FleetState {
   const record = (ev: FleetEvent) => {
     if (Object.keys(ev.moves).length) log.push(ev)
   }
+  /**
+   * The household's share of an operation (D80, `calc/household.ts`): a financed purchase takes the member's advance,
+   * the rest the shields lend; their money repays the loan (back to the shields) and the rest is their advance.
+   */
+  const settle = (flows: readonly MemberFlow[] | undefined, moves: Moves) => {
+    for (const f of flows ?? []) {
+      if (f.fromDeposit) {
+        deposit -= f.fromDeposit
+        moves.deposit = (moves.deposit ?? 0) - f.fromDeposit
+      }
+      if (f.lent) {
+        drawShields(f.lent, moves)
+        moves.house = (moves.house ?? 0) + f.lent
+      }
+      if (f.repaid) {
+        addShields(f.repaid, moves)
+        moves.house = (moves.house ?? 0) - f.repaid
+      }
+      if (f.advance) {
+        deposit += f.advance
+        moves.deposit = (moves.deposit ?? 0) + f.advance
+      }
+    }
+  }
 
   // The budget's first month started before the budget did: what it spent until the start came out of that month's
   // salary already (T45), the start pays only the rest.
@@ -535,21 +576,9 @@ export function computeFleet(input: FleetInput): FleetState {
         const periodic = container && container.cycleMonths > 1 ? container : undefined
         const goal = t.goalId && knownGoal(t.goalId) ? t.goalId : null
         for (const p of partsOf(t)) {
-          if (p.refundable) {
-            // Bought for the house: lent from the shields, owed back (D21).
-            if (p.amount < 0) {
-              drawShields(-p.amount, moves)
-              house += -p.amount
-              houseQueue.push({ date: t.date, amount: -p.amount })
-              moves.house = (moves.house ?? 0) - p.amount
-            } else {
-              const back = Math.min(p.amount, house)
-              house -= back
-              repayHouse(back)
-              if (back) moves.house = (moves.house ?? 0) - back
-              addShields(p.amount, moves)
-            }
-          } else if (goal) {
+          // A household member's part: the ledger's (below).
+          if (p.refundable) continue
+          if (goal) {
             if (p.amount < 0) {
               const have = goalAmount.get(goal) ?? 0
               const fromGoal = Math.min(-p.amount, Math.max(0, have))
@@ -573,6 +602,7 @@ export function computeFleet(input: FleetInput): FleetState {
           } else if (p.amount < 0) spendEnergy(-p.amount, t, moves)
           else refundEnergy(p.amount, t, moves)
         }
+        settle(household.byTx.get(t.id), moves)
         break
       }
       case 'income': {
@@ -580,15 +610,11 @@ export function computeFleet(input: FleetInput): FleetState {
           drawShields(-amt, moves)
           break
         }
-        // A household member's payment: first it repays the house receivable (back to the shields), the rest docks (D20).
-        const repaid = Math.min(t.repaid, house, amt)
-        if (repaid) {
-          house -= repaid
-          repayHouse(repaid)
-          moves.house = -repaid
-          addShields(repaid, moves)
-        }
-        const rest = amt - repaid
+        // A household member's money (D80): it repays what they owe (back to the shields), then it is their advance or
+        // income – only income docks.
+        const flows = household.byTx.get(t.id)
+        settle(flows, moves)
+        const rest = flows ? sum(flows.map((f) => f.income)) : amt
         const d = dockingByTx.get(t.id)
         if (!rest) break
         if (d?.split) applySplit(rest, d.split, moves)
@@ -860,8 +886,9 @@ export function computeFleet(input: FleetInput): FleetState {
       .filter((c) => c.cycleMonths > 1 && (activeIn(c, month) || (tanks.get(c.id) ?? 0) !== 0))
       .map((c) => ({ containerId: c.id, name: c.name, amount: tanks.get(c.id) ?? 0, dueMonth: nextDue(c), due: c.amount })),
     taxHold,
+    deposit,
     loot: { month: lootMonth, amount: loot },
-    receivables: { house, houseSince: houseQueue[0]?.date ?? null, loans: given, total: house + sum(Object.values(given)) },
+    receivables: { house: household.owed, houseSince: household.since, members: household.members, loans: given, total: household.owed + sum(Object.values(given)) },
     loans: loanList,
     debt,
     costs,
@@ -880,5 +907,5 @@ export function computeFleet(input: FleetInput): FleetState {
 
 /** Sum of the layers – equal to `total` (the balances) once the layers run (the invariant the tests check). */
 export function layersSum(s: FleetState): number {
-  return s.shields.amount + s.hull.amount + sum(s.goals.map((g) => g.amount)) + s.energy + sum(s.tanks.map((t) => t.amount)) + s.taxHold + s.loot.amount
+  return s.shields.amount + s.hull.amount + sum(s.goals.map((g) => g.amount)) + s.energy + sum(s.tanks.map((t) => t.amount)) + s.taxHold + s.deposit + s.loot.amount
 }

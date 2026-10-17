@@ -23,10 +23,11 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
   })
 
   it('operacje w okresie, po dacie i godzinie, z kategorią i oznaczeniami', () => {
-    const rows = operationRows([tx('2026-10-03', -zl(12.5), { time: '09:15', counterparty: 'Biedronka', impulse: 'impulse' }), tx('2026-10-02', -zl(80), { refundable: true }), tx('2026-11-01', -zl(1))], s.categories, s.accounts, '2026-10-01', '2026-10-31')
-    expect(rows.map((r) => [r.date, r.amount, r.refundable, r.log])).toEqual([
-      ['2026-10-02', -zl(80), true, ''],
-      ['2026-10-03', -zl(12.5), false, 'impuls']
+    const rows = operationRows([tx('2026-10-03', -zl(12.5), { time: '09:15', counterparty: 'Biedronka', impulse: 'impulse' }), tx('2026-10-02', -zl(80), { refundable: true }), tx('2026-11-01', -zl(1))], s.categories, s.accounts, '2026-10-01', '2026-10-31', s.household.members)
+    // Financed by a household member (D80): their name – an operation marked before 1.3.0 is the first member's („Dom”).
+    expect(rows.map((r) => [r.date, r.amount, r.financed, r.log])).toEqual([
+      ['2026-10-02', -zl(80), 'Dom', ''],
+      ['2026-10-03', -zl(12.5), '', 'impuls']
     ])
     expect(rows[1]!.category).toBe('Jedzenie · zakupy spożywcze')
     expect(operationsCsv(rows).split('\r\n')[2]).toBe('2026-10-03;09:15;mBank;Wydatek;-12,50;Jedzenie · zakupy spożywcze;Biedronka;;;impuls;')
@@ -38,6 +39,10 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
     const plans = [monthPlanSchema.parse({ ...base(), month: '2026-10', salary: zl(3000) })]
     const rows = monthRows({ transactions: [tx('2026-10-05', -zl(500)), tx('2026-10-06', zl(4000), { kind: 'income', categoryId: null })], categories: s.categories, plans, log: [], today: '2026-10-20' }, ['2026-10'])
     expect(rows).toEqual([{ month: '2026-10', salary: zl(3000), costs: zl(500), income: zl(4000), plus: true, loot: null }])
+    // A household member's money is no income (D80: their advance here).
+    const member = s.household.members[0]!.id
+    const advance = tx('2026-10-07', zl(300), { kind: 'income', categoryId: null, memberId: member, advance: true })
+    expect(monthRows({ transactions: [advance], categories: s.categories, plans, log: [], today: '2026-10-20' }, ['2026-10'])[0]!.income).toBe(0)
     expect(monthsCsv(rows).split('\r\n')[1]).toBe('2026-10;3000,00;500,00;4000,00;tak;')
   })
 

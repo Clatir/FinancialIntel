@@ -6,9 +6,11 @@
 import { DateTime } from 'luxon'
 import { formatPln } from '../format'
 import { ICTJ_POOL_LABEL } from '../ictj'
+import type { HouseholdMember } from '../schema/budget'
 import type { Container } from '../schema/records'
 import { daysBetween, firstDayOf, warsawNow } from './dates'
 import type { Delivery } from './dock'
+import { memberName } from './household'
 import { HOUSE_DAYS } from './loans'
 import { pit38Deadline } from './radar'
 import { activeIn, nextPaymentOf, type Alarm, type FleetState } from './fleet'
@@ -88,6 +90,8 @@ export interface BriefingInput {
   ictjProblem?: string | null
   /** This week's mission of the command (E7): its title and what to do. */
   mission?: { week: string; title: string; text: string } | null
+  /** The household (D80): the members' names. */
+  members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>
 }
 
 /** Silver Bullet (D73): the briefing opened between 10:00 and 11:00 New York time comes short. */
@@ -206,10 +210,12 @@ export function briefing(o: BriefingInput): BriefingItem[] {
       key: `pit38:${pit}:${pitDays <= 3 ? 3 : 14}`,
       text: `PIT-38 za ${Number(pit.slice(0, 4)) - 1}: termin ${pitDays === 0 ? 'dziś' : `za ${pitDays} ${pitDays === 1 ? 'dzień' : 'dni'}`} (30 kwietnia) – kwota w ICTTJ.`
     })
-  const since = f.receivables.houseSince
-  const houseDays = since ? daysBetween(since, f.today) : 0
-  if (f.receivables.house > 0 && since && houseDays > HOUSE_DAYS)
-    items.push({ level: 'info', kind: 'house', key: `house:${since}`, text: `Należność domu ${zl(f.receivables.house)} – najstarszy zakup „do zwrotu” z ${dm(since)} (${houseDays} dni).` })
+  // What a household member owes for longer than 30 days (D80 e): each member apart; their advance is only shown.
+  for (const m of f.receivables.members) {
+    const days = m.since ? daysBetween(m.since, f.today) : 0
+    if (m.owed > 0 && m.since && days > HOUSE_DAYS)
+      items.push({ level: 'info', kind: 'house', key: `house:${m.memberId}:${m.since}`, text: `${memberName(m.memberId, o.members)}: do oddania ${zl(m.owed)} – najstarszy zakup z ${dm(m.since)} (${days} dni).` })
+  }
   if (o.mission) items.push({ level: 'info', kind: 'mission', key: `mission:${o.mission.week}`, text: `Misja tygodnia – ${o.mission.title}: ${o.mission.text}` })
   return items
 }

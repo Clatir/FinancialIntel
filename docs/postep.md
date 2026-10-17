@@ -1,13 +1,12 @@
 # Financial Intel – postęp
 
-**Stan:** 1.2.3 – poprawka podobnych nazw i propozycji słowa po zgłoszeniu użytkownika (D79: daty transakcji w nazwach,
-wspólne słowa łączyły niezwiązane) zrobiona na gałęzi `claude/import-1.2.3`, PR do `main` – scalenie przy zielonym CI
-(D71). **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**Stan:** 1.3.0 – rozliczenia z domownikami (D80) w toku na gałęzi `claude/rozliczenia-1.3.0`. **1.2.3 wydane**
+(PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.2.3 w aplikacji (sprawdzone już na prawdziwej historii rachunku użytkownika –
-T104); potem kalibracja progów gry po pierwszym miesiącu (na prawdziwych danych).
+**Następny krok:** 1.3.0 – silnik rozliczeń, import, ekrany, przegląd, wydanie; potem pauza (odbiór 1.2.3 i 1.3.0
+w aplikacji, kalibracja progów gry po pierwszym miesiącu na prawdziwych danych).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -30,9 +29,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
 | 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze + duplikaty jak w ICTTJ | Opus 5.5 | **max** | zmierzone ok. 2 h (plan był 1–1,5 h + 0,5 h + 0,75 h) | 1.2.1 | ✅ wybór pomysłów (D75–D77) | ✅ wydane (PR #7) |
 | 1.2.2 | Podobne nazwy (5) + propozycja reguły z liczbą operacji (6) | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.2 | ✅ wybór „opcja 2” (D78) | ✅ wydane (PR #8) |
-| 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79) | Opus 5.5 | **max** | zmierzone ok. 1 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ zrobione, PR do `main` |
+| 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79), sprawdzenie na prawdziwej historii rachunku (T104) | Opus 5.5 | **max** | zmierzone ok. 1,5 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ wydane (PR #9) |
+| 1.3.0 | Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80) | Opus 5.5 | **max** | ok. 2,5–3 h | 1.3.0 | ✅ odpowiedzi i komenda (D80) | 🔨 w toku |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.2.3** | | | **zmierzone ok. 13,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.2.3** | | | **zmierzone ok. 14 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -47,23 +47,18 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
 
-## Przed etapem 1.2.2 – podobne nazwy i propozycja reguły (17.10.2026)
+## Przed etapem 1.3.0 – rozliczenia z domownikami (17.10.2026)
 
-1. **Co trzeba wiedzieć** – 1.2.1 wydane (PR #7): marki, słownik sieci, słowa kluczowe, tematy, decyzje zbiorcze,
-   duplikaty. Zostały pomysły 5 i 6 z propozycji (D75: „na razie bez”); użytkownik wybrał je jako „opcję 2” (D78).
-   Zmiana dotyczy tylko importu i reguł; bez AI, bez sieci.
-2. **Co użytkownik musi powiedzieć** – wybór ✅ (D78). Rozstrzygam sam (T-decyzje, do zmiany na życzenie):
-   - podobne nazwy tylko spoza słownika sieci (sieci ze słownika łączą się już same), także z markami Twoich reguł
-     z wcześniejszych importów („MOKKA CAFE” ⟷ reguła „KAWIARNIA MOKKA”); nic nie łączy się samo – „Połącz” albo
-     „To nie to samo”, oba zapamiętane (połączone nazwy kolejne importy grupują razem, odrzucona para nie wraca);
-     połączenie można cofnąć w Ustawieniach → Import z banku;
-   - do tego ręczne „Połącz nazwy” dla zaznaczonych grup (gdy podobieństwo nie wystarcza – „MOKKA DWORZEC” i „MOKKA
-     ARKADIA”);
-   - propozycja reguły: po Twojej decyzji dla grupy słowa z jej nazwy (przy przelewach – z tytułu), które są też w innych
-     operacjach pliku bez Twojej decyzji, z liczbą operacji, które reguła zmieni; kliknięcie = Twoje słowo kluczowe
-     (jak w Ustawieniach), plik liczony od nowa od razu.
-3. **Co przygotować** – nic.
-4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1–1,5 h.
+1. **Co trzeba wiedzieć** – część wydatków finansują domownicy; dotąd FI miał jedną należność „od domu” (D21) i wybór
+   zwrot / przychód przy wpłacie (D20). Zakres: saldo każdego domownika w obie strony (należność albo zaliczka),
+   wydatek albo część paragonu „finansuje: osoba” (nie zjada energii, nie jest kosztem), wpływ od domownika najpierw
+   wyrównuje należność, reszta zaliczka albo przychód; salda na Mostku i Radarze, przypomnienia, sfinansowane osobno
+   w debriefingu i Raportach. 1.2.3 wydane (PR #9), nic nie jest otwarte.
+2. **Co użytkownik musi powiedzieć** – ✅ odpowiedzi (kto płaci pierwszy: różnie; tylko domownicy; sfinansowane widać
+   osobno; nic dotąd nie oznaczone) i propozycje a–g przyjęte komendą „Ok” (D80).
+3. **Co przygotować** – nic przed startem; po wydaniu: domownicy w Ustawieniach, oznaczenie kilku wspólnych wydatków,
+   sprawdzenie sald na Mostku i dopasowania po imporcie.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2,5–3 h.
 
 ## 1.2.3 – poprawka podobnych nazw (17.10.2026)
 

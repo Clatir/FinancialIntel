@@ -8,6 +8,7 @@ import type { Balance, Transaction } from '../schema/records'
 import type { Category, Orders } from '../schema/budget'
 import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthRange, mondayOf, weekdayOf } from './dates'
 import type { FleetEvent } from './fleet'
+import { settleHousehold } from './household'
 import { asksImpulse, categoryIndex, costOf, incomeOf, partsOf, sum } from './operations'
 
 // ------------------------------------------------------------------ the wealth curve
@@ -247,8 +248,8 @@ export interface WeekNumbers {
   categories: Array<{ id: string; cost: number }>
 }
 
-/** A week in numbers (the watch report, spec: on Sunday). */
-export function weekNumbers(transactions: readonly Transaction[], categories: readonly Category[], monday: string): WeekNumbers {
+/** A week in numbers (the watch report, spec: on Sunday); `start` = the budget's (the household's balances – D80). */
+export function weekNumbers(transactions: readonly Transaction[], categories: readonly Category[], monday: string, start: string | null = null): WeekNumbers {
   const to = addDays(monday, 6)
   const cats = categoryIndex(categories)
   const txs = transactions.filter((t) => t.date >= monday && t.date <= to)
@@ -265,7 +266,7 @@ export function weekNumbers(transactions: readonly Transaction[], categories: re
     from: monday,
     to,
     costs: sum(txs.map(costOf)),
-    income: sum(txs.map(incomeOf)),
+    income: sum(txs.map((t) => incomeOf(t, settleHousehold(transactions, { from: start })))),
     days: Array.from({ length: 7 }, (_, i) => {
       const date = addDays(monday, i)
       return { date, costs: sum(txs.filter((t) => t.date === date).map(costOf)) }
@@ -295,11 +296,12 @@ export interface YearNumbers {
   categories: Array<{ id: string; cost: number }>
 }
 
-/** A year in numbers (the year's review, spec: in January). */
-export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string): YearNumbers {
+/** A year in numbers (the year's review, spec: in January); `start` = the budget's (the household's balances – D80). */
+export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, start: string | null = null): YearNumbers {
   const months = monthRange(`${year}-01`, `${year}-12`)
   const spend = spendingByMonth(transactions, categories, months)
-  const income = months.map((m) => sum(transactions.filter((t) => monthOf(t.date) === m).map(incomeOf)))
+  const ledger = settleHousehold(transactions, { from: start })
+  const income = months.map((m) => sum(transactions.filter((t) => monthOf(t.date) === m).map((t) => incomeOf(t, ledger))))
   return {
     year,
     months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]! })),

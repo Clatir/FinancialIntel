@@ -2,7 +2,9 @@ import { useDeferredValue, useEffect, useMemo, useState, type DragEvent } from '
 import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
 import { importThemes, joins, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
-import { TX_KIND_LABEL, type TxKind } from '@shared/schema'
+import { TX_KIND_LABEL, type HouseholdMember, type TxKind } from '@shared/schema'
+import { memberName } from '@shared/calc/household'
+import { opKindOf } from '@shared/import/reconcile'
 import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { useWizard } from '../wizard/state'
@@ -18,7 +20,8 @@ import { DuplicatesPanel } from './DuplicatesPanel'
 import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
-import { BULK_OPTIONS, OPTIONS, choiceFor, optionOf, type Option } from './options'
+import { bulkOptions, choiceFor, hasCategory, optionOf, optionsFor, type Option } from './options'
+import { addMemberFromBank, useMembers } from '../household/actions'
 import {
   acceptGroupHint,
   acceptHints,
@@ -301,7 +304,7 @@ function MatchesPanel() {
 }
 
 /** A theme's name: its category (or kind, container), the bank's category it hints at, or the kind of operation. */
-function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, containerName: (id: string) => string): string {
+function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, containerName: (id: string) => string, members: readonly Pick<HouseholdMember, 'id' | 'name'>[]): string {
   const b = t.basis
   if (b.kind === 'hint') return `mBank: ${b.bankCategories.join(', ') || 'kategoria'}`
   if (b.kind === 'op') return OP_LABEL[t.direction][b.op]
@@ -309,9 +312,9 @@ function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, con
   const c = b.choice
   if (c.kind === 'expense') {
     const cat = catLabel(c.categoryId) || 'bez kategorii'
-    return t.direction === 'in' ? `Zwroty · ${cat}` : c.refundable ? `Do zwrotu · ${cat}` : cat
+    return t.direction === 'in' ? `Zwroty · ${cat}` : c.refundable ? `Finansuje: ${memberName(c.memberId, members)} · ${cat}` : cat
   }
-  if (c.kind === 'income') return c.household ? 'Od domownika' : 'Wpływy (przychód)'
+  if (c.kind === 'income') return c.household ? `Od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}` : 'Wpływy (przychód)'
   if (c.kind === 'transfer') return 'Przelewy własne'
   if (c.kind === 'trading') return t.direction === 'out' ? 'XTB – dopłaty do konta tradingowego' : 'XTB – wypłaty z konta tradingowego'
   if (c.kind === 'loan') return 'Pożyczki'
@@ -319,15 +322,16 @@ function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, con
   return TX_KIND_LABEL[c.kind as TxKind] ?? c.kind
 }
 
-const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out' ? 'expense' : 'income', categoryId: null, refundable: false, household: false, counterAccountId: null })
+const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out' ? 'expense' : 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null })
 
-/** The kind and the category of a decision (a theme's, a group's). */
+/** The kind and the category of a decision (a theme's, a group's); the household's per member (D80). */
 function DecisionFields({ choice, direction, onChange, testId }: { choice: Choice; direction: 'in' | 'out'; onChange: (c: Choice) => void; testId: string }) {
+  const members = useMembers()
   const option = optionOf(choice, direction)
   return (
     <>
       <select className="input h-[24px] w-[230px] py-0" value={option} onChange={(e) => onChange(choiceFor(e.currentTarget.value as Option, choice))} aria-label="Co to jest" data-testid={`${testId}-kind`}>
-        {OPTIONS[direction].map((o) => (
+        {optionsFor(direction, members, choice).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -337,6 +341,32 @@ function DecisionFields({ choice, direction, onChange, testId }: { choice: Choic
         <CategorySelect className="h-[24px] min-w-[180px] flex-1 py-0" value={choice.categoryId} onChange={(categoryId) => onChange({ ...choice, categoryId })} data-testid={`${testId}-category`} />
       )}
     </>
+  )
+}
+
+/**
+ * Money in from a person not of the household (D80 a): „+ domownik” adds them (their name in the bank) and decides the
+ * group as their money – the rest beyond their debt as income until the user says „zaliczka”.
+ */
+function NewMember({ g }: { g: ImportGroup }) {
+  const members = useMembers()
+  const readOnly = useData((s) => !!s.status?.readOnly)
+  const name = g.names[0] ?? g.label
+  if (readOnly || g.direction !== 'in' || opKindOf(g.rows[0]!.row.operation) !== 'transfer' || !name.trim()) return null
+  if (members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.trim().toUpperCase()))) return null
+  return (
+    <button
+      type="button"
+      className="text-[11px] text-accent hover:underline"
+      title="Dopisz nadawcę do domowników (Ustawienia → Domownicy): jego wpłaty najpierw wyrównają to, co ma oddać"
+      onClick={() => {
+        const id = addMemberFromBank(name)
+        if (id) decideGroup(g.group, { ...nothing('in'), household: true, memberId: id })
+      }}
+      data-testid="import-group-new-member"
+    >
+      + domownik
+    </button>
   )
 }
 
@@ -392,6 +422,7 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
         )}
         {!own && !themeDecided && g.source !== 'rule' && <span className="truncate text-[11px] text-dim">{g.reason}</span>}
         {g.byTitle && <span className="text-[11px] text-dim">z tytułu przelewu – bez reguły</span>}
+        {!(choice.kind === 'income' && choice.household) && <NewMember g={g} />}
       </div>
       {own && proposing && <RuleProposal g={g} choice={own} />}
       {choice.kind === 'expense' && !choice.categoryId && g.hint && (
@@ -515,6 +546,7 @@ const KEYWORD_KIND: Partial<Record<Option, { kind: TxKind; direction: 'in' | 'ou
 }
 
 function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
+  const members = useMembers()
   const selected = useImport((s) => s.selected)
   const readOnly = useData((s) => !!s.status?.readOnly)
   const query = useImport((s) => s.query)
@@ -528,7 +560,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const keyword = keywordOfSearch(query)
   const keywordKind = keyword ? KEYWORD_KIND[option] : undefined
   const apply = () => {
-    const category = option === 'expense' || option === 'refundable' ? categoryId : null
+    const category = hasCategory(option) ? categoryId : null
     // The search as a key first: the file is planned again with it, the decisions of the ticked stay theirs.
     let note = ''
     if (asKeyword && keyword && keywordKind) {
@@ -546,13 +578,13 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
         {operations(rows)}
       </span>
       <select className="input h-[24px] w-[220px] py-0" value={option} onChange={(e) => setOption(e.currentTarget.value as Option)} aria-label="Decyzja dla zaznaczonych" data-testid="import-bulk-kind">
-        {BULK_OPTIONS.map((o) => (
+        {bulkOptions(members).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}
       </select>
-      {(option === 'expense' || option === 'refundable') && <CategorySelect className="h-[24px] min-w-[170px] py-0" value={categoryId} onChange={setCategoryId} data-testid="import-bulk-category" />}
+      {hasCategory(option) && <CategorySelect className="h-[24px] min-w-[170px] py-0" value={categoryId} onChange={setCategoryId} data-testid="import-bulk-category" />}
       {keywordKind && (
         <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają operacje z tym słowem w nazwie albo tytule same">
           <input type="checkbox" checked={asKeyword} onChange={(e) => setAsKeyword(e.currentTarget.checked)} data-testid="import-bulk-keyword" />
@@ -592,6 +624,7 @@ function ThemesPanel() {
   const choices = useImport((s) => s.choices)
   const query = useImport((s) => s.query)
   const cats = useCategories()
+  const members = useMembers()
   const containers = useRecordList('containers')
   const groups = useImportGroups()
   const themes = useMemo(() => importThemes(groups), [groups])
@@ -670,7 +703,7 @@ function ThemesPanel() {
                 {STATUS_LABEL[st]} · {list.length}
               </button>
               {!isClosed &&
-                list.map((t) => <ThemeRow key={t.theme} t={t} label={themeLabel(t, (id) => cats.label(id), containerName)} status={st} found={found} searching={searching} />)}
+                list.map((t) => <ThemeRow key={t.theme} t={t} label={themeLabel(t, (id) => cats.label(id), containerName, members)} status={st} found={found} searching={searching} />)}
             </div>
           )
         })}
@@ -752,8 +785,10 @@ export function ImportPage() {
   const plan = useImport((s) => s.plan)
   const rules = useData((s) => s.fi?.settings.import.rules)
   const aliases = useData((s) => s.fi?.settings.import.aliases)
-  // A keyword added, a rule deleted, names merged (here, in the settings, on another computer): the open file planned again.
-  useEffect(() => replanIfChanged(rules, aliases), [rules, aliases])
+  const members = useData((s) => s.fi?.settings.household.members)
+  // A keyword added, a rule deleted, names merged, a member added (here, in the settings, on another computer): the open
+  // file planned again.
+  useEffect(() => replanIfChanged(rules, aliases, members), [rules, aliases, members])
   const done = useImport((s) => s.done)
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()

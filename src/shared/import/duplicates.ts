@@ -52,7 +52,18 @@ function userContent(t: Transaction): number {
 function decision(t: Transaction): string | null {
   const decided = t.kind !== 'expense' || !!t.categoryId || t.splits.length > 0 || t.refundable || !!t.containerId || !!t.loanId || !!t.goalId
   if (!decided) return null
-  return [t.kind, t.categoryId ?? '', t.splits.map((s) => `${s.categoryId}:${s.amount}`).join(','), t.refundable, t.counterAccountId ?? '', t.containerId ?? '', t.loanId ?? '', t.goalId ?? ''].join('|')
+  const member = (refundable: boolean, memberId: string | null) => (refundable ? (memberId ?? '-') : '')
+  return [
+    t.kind,
+    t.categoryId ?? '',
+    t.splits.map((s) => `${s.categoryId}:${s.amount}:${member(s.refundable, s.memberId)}`).join(','),
+    t.refundable,
+    member(t.refundable || t.kind === 'income', t.memberId),
+    t.counterAccountId ?? '',
+    t.containerId ?? '',
+    t.loanId ?? '',
+    t.goalId ?? ''
+  ].join('|')
 }
 
 const conflicting = (keep: Transaction, copies: readonly Transaction[]): boolean => {
@@ -155,6 +166,9 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
         categoryId: c.categoryId,
         splits: c.splits,
         refundable: c.refundable,
+        memberId: c.memberId,
+        advance: c.advance,
+        covers: c.covers,
         repaid: c.repaid,
         counterAccountId: c.counterAccountId,
         containerId: c.containerId,

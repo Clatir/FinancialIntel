@@ -14,7 +14,7 @@
 import { daysBetween } from '../calc/dates'
 import { fold } from '../fold'
 import { queryAmount } from '../operationsView'
-import type { ImportRule } from '../schema/budget'
+import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isFeeOperation, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
@@ -99,7 +99,8 @@ export interface ImportPlan {
 /** A proposal as one text: the rows of a brand with another proposal are another group (and theme). */
 export function proposalSig(d: ImportDecision): string {
   if (d.source === 'none') return `?${d.kind}`
-  return [d.kind, d.categoryId ?? '', d.refundable ? 'z' : '', d.household ? 'd' : '', d.counterAccountId ?? '', d.containerId ?? '', d.byTitle ? 't' : ''].join(':')
+  const member = d.refundable || d.household ? (d.memberId ?? '-') : ''
+  return [d.kind, d.categoryId ?? '', d.refundable ? 'z' : '', d.household ? 'd' : '', member, d.household && d.advance ? 'a' : '', d.counterAccountId ?? '', d.containerId ?? '', d.byTitle ? 't' : ''].join(':')
 }
 
 /**
@@ -424,6 +425,10 @@ export interface Choice {
   categoryId: string | null
   refundable: boolean
   household: boolean
+  /** The household member (D80): who finances (`refundable`), whose money it is (`household`); null = the first one. */
+  memberId: string | null
+  /** A household member's money: the rest beyond their debt is their advance (else income). */
+  advance: boolean
   counterAccountId: string | null
 }
 
@@ -454,10 +459,27 @@ export interface ImportChoices {
 /** Is a matched hand-typed operation joined? `noMerge` false = ticked by the user (a possible duplicate that asks). */
 export const joins = (p: Extract<RowPlan, { status: 'merge' }>, choices: Pick<ImportChoices, 'noMerge'>): boolean => (p.ask ? choices.noMerge[p.key] === false : !choices.noMerge[p.key])
 
-export const choiceOf = (d: ImportDecision): Choice => ({ kind: d.kind, categoryId: d.categoryId, refundable: d.refundable, household: d.household, counterAccountId: d.counterAccountId })
+export const choiceOf = (d: ImportDecision): Choice => ({
+  kind: d.kind,
+  categoryId: d.categoryId,
+  refundable: d.refundable,
+  household: d.household,
+  memberId: d.refundable || d.household ? d.memberId : null,
+  advance: d.household && d.advance,
+  counterAccountId: d.counterAccountId
+})
+
+/** The member of a choice that has one (null = the first; '' = none). */
+const memberKey = (c: Choice) => (c.refundable || c.household ? (c.memberId ?? HOUSE_MEMBER_ID) : '')
 
 export const sameChoice = (a: Choice, b: Choice): boolean =>
-  a.kind === b.kind && a.categoryId === b.categoryId && a.refundable === b.refundable && a.household === b.household && a.counterAccountId === b.counterAccountId
+  a.kind === b.kind &&
+  a.categoryId === b.categoryId &&
+  a.refundable === b.refundable &&
+  a.household === b.household &&
+  memberKey(a) === memberKey(b) &&
+  (a.household && a.advance) === (b.household && b.advance) &&
+  a.counterAccountId === b.counterAccountId
 
 export interface ImportResult {
   create: Transaction[]
@@ -469,14 +491,10 @@ export interface ImportResult {
 }
 
 /**
- * The records an import writes. `house` = the open house receivable now: money from a household member repays it
- * first, in date order (D20); `makeId` gives new ids (ULIDs), `now` the time of the import.
+ * The records an import writes; `makeId` gives new ids (ULIDs), `now` the time of the import. A household member's money
+ * says whose it is: what it repays and what is their advance the ledger counts (`calc/household.ts`, D80).
  */
-export function buildImport(
-  plan: ImportPlan,
-  choices: ImportChoices,
-  opts: { now: string; house: number; makeId: () => string; rules: readonly ImportRule[] }
-): ImportResult {
+export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { now: string; makeId: () => string; rules: readonly ImportRule[] }): ImportResult {
   const groups = importGroups(plan)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
   const bankOf = (p: RowPlan): BankRow => ({
@@ -493,9 +511,6 @@ export function buildImport(
   const create: Transaction[] = []
   const update: Transaction[] = []
   const counts = { created: 0, merged: 0, settled: 0, known: 0, removed: 0, skipped: 0, excluded: 0 }
-  // The house receivable as the file goes, by date: purchases „do zwrotu” of the file add to it, a household member's
-  // money repays it (D20) – the same order the layers' engine uses.
-  let open = Math.max(0, opts.house)
   const fresh = [...plan.rows].sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
   for (const p of fresh) {
     if (p.status === 'known') {
@@ -535,16 +550,12 @@ export function buildImport(
     const base: Choice =
       p.status === 'new' || p.status === 'deleted'
         ? choiceOf(p.decision)
-        : { kind: p.row.amount < 0 ? 'expense' : 'income', categoryId: null, refundable: false, household: false, counterAccountId: null }
+        : { kind: p.row.amount < 0 ? 'expense' : 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }
     // The row's own decision, else its group's, else its theme's, else the proposal.
     const c = choices.rows[p.key] ?? (group ? choices.groups[group] : undefined) ?? (theme ? choices.themes[theme] : undefined) ?? base
     const out = p.row.amount < 0
-    let repaid = 0
-    if (c.kind === 'expense' && c.refundable && out) open += -p.row.amount
-    if (c.kind === 'income' && c.household && !out) {
-      repaid = Math.min(p.row.amount, open)
-      open -= repaid
-    }
+    const refundable = c.kind === 'expense' && out && c.refundable
+    const household = c.kind === 'income' && !out && c.household
     counts.created++
     create.push(
       transactionSchema.parse({
@@ -558,10 +569,12 @@ export function buildImport(
         kind: c.kind,
         amount: p.row.amount,
         categoryId: c.kind === 'expense' ? c.categoryId : null,
-        refundable: c.kind === 'expense' && out && c.refundable,
+        refundable,
+        // A household member's purchase or money (D80): whose; their money beyond their debt is their advance or income.
+        memberId: refundable || household ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
+        advance: household && c.advance,
         counterparty: p.row.counterparty,
         title: p.row.title,
-        repaid,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null,
         containerId: c.kind === 'expense' && out && (p.status === 'new' || p.status === 'deleted') ? p.decision.containerId : null,
         bank: bankOf(p)
@@ -600,6 +613,7 @@ export function buildImport(
         categoryId: c.kind === 'expense' ? c.categoryId : null,
         refundable: c.kind === 'expense' && g.direction === 'out' && c.refundable,
         household: c.kind === 'income' && c.household,
+        memberId: (c.kind === 'expense' && g.direction === 'out' && c.refundable) || (c.kind === 'income' && c.household) ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null
       },
       { now: opts.now, makeId: opts.makeId, hits: total }

@@ -208,6 +208,27 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **D79** (17.10.2026) Zgłoszenie użytkownika po 1.2.2: rozpoznawanie podobnych transakcji nie działa – wiele nazw ma
   datę transakcji, a to samo słowo w nazwach (nazwa miasta, „bar”) łączy niezwiązane transakcje. Poprawka 1.2.3: nazwy bez
   dopisków banku, ostrożniejsze podobieństwo i propozycje, łączenie tylko parami, „Rozłącz wszystkie”.
+- **D80** (17.10.2026) Rozliczenia z domownikami (1.3.0, prośba użytkownika: część wydatków finansują inne osoby;
+  propozycja użytkownika – odjąć wydatek od wpływów tej osoby; wybrany wariant A z „Przed etapem 1.3.0”, komenda „Ok”).
+  Zastępuje „jedna należność od domu (bez osób)” z D21 i rozszerza D20. Odpowiedzi użytkownika: kto płaci pierwszy –
+  różnie (oba kierunki); tylko domownicy; sfinansowane wydatki widać osobno; nic dotąd nie oznaczone („do zwrotu”,
+  „od domownika”) – bez przenoszenia danych. Przyjęte propozycje:
+  - każdy domownik ma saldo w obie strony: należność (zapłaciłem za niego) albo zaliczka (przelał z góry);
+  - wydatek – cały albo część paragonu – „finansuje: osoba”: nie zjada energii ani kopert, nie jest moim kosztem; najpierw
+    bierze z zaliczki tej osoby, brakujące pieniądze pożyczają osłony (jak dotąd „do zwrotu”);
+  - a. domownicy w Ustawieniach (imię i nazwy nadawcy z banku); import rozpoznaje przelew po nadawcy i podpowiada
+    dopisanie nowej osoby;
+  - b. wpływ od domownika najpierw wyrównuje jego należność; reszta: zaliczka albo przychód – pytanie raz, potem
+    zapamiętane dla tej osoby;
+  - c. zaliczka = pieniądze domowników na moim koncie, nie do wydania na siebie: osobno w stanie okrętu („Depozyt
+    domowników”), nie w energii; wydatek „finansuje X” najpierw zużywa zaliczkę X;
+  - d. pomost: należność bez zaliczki pożyczają osłony, zwrot wraca do osłon;
+  - e. przypomnienie (odprawa i powiadomienie) o należności starszej niż 30 dni – dla każdej osoby; zaliczka tylko
+    pokazywana;
+  - f. gra: wydatek sfinansowany przez domownika nie jest naruszeniem i nie liczy się do kopert dnia;
+  - g. w Operacjach zbiorczo „finansuje: X”; przy wpływie opcjonalnie wskazanie pokrytych wydatków (inaczej od
+    najstarszych); reguła importu może oznaczać, kto finansuje (po sklepie);
+  - salda na Mostku i Radarze, sfinansowane wydatki osobno w debriefingu miesiąca i Raportach.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.

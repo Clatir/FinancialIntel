@@ -1,16 +1,16 @@
 import { create } from 'zustand'
-import { computeFleet } from '@shared/calc/fleet'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import type { BrandAliases } from '@shared/import/aliases'
 import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
 import { buildImport, importGroups, planImport, sameChoice, type Choice, type ImportChoices, type ImportGroup, type ImportPlan, type ImportTheme } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
-import { MBANK_ACCOUNT_ID, type ImportRule, type Transaction } from '@shared/schema'
+import { HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, type HouseholdMember, type ImportRule, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { addRecords, deleteRecord, flushSaves, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { choiceFor, fits, type Option } from './options'
+import { rememberInflows } from '../household/actions'
 
 export interface ImportDone {
   counts: { created: number; merged: number; settled: number; known: number; removed: number; skipped: number; excluded: number }
@@ -37,7 +37,7 @@ interface ImportSession {
    * The rules and merged names the plan was made with: others now (a keyword added, a rule deleted, names merged – 1.2.2)
    * = plan again.
    */
-  planInputs: { rules: readonly ImportRule[]; aliases: BrandAliases } | null
+  planInputs: { rules: readonly ImportRule[]; aliases: BrandAliases; members: readonly HouseholdMember[] } | null
   /** The group the user decided last by itself (1.2.2): a keyword rule is proposed for it, until closed (`noProposal`). */
   lastDecided: string | null
   noProposal: Record<string, true>
@@ -90,12 +90,13 @@ function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<st
   const s = useData.getState()
   if (!s.fi) return null
   const { rules, aliases } = s.fi.settings.import
-  useImport.setState({ planInputs: { rules, aliases } })
+  const { members } = s.fi.settings.household
+  useImport.setState({ planInputs: { rules, aliases, members } })
   return planImport(
     file,
     accountId,
     records(s.records.transactions),
-    { rules, ownNames: ownNamesWith(s.fi.settings.import.ownNames, file), categories: categoryIndex(s.fi.settings.categories), containers: records(s.records.containers), aliases },
+    { rules, ownNames: ownNamesWith(s.fi.settings.import.ownNames, file), categories: categoryIndex(s.fi.settings.categories), containers: records(s.records.containers), aliases, members },
     deletedKeys
   )
 }
@@ -163,12 +164,12 @@ export function setImportAccount(accountId: string): void {
 }
 
 /**
- * Plan again when the rules or the merged names are not the ones the plan was made with (a keyword added, names merged –
- * here, in the settings, on another computer).
+ * Plan again when the rules, the merged names or the household are not the ones the plan was made with (a keyword
+ * added, names merged, a member added – here, in the settings, on another computer).
  */
-export function replanIfChanged(rules: readonly ImportRule[] | undefined, aliases: BrandAliases | undefined): void {
+export function replanIfChanged(rules: readonly ImportRule[] | undefined, aliases: BrandAliases | undefined, members?: readonly HouseholdMember[]): void {
   const { plan, planInputs } = useImport.getState()
-  if (plan && rules && aliases && (rules !== planInputs?.rules || aliases !== planInputs.aliases)) replanImport()
+  if (plan && rules && aliases && (rules !== planInputs?.rules || aliases !== planInputs.aliases || (members != null && members !== planInputs.members))) replanImport()
 }
 
 /**
@@ -434,7 +435,7 @@ export const hintable = (themes: readonly ImportTheme[], c: ImportChoices) => th
 /** „Przyjmij podpowiedzi mBanku”: the bank's category for the expense themes it hints at – no rules (D68). */
 export function acceptHints(themes: readonly ImportTheme[]): number {
   const todo = hintable(themes, useImport.getState().choices)
-  for (const t of todo) if (t.basis.kind === 'hint') chooseTheme(t.theme, { kind: 'expense', categoryId: t.basis.categoryId, refundable: false, household: false, counterAccountId: null }, false, true)
+  for (const t of todo) if (t.basis.kind === 'hint') chooseTheme(t.theme, { kind: 'expense', categoryId: t.basis.categoryId, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }, false, true)
   return todo.length
 }
 
@@ -455,18 +456,7 @@ export async function runImport(): Promise<void> {
     const s = useData.getState()
     if (!plan || !s.fi) throw new Error('Brak danych do importu.')
     const now = new Date().toISOString()
-    const fleet = computeFleet({
-      settings: s.fi.settings,
-      transactions: records(s.records.transactions),
-      balances: records(s.records.balances),
-      goals: records(s.records.goals),
-      months: records(s.records.months),
-      containers: records(s.records.containers),
-      dockings: records(s.records.dockings),
-      loans: records(s.records.loans),
-      now
-    })
-    const result = buildImport(plan, st.choices, { now, house: fleet.receivables.house, makeId: newId, rules: s.fi.settings.import.rules })
+    const result = buildImport(plan, st.choices, { now, makeId: newId, rules: s.fi.settings.import.rules })
     addRecords('transactions', result.create)
     replaceRecords('transactions', result.update as Transaction[])
     for (const id of result.remove) await deleteRecord('transactions', id)
@@ -490,6 +480,9 @@ export async function runImport(): Promise<void> {
         }
       }
     }))
+    // A household member's money the user decided here (zaliczka / przychód): asked once, remembered for them (D80 b).
+    const decided = [...Object.values(st.choices.themes), ...Object.values(st.choices.groups), ...Object.values(st.choices.rows)]
+    rememberInflows(decided.filter((c) => c.kind === 'income' && c.household).map((c) => ({ kind: 'income', memberId: c.memberId ?? HOUSE_MEMBER_ID, advance: c.advance })))
     if (!(await flushSaves())) throw new Error('Część operacji nie zapisała się jeszcze – aplikacja ponawia zapis automatycznie.')
     useImport.setState({
       done: { counts: result.counts, backup, accountId: st.accountId, rules: learned },

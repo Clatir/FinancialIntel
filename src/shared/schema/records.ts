@@ -11,8 +11,8 @@ import { clockTime, grosze, isoDate, isoDateTime, isoMonth, recordBase, text, ul
 /**
  * What an operation is for the budget:
  * - 'expense' – a cost from the energy (a positive amount = a product return, a negative expense of its category);
- * - 'income' – a delivery: docks into the layers (shields → hull → goals); `repaid` = the part that repays the house
- *   receivable (a household member, D20);
+ * - 'income' – a delivery: docks into the layers (shields → hull → goals); money of a household member (`memberId`, D80)
+ *   repays what they owe first, the rest is their advance or income (`calc/household.ts`);
  * - 'transfer' – an own transfer (between the budget's accounts, or to / from an own account outside the budget): no
  *   cost, no income;
  * - 'trading' – the XTB trading account (D54): money out = a top-up (the firewall, D23), money in = a withdrawal (a
@@ -34,14 +34,16 @@ export const TX_KIND_LABEL: Record<TxKind, string> = {
   correction: 'Korekta salda'
 }
 
-/** One line of a split receipt: several categories, or the own part and the house part („do zwrotu”). */
+/** One line of a split receipt: several categories, or the own part and a household member's part. */
 export const splitSchema = z.looseObject({
   id: ulidSchema,
   /** Signed like the operation's amount (money out < 0). */
   amount: grosze,
   categoryId: ulidSchema.nullable().default(null),
-  /** Bought for the house: a receivable, not a cost (D21). */
+  /** Financed by a household member (D80, before 1.3.0 „do zwrotu” for the house – D21): not a cost of mine. */
   refundable: z.boolean().default(false),
+  /** Who finances the line (`settings.household.members`); null = the first member, „Dom” (D21 – one house). */
+  memberId: ulidSchema.nullable().catch(null).default(null),
   note: text
 })
 export type Split = z.infer<typeof splitSchema>
@@ -78,8 +80,20 @@ export const transactionSchema = z.looseObject({
   /** Grosze, signed: money out of the account < 0, money in > 0. */
   amount: grosze,
   categoryId: ulidSchema.nullable().default(null),
-  /** Bought for the house („do zwrotu”): the money is lent from the shields, the house owes it back. */
+  /**
+   * Financed by a household member (D80; „do zwrotu” for the house before 1.3.0 – D21): not a cost of mine, never the
+   * energy's; it takes the member's advance first, the rest the shields lend until the member pays it back.
+   */
   refundable: z.boolean().default(false),
+  /**
+   * The household member (`settings.household.members`, D80): of an expense – who finances it (with `refundable`; null =
+   * the first member, „Dom”); of an income – whose money it is (repays what they owe first).
+   */
+  memberId: ulidSchema.nullable().catch(null).default(null),
+  /** A household member's income: what they do not owe is their advance (held in the deposit), not income. */
+  advance: z.boolean().catch(false).default(false),
+  /** A household member's income: the purchases it pays back first (operations' ids), then the oldest. */
+  covers: z.array(ulidSchema).max(500).catch([]).default([]),
   /** A split receipt (its lines replace `categoryId` / `refundable`); the lines sum to `amount`. */
   splits: z.array(splitSchema).default([]),
   /** Payee or payer as shown (shop, person). */
@@ -91,7 +105,10 @@ export const transactionSchema = z.looseObject({
   impulse: z.enum(['plan', 'impulse']).nullable().default(null),
   /** The captain's log entry (an impulse, a purchase in the quiet hours). */
   logNote: z.string().max(2000).default(''),
-  /** Income: the part repaying the house receivable (≤ amount); the rest docks as income. */
+  /**
+   * Income before 1.3.0: the part repaying the house receivable (≤ amount; D20). An income with it and no `memberId` is
+   * the first member's money that repays at most this much; 1.3.0 writes `memberId` instead (0 here).
+   */
   repaid: grosze.min(0).default(0),
   /** Own transfer: the budget's other account (null = an account outside the budget). */
   counterAccountId: ulidSchema.nullable().default(null),

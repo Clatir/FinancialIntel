@@ -48,13 +48,14 @@ const rule = (over: Partial<ImportRule>): ImportRule => ({
   categoryId: null,
   refundable: false,
   household: false,
+  memberId: null,
   counterAccountId: null,
   learned: true,
   hits: 3,
   updatedAt: NOW,
   ...over
 })
-const expense = (categoryId: string | null): Choice => ({ kind: 'expense', categoryId, refundable: false, household: false, counterAccountId: null })
+const expense = (categoryId: string | null): Choice => ({ kind: 'expense', categoryId, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null })
 const empty = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {} })
 const groupsOf = (rows: MbankRow[], rules: ImportRule[] = [], aliases: BrandAliases = {}) =>
   importGroups(planImport(file(rows), MBANK_ACCOUNT_ID, [], { rules, ownNames: ['JAN KAPITAN'], categories, aliases }))

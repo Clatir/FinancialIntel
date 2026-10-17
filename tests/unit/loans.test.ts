@@ -9,6 +9,7 @@ import { DEFAULT_MACHINE_PREFS } from '@shared/machine'
 import {
   balanceSchema,
   containerSchema,
+  HOUSE_MEMBER_ID,
   loanSchema,
   MBANK_ACCOUNT_ID,
   monthPlanSchema,
@@ -174,12 +175,12 @@ describe('radar 90 dni i PIT-38 (D58, D72)', () => {
     expect(items.filter((i) => ['loan', 'pit38', 'house'].includes(i.kind)).map((i) => [i.kind, i.level, i.key])).toEqual([
       ['loan', 'yellow', `loan:${given.id}:2027-04-10`],
       ['pit38', 'info', 'pit38:2027-04-30:14'],
-      ['house', 'info', 'house:2027-03-10']
+      ['house', 'info', `house:${HOUSE_MEMBER_ID}:2027-03-10`]
     ])
-    expect(items.find((i) => i.kind === 'house')!.text).toContain('38 dni')
+    expect(items.find((i) => i.kind === 'house')!.text).toBe('Dom: do oddania 80,00 zł – najstarszy zakup z 10.03 (38 dni).')
     const notices = dueNotices({ fleet, containers: [], imports: [], lastConfirmation: '2027-04-15', label: () => '', prefs: DEFAULT_MACHINE_PREFS.notify, quietHours: { from: '23:00', to: '05:00' }, time: '12:00', opened: false, money })
-    expect(notices.filter((n) => n.tag === 'radar').map((n) => n.title)).toEqual(['Rata pożyczki po terminie', 'PIT-38 na radarze'])
-    const off = dueNotices({ fleet, containers: [], imports: [], lastConfirmation: '2027-04-15', label: () => '', prefs: { ...DEFAULT_MACHINE_PREFS.notify, loans: false, pit38: false }, quietHours: { from: '23:00', to: '05:00' }, time: '12:00', opened: false, money })
+    expect(notices.filter((n) => n.tag === 'radar').map((n) => n.title)).toEqual(['Rata pożyczki po terminie', 'PIT-38 na radarze', 'Rozliczenie z domownikiem'])
+    const off = dueNotices({ fleet, containers: [], imports: [], lastConfirmation: '2027-04-15', label: () => '', prefs: { ...DEFAULT_MACHINE_PREFS.notify, loans: false, pit38: false, house: false }, quietHours: { from: '23:00', to: '05:00' }, time: '12:00', opened: false, money })
     expect(off.filter((n) => n.tag === 'radar')).toEqual([])
   })
 })

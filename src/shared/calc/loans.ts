@@ -5,8 +5,8 @@
  *   3 days after its date is overdue (a reminder);
  * - a loan taken: the money comes into the shields, its installments are a container of the cargo hold for the time of
  *   the repayment, and the range counts the shields less the debt still to pay;
- * - the house receivable (purchases „do zwrotu”, counted by the engine with its oldest purchase not repaid) is recalled
- *   after 30 days.
+ * - what a household member owes (the purchases they finance – `calc/household.ts`, D80) is recalled 30 days after
+ *   their oldest purchase still owed.
  */
 import type { Container, Loan, Transaction } from '../schema/records'
 import { addMonths, daysBetween, daysInMonth } from './dates'
@@ -14,7 +14,7 @@ import { splitEvenly, sum } from './operations'
 
 /** An installment unpaid this many days after its date is overdue (D72). */
 export const OVERDUE_DAYS = 3
-/** The house receivable is recalled when its oldest purchase is older than this (D72). */
+/** What a household member owes is recalled when their oldest purchase still owed is older than this (D72, D80). */
 export const HOUSE_DAYS = 30
 
 export interface LoanState {

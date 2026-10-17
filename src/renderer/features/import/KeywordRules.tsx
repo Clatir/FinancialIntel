@@ -6,15 +6,28 @@ import { IconPlus } from '../../components/icons'
 import { TextField } from '../../components/ui'
 import { CategorySelect, useCategories } from '../operations/pickers'
 import { deleteRule, ruleDecisionText, saveKeywordRule } from './rules'
+import { useMembers } from '../household/actions'
 
 const NO_RULES: ImportRule[] = []
 
-/** What a keyword decides (a small set: the import's decisions per group cover the rest). */
-const KEYWORD_OPTIONS: Array<{ value: string; label: string; kind: TxKind; direction: 'in' | 'out' | null }> = [
-  { value: 'expense', label: 'Wydatek – kategoria', kind: 'expense', direction: 'out' },
-  { value: 'income', label: 'Wpływ (przychód)', kind: 'income', direction: 'in' },
-  { value: 'transfer', label: 'Przelew własny', kind: 'transfer', direction: null }
-]
+interface KeywordOption {
+  value: string
+  label: string
+  kind: TxKind
+  direction: 'in' | 'out' | null
+  /** A purchase a household member finances (D80 g: „ubezpieczenie” → Tata). */
+  memberId?: string
+}
+
+/** What a keyword decides (a small set: the import's decisions per group cover the rest); a member's purchases too. */
+function keywordOptions(members: ReadonlyArray<{ id: string; name: string; archived: boolean }>): KeywordOption[] {
+  return [
+    { value: 'expense', label: 'Wydatek – kategoria', kind: 'expense', direction: 'out' },
+    ...members.filter((m) => !m.archived).map((m) => ({ value: `refundable:${m.id}`, label: `Finansuje: ${m.name} – kategoria`, kind: 'expense' as const, direction: 'out' as const, memberId: m.id })),
+    { value: 'income', label: 'Wpływ (przychód)', kind: 'income', direction: 'in' },
+    { value: 'transfer', label: 'Przelew własny', kind: 'transfer', direction: null }
+  ]
+}
 
 /**
  * Keywords of the user (D75): words of a name or a title → a decision, ahead of the built-in ones and the chains of the
@@ -22,15 +35,17 @@ const KEYWORD_OPTIONS: Array<{ value: string; label: string; kind: TxKind; direc
  */
 export function KeywordRules() {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
+  const members = useMembers()
+  const options = keywordOptions(members)
   const cats = useCategories()
   const mine = rules.filter((r) => r.mode === 'keyword')
   const [word, setWord] = useState('')
   const [option, setOption] = useState('expense')
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const opt = KEYWORD_OPTIONS.find((o) => o.value === option)!
+  const opt = options.find((o) => o.value === option) ?? options[0]!
   const add = () => {
-    const err = saveKeywordRule({ keyword: word, direction: opt.direction, kind: opt.kind, categoryId: opt.kind === 'expense' ? categoryId : null })
+    const err = saveKeywordRule({ keyword: word, direction: opt.direction, kind: opt.kind, categoryId: opt.kind === 'expense' ? categoryId : null, refundable: !!opt.memberId, memberId: opt.memberId ?? null })
     setError(err)
     if (!err) setWord('')
   }
@@ -54,7 +69,7 @@ export function KeywordRules() {
       <div className="flex flex-wrap items-center gap-2">
         <TextField className="w-[150px]" value={word} onChange={setWord} placeholder="słowo, np. cukiernia" maxLength={60} data-testid="keyword-input" />
         <select className="input h-[24px] w-[170px] py-0" value={option} onChange={(e) => setOption(e.currentTarget.value)} aria-label="Co to jest" data-testid="keyword-kind">
-          {KEYWORD_OPTIONS.map((o) => (
+          {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
