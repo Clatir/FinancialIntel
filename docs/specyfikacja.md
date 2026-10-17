@@ -310,8 +310,7 @@ Podstawowy przydział to suma kopert codziennych podzielona przez liczbę dni mi
 
 **Eksport:** CSV i Excel (operacje, miesiące), PDF (debriefing, przegląd roczny), pełna kopia danych w ZIP.
 
-**Asystent AI „Pierwszy oficer”** (osobny etap później): pytania po polsku o dane, np. „ile wydałem na paliwo
-w sierpniu?”. Wymaga klucza API i kosztuje za użycie.
+Bez asystenta AI (D74 – etap „Pierwszy oficer” wypadł).
 
 ## Powiadomienia, dźwięki i prywatność
 
@@ -339,8 +338,7 @@ jak w ICTTJ (120–160 ms).
 **Prywatność**
 - Bez blokady i bez szyfrowania: pliki są czytelne, jak w ICTTJ.
 - Tryb ukrycia kwot włączany jednym skrótem maskuje kwoty w oknie i w dymku zasobnika.
-- Sieć służy tylko aktualizacjom (GitHub). Bez telemetrii. Asystent AI ruszy dopiero
-  po włączeniu.
+- Sieć służy tylko aktualizacjom (GitHub). Bez telemetrii i bez asystenta AI (D74).
 
 **Kopie zapasowe** – codziennie (30 ostatnich), przed każdym importem i przed migracją formatu, do tego kopie ręczne.
 

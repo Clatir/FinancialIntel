@@ -1,5 +1,27 @@
 # Financial Intel – zmiany
 
+## 1.2.0
+
+Gra i wywiad (grupa D: etapy E7 i E8) – Dowództwo ocenia każdy dzień, a Wywiad i Raporty czytają strukturę własnych
+pieniędzy w języku ICT. Asystent AI nie powstanie (decyzja D74) – plan etapów jest zamknięty.
+
+- Dowództwo (Ctrl+8): każdy dzień od startu gry (pierwszy pełny dzień po uruchomieniu tej wersji) oceniany według
+  rozkazów i zamrażany 24 h po swoim końcu – późniejsza korekta zmienia budżet, nie ocenę. Naruszenia zwykłe
+  (przydział dnia, koperta, ładunek ponad linią) i poważne (koperta ponad 20%, osłony poniżej minimum z decyzji,
+  dopłata do XTB wbrew firewallowi, zakup w ciszy nocnej).
+- Stopnie Kadet → Chorąży → Porucznik → Komandor → Kapitan → Admirał: awans po 30 dniach zgodnych w ostatnich 35
+  (wykonana misja = 3 dni), degradacja przy 3. poważnym naruszeniu w miesiącu; klasa okrętu z zasięgu; seria i rekord;
+  ekran awansu z animacją i dźwiękiem; progi gry do zmiany w Dowództwie.
+- Misje tygodniowe dobierane do słabego punktu z ostatnich 4 tygodni (także w odprawie), 13 ukrytych osiągnięć,
+  dziennik wachty.
+- Smaczki ICT: Silver Bullet (krótka odprawa 10–11 czasu NY), Premium / Discount na kopertach (linia Equilibrium),
+  Draw on Liquidity na Mapie gwiezdnej, Judas Swing, Turtle Soup i Liquidity sweep w dzienniku wachty, Order Block
+  (ładownia) w wydatkach.
+- Wywiad (Ctrl+9): krzywa majątku tydzień po tygodniu z drawdownem i BOS / CHoCH, Killzones wydatków, FVG kopert,
+  wydatki w czasie, prognoza zasięgu bez wypłat, trafność dziennika kapitańskiego.
+- Raporty (Ctrl+0): odprawa, raport wachty (powiadomienie w niedzielę od 18:00), debriefing i przegląd roczny do PDF;
+  eksport CSV i Excel (operacje, miesiące) oraz pełna kopia danych w ZIP – zawsze z prawdziwymi kwotami.
+
 ## 1.1.0
 
 Przepływy z zewnątrz (grupa C: etapy E5 i E6) – wypłaty z ICT Trade Journal dokują do budżetu, a Radar pokazuje, co

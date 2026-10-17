@@ -20,6 +20,11 @@ import { BridgePage } from '../features/bridge/BridgePage'
 import { StarMapPage } from '../features/starmap/StarMapPage'
 import { RadarPage } from '../features/radar/RadarPage'
 import { useIctjGoalSync } from '../features/starmap/sync'
+import { CommandPage } from '../features/command/CommandPage'
+import { IntelPage } from '../features/intel/IntelPage'
+import { ReportsPage } from '../features/reports/ReportsPage'
+import { GameCelebrations } from '../features/command/Celebration'
+import { useGameAdvance, useGameCelebrations } from '../store/game'
 import { DockingDialog } from '../features/dock/DockingDialog'
 import { initIctj, openIctj } from '../store/ictj'
 import { loadMachinePrefs, toggleHideAmounts, useMachine } from '../store/machine'
@@ -219,6 +224,9 @@ function Page({ route }: { route: Route }) {
   if (route.page === 'bridge') return <BridgePage />
   if (route.page === 'starmap') return <StarMapPage />
   if (route.page === 'radar') return <RadarPage />
+  if (route.page === 'command') return <CommandPage />
+  if (route.page === 'intel') return <IntelPage />
+  if (route.page === 'reports') return <ReportsPage />
   const def = pageDef(route.page)
   return def ? <PlaceholderPage key={def.page} def={def} /> : null
 }
@@ -243,6 +251,8 @@ export function App() {
   useGlobalHotkeys()
   useBackNavigation()
   useIctjGoalSync()
+  useGameAdvance()
+  useGameCelebrations()
   useEffect(() => {
     void boot()
     void loadMachinePrefs()
@@ -276,6 +286,7 @@ export function App() {
       </div>
       <CommandPalette />
       <DockingDialog />
+      <GameCelebrations />
       <TrayStatus />
       <ShortcutsHelp />
       <RemoteChangesDialog />

@@ -98,7 +98,8 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['debriefing', 'Debriefing – 1. dnia miesiąca'],
   ['ictj', 'Nowa wypłata w ICTTJ do zadokowania'],
   ['loans', 'Rata pożyczki 3 dni po terminie (własna albo spłata od dłużnika)'],
-  ['pit38', 'PIT-38 – 14 i 3 dni przed 30 kwietnia']
+  ['pit38', 'PIT-38 – 14 i 3 dni przed 30 kwietnia'],
+  ['watch', 'Raport wachty – w niedzielę od 18:00']
 ]
 
 /** Ustawienia → Powiadomienia i dźwięki (config.json – this computer only): the quick entry's shortcut too. */

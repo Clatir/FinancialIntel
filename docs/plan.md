@@ -14,7 +14,7 @@ Szacunek nie obejmuje testowania przez użytkownika.
 | E6 Radar i należności | Radar 90 dni z przypomnieniem o PIT-38, pożyczki z harmonogramem, należność od domu, przypomnienia | Opus 5.5 · high | 3 h | — |
 | E7 Dowództwo | rozkazy, ocena i zamrażanie dni, seria, stopnie, degradacja, klasy, misje, osiągnięcia, dziennik wachty | Opus 5.5 · xhigh | 4 h | akceptacja listy misji i osiągnięć |
 | E8 Wywiad i raporty | krzywa majątku z BOS / CHoCH, Killzones, FVG, Daily Bias, odprawa z odsłuchem, raporty, eksporty, smaczki ICT | Opus 5.5 · high | 5–6 h | — |
-| E9 Pierwszy oficer (opcjonalnie) | asystent AI z pytaniami o dane | Opus 5.5 · high | 3 h | klucz API Claude |
+| ~~E9 Pierwszy oficer~~ | wypada – bez asystenta AI (D74) | – | – | – |
 
 ## Gotowe, gdy
 
@@ -60,7 +60,7 @@ Szacunek nie obejmuje testowania przez użytkownika.
 - Powiadomienia z przełącznikami (odprawa, wieczorne dopisanie, limity, import, salda); dźwięki w ustawieniach.
 - Wydanie 1.0.0 na GitHub Releases.
 
-**E5–E9** – kryteria spisujemy w komunikacie „Przed etapem N”, na podstawie `specyfikacja.md`.
+**E5–E8** – kryteria spisujemy w komunikacie „Przed etapem N”, na podstawie `specyfikacja.md`.
 
 ## Szablon „Przed etapem N”
 1. **Co trzeba wiedzieć** – zakres etapu, stan poprzednich, rzeczy otwarte.

@@ -4,6 +4,7 @@
  * the first opening of the window after them.
  */
 import { briefing, dm, type BriefingInput } from './calc/briefing'
+import { WATCH_TIME } from './calc/intel'
 import { dayOfMonth, daysBetween, inClockWindow, monthOf, weekdayOf } from './calc/dates'
 import type { FleetState } from './calc/fleet'
 import { ICTJ_POOL_LABEL } from './ictj'
@@ -15,7 +16,7 @@ export interface Notice {
   title: string
   body: string
   /** Where clicking it leads (App routes it). */
-  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar'
+  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar' | 'reports'
   /** An alarm: its sound. */
   alarm?: boolean
   /** What exactly a click opens (a delivery: `dock:<key>`); else the tag's screen. */
@@ -83,6 +84,9 @@ export function dueNotices(o: NotifyInput): Notice[] {
   // The debriefing of the month just closed: from the 1st, at the first look until the loot's deadline (the 7th).
   if (p.debriefing && dayOfMonth(today) <= 7 && f.start && monthOf(f.start) < f.month)
     out.push({ key: `debriefing:${f.month}`, tag: 'debriefing', title: 'Debriefing miesiąca', body: 'Miesiąc zamknięty – wynik wobec planu i podział łupów (Plan miesiąca).' })
+  // The watch report (spec: on Sunday; E8): from 18:00, once a week.
+  if (p.watch && weekdayOf(today) === 7 && o.time >= WATCH_TIME)
+    out.push({ key: `watch:${today}`, tag: 'reports', title: 'Raport wachty', body: 'Tydzień w liczbach, killzone, koperty na następny tydzień i misja – Raporty.' })
   // A new payout in ICTTJ (spec: at once): each entry once, still to dock.
   if (p.ictj)
     for (const d of o.deliveries ?? []) {

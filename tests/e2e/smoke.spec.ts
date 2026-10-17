@@ -33,19 +33,10 @@ test('pierwsze uruchomienie: propozycja folderu, fi.json, menu boczne i puste ek
     await page.getByTestId('nav-import').click()
     await expect(page.getByTestId('page-import')).toBeVisible()
     // Plan miesiąca and Ładownia are real screens from E3.
-    for (const page_ of ['month', 'cargo', 'starmap', 'radar']) {
+    for (const page_ of ['month', 'cargo', 'starmap', 'radar', 'command', 'intel', 'reports']) {
       await page.getByTestId(`nav-${page_}`).click()
       await expect(page.getByTestId(`page-${page_}`)).toBeVisible()
       await expect(page.getByTestId('page-stage')).toHaveCount(0)
-    }
-    for (const [page_, stage] of [
-      ['command', 'E7'],
-      ['intel', 'E8'],
-      ['reports', 'E8']
-    ]) {
-      await page.getByTestId(`nav-${page_}`).click()
-      await expect(page.getByTestId(`page-${page_}`)).toBeVisible()
-      await expect(page.getByTestId('page-stage')).toHaveText(`etap ${stage}`)
     }
     await page.keyboard.press('Control+1')
     await expect(page.getByTestId('page-bridge')).toBeVisible()

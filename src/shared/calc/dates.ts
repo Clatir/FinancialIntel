@@ -66,6 +66,25 @@ export function weekdayOf(date: string): number {
   return d === 0 ? 7 : d
 }
 
+/** The last moment of a Warsaw day (the state of the day's end – the game rates it, E7). */
+export function warsawEndOf(date: string): Date {
+  return DateTime.fromISO(date, { zone: WARSAW }).endOf('day').toJSDate()
+}
+
+/** ISO week 'RRRR-Www' of a date (weeks from Monday; the week of 4 January is the first). */
+export function isoWeekOf(date: string): string {
+  const dt = DateTime.fromISO(date, { zone: 'utc' })
+  return `${dt.weekYear}-W${String(dt.weekNumber).padStart(2, '0')}`
+}
+
+/** Monday of the week of `date`. */
+export const mondayOf = (date: string): string => addDays(date, 1 - weekdayOf(date))
+
+/** Monday of an ISO week 'RRRR-Www'. */
+export function mondayOfWeek(week: string): string {
+  return DateTime.fromObject({ weekYear: Number(week.slice(0, 4)), weekNumber: Number(week.slice(6, 8)), weekday: 1 }, { zone: 'utc' }).toISODate() as string
+}
+
 /** Is the wall time `time` ('HH:MM') inside [from, to) – a window may cross midnight (23:00–05:00). */
 export function inClockWindow(time: string, from: string, to: string): boolean {
   if (from === to) return false

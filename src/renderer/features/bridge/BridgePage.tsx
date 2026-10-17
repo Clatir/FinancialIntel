@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { BIAS_LABEL, briefing, dailyBias, type BriefingItem } from '@shared/calc/briefing'
+import { BIAS_LABEL, briefing, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
+import { isoWeekOf } from '@shared/calc/dates'
+import { missionText, missionTitle } from '@shared/calc/game'
 import { SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
 import { amountTone } from '@shared/operationsView'
@@ -19,11 +21,12 @@ import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { dayLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { newOperation, openRefundables, selectOperation, setFilter } from '../operations/state'
-import { EnvelopeBars } from '../month/EnvelopeBars'
+import { EnvelopeBars, monthElapsed } from '../month/EnvelopeBars'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
 import { useIctj } from '../../store/ictj'
+import { useGameRecords } from '../../store/game'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).replace('.', ',')} mies.`)
@@ -58,7 +61,7 @@ export const bridgeFleet = (f: FleetState): BridgeFleet => ({
 export type BridgeDetachProps =
   | { panel: 'briefing'; fleet: BridgeFleet; items: BriefingItem[] }
   | { panel: 'state'; fleet: BridgeFleet }
-  | { panel: 'envelopes'; rows: BridgeFleet['envelopes']; labels: Record<string, string> }
+  | { panel: 'envelopes'; rows: BridgeFleet['envelopes']; labels: Record<string, string>; elapsed?: number }
 
 /** Where a click on the bridge leads: a briefing line (by its kind; its key names a delivery) or the cargo's mass. */
 type BridgeTarget = BriefingItem['kind'] | 'cargo'
@@ -74,6 +77,7 @@ function openTarget(t: BridgeTarget, key?: string): void {
   } else if (t === 'ictj') navigate({ page: 'settings', tab: 'ictj' })
   else if (t === 'loan' || t === 'pit38') navigate({ page: 'radar' })
   else if (t === 'house') openRefundables()
+  else if (t === 'mission') navigate({ page: 'command' })
   else navigate({ page: 'month' })
 }
 
@@ -104,22 +108,10 @@ function speak(text: string): boolean {
 export function BridgePage() {
   const fleet = useFleet()
   const fi = useData((s) => s.fi)
-  const containers = useRecordList('containers')
-  const balances = useRecordList('balances')
   const transactions = useRecordList('transactions')
   const shortcut = useMachine((s) => s.prefs.quickShortcut)
-  // The briefing's texts carry amounts (`zl` masks them while hidden – Ctrl+$): written again on a change.
-  const hidden = useMachine((s) => s.prefs.hideAmounts)
   const cats = useCategories()
-  const deliveries = useDeliveries()
-  const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
-  const items = useMemo(() => {
-    if (!fleet || !fi) return []
-    const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
-    const confirmed = balances.filter((b) => b.kind === 'confirmation').map((b) => b.date).sort().at(-1) ?? null
-    const label = (id: string) => containers.find((c) => c.id === id)?.name ?? cats.label(id)
-    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem })
-  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem])
+  const items = useBriefingItems(fleet)
   const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
   const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
   const specs = useMemo(() => {
@@ -128,7 +120,7 @@ export function BridgePage() {
     return {
       briefing: spec({ panel: 'briefing', fleet: view, items }),
       state: spec({ panel: 'state', fleet: view }),
-      envelopes: spec({ panel: 'envelopes', rows: view.envelopes, labels })
+      envelopes: spec({ panel: 'envelopes', rows: view.envelopes, labels, elapsed: monthElapsed(view.today) })
     }
   }, [view, items, labels])
   if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
@@ -167,7 +159,7 @@ export function BridgePage() {
           </div>
           <div className="flex min-w-0 flex-col">
             <Panel title="Koperty" testId="bridge-envelopes" detach={specs.envelopes}>
-              <Envelopes rows={fleet.envelopes} />
+              <Envelopes rows={fleet.envelopes} elapsed={monthElapsed(fleet.today)} />
             </Panel>
             <Receivables fleet={fleet} />
             <Panel title="Ostatnie operacje" testId="bridge-recent">
@@ -260,6 +252,7 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
           )}
         </div>
       )}
+      {fleet.started && silverBullet() && <SilverBullet fleet={fleet} items={items} />}
       {!fleet.started && (
         <div className="flex items-center gap-3 border border-accent/40 bg-accent-soft px-3 py-2">
           <span className="flex-1 text-fg-strong">Budżet jeszcze nie wystartował.</span>
@@ -284,8 +277,47 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
   )
 }
 
-function Envelopes({ rows, labels }: { rows: BridgeFleet['envelopes']; labels?: Record<string, string> }) {
-  return rows.length ? <EnvelopeBars rows={rows} labels={labels} /> : <Empty>Bez kopert w planie tego miesiąca.</Empty>
+/** The morning briefing's items (the bridge, the reports): the texts carry amounts – written again when they hide (Ctrl+$). */
+export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
+  const fi = useData((s) => s.fi)
+  const containers = useRecordList('containers')
+  const balances = useRecordList('balances')
+  const hidden = useMachine((s) => s.prefs.hideAmounts)
+  const cats = useCategories()
+  const deliveries = useDeliveries()
+  const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
+  const game = useGameRecords()
+  return useMemo(() => {
+    if (!fleet || !fi) return []
+    const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
+    const confirmed = balances.filter((b) => b.kind === 'confirmation').map((b) => b.date).sort().at(-1) ?? null
+    const label = (id: string) => containers.find((c) => c.id === id)?.name ?? cats.label(id)
+    // This week's mission of the command (E7).
+    const week = isoWeekOf(fleet.today)
+    const m = game.flatMap((g) => g.missions).find((x) => x.week === week)
+    const mission = m ? { week, title: missionTitle(m.template), text: missionText(m, cats.label, zl) } : null
+    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem, mission })
+    // `hidden`: the amounts of the texts mask on a change.
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game])
+}
+
+/** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */
+function SilverBullet({ fleet, items }: { fleet: BridgeFleet; items: BriefingItem[] }) {
+  const bias = dailyBias(fleet)
+  const d = fleet.daily
+  const first = items.find((i) => i.level !== 'info') ?? null
+  return (
+    <div className="flex flex-col gap-0.5 border-l-2 border-accent pl-2 text-[11.5px]" data-testid="briefing-silver-bullet">
+      <span className="label text-accent">Silver Bullet · 10:00–11:00 NY</span>
+      <span>
+        {d ? `Energia dziś ${zl(d.left)}.` : 'Bez planu tego miesiąca.'} {bias ? `Daily Bias: ${BIAS_LABEL[bias]}.` : ''} {first ? first.text : 'Bez alarmów.'}
+      </span>
+    </div>
+  )
+}
+
+function Envelopes({ rows, labels, elapsed }: { rows: BridgeFleet['envelopes']; labels?: Record<string, string>; elapsed?: number }) {
+  return rows.length ? <EnvelopeBars rows={rows} labels={labels} elapsed={elapsed} /> : <Empty>Bez kopert w planie tego miesiąca.</Empty>
 }
 
 /** A bridge panel in its own window (a second monitor, D45): clicks lead the main window. */
@@ -294,7 +326,7 @@ export function BridgeDetached({ props }: { props: BridgeDetachProps }) {
     <div className="min-h-0 flex-1 overflow-auto" data-testid="detached-bridge" data-panel-kind={props.panel}>
       {props.panel === 'briefing' && <DetachedBriefing fleet={props.fleet} items={props.items} />}
       {props.panel === 'state' && <ShipState fleet={props.fleet} onOpen={emitTarget} />}
-      {props.panel === 'envelopes' && <Envelopes rows={props.rows} labels={props.labels} />}
+      {props.panel === 'envelopes' && <Envelopes rows={props.rows} labels={props.labels} elapsed={props.elapsed} />}
     </div>
   )
 }

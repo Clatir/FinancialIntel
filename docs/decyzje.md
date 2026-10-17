@@ -75,7 +75,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **D50** Windows 11; ICTTJ jest w Electronie; build przez GitHub Actions; instalator + auto-aktualizacje.
 - **D51** MVP: rdzeń + klimat (E0–E4); małe etapy, każdy kończy się działającym .exe.
 - **D52** Automatyczne testy obliczeń; Claude decyduje technicznie, użytkownik testuje.
-- **D53** Asystent AI później, jako osobny etap.
+- **D53** ~~Asystent AI później, jako osobny etap.~~ – zastąpione przez D74 (17.10.2026): bez asystenta AI.
 
 ### Punkty styku z ICTTJ (przegląd 16.10.2026)
 - **D54** Konto tradingowe (maklerskie) XTB nie jest częścią FI – wyłącznie ICTTJ. Bez okrętu bojowego i bez etapu
@@ -157,6 +157,32 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   - należność od domu w odprawie, gdy najstarszy niespłacony zakup „do zwrotu” ma ponad 30 dni.
 
   Grupa C (E5 + E6 → 1.1.0) na komendę 17.10.2026.
+- **D73** (17.10.2026) Komenda „jak się skończy, to leć dalej” po wydaniu 1.1.0 = start grupy D (E7 + E8 → 1.2.0)
+  z propozycjami z „Przed etapem E7” bez zmian:
+  - start gry: pierwszy pełny dzień po uruchomieniu 1.2.0 (datę zapisuje w folderze pierwszy komputer), stopień
+    Kadet, seria 0; dni wcześniejsze tylko w statystykach Wywiadu;
+  - naruszenie zwykłe (przerywa serię): przekroczony przydział dnia, koperta planowa przekroczona o najwyżej 20%,
+    kontener dodany albo zmieniony ponad linię zanurzenia; poważne (przerywa serię i liczy się do degradacji): koperta
+    przekroczona o ponad 20%, osłony poniżej minimum przez decyzję (nie przez wypłatę pensji), dopłata do konta
+    tradingowego wbrew firewallowi, zakup w ciszy nocnej; dzień bez wpisów jest zgodny; ocena z danych znanych w chwili
+    zamrożenia;
+  - awans: 30 dni zgodnych w ostatnich 35, liczonych od ostatniej zmiany stopnia; wykonana misja = 3 dni zgodne;
+    degradacja przy 3. poważnym naruszeniu w miesiącu kalendarzowym (Kadet nie spada niżej), potem licznik od zera;
+    klasa okrętu rośnie i spada z zasięgiem – wyższa z animacją i dźwiękiem, niższa w dzienniku wachty;
+  - progi jak w specyfikacji (30 z 35, 20%, 3 poważne, misja = 3 dni), wspólne dla folderu, do zmiany w Dowództwie;
+  - misje: jedna na tydzień (poniedziałek–niedziela), dobrana do najsłabszego punktu z ostatnich 4 tygodni, rozliczona
+    po zamrożeniu niedzieli; pula: Killzone, Pełna energia, Cisza w eterze, Koperta pod kontrolą, Zero impulsów, Dzień
+    bez wydatków, Łączność z bazą, Inwentaryzacja, Rozliczenie z domem;
+  - ukryte osiągnięcia: Cisza w eterze, Pełne osłony, Pancerny kadłub, Asteroida rozbita, Pierwsze dokowanie, Cel
+    osiągnięty, Seria 7 / 30 / 100, Hat-trick, Snajper, Czyste konto, Flagowiec;
+  - smaczki ICT: Judas Swing (impuls), Turtle Soup (zwrot towaru), Liquidity sweep (energia dokładnie 0 zł), Order
+    Blocks (kontenery na wykresie), Silver Bullet (krótka odprawa 10–11 czasu NY), Premium / Discount (linia
+    Equilibrium na kopertach), Draw on Liquidity (najbliższy cel „DOL”);
+  - krzywa majątku: suma sald kont na koniec tygodnia, swingi z tygodniowych zamknięć, BOS i CHoCH;
+  - raporty: raport wachty w niedzielę od 18:00, debriefing z FVG i grą, przegląd roczny od 1 stycznia; eksport zawsze
+    z prawdziwymi kwotami (ukrycie kwot dotyczy ekranu).
+- **D74** (17.10.2026) Bez asystenta AI: etap E9 „Pierwszy oficer” wypada (zastępuje D53 i grupę E z D67); grupa D
+  (1.2.0) zamyka plan etapów. Sieć tylko do aktualizacji.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -400,3 +426,55 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T74** Odprawa i powiadomienia: zaległa rata (`notify.loans`), PIT-38 14 i 3 dni przed terminem (`notify.pit38`),
   należność domu po 30 dniach od najstarszego zakupu (odprawa). Kolory: zaległość w akcencie – czerwień zostaje dla kwot
   i alarmów.
+
+### E7 – Dowództwo (17.10.2026)
+- **T75** Ocena dnia (`shared/calc/game.ts` `rateDay`): stan okrętu na koniec dnia warszawskiego (`computeFleet` z
+  `warsawEndOf`), dane znane w chwili zamrożenia. Zwykłe: przydział dnia na minusie, koperta planowa przekroczona tego
+  dnia (`EnvelopeState.today`), masa ładunku ponad linią po wzroście względem poprzedniego zamrożonego dnia (masa
+  zapisana w dniu – `cargo`; bez poprzedniego: kontener dodany tego dnia). Poważne: koperta planowa ponad limit + próg
+  (domyślnie 20%; limit 0 – tylko zwykłe), osłony poniżej minimum na koniec dnia, gdy decyzje dnia (wydatek, wpływ,
+  XTB, pożyczka udzielona, przelew – bez pensji, korekty, PIT-38 i rat własnych) netto zabrały z osłon i kadłuba,
+  alarm firewalla tego dnia, każdy zakup w ciszy nocnej. Koperty codzienne liczy przydział dnia.
+- **T76** Zamrażanie (`advanceGame`, w tle w oknie głównym co minutę i przy zmianie rekordów): dni od `game.start`
+  do dziś − 2 (24 h po końcu, T9), po kolei; rekordy `game/RRRR-MM.json` ze stałymi id (miesiąc, misja tygodnia,
+  zmiana stopnia – ULID z daty), więc dwa komputery piszą to samo. Start gry: pierwszy pełny dzień po uruchomieniu 1.2.0
+  na działającym budżecie (`settings.game.start`, raz).
+- **T77** Stopień: awans, gdy dni zgodne w ostatnich `windowDays` od dnia po ostatniej zmianie + misje wykonane
+  (niedziela w tym oknie) × `missionDays` ≥ `promoteDays`; degradacja w dniu z poważnym naruszeniem, które doprowadza
+  liczbę poważnych w miesiącu (od ostatniej zmiany) do progu – działa też po obniżeniu progu. Zmiana stopnia zapisana
+  (nie przeliczana), więc późniejsza korekta danych ani zmiana progów jej nie cofa.
+- **T78** Misje: jedna na tydzień ISO, wybierana przy pierwszym uruchomieniu w tygodniu (od pierwszego pełnego tygodnia
+  gry), z danych sprzed poniedziałku (4 tygodnie): kolejno cisza nocna, koperta planowa ponad tempo, ≥ 2 przekroczenia
+  przydziału, ≥ 2 impulsy, killzone (≥ 8 wydatków z godziną, ≥ 25% kosztów w jednej godzinie dnia tygodnia), należność
+  domu starsza niż 14 dni, import starszy niż 4 dni, brak potwierdzeń sald, < 4 dni bez wydatków – inna niż w zeszłym
+  tygodniu; bez słabego punktu po kolei z puli stałej. Rozliczenie po zamrożeniu niedzieli. Importy zapisywane
+  w `settings.import.log` (czas → konto, ostatnie 100; obiekt – dwa komputery scalają się po kluczach).
+- **T79** Osiągnięcia ukryte (13, D73): stanowe (osłony, kadłub, cel, Flagowiec, spłacona pożyczka) w dniu, w którym
+  stan je spełnia; z historii gry (Cisza w eterze, serie, dokowanie od startu gry); Hat-trick i Snajper przy
+  zamrożeniu 1. dnia miesiąca – miesiące od startu gry. Każde raz.
+- **T80** Ekran awansu i święta: z dziennika wachty (`gameView`), tylko zdarzenia z ostatnich 14 dni, raz na komputer
+  (`fi.game.seen` w localStorage; pierwsze uruchomienie zapamiętuje historię bez świętowania); awans i wyższa klasa –
+  ekran z dźwiękiem, degradacja / osiągnięcie / misja – toast (kilka naraz jako jeden), niższa klasa tylko w dzienniku.
+  Smaczki ICT: Silver Bullet = odprawa skrócona do 3 zdań między 10:00 a 11:00 czasu NY; Equilibrium na kopertach
+  (część miesiąca, która minęła – Premium / Discount), DOL = pierwszy nieosiągnięty cel na liście priorytetów; Judas
+  Swing, Turtle Soup, Liquidity sweep – oznaczenia dnia w dzienniku wachty.
+
+### E8 – Wywiad i raporty (17.10.2026)
+- **T81** Krzywa majątku (`shared/calc/intel.ts`): suma sald kont budżetu na koniec każdej niedzieli (ostatni punkt –
+  dziś), saldo z ostatniego salda otwarcia w obie strony (historia z importu wstecz), sumy narastające i wyszukiwanie
+  binarne (lata historii); drawdown od szczytu. Struktura: swing = tygodniowe zamknięcie wyższe / niższe od obu
+  sąsiadów (potwierdzone tydzień później); zamknięcie ponad ostatni swing high albo pod swing low – BOS zgodnie z
+  trendem, CHoCH przeciw niemu (pierwsze przebicie bez trendu = BOS).
+- **T82** Killzones: koszty zakupów z godziną (dzień tygodnia × godzina), bez godziny tylko policzone; FVG kopert =
+  debriefing (plan − fakt); wydatki w czasie – kategorie główne miesiąc po miesiącu, ładownia jako wiersz „Order Block”;
+  prognoza zasięgu – osłony + kadłub − dług ubywające po średnich kosztach; dziennik – plan / impuls / bez oznaczenia
+  od progu, trafność = plan wśród oznaczonych.
+- **T83** Raporty: raport wachty – tydzień poniedziałek–niedziela (domyślnie bieżący od niedzieli 18:00, wcześniej
+  poprzedni), koperty na najbliższe dni do końca miesiąca (do 7); debriefing – debriefing miesiąca + FVG + dni gry,
+  poważne naruszenia, misje, osiągnięcia, dziennik, podział łupów (z osłonami); przegląd roczny – majątek na koniec
+  31.12 roku wcześniej i roku (dziś w bieżącym), cele osiągnięte w roku (z dziennika silnika), osiągnięcia roku,
+  PIT-38 bez kwoty. Powiadomienie „Raport wachty” w niedzielę od 18:00 (`notify.watch`) otwiera raport tego tygodnia.
+- **T84** Eksport: CSV dla polskiego Excela (średnik, przecinek dziesiętny, BOM; tekst zaczynający się jak formuła
+  dostaje apostrof), Excel – generator z ICTTJ @ 84a8339 (arkusze Operacje i Miesiące), PDF – samodzielny HTML bez
+  skryptów drukowany przez ukryte okno (moduł z ICTTJ), pełna kopia ZIP (`exportZip` z E0). Pliki zawsze z prawdziwymi
+  kwotami (D73).

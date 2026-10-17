@@ -16,8 +16,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   postępu (etap / grupa, model i thinking **z górką**, szacowany czas pracy Claude'a, stan) → pauza (użytkownik zmienia
   model / thinking).
 - **Bez komendy użytkownika nie zaczynaj kolejnego etapu ani grupy** (D67). Grupy etapów idących jednym ciągiem (A: E1
-  [+ E2], B: E3 + E4, C: E5 + E6, D: E7 + E8, E: E9) – w grupie bez pauzy między etapami, jeden PR i wydanie na grupę;
-  tabela w `docs/postep.md`.
+  [+ E2], B: E3 + E4, C: E5 + E6, D: E7 + E8; E9 wypada – D74, bez asystenta AI) – w grupie bez pauzy między etapami,
+  jeden PR i wydanie na grupę; tabela w `docs/postep.md`.
 - **Scalanie (D71):** PR grupy scalam sam, gdy CI (Linux i Windows) jest zielone, nie ma konfliktu ani otwartych uwag
   i nic nie czeka na decyzję użytkownika. Po scaleniu sprawdź, czy CI na `main` wydało wersję (wydanie publikuje job
   Windows; czerwone E2E na `main` = brak wydania – tak przepadło 0.3.0).
@@ -66,7 +66,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
   (pożyczki), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
-  `format.ts` (kwoty), później `calc/game.ts` (oceny dni, stopnie, misje) i `calc/intel.ts` (analizy ICT),
+  `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
   powiadomienia w `index.ts`, `tray.ts`, `update/`, `config.ts` (ustawienia komputera w userData), `log.ts`; od E5
@@ -234,6 +234,34 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   linia „Dług” w stanie okrętu, cele odprawy `loan` / `pit38` → Radar, `house` → zakupy „do zwrotu”.
 - Testy: `tests/unit/loans.test.ts`, E2E `tests/e2e/radar.spec.ts`.
 
+## Kod (E7 – Dowództwo, grupa D → 1.2.0)
+- Shared: `calc/game.ts` – `rateDay` (stan na koniec dnia, naruszenia zwykłe / poważne, smaczki – T75), `advanceGame`
+  (zamrażanie, misje, stopnie, osiągnięcia – T76–T79; stałe id `gameMonthId` / `missionId` / `rankChangeId`),
+  `chooseMission` / `missionStatus` / `missionText`, `promotionProgress`, `rankOf`, `gameView` (pasek dni, seria,
+  rekord, dziennik wachty); `schema/records.ts` – `gameDaySchema` (+ `cls`, `cargo`, `tags`), `gameMissionSchema`;
+  `schema/budget.ts` – `settings.game` (start i progi), `settings.import.log`; `calc/dates.ts` – `warsawEndOf`,
+  `isoWeekOf`, `mondayOf`, `mondayOfWeek`; `calc/fleet.ts` – `EnvelopeState.today`, `CLASS_FROM`; `calc/briefing.ts` –
+  pozycja `mission`, `silverBullet`.
+- Renderer: `store/game.ts` (`useGameAdvance` – start i zamrażanie w tle, `useGame`, `useGameCelebrations` /
+  `celebrationsOf` – T80), `features/command/` – `CommandPage.tsx` (Dowództwo, Ctrl+8: stopień, klasa, seria, misja,
+  osiągnięcia, rozkazy i progi, dziennik wachty; `Insignia`), `Celebration.tsx` (ekran awansu, toasty); Mostek – misja
+  i Silver Bullet w odprawie; `EnvelopeBars` `elapsed` (Equilibrium) i `Meter` `tick`; Mapa gwiezdna – znaczek DOL.
+- Testy: `tests/unit/game.test.ts`, E2E `tests/e2e/command.spec.ts`.
+
+## Kod (E8 – Wywiad i raporty, grupa D → 1.2.0)
+- Shared: `calc/intel.ts` – `balancesAt` (sumy narastające), `wealthCurve`, `structureOf` (BOS / CHoCH – T81),
+  `killzoneGrid`, `spendingByMonth`, `rangeForecast`, `logAccuracy` (T82), `weekNumbers`, `nextWeekEnvelopes`,
+  `yearNumbers`, `yearWealth`, `goalsReachedIn`, `defaultWatchMonday` / `WATCH_TIME` (T83); `export/budget.ts` –
+  `toCsv` / `plnCell`, `operationRows` / `operationsCsv` / `operationsSheet`, `monthRows` / `monthsCsv` / `monthsSheet`,
+  `reportHtml` (T84); `export/xlsx.ts` (z ICTTJ); `notify.ts` – tag `reports`, `notify.watch`.
+- Main: `export/pdf.ts`, `export/xlsx.ts` (z ICTTJ); IPC `fi:saveTextFile`, `fi:saveXlsx`, `fi:savePdf`.
+- Renderer: `features/intel/` – `IntelPage.tsx` (Wywiad, Ctrl+9), `charts.tsx` (`WealthChart` – lightweight-charts
+  z markerami i drawdownem, `KillzoneMap` – SVG); `features/reports/` – `ReportsPage.tsx` (Raporty, Ctrl+0: odprawa,
+  raport wachty, debriefing i przegląd roczny z PDF, eksport), `state.ts` (`useReportsUi`, `openWatchReport`);
+  `features/bridge/BridgePage.tsx` – `useBriefingItems` (wspólne z Raportami).
+- Testy: `tests/unit/intel.test.ts`, `export.test.ts`, E2E `tests/e2e/intel.spec.ts` (okno zapisu podstawione przez
+  `app.evaluate`).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -290,6 +318,6 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E4 Mostek i szybki wpis → wydanie 1.0.0 (grupa B)
 - [x] E5 ICTTJ i dokowanie → 1.1.0 (grupa C)
 - [x] E6 Radar i należności → 1.1.0 (grupa C)
-- [ ] E7 Dowództwo (gra)
-- [ ] E8 Wywiad i raporty
-- [ ] E9 Pierwszy oficer (opcjonalnie)
+- [x] E7 Dowództwo (gra) → 1.2.0 (grupa D)
+- [x] E8 Wywiad i raporty → 1.2.0 (grupa D)
+- ~~E9 Pierwszy oficer~~ – wypada (D74: bez asystenta AI)

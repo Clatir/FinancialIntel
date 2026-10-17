@@ -9,6 +9,7 @@ export function Meter({
   max,
   over = false,
   mark,
+  tick,
   className,
   ...rest
 }: {
@@ -18,6 +19,8 @@ export function Meter({
   over?: boolean
   /** A line at this fraction of the bar (the load line, the minimum shields). */
   mark?: number
+  /** A second, quieter line (the envelope's Equilibrium – the part of the month gone, D73). */
+  tick?: number
   className?: string
   'data-testid'?: string
 }) {
@@ -27,6 +30,7 @@ export function Meter({
     <div className={cx('relative h-[5px] w-full bg-line', className)} data-testid={rest['data-testid']} data-frac={frac.toFixed(3)}>
       <div className={cx('h-full transition-[width] duration-150', bad ? 'bg-down' : 'bg-accent')} style={{ width: `${Math.min(100, frac * 100)}%` }} />
       {mark != null && mark > 0 && mark < 1 && <div className="absolute top-[-2px] h-[9px] w-px bg-fg-strong/70" style={{ left: `${mark * 100}%` }} />}
+      {tick != null && tick > 0 && tick < 1 && <div className="absolute top-[-2px] h-[9px] w-px bg-muted" style={{ left: `${tick * 100}%` }} data-testid="meter-equilibrium" />}
     </div>
   )
 }

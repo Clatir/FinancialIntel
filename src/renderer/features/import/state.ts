@@ -241,7 +241,13 @@ export async function runImport(): Promise<void> {
           ...f.settings.import,
           rules: result.rules,
           ownNames: client && !f.settings.import.ownNames.some((n) => n.toLowerCase() === client.toLowerCase()) ? [...f.settings.import.ownNames, client] : f.settings.import.ownNames,
-          lastImport: { ...f.settings.import.lastImport, [st.accountId]: now }
+          lastImport: { ...f.settings.import.lastImport, [st.accountId]: now },
+          // The imports' times (the mission „Łączność z bazą”, E7): the last 100.
+          log: Object.fromEntries(
+            Object.entries({ ...f.settings.import.log, [now]: st.accountId })
+              .sort(([a], [b]) => a.localeCompare(b))
+              .slice(-100)
+          )
         }
       }
     }))

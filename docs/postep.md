@@ -1,11 +1,11 @@
 # Financial Intel – postęp
 
-**Stan:** grupa C (E5 + E6 → 1.1.0) zrobiona na gałęzi `claude/grupa-c`, PR do `main` – scalenie przy zielonym CI
-(D71). **1.0.0 wydane** (PR #4 scalony). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
+**Stan:** grupa D (E7 + E8 → 1.2.0) zrobiona na gałęzi `claude/grupa-d`, PR do `main` – scalenie przy zielonym CI
+(D71); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. **1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
 (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy
 czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – grupa D (E7 + E8 → 1.2.0) dopiero na komendę użytkownika, po odpowiedziach na „Przed etapem
-E7” (sekcja niżej).
+**Następny krok:** pauza – czeka wybór użytkownika: usprawnienie grupowania importu z mBanku (propozycja niżej, 1.2.1),
+kalibracja progów gry po pierwszym miesiącu.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -16,7 +16,7 @@ E7” (sekcja niżej).
 ## Kolejka prac
 
 Czas = praca Claude Code w sesji (czytanie, pisanie, testy, poprawki), bez testowania przez użytkownika i bez czekania
-na CI. Model i thinking z górką. E0 oraz grupy B i C zmierzone zegarem sesji; reszta przeliczona na ich podstawie, z zapasem.
+na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesji.
 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -24,10 +24,11 @@ na CI. Model i thinking z górką. E0 oraz grupy B i C zmierzone zegarem sesji; 
 | **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ scalony (PR #3); wydanie nie wyszło – zastąpione przez 1.0.0 |
 | **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 4–6 h) | **1.0.0** | ✅ odpowiedzi (D69, D70) | ✅ wydane (PR #4), czeka na odbiór na Windows |
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
-| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ zrobione, PR do `main` |
-| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 2–3 h | 1.2.0 | odpowiedzi na „Przed etapem E7” (misje, osiągnięcia, smaczki ICT, progi gry) | ⏳ czeka na komendę |
-| **E** | E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 0,5–1 h | 1.3.0 | klucz API Claude | ⏳ |
-| | **Całość E0–E9** | | | **ok. 11–12,5 h** | | | |
+| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
+| **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ zrobione, PR do `main` |
+| 1.2.1 | Grupowanie importu z mBanku (propozycja) | Opus 5.5 | **max** | ok. 1 h | 1.2.1 | wybór pomysłów (1–6) | ⏳ czeka na decyzję |
+| ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
+| | **Całość E0–E8** | | | **zmierzone ok. 9,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -41,6 +42,67 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
+
+## Propozycja: grupowanie importu z mBanku (1.2.1, zgłoszenie użytkownika 17.10.2026)
+
+1. **Co trzeba wiedzieć** – import grupuje po kluczu kontrahenta z całą nazwą (miasto, numer sklepu), więc jedna sieć
+   daje wiele grup; zmiana w E2 (import), bez AI.
+2. **Pytania z propozycją** – które pomysły: (1) klucz marki bez miast, numerów i dopisków kartowych, (2) wbudowany
+   słownik sieci z kategoriami, (3) reguły na słowa kluczowe w nazwie i tytule (zestaw startowy + własne),
+   (4) grupowanie wielopoziomowe (marka / słowo / kategoria mBanku) z „Zaakceptuj pewne”, (5) łączenie podobnych nazw do
+   zatwierdzenia, (6) propozycja reguły po decyzji z liczbą objętych wierszy. Propozycja: 1 + 3 + 4 (+ 2).
+3. **Co przygotować** – nic; przydatny zanonimizowany fragment CSV z problematycznymi nazwami (jak przy E2).
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1 h.
+
+## E8 – Wywiad i raporty (17.10.2026)
+
+Zrobione (zakres i odpowiedzi z „Przed etapem E7” – D73):
+- Wywiad (Ctrl+9): krzywa majątku tydzień po tygodniu z drawdownem i oznaczeniami BOS / CHoCH, Killzones wydatków
+  (dzień × godzina), FVG kopert dowolnego miesiąca, wydatki w czasie z ładownią jako Order Block, prognoza zasięgu bez
+  wypłat, trafność dziennika kapitańskiego; okres 3 / 6 / 12 miesięcy (T81, T82).
+- Raporty (Ctrl+0): odprawa, raport wachty (tydzień w liczbach, dni gry, killzone, misja, koperty na najbliższe dni),
+  debriefing z FVG, grą, dziennikiem i łupami, przegląd roczny; PDF debriefingu i przeglądu; eksport CSV i Excel
+  (operacje, miesiące) i pełna kopia ZIP; powiadomienie „Raport wachty” w niedzielę od 18:00 (T83, T84).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione:
+  - salda tygodni liczone sumami narastającymi (bez kwadratowego kopiowania), analizy przeliczane z dniem, nie co minutę;
+  - przegląd roczny: majątek na granicach roku, cele osiągnięte w tym roku (z dziennika silnika);
+  - szczyt krzywej od pierwszego punktu; CSV odporny na formuły (apostrof);
+  - powiadomienie otwiera raport bieżącego tygodnia (stan Raportów poza stroną); łupy z częścią do osłon;
+  - koperty na najbliższe dni – tylko do końca miesiąca, z liczbą dni; usunięty martwy kod.
+- Testy: 342 unit + fs (`tests/unit/intel.test.ts`, `export.test.ts`), E2E 15 (`tests/e2e/intel.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.2.0, Windows):
+1. Wywiad: krzywa majątku z historią z importu, Killzones (wpisy z godziną), FVG poprzedniego miesiąca.
+2. Raporty: raport wachty, debriefing i przegląd roczny do PDF, eksport CSV / Excel – otwarcie w Excelu.
+
+## E7 – Dowództwo (17.10.2026)
+
+Zrobione (zakres i odpowiedzi z „Przed etapem E7” – D73):
+- Ocena każdego dnia od startu gry (pierwszy pełny dzień po uruchomieniu 1.2.0) i zamrożenie 24 h po końcu dnia, w tle:
+  naruszenia zwykłe i poważne, smaczki ICT dnia, klasa okrętu (T75, T76).
+- Stopnie Kadet → Admirał (30 z 35, misja = 3 dni, degradacja przy 3. poważnym w miesiącu), seria i rekord, misje
+  tygodniowe dobierane do słabego punktu (9 w puli), 13 ukrytych osiągnięć (T77–T79).
+- Dowództwo (Ctrl+8): stopień z postępem, klasa z drabiną zasięgu, seria z paskiem 35 dni i oceną dnia „na razie”, misja
+  tygodnia z postępem, osiągnięcia, rozkazy i progi gry (do zmiany), dziennik wachty.
+- Ekran awansu i wyższej klasy z animacją i dźwiękiem; degradacja, osiągnięcia i misje jako toasty (T80).
+- Odprawa: misja tygodnia, Silver Bullet (10–11 NY); koperty: Equilibrium (Premium / Discount); Mapa gwiezdna: DOL.
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione:
+  - święta tylko ze zdarzeń z ostatnich 14 dni (pamięć „widzianych” nie odtwarza starych), kilka naraz jako jeden toast;
+  - degradacja nie jako „Błąd”, bez liczby na sztywno; niższa klasa tylko w dzienniku (D73);
+  - ładunek: wzrost masy względem poprzedniego zamrożonego dnia zamiast `updatedAt` (zmiana nazwy, scalenie);
+  - degradacja działa też po obniżeniu progu; wybór misji „import” z danych sprzed poniedziałku;
+  - dziennik importów jako obiekt (scalanie z drugiego komputera po kluczach);
+  - święta z dziennika wachty (bez drugiego wyprowadzenia, daty warszawskie); progi klas z jednego miejsca.
+- Testy: 327 unit + fs (`tests/unit/game.test.ts` – 17), E2E 14 (`tests/e2e/command.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.2.0, Windows):
+1. Dowództwo: data startu gry (jutro po pierwszym uruchomieniu), ocena dnia „na razie”, misja od pierwszego pełnego tygodnia.
+2. Po kilku dniach: dziennik wachty, seria, pasek dni; próg gry – do kalibracji po pierwszym miesiącu.
+
+Otwarte (zgłoszenie użytkownika 17.10.2026): import historii z mBanku daje za dużo grup – pomysły bez AI (klucz marki
+bez miast i numerów sklepów, słownik sieci, reguły na słowa kluczowe w nazwie i tytule, grupowanie wielopoziomowe,
+łączenie podobnych nazw, nauka reguł z decyzji); propozycja: 1 + 3 + 4 jako osobna zmiana po grupie D (1.2.1) –
+czeka na wybór użytkownika.
 
 ## Przed etapem E7 (grupa D)
 
@@ -502,3 +564,12 @@ Do sprawdzenia przez użytkownika (Windows 11):
   powiadomienie o nowej wypłacie), przegląd i poprawki; dalej E6 bez pauzy.
 - 17.10.2026 – E6 (Radar 90 dni, pożyczki w obie strony, należność domu, PIT-38, powiadomienia), przegląd i poprawki.
 - 17.10.2026 – zamknięcie grupy C: 1.1.0, PR do `main`; „Przed etapem E7” (grupa D → 1.2.0, model max); pauza.
+- 17.10.2026 – Windows CI w PR #5 złapał błąd pola kwoty (fokus) i ścieżki w teście – poprawione; PR #5 scalony,
+  wydanie 1.1.0 opublikowane; komenda startu grupy D z propozycjami „Przed etapem E7” (D73), bez asystenta AI (D74 –
+  E9 wypada).
+- 17.10.2026 – E7 (Dowództwo: ocena i zamrażanie dni, stopnie, misje, osiągnięcia, dziennik wachty, smaczki ICT), przegląd
+  i poprawki; zgłoszenie użytkownika o grupowaniu importu – pomysły podane, czeka na wybór.
+- 17.10.2026 – E8 (Wywiad: krzywa majątku z BOS / CHoCH, Killzones, FVG, Order Block, zasięg, dziennik; Raporty i eksport
+  CSV / Excel / PDF / ZIP, raport wachty w niedzielę), przegląd i poprawki.
+- 17.10.2026 – zamknięcie grupy D: 1.2.0, PR do `main`; plan etapów E0–E8 zamknięty (E9 wypada – D74); propozycja
+  usprawnienia importu (1.2.1) czeka na wybór użytkownika; pauza.

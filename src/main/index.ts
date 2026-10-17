@@ -14,6 +14,10 @@ import { clearPresence, readOtherMachines, writePresence } from './datastore/pre
 import { initLog, log } from './log'
 import { importBackup, isDataFile, listBackups, manualBackup, runBackups } from './datastore/backup'
 import { zipFolder } from './datastore/zip'
+import { writeFileAtomic } from './datastore/atomic'
+import { htmlToPdf } from './export/pdf'
+import { writeXlsx } from './export/xlsx'
+import type { XlsxSheet } from '@shared/export/xlsx'
 import { Updater } from './update/updater'
 import { startPortableSwap, startSilentInstaller } from './update/apply'
 import { setupDetach } from './detach'
@@ -482,6 +486,25 @@ function registerIpc(): void {
     })
     if (res.canceled || !res.filePath) return null
     await zipFolder(s.root, res.filePath, isDataFile)
+    return res.filePath
+  })
+  // Exports (E8): a file the user names – CSV, Excel, PDF of a report (the window prints it, nothing else loads).
+  handle('saveTextFile', async (name: string, content: string, filter: { name: string; extensions: string[] }) => {
+    const res = await dialog.showSaveDialog(mainWindow!, { defaultPath: name, filters: [filter] })
+    if (res.canceled || !res.filePath) return null
+    await writeFileAtomic(res.filePath, content)
+    return res.filePath
+  })
+  handle('saveXlsx', async (name: string, sheets: XlsxSheet[]) => {
+    const res = await dialog.showSaveDialog(mainWindow!, { defaultPath: name, filters: [{ name: 'Excel', extensions: ['xlsx'] }] })
+    if (res.canceled || !res.filePath) return null
+    await writeXlsx(res.filePath, sheets)
+    return res.filePath
+  })
+  handle('savePdf', async (name: string, html: string) => {
+    const res = await dialog.showSaveDialog(mainWindow!, { defaultPath: name, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+    if (res.canceled || !res.filePath) return null
+    await writeFileAtomic(res.filePath, await htmlToPdf(html))
     return res.filePath
   })
   handle('copyText', async (text: string) => {

@@ -148,14 +148,14 @@ export const SHIP_CLASS_LABEL: Record<ShipClass, string> = {
   flagship: 'Flagowiec'
 }
 
-/** The ship's class by its range (T10): < 1, 1–3, 3–6, 6–9, 9–12, ≥ 12 months. */
+/** The range (months) each class starts at (T10): < 1, 1–3, 3–6, 6–9, 9–12, ≥ 12 months. */
+export const CLASS_FROM: Record<ShipClass, number> = { scout: 0, corvette: 1, frigate: 3, destroyer: 6, cruiser: 9, flagship: 12 }
+
+/** The ship's class by its range (T10). */
 export function shipClass(range: number): ShipClass {
-  if (range < 1) return 'scout'
-  if (range < 3) return 'corvette'
-  if (range < 6) return 'frigate'
-  if (range < 9) return 'destroyer'
-  if (range < 12) return 'cruiser'
-  return 'flagship'
+  let out: ShipClass = 'scout'
+  for (const c of SHIP_CLASSES) if (range >= CLASS_FROM[c]) out = c
+  return out
 }
 
 /** The next payment of a container on or after `today`. */
@@ -254,6 +254,8 @@ export interface EnvelopeState {
   limit: number
   spent: number
   left: number
+  /** Spent today (part of `spent`): the game sees the day an envelope went over (E7). */
+  today: number
 }
 
 export interface FleetState {
@@ -825,7 +827,7 @@ export function computeFleet(input: FleetInput): FleetState {
       if (limit == null) continue
       const s = spentBy.get(main.id) ?? { before: 0, today: 0 }
       const spent = s.before + s.today
-      envelopes.push({ categoryId: main.id, kind, limit, spent, left: limit - spent })
+      envelopes.push({ categoryId: main.id, kind, limit, spent, left: limit - spent, today: s.today })
       if (kind === 'planned' && spent > limit) alarms.push({ kind: 'envelope-over', level: spent > limit * 1.2 ? 'red' : 'yellow', date: today, amount: spent - limit, ref: main.id })
     }
     const d = dailyAllowance({ limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, day: dayOfMonth(today), daysInMonth: daysInMonth(month) })

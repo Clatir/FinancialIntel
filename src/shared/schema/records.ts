@@ -253,22 +253,55 @@ export type Balance = z.infer<typeof balanceSchema>
 
 // ------------------------------------------------------------------ game (E7)
 
-/** A month of the command: rated days (frozen 24 h after their end, T9), missions, promotions. Refined in E7. */
+/** A rated day, frozen 24 h after its end (T9): a later change of the data never changes it. */
+export const gameDaySchema = z.looseObject({
+  status: z.enum(['ok', 'broken']),
+  frozenAt: isoDateTime,
+  violations: z
+    .array(
+      z.looseObject({
+        order: z.string().max(60),
+        serious: z.boolean().default(false),
+        note: z.string().max(500).default(''),
+        /** What the violation is about: an envelope's category, an operation, a container. */
+        ref: z.string().max(100).nullable().default(null),
+        /** Its amount (grosze): over the allowance or the limit, below the minimum, the purchase; the screen formats it. */
+        amount: grosze.nullable().default(null)
+      })
+    )
+    .default([]),
+  /** The ship's class at the day's end. */
+  cls: z.string().max(20).nullable().default(null),
+  /** The cargo's monthly mass at the day's end (the next day sees a container added or raised by it). */
+  cargo: grosze.nullable().default(null),
+  /** The day's ICT flavour (D73): 'judas' (an impulse), 'turtle' (a returned product), 'sweep' (the energy exactly 0). */
+  tags: z.array(z.string().max(20)).default([])
+})
+export type GameDay = z.infer<typeof gameDaySchema>
+
+/** A weekly mission (D73): chosen for the week's weak point, judged once its Sunday is frozen. */
+export const gameMissionSchema = z.looseObject({
+  id: ulidSchema,
+  template: z.string().max(60),
+  /** ISO week 'RRRR-Www'. */
+  week: z.string().max(10),
+  done: z.boolean().default(false),
+  /** Judged (done or not); null = in progress. */
+  evaluatedAt: isoDateTime.nullable().default(null),
+  /** The mission's target: an envelope, a killzone slot, an amount. */
+  params: z.record(z.string().max(40), z.union([z.string().max(100), z.number()])).default({})
+})
+export type GameMission = z.infer<typeof gameMissionSchema>
+
+/** A month of the command (E7): rated days, missions, changes of rank and achievements – all frozen. */
 export const gameMonthSchema = z.looseObject({
   ...recordBase,
   month: isoMonth,
-  days: z
-    .record(
-      isoDate,
-      z.looseObject({
-        status: z.enum(['ok', 'broken']),
-        frozenAt: isoDateTime,
-        violations: z.array(z.looseObject({ order: z.string().max(60), serious: z.boolean().default(false), note: z.string().max(500).default('') })).default([])
-      })
-    )
-    .default({}),
-  missions: z.array(z.looseObject({ id: ulidSchema, template: z.string().max(60), week: z.string().max(10), done: z.boolean().default(false) })).default([]),
-  promotions: z.array(z.looseObject({ id: ulidSchema, at: isoDateTime, rank: z.string().max(40), change: z.enum(['up', 'down']) })).default([]),
-  achievements: z.array(z.looseObject({ id: z.string().max(60), at: isoDateTime })).default([])
+  days: z.record(isoDate, gameDaySchema).default({}),
+  missions: z.array(gameMissionSchema).default([]),
+  promotions: z
+    .array(z.looseObject({ id: ulidSchema, at: isoDateTime, rank: z.string().max(40), change: z.enum(['up', 'down']), day: isoDate.nullable().default(null) }))
+    .default([]),
+  achievements: z.array(z.looseObject({ id: z.string().max(60), at: isoDateTime, day: isoDate.nullable().default(null) })).default([])
 })
 export type GameMonth = z.infer<typeof gameMonthSchema>

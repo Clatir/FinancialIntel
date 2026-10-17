@@ -2,6 +2,7 @@
  * The notifications of this computer (`shared/notify.ts`): checked every minute and when the window opens, each shown
  * once (remembered in localStorage), clicking leads to its screen. Only the main window runs it.
  */
+import { openWatchReport } from '../features/reports/state'
 import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { dueNotices, type Notice } from '@shared/notify'
@@ -55,6 +56,7 @@ export function openTag(tag: string): void {
   else if (tag === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (tag === 'debriefing' || tag === 'low' || tag === 'overrun') navigate({ page: 'month' })
   else if (tag === 'radar') navigate({ page: 'radar' })
+  else if (tag === 'reports') openWatchReport()
   else {
     navigate({ page: 'bridge' })
     if (tag === 'dock' || tag.startsWith('dock:')) openDockingTag(tag)

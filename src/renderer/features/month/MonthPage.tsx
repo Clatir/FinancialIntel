@@ -15,7 +15,7 @@ import { IconBack, IconNext } from '../../components/icons'
 import { dayLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { decideLoot, setEnvelope, setEnvelopes, setSalary, usePlans } from './actions'
-import { EnvelopeBars } from './EnvelopeBars'
+import { EnvelopeBars, monthElapsed } from './EnvelopeBars'
 import { playSound } from '../../lib/sounds'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
@@ -263,7 +263,7 @@ function EnvelopesPanel({ month, current, fleet, brief }: { month: string; curre
   if (month > current) return null
   return (
     <Panel title="Koperty" testId="month-envelopes">
-      {!rows.length ? <Empty>Brak kopert w tym miesiącu.</Empty> : <EnvelopeBars rows={rows} />}
+      {!rows.length ? <Empty>Brak kopert w tym miesiącu.</Empty> : <EnvelopeBars rows={rows} elapsed={month === current ? monthElapsed(fleet.today) : undefined} />}
     </Panel>
   )
 }

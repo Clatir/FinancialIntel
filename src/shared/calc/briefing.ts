@@ -3,6 +3,7 @@
  * engine's alarms of this month, the asteroids (periodic fees) within 14 days, an overdue import, the balances to
  * confirm, the loot waiting for a decision. Pure; the bridge, the notifications and the spoken briefing use it.
  */
+import { DateTime } from 'luxon'
 import { formatPln } from '../format'
 import { ICTJ_POOL_LABEL } from '../ictj'
 import type { Container } from '../schema/records'
@@ -30,7 +31,7 @@ export const BIAS_LABEL: Record<DailyBias, string> = { bullish: 'Bullish', beari
 export interface BriefingItem {
   level: 'red' | 'yellow' | 'info'
   /** What the item is about (the screen it leads to; 'dock' – the docking window of the delivery in `key`). */
-  kind: 'alarm' | 'asteroid' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house'
+  kind: 'alarm' | 'asteroid' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house' | 'mission'
   text: string
   /** Stable key (the notifications send each once). */
   key: string
@@ -85,6 +86,14 @@ export interface BriefingInput {
   deliveries?: readonly Delivery[]
   /** The ICTTJ folder chosen on this computer cannot be read: why. */
   ictjProblem?: string | null
+  /** This week's mission of the command (E7): its title and what to do. */
+  mission?: { week: string; title: string; text: string } | null
+}
+
+/** Silver Bullet (D73): the briefing opened between 10:00 and 11:00 New York time comes short. */
+export function silverBullet(now: Date | string = new Date()): boolean {
+  const dt = (typeof now === 'string' ? DateTime.fromISO(now) : DateTime.fromJSDate(now)).setZone('America/New_York')
+  return dt.isValid && dt.hour === 10
 }
 
 /** PIT-38 is announced from 14 days before its deadline (like an asteroid). */
@@ -201,5 +210,6 @@ export function briefing(o: BriefingInput): BriefingItem[] {
   const houseDays = since ? daysBetween(since, f.today) : 0
   if (f.receivables.house > 0 && since && houseDays > HOUSE_DAYS)
     items.push({ level: 'info', kind: 'house', key: `house:${since}`, text: `Należność domu ${zl(f.receivables.house)} – najstarszy zakup „do zwrotu” z ${dm(since)} (${houseDays} dni).` })
+  if (o.mission) items.push({ level: 'info', kind: 'mission', key: `mission:${o.mission.week}`, text: `Misja tygodnia – ${o.mission.title}: ${o.mission.text}` })
   return items
 }
