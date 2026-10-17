@@ -1,9 +1,10 @@
 # Financial Intel – postęp
 
-**Stan:** grupa B (E3 + E4) zrobiona na gałęzi `claude/grupa-b` – PR #4 do `main`; po scaleniu CI wyda **1.0.0**
-(MVP). Grupa A scalona (PR #3, 0.3.0).
-**Następny krok:** pauza – scalenie PR #4 i odbiór 1.0.0 na Windows; potem odpowiedzi na „Przed etapem E5” i komenda
-startu grupy C (E5 + E6).
+**Stan:** grupa C (E5 + E6 → 1.1.0) w toku na gałęzi `claude/grupa-c` (komenda 17.10.2026, odpowiedzi D72).
+**1.0.0 wydane** (PR #4 scalony). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
+(plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy
+czytają folder przez `tests/e2e/files.ts`.
+**Następny krok:** E5 – ICTTJ i dokowanie, potem E6 – Radar i należności (bez pauzy, jeden PR).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -18,11 +19,11 @@ na CI. Model i thinking z górką. E0 i grupa B zmierzone zegarem sesji; reszta 
 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| – | E0 Fundament | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | 0.1.0 | – | ✅ scalony |
-| **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ scalony (PR #3) |
-| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 4–6 h) | **1.0.0** | ✅ odpowiedzi (D69, D70) | ✅ PR #4 do `main`, czeka na scalenie i odbiór |
+| – | E0 Fundament | Opus 5.5 | xhigh | zmierzone ok. 1,5 h | 0.1.0 | – | ✅ wydane |
+| **A** | E1 Model i silnik + E2 Import mBank | Opus 5.5 | **max** | ok. 4,5 h (E1 zmierzony: ok. 2 h; E2 z przeglądem: ok. 2,5 h, szacunek z przebiegu sesji) | 0.3.0 | ✅ odpowiedzi (D68), CSV z mBanku | ✅ scalony (PR #3); wydanie nie wyszło – zastąpione przez 1.0.0 |
+| **B** | E3 Start i plan miesiąca + E4 Mostek i szybki wpis | Opus 5.5 | **max** | zmierzone ok. 1,5 h (plan był 4–6 h) | **1.0.0** | ✅ odpowiedzi (D69, D70) | ✅ wydane (PR #4), czeka na odbiór na Windows |
 | 🏁 | **MVP = 1.0.0** (E0–E4, D51) | | | **razem ok. 7,5 h** | | | |
-| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 2–3 h | 1.1.0 | odpowiedzi na „Przed etapem E5”, ścieżka folderu ICTTJ | ⏳ czeka na komendę |
+| **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | 2–3 h | 1.1.0 | ✅ odpowiedzi (D71, D72) | 🔄 w toku |
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | 2,5–3,5 h | 1.2.0 | akceptacja listy misji, osiągnięć i smaczków ICT | ⏳ |
 | **E** | E9 Pierwszy oficer (opcjonalnie) | Opus 5.5 | xhigh | 1–1,5 h | 1.3.0 | klucz API Claude | ⏳ |
 | | **Całość E0–E9** | | | **ok. 13–16 h** | | | |
@@ -351,3 +352,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 17.10.2026 – E3 (kreator startu, Plan miesiąca, Ładownia), przegląd i poprawki; E4 (Mostek, szybki wpis, zasobnik,
   ukrycie kwot, powiadomienia, dźwięki), przegląd i poprawki; zamknięcie grupy B: 1.0.0, PR #4 do `main`; „Przed
   etapem E5” (grupa C, model max); pauza.
+- 17.10.2026 – PR #4 scalony, wydanie 1.0.0 opublikowane; przy sprawdzaniu wyszło, że 0.3.0 nie zostało wydane (E2E
+  na `main` – wyścig w pomocniku testu operacji, poprawiony w grupie C); D71 (scalanie bez pytania przy zielonym CI)
+  i D72 (odpowiedzi na „Przed etapem E5”); start grupy C na komendę użytkownika.

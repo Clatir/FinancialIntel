@@ -1,9 +1,10 @@
-import { mkdtempSync, promises as fs } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
+import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
 const ACC = '01KDEFACC00000000000000001'
@@ -12,8 +13,6 @@ const GROCERIES = '01KDEFCAT00000000000000101'
 const FUN = '01KDEFCAT00000000000000600'
 const RENT = '01KDEFCAT00000000000000201'
 const STREAMING = '01KDEFCAT00000000000000703'
-
-const json = async (path: string) => JSON.parse(await fs.readFile(path, 'utf8'))
 
 /** Seven months of history before this one (the first is not full): the same costs every month – 2 479,99 zł. */
 function history(month: string) {
@@ -72,12 +71,10 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await expect.poll(async () => (await json(join(dataDir, 'months', `${month}.json`))).salary).toBe(zl(2500))
     const plan = await json(join(dataDir, 'months', `${month}.json`))
     expect(plan.envelopes).toMatchObject({ [FOOD]: zl(780), [FUN]: zl(150) })
-    const containers = await fs.readdir(join(dataDir, 'containers'))
+    const containers = await records(dataDir, 'containers')
     expect(containers).toHaveLength(1)
-    expect((await json(join(dataDir, 'containers', containers[0]!))).counterparty).toBe('WSPOLNOTA')
-    const balances = await fs.readdir(join(dataDir, 'balances'), { recursive: true })
-    const opening = await json(join(dataDir, 'balances', String(balances.find((f) => String(f).endsWith('.json')))))
-    expect(opening).toMatchObject({ kind: 'opening', date: today, amount: zl(25000) })
+    expect(containers[0]!.counterparty).toBe('WSPOLNOTA')
+    expect((await records(dataDir, 'balances')).find((b) => b.accountId === ACC)).toMatchObject({ kind: 'opening', date: today, amount: zl(25000) })
 
     // Plan miesiąca: the salary and an envelope changed; the split follows.
     await page.getByTestId('nav-month').click()
@@ -107,7 +104,7 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await page.getByTestId('cargo-new-confirm').click()
     await expect(page.locator('[data-testid="cargo-row"][data-name="OC auta"]')).toBeVisible()
     await expect(page.locator('[data-testid="cargo-tank"][data-name="OC auta"]')).toBeVisible()
-    await expect.poll(async () => (await fs.readdir(join(dataDir, 'containers'))).length).toBe(2)
+    await expect.poll(async () => (await records(dataDir, 'containers')).length).toBe(2)
     expect(errors).toEqual([])
   } finally {
     await app.close()

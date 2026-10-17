@@ -2,14 +2,10 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { launch } from './app'
+import { records } from './files'
 
 /** Every operation file of the folder, parsed. */
-async function operations(dataDir: string): Promise<Array<Record<string, unknown>>> {
-  const root = join(dataDir, 'transactions')
-  const out: Array<Record<string, unknown>> = []
-  for (const y of await fs.readdir(root).catch(() => [])) for (const f of await fs.readdir(join(root, y))) out.push(JSON.parse(await fs.readFile(join(root, y, f), 'utf8')))
-  return out
-}
+const operations = (dataDir: string) => records(dataDir, 'transactions')
 
 async function typeAmount(page: Page, target: string | Locator, text: string) {
   const field = typeof target === 'string' ? page.getByTestId(target) : target
@@ -117,12 +113,7 @@ test('Ustawienia: konta z saldem otwarcia i potwierdzeniem (korekta), kategorie'
     await expect(mbank.getByTestId('account-balance')).toHaveText('1 200,00 zł')
     await page.screenshot({ path: join('test-results', 'screens', '05-konta.png') })
     await expect
-      .poll(async () => {
-        const root = join(dataDir, 'transactions')
-        const files = []
-        for (const y of await fs.readdir(root).catch(() => [])) for (const f of await fs.readdir(join(root, y))) files.push(JSON.parse(await fs.readFile(join(root, y, f), 'utf8')))
-        return files.map((t) => [t.kind, t.amount])
-      })
+      .poll(async () => (await operations(dataDir)).map((t) => [t.kind, t.amount]))
       .toEqual([['correction', -5050]])
 
     // Categories: rename, an envelope, a subcategory.

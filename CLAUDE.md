@@ -18,6 +18,9 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - **Bez komendy użytkownika nie zaczynaj kolejnego etapu ani grupy** (D67). Grupy etapów idących jednym ciągiem (A: E1
   [+ E2], B: E3 + E4, C: E5 + E6, D: E7 + E8, E: E9) – w grupie bez pauzy między etapami, jeden PR i wydanie na grupę;
   tabela w `docs/postep.md`.
+- **Scalanie (D71):** PR grupy scalam sam, gdy CI (Linux i Windows) jest zielone, nie ma konfliktu ani otwartych uwag
+  i nic nie czeka na decyzję użytkownika. Po scaleniu sprawdź, czy CI na `main` wydało wersję (wydanie publikuje job
+  Windows; czerwone E2E na `main` = brak wydania – tak przepadło 0.3.0).
 - Po wznowieniu pracy (limit, nowa sesja, streszczenie rozmowy) najpierw przeczytaj `docs/postep.md` i kontynuuj od
   zapisanego miejsca.
 - Dokumenty: `docs/specyfikacja.md` (co budujemy), `docs/decyzje.md` (decyzje użytkownika D1… i techniczne T1… – nie
@@ -38,7 +41,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   najwyżej raz (`dockings/*` z `source.ictjEntryId`).
 - Pula wpisu ICTTJ: `current` / `surplus` → zwykłe dokowanie, `goals` → prosto do celów, `tax` → przepływ poza
   budżetem (PIT-38), nie koszt. PIT-38 na radarze tylko jako termin, bez kwoty.
-- Dopasowanie: wypłata z ICTTJ bez pary w CSV z mBanku przez 3 dni → Portfel XTB (potwierdzenie przy dokowaniu);
+- Dopasowanie: wypłata z ICTTJ bez pary w CSV z mBanku przez 3 dni robocze (D72) → Portfel XTB (potwierdzenie przy
+  dokowaniu);
   wpływ z XTB w mBanku bez wpisu w ICTTJ → dokuje normalnie + przypomnienie o wpisie w ICTTJ.
 - Przycisk „Otwórz ICTTJ” w menu bocznym FI; w ICTTJ nic się nie zmienia.
 

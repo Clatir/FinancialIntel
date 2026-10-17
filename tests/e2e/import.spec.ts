@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { launch } from './app'
+import { records } from './files'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 
@@ -12,17 +13,7 @@ async function answerFileDialog(app: ElectronApplication, path: string): Promise
   }, path)
 }
 
-async function operations(dataDir: string): Promise<Array<Record<string, unknown>>> {
-  const root = join(dataDir, 'transactions')
-  const out: Array<Record<string, unknown>> = []
-  for (const y of await fs.readdir(root).catch(() => []))
-    for (const f of await fs.readdir(join(root, y)).catch(() => [])) {
-      // A file deleted between the listing and the read (an operation being removed) is gone.
-      const text = await fs.readFile(join(root, y, f), 'utf8').catch(() => null)
-      if (text) out.push(JSON.parse(text))
-    }
-  return out
-}
+const operations = (dataDir: string) => records(dataDir, 'transactions')
 
 const group = (page: Page, label: string) => page.locator(`[data-testid="import-group"][data-label="${label}"]`).first()
 
