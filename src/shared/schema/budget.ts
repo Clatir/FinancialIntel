@@ -192,7 +192,9 @@ export const importSettingsSchema = z.looseObject({
    * The imports (E7: the mission „Łączność z bazą”): time → account, the last 100. A record, so two computers' imports
    * merge key by key (an array would be one conflicting field).
    */
-  log: z.record(isoDateTime, ulidSchema).catch({}).default({})
+  log: z.record(isoDateTime, ulidSchema).catch({}).default({}),
+  /** Groups of operations the user said are no duplicates (`duplicateKey` → when, 1.2.1): not offered again. */
+  notDuplicates: z.record(z.string().max(200), isoDateTime).catch({}).default({})
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 

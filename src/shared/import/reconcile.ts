@@ -23,6 +23,9 @@ import { rowKeys, type MbankFile, type MbankRow } from './mbank'
 /** Days around the bank's date a manual entry may be (spec: ±3). */
 export const MATCH_DAYS = 3
 
+/** An amount a hand-typed operation may be off by (a typo, grosze left out): max(1 zł, 3%), the same direction. */
+export const closeAmount = (a: number, b: number): boolean => Math.sign(a) === Math.sign(b) && Math.abs(a - b) <= Math.max(100, Math.round(Math.max(Math.abs(a), Math.abs(b)) * 0.03))
+
 /** The same counterparty in other words: an empty one (a quick entry without it), one key in the other, a common word. */
 export function similarCounterparty(a: string, b: string): boolean {
   const ka = counterpartyKey(a)
@@ -39,8 +42,12 @@ export type RowPlan =
   | { status: 'known'; row: MbankRow; key: string; tx: Transaction; settled: boolean }
   /** A pending operation that came back changed: it takes the row's amount, date and description. */
   | { status: 'settle'; row: MbankRow; key: string; tx: Transaction }
-  /** An operation typed by hand: it takes the bank's data and keeps the user's category, time and notes. */
-  | { status: 'merge'; row: MbankRow; key: string; tx: Transaction }
+  /**
+   * An operation typed by hand: it takes the bank's data and keeps the user's category, time and notes. `loose` = a
+   * possible duplicate (1.2.1, D77): the same amount under another name, or a close amount (max(1 zł, 3%)) under a
+   * similar one – joined too, so nothing comes in twice; the preview shows it to check.
+   */
+  | { status: 'merge'; row: MbankRow; key: string; tx: Transaction; loose?: 'name' | 'amount' }
   | ({ status: 'new' } & PlannedRow)
   /** An operation the user deleted (its version is in the history): left out unless brought back. */
   | ({ status: 'deleted' } & PlannedRow)
@@ -133,6 +140,26 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     if (plans[c.i] || used.has(c.tx.id)) continue
     used.add(c.tx.id)
     plans[c.i] = { status: 'merge', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx }
+  }
+
+  // Possible duplicates (D77): a hand-typed operation left over, ±3 days, the same amount under another name or a close
+  // amount under a similar name – the same amount first, then the closest date; each side once.
+  const loose: Array<{ i: number; tx: Transaction; days: number; exact: boolean }> = []
+  file.rows.forEach((row, i) => {
+    if (plans[i]) return
+    for (const tx of manual) {
+      if (used.has(tx.id) || Math.sign(tx.amount) !== Math.sign(row.amount)) continue
+      const days = Math.abs(daysBetween(tx.date, row.date))
+      if (days > MATCH_DAYS) continue
+      const exact = tx.amount === row.amount
+      if (exact || (closeAmount(tx.amount, row.amount) && similarCounterparty(tx.counterparty, row.counterparty || row.description))) loose.push({ i, tx, days, exact })
+    }
+  })
+  loose.sort((a, b) => Number(b.exact) - Number(a.exact) || a.days - b.days || a.i - b.i)
+  for (const c of loose) {
+    if (plans[c.i] || used.has(c.tx.id)) continue
+    used.add(c.tx.id)
+    plans[c.i] = { status: 'merge', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount' }
   }
 
   const rows: RowPlan[] = file.rows.map((row, i) => {

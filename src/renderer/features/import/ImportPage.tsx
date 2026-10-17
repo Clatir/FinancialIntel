@@ -14,6 +14,7 @@ import { Columns } from '../../components/layout'
 import { Badge, Panel, cx } from '../../components/ui'
 import { confirmBalance } from '../balances/actions'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
+import { DuplicatesPanel } from './DuplicatesPanel'
 import { KeywordRules } from './KeywordRules'
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { BULK_OPTIONS, OPTIONS, choiceFor, optionOf, type Option } from './options'
@@ -217,7 +218,10 @@ function MatchesPanel() {
         {merges.length > 0 && (
           <div className="flex flex-col gap-1">
             <span className="label">Wpisy ręczne z banku ({merges.length})</span>
-            <p className="text-[11px] text-dim">Ta sama kwota, data ±3 dni, podobny kontrahent: wpis zachowuje Twoją kategorię i godzinę, bierze dane z banku.</p>
+            <p className="text-[11px] text-dim">
+              Ta sama kwota, data ±3 dni, podobny kontrahent – albo możliwy duplikat: ta sama kwota pod inną nazwą, prawie ta sama przy podobnej nazwie. Wpis
+              zachowuje Twoją kategorię i godzinę, bierze dane z banku – nic nie wchodzi dwa razy. Odznacz, jeśli to inna operacja.
+            </p>
             {merges.map((p) => (
               <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-merge">
                 <input type="checkbox" checked={!choices.noMerge[p.key]} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} />
@@ -229,6 +233,11 @@ function MatchesPanel() {
                     {p.tx.time ? ` ${p.tx.time}` : ''} · {cats.label(p.tx.categoryId) || 'bez kategorii'}
                   </span>
                   <span className="text-dim"> ⟷ bank {fullDay(p.row.date)}: {p.row.counterparty || p.row.description}</span>
+                  {p.loose && (
+                    <span className="ml-1 text-accent" data-testid="import-merge-loose">
+                      możliwy duplikat – {p.loose === 'name' ? 'inna nazwa' : `wpis ${plnText(p.tx.amount)} zł`}
+                    </span>
+                  )}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -755,6 +764,7 @@ export function ImportPage() {
               </Panel>
             )}
             <DonePanel />
+            {!plan && <DuplicatesPanel />}
             {(done || !plan) && <BalanceCheck />}
           </div>
           <div className="flex min-w-0 flex-col">

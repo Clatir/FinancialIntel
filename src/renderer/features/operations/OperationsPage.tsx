@@ -2,11 +2,12 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, compareOperations, marksOf, matchesFilter, needsLog, sumOperations, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { useDuplicates } from '../import/DuplicatesPanel'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { discardDraft, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
-import { useUi } from '../../store/ui'
+import { navigate, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
 import { usePanels } from '../../store/panels'
 import { plnText, signedPln } from '../../components/fields'
@@ -191,6 +192,17 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
         {signedPln(t.amount)}
       </span>
     </div>
+  )
+}
+
+/** Duplicates waiting (D77): to the import screen, where they are merged. */
+function DuplicatesLink() {
+  const n = useDuplicates().groups.length
+  if (!n) return null
+  return (
+    <button type="button" className="text-accent hover:underline" onClick={() => navigate({ page: 'import' })} title="Ta sama operacja dwa razy – scal na ekranie Import" data-testid="operations-duplicates">
+      Możliwe duplikaty: {n}
+    </button>
   )
 }
 
@@ -385,6 +397,7 @@ export function OperationsPage() {
           <span className="text-muted" title="Wydatki minus zwroty towaru (bez przelewów własnych, XTB i zakupów do zwrotu)">
             Koszty <span className="num text-fg-strong">{plnText(sums.costs)} zł</span>
           </span>
+          <DuplicatesLink />
           <span className="flex-1" />
           {balances.map((a) => (
             <span key={a.id} className="text-muted" title={a.opening ? `Saldo otwarcia ${plnText(a.opening.amount)} zł na początek ${a.opening.date}` : 'Bez salda otwarcia – suma operacji (Ustawienia → Konta)'}>
