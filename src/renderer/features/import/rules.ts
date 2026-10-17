@@ -1,6 +1,7 @@
 import { withMerged, type BrandAliases, type BrandName } from '@shared/import/aliases'
-import { normalizeKeyword } from '@shared/import/brands'
+import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
 import { findRule, ruleTargetOf, upsertRule } from '@shared/import/classify'
+import { cleanBankName } from '@shared/import/names'
 import { newId } from '@shared/ids'
 import { TX_KIND_LABEL, type BrandAlias, type ImportRule, type Transaction, type TxKind } from '@shared/schema'
 import { updateSettings, useData } from '../../store/data'
@@ -9,7 +10,7 @@ import { toast } from '../../store/ui'
 const NO_ALIASES: BrandAliases = {}
 /** The names the user merged (1.2.2): an operation's brand is looked up and remembered through them. */
 const aliasesNow = (): BrandAliases => useData.getState().fi?.settings.import.aliases ?? NO_ALIASES
-const targetOf = (t: Transaction) => ruleTargetOf({ counterparty: t.counterparty, title: t.title, operation: t.bank?.operation }, aliasesNow())
+const targetOf = (t: Transaction) => ruleTargetOf({ counterparty: t.counterparty, title: t.title, operation: t.bank?.operation, bankName: t.bank?.bankName }, aliasesNow())
 
 /** The rule an operation from the bank would get now (its brand, its name, its words, its direction). */
 export function ruleFor(t: Transaction): ImportRule | null {
@@ -89,6 +90,7 @@ export function saveKeywordRule(input: {
 }): string | null {
   const match = normalizeKeyword(input.keyword)
   if (match.replace(/[^a-z?]/g, '').length < 3) return 'Słowo kluczowe musi mieć co najmniej 3 litery.'
+  if (match.split(' ').every(isGenericWord)) return `„${input.keyword.trim()}” jest za ogólne – bank pisze je przy wielu operacjach. Wybierz słowo, które mówi, co to było.`
   if (input.kind === 'expense' && !input.categoryId) return 'Wybierz kategorię.'
   const now = new Date().toISOString()
   updateSettings((f) => {
@@ -158,6 +160,18 @@ export const unmergeName = (key: string): void => {
     return next
   })
 }
+
+/** Every merged name back on its own; returns an undo. */
+export const unmergeAll = (): (() => void) | null => changeAliases(() => ({}))
+
+/**
+ * A merge made in 1.2.2 on names with the bank's additions („… DATA TRANSAKCJI: …”): no name is read so any more, so it
+ * merges nothing – shown as inactive, removed in one click (`removeInactive`).
+ */
+export const inactiveAlias = (a: BrandAlias): boolean => [a.label, a.toLabel].some((l) => !!l && cleanBankName(l, { town: true }) !== l.trim())
+
+export const removeInactive = (): (() => void) | null =>
+  changeAliases((a) => Object.fromEntries(Object.entries(a).filter(([, x]) => !inactiveAlias(x))))
 
 /** „To nie to samo”: the pair is not offered again. */
 export function dismissSimilar(key: string): void {

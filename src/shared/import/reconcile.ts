@@ -17,7 +17,7 @@ import { queryAmount } from '../operationsView'
 import type { ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
+import { classifyRow, counterpartyKey, isFeeOperation, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
 import { rowKeys, type MbankFile, type MbankRow } from './mbank'
 
 /** Days around the bank's date a manual entry may be (spec: ±3). */
@@ -257,7 +257,7 @@ export type OpKind = 'card' | 'transfer' | 'fee' | 'other'
 export function opKindOf(operation: string): OpKind {
   if (/^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA)/.test(operation)) return 'card'
   if (/^(PRZELEW|BLIK P2P|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|PRZEKAZ|OBCIĄŻENIE|OBCIAZENIE)/.test(operation)) return 'transfer'
-  if (/^(PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK)/.test(operation)) return 'fee'
+  if (isFeeOperation(operation)) return 'fee'
   return 'other'
 }
 
@@ -484,6 +484,7 @@ export function buildImport(
     key: p.key,
     description: p.row.description,
     counterparty: p.row.counterparty,
+    ...(p.row.bankName !== undefined ? { bankName: p.row.bankName } : {}),
     operation: p.row.operation,
     category: p.row.category,
     pending: p.row.pending,

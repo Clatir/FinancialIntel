@@ -8,7 +8,7 @@
  * brands of the user's rules from the earlier imports.
  */
 import { pairKey, resolveBrand, type BrandAliases } from './aliases'
-import { brandById, brandOf, isGenericWord, isKeywordWord, sameWord } from './brands'
+import { brandById, brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord, sameWord, words } from './brands'
 import { opKindOf, type ImportGroup } from './reconcile'
 import type { ImportRule } from '../schema/budget'
 
@@ -40,7 +40,10 @@ interface Entry extends SimilarSide {
   words: string[]
   /** The words of its first name, in order: a shop's name is first, a town last („APTEKA ŚWIEBODZICE”). */
   head: string[]
-  /** Its words that tell it apart (no generic ones, no keywords' words – „kawiarnia”). */
+  /**
+   * Its words that tell it apart: no generic ones, no keywords' words („kawiarnia”), no cities, none the names of many
+   * other brands have too (a town, a word the bank adds – 1.2.3).
+   */
   distinct: string[]
   /** A transfer's other side – often a person: a common word is not enough („ANNA NOWAK”, „JAN NOWAK”). */
   person: boolean
@@ -48,6 +51,8 @@ interface Entry extends SimilarSide {
 
 /** A name cut off by the bank (25 characters of a card terminal): the shorter key is at least this long. */
 const CUT_MIN = 12
+/** A word in the names of more brands of the file than this names none of them (a town, the bank's own words). */
+const MAX_BRANDS_OF_WORD = 4
 const RANK: Record<SimilarWhy, number> = { words: 0, cut: 1, typo: 2, first: 3 }
 
 /** Two folded words are one („?” – a letter the bank could not encode – is any letter). */
@@ -73,8 +78,8 @@ export function editDistance(a: string, b: string, max: number): number {
 
 type Compared = Pick<Entry, 'brand' | 'head' | 'distinct' | 'person'>
 
-/** A word that tells a name apart (not generic, not a keyword's word like „kawiarnia”). */
-const telling = (w: string) => !isGenericWord(w) && !isKeywordWord(w) && /[a-z]/.test(w)
+/** A word that may tell a name apart (not generic, not a keyword's word like „kawiarnia”, not a city). */
+const telling = (w: string) => !isGenericWord(w) && !isKindWord(w) && !isKeywordWord(w) && !isCityWord(w) && /[a-z]/.test(w)
 
 /** Why two names look like one counterparty, null = they do not. */
 export function similarity(x: Compared, y: Compared): SimilarWhy | null {
@@ -97,17 +102,29 @@ export function similarity(x: Compared, y: Compared): SimilarWhy | null {
   // A shop's branches start with its name („MOKKA DWORZEC”, „MOKKA ARKADIA”); people share first names.
   const fx = x.head[0]
   const fy = y.head[0]
-  if (!person && fx && fy && x.head.length > 1 && y.head.length > 1 && fx.length >= 5 && telling(fx) && sameText(fx, fy)) return 'first'
+  if (!person && fx && fy && x.head.length > 1 && y.head.length > 1 && fx.length >= 5 && x.distinct.includes(fx) && sameText(fx, fy)) return 'first'
   return null
 }
 
-const distinctOf = (ws: readonly string[]) => ws.filter(telling)
+/** The telling words of a name that the names of few brands of the file have (`MAX_BRANDS_OF_WORD`). */
+const distinctOf = (ws: readonly string[], brandsOf: ReadonlyMap<string, number>) => ws.filter((w) => telling(w) && (brandsOf.get(w) ?? 0) <= MAX_BRANDS_OF_WORD)
 
 /** The brands of the file outside the dictionary, with their words. */
-function fileEntries(groups: readonly ImportGroup[]): Map<string, Entry> {
+function fileEntries(groups: readonly ImportGroup[]): Map<string, Entry> & { brandsOf: Map<string, number> } {
   const out = new Map<string, Entry & { biggest: number }>()
+  // How many brands each word names – the chains' too („DINO OLEŚNICA”): a word of many is no one's name.
+  const named = new Map<string, Set<string>>()
+  for (const g of groups)
+    for (const p of g.rows)
+      for (const w of words(p.row.counterparty)) {
+        const at = named.get(w)
+        if (at) at.add(g.brand)
+        else named.set(w, new Set([g.brand]))
+      }
+  const brandsOf = new Map([...named].map(([w, b]) => [w, b.size]))
   for (const g of groups) {
-    if (g.chain || !g.brand) continue
+    // A chain, or the type of the operation for a name (no other side: „BLIK WYPŁATA ATM”, a bank's fee).
+    if (g.chain || !g.brand || g.rows.every((p) => !p.row.counterparty)) continue
     let e = out.get(g.brand)
     if (!e) {
       e = { brand: g.brand, label: g.label, names: [], count: 0, rules: [], words: [], head: g.rows[0]!.words, distinct: [], person: false, biggest: 0 }
@@ -124,15 +141,15 @@ function fileEntries(groups: readonly ImportGroup[]): Map<string, Entry> {
       if (opKindOf(p.row.operation) === 'transfer') e.person = true
     }
   }
-  for (const e of out.values()) e.distinct = distinctOf(e.words)
-  return out
+  for (const e of out.values()) e.distinct = distinctOf(e.words, brandsOf)
+  return Object.assign(out, { brandsOf })
 }
 
 /**
  * The brands of the user's exact rules not in the file (their label is the bank's name), outside the dictionary; a rule
  * that decides names of the file already (a key of a whole name, learned before 1.2.1) is no other name.
  */
-function ruleEntries(rules: readonly ImportRule[], aliases: BrandAliases, file: ReadonlyMap<string, Entry>, used: ReadonlySet<string>): Map<string, Entry> {
+function ruleEntries(rules: readonly ImportRule[], aliases: BrandAliases, file: ReadonlyMap<string, Entry>, used: ReadonlySet<string>, brandsOf: ReadonlyMap<string, number>): Map<string, Entry> {
   const out = new Map<string, Entry>()
   for (const r of rules) {
     if (r.mode !== 'exact' || brandById(r.match) || file.has(r.match) || used.has(r.match) || resolveBrand(aliases, r.match) !== r.match) continue
@@ -143,8 +160,10 @@ function ruleEntries(rules: readonly ImportRule[], aliases: BrandAliases, file: 
       continue
     }
     const m = brandOf(r.label || r.match, { dictionary: false })
+    // A rule learned on the name with the bank's additions (before 1.2.3) of a shop of the file is that shop.
+    if (file.has(m.key)) continue
     const words = m.words.length ? m.words : [r.match]
-    out.set(r.match, { brand: r.match, label: r.label || r.match, names: [r.label || r.match], count: 0, rules: [r], words, head: words, distinct: distinctOf(words), person: r.kind !== 'expense' })
+    out.set(r.match, { brand: r.match, label: r.label || r.match, names: [r.label || r.match], count: 0, rules: [r], words, head: words, distinct: distinctOf(words, brandsOf), person: r.kind !== 'expense' })
   }
   return out
 }
@@ -159,10 +178,11 @@ export function similarPairs(
 ): SimilarPair[] {
   const aliases = opts.aliases ?? {}
   const dismissed = opts.dismissed ?? {}
-  const file = [...fileEntries(groups).values()]
+  const entries = fileEntries(groups)
+  const file = [...entries.values()]
   // The keys the rules of the file's rows are looked up by (`findRule`).
-  const used = new Set(groups.flatMap((g) => g.rows.flatMap((p) => [p.target.raw, p.target.key])))
-  const known = [...ruleEntries(opts.rules ?? [], aliases, new Map(file.map((e) => [e.brand, e])), used).values()]
+  const used = new Set(groups.flatMap((g) => g.rows.flatMap((p) => [p.target.raw, p.target.key, ...(p.target.legacy ?? [])])))
+  const known = [...ruleEntries(opts.rules ?? [], aliases, entries, used, entries.brandsOf).values()]
   // The rules of a brand of the file (it keeps them when the other one is merged into it).
   for (const e of file) e.rules = (opts.rules ?? []).filter((r) => r.mode === 'exact' && r.match === e.brand)
   const out: SimilarPair[] = []
@@ -178,7 +198,7 @@ export function similarPairs(
   }
   all.forEach((e, i) => {
     for (const w of e.distinct) put(`w:${w.replace(/\?/g, '')}`, i)
-    if (e.head[0] && telling(e.head[0])) put(`w:${e.head[0].replace(/\?/g, '')}`, i)
+    if (e.head[0] && e.distinct.includes(e.head[0])) put(`w:${e.head[0].replace(/\?/g, '')}`, i)
     if (e.brand.length >= CUT_MIN) put(`c:${e.brand.slice(0, CUT_MIN)}`, i)
     if (e.brand.length >= 6) {
       put(`s:${e.brand.slice(0, 4)}`, i)

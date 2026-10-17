@@ -3,9 +3,10 @@ import { categoryIndex } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
 import { pairKey, resolveBrand, withMerged, type BrandAliases } from '@shared/import/aliases'
 import { brandOf } from '@shared/import/brands'
+import { cleanBankName } from '@shared/import/names'
 import { classifyRow, findRule, ruleTargetOf } from '@shared/import/classify'
 import { keywordProposals } from '@shared/import/learn'
-import type { MbankFile, MbankRow } from '@shared/import/mbank'
+import { parseMbank, type MbankFile, type MbankRow } from '@shared/import/mbank'
 import { importGroups, planImport, type Choice, type ImportChoices, type ImportGroup } from '@shared/import/reconcile'
 import { editDistance, mergeTarget, similarity, similarPairs } from '@shared/import/similar'
 import { defaultCategoryId, importSettingsSchema, MBANK_ACCOUNT_ID, type ImportRule } from '@shared/schema'
@@ -227,5 +228,161 @@ describe('propozycja reguły z liczbą operacji (D78, pomysł 6)', () => {
       ['ZEGARMISTRZ POD ARKADAMI', 'rule', OTHER],
       ['ZEGARMISTRZA KOWALSKI', 'rule', OTHER]
     ])
+  })
+})
+
+describe('dopiski banku w nazwach (1.2.3 – zgłoszenie użytkownika)', () => {
+  const history = (names: string[]) =>
+    parseMbank(
+      [
+        '#Klient;',
+        'JAN KAPITAN;',
+        '#Data operacji;#Data księgowania;#Opis operacji;#Tytuł;#Nadawca/Odbiorca;#Numer konta;#Kwota;#Saldo po operacji;',
+        ...names.map((n, i) => `2026-10-${String(1 + (i % 28)).padStart(2, '0')};2026-10-${String(1 + (i % 28)).padStart(2, '0')};ZAKUP PRZY UŻYCIU KARTY;"${n}";"";'';-${10 + i},00;1 000,00;`)
+      ].join('\r\n')
+    )
+
+  it('nazwa bez daty transakcji, godziny, numeru karty i miasta po „/” – nigdy pusta', () => {
+    expect(cleanBankName('ŻABKA Z1234 K.1 /TESTOWO DATA TRANSAKCJI: 2026-10-01', { town: true })).toBe('ŻABKA Z1234 K.1')
+    expect(cleanBankName('KAWIARNIA MOKKA /OLEŚNICA DATA TRANSAKCJI:2026-10-01', { town: true })).toBe('KAWIARNIA MOKKA')
+    // The town only of a shop, in capitals: never the second person of a joint account, never a name typed by hand.
+    expect(cleanBankName('JAN KOWALSKI / ANNA KOWALSKA')).toBe('JAN KOWALSKI / ANNA KOWALSKA')
+    expect(cleanBankName('Czynsz / mieszkanie', { town: true })).toBe('Czynsz / mieszkanie')
+    expect(brandOf('JAN KOWALSKI / ANNA KOWALSKA', { transfer: true }).key).toBe('jankowalskiannakowalska')
+    expect(cleanBankName('SKLEP ABC 01.10.2026 12:45 4567******1234')).toBe('SKLEP ABC')
+    expect(cleanBankName('ALLEGRO REF: 12AB34')).toBe('ALLEGRO')
+    expect(cleanBankName('Chess.com 800-318-2827')).toBe('Chess.com 800-318-2827')
+    expect(cleanBankName('DATA TRANSAKCJI: 2026-10-01')).toBe('DATA TRANSAKCJI: 2026-10-01')
+    // As the bank writes it: the shop in 19 characters, right after it „/” and the town in 10, in any case – or a phone,
+    // a website, nothing.
+    expect(cleanBankName('Kawiarnia Pod Lipa/Testowo DATA TRANSAKCJI: 2026-10-01', { town: true })).toBe('Kawiarnia Pod Lipa')
+    expect(cleanBankName('Apteka Testowa /Wolka Test DATA TRANSAKCJI: 2026-10-01', { town: true })).toBe('Apteka Testowa')
+    expect(cleanBankName('Sklep Testowy 800-1/800-123456 DATA TRANSAKCJI: 2026-10-01', { town: true })).toBe('Sklep Testowy 800-1')
+    expect(cleanBankName('SKLEP TESTOWY ABC/ DATA TRANSAKCJI: 2026-10-01', { town: true })).toBe('SKLEP TESTOWY ABC')
+    expect(cleanBankName('Kawiarnia Pod Lipa/Testowo')).toBe('Kawiarnia Pod Lipa/Testowo')
+    // Only of a name the bank dated: never „Czynsz/mieszkanie” or „AC/DC” typed by hand.
+    expect(cleanBankName('Czynsz/mieszkanie', { town: true })).toBe('Czynsz/mieszkanie')
+    expect(cleanBankName('AC/DC', { town: true })).toBe('AC/DC')
+    expect(brandOf('Czynsz/mieszkanie').key).not.toBe(brandOf('Czynsz/garaz').key)
+    // Keys: the same shop on any day; the old key (before 1.2.3) still decides by its rule.
+    expect(brandOf('KAWIARNIA MOKKA /OLESNICA DATA TRANSAKCJI: 2026-10-01').key).toBe('kawiarniamokka')
+    expect(brandOf('KAWIARNIA MOKKA /OLESNICA DATA TRANSAKCJI: 2026-10-01', { raw: true }).key).toBe('kawiarniamokkaolesnicadatatransakcji')
+  })
+
+  it('historia rachunku: jeden sklep to jedna grupa, mimo dat w nazwach; reguła sprzed 1.2.3 dalej działa', () => {
+    const file = history([
+      'KAWIARNIA MOKKA     /OLESNICA      DATA TRANSAKCJI: 2026-10-01',
+      'KAWIARNIA MOKKA     /OLESNICA      DATA TRANSAKCJI: 2026-10-04',
+      'KAWIARNIA MOKKA     /OLESNICA      DATA TRANSAKCJI: 2026-10-07',
+      'ZEGARMISTRZ ROMAN   /OLESNICA      DATA TRANSAKCJI: 2026-10-02'
+    ])
+    const groups = importGroups(planImport(file, MBANK_ACCOUNT_ID, [], { rules: [], ownNames: [], categories }))
+    expect(groups.map((g) => [g.label, g.rows.length, g.names])).toEqual([
+      ['KAWIARNIA MOKKA', 3, ['KAWIARNIA MOKKA']],
+      ['ZEGARMISTRZ ROMAN', 1, ['ZEGARMISTRZ ROMAN']]
+    ])
+    const old = rule({ match: 'zegarmistrzromanolesnicadatatransakcji', categoryId: GIFTS })
+    expect(classifyRow(file.rows[3]!, { rules: [old], ownNames: [], categories }).decision).toMatchObject({ source: 'rule', categoryId: GIFTS })
+    // A payment the type of operation named before 1.2.3 (no name read then): the shop from the title now, the old
+    // rule of that type still decides it.
+    const web = parseMbank(
+      [
+        '#Data operacji;#Data księgowania;#Opis operacji;#Tytuł;#Nadawca/Odbiorca;#Numer konta;#Kwota;#Saldo po operacji;',
+        `2026-10-02;2026-10-02;PŁATNOŚĆ WEB - KOD MOBILNY;"SKLEP INTERNETOWY ABC";"";'';-15,00;1 000,00;`
+      ].join('\r\n')
+    ).rows[0]!
+    expect(web).toMatchObject({ counterparty: 'SKLEP INTERNETOWY ABC', title: '', bankName: '' })
+    const byType = rule({ match: brandOf('PŁATNOŚĆ WEB - KOD MOBILNY', { raw: true }).key, categoryId: GIFTS })
+    expect(classifyRow(web, { rules: [byType], ownNames: [], categories }).decision).toMatchObject({ source: 'rule', categoryId: GIFTS })
+  })
+
+  it('historia rachunku jak w banku: sklep w 19 znakach, „/Miasto”; zwrot towaru, prowizja, bankomat, pośrednik płatności', () => {
+    const card = (name: string, town: string, day: number, op = 'ZAKUP PRZY UŻYCIU KARTY', amount = `-${day},00`) =>
+      `${day}.10.2026;${day}.10.2026;${op};"${name.padEnd(19)}/${town.padEnd(10)}${' '.repeat(40)}DATA TRANSAKCJI: 2026-10-${day}";"  ";'';${amount};1 000,00;`
+    const bank = (op: string, title: string, day: number, amount: string) => `${day}.10.2026;${day}.10.2026;${op};"${title}";"  ";'';${amount};1 000,00;`
+    const file = parseMbank(
+      [
+        '#Data księgowania;#Data operacji;#Opis operacji;#Tytuł;#Nadawca/Odbiorca;#Numer konta;#Kwota;#Saldo po operacji;',
+        card('APTEKA POD LIPA', 'Wolka Test', 10),
+        card('APTEKA POD LIPA', 'WOLKA TEST', 11),
+        card('APTEKA TESTOWA SP. Z', 'Testowo', 12),
+        card('APTEKA TESTOWA SP. Z O.O.', 'Testowo', 13),
+        card('SumUp *KAWIARNIA AB', 'Testowo', 14),
+        card('SUMUP *PRACOWNIA CD', 'Testowo', 15),
+        card('KAWIARNIA AB', 'Testowo', 16),
+        card('KEBAB TESTOWY', 'Testowo', 17),
+        card('KEBAB TESTOWY', 'Testowo', 18, 'POS ZWROT TOWARU', '17,00'),
+        card('KEBAB TESTOWY', 'Testowo', 19, 'PROWIZJA ZA ZAKUP', '-0,50'),
+        bank('BLIK WYPŁATA ATM KRAJOWY', 'WYPLATA BLIK', 20, '-100,00'),
+        bank('BLIK PROW. WYPŁATA ATM KRAJOWY', '', 21, '-2,00')
+      ].join('\r\n')
+    )
+    expect(file.rows.map((r) => r.counterparty)).toEqual([
+      'APTEKA POD LIPA',
+      'APTEKA POD LIPA',
+      'APTEKA TESTOWA SP. Z',
+      'APTEKA TESTOWA SP. Z O.O.',
+      'SumUp *KAWIARNIA AB',
+      'SUMUP *PRACOWNIA CD',
+      'KAWIARNIA AB',
+      'KEBAB TESTOWY',
+      'KEBAB TESTOWY',
+      '',
+      '',
+      ''
+    ])
+    const groups = importGroups(planImport(file, MBANK_ACCOUNT_ID, [], { rules: [], ownNames: [], categories }))
+    const out = (label: string) => groups.find((g) => g.label === label && g.direction === 'out')!
+    const rowsOf = (start: string) => groups.filter((g) => g.label.toUpperCase().startsWith(start)).map((g) => g.rows.length)
+    expect(rowsOf('APTEKA POD LIPA')).toEqual([2])
+    // A legal form the bank cut at 19 characters: another name, offered as similar.
+    expect(rowsOf('APTEKA TESTOWA')).toEqual([1, 1])
+    // The processor before the shop names no one: the shop's own name is its brand.
+    expect(groups.filter((g) => g.brand === brandOf('KAWIARNIA AB').key).map((g) => g.rows.length)).toEqual([2])
+    // A cash machine and its fee are types of operation, no names: never a pair.
+    expect(similarPairs(groups).map((p) => [p.a.label, p.b.label].sort())).toEqual([['APTEKA TESTOWA SP. Z', 'APTEKA TESTOWA SP. Z O.O.']])
+    // The return of the shop's purchase: the purchases' rule says the category.
+    const kebab = rule({ match: brandOf('KEBAB TESTOWY').key, categoryId: COFFEE })
+    expect(classifyRow(file.rows[8]!, { rules: [kebab], ownNames: [], categories }).decision).toMatchObject({ kind: 'expense', categoryId: COFFEE, source: 'rule' })
+    // The fee's title is the purchase's shop: no keyword of it decides the fee, none is learned from it.
+    const word = rule({ match: 'kebab', mode: 'keyword', categoryId: COFFEE })
+    expect(findRule([word], ruleTargetOf(file.rows[9]!).target, 'out')).toBeNull()
+    const choice = expense(OTHER)
+    const proposalsOf = (label: string) => {
+      const g = out(label)
+      return keywordProposals(groups, g, choice, { rules: [], choices: { ...empty(), groups: { [g.group]: choice } } }).map((p) => p.text)
+    }
+    expect(proposalsOf('PROWIZJA ZA ZAKUP')).toEqual([])
+    expect(proposalsOf('KEBAB TESTOWY')).toEqual([])
+    expect(proposalsOf('SUMUP *PRACOWNIA CD')).toEqual([])
+    expect(proposalsOf('APTEKA POD LIPA')).toEqual(['apteka'])
+  })
+
+  it('wspólne miasto, „bar” albo słowa banku nie łączą niezwiązanych nazw; trafna para zostaje', () => {
+    const shops = ['BAR', 'KEBAB', 'SKLEP', 'PIZZERIA', 'APTEKA', 'BAR MLECZNY', 'KWIACIARNIA', 'PIEKARNIA']
+    const file = history([
+      ...shops.map((s) => `${s}   /OLESNICA   DATA TRANSAKCJI: 2026-10-05`),
+      'KAWIARNIA MOKKA   /TESTOWO   DATA TRANSAKCJI: 2026-10-06',
+      'MOKKA KAWIARNIA   /TESTOWO   DATA TRANSAKCJI: 2026-10-07'
+    ])
+    const groups = importGroups(planImport(file, MBANK_ACCOUNT_ID, [], { rules: [], ownNames: [], categories }))
+    expect(similarPairs(groups).map((p) => [p.a.label, p.b.label])).toEqual([['KAWIARNIA MOKKA', 'MOKKA KAWIARNIA']])
+    // Names as saved before 1.2.3 (with the additions) and a town in many names of a list of operations: no pairs.
+    const old = groupsOf([...shops.map((s) => row(`${s} /OLESNICA DATA TRANSAKCJI: 2026-10-05`)), row('ZEGARMISTRZ /OLESNICA DATA TRANSAKCJI: 2026-10-05')])
+    expect(similarPairs(old)).toEqual([])
+    const town = groupsOf(['NOWINA OLESNICA', 'ROMA OLESNICA', 'SKLEP OLESNICA', 'GRZYBEK OLESNICA', 'MOKKA OLESNICA', 'LIPA OLESNICA'].map((n) => row(n)))
+    expect(similarPairs(town)).toEqual([])
+  })
+
+  it('propozycja słowa: bez słów banku i słów prawie wszystkich nazw pliku', () => {
+    const dated = groupsOf([
+      row('ZEGARMISTRZ ROMAN /OLESNICA DATA TRANSAKCJI: 2026-10-05'),
+      row('ZEGARMISTRZ JAN /OLESNICA DATA TRANSAKCJI: 2026-10-06'),
+      ...['NOWINA', 'ROMA', 'LIPA', 'GRZYBEK', 'MOKKA'].map((n) => row(`${n} TRANSFERY /OLESNICA DATA TRANSAKCJI: 2026-10-07`))
+    ])
+    const g = byLabel(dated, 'ZEGARMISTRZ ROMAN /OLESNICA DATA TRANSAKCJI: 2026-10-05')
+    const choice = expense(OTHER)
+    const props = keywordProposals(dated, g, choice, { rules: [], choices: { ...empty(), groups: { [g.group]: choice } } })
+    expect(props.map((p) => p.text)).toEqual(['zegarmistrz'])
   })
 })

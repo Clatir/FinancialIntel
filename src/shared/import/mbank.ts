@@ -6,6 +6,7 @@
  * number, „transakcja nierozliczona”); runs of two or more spaces separate them. The bank's category is kept as a
  * weak hint only (D68). No hours: an import never says when in the day (spec).
  */
+import { cleanBankName } from './names'
 import { parseCsv } from './text'
 
 export interface MbankRow {
@@ -17,8 +18,13 @@ export interface MbankRow {
   description: string
   /** Type of the operation („ZAKUP PRZY UŻYCIU KARTY W KRAJU”, „PRZELEW WEWNĘTRZNY PRZYCHODZĄCY”…); '' unknown. */
   operation: string
-  /** Shop or person as the bank writes it. */
+  /** Shop or person as the bank writes it, without the bank's additions (a date of the transaction, the town after „/”). */
   counterparty: string
+  /**
+   * The name as versions before 1.2.3 read it, when it was another (the bank's additions cut from `counterparty`; ''
+   * = none – the type of operation named it): the rules they learned are looked up by it too.
+   */
+  bankName?: string
   /** Title of a transfer. */
   title: string
   /** The other side's account number (often masked); '' none. */
@@ -87,7 +93,7 @@ const isAddress = (part: string) => /^(UL\.|AL\.|OS\.|PL\.)/i.test(part) || /^\d
 const isAccountNo = (part: string) => /^[\d\s]{10,}$/.test(part) || /^\[REDACTED\]/i.test(part) || /^[\dx*\s]{10,}$/i.test(part)
 
 /** „ANNA X UL. TESTOWA 1 00*950 TESTOWO” → „ANNA X”; „MAREK X .” → „MAREK X”. */
-function cleanName(name: string): string {
+function withoutAddress(name: string): string {
   return name
     .replace(/\s+(UL\.|AL\.|OS\.|PL\.)\s?.*$/i, '')
     .replace(/\s+\d{2}[-*]\d{3}\b.*$/, '')
@@ -95,11 +101,18 @@ function cleanName(name: string): string {
     .trim()
 }
 
+
+/** A card payment or its return („POS ZWROT TOWARU”): the account history writes the shop in the title. */
+const PURCHASE = /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA|ZWROT|POS ZWROT)/
+
 /** Transfers and payments between people: the head holds „name, title” (and maybe the name again, an address). */
 const TRANSFER_LIKE = /^(PRZELEW|BLIK P2P|ZLECENIE|POLECENIE|WPŁATA|WPLATA|PRZEKAZ|UZNANIE|OBCIĄŻENIE|OBCIAZENIE)/
 
-/** The fields of an mBank description (whitespace runs separate them). */
-export function splitDescription(raw: string): { description: string; operation: string; counterparty: string; title: string; accountNo: string; pending: boolean } {
+/**
+ * The fields of an mBank description (whitespace runs separate them); `bankName` = the other side's name as written,
+ * when the bank's additions were cut from `counterparty`.
+ */
+export function splitDescription(raw: string): { description: string; operation: string; counterparty: string; bankName?: string; title: string; accountNo: string; pending: boolean } {
   const pending = PENDING.test(raw)
   const text = raw.replace(PENDING, '  ')
   const parts = text
@@ -107,26 +120,31 @@ export function splitDescription(raw: string): { description: string; operation:
     .map((p) => p.trim())
     .filter((p) => p && p !== '.')
   const description = parts.join(' ')
+  const named = (name: string, shop = false) => {
+    const written = withoutAddress(name)
+    const counterparty = cleanBankName(written, { town: shop })
+    return written === counterparty ? { counterparty } : { counterparty, bankName: written }
+  }
   let at = -1
   for (let i = parts.length - 1; i >= 0; i--)
     if (isOperation(parts[i]!)) {
       at = i
       break
     }
-  if (at < 0) return { description, operation: '', counterparty: cleanName(parts[0] ?? ''), title: parts.slice(1).join(' '), accountNo: '', pending }
+  if (at < 0) return { description, operation: '', ...named(parts[0] ?? ''), title: parts.slice(1).join(' '), accountNo: '', pending }
   const operation = parts[at]!
   const head = parts.slice(0, at)
   const accountNo = parts.slice(at + 1).find(isAccountNo) ?? ''
   if (!head.length) return { description, operation, counterparty: '', title: '', accountNo, pending }
-  if (!TRANSFER_LIKE.test(operation)) return { description, operation, counterparty: cleanName(head[0]!), title: '', accountNo, pending }
+  if (!TRANSFER_LIKE.test(operation)) return { description, operation, ...named(head[0]!, !/^BLIK P2P/.test(operation)), title: '', accountNo, pending }
   const first = head[0]!
   const comma = first.indexOf(', ')
   const second = head[1]
   // „Doładowanie telefonu | BLUE MEDIA SPÓŁKA AKCYJNA” (mTransfer), „XTB … , Withdrawal | XTB SPÓŁKA AKCYJNA”: the name next.
   if (second && !isAddress(second) && !isAccountNo(second))
-    return { description, operation, counterparty: cleanName(second), title: comma >= 0 ? first.slice(comma + 2).trim() : first, accountNo, pending }
-  if (comma >= 0) return { description, operation, counterparty: cleanName(first.slice(0, comma)), title: first.slice(comma + 2).trim(), accountNo, pending }
-  return { description, operation, counterparty: cleanName(first), title: '', accountNo, pending }
+    return { description, operation, ...named(second), title: comma >= 0 ? first.slice(comma + 2).trim() : first, accountNo, pending }
+  if (comma >= 0) return { description, operation, ...named(first.slice(0, comma)), title: first.slice(comma + 2).trim(), accountNo, pending }
+  return { description, operation, ...named(first), title: '', accountNo, pending }
 }
 
 const headerName = (cell: string) => cell.trim().replace(/^#/, '').trim().toLowerCase()
@@ -188,6 +206,7 @@ export function parseMbank(text: string): MbankFile {
       description: parts.description,
       operation: parts.operation,
       counterparty: parts.counterparty,
+      ...(parts.bankName ? { bankName: parts.bankName } : {}),
       title: parts.title,
       accountNo: parts.accountNo,
       category: c.category >= 0 ? (r[c.category] ?? '').trim() : '',
@@ -196,14 +215,21 @@ export function parseMbank(text: string): MbankFile {
       balanceAfter: c.balance >= 0 ? (parseBankAmount(r[c.balance] ?? '')?.grosze ?? null) : null
     }
     if (historia) {
-      // The account history: the type of operation in its own column, the title and the other side next to it.
+      // The account history: the type of operation in its own column, the title and the other side next to it; a card
+      // payment has the shop in the title („ŻABKA Z1234 /WARSZAWA DATA TRANSAKCJI: 2026-10-01”) – the name, no title.
       const title = c.title >= 0 ? (r[c.title] ?? '').replace(/\s+/g, ' ').trim() : ''
       const who = c.counterparty >= 0 ? (r[c.counterparty] ?? '').replace(/\s+/g, ' ').trim() : ''
       row.operation = (r[c.description] ?? '').replace(/\s+/g, ' ').trim().toUpperCase()
-      row.title = title
-      row.counterparty = cleanName(who) || (row.operation.startsWith('ZAKUP') ? title : '')
+      const shop = !who && PURCHASE.test(row.operation)
+      row.title = shop ? '' : title
+      row.counterparty = shop ? cleanBankName(withoutAddress(title), { town: true }) : cleanBankName(withoutAddress(who))
       row.accountNo = c.account >= 0 ? (r[c.account] ?? '').replace(/['\s]/g, '') : ''
+      // The description as the bank wrote it: the row's key across imports (`rowIdentity`) never changes.
       row.description = [row.operation, who, title].filter(Boolean).join(' ')
+      // The name as versions before 1.2.3 read it ('' = none, the type of operation named it): their rules' keys.
+      const before = withoutAddress(who) || (row.operation.startsWith('ZAKUP') ? title : '')
+      if (before !== row.counterparty) row.bankName = before
+      else delete row.bankName
     }
     out.push(row)
   }

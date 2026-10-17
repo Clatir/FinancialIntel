@@ -1,12 +1,13 @@
 # Financial Intel – postęp
 
-**Stan:** 1.2.2 – podobne nazwy i propozycja reguły (D78, pomysły 5 i 6 z propozycji importu) zrobione na gałęzi
-`claude/import-1.2.2`, PR do `main` – scalenie przy zielonym CI (D71). **1.2.1 wydane** (PR #7), **1.2.0 wydane**
-(PR #6), **1.1.0 wydane** (PR #5), **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
+**Stan:** 1.2.3 – poprawka podobnych nazw i propozycji słowa po zgłoszeniu użytkownika (D79: daty transakcji w nazwach,
+wspólne słowa łączyły niezwiązane) zrobiona na gałęzi `claude/import-1.2.3`, PR do `main` – scalenie przy zielonym CI
+(D71). **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.2.1 i 1.2.2 na prawdziwej historii z mBanku; potem kalibracja progów gry po
-pierwszym miesiącu (na prawdziwych danych).
+**Następny krok:** pauza – odbiór 1.2.3 w aplikacji (sprawdzone już na prawdziwej historii rachunku użytkownika –
+T104); potem kalibracja progów gry po pierwszym miesiącu (na prawdziwych danych).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -28,9 +29,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **C** | E5 ICTTJ i dokowanie + E6 Radar i należności | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.1.0 | ✅ odpowiedzi (D71, D72) | ✅ wydane (PR #5) |
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
 | 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze + duplikaty jak w ICTTJ | Opus 5.5 | **max** | zmierzone ok. 2 h (plan był 1–1,5 h + 0,5 h + 0,75 h) | 1.2.1 | ✅ wybór pomysłów (D75–D77) | ✅ wydane (PR #7) |
-| 1.2.2 | Podobne nazwy (5) + propozycja reguły z liczbą operacji (6) | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.2 | ✅ wybór „opcja 2” (D78) | ✅ zrobione, PR do `main` |
+| 1.2.2 | Podobne nazwy (5) + propozycja reguły z liczbą operacji (6) | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.2 | ✅ wybór „opcja 2” (D78) | ✅ wydane (PR #8) |
+| 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79) | Opus 5.5 | **max** | zmierzone ok. 1 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ zrobione, PR do `main` |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1 + 1.2.2** | | | **zmierzone ok. 12,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.2.3** | | | **zmierzone ok. 13,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -62,6 +64,46 @@ całość ok. 4–6 miesięcy (szacunek zgrubny).
      (jak w Ustawieniach), plik liczony od nowa od razu.
 3. **Co przygotować** – nic.
 4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1–1,5 h.
+
+## 1.2.3 – poprawka podobnych nazw (17.10.2026)
+
+Zgłoszenie użytkownika (D79): rozpoznawanie podobnych transakcji nie działa – wiele nazw ma datę transakcji, a to samo
+słowo (nazwa miasta, „bar”) łączy niezwiązane. Przyczyna: historia rachunku mBanku pisze płatność kartą jako „SKLEP /MIASTO
+DATA TRANSAKCJI: RRRR-MM-DD” (sklep w tytule); dopiski zostawały w nazwie – jeden sklep rozpadał się na nazwy, a
+sklepy, którym po odjęciu słów ogólnych zostawały tylko dopiski, wyglądały na „podobne”; propozycje słowa podsuwały
+„data” / „transakcji”. Na pierwszym pliku użytkownika (lista operacji) tych dopisków nie było, dlatego pomiar w 1.2.2
+tego nie pokazał.
+
+Zrobione:
+- Nazwa bez dopisków banku (data i godzina, numer karty, „Ref”, miasto po „/” – tylko w nazwie sklepu, wielkimi
+  literami); opis z banku i klucz wiersza bez zmian; reguły sprzed 1.2.3 dalej działają (stare klucze, także w
+  Operacjach) (T100).
+- Podobne nazwy: słowo z nazw ponad 4 marek, rodzaje miejsc i miasta nic nie łączą; tylko pojedyncze „Połącz”;
+  nieaktywne połączenia z 1.2.2 oznaczone i „Usuń nieaktywne”, „Rozłącz wszystkie” (T101).
+- Propozycja słowa: bez słów banku i słów prawie wszystkich nazw, tylko polskie końcówki; zbyt ogólne słowo kluczowe
+  odrzucane (T102).
+- Pomiar: syntetyczna historia rachunku – sklep z trzech dni jedna grupa, jedna trafna para, sklepy jednego miasta bez
+  par; plik użytkownika (lista operacji) – bez regresji (para z nazwiskiem zamaskowanym „xxx” znika – „xxx” jest w wielu
+  nazwach i nie wskazuje osoby).
+- Przegląd `/code-review` high: 10 znalezisk – poprawione: miasto po „/” tylko w nazwie sklepu (wspólne konto w
+  przelewie), rodzaje miejsc nie są „za ogólne” dla słów kluczowych, dokładne stare klucze (płatność nazwana rodzajem
+  operacji, tytuł bez obcinania adresu), stare klucze w Operacjach (`BankRow.bankName`), nieaktywne połączenia zamiast
+  „rozłącz wszystko”, przymiotnikowe końcówki, mniej pracy dla sieci, reguła na nazwie z dopiskami nie jest „inną
+  nazwą”; świadomie bez zmian: próg 4 marek dla słowa (sieć z 5+ oddziałami – propozycja słowa albo „Połącz nazwy”).
+- Sprawdzenie na prawdziwej historii rachunku użytkownika (T104, przed scaleniem): miasto było pisane bez spacji przed
+  „/” i małymi literami („…/Miasto”) – poprawione (miasto tylko w nazwie z datą transakcji, nazwy wpisane ręcznie
+  całe); bankomat i prowizja nie są parą, prowizja nie bierze decyzji sklepu z tytułu, „POS ZWROT TOWARU” = zwrot
+  towaru, propozycje bez pośredników płatności. Wynik: 4 trafne pary, propozycje przy 43 grupach bez miast i słów banku.
+  Drugi przegląd `/code-review` high (9 znalezisk): poprawione – miasto tylko w nazwie z datą (nie „Czynsz/mieszkanie”,
+  „AC/DC”, długie miasta znów ucinane), jeden warunek prowizji (`isFeeOperation`), pośrednik zdejmowany zamiast listy
+  słów ogólnych, cięta forma prawna wycofana (zmieniała klucze reguł); świadomie bez zmian: „POS ZWROT” w temacie „inne”
+  (wpływ – nie trafia do decyzji zbiorczej zakupów).
+- Testy: 369 unit + fs, E2E 17 (`tests/e2e/learning.spec.ts` na `tests/fixtures/mbank/historia_rachunku.csv`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.2.3, Windows):
+1. Ustawienia → Import z banku → „Połączone nazwy”: „Usuń nieaktywne” (połączenia z 1.2.2) i ewentualnie słowa kluczowe
+   dodane z błędnych propozycji („data”, „transakcji”).
+2. Import historii rachunku: jeden sklep = jedna grupa, „Podobne nazwy” tylko trafne pary.
 
 ## 1.2.2 – podobne nazwy i propozycja reguły (17.10.2026)
 
@@ -683,4 +725,8 @@ Do sprawdzenia przez użytkownika (Windows 11):
   i poprawki; PR #7 do `main`; pauza.
 - 17.10.2026 – PR #7 scalony, wydanie 1.2.1 opublikowane; użytkownik wybrał „opcję 2” – pomysły 5 i 6 (D78): podobne
   nazwy z połączeniem zapamiętanym w folderze, „Połącz nazwy”, propozycja reguły z liczbą operacji; dwa przeglądy i
-  poprawki; PR do `main`; pauza.
+  poprawki; PR #8 scalony, wydanie 1.2.2 opublikowane; pauza.
+- 17.10.2026 – zgłoszenie użytkownika (D79): podobne nazwy nie działają na historii rachunku (daty w nazwach, wspólne
+  słowa); poprawka 1.2.3 – nazwy bez dopisków banku, ostrożniejsze podobieństwo i propozycje; przegląd i poprawki; PR
+  #9 do `main`; użytkownik przysłał historię rachunku – sprawdzenie na niej (T104), poprawki formatu banku, prowizji,
+  zwrotu towaru i pośredników, drugi przegląd.
