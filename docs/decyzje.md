@@ -377,3 +377,26 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   „Dokowanie”; menu boczne: „Otwórz ICTTJ”; Ustawienia → ICTTJ.
 - **T69** Zmienne testowe: `FI_ICTJ_DIR` (folder ICTTJ bez ustawień), `FI_ICTJ_APPDATA` (gdzie szukać config.json ICTTJ),
   `FI_ICTJ_LAUNCH=dry` (bez uruchamiania programu).
+
+### E6 – Radar i należności (17.10.2026)
+- **T70** Pożyczki (`shared/calc/loans.ts`): stan z harmonogramu i operacji. Udzielona – należność = kwota pożyczki −
+  spłaty (operacje „Pożyczka” z jej id); spłata wraca do osłon do wysokości długu (także pożyczka sprzed startu, bez
+  operacji wypływu), nadwyżka (odsetki) dokuje jako przychód. Wzięta – do spłaty = suma harmonogramu (z odsetkami), raty
+  = wydatki jej kontenera w ładowni (albo operacje „Pożyczka” na minus). Wpłaty pokrywają raty po kolei; rata
+  niezapłacona 3 dni po terminie jest zaległa (wszystkie zaległe razem; każda nowa zaległa = nowe przypomnienie).
+  Zamknięta – bez należności i rat; usunięcie tylko bez operacji (także rat z importu), inaczej „zamknij”. Powiązanie
+  z pożyczką ma tylko operacja rodzaju „Pożyczka” (zmiana rodzaju je zdejmuje).
+- **T71** Silnik: stan okrętu ma `loans` (stany pożyczek), `debt` (wzięte do spłaty) i należności z rekordów pożyczek
+  (zamknięte bez); zasięg = max(0, osłony + kadłub − dług) / koszty – tak samo w symulacji Ładowni; `receivables.houseSince`
+  = najstarszy niespłacony zakup „do zwrotu” (spłaty od najstarszych, jak suma należności domu).
+- **T72** Nowa pożyczka (Radar): harmonogram miesięczny (grosze z resztą w ostatniej racie, dzień miesiąca, w krótszym
+  miesiącu jego ostatni dzień), opcjonalnie operacja na wybranym koncie (udzielona – wypływ z osłon, wzięta – wpływ do
+  osłon); wzięta tworzy kontener „Rata: …” (rodzaj rata, kwota pierwszej raty, od pierwszej do ostatniej raty, odbiorca =
+  pożyczkodawca – import łączy przelewy); zamknięcie archiwizuje kontener. „Spłata otrzymana” / „zapłać ratę” – kwota
+  następnej raty, data dziś.
+- **T73** Radar 90 dni (`shared/calc/radar.ts`): pensje 1. dnia (z osłon do energii), każda płatność asteroidy w oknie
+  w czasie życia kontenera (stan zbiornika przy pierwszej), raty własne i spodziewane spłaty (także zaległe – oznaczone),
+  PIT-38: 30 kwietnia, na radarze od 1 lutego, bez kwoty (D58).
+- **T74** Odprawa i powiadomienia: zaległa rata (`notify.loans`), PIT-38 14 i 3 dni przed terminem (`notify.pit38`),
+  należność domu po 30 dniach od najstarszego zakupu (odprawa). Kolory: zaległość w akcencie – czerwień zostaje dla kwot
+  i alarmów.

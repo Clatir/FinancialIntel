@@ -47,7 +47,9 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     splits: kind === 'expense' ? t.splits : [],
     repaid: kind === 'income' ? t.repaid : 0,
     counterAccountId: kind === 'transfer' ? t.counterAccountId : null,
-    impulse: kind === 'expense' ? t.impulse : null
+    impulse: kind === 'expense' ? t.impulse : null,
+    // The loan's link only on a loan's operation (an installment of a taken loan is its container's payment).
+    loanId: kind === 'loan' ? t.loanId : null
   }
 }
 
@@ -69,6 +71,7 @@ export function OperationEditor({ id }: { id: string }) {
   const accounts = useAccounts()
   const cats = useCategories()
   const rules = useData((s) => s.fi?.settings.import.rules)
+  const loans = useRecordList('loans')
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
@@ -295,8 +298,20 @@ export function OperationEditor({ id }: { id: string }) {
         <p className="text-[11.5px] text-muted">
           {outgoing
             ? 'Dopłata do konta tradingowego XTB – tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (rozkaz „firewall”).'
-            : 'Wypłata z konta tradingowego dokuje jak każda dostawa; od etapu E5 FI dopasuje ją do wpisu w ICTTJ (pula Cele, Podatek…).'}
+            : 'Wypłata z konta tradingowego dokuje jak każda dostawa; FI łączy ją z wpisem w ICTTJ (pula Cele, Podatek…) – Mostek → Dokowanie.'}
         </p>
+      )}
+      {t.kind === 'loan' && (
+        <Field label="Pożyczka">
+          <select className="input w-[240px]" value={t.loanId ?? ''} disabled={readOnly} onChange={(e) => patch({ loanId: e.currentTarget.value || null })} data-testid="operation-loan">
+            <option value="">— bez pożyczki z radaru —</option>
+            {loans.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name} ({l.direction === 'given' ? 'udzielona' : 'wzięta'})
+              </option>
+            ))}
+          </select>
+        </Field>
       )}
 
       {showLog && (

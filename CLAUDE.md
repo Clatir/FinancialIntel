@@ -64,7 +64,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 ## Architektura
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
-  `calc/briefing.ts` (odprawa, Daily Bias), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
+  (pożyczki), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), później `calc/game.ts` (oceny dni, stopnie, misje) i `calc/intel.ts` (analizy ICT),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
@@ -221,6 +222,18 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `FI_ICTJ_LAUNCH=dry`, `FI_ICTJ_DIR` – T69); E2E czytają folder przez `tests/e2e/files.ts` (pomija pliki znikające
   w trakcie odczytu i pliki tymczasowe).
 
+## Kod (E6 – Radar i należności, grupa C → 1.1.0)
+- Shared: `calc/loans.ts` (`loanState` / `loanStates` – raty pokrywane po kolei, zaległa po 3 dniach z `last`; `debtOf`,
+  `monthlySchedule`, `OVERDUE_DAYS`, `HOUSE_DAYS` – T70), `calc/radar.ts` (`radar` – 90 dni, `pit38Deadline` – T73);
+  `calc/fleet.ts` – `FleetState.loans`, `debt`, `receivables.houseSince`, `rangeMonths(…, debt)`, `nextPaymentOf` (przeniesione
+  z briefing.ts), spłata pożyczki udzielonej do wysokości długu (T71); `calc/briefing.ts` – pozycje `loan`, `pit38`, `house`;
+  `notify.ts` – tag `radar`; `machine.ts` – `notify.loans`, `notify.pit38`; `calc/plan.ts` `simulateCargo(…debt)`.
+- Renderer: `features/radar/` – `RadarPage.tsx` (oś 90 dni, pożyczki z formularzem i spłatami, należności, PIT-38),
+  `actions.ts` (`addLoan` – z operacją i kontenerem rat, `recordPayment`, `closeLoan`, `deleteLoan`); `OperationEditor` –
+  wybór pożyczki przy rodzaju „Pożyczka”, `withKind` zdejmuje `loanId`; `operations/state.ts` `openRefundables`; Mostek –
+  linia „Dług” w stanie okrętu, cele odprawy `loan` / `pit38` → Radar, `house` → zakupy „do zwrotu”.
+- Testy: `tests/unit/loans.test.ts`, E2E `tests/e2e/radar.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
@@ -276,7 +289,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] E3 Kreator startu i plan miesiąca → 1.0.0 (grupa B)
 - [x] E4 Mostek i szybki wpis → wydanie 1.0.0 (grupa B)
 - [x] E5 ICTTJ i dokowanie → 1.1.0 (grupa C)
-- [ ] E6 Radar i należności
+- [x] E6 Radar i należności → 1.1.0 (grupa C)
 - [ ] E7 Dowództwo (gra)
 - [ ] E8 Wywiad i raporty
 - [ ] E9 Pierwszy oficer (opcjonalnie)

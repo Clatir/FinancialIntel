@@ -18,7 +18,7 @@ import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { dayLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
-import { newOperation, selectOperation, setFilter } from '../operations/state'
+import { newOperation, openRefundables, selectOperation, setFilter } from '../operations/state'
 import { EnvelopeBars } from '../month/EnvelopeBars'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
@@ -31,7 +31,7 @@ const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).repl
 /** What the bridge's panels draw – in the main window and in their own windows (D45) alike, as plain JSON. */
 export type BridgeFleet = Pick<
   FleetState,
-  'today' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily'
+  'today' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
 >
 
 export const bridgeFleet = (f: FleetState): BridgeFleet => ({
@@ -50,7 +50,8 @@ export const bridgeFleet = (f: FleetState): BridgeFleet => ({
   shipClass: f.shipClass,
   cargo: f.cargo,
   envelopes: f.envelopes,
-  daily: f.daily
+  daily: f.daily,
+  debt: f.debt
 })
 
 /** A detached panel of the bridge (`features/detach/DetachedApp.tsx`). */
@@ -71,6 +72,8 @@ function openTarget(t: BridgeTarget, key?: string): void {
     navigate({ page: 'bridge' })
     if (key?.startsWith('dock:')) openDocking(key.slice('dock:'.length))
   } else if (t === 'ictj') navigate({ page: 'settings', tab: 'ictj' })
+  else if (t === 'loan' || t === 'pit38') navigate({ page: 'radar' })
+  else if (t === 'house') openRefundables()
   else navigate({ page: 'month' })
 }
 
@@ -339,13 +342,14 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
       {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" value={zl(tanks)} />}
       {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" value={zl(fleet.taxHold)} />}
       {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" value={zl(fleet.loot.amount)} />}
+      {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" value={zl(fleet.debt)} testId="state-debt" />}
       <div className="grid grid-cols-3 gap-2 border-t border-line pt-2">
         <div className="flex flex-col">
           <span className="label">Zasięg</span>
           <span className="num text-[14px] text-fg-strong" data-testid="state-range">
             {fmtRange(fleet.range)}
           </span>
-          <span className="text-[10.5px] text-dim">(osłony + kadłub) / koszty</span>
+          <span className="text-[10.5px] text-dim">{fleet.debt > 0 ? '(osłony − dług + kadłub) / koszty' : '(osłony + kadłub) / koszty'}</span>
         </div>
         <div className="flex flex-col">
           <span className="label">Klasa</span>
@@ -380,13 +384,7 @@ function Receivables({ fleet }: { fleet: FleetState }) {
             <span className="num ml-auto">{zl(r.total - r.house)}</span>
           </div>
         )}
-        <button
-          className="self-start text-[11.5px] text-accent hover:underline"
-          onClick={() => {
-            setFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })
-            navigate({ page: 'operations' })
-          }}
-        >
+        <button className="self-start text-[11.5px] text-accent hover:underline" onClick={openRefundables}>
           zakupy „do zwrotu” ›
         </button>
         <p className="text-[11px] text-dim">Wpłata domownika najpierw spłaca należność (szybki wpis: „Wpływ” → od domownika).</p>

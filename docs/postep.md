@@ -4,7 +4,7 @@
 **1.0.0 wydane** (PR #4 scalony). Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło na wyścigu w teście
 (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez 1.0.0; testy
 czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** E5 zrobiony (sekcja niżej); E6 – Radar i należności (bez pauzy, ten sam PR).
+**Następny krok:** E5 i E6 zrobione (sekcje niżej); zamknięcie grupy C – wydanie 1.1.0.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -83,6 +83,32 @@ całość ok. 4–6 miesięcy (szacunek zgrubny).
    - Bieżące pożyczki (kwota, raty, terminy) – do wpisania po wydaniu 1.1.0.
 4. **Model, thinking, czas:** Opus 5.5 · **max** (z górką – przepływy prawdziwych pieniędzy z zewnątrz i zmiany
    w silniku: dokowanie, pule, pożyczki) · 2–3 h.
+
+## E6 – Radar i należności (17.10.2026)
+
+Zrobione (zakres z „Przed etapem E5”, odpowiedzi D72):
+- Radar (Ctrl+7): 90 dni – pensje 1. dnia, każda płatność asteroid w oknie (stan zbiornika), raty własne i spodziewane
+  spłaty (zaległe oznaczone), PIT-38 od 1 lutego do 30 kwietnia bez kwoty (T73).
+- Pożyczki w obie strony: nowa z harmonogramem miesięcznym i operacją na koncie; udzielona – spłaty wracają do osłon,
+  należność na Mostku i Radarze; wzięta – kontener „Rata: …” w Ładowni na czas spłaty, dług odjęty od zasięgu (Mostek,
+  symulacja Ładowni); „spłata otrzymana” / „zapłać ratę”, zamknięcie, usunięcie bez operacji; w edytorze operacji wybór
+  pożyczki (T70–T72).
+- Należność domu: najstarszy niespłacony zakup „do zwrotu” (spłaty od najstarszych) – w odprawie po 30 dniach (T71, T74).
+- Powiadomienia: zaległa rata po 3 dniach, PIT-38 14 i 3 dni przed terminem – każde z przełącznikiem (T74).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione:
+  - należności pożyczek, wiek należności domu i dług liczone raz – w silniku (Mostek i Radar zawsze zgodne);
+  - spłata pożyczki udzielonej bez operacji wypływu (pożyczone przed startem) wraca do osłon, zamknięta bez należności;
+  - powiązanie z pożyczką tylko dla operacji „Pożyczka”; usunięcie pożyczki sprawdza też raty z importu;
+  - zasięg w symulacji Ładowni z długiem; zasięg nigdy ujemny;
+  - domyślna pierwsza rata istniejącego dnia (31 → koniec miesiąca), kwota spłaty = to, co należne teraz;
+  - każda nowa zaległa rata = nowe przypomnienie; kolory zaległości w akcencie.
+- Testy: 310 unit + fs (`tests/unit/loans.test.ts`), E2E 13 (`tests/e2e/radar.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.1.0, Windows):
+1. Radar: najbliższe pensje, opłaty okresowe ze stanem zbiorników.
+2. Bieżące pożyczki: „Nowa pożyczka” (udzielona / wzięta, raty), spłata – kwota otwarta maleje, Mostek → Do zwrotu.
+3. Pożyczka wzięta: kontener „Rata: …” w Ładowni, „Dług” na Mostku, zasięg pomniejszony.
+4. Odprawa: zakup „do zwrotu” starszy niż 30 dni; w lutym – PIT-38 na Radarze.
 
 ## E5 – ICTTJ i dokowanie (17.10.2026)
 
@@ -393,3 +419,4 @@ Do sprawdzenia przez użytkownika (Windows 11):
   i D72 (odpowiedzi na „Przed etapem E5”); start grupy C na komendę użytkownika.
 - 17.10.2026 – E5 (odczyt ICTTJ, dokowanie z oknem, Portfel XTB, pule Cele i Podatek, Mapa gwiezdna, „Otwórz ICTTJ”,
   powiadomienie o nowej wypłacie), przegląd i poprawki; dalej E6 bez pauzy.
+- 17.10.2026 – E6 (Radar 90 dni, pożyczki w obie strony, należność domu, PIT-38, powiadomienia), przegląd i poprawki.

@@ -54,6 +54,7 @@ export function openTag(tag: string): void {
   else if (tag === 'import') navigate({ page: 'import' })
   else if (tag === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (tag === 'debriefing' || tag === 'low' || tag === 'overrun') navigate({ page: 'month' })
+  else if (tag === 'radar') navigate({ page: 'radar' })
   else {
     navigate({ page: 'bridge' })
     if (tag === 'dock' || tag.startsWith('dock:')) openDockingTag(tag)

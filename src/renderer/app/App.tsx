@@ -18,6 +18,7 @@ import { CargoPage } from '../features/cargo/CargoPage'
 import { WizardPage } from '../features/wizard/WizardPage'
 import { BridgePage } from '../features/bridge/BridgePage'
 import { StarMapPage } from '../features/starmap/StarMapPage'
+import { RadarPage } from '../features/radar/RadarPage'
 import { useIctjGoalSync } from '../features/starmap/sync'
 import { DockingDialog } from '../features/dock/DockingDialog'
 import { initIctj, openIctj } from '../store/ictj'
@@ -217,6 +218,7 @@ function Page({ route }: { route: Route }) {
   if (route.page === 'wizard') return <WizardPage />
   if (route.page === 'bridge') return <BridgePage />
   if (route.page === 'starmap') return <StarMapPage />
+  if (route.page === 'radar') return <RadarPage />
   const def = pageDef(route.page)
   return def ? <PlaceholderPage key={def.page} def={def} /> : null
 }

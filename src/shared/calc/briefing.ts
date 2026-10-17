@@ -6,9 +6,11 @@
 import { formatPln } from '../format'
 import { ICTJ_POOL_LABEL } from '../ictj'
 import type { Container } from '../schema/records'
-import { addMonths, daysBetween, daysInMonth, firstDayOf, warsawNow } from './dates'
+import { daysBetween, firstDayOf, warsawNow } from './dates'
 import type { Delivery } from './dock'
-import { activeIn, cyclePosition, type Alarm, type FleetState } from './fleet'
+import { HOUSE_DAYS } from './loans'
+import { pit38Deadline } from './radar'
+import { activeIn, nextPaymentOf, type Alarm, type FleetState } from './fleet'
 
 /** The Daily Bias (spec, „Wywiad”): Bullish – today's energy at least the base allowance and the envelopes on plan;
  * Bearish – the energy under half the base or the shields under their minimum; else Neutral. */
@@ -28,7 +30,7 @@ export const BIAS_LABEL: Record<DailyBias, string> = { bullish: 'Bullish', beari
 export interface BriefingItem {
   level: 'red' | 'yellow' | 'info'
   /** What the item is about (the screen it leads to; 'dock' – the docking window of the delivery in `key`). */
-  kind: 'alarm' | 'asteroid' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj'
+  kind: 'alarm' | 'asteroid' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house'
   text: string
   /** Stable key (the notifications send each once). */
   key: string
@@ -66,15 +68,7 @@ export function alarmText(a: Alarm, label: (id: string) => string = () => '', zl
   }
 }
 
-/** The next payment of a container on or after `today`. */
-export function nextPaymentOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'dueDay'>, today: string): string {
-  const at = (month: string) => `${month}-${String(Math.min(c.dueDay, daysInMonth(month))).padStart(2, '0')}`
-  const due = cyclePosition(c, today.slice(0, 7)).dueMonth
-  const date = at(due)
-  if (date >= today) return date
-  // This cycle's payment day has passed (earlier this month): the next cycle.
-  return at(cyclePosition(c, addMonths(due, 1)).dueMonth)
-}
+export { nextPaymentOf }
 
 export interface BriefingInput {
   fleet: FleetState
@@ -92,6 +86,9 @@ export interface BriefingInput {
   /** The ICTTJ folder chosen on this computer cannot be read: why. */
   ictjProblem?: string | null
 }
+
+/** PIT-38 is announced from 14 days before its deadline (like an asteroid). */
+export const PIT38_DAYS = 14
 
 /** An XTB inflow without its ICTTJ entry is recalled this long. */
 export const MISSING_ENTRY_DAYS = 30
@@ -178,5 +175,31 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     if (item) items.push(item)
   }
   if (o.ictjProblem) items.push({ level: 'info', kind: 'ictj', key: `ictj:folder:${f.today}`, text: `ICTTJ: ${o.ictjProblem}` })
+  for (const l of f.loans) {
+    if (!l.overdue || l.loan.closedAt) continue
+    const taken = l.loan.direction === 'taken'
+    items.push({
+      level: 'yellow',
+      kind: 'loan',
+      // Each installment going late is a new reminder (the latest late one in the key).
+      key: `loan:${l.loan.id}:${l.overdue.last}`,
+      text: taken
+        ? `Zaległa rata „${l.loan.name}”: ${zl(l.overdue.amount)} od ${dm(l.overdue.date)}.`
+        : `Pożyczka „${l.loan.name}”: spłata ${zl(l.overdue.amount)} spóźniona od ${dm(l.overdue.date)} – przypomnij${l.loan.counterparty ? ` (${l.loan.counterparty})` : ''}.`
+    })
+  }
+  const pit = pit38Deadline(f.today)
+  const pitDays = pit ? daysBetween(f.today, pit) : null
+  if (pit && pitDays != null && pitDays <= PIT38_DAYS)
+    items.push({
+      level: pitDays <= 3 ? 'yellow' : 'info',
+      kind: 'pit38',
+      key: `pit38:${pit}:${pitDays <= 3 ? 3 : 14}`,
+      text: `PIT-38 za ${Number(pit.slice(0, 4)) - 1}: termin ${pitDays === 0 ? 'dziś' : `za ${pitDays} ${pitDays === 1 ? 'dzień' : 'dni'}`} (30 kwietnia) – kwota w ICTTJ.`
+    })
+  const since = f.receivables.houseSince
+  const houseDays = since ? daysBetween(since, f.today) : 0
+  if (f.receivables.house > 0 && since && houseDays > HOUSE_DAYS)
+    items.push({ level: 'info', kind: 'house', key: `house:${since}`, text: `Należność domu ${zl(f.receivables.house)} – najstarszy zakup „do zwrotu” z ${dm(since)} (${houseDays} dni).` })
   return items
 }

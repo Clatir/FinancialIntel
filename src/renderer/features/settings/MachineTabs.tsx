@@ -96,7 +96,9 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['importOverdue', 'Zaległy import z mBanku – po 3 dniach'],
   ['balances', 'Potwierdzenie sald – w niedzielę'],
   ['debriefing', 'Debriefing – 1. dnia miesiąca'],
-  ['ictj', 'Nowa wypłata w ICTTJ do zadokowania']
+  ['ictj', 'Nowa wypłata w ICTTJ do zadokowania'],
+  ['loans', 'Rata pożyczki 3 dni po terminie (własna albo spłata od dłużnika)'],
+  ['pit38', 'PIT-38 – 14 i 3 dni przed 30 kwietnia']
 ]
 
 /** Ustawienia → Powiadomienia i dźwięki (config.json – this computer only): the quick entry's shortcut too. */
