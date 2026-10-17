@@ -16,9 +16,13 @@ import { ImportPage } from '../features/import/ImportPage'
 import { MonthPage } from '../features/month/MonthPage'
 import { CargoPage } from '../features/cargo/CargoPage'
 import { WizardPage } from '../features/wizard/WizardPage'
+import { BridgePage } from '../features/bridge/BridgePage'
 import { loadMachinePrefs, toggleHideAmounts, useMachine } from '../store/machine'
 import { initQuickHost } from '../store/quickHost'
-import { setAmountsHidden } from '../components/fields'
+import { initNotifier } from '../store/notifier'
+import { useFleet } from '../store/fleet'
+import { api } from '../lib/api'
+import { plnText, setAmountsHidden } from '../components/fields'
 import { Toasts } from '../components/Toasts'
 import { IconGear, IconSync } from '../components/icons'
 import { cx } from '../components/ui'
@@ -199,8 +203,20 @@ function Page({ route }: { route: Route }) {
   if (route.page === 'month') return <MonthPage />
   if (route.page === 'cargo') return <CargoPage />
   if (route.page === 'wizard') return <WizardPage />
+  if (route.page === 'bridge') return <BridgePage />
   const def = pageDef(route.page)
   return def ? <PlaceholderPage key={def.page} def={def} /> : null
+}
+
+/** Today's energy in the tray's tooltip (masked with the amounts). */
+function TrayStatus() {
+  const fleet = useFleet()
+  useMachine((s) => s.prefs.hideAmounts)
+  const text = fleet?.daily ? `Energia dziś: ${plnText(fleet.daily.left)} zł` : null
+  useEffect(() => {
+    void api.setTrayStatus(text)
+  }, [text])
+  return null
 }
 
 export function App() {
@@ -215,6 +231,7 @@ export function App() {
     void boot()
     void loadMachinePrefs()
     initQuickHost()
+    initNotifier()
     initUpdates()
   }, [])
 
@@ -241,6 +258,7 @@ export function App() {
         </main>
       </div>
       <CommandPalette />
+      <TrayStatus />
       <ShortcutsHelp />
       <RemoteChangesDialog />
       <Toasts />

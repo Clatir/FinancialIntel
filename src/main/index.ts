@@ -532,7 +532,8 @@ function registerIpc(): void {
   handle('setMachinePrefs', async (patch: unknown) => {
     const prefs = patchMachinePrefs(config.get().prefs, patch)
     await config.update({ prefs })
-    quick?.applyShortcut(prefs.quickShortcut)
+    // The shortcut registered again only when it was set (also the same one: a retry after another program let it go).
+    if (patch && typeof patch === 'object' && 'quickShortcut' in patch) quick?.applyShortcut(prefs.quickShortcut)
     broadcastPrefs(prefs)
     return prefs
   })

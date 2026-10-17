@@ -3,8 +3,6 @@
  * amounts live in config.json, never on OneDrive): defaults and a reader that keeps what it knows from a hand-edited or
  * older file.
  */
-import { inClockWindow } from './calc/dates'
-
 export const SOUND_KINDS = ['entry', 'docking', 'alarm', 'promotion', 'plus'] as const
 export type SoundKind = (typeof SOUND_KINDS)[number]
 
@@ -112,6 +110,3 @@ export function patchMachinePrefs(cur: MachinePrefs, patch: unknown): MachinePre
 export function shortcutLabel(accelerator: string): string {
   return accelerator.replace(/Control|CommandOrControl|CmdOrCtrl/g, 'Ctrl')
 }
-
-/** Outside the quiet hours (the briefing waits for the morning). */
-export const afterQuietHours = (time: string, quiet: { from: string; to: string }): boolean => !inClockWindow(time, quiet.from, quiet.to)

@@ -15,6 +15,7 @@ import { IconBack, IconNext } from '../../components/icons'
 import { dayLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { decideLoot, setEnvelope, setEnvelopes, setSalary, usePlans } from './actions'
+import { EnvelopeBars } from './EnvelopeBars'
 import { playSound } from '../../lib/sounds'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
@@ -45,7 +46,6 @@ export function MonthPage() {
   const containers = useRecordList('containers')
   const categories = useData((s) => s.fi?.settings.categories)
   const readOnly = useData((s) => !!s.status?.readOnly)
-  const cats = useCategories()
   const plan = planFor(plans, month)
   const own = plans.find((p) => p.month === month) ?? null
   const split = useMemo(() => (plan && categories ? salarySplit(plan, month, containers, categories, month <= current && fleet ? sinkingOf(fleet.log, month) : undefined) : null), [plan, month, containers, categories, current, fleet])
@@ -113,7 +113,6 @@ export function MonthPage() {
     const limits = Object.fromEntries(p.envelopes.filter((e) => e.limit > 0).map((e) => [e.categoryId, e.limit]))
     if (!Object.keys(limits).length) return
     setEnvelopes(m, limits)
-    void cats
   }
 }
 
@@ -260,29 +259,11 @@ function DailyPanel({ fleet }: { fleet: FleetState }) {
 }
 
 function EnvelopesPanel({ month, current, fleet, brief }: { month: string; current: string; fleet: FleetState; brief: Debriefing | null }) {
-  const cats = useCategories()
-  const rows = month === current ? fleet.envelopes.map((e) => ({ categoryId: e.categoryId, kind: e.kind, limit: e.limit, spent: e.spent })) : (brief?.envelopes ?? [])
+  const rows = month === current ? fleet.envelopes : (brief?.envelopes ?? [])
   if (month > current) return null
   return (
     <Panel title="Koperty" testId="month-envelopes">
-      {!rows.length ? (
-        <Empty>Brak kopert w tym miesiącu.</Empty>
-      ) : (
-        <div className="flex flex-col gap-1.5 text-[12px]">
-          {rows.map((e) => (
-            <div key={e.categoryId} className="flex flex-col gap-0.5" data-testid="envelope-state" data-name={cats.label(e.categoryId)}>
-              <div className="flex items-baseline gap-2">
-                <span className="min-w-0 flex-1 truncate">{cats.label(e.categoryId)}</span>
-                <span className="text-[10.5px] text-dim">{e.kind === 'daily' ? 'codzienna' : 'planowa'}</span>
-                <span className={cx('num', e.spent > e.limit ? 'text-down' : 'text-fg-strong')}>
-                  {zl(e.spent)} / {zl(e.limit)}
-                </span>
-              </div>
-              <Meter value={e.spent} max={e.limit} over mark={e.limit > 0 ? 0.8 : undefined} />
-            </div>
-          ))}
-        </div>
-      )}
+      {!rows.length ? <Empty>Brak kopert w tym miesiącu.</Empty> : <EnvelopeBars rows={rows} />}
     </Panel>
   )
 }

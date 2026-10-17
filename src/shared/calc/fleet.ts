@@ -154,7 +154,8 @@ export function shipClass(range: number): ShipClass {
   return 'flagship'
 }
 
-const activeIn = (c: Container, month: string) => !c.archived && (c.from == null || c.from <= month) && (c.until == null || month <= c.until)
+/** A container counts in this month: not archived, between its `from` and `until`. */
+export const activeIn = (c: Pick<Container, 'archived' | 'from' | 'until'>, month: string): boolean => !c.archived && (c.from == null || c.from <= month) && (c.until == null || month <= c.until)
 
 /** The cargo's mass: fixed costs a month (periodic fees by their monthly share) as a % of the salary; the load line 40%. */
 export function cargoMass(containers: readonly Container[], month: string, salary: number | null, limitPct: number): FleetState['cargo'] {

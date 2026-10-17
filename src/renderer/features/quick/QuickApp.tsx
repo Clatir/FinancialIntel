@@ -43,6 +43,10 @@ export function QuickApp() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [officer, setOfficer] = useState<string | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
+  const [opened, setOpened] = useState(0)
+  useEffect(() => {
+    if (opened) amountRef.current?.focus()
+  }, [opened])
 
   useEffect(() => {
     document.title = 'Szybki wpis – Financial Intel'
@@ -55,7 +59,8 @@ export function QuickApp() {
       setMsg(null)
       setOfficer(null)
       setBusy(false)
-      requestAnimationFrame(() => amountRef.current?.focus())
+      // Focus after the reset has rendered (an earlier focus would take the previous amount as its draft).
+      setOpened((n) => n + 1)
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
       setBusy(false)
