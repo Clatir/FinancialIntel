@@ -1,5 +1,29 @@
 # Financial Intel – zmiany
 
+## 1.1.0
+
+Przepływy z zewnątrz (grupa C: etapy E5 i E6) – wypłaty z ICT Trade Journal dokują do budżetu, a Radar pokazuje, co
+nadciąga w ciągu 90 dni.
+
+- ICTTJ (Ustawienia → ICTTJ): FI czyta folder danych ICT Trade Journal tylko do odczytu (wypłaty i cele prognozy),
+  z obserwacją zmian; folder podpowiadany z ustawień ICTTJ na tym komputerze albo wskazany ręcznie, osobno na każdym
+  komputerze; nowszy format ICTTJ albo nieczytelny plik – ostrzeżenie, nie błąd. „Otwórz ICTTJ” w menu bocznym
+  (zainstalowany ICTTJ znajdowany sam, wersja portable wskazana raz).
+- Dokowanie: wypłata z ICTTJ łączona z wpływem od XTB w mBanku (ta sama kwota, do 3 dni roboczych), bez pary –
+  propozycja Portfela XTB; okno dokowania z podziałem według kolejności (osłony → kadłub → cele) do zmiany przed
+  zapisem, z animacją i dźwiękiem, „Cofnij”; pula Cele prosto do celów, pula Podatek poza kosztami; wpływ z XTB bez
+  wpisu w ICTTJ – przypomnienie; wypłaty sprzed startu budżetu pominięte; powiadomienie „Nowa wypłata w ICTTJ do
+  zadokowania”; Mostek → panel „Dokowanie”.
+- Mapa gwiezdna (Ctrl+6): cele z prognozy ICTTJ (tylko do odczytu) i własne na jednej liście priorytetów
+  (przeciąganie), postęp, termin, ETA z tempa ostatnich 6 miesięcy, archiwum.
+- Radar (Ctrl+7): 90 dni – pensje, opłaty okresowe ze stanem zbiorników, raty i spodziewane spłaty pożyczek (zaległe
+  oznaczone), PIT-38 od 1 lutego do 30 kwietnia (bez kwoty – kwota jest w ICTTJ).
+- Pożyczki w obie strony z harmonogramem rat: udzielona – należność, spłaty wracają do osłon; wzięta – raty jako
+  kontener ładowni na czas spłaty, dług odejmowany od zasięgu (Mostek, symulacja Ładowni); spłata, zamknięcie; w
+  edytorze operacji wybór pożyczki.
+- Odprawa i powiadomienia: zaległa rata po 3 dniach, PIT-38 14 i 3 dni przed terminem, należność domu starsza niż
+  30 dni – powiadomienia z przełącznikami (Ustawienia → Powiadomienia i dźwięki).
+
 ## 1.0.0
 
 Pierwsza wersja do codziennego użytku (grupa B: etapy E3 i E4) – budżet startuje z kreatora, a codzienność obsługują
