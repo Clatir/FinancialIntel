@@ -97,6 +97,9 @@ export function QuickApp() {
         setD((x) => ({ ...blank(null), accountId: x.accountId }))
         setLines([])
         setShares({})
+        // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
+        // opened again meanwhile.
+        if (closing.current) clearTimeout(closing.current)
         closing.current = setTimeout(() => {
           closing.current = null
           void api.quickClose()

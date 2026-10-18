@@ -1,7 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** grupa F (1.4.3 – szybkość przy dużym folderze) zrobiona, gałąź `claude/grupa-f-1.4.3` – PR, CI i scalenie
-(D71); potem G i H jednym ciągiem (D84). **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
+**Stan:** grupa F (1.4.3 – szybkość przy dużym folderze) scalona (PR #15); E2E na `main` padło na prawdziwym błędzie
+szybkiego wpisu (podwójny licznik zamknięcia przy dwóch odpowiedziach na jeden wpis – B51 z 1.4.2), poprawka z testem
+osobnym PR do `main`, potem wydanie 1.4.3; równolegle grupa G na gałęzi `claude/grupa-g-1.5.0`, potem H (D84). **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
 **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
@@ -1004,3 +1005,8 @@ Do sprawdzenia przez użytkownika (Windows 11):
   folder (kolejka odświeżeń, zdarzenia katalogów, konflikty bez przeskanowania, otwarcie bez osobnego `stat`), kopie (ZIP
   w jednym przejściu z pamięci, dzienna w zasobniku, 14 + 8); pomiar na 30 i 150 tys.; przegląd `/code-review` high –
   7 poprawek; PR do `main`.
+- 18.10.2026 – PR #15 scalony (CI PR zielone, także Windows); E2E na `main` czerwone – `bridge.spec.ts`: okno szybkiego
+  wpisu otwarte ponownie chowało się po chwili. Przyczyna: dwie odpowiedzi „Zapisano” na jeden wpis (B51) ustawiały
+  dwa liczniki zamknięcia, a okno pamiętało tylko drugi – pierwszy chował okno otwarte na nowo (zależnie od tego, jak
+  szybko główne okno odpowie, dlatego PR przeszedł). Test odtwarza to za każdym razem (druga odpowiedź 300 ms później),
+  poprawka: jeden licznik; osobny PR do `main` – wydanie 1.4.3 po zielonym CI.

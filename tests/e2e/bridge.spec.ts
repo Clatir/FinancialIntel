@@ -80,6 +80,20 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     await expect.poll(async () => (await operations(dir)).filter((t) => t.amount === -3333).map((t) => t.id)).toEqual([twice.id])
     await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(1)
 
+    // The second answer to one draft comes late (1.4.3): one closing countdown – the window opened again stays open.
+    quick = await quickWindow(app, page)
+    const late = { ...twice, id: '01KQ0000000000000000000B52', amount: 4444, counterparty: 'Spóźniona odpowiedź' }
+    await quick.evaluate(async (draft) => {
+      const fi = (globalThis as unknown as { fi: { quickAdd(d: unknown): Promise<void> } }).fi
+      await fi.quickAdd(draft)
+      await new Promise((r) => setTimeout(r, 300))
+      await fi.quickAdd(draft)
+    }, late)
+    await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(1)
+    quick = await quickWindow(app, page)
+    await page.waitForTimeout(800)
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(2)
+
     // The quiet hours: a confirmation and a short note first.
     quick = await quickWindow(app, page)
     await expect(quick.getByTestId('quick-amount')).toHaveValue('')

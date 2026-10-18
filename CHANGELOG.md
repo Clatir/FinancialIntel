@@ -32,6 +32,10 @@ Kopie zapasowe:
   zmian; plik, którego nie da się odczytać, przerywa kopię zamiast zostać po cichu pominięty.
 - Ustawienia → Folder i kopie: „Ostatnia kopia: dziś / wczoraj / N dni temu”, ostrzeżenie, gdy ma ponad 3 dni.
 
+Szybki wpis:
+- Okno otwarte ponownie zaraz po zapisie nie chowa się samo, gdy na ten sam wpis przyszły dwie odpowiedzi (podwójny
+  Enter z 1.4.2) – liczył się wtedy podwójny licznik zamknięcia.
+
 ## 1.4.2
 
 Pieniądze i dane się zgadzają – poprawki z przeglądu aplikacji po 1.4.1 (decyzje D84).
