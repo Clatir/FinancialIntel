@@ -13,6 +13,8 @@ const W1 = '01KPAY00000000000000000001'
 const W2 = '01KPAY00000000000000000002'
 const R1 = '01KPAY00000000000000000003'
 const GOAL = '01KG0000000000000000000001'
+const PLAN2 = '01KPRGN0000000000000000002'
+const GOAL2 = '01KG0000000000000000000002'
 
 function put(root: string, rel: string, data: unknown): void {
   const file = join(root, rel)
@@ -54,6 +56,17 @@ test('ICTTJ: podpowiedź folderu, dokowanie z mBanku i na Portfel XTB, pula Cele
     firstMonth: month,
     goals: [{ id: GOAL, name: 'Wakacje', month: 3, amount: 3000, enabled: true, flexible: false }]
   })
+  // An older scenario: not the one FI takes at the first connection (C3), chosen later with a confirmation.
+  put(ictj, `forecasts/${PLAN2}.json`, {
+    schemaVersion: 1,
+    id: PLAN2,
+    createdAt: '2026-08-01T10:00:00.000Z',
+    updatedAt: '2026-08-05T10:00:00.000Z',
+    name: 'Plan mieszkanie',
+    currency: 'PLN',
+    firstMonth: month,
+    goals: [{ id: GOAL2, name: 'Mieszkanie', month: 12, amount: 50000, enabled: true, flexible: false }]
+  })
   const appData = join(tmp, 'AppData')
   put(appData, 'ICT Trade Journal/config.json', { dataDir: ictj })
   const exe = join(tmp, 'ICT-Trade-Journal-portable.exe')
@@ -84,8 +97,9 @@ test('ICTTJ: podpowiedź folderu, dokowanie z mBanku i na Portfel XTB, pula Cele
     await expect(page.getByTestId('ictj-counts')).toContainText('Wypłaty: 2')
     await expect.poll(async () => (await json(join(userData, 'config.json'))).ictj?.dir).toBe(ictj)
 
-    // The forecast's goal is the ship's (its id = ICTTJ's).
+    // The forecast's goal is the ship's (its id = ICTTJ's); the scenario changed last is remembered (C3).
     await expect.poll(async () => (await records(dir, 'goals')).map((g) => [g.id, g.name, g.target, g.source])).toEqual([[GOAL, 'Wakacje', zl(3000), 'ictj']])
+    await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings?.ictj?.forecastId).toBe('01KPRGN0000000000000000001')
 
     // The bridge: the withdrawal paired with the mBank inflow, the old one without a pair → Portfel XTB.
     await page.keyboard.press('Control+1')
@@ -137,6 +151,22 @@ test('ICTTJ: podpowiedź folderu, dokowanie z mBanku i na Portfel XTB, pula Cele
     ])
     await page.screenshot({ path: join('test-results', 'screens', '11-mapa-gwiezdna.png') })
 
+    // Another scenario only after a confirmation (C3): the goals of the one before archived, their money kept.
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-ictj').click()
+    await page.getByTestId('ictj-forecast').selectOption(PLAN2)
+    await expect(page.getByTestId('ictj-forecast-confirm')).toContainText('Plan wakacyjny')
+    await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings?.ictj?.forecastId).toBe('01KPRGN0000000000000000001')
+    await page.getByTestId('ictj-forecast-confirm-ok').click()
+    await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings?.ictj?.forecastId).toBe(PLAN2)
+    await expect.poll(async () => (await records(dir, 'goals')).map((g) => [g.name, g.archived]).sort()).toEqual([
+      ['Mieszkanie', false],
+      ['Rower', false],
+      ['Wakacje', true]
+    ])
+    await page.keyboard.press('Control+6')
+    await expect(page.getByTestId('starmap-archived-row')).toContainText('500,00 zł')
+
     // „Otwórz ICTTJ”: not found on this computer (the reason with the way to the settings), then the chosen program.
     await page.getByTestId('nav-open-ictj').click()
     await expect(page.getByText('Nie znaleziono ICT Trade Journal')).toBeVisible()
@@ -153,7 +183,7 @@ test('ICTTJ: podpowiedź folderu, dokowanie z mBanku i na Portfel XTB, pula Cele
     // Relative paths with „/” on every system (Windows lists them with „\”).
     const files = (await fs.readdir(ictj, { recursive: true })).map((f) => String(f).replace(/\\/g, '/'))
     expect(files.filter((f) => f.endsWith('.json')).sort()).toEqual(
-      ['journal.json', `forecasts/01KPRGN0000000000000000001.json`, `payouts/${old.slice(0, 4)}/${old}_${W2}.json`, `payouts/${today.slice(0, 4)}/${today}_${R1}.json`, `payouts/${today.slice(0, 4)}/${today}_${W1}.json`].sort()
+      ['journal.json', `forecasts/01KPRGN0000000000000000001.json`, `forecasts/${PLAN2}.json`, `payouts/${old.slice(0, 4)}/${old}_${W2}.json`, `payouts/${today.slice(0, 4)}/${today}_${R1}.json`, `payouts/${today.slice(0, 4)}/${today}_${W1}.json`].sort()
     )
     expect(errors).toEqual([])
   } finally {

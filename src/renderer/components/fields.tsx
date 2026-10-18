@@ -3,9 +3,9 @@
  * draft and applied on leaving the field or Enter – an intermediate value is never saved; a value that cannot be read
  * goes back to the saved one with a message.
  */
-import { forwardRef, useState } from 'react'
+import { forwardRef, useRef, useState } from 'react'
 import { formatPln } from '@shared/format'
-import { parseAmountInput, parseClockInput, parseDateInput } from '../lib/format'
+import { parseAmountInput, parseClockInput, parseDateInput, parseMonthInput } from '../lib/format'
 import { toast } from '../store/ui'
 import { cx } from './ui'
 
@@ -49,6 +49,8 @@ export const AmountField = forwardRef<
   }
 >(function AmountField({ value, onChange, allowNegative, allowEmpty, placeholder, className, autoFocus, ...rest }, ref) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
   const parse = (t: string): number | null | undefined => {
     const v = parseAmountInput(t)
     if (v === undefined) return undefined
@@ -80,17 +82,19 @@ export const AmountField = forwardRef<
       }}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null) {
+        if (draft != null && !cancelled.current) {
           const v = parse(draft)
           if (v === undefined) toast('Nieprawidłowa kwota – zostaje poprzednia.', 'error')
           else if (v !== value) onChange(v)
         }
+        cancelled.current = false
         setDraft(null)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
         if (e.key === 'Escape' && draft != null) {
           e.stopPropagation()
+          cancelled.current = true
           setDraft(null)
           e.currentTarget.blur()
         }
@@ -115,6 +119,8 @@ export function DateField({
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
   const year = Number(value.slice(0, 4)) || new Date().getFullYear()
   const invalid = draft != null && parseDateInput(draft, year) == null
   return (
@@ -128,14 +134,80 @@ export function DateField({
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null) {
+        if (draft != null && !cancelled.current) {
           const d = parseDateInput(draft, year)
           if (!d) toast('Nieprawidłowa data – zostaje poprzednia.', 'error')
           else if (d !== value) onChange(d)
         }
+        cancelled.current = false
         setDraft(null)
       }}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
+/**
+ * A month 'RRRR-MM' (typed also as 03.2027 or 3/2027); empty = none when `allowEmpty`. Saved on leaving the field or
+ * Enter (B1): a month half typed never saves, one that cannot be read goes back to the saved one with a message.
+ */
+export function MonthField({
+  value,
+  onChange,
+  allowEmpty,
+  className,
+  placeholder = 'RRRR-MM',
+  ...rest
+}: {
+  value: string | null
+  onChange: (month: string | null) => void
+  allowEmpty?: boolean
+  className?: string
+  placeholder?: string
+  'aria-label'?: string
+  'data-testid'?: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
+  const parsed = draft == null ? value : parseMonthInput(draft)
+  const invalid = draft != null && (parsed === undefined || (parsed === null && !allowEmpty))
+  return (
+    <input
+      className={cx('input num', className)}
+      spellCheck={false}
+      value={draft ?? value ?? ''}
+      placeholder={placeholder}
+      aria-invalid={invalid}
+      aria-label={rest['aria-label']}
+      data-testid={rest['data-testid']}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.currentTarget.value)}
+      onBlur={() => {
+        if (draft != null && !cancelled.current) {
+          if (invalid) toast(`Nieprawidłowy miesiąc – zostaje ${value ? 'poprzedni' : 'pusty'} (wpisz RRRR-MM${allowEmpty ? ' albo zostaw puste' : ''}).`, 'error')
+          else if (parsed !== value) onChange(parsed ?? null)
+        }
+        cancelled.current = false
+        setDraft(null)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
     />
   )
 }
@@ -156,6 +228,8 @@ export function TimeField({
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
   const read = (t: string) => (t.trim() === '' ? (allowEmpty ? null : undefined) : (parseClockInput(t) ?? undefined))
   const invalid = draft != null && read(draft) === undefined
   return (
@@ -170,14 +244,23 @@ export function TimeField({
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null) {
+        if (draft != null && !cancelled.current) {
           const v = read(draft)
           if (v === undefined) toast('Nieprawidłowa godzina – zostaje poprzednia.', 'error')
           else if (v !== value) onChange(v)
         }
+        cancelled.current = false
         setDraft(null)
       }}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
     />
   )
 }

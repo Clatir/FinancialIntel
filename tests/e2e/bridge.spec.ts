@@ -64,8 +64,20 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     await quick.getByTestId('quick-time').press('Tab')
     await expect(quick.getByTestId('quick-preview-energy')).toContainText('→')
     await quick.screenshot({ path: join('test-results', 'screens', '09-szybki-wpis.png') })
+    // A second Enter right after the first (B51): saved once.
     await quick.getByTestId('quick-note').press('Enter')
+    await quick.keyboard.press('Enter')
     await expect.poll(async () => (await operations(dir)).filter((t) => t.amount === -1250).map((t) => [t.date, t.time, t.categoryId, t.counterparty])).toEqual([[today, '12:00', GROCERIES, 'Biedronka']])
+    await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(1)
+
+    // The same draft sent twice before an answer came (B51): the main window saves it once.
+    quick = await quickWindow(app, page)
+    const twice = { id: '01KQ0000000000000000000B51', kind: 'expense', amount: 3333, categoryId: null, accountId: ACC, date: today, time: null, counterparty: 'Dwa razy', note: '', impulse: null, logNote: '', household: false, memberId: null, advance: false, splits: [] }
+    await quick.evaluate(async (draft) => {
+      const fi = (globalThis as unknown as { fi: { quickAdd(d: unknown): Promise<void> } }).fi
+      await Promise.all([fi.quickAdd(draft), fi.quickAdd(draft)])
+    }, twice)
+    await expect.poll(async () => (await operations(dir)).filter((t) => t.amount === -3333).map((t) => t.id)).toEqual([twice.id])
     await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(1)
 
     // The quiet hours: a confirmation and a short note first.

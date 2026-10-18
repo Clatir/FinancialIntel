@@ -71,6 +71,16 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
     await page.locator('[data-testid="operation-row"]', { hasText: /Domownik/ }).click()
     await typeAmount(page, 'operation-amount', '250')
     await expect.poll(async () => (await operations(dataDir)).find((t) => t.counterparty === 'Domownik')?.amount).toBe(25000)
+    // Esc throws a typed date and time away (B24).
+    const saved = (await operations(dataDir)).find((t) => t.counterparty === 'Domownik')!
+    for (const [id, typed] of [['operation-date', '01.01.2020'], ['operation-time', '23:59']] as const) {
+      const field = page.getByTestId(id)
+      const before = await field.inputValue()
+      await field.fill(typed)
+      await field.press('Escape')
+      await expect(field).toHaveValue(before)
+    }
+    expect((await operations(dataDir)).find((t) => t.counterparty === 'Domownik')).toMatchObject({ date: saved.date, time: saved.time })
     await page.getByTestId('history-open').click()
     await expect(page.getByTestId('history-changes')).toContainText('Kwota')
     await page.keyboard.press('Escape')

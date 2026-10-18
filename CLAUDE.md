@@ -390,6 +390,33 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/fs/open-progress.test.ts`, E2E `tests/e2e/open.spec.ts`; zmienne testowe `FI_OPEN_DELAY_MS` (opóźnienie
   każdego odczytu) i `FI_OPEN_SLOW_MS` (próg wolnego odczytu).
 
+## Kod (1.4.2 – pieniądze i dane się zgadzają, grupa E, D84)
+- Cele od chwili zmiany (C1–C3, B2, B13, B30, N1, T128–T131): `goal.activeFrom` / `past` (`goalPastSchema`, stan sprzed
+  każdej zmiany kolejności, kwoty, archiwizacji) / `transfers` (`goalTransferSchema`); `calc/goals.ts` `goalAt`,
+  `goalTakes`, `goalDecided` (cele sprzed 1.4.2 bez historii – jak wcześniej), `changeGoal`, `transferGoal`, `renumber(…,
+  now)`; silnik: dostawa do celów z chwili wpływu `cameIn` (utworzenie dokowania albo operacji, nie wcześniej niż początek
+  jej dnia), łupy z `decidedAt`, przeniesienia (slot 4) `min(kwota, stan)`, `FleetState.goals[].takes`; renderer:
+  `starmap/actions.ts` `addGoal` / `patchGoal` / `archiveGoal(g, archived, to)` / `moveGoalMoney`, `GoalMoneyDialog`
+  (`starmap-archived-move`), wydatek z celu `GoalSelect` w `OperationEditor` (`operation-goal`; cel albo kontener),
+  scenariusz ICTTJ zapamiętany, zmiana z potwierdzeniem (`ictj-forecast-confirm`).
+- Domownicy i import (B3–B5, T132–T134): `rebaseOpenings` (`fleet.ts`) w `setHouseholdSince` z „Cofnij”; `proposalSig`
+  z osobą; `bank.source` / `bank.altKeys`, `formatsOf` (format starszych importów), `coverageOf` (dni pliku), krok
+  „drugi format” w `planImport` (`known` + `other`), `ImportPlan.format`; duplikaty `bank-format` (w zakresach obu importów).
+- Ładownia i plan (B1, B6, B10, B11, B46, B55, B56, T135–T139): `container.archivedAt`, `activeIn` / `lifeOver`,
+  `paidCycleOf(c, m, closed)`, `nextUnpaidOf`, `tanks[].paidDue`, zdarzenie `tank` (resztka zbiornika do osłon),
+  `cargo/actions.ts` `fromNow` / `archiveContainer`, `MonthField` (`fields.tsx`); `monthPlanId` (stałe id planu),
+  `editPlan` zamraża następny miesiąc, `lootApplied` (zdarzenie `loot` z `ref`), `LootDecided` (`loot-decided`, `loot-changed`).
+- Folder danych (B9, B42–B50, T140–T143): `FileState.readError` + `DataStore.unreadable` / `reread`, `RemovedOutsideError`
+  i `ConflictCopyError` (z `change` dla okna), `history.snapshot` → plik + `drop`, `resolveConflict` (`keepAside`, plan
+  miesiąca pod id zachowanego, strony sprawdzane), kopia planu `-KOMPUTER.json`, `Mutex.idle` / `DataStore.idle`,
+  zamykanie (`QUIT_DRAIN_MS`, `FLUSH_SILENT_MS`, `FLUSH_LIMIT_MS`, `fi:flushing`, `windowClosing`), `openErrorMessage`,
+  `trash` przez `withRetry`; `merge.ts` `MISSING`, `PendingRemote.savedAfter`.
+- Szybki wpis i pola (B51, B24, T144): `QuickDraft.id` (host odrzuca znane id), okno zablokowane do następnego otwarcia,
+  Esc w fazie przechwytywania, zegar zamknięcia kasowany przy otwarciu; `cancelled` w `AmountField` / `DateField` /
+  `TimeField` / `MonthField` / `NameInput`. Gra (B32): `namesNote`, notatka naruszenia ≤ 500.
+- Testy: `tests/unit/goals.test.ts`, `tests/fs/datastore-robust.test.ts`, E2E `tests/e2e/goals.spec.ts`; poszerzone
+  `fleet`, `import`, `household`, `merge`, `game`, E2E `month`, `household`, `ictj`, `bridge`, `operations`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -455,4 +482,6 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.3.0 Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80)
 - [x] 1.4.0 Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dnia z saldem na start, panel przychodów (D81)
 - [x] 1.4.1 Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82)
+- [x] 1.4.2 Pieniądze i dane się zgadzają (grupa E, D84): cele od chwili zmiany, pieniądze archiwizowanego celu, opłaty
+  okresowe i życie kontenera, łupy, dwa formaty pliku z banku, folder danych i dwa komputery, szybki wpis, Esc w polach
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

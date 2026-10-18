@@ -108,7 +108,8 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     expect(moved.entry.relPath).toBe('months/2026-05.json')
     expect(await exists(join(store.root, 'months', '2026-03.json'))).toBe(false)
     const other = sampleMonth('2026-05', { note: 'inny' })
-    await expect(store.saveRecord('months', other)).rejects.toThrow(/należy do innego wpisu/)
+    // Never written over: it waits beside it as a sync copy (B46).
+    await expect(store.saveRecord('months', other)).rejects.toThrow(/Ten miesiąc zapisał już inny komputer/)
     expect((await readJson(join(store.root, 'months', '2026-05.json'))).id).toBe(march.entry.record.id)
   })
 

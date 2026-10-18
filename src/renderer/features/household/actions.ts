@@ -4,9 +4,10 @@
  */
 import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
-import { householdOf } from '@shared/calc/fleet'
+import { householdOf, rebaseOpenings } from '@shared/calc/fleet'
 import { balanceOf } from '@shared/calc/household'
-import { inflowOf, type HouseholdMember, type MemberInflow, type Transaction } from '@shared/schema'
+import { inflowOf, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
+import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
 import { updateSettings, useData } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
@@ -80,15 +81,39 @@ export function rememberInflows(incomes: ReadonlyArray<Pick<Transaction, 'kind' 
   patchMembers((ms) => ms.map((m) => (ask.some((a) => a.id === m.id) ? { ...m, inflow: answer(m.id) } : m)))
 }
 
-/** The settlements' start (D81): a date (not in the future), or null = from the budget's start. */
+/**
+ * The settlements' start (D81): a date (not in the future), or null = from the budget's start. The members' opening
+ * balances move with it (B3, `rebaseOpenings`): what they owed or held then, as counted now – shown, with „Cofnij”.
+ */
 export function setHouseholdSince(since: string | null): void {
-  if (useData.getState().status?.readOnly) return
-  if (since && since > warsawNow().date) {
+  const state = useData.getState()
+  if (state.status?.readOnly || !state.fi) return
+  const today = warsawNow().date
+  if (since && since > today) {
     toast('Rozliczenia nie mogą zaczynać się w przyszłości.', 'error')
     return
   }
-  updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, since } } }))
+  const before = state.fi.settings.household
+  const input = fleetInputNow()
+  const openings = input ? timed('rozliczenia: saldo na start', () => rebaseOpenings(input, today, since)) : null
+  const changed = openings ? before.members.filter((m) => !sameOpening(m.opening, openings.get(m.id))) : []
+  updateSettings((f) => ({
+    ...f,
+    settings: {
+      ...f.settings,
+      household: { ...f.settings.household, since, members: f.settings.household.members.map((m) => (openings?.has(m.id) ? { ...m, opening: openings.get(m.id)! } : m)) }
+    }
+  }))
+  if (!changed.length) return
+  const shown = changed.slice(0, 3).map((m) => `${m.name}: ${openingText(openings!.get(m.id)!)} (było ${openingText(m.opening)})`)
+  toast(`Saldo na start rozliczeń przeliczone – ${shown.join(', ')}${changed.length > 3 ? ` i ${changed.length - 3} innych` : ''}.`, 'info', 8000, {
+    label: 'Cofnij',
+    run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, household: before } }))
+  })
 }
+
+const sameOpening = (a: MemberOpening, b: MemberOpening | undefined) => !b || (a.owed === b.owed && a.deposit === b.deposit)
+const openingText = (o: MemberOpening) => (o.deposit > 0 ? `zaliczka ${formatPln(o.deposit)} zł` : o.owed > 0 ? `ma oddać ${formatPln(o.owed)} zł` : '0 zł')
 
 /**
  * The settlements from today (D81): a folder without the date chosen gets today, once. What each member owed or held

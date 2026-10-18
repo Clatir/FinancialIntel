@@ -112,6 +112,17 @@ describe('scalanie trzech wersji', () => {
     expect(r.conflicts).toEqual([])
   })
 
+  it('klucz dodany po jednej stronie (nowa koperta) przy zmianie innego tutaj: scalone bez pytania; dwa różne dodania – konflikt (B47)', () => {
+    const plan = { envelopes: { A: 10000 } }
+    const r = merge3(plan, { envelopes: { A: 15000 } }, { envelopes: { A: 10000, C: 30000 } })
+    expect(r.conflicts).toEqual([])
+    expect(r.merged).toEqual({ envelopes: { A: 15000, C: 30000 } })
+    const both = merge3(plan, { envelopes: { A: 10000, C: 1 } }, { envelopes: { A: 10000, C: 2 } })
+    expect(both.conflicts.map((c) => [c.path.join('.'), c.base])).toEqual([['envelopes.C', undefined]])
+    // An optional field added there (`bankName`), another changed here.
+    expect(merge3({ note: '' }, { note: 'moja' }, { note: '', bankName: 'BANK' }).merged).toEqual({ note: 'moja', bankName: 'BANK' })
+  })
+
   it('pola techniczne nigdy nie są konfliktem: wygrywa przychodząca wersja', () => {
     const r = merge3(base, { ...base, updatedAt: 'mine', updatedBy: 'PC-A', note: 'm' }, { ...base, updatedAt: 'theirs', updatedBy: 'PC-B' })
     expect(r.conflicts).toEqual([])

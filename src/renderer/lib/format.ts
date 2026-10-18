@@ -147,6 +147,24 @@ export function parseDateInput(text: string, fallbackYear = new Date().getFullYe
   return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
+/** Parse a month: "2027-03", "2027-3", "03.2027", "3/2027"; '' = none (null); undefined = not a month. */
+export function parseMonthInput(text: string): string | null | undefined {
+  const t = text.trim()
+  if (!t) return null
+  let y: number
+  let mo: number
+  let m = /^(\d{4})[-./](\d{1,2})$/.exec(t)
+  if (m) {
+    y = Number(m[1])
+    mo = Number(m[2])
+  } else if ((m = /^(\d{1,2})[-./](\d{4})$/.exec(t))) {
+    mo = Number(m[1])
+    y = Number(m[2])
+  } else return undefined
+  if (mo < 1 || mo > 12 || y < 1900 || y > 2999) return undefined
+  return `${y}-${String(mo).padStart(2, '0')}`
+}
+
 export const WEEKDAY_PL = ['', 'pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd']
 
 const MONTH_PL = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']

@@ -13,7 +13,7 @@ import type { Delivery } from './dock'
 import { isOpeningItem, memberName } from './household'
 import { HOUSE_DAYS } from './loans'
 import { pit38Deadline } from './radar'
-import { activeIn, nextPaymentOf, type Alarm, type FleetState } from './fleet'
+import { activeIn, nextPaymentOf, nextUnpaidOf, type Alarm, type FleetState } from './fleet'
 
 /** The Daily Bias (spec, „Wywiad”): Bullish – today's energy at least the base allowance and the envelopes on plan;
  * Bearish – the energy under half the base or the shields under their minimum; else Neutral. */
@@ -159,12 +159,13 @@ export function briefing(o: BriefingInput): BriefingItem[] {
   }
   for (const c of o.containers) {
     if (c.cycleMonths <= 1) continue
-    const date = nextPaymentOf(c, f.today)
-    // Only a payment of the container's life (`from` – `until`, not archived).
+    const tankOf = f.tanks.find((t) => t.containerId === c.id)
+    // The next payment still to make (a cycle paid early has none – B55), of the container's life (`from` – `until`).
+    const date = nextUnpaidOf(c, f.today, tankOf?.paidDue)
     if (!activeIn(c, date.slice(0, 7))) continue
     const days = daysBetween(f.today, date)
     if (days < 0 || days > ASTEROID_DAYS) continue
-    const tank = f.tanks.find((t) => t.containerId === c.id)?.amount ?? 0
+    const tank = tankOf?.amount ?? 0
     items.push({
       level: days <= 3 ? 'yellow' : 'info',
       kind: 'asteroid',

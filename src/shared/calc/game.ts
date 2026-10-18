@@ -193,11 +193,17 @@ const dateOf = (iso: string) => warsawStamp(iso).slice(0, 10)
  * load line (ordinary); an envelope over by more than the threshold, the shields below their minimum by a decision, a
  * top-up of the trading account against the firewall, a purchase in the quiet hours (serious).
  */
+/** Names in a violation's note: the first three and how many more (B32 – a note stays short whatever the day added). */
+export function namesNote(names: readonly string[]): string {
+  const shown = names.slice(0, 3).join(', ')
+  return names.length > 3 ? `${shown} i ${names.length - 3} innych` : shown
+}
+
 export function rateDay(input: GameInput, date: string, prev: GameDay | null = null): DayRating {
   const f = computeFleet({ ...input, now: warsawEndOf(date) })
   const { settings } = input
   const violations: GameDay['violations'] = []
-  const add = (order: ViolationKind, amount: number | null, ref: string | null = null, note = '') => violations.push({ order, serious: SERIOUS.has(order), note, ref, amount })
+  const add = (order: ViolationKind, amount: number | null, ref: string | null = null, note = '') => violations.push({ order, serious: SERIOUS.has(order), note: note.slice(0, 500), ref, amount })
   const txs = input.transactions.filter((t) => t.date === date)
   const tags: string[] = []
   let cargo: number | null = null
@@ -219,7 +225,7 @@ export function rateDay(input: GameInput, date: string, prev: GameDay | null = n
     cargo = mass.monthly
     const added = known.filter((c) => dateOf(c.createdAt) === date && activeIn(c, monthOf(date)))
     const grew = prev?.cargo != null && monthOf(addDays(date, -1)) === monthOf(date) ? mass.monthly > prev.cargo : added.length > 0
-    if (mass.over && grew) add('cargo', mass.monthly, added[0]?.id ?? null, added.map((c) => c.name).join(', '))
+    if (mass.over && grew) add('cargo', mass.monthly, added[0]?.id ?? null, namesNote(added.map((c) => c.name)))
     // The shields below their minimum at the day's end after the day's decisions took money out of them.
     const min = f.shields.min
     if (min != null && f.shields.amount < min) {

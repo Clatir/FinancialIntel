@@ -6,6 +6,8 @@ import {
   dailyAllowance,
   dockAmount,
   layersSum,
+  nextUnpaidOf,
+  paidCycleOf,
   paySalary,
   rangeMonths,
   shipClass,
@@ -14,6 +16,8 @@ import {
   type FleetInput,
   type FleetState
 } from '@shared/calc/fleet'
+import { addMonths } from '@shared/calc/dates'
+import { lootApplied } from '@shared/calc/plan'
 import { costOf, partsOf, splitEvenly } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
 import {
@@ -179,6 +183,25 @@ describe('pensja 1. dnia (spec: 4 000 zł przy osłonach 2 500 zł)', () => {
     expect(s.energy).toBe(zl(4900))
     // The next month's daily envelopes grow by the loot: (3 000 + 900) / 30 days left of November on the 1st…
     expect(s.daily?.limit).toBe(zl(3900))
+    expect(lootApplied(s.log, '2026-10')).toEqual({ date: '2026-11-02', amount: zl(3900), goals: zl(2000), nextMonth: zl(900), shields: zl(1000) })
+  })
+
+  it('łupy zmienione po decyzji (późny import): silnik dzieli to, co jest – cele, następny miesiąc, reszta do osłon (B10)', () => {
+    const trip = goal('Wyjazd', zl(5000), 1)
+    const late = tx('2026-10-29', zl(-1800), { categoryId: FOOD, createdAt: '2026-11-05T08:00:00.000Z' })
+    const s = fleet({
+      settings: settingsWith({ budget: { start: '2026-10-01' } }),
+      balances: [opening('2026-10-01', zl(20000))],
+      goals: [trip],
+      months: [plan('2026-10', zl(4000), {}, { loot: { decidedAt: '2026-11-02T10:00:00.000Z', shields: zl(1000), nextMonth: zl(900), goals: { [trip.id]: zl(2000) } } })],
+      transactions: [tx('2026-10-05', zl(-100), { categoryId: FOOD }), late],
+      now: '2026-11-06T12:00:00+01:00'
+    })
+    expect(lootApplied(s.log, '2026-10')).toEqual({ date: '2026-11-02', amount: zl(2100), goals: zl(2000), nextMonth: zl(100), shields: 0 })
+    // Without a decision by the 7th: all of it to the shields on the 8th.
+    const none = fleet({ settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(20000))], months: [plan('2026-10', zl(4000))], now: '2026-11-09T12:00:00+01:00' })
+    expect(lootApplied(none.log, '2026-10')).toEqual({ date: '2026-11-08', amount: zl(4000), goals: 0, nextMonth: 0, shields: zl(4000) })
+    expect(lootApplied(none.log, '2026-11')).toBeNull()
   })
 })
 
@@ -213,12 +236,81 @@ describe('odkładki (spec: OC 1 240 zł rocznie)', () => {
     const s = fleet({ ...input, now: '2027-09-10T12:00:00+02:00' })
     const installments = s.log.filter((e) => e.kind === 'sinking').map((e) => e.amount)
     expect(installments).toEqual([...Array(11).fill(10333), 10337])
-    expect(s.tanks).toEqual([{ containerId: oc.id, name: 'OC', amount: zl(1240), dueMonth: '2027-09', due: zl(1240) }])
+    expect(s.tanks).toEqual([{ containerId: oc.id, name: 'OC', amount: zl(1240), dueMonth: '2027-09', paidDue: null, due: zl(1240) }])
     expect(s.energy).toBe(zl(4000) - 10337)
     const paid = fleet({ ...input, transactions: [tx('2027-09-15', -zl(1240), { containerId: oc.id, categoryId: oc.categoryId })], now: '2027-09-16T12:00:00+02:00' })
     expect(paid.tanks[0]?.amount).toBe(0)
     expect(paid.energy).toBe(zl(4000) - 10337)
     expect(paid.alarms.filter((a) => a.kind === 'sinking-short')).toEqual([])
+    // Paid: the cycle is closed – the tank collects for the next due month, no gap against the plan (B6).
+    expect(paid.tanks[0]).toMatchObject({ dueMonth: '2028-09', paidDue: '2027-09' })
+  })
+
+  const monthsFrom = (first: string, count: number, salary = zl(4000)) => Array.from({ length: count }, (_, i) => plan(addMonths(first, i), salary))
+
+  it('opłata zapłacona miesiąc przed terminem (1. dnia w poniedziałek) zamyka cykl: bez raty doganiającej, odprawa i radar bez asteroidy (B55)', () => {
+    const fee = containerSchema.parse({ ...base(), name: 'OC', amount: zl(1200), cycleMonths: 12, dueMonth: '2027-03', dueDay: 1 })
+    const input = { settings: settingsWith({ budget: { start: '2026-04-01' } }), balances: [opening('2026-04-01', zl(60000))], months: monthsFrom('2026-04', 13), containers: [fee] }
+    const early = tx('2027-02-26', -zl(1200), { containerId: fee.id })
+    const s = fleet({ ...input, transactions: [early], now: '2027-03-10T12:00:00+01:00' })
+    // March: no installment (the cycle is paid), the salary whole in the energy.
+    expect(s.log.filter((e) => e.kind === 'sinking' && e.date === '2027-03-01')).toEqual([])
+    expect(s.energy).toBe(zl(4000))
+    expect(s.tanks[0]).toMatchObject({ dueMonth: '2028-03', paidDue: '2027-03' })
+    // 27.02: the payment of 1.03 made already – the next asteroid is a year away.
+    const before = fleet({ ...input, transactions: [early], now: '2027-02-27T12:00:00+01:00' })
+    expect(before.tanks[0]).toMatchObject({ paidDue: '2027-03', dueMonth: '2028-03' })
+    expect(nextUnpaidOf(fee, '2027-02-27', before.tanks[0]!.paidDue)).toBe('2028-03-01')
+    expect(nextUnpaidOf(fee, '2027-02-27', null)).toBe('2027-03-01')
+    // Paid before the day in the due month (15.10 for 25.10): the tank empty, no gap, the next payment a year on.
+    const oct = containerSchema.parse({ ...base(), name: 'OC2', amount: zl(1200), cycleMonths: 12, dueMonth: '2026-10', dueDay: 25 })
+    const paid = fleet({ ...input, containers: [oct], transactions: [tx('2026-10-15', -zl(1200), { containerId: oct.id })], now: '2026-10-16T12:00:00+02:00' })
+    expect(paid.tanks[0]).toMatchObject({ amount: 0, paidDue: '2026-10', dueMonth: '2027-10' })
+    expect(nextUnpaidOf(oct, '2026-10-16', paid.tanks[0]!.paidDue)).toBe('2027-10-25')
+    // A payment two months early is no payment of the cycle: the tank still collects for it.
+    expect(paidCycleOf(fee, '2027-01')).toBeNull()
+    expect(paidCycleOf({ cycleMonths: 2, dueMonth: '2027-03' }, '2027-02')).toBeNull()
+  })
+
+  it('zaległa zapłata poprzedniego cyklu w miesiącu przed terminem nie zamyka następnego (B55)', () => {
+    const water = containerSchema.parse({ ...base(), name: 'Woda', amount: zl(300), cycleMonths: 3, dueMonth: '2027-03', dueDay: 10 })
+    const input = { settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(60000))], months: monthsFrom('2026-10', 10), containers: [water] }
+    // December paid on time, March not: the May payment is March's, late – June still to pay.
+    const dec = tx('2026-12-10', -zl(300), { containerId: water.id })
+    const may = tx('2027-05-20', -zl(300), { containerId: water.id })
+    const late = fleet({ ...input, transactions: [dec, may], now: '2027-05-25T12:00:00+02:00' })
+    expect(late.tanks[0]).toMatchObject({ dueMonth: '2027-06', paidDue: null })
+    // June's installment still collected (paid early – none).
+    const june = (txs: Transaction[]) => fleet({ ...input, transactions: txs, now: '2027-06-02T12:00:00+02:00' }).log.some((e) => e.kind === 'sinking' && e.date === '2027-06-01')
+    expect(june([dec, may])).toBe(true)
+    // March paid in March: the May payment is June's, early.
+    const mar = tx('2027-03-10', -zl(300), { containerId: water.id })
+    expect(fleet({ ...input, transactions: [dec, mar, may], now: '2027-05-25T12:00:00+02:00' }).tanks[0]).toMatchObject({ dueMonth: '2027-09', paidDue: '2027-06' })
+    expect(june([dec, mar, may])).toBe(false)
+    // The first cycle followed: the one before it is the budget's past – a payment the month before is early.
+    expect(fleet({ ...input, transactions: [tx('2026-11-20', -zl(300), { containerId: water.id })], now: '2026-11-25T12:00:00+01:00' }).tanks[0]).toMatchObject({ dueMonth: '2027-03', paidDue: '2026-12' })
+  })
+
+  it('archiwizacja kontenera liczy się od jej miesiąca, a resztka zbiornika po końcu życia wraca do osłon (B56)', () => {
+    const fee = containerSchema.parse({ ...base(), name: 'OC', amount: zl(1200), cycleMonths: 12, dueMonth: '2027-09', dueDay: 1 })
+    const input = { settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(60000))], months: monthsFrom('2026-10', 6), containers: [fee] }
+    const running = fleet({ ...input, now: '2027-01-10T12:00:00+01:00' })
+    expect(running.tanks[0]?.amount).toBe(zl(400))
+    // Archived on 10.01.2027: October – January stay as they were; February: the tank back to the shields.
+    const archived = { ...fee, archived: true, archivedAt: '2027-01-10T11:00:00.000Z' }
+    const jan = fleet({ ...input, containers: [archived], now: '2027-01-20T12:00:00+01:00' })
+    expect(jan.log.filter((e) => e.kind === 'sinking').map((e) => e.date)).toEqual(['2026-10-01', '2026-11-01', '2026-12-01', '2027-01-01'])
+    expect(jan.tanks[0]?.amount).toBe(zl(400))
+    const feb = fleet({ ...input, containers: [archived], now: '2027-02-10T12:00:00+01:00' })
+    expect(feb.tanks).toEqual([])
+    expect(feb.log.filter((e) => e.kind === 'tank')).toEqual([{ date: '2027-02-01', kind: 'tank', amount: zl(400), moves: { tanks: { [fee.id]: -zl(400) }, shields: zl(400) } }])
+    // Archived before 1.4.2 (no date): never counted, as then.
+    expect(fleet({ ...input, containers: [{ ...fee, archived: true }], now: '2027-01-10T12:00:00+01:00' }).log.filter((e) => e.kind === 'sinking')).toEqual([])
+    // Its `until` passed with 100 zł left (a fee paid lower): back to the shields the month after.
+    const ended = { ...fee, cycleMonths: 3, amount: zl(300), dueMonth: '2026-12', until: '2026-12' }
+    const after = fleet({ ...input, containers: [ended], transactions: [tx('2026-12-05', -zl(200), { containerId: fee.id })], now: '2027-01-10T12:00:00+01:00' })
+    expect(after.tanks).toEqual([])
+    expect(after.log.find((e) => e.kind === 'tank')).toMatchObject({ date: '2027-01-01', amount: zl(100) })
   })
 })
 

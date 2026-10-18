@@ -254,6 +254,21 @@ test('Domownicy bez bankowości (D81): rozliczenia od dziś z saldem na start, �
     await page.keyboard.press('Control+4')
     await expect(page.getByTestId('income-panel').getByTestId('income-total-6')).toHaveText('6 000,00 zł')
     await page.screenshot({ path: join('test-results', 'screens', '16-przychody.png') })
+
+    // The date moved (B3): the opening balance follows it – the purchase of last month counts once, the typed 60 zł
+    // beyond it stays; back to today, the opening as before.
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-household').click()
+    await page.getByTestId('household-since-budget').click()
+    await expect(page.getByTestId('household-since-none')).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'Saldo na start rozliczeń przeliczone' })).toContainText('Mama: ma oddać 60,00 zł (było ma oddać 150,00 zł)')
+    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(60), deposit: 0 })
+    await page.keyboard.press('Control+1')
+    await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-household').click()
+    await page.getByTestId('household-since-today').click()
+    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(150), deposit: 0 })
     expect(errors).toEqual([])
   } finally {
     await app.close()

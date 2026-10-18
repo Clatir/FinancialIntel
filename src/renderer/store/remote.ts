@@ -18,6 +18,11 @@ export interface PendingRemote {
   /** This computer had unsaved edits of the record when the change arrived. */
   hadLocalEdits: boolean
   receivedAt: string
+  /**
+   * This computer's write of the record ended after the change came (it was on its way – B48): the disk holds mine,
+   * so taking theirs (or their deletion) must be written, not only shown.
+   */
+  savedAfter?: boolean
 }
 
 interface RemoteState {

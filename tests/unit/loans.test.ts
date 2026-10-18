@@ -142,7 +142,7 @@ describe('radar 90 dni i PIT-38 (D58, D72)', () => {
       today: '2027-02-01',
       plans,
       containers: [oc, ended],
-      tanks: [{ containerId: oc.id, name: 'OC auta', amount: zl(930), dueMonth: '2027-03', due: zl(1240) }],
+      tanks: [{ containerId: oc.id, name: 'OC auta', amount: zl(930), dueMonth: '2027-03', paidDue: null, due: zl(1240) }],
       loans: loanStates([given], [lent], [], '2027-02-01'),
       money
     })

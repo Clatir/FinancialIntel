@@ -21,12 +21,15 @@ const STATUS: Record<string, { label: string; tone: 'up' | 'down' | 'warn' | 'de
   error: { label: 'błąd odczytu', tone: 'down' }
 }
 
+const chooseForecast = (id: string) => updateSettings((f) => ({ ...f, settings: { ...f.settings, ictj: { ...f.settings.ictj, forecastId: id } } }))
+
 export function IctjTab() {
   const snap = useIctj((s) => s.snap)
   const forecastId = useData((s) => s.fi?.settings.ictj.forecastId ?? null)
   const readOnly = useData((s) => !!s.status?.readOnly)
   const [suggested, setSuggested] = useState<string | null>(null)
   const [program, setProgram] = useState<IctjProgram | null>(null)
+  const [pending, setPending] = useState<string | null>(null)
   useEffect(() => {
     void api.ictjSuggest().then(setSuggested, () => setSuggested(null))
     void api.ictjProgram().then(setProgram, () => setProgram(null))
@@ -100,15 +103,18 @@ export function IctjTab() {
           <Field label="Scenariusz" labelWidth={120} hint="Jego cele są układami gwiezdnymi okrętu (tylko do odczytu). Wspólne dla wszystkich komputerów.">
             <select
               className="input h-[26px] w-[320px]"
-              value={forecastId ?? ''}
+              value={pending ?? forecastId ?? ''}
               disabled={readOnly}
               onChange={(e) => {
                 const id = e.currentTarget.value || null
-                updateSettings((f) => ({ ...f, settings: { ...f.settings, ictj: { ...f.settings.ictj, forecastId: id } } }))
+                if (!id || id === forecastId) return setPending(null)
+                // Another scenario archives the goals of this one (D84 C3): asked first, never by itself.
+                if (forecastId && current) setPending(id)
+                else chooseForecast(id)
               }}
               data-testid="ictj-forecast"
             >
-              <option value="">zmieniony ostatnio w ICTTJ{latest ? ` (${latest.name})` : ''}</option>
+              {!forecastId && <option value="">— wybierz{latest ? ` (zmieniony ostatnio: ${latest.name})` : ''} —</option>}
               {snap.forecasts.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name} · {f.currency} · {countLabel(f.goals.filter((g) => g.enabled).length, 'cel', 'cele', 'celów')}
@@ -117,6 +123,29 @@ export function IctjTab() {
               {forecastId && !snap.forecasts.some((f) => f.id === forecastId) && <option value={forecastId}>(scenariusza nie ma w ICTTJ)</option>}
             </select>
           </Field>
+          {pending && current && (
+            <div className="flex flex-col gap-2 border border-accent/40 bg-accent-soft px-2 py-1.5" data-testid="ictj-forecast-confirm">
+              <span>
+                Cele scenariusza „{current.name}” zostaną zarchiwizowane: ich środki zostają w nich (przeniesiesz je na Mapie gwiezdnej), a nowe pieniądze
+                trafią do celów scenariusza „{snap.forecasts.find((f) => f.id === pending)?.name ?? '—'}”.
+              </span>
+              <span className="flex gap-2">
+                <button
+                  className="btn btn-accent h-[24px]"
+                  onClick={() => {
+                    chooseForecast(pending)
+                    setPending(null)
+                  }}
+                  data-testid="ictj-forecast-confirm-ok"
+                >
+                  Zmień scenariusz
+                </button>
+                <button className="btn h-[24px]" onClick={() => setPending(null)}>
+                  Anuluj
+                </button>
+              </span>
+            </div>
+          )}
           {forecastId && snap.status === 'ok' && !current && <p className="text-accent">Wybranego scenariusza nie ma w folderze ICTTJ – cele zostają, jakie były, dopóki nie wybierzesz innego.</p>}
           {current && current.currency !== 'PLN' && (
             <p className="text-accent" data-testid="ictj-currency">

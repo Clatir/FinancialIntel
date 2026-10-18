@@ -9,7 +9,7 @@ import { addDays, isoWeekOf, mondayOf, monthOf, monthRange, warsawNow, weekdayOf
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
 import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekNumbers, yearNumbers, yearWealth } from '@shared/calc/intel'
 import { setReportTab, setWatchMonday, useReportsUi, type ReportTab } from './state'
-import { debriefing, planFor } from '@shared/calc/plan'
+import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
 import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
@@ -237,7 +237,8 @@ function DebriefReport() {
   const [month, setMonth] = useState(() => (months[1] ?? months[0])!)
   const d = useDebrief(month)
   const b = d.brief
-  const loot = d.plan?.month === month ? d.plan.loot : null
+  // The split as the engine made it (B10): the loot now, a late import included.
+  const loot = lootApplied(fleet.log, month)
   const sections = (money: (g: number) => string, label: (id: string) => string): ReportSection[] => [
     {
       title: 'Wynik wobec planu',
@@ -278,7 +279,7 @@ function DebriefReport() {
             title: 'Podział łupów',
             lines: [
               ['Na następny miesiąc', money(loot.nextMonth)],
-              ['Do celów', money(Object.values(loot.goals).reduce((a, x) => a + x, 0))],
+              ['Do celów', money(loot.goals)],
               ['Do osłon', money(loot.shields)]
             ] as Array<[string, string]>
           }

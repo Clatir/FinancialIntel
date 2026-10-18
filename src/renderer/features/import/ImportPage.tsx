@@ -153,6 +153,7 @@ function Summary() {
   const removed = plan.vanished.filter((t) => choices.removeVanished[t.id]).length
   const known = n('known')
   const settledFlags = plan.rows.filter((p) => p.status === 'known' && p.settled).length
+  const otherFormat = plan.rows.filter((p) => p.status === 'known' && p.other).length
   const nothing = created + merged + n('settle') + removed + settledFlags === 0
   return (
     <Panel title="Podgląd">
@@ -174,6 +175,16 @@ function Summary() {
           <span className="num text-right text-muted" data-testid="import-count-known">
             {known - settledFlags}
           </span>
+          {otherFormat > 0 && (
+            <>
+              <span className="pl-3 text-dim" title="Ta sama operacja z drugiego formatu pliku (lista operacji ↔ historia rachunku): opis jest tam inny, więc FI łączy ją po kwocie, dacie (±3 dni) i nazwie.">
+                w tym z {plan.format === 'historia' ? 'listy operacji' : 'historii rachunku'}
+              </span>
+              <span className="num text-right text-dim" data-testid="import-count-other-format">
+                {otherFormat}
+              </span>
+            </>
+          )}
           {deleted.length > 0 && (
             <>
               <span className="text-muted">usunięte przez Ciebie wcześniej (pominięte)</span>

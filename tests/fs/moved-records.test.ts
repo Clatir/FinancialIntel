@@ -6,7 +6,7 @@ import { DataStore } from '../../src/main/datastore/store'
 import { createDefaultSettings } from '@shared/defaults'
 import { newerSide } from '@shared/conflicts'
 import type { Collection } from '@shared/paths'
-import type { RecordTypes } from '@shared/records'
+import { serializeRecord, type RecordTypes } from '@shared/records'
 import { balanceSchema, dockingSchema, MBANK_ACCOUNT_ID, type Transaction } from '@shared/schema'
 import { readJson, sampleTransaction, tempDir } from './helpers'
 
@@ -126,11 +126,13 @@ describe('wpis przeniesiony zmianą daty na innym komputerze', () => {
   })
 
   it('zapis pod datą drugiego duplikatu odkłada jego wersję do historii (W8-35)', async () => {
-    const { a, b } = await twoComputers()
+    const { a, b, root } = await twoComputers()
     const first = await a.saveRecord('transactions', entry())
     await b.refresh([first.entry.relPath])
     // B moves it to the 7th, A – not knowing – to the 5th: the same id under two dates.
     await b.saveRecord('transactions', { ...first.entry.record, date: '2026-10-07', amount: 300, note: 'z B' })
+    // OneDrive has not removed the old file on A's disk yet – the duplicate's way in (a file gone already is a move, B49).
+    await fs.writeFile(join(root, ...first.entry.relPath.split('/')), serializeRecord('transactions', first.entry.record))
     const mine = await a.saveRecord('transactions', { ...first.entry.record, date: '2026-10-05', amount: 150 })
     const both = await a.refresh()
     expect(both?.conflicts.some((c) => c.type === 'duplicate')).toBe(true)

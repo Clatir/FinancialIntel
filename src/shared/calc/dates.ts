@@ -66,6 +66,11 @@ export function weekdayOf(date: string): number {
   return d === 0 ? 7 : d
 }
 
+/** The first moment of a Warsaw day. */
+export function warsawStartOf(date: string): Date {
+  return DateTime.fromISO(date, { zone: WARSAW }).startOf('day').toJSDate()
+}
+
 /** The last moment of a Warsaw day (the state of the day's end – the game rates it, E7). */
 export function warsawEndOf(date: string): Date {
   return DateTime.fromISO(date, { zone: WARSAW }).endOf('day').toJSDate()

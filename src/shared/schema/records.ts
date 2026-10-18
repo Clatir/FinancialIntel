@@ -70,7 +70,11 @@ export const bankRowSchema = z.looseObject({
   category: z.string().max(200).default(''),
   /** „transakcja nierozliczona”: the bank may still change the amount or drop the row. */
   pending: z.boolean().default(false),
-  importedAt: isoDateTime
+  importedAt: isoDateTime,
+  /** The file it came from (1.4.2; before – `import/reconcile.ts` `formatsOf` tells it): a list of operations or the account history. */
+  source: z.enum(['lista', 'historia']).optional().catch(undefined),
+  /** The keys of the same row in the other format (1.4.2, B5): its description differs there, so its key too. */
+  altKeys: z.array(z.string().min(1).max(300)).max(20).optional().catch(undefined)
 })
 export type BankRow = z.infer<typeof bankRowSchema>
 
@@ -152,11 +156,35 @@ export const containerSchema = z.looseObject({
   until: isoMonth.nullable().default(null),
   loanId: ulidSchema.nullable().default(null),
   archived: z.boolean().default(false),
+  /** When it was archived (1.4.2, B56): it counts until that month's end; none = archived before 1.4.2 – never counts. */
+  archivedAt: isoDateTime.nullable().catch(null).default(null),
   note: text
 })
 export type Container = z.infer<typeof containerSchema>
 
 // ------------------------------------------------------------------ goals
+
+/** A goal's state before one of its changes (1.4.2, D84 C1): it held until that moment (excluded). */
+export const goalPastSchema = z.looseObject({
+  until: isoDateTime,
+  priority: z.number().int().min(1).max(999),
+  target: grosze.min(0),
+  archived: z.boolean()
+})
+export type GoalPast = z.infer<typeof goalPastSchema>
+
+/** The goal's money moved out (1.4.2, D84 C2): at the end of the Warsaw day of `at`, to the shields or another goal. */
+export const goalTransferSchema = z.looseObject({
+  at: isoDateTime,
+  /** 'shields' or the id of a goal. */
+  to: z.string().min(1).max(40),
+  /** What the goal held then: never more moves (a later import may have taken some of it). */
+  amount: grosze.min(0)
+})
+export type GoalTransfer = z.infer<typeof goalTransferSchema>
+
+/** A malformed item (a hand-edited file) dropped, not the whole list. */
+const lenientList = <T extends z.ZodType>(item: T) => z.array(item.nullable().catch(null)).transform((xs) => xs.filter((x): x is NonNullable<z.output<T>> => x != null))
 
 export const goalSchema = z.looseObject({
   ...recordBase,
@@ -184,7 +212,19 @@ export const goalSchema = z.looseObject({
   deadline: isoMonth.nullable().default(null),
   archived: z.boolean().default(false),
   achievedAt: isoDateTime.nullable().default(null),
-  note: text
+  note: text,
+  /**
+   * The moment the goal takes money from (1.4.2: when it was added) – money that came in before is not its; null =
+   * always, a goal from before 1.4.2 as the engine counted it then.
+   */
+  activeFrom: isoDateTime.nullable().catch(null).default(null),
+  /** Its priority, target and archiving before each change, oldest first (1.4.2): a change counts from its moment on. */
+  past: lenientList(goalPastSchema)
+    .transform((xs) => [...xs].sort((a, b) => Date.parse(a.until) - Date.parse(b.until)))
+    .catch([])
+    .default([]),
+  /** Its money moved out (1.4.2): at archiving or later, to the shields or another goal. */
+  transfers: lenientList(goalTransferSchema).catch([]).default([])
 })
 export type Goal = z.infer<typeof goalSchema>
 
@@ -286,7 +326,11 @@ export const gameDaySchema = z.looseObject({
       z.looseObject({
         order: z.string().max(60),
         serious: z.boolean().default(false),
-        note: z.string().max(500).default(''),
+        /** Cut, never refused: one long text never makes a month unwritable (B32). */
+        note: z
+          .string()
+          .default('')
+          .transform((s) => s.slice(0, 500)),
         /** What the violation is about: an envelope's category, an operation, a container. */
         ref: z.string().max(100).nullable().default(null),
         /** Its amount (grosze): over the allowance or the limit, below the minimum, the purchase; the screen formats it. */

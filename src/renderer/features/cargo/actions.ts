@@ -37,13 +37,26 @@ export function draftFromPayment(p: RecurringPayment): ContainerDraft {
   }
 }
 
+/** This month, when the budget ran before it (null = it starts now or later: the container counts from the start anyway). */
+function runningMonth(): string | null {
+  const start = useData.getState().fi?.settings.budget.start ?? null
+  const { month } = warsawNow()
+  return start && monthOf(start) < month ? month : null
+}
+
+/**
+ * A periodic fee added (or made periodic) while the budget runs fills its tank from this month on – catching up from
+ * now (T29), never from the energy of months gone by (B56).
+ */
+const fromNow = <T extends Pick<Container, 'cycleMonths' | 'from'>>(c: T): T => (c.cycleMonths > 1 && c.from == null ? { ...c, from: runningMonth() } : c)
+
 export function addContainer(draft: ContainerDraft): string | null {
   if (useData.getState().status?.readOnly) {
     toast('Folder jest tylko do odczytu.', 'error')
     return null
   }
   const now = new Date().toISOString()
-  const record = containerSchema.parse({ ...draft, schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now })
+  const record = containerSchema.parse({ ...fromNow(draft), schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now })
   addRecord('containers', record)
   linkPayments(record.id, record.counterparty, true)
   return record.id
@@ -77,6 +90,13 @@ export function linkPayments(containerId: string, counterparty: string, quiet = 
   return found.length
 }
 
-export const patchContainer = (id: string, p: Partial<Container>) => updateRecord('containers', id, (c) => ({ ...c, ...p }))
+export const patchContainer = (id: string, p: Partial<Container>) =>
+  updateRecord('containers', id, (c) => {
+    const next = { ...c, ...p }
+    return c.cycleMonths <= 1 && next.cycleMonths > 1 ? fromNow(next) : next
+  })
+
+/** Dropped from the hold (or brought back): it still counts until this month's end – the months before stay as they were (B56). */
+export const archiveContainer = (c: Container, archived: boolean) => patchContainer(c.id, { archived, archivedAt: archived ? new Date().toISOString() : null })
 
 export const deleteContainer = (c: Container) => deleteWithUndo('containers', c.id, c.name, `Usunięto kontener „${c.name}”.`)

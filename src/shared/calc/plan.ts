@@ -266,6 +266,12 @@ export interface Debriefing {
   financed: Array<{ memberId: string; amount: number }>
 }
 
+/**
+ * A month's own plan has the month's id (1.4.2, B46): two computers making it before OneDrive synced write one record,
+ * a change of it, not a second plan of the month.
+ */
+export const monthPlanId = (month: string): string => `01KMTH${month.replace('-', '').padStart(20, '0')}`
+
 /** The planned month in force for `month`: its own plan or the last earlier one. */
 export function planFor(plans: readonly MonthPlan[], month: string): MonthPlan | null {
   let found: MonthPlan | null = null
@@ -344,6 +350,16 @@ export function lootDecision(loot: number, choice: { nextMonth: number; goals: R
   const nextMonth = Math.min(rest, Math.max(0, Math.round(choice.nextMonth)))
   rest -= nextMonth
   return { decidedAt, shields: rest, nextMonth, goals }
+}
+
+/**
+ * How the engine split the loot of `month` (B10): the loot as it is now (a late import changes it) by the decision –
+ * the goals first, then the next month, the rest to the shields – or all to the shields after the 7th. null = not yet.
+ */
+export function lootApplied(log: readonly FleetEvent[], month: string): { date: string; amount: number; goals: number; nextMonth: number; shields: number } | null {
+  const e = log.find((x) => x.kind === 'loot' && x.ref === month)
+  if (!e) return null
+  return { date: e.date, amount: e.amount, goals: sum(Object.values(e.moves.goals ?? {})), nextMonth: e.moves.energy ?? 0, shields: e.moves.shields ?? 0 }
 }
 
 /** Until when the loot of `month` waits for a decision: the 7th of the next month (then it goes to the shields – D18). */

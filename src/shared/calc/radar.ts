@@ -4,7 +4,7 @@
  */
 import type { Container, MonthPlan } from '../schema/records'
 import { addDays, addMonths, daysBetween, firstDayOf, monthOf } from './dates'
-import { activeIn, nextPaymentOf, type FleetState } from './fleet'
+import { activeIn, nextPaymentOf, nextUnpaidOf, type FleetState } from './fleet'
 import { OVERDUE_DAYS, type LoanState } from './loans'
 
 export const RADAR_DAYS = 90
@@ -66,9 +66,11 @@ export function radar(o: RadarInput): RadarItem[] {
   // The asteroids: every payment of a periodic fee in the window, during the container's life.
   for (const c of o.containers) {
     if (c.cycleMonths <= 1 || c.archived) continue
-    for (let date = nextPaymentOf(c, o.today), first = true; date <= end; date = nextPaymentOf(c, addDays(date, 1)), first = false) {
+    const tankOf = o.tanks.find((t) => t.containerId === c.id)
+    // A cycle paid already (early – B55) has no asteroid left: the next one.
+    for (let date = nextUnpaidOf(c, o.today, tankOf?.paidDue), first = true; date <= end; date = nextPaymentOf(c, addDays(date, 1)), first = false) {
       if (!activeIn(c, date.slice(0, 7))) continue
-      const tank = o.tanks.find((t) => t.containerId === c.id)?.amount ?? 0
+      const tank = tankOf?.amount ?? 0
       out.push({ key: `asteroid:${c.id}:${date}`, date, kind: 'asteroid', name: c.name, amount: c.amount, direction: 'out', note: first ? `w zbiorniku ${o.money(tank)}` : '', ref: c.id })
     }
   }

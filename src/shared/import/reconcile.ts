@@ -11,7 +11,7 @@
  * - pending operations of the period a list of operations no longer has (a cancelled card authorization) are offered
  *   for removal – never ticked by themselves: a filtered list lacks rows too.
  */
-import { daysBetween } from '../calc/dates'
+import { addDays, daysBetween } from '../calc/dates'
 import { fold } from '../fold'
 import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
@@ -42,6 +42,33 @@ export function looseMatch(own: { amount: number; date: string; counterparty: st
   return exact || (similar && closeAmount(own.amount, bank.amount)) ? { days, exact, similar } : null
 }
 
+/**
+ * The file format of each bank's operation (B5): its own (`bank.source`, 1.4.2), else the format of the import it came
+ * with – the account history's descriptions start with the type of operation, so most of them in one import = the history.
+ */
+export function formatsOf(txs: readonly Transaction[]): (t: Transaction) => MbankFile['format'] {
+  const votes = new Map<string, number>()
+  for (const t of txs) {
+    if (!t.bank || t.bank.source) continue
+    const op = t.bank.operation.trim().toUpperCase()
+    const history = !!op && t.bank.description.trim().toUpperCase().startsWith(op)
+    votes.set(t.bank.importedAt, (votes.get(t.bank.importedAt) ?? 0) + (history ? 1 : -1))
+  }
+  return (t) => t.bank?.source ?? ((votes.get(t.bank?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')
+}
+
+/** The days a file covers: its period, else its rows' first and last day. */
+export function coverageOf(file: Pick<MbankFile, 'period' | 'rows'>): (date: string) => boolean {
+  let from = file.period?.from ?? ''
+  let to = file.period?.to ?? ''
+  if (!from || !to)
+    for (const r of file.rows) {
+      if (!from || r.date < from) from = r.date
+      if (!to || r.date > to) to = r.date
+    }
+  return (date) => date >= from && date <= to
+}
+
 /** The same counterparty in other words: an empty one (a quick entry without it), one key in the other, a common word. */
 export function similarCounterparty(a: string, b: string): boolean {
   const ka = counterpartyKey(a)
@@ -54,8 +81,11 @@ export function similarCounterparty(a: string, b: string): boolean {
 }
 
 export type RowPlan =
-  /** Imported before; `settled` = it was pending and is settled now (the mark goes). */
-  | { status: 'known'; row: MbankRow; key: string; tx: Transaction; settled: boolean }
+  /**
+   * Imported before; `settled` = it was pending and is settled now (the mark goes); `other` = from the other format of
+   * the file (the list of operations ↔ the account history, B5) – its key joins the operation's.
+   */
+  | { status: 'known'; row: MbankRow; key: string; tx: Transaction; settled: boolean; other?: boolean }
   /** A pending operation that came back changed: it takes the row's amount, date and description. */
   | { status: 'settle'; row: MbankRow; key: string; tx: Transaction }
   /**
@@ -90,15 +120,20 @@ export type NewRow = Extract<RowPlan, { status: 'new' }>
 
 export interface ImportPlan {
   accountId: string
+  /** The file's format: the operations remember it (`bank.source`). */
+  format: MbankFile['format']
   rows: RowPlan[]
   /** Pending operations of the file's period the file does not have any more. */
   vanished: Transaction[]
   period: { from: string; to: string } | null
 }
 
-/** A proposal as one text: the rows of a brand with another proposal are another group (and theme). */
+/**
+ * A proposal as one text: the rows of a brand with another proposal are another group (and theme). A household
+ * member asked about (inflow „pytaj”) is a theme of their own (T110, B4): never one with another member's money.
+ */
 export function proposalSig(d: ImportDecision): string {
-  if (d.source === 'none') return `?${d.kind}`
+  if (d.source === 'none') return d.household ? `?${d.kind}:d:${d.memberId ?? '-'}` : `?${d.kind}`
   const member = d.refundable || d.household ? (d.memberId ?? '-') : ''
   return [d.kind, d.categoryId ?? '', d.refundable ? 'z' : '', d.household ? 'd' : '', member, d.household && d.advance ? 'a' : '', d.counterAccountId ?? '', d.containerId ?? '', d.byTitle ? 't' : ''].join(':')
 }
@@ -114,6 +149,8 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   const keys = rowKeys(file.rows, accountId)
   const mine = existing.filter((t) => t.accountId === accountId)
   const byKey = new Map(mine.filter((t) => t.bank).map((t) => [t.bank!.key, t]))
+  // The keys of the same rows in the other format (B5), never over an operation's own key.
+  for (const t of mine) for (const k of t.bank?.altKeys ?? []) if (!byKey.has(k)) byKey.set(k, t)
   const used = new Set<string>()
   const plans: Array<RowPlan | null> = file.rows.map((row, i) => {
     const tx = byKey.get(keys[i]!)
@@ -142,6 +179,36 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
       plans[i] = { status: 'settle', row, key: keys[i]!, tx: best.tx }
     }
   })
+
+  // The same row of the other format (B5): the account history and the list of operations describe a row in other
+  // words, so its key differs – a booked operation of the bank from the other format, the same amount within ±3 days
+  // (a card's date may differ), a similar name. The closest first, each side once. Only operations of the days this
+  // file covers: one outside its period is not in it – a row of the same amount and name next to it is another one.
+  const other = new Map<string, Transaction[]>()
+  const formatOf = formatsOf(mine)
+  const covers = coverageOf(file)
+  for (const t of mine) {
+    if (!t.bank || t.bank.pending || used.has(t.id) || formatOf(t) === file.format || !covers(t.date)) continue
+    const k = `${t.date}|${t.amount}`
+    const list = other.get(k)
+    if (list) list.push(t)
+    else other.set(k, [t])
+  }
+  if (other.size) {
+    const pairs: Array<{ i: number; tx: Transaction; days: number }> = []
+    file.rows.forEach((row, i) => {
+      if (plans[i]) return
+      for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
+        for (const tx of other.get(`${addDays(row.date, d)}|${row.amount}`) ?? [])
+          if (similarCounterparty(tx.bank!.counterparty || tx.bank!.description, row.counterparty || row.description)) pairs.push({ i, tx, days: Math.abs(d) })
+    })
+    pairs.sort((a, b) => a.days - b.days || a.i - b.i)
+    for (const c of pairs) {
+      if (plans[c.i] || used.has(c.tx.id)) continue
+      used.add(c.tx.id)
+      plans[c.i] = { status: 'known', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx, settled: false, other: true }
+    }
+  }
 
   // Operations typed by hand (the evening entries, D26): the same amount within ±3 days, a similar counterparty.
   const manual = mine.filter(joinable)
@@ -210,7 +277,7 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   const period = file.period ?? (dates.length ? { from: dates[0]!, to: dates.at(-1)! } : null)
   // Only a list of operations shows pending rows (the account history has the booked ones only).
   const vanished = period && file.format === 'lista' ? mine.filter((t) => t.bank?.pending && !used.has(t.id) && t.date >= period.from && t.date <= period.to) : []
-  return { accountId, rows, vanished, period }
+  return { accountId, format: file.format, rows, vanished, period }
 }
 
 /**
@@ -512,7 +579,8 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
     operation: p.row.operation,
     category: p.row.category,
     pending: p.row.pending,
-    importedAt: opts.now
+    importedAt: opts.now,
+    source: plan.format
   })
   const create: Transaction[] = []
   const update: Transaction[] = []
@@ -521,7 +589,9 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
   for (const p of fresh) {
     if (p.status === 'known') {
       counts.known++
-      if (p.settled) update.push({ ...p.tx, bank: { ...p.tx.bank!, pending: false } })
+      // The row of the other format: its key remembered, so the next file of it is known at once.
+      if (p.other) update.push({ ...p.tx, bank: { ...p.tx.bank!, altKeys: [...(p.tx.bank!.altKeys ?? []), p.key].slice(-20) } })
+      else if (p.settled) update.push({ ...p.tx, bank: { ...p.tx.bank!, pending: false } })
       continue
     }
     if (p.status === 'settle') {

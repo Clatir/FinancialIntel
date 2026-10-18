@@ -3,6 +3,7 @@ import { newId } from '@shared/ids'
 import { asksImpulse, isNight, sum } from '@shared/calc/operations'
 import { TX_KIND_LABEL, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { updateRecord, useData } from '../../store/data'
+import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { AmountField, DateField, plnText, TimeField } from '../../components/fields'
@@ -55,7 +56,9 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     counterAccountId: kind === 'transfer' ? t.counterAccountId : null,
     impulse: kind === 'expense' ? t.impulse : null,
     // The loan's link only on a loan's operation (an installment of a taken loan is its container's payment).
-    loanId: kind === 'loan' ? t.loanId : null
+    loanId: kind === 'loan' ? t.loanId : null,
+    // Paid from a goal's money (T24, N1): an expense only.
+    goalId: kind === 'expense' ? t.goalId : null
   }
 }
 
@@ -245,7 +248,7 @@ export function OperationEditor({ id }: { id: string }) {
                   Zapamiętaj: „{t.counterparty}” → {cats.label(t.categoryId)}
                 </button>
               )}
-              {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId })} />}
+              {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId, goalId: containerId ? null : t.goalId })} />}
               <div className="flex items-center gap-2">
                 <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
                 <FinancerSelect refundable={t.refundable} memberId={t.memberId} onChange={(p) => patch(p)} testId="operation-financer" />
@@ -255,6 +258,7 @@ export function OperationEditor({ id }: { id: string }) {
           ) : (
             <SplitEditor t={t} sign={sign} update={update} />
           )}
+          <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
         </Section>
       )}
 
@@ -365,6 +369,37 @@ function CargoSelect({ value, onChange }: { value: string | null; onChange: (id:
         ))}
         {value && !containers.some((c) => c.id === value) && <option value={value}>(usunięty kontener)</option>}
       </select>
+    </div>
+  )
+}
+
+/**
+ * An expense paid from a goal's money (T24, N1): it comes out of the goal, not the energy nor an envelope (what the
+ * goal lacks – from the shields); a returned purchase goes back to it. The goals that take money and those with money.
+ */
+function GoalSelect({ value, outgoing, goals, onChange }: { value: string | null; outgoing: boolean; goals: FleetState['goals']; onChange: (id: string | null) => void }) {
+  const shown = [...goals.filter((g) => g.takes || g.amount > 0 || g.id === value)].sort((a, b) => Number(b.takes) - Number(a.takes) || a.priority - b.priority)
+  if (!shown.length && !value) return null
+  const chosen = goals.find((g) => g.id === value)
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-2">
+        <span className="w-[64px] shrink-0 text-[11.5px] text-muted">Z celu</span>
+        <select className="input min-w-0 flex-1" value={value ?? ''} onChange={(e) => onChange(e.currentTarget.value || null)} aria-label="Z pieniędzy celu" data-testid="operation-goal">
+          <option value="">— nie z pieniędzy celu —</option>
+          {shown.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name} ({plnText(g.amount)} zł{g.takes ? '' : ', archiwum'})
+            </option>
+          ))}
+          {value && !chosen && <option value={value}>(usunięty cel)</option>}
+        </select>
+      </div>
+      {chosen && (
+        <span className="pl-[72px] text-[11px] text-dim" data-testid="operation-goal-note">
+          {outgoing ? 'Wydatek schodzi z celu – bez energii i koperty; czego w celu brakuje, bierze osłony.' : 'Zwrot towaru wraca do celu.'}
+        </span>
+      )}
     </div>
   )
 }

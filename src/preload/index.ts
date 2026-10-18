@@ -61,9 +61,17 @@ const api: FiApi = {
   onChange: (cb) => listen<[ChangeSet]>('change', cb),
   onFlushRequest: (cb) =>
     listen<[]>('flush', () => {
+      // Still saving: said every second, so closing waits for it (B43).
+      const alive = setInterval(() => ipcRenderer.send('fi:flushing'), 1000)
       cb().then(
-        (saved) => ipcRenderer.send('fi:flushed', saved),
-        () => ipcRenderer.send('fi:flushed', false)
+        (saved) => {
+          clearInterval(alive)
+          ipcRenderer.send('fi:flushed', saved)
+        },
+        () => {
+          clearInterval(alive)
+          ipcRenderer.send('fi:flushed', false)
+        }
       )
     }),
   detachOpen: (key, payload) => invoke('detachOpen', key, payload),

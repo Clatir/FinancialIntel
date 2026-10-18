@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { QuickData, QuickResult } from '@shared/api'
 import { inClockWindow, warsawNow } from '@shared/calc/dates'
 import { counterpartyKey } from '@shared/import/classify'
+import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID } from '@shared/schema'
 import { AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { Segmented, cx } from '../../components/ui'
@@ -20,7 +21,7 @@ interface Line {
 
 const blank = (data: QuickData | null): QuickDraft => {
   const { date, time } = warsawNow()
-  return { kind: 'expense', amount: 0, categoryId: null, accountId: data?.accountId ?? '', date, time, counterparty: '', note: '', impulse: null, logNote: '', household: false, memberId: null, advance: false, splits: [] }
+  return { id: newId(), kind: 'expense', amount: 0, categoryId: null, accountId: data?.accountId ?? '', date, time, counterparty: '', note: '', impulse: null, logNote: '', household: false, memberId: null, advance: false, splits: [] }
 }
 
 /** A household member to pick (D80): „ja” = my own purchase. */
@@ -58,7 +59,11 @@ export function QuickApp() {
   // Others' money in a member's transfer (D81, „w tym za …”), by member.
   const [shares, setShares] = useState<Record<string, number>>({})
   const [nightOk, setNightOk] = useState(false)
+  // Sending, or saved and closing (B51): no second save until the window opens again.
   const [busy, setBusy] = useState(false)
+  const sending = useRef(false)
+  // Hiding after „Zapisano”: never the window opened again meanwhile.
+  const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [officer, setOfficer] = useState<string | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
@@ -70,6 +75,8 @@ export function QuickApp() {
   useEffect(() => {
     document.title = 'Szybki wpis – Financial Intel'
     const offData = api.onQuickData((next) => {
+      if (closing.current) clearTimeout(closing.current)
+      closing.current = null
       setData(next)
       setAmountsHidden(!!next?.hideAmounts)
       setD(blank(next))
@@ -79,13 +86,25 @@ export function QuickApp() {
       setMsg(null)
       setOfficer(null)
       setBusy(false)
+      sending.current = false
       // Focus after the reset has rendered (an earlier focus would take the previous amount as its draft).
       setOpened((n) => n + 1)
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
-      setBusy(false)
       setMsg({ ok: r.ok, text: r.message })
-      if (r.ok) setTimeout(() => void api.quickClose(), 450)
+      if (r.ok) {
+        // Saved: a fresh draft (a new id) right away, the window stays locked until it opens again.
+        setD((x) => ({ ...blank(null), accountId: x.accountId }))
+        setLines([])
+        setShares({})
+        closing.current = setTimeout(() => {
+          closing.current = null
+          void api.quickClose()
+        }, 450)
+      } else {
+        sending.current = false
+        setBusy(false)
+      }
     })
     const offPrefs = api.onMachinePrefs((p) => setAmountsHidden(p.hideAmounts))
     void api.quickRefresh()
@@ -176,12 +195,13 @@ export function QuickApp() {
   }, [data, d, lines, cats, money, shares])
 
   const save = useCallback(() => {
-    if (busy || !data) return
+    if (busy || sending.current || !data) return
     if (data.readOnly) return setMsg({ ok: false, text: 'Folder jest tylko do odczytu.' })
     if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
     if (lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
     if (d.kind === 'refundable' && lines.length <= 1 && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
+    sending.current = true
     setBusy(true)
     setMsg(null)
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
@@ -193,19 +213,26 @@ export function QuickApp() {
   const saveRef = useRef(save)
   saveRef.current = save
   useEffect(() => {
+    // Esc closes before any field takes it (a field cancelling its draft stops it there).
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      void api.quickClose()
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        void api.quickClose()
-      } else if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
+      if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
         e.preventDefault()
         // The field being typed in applies its value first (amounts are drafts until left).
         ;(document.activeElement as HTMLElement | null)?.blur()
         setTimeout(() => saveRef.current(), 0)
       }
     }
+    window.addEventListener('keydown', onEscape, true)
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onEscape, true)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [])
 
   const onCounterparty = (counterparty: string) => {

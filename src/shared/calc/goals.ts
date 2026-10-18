@@ -9,6 +9,43 @@ import type { Goal } from '../schema/records'
 import { addMonths, monthOf } from './dates'
 import type { FleetEvent } from './fleet'
 
+// ------------------------------------------------------------------ changes from their moment on (1.4.2, D84 C1)
+
+type Dated = Pick<Goal, 'priority' | 'target' | 'archived'> & { past?: Goal['past']; activeFrom?: string | null }
+
+/** The goal's priority, target and archiving at a moment (ms): the state before the first change after it, else the current one. */
+export function goalAt(g: Dated, at: number): { priority: number; target: number; archived: boolean } {
+  for (const p of g.past ?? []) if (at < Date.parse(p.until)) return { priority: p.priority, target: p.target, archived: p.archived }
+  return { priority: g.priority, target: g.target, archived: g.archived }
+}
+
+/** The goal takes money that came in at a moment (ms): it was there by then (from 1.4.2 – before, always) and not archived. */
+export const goalTakes = (g: Dated, at: number): boolean => (g.activeFrom == null || Date.parse(g.activeFrom) <= at) && !goalAt(g, at).archived
+
+/**
+ * A choice made by hand (the loot's split) may put money in the goal at that moment: it takes money then (B13) – a goal
+ * from before 1.4.2 with no change since keeps the old rule (any goal), as when it was archived is not known.
+ */
+export const goalDecided = (g: Dated, at: number): boolean => goalTakes(g, at) || (g.activeFrom == null && !g.past?.length)
+
+/**
+ * A change of a goal counting from now on, never back (C1): when its priority, target or archiving changes, the state
+ * before is kept in `past` – money that came in before keeps going where it went. Not in the moment the goal was
+ * added (nothing came in before). Every change is kept, however close to the one before: the order is the goals'
+ * together – a state dropped from one goal's history would tie or swap it with another in the money of that moment.
+ */
+export function changeGoal(g: Goal, patch: Partial<Omit<Goal, 'past' | 'id'>>, now: string): Goal {
+  const next: Goal = { ...g, ...patch, updatedAt: now }
+  if (next.priority === g.priority && next.target === g.target && next.archived === g.archived) return next
+  if (g.activeFrom != null && Date.parse(g.activeFrom) >= Date.parse(now)) return next
+  return { ...next, past: [...(g.past ?? []), { until: now, priority: g.priority, target: g.target, archived: g.archived }] }
+}
+
+/** The goal's money moved out now (C2, B30): `amount` (what it holds now) to the shields or another goal. */
+export function transferGoal(g: Goal, to: string, amount: number, now: string): Goal {
+  return { ...g, transfers: [...(g.transfers ?? []), { at: now, to, amount }], updatedAt: now }
+}
+
 export interface GoalSync {
   add: Goal[]
   update: Goal[]
@@ -52,7 +89,11 @@ export function syncIctjGoals(forecast: IctjForecast | null, goals: readonly Goa
         deadline: fg.month,
         archived: false,
         achievedAt: null,
-        note: ''
+        note: '',
+        // It takes money from the moment it comes (C1): what came in before belonged elsewhere.
+        activeFrom: now,
+        past: [],
+        transfers: []
       })
       continue
     }
@@ -65,7 +106,7 @@ export function syncIctjGoals(forecast: IctjForecast | null, goals: readonly Goa
       cur.ictj?.forecastId === ictj.forecastId &&
       cur.ictj?.currency === ictj.currency &&
       cur.ictj?.amount === ictj.amount
-    if (!same) update.push({ ...cur, name, target, deadline: fg.month, archived: false, ictj: { ...cur.ictj, ...ictj }, updatedAt: now })
+    if (!same) update.push(changeGoal(cur, { name, target, deadline: fg.month, archived: false, ictj: { ...cur.ictj, ...ictj } }, now))
   }
   for (const cur of goals) {
     if (cur.source !== 'ictj' || cur.archived || wanted.has(cur.id)) continue
@@ -73,7 +114,7 @@ export function syncIctjGoals(forecast: IctjForecast | null, goals: readonly Goa
     const same = !!forecast && cur.ictj?.forecastId === forecast.id
     if (same && older(cur)) continue
     // The version that dropped it, so an older copy (with the goal still in) does not bring it back.
-    update.push({ ...cur, archived: true, ictj: same && cur.ictj ? { ...cur.ictj, version } : cur.ictj, updatedAt: now })
+    update.push(changeGoal(cur, { archived: true, ictj: same && cur.ictj ? { ...cur.ictj, version } : cur.ictj }, now))
   }
   return { add, update }
 }
@@ -83,14 +124,15 @@ export function byPriority<T extends Pick<Goal, 'priority' | 'createdAt' | 'id'>
   return [...goals].sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
 }
 
-/** Priorities 1…n in the given order (only the goals whose priority changes). */
+/** Priorities 1…n in the given order (only the goals whose priority changes), counting from now on (C1). */
 export function renumber(goals: readonly Goal[], now: string): Goal[] {
-  return goals.flatMap((g, i) => (g.priority === i + 1 ? [] : [{ ...g, priority: i + 1, updatedAt: now }]))
+  return goals.flatMap((g, i) => (g.priority === i + 1 ? [] : [changeGoal(g, { priority: i + 1 }, now)]))
 }
 
 /**
  * The money that went into the goals a month, on average over the last full months of the budget (at most `count`):
- * the deliveries and the loot – what a goal paid out does not count. null = no full month yet.
+ * the deliveries and the loot – what a goal paid out does not count, nor money moved between goals. null = no full
+ * month yet.
  */
 export function goalInflow(log: readonly FleetEvent[], start: string | null, month: string, count = 6): number | null {
   if (!start) return null
@@ -101,7 +143,7 @@ export function goalInflow(log: readonly FleetEvent[], start: string | null, mon
   const inMonths = new Set(months)
   let total = 0
   for (const e of log) {
-    if (!inMonths.has(monthOf(e.date)) || !e.moves.goals) continue
+    if (!inMonths.has(monthOf(e.date)) || !e.moves.goals || e.kind === 'goal') continue
     for (const v of Object.values(e.moves.goals)) if (v > 0) total += v
   }
   return Math.round(total / months.length)
