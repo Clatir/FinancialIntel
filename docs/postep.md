@@ -37,7 +37,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.3.0 | Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80) | Opus 5.5 | **max** | ok. 3,5 h (szacunek z przebiegu sesji; plan był 2,5–3 h) | 1.3.0 | ✅ odpowiedzi i komenda (D80) | ✅ wydane (PR #10) |
 | 1.4.0 | Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dziś z saldem początkowym, panel przychodów (D81) | Opus 5.5 | **max** | ok. 2 h (szacunek z przebiegu sesji; plan był ok. 3 h) | 1.4.0 | ✅ odpowiedzi i komenda (D81) | ✅ wydane (PR #11) |
 | 1.4.1 | Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82) | Opus 5.5 | **xhigh** | ok. 1 h (szacunek z przebiegu sesji; plan był ok. 1,5 h) | 1.4.1 | ✅ zgłoszenie, diagnoza i komenda (D82) | ✅ wydane (PR #12) |
-| Przegląd | Przegląd całej aplikacji po 1.4.1: 10 obszarów × 3 soczewki (błędy, niespójności, wydajność), weryfikacja każdego znaleziska, pomiary na 30 tys. i 150 tys. operacji, brakujące funkcje (`docs/przeglad/`) | Opus 5.5 | **ultracode** | ok. 3 h (zegar sesji, bez przerwy na limit tygodniowy) | – | ✅ prośba, model i skala (150 tys.) | ✅ raport, PR do `main` |
+| Przegląd | Przegląd całej aplikacji po 1.4.1: 10 obszarów × 3 soczewki (błędy, niespójności, wydajność), weryfikacja każdego znaleziska, pomiary na 30 tys. i 150 tys. operacji, brakujące funkcje (`docs/przeglad/`) | Opus 5.5 | **ultracode** | ok. 3 h (zegar sesji, bez przerwy na limit tygodniowy) | – | ✅ prośba, model i skala (150 tys.) | ✅ raport, PR #13 |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd** | | | **ok. 23,5 h** | | | |
 
@@ -871,4 +871,4 @@ Do sprawdzenia przez użytkownika (Windows 11):
   wczytywania, „Przerwij”, log, pula wątków), przegląd i poprawki; PR #12 do `main`.
 - 18.10.2026 – PR #12 scalony, wydanie 1.4.1 opublikowane; prośba użytkownika: przegląd całej aplikacji (niespójności,
   brakujące funkcje, błędy, duże dane) – model ultracode, skala 150 tys.; pomiary i przegląd wieloagentowy (przerwa na
-  limit tygodniowy), nowe wymaganie F0 (wielu finansujących, osoby bez konta); raport `docs/przeglad/`, PR do `main`.
+  limit tygodniowy), nowe wymaganie F0 (wielu finansujących, osoby bez konta); raport `docs/przeglad/`, PR #13.
