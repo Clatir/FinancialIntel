@@ -90,11 +90,15 @@ export function merge3<T>(base: unknown, mine: T, theirs: T, choose: (conflict: 
 }
 
 const ABSENT = undefined
+/** A key the known base did not have (B47): unlike an unknown base, a side that adds it alone is no conflict. */
+const MISSING = Symbol('missing')
 
-function mergeAt(base: unknown, mine: unknown, theirs: unknown, path: Path, conflicts: MergeConflict[], choose: (c: MergeConflict) => Side): unknown {
+function mergeAt(rawBase: unknown, mine: unknown, theirs: unknown, path: Path, conflicts: MergeConflict[], choose: (c: MergeConflict) => Side): unknown {
   if (deepEqual(mine, theirs)) return mine
-  if (base !== ABSENT && deepEqual(base, mine)) return theirs
-  if (base !== ABSENT && deepEqual(base, theirs)) return mine
+  const known = rawBase !== ABSENT
+  const base = rawBase === MISSING ? undefined : rawBase
+  if (known && deepEqual(base, mine)) return theirs
+  if (known && deepEqual(base, theirs)) return mine
   if (isObject(mine) && isObject(theirs)) {
     const b = isObject(base) ? base : undefined
     const out: Record<string, unknown> = {}
@@ -104,13 +108,13 @@ function mergeAt(base: unknown, mine: unknown, theirs: unknown, path: Path, conf
         out[k] = theirs[k] ?? mine[k]
         continue
       }
-      const v = mergeAt(b?.[k], mine[k], theirs[k], [...path, k], conflicts, choose)
+      const v = mergeAt(b ? (k in b ? b[k] : MISSING) : ABSENT, mine[k], theirs[k], [...path, k], conflicts, choose)
       if (v !== undefined) out[k] = v
     }
     return out
   }
   if (isIdArray(mine) && isIdArray(theirs)) {
-    const b = isIdArray(base) ? base : base === ABSENT ? undefined : []
+    const b = isIdArray(base) ? base : !known ? undefined : []
     const byId = (arr: Array<{ id: string }> | undefined, id: string) => arr?.find((x) => x.id === id)
     // Order: theirs, then items only I added (in my order).
     const ids = [...theirs.map((x) => x.id), ...mine.map((x) => x.id).filter((id) => !byId(theirs, id))]
@@ -136,7 +140,7 @@ function mergeAt(base: unknown, mine: unknown, theirs: unknown, path: Path, conf
     // Removals on both sides, or of an item only in base: nothing to add.
     return out
   }
-  return pick({ path, base, mine, theirs }, conflicts, choose) === 'mine' ? mine : theirs
+  return pick({ path, base: known ? base : undefined, mine, theirs }, conflicts, choose) === 'mine' ? mine : theirs
 }
 
 function pick(c: MergeConflict, conflicts: MergeConflict[], choose: (c: MergeConflict) => Side): Side {

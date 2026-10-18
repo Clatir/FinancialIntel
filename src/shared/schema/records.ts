@@ -326,7 +326,11 @@ export const gameDaySchema = z.looseObject({
       z.looseObject({
         order: z.string().max(60),
         serious: z.boolean().default(false),
-        note: z.string().max(500).default(''),
+        /** Cut, never refused: one long text never makes a month unwritable (B32). */
+        note: z
+          .string()
+          .default('')
+          .transform((s) => s.slice(0, 500)),
         /** What the violation is about: an envelope's category, an operation, a container. */
         ref: z.string().max(100).nullable().default(null),
         /** Its amount (grosze): over the allowance or the limit, below the minimum, the purchase; the screen formats it. */

@@ -53,7 +53,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
       // Unsaved local edits would be written over the version kept here (e.g. a kept copy of fi.json).
       if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.')
       await api.resolveConflict(c.id, keep)
-      toast('Konflikt rozstrzygnięty – odrzucona wersja jest w Koszu.', 'success')
+      toast('Konflikt rozstrzygnięty – odrzucona wersja jest w historii wpisu (i w Koszu).', 'success')
     } catch (e) {
       toast(errorMessage(e), 'error', 6000)
     } finally {
@@ -78,7 +78,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         {s.mtimeMs ? ` · plik: ${new Date(s.mtimeMs).toLocaleString('pl-PL')}` : ''}
       </div>
       {s.error && <div className="text-[11.5px] text-down">{s.error}</div>}
-      <button className="btn self-start" disabled={busy || (!s.record && keep === 'copy')} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
+      <button className="btn self-start" disabled={busy || !s.record} title={!s.record ? 'Tej wersji nie da się odczytać – zachowaj drugą.' : undefined} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
         Zachowaj tę wersję
       </button>
     </div>
@@ -243,7 +243,7 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
     const skipped = plan.skipped.length ? ` Nieczytelna wersja – wybierz ręcznie: ${plan.skipped.length}.` : ''
     const left = untouched ? ` Pozostawione bez zmian (nie udało się zachować nowszej kopii tego pliku): ${untouched}.` : ''
     if (errors.size) toast(`Rozstrzygnięto ${done} z ${ids.length}. ${[...errors].join(' ')}${left}${skipped}`, 'error', 8000)
-    else toast(`Zachowano nowsze wersje: ${done} – odrzucone są w Koszu.${skipped}`, plan.skipped.length ? 'info' : 'success', plan.skipped.length ? 6000 : 3200)
+    else toast(`Zachowano nowsze wersje: ${done} – odrzucone są w historii wpisów (i w Koszu).${skipped}`, plan.skipped.length ? 'info' : 'success', plan.skipped.length ? 6000 : 3200)
   }
   return (
     <div className="flex flex-wrap items-center gap-2 border border-line bg-panel px-2.5 py-1.5" data-testid="conflicts-bulk">
@@ -287,7 +287,7 @@ export function SyncPage() {
         </div>
         <p className="text-[11.5px] text-muted">
           Gdy ten sam plik zmieni się na dwóch komputerach, usługa synchronizacji (OneDrive, Dropbox, Google Drive) tworzy jego kopię zamiast
-          nadpisywać. Aplikacja pokazuje takie kopie tutaj – wybierz, którą wersję zachować; druga trafia do Kosza.
+          nadpisywać. Aplikacja pokazuje takie kopie tutaj – wybierz, którą wersję zachować; druga trafia do historii wpisu (widać ją na każdym komputerze) i do Kosza.
         </p>
         {status && status.otherMachines.length > 0 && (
           <Panel title="Inne komputery">

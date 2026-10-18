@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/main/datastore/store.ts @ 84a8339
 import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { SLOW_FILE_MS, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
+import { CONFLICT_COPY_MESSAGE, SLOW_FILE_MS, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import {
   BACKUPS_DIR,
@@ -45,12 +45,30 @@ interface FileState {
   migrated: boolean
   fromVersion: number
   text: string | null
+  /** The file could not be read (OneDrive still bringing it, B42): read again next time, never kept as its content. */
+  readError?: boolean
 }
 
 export class ReadOnlyError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ReadOnlyError'
+  }
+}
+
+/** A month's record written as a sync copy beside the month's file of another record (B46): the user picks in Synchronizacja. */
+export class ConflictCopyError extends Error {
+  constructor(readonly relPath: string) {
+    super(`${CONFLICT_COPY_MESSAGE} – Twoja wersja czeka w Synchronizacji jako kopia do wyboru.`)
+    this.name = 'ConflictCopyError'
+  }
+}
+
+/** The record's file was removed from outside a moment before its write (B49): the write is refused, the window asks. */
+export class RemovedOutsideError extends Error {
+  constructor(readonly relPath: string) {
+    super('Ten wpis został właśnie usunięty na innym komputerze – zdecyduj, czy go zachować.')
+    this.name = 'RemovedOutsideError'
   }
 }
 
@@ -134,6 +152,10 @@ class Mutex {
     const result = this.tail.then(fn, fn)
     this.tail = result.catch(() => undefined)
     return result
+  }
+  /** Everything queued so far is done. */
+  idle(): Promise<void> {
+    return this.tail.then(() => undefined)
   }
 }
 
@@ -268,7 +290,8 @@ export class DataStore {
   private async listDataFiles(tracker?: ReadTracker, signal?: AbortSignal): Promise<string[]> {
     const rels: string[] = []
     const onFile = tracker ? () => void tracker.total++ : undefined
-    for (const c of COLLECTIONS) rels.push(...(await walkFiles(this.root, join(this.root, c), isIgnoredPath, { signal, onFile })))
+    // One by one: spreading a list of 125k+ names into `push` overflows the call stack (B50).
+    for (const c of COLLECTIONS) for (const rel of await walkFiles(this.root, join(this.root, c), isIgnoredPath, { signal, onFile })) rels.push(rel)
     const rootEntries = await fs.readdir(this.root, { withFileTypes: true })
     for (const e of rootEntries) if (e.isFile() && e.name.toLowerCase().endsWith('.json') && !isIgnoredPath(e.name)) rels.push(e.name)
     return rels
@@ -312,12 +335,14 @@ export class DataStore {
     }
     if (!st.isFile()) return null
     const prev = this.files.get(rel)
-    if (prev && prev.mtimeMs === st.mtimeMs && prev.size === st.size) return prev
+    if (prev && !prev.readError && prev.mtimeMs === st.mtimeMs && prev.size === st.size) return prev
     let buf: Buffer
     try {
       buf = await withRetry(() => fs.readFile(abs))
     } catch (e) {
-      return this.problemState(rel, st, '', 'corrupt', `Nie można odczytać pliku: ${(e as Error).message}`)
+      // A record read before stays as it was (read again next time – its stamps differ); else a problem read again later.
+      if (prev?.status === 'record' && !prev.readError) return prev
+      return { ...this.problemState(rel, st, '', 'corrupt', `Nie można odczytać pliku (OneDrive może go jeszcze pobierać): ${(e as Error).message}`), readError: true }
     }
     const hash = sha1(buf)
     if (prev && prev.hash === hash) return { ...prev, mtimeMs: st.mtimeMs, size: st.size }
@@ -448,7 +473,7 @@ export class DataStore {
     const pending = [...this.files.values()].filter((s) => s.status === 'record' && s.migrated && !s.readOnly)
     if (pending.length === 0) return
     const settingsState = this.files.get(SETTINGS_FILE)
-    const from = Math.min(...pending.map((s) => s.fromVersion))
+    const from = pending.reduce((m, s) => Math.min(m, s.fromVersion), SCHEMA_VERSION)
     if (settingsState?.migrated) {
       // Folder-level migration: full ZIP backup first.
       const out = join(this.backupsDir, 'pre-migration', `${stamp(this.opts.now())}_v${from}-v${SCHEMA_VERSION}.zip`)
@@ -761,6 +786,8 @@ export class DataStore {
     if (state.problemKind === 'too-new') {
       throw new ReadOnlyError(`Plik ${state.relPath} zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby go zmienić.`)
     }
+    // Unreadable now, not broken: never moved aside – the write waits (B42).
+    if (state.readError) throw new Error(`Plik ${state.relPath} jest teraz niedostępny (OneDrive może go jeszcze pobierać) – zapis wstrzymany, spróbuj za chwilę.`)
     const copyRel = state.relPath.replace(/\.json$/i, `-uszkodzona-${stamp(this.opts.now())}.json`)
     try {
       await withRetry(() => fs.rename(this.abs(state.relPath), this.abs(copyRel)))
@@ -804,16 +831,39 @@ export class DataStore {
     if (st) this.files.set(copyRel, st)
   }
 
+  /**
+   * Files that could not be read (B42) and concern this write – its record's (the id in the name) or the one at its
+   * path: read again first, OneDrive may have brought them. Only those: a folder offline may have thousands.
+   */
+  private async reread(concerns: (rel: string) => boolean): Promise<void> {
+    for (const s of [...this.files.values()]) {
+      if (!s.readError || !concerns(s.relPath)) continue
+      const again = await this.loadFile(s.relPath)
+      if (again) this.files.set(s.relPath, again)
+      else this.files.delete(s.relPath)
+    }
+  }
+
   saveRecord<C extends Collection>(collection: C, input: RecordTypes[C]): Promise<{ entry: RecordEntry<RecordTypes[C]>; change: ChangeSet | null }> {
     return this.mutex.run(async () => {
       this.assertWritable()
+      await this.reread((rel) => rel.includes(input.id))
       // Seen removed from outside: maybe moved on another computer, its new file not reported yet – then this
       // write replaces that file instead of adding a duplicate under the old date, and that version stays as a conflict
       // copy (the user decides; "keep mine" answered a removal, not that edit).
       const removedKey = `${collection}:${input.id}`
-      const moved = !this.currentState(collection, input.id) && this.removedOutside.has(removedKey) ? ((await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null) : null
-      const existing = this.currentState(collection, input.id)
-      if (existing?.readOnly) throw new ReadOnlyError('Ten wpis zapisała nowsza wersja aplikacji - jest tylko do odczytu.')
+      let moved = !this.currentState(collection, input.id) && this.removedOutside.has(removedKey) ? ((await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null) : null
+      // Its file gone this moment (another computer deleted or moved it, the watcher not here yet – B49): a move is taken
+      // like a reported one; a removal is never undone by this write – the window gets it and asks.
+      const known = this.currentState(collection, input.id)
+      if (known && !moved && !(await pathExists(this.abs(known.relPath)))) {
+        this.files.delete(known.relPath)
+        moved = (await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null
+        if (!moved) {
+          this.removedOutside.add(removedKey)
+          throw new RemovedOutsideError(known.relPath)
+        }
+      }
       const parsed = SCHEMAS[collection].safeParse({
         ...input,
         schemaVersion: SCHEMA_VERSION,
@@ -823,8 +873,20 @@ export class DataStore {
       if (!parsed.success) throw new Error(`Niepoprawne dane: ${parsed.error.issues[0]?.path.join('.')}: ${parsed.error.issues[0]?.message}`)
       const record = parsed.data as RecordTypes[C]
       const rel = recordRelPath(collection, record as unknown as Record<string, unknown>)
+      await this.reread((r) => r === rel)
+      const existing = this.currentState(collection, input.id)
+      if (existing?.readOnly) throw new ReadOnlyError('Ten wpis zapisała nowsza wersja aplikacji - jest tylko do odczytu.')
       const occupant = this.files.get(rel)
       if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== record.id) {
+        // The month's file of another record (two computers made the month's plan before syncing – B46): this version
+        // waits beside it as a sync copy for the user to pick – never written over it, never retried for ever.
+        if (LAYOUTS[collection] === 'month') {
+          const copyRel = rel.replace(/\.json$/, `-${this.opts.machineName.replace(/[^0-9A-Za-z]+/g, '-') || 'PC'}.json`)
+          await writeFileAtomic(this.abs(copyRel), serializeRecord(collection, record))
+          const copy = await this.loadFile(copyRel)
+          if (copy) this.files.set(copyRel, copy)
+          throw new ConflictCopyError(copyRel)
+        }
         throw new Error(`Plik ${rel} należy do innego wpisu (np. plan tego miesiąca już istnieje).`)
       }
       if (occupant?.status === 'problem') await this.setAsideProblem(occupant)
@@ -866,7 +928,7 @@ export class DataStore {
         const occupant = this.files.get(rel)
         if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== record.id) continue
         if (occupant?.status === 'problem') {
-          if (occupant.problemKind === 'too-new') continue
+          if (occupant.problemKind === 'too-new' || occupant.readError) continue
           await this.setAsideProblem(occupant)
         }
         await this.writeState(rel, collection, record, serializeRecord(collection, record))
@@ -885,8 +947,14 @@ export class DataStore {
       const state = this.currentState(collection, id)
       if (!state) return null
       if (state.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
-      await this.history.snapshot(collection, state.record as AnyRecord, 'delete')
-      await this.opts.trash(this.abs(state.relPath))
+      const kept = await this.history.snapshot(collection, state.record as AnyRecord, 'delete')
+      try {
+        await this.opts.trash(this.abs(state.relPath))
+      } catch (e) {
+        // The file stays (held by OneDrive, an antivirus): no „deleted” version in the history either (B9).
+        await this.history.drop(kept)
+        throw new Error(`Nie udało się usunąć pliku ${state.relPath} (zajęty przez inny program?) – spróbuj ponownie. ${(e as Error).message}`)
+      }
       this.files.delete(state.relPath)
       return this.diff(this.buildViews(), false)
     })
@@ -929,6 +997,7 @@ export class DataStore {
     return this.mutex.run(async () => {
       this.assertWritable()
       const fi = SCHEMAS.fi.parse({ ...input, schemaVersion: SCHEMA_VERSION, updatedAt: this.opts.now(), updatedBy: this.opts.machineName })
+      await this.reread((rel) => rel === SETTINGS_FILE)
       const existing = this.files.get(SETTINGS_FILE)
       if (existing?.status === 'problem') await this.setAsideProblem(existing)
       else if (existing) await this.preserveExternalChange(existing, 'fi', fi)
@@ -949,13 +1018,27 @@ export class DataStore {
       this.assertWritable()
       const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
       if (!conflict) throw new Error('Konflikt już nie istnieje (mógł zostać rozwiązany na innym komputerze).')
+      const canonicalState = this.files.get(conflict.canonical.relPath)
+      const copyState = this.files.get(conflict.copy.relPath)
+      // The version let go goes to the history first – it syncs to every computer, the bin does not (B44).
+      const keepAside = async (state: FileState | undefined) => {
+        if (state?.status !== 'problem' && state?.record) await this.history.snapshot(conflict.kind, state.record as AnyRecord, 'discarded')
+      }
       if (keep === 'canonical') {
+        // No original to keep (missing, unreadable): never the only readable version thrown away (B45).
+        if (canonicalState?.status !== 'record' || !canonicalState.record) throw new Error('Oryginału nie ma albo nie da się go odczytać – zachowaj kopię.')
+        await keepAside(copyState)
         await this.opts.trash(this.abs(conflict.copy.relPath))
         this.files.delete(conflict.copy.relPath)
         return
       }
-      const copyState = this.files.get(conflict.copy.relPath)
       if (!copyState?.record) throw new Error('Kopii nie da się odczytać - można zachować tylko oryginał.')
+      // A newer format is never written over, nor written by this version (B45).
+      if (copyState.readOnly) throw new ReadOnlyError('Kopię zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby ją zachować.')
+      if (canonicalState?.readOnly || canonicalState?.problemKind === 'too-new') throw new ReadOnlyError('Oryginał zapisała nowsza wersja aplikacji – nie zostanie nadpisany; zaktualizuj aplikację.')
+      await keepAside(canonicalState)
+      // A broken original is moved aside, never overwritten (B45).
+      if (canonicalState?.status === 'problem') await this.setAsideProblem(canonicalState)
       // The kept version is rewritten (newest updatedAt) at its canonical path; every other file of the pair goes to the bin.
       let keptPath: string
       let keptId: string
@@ -1066,6 +1149,11 @@ export class DataStore {
   /** Snapshot of everything currently loaded (used after reconnecting the renderer). */
   snapshot(): Promise<Snapshot> {
     return this.mutex.run(async () => ({ ...this.snapshotFrom(this.buildViews()), loadMs: 0 }))
+  }
+
+  /** The writes queued so far are done (quitting waits for them – B43). */
+  idle(): Promise<void> {
+    return this.mutex.idle()
   }
 
   /** Directory of a file, for "show in folder". */

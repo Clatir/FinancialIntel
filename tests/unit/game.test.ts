@@ -8,6 +8,7 @@ import {
   killzoneOf,
   missionId,
   missionStatus,
+  namesNote,
   newGameMonth,
   promotionProgress,
   rankChangeId,
@@ -23,6 +24,7 @@ import {
   containerSchema,
   defaultCategoryId,
   dockingSchema,
+  gameDaySchema,
   MBANK_ACCOUNT_ID,
   monthPlanSchema,
   SCHEMA_VERSION,
@@ -106,6 +108,15 @@ describe('ocena dnia (D73): naruszenia zwykłe i poważne', () => {
     expect(rateDay(w, '2026-10-13').violations).toEqual([{ order: 'cargo', serious: false, amount: zl(1500), ref: rent.id, note: 'Czynsz' }])
     expect(rateDay(w, '2026-10-14').violations).toEqual([])
     expect(rateDay(w, '2026-10-12').violations).toEqual([])
+    // Many containers with long names the same day: the note stays short and the month always valid (B32).
+    const many = Array.from({ length: 9 }, (_, i) =>
+      containerSchema.parse({ ...base(), createdAt: '2026-10-13T10:00:00.000Z', updatedAt: '2026-10-13T10:00:00.000Z', name: `${'Bardzo długa nazwa dostawcy '.repeat(3).slice(0, 78)}${i}`, amount: zl(200), dueMonth: '2026-10', dueDay: 10 })
+    )
+    const note = rateDay(world({ containers: many }), '2026-10-13').violations[0]!.note
+    expect(note.endsWith('i 6 innych')).toBe(true)
+    expect(note.length).toBeLessThanOrEqual(500)
+    expect(namesNote(['A', 'B'])).toBe('A, B')
+    expect(gameDaySchema.parse({ status: 'broken', frozenAt: AT, violations: [{ order: 'cargo', note: 'x'.repeat(900) }] }).violations[0]!.note).toHaveLength(500)
   })
 
   it('smaczki ICT: Judas Swing (impuls), Turtle Soup (zwrot towaru), Liquidity sweep (energia dokładnie 0 zł)', () => {

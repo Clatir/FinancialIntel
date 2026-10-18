@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/renderer/store/journal.ts @ 84a8339
 import { create } from 'zustand'
-import type { AppInfo, ChangeSet, ConflictEntry, FolderStatus, Problem, RecordEntry, Snapshot } from '@shared/api'
+import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry, type FolderStatus, type Problem, type RecordEntry, type Snapshot } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { RecordTypes } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
@@ -289,6 +289,8 @@ export function resolveRemote(key: string, choice: 'merge' | Side, fieldChoices:
       if (dirty.has(key)) void api.historyKeep('fi', mine, 'discarded').catch(() => undefined)
       forget(key)
       set({ fi: theirs })
+      // Mine was written after theirs came (B48): theirs written back.
+      if (item.savedAfter) scheduleSave('fi', 'fi', 0)
       return
     }
     const fi = choice === 'mine' ? mine : merge3(item.base, mine, theirs, chooser(fieldChoices)).merged
@@ -311,6 +313,8 @@ export function resolveRemote(key: string, choice: 'merge' | Side, fieldChoices:
       if (dirty.has(key) && local) void api.historyKeep(c, local.record, 'discarded').catch(() => undefined)
       forget(key)
       setEntry(null)
+      // Mine was written after the deletion came (B48): the file is back on the disk – deleted again.
+      if (item.savedAfter) void api.deleteRecord(c, item.id).catch((e) => toast(errorMessage(e), 'error', 8000))
     } else if (local) scheduleSave(c, item.id, 0)
     return
   }
@@ -319,6 +323,8 @@ export function resolveRemote(key: string, choice: 'merge' | Side, fieldChoices:
     if (dirty.has(key) && local) void api.historyKeep(c, local.record, 'discarded').catch(() => undefined)
     forget(key)
     setEntry(theirs)
+    // Mine was written after theirs came (B48): theirs written back.
+    if (item.savedAfter) scheduleSave(c, item.id, 0)
     return
   }
   bases.set(key, theirs.record)
@@ -427,9 +433,26 @@ async function runSave(key: string): Promise<void> {
     retryDelay.delete(key)
     failed.delete(key)
     bumpPending(-1, { lastSavedAt: new Date().toISOString(), error: saveError() })
+    // A change from another computer came while this write was on its way (B48): the decision about it must reach the disk.
+    if (pendingFor(key)) useRemote.setState((r) => ({ pending: r.pending.map((p) => (p.key === key ? { ...p, savedAfter: true } : p)) }))
   } catch (e) {
+    const message = errorMessage(e)
+    // Its month made on another computer meanwhile (B46): this version waits in Synchronizacja as a copy – not kept
+    // here as a second plan of the month, never retried.
+    if (target.collection !== 'fi' && message.startsWith(CONFLICT_COPY_MESSAGE)) {
+      forget(key)
+      const c = target.collection
+      set((s) => {
+        const map = { ...mapOf(s, c) }
+        delete map[target.id]
+        return withMap(s, c, map)
+      })
+      bumpPending(-1, { error: saveError() })
+      toast(message, 'info', 9000)
+      return
+    }
     // A record deleted meanwhile is no longer dirty: nothing to report or retry.
-    if (dirty.has(key)) failed.set(key, errorMessage(e))
+    if (dirty.has(key)) failed.set(key, message)
     bumpPending(-1, { error: saveError() })
     scheduleRetry(key)
   }
@@ -558,6 +581,7 @@ export function discardDraft(collection: Collection, id: string): void {
 
 export async function deleteRecord(collection: Collection, id: string): Promise<void> {
   const key = keyOf(collection, id)
+  const entry = mapOf(get(), collection)[id]
   forget(key)
   useRemote.setState((r) => ({ pending: r.pending.filter((p) => p.key !== key) }))
   bumpPending(0, { error: saveError() })
@@ -570,7 +594,14 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
     return { ...withMap(s, collection, map), drafts }
   })
   await inFlight.get(key)
-  if (!wasDraft) await api.deleteRecord(collection, id)
+  if (wasDraft) return
+  try {
+    await api.deleteRecord(collection, id)
+  } catch (e) {
+    // The file stays on the disk (held by another program – B9): the record back on the screen, the caller says why.
+    if (entry && !mapOf(get(), collection)[id]) set((s) => withMap(s, collection, { ...mapOf(s, collection), [id]: entry }))
+    throw e
+  }
 }
 
 /** Settings written by the main process (restored from the history): replace the in-memory copy. */

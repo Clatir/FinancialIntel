@@ -20,8 +20,13 @@ export async function restoreVersion(kind: HistoryKind, id: string, file: string
 }
 
 /** Delete a record with "Cofnij" in the toast: the undo restores the version kept by the deletion, like "Usunięte wpisy". */
-export async function deleteWithUndo(collection: Collection, id: string, label: string, text: string, beforeUndo?: () => boolean): Promise<void> {
-  await deleteRecord(collection, id)
+export async function deleteWithUndo(collection: Collection, id: string, label: string, text: string, beforeUndo?: () => boolean): Promise<boolean> {
+  try {
+    await deleteRecord(collection, id)
+  } catch (e) {
+    toast(errorMessage(e), 'error', 8000)
+    return false
+  }
   toast(text, 'success', 8000, {
     label: 'Cofnij',
     run: () =>
@@ -33,6 +38,7 @@ export async function deleteWithUndo(collection: Collection, id: string, label: 
         await restoreVersion(collection, id, last.file, label)
       })()
   })
+  return true
 }
 
 /**

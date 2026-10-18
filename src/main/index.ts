@@ -10,7 +10,7 @@ import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type ChangeSet, type 
 import type { Collection } from '@shared/paths'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
-import { DataStore } from './datastore/store'
+import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/store'
 import { FolderWatcher } from './datastore/watch'
 import { clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
@@ -60,6 +60,11 @@ let ictj: IctjSource | null = null
 const notifications = new Set<Notification>()
 /** The app really quits (from the tray, an update, the system): closing the window then closes it, not hides it. */
 let quitting = false
+/** The main window is closing (its last writes on the way): no rescans start meanwhile (B43). */
+let windowClosing = false
+/** A renderer silent this long while closing is taken as unresponsive; one still saving gets at most the limit. */
+const FLUSH_SILENT_MS = 4000
+const FLUSH_LIMIT_MS = 60_000
 /** Started hidden (with the system) from a maximized window: maximize when first shown – maximize() would show it now. */
 let pendingMaximize = false
 /** The system ends the session (logoff, shutdown) – no way back. */
@@ -249,10 +254,13 @@ async function trash(absPath: string): Promise<void> {
   try {
     await shell.trashItem(absPath)
   } catch {
-    // Removable or network drives may have no recycle bin.
-    await fs.rm(absPath, { force: true })
+    // Removable or network drives may have no recycle bin; a file held for a moment (OneDrive, an antivirus) – retried.
+    await fs.rm(absPath, { force: true, maxRetries: 5, retryDelay: 200 })
   }
 }
+
+/** The longest quitting waits for the writes already queued (B43). */
+const QUIT_DRAIN_MS = 30_000
 
 async function closeStore(): Promise<void> {
   // Detach everything first: an open that switches meanwhile is never undone by this close resuming later.
@@ -262,7 +270,11 @@ async function closeStore(): Promise<void> {
   if (presenceTimer) clearInterval(presenceTimer)
   presenceTimer = null
   store = null
-  if (closing) await clearPresence(closing.root, machineName).catch(() => undefined)
+  if (!closing) return
+  // The writes the window sent before closing finish first (a rescan ahead of them in the queue takes seconds – B43).
+  const drained = await Promise.race([closing.idle().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), QUIT_DRAIN_MS).unref?.())])
+  if (!drained) log('warn', `zamykanie: zapisy trwały ponad ${QUIT_DRAIN_MS / 1000} s`)
+  await clearPresence(closing.root, machineName).catch(() => undefined)
 }
 
 async function heartbeat(): Promise<void> {
@@ -400,7 +412,8 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
       target,
       (paths) => {
         const s = store
-        if (s !== opened) return
+        // Closing: no rescan before the last writes (B43).
+        if (s !== opened || windowClosing) return
         s.refresh(paths ?? undefined).then(send, (e) => log('error', 'refresh failed', e))
       },
       { onError: (e) => log('warn', 'watcher error', e) }
@@ -428,11 +441,21 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
       return { ok: false, reason: 'aborted', dir, message: OPEN_ABORTED_MESSAGE }
     }
     log('error', `open failed ${dir}: ${describeProgress(progress(), Date.now() - t0)}`, e)
-    return { ok: false, reason: 'error', dir, message: (e as Error).message }
+    return { ok: false, reason: 'error', dir, message: openErrorMessage(e) }
   } finally {
     clearInterval(ticker)
     if (opening === controller) opening = null
   }
+}
+
+/**
+ * A folder's open failure for the screen: the app's own messages as they are; a system's or the runtime's (English,
+ * e.g. a stack overflow – B50) said in Polish, the details in the log.
+ */
+function openErrorMessage(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e)
+  const foreign = (e as NodeJS.ErrnoException)?.code != null || e instanceof RangeError || e instanceof TypeError || !/[ąćęłńóśźż]/i.test(message)
+  return foreign ? `Nie udało się wczytać folderu danych (${message}). Szczegóły są w logu – „Otwórz folder logów”.` : message
 }
 
 /** The folder or one of its parents up to the drive is an ICT Trade Journal data folder (journal.json). */
@@ -500,9 +523,18 @@ function registerIpc(): void {
     opening?.abort()
   })
   handle('saveRecord', async (collection: Collection, record: never) => {
-    const { entry, change } = await requireStore().saveRecord(collection, record)
-    send(change)
-    return entry
+    const s = requireStore()
+    try {
+      const { entry, change } = await s.saveRecord(collection, record)
+      send(change)
+      return entry
+    } catch (e) {
+      // Removed on another computer a moment ago (B49): the window gets the removal (its question), the write waits.
+      if (e instanceof RemovedOutsideError) send(await s.refresh([e.relPath], 'external'))
+      // Its month made on another computer (B46): the copy shows in Synchronizacja.
+      if (e instanceof ConflictCopyError) send(await s.refresh([e.relPath], 'local'))
+      throw e
+    }
   })
   handle('deleteRecord', async (collection: Collection, id: string) => {
     send(await requireStore().deleteRecord(collection, id))
@@ -867,11 +899,14 @@ function createWindow(): void {
       return
     }
     closing = true
+    windowClosing = true
     const b = win.getNormalBounds()
     void config.update({ window: { ...b, maximized: win.isMaximized() } })
     const finish = (saved: boolean) => {
       clearTimeout(timeout)
+      clearTimeout(limit)
       ipcMain.removeListener('fi:flushed', onFlushed)
+      ipcMain.removeListener('fi:flushing', onFlushing)
       if (allowClose || win.isDestroyed()) return
       if (!saved) {
         // The renderer keeps unsaved changes and retries; closing now would lose them.
@@ -887,6 +922,7 @@ function createWindow(): void {
         })
         if (choice === 0) {
           closing = false
+          windowClosing = false
           quitting = false
           updater?.cancelRestart()
           return
@@ -896,12 +932,21 @@ function createWindow(): void {
       win.close()
     }
     const onFlushed = (_e: Electron.IpcMainEvent, saved?: boolean) => finish(saved !== false)
-    // An unresponsive renderer must not keep the window open forever.
-    const timeout = setTimeout(() => finish(true), 4000)
+    // An unresponsive renderer must not keep the window open forever; one still saving (it says so every second)
+    // gets time – up to a minute, then the question (B43).
+    let timeout = setTimeout(() => finish(true), FLUSH_SILENT_MS)
+    const onFlushing = () => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => finish(true), FLUSH_SILENT_MS)
+    }
+    const limit = setTimeout(() => finish(false), FLUSH_LIMIT_MS)
     ipcMain.on('fi:flushed', onFlushed)
+    ipcMain.on('fi:flushing', onFlushing)
     win.webContents.send('fi:flush')
   })
   win.on('focus', () => {
+    // No full rescan while closing: it would stand before the last writes (B43).
+    if (windowClosing) return
     store?.refresh().then(send, () => undefined)
   })
   watchHangs(win)

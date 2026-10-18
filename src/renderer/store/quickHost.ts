@@ -8,7 +8,7 @@ import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { counterpartyKey } from '@shared/import/classify'
 import { newId } from '@shared/ids'
-import { envelopeKind, inflowOf, SCHEMA_VERSION, transactionSchema, type Transaction } from '@shared/schema'
+import { envelopeKind, inflowOf, SCHEMA_VERSION, transactionSchema, ulidSchema, type Transaction } from '@shared/schema'
 import { rememberInflows } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
@@ -79,6 +79,8 @@ export function quickData(): QuickData | null {
 
 /** What the quick window sends: an expense, an income or a purchase a household member finances, with its lines and the log. */
 export interface QuickDraft {
+  /** The operation's id, given in the quick window (B51): a draft that comes twice is saved once. */
+  id?: string
   kind: 'expense' | 'income' | 'refundable'
   /** Grosze, > 0. */
   amount: number
@@ -118,7 +120,7 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
   const refundable = d.kind === 'refundable' && !splits.length
   const parsed = transactionSchema.safeParse({
     schemaVersion: SCHEMA_VERSION,
-    id: newId(),
+    id: ulidSchema.safeParse(d.id).success ? d.id : newId(),
     createdAt: now,
     updatedAt: now,
     date: d.date,
@@ -152,7 +154,10 @@ export function initQuickHost(): void {
     const s = useData.getState()
     if (!s.fi || s.phase !== 'ready') return answer({ ok: false, message: 'Najpierw otwórz folder danych.' })
     if (s.status?.readOnly) return answer({ ok: false, message: 'Folder jest tylko do odczytu.' })
-    const t = quickTransaction(raw as QuickDraft)
+    const draft = raw as QuickDraft
+    // Sent again (a second Enter before the answer came, B51): it is saved already.
+    if (draft.id && s.records.transactions[draft.id]) return answer({ ok: true, message: 'Zapisano.' })
+    const t = quickTransaction(draft)
     if (typeof t === 'string') return answer({ ok: false, message: t })
     addRecord('transactions', t)
     // A household member's money with the rest chosen here: asked once, remembered for them (D80 b).

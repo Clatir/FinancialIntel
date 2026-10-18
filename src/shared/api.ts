@@ -186,6 +186,9 @@ export interface OpenProgress {
 /** A read this long means the file was not on the disk (OneDrive online-only) or something holds it. */
 export const SLOW_FILE_MS = 3000
 
+/** A month's record written beside the month's file of another record (two computers made it – B46): the start of the error's message. */
+export const CONFLICT_COPY_MESSAGE = 'Ten miesiąc zapisał już inny komputer'
+
 export const OPEN_ABORTED_MESSAGE =
   'Przerwano wczytywanie folderu – nic w nim nie zostało zmienione. Jeśli pliki pobiera OneDrive, ustaw na folderze „Zawsze zachowuj na tym urządzeniu”, poczekaj na zielone ptaszki i spróbuj ponownie.'
 

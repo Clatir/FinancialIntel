@@ -42,9 +42,10 @@ export class RecordHistory {
 
   /**
    * Keep `record` (the version about to be replaced or deleted). Never throws: a failed snapshot must not block
-   * the save itself (it is reported through `onError`).
+   * the save itself (it is reported through `onError`). Returns the file written (null = none: throttled or failed) –
+   * `drop` takes it back (a delete the disk refused).
    */
-  async snapshot(kind: FileKind, record: SnapshotFile['record'], reason: HistoryReason, onError?: (e: unknown) => void): Promise<boolean> {
+  async snapshot(kind: FileKind, record: SnapshotFile['record'], reason: HistoryReason, onError?: (e: unknown) => void): Promise<string | null> {
     try {
       const id = String(record.id ?? 'fi')
       const key = `${kind}/${id}`
@@ -53,19 +54,25 @@ export class RecordHistory {
       const fromOther = record.updatedBy != null && record.updatedBy !== this.machineName
       if (reason === 'edit' && !fromOther) {
         const last = this.lastSnapshot.get(key)
-        if (last != null && nowMs - last < EDIT_THROTTLE_MS) return false
+        if (last != null && nowMs - last < EDIT_THROTTLE_MS) return null
       }
       this.lastSnapshot.set(key, nowMs)
       const dir = this.dir(kind, id)
       const name = `${fileStamp(nowIso)}_${reason}_${randomBytes(2).toString('hex')}.json`
       const body: SnapshotFile = { savedAt: nowIso, savedBy: this.machineName, reason, record }
-      await writeFileAtomic(join(dir, name), `${JSON.stringify(body, null, 2)}\n`)
+      const file = join(dir, name)
+      await writeFileAtomic(file, `${JSON.stringify(body, null, 2)}\n`)
       await this.prune(dir)
-      return true
+      return file
     } catch (e) {
       onError?.(e)
-      return false
+      return null
     }
+  }
+
+  /** A version kept for an action that did not happen (a delete the disk refused, B9). */
+  async drop(file: string | null): Promise<void> {
+    if (file) await fs.rm(file, { force: true }).catch(() => undefined)
   }
 
   private async files(dir: string): Promise<string[]> {
