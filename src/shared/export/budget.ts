@@ -6,8 +6,9 @@
 import type { Account, Category, HouseholdMember } from '../schema/budget'
 import type { MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
-import { memberName, settleHousehold, type HouseholdLedger } from '../calc/household'
-import { categoryIndex, financedOf, incomeOf, sum } from '../calc/operations'
+import { memberName } from '../calc/household'
+import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
+import { categoryIndex, financedOf, sum } from '../calc/operations'
 import { debriefing } from '../calc/plan'
 import type { FleetEvent } from '../calc/fleet'
 import { monthOf } from '../calc/dates'
@@ -116,13 +117,13 @@ export interface MonthRow {
 }
 
 export function monthRows(
-  input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; today: string; ledger?: Pick<HouseholdLedger, 'byTx'> },
+  input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; today: string; income?: IncomeContext },
   months: readonly string[]
 ): MonthRow[] {
-  const ledger = input.ledger ?? settleHousehold(input.transactions)
+  const ctx = input.income ?? plainIncomeContext(input.transactions)
   return months.map((month) => {
     const d = debriefing(month, input)
-    return { month, salary: d.salary, costs: d.costs, income: sum(input.transactions.filter((t) => monthOf(t.date) === month).map((t) => incomeOf(t, ledger))), plus: d.plus, loot: d.loot }
+    return { month, salary: d.salary, costs: d.costs, income: incomeOfPeriod(input.transactions.filter((t) => monthOf(t.date) === month), ctx).total, plus: d.plus, loot: d.loot }
   })
 }
 

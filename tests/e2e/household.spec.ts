@@ -41,7 +41,7 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     settings: (s) => ({
       ...s,
       budget: { ...s.budget, start },
-      household: { members: [...s.household.members, { id: MAMA, name: 'Mama', bankNames: ['ANNA TESTOWA'], inflow: 'advance', archived: false }] }
+      household: { members: [...s.household.members, { id: MAMA, name: 'Mama', bankNames: ['ANNA TESTOWA'], inflow: 'advance', archived: false, via: null, opening: { owed: 0, deposit: 0 } }] }
     }),
     records: {
       balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],

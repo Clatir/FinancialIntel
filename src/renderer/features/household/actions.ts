@@ -36,7 +36,7 @@ export function addMemberFromBank(bankName: string): string | null {
   if (useData.getState().status?.readOnly) return null
   const id = newId()
   const name = freeName(nameOf(bankName))
-  patchMembers((ms) => [...ms, { id, name, bankNames: [bankName.trim().slice(0, 120)], inflow: 'ask', archived: false }])
+  patchMembers((ms) => [...ms, { id, name, bankNames: [bankName.trim().slice(0, 120)], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
   toast(`Dopisano domownika „${name}” (Ustawienia → Domownicy – tam zmienisz imię).`, 'success', 4500)
   return id
 }
@@ -44,7 +44,7 @@ export function addMemberFromBank(bankName: string): string | null {
 export function addMember(name: string): string | null {
   if (useData.getState().status?.readOnly || !name.trim()) return null
   const id = newId()
-  patchMembers((ms) => [...ms, { id, name: freeName(name.trim().slice(0, 40)), bankNames: [], inflow: 'ask', archived: false }])
+  patchMembers((ms) => [...ms, { id, name: freeName(name.trim().slice(0, 40)), bankNames: [], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
   return id
 }
 

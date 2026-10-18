@@ -1,13 +1,12 @@
 # Financial Intel – postęp
 
-**Stan:** 1.3.0 – rozliczenia z domownikami (D80) gotowe: PR #10 do `main`, scalenie po zielonym CI (D71). **1.2.3
-wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**Stan:** 1.4.0 – domownicy bez bankowości i panel przychodów (D81) w toku na gałęzi `claude/domownicy-1.4.0`.
+**1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.2.3 i 1.3.0 w aplikacji (domownicy w Ustawieniach, kilka wspólnych wydatków
-oznaczonych „finansuje”, salda na Mostku, import z wpłatami domowników), kalibracja progów gry po pierwszym miesiącu na
-prawdziwych danych; kolejny etap tylko na komendę użytkownika (D67).
+**Następny krok:** 1.4.0 – silnik (data rozliczeń, salda początkowe, podział wpłaty, przychody), ekrany, przegląd,
+wydanie; potem pauza (odbiór 1.3.0 i 1.4.0, kalibracja progów gry po pierwszym miesiącu na prawdziwych danych).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -31,7 +30,8 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze + duplikaty jak w ICTTJ | Opus 5.5 | **max** | zmierzone ok. 2 h (plan był 1–1,5 h + 0,5 h + 0,75 h) | 1.2.1 | ✅ wybór pomysłów (D75–D77) | ✅ wydane (PR #7) |
 | 1.2.2 | Podobne nazwy (5) + propozycja reguły z liczbą operacji (6) | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.2 | ✅ wybór „opcja 2” (D78) | ✅ wydane (PR #8) |
 | 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79), sprawdzenie na prawdziwej historii rachunku (T104) | Opus 5.5 | **max** | zmierzone ok. 1,5 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ wydane (PR #9) |
-| 1.3.0 | Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80) | Opus 5.5 | **max** | ok. 3,5 h (szacunek z przebiegu sesji; plan był 2,5–3 h) | 1.3.0 | ✅ odpowiedzi i komenda (D80) | ✅ gotowe, PR #10 – scalenie po zielonym CI |
+| 1.3.0 | Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80) | Opus 5.5 | **max** | ok. 3,5 h (szacunek z przebiegu sesji; plan był 2,5–3 h) | 1.3.0 | ✅ odpowiedzi i komenda (D80) | ✅ wydane (PR #10) |
+| 1.4.0 | Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dziś z saldem początkowym, panel przychodów (D81) | Opus 5.5 | **max** | ok. 3 h | 1.4.0 | ✅ odpowiedzi i komenda (D81) | 🔨 w toku |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | | **Całość E0–E8 + 1.2.1–1.3.0** | | | **ok. 17,5 h** | | | |
 
@@ -60,6 +60,18 @@ całość ok. 4–6 miesięcy (szacunek zgrubny).
 3. **Co przygotować** – nic przed startem; po wydaniu: domownicy w Ustawieniach, oznaczenie kilku wspólnych wydatków,
    sprawdzenie sald na Mostku i dopasowania po imporcie.
 4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2,5–3 h.
+
+## Przed etapem 1.4.0 – domownicy bez bankowości i przychody (18.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.3.0 wydane (PR #10). Część domowników nie ma bankowości: pieniądze przekazuje inny
+   domownik, czasem w jednym przelewie są pieniądze kilku osób, a historii nie da się rozsupłać. Zakres: pośrednik jako
+   podpowiedź („+ także za X”) i ręczny podział wpłaty na osoby, rozliczenia od dziś z saldem początkowym osoby (dawne
+   przelewy domowników poza przychodem), panel „Przychody” (średnie 3 / 6 / 12 mies. i mediana; praca i trading XTB
+   netto bez puli Podatek).
+2. **Co użytkownik musi powiedzieć** – ✅ odpowiedzi i komenda „Ok” (D81).
+3. **Co przygotować** – nic przed startem; po wydaniu: data rozliczeń i salda początkowe osób, pośrednik przy osobie
+   bez konta, podział pierwszej wspólnej wpłaty.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3 h.
 
 ## 1.3.0 – rozliczenia z domownikami (18.10.2026)
 
@@ -764,3 +776,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
   propozycja (wariant A: saldo każdej osoby w obie strony), odpowiedzi i komenda „Ok” (D80); start 1.3.0.
 - 18.10.2026 – 1.3.0 (rejestr rozliczeń, depozyt w warstwach, domownicy w Ustawieniach, import z osobami, edytor, szybki
   wpis, Operacje, Mostek, Radar, raporty), przegląd i poprawki; PR #10 do `main`.
+- 18.10.2026 – PR #10 scalony, wydanie 1.3.0 opublikowane; zgłoszenie użytkownika: domownicy bez bankowości (pieniądze
+  przez innego domownika, kilka osób w jednym przelewie), rozliczenia od dziś, przychody ze średnich – propozycje,
+  odpowiedzi i komenda „Ok” (D81); start 1.4.0.

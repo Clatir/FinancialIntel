@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { briefing } from '@shared/calc/briefing'
 import { computeFleet, householdOf, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
-import { balanceOf, settleHousehold } from '@shared/calc/household'
-import { costOf, financedOf, incomeOf } from '@shared/calc/operations'
+import { balanceOf, incomeShares, settleHousehold, type HouseholdLedger } from '@shared/calc/household'
+import { incomeParts } from '@shared/calc/income'
+import { costOf, financedOf } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
-import { balanceSchema, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Settings, type Transaction } from '@shared/schema'
+import { balanceSchema, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type HouseholdMember, type Settings, type Transaction } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-01-01T00:00:00.000Z'
@@ -15,6 +17,9 @@ const MAMA = `01KMEM${'0'.repeat(19)}1`
 const TATA = `01KMEM${'0'.repeat(19)}2`
 const NOW = '2026-10-20T12:00:00+02:00'
 
+const member = (id: string, name: string, over: Partial<HouseholdMember> = {}): HouseholdMember => ({ id, name, bankNames: [], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 }, ...over })
+const work = (t: Transaction, ledger: HouseholdLedger) => incomeParts(t, { ledger, since: null, members: [], tax: new Map() }).work
+
 const tx = (date: string, amount: number, over: Partial<Transaction> = {}): Transaction => transactionSchema.parse({ ...base(), date, accountId: MBANK_ACCOUNT_ID, amount, ...over })
 const bought = (date: string, amount: number, memberId: string | null, over: Partial<Transaction> = {}) => tx(date, -zl(amount), { categoryId: GROCERIES, refundable: true, memberId, ...over })
 const paid = (date: string, amount: number, memberId: string, advance = false, over: Partial<Transaction> = {}) => tx(date, zl(amount), { kind: 'income', memberId, advance, counterparty: 'Domownik', ...over })
@@ -25,7 +30,7 @@ function settings(): Settings {
     ...s,
     budget: { start: '2026-10-01', initial: { shields: zl(12640), hull: zl(15000), goals: {} } },
     layers: { ...s.layers, assumedCosts: zl(3650) },
-    household: { members: [...s.household.members, { id: MAMA, name: 'Mama', bankNames: ['ANNA TESTOWA'], inflow: 'advance', archived: false }, { id: TATA, name: 'Tata', bankNames: [], inflow: 'ask', archived: false }] }
+    household: { members: [...s.household.members, member(MAMA, 'Mama', { bankNames: ['ANNA TESTOWA'], inflow: 'advance' }), member(TATA, 'Tata')] }
   }
 }
 
@@ -61,7 +66,7 @@ describe('rozliczenia z domownikami (D80)', () => {
     expect(s.log.find((e) => e.txId === purchase.id)?.moves).toEqual({ deposit: -zl(300) })
     const ledger = settleHousehold([advance, purchase])
     expect(costOf(purchase)).toBe(0)
-    expect(incomeOf(advance, ledger)).toBe(0)
+    expect(work(advance, ledger)).toBe(0)
     expect(financedOf(purchase)).toEqual(new Map([[MAMA, zl(300)]]))
   })
 
@@ -86,7 +91,7 @@ describe('rozliczenia z domownikami (D80)', () => {
     const t = fleet([purchase, income])
     expect(t.log.find((e) => e.txId === income.id)?.moves).toEqual({ shields: zl(200), house: -zl(150) })
     expect(t.deposit).toBe(0)
-    expect(incomeOf(income, settleHousehold([purchase, income]))).toBe(zl(50))
+    expect(work(income, settleHousehold([purchase, income]))).toBe(zl(50))
   })
 
   it('wpłata pokrywa wskazane wydatki, inaczej od najstarszych; przypomnienie liczy od najstarszego otwartego', () => {
@@ -102,9 +107,9 @@ describe('rozliczenia z domownikami (D80)', () => {
     const plain = fleet([])
     const receipt = tx('2026-10-06', -zl(120), {
       splits: [
-        { id: nextId(), amount: -zl(40), categoryId: GROCERIES, refundable: false, memberId: null, note: '' },
-        { id: nextId(), amount: -zl(50), categoryId: GROCERIES, refundable: true, memberId: MAMA, note: '' },
-        { id: nextId(), amount: -zl(30), categoryId: GROCERIES, refundable: true, memberId: TATA, note: '' }
+        { id: nextId(), amount: -zl(40), categoryId: GROCERIES, refundable: false, memberId: null, advance: false, note: '' },
+        { id: nextId(), amount: -zl(50), categoryId: GROCERIES, refundable: true, memberId: MAMA, advance: false, note: '' },
+        { id: nextId(), amount: -zl(30), categoryId: GROCERIES, refundable: true, memberId: TATA, advance: false, note: '' }
       ]
     })
     const s = fleet([receipt])
@@ -150,9 +155,9 @@ describe('rozliczenia z domownikami (D80)', () => {
 
     // A payment of hers was income; the purchase marked later (dated before it) makes it a repayment.
     const payment = paid('2026-10-10', 80, MAMA)
-    expect(incomeOf(payment, settleHousehold([payment]))).toBe(zl(80))
+    expect(work(payment, settleHousehold([payment]))).toBe(zl(80))
     const marked = bought('2026-10-04', 80, MAMA)
-    expect(incomeOf(payment, settleHousehold([marked, payment]))).toBe(0)
+    expect(work(payment, settleHousehold([marked, payment]))).toBe(0)
   })
 
   it('konto dołączone po starcie: operacje sprzed jego salda otwarcia są w tym saldzie – rozliczeń nie zmieniają', () => {
@@ -177,3 +182,97 @@ describe('rozliczenia z domownikami (D80)', () => {
     expect(settleHousehold(list).deposit).toBe(0)
   })
 })
+
+describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
+  const SINCE = '2026-10-10'
+  const withHousehold = (over: Partial<Settings['household']>, members?: (s: Settings) => HouseholdMember[]): Partial<FleetInput> => {
+    const s = settings()
+    return { settings: { ...s, household: { ...s.household, ...over, members: members ? members(s) : s.household.members } } }
+  }
+  const setMember = (id: string, over: Partial<HouseholdMember>) => (s: Settings) => s.household.members.map((m) => (m.id === id ? { ...m, ...over } : m))
+
+  it('rozliczenia od dnia: to, co przed nim, zapomniane; saldo początkowe osoby to jej należność od tego dnia', () => {
+    const before = bought('2026-10-03', 120, MAMA)
+    const plain = fleet([before], withHousehold({ since: SINCE }))
+    expect(plain.receivables.house).toBe(0)
+    expect(plain.settleFrom).toBe(SINCE)
+    const s = fleet([before], withHousehold({ since: SINCE }, setMember(MAMA, { opening: { owed: zl(150), deposit: 0 } })))
+    expect(s.receivables.members).toEqual([{ memberId: MAMA, owed: zl(150), deposit: 0, open: [{ txId: `opening:${MAMA}`, date: SINCE, amount: zl(150) }], since: SINCE }])
+    // Her money after the start pays the opening balance back.
+    const t = fleet([before, paid('2026-10-12', 100, MAMA)], withHousehold({ since: SINCE }, setMember(MAMA, { opening: { owed: zl(150), deposit: 0 } })))
+    expect(t.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(50) })
+    // No date chosen: from the budget's start, as in 1.3.0.
+    expect(fleet([before]).receivables.house).toBe(zl(120))
+  })
+
+  it('zaliczka na start jest w depozycie (z osłon), a zaliczka sprzed daty wraca do osłon', () => {
+    const plain = fleet([])
+    const opening = fleet([], withHousehold({ since: SINCE }, setMember(TATA, { opening: { owed: 0, deposit: zl(200) } })))
+    expect(opening.deposit).toBe(zl(200))
+    expect(opening.shields.amount).toBe(plain.shields.amount - zl(200))
+    expect(opening.log.find((e) => e.kind === 'household')).toMatchObject({ date: SINCE, amount: zl(200), moves: { deposit: zl(200), shields: -zl(200) } })
+    // A purchase Tata finances after the start takes his opening advance.
+    const spent = fleet([bought('2026-10-12', 50, TATA)], withHousehold({ since: SINCE }, setMember(TATA, { opening: { owed: 0, deposit: zl(200) } })))
+    expect(spent.deposit).toBe(zl(150))
+    expect(spent.receivables.members).toEqual([{ memberId: TATA, owed: 0, deposit: zl(150), open: [], since: null }])
+    // Mama's advance of before the start: forgotten – the money is the shields' now.
+    const early = fleet([paid('2026-10-05', 300, MAMA, true)], withHousehold({ since: SINCE }))
+    expect(early.deposit).toBe(0)
+    expect(early.shields.amount).toBe(plain.shields.amount + zl(300))
+  })
+
+  it('wpłata podzielona na osoby: każda część spłaca swoją osobę, reszta kwoty jest nadawcy, część bez osoby to przychód', () => {
+    const forMama = bought('2026-10-03', 200, MAMA)
+    const transfer = tx('2026-10-12', zl(500), {
+      kind: 'income',
+      memberId: TATA,
+      advance: true,
+      counterparty: 'PIOTR TESTOWY',
+      splits: [{ id: nextId(), amount: zl(300), categoryId: null, refundable: false, memberId: MAMA, advance: false, note: '' }]
+    })
+    expect(incomeShares(transfer)).toEqual([
+      { memberId: MAMA, amount: zl(300), advance: false },
+      { memberId: TATA, amount: zl(200), advance: true }
+    ])
+    const ledger = settleHousehold([forMama, transfer])
+    expect(ledger.byTx.get(transfer.id)).toEqual([
+      { memberId: MAMA, fromDeposit: 0, lent: 0, repaid: zl(200), advance: 0, income: zl(100) },
+      { memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: zl(200), income: 0 }
+    ])
+    const s = fleet([forMama, transfer])
+    expect(s.receivables.house).toBe(0)
+    expect(s.deposit).toBe(zl(200))
+    expect(s.log.find((e) => e.txId === transfer.id)?.moves).toMatchObject({ house: -zl(200), deposit: zl(200) })
+    expect(work(transfer, ledger)).toBe(zl(100))
+    // A part without a member is mine (income); parts over the amount are cut at it.
+    const mine = tx('2026-10-12', zl(100), {
+      kind: 'income',
+      memberId: TATA,
+      splits: [
+        { id: nextId(), amount: zl(70), categoryId: null, refundable: false, memberId: null, advance: false, note: '' },
+        { id: nextId(), amount: zl(70), categoryId: null, refundable: false, memberId: MAMA, advance: false, note: '' }
+      ]
+    })
+    expect(incomeShares(mine)).toEqual([
+      { memberId: null, amount: zl(70), advance: false },
+      { memberId: MAMA, amount: zl(30), advance: false }
+    ])
+  })
+
+  it('przypomnienie po 30 dniach: saldo na start albo najstarszy zakup, przez kogo osoba przekazuje pieniądze', () => {
+    const members = (s: Settings) => s.household.members.map((m) => (m.id === MAMA ? { ...m, via: TATA, opening: { owed: zl(150), deposit: 0 } } : m))
+    const over = withHousehold({ since: '2026-09-01' }, members)
+    const late = fleet([], { ...over, settings: { ...over.settings!, budget: { start: '2026-09-01', initial: null } } })
+    const items = briefing({ fleet: late, containers: [], imports: [], lastConfirmation: '2026-10-19', label: () => '', members: members(settings()) })
+    expect(items.find((i) => i.kind === 'house')!.text).toBe('Mama: do oddania 150,00 zł – saldo na start rozliczeń z 01.09 (49 dni) – przekazuje przez: Tata.')
+  })
+
+  it('pośrednik to tylko podpowiedź: przelew Taty jest Taty, choć Mama przekazuje przez niego', () => {
+    const forMama = bought('2026-10-03', 200, MAMA)
+    const transfer = paid('2026-10-12', 1000, TATA)
+    const s = fleet([forMama, transfer], withHousehold({}, setMember(MAMA, { via: TATA })))
+    expect(s.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(200) })
+    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(1000) }])
+  })
+})
+

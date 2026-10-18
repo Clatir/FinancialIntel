@@ -42,8 +42,13 @@ export const splitSchema = z.looseObject({
   categoryId: ulidSchema.nullable().default(null),
   /** Financed by a household member (D80, before 1.3.0 „do zwrotu” for the house – D21): not a cost of mine. */
   refundable: z.boolean().default(false),
-  /** Who finances the line (`settings.household.members`); null = the first member, „Dom” (D21 – one house). */
+  /**
+   * Who finances the line (`settings.household.members`); null = the first member, „Dom” (D21 – one house). A part of an
+   * income (D81): whose money it is (null = mine, income).
+   */
   memberId: ulidSchema.nullable().catch(null).default(null),
+  /** A member's part of an income (D81): what they do not owe is their advance, not income. */
+  advance: z.boolean().catch(false).default(false),
   note: text
 })
 export type Split = z.infer<typeof splitSchema>

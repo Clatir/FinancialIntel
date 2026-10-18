@@ -303,8 +303,8 @@ describe('zakup „do zwrotu” i wpłata domownika (D20, D21)', () => {
   it('podział paragonu: część swoja z energii, część domowa jako należność', () => {
     const receipt = tx('2026-10-06', zl(-120), {
       splits: [
-        { id: nextId(), amount: zl(-80), categoryId: GROCERIES, refundable: false, memberId: null, note: '' },
-        { id: nextId(), amount: zl(-40), categoryId: GROCERIES, refundable: true, memberId: null, note: 'dla domu' }
+        { id: nextId(), amount: zl(-80), categoryId: GROCERIES, refundable: false, memberId: null, advance: false, note: '' },
+        { id: nextId(), amount: zl(-40), categoryId: GROCERIES, refundable: true, memberId: null, advance: false, note: 'dla domu' }
       ]
     })
     expect(partsOf(receipt).map((p) => [p.amount, p.refundable])).toEqual([

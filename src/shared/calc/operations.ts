@@ -5,7 +5,6 @@
 import { envelopeKind, HOUSE_MEMBER_ID, type Category, type EnvelopeKind, type Orders } from '../schema/budget'
 import type { Transaction } from '../schema/records'
 import { inClockWindow } from './dates'
-import type { HouseholdLedger } from './household'
 
 export interface Part {
   amount: number
@@ -100,20 +99,6 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
 export function costOf(t: Transaction): number {
   if (t.kind !== 'expense' || t.goalId) return 0
   return -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)) || 0
-}
-
-/**
- * Income of an operation for the statistics (the salary warning): deliveries, without what a household member pays back
- * or pays ahead (D80) – the ledger (`settleHousehold`) says how much of their money is income.
- */
-export function incomeOf(t: Transaction, ledger?: Pick<HouseholdLedger, 'byTx'>): number {
-  if (t.kind === 'income') {
-    const flows = ledger?.byTx.get(t.id)
-    if (flows) return Math.max(0, sum(flows.map((f) => f.income)))
-    return Math.max(0, t.amount - t.repaid)
-  }
-  if (t.kind === 'trading') return Math.max(0, t.amount)
-  return 0
 }
 
 // ------------------------------------------------------------------ the captain's log marks
