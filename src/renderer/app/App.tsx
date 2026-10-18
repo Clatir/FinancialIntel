@@ -5,6 +5,7 @@ import { goBack, navigate, setPalette, toast, useUi, type Route } from '../store
 import { setRemoteDialog, useRemote } from '../store/remote'
 import { initUpdates } from '../store/update'
 import { FolderSetup } from '../features/setup/FolderSetup'
+import { OpenProgressPanel, useOpenProgress } from '../features/setup/OpenProgress'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { SyncPage } from '../features/sync/SyncPage'
 import { RemoteChangesDialog } from '../features/sync/RemoteChangesDialog'
@@ -264,7 +265,7 @@ export function App() {
     initUpdates()
   }, [])
 
-  if (phase === 'boot') return <div className="flex h-full items-center justify-center text-muted">Wczytywanie…</div>
+  if (phase === 'boot') return <BootScreen />
   if (phase === 'setup')
     return (
       <>
@@ -293,6 +294,21 @@ export function App() {
       <ShortcutsHelp />
       <RemoteChangesDialog />
       <Toasts />
+    </div>
+  )
+}
+
+/** Starting with the remembered folder: its reading, step by step (1.4.1), with „Przerwij”. */
+function BootScreen() {
+  const [progress] = useOpenProgress()
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-muted" data-testid="boot">
+      <span>Wczytywanie…</span>
+      {progress && (
+        <div className="w-[600px]">
+          <OpenProgressPanel progress={progress} />
+        </div>
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { api, errorMessage } from '../../lib/api'
 import { toast } from '../../store/ui'
 import { openResult, useData } from '../../store/data'
 import { IconFolder, IconPlus } from '../../components/icons'
+import { OpenProgressPanel, openLogs, useOpenProgress } from './OpenProgress'
 
 /**
  * First run (or a missing folder): where the data lives. The proposal is `OneDrive\FinancialIntel` (decision E0-2) –
@@ -15,10 +16,12 @@ export function FolderSetup() {
   const dir = useData((s) => s.setupDir)
   const [busy, setBusy] = useState(false)
   const [proposal, setProposal] = useState<{ dir: string; oneDrive: boolean } | null>(null)
+  const [progress, resetProgress] = useOpenProgress()
   useEffect(() => {
     void api.defaultDataDir().then(setProposal, () => undefined)
   }, [])
   const run = async (fn: () => ReturnType<typeof api.pickDataDir>) => {
+    resetProgress()
     setBusy(true)
     try {
       await openResult(await fn())
@@ -44,6 +47,7 @@ export function FolderSetup() {
             Dane to zwykłe pliki JSON w jednym folderze. Najlepiej w OneDrive – wtedy każdy Twój komputer widzi ten sam budżet. Ten wybór
             jest zapamiętywany na tym komputerze; na innym komputerze wskażesz ten sam folder.
           </p>
+          {busy && progress && <OpenProgressPanel progress={progress} />}
           {message && (
             <div className="border border-accent/40 bg-accent-soft px-3 py-2 text-fg-strong" data-testid="setup-message">
               {message}
@@ -93,6 +97,11 @@ export function FolderSetup() {
                 <IconFolder size={14} /> Otwórz istniejące
               </span>
               <span className="text-[11px] text-muted">folder z plikiem fi.json (np. z drugiego komputera)</span>
+            </button>
+          </div>
+          <div className="flex justify-end">
+            <button className="text-[11px] text-muted hover:text-fg" onClick={openLogs} data-testid="setup-logs">
+              Folder logów (diagnostyka)
             </button>
           </div>
         </div>

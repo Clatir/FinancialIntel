@@ -12,6 +12,7 @@ import type { RecordEntry } from '@shared/api'
 import type { GameMonth, GameSettings } from '@shared/schema'
 import { addRecords, updateRecord, updateSettings, useData } from './data'
 import { fleetNow, useMinute } from './fleet'
+import { timed } from '../lib/timing'
 
 const recordsOf = <T,>(map: Record<string, RecordEntry<T>>): T[] => Object.values(map).map((e) => e.record)
 
@@ -46,7 +47,7 @@ export function useGameAdvance(): void {
         updateSettings((f) => (f.settings.game.start ? f : { ...f, settings: { ...f.settings, game: { ...f.settings.game, start: gameStartFor(new Date()) } } }), { background: true })
       return
     }
-    const change = advanceGame(gameInputOf(fi, records), new Date())
+    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date()))
     if (!change.months.length) return
     const fresh = change.months.filter((m) => !records.game[m.id])
     if (fresh.length) addRecords('game', fresh)
@@ -65,9 +66,11 @@ export function useGame(): { view: GameView; today: DayRating | null; input: Gam
     if (!fi) return null
     const input = gameInputOf(fi, records)
     const today = warsawNow(new Date(minute)).date
-    const view = gameView(input.game, fi.settings.game, today)
-    const start = fi.settings.game.start
-    return { view, today: start && start <= today ? rateDay(input, today) : null, input }
+    return timed('gra: widok', () => {
+      const view = gameView(input.game, fi.settings.game, today)
+      const start = fi.settings.game.start
+      return { view, today: start && start <= today ? rateDay(input, today) : null, input }
+    })
   }, [fi, records, minute])
 }
 

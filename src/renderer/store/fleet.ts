@@ -4,6 +4,7 @@ import { computeFleet, type FleetInput, type FleetState } from '@shared/calc/fle
 import type { HouseholdLedger } from '@shared/calc/household'
 import type { RecordEntry } from '@shared/api'
 import { useData } from './data'
+import { timed } from '../lib/timing'
 
 /** A clock shared by the screens: the minute changes the budget's day and today's energy. */
 const useClockStore = create<{ now: number }>(() => ({ now: Date.now() }))
@@ -52,7 +53,7 @@ const inputOf = (fi: Fi, records: Records, now: number): FleetInput => ({
 
 function fleetOf(fi: Fi, records: Records, now: number): FleetState {
   if (memo && memo.fi === fi && memo.records === records && memo.now === now) return memo.state
-  const state = computeFleet(inputOf(fi, records, now))
+  const state = timed('silnik budżetu', () => computeFleet(inputOf(fi, records, now)))
   memo = { fi, records, now, state }
   return state
 }
