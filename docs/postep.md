@@ -1,12 +1,13 @@
 # Financial Intel – postęp
 
-**Stan:** 1.4.0 – domownicy bez bankowości i panel przychodów (D81) gotowe: PR #11 do `main`, scalenie po zielonym CI
-(D71). **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**Stan:** 1.4.1 – wczytywanie folderu krok po kroku (D82) gotowe: PR #12 do `main`, scalenie po zielonym CI (D71).
+**1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.3.0 i 1.4.0 w aplikacji (data rozliczeń i salda na start, pośrednik, podział
-pierwszej wspólnej wpłaty, panel „Przychody”), kalibracja progów gry po pierwszym miesiącu na prawdziwych danych;
+**Następny krok:** pauza – odbiór 1.4.1 na drugim komputerze (otwarcie folderu z postępem; przy wolnych plikach
+„Zawsze zachowuj na tym urządzeniu”, w razie problemu `main.log`), odbiór 1.3.0 i 1.4.0 w aplikacji (data rozliczeń i
+salda na start, pośrednik, podział pierwszej wspólnej wpłaty, panel „Przychody”), kalibracja progów gry po pierwszym miesiącu na prawdziwych danych;
 kolejny etap tylko na komendę użytkownika (D67).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
@@ -32,9 +33,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.2.2 | Podobne nazwy (5) + propozycja reguły z liczbą operacji (6) | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.2 | ✅ wybór „opcja 2” (D78) | ✅ wydane (PR #8) |
 | 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79), sprawdzenie na prawdziwej historii rachunku (T104) | Opus 5.5 | **max** | zmierzone ok. 1,5 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ wydane (PR #9) |
 | 1.3.0 | Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80) | Opus 5.5 | **max** | ok. 3,5 h (szacunek z przebiegu sesji; plan był 2,5–3 h) | 1.3.0 | ✅ odpowiedzi i komenda (D80) | ✅ wydane (PR #10) |
-| 1.4.0 | Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dziś z saldem początkowym, panel przychodów (D81) | Opus 5.5 | **max** | ok. 2 h (szacunek z przebiegu sesji; plan był ok. 3 h) | 1.4.0 | ✅ odpowiedzi i komenda (D81) | ✅ gotowe, PR #11 – scalenie po zielonym CI |
+| 1.4.0 | Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dziś z saldem początkowym, panel przychodów (D81) | Opus 5.5 | **max** | ok. 2 h (szacunek z przebiegu sesji; plan był ok. 3 h) | 1.4.0 | ✅ odpowiedzi i komenda (D81) | ✅ wydane (PR #11) |
+| 1.4.1 | Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82) | Opus 5.5 | **xhigh** | ok. 1 h (szacunek z przebiegu sesji; plan był ok. 1,5 h) | 1.4.1 | ✅ zgłoszenie, diagnoza i komenda (D82) | ✅ gotowe, PR #12 – scalenie po zielonym CI |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.0** | | | **ok. 19,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1** | | | **ok. 20,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -100,6 +102,43 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.4.0, Windows):
    przekazuje przez” przy osobie bez konta.
 2. Przelew pośrednika z pieniędzmi innej osoby: „+ także za …” w edytorze albo „W tym za …” w szybkim wpisie.
 3. Panel „Przychody”: praca i trading XTB osobno, średnie i mediana wobec pensji.
+
+## Przed etapem 1.4.1 – wczytywanie folderu (18.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.4.0 wydane (PR #11). Na drugim komputerze „Otwórz istniejące” przygasza przyciski i
+   aplikacja wisi minutami; w `main.log` nie ma linii „opened” – proces główny stoi na odczycie plików. Przyczyna
+   (T123): OneDrive trzyma pliki tylko online, a Node czyta pliki na 4 wątkach. Zakres: postęp wczytywania na ekranie,
+   podpowiedź OneDrive, „Przerwij”, folder logów, czasy etapów i obliczeń okna w logu, okienko przy zawieszonym oknie,
+   szybszy odczyt.
+2. **Co użytkownik musi powiedzieć** – ✅ zakres („Tak”), log bez „opened”; model i thinking po diagnozie, przed
+   zmianami (D82).
+3. **Co przygotować** – obejście od razu: „Zawsze zachowuj na tym urządzeniu” na folderze danych; po wydaniu: otwarcie
+   folderu na drugim komputerze, w razie problemu `%APPDATA%\Financial Intel\logs\main.log`.
+4. **Model, thinking, czas** – Opus 5.5 · xhigh (zmiany w odczycie folderu) · ok. 1,5 h.
+
+## 1.4.1 – wczytywanie folderu krok po kroku (18.10.2026)
+
+Zgłoszenie użytkownika po 1.4.0 (D82): na drugim komputerze otwarcie folderu wisiało minutami bez śladu w logu.
+
+Zrobione:
+- Pula wątków plików 32 zamiast 4 (`main/threadpool.ts`, importowany pierwszy; sprawdzone w Electronie), odczyt po 24
+  pliki naraz – czekające na chmurę pliki nie zatrzymują reszty aplikacji (T123).
+- Postęp otwierania: etapy, „x z N”, plik czekający najdłużej, wolne odczyty, czasy etapów; do okna co 250 ms, do logu
+  co 10 s i przy końcu (najwolniejsze pliki) (T124).
+- „Przerwij” do końca odczytu (bez migracji i sprzątania folderu, „Spróbuj ponownie”), nowsze otwarcie wygrywa ze
+  starszym, obecność innych komputerów najwyżej 2 s (T125).
+- Okno: panel postępu na ekranie wyboru folderu i przy starcie, podpowiedź „Zawsze zachowuj na tym urządzeniu”, „Folder
+  logów (diagnostyka)”; długie obliczenia (silnik, gra, saldo na start) do logu, zawieszone okno – wpis z etapem i
+  okienko po 10 s (T126).
+- Przegląd `/code-review` high: 8 kandydatów, 7 poprawionych, 1 bez zmian z uzasadnieniem (T127).
+- Testy: 398 unit + fs (nowy `tests/fs/open-progress.test.ts`), E2E 20 (nowy `tests/e2e/open.spec.ts`: postęp,
+  podpowiedź, „Przerwij”, ponowna próba, log).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.4.1, Windows, drugi komputer):
+1. Otwarcie folderu: pasek „Wczytywanie plików: x z N”, czas, przy wolnych plikach podpowiedź OneDrive.
+2. „Przerwij” wraca do wyboru folderu, „Spróbuj ponownie” otwiera go jeszcze raz.
+3. Gdy coś dalej trwa długo: „Folder logów (diagnostyka)” → `main.log` (linie „open progress …” pokazują, na czym
+   stoi).
 
 ## 1.3.0 – rozliczenia z domownikami (18.10.2026)
 
@@ -809,3 +848,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
   odpowiedzi i komenda „Ok” (D81); start 1.4.0.
 - 18.10.2026 – 1.4.0 (rozliczenia od dnia z saldem na start, podział wpłaty na osoby, pośrednik jako podpowiedź, panel
   „Przychody” z pracą i tradingiem XTB netto), przegląd i poprawki; PR #11 do `main`.
+- 18.10.2026 – PR #11 scalony, wydanie 1.4.0 opublikowane; zgłoszenie: otwarcie folderu na drugim komputerze wisi –
+  diagnoza (log bez „opened”, OneDrive tylko online, 4 wątki), zakres przyjęty, model po diagnozie (D82); 1.4.1 (postęp
+  wczytywania, „Przerwij”, log, pula wątków), przegląd i poprawki; PR #12 do `main`.

@@ -10,6 +10,7 @@ import { inflowOf, type HouseholdMember, type MemberInflow, type Transaction } f
 import { newId } from '@shared/ids'
 import { updateSettings, useData } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
+import { timed } from '../../lib/timing'
 import { toast } from '../../store/ui'
 
 const NO_MEMBERS: HouseholdMember[] = []
@@ -101,7 +102,7 @@ export function useHouseholdSinceSeed(): void {
     const input = fleetInputNow()
     if (!input || useData.getState().fi?.settings.household.since !== undefined) return
     const today = warsawNow().date
-    const before = householdOf(input, today, addDays(today, -1))
+    const before = timed('rozliczenia: saldo na start', () => householdOf(input, today, addDays(today, -1)))
     updateSettings(
       (f) => ({
         ...f,

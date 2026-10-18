@@ -68,7 +68,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
-- `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
+- `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `threadpool.ts` (pula wątków plików), `quick.ts` (szybki wpis i globalny skrót),
   powiadomienia w `index.ts`, `tray.ts`, `update/`, `config.ts` (ustawienia komputera w userData), `log.ts`; od E5
   `ictj/` (odczyt ICTTJ).
 - `src/preload` – `window.fi` (contextBridge); okno z contextIsolation, sandbox, CSP; jedna instancja aplikacji.
@@ -373,6 +373,22 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/income.test.ts`, D81 w `tests/unit/household.test.ts`, E2E D81 w `tests/e2e/household.spec.ts`
   (testy E2E z należnościami sprzed dziś ustawiają `household.since`).
 
+## Kod (1.4.1 – wczytywanie folderu, D82)
+- Main: `threadpool.ts` (importowany pierwszy w `index.ts`: `UV_THREADPOOL_SIZE` 32 – pliki OneDrive tylko online
+  blokowały 4 wątki, T123), `datastore/progress.ts` (`ReadTracker` – etap, „x z N”, plik czekający najdłużej, wolne
+  odczyty, najwolniejsze; `describeProgress`, `untilAborted`), `DataStore.open({signal, slowMs, readDelayMs, onCommit})`
+  + `progress()` / `loadStats`, `READ_CONCURRENCY` 24 (otwarcie i pełne odświeżenie), `walkFiles` / `mapLimit` z
+  przerwaniem; `openFolder`: `OpenProgress` do okna co 250 ms (`fi:openProgress`), log co 10 s i „open start / aborted /
+  failed / superseded”, `cancelOpen` (do końca odczytu – od migracji `onCommit` już nie), `openGeneration`, obecność
+  innych komputerów najwyżej 2 s; `watchHangs` (`unresponsive` → log z etapem okna, po 10 s okienko), `fi:step` (etapy
+  obliczeń okna, ≥ 500 ms do logu). Typy `OpenProgress` / `OpenStep` / `SLOW_FILE_MS` / `OPEN_ABORTED_MESSAGE` w
+  `shared/api.ts` (T124–T126).
+- Renderer: `features/setup/OpenProgress.tsx` (`useOpenProgress`, `OpenProgressPanel` – `open-progress`, `open-cancel`,
+  `open-logs`, `open-progress-cloud`), ekran wyboru folderu (`setup-logs`) i start (`BootScreen` w `App.tsx`),
+  `lib/timing.ts` `timed` (silnik budżetu, gra, saldo na start).
+- Testy: `tests/fs/open-progress.test.ts`, E2E `tests/e2e/open.spec.ts`; zmienne testowe `FI_OPEN_DELAY_MS` (opóźnienie
+  każdego odczytu) i `FI_OPEN_SLOW_MS` (próg wolnego odczytu).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -437,3 +453,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.2.3 Poprawka podobnych nazw: dopiski banku w nazwach, wspólne słowa (D79)
 - [x] 1.3.0 Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80)
 - [x] 1.4.0 Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dnia z saldem na start, panel przychodów (D81)
+- [x] 1.4.1 Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82)

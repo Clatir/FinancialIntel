@@ -1,10 +1,12 @@
 // adapted from ICTTJ src/main/index.ts @ 84a8339
+// First: sizes the file thread pool before anything uses it (1.4.1).
+import './threadpool'
 import { existsSync, promises as fs } from 'node:fs'
 import { hostname } from 'node:os'
 import { basename, dirname, join, parse } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
-import type { AppInfo, ChangeSet, HistoryKind, HistoryReason, OpenFolderResult, TrayPrefs } from '@shared/api'
+import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import type { Collection } from '@shared/paths'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
@@ -14,7 +16,8 @@ import { clearPresence, readOtherMachines, writePresence } from './datastore/pre
 import { initLog, log } from './log'
 import { importBackup, isDataFile, listBackups, manualBackup, runBackups } from './datastore/backup'
 import { zipFolder } from './datastore/zip'
-import { writeFileAtomic } from './datastore/atomic'
+import { sleep, writeFileAtomic } from './datastore/atomic'
+import { describeProgress, untilAborted } from './datastore/progress'
 import { htmlToPdf } from './export/pdf'
 import { writeXlsx } from './export/xlsx'
 import type { XlsxSheet } from '@shared/export/xlsx'
@@ -252,12 +255,14 @@ async function trash(absPath: string): Promise<void> {
 }
 
 async function closeStore(): Promise<void> {
+  // Detach everything first: an open that switches meanwhile is never undone by this close resuming later.
+  const closing = store
   watcher?.stop()
   watcher = null
   if (presenceTimer) clearInterval(presenceTimer)
   presenceTimer = null
-  if (store) await clearPresence(store.root, machineName).catch(() => undefined)
   store = null
+  if (closing) await clearPresence(closing.root, machineName).catch(() => undefined)
 }
 
 async function heartbeat(): Promise<void> {
@@ -275,18 +280,68 @@ async function heartbeat(): Promise<void> {
   }
 }
 
+/** The open in progress (1.4.1): „Przerwij” aborts it, a new open replaces it – until its folder is read. */
+let opening: AbortController | null = null
+/** Every open counts up: an older one that finished reading gives way to a newer one instead of switching folders. */
+let openGeneration = 0
+/** Test hooks (E2E of the progress screen): every file read waits so long; a read this long is slow. */
+const OPEN_DELAY_MS = Number(process.env.FI_OPEN_DELAY_MS) || 0
+const OPEN_SLOW_MS = Number(process.env.FI_OPEN_SLOW_MS) || undefined
+/** Progress to the window this often; a line to the log this often while an open takes long. */
+const PROGRESS_MS = 250
+const PROGRESS_LOG_MS = 10_000
+/** The other computers' heartbeats are a nicety: an open never waits for them longer than this. */
+const MACHINES_WAIT_MS = 2000
+
 async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFolderResult> {
+  opening?.abort()
+  const controller = new AbortController()
+  opening = controller
+  const generation = ++openGeneration
+  const superseded = (): OpenFolderResult => {
+    log('warn', `open superseded ${dir}: a newer open took over`)
+    return { ok: false, reason: 'aborted', dir, message: OPEN_ABORTED_MESSAGE }
+  }
+  const signal = controller.signal
+  const t0 = Date.now()
+  let step: OpenStep = 'inspect'
+  let next: DataStore | null = null
+  const progress = (): OpenProgress => {
+    const p = step === 'machines' || step === 'inspect' ? null : next?.progress()
+    return {
+      dir,
+      step: p?.step ?? step,
+      done: p?.done ?? 0,
+      total: p?.total ?? 0,
+      waiting: p?.waiting ?? null,
+      slow: p?.slow ?? 0,
+      slowMs: OPEN_SLOW_MS ?? SLOW_FILE_MS,
+      elapsedMs: Date.now() - t0
+    }
+  }
+  let lastLog = t0
+  const report = () => {
+    const p = progress()
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:openProgress', p)
+    if (Date.now() - lastLog >= PROGRESS_LOG_MS) {
+      lastLog = Date.now()
+      log('info', `open progress ${dir}: ${describeProgress(p, p.elapsedMs)}`)
+    }
+  }
+  const ticker = setInterval(report, PROGRESS_MS)
+  log('info', `open start ${dir}`)
   try {
+    report()
     let target = dir
-    let kind = await DataStore.inspect(target)
-    if (kind === 'ictj' || (await insideIctj(dir))) {
+    let kind = await untilAborted(DataStore.inspect(target), signal)
+    if (kind === 'ictj' || (await untilAborted(insideIctj(dir), signal))) {
       return { ok: false, reason: 'not-data', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
     }
     // A folder of other files gets a FinancialIntel subfolder – not the proposal itself (already named so) and not a
     // folder of FI data whose fi.json has not arrived yet.
     if (kind === 'other' && createIfEmpty && basename(dir) !== DATA_FOLDER_NAME) {
       target = join(dir, DATA_FOLDER_NAME)
-      kind = await DataStore.inspect(target)
+      kind = await untilAborted(DataStore.inspect(target), signal)
     }
     if (kind === 'partial' || (kind === 'other' && createIfEmpty)) {
       return {
@@ -311,6 +366,7 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
               : 'Zapamiętany folder danych jest niedostępny (np. OneDrive jeszcze się nie uruchomił albo dysk jest odłączony). Spróbuj ponownie albo wskaż inny folder.'
         }
       }
+      signal.throwIfAborted()
       await DataStore.initialize(target)
     } else if (kind === 'other') {
       return {
@@ -320,18 +376,31 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
         message: `W tym folderze nie ma danych Financial Intel (fi.json). Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
       }
     }
-    const next = new DataStore(target, { machineName, trash, backupDir: config.get().backupDirOverride })
-    // Open the new folder first: if it fails, the current one stays open and keeps saving.
-    const snapshot = await next.open()
+    next = new DataStore(target, { machineName, trash, backupDir: config.get().backupDirOverride })
+    step = 'list'
+    // Open the new folder first: if it fails or is stopped, the current one stays open and keeps saving. Once read
+    // (before a migration) it no longer stops: „Przerwij” would promise an untouched folder.
+    const commit = () => {
+      if (opening === controller) opening = null
+    }
+    const snapshot = await untilAborted(next.open({ signal, readDelayMs: OPEN_DELAY_MS, slowMs: OPEN_SLOW_MS, onCommit: commit }), signal)
+    commit()
+    step = 'machines'
+    const others = await Promise.race([readOtherMachines(target, machineName).catch(() => []), sleep(MACHINES_WAIT_MS).then(() => [])])
+    if (generation !== openGeneration) return superseded()
     await closeStore()
-    store = next
-    next.otherMachines = await readOtherMachines(target, machineName)
-    snapshot.status = next.status()
+    // A newer open may have closed the store meanwhile: it switches, this one gives way. From here on no await until
+    // the watcher and the heartbeat are set, so two opens never interleave.
+    if (generation !== openGeneration) return superseded()
+    const opened = next
+    store = opened
+    opened.otherMachines = others
+    snapshot.status = opened.status()
     watcher = new FolderWatcher(
       target,
       (paths) => {
         const s = store
-        if (s !== next) return
+        if (s !== opened) return
         s.refresh(paths ?? undefined).then(send, (e) => log('error', 'refresh failed', e))
       },
       { onError: (e) => log('warn', 'watcher error', e) }
@@ -339,20 +408,30 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
     watcher.start()
     void heartbeat()
     presenceTimer = setInterval(() => void heartbeat(), 60_000)
-    if (!next.status().readOnly) {
+    if (!opened.status().readOnly) {
       // Daily backup (decision D31), in the background.
-      runBackups(target, next.backupsDir).then(
+      runBackups(target, opened.backupsDir).then(
         (file) => file && log('info', `backup ${file}`),
         (e) => log('warn', 'backup failed', e)
       )
     }
     await config.rememberDir(target)
     const count = Object.values(snapshot.records).reduce((n, list) => n + list.length, 0)
-    log('info', `opened ${target}: ${count} records, ${snapshot.problems.length} problems, ${snapshot.conflicts.length} conflicts, ${snapshot.loadMs} ms`)
+    const st = opened.loadStats
+    const times = st ? ` (list ${st.listMs} ms, read ${st.readMs} ms of ${st.files} files, ${st.slow} slow, migrate ${st.migrateMs} ms)` : ''
+    log('info', `opened ${target}: ${count} records, ${snapshot.problems.length} problems, ${snapshot.conflicts.length} conflicts, ${snapshot.loadMs} ms${times}`)
+    if (st?.slowest.length && st.slowest[0]!.ms >= 1000) log('info', `open slowest files: ${st.slowest.map((f) => `${f.relPath} ${f.ms} ms`).join(', ')}`)
     return { ok: true, snapshot }
   } catch (e) {
-    log('error', `open failed ${dir}`, e)
+    if (signal.aborted) {
+      log('warn', `open aborted ${dir}: ${describeProgress(progress(), Date.now() - t0)}`)
+      return { ok: false, reason: 'aborted', dir, message: OPEN_ABORTED_MESSAGE }
+    }
+    log('error', `open failed ${dir}: ${describeProgress(progress(), Date.now() - t0)}`, e)
     return { ok: false, reason: 'error', dir, message: (e as Error).message }
+  } finally {
+    clearInterval(ticker)
+    if (opening === controller) opening = null
   }
 }
 
@@ -387,6 +466,7 @@ function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Pro
 }
 
 function registerIpc(): void {
+  registerRendererSteps()
   handle(
     'appInfo',
     (): AppInfo => ({
@@ -416,6 +496,9 @@ function registerIpc(): void {
     return openFolder(dir, mode === 'create')
   })
   handle('openDataDir', (dir: string, createIfEmpty: boolean) => openFolder(dir, createIfEmpty))
+  handle('cancelOpen', () => {
+    opening?.abort()
+  })
   handle('saveRecord', async (collection: Collection, record: never) => {
     const { entry, change } = await requireStore().saveRecord(collection, record)
     send(change)
@@ -648,6 +731,82 @@ function broadcastPrefs(prefs: MachinePrefs): void {
   for (const w of wins) if (w && !w.isDestroyed()) w.webContents.send('fi:machinePrefs', prefs)
 }
 
+/** The long computation each window started last and has not finished (1.4.1): names a hang in the log. */
+const rendererSteps = new Map<number, { name: string; at: number }>()
+/** Log a computation of the window this long or longer. */
+const RENDERER_STEP_LOG_MS = 500
+/** The window not answering this long after Chromium noticed: tell the user (once per hang). */
+const HANG_NOTICE_MS = 10_000
+
+function registerRendererSteps(): void {
+  ipcMain.on('fi:step', (e, name: unknown, ms: unknown) => {
+    if (typeof name !== 'string') return
+    const id = e.sender.id
+    if (typeof ms !== 'number') {
+      rendererSteps.set(id, { name, at: Date.now() })
+      return
+    }
+    if (rendererSteps.get(id)?.name === name) rendererSteps.delete(id)
+    if (ms >= RENDERER_STEP_LOG_MS) log('info', `window ${name} ${Math.round(ms)} ms`)
+  })
+}
+
+/** A window that stops answering (a long computation) leaves a line in the log and, after a while, a message. */
+function watchHangs(win: BrowserWindow): void {
+  const id = win.webContents.id
+  const stepText = () => {
+    const step = rendererSteps.get(id)
+    return step ? `, last step ${step.name} started ${Math.round((Date.now() - step.at) / 1000)} s ago` : ''
+  }
+  let since = 0
+  let timer: NodeJS.Timeout | null = null
+  const reset = () => {
+    since = 0
+    if (timer) clearTimeout(timer)
+    timer = null
+  }
+  win.on('unresponsive', () => {
+    if (since) return
+    since = Date.now()
+    log('warn', `window unresponsive${stepText()}`)
+    timer = setTimeout(() => {
+      timer = null
+      if (win.isDestroyed()) return
+      const step = rendererSteps.get(id)
+      log('warn', `window still unresponsive after ${Math.round((Date.now() - since) / 1000)} s${stepText()}`)
+      void dialog
+        .showMessageBox({
+          type: 'warning',
+          title: APP_TITLE,
+          message: 'Okno Financial Intel nie odpowiada',
+          detail: `Aplikacja coś liczy albo się zawiesiła${step ? ` (etap: ${step.name})` : ''}. Szczegóły są w logu – folder logów można otworzyć poniżej. Jeśli to się powtarza, prześlij plik main.log.`,
+          buttons: ['Czekaj', 'Otwórz folder logów'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true
+        })
+        .then(({ response }) => {
+          if (response === 1) void shell.openPath(join(app.getPath('userData'), 'logs'))
+        })
+    }, HANG_NOTICE_MS)
+  })
+  win.on('responsive', () => {
+    if (!since) return
+    log('info', `window responsive again after ${Math.round((Date.now() - since) / 1000)} s`)
+    reset()
+  })
+  // A renderer that died or reloaded while hung never says 'responsive': start over, forget its step.
+  win.webContents.on('render-process-gone', () => {
+    reset()
+    rendererSteps.delete(id)
+  })
+  win.webContents.on('did-start-loading', () => rendererSteps.delete(id))
+  win.on('closed', () => {
+    reset()
+    rendererSteps.delete(id)
+  })
+}
+
 function createWindow(): void {
   const saved = config.get().window
   const win = new BrowserWindow({
@@ -745,6 +904,7 @@ function createWindow(): void {
   win.on('focus', () => {
     store?.refresh().then(send, () => undefined)
   })
+  watchHangs(win)
   // Shutdown / log-off (Windows): no installer or swap helper now, the update waits for the next close.
   // Shutdown also closes for real when the window would go to the tray.
   win.on('query-session-end', () => {

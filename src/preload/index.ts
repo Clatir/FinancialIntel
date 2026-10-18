@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/preload/index.ts @ 84a8339
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ChangeSet, DetachEvent, DetachPayload, FiApi, QuickData, QuickResult } from '@shared/api'
+import type { ChangeSet, DetachEvent, DetachPayload, FiApi, OpenProgress, QuickData, QuickResult } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import type { IctjSnapshot } from '@shared/ictj'
 import type { UpdateState } from '@shared/update'
@@ -20,6 +20,9 @@ const api: FiApi = {
   defaultDataDir: () => invoke('defaultDataDir'),
   pickDataDir: (mode) => invoke('pickDataDir', mode),
   openDataDir: (dir, createIfEmpty) => invoke('openDataDir', dir, createIfEmpty),
+  cancelOpen: () => invoke('cancelOpen'),
+  onOpenProgress: (cb) => listen<[OpenProgress]>('openProgress', cb),
+  rendererStep: (name, ms) => ipcRenderer.send('fi:step', name, ms),
   saveRecord: (collection, record) => invoke('saveRecord', collection, record),
   deleteRecord: (collection, id) => invoke('deleteRecord', collection, id),
   historyList: (kind, id) => invoke('historyList', kind, id),

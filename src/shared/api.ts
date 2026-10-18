@@ -155,7 +155,39 @@ export interface AppInfo {
 
 export type OpenFolderResult =
   | { ok: true; snapshot: Snapshot }
-  | { ok: false; reason: 'cancelled' | 'not-data' | 'error'; message: string; dir?: string }
+  | { ok: false; reason: 'cancelled' | 'aborted' | 'not-data' | 'error'; message: string; dir?: string }
+
+/** The steps of reading the folder itself (1.4.1). */
+export type LoadStep = 'list' | 'read' | 'migrate' | 'prepare'
+/** The steps of opening a data folder: checking it, reading it, the other computers' presence. */
+export type OpenStep = 'inspect' | LoadStep | 'machines'
+
+export interface SlowFile {
+  relPath: string
+  ms: number
+}
+
+/** Opening a data folder in progress (1.4.1): sent to the window about four times a second. */
+export interface OpenProgress {
+  dir: string
+  step: OpenStep
+  /** Files read; files found (while listing: found so far). */
+  done: number
+  total: number
+  /** The file waiting longest right now (OneDrive fetching it from the cloud, an antivirus…). */
+  waiting: SlowFile | null
+  /** Reads that took at least `slowMs`. */
+  slow: number
+  /** The threshold of a slow read (`SLOW_FILE_MS`). */
+  slowMs: number
+  elapsedMs: number
+}
+
+/** A read this long means the file was not on the disk (OneDrive online-only) or something holds it. */
+export const SLOW_FILE_MS = 3000
+
+export const OPEN_ABORTED_MESSAGE =
+  'Przerwano wczytywanie folderu – nic w nim nie zostało zmienione. Jeśli pliki pobiera OneDrive, ustaw na folderze „Zawsze zachowuj na tym urządzeniu”, poczekaj na zielone ptaszki i spróbuj ponownie.'
 
 export interface FiApi {
   appInfo(): Promise<AppInfo>
@@ -167,6 +199,11 @@ export interface FiApi {
   /** Show a folder picker. mode=create initializes an empty folder as new data. */
   pickDataDir(mode: 'open' | 'create'): Promise<OpenFolderResult>
   openDataDir(dir: string, createIfEmpty: boolean): Promise<OpenFolderResult>
+  /** Stop opening a folder (1.4.1): the open in progress returns `aborted`, nothing in the folder changes. */
+  cancelOpen(): Promise<void>
+  onOpenProgress(cb: (p: OpenProgress) => void): () => void
+  /** A long computation in the window (1.4.1): `ms` undefined = it starts, a number = it took so long (logged ≥ 500 ms). */
+  rendererStep(name: string, ms?: number): void
   saveRecord<C extends Collection>(collection: C, record: RecordTypes[C]): Promise<RecordEntry<RecordTypes[C]>>
   deleteRecord(collection: Collection, id: string): Promise<void>
   /** Kept versions of a record, newest first (the settings: `kind` 'fi', `id` = the id of fi.json). */

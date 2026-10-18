@@ -241,6 +241,12 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     „Trading (XTB)” oraz suma; trading = wypłaty minus dopłaty, bez wypłat z puli Podatek; bez przelewów własnych, spłat
     i zaliczek domowników; porównanie z pensją; te same liczby w średnich przychodach silnika (ostrzeżenie „pensja
     wyższa niż średnie wpływy”). Tryb „pensja automatyczna” – nie (nie wybrany).
+- **D82** (18.10.2026) Wczytywanie folderu krok po kroku (1.4.1, zgłoszenie użytkownika: na drugim komputerze
+  „Otwórz istniejące” przygasza przyciski i aplikacja wisi minutami, w logu brak śladu wczytania). Propozycja przyjęta
+  („Tak”): postęp wczytywania (etap, „x z N”, plik czekający najdłużej, czas) na ekranie wyboru folderu i przy starcie,
+  podpowiedź „Zawsze zachowuj na tym urządzeniu”, gdy pliki czytają się wolno, „Przerwij” (bez zmian w folderze) i
+  „Otwórz folder logów”, czasy etapów i długich obliczeń okna w logu, okienko przy zawieszonym oknie, szybszy odczyt
+  plików pobieranych z chmury; model i thinking podawane po diagnozie, przed zmianami (prośba użytkownika).
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -781,3 +787,31 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   netto w całym roku (T119), pole salda na start zgodne z danymi (T121), kwota „+ także za” na dzień wpłaty (T118), CSV i
   duplikaty z częściami wpłaty (T117), decyzje T115–T122.
 
+### 1.4.1 – wczytywanie folderu (18.10.2026)
+
+- **T123** Przyczyna zawieszenia (D82): log bez „opened” = proces główny stał na odczycie plików. OneDrive na nowym
+  komputerze trzyma pliki tylko online i pobiera każdy przy pierwszym odczycie, a Node czyta pliki na puli 4 wątków
+  (libuv) – cztery czekające odczyty zatrzymywały każdą inną operację na plikach (sprawdzone w Electronie na FIFO: przy
+  4 wątkach `stat` czekał, przy większej puli trwał 45 ms). `main/threadpool.ts` (importowany pierwszy) ustawia
+  `UV_THREADPOOL_SIZE` 32, odczyt (otwarcie i pełne odświeżenie) idzie po `READ_CONCURRENCY` 24 pliki – zawsze zostają
+  wolne wątki na zapis, kopie i obecność.
+- **T124** Postęp (`DataStore.open({signal, slowMs, onCommit})`, `ReadTracker` w `main/datastore/progress.ts`): etapy
+  list → read → migrate → prepare, „x z N”, plik czekający najdłużej, odczyty wolne (≥ `SLOW_FILE_MS` 3 s),
+  najwolniejsze pliki i czasy etapów (`loadStats`); `openFolder` dokłada inspect i machines, wysyła `OpenProgress` do
+  okna co 250 ms (`fi:openProgress`) i pisze wiersz do logu co 10 s („open start / progress / aborted / failed /
+  superseded”, przy „opened” czasy i najwolniejsze pliki) – log mówi, gdzie stanęło, nawet gdy aplikację zamknięto.
+- **T125** „Przerwij” (`cancelOpen`): działa do końca odczytu – `untilAborted` zwalnia okno od razu, odczyty w toku
+  kończą się same, nowe nie startują, przerwane otwarcie nie migruje i nie sprząta folderu (wynik `aborted`, komunikat
+  „nic nie zostało zmienione”, „Spróbuj ponownie”). Od migracji (`onCommit`) otwarcie już się nie przerywa – przycisk
+  wyłączony. Nowsze otwarcie wygrywa ze starszym (`openGeneration`), `closeStore` odłącza wszystko przed czekaniem;
+  obecność innych komputerów czeka najwyżej 2 s.
+- **T126** Okno: `OpenProgressPanel` na ekranie wyboru folderu i przy starcie (zamiast samego „Wczytywanie…”), podpowiedź
+  „Zawsze zachowuj na tym urządzeniu” przy wolnych odczytach, „Folder logów (diagnostyka)” na ekranie wyboru. Długie
+  obliczenia okna (`timed`: silnik budżetu, gra, saldo na start) zgłaszane procesowi głównemu – czas ≥ 500 ms do logu;
+  okno, które nie odpowiada (`unresponsive`), to wiersz w logu z etapem danego okna i po 10 s okienko z „Otwórz folder
+  logów”. Testowe `FI_OPEN_DELAY_MS` / `FI_OPEN_SLOW_MS` (E2E `tests/e2e/open.spec.ts`).
+- **T127** Przegląd 1.4.1 (`/code-review` high, 8 kandydatów): poprawione – przerwanie w trakcie migracji (T125),
+  pełne odświeżenie po 64 pliki (T123), krótki powrót paska do „Szukanie plików”, „Przerwij” bez skutku po odczycie,
+  przeplatanie dwóch otwarć i przeciek obserwatora (T125), stan wykrywania zawieszeń po awarii okna, etapy obliczeń
+  mieszane między oknami (T126); bez zmian – 24 odczyty naraz zamiast 64 nie spowalniają lokalnego folderu (wcześniej
+  i tak szły najwyżej 4 naraz – pula wątków).

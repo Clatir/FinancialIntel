@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/main/datastore/store.ts @ 84a8339
 import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { ChangeSet, ConflictEntry, ConflictSide, FolderStatus, HistoryEntry, HistoryKind, HistoryReason, Problem, ProblemKind, RecordEntry, RecordLists, Snapshot } from '@shared/api'
+import { SLOW_FILE_MS, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import {
   BACKUPS_DIR,
@@ -23,6 +23,7 @@ import { SCHEMAS, parseRecordText, serializeRecord, type AnyRecord, type RecordT
 import { SCHEMA_VERSION, type SettingsFile } from '@shared/schema'
 import { pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
 import { mapLimit, walkFiles } from './fsutil'
+import { ReadTracker, type LoadProgress, type LoadStats } from './progress'
 import { RecordHistory } from './history'
 import { zipFolder } from './zip'
 
@@ -66,6 +67,20 @@ export interface DataStoreOptions {
  * 'partial' = FI's folders without fi.json (OneDrive has not synced it yet – never initialize over it);
  * 'ictj' = the data folder of ICT Trade Journal (FI never writes there).
  */
+export interface OpenOptions {
+  /** Stop opening: no more files are read and nothing is written (no migration, no clean-up). */
+  signal?: AbortSignal
+  /** A read at least this long counts as slow (default `SLOW_FILE_MS`). */
+  slowMs?: number
+  /** Test hook (E2E of the progress screen): every file read waits this long first. */
+  readDelayMs?: number
+  /** Called once the folder is read, right before the migration: from here on the open no longer stops. */
+  onCommit?: () => void
+}
+
+/** Files read at once (open, rescan): fewer than the thread pool (`main/threadpool.ts`), so other work still runs. */
+export const READ_CONCURRENCY = 24
+
 export type FolderKind = 'data' | 'partial' | 'ictj' | 'empty' | 'other' | 'missing'
 
 type ViewKey = string
@@ -133,6 +148,10 @@ export class DataStore {
   private prevKeys: Record<Collection, Map<string, ViewKey>> = Object.fromEntries(COLLECTIONS.map((c) => [c, new Map()])) as Record<Collection, Map<string, ViewKey>>
   private prevMeta = ''
   private readonly mutex = new Mutex()
+  /** The open in progress (1.4.1): what `progress()` reports. */
+  private tracker: ReadTracker | null = null
+  /** How the last open went (logged by the main process). */
+  loadStats: LoadStats | null = null
   private readonly opts: Required<Omit<DataStoreOptions, 'backupDir'>> & { backupDir: string | null }
   fi!: SettingsFile
   private folderReadOnlyReason: string | null = null
@@ -193,19 +212,39 @@ export class DataStore {
     return join(this.root, ...clean.split('/'))
   }
 
-  open(): Promise<Snapshot> {
+  open(opts: OpenOptions = {}): Promise<Snapshot> {
     return this.mutex.run(async () => {
       const t0 = performance.now()
-      const kind = await DataStore.inspect(this.root)
-      if (kind !== 'data') throw new Error('W tym folderze nie ma pliku fi.json.')
-      await this.scanAll()
-      this.applySettingsState()
-      if (!this.folderReadOnlyReason) await this.migrateIfNeeded()
-      await this.cleanupTempFiles()
-      const views = this.buildViews()
-      this.commit(views)
-      return { ...this.snapshotFrom(views), loadMs: Math.round(performance.now() - t0) }
+      const tracker = new ReadTracker(opts.slowMs ?? SLOW_FILE_MS)
+      this.tracker = tracker
+      try {
+        const kind = await DataStore.inspect(this.root)
+        if (kind !== 'data') throw new Error('W tym folderze nie ma pliku fi.json.')
+        const times = await this.scanAll(tracker, opts)
+        // Stopped: an open nobody waits for any more never migrates or cleans up the folder. Past this point it is
+        // not stopped any more – the caller is told (no „nothing changed” while the migration rewrites files).
+        opts.signal?.throwIfAborted()
+        opts.onCommit?.()
+        this.applySettingsState()
+        tracker.step = 'migrate'
+        const tm = performance.now()
+        if (!this.folderReadOnlyReason) await this.migrateIfNeeded()
+        const migrateMs = Math.round(performance.now() - tm)
+        await this.cleanupTempFiles()
+        tracker.step = 'prepare'
+        const views = this.buildViews()
+        this.commit(views)
+        this.loadStats = { files: tracker.total, ...times, migrateMs, slow: tracker.slow, slowest: tracker.slowest() }
+        return { ...this.snapshotFrom(views), loadMs: Math.round(performance.now() - t0) }
+      } finally {
+        this.tracker = null
+      }
     })
+  }
+
+  /** Where the open in progress is (null when none). */
+  progress(): LoadProgress | null {
+    return this.tracker?.progress() ?? null
   }
 
   status(): FolderStatus {
@@ -226,20 +265,41 @@ export class DataStore {
 
   // ---------------------------------------------------------------- reading
 
-  private async listDataFiles(): Promise<string[]> {
+  private async listDataFiles(tracker?: ReadTracker, signal?: AbortSignal): Promise<string[]> {
     const rels: string[] = []
-    for (const c of COLLECTIONS) rels.push(...(await walkFiles(this.root, join(this.root, c), isIgnoredPath)))
+    const onFile = tracker ? () => void tracker.total++ : undefined
+    for (const c of COLLECTIONS) rels.push(...(await walkFiles(this.root, join(this.root, c), isIgnoredPath, { signal, onFile })))
     const rootEntries = await fs.readdir(this.root, { withFileTypes: true })
     for (const e of rootEntries) if (e.isFile() && e.name.toLowerCase().endsWith('.json') && !isIgnoredPath(e.name)) rels.push(e.name)
     return rels
   }
 
-  private async scanAll(): Promise<void> {
-    const rels = await this.listDataFiles()
-    const states = await mapLimit(rels, 64, (rel) => this.loadFile(rel))
+  private async scanAll(tracker = new ReadTracker(SLOW_FILE_MS), opts: OpenOptions = {}): Promise<{ listMs: number; readMs: number }> {
+    const t0 = performance.now()
+    tracker.step = 'list'
+    const rels = await this.listDataFiles(tracker, opts.signal)
+    tracker.total = rels.length
+    tracker.step = 'read'
+    const t1 = performance.now()
+    const delay = opts.readDelayMs ?? 0
+    const states = await mapLimit(
+      rels,
+      READ_CONCURRENCY,
+      async (rel) => {
+        tracker.start(rel)
+        try {
+          if (delay) await new Promise((r) => setTimeout(r, delay))
+          return await this.loadFile(rel)
+        } finally {
+          tracker.end(rel)
+        }
+      },
+      opts.signal
+    )
     const next = new Map<string, FileState>()
     states.forEach((s) => s && next.set(s.relPath, s))
     this.files = next
+    return { listMs: Math.round(t1 - t0), readMs: Math.round(performance.now() - t1) }
   }
 
   private async loadFile(rel: string): Promise<FileState | null> {
@@ -603,7 +663,7 @@ export class DataStore {
       if (needsFull) {
         const rels = await this.listDataFiles()
         const seen = new Set(rels)
-        const states = await mapLimit(rels, 64, (rel) => this.loadFile(rel))
+        const states = await mapLimit(rels, READ_CONCURRENCY, (rel) => this.loadFile(rel))
         for (const rel of [...this.files.keys()]) if (!seen.has(rel)) this.files.delete(rel)
         states.forEach((s) => s && this.files.set(s.relPath, s))
       } else {
