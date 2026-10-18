@@ -4,13 +4,20 @@ import { join } from 'node:path'
 import { DateTime } from 'luxon'
 import type { BackupInfo } from '@shared/api'
 import { COLLECTIONS, SETTINGS_FILE, isIgnoredPath } from '@shared/paths'
-import { zipFolder } from './zip'
+import { tempPathFor, withRetry } from './atomic'
+import type { ZipResult } from './zip'
 
-/** Daily backups kept (decision D31). */
-export const DAILY_KEEP = 30
+/** Daily backups kept, and one a week for 8 weeks back (D31, D84 C4 – 30 daily before 1.4.3). */
+export const DAILY_KEEP = 14
+export const WEEKLY_KEEP = 8
 export const MANUAL_KEEP = 5
 /** Backups before an import from the bank (spec, „Kopie zapasowe”; T20). */
 export const IMPORT_KEEP = 10
+
+/** What writes the ZIP of the data: the open folder's store (records from memory – W7). */
+export interface DataSource {
+  zipData(outFile: string): Promise<ZipResult>
+}
 
 /**
  * The data: fi.json and the JSON records of the collections – never other files that happen to be in the folder (a
@@ -45,43 +52,82 @@ async function rotate(dir: string, keep: number): Promise<void> {
   for (const old of (await list(dir)).slice(keep)) await fs.rm(old.path, { force: true })
 }
 
+/** A copy of a backup under another name, atomically. */
+async function copyBackup(from: string, to: string): Promise<void> {
+  const tmp = tempPathFor(to)
+  try {
+    await fs.copyFile(from, tmp)
+    await withRetry(() => fs.rename(tmp, to))
+  } catch (e) {
+    await fs.rm(tmp, { force: true }).catch(() => undefined)
+    throw e
+  }
+}
+
+const weekOf = (day: DateTime): string => `${day.toFormat("kkkk-'W'WW")}.zip`
+
 /**
- * Startup backup: a daily ZIP of the data (`isDataFile`), the last 30 kept.
- * Returns the new file, or null when today's backup exists already.
+ * The daily backup (D31): a ZIP of the data (`isDataFile`) once a day – at the start and, while the app lives in the
+ * tray, in the background (F2) –, the last 14 kept; and once an ISO week its copy in `weekly/`, the last 8 (D84 C4).
+ * The first time the weekly copies come from the daily ones already there (the newest of each week), so the switch from
+ * 30 daily ones loses no week. Returns the new daily file, or null when today's exists already.
  */
-export async function runBackups(root: string, backupsDir: string, now = new Date()): Promise<string | null> {
-  const today = DateTime.fromJSDate(now).toISODate() as string
+export async function runBackups(source: DataSource, backupsDir: string, now = new Date()): Promise<string | null> {
+  const day = DateTime.fromJSDate(now)
   const dailyDir = join(backupsDir, 'daily')
-  const name = `${today}.zip`
-  if ((await list(dailyDir)).some((f) => f.name === name)) return null
+  const weeklyDir = join(backupsDir, 'weekly')
+  const name = `${day.toISODate()}.zip`
   const file = join(dailyDir, name)
-  await zipFolder(root, file, isDataFile)
+  const dailies = await list(dailyDir)
+  let made: string | null = null
+  if (!dailies.some((f) => f.name === name)) {
+    await source.zipData(file)
+    made = file
+  }
+  const weeklies = await list(weeklyDir)
+  if (!weeklies.length) {
+    // Before the first weekly copy: the daily ones kept so far stand for their weeks.
+    await fs.mkdir(weeklyDir, { recursive: true })
+    const seeded = new Set<string>()
+    for (const f of dailies) {
+      const d = DateTime.fromISO(f.name.replace(/\.zip$/, ''))
+      if (!d.isValid || seeded.has(weekOf(d)) || weekOf(d) === weekOf(day)) continue
+      seeded.add(weekOf(d))
+      if (seeded.size > WEEKLY_KEEP) break
+      await copyBackup(f.path, join(weeklyDir, weekOf(d)))
+    }
+  }
+  if (!weeklies.some((f) => f.name === weekOf(day))) {
+    await fs.mkdir(weeklyDir, { recursive: true })
+    await copyBackup(file, join(weeklyDir, weekOf(day)))
+  }
   await rotate(dailyDir, DAILY_KEEP)
-  return file
+  await rotate(weeklyDir, WEEKLY_KEEP)
+  return made
 }
 
 /** A ZIP of the data named by its time in `backups/<kind>`, the newest `keep` kept. */
-async function datedBackup(root: string, backupsDir: string, kind: 'manual' | 'pre-import', keep: number, now: Date): Promise<string> {
+async function datedBackup(source: DataSource, backupsDir: string, kind: 'manual' | 'pre-import', keep: number, now: Date): Promise<string> {
   const dir = join(backupsDir, kind)
   const file = join(dir, `${DateTime.fromJSDate(now).toFormat('yyyy-LL-dd_HHmmss')}.zip`)
-  await zipFolder(root, file, isDataFile)
+  await source.zipData(file)
   await rotate(dir, keep)
   return file
 }
 
 /** Full backup on demand (backups/manual, last 5 kept). */
-export function manualBackup(root: string, backupsDir: string, now = new Date()): Promise<string> {
-  return datedBackup(root, backupsDir, 'manual', MANUAL_KEEP, now)
+export function manualBackup(source: DataSource, backupsDir: string, now = new Date()): Promise<string> {
+  return datedBackup(source, backupsDir, 'manual', MANUAL_KEEP, now)
 }
 
 /** The data before an import (backups/pre-import, the last 10 kept): the import can always be undone by hand. */
-export function importBackup(root: string, backupsDir: string, now = new Date()): Promise<string> {
-  return datedBackup(root, backupsDir, 'pre-import', IMPORT_KEEP, now)
+export function importBackup(source: DataSource, backupsDir: string, now = new Date()): Promise<string> {
+  return datedBackup(source, backupsDir, 'pre-import', IMPORT_KEEP, now)
 }
 
 export async function listBackups(backupsDir: string): Promise<BackupInfo[]> {
   const out: BackupInfo[] = []
-  for (const kind of ['daily', 'manual', 'pre-import', 'pre-migration'] as const) {
+  for (const kind of ['daily', 'weekly', 'manual', 'pre-import', 'pre-migration'] as const) {
     for (const f of await list(join(backupsDir, kind))) out.push({ ...f, kind })
   }
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs)

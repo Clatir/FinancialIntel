@@ -44,6 +44,7 @@ test('Cele (1.4.2): wydatek z pieniędzy celu, archiwizacja z pytaniem o środki
     await amount.fill('400')
     await amount.press('Enter')
     await page.getByTestId('operation-counterparty').fill('Biuro podróży')
+    await page.getByTestId('operation-counterparty').press('Enter')
     await page.getByTestId('operation-goal').selectOption({ label: 'Wakacje (2 500,00 zł)' })
     await expect(page.getByTestId('operation-goal-note')).toContainText('schodzi z celu')
     await expect.poll(async () => (await records(dir, 'transactions')).filter((t) => t.counterparty === 'Biuro podróży').map((t) => [t.amount, t.goalId])).toEqual([[-zl(400), TRIP]])

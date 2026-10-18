@@ -9,7 +9,7 @@ import { byPriority } from '@shared/calc/goals'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData } from '../../store/data'
-import { fleetInputNow, useFleet } from '../../store/fleet'
+import { fleetInputNow, useEngineParts, useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { Modal } from '../../components/Modal'
 import { AmountField, plnText } from '../../components/fields'
@@ -22,15 +22,19 @@ const zl = (g: number) => `${plnText(g)} zł`
 
 export function DockingDialog() {
   const key = useDocking((s) => s.key)
+  // No window: no list of deliveries counted at every change (W13).
+  return key ? <OpenDocking dkey={key} /> : null
+}
+
+function OpenDocking({ dkey: key }: { dkey: string }) {
   const list = useDeliveries()
-  const d = key ? list.find((x) => x.key === key) : undefined
+  const d = list.find((x) => x.key === key)
   // The delivery docked (by this window or another computer) or gone: the window closes – unless it shows its end.
   const [done, setDone] = useState<string | null>(null)
   const end = useCallback(() => setDone(null), [])
   useEffect(() => {
-    if (key && !d && done !== key) closeDocking()
+    if (!d && done !== key) closeDocking()
   }, [key, d, done])
-  if (!key) return null
   if (done === key) return <Docked onEnd={end} />
   if (!d) return null
   return <DockingWindow key={d.key} d={d} onDocked={() => setDone(d.key)} />
@@ -58,7 +62,7 @@ function Docked({ onEnd }: { onEnd: () => void }) {
 function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const fleet = useFleet()
   const readOnly = useData((s) => !!s.status?.readOnly)
-  const records = useData((s) => s.records)
+  const parts = useEngineParts()
   const goalsAll = useRecordList('goals')
   const goals = useMemo(() => byPriority(goalsAll.filter((g) => !g.archived)), [goalsAll])
   // The operation the docking is about: the paired one, or the one it would create on Portfel XTB.
@@ -66,8 +70,8 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const preview = useMemo(() => {
     const input = fleetInputNow()
     return input ? withDocking(input, tx, dockingOf(d, tx, null, new Date().toISOString())) : null
-    // The records and the fleet: a change elsewhere (an import) proposes again.
-  }, [d, tx, records, fleet])
+    // What the engine reads: a change of it (an import) proposes again – never the minute (W28).
+  }, [d, tx, parts])
   const moves = preview?.log.find((e) => e.txId === tx.id)?.moves ?? {}
   const proposal: SplitDraft = { hull: Math.max(0, moves.hull ?? 0), goals: Object.fromEntries(Object.entries(moves.goals ?? {}).filter(([, v]) => v > 0)), taxHold: Math.max(0, moves.taxHold ?? 0) }
   // A docked delivery opens with the split it was docked with (null = the docking order); a goal archived since is

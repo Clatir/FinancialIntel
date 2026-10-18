@@ -1,8 +1,8 @@
 import { firstDayOf, monthOf, warsawNow } from '@shared/calc/dates'
 import { unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
 import { newId } from '@shared/ids'
-import { containerSchema, SCHEMA_VERSION, type Container } from '@shared/schema'
-import { addRecord, replaceRecords, updateRecord, useData } from '../../store/data'
+import { containerSchema, SCHEMA_VERSION, type Container, type Transaction } from '@shared/schema'
+import { addRecord, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { deleteWithUndo } from '../history/actions'
 
@@ -63,17 +63,14 @@ export function addContainer(draft: ContainerDraft): string | null {
 }
 
 /** Where linking starts: the budget's first month (its envelopes count the whole month); null = no budget yet. */
-function linkFrom(): string | null {
-  const start = useData.getState().fi?.settings.budget.start ?? null
+function linkFrom(start = useData.getState().fi?.settings.budget.start ?? null): string | null {
   return start ? firstDayOf(monthOf(start)) : null
 }
 
 /** The payments of the container's counterparty not linked yet (in the budget's time). */
-export function paymentsToLink(counterparty: string): number {
-  const from = linkFrom()
-  if (!from) return 0
-  const txs = Object.values(useData.getState().records.transactions).map((e) => e.record)
-  return unlinkedPayments(txs, counterparty, from).length
+export function paymentsToLink(counterparty: string, txs: readonly Transaction[], start: string | null): number {
+  const from = linkFrom(start)
+  return from ? unlinkedPayments(txs, counterparty, from).length : 0
 }
 
 /**
@@ -83,8 +80,7 @@ export function paymentsToLink(counterparty: string): number {
 export function linkPayments(containerId: string, counterparty: string, quiet = false): number {
   const from = linkFrom()
   if (!from || useData.getState().status?.readOnly) return 0
-  const txs = Object.values(useData.getState().records.transactions).map((e) => e.record)
-  const found = unlinkedPayments(txs, counterparty, from)
+  const found = unlinkedPayments(listOf(useData.getState().records.transactions), counterparty, from)
   if (found.length) replaceRecords('transactions', found.map((t) => ({ ...t, containerId })))
   if (found.length || !quiet) toast(found.length ? `Połączono z kontenerem: ${found.length} płatności od ${from.slice(8, 10)}.${from.slice(5, 7)}.${from.slice(0, 4)}.` : 'Brak płatności do połączenia.', 'info', 3500)
   return found.length

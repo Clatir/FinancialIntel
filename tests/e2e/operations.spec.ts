@@ -29,6 +29,7 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
     expect(await operations(dataDir)).toEqual([])
     await typeAmount(page, 'operation-amount', '45,99')
     await page.getByTestId('operation-counterparty').fill('Biedronka')
+    await page.getByTestId('operation-counterparty').press('Enter')
     await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
     await expect.poll(async () => (await operations(dataDir)).map((t) => [t.amount, t.counterparty, t.kind])).toEqual([[-4599, 'Biedronka', 'expense']])
     const cell = page.getByTestId('operation-amount-cell').first()
@@ -40,6 +41,7 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
     await page.getByRole('radio', { name: 'Wpływ' }).click()
     await typeAmount(page, 'operation-amount', '200')
     await page.getByTestId('operation-counterparty').fill('Domownik')
+    await page.getByTestId('operation-counterparty').press('Enter')
     await expect(page.locator('[data-testid="operation-row"]', { hasText: /Domownik/ }).getByTestId('operation-amount-cell')).toHaveText('+200,00')
     await expect(page.locator('[data-testid="operation-row"]', { hasText: /Domownik/ }).getByTestId('operation-amount-cell')).toHaveClass(/text-up/)
 
@@ -71,16 +73,16 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
     await page.locator('[data-testid="operation-row"]', { hasText: /Domownik/ }).click()
     await typeAmount(page, 'operation-amount', '250')
     await expect.poll(async () => (await operations(dataDir)).find((t) => t.counterparty === 'Domownik')?.amount).toBe(25000)
-    // Esc throws a typed date and time away (B24).
+    // Esc throws a typed date, time and name away (B24); a text is saved on leaving its field, never at every key (W2).
     const saved = (await operations(dataDir)).find((t) => t.counterparty === 'Domownik')!
-    for (const [id, typed] of [['operation-date', '01.01.2020'], ['operation-time', '23:59']] as const) {
+    for (const [id, typed] of [['operation-date', '01.01.2020'], ['operation-time', '23:59'], ['operation-counterparty', 'Ktoś inny']] as const) {
       const field = page.getByTestId(id)
       const before = await field.inputValue()
       await field.fill(typed)
       await field.press('Escape')
       await expect(field).toHaveValue(before)
     }
-    expect((await operations(dataDir)).find((t) => t.counterparty === 'Domownik')).toMatchObject({ date: saved.date, time: saved.time })
+    expect((await operations(dataDir)).find((t) => t.id === saved.id)).toMatchObject({ date: saved.date, time: saved.time, counterparty: 'Domownik' })
     await page.getByTestId('history-open').click()
     await expect(page.getByTestId('history-changes')).toContainText('Kwota')
     await page.keyboard.press('Escape')

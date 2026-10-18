@@ -12,7 +12,7 @@ import { useFleet } from '../../store/fleet'
 import { useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
-import { AmountField, plnText } from '../../components/fields'
+import { AmountField, MonthField, plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, NameInput, Panel, cx } from '../../components/ui'
@@ -333,14 +333,8 @@ function GoalRow({
           {noTarget ? '' : amount >= g.target ? 'osiągnięty' : eta ? `ETA ${monthLabel(eta)}` : pace ? 'ponad 50 lat' : 'ETA —'}
         </span>
         {!ictj && !readOnly ? (
-          <input
-            type="month"
-            className="input h-[22px] w-[130px]"
-            value={g.deadline ?? ''}
-            onChange={(e) => patchGoal(g.id, { deadline: e.currentTarget.value || null })}
-            aria-label="Termin celu"
-            title="Termin (opcjonalnie)"
-          />
+          // A month typed whole, saved on leaving the field (W2): never a save per key.
+          <MonthField className="h-[22px] w-[90px]" value={g.deadline} allowEmpty onChange={(deadline) => patchGoal(g.id, { deadline })} placeholder="termin" aria-label="Termin celu" />
         ) : (
           g.deadline && <span className="text-[11.5px] text-dim">termin {monthLabel(g.deadline)}</span>
         )}

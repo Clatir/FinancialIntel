@@ -15,6 +15,8 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.ts', 'tests/fs/**/*.test.ts'],
     environment: 'node',
-    testTimeout: 30000
+    testTimeout: 30000,
+    // The data store checks its views updated in place against views built whole after every change (W8).
+    env: { FI_VERIFY_VIEWS: '1' }
   }
 })

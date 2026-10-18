@@ -8,8 +8,10 @@ import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type SettingsFile,
 // The renderer store talks to the main process through window.fi (preload); here it is a mock.
 const api = {
   saveRecord: vi.fn(),
+  saveRecords: vi.fn(),
   saveSettings: vi.fn(),
   deleteRecord: vi.fn(),
+  deleteRecords: vi.fn(),
   historyKeep: vi.fn()
 }
 vi.stubGlobal('window', { fi: api })
@@ -78,7 +80,9 @@ beforeEach(() => {
   vi.useFakeTimers()
   api.saveRecord.mockReset()
   api.saveSettings.mockReset()
+  api.saveRecords.mockReset()
   api.deleteRecord.mockReset()
+  api.deleteRecords.mockReset()
   api.historyKeep.mockReset().mockResolvedValue(undefined)
 })
 afterEach(() => {
@@ -351,5 +355,42 @@ describe('wpis przeniesiony na innym komputerze (W8-33)', () => {
     expect(now?.amount).toBe(-5000)
     expect(now?.date).toBe('2026-03-17')
     expect(store.useData.getState().records.transactions[t.id]?.relPath).toBe(`transactions/2026/2026-03-17_${t.id}.json`)
+  })
+})
+
+describe('zapis i usuwanie paczkami (1.4.3, przegląd grupy F)', () => {
+  it('odpowiedź paczki, której nie da się przyjąć: zapisy ponawiane po jednym, flushSaves odpowiada', async () => {
+    load(transaction())
+    api.saveRecords.mockResolvedValueOnce(null)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    store.addRecords('transactions', [transaction(ID2)])
+    await vi.advanceTimersByTimeAsync(10)
+    expect(api.saveRecords).toHaveBeenCalledTimes(1)
+    expect(store.hasUnsaved()).toBe(true)
+    // Not „saving” for ever, and the failure on screen; the retry by itself.
+    expect(store.useData.getState().save).toMatchObject({ pending: 0, error: expect.any(String) })
+    await expect(store.flushSaves()).resolves.toBe(true)
+    expect(api.saveRecord.mock.calls.map((c) => c[1].id)).toEqual([ID2])
+  })
+
+  it('usunięcie, którego dysk nie przyjął: wpis wraca razem ze swoją niezapisaną zmianą i ją zapisuje', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    api.deleteRecords.mockResolvedValue([{ id: t.id, error: 'EBUSY: plik zajęty' }])
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'zmiana przed usunięciem' }))
+    const res = await store.deleteRecords('transactions', [t.id])
+    expect(res).toEqual({ deleted: [], error: 'EBUSY: plik zajęty' })
+    expect(current()?.note).toBe('zmiana przed usunięciem')
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(api.saveRecord.mock.calls.at(-1)?.[1].note).toBe('zmiana przed usunięciem')
+    expect(store.hasUnsaved()).toBe(false)
+    // One record, the same way.
+    api.deleteRecord.mockRejectedValue(new Error('EBUSY: plik zajęty'))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'druga zmiana' }))
+    await expect(store.deleteRecord('transactions', t.id)).rejects.toThrow('EBUSY')
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(api.saveRecord.mock.calls.at(-1)?.[1].note).toBe('druga zmiana')
+    expect(store.hasUnsaved()).toBe(false)
   })
 })

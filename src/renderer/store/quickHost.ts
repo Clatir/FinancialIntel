@@ -12,7 +12,7 @@ import { envelopeKind, inflowOf, SCHEMA_VERSION, transactionSchema, ulidSchema, 
 import { rememberInflows } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
-import { addRecord, useData } from './data'
+import { addRecord, listOf, useData } from './data'
 import { fleetNow } from './fleet'
 import { useMachine } from './machine'
 import { toast } from './ui'
@@ -25,6 +25,29 @@ function lastAccount(): string | null {
   } catch {
     return null
   }
+}
+
+/** The officer's hints (W15): computed once per change of the operations, not at every opening of the window. */
+let officer: { map: object; lastCategory: Record<string, string>; counterparties: string[] } | null = null
+
+function officerOf(map: ReturnType<typeof useData.getState>['records']['transactions']) {
+  if (officer?.map === map) return officer
+  // The latest category per counterparty, the counterparties used most of late (plain comparisons of ISO stamps).
+  const txs = listOf(map)
+    .filter((t) => t.kind === 'expense' && t.counterparty.trim())
+    .sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+  const lastCategory: Record<string, string> = {}
+  const uses = new Map<string, { name: string; n: number }>()
+  for (const t of txs.slice(0, 2000)) {
+    const key = counterpartyKey(t.counterparty)
+    if (!key) continue
+    if (t.categoryId && !lastCategory[key]) lastCategory[key] = t.categoryId
+    const u = uses.get(key)
+    if (u) u.n++
+    else uses.set(key, { name: t.counterparty.trim(), n: 1 })
+  }
+  officer = { map, lastCategory, counterparties: [...uses.values()].sort((a, b) => b.n - a.n).slice(0, 40).map((u) => u.name) }
+  return officer
 }
 
 export function quickData(): QuickData | null {
@@ -40,21 +63,7 @@ export function quickData(): QuickData | null {
     })
   const accounts = fi.settings.accounts.filter((a) => !a.archived).map((a) => ({ id: a.id, name: a.name }))
   const fleet = fleetNow()
-  // The officer: the latest category per counterparty, the counterparties used most of late.
-  const txs = Object.values(s.records.transactions)
-    .map((e) => e.record)
-    .filter((t) => t.kind === 'expense' && t.counterparty.trim())
-    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
-  const lastCategory: Record<string, string> = {}
-  const uses = new Map<string, { name: string; n: number }>()
-  for (const t of txs.slice(0, 2000)) {
-    const key = counterpartyKey(t.counterparty)
-    if (!key) continue
-    if (t.categoryId && !lastCategory[key]) lastCategory[key] = t.categoryId
-    const u = uses.get(key)
-    if (u) u.n++
-    else uses.set(key, { name: t.counterparty.trim(), n: 1 })
-  }
+  const { lastCategory, counterparties } = officerOf(s.records.transactions)
   const last = lastAccount()
   return {
     categories,
@@ -65,7 +74,7 @@ export function quickData(): QuickData | null {
     quietHours: fi.settings.orders.quietHours,
     impulseThreshold: fi.settings.orders.impulseThreshold,
     lastCategory,
-    counterparties: [...uses.values()].sort((a, b) => b.n - a.n).slice(0, 40).map((u) => u.name),
+    counterparties,
     members: fi.settings.household.members
       .filter((m) => !m.archived)
       .map((m) => {

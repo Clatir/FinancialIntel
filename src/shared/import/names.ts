@@ -53,10 +53,21 @@ export function withoutLegalForms(folded: string): string {
  * versions before 1.2.3 made it (their rules).
  */
 export function counterpartyKey(name: string, raw = false): string {
-  return withoutLegalForms(fold(raw ? name : cleanBankName(name)))
-    .split(/\s+/)
-    .filter((tok) => !/^[\d\-+()./*]+$/.test(tok))
-    .map((tok) => tok.replace(/\d{3,}$/, ''))
-    .join('')
-    .replace(/[^a-z0-9]/g, '')
+  const id = raw ? `\u0001${name}` : name
+  let key = keys.get(id)
+  if (key === undefined) {
+    key = withoutLegalForms(fold(raw ? name : cleanBankName(name)))
+      .split(/\s+/)
+      .filter((tok) => !/^[\d\-+()./*]+$/.test(tok))
+      .map((tok) => tok.replace(/\d{3,}$/, ''))
+      .join('')
+      .replace(/[^a-z0-9]/g, '')
+    if (keys.size >= KEYS_MAX) keys.clear()
+    keys.set(id, key)
+  }
+  return key
 }
+
+/** Keys made already (W4): the same names come again and again (shops, people) – each one folded once. */
+const keys = new Map<string, string>()
+const KEYS_MAX = 50_000

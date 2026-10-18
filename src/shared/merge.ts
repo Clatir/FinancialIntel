@@ -47,6 +47,13 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false
 }
 
+/** The same content, the save stamps aside (`BOOKKEEPING` at the top level). */
+export function sameContentAs(a: unknown, b: unknown): boolean {
+  if (!isObject(a) || !isObject(b)) return deepEqual(a, b)
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) if (!BOOKKEEPING.has(k) && !deepEqual(a[k], b[k])) return false
+  return true
+}
+
 export const pathKey = (p: Path) => p.join('\u0001')
 
 /** Leaf-level changes from `a` to `b` (bookkeeping fields at the top level are left out). */

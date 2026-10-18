@@ -314,7 +314,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   `SCHEMA_VERSION` = 1.
 - **T20** Kopie zapasowe: przy starcie raz dziennie ZIP całego folderu (bez `backups/`, `.history/`, `.presence/`),
   30 ostatnich; ręczne (5 ostatnich); przed migracją formatu. Bez kopii tygodniowej ICTTJ (folder FI jest mały, bez
-  screenów). Kopia przed importem – w E2.
+  screenów). Kopia przed importem – w E2. **Od 1.4.3 zastąpione przez T154** (D84 C4: 14 dziennych + 8 tygodniowych,
+  kopia dzienna także w zasobniku).
 - **T21** Skróty: Ctrl+1…0 = ekrany w kolejności menu (po pozycji klawisza), Ctrl+K paleta, Ctrl+, ustawienia,
   Ctrl+Shift+Y synchronizacja, F1 / ? ściąga. Zmienne testowe `FI_*` zamiast `ICTJ_*` (lista w `CLAUDE.md`).
 - **T22** Preload wystawia `window.fi` (kanały IPC `fi:*`); okno renderera: contextIsolation, sandbox, CSP bez
@@ -923,3 +924,57 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   rodzaju błędu (T140), odrzucony plan miesiąca pod id zachowanego (T141); bez zmian – historia celów bez skracania (T128).
   Przy okazji: Esc w szybkim wpisie z wpisaną kwotą nie zamykał okna (test przechodził dzięki zegarowi z poprzedniego
   zapisu) – T144.
+- **T146** Okno – silnik i gra (W9–W11, W16): silnik liczony po dniu warszawskim (nie co minutę) i tylko przy zmianie
+  tego, co czyta – klucz z referencji części ustawień i map kolekcji (`KEY_SETTINGS`, `KEY_COLLECTIONS`); gra – części
+  silnika + `settings.game` + `game`; jedna lista rekordów na mapę dla wszystkich ekranów (`listOf`). Raporty bez oceny
+  dnia dzisiejszego. Zaległe dni gry porcjami po 2 dni (każdy dzień to cały przebieg silnika), kolejna porcja po
+  zapisaniu poprzedniej; misja tygodnia po nadrobieniu; miesiąc gry zapisany przez nowszą wersję (tylko do odczytu)
+  pominięty – porcja nigdy na nim nie utyka.
+- **T147** Echo zapisu (W3, W5): odpowiedź zapisu i własna zmiana z dysku, które różnią się tylko polami zapisu
+  (`updatedAt`, `updatedBy`, `schemaVersion`), wchodzą do mapy na miejsce – bez nowej mapy i przeliczenia; usunięcie wpisu,
+  którego w pamięci już nie ma, mapy nie kopiuje; ustawienia z dysku dzielą niezmienione części; zadania tła okna w
+  osobnym komponencie (zmiana rekordów nie renderuje całego okna).
+- **T148** Pola tekstowe (W2, zgodnie z T34): kontrahent, tytuł i notatki operacji oraz kontenera – szkic do wyjścia z pola
+  (Enter, Ctrl+Enter w polu wielowierszowym; Esc cofa); termin celu – pole miesiąca. Tekst zmieniony w międzyczasie na
+  innym komputerze: wygrywa wpisany tutaj, okno o tym mówi, tamta wersja jest w historii wpisu (proces główny zawsze
+  zachowuje nadpisywaną wersję innego komputera) – rzadkie, bo FI nie pracuje na dwóch komputerach naraz.
+- **T149** Ekrany (W4, W6, W12–W15): licznik możliwych duplikatów 1,5 s po ostatniej zmianie (pełna lista na żądanie);
+  `findDuplicates` najpierw tania kwota, potem nazwa; klucz nazwy i jej słowa raz na nazwę (pamięć do 50 tys. nazw), dni ±3
+  raz na datę – 150 tys. operacji: 0,6 s zamiast 7,9 s. Propozycje opłat stałych bez kwadratowego grupowania, klucz
+  odbiorcy raz na rekord, propozycje po sygnaturze odbiorców; domownik po nazwie raz na nazwę; dostawy bez mapy
+  wszystkich operacji; tekst wyszukiwania raz na rekord; podpowiedzi oficera raz na mapę operacji.
+- **T150** Magazyn w procesie głównym (W1, W8, W26): indeks plików aktualizowany przy każdym `set` / `delete` (ścieżki
+  rekordu, problemy, kopie, katalogi, rekordy do migracji); widoki i różnice tylko dla zmienionych rekordów, w testach
+  porównywane z pełną przebudową (`FI_VERIFY_VIEWS`); zapis i usuwanie paczką (`saveRecords` / `deleteRecords`: jedna
+  zmiana dla okna, usunięcie z zewnątrz w osobnej) – import, zbiorcza kategoria i finansujący, sprzątanie duplikatów i jego
+  „Cofnij”; tekst pliku tylko dla rekordów do migracji. W oknie: zapis po nieudanym nigdy nie czeka w nieskończoność,
+  odpowiedź, której nie da się przyjąć, = zapisy ponawiane po jednym; wpis, którego dysk nie dał usunąć, wraca z
+  niezapisanymi zmianami i je zapisuje.
+- **T151** Obserwator i odświeżanie (W21, W22): jedno odświeżenie naraz, zaległe łączone (`RefreshQueue`: ścieżki
+  sumowane, pełne wygrywa); pełna kontrola co 5 min przy obserwatorze natywnym (Windows), 30 s na Linuksie, przy fokusie
+  okna najwyżej raz na minutę; jej listowanie i `stat` przed kolejką zapisów (zapis w trakcie czeka 0,05–0,1 s, nie 1–5 s),
+  w kolejce czytane tylko pliki o innym `stat`. Zdarzenie katalogu (`change` – Windows zgłasza je przy każdym zapisie w
+  nim): wpisy katalogu porównane z plikami znanymi w nim, nowy podkatalog cały; katalog, który się pojawił, zniknął albo
+  zmienił nazwę (`rename`, np. odzyskany z kosza z plikami o tych samych nazwach) – zgłaszany jako `katalog/`, wszystko
+  pod nim czytane ponownie, gdzie zmienił się `stat`; ścieżka spoza kolekcji – nic; katalog, którego nie da się odczytać –
+  pełne przeskanowanie.
+- **T152** Konflikty (W23): rozstrzygnięcie i „Do Kosza” zwracają zmianę z kolejki magazynu, bez przeskanowania folderu
+  (wcześniejsze przeskanowanie oznaczało też obce zmiany jako „własne”); „Zachowaj nowsze” – jedno żądanie
+  `resolveConflicts` w kolejności planu, grupa z nieudanym zachowaniem kopii zostaje (`skipped`), jedna zmiana dla okna.
+- **T153** Otwarcie (W24): plik bez wcześniejszego stanu czytany jednym otwarciem (`stat` z uchwytu); pliki tymczasowe
+  przerwanych zapisów zebrane przy pierwszym przejściu folderu (także w katalogu głównym).
+- **T154** Kopie (W7, F2, N19, D84 C4 – zastępuje T20): ZIP pisany własnym zapisem w jednym przejściu (yazl szukał
+  kolejnego wpisu od pierwszego – czas rósł z kwadratem liczby plików), ZIP64 od 65 535 wpisów, kompresja na miejscu
+  porcjami (mały plik szybciej skompresować niż oddać do puli wątków); kopie danych (dzienna, tygodniowa, ręczna, przed
+  importem, eksport ZIP) z rekordów w pamięci magazynu, gdy ich zapis daje te same bajty co plik (SHA-1), inaczej z dysku;
+  plik nieczytelny (OneDrive) przerywa kopię – nigdy kopia bez niego, która z czasem wypchnęłaby pełne; przed kopią
+  dzienną i ręczną pełna kontrola folderu; kopia przed migracją – z dysku (oryginały), bez wchodzenia do `.history/`.
+  Kopia dzienna przy otwarciu, co godzinę i po wybudzeniu komputera; zostaje 14 dziennych i 8 tygodniowych (z dnia
+  tygodnia ISO; pierwsze tygodniowe z dziennych sprzed 1.4.3 – najnowsza z każdego tygodnia); w Ustawieniach wiek
+  ostatniej kopii, ostrzeżenie po 3 dniach. Bez ZIP-a przed operacjami zbiorczymi (F2 go proponował): mają „Cofnij” i
+  historię, a ZIP przy każdym zaznaczeniu kosztowałby sekundy i miejsce w OneDrive.
+- **T155** Przegląd grupy F (`/code-review` high, 7 kandydatów): poprawione wszystkie – kopia z pamięci tylko bajt w bajt
+  (T154), plik nieczytelny przerywa kopię (T154), gra nie utyka na miesiącu nowszej wersji (T146), komunikat przy tekście
+  zmienionym w międzyczasie (T148), katalog odzyskany w całości czytany od nowa (T151), zapis paczką nigdy nie blokuje
+  następnych i wpis nieusunięty zachowuje zmiany (T150). Pomiar okna przy 150 tys. pokazał 5,9 s zawieszenia przy liczeniu
+  duplikatów – przyspieszone (T149).

@@ -417,6 +417,37 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/goals.test.ts`, `tests/fs/datastore-robust.test.ts`, E2E `tests/e2e/goals.spec.ts`; poszerzone
   `fleet`, `import`, `household`, `merge`, `game`, E2E `month`, `household`, `ictj`, `bridge`, `operations`.
 
+## Kod (1.4.3 – szybkość przy dużym folderze, grupa F, D84)
+- Okno (W2–W6, W9–W16, T146–T149): `store/fleet.ts` – silnik po dniu warszawskim (`useToday`) i kluczu części, które
+  czyta (`KEY_SETTINGS`, `KEY_COLLECTIONS`, `useEngineParts`); `store/data.ts` `listOf` (jedna lista na mapę, WeakMap),
+  `stampInPlace` (odpowiedź zapisu i echo tylko ze zmienionymi polami zapisu – bez nowej mapy), `shareSettings` /
+  `adoptSaved`; `store/game.ts` `gameParts`, `useGameView` (bez oceny dziś), `DAYS_PER_PASS` 2 + `advanceGame(…, {maxDays,
+  locked})` (`more`; miesiące innej wersji pomijane); `App.tsx` `Background`; `ui.tsx` `useTextDraft` (`commit`: zapis po
+  wyjściu z pola, Enter / Ctrl+Enter, Esc cofa, komunikat, gdy tekst zmienił się w międzyczasie); `DuplicatesPanel`
+  `useDuplicateCount(1500)`; `findDuplicates` najpierw kwota, potem nazwa (`looseMatch`), `around` (dni ±3 raz na datę),
+  `counterpartyKey` i słowa nazwy w pamięci (do 50 tys.); `plan.ts` `payeeKey` (WeakMap), `household.ts` `memberCache`,
+  `operationsView.ts` teksty wyszukiwania raz na rekord i `parsedQuery`, `quickHost.ts` `officerOf`, `dock.ts` mapa tylko
+  operacji tradingu i zadokowanych.
+- Magazyn (W1, W8, W26, T150): `FileMap` (indeksy: `ids` `kind:id` → ścieżki, `problemPaths`, `copyPaths`, `dirs`,
+  `migratedPaths`, `dirty` / `metaDirty`), `updateViews` / `fullViews` / `computeViews`, `uncommitted` (różnica tylko
+  zmienionych), `FI_VERIFY_VIEWS` (testy porównują z pełną przebudową); `saveRecords` / `deleteRecords` (IPC paczką, usunięcie z
+  zewnątrz w osobnej zmianie), w oknie `saveBatch` / `runSaveMany` / `applySaved` / `saveFailed`, `settled` (zapis po
+  nieudanym nigdy nie utyka), `deleteRecords` (niedokonane wracają z niezapisanymi zmianami); `FileState.text` tylko
+  do migracji.
+- Folder (W21–W24, T151–T153): `RefreshQueue` (`watch.ts`: jedno odświeżenie naraz, zaległe łączone), pełna kontrola
+  `refresh()` = `statAll` przed kolejką zapisów + `rescanAll(listing)`, `rescanPaths` / `changedInDir` (zdarzenie katalogu:
+  wpisy porównane; `dir/` z `FolderWatcher` przy `rename` = całość pod nim), `FOCUS_REFRESH_MS` 60 s, `pollMs` 5 min
+  (natywny) / 30 s; `resolveConflicts` (IPC, grupy `skipped`) i `resolveConflict` / `trashFile` bez przeskanowania;
+  `loadFile` – nowy plik jednym otwarciem (`readWithStat`), pliki `.tmp-` z pierwszego przejścia.
+- Kopie (W7, F2, N19, C4, T154): `zip.ts` `ZipWriter` (jeden przebieg, ZIP64 od 65 535 wpisów), `writeZipFile(out,
+  ZipSource[])`, `diskSource`, `zipFolder(root, out, include, skip)` (przed migracją); `DataStore.zipData` (rekord z pamięci,
+  gdy SHA-1 tekstu = pliku, inaczej z dysku; nieczytelny – kopia przerwana); `backup.ts` `DataSource`, `runBackups` (14
+  dziennych, `weekly/RRRR-Wnn.zip` 8, pierwsze tygodniowe z dziennych), `index.ts` `dailyBackup` (otwarcie, co godzinę,
+  `powerMonitor` 'resume'), `checkedData` (pełna kontrola przed kopią dzienną i ręczną); Ustawienia `BackupAge`
+  (`backup-age`, ostrzeżenie po 3 dniach).
+- Testy: `tests/fs/folder-speed.test.ts`, poszerzone `backup`, `datastore-robust`, `watch`, `tests/unit/data-store.test.ts`,
+  `game.test.ts`, E2E `sync.spec.ts` (pole w trakcie pisania); pomiar na 30 tys. / 150 tys. – `docs/postep.md` „1.4.3”.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -484,4 +515,6 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.4.1 Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82)
 - [x] 1.4.2 Pieniądze i dane się zgadzają (grupa E, D84): cele od chwili zmiany, pieniądze archiwizowanego celu, opłaty
   okresowe i życie kontenera, łupy, dwa formaty pliku z banku, folder danych i dwa komputery, szybki wpis, Esc w polach
+- [x] 1.4.3 Szybkość przy dużym folderze (grupa F, D84): zapis paczkami i przyrostowe widoki, okno bez przeliczeń przy
+  pisaniu, obserwator bez pełnych skanów, kopie ZIP w jednym przejściu, kopia dzienna w zasobniku, 14 + 8 kopii
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

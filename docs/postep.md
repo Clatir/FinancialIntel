@@ -1,13 +1,15 @@
 # Financial Intel – postęp
 
-**Stan:** grupa E (1.4.2 – pieniądze i dane się zgadzają) zrobiona, gałąź `claude/grupa-e-1.4.2` – PR, CI i scalenie
-(D71); potem F, G, H jednym ciągiem (D84). Przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`). **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**Stan:** grupa F (1.4.3 – szybkość przy dużym folderze) zrobiona, gałąź `claude/grupa-f-1.4.3` – PR, CI i scalenie
+(D71); potem G i H jednym ciągiem (D84). **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
+**1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu i wydaniu 1.4.2 grupa F według „Przed grupą F” niżej, potem G i H (każda z PR i wydaniem),
-po H pauza (D67). Odbiór 1.4.1 na drugim komputerze i 1.3.0 / 1.4.0 w aplikacji nadal aktualny; po 1.4.2 – kwoty celów,
-osłon i salda domowników na prawdziwych danych (punkt kontrolny bez przerwy w pracy – D84).
+**Następny krok:** po scaleniu i wydaniu 1.4.3 grupa G według „Przed grupą G” niżej, potem H (każda z PR i wydaniem),
+po H pauza (D67). Odbiór 1.4.1 na drugim komputerze i 1.3.0 / 1.4.0 / 1.4.2 w aplikacji nadal aktualny; po 1.4.3 –
+płynność na prawdziwym folderze w OneDrive i kopia dzienna przy aplikacji w zasobniku (punkt kontrolny bez przerwy w
+pracy – D84).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -35,12 +37,12 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.4.0 | Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dziś z saldem początkowym, panel przychodów (D81) | Opus 5.5 | **max** | ok. 2 h (szacunek z przebiegu sesji; plan był ok. 3 h) | 1.4.0 | ✅ odpowiedzi i komenda (D81) | ✅ wydane (PR #11) |
 | 1.4.1 | Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82) | Opus 5.5 | **xhigh** | ok. 1 h (szacunek z przebiegu sesji; plan był ok. 1,5 h) | 1.4.1 | ✅ zgłoszenie, diagnoza i komenda (D82) | ✅ wydane (PR #12) |
 | Przegląd | Przegląd całej aplikacji po 1.4.1: 10 obszarów × 3 soczewki (błędy, niespójności, wydajność), weryfikacja każdego znaleziska, pomiary na 30 tys. i 150 tys. operacji, brakujące funkcje (`docs/przeglad/`) | Opus 5.5 | **ultracode** | ok. 3 h (zegar sesji, bez przerwy na limit tygodniowy) | – | ✅ prośba, model i skala (150 tys.) | ✅ raport, PR #13 |
-| **E** | 1.4.2 Pieniądze i dane się zgadzają: B1–B5, B6, B9–B11, B13, B24, B30, B32, B42–B51, B55, B56, N1 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z przeglądem i E2E; plan był 4–5 h) | 1.4.2 | ✅ D84 (C1–C3) | ✅ zrobione – PR, CI, scalenie |
-| **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | ok. 3–5 h | 1.4.3 | ✅ D84 (C4) | ⏳ po E |
+| **E** | 1.4.2 Pieniądze i dane się zgadzają: B1–B5, B6, B9–B11, B13, B24, B30, B32, B42–B51, B55, B56, N1 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z przeglądem i E2E; plan był 4–5 h) | 1.4.2 | ✅ D84 (C1–C3) | ✅ wydane (PR #14) |
+| **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, W26, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z pomiarami 30 / 150 tys., przeglądem i E2E; plan był 3–5 h) | 1.4.3 | ✅ D84 (C4) | ✅ zrobione – PR, CI, scalenie |
 | **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | ok. 3–4 h | 1.5.0 | ✅ D83 | ⏳ po F |
 | **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | ok. 3–5 h | 1.5.1 | ✅ D84 (C11) | ⏳ po G |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E** | | | **ok. 25,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F** | | | **ok. 27,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -190,6 +192,67 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.4.2, Windows, prawdziwe dane –
 2. Mostek: osłony, kadłub i salda domowników bez zmian po aktualizacji.
 3. Ładownia: opłata zapłacona przed terminem – bez „Za plan o …”; edytor kontenera – miesiące „od / do”.
 4. Import kolejnego pliku z mBanku: operacje z poprzedniego pliku w drugim formacie rozpoznane, nic podwójnie.
+
+## 1.4.3 – szybkość przy dużym folderze (grupa F, 18.10.2026)
+
+Zakres: wydajność z przeglądu po 1.4.1 (D84, „Przed grupą F” niżej). Zrobione:
+- Okno (W2–W6, W9–W16): silnik budżetu i gra liczone raz na dzień i tylko przy zmianie tego, co czytają; odpowiedź zapisu
+  i echo z dysku bez nowej mapy i przeliczenia; pola tekstowe zapisują po wyjściu z pola; duplikaty liczone chwilę po
+  zmianie i ok. 13 razy szybciej; Ładownia, wyszukiwanie, dostawy, domownicy, szybki wpis bez zbędnych przeliczeń; zaległe
+  dni gry porcjami (T146–T149).
+- Magazyn (W1, W8, W26): indeks plików, widoki i różnice tylko dla zmienionych rekordów, zapis i usuwanie paczką (import,
+  zbiorcze zmiany, duplikaty), tekst plików tylko do migracji (T150).
+- Folder (W21–W24): jedno odświeżenie naraz, pełna kontrola rzadziej i poza kolejką zapisów, zdarzenie katalogu bez
+  pełnego skanu, konflikty bez przeskanowania, otwarcie bez osobnego `stat` (T151–T153).
+- Kopie (W7, F2, N19, C4): własny zapis ZIP w jednym przejściu, kopie z pamięci magazynu (bajt w bajt, inaczej z dysku),
+  kopia dzienna co godzinę i po wybudzeniu, 14 dziennych + 8 tygodniowych, wiek ostatniej kopii w Ustawieniach (T154).
+- Przegląd `/code-review` high: 7 kandydatów, wszystkie poprawione (T155); pomiar okna przy 150 tys. pokazał zawieszenie
+  przy liczeniu duplikatów – przyspieszone.
+- Testy: 449 unit + fs (nowe `tests/fs/folder-speed.test.ts`, poszerzone `backup`, `datastore-robust`, `watch`,
+  `data-store`, `game`), E2E 23 (nowy w `sync.spec.ts`). Każda poprawka z przeglądu z testem sprawdzonym bez niej (pada).
+
+Pomiar (syntetyczny folder 10 lat jak w przeglądzie, Linux, 4 rdzenie; „przed” = `docs/przeglad/`, okno = drugi start):
+
+| | 30 tys. przed | 30 tys. po | 150 tys. przed | 150 tys. po |
+| --- | --- | --- | --- | --- |
+| zapis jednej operacji (proces główny) | 101 ms | 2 ms | 667 ms | 2 ms |
+| import 2000 operacji (proces główny) | ok. 3,5 min | 2,7–3,8 s | ok. 22 min | 3,0–3,5 s |
+| odświeżenie po zapisie (Windows: zdarzenie katalogu) | pełny skan 1,1 s | 5–9 ms | pełny skan ok. 6 s | 24–37 ms |
+| zapis w trakcie pełnej kontroli folderu | czeka 1,1 s | 53 ms | czeka ok. 6 s | 94 ms |
+| kopia ZIP (dzienna, przed importem) | 23 s | 1,9 s | 1,5–3 min | 13 s |
+| możliwe duplikaty (cała historia) | 0,39 s | 0,13 s | 7,7 s | 0,6 s |
+| okno: Mostek po starcie | 7,2 s | 6,7 s | 54 s | 29 s |
+| okno: Operacje (najdłuższe zadanie) | 0,5 s (0,44 s) | 0,07 s (0,11 s) | 8,8 s (7,2 s) | 0,1 s (0,47 s) |
+| okno: Raporty | 0,44 s | 0,05 s | 2,7 s | 0,1 s |
+| okno: Dowództwo | 0,26 s | 0,17 s | 0,75 s | 0,87 s |
+| pamięć okna (sterta JS) / procesu głównego | 131 MB / 320 MB | 45 MB / 252 MB | 703 MB / 1,2 GB | 167 MB / 509 MB |
+
+Cel z „Przed grupą F”: przy 30 tys. przełączanie ekranów i pisanie bez zacięć ponad 0,1 s – zostały dwa krótkie zadania:
+ocena dnia przy wejściu do Dowództwa (0,15 s) i liczenie duplikatów chwilę po zmianie (0,1 s); 150 tys. – używalne (Mostek
+po 29 s, Dowództwo 0,9 s). Dalsze przyspieszenia (przyrostowy silnik W27, import W17–W20, okno „pytaj” W25) – w kolejnych
+grupach według przeglądu.
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.4.3, Windows, prawdziwy folder w OneDrive – bez przerwy w pracy, D84):
+1. Pisanie notatki i kontrahenta w operacji – płynne; Esc cofa, Enter zapisuje.
+2. Import z mBanku – szybciej; po imporcie wszystko na swoim miejscu.
+3. Ustawienia → Folder i kopie: „Ostatnia kopia: dziś”; po kilku dniach w zasobniku nowe kopie dzienne, w `backups/weekly`
+   kopie tygodniowe.
+
+## Przed grupą G – domownicy, ICTTJ i dokowanie (18.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa F (1.4.3) zrobiona. Grupa G (1.5.0): wydatek finansowany przez wiele osób – równo,
+   procentami albo kwotami; moja część to mój wydatek, części innych idą do ich sald; to samo w szybkim wpisie, decyzji
+   zbiorczej i regule importu; osoby bez konta (babcia i dziadek osobno), zwrot gotówką na konto „Gotówka”,
+   „sfinansowane jako prezent” – bez długu, nie zjada energii (D83). Błędy domowników: operacje sprzed dnia rozliczeń
+   dodane później (B14), zwrot towaru z zakupu domownika (B40), wpłata domownika i reguła bez osoby (B41), zakup
+   sfinansowany przez domownika bez poważnego naruszenia gry (N5). ICTTJ i dokowanie (B15–B22): osierocone dokowanie po
+   usunięciu operacji, zmiana puli po dokowaniu, dwa dokowania jednego wpisu, „Portfel XTB?” od zakresu pliku, granica
+   startu po dacie pieniędzy, pula wypłaty jeszcze niezadokowanej, wpis usunięty i wpisany od nowa, inna kwota albo
+   przelew po świętach. Polskie święta w dniach roboczych (F42 – zmienia T63).
+2. **Co użytkownik musi powiedzieć** – ✅ D83 (wielu finansujących, gotówka, prezent) i D84; nic nowego.
+3. **Co przygotować** – nic przed startem; po wydaniu 1.5.0: babcia i dziadek jako osoby (Ustawienia → Domownicy), konto
+   „Gotówka”, pierwszy wspólny wydatek z podziałem, dokowanie najbliższej wypłaty z ICTTJ.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3–4 h (z planu; grupy E i F zajęły po ok. 2 h przy planie 4–5 i 3–5 h).
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
@@ -936,3 +999,8 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 18.10.2026 – PR #13 scalony; odpowiedzi użytkownika na pytania z przeglądu (D83 – babcia i dziadek osobno, reszta
   zalecanych; D84) i komenda „Start E–H”; grupa E (1.4.2): cele od chwili zmiany, pieniądze celu, domownicy i import,
   Ładownia i łupy, folder danych i dwa komputery, szybki wpis, Esc w polach; przegląd i poprawki; PR grupy E do `main`.
+- 18.10.2026 – 1.4.2 wydane (PR #14). Grupa F (1.4.3, szybkość przy dużym folderze): okno (silnik raz na dzień, bez echa
+  zapisu, pola tekstowe, duplikaty, gra porcjami), magazyn (indeks plików, przyrostowe widoki, zapis i usuwanie paczkami),
+  folder (kolejka odświeżeń, zdarzenia katalogów, konflikty bez przeskanowania, otwarcie bez osobnego `stat`), kopie (ZIP
+  w jednym przejściu z pamięci, dzienna w zasobniku, 14 + 8); pomiar na 30 i 150 tys.; przegląd `/code-review` high –
+  7 poprawek; PR do `main`.

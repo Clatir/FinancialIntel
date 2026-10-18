@@ -508,6 +508,8 @@ export interface GameChange {
   /** The month records to write (new or changed), whole. */
   months: GameMonth[]
   events: GameEvent[]
+  /** Days still to freeze after this pass (`maxDays` reached): the next pass goes on. */
+  more?: boolean
 }
 
 /** The game's first day for a computer starting the game now: the next full day (D73). */
@@ -517,7 +519,7 @@ export const gameStartFor = (now: Date | string): string => addDays(warsawNow(no
  * Freeze the days that ended 24 h ago and more (T9), judge the missions of their Sundays, change the rank, award the
  * achievements, and give the week its mission. Deterministic: two computers advancing the same data write the same.
  */
-export function advanceGame(input: GameInput, now: Date | string): GameChange {
+export function advanceGame(input: GameInput, now: Date | string, opts: { maxDays?: number; locked?: ReadonlySet<string> } = {}): GameChange {
   const gs = input.settings.game
   const start = gs.start
   if (!start) return { months: [], events: [] }
@@ -535,8 +537,18 @@ export function advanceGame(input: GameInput, now: Date | string): GameChange {
 
   const lastFreezable = addDays(today, -2)
   const frozen = allDays([...months.values()])
+  // Each day is a whole run of the engine (W16): at most `maxDays` a pass – the same days in the same order, in parts.
+  let rated = 0
+  let more = false
   for (let d = start; d <= lastFreezable; d = addDays(d, 1)) {
-    if (frozen.has(d)) continue
+    // A month this version may not write (a newer one wrote it): its days are that version's to freeze – passed over,
+    // never a portion stuck on them.
+    if (frozen.has(d) || opts.locked?.has(monthOf(d))) continue
+    if (opts.maxDays != null && rated >= opts.maxDays) {
+      more = true
+      break
+    }
+    rated++
     const r = rateDay(input, d, frozen.get(addDays(d, -1)) ?? null)
     const day: GameDay = { status: r.status, frozenAt: stamp, violations: r.violations, cls: r.cls, cargo: r.cargo, tags: r.tags }
     frozen.set(d, day)
@@ -560,9 +572,9 @@ export function advanceGame(input: GameInput, now: Date | string): GameChange {
     }
   }
 
-  // This week's mission, from the game's first full week.
+  // This week's mission, from the game's first full week – once no day is left to freeze (it reads the frozen ones).
   const monday = mondayOf(today)
-  if (monday >= firstMissionMonday(start)) {
+  if (!more && monday >= firstMissionMonday(start)) {
     const week = isoWeekOf(today)
     if (!missionOf(week)) {
       const last = missionOf(isoWeekOf(addDays(monday, -7)))?.mission.template ?? null
@@ -570,7 +582,7 @@ export function advanceGame(input: GameInput, now: Date | string): GameChange {
       update(monthOf(monday), (g) => ({ ...g, missions: [...g.missions, { id: missionId(week), template: pick.template, week, done: false, evaluatedAt: null, params: pick.params }] }))
     }
   }
-  return { months: [...changed].sort().map((m) => ({ ...months.get(m)!, updatedAt: stamp })), events }
+  return { months: [...changed].sort().map((m) => ({ ...months.get(m)!, updatedAt: stamp })), events, ...(more ? { more } : {}) }
 }
 
 // ------------------------------------------------------------------ what the screens show

@@ -25,7 +25,8 @@ import { pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atom
 import { mapLimit, walkFiles } from './fsutil'
 import { ReadTracker, type LoadProgress, type LoadStats } from './progress'
 import { RecordHistory } from './history'
-import { zipFolder } from './zip'
+import { isDataFile } from './backup'
+import { diskSource, writeZipFile, zipFolder, type ZipResult, type ZipSource } from './zip'
 
 /** The settings file of an ICT Trade Journal data folder. */
 const ICTJ_FILE = 'journal.json'
@@ -85,6 +86,14 @@ export class RemovedOutsideError extends Error {
   }
 }
 
+type FileStat = { mtimeMs: number; size: number }
+
+/** One conflict of `resolveConflicts`: resolved, failed (why) or left as it is (`skipped`). */
+export type ConflictResult = { id: string; error?: string; skipped?: boolean }
+
+/** One record of `saveRecords`: written (the entry as on the disk) or why not. */
+export type SaveResult<C extends Collection> = { id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string }
+
 export interface DataStoreOptions {
   machineName: string
   /** Move a file to the recycle bin (Electron shell.trashItem); defaults to deleting it. */
@@ -124,8 +133,123 @@ interface Views {
 
 const emptyRecords = (): Record<Collection, Map<string, FileState>> => Object.fromEntries(COLLECTIONS.map((c) => [c, new Map()])) as Record<Collection, Map<string, FileState>>
 
+/**
+ * The files read, by path – with what keeps a write cheap at any size of the folder (W8): the paths of each record
+ * (`kind:id`), of the problems and of the conflict copies, and what changed since the views were last built.
+ */
+class FileMap extends Map<string, FileState> {
+  readonly ids = new Map<string, Set<string>>()
+  readonly problemPaths = new Set<string>()
+  readonly copyPaths = new Set<string>()
+  /** The files directly in each directory ('' = the folder's root) – a directory's event compares its entries (W22). */
+  readonly dirs = new Map<string, Set<string>>()
+  /** Records read in an older format and not rewritten yet. */
+  readonly migratedPaths = new Set<string>()
+  /** Copies by the path of their original (a change of an original changes its conflict). */
+  private readonly canonicals = new Map<string, number>()
+  /** Records (`kind:id`) changed since the views were built. */
+  readonly dirty = new Set<string>()
+  /** Problems or conflicts changed since the views were built. */
+  metaDirty = true
+
+  static keyOf(s: FileState): string | null {
+    return s.status === 'record' && s.kind !== 'fi' && s.record ? `${s.kind}:${(s.record as AnyRecord).id}` : null
+  }
+
+  override set(rel: string, s: FileState): this {
+    const prev = super.get(rel)
+    if (prev) this.track(rel, prev, -1)
+    else this.inDir(rel, 1)
+    super.set(rel, s)
+    this.track(rel, s, 1)
+    return this
+  }
+
+  override delete(rel: string): boolean {
+    const prev = super.get(rel)
+    if (!prev) return false
+    this.track(rel, prev, -1)
+    this.inDir(rel, -1)
+    return super.delete(rel)
+  }
+
+  /** Whether any file under `dir` (in it or deeper) is known. */
+  hasUnder(dir: string): boolean {
+    for (const d of this.dirs.keys()) if (d === dir || d.startsWith(`${dir}/`)) return true
+    return false
+  }
+
+  private inDir(rel: string, sign: 1 | -1): void {
+    const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
+    let files = this.dirs.get(dir)
+    if (sign > 0) {
+      if (!files) this.dirs.set(dir, (files = new Set()))
+      files.add(rel)
+    } else if (files) {
+      files.delete(rel)
+      if (!files.size) this.dirs.delete(dir)
+    }
+  }
+
+  private track(rel: string, s: FileState, sign: 1 | -1): void {
+    const key = FileMap.keyOf(s)
+    if (key) {
+      let paths = this.ids.get(key)
+      if (sign > 0) {
+        if (!paths) this.ids.set(key, (paths = new Set()))
+        paths.add(rel)
+      } else if (paths) {
+        paths.delete(rel)
+        if (!paths.size) this.ids.delete(key)
+      }
+      this.dirty.add(key)
+    }
+    if (s.status === 'record' && s.migrated && !s.readOnly) {
+      if (sign > 0) this.migratedPaths.add(rel)
+      else this.migratedPaths.delete(rel)
+    }
+    if (s.status === 'problem') {
+      if (sign > 0) this.problemPaths.add(rel)
+      else this.problemPaths.delete(rel)
+      this.metaDirty = true
+    }
+    if (s.status === 'copy') {
+      if (sign > 0) this.copyPaths.add(rel)
+      else this.copyPaths.delete(rel)
+      const canonical = s.conflict?.canonicalPath
+      if (canonical) {
+        const n = (this.canonicals.get(canonical) ?? 0) + sign
+        if (n > 0) this.canonicals.set(canonical, n)
+        else this.canonicals.delete(canonical)
+      }
+      this.metaDirty = true
+    }
+    if (this.canonicals.has(rel)) this.metaDirty = true
+  }
+}
+
+/** A record's files, the one that counts first: the newest `updatedAt`, then the path. */
+const byNewest = (a: FileState, b: FileState): number => {
+  const ua = (a.record as AnyRecord).updatedAt
+  const ub = (b.record as AnyRecord).updatedAt
+  if (ua !== ub) return ua < ub ? 1 : -1
+  return a.relPath < b.relPath ? -1 : 1
+}
+
 function stamp(iso: string): string {
   return iso.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
+}
+
+/** A file's stat and content through one open (W24); null = not a file. */
+async function readWithStat(abs: string): Promise<{ st: { mtimeMs: number; size: number }; buf: Buffer } | null> {
+  const fh = await withRetry(() => fs.open(abs, 'r'))
+  try {
+    const st = await fh.stat()
+    if (!st.isFile()) return null
+    return { st, buf: await fh.readFile() }
+  } finally {
+    await fh.close()
+  }
 }
 
 function parseJsonSafe(text: string): unknown {
@@ -174,7 +298,13 @@ class Mutex {
 
 export class DataStore {
   readonly root: string
-  private files = new Map<string, FileState>()
+  private files = new FileMap()
+  /** The views built last (W8): rebuilt where the files changed – never walked whole at every write. */
+  private views: Views | null = null
+  /** The duplicate-id conflicts of each record (`kind:id`), kept with the views. */
+  private dupConflicts = new Map<string, ConflictEntry[]>()
+  /** Records (`kind:id`) whose view may have changed since the last change set; null = any (a full build since). */
+  private uncommitted: Set<string> | null = null
   /**
    * Records seen removed from outside (`kind:id`): another computer may have moved one by a date change and its
    * new file come later – a save of such a record looks for it first.
@@ -257,7 +387,8 @@ export class DataStore {
       try {
         const kind = await DataStore.inspect(this.root)
         if (kind !== 'data') throw new Error('W tym folderze nie ma pliku fi.json.')
-        const times = await this.scanAll(tracker, opts)
+        const temps: string[] = []
+        const times = await this.scanAll(tracker, opts, temps)
         // Stopped: an open nobody waits for any more never migrates or cleans up the folder. Past this point it is
         // not stopped any more – the caller is told (no „nothing changed” while the migration rewrites files).
         opts.signal?.throwIfAborted()
@@ -267,7 +398,7 @@ export class DataStore {
         const tm = performance.now()
         if (!this.folderReadOnlyReason) await this.migrateIfNeeded()
         const migrateMs = Math.round(performance.now() - tm)
-        await this.cleanupTempFiles()
+        await this.cleanupTempFiles(temps)
         tracker.step = 'prepare'
         const views = this.buildViews()
         this.commit(views)
@@ -302,20 +433,26 @@ export class DataStore {
 
   // ---------------------------------------------------------------- reading
 
-  private async listDataFiles(tracker?: ReadTracker, signal?: AbortSignal): Promise<string[]> {
+  /** The data files of the folder; the temp files of interrupted writes met on the way go to `temps` (W24). */
+  private async listDataFiles(tracker?: ReadTracker, signal?: AbortSignal, temps?: string[]): Promise<string[]> {
     const rels: string[] = []
     const onFile = tracker ? () => void tracker.total++ : undefined
+    const skip = (rel: string) => {
+      if (!isIgnoredPath(rel)) return false
+      if (temps && rel.includes('.tmp-')) temps.push(rel)
+      return true
+    }
     // One by one: spreading a list of 125k+ names into `push` overflows the call stack (B50).
-    for (const c of COLLECTIONS) for (const rel of await walkFiles(this.root, join(this.root, c), isIgnoredPath, { signal, onFile })) rels.push(rel)
+    for (const c of COLLECTIONS) for (const rel of await walkFiles(this.root, join(this.root, c), skip, { signal, onFile })) rels.push(rel)
     const rootEntries = await fs.readdir(this.root, { withFileTypes: true })
-    for (const e of rootEntries) if (e.isFile() && e.name.toLowerCase().endsWith('.json') && !isIgnoredPath(e.name)) rels.push(e.name)
+    for (const e of rootEntries) if (e.isFile() && !skip(e.name) && e.name.toLowerCase().endsWith('.json')) rels.push(e.name)
     return rels
   }
 
-  private async scanAll(tracker = new ReadTracker(SLOW_FILE_MS), opts: OpenOptions = {}): Promise<{ listMs: number; readMs: number }> {
+  private async scanAll(tracker = new ReadTracker(SLOW_FILE_MS), opts: OpenOptions = {}, temps?: string[]): Promise<{ listMs: number; readMs: number }> {
     const t0 = performance.now()
     tracker.step = 'list'
-    const rels = await this.listDataFiles(tracker, opts.signal)
+    const rels = await this.listDataFiles(tracker, opts.signal, temps)
     tracker.total = rels.length
     tracker.step = 'read'
     const t1 = performance.now()
@@ -334,31 +471,47 @@ export class DataStore {
       },
       opts.signal
     )
-    const next = new Map<string, FileState>()
+    const next = new FileMap()
     states.forEach((s) => s && next.set(s.relPath, s))
     this.files = next
+    this.views = null
     return { listMs: Math.round(t1 - t0), readMs: Math.round(performance.now() - t1) }
   }
 
   private async loadFile(rel: string): Promise<FileState | null> {
     const abs = join(this.root, ...rel.split('/'))
-    let st
-    try {
-      st = await fs.stat(abs)
-    } catch {
-      return null
-    }
-    if (!st.isFile()) return null
     const prev = this.files.get(rel)
-    if (prev && !prev.readError && prev.mtimeMs === st.mtimeMs && prev.size === st.size) return prev
+    let st: { mtimeMs: number; size: number }
     let buf: Buffer
-    try {
-      buf = await withRetry(() => fs.readFile(abs))
-    } catch (e) {
-      // A record read before stays as it was (read again next time – its stamps differ); else a problem read again later.
-      if (prev?.status === 'record' && !prev.readError) return prev
-      this.unreadable.add(rel)
-      return { ...this.problemState(rel, st, '', 'corrupt', `Nie można odczytać pliku (OneDrive może go jeszcze pobierać): ${(e as Error).message}`), readError: true }
+    if (prev && !prev.readError) {
+      // Known: read again only when its stat says it changed.
+      let now
+      try {
+        now = await fs.stat(abs)
+      } catch {
+        return null
+      }
+      if (!now.isFile()) return null
+      if (prev.mtimeMs === now.mtimeMs && prev.size === now.size) return prev
+      st = now
+      try {
+        buf = await withRetry(() => fs.readFile(abs))
+      } catch (e) {
+        // A record read before stays as it was (read again next time – its stamps differ); else a problem read again later.
+        if (prev.status === 'record') return prev
+        return this.unreadableState(rel, st, e)
+      }
+    } else {
+      // Nothing to compare with (an open, a new file): one open for the stat and the content (W24).
+      try {
+        const read = await readWithStat(abs)
+        if (!read) return null
+        ;({ st, buf } = read)
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code
+        if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR') return null
+        return this.unreadableState(rel, (await fs.stat(abs).catch(() => null)) ?? { mtimeMs: 0, size: 0 }, e)
+      }
     }
     const hash = sha1(buf)
     if (prev && prev.hash === hash) return { ...prev, mtimeMs: st.mtimeMs, size: st.size }
@@ -375,6 +528,12 @@ export class DataStore {
       return this.problemState(rel, st, hash, 'unknown-file', 'Nieznany plik JSON (nazwa nie pasuje do układu folderu danych).')
     }
     return null
+  }
+
+  /** A file that could not be read (B42): a problem read again next time. */
+  private unreadableState(rel: string, st: { mtimeMs: number; size: number }, e: unknown): FileState {
+    this.unreadable.add(rel)
+    return { ...this.problemState(rel, st, '', 'corrupt', `Nie można odczytać pliku (OneDrive może go jeszcze pobierać): ${(e as Error).message}`), readError: true }
   }
 
   private problemState(
@@ -403,6 +562,7 @@ export class DataStore {
   }
 
   private parseState(rel: string, kind: FileKind, text: string, hash: string, st: { mtimeMs: number; size: number }): FileState {
+    const outcome = parseRecordText(kind, text, idFromPath(rel))
     const base = {
       relPath: rel,
       kind,
@@ -410,9 +570,10 @@ export class DataStore {
       size: st.size,
       hash,
       conflict: null,
-      text
+      // The text only of what a migration rewrites (its original kept first – `backupOriginals`); else half the
+      // store's memory for nothing (W26).
+      text: outcome.ok && outcome.migrated ? text : null
     }
-    const outcome = parseRecordText(kind, text, idFromPath(rel))
     if (outcome.ok) {
       return {
         ...base,
@@ -486,7 +647,7 @@ export class DataStore {
   // ---------------------------------------------------------------- migrations
 
   private async migrateIfNeeded(): Promise<void> {
-    const pending = [...this.files.values()].filter((s) => s.status === 'record' && s.migrated && !s.readOnly)
+    const pending = [...this.files.migratedPaths].map((rel) => this.files.get(rel)!)
     if (pending.length === 0) return
     const settingsState = this.files.get(SETTINGS_FILE)
     const from = pending.reduce((m, s) => Math.min(m, s.fromVersion), SCHEMA_VERSION)
@@ -535,72 +696,115 @@ export class DataStore {
       conflict: null,
       migrated: false,
       fromVersion: SCHEMA_VERSION,
-      text
+      text: null
     }
     this.files.set(rel, state)
     return state
   }
 
-  private async cleanupTempFiles(): Promise<void> {
+  /** Temp files of writes interrupted over an hour ago (met by the open's listing – W24) are removed. */
+  private async cleanupTempFiles(temps: readonly string[]): Promise<void> {
     const cutoff = Date.now() - 60 * 60 * 1000
-    for (const dir of COLLECTIONS) {
-      const all = await walkFiles(this.root, join(this.root, dir))
-      for (const rel of all.filter((r) => r.includes('.tmp-'))) {
-        try {
-          const st = await fs.stat(join(this.root, rel))
-          if (st.mtimeMs < cutoff) await removeFile(join(this.root, rel))
-        } catch {
-          /* ignore */
-        }
+    for (const rel of temps) {
+      try {
+        const abs = join(this.root, ...rel.split('/'))
+        const st = await fs.stat(abs)
+        if (st.isFile() && st.mtimeMs < cutoff) await removeFile(abs)
+      } catch {
+        /* ignore */
       }
     }
   }
 
   // ---------------------------------------------------------------- views & diffs
 
+  /** The views: built whole the first time, then updated where the files changed (W8). */
   private buildViews(): Views {
+    const views = this.views ? this.updateViews(this.views) : this.fullViews()
+    if (process.env.FI_VERIFY_VIEWS) this.verifyViews(views)
+    return views
+  }
+
+  /** The views from all the files, the caches set from them. */
+  private fullViews(): Views {
+    const { views, dups } = this.computeViews()
+    this.views = views
+    this.dupConflicts = dups
+    this.files.dirty.clear()
+    this.files.metaDirty = false
+    this.uncommitted = null
+    return views
+  }
+
+  private computeViews(): { views: Views; dups: Map<string, ConflictEntry[]> } {
     const records = emptyRecords()
-    const conflicts: ConflictEntry[] = []
-    const problems: Problem[] = []
-    const groups = new Map<string, FileState[]>()
-
-    for (const s of this.files.values()) {
-      if (s.status === 'problem') {
-        problems.push({ relPath: s.relPath, kind: s.problemKind ?? 'invalid', message: s.error ?? '' })
-        continue
-      }
-      if (s.status === 'copy' || s.kind === 'fi') continue
-      const id = (s.record as AnyRecord).id
-      const key = `${s.kind}:${id}`
-      const g = groups.get(key)
-      if (g) g.push(s)
-      else groups.set(key, [s])
-    }
-
-    for (const [key, group] of groups) {
-      const kind = key.split(':')[0] as Collection
-      const sorted = [...group].sort((a, b) => {
-        const ua = (a.record as AnyRecord).updatedAt
-        const ub = (b.record as AnyRecord).updatedAt
-        if (ua !== ub) return ua < ub ? 1 : -1
-        return a.relPath < b.relPath ? -1 : 1
-      })
-      const primary = sorted[0] as FileState
+    const dups = new Map<string, ConflictEntry[]>()
+    for (const [key, paths] of this.files.ids) {
+      const kind = key.slice(0, key.indexOf(':')) as Collection
+      const sorted = [...paths].map((rel) => this.files.get(rel)!).sort(byNewest)
+      const primary = sorted[0]!
       records[kind].set((primary.record as AnyRecord).id, primary)
-      for (const dup of sorted.slice(1)) {
-        conflicts.push({
-          id: dup.relPath,
-          kind,
-          type: 'duplicate',
-          source: 'ten sam identyfikator w dwóch plikach',
-          canonical: this.side(primary),
-          copy: this.side(dup)
-        })
-      }
+      if (sorted.length > 1) dups.set(key, sorted.slice(1).map((dup) => this.duplicateConflict(kind, primary, dup)))
     }
+    return { views: { records, problems: this.problemList(), conflicts: this.conflictList(dups) }, dups }
+  }
 
-    for (const s of this.files.values()) {
-      if (s.status !== 'copy' || !s.conflict) continue
+  /** The views where the files changed since they were built: the records touched, problems and conflicts when changed. */
+  private updateViews(views: Views): Views {
+    const files = this.files
+    for (const key of files.dirty) {
+      const i = key.indexOf(':')
+      const kind = key.slice(0, i) as Collection
+      const id = key.slice(i + 1)
+      const sorted = [...(files.ids.get(key) ?? [])].map((rel) => files.get(rel)!).sort(byNewest)
+      const primary = sorted[0]
+      if (primary) views.records[kind].set(id, primary)
+      else views.records[kind].delete(id)
+      if (sorted.length > 1) {
+        this.dupConflicts.set(key, sorted.slice(1).map((dup) => this.duplicateConflict(kind, primary!, dup)))
+        files.metaDirty = true
+      } else if (this.dupConflicts.delete(key)) files.metaDirty = true
+      this.uncommitted?.add(key)
+    }
+    files.dirty.clear()
+    if (files.metaDirty) {
+      views.problems = this.problemList()
+      views.conflicts = this.conflictList(this.dupConflicts)
+      files.metaDirty = false
+    }
+    return views
+  }
+
+  /** Test aid (`FI_VERIFY_VIEWS`): the views updated in place are the views built whole. */
+  private verifyViews(views: Views): void {
+    const full = this.computeViews().views
+    for (const c of COLLECTIONS) {
+      const a = views.records[c]
+      const b = full.records[c]
+      if (a.size !== b.size || [...b].some(([id, st]) => a.get(id) !== st)) throw new Error(`views out of step: ${c}`)
+    }
+    const json = (v: Views) => JSON.stringify([v.problems, v.conflicts])
+    if (json(views) !== json(full)) throw new Error('views out of step: problems / conflicts')
+  }
+
+  private duplicateConflict(kind: Collection, primary: FileState, dup: FileState): ConflictEntry {
+    return { id: dup.relPath, kind, type: 'duplicate', source: 'ten sam identyfikator w dwóch plikach', canonical: this.side(primary), copy: this.side(dup) }
+  }
+
+  private problemList(): Problem[] {
+    return [...this.files.problemPaths]
+      .map((rel) => {
+        const s = this.files.get(rel)!
+        return { relPath: s.relPath, kind: s.problemKind ?? 'invalid', message: s.error ?? '' }
+      })
+      .sort((a, b) => a.relPath.localeCompare(b.relPath))
+  }
+
+  private conflictList(dups: Map<string, ConflictEntry[]>): ConflictEntry[] {
+    const conflicts = [...dups.values()].flat()
+    for (const rel of this.files.copyPaths) {
+      const s = this.files.get(rel)!
+      if (!s.conflict) continue
       const canonicalState = this.files.get(s.conflict.canonicalPath)
       conflicts.push({
         id: s.relPath,
@@ -613,10 +817,7 @@ export class DataStore {
         copy: this.side(s)
       })
     }
-
-    conflicts.sort((a, b) => a.id.localeCompare(b.id))
-    problems.sort((a, b) => a.relPath.localeCompare(b.relPath))
-    return { records, conflicts, problems }
+    return conflicts.sort((a, b) => a.id.localeCompare(b.id))
   }
 
   private side(s: FileState): ConflictSide {
@@ -653,11 +854,23 @@ export class DataStore {
   }
 
   private commit(views: Views): void {
-    for (const c of COLLECTIONS) {
-      const keys = new Map<string, ViewKey>()
-      for (const [id, s] of views.records[c]) keys.set(id, this.viewKey(s))
-      this.prevKeys[c] = keys
-    }
+    const keys = this.uncommitted
+    if (keys == null)
+      for (const c of COLLECTIONS) {
+        const map = new Map<string, ViewKey>()
+        for (const [id, s] of views.records[c]) map.set(id, this.viewKey(s))
+        this.prevKeys[c] = map
+      }
+    else
+      for (const key of keys) {
+        const i = key.indexOf(':')
+        const c = key.slice(0, i) as Collection
+        const id = key.slice(i + 1)
+        const s = views.records[c].get(id)
+        if (s) this.prevKeys[c].set(id, this.viewKey(s))
+        else this.prevKeys[c].delete(id)
+      }
+    this.uncommitted = new Set()
     this.prevMeta = this.metaKey(views)
   }
 
@@ -671,13 +884,27 @@ export class DataStore {
       status: this.status(),
       origin
     }
-    for (const c of COLLECTIONS) {
-      const prev = this.prevKeys[c]
-      for (const [id, s] of views.records[c]) {
-        if (prev.get(id) !== this.viewKey(s)) change.upserts.push({ collection: c, entry: this.entry(s) })
+    const keys = this.uncommitted
+    if (keys == null)
+      for (const c of COLLECTIONS) {
+        const prev = this.prevKeys[c]
+        for (const [id, s] of views.records[c]) {
+          if (prev.get(id) !== this.viewKey(s)) change.upserts.push({ collection: c, entry: this.entry(s) })
+        }
+        for (const id of prev.keys()) if (!views.records[c].has(id)) change.removals.push({ collection: c, id })
       }
-      for (const id of prev.keys()) if (!views.records[c].has(id)) change.removals.push({ collection: c, id })
-    }
+    else
+      // Only the records whose files changed since the last change set (W8).
+      for (const key of keys) {
+        const i = key.indexOf(':')
+        const c = key.slice(0, i) as Collection
+        const id = key.slice(i + 1)
+        const s = views.records[c].get(id)
+        const prev = this.prevKeys[c].get(id)
+        if (s) {
+          if (prev !== this.viewKey(s)) change.upserts.push({ collection: c, entry: this.entry(s) })
+        } else if (prev !== undefined) change.removals.push({ collection: c, id })
+      }
     const metaChanged = this.metaKey(views) !== this.prevMeta
     this.commit(views)
     if (!change.upserts.length && !change.removals.length && !settingsChanged && !metaChanged) return null
@@ -687,65 +914,161 @@ export class DataStore {
   // ---------------------------------------------------------------- external changes
 
   /**
-   * Re-read changed files. `paths` = relative paths reported by the watcher; omit for a full rescan.
-   * Returns null when nothing visible changed. `origin` 'local' marks a refresh after this app's own action.
-   * `settingsWritten`: fi.json was just rewritten by this store (a resolved conflict) – the change set carries it.
+   * Re-read changed files. `paths` = relative paths reported by the watcher (files, or directories whose entries
+   * changed); omit for a full rescan. Returns null when nothing visible changed.
    */
-  refresh(paths?: string[], origin: 'external' | 'local' = 'external', settingsWritten = false): Promise<ChangeSet | null> {
-    return this.mutex.run(async () => {
-      const wasAvailable = this.available
-      this.available = (await DataStore.inspect(this.root)) === 'data'
-      if (!this.available) {
-        // Keep everything in memory; the folder may come back (pendrive, network drive).
-        return wasAvailable ? this.diff(this.buildViews(), false, origin) : null
-      }
-      const settingsBefore = this.files.get(SETTINGS_FILE)?.hash
-      const needsFull = !paths || !wasAvailable || paths.some((p) => !p.toLowerCase().endsWith('.json'))
-      if (needsFull) {
-        const rels = await this.listDataFiles()
-        const seen = new Set(rels)
-        const states = await mapLimit(rels, READ_CONCURRENCY, (rel) => this.loadFile(rel))
-        for (const rel of [...this.files.keys()]) if (!seen.has(rel)) this.files.delete(rel)
-        states.forEach((s) => s && this.files.set(s.relPath, s))
-      } else {
-        const gone: FileState[] = []
-        for (const p of new Set(paths)) {
-          const rel = sanitizeRelPath(p)
-          if (!rel || isIgnoredPath(rel)) continue
-          const s = await this.loadFile(rel)
-          if (s) this.files.set(rel, s)
-          else {
-            const old = this.files.get(rel)
-            if (old) gone.push(old)
-            this.files.delete(rel)
-          }
-        }
-        // A record moved by a date change on another computer: the watcher may report its old file's removal before
-        // the new file – read the new one now, so the change is an update, not a removal. One walk of a
-        // collection for all its removed records.
-        const lost = new Map<Collection, Set<string>>()
-        for (const old of gone) {
-          if (old.status !== 'record' || old.kind === 'fi' || !old.record) continue
-          const id = (old.record as AnyRecord).id
-          if (this.currentState(old.kind, id)) continue
-          const ids = lost.get(old.kind) ?? new Set<string>()
-          lost.set(old.kind, ids.add(id))
-        }
-        for (const [kind, ids] of lost) {
-          const found = await this.findMoved(kind, ids)
-          for (const id of ids) if (!found.has(id)) this.removedOutside.add(`${kind}:${id}`)
-        }
-      }
-      const settingsChanged = settingsWritten || (this.files.get(SETTINGS_FILE)?.hash !== settingsBefore && this.refreshSettingsState())
-      if (!this.folderReadOnlyReason) {
-        const migrated = [...this.files.values()].filter((s) => s.status === 'record' && s.migrated && !s.readOnly)
-        if (migrated.length) {
-          await this.backupOriginals(migrated)
-          for (const s of migrated) await this.rewrite(s)
-        }
-      }
-      return this.diff(this.buildViews(), settingsChanged, origin)
+  refresh(paths?: string[]): Promise<ChangeSet | null> {
+    if (paths) return this.mutex.run(() => this.refreshInQueue(paths))
+    // A full check lists and stats the folder before it joins the queue – seconds at 150 thousand files, writes go on
+    // meanwhile; in the queue only what differs is read again (W21).
+    return this.statAll()
+      .catch(() => null)
+      .then((listing) => this.mutex.run(() => this.refreshInQueue(undefined, listing ?? undefined)))
+  }
+
+  /** The refresh in its turn of the queue; `listing` = a full check's files and their stats made before it. */
+  private async refreshInQueue(paths?: string[], listing?: Map<string, FileStat | null>): Promise<ChangeSet | null> {
+    const wasAvailable = this.available
+    this.available = (await DataStore.inspect(this.root)) === 'data'
+    if (!this.available) {
+      // Keep everything in memory; the folder may come back (pendrive, network drive).
+      return wasAvailable ? this.diff(this.buildViews(), false, 'external') : null
+    }
+    const settingsBefore = this.files.get(SETTINGS_FILE)?.hash
+    if (!paths || !wasAvailable || !(await this.rescanPaths(paths))) await this.rescanAll(listing)
+    const settingsChanged = this.files.get(SETTINGS_FILE)?.hash !== settingsBefore && this.refreshSettingsState()
+    if (!this.folderReadOnlyReason && this.files.migratedPaths.size) {
+      const migrated = [...this.files.migratedPaths].map((rel) => this.files.get(rel)!)
+      await this.backupOriginals(migrated)
+      for (const s of migrated) await this.rewrite(s)
+    }
+    return this.diff(this.buildViews(), settingsChanged, 'external')
+  }
+
+  /** The folder's data files with their stat (null = gone meanwhile), outside the queue. */
+  private async statAll(): Promise<Map<string, FileStat | null>> {
+    const rels = await this.listDataFiles()
+    const stats = await mapLimit(rels, READ_CONCURRENCY, (rel) =>
+      fs.stat(join(this.root, ...rel.split('/'))).then(
+        (st) => (st.isFile() ? { mtimeMs: st.mtimeMs, size: st.size } : null),
+        () => null
+      )
+    )
+    return new Map(rels.map((rel, i) => [rel, stats[i] ?? null]))
+  }
+
+  /**
+   * Every file of the folder, read again where its stat changed. `listing` (made before the queue's turn): files
+   * whose stat there is the known one are taken as they are; any other – new, changed, gone or written by this
+   * store meanwhile – goes through `loadFile` (stat again, read when changed).
+   */
+  private async rescanAll(listing?: Map<string, FileStat | null>): Promise<void> {
+    const seen = listing ?? new Map((await this.listDataFiles()).map((rel) => [rel, undefined]))
+    const check: string[] = []
+    for (const [rel, st] of seen) {
+      const known = this.files.get(rel)
+      if (!known || known.readError || !st || known.mtimeMs !== st.mtimeMs || known.size !== st.size) check.push(rel)
+    }
+    for (const rel of this.files.keys()) if (!seen.has(rel)) check.push(rel)
+    const states = await mapLimit(check, READ_CONCURRENCY, (rel) => this.loadFile(rel))
+    check.forEach((rel, i) => this.put(rel, states[i] ?? null))
+  }
+
+  /** A file's state after a read: kept (the same object leaves the views alone), replaced or gone. */
+  private put(rel: string, state: FileState | null): FileState | null {
+    const old = this.files.get(rel) ?? null
+    if (state) {
+      if (state !== old) this.files.set(rel, state)
+    } else if (old) this.files.delete(rel)
+    return old
+  }
+
+  /**
+   * The paths the watcher reported: the files read again, and of a directory (on Windows every write into it reports
+   * it too – W22) its entries compared with the files known there. False = a directory could not be listed (not
+   * gone, e.g. no access): the caller rescans everything instead.
+   */
+  private async rescanPaths(paths: readonly string[]): Promise<boolean> {
+    const rels = new Set<string>()
+    for (const p of new Set(paths)) {
+      // `dir/`: a directory that appeared, went or was renamed – everything under it (FolderWatcher).
+      const deep = p.endsWith('/')
+      const rel = sanitizeRelPath(deep ? p.slice(0, -1) : p)
+      if (!rel || isIgnoredPath(rel)) continue
+      if (!deep && rel.toLowerCase().endsWith('.json')) rels.add(rel)
+      else if (!(await this.changedInDir(rel, rels, deep))) return false
+    }
+    const list = [...rels]
+    const states = await mapLimit(list, READ_CONCURRENCY, (rel) => this.loadFile(rel))
+    const gone: FileState[] = []
+    list.forEach((rel, i) => {
+      const old = this.put(rel, states[i] ?? null)
+      if (old && !states[i]) gone.push(old)
     })
+    // A record moved by a date change on another computer: the watcher may report its old file's removal before
+    // the new file – read the new one now, so the change is an update, not a removal. One walk of a
+    // collection for all its removed records.
+    const lost = new Map<Collection, Set<string>>()
+    for (const old of gone) {
+      if (old.status !== 'record' || old.kind === 'fi' || !old.record) continue
+      const id = (old.record as AnyRecord).id
+      if (this.currentState(old.kind, id)) continue
+      const ids = lost.get(old.kind) ?? new Set<string>()
+      lost.set(old.kind, ids.add(id))
+    }
+    for (const [kind, ids] of lost) {
+      const found = await this.findMoved(kind, ids)
+      for (const id of ids) if (!found.has(id)) this.removedOutside.add(`${kind}:${id}`)
+    }
+    return true
+  }
+
+  /**
+   * A reported path that is no JSON file: of a directory, the files to read – those added since and those known
+   * there that are gone; a subdirectory with no file known under it, whole (new, or brought back). A path gone or
+   * not a directory: the files known under it. `deep` (the directory itself appeared, went or was renamed): every file
+   * known under it and every file in it, each read again where its stat changed. False = the directory could not be
+   * listed.
+   */
+  private async changedInDir(dir: string, out: Set<string>, deep = false): Promise<boolean> {
+    // Outside the collections nothing is data (a full rescan does not look there either).
+    if (!(COLLECTIONS as readonly string[]).includes(dir.split('/')[0]!)) return true
+    if (deep) {
+      let found: string[]
+      try {
+        found = await walkFiles(this.root, this.abs(dir), isIgnoredPath)
+      } catch (e) {
+        // A file of another kind renamed: nothing under it; a directory that cannot be listed: everything rescanned.
+        if ((e as NodeJS.ErrnoException).code !== 'ENOTDIR') return false
+        found = []
+      }
+      for (const f of found) if (f.toLowerCase().endsWith('.json')) out.add(f)
+      for (const [d, files] of this.files.dirs) if (d === dir || d.startsWith(`${dir}/`)) for (const rel of files) out.add(rel)
+      return true
+    }
+    let entries
+    try {
+      entries = await fs.readdir(this.abs(dir), { withFileTypes: true })
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') return false
+      for (const [d, files] of this.files.dirs) if (d === dir || d.startsWith(`${dir}/`)) for (const rel of files) out.add(rel)
+      return true
+    }
+    const known = this.files.dirs.get(dir)
+    const listed = new Set<string>()
+    for (const e of entries) {
+      const rel = `${dir}/${e.name}`
+      if (isIgnoredPath(rel)) continue
+      if (e.isFile()) {
+        listed.add(rel)
+        if (!known?.has(rel) && rel.toLowerCase().endsWith('.json')) out.add(rel)
+      } else if (e.isDirectory() && !this.files.hasUnder(rel)) {
+        for (const f of await walkFiles(this.root, this.abs(rel), isIgnoredPath).catch(() => [] as string[])) if (f.toLowerCase().endsWith('.json')) out.add(f)
+      }
+    }
+    if (known) for (const rel of known) if (!listed.has(rel)) out.add(rel)
+    return true
   }
 
   // ---------------------------------------------------------------- writing
@@ -787,11 +1110,13 @@ export class DataStore {
   }
 
   private currentState(collection: Collection, id: string): FileState | null {
-    const candidates = [...this.files.values()].filter(
-      (s) => s.status === 'record' && s.kind === collection && (s.record as AnyRecord).id === id
-    )
-    if (candidates.length === 0) return null
-    return candidates.sort((a, b) => ((a.record as AnyRecord).updatedAt < (b.record as AnyRecord).updatedAt ? 1 : -1))[0] ?? null
+    // The record's files from the index (W8), never a walk of all.
+    let best: FileState | null = null
+    for (const rel of this.files.ids.get(`${collection}:${id}`) ?? []) {
+      const s = this.files.get(rel)!
+      if (!best || (s.record as AnyRecord).updatedAt > (best.record as AnyRecord).updatedAt) best = s
+    }
+    return best
   }
 
   /**
@@ -869,65 +1194,109 @@ export class DataStore {
   saveRecord<C extends Collection>(collection: C, input: RecordTypes[C]): Promise<{ entry: RecordEntry<RecordTypes[C]>; change: ChangeSet | null }> {
     return this.mutex.run(async () => {
       this.assertWritable()
-      await this.reread((rel) => rel.includes(input.id))
-      // Seen removed from outside: maybe moved on another computer, its new file not reported yet – then this
-      // write replaces that file instead of adding a duplicate under the old date, and that version stays as a conflict
-      // copy (the user decides; "keep mine" answered a removal, not that edit).
-      const removedKey = `${collection}:${input.id}`
-      let moved = !this.currentState(collection, input.id) && this.removedOutside.has(removedKey) ? ((await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null) : null
-      // Its file gone this moment (another computer deleted or moved it, the watcher not here yet – B49): a move is taken
-      // like a reported one; a removal is never undone by this write – the window gets it and asks.
-      const known = this.currentState(collection, input.id)
-      if (known && !moved && !(await pathExists(this.abs(known.relPath)))) {
-        this.files.delete(known.relPath)
-        moved = (await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null
-        if (!moved) {
-          this.removedOutside.add(removedKey)
-          throw new RemovedOutsideError(known.relPath, this.diff(this.buildViews(), false, 'external'))
-        }
+      try {
+        const state = await this.writeRecord(collection, input)
+        return { entry: this.entry<C>(state), change: this.diff(this.buildViews(), false) }
+      } catch (e) {
+        // The window gets what happened with the error (B49 – as a change from outside; B46 – the copy).
+        if (e instanceof RemovedOutsideError) throw new RemovedOutsideError(e.relPath, this.diff(this.buildViews(), false, 'external'))
+        if (e instanceof ConflictCopyError) throw new ConflictCopyError(e.relPath, this.diff(this.buildViews(), false))
+        throw e
       }
-      const parsed = SCHEMAS[collection].safeParse({
-        ...input,
-        schemaVersion: SCHEMA_VERSION,
-        updatedAt: this.opts.now(),
-        updatedBy: this.opts.machineName
-      })
-      if (!parsed.success) throw new Error(`Niepoprawne dane: ${parsed.error.issues[0]?.path.join('.')}: ${parsed.error.issues[0]?.message}`)
-      const record = parsed.data as RecordTypes[C]
-      const rel = recordRelPath(collection, record as unknown as Record<string, unknown>)
-      await this.reread((r) => r === rel)
-      const existing = this.currentState(collection, input.id)
-      if (existing?.readOnly) throw new ReadOnlyError('Ten wpis zapisała nowsza wersja aplikacji - jest tylko do odczytu.')
-      const occupant = this.files.get(rel)
-      if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== record.id) {
-        // The month's file of another record (two computers made the month's plan before syncing – B46): this version
-        // waits beside it as a sync copy for the user to pick – never written over it, never retried for ever.
-        if (LAYOUTS[collection] === 'month') {
-          const copyRel = rel.replace(/\.json$/, `-${this.opts.machineName.replace(/[^0-9A-Za-z]+/g, '-') || 'PC'}.json`)
-          await writeFileAtomic(this.abs(copyRel), serializeRecord(collection, record))
-          const copy = await this.loadFile(copyRel)
-          if (copy) this.files.set(copyRel, copy)
-          throw new ConflictCopyError(copyRel, this.diff(this.buildViews(), false))
+    })
+  }
+
+  /**
+   * Many records at once (an import, a bulk change – W1): each written as `saveRecord` writes it, one change set at the
+   * end; a record that fails says why, the others are written. A record removed on another computer a moment ago
+   * (B49) goes to the window in a change set of its own, from outside.
+   */
+  saveRecords<C extends Collection>(collection: C, inputs: readonly RecordTypes[C][]): Promise<{ results: SaveResult<C>[]; changes: ChangeSet[] }> {
+    return this.mutex.run(async () => {
+      this.assertWritable()
+      const results: SaveResult<C>[] = []
+      const removed = new Set<string>()
+      for (const input of inputs) {
+        try {
+          results.push({ id: input.id, entry: this.entry<C>(await this.writeRecord(collection, input)) })
+        } catch (e) {
+          if (e instanceof RemovedOutsideError) removed.add(input.id)
+          results.push({ id: input.id, error: (e as Error).message })
         }
-        throw new Error(`Plik ${rel} należy do innego wpisu (np. plan tego miesiąca już istnieje).`)
-      }
-      if (occupant?.status === 'problem') await this.setAsideProblem(occupant)
-      await this.keepDuplicate(occupant, existing, collection, record.id)
-      if (moved && existing === moved && existing.record && !sameContent(existing.record, record)) {
-        const buf = await fs.readFile(this.abs(existing.relPath)).catch(() => null)
-        if (buf) await this.keepCopy(buf, rel)
-      } else if (existing) await this.preserveExternalChange(existing, collection, record as AnyRecord, rel)
-      if (existing?.record) await this.history.snapshot(collection, existing.record as AnyRecord, 'edit')
-      const text = serializeRecord(collection, record)
-      const state = await this.writeState(rel, collection, record, text)
-      this.removedOutside.delete(removedKey)
-      if (existing && existing.relPath !== rel) {
-        await removeFile(this.abs(existing.relPath))
-        this.files.delete(existing.relPath)
       }
       const change = this.diff(this.buildViews(), false)
-      return { entry: this.entry<C>(state), change }
+      if (!change) return { results, changes: [] }
+      if (!removed.size) return { results, changes: [change] }
+      const outside = (r: { collection: Collection; id: string }) => r.collection === collection && removed.has(r.id)
+      return {
+        results,
+        changes: [
+          { ...change, upserts: [], removals: change.removals.filter(outside), origin: 'external' },
+          { ...change, removals: change.removals.filter((r) => !outside(r)) }
+        ]
+      }
     })
+  }
+
+  /** One record written (inside the queue): `saveRecord`'s work without the change set. */
+  private async writeRecord<C extends Collection>(collection: C, input: RecordTypes[C]): Promise<FileState> {
+    await this.reread((rel) => rel.includes(input.id))
+    // Seen removed from outside: maybe moved on another computer, its new file not reported yet – then this
+    // write replaces that file instead of adding a duplicate under the old date, and that version stays as a conflict
+    // copy (the user decides; "keep mine" answered a removal, not that edit).
+    const removedKey = `${collection}:${input.id}`
+    let moved = !this.currentState(collection, input.id) && this.removedOutside.has(removedKey) ? ((await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null) : null
+    // Its file gone this moment (another computer deleted or moved it, the watcher not here yet – B49): a move is taken
+    // like a reported one; a removal is never undone by this write – the window gets it and asks.
+    const known = this.currentState(collection, input.id)
+    if (known && !moved && !(await pathExists(this.abs(known.relPath)))) {
+      this.files.delete(known.relPath)
+      moved = (await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null
+      if (!moved) {
+        this.removedOutside.add(removedKey)
+        throw new RemovedOutsideError(known.relPath)
+      }
+    }
+    const parsed = SCHEMAS[collection].safeParse({
+      ...input,
+      schemaVersion: SCHEMA_VERSION,
+      updatedAt: this.opts.now(),
+      updatedBy: this.opts.machineName
+    })
+    if (!parsed.success) throw new Error(`Niepoprawne dane: ${parsed.error.issues[0]?.path.join('.')}: ${parsed.error.issues[0]?.message}`)
+    const record = parsed.data as RecordTypes[C]
+    const rel = recordRelPath(collection, record as unknown as Record<string, unknown>)
+    await this.reread((r) => r === rel)
+    const existing = this.currentState(collection, input.id)
+    if (existing?.readOnly) throw new ReadOnlyError('Ten wpis zapisała nowsza wersja aplikacji - jest tylko do odczytu.')
+    const occupant = this.files.get(rel)
+    if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== record.id) {
+      // The month's file of another record (two computers made the month's plan before syncing – B46): this version
+      // waits beside it as a sync copy for the user to pick – never written over it, never retried for ever.
+      if (LAYOUTS[collection] === 'month') {
+        const copyRel = rel.replace(/\.json$/, `-${this.opts.machineName.replace(/[^0-9A-Za-z]+/g, '-') || 'PC'}.json`)
+        await writeFileAtomic(this.abs(copyRel), serializeRecord(collection, record))
+        const copy = await this.loadFile(copyRel)
+        if (copy) this.files.set(copyRel, copy)
+        throw new ConflictCopyError(copyRel)
+      }
+      throw new Error(`Plik ${rel} należy do innego wpisu (np. plan tego miesiąca już istnieje).`)
+    }
+    if (occupant?.status === 'problem') await this.setAsideProblem(occupant)
+    await this.keepDuplicate(occupant, existing, collection, record.id)
+    if (moved && existing === moved && existing.record && !sameContent(existing.record, record)) {
+      const buf = await fs.readFile(this.abs(existing.relPath)).catch(() => null)
+      if (buf) await this.keepCopy(buf, rel)
+    } else if (existing) await this.preserveExternalChange(existing, collection, record as AnyRecord, rel)
+    if (existing?.record) await this.history.snapshot(collection, existing.record as AnyRecord, 'edit')
+    const text = serializeRecord(collection, record)
+    const state = await this.writeState(rel, collection, record, text)
+    this.removedOutside.delete(removedKey)
+    if (existing && existing.relPath !== rel) {
+      await removeFile(this.abs(existing.relPath))
+      this.files.delete(existing.relPath)
+    }
+    return state
   }
 
   /**
@@ -966,20 +1335,43 @@ export class DataStore {
   deleteRecord(collection: Collection, id: string): Promise<ChangeSet | null> {
     return this.mutex.run(async () => {
       this.assertWritable()
-      const state = this.currentState(collection, id)
-      if (!state) return null
-      if (state.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
-      const kept = await this.history.snapshot(collection, state.record as AnyRecord, 'delete')
-      try {
-        await this.opts.trash(this.abs(state.relPath))
-      } catch (e) {
-        // The file stays (held by OneDrive, an antivirus): no „deleted” version in the history either (B9).
-        await this.history.drop(kept)
-        throw new Error(`Nie udało się usunąć pliku ${state.relPath} (zajęty przez inny program?) – spróbuj ponownie. ${(e as Error).message}`)
-      }
-      this.files.delete(state.relPath)
+      if (!(await this.removeRecord(collection, id))) return null
       return this.diff(this.buildViews(), false)
     })
+  }
+
+  /** Many records deleted at once (an import's, duplicates – W1): one change set; a record that fails says why. */
+  deleteRecords(collection: Collection, ids: readonly string[]): Promise<{ results: Array<{ id: string; error?: string }>; change: ChangeSet | null }> {
+    return this.mutex.run(async () => {
+      this.assertWritable()
+      const results: Array<{ id: string; error?: string }> = []
+      for (const id of ids) {
+        try {
+          await this.removeRecord(collection, id)
+          results.push({ id })
+        } catch (e) {
+          results.push({ id, error: (e as Error).message })
+        }
+      }
+      return { results, change: this.diff(this.buildViews(), false) }
+    })
+  }
+
+  /** One record deleted (inside the queue); false = not there. */
+  private async removeRecord(collection: Collection, id: string): Promise<boolean> {
+    const state = this.currentState(collection, id)
+    if (!state) return false
+    if (state.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
+    const kept = await this.history.snapshot(collection, state.record as AnyRecord, 'delete')
+    try {
+      await this.opts.trash(this.abs(state.relPath))
+    } catch (e) {
+      // The file stays (held by OneDrive, an antivirus): no „deleted” version in the history either (B9).
+      await this.history.drop(kept)
+      throw new Error(`Nie udało się usunąć pliku ${state.relPath} (zajęty przez inny program?) – spróbuj ponownie. ${(e as Error).message}`)
+    }
+    this.files.delete(state.relPath)
+    return true
   }
 
   /** Write imported records as-is (keeping their updatedAt), moving files whose canonical path changed. */
@@ -1033,78 +1425,115 @@ export class DataStore {
 
   // ---------------------------------------------------------------- conflicts & problems
 
-  async resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<ChangeSet | null> {
-    // Keeping a copy of fi.json rewrites it here: the window must get the kept settings (the rescan sees no new hash).
-    let settingsWritten = false
-    await this.mutex.run(async () => {
+  /** One conflict resolved (`keep` = the version that stays): the change from inside the queue, no rescan (W23). */
+  resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<ChangeSet | null> {
+    return this.mutex.run(async () => {
       this.assertWritable()
-      const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
-      if (!conflict) throw new Error('Konflikt już nie istnieje (mógł zostać rozwiązany na innym komputerze).')
-      const canonicalState = this.files.get(conflict.canonical.relPath)
-      const copyState = this.files.get(conflict.copy.relPath)
-      // The version let go goes to the history first – it syncs to every computer, the bin does not (B44): a version of
-      // the record kept – a month's plan of another id (B46) too, never a „deleted” record to bring back over the month.
-      const keepAside = async (state: FileState | undefined, keptId: string) => {
-        if (state?.status === 'problem' || !state?.record) return
-        const record = state.record as AnyRecord
-        const month = conflict.kind !== 'fi' && LAYOUTS[conflict.kind] === 'month'
-        await this.history.snapshot(conflict.kind, month && record.id !== keptId ? { ...record, id: keptId } : record, 'discarded')
-      }
-      if (keep === 'canonical') {
-        // No original to keep (missing, unreadable): never the only readable version thrown away (B45).
-        if (canonicalState?.status !== 'record' || !canonicalState.record) throw new Error('Oryginału nie ma albo nie da się go odczytać – zachowaj kopię.')
-        await keepAside(copyState, (canonicalState.record as AnyRecord).id)
-        await this.opts.trash(this.abs(conflict.copy.relPath))
-        this.files.delete(conflict.copy.relPath)
-        return
-      }
-      if (!copyState?.record) throw new Error('Kopii nie da się odczytać - można zachować tylko oryginał.')
-      // A newer format is never written over, nor written by this version (B45).
-      if (copyState.readOnly) throw new ReadOnlyError('Kopię zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby ją zachować.')
-      if (canonicalState?.readOnly || canonicalState?.problemKind === 'too-new') throw new ReadOnlyError('Oryginał zapisała nowsza wersja aplikacji – nie zostanie nadpisany; zaktualizuj aplikację.')
-      await keepAside(canonicalState, (copyState.record as AnyRecord).id)
-      // A broken original is moved aside, never overwritten (B45).
-      if (canonicalState?.status === 'problem') await this.setAsideProblem(canonicalState)
-      // The kept version is rewritten (newest updatedAt) at its canonical path; every other file of the pair goes to the bin.
-      let keptPath: string
-      let keptId: string
-      if (conflict.kind === 'fi') {
-        const fi = SCHEMAS.fi.parse({ ...(copyState.record as SettingsFile), updatedAt: this.opts.now() })
-        await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
-        this.fi = fi
-        settingsWritten = true
-        keptPath = SETTINGS_FILE
-        keptId = fi.id
-      } else {
-        const kind = conflict.kind as Collection
-        const record = { ...(copyState.record as AnyRecord), updatedAt: this.opts.now() } as AnyRecord
-        keptPath = recordRelPath(kind, record as unknown as Record<string, unknown>)
-        keptId = record.id
-        await this.writeState(keptPath, kind, record, serializeRecord(kind, record))
-      }
-      for (const side of [conflict.canonical, conflict.copy]) {
-        if (side.relPath === keptPath) continue
-        const state = this.files.get(side.relPath)
-        if (!state) continue
-        const sameRecord = (state.record as { id?: string } | null)?.id === keptId
-        if (state.status !== 'record' || sameRecord) {
-          await this.opts.trash(this.abs(side.relPath))
-          this.files.delete(side.relPath)
-        }
-      }
+      const settingsWritten = await this.resolveOne(conflictId, keep)
+      return this.diff(this.buildViews(), settingsWritten)
     })
-    return this.refresh(undefined, 'local', settingsWritten)
   }
 
-  async trashFile(relPath: string): Promise<ChangeSet | null> {
-    await this.mutex.run(async () => {
+  /**
+   * Many conflicts at once („Zachowaj nowsze” – W23), in the order given, one change set at the end. A group whose copy
+   * could not be kept leaves its other conflicts as they are (nothing newer goes to the bin).
+   */
+  resolveConflicts(items: ReadonlyArray<{ id: string; keep: 'canonical' | 'copy'; group?: string }>): Promise<{ results: ConflictResult[]; change: ChangeSet | null }> {
+    return this.mutex.run(async () => {
+      this.assertWritable()
+      const results: ConflictResult[] = []
+      const failed = new Set<string>()
+      let settingsWritten = false
+      for (const item of items) {
+        if (item.group != null && failed.has(item.group)) {
+          results.push({ id: item.id, skipped: true })
+          continue
+        }
+        try {
+          if (await this.resolveOne(item.id, item.keep)) settingsWritten = true
+          results.push({ id: item.id })
+        } catch (e) {
+          results.push({ id: item.id, error: (e as Error).message })
+          if (item.keep === 'copy' && item.group != null) failed.add(item.group)
+        }
+      }
+      return { results, change: this.diff(this.buildViews(), settingsWritten) }
+    })
+  }
+
+  /**
+   * One conflict resolved inside the queue. True = fi.json was rewritten with the kept copy (the change set carries the
+   * settings: its hash is this store's own).
+   */
+  private async resolveOne(conflictId: string, keep: 'canonical' | 'copy'): Promise<boolean> {
+    let settingsWritten = false
+    const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
+    if (!conflict) throw new Error('Konflikt już nie istnieje (mógł zostać rozwiązany na innym komputerze).')
+    const canonicalState = this.files.get(conflict.canonical.relPath)
+    const copyState = this.files.get(conflict.copy.relPath)
+    // The version let go goes to the history first – it syncs to every computer, the bin does not (B44): a version of
+    // the record kept – a month's plan of another id (B46) too, never a „deleted” record to bring back over the month.
+    const keepAside = async (state: FileState | undefined, keptId: string) => {
+      if (state?.status === 'problem' || !state?.record) return
+      const record = state.record as AnyRecord
+      const month = conflict.kind !== 'fi' && LAYOUTS[conflict.kind] === 'month'
+      await this.history.snapshot(conflict.kind, month && record.id !== keptId ? { ...record, id: keptId } : record, 'discarded')
+    }
+    if (keep === 'canonical') {
+      // No original to keep (missing, unreadable): never the only readable version thrown away (B45).
+      if (canonicalState?.status !== 'record' || !canonicalState.record) throw new Error('Oryginału nie ma albo nie da się go odczytać – zachowaj kopię.')
+      await keepAside(copyState, (canonicalState.record as AnyRecord).id)
+      await this.opts.trash(this.abs(conflict.copy.relPath))
+      this.files.delete(conflict.copy.relPath)
+      return false
+    }
+    if (!copyState?.record) throw new Error('Kopii nie da się odczytać - można zachować tylko oryginał.')
+    // A newer format is never written over, nor written by this version (B45).
+    if (copyState.readOnly) throw new ReadOnlyError('Kopię zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby ją zachować.')
+    if (canonicalState?.readOnly || canonicalState?.problemKind === 'too-new') throw new ReadOnlyError('Oryginał zapisała nowsza wersja aplikacji – nie zostanie nadpisany; zaktualizuj aplikację.')
+    await keepAside(canonicalState, (copyState.record as AnyRecord).id)
+    // A broken original is moved aside, never overwritten (B45).
+    if (canonicalState?.status === 'problem') await this.setAsideProblem(canonicalState)
+    // The kept version is rewritten (newest updatedAt) at its canonical path; every other file of the pair goes to the bin.
+    let keptPath: string
+    let keptId: string
+    if (conflict.kind === 'fi') {
+      const fi = SCHEMAS.fi.parse({ ...(copyState.record as SettingsFile), updatedAt: this.opts.now() })
+      await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
+      this.fi = fi
+      settingsWritten = true
+      keptPath = SETTINGS_FILE
+      keptId = fi.id
+    } else {
+      const kind = conflict.kind as Collection
+      const record = { ...(copyState.record as AnyRecord), updatedAt: this.opts.now() } as AnyRecord
+      keptPath = recordRelPath(kind, record as unknown as Record<string, unknown>)
+      keptId = record.id
+      await this.writeState(keptPath, kind, record, serializeRecord(kind, record))
+    }
+    for (const side of [conflict.canonical, conflict.copy]) {
+      if (side.relPath === keptPath) continue
+      const state = this.files.get(side.relPath)
+      if (!state) continue
+      const sameRecord = (state.record as { id?: string } | null)?.id === keptId
+      if (state.status !== 'record' || sameRecord) {
+        await this.opts.trash(this.abs(side.relPath))
+        this.files.delete(side.relPath)
+      }
+    }
+    return settingsWritten
+  }
+
+  /** A problem file or a conflict copy to the bin: the change from inside the queue, no rescan (W23). */
+  trashFile(relPath: string): Promise<ChangeSet | null> {
+    return this.mutex.run(async () => {
       this.assertWritable()
       const s = this.files.get(relPath)
       if (!s || s.status === 'record') throw new Error('Można usuwać tylko pliki z listy problemów lub kopie konfliktów.')
       await this.opts.trash(this.abs(relPath))
       this.files.delete(relPath)
+      return this.diff(this.buildViews(), false)
     })
-    return this.refresh(undefined, 'local')
   }
 
   // ---------------------------------------------------------------- history
@@ -1170,6 +1599,30 @@ export class DataStore {
       }
       return { change: this.diff(this.buildViews(), false), fi: null }
     })
+  }
+
+  /**
+   * A ZIP of the data (`isDataFile`) as this store has it (W7): a record whose text written from memory is the file's
+   * very bytes (the same hash) goes from memory – no file read, none scanned by the antivirus; any other file (a copy,
+   * a problem, a record its parsing changed – an older or newer version wrote it, a hand edit) is read from the disk:
+   * one gone meanwhile is left out, one that cannot be read (OneDrive) fails the backup – never a backup without it.
+   */
+  async zipData(outFile: string): Promise<ZipResult> {
+    const states = await this.mutex.run(async () => [...this.files.values()].filter((s) => isDataFile(s.relPath)))
+    states.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0))
+    const items = states.map((s): ZipSource => {
+      const { relPath, kind, record, mtimeMs, hash } = s
+      const disk = diskSource(this.abs(relPath), relPath)
+      if (s.status !== 'record' || !record) return disk
+      return {
+        name: relPath,
+        read: () => {
+          const text = serializeRecord(kind, record)
+          return sha1(text) === hash ? { data: Buffer.from(text, 'utf8'), mtime: new Date(mtimeMs) } : disk.read()
+        }
+      }
+    })
+    return writeZipFile(outFile, items)
   }
 
   /** Snapshot of everything currently loaded (used after reconnecting the renderer). */

@@ -151,6 +151,20 @@ describe('zamrażanie (T9), seria, stopnie (D73)', () => {
     expect(advanceGame(late, '2026-10-09T10:00:00Z').months[0]!.days['2026-10-07']!.status).toBe('ok')
   })
 
+  it('porcjami (W16): najwyżej maxDays dni na raz, misja tygodnia po nadrobieniu; miesiąc innej wersji pominięty', () => {
+    // 1 November at noon: 5 October – 30 October to freeze, in portions of 2.
+    const first = advanceGame(world(), '2026-11-01T10:00:00Z', { maxDays: 2 })
+    expect(first.more).toBe(true)
+    expect(Object.keys(first.months[0]!.days)).toEqual(['2026-10-05', '2026-10-06'])
+    expect(first.months[0]!.missions).toEqual([])
+    // October written by a newer version (this one may not write it): November's days go on, the mission comes.
+    const locked = advanceGame(world({ game: first.months }), '2026-11-04T10:00:00Z', { maxDays: 2, locked: new Set(['2026-10']) })
+    expect(locked.months.map((m) => m.month)).toEqual(['2026-11'])
+    expect(Object.keys(locked.months[0]!.days)).toEqual(['2026-11-01', '2026-11-02'])
+    expect(locked.more).toBeUndefined()
+    expect(locked.months[0]!.missions.map((m) => m.week)).toEqual(['2026-W45'])
+  })
+
   it('awans po 30 dniach zgodnych w ostatnich 35; wykonana misja = 3 dni', () => {
     // 30 compliant days from the 5th: the promotion on 3 November.
     const a = advanceGame(world(), '2026-11-05T10:00:00Z')

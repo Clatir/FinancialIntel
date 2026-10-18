@@ -59,7 +59,12 @@ export function CargoPage() {
   const [showArchived, setShowArchived] = useState(false)
   const month = fleet?.month ?? ''
   const sorted = useMemo(() => [...containers].sort((a, b) => Number(a.archived) - Number(b.archived) || monthlyShare(b) - monthlyShare(a) || a.name.localeCompare(b.name)), [containers])
-  const proposals = useMemo(() => (month ? recurringPayments(transactions, month, containers) : []), [transactions, month, containers])
+  // The proposals change with the payees of the containers only – not with a note or an amount (W6).
+  const payees = containers
+    .filter((c) => !c.archived)
+    .map((c) => c.counterparty)
+    .join('\u0001')
+  const proposals = useMemo(() => (month ? recurringPayments(transactions, month, containers) : []), [transactions, month, payees])
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const sim = (change: { add?: ContainerDraft; drop?: string }) =>
     simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)
@@ -234,7 +239,7 @@ function ContainerFields({ c, set, saved }: { c: ContainerDraft; set: (p: Partia
         <CategorySelect value={c.categoryId} onChange={(categoryId) => set({ categoryId })} />
       </Field>
       <Field label="Odbiorca w banku" hint="Płatności tego odbiorcy z importu trafią do tego kontenera (nie do kopert).">
-        <TextField value={c.counterparty} onChange={(counterparty) => set({ counterparty })} maxLength={300} placeholder="jak w wyciągu, np. NETFLIX.COM" data-testid="container-counterparty" />
+        <TextField commit value={c.counterparty} onChange={(counterparty) => set({ counterparty })} maxLength={300} placeholder="jak w wyciągu, np. NETFLIX.COM" data-testid="container-counterparty" />
       </Field>
       <Field label="Okres" hint="Puste = bez końca; rata z ostatnim miesiącem.">
         <div className="flex items-center gap-2 text-muted">
@@ -245,7 +250,7 @@ function ContainerFields({ c, set, saved }: { c: ContainerDraft; set: (p: Partia
         </div>
       </Field>
       <Field label="Notatka">
-        <TextArea value={c.note} onChange={(note) => set({ note })} rows={2} />
+        <TextArea commit value={c.note} onChange={(note) => set({ note })} rows={2} />
       </Field>
     </div>
   )
@@ -331,9 +336,10 @@ function ContainerEditor({ c, readOnly, onDeleted, sim }: { c: Container; readOn
 
 /** Payments of the counterparty typed by hand or imported before the container: link them in one click. */
 function LinkPayments({ c }: { c: Container }) {
-  // Recomputed with the records (the list changes when they are linked).
-  useRecordList('transactions')
-  const n = paymentsToLink(c.counterparty)
+  // Counted when the operations, the payee or the budget's start change – never at every render (W6).
+  const transactions = useRecordList('transactions')
+  const start = useData((s) => s.fi?.settings.budget.start ?? null)
+  const n = useMemo(() => paymentsToLink(c.counterparty, transactions, start), [c.counterparty, transactions, start])
   if (!n) return null
   return (
     <button type="button" className="self-start text-[11.5px] text-accent hover:underline" onClick={() => linkPayments(c.id, c.counterparty)} data-testid="container-link">

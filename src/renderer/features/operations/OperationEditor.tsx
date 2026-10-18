@@ -206,11 +206,11 @@ export function OperationEditor({ id }: { id: string }) {
         />
       </Field>
       <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'}>
-        <TextField value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
+        <TextField commit value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
       </Field>
       {(t.title || t.kind === 'transfer' || t.kind === 'income') && (
         <Field label="Tytuł">
-          <TextField value={t.title} onChange={(title) => patch({ title })} maxLength={1000} data-testid="operation-title" />
+          <TextField commit value={t.title} onChange={(title) => patch({ title })} maxLength={1000} data-testid="operation-title" />
         </Field>
       )}
 
@@ -317,6 +317,7 @@ export function OperationEditor({ id }: { id: string }) {
             {asksImpulse(t, orders) && !t.impulse && <span className="text-[11.5px] text-accent">od {plnText(orders.impulseThreshold)} zł: plan czy impuls?</span>}
           </div>
           <TextArea
+            commit
             value={t.logNote}
             onChange={(logNote) => patch({ logNote })}
             rows={2}
@@ -327,7 +328,7 @@ export function OperationEditor({ id }: { id: string }) {
       )}
 
       <Field label="Notatka">
-        <TextArea value={t.note} onChange={(note) => patch({ note })} rows={2} data-testid="operation-note" />
+        <TextArea commit value={t.note} onChange={(note) => patch({ note })} rows={2} data-testid="operation-note" />
       </Field>
 
       {t.bank && (

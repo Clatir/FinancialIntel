@@ -10,12 +10,19 @@ import { CREATED, exists, freshStore, sampleMonth, sampleTransaction, tempDir } 
 import { CONFLICT_COPY_MESSAGE } from '@shared/api'
 
 const realReadFile = fs.readFile
-/** Reads of files whose path ends with `suffix` fail like a file OneDrive has not brought yet. */
-const failReads = (suffix: string) =>
-  vi.spyOn(fs, 'readFile').mockImplementation(((path: Parameters<typeof fs.readFile>[0], ...rest: unknown[]) => {
-    if (String(path).endsWith(suffix)) return Promise.reject(Object.assign(new Error('EIO: i/o error, read'), { code: 'EIO' }))
-    return (realReadFile as (...a: unknown[]) => Promise<unknown>).call(fs, path, ...rest)
-  }) as typeof fs.readFile)
+const realOpen = fs.open
+/**
+ * Reads of files whose path ends with `suffix` fail like a file OneDrive has not brought yet – a file known before is
+ * read by `readFile`, a new one through `open` (W24).
+ */
+const failReads = (suffix: string) => {
+  const fail = () => Promise.reject(Object.assign(new Error('EIO: i/o error, read'), { code: 'EIO' }))
+  const read = vi.spyOn(fs, 'readFile').mockImplementation(((path: Parameters<typeof fs.readFile>[0], ...rest: unknown[]) =>
+    String(path).endsWith(suffix) ? fail() : (realReadFile as (...a: unknown[]) => Promise<unknown>).call(fs, path, ...rest)) as typeof fs.readFile)
+  const open = vi.spyOn(fs, 'open').mockImplementation(((path: Parameters<typeof fs.open>[0], ...rest: unknown[]) =>
+    String(path).endsWith(suffix) ? fail() : (realOpen as (...a: unknown[]) => Promise<unknown>).call(fs, path, ...rest)) as typeof fs.open)
+  return { mockRestore: () => (read.mockRestore(), open.mockRestore()) }
+}
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -172,5 +179,42 @@ describe('folder danych: odporność (1.4.2)', () => {
     await store.historyRestore('months', mine.id, kept[0]!.file)
     expect((await store.snapshot()).records.months.map((e) => [e.record.id, e.record.salary])).toEqual([[mine.id, 400000]])
     expect((await store.snapshot()).conflicts).toEqual([])
+  })
+})
+
+describe('folder danych: zapis i usuwanie paczkami (1.4.3, W1, W8)', () => {
+  it('wiele rekordów jednym wywołaniem: jeden zestaw zmian, błędny rekord nie zatrzymuje reszty', async () => {
+    const store = await freshStore()
+    const a = sampleTransaction({ note: 'a' })
+    const b = sampleTransaction({ date: '2026-03-17', note: 'b' })
+    const bad = { ...sampleTransaction(), amount: 1.5 }
+    const { results, changes } = await store.saveRecords('transactions', [a, bad, b])
+    expect(results.map((r) => [r.id, !!r.entry, !!r.error])).toEqual([
+      [a.id, true, false],
+      [bad.id, false, true],
+      [b.id, true, false]
+    ])
+    expect(changes).toHaveLength(1)
+    expect(changes[0]!.upserts.map((u) => u.entry.record.id).sort()).toEqual([a.id, b.id].sort())
+    // Deleted with one call: a record that is not there is no error.
+    const missing = sampleTransaction().id
+    const del = await store.deleteRecords('transactions', [a.id, missing])
+    expect(del.results).toEqual([{ id: a.id }, { id: missing }])
+    expect(del.change!.removals).toEqual([{ collection: 'transactions', id: a.id }])
+    expect((await store.snapshot()).records.transactions.map((e) => e.record.id)).toEqual([b.id])
+  })
+
+  it('rekord usunięty właśnie na innym komputerze: jego usunięcie idzie do okna osobno, „z zewnątrz” (B49)', async () => {
+    const store = await freshStore()
+    const a = sampleTransaction({ note: 'a' })
+    await store.saveRecord('transactions', a)
+    await fs.rm(join(store.root, ...recordRelPath('transactions', a).split('/')))
+    const c = sampleTransaction({ date: '2026-03-18', note: 'c' })
+    const { results, changes } = await store.saveRecords('transactions', [{ ...a, note: 'moja' }, c])
+    expect(results[0]!.error).toMatch(/usunięty na innym komputerze/)
+    expect(changes.map((ch) => [ch.origin, ch.removals.map((r) => r.id), ch.upserts.map((u) => u.entry.record.id)])).toEqual([
+      ['external', [a.id], []],
+      ['local', [], [c.id]]
+    ])
   })
 })

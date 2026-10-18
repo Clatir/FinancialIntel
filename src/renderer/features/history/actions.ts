@@ -2,7 +2,7 @@
 import type { HistoryKind } from '@shared/api'
 import type { Collection } from '@shared/paths'
 import { api, errorMessage } from '../../lib/api'
-import { adoptSettings, deleteRecord, flushSaves } from '../../store/data'
+import { adoptSettings, deleteRecord, deleteRecords, flushSaves } from '../../store/data'
 import { toast } from '../../store/ui'
 
 /** Make a kept version current: pending edits are written first, the current version goes to the history. */
@@ -43,21 +43,11 @@ export async function deleteWithUndo(collection: Collection, id: string, label: 
 
 /**
  * Delete several records with one "Cofnij" (e.g. duplicates after an import): the undo restores each from the
- * version its deletion kept (after `onUndo` – what the caller changed with them, 1.2.1). A deletion that fails stops
- * the rest; those already deleted still get the undo.
+ * version its deletion kept (after `onUndo` – what the caller changed with them, 1.2.1). Deleted with one call (W1); a
+ * record whose file the disk refused stays (the error said after), those deleted still get the undo.
  */
 export async function deleteManyWithUndo(collection: Collection, ids: readonly string[], label: string, text: (n: number) => string, onUndo?: () => void): Promise<void> {
-  const deleted: string[] = []
-  let error: unknown = null
-  for (const id of ids) {
-    try {
-      await deleteRecord(collection, id)
-      deleted.push(id)
-    } catch (e) {
-      error = e
-      break
-    }
-  }
+  const { deleted, error } = await deleteRecords(collection, ids)
   if (deleted.length)
     toast(text(deleted.length), 'success', 10000, {
       label: 'Cofnij',
@@ -65,6 +55,7 @@ export async function deleteManyWithUndo(collection: Collection, ids: readonly s
         void (async () => {
           // What changed with the deletion (a merged record, a moved link) goes back first.
           onUndo?.()
+          if (!(await flushSaves())) return toast('Nie udało się zapisać bieżących zmian – spróbuj ponownie za chwilę.', 'error', 7000)
           let missing = 0
           for (const id of deleted) {
             const last = (await api.historyList(collection, id)).find((e) => e.reason === 'delete')
@@ -73,7 +64,6 @@ export async function deleteManyWithUndo(collection: Collection, ids: readonly s
               continue
             }
             try {
-              if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – spróbuj ponownie za chwilę.')
               const fi = await api.historyRestore(collection, id, last.file)
               if (fi) adoptSettings(fi)
             } catch (e) {
@@ -84,5 +74,5 @@ export async function deleteManyWithUndo(collection: Collection, ids: readonly s
           toast(missing ? `Przywrócono ${deleted.length - missing} z ${deleted.length}: ${label}.` : `Przywrócono: ${label}.`, missing ? 'error' : 'success', 5000)
         })()
     })
-  if (error) throw error
+  if (error) throw new Error(error)
 }

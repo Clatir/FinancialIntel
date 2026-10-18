@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useShallow } from 'zustand/shallow'
 import { findDuplicates, mergeDuplicate, type DuplicateGroup } from '@shared/import/duplicates'
 import type { Transaction } from '@shared/schema'
 import { errorMessage } from '../../lib/api'
 import { plural } from '../../lib/format'
-import { replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
+import { listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
 import { signedPln } from '../../components/fields'
@@ -19,21 +20,37 @@ type Duplicates = { groups: DuplicateGroup[]; byId: Record<string, Transaction> 
 /** One computation for every screen showing it (the Operations link, the import panel): the last inputs and result. */
 let last: { inputs: readonly unknown[]; out: Duplicates } | null = null
 
-/** The duplicates among the saved operations (drafts left out): recomputed when the operations change. */
+type DataState = ReturnType<typeof useData.getState>
+const duplicateInputs = (s: DataState) => [s.records.transactions, s.records.dockings, s.fi?.settings.import.notDuplicates ?? NO_DISMISSED, s.drafts] as const
+
+/** The duplicates among the saved operations (drafts left out): computed once for the inputs of now. */
+function duplicatesNow(): Duplicates {
+  const inputs = duplicateInputs(useData.getState())
+  if (last && last.inputs.every((x, i) => x === inputs[i])) return last.out
+  const [records, dockings, dismissed, drafts] = inputs
+  const all = listOf(records)
+  const txs = Object.keys(drafts).length ? all.filter((t) => !drafts[t.id]) : all
+  const out = { groups: findDuplicates(txs, listOf(dockings), dismissed), byId: Object.fromEntries(txs.map((t) => [t.id, t])) }
+  last = { inputs, out }
+  return out
+}
+
+/** The duplicates among the saved operations: recomputed when the operations change (the import screen). */
 export function useDuplicates(): Duplicates {
-  const records = useData((s) => s.records.transactions)
-  const drafts = useData((s) => s.drafts)
-  const dismissed = useData((s) => s.fi?.settings.import.notDuplicates ?? NO_DISMISSED)
-  const dockings = useRecordList('dockings')
-  return useMemo(() => {
-    const inputs = [records, drafts, dismissed, dockings]
-    if (last && last.inputs.every((x, i) => x === inputs[i])) return last.out
-    const byId: Record<string, Transaction> = {}
-    for (const [id, e] of Object.entries(records)) if (!drafts[id]) byId[id] = e.record
-    const out = { groups: findDuplicates(Object.values(byId), dockings, dismissed), byId }
-    last = { inputs, out }
-    return out
-  }, [records, drafts, dismissed, dockings])
+  const inputs = useData(useShallow(duplicateInputs))
+  // `inputs` is the key (read inside from the store's state of now).
+  return useMemo(() => duplicatesNow(), [inputs])
+}
+
+/** How many duplicates (the Operations link – W4): counted a moment after the last change, never while typing. */
+export function useDuplicateCount(delayMs = 1500): number {
+  const inputs = useData(useShallow(duplicateInputs))
+  const [n, setN] = useState(() => (last ? last.out.groups.length : 0))
+  useEffect(() => {
+    const t = setTimeout(() => setN(duplicatesNow().groups.length), delayMs)
+    return () => clearTimeout(t)
+  }, [inputs, delayMs])
+  return n
 }
 
 const DIFFERS = { '': '', name: 'inna nazwa', amount: 'inna kwota', both: 'inna nazwa i kwota' } as const

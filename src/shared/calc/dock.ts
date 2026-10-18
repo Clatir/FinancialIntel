@@ -78,14 +78,16 @@ export interface DeliveriesInput {
 const STATE_ORDER: Record<DeliveryState, number> = { pending: 0, waiting: 1, docked: 2, skipped: 3, 'before-start': 4 }
 
 export function deliveries(o: DeliveriesInput): Delivery[] {
-  const txById = new Map(o.transactions.map((t) => [t.id, t]))
   const dockingByTx = dockingsByTx(o.dockings)
+  // Only the operations a delivery can be about (W13): the trading account's and the docked ones – never a map of all.
+  const txById = new Map<string, Transaction>()
+  for (const t of o.transactions) if (t.kind === 'trading' || dockingByTx.has(t.id)) txById.set(t.id, t)
   // An entry is docked by the docking that counts for its operation (the engine's).
   const dockingByEntry = new Map<string, Docking>()
   for (const d of dockingByTx.values()) if (d.ictjEntryId && !dockingByEntry.has(d.ictjEntryId)) dockingByEntry.set(d.ictjEntryId, d)
   const counted = (date: string) => o.start != null && date >= o.start
   // Operations of the trading account, not docked with an entry yet (a docking without an entry can still get one).
-  const free = new Set(o.transactions.filter((t) => t.kind === 'trading' && t.amount !== 0 && !dockingByTx.get(t.id)?.ictjEntryId).map((t) => t.id))
+  const free = new Set([...txById.values()].filter((t) => t.kind === 'trading' && t.amount !== 0 && !dockingByTx.get(t.id)?.ictjEntryId).map((t) => t.id))
   const out: Delivery[] = []
   const base = (e: IctjEntry): Omit<Delivery, 'state' | 'transaction' | 'docking' | 'wallet' | 'mismatch'> => ({
     key: `ictj:${e.id}`,
