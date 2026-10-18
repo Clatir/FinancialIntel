@@ -156,6 +156,8 @@ export const containerSchema = z.looseObject({
   until: isoMonth.nullable().default(null),
   loanId: ulidSchema.nullable().default(null),
   archived: z.boolean().default(false),
+  /** When it was archived (1.4.2, B56): it counts until that month's end; none = archived before 1.4.2 – never counts. */
+  archivedAt: isoDateTime.nullable().catch(null).default(null),
   note: text
 })
 export type Container = z.infer<typeof containerSchema>

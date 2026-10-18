@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { lootDecision, planFor } from '@shared/calc/plan'
-import { newId } from '@shared/ids'
+import { addMonths, warsawNow } from '@shared/calc/dates'
+import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
 import { addRecord, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -17,9 +17,16 @@ export function usePlans(): MonthPlan[] {
 
 const allPlans = () => plansOf(useData.getState().records.months ?? NO_PLANS)
 
+/** A month's own plan from the plan in force (its salary and envelopes – never another month's loot decision). */
+const ownPlan = (month: string, from: MonthPlan | null, now: string): MonthPlan =>
+  monthPlanSchema.parse({ schemaVersion: SCHEMA_VERSION, id: monthPlanId(month), createdAt: now, updatedAt: now, month, salary: from?.salary ?? 0, envelopes: { ...(from?.envelopes ?? {}) } })
+
+const sameEnvelopes = (a: Record<string, number>, b: Record<string, number>) => Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v)
+
 /**
  * Change a month's own plan. A month living on an earlier plan gets its own first – a copy of the salary and the
- * envelopes in force (never the earlier month's loot decision), so the change does not reach other months.
+ * envelopes in force – so the change does not reach other months (T46); a month gone by changed, the next month living
+ * on the plan in force keeps it as its own first (B11): the current month and those after never change with it.
  */
 export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): void {
   if (useData.getState().status?.readOnly) {
@@ -27,15 +34,17 @@ export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): void {
     return
   }
   const plans = allPlans()
-  const own = plans.find((p) => p.month === month)
-  if (own) {
-    updateRecord('months', own.id, fn)
-    return
-  }
-  const from = planFor(plans, month)
   const now = new Date().toISOString()
-  const base = monthPlanSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, month, salary: from?.salary ?? 0, envelopes: { ...(from?.envelopes ?? {}) } })
-  addRecord('months', fn(base))
+  const own = plans.find((p) => p.month === month)
+  const base = own ?? ownPlan(month, planFor(plans, month), now)
+  const changed = fn(base)
+  const next = addMonths(month, 1)
+  if ((changed.salary !== base.salary || !sameEnvelopes(changed.envelopes, base.envelopes)) && month < warsawNow().month && !plans.some((p) => p.month === next)) {
+    const inForce = planFor(plans, next)
+    if (inForce) addRecord('months', ownPlan(next, inForce, now))
+  }
+  if (own) updateRecord('months', own.id, fn)
+  else addRecord('months', changed)
 }
 
 export const setSalary = (month: string, salary: number) => editPlan(month, (p) => ({ ...p, salary }))

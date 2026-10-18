@@ -5,7 +5,7 @@
  */
 import { forwardRef, useState } from 'react'
 import { formatPln } from '@shared/format'
-import { parseAmountInput, parseClockInput, parseDateInput } from '../lib/format'
+import { parseAmountInput, parseClockInput, parseDateInput, parseMonthInput } from '../lib/format'
 import { toast } from '../store/ui'
 import { cx } from './ui'
 
@@ -136,6 +136,58 @@ export function DateField({
         setDraft(null)
       }}
       onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+    />
+  )
+}
+
+/**
+ * A month 'RRRR-MM' (typed also as 03.2027 or 3/2027); empty = none when `allowEmpty`. Saved on leaving the field or
+ * Enter (B1): a month half typed never saves, one that cannot be read goes back to the saved one with a message.
+ */
+export function MonthField({
+  value,
+  onChange,
+  allowEmpty,
+  className,
+  placeholder = 'RRRR-MM',
+  ...rest
+}: {
+  value: string | null
+  onChange: (month: string | null) => void
+  allowEmpty?: boolean
+  className?: string
+  placeholder?: string
+  'aria-label'?: string
+  'data-testid'?: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const parsed = draft == null ? value : parseMonthInput(draft)
+  const invalid = draft != null && (parsed === undefined || (parsed === null && !allowEmpty))
+  return (
+    <input
+      className={cx('input num', className)}
+      spellCheck={false}
+      value={draft ?? value ?? ''}
+      placeholder={placeholder}
+      aria-invalid={invalid}
+      aria-label={rest['aria-label']}
+      data-testid={rest['data-testid']}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.currentTarget.value)}
+      onBlur={() => {
+        if (draft != null) {
+          if (invalid) toast(`Nieprawidłowy miesiąc – zostaje ${value ? 'poprzedni' : 'pusty'} (wpisz RRRR-MM${allowEmpty ? ' albo zostaw puste' : ''}).`, 'error')
+          else if (parsed !== value) onChange(parsed ?? null)
+        }
+        setDraft(null)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') {
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
     />
   )
 }

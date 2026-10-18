@@ -7,16 +7,17 @@ import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/sch
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
-import { AmountField, DateField, plnText } from '../../components/fields'
+import { AmountField, DateField, MonthField, plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
-import { Empty, Field, Panel, Segmented, TextArea, TextField, Toggle, cx } from '../../components/ui'
+import { Empty, Field, NameInput, NumberField, Panel, Segmented, TextArea, TextField, Toggle, cx } from '../../components/ui'
+import { toast } from '../../store/ui'
 import { IconPlus } from '../../components/icons'
 import { DeleteButton } from '../history/DeleteButton'
 import { HistoryButton } from '../history/HistoryDialog'
 import { AccountSelect, CategorySelect } from '../operations/pickers'
 import { monthLabel } from '../../lib/format'
-import { addContainer, deleteContainer, draftFromPayment, emptyDraft, linkPayments, patchContainer, paymentsToLink, type ContainerDraft } from './actions'
+import { addContainer, archiveContainer, deleteContainer, draftFromPayment, emptyDraft, linkPayments, patchContainer, paymentsToLink, type ContainerDraft } from './actions'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const TYPE_LABEL: Record<ContainerType, string> = { fixed: 'stały', subscription: 'abonament', installment: 'rata' }
@@ -49,6 +50,12 @@ export function CargoPage() {
   const readOnly = useData((s) => !!s.status?.readOnly)
   const [selected, setSelected] = useState<string | null>(null)
   const [draft, setDraft] = useState<ContainerDraft | null>(null)
+  // Each new draft is a new form (its own „inny…” mode).
+  const [draftKey, setDraftKey] = useState(0)
+  const openDraft = (d: ContainerDraft) => {
+    setDraft(d)
+    setDraftKey((k) => k + 1)
+  }
   const [showArchived, setShowArchived] = useState(false)
   const month = fleet?.month ?? ''
   const sorted = useMemo(() => [...containers].sort((a, b) => Number(a.archived) - Number(b.archived) || monthlyShare(b) - monthlyShare(a) || a.name.localeCompare(b.name)), [containers])
@@ -76,7 +83,7 @@ export function CargoPage() {
                   <label className="flex items-center gap-1 text-[11px] text-muted">
                     <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.currentTarget.checked)} /> zarchiwizowane
                   </label>
-                  <button className="btn h-[22px]" disabled={readOnly} onClick={() => setDraft(emptyDraft())} data-testid="cargo-add">
+                  <button className="btn h-[22px]" disabled={readOnly} onClick={() => openDraft(emptyDraft())} data-testid="cargo-add">
                     <IconPlus size={12} /> Kontener
                   </button>
                 </>
@@ -106,8 +113,8 @@ export function CargoPage() {
                 </div>
               )}
             </Panel>
-            {draft && <NewContainer draft={draft} setDraft={setDraft} sim={sim(draft.amount > 0 ? { add: draft } : {})} limitPct={fleet.cargo.limitPct} onAdded={(id) => setSelected(id)} />}
-            {current && <ContainerEditor c={current} readOnly={readOnly} onDeleted={() => setSelected(null)} sim={sim({ drop: current.id })} />}
+            {draft && <NewContainer key={draftKey} draft={draft} setDraft={setDraft} sim={sim(draft.amount > 0 ? { add: draft } : {})} limitPct={fleet.cargo.limitPct} onAdded={(id) => setSelected(id)} />}
+            {current && <ContainerEditor key={current.id} c={current} readOnly={readOnly} onDeleted={() => setSelected(null)} sim={sim({ drop: current.id })} />}
           </div>
           <div className="flex min-w-0 flex-col">
             <LoadLine fleet={fleet} />
@@ -123,7 +130,7 @@ export function CargoPage() {
                       <span className="min-w-0 flex-1 truncate">{p.label}</span>
                       <span className="text-[11px] text-muted">{cycleLabel(p.cycleMonths)}</span>
                       <span className="num w-[90px] text-right">{zl(p.amount)}</span>
-                      <button className="btn h-[22px]" disabled={readOnly} onClick={() => setDraft(draftFromPayment(p))} data-testid="cargo-proposal-add">
+                      <button className="btn h-[22px]" disabled={readOnly} onClick={() => openDraft(draftFromPayment(p))} data-testid="cargo-proposal-add">
                         Do ładowni
                       </button>
                     </div>
@@ -153,13 +160,19 @@ function SimulationLine({ sim, verb }: { sim: CargoSimulation; verb: string }) {
   )
 }
 
-function ContainerFields({ c, set }: { c: ContainerDraft; set: (p: Partial<ContainerDraft>) => void }) {
-  const custom = !CYCLES.some(([m]) => m === c.cycleMonths)
+function ContainerFields({ c, set, saved }: { c: ContainerDraft; set: (p: Partial<ContainerDraft>) => void; saved?: boolean }) {
+  // „inny…” chosen stays chosen while its number is typed (B1): the mode is the field's, not read from the value.
+  const [otherCycle, setOtherCycle] = useState(() => !CYCLES.some(([m]) => m === c.cycleMonths))
+  const custom = otherCycle || !CYCLES.some(([m]) => m === c.cycleMonths)
   const next = nextPayment(c, c.dueMonth)
   return (
     <div className="flex flex-col gap-2 text-[12px]">
       <Field label="Nazwa">
-        <TextField value={c.name} onChange={(name) => set({ name })} maxLength={80} placeholder="np. Czynsz, Netflix, OC" data-testid="container-name" />
+        {saved ? (
+          <NameInput value={c.name} onChange={(name) => set({ name })} emptyMessage="Kontener musi mieć nazwę – zostaje poprzednia." maxLength={80} aria-label="Nazwa kontenera" data-testid="container-name" />
+        ) : (
+          <TextField value={c.name} onChange={(name) => set({ name })} maxLength={80} placeholder="np. Czynsz, Netflix, OC" data-testid="container-name" />
+        )}
       </Field>
       <Field label="Rodzaj">
         <Segmented size="sm" value={c.type as ContainerType} onChange={(type) => set({ type })} options={CONTAINER_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] }))} aria-label="Rodzaj kontenera" />
@@ -172,7 +185,18 @@ function ContainerFields({ c, set }: { c: ContainerDraft; set: (p: Partial<Conta
       </Field>
       <Field label="Cykl" hint={c.cycleMonths > 1 ? `Opłata okresowa: co miesiąc z energii idzie rata do zbiornika (${zl(Math.round(c.amount / c.cycleMonths))} – odkładka).` : undefined}>
         <div className="flex items-center gap-2">
-          <select className="input w-[150px]" value={custom ? 0 : c.cycleMonths} onChange={(e) => set({ cycleMonths: Number(e.currentTarget.value) || 4 })} aria-label="Cykl" data-testid="container-cycle">
+          <select
+            className="input w-[150px]"
+            value={custom ? 0 : c.cycleMonths}
+            onChange={(e) => {
+              // „inny…” only opens the field: nothing is saved before its number is typed.
+              const n = Number(e.currentTarget.value)
+              setOtherCycle(!n)
+              if (n) set({ cycleMonths: n })
+            }}
+            aria-label="Cykl"
+            data-testid="container-cycle"
+          >
             {CYCLES.map(([m, label]) => (
               <option key={m} value={m}>
                 {label}
@@ -181,7 +205,16 @@ function ContainerFields({ c, set }: { c: ContainerDraft; set: (p: Partial<Conta
             <option value={0}>inny…</option>
           </select>
           {custom && (
-            <input className="input num w-[60px] text-right" value={c.cycleMonths} onChange={(e) => set({ cycleMonths: Math.min(60, Math.max(1, Number(e.currentTarget.value) || 1)) })} aria-label="Miesięcy" />
+            <NumberField
+              className="w-[60px]"
+              value={c.cycleMonths}
+              commitOnBlur
+              isValid={(v) => v != null && Number.isInteger(v) && v >= 1 && v <= 60}
+              onChange={(v) => v != null && set({ cycleMonths: v })}
+              onReject={() => toast('Cykl to od 1 do 60 miesięcy – zostaje poprzedni.', 'error')}
+              aria-label="Miesięcy"
+              data-testid="container-cycle-months"
+            />
           )}
         </div>
       </Field>
@@ -206,9 +239,9 @@ function ContainerFields({ c, set }: { c: ContainerDraft; set: (p: Partial<Conta
       <Field label="Okres" hint="Puste = bez końca; rata z ostatnim miesiącem.">
         <div className="flex items-center gap-2 text-muted">
           od
-          <input className="input w-[90px]" placeholder="RRRR-MM" value={c.from ?? ''} onChange={(e) => set({ from: /^\d{4}-(0[1-9]|1[0-2])$/.test(e.currentTarget.value) ? e.currentTarget.value : null })} aria-label="Od miesiąca" />
+          <MonthField className="w-[90px]" value={c.from} allowEmpty onChange={(from) => set({ from })} aria-label="Od miesiąca" data-testid="container-from" />
           do
-          <input className="input w-[90px]" placeholder="RRRR-MM" value={c.until ?? ''} onChange={(e) => set({ until: /^\d{4}-(0[1-9]|1[0-2])$/.test(e.currentTarget.value) ? e.currentTarget.value : null })} aria-label="Do miesiąca" />
+          <MonthField className="w-[90px]" value={c.until} allowEmpty onChange={(until) => set({ until })} aria-label="Do miesiąca" data-testid="container-until" />
         </div>
       </Field>
       <Field label="Notatka">
@@ -282,9 +315,9 @@ function ContainerEditor({ c, readOnly, onDeleted, sim }: { c: Container; readOn
       }
     >
       <fieldset disabled={readOnly} className="flex flex-col gap-2">
-        <ContainerFields c={c} set={(p) => patchContainer(c.id, p)} />
+        <ContainerFields c={c} set={(p) => patchContainer(c.id, p)} saved />
         {c.counterparty.trim() && <LinkPayments c={c} />}
-        <Toggle checked={c.archived} onChange={(archived) => patchContainer(c.id, { archived })} label="Zarchiwizowany (zrzucony z ładowni)" data-testid="container-archived" />
+        <Toggle checked={c.archived} onChange={(archived) => archiveContainer(c, archived)} label="Zarchiwizowany (zrzucony z ładowni)" data-testid="container-archived" />
         {!c.archived && (
           <div className="border-l-2 border-line-strong pl-2">
             <span className="label">Symulacja zrzutu</span>
@@ -342,7 +375,8 @@ function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container
           {fleet.tanks.map((t) => {
             const c = containers.find((x) => x.id === t.containerId)
             const pos = c ? cyclePosition(c, fleet.month) : null
-            const expected = c && pos ? sum(sinkingSchedule(c.amount, c.cycleMonths).slice(0, pos.index)) : null
+            // The plan with this month's installment (the engine takes it on the 1st); a cycle paid already has no gap (B6).
+            const expected = c && pos && !t.paidDue ? sum(sinkingSchedule(c.amount, c.cycleMonths).slice(0, pos.index + 1)) : null
             const short = expected != null ? expected - t.amount : 0
             const months = monthsBetween(fleet.month, t.dueMonth)
             return (
@@ -358,6 +392,11 @@ function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container
                   </span>
                 </div>
                 <Meter value={t.amount} max={t.due} />
+                {t.paidDue && (
+                  <span className="text-[11px] text-dim" data-testid="cargo-tank-paid">
+                    Opłata za {monthLabel(t.paidDue)} zapłacona – zbiornik zbiera na następny termin.
+                  </span>
+                )}
                 {short > 0 && <span className="text-[11px] text-accent">Za plan o {zl(short)} – kolejne raty będą większe.</span>}
               </div>
             )

@@ -174,8 +174,34 @@ export function nextPaymentOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'd
   return at(cyclePosition(c, addMonths(due, 1)).dueMonth)
 }
 
-/** A container counts in this month: not archived, between its `from` and `until`. */
-export const activeIn = (c: Pick<Container, 'archived' | 'from' | 'until'>, month: string): boolean => !c.archived && (c.from == null || c.from <= month) && (c.until == null || month <= c.until)
+/** The next payment still to make (B55): when this cycle's (`paidDue` – its due month) is paid already, the one after it. */
+export function nextUnpaidOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'dueDay'>, today: string, paidDue: string | null | undefined): string {
+  const date = nextPaymentOf(c, today)
+  return paidDue && date.slice(0, 7) === paidDue ? nextPaymentOf(c, addDays(date, 1)) : date
+}
+
+/**
+ * The cycle (its due month) a payment of a periodic fee in `month` closes (B55): the due month's, or – a cycle of 3
+ * months or more – the next due month's when paid the month before it (early: the 1st on a Monday); null = paid late.
+ */
+export function paidCycleOf(c: Pick<Container, 'cycleMonths' | 'dueMonth'>, month: string): string | null {
+  const due = cyclePosition(c, month).dueMonth
+  return due === month || (c.cycleMonths >= 3 && addMonths(month, 1) === due) ? due : null
+}
+
+/** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
+const archivedMonth = (c: { archived: boolean; archivedAt?: string | null }): string | null => (c.archived && c.archivedAt ? warsawNow(c.archivedAt).month : null)
+
+/**
+ * A container counts in this month: between its `from` and `until`, not archived – archived from 1.4.2 (`archivedAt`),
+ * it still counts until that month's end (B56: archiving does not rewrite the months before).
+ */
+export const activeIn = (c: Pick<Container, 'archived' | 'from' | 'until'> & { archivedAt?: string | null }, month: string): boolean =>
+  (!c.archived || (archivedMonth(c) ?? '') >= month) && (c.from == null || c.from <= month) && (c.until == null || month <= c.until)
+
+/** The container's life is over by `month` (its `until` or its archiving before it): its tank has nothing to wait for. */
+const lifeOver = (c: Pick<Container, 'archived' | 'until'> & { archivedAt?: string | null }, month: string): boolean =>
+  (c.until != null && c.until < month) || (c.archived && (archivedMonth(c) ?? '') < month)
 
 /** The cargo's mass: fixed costs a month (periodic fees by their monthly share) as a % of the salary; the load line 40%. */
 export function cargoMass(containers: readonly Container[], month: string, salary: number | null, limitPct: number): FleetState['cargo'] {
@@ -319,10 +345,12 @@ export interface Moves {
 
 export interface FleetEvent {
   date: string
-  /** 'goal' = a goal's money moved out (to the shields or another goal – 1.4.2). */
-  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'month-end' | 'loot' | 'goal' | TxKind
+  /** 'goal' = a goal's money moved out (to the shields or another goal – 1.4.2); 'tank' = a tank's rest back to the shields after its fee's life (1.4.2). */
+  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'month-end' | 'loot' | 'goal' | 'tank' | TxKind
   amount: number
   txId?: string
+  /** 'loot': the month whose loot it splits (1.4.2, B10). */
+  ref?: string
   moves: Moves
 }
 
@@ -350,7 +378,8 @@ export interface FleetState {
   /** Every goal, archived too; `takes` = it takes money today (the loot's and an expense's choice – B13, N1). */
   goals: Array<{ id: string; name: string; amount: number; target: number; priority: number; takes: boolean }>
   energy: number
-  tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; due: number }>
+  /** The periodic fees' tanks: `dueMonth` = the next payment still to make; `paidDue` = this cycle's due month when paid already (B6, B55). */
+  tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; paidDue: string | null; due: number }>
   taxHold: number
   /** The household members' advances held on the accounts (D80): a layer, never the ship's money. */
   deposit: number
@@ -618,8 +647,18 @@ export function computeFleet(input: FleetInput): FleetState {
   // salary already (T45), the start pays only the rest.
   // A periodic fee is its tank's, never the salary's.
   const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
+  /** The cycles (due months) of each periodic fee paid already (B55). */
+  const paidCycles = new Map<string, Set<string>>()
   const startMonthSpent = start ? sum(txs.filter((t) => monthOf(t.date) === monthOf(start) && t.date < start && !(t.containerId && periodicIds.has(t.containerId))).map(costOf)) : 0
   const payMonth = (m: string, date: string) => {
+    // A periodic fee's life over (its `until`, its archiving): what its tank still holds goes back to the shields (B56).
+    for (const c of containers) {
+      const tank = tanks.get(c.id) ?? 0
+      if (c.cycleMonths <= 1 || !tank || !lifeOver(c, m)) continue
+      tanks.set(c.id, 0)
+      shields += tank
+      record({ date, kind: 'tank', amount: tank, moves: { tanks: { [c.id]: -tank }, shields: tank } })
+    }
     const salary = salaryOf(m)
     if (salary != null && salary > 0) {
       const due = start && m === monthOf(start) ? Math.max(0, salary - startMonthSpent) : salary
@@ -636,6 +675,8 @@ export function computeFleet(input: FleetInput): FleetState {
     // The tanks of the periodic fees, from this month's energy.
     for (const c of containers) {
       if (c.cycleMonths <= 1 || !activeIn(c, m)) continue
+      // This cycle paid already (early, B55): nothing more to collect for it.
+      if (paidCycles.get(c.id)?.has(cyclePosition(c, m).dueMonth)) continue
       const tank = tanks.get(c.id) ?? 0
       const want = sinkingInstallment(c, m, tank)
       const take = Math.min(want, Math.max(0, energy))
@@ -652,7 +693,9 @@ export function computeFleet(input: FleetInput): FleetState {
     switch (t.kind) {
       case 'expense': {
         const container = t.containerId ? containers.find((c) => c.id === t.containerId) : undefined
-        const periodic = container && container.cycleMonths > 1 ? container : undefined
+        // Its tank pays only during the fee's life: a payment before it (the history linked to a fee added later – B56)
+        // or after it is an ordinary expense.
+        const periodic = container && container.cycleMonths > 1 && activeIn(container, monthOf(t.date)) ? container : undefined
         const goal = t.goalId && knownGoal(t.goalId) ? t.goalId : null
         for (const p of partsOf(t)) {
           // A household member's part: the ledger's (below).
@@ -666,6 +709,8 @@ export function computeFleet(input: FleetInput): FleetState {
             } else addGoal(goal, p.amount, moves)
           } else if (periodic) {
             if (p.amount < 0) {
+              const cycle = paidCycleOf(periodic, monthOf(t.date))
+              if (cycle) paidCycles.set(periodic.id, (paidCycles.get(periodic.id) ?? new Set()).add(cycle))
               const tank = tanks.get(periodic.id) ?? 0
               const fromTank = Math.min(-p.amount, Math.max(0, tank))
               tanks.set(periodic.id, tank - fromTank)
@@ -835,7 +880,7 @@ export function computeFleet(input: FleetInput): FleetState {
         run: () => {
           if (lootMonth && loot) {
             shields += loot
-            record({ date: firstDayOf(m), kind: 'loot', amount: loot, moves: { loot: -loot, shields: loot } })
+            record({ date: firstDayOf(m), kind: 'loot', amount: loot, ref: lootMonth, moves: { loot: -loot, shields: loot } })
           }
           loot = Math.max(0, energy)
           lootMonth = prev
@@ -852,7 +897,7 @@ export function computeFleet(input: FleetInput): FleetState {
           run: () => {
             if (lootMonth !== prev || !loot) return
             shields += loot
-            record({ date: deadline, kind: 'loot', amount: loot, moves: { loot: -loot, shields: loot } })
+            record({ date: deadline, kind: 'loot', amount: loot, ref: prev, moves: { loot: -loot, shields: loot } })
             loot = 0
             lootMonth = null
           }
@@ -884,7 +929,7 @@ export function computeFleet(input: FleetInput): FleetState {
                 rest -= next
               }
               if (rest) addShields(rest, moves)
-              record({ date, kind: 'loot', amount: loot, moves })
+              record({ date, kind: 'loot', amount: loot, ref: prev, moves })
               loot = 0
               lootMonth = null
             }
@@ -987,7 +1032,11 @@ export function computeFleet(input: FleetInput): FleetState {
   if (cargo.over) alarms.push({ kind: 'cargo-over', level: 'yellow', date: today, amount: cargo.monthly })
   if (salary != null && income.average != null && salary > income.average) alarms.push({ kind: 'salary-above-income', level: 'yellow', date: today, amount: salary - income.average })
 
-  const nextDue = (c: Container) => cyclePosition(c, month).dueMonth
+  /** The tank's cycle: this one, or – paid already – the next one (B6). */
+  const tankCycle = (c: Container) => {
+    const due = cyclePosition(c, month).dueMonth
+    return paidCycles.get(c.id)?.has(due) ? { dueMonth: addMonths(due, c.cycleMonths), paidDue: due } : { dueMonth: due, paidDue: null }
+  }
   return {
     today,
     month,
@@ -1001,7 +1050,7 @@ export function computeFleet(input: FleetInput): FleetState {
     energy,
     tanks: containers
       .filter((c) => c.cycleMonths > 1 && (activeIn(c, month) || (tanks.get(c.id) ?? 0) !== 0))
-      .map((c) => ({ containerId: c.id, name: c.name, amount: tanks.get(c.id) ?? 0, dueMonth: nextDue(c), due: c.amount })),
+      .map((c) => ({ containerId: c.id, name: c.name, amount: tanks.get(c.id) ?? 0, ...tankCycle(c), due: c.amount })),
     taxHold,
     deposit,
     loot: { month: lootMonth, amount: loot },

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import type { FleetState } from '@shared/calc/fleet'
-import { debriefing, lootDeadline, planFor, proposeEnvelopes, proposeSalary, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
+import { debriefing, lootApplied, lootDeadline, planFor, proposeEnvelopes, proposeSalary, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
@@ -327,10 +327,7 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
           {brief.loot == null ? (
             <p className="text-[11.5px] text-dim">Łupy (niewydana energia) policzymy po końcu miesiąca.</p>
           ) : decision ? (
-            <p className="text-[11.5px] text-muted" data-testid="loot-decided">
-              Decyzja z {plDate(decision.decidedAt.slice(0, 10))}: osłony {zl(decision.shields)}, następny miesiąc {zl(decision.nextMonth)}
-              {Object.keys(decision.goals).length ? `, cele ${zl(Object.values(decision.goals).reduce((a, b) => a + b, 0))}` : ''}.
-            </p>
+            <LootDecided month={brief.month} decision={decision} fleet={fleet} />
           ) : pending ? (
             <div className="mt-1 flex flex-col gap-1.5">
               <div className="text-[11.5px] text-muted">
@@ -360,6 +357,32 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
         {decision && <Badge tone="accent">zamknięty</Badge>}
       </div>
     </Panel>
+  )
+}
+
+/**
+ * The loot's split as the engine made it (B10): the loot now (a late import changes it) by the decision – the goals
+ * first, the next month, the rest to the shields; a decision after the 7th came too late (all to the shields).
+ */
+function LootDecided({ month, decision, fleet }: { month: string; decision: NonNullable<MonthPlan['loot']>; fleet: FleetState }) {
+  const applied = lootApplied(fleet.log, month)
+  const decidedOn = warsawNow(decision.decidedAt).date
+  const goals = Object.values(decision.goals).reduce((a, b) => a + b, 0)
+  const decided = decision.shields + decision.nextMonth + goals
+  const shown = applied ?? { amount: decided, shields: decision.shields, nextMonth: decision.nextMonth, goals }
+  const late = decidedOn > lootDeadline(month)
+  return (
+    <p className="text-[11.5px] text-muted" data-testid="loot-decided">
+      Decyzja z {plDate(decidedOn)}: osłony {zl(shown.shields)}, następny miesiąc {zl(shown.nextMonth)}
+      {shown.goals ? `, cele ${zl(shown.goals)}` : ''}.
+      {late && applied ? (
+        <span className="block text-accent">Decyzja po terminie (do {dayLabel(lootDeadline(month))}) – łupy trafiły do osłon.</span>
+      ) : applied && applied.amount !== decided ? (
+        <span className="block text-accent" data-testid="loot-changed">
+          Łupy zmieniły się po decyzji (było {zl(decided)}, jest {zl(applied.amount)}) – podział przeliczony: cele, następny miesiąc, reszta do osłon.
+        </span>
+      ) : null}
+    </p>
   )
 }
 
