@@ -74,6 +74,9 @@ describe('odczyt folderu ICTTJ (tylko payouts/ i forecasts/, nigdy zapis)', () =
     expect(snap.forecasts).toEqual([{ id: F1, name: 'Plan', currency: 'PLN', updatedAt: '2026-10-05T10:00:00.000Z', goals: [{ id: '01KG0000000000000000000001', name: 'Wakacje', month: '2027-01', amount: 300000, enabled: true }] }])
     expect(snap.warnings).toHaveLength(1)
     expect(snap.warnings[0]).toContain('nieczytelny plik')
+    // The broken payout by its name (B21: never taken for deleted), the expense read; every folder listed.
+    expect(snap.unread).toEqual(['01KPAY00000000000000000005'])
+    expect(snap.complete).toBe(true)
     // FI wrote nothing in the ICTTJ folder.
     expect(await fs.readdir(root, { recursive: true })).toEqual(before)
   })
@@ -84,6 +87,11 @@ describe('odczyt folderu ICTTJ (tylko payouts/ i forecasts/, nigdy zapis)', () =
     const snap = await readIctjFolder(root)
     expect(snap.entries).toHaveLength(4)
     expect(snap.warnings.some((w) => w.includes('nowszym formacie (wersja 3)'))).toBe(true)
+    expect(snap.complete).toBe(true)
+    // No payouts yet: nothing unread, every folder listed.
+    const empty = join(tempDir('fi-ictj-'), 'ICTJ')
+    await write(empty, 'journal.json', { schemaVersion: 1, settings: {} })
+    expect(await readIctjFolder(empty)).toMatchObject({ status: 'ok', entries: [], unread: [], complete: true })
     expect((await readIctjFolder(join(root, 'nie-ma'))).status).toBe('missing')
     const fiDir = join(tempDir(), 'FI')
     await DataStore.initialize(fiDir)

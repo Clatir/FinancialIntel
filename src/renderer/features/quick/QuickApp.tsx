@@ -3,7 +3,9 @@ import type { QuickData, QuickResult } from '@shared/api'
 import { inClockWindow, warsawNow } from '@shared/calc/dates'
 import { counterpartyKey } from '@shared/import/classify'
 import { newId } from '@shared/ids'
-import { HOUSE_MEMBER_ID } from '@shared/schema'
+import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
+import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
+import { ShareEditor } from '../household/ShareEditor'
 import { AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -17,11 +19,13 @@ interface Line {
   refundable: boolean
   /** Who finances the line (D80); null with `refundable` = the first member. */
   memberId: string | null
+  /** Their gift (D83): nobody owes it. */
+  gift?: boolean
 }
 
 const blank = (data: QuickData | null): QuickDraft => {
   const { date, time } = warsawNow()
-  return { id: newId(), kind: 'expense', amount: 0, categoryId: null, accountId: data?.accountId ?? '', date, time, counterparty: '', note: '', impulse: null, logNote: '', household: false, memberId: null, advance: false, splits: [] }
+  return { id: newId(), kind: 'expense', amount: 0, categoryId: null, accountId: data?.accountId ?? '', date, time, counterparty: '', note: '', impulse: null, logNote: '', household: false, memberId: null, advance: false, gift: false, splits: [] }
 }
 
 /** A household member to pick (D80): „ja” = my own purchase. */
@@ -56,6 +60,8 @@ export function QuickApp() {
   const [data, setData] = useState<QuickData | null>(null)
   const [d, setD] = useState<QuickDraft>(() => blank(null))
   const [lines, setLines] = useState<Line[]>([])
+  // A purchase financed by several people (D83, „Wspólnie”).
+  const [share, setShare] = useState<Share | null>(null)
   // Others' money in a member's transfer (D81, „w tym za …”), by member.
   const [shares, setShares] = useState<Record<string, number>>({})
   const [nightOk, setNightOk] = useState(false)
@@ -81,6 +87,7 @@ export function QuickApp() {
       setAmountsHidden(!!next?.hideAmounts)
       setD(blank(next))
       setLines([])
+      setShare(null)
       setShares({})
       setNightOk(false)
       setMsg(null)
@@ -96,6 +103,7 @@ export function QuickApp() {
         // Saved: a fresh draft (a new id) right away, the window stays locked until it opens again.
         setD((x) => ({ ...blank(null), accountId: x.accountId }))
         setLines([])
+        setShare(null)
         setShares({})
         // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
         // opened again meanwhile.
@@ -150,15 +158,20 @@ export function QuickApp() {
         </div>
       )
     }
-    const parts: Line[] = lines.length > 1 ? lines : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null }]
+    const parts: Line[] = share
+      ? shareAmounts(d.amount, share).map((amount, i) => ({ amount, categoryId: d.categoryId, refundable: share.lines[i]!.memberId != null, memberId: share.lines[i]!.memberId, gift: share.lines[i]!.gift }))
+      : lines.length > 1
+        ? lines
+        : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift }]
     let daily = 0
     const planned = new Map<string, number>()
-    const financed = new Map<string, number>()
+    const financed = new Map<string, { amount: number; gift: boolean }>()
     for (const p of parts) {
       if (p.refundable) {
         // As the ledger reads it (`financerOf`): no member = the first one, „Dom”.
         const id = p.memberId ?? HOUSE_MEMBER_ID
-        financed.set(id, (financed.get(id) ?? 0) + p.amount)
+        const was = financed.get(id)
+        financed.set(id, { amount: (was?.amount ?? 0) + p.amount, gift: !!p.gift || !!was?.gift })
         continue
       }
       const c = p.categoryId ? cats.get(p.categoryId) : undefined
@@ -182,35 +195,36 @@ export function QuickApp() {
         </div>
       )
     }
-    // Financed by household members (D80): not my energy – their advance first, the rest the shields lend.
-    for (const [id, v] of financed) {
+    // Financed by household members (D80): not my energy – their advance first, the rest the shields lend (a gift – pay, D83).
+    for (const [id, { amount: v, gift }] of financed) {
       const m = data.members.find((x) => x.id === id)
       const fromDeposit = Math.min(v, m?.deposit ?? 0)
       out.push(
         <div key={`member:${id}`} data-testid="quick-preview-financed">
-          Finansuje {m?.name ?? 'domownik'}: {money(v)} – nie zjada energii
+          {gift ? 'Prezent od' : 'Finansuje'} {m?.name ?? 'domownik'}: {money(v)} – nie zjada energii
           {fromDeposit ? `; z zaliczki ${money(fromDeposit)}` : ''}
-          {v > fromDeposit ? `; pożyczają osłony ${money(v - fromDeposit)}, ma oddać` : ''}.
+          {v > fromDeposit ? (gift ? `; osłony ${money(v - fromDeposit)}, nikt nic nie jest winien` : `; pożyczają osłony ${money(v - fromDeposit)}, ma oddać`) : ''}.
         </div>
       )
     }
     return out
-  }, [data, d, lines, cats, money, shares])
+  }, [data, d, lines, share, cats, money, shares])
 
   const save = useCallback(() => {
     if (busy || sending.current || !data) return
     if (data.readOnly) return setMsg({ ok: false, text: 'Folder jest tylko do odczytu.' })
     if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
     if (lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
-    if (d.kind === 'refundable' && lines.length <= 1 && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
+    if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
+    if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
     sending.current = true
     setBusy(true)
     setMsg(null)
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
     const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
-    void api.quickAdd({ ...d, splits: lines.length > 1 ? lines : [], shares: parts } satisfies QuickDraft)
-  }, [busy, data, d, lines, night, nightOk, shares])
+    void api.quickAdd({ ...d, splits: !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
+  }, [busy, data, d, lines, share, night, nightOk, shares])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -292,20 +306,33 @@ export function QuickApp() {
             <Row label="Kategoria">
               <div className="flex items-center gap-1.5">
                 <CategoryPick data={data} value={d.categoryId} onChange={(categoryId) => set({ categoryId })} testId="quick-category" />
-                <button
-                  type="button"
-                  className="btn h-[24px] shrink-0 px-1.5"
-                  title="Podziel paragon: kilka kategorii albo część domownika"
-                  onClick={() =>
-                    setLines([
-                      { amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable' && !!d.memberId, memberId: d.kind === 'refundable' ? d.memberId : null },
-                      { amount: 0, categoryId: null, refundable: false, memberId: null }
-                    ])
-                  }
-                  data-testid="quick-split"
-                >
-                  <IconPlus size={11} />
-                </button>
+                {!share && (
+                  <button
+                    type="button"
+                    className="btn h-[24px] shrink-0 px-1.5"
+                    title="Podziel paragon: kilka kategorii albo część domownika"
+                    onClick={() =>
+                      setLines([
+                        { amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable' && !!d.memberId, memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift },
+                        { amount: 0, categoryId: null, refundable: false, memberId: null }
+                      ])
+                    }
+                    data-testid="quick-split"
+                  >
+                    <IconPlus size={11} />
+                  </button>
+                )}
+                {!share && data.members.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn h-[24px] shrink-0 px-1.5"
+                    title="Wspólnie: kilka osób płaci za ten zakup – równo, procentami albo kwotami"
+                    onClick={() => setShare(startShare(d.kind === 'refundable' && d.memberId ? d.memberId : data.members[0]!.id, d.kind === 'refundable' && !!d.gift))}
+                    data-testid="quick-joint-start"
+                  >
+                    wspólnie
+                  </button>
+                )}
               </div>
               {officer && officer !== d.categoryId && (
                 <button className="mt-0.5 text-[11px] text-accent hover:underline" onClick={() => set({ categoryId: officer })}>
@@ -314,9 +341,20 @@ export function QuickApp() {
               )}
             </Row>
           )}
-          {d.kind === 'refundable' && lines.length <= 1 && (
+          {d.kind === 'refundable' && lines.length <= 1 && !share && (
             <Row label="Finansuje">
-              <MemberPick data={data} value={d.memberId} onChange={(memberId) => set({ memberId })} none="— wybierz domownika —" testId="quick-financer" />
+              <div className="flex items-center gap-2">
+                <MemberPick data={data} value={d.memberId} onChange={(memberId) => set({ memberId })} none="— wybierz domownika —" testId="quick-financer" />
+                <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted" title="Prezent: nic nie jest winna / winien – najpierw z zaliczki, resztę pokrywają osłony">
+                  <input type="checkbox" checked={!!d.gift} onChange={(e) => set({ gift: e.currentTarget.checked })} data-testid="quick-gift" />
+                  prezent
+                </label>
+              </div>
+            </Row>
+          )}
+          {d.kind !== 'income' && share && (
+            <Row label="Wspólnie">
+              <ShareEditor share={share} total={d.amount} members={data.members} onChange={setShare} onClear={() => setShare(null)} testId="quick-joint" />
             </Row>
           )}
           {d.kind !== 'income' && lines.length > 1 && (

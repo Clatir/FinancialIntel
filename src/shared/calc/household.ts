@@ -17,6 +17,10 @@
  * - An income split among members (D81 – one transfer carrying the money of several): each part is its member's money
  *   (a part without a member is income); the rest of the amount is the sender's (`memberId`).
  * - The settlements start at `from` (the budget's start, or later – D81): each member's balance is then their `opening`.
+ *   An operation dated before `from` the openings do not take in (`covered` – added later by a late import of the bank or
+ *   another computer, its date or its members changed since: B14) counts right after them.
+ * - A member's part as their gift (D83): their advance first, the rest the shields pay – nobody owes it; a returned gift
+ *   goes back to the shields.
  */
 import { fold } from '../fold'
 import { HOUSE_MEMBER_ID, type HouseholdMember, type MemberOpening } from '../schema/budget'
@@ -36,6 +40,8 @@ export interface MemberFlow {
   advance: number
   /** …and income (an income only: docks as a delivery). */
   income: number
+  /** Money out of a purchase they gave (D83): what their advance did not cover, paid by the shields – nobody owes it; < 0 = a returned gift back to the shields. */
+  gift: number
 }
 
 /** A purchase they still owe (its open part). */
@@ -67,6 +73,10 @@ export interface HouseholdLedger {
   deposit: number
   /** The oldest purchase still owed by anyone. */
   since: string | null
+  /** Operations dated before the settlements' start, added after the openings were set (B14): counted right after them. */
+  late: string[]
+  /** Their change of the deposit (the engine's deposit at the start = the openings' and this). */
+  lateDeposit: number
 }
 
 /** The engine's order of operations: date, time (none first), creation, id. */
@@ -158,7 +168,7 @@ interface State {
   queue: OpenPurchase[]
 }
 
-const flowOf = (memberId: string): MemberFlow => ({ memberId, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0 })
+const flowOf = (memberId: string): MemberFlow => ({ memberId, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: 0 })
 
 /** Pay back up to `v` of what is owed: the covered purchases first (in their order), then the oldest. */
 function repay(st: State, v: number, covers: readonly string[]): number {
@@ -192,6 +202,20 @@ export interface LedgerOptions {
   openings?: ReadonlyMap<string, string>
   /** The members' balances at `from` (D81). */
   members?: ReadonlyArray<Pick<HouseholdMember, 'id'> & { opening?: MemberOpening }>
+  /**
+   * The operations the members' balances at `from` take in (B14 – `settings.household.openingIds`): one dated before
+   * `from` and not among them counts right after them. None = all of them are in (1.4.x).
+   */
+  covered?: readonly string[] | null
+}
+
+/** A list of ids as a set and a number for the memo's key, once per list (the settings keep it while unchanged). */
+const coveredSets = new WeakMap<readonly string[], { set: ReadonlySet<string>; n: number }>()
+let coveredN = 0
+function coveredOf(ids: readonly string[]): { set: ReadonlySet<string>; n: number } {
+  let c = coveredSets.get(ids)
+  if (!c) coveredSets.set(ids, (c = { set: new Set(ids), n: ++coveredN }))
+  return c
 }
 
 /** The household's balances from the operations (`LedgerOptions`). */
@@ -199,10 +223,12 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
   const { until, from, openings } = opts
   const clearAt = opts.reset && from && opts.reset < from ? opts.reset : null
   const opened = from ? (opts.members ?? []).filter((m) => m.opening && (m.opening.owed > 0 || m.opening.deposit > 0)) : []
+  const covered = from && clearAt && opts.covered ? coveredOf(opts.covered) : null
   const key = [
     until ?? '',
     from ?? '',
     clearAt ?? '',
+    covered?.n ?? '',
     openings ? [...openings].map(([id, date]) => `${id}:${date}`).sort().join(',') : '',
     opened.map((m) => `${m.id}:${m.opening!.owed}:${m.opening!.deposit}`).join(',')
   ].join('|')
@@ -222,17 +248,17 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
   const budgetFrom = clearAt ?? from
   const insideOpening = (t: Transaction) => budgetFrom != null && t.date >= budgetFrom && t.date < (openings?.get(t.accountId) ?? '')
   const txs = transactions.filter((t) => (until == null || t.date <= until) && settlesHousehold(t) && !insideOpening(t)).sort(ledgerOrder)
+  // Dated between the budget's start and the settlements', not taken in by the openings (B14): counted right after them.
+  const isLate = (t: Transaction) => covered != null && t.date >= clearAt! && t.date < from! && !covered.set.has(t.id)
+  const late = txs.filter(isLate)
   let cleared = !clearAt
   let started = !from
-  for (const t of txs) {
-    if (!cleared && t.date >= clearAt!) {
-      cleared = true
-      states.clear()
-    }
-    if (!started && t.date >= from!) {
-      started = true
-      begin()
-    }
+  const start = () => {
+    started = true
+    begin()
+    for (const t of late) run(t)
+  }
+  const run = (t: Transaction) => {
     const flows = new Map<string, MemberFlow>()
     const flow = (id: string) => flows.get(id) ?? flows.set(id, flowOf(id)).get(id)!
     if (t.kind === 'expense') {
@@ -244,6 +270,12 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
         if (p.amount < 0) {
           const fromDeposit = Math.min(-p.amount, st.deposit)
           st.deposit -= fromDeposit
+          f.fromDeposit += fromDeposit
+          // Their gift (D83): what their advance does not cover the shields pay – nobody owes it.
+          if (p.gift) {
+            f.gift += -p.amount - fromDeposit
+            continue
+          }
           const lent = -p.amount - fromDeposit
           if (lent) {
             st.owed += lent
@@ -251,8 +283,10 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
             if (last?.txId === t.id) last.amount += lent
             else st.queue.push({ txId: t.id, date: t.date, amount: lent })
           }
-          f.fromDeposit += fromDeposit
           f.lent += lent
+        } else if (p.gift) {
+          // A returned gift: back to the shields that paid it (or to me – it was given).
+          f.gift -= p.amount
         } else {
           // A product return of a purchase they financed: their money.
           const back = repay(st, p.amount, [])
@@ -279,19 +313,30 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
     }
     if (flows.size) byTx.set(t.id, [...flows.values()])
   }
+  for (const t of txs) {
+    if (!cleared && t.date >= clearAt!) {
+      cleared = true
+      states.clear()
+    }
+    if (!started && t.date >= from!) start()
+    if (!isLate(t)) run(t)
+  }
   // No operation since the start (yet): the balances are the openings – a start still to come leaves none.
   if (!started) {
-    if (from && (until == null || from <= until)) begin()
+    if (from && (until == null || from <= until)) start()
     else states.clear()
   }
   const members: MemberBalance[] = [...states].map(([memberId, st]) => ({ memberId, owed: st.owed, deposit: st.deposit, open: st.queue.map((i) => ({ ...i })), since: st.queue[0]?.date ?? null }))
   const since = members.map((m) => m.since).filter((d): d is string => d != null).sort()[0] ?? null
+  const counted = started ? late : []
   const out: HouseholdLedger = {
     members,
     byTx,
     owed: members.reduce((a, m) => a + m.owed, 0),
     deposit: members.reduce((a, m) => a + m.deposit, 0),
-    since
+    since,
+    late: counted.map((t) => t.id),
+    lateDeposit: counted.reduce((a, t) => a + depositMove(byTx.get(t.id)), 0)
   }
   const forList = memo.get(transactions) ?? new Map<string, HouseholdLedger>()
   forList.set(key, out)
@@ -314,6 +359,19 @@ export function balanceOf(ledger: HouseholdLedger, memberId: string): MemberBala
 export function memberName(memberId: string | null | undefined, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> | undefined): string {
   const id = memberId ?? HOUSE_MEMBER_ID
   return members?.find((m) => m.id === id)?.name ?? (id === HOUSE_MEMBER_ID ? 'Dom' : 'domownik spoza listy')
+}
+
+/**
+ * Who pays a purchase, as the lists and exports say it (D80, D83): its members – a gift marked – and „ja” first when a
+ * part is mine too (a shared purchase); '' = mine alone.
+ */
+export function financersText(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> | undefined): string {
+  if (t.kind !== 'expense') return ''
+  const parts = partsOf(t)
+  const theirs = parts.filter((p) => p.refundable)
+  if (!theirs.length) return ''
+  const names = [...new Set(theirs.map((p) => `${memberName(financerOf(p), members)}${p.gift ? ' (prezent)' : ''}`))]
+  return [...(parts.some((p) => !p.refundable && p.amount !== 0) ? ['ja'] : []), ...names].join(', ')
 }
 
 /** What household members financed in some operations, by member, the most first (D80: the reports show it apart). */

@@ -16,7 +16,7 @@ import { AmountField, plnText } from '../../components/fields'
 import { Badge, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { closeDocking, useDeliveries, useDocking } from './state'
-import { dockDelivery, dockingOf, skipEntry, walletOperation, type SplitDraft } from './actions'
+import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, walletOperation, type SplitDraft } from './actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -144,7 +144,30 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
           </span>
           <span className={cx('num text-[14px]', d.direction === 'in' ? 'text-up' : 'text-fg-strong')}>{d.direction === 'in' ? '+' : '−'}{zl(d.amount)}</span>
         </section>
-        {!e && d.missingEntry && <p className="border-l-2 border-accent pl-2 text-muted">Bez wpisu w ICTTJ – dokuje zwykłą kolejnością. Dopisz tę wypłatę w ICTTJ (z pulą): FI połączy ją sama.</p>}
+        {!e && d.entryGone && (
+          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-entry-gone">
+            Wpis tej wypłaty usunięto w ICTTJ – pula, z którą ją zadokowano, już nie obowiązuje. Zadokuj ponownie (zwykłą kolejnością) albo dopisz wpis w ICTTJ: FI połączy go sama.
+          </p>
+        )}
+        {!e && d.missingEntry && !d.entryGone && <p className="border-l-2 border-accent pl-2 text-muted">Bez wpisu w ICTTJ – dokuje zwykłą kolejnością. Dopisz tę wypłatę w ICTTJ (z pulą): FI połączy ją sama.</p>}
+        {e && d.near && d.transaction && (
+          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-near">
+            W banku jest wpływ z XTB z {plDate(d.transaction.date)} na {zl(Math.abs(d.transaction.amount))} – różni się od wpisu o {zl(Math.abs(Math.abs(d.transaction.amount) - d.amount))} (przewalutowanie, prowizja, literówka?). „Zadokuj” połączy je: liczy się kwota z banku.
+          </p>
+        )}
+        {e && d.poolChanged && d.docking && (
+          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-pool-changed">
+            Pula wpisu zmieniła się w ICTTJ po dokowaniu (było: {d.docking.pool ? ICTJ_POOL_LABEL[d.docking.pool] : 'bez puli'}) – „Zapisz podział” zadokuje z obecną pulą.
+          </p>
+        )}
+        {d.extra.length > 0 && (
+          <p className="flex flex-wrap items-baseline gap-2 border-l-2 border-down pl-2 text-muted" data-testid="docking-extra">
+            Ten wpis zadokowano {d.extra.length + 1} razy (np. na dwóch komputerach przed synchronizacją) – pieniądze liczą się podwójnie.
+            <button className="text-accent hover:underline" disabled={readOnly} onClick={() => removeExtraDockings(d)} data-testid="docking-extra-remove">
+              Usuń nadmiarowe
+            </button>
+          </p>
+        )}
 
         <section className="flex items-baseline gap-2" data-testid="docking-account">
           <span className="label w-[70px] shrink-0">Konto</span>

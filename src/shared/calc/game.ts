@@ -11,7 +11,7 @@ import type { Settings } from '../schema/settings'
 import type { GameDay, GameMission, GameMonth, Transaction } from '../schema/records'
 import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, weekdayOf } from './dates'
 import { activeIn, cargoMass, computeFleet, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
-import { categoryIndex, costOf, isNight, partsOf, sum } from './operations'
+import { categoryIndex, costOf, isNight, ownSpent, partsOf, sum } from './operations'
 import { debriefing } from './plan'
 
 // ------------------------------------------------------------------ names
@@ -226,22 +226,25 @@ export function rateDay(input: GameInput, date: string, prev: GameDay | null = n
     const added = known.filter((c) => dateOf(c.createdAt) === date && activeIn(c, monthOf(date)))
     const grew = prev?.cargo != null && monthOf(addDays(date, -1)) === monthOf(date) ? mass.monthly > prev.cargo : added.length > 0
     if (mass.over && grew) add('cargo', mass.monthly, added[0]?.id ?? null, namesNote(added.map((c) => c.name)))
-    // The shields below their minimum at the day's end after the day's decisions took money out of them.
+    // The shields below their minimum at the day's end after the day's decisions took money out of them – what they lent
+    // for a household member's purchase or paid of their gift is no decision of mine (D80 f, D83, N5).
     const min = f.shields.min
     if (min != null && f.shields.amount < min) {
       const byId = new Map(txs.map((t) => [t.id, t]))
       const taken = new Set((input.loans ?? []).filter((l) => l.direction === 'taken').map((l) => l.id))
+      const forMembers = (txId: string | undefined) => sum((f.household.byTx.get(txId ?? '') ?? []).map((x) => x.lent + Math.max(0, x.gift)))
       const moved = sum(
         f.log
           .filter((e) => e.date === date && DECISIONS.has(e.kind))
           .filter((e) => !(e.kind === 'loan' && taken.has(byId.get(e.txId ?? '')?.loanId ?? '')))
-          .map((e) => (e.moves.shields ?? 0) + (e.moves.hull ?? 0))
+          .map((e) => (e.moves.shields ?? 0) + (e.moves.hull ?? 0) + (e.kind === 'expense' ? forMembers(e.txId) : 0))
       )
       if (moved < 0) add('shields', min - f.shields.amount)
     }
     for (const a of f.alarms) if (a.kind === 'firewall' && a.date === date) add('firewall', a.amount, a.txId ?? null)
-    for (const t of txs) if (isNight(t, settings.orders)) add('quiet', -t.amount, t.id, t.counterparty)
-    if (txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse')) tags.push('judas')
+    // A purchase in the quiet hours: my own part of it (a household member's part is theirs – N5).
+    for (const t of txs) if (isNight(t, settings.orders) && ownSpent(t) > 0) add('quiet', ownSpent(t), t.id, t.counterparty)
+    if (txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0)) tags.push('judas')
     if (txs.some((t) => t.kind === 'expense' && t.amount > 0 && !t.refundable && !t.goalId && !t.splits.length)) tags.push('turtle')
     if (f.daily && f.daily.left === 0 && f.daily.spentToday > 0) tags.push('sweep')
   }
@@ -308,7 +311,7 @@ export function chooseMission(input: GameInput, monday: string, lastTemplate: st
   const days = allDays(game)
   const month = monthOf(monday)
   const weak: Partial<Record<MissionTemplate, () => MissionPick | null>> = {
-    quiet: () => (txs.some((t) => isNight(t, input.settings.orders)) ? { template: 'quiet', params: {} } : null),
+    quiet: () => (txs.some((t) => isNight(t, input.settings.orders) && ownSpent(t) > 0) ? { template: 'quiet', params: {} } : null),
     envelope: () => {
       // The planned envelope most over its limit: last month and this month's pace so far.
       const cats = categoryIndex(input.settings.categories)
@@ -333,7 +336,7 @@ export function chooseMission(input: GameInput, monday: string, lastTemplate: st
       for (let d = from; d <= to; d = addDays(d, 1)) if (days.get(d)?.violations.some((v) => v.order === 'daily')) over++
       return over >= 2 ? { template: 'energy', params: {} } : null
     },
-    impulse: () => (txs.filter((t) => t.kind === 'expense' && t.impulse === 'impulse').length >= 2 ? { template: 'impulse', params: {} } : null),
+    impulse: () => (txs.filter((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0).length >= 2 ? { template: 'impulse', params: {} } : null),
     killzone: () => {
       const k = killzoneOf(txs)
       if (!k.top || k.count < KILLZONE_MIN_COUNT || k.top.cost < k.total * KILLZONE_SHARE) return null
@@ -385,9 +388,9 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
   const num = (k: string) => Number(mission.params[k] ?? 0)
   switch (mission.template) {
     case 'quiet':
-      return { ok: !txs.some((t) => isNight(t, input.settings.orders)) }
+      return { ok: !txs.some((t) => isNight(t, input.settings.orders) && ownSpent(t) > 0) }
     case 'impulse':
-      return { ok: !txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse') }
+      return { ok: !txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0) }
     case 'energy': {
       const days = allDays(game)
       let over = 0
@@ -519,7 +522,11 @@ export const gameStartFor = (now: Date | string): string => addDays(warsawNow(no
  * Freeze the days that ended 24 h ago and more (T9), judge the missions of their Sundays, change the rank, award the
  * achievements, and give the week its mission. Deterministic: two computers advancing the same data write the same.
  */
-export function advanceGame(input: GameInput, now: Date | string, opts: { maxDays?: number; locked?: ReadonlySet<string> } = {}): GameChange {
+/**
+ * `hold`: the first day not to freeze yet (B20 – a paired ICTTJ payout still to dock: its pool decides where the money
+ * goes); it and the days after it wait.
+ */
+export function advanceGame(input: GameInput, now: Date | string, opts: { maxDays?: number; locked?: ReadonlySet<string>; hold?: string | null } = {}): GameChange {
   const gs = input.settings.game
   const start = gs.start
   if (!start) return { months: [], events: [] }
@@ -544,6 +551,7 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
     // A month this version may not write (a newer one wrote it): its days are that version's to freeze – passed over,
     // never a portion stuck on them.
     if (frozen.has(d) || opts.locked?.has(monthOf(d))) continue
+    if (opts.hold && d >= opts.hold) break
     if (opts.maxDays != null && rated >= opts.maxDays) {
       more = true
       break

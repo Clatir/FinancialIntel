@@ -90,6 +90,13 @@ describe('rozpoznawanie wierszy', () => {
     expect(two).toHaveLength(1)
     expect(two[0]).toMatchObject({ id: one[0]!.id, categoryId: GROCERIES, hits: 5, learned: true, mode: 'exact' })
     expect(upsertRule(two, { ...two[0]!, direction: 'in' }, { now: NOW, makeId, hits: 1 })).toHaveLength(2)
+    // The decision is the new one whole (D83): a rule learned as shared or as a gift and remembered again without – none.
+    const shared = upsertRule(two, { ...two[0]!, share: { mode: 'equal', lines: [{ memberId: null, value: 0, gift: false }, { memberId: makeId(), value: 0, gift: true }] } }, { now: NOW, makeId, hits: 1 })
+    expect(shared[0]!.share).toBeTruthy()
+    const plain = upsertRule(shared, { match: 'bolt', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: AUTO, refundable: false, household: false, memberId: null, counterAccountId: null }, { now: NOW, makeId, hits: 1 })
+    expect(plain[0]!.share).toBeUndefined()
+    const gift = upsertRule(plain, { ...plain[0]!, refundable: true, memberId: makeId(), gift: true }, { now: NOW, makeId, hits: 1 })
+    expect(upsertRule(gift, { ...gift[0]!, gift: undefined }, { now: NOW, makeId, hits: 1 })[0]!.gift).toBeUndefined()
   })
 
   it('reguły: dokładny klucz przed „zawiera”, kierunek, zwrot towaru z kategorią zakupów', () => {
@@ -419,5 +426,88 @@ describe('domownicy w imporcie (D80)', () => {
     expect(new Set(result.create.filter((t) => t.counterparty === 'ANNA xxx').map((t) => t.memberId))).toEqual(new Set([ANNA]))
     expect(new Set(result.create.filter((t) => t.counterparty === 'TOMASZ xxx').map((t) => `${t.memberId}|${t.advance}`))).toEqual(new Set([`${TOMASZ}|true`]))
     expect(result.rules.filter((r) => r.memberId === TOMASZ).map((r) => r.match)).not.toContain('annaxxx')
+  })
+})
+
+describe('grupa G (1.5.0): zwrot zakupu domownika, połączone nazwy, wspólne finansowanie i prezent w regule', () => {
+  const MAMA = `01KMEM${'0'.repeat(19)}5`
+  const TOMASZ = `01KMEM${'0'.repeat(19)}7`
+  const koleo = (over: Partial<ImportRule> = {}): ImportRule => ({
+    id: makeId(),
+    match: 'koleo',
+    mode: 'exact',
+    direction: 'out',
+    label: 'KOLEO',
+    kind: 'expense',
+    categoryId: AUTO,
+    refundable: false,
+    household: false,
+    memberId: null,
+    counterAccountId: null,
+    learned: true,
+    hits: 3,
+    updatedAt: NOW,
+    ...over
+  })
+  const members = [...settings.household.members, { id: MAMA, name: 'Mama', bankNames: [], inflow: 'advance' as const, archived: false }]
+
+  it('B40: zwrot towaru z zakupu, który finansuje Mama – jej pieniądze (zakup z reguły „finansuje”), nie mój ujemny wydatek', () => {
+    const f = fixture()
+    const back = f.rows.find((r) => r.description.includes('ZWROT ZAKUPU'))!
+    const rules = [koleo({ refundable: true, memberId: MAMA })]
+    expect(classifyRow(back, { ...ctx(rules), members }).decision).toMatchObject({ kind: 'expense', refundable: true, memberId: MAMA, categoryId: AUTO, source: 'rule' })
+    const { result } = runImport(withRows(f, [back]), [], emptyChoices(), rules)
+    const created = result.create[0]!
+    expect(created).toMatchObject({ kind: 'expense', refundable: true, memberId: MAMA })
+    expect(created.amount).toBeGreaterThan(0)
+    const bought = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, date: addDays(created.date, -1), accountId: MBANK_ACCOUNT_ID, amount: -created.amount - 1000, categoryId: AUTO, refundable: true, memberId: MAMA })
+    // The return repays what she owes for the purchase.
+    expect(settleHousehold([bought, created]).byTx.get(created.id)).toEqual([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: created.amount, advance: 0, income: 0, gift: 0 }])
+  })
+
+  it('reguła „wspólnie: ja i Mama po połowie” i „prezent od Mamy”: nowe operacje z częściami osób; zwrot – tak samo', () => {
+    const f = fixture()
+    const bought = f.rows.filter((r) => r.counterparty.startsWith('KOLEO') && r.amount < 0).slice(0, 1)
+    const share = { mode: 'percent' as const, lines: [{ memberId: null, value: 50, gift: false }, { memberId: MAMA, value: 50, gift: false }] }
+    const shared = runImport(withRows(f, bought), [], emptyChoices(), [koleo({ share })]).result.create[0]!
+    expect(shared.share).toEqual(share)
+    expect(shared.splits.map((s) => [s.memberId, s.refundable, s.categoryId])).toEqual([
+      [null, false, AUTO],
+      [MAMA, true, AUTO]
+    ])
+    expect(shared.splits[0]!.amount + shared.splits[1]!.amount).toBe(shared.amount)
+    const gift = runImport(withRows(f, bought), [], emptyChoices(), [koleo({ refundable: true, memberId: MAMA, gift: true })]).result.create[0]!
+    expect(gift).toMatchObject({ refundable: true, memberId: MAMA, gift: true })
+    // A decision of the group teaches the rule with its share; the group with another share is another group.
+    const plan = planImport(withRows(f, bought), MBANK_ACCOUNT_ID, [], ctx())
+    const group = groupOf(plan, 'koleo', 'out')
+    const choices = emptyChoices()
+    choices.groups[group] = { ...choiceOf(plan.rows.find((p): p is NewRow => p.status === 'new')!.decision), categoryId: AUTO, share }
+    choices.remember[group] = true
+    const learned = buildImport(plan, choices, { now: NOW, makeId, rules: [] }).rules.find((r) => r.match === 'koleo')!
+    expect(learned).toMatchObject({ kind: 'expense', categoryId: AUTO, refundable: false, share })
+  })
+
+  it('B41: połączone nazwy – wpłata domownika „pytaj” nie dostaje decyzji zwykłego wpływu z reguły drugiej nazwy', () => {
+    const f = fixture()
+    const tomasz = f.rows.filter((r) => r.counterparty === 'TOMASZ xxx' && r.amount > 0).slice(0, 3)
+    // „TOMASZ X” – not his name in the bank (no „xxx”), merged with it by the user; a plain income rule learned for it.
+    const other = tomasz.slice(0, 2).map((r) => ({ ...r, counterparty: 'TOMASZ X', description: r.description.replace('TOMASZ xxx', 'TOMASZ X'), amount: r.amount + 1 }))
+    const otherKey = planImport(withRows(f, other), MBANK_ACCOUNT_ID, [], ctx()).rows.find((p): p is NewRow => p.status === 'new')!.brand
+    const plain: ImportRule = { ...koleo(), match: otherKey, direction: 'in', label: 'TOMASZ X', kind: 'income', categoryId: null }
+    const c = {
+      ...ctx([plain]),
+      aliases: { [otherKey]: { to: 'tomaszxxx', label: 'TOMASZ X', toLabel: 'TOMASZ xxx', at: NOW } },
+      members: [...settings.household.members, { id: TOMASZ, name: 'Tomasz', bankNames: ['TOMASZ xxx'], inflow: 'ask' as const, archived: false }]
+    }
+    const plan = planImport(withRows(f, [...tomasz, ...other]), MBANK_ACCOUNT_ID, [], c)
+    const decisions = plan.rows.filter((p): p is NewRow => p.status === 'new')
+    expect(decisions.filter((p) => p.row.counterparty === 'TOMASZ X').every((p) => p.decision.kind === 'income' && !p.decision.household && p.decision.source === 'rule')).toBe(true)
+    // His money keeps its question (it repays what he owes) – not „jak TOMASZ X (połączone nazwy)”.
+    expect(decisions.filter((p) => p.row.counterparty === 'TOMASZ xxx').map((p) => [p.decision.household, p.decision.memberId, p.decision.source])).toEqual([
+      [true, TOMASZ, 'none'],
+      [true, TOMASZ, 'none'],
+      [true, TOMASZ, 'none']
+    ])
   })
 })

@@ -496,7 +496,8 @@ describe('salda kont i start budżetu', () => {
     expect(s.start).toBe('2026-08-06')
     expect(s.accounts.map((a) => [a.name, a.balance])).toEqual([
       ['mBank', zl(1400)],
-      ['Portfel XTB', zl(280)]
+      ['Portfel XTB', zl(280)],
+      ['Gotówka', 0]
     ])
     expect(s.total).toBe(zl(1680))
     // No salary yet: every delivery stays in the shields, expenses come from them.

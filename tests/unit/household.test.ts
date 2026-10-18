@@ -143,7 +143,7 @@ describe('rozliczenia z domownikami (D80)', () => {
     const legacy = tx('2026-10-07', zl(200), { kind: 'income', repaid: zl(100), counterparty: 'Domownik' })
     const ledger = settleHousehold([purchase, legacy])
     expect(balanceOf(ledger, HOUSE_MEMBER_ID)).toMatchObject({ owed: zl(50), since: '2026-10-03' })
-    expect(ledger.byTx.get(legacy.id)).toEqual([{ memberId: HOUSE_MEMBER_ID, fromDeposit: 0, lent: 0, repaid: zl(100), advance: 0, income: zl(100) }])
+    expect(ledger.byTx.get(legacy.id)).toEqual([{ memberId: HOUSE_MEMBER_ID, fromDeposit: 0, lent: 0, repaid: zl(100), advance: 0, income: zl(100), gift: 0 }])
     expect(fleet([purchase, legacy]).receivables).toMatchObject({ house: zl(50), houseSince: '2026-10-03' })
   })
 
@@ -242,7 +242,7 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     const old = bought('2026-09-20', 200, MAMA)
     const transfer = paid('2026-10-05', 200, MAMA)
     const s = fleet([old, transfer], withHousehold({ since: SINCE }))
-    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(200) }])
+    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(200), gift: 0 }])
     expect(s.log.find((e) => e.txId === transfer.id)?.moves.house).toBeUndefined()
   })
 
@@ -277,8 +277,8 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     ])
     const ledger = settleHousehold([forMama, transfer])
     expect(ledger.byTx.get(transfer.id)).toEqual([
-      { memberId: MAMA, fromDeposit: 0, lent: 0, repaid: zl(200), advance: 0, income: zl(100) },
-      { memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: zl(200), income: 0 }
+      { memberId: MAMA, fromDeposit: 0, lent: 0, repaid: zl(200), advance: 0, income: zl(100), gift: 0 },
+      { memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: zl(200), income: 0, gift: 0 }
     ])
     const s = fleet([forMama, transfer])
     expect(s.receivables.house).toBe(0)
@@ -313,7 +313,7 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     const transfer = paid('2026-10-12', 1000, TATA)
     const s = fleet([forMama, transfer], withHousehold({}, setMember(MAMA, { via: TATA })))
     expect(s.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(200) })
-    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(1000) }])
+    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(1000), gift: 0 }])
   })
 })
 

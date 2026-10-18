@@ -63,7 +63,10 @@ export function HouseholdTab() {
  */
 function SinceRow() {
   const since = useData((s) => s.fi?.settings.household.since)
-  const budgetStart = useFleet()?.start ?? null
+  const fleet = useFleet()
+  const budgetStart = fleet?.start ?? null
+  // Dated before the start, added after the balances on it were set (B14): they count right after them.
+  const late = fleet?.household.late.length ?? 0
   const readOnly = useData((s) => !!s.status?.readOnly)
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 border-y border-line/70 py-2 text-[11.5px]" data-testid="household-since-row">
@@ -88,6 +91,13 @@ function SinceRow() {
       <span className="basis-full text-muted">
         Wcześniejsze przelewy domowników nie są Twoim przychodem. To, co ktoś był winien albo wpłacił z góry przed tą datą, wpisz niżej jako jego saldo na start.
       </span>
+      {late > 0 && (
+        <span className="basis-full text-muted" data-testid="household-since-late">
+          Sprzed tej daty, ale spoza sald na start (dopisane później – np. z późniejszego importu z banku – albo zmienione): {late}{' '}
+          {late === 1 ? 'operacja' : late % 10 >= 2 && late % 10 <= 4 && (late % 100 < 12 || late % 100 > 14) ? 'operacje' : 'operacji'} – liczą się zaraz po saldach na start; saldo na start
+          wpisz bez nich.
+        </span>
+      )}
     </div>
   )
 }

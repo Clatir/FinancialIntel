@@ -978,3 +978,73 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zmienionym w międzyczasie (T148), katalog odzyskany w całości czytany od nowa (T151), zapis paczką nigdy nie blokuje
   następnych i wpis nieusunięty zachowuje zmiany (T150). Pomiar okna przy 150 tys. pokazał 5,9 s zawieszenia przy liczeniu
   duplikatów – przyspieszone (T149).
+- **T156** Wspólne finansowanie (D83, F0): operacja `expense` z opisem `share` {`mode` równo / procenty / kwoty, `lines`
+  {`memberId` – null = ja, `value`, `gift`}} i liniami `splits` – jedna na osobę, kategoria operacji, część domownika
+  `refundable` z jego `memberId`. Prawdą są linie: każda wersja (także 1.4.x) czyta je jak paragon z częściami domowników,
+  więc te same pieniądze liczą się tak samo; `share` mówi tylko, jak je zrobiono (`shareOf` sprawdza, że linie wciąż go
+  słuchają – ręczna zmiana linii zostawia zwykły paragon). Nowa kwota (edytor, wiersz banku z „nierozliczonej”,
+  scalenie wpisu ręcznego z importem) robi linie od nowa (`withAmount`); zmiana kategorii też. Grosze: równo – części
+  ucięte, reszta w ostatniej (T3); procenty – każda zaokrąglona, ostatnia bierze resztę (suma ≠ 100 % – edytor
+  ostrzega, szybki wpis, decyzja zbiorcza i import jej nie przyjmą; procenty po równo – ucięte, ostatnia reszta do 100,
+  `equalPercents`); kwoty – wpisane części innych, moja linia (bez niej ostatnia) bierze resztę (`restIndex`), nigdy
+  ponad całość. Kwota z banku (rozliczenie wiersza „nierozliczonej”, scalenie z wpisem ręcznym) robi od nowa tylko linie
+  wspólnego zakupu – linie zwykłego paragonu zostają, jakie były (`withBankAmount`). To samo w edytorze, szybkim wpisie, decyzji zbiorczej Operacji i importu (równo / procenty – kwoty
+  zależą od operacji) i w regule importu (`importRuleSchema.share`, `ImportDecision.share`). Pola addytywne, opcjonalne –
+  zapis bez `gift: false` i bez `share` przy zwykłej operacji.
+- **T157** Prezent (D83 „sfinansowane jako prezent”): `gift: true` przy operacji z jednym finansującym („prezent od: X”)
+  albo przy linii wspólnego zakupu. Rejestr: najpierw zaliczka tej osoby, resztę płacą osłony (`MemberFlow.gift`) – nikt
+  nic nie jest winien, wydatek nie zjada energii, kopert ani mojego kosztu; zwrot towaru z prezentu wraca do osłon.
+  Gdy zaliczki brakuje – reszta z osłon (propozycja zgodna z D83 „nic nie jest winna”; pytanie do użytkownika otwarte,
+  „Przed grupą H”). Gra: prezent tak jak zakup domownika (N5 – T161).
+- **T158** Konto „Gotówka” (D83 wariant A): rodzaj konta `cash` (`ACCOUNT_KINDS`, starsza wersja zachowuje wartość –
+  T33), stałe id `CASH_ACCOUNT_ID` = `fixedId('ACC', 3)`; nowy folder ma je od razu, istniejący dostaje raz przy wczytaniu
+  (`settings.seeded` 'account:gotowka'; pominięte, gdy jest konto o tym id albo tej nazwie). W kreatorze saldo gotówki
+  nieobowiązkowe (puste = 0 zł); zwrot gotówką – wpływ na tym koncie, wydatki z portfela – szybki wpis.
+- **T159** Operacje domowników spoza sald na start (B14): `settings.household.openingIds` = operacje, które salda na
+  start obejmują – domowników, z datą od startu budżetu do dnia przed rozliczeniami, zapisane razem z saldami
+  (`openingIdsOf`: pierwsze ustawienie daty rozliczeń, każda zmiana daty; folder sprzed 1.5.0 – przy pierwszym starcie
+  1.5.0 te, które wtedy są). Operacja z tego okresu spoza listy – dopisana później (import z opóźnieniem, drugi komputer),
+  z datą przesuniętą sprzed rozliczeń albo z domownikiem dopisanym potem – rejestr liczy zaraz po saldach na start
+  (`HouseholdLedger.late`, depozyt na start silnika + `lateDeposit`); lista zamiast chwili ustalenia sald, bo sam czas
+  utworzenia nie widzi zmiany daty ani domownika. Wcześniejsza data rozliczeń nie odejmuje od salda na start operacji,
+  których ono nie obejmowało (`rebaseOpenings`). Saldo na start wpisane ręcznie – bez tych operacji (mówi o tym
+  Ustawienia → Domownicy, `household-since-late`, z ich liczbą). Data rozliczeń nowego folderu (`seedSince`) = dzień po
+  ostatniej operacji z banku, najpóźniej dziś (bez importu – dziś). Operacja z listy przeniesiona za dzień rozliczeń liczy
+  się jeszcze raz – jak w 1.4.x (rzadkie; saldo na start do poprawy ręcznie).
+- **T160** Import a domownicy (B40, B41): reguła „finansuje: X” działa w obie strony – zwrot towaru z zakupu domownika
+  (wpływ) to jego pieniądze („Zwrot towaru – dla: X”), także zwrot kartą („POS ZWROT”) z reguły zakupu; prezent i wspólny
+  podział też. Reguła zapamiętana jeszcze raz (edytor, decyzja zbiorcza, import) dostaje całą nową decyzję – bez
+  podziału albo prezentu, których nowa nie ma; „Zapamiętaj” i „zapamiętaj dla ich marek” zapisują też, kto finansuje. Połączone nazwy (`shareMerged`) nie oddają decyzji wierszowi rozpoznanemu jako pieniądze domownika, chyba
+  że dawca jest tą samą osobą (B41 część 2). Część 1 B41 – słowo kluczowe z tytułu wygrywa z rozpoznanym domownikiem –
+  czeka na decyzję użytkownika (doprecyzowanie T110, „Przed grupą H”); bez zmian.
+- **T161** Gra a domownicy (N5, zgodnie z D80 f / T107): naruszenia ciszy nocnej i impulsu, tag „judas” i misje „cicho” /
+  „bez impulsu” liczą tylko moją część zakupu (`ownSpent`); sprawdzenie osłon poniżej minimum oddaje to, co tego dnia
+  pożyczyły domownikom albo zapłaciły za ich prezent – zakup za kogoś nie daje poważnego naruszenia.
+- **T162** Dostawy z ICTTJ (B15–B19, B21, B22; zmienia T63): dokowanie, którego operacji już nie ma, nic nie dokuje
+  (`orphans` – usuwane przy ponownym dokowaniu, usunięcie operacji usuwa jej dokowania, „Cofnij” je przywraca); wpis
+  usunięty w ICTTJ zwalnia operację – dokuje się jeszcze raz (`entryGone`), gdy wszystkie foldery wypłat ICTTJ dały się
+  odczytać, a pliku tego wpisu nie ma wśród nieczytelnych (`IctjSnapshot.unread` / `complete` – id z nazwy pliku;
+  ostrzeżenie o nowszym formacie ICTTJ niczego nie blokuje); zmiana puli wpisu po
+  dokowaniu – znaczek „pula zmieniona”, ponowne dokowanie bierze nową (`poolChanged`); dwa dokowania jednego wpisu (dwa
+  komputery) – liczy się dokowanie operacji z banku przed dopisaną na Portfelu XTB, potem starsze; drugie do usunięcia
+  jednym przyciskiem razem z jego operacją Portfela (`extra`); id operacji Portfela XTB i dokowania
+  z wpisu ICTTJ (`derivedId`; data operacji Portfela z wpisu, dokowania – z jego operacji: drugi komputer pisze ten sam
+  plik, nie drugą operację); „Portfel XTB?” dopiero, gdy
+  plik z banku konta, na które przychodzą pieniądze XTB, sięga dalej niż okno (`settings.import.coveredTo` – okres pliku,
+  nie chwila importu); start budżetu po dacie pieniędzy w banku (wpis sprzed startu z parą po nim dokuje; para sprzed
+  startu = salda otwarcia; bez Portfela XTB dla okna zaczętego przed startem); para innej kwoty (≤ max(5 zł, 1 %), do
+  4 dni po oknie – przelew po świętach, przewalutowanie) dopiero po wszystkich dokładnych – znaczek „inna kwota”, liczy się
+  kwota banku, nigdy Portfel XTB obok.
+- **T163** Gra czeka na dokowanie (B20, wariant „najtaniej” z przeglądu): dzień z parą wypłaty ICTTJ jeszcze
+  niezadokowaną nie zamarza (`pendingPairDays`, `advanceGame` `hold`, liczone z bieżących dostaw – także po pominięciu
+  wpisu czy nowym odczycie ICTTJ) – najwyżej 7 dni, potem zamarza jak dotąd. Silnik
+  do dokowania nadal liczy parę zwykłą kolejnością (pula dopiero z rekordem dokowania – wariant „pełniej” bez zmian).
+- **T164** Dni robocze (F42, zmienia T63): bez sobót, niedziel i polskich świąt ustawowych – stałe (1.01, 6.01, 1.05,
+  3.05, 15.08, 1.11, 11.11, 25–26.12; 24.12 od 2025), Wielkanoc i poniedziałek wielkanocny, Zielone Świątki (+49 dni),
+  Boże Ciało (+60) – `isPolishHoliday` / `isWorkingDay` (`calc/dates.ts`), tylko w oknie pary i 3 dniach roboczych D72.
+- **T165** Przegląd grupy G (`/code-review` high, 10 kandydatów): poprawione wszystkie – reguła zapamiętana jeszcze raz
+  bez starego podziału czy prezentu (T160), saldo na start i operacje spoza niego przy wcześniejszej dacie rozliczeń, po
+  zmianie daty albo domownika (T159), dokowanie operacji z banku przed Portfelem XTB (T162), kwota z banku nie zmienia
+  linii paragonu (T156), wpis usunięty w ICTTJ także przy ostrzeżeniach odczytu (T162), procenty ≠ 100 % niezapisywane
+  zbiorczo i w imporcie (T156), wstrzymanie gry liczone z bieżących dostaw (T163), jedna reguła reszty i procentów po równo
+  w edytorze i obliczeniach (T156). Każda poprawka z testem sprawdzonym bez niej (pada).

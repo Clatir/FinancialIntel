@@ -36,17 +36,28 @@ export async function readIctjFolder(dir: string, now = new Date()): Promise<Ict
 
   const entries: IctjEntry[] = []
   const problems: string[] = []
+  // The payouts not read (their ids from the files' names) and a folder not listed: no entry of them is deleted (B21).
+  const unread: string[] = []
+  let complete = true
+  const listed = (d: string, optional: boolean): Promise<string[]> =>
+    fs.readdir(d).catch((e: NodeJS.ErrnoException) => {
+      if (!optional || e.code !== 'ENOENT') complete = false
+      return []
+    })
   let newest = 0
   try {
-    for (const year of (await names(join(dir, 'payouts'))).filter((n) => /^\d{4}$/.test(n)).sort()) {
-      for (const file of (await names(join(dir, 'payouts', year))).sort()) {
-        if (!ICTJ_PAYOUT_FILE.test(file)) continue
+    for (const year of (await listed(join(dir, 'payouts'), true)).filter((n) => /^\d{4}$/.test(n)).sort()) {
+      for (const file of (await listed(join(dir, 'payouts', year), false)).sort()) {
+        const name = ICTJ_PAYOUT_FILE.exec(file)
+        if (!name) continue
         try {
           const p = parseIctjPayout(await readJson(join(dir, 'payouts', year, file)))
           newest = Math.max(newest, p.schemaVersion)
           if (p.entry) entries.push(p.entry)
+          else if (p.problem) unread.push(name[2]!)
           if (p.problem) problems.push(`payouts/${year}/${file}: ${p.problem}`)
         } catch {
+          unread.push(name[2]!)
           problems.push(`payouts/${year}/${file}: nieczytelny plik`)
         }
       }
@@ -67,7 +78,7 @@ export async function readIctjFolder(dir: string, now = new Date()): Promise<Ict
     if (newest > ICTJ_KNOWN_SCHEMA) warnings.push(`ICTTJ zapisał dane w nowszym formacie (wersja ${newest}) – FI czyta pola, które zna; zaktualizuj Financial Intel.`)
     if (problems.length) warnings.push(`Pominięte pliki ICTTJ (${problems.length}): ${problems.slice(0, 3).join('; ')}${problems.length > 3 ? '; …' : ''}`)
     entries.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
-    return { ...base, status: 'ok', message: null, entries, forecasts, warnings }
+    return { ...base, status: 'ok', message: null, entries, forecasts, warnings, unread, complete }
   } catch (e) {
     return { ...base, status: 'error', message: `Nie udało się odczytać folderu ICTTJ: ${(e as Error).message}` }
   }

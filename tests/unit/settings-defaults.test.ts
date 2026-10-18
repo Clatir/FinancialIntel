@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createDefaultSettings } from '@shared/defaults'
 import {
   balanceSchema,
+  CASH_ACCOUNT_ID,
   CASH_CATEGORY_ID,
   containerSchema,
   defaultCategoryId,
@@ -43,11 +44,12 @@ describe('fi.json – ustawienia folderu', () => {
 })
 
 describe('fi.json – konta, kategorie, warstwy i rozkazy (E1)', () => {
-  it('domyślne konta: mBank (import CSV) i Portfel XTB, stałe id (D68)', () => {
+  it('domyślne konta: mBank (import CSV), Portfel XTB i Gotówka (D83), stałe id (D68)', () => {
     const { accounts } = createDefaultSettings().settings
     expect(accounts.map((a) => [a.id, a.name, a.kind, a.importFormat])).toEqual([
       [MBANK_ACCOUNT_ID, 'mBank', 'bank', 'mbank'],
-      [XTB_WALLET_ACCOUNT_ID, 'Portfel XTB', 'wallet', null]
+      [XTB_WALLET_ACCOUNT_ID, 'Portfel XTB', 'wallet', null],
+      [CASH_ACCOUNT_ID, 'Gotówka', 'cash', null]
     ])
     for (const a of accounts) expect(a.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/)
   })
@@ -124,7 +126,7 @@ describe('fi.json – konta, kategorie, warstwy i rozkazy (E1)', () => {
       ['bolt', defaultCategoryId(3)],
       ['koleo', defaultCategoryId(3, 5)]
     ])
-    expect(a.seeded).toEqual(['category:auto-przejazdy', 'rule:bolt', 'rule:koleo'])
+    expect(a.seeded).toEqual(['category:auto-przejazdy', 'rule:bolt', 'rule:koleo', 'account:gotowka'])
     // Saved and read again: nothing more; the KOLEO rule deleted and „przejazdy” archived by the user stay so.
     const saved = JSON.parse(serializeRecord('fi', { ...fi, settings: a }))
     saved.settings.import.rules = saved.settings.import.rules.filter((r: { match: string }) => r.match !== 'koleo')

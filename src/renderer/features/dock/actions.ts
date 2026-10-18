@@ -4,7 +4,7 @@
  */
 import type { Delivery } from '@shared/calc/dock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
-import { newId } from '@shared/ids'
+import { derivedId, newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
 import { addRecord, deleteRecord, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -23,7 +23,8 @@ export function walletOperation(d: Delivery, now: string): Transaction {
   const pool = d.entry ? ` (pula ${ICTJ_POOL_LABEL[d.entry.pool]})` : ''
   return transactionSchema.parse({
     schemaVersion: SCHEMA_VERSION,
-    id: newId(),
+    // One id per payout (B17): docked on two computers before the sync, it is one file – never twice the money.
+    id: d.entry ? derivedId(d.entry.id, `wallet:${d.entry.id}`) : newId(),
     createdAt: now,
     updatedAt: now,
     date: d.date,
@@ -39,13 +40,15 @@ export function walletOperation(d: Delivery, now: string): Transaction {
 /** The docking record of a delivery with its operation (the pool of its ICTTJ entry, the split of the window). */
 export function dockingOf(d: Delivery, tx: Transaction, split: SplitDraft | null, now: string): Docking {
   const others = split ? split.hull + split.taxHold + Object.values(split.goals).reduce((a, b) => a + b, 0) : 0
+  // A payout's docking has one id too (B17); one whose entry was deleted in ICTTJ leaves its pool behind (B21).
+  const kept = d.entryGone ? null : d.docking
   return dockingSchema.parse({
-    ...(d.docking ?? { schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now }),
+    ...(d.docking ?? { schemaVersion: SCHEMA_VERSION, id: d.entry ? derivedId(d.entry.id, `docking:${d.entry.id}`) : newId(), createdAt: now }),
     updatedAt: now,
     date: tx.date,
     transactionId: tx.id,
-    ictjEntryId: d.entry?.id ?? d.docking?.ictjEntryId ?? null,
-    pool: d.entry?.pool ?? d.docking?.pool ?? null,
+    ictjEntryId: d.entry?.id ?? kept?.ictjEntryId ?? null,
+    pool: d.entry?.pool ?? kept?.pool ?? null,
     split: split ? { shields: Math.max(0, d.amount - others), hull: split.hull, goals: Object.fromEntries(Object.entries(split.goals).filter(([, v]) => v > 0)), taxHold: split.taxHold } : null
   })
 }
@@ -61,13 +64,21 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
     return false
   }
   const now = new Date().toISOString()
-  const created = d.transaction ? null : walletOperation(d, now)
-  const tx = d.transaction ?? created!
-  const docking = dockingOf(d, tx, split, now)
-  const before = d.docking
+  const records = useData.getState().records
+  // The payout's wallet operation already here (written on another computer – B17): docked with it, not again.
+  const wallet = d.transaction ? null : walletOperation(d, now)
+  const existing = wallet ? (records.transactions[wallet.id]?.record ?? null) : null
+  const created = existing ? null : wallet
+  const tx = d.transaction ?? existing ?? created!
+  const stored = records.dockings?.[dockingOf(d, tx, split, now).id]?.record
+  const docking = dockingOf(stored && !d.docking ? { ...d, docking: stored } : d, tx, split, now)
+  const before = d.docking ?? stored ?? null
   if (created) addRecord('transactions', created)
   if (before) updateRecord('dockings', before.id, () => docking)
   else addRecord('dockings', docking)
+  // Dockings of this payout whose operation is gone (B15): they dock nothing – out of the folder.
+  const orphans = d.orphans.filter((o) => o.id !== docking.id)
+  for (const o of orphans) void deleteRecord('dockings', o.id)
   playSound('docking')
   toast(`Zadokowano ${plnText(d.amount)} zł${created ? ' na Portfelu XTB' : ''}.`, 'success', 6000, {
     label: 'Cofnij',
@@ -75,9 +86,28 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
       if (before) updateRecord('dockings', before.id, () => before)
       else void deleteRecord('dockings', docking.id)
       if (created) void deleteRecord('transactions', created.id)
+      for (const o of orphans) addRecord('dockings', o)
     }
   })
   return true
+}
+
+/**
+ * The extra dockings of one payout (two computers before the sync – B17): each goes, and its operation too when it is
+ * one on Portfel XTB made by the docking (a bank's operation stays – an inflow to dock again). „Cofnij” brings them back.
+ */
+export function removeExtraDockings(d: Delivery): void {
+  if (useData.getState().status?.readOnly || !d.extra.length) return
+  const ops = d.extra.filter((x) => x.transaction.accountId === XTB_WALLET_ACCOUNT_ID && !x.transaction.bank).map((x) => x.transaction)
+  for (const x of d.extra) void deleteRecord('dockings', x.docking.id)
+  for (const t of ops) void deleteRecord('transactions', t.id)
+  toast(`Usunięto podwójne dokowanie${ops.length ? ` i ${ops.length === 1 ? 'jego operację' : 'ich operacje'} na Portfelu XTB` : ''}.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      for (const t of ops) addRecord('transactions', t)
+      for (const x of d.extra) addRecord('dockings', x.docking)
+    }
+  })
 }
 
 /** An ICTTJ entry that is not the budget's money (it went elsewhere): left out of the docking, until brought back. */

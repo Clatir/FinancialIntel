@@ -1,16 +1,18 @@
 # Financial Intel – postęp
 
-**Stan:** grupa F (1.4.3 – szybkość przy dużym folderze) scalona (PR #15); E2E na `main` padło na prawdziwym błędzie
-szybkiego wpisu (podwójny licznik zamknięcia przy dwóch odpowiedziach na jeden wpis – B51 z 1.4.2), poprawka z testem
-osobnym PR do `main`, potem wydanie 1.4.3; równolegle grupa G na gałęzi `claude/grupa-g-1.5.0`, potem H (D84). **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
+**Stan:** grupa G (1.5.0 – domownicy, ICTTJ i dokowanie) zrobiona na gałęzi `claude/grupa-g-1.5.0` – PR, CI, scalenie
+(D71) i wydanie w toku; potem grupa H (1.5.1, import) według „Przed grupą H” niżej (D84 A1: E–H jednym ciągiem), po H
+pauza (D67). **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik
+zamknięcia okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
 **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu i wydaniu 1.4.3 grupa G według „Przed grupą G” niżej, potem H (każda z PR i wydaniem),
-po H pauza (D67). Odbiór 1.4.1 na drugim komputerze i 1.3.0 / 1.4.0 / 1.4.2 w aplikacji nadal aktualny; po 1.4.3 –
-płynność na prawdziwym folderze w OneDrive i kopia dzienna przy aplikacji w zasobniku (punkt kontrolny bez przerwy w
-pracy – D84).
+**Następny krok:** po scaleniu i wydaniu 1.5.0 grupa H według „Przed grupą H” niżej, po niej pauza (D67). Dwa pytania
+czekają na odpowiedź użytkownika (w „Przed grupą H”): reszta prezentu bez zaliczki i słowo kluczowe z tytułu wobec wpłaty
+domownika (B41 część 1). Odbiór 1.4.1 na drugim komputerze i 1.3.0 / 1.4.0 / 1.4.2 / 1.4.3 w aplikacji nadal aktualny;
+po 1.5.0 – babcia i dziadek, konto „Gotówka”, pierwszy wspólny wydatek, dokowanie najbliższej wypłaty z ICTTJ (punkt
+kontrolny bez przerwy w pracy – D84).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -39,11 +41,11 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.4.1 | Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82) | Opus 5.5 | **xhigh** | ok. 1 h (szacunek z przebiegu sesji; plan był ok. 1,5 h) | 1.4.1 | ✅ zgłoszenie, diagnoza i komenda (D82) | ✅ wydane (PR #12) |
 | Przegląd | Przegląd całej aplikacji po 1.4.1: 10 obszarów × 3 soczewki (błędy, niespójności, wydajność), weryfikacja każdego znaleziska, pomiary na 30 tys. i 150 tys. operacji, brakujące funkcje (`docs/przeglad/`) | Opus 5.5 | **ultracode** | ok. 3 h (zegar sesji, bez przerwy na limit tygodniowy) | – | ✅ prośba, model i skala (150 tys.) | ✅ raport, PR #13 |
 | **E** | 1.4.2 Pieniądze i dane się zgadzają: B1–B5, B6, B9–B11, B13, B24, B30, B32, B42–B51, B55, B56, N1 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z przeglądem i E2E; plan był 4–5 h) | 1.4.2 | ✅ D84 (C1–C3) | ✅ wydane (PR #14) |
-| **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, W26, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z pomiarami 30 / 150 tys., przeglądem i E2E; plan był 3–5 h) | 1.4.3 | ✅ D84 (C4) | ✅ zrobione – PR, CI, scalenie |
-| **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | ok. 3–4 h | 1.5.0 | ✅ D83 | ⏳ po F |
-| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | ok. 3–5 h | 1.5.1 | ✅ D84 (C11) | ⏳ po G |
+| **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, W26, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z pomiarami 30 / 150 tys., przeglądem i E2E; plan był 3–5 h) | 1.4.3 | ✅ D84 (C4) | ✅ wydane (PR #15, poprawka PR #16) |
+| **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 3–4 h) | 1.5.0 | ✅ D83 | ✅ zrobione – PR, CI, scalenie |
+| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | ok. 2–3 h (plan był 3–5 h; E–G zajęły po 1,5–2 h) | 1.5.1 | ✅ D84 (C11) | ⏳ po G |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F** | | | **ok. 27,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G** | | | **ok. 29 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -254,6 +256,53 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.4.3, Windows, prawdziwy folder w
 3. **Co przygotować** – nic przed startem; po wydaniu 1.5.0: babcia i dziadek jako osoby (Ustawienia → Domownicy), konto
    „Gotówka”, pierwszy wspólny wydatek z podziałem, dokowanie najbliższej wypłaty z ICTTJ.
 4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3–4 h (z planu; grupy E i F zajęły po ok. 2 h przy planie 4–5 i 3–5 h).
+
+## 1.5.0 – domownicy, ICTTJ i dokowanie (grupa G, 19.10.2026)
+
+Zakres: D83 (F0) i poprawki z przeglądu po 1.4.1 – B14–B22, B40, B41, N5, F42 („Przed grupą G” wyżej). Zrobione:
+- Wspólne finansowanie (D83): wydatek kilku osób – równo, procentami albo kwotami; moja część mój wydatek, części innych
+  do ich sald; edytor („Wspólnie”), szybki wpis („wspólnie”), Operacje dla zaznaczonych („wspólnie…”), decyzje i reguły
+  importu; linie operacji czytelne dla starszej wersji jak paragon (T156). Prezent – bez długu, najpierw z zaliczki osoby,
+  reszta z osłon (T157). Konto „Gotówka” (T158).
+- Domownicy (B14, B40, B41 część 2): operacje spoza sald na start liczone zaraz po nich – lista operacji, które salda
+  obejmują, zamiast chwili ich ustalenia (wyszło w przeglądzie: zmiana daty albo domownika też musi się liczyć); zwrot
+  towaru z zakupu domownika z importu; połączone nazwy a pieniądze domownika (T159, T160).
+- Gra (N5, B20): zakup za kogoś nie daje naruszeń; dzień z niezadokowaną parą wypłaty czeka najwyżej tydzień (T161, T163).
+- ICTTJ i dokowanie (B15–B19, B21, B22, F42): osierocone i podwójne dokowania, zmiana puli, wpis usunięty i wpisany od
+  nowa, zasięg pliku z banku, start po dacie pieniędzy, para innej kwoty, polskie święta (T162, T164).
+- Przegląd `/code-review` high: 10 kandydatów, wszystkie poprawione (T165).
+- Testy: 478 unit + fs (nowy `tests/unit/share.test.ts`, poszerzone `dock`, `import`, `game`, `household`, `fleet`,
+  `settings-defaults`, `tests/fs/ictj.test.ts`), E2E 24 (nowy `tests/e2e/shared.spec.ts`). Każda poprawka z przeglądu z
+  testem sprawdzonym bez niej (pada).
+
+Nie zrobione – czeka na decyzję użytkownika („Przed grupą H”): B41 część 1 (słowo kluczowe z tytułu a wpłata domownika).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.5.0, Windows – bez przerwy w pracy, D84):
+1. Ustawienia → Domownicy: babcia i dziadek jako dwie osoby; konto „Gotówka” w Ustawieniach → Konta (saldo otwarcia).
+2. Edytor operacji: „Wspólnie” – ja i domownicy po równo, potem procentami; „prezent od: …”; Mostek – kto ile ma oddać.
+3. Szybki wpis: „wspólnie” i „prezent”; Operacje: zaznaczone → „wspólnie…”.
+4. Najbliższa wypłata z ICTTJ – dokowanie; przy przelewie po świętach albo innej kwocie – „inna kwota” w oknie dokowania.
+
+## Przed grupą H – import z mBanku (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa G (1.5.0) zrobiona. Grupa H (1.5.1): import z mBanku według przeglądu – pożyczka z
+   importu powiązana z Radarem (B34), operacja przeniesiona na inne konto nie wraca drugi raz (B35), niepołączony możliwy
+   duplikat z rozpoznaniem (B36), „Ustaw” bez kategorii nie uczy pustych reguł (B37), plan liczony od nowa po zmianie
+   nazwisk, kontenerów, kategorii (B38), temat nie traci decyzji po przeliczeniu (B39); sesja importu nie znika bez pytania
+   (N12), import bez nowych operacji zapisuje „ostatni import” (N13), pożyczka / PIT-38 nie stają się regułą (N14), reguła z
+   nazwy z banku (N15), propozycja reguły na słowo = to, co zapisuje (N16); „Cofnij import” (F4), saldo z pliku banku z
+   dniem rozbieżności (F5), oficer szybkiego wpisu zna marki i reguły (F8), audyt reguł importu (F22).
+2. **Co użytkownik musi powiedzieć** – ✅ D84 (C11) na zakres H. Dwa pytania z grupy G (nie blokują H – wdrożona
+   propozycja albo nic do czasu odpowiedzi):
+   - **Prezent bez zaliczki** – osoba „płaci za mnie” (prezent), a nie ma u mnie zaliczki: resztę pokrywają osłony, nikt nic
+     nie jest winien (tak działa 1.5.0 – propozycja). Inaczej: reszta jako długu tej osoby, albo pytanie przy zapisie.
+   - **B41 część 1** – słowo kluczowe z tytułu (np. „oszczędności” → przelew własny) a przelew od domownika z takim
+     tytułem: dziś wygrywa słowo kluczowe (wpłata staje się przelewem własnym, zaliczka nie rośnie). Propozycja: przy
+     rozpoznanym domowniku słowo z tytułu nie decyduje – wpłata zostaje pieniędzmi domownika, a słowo działa dla innych
+     nadawców (doprecyzowanie T110).
+3. **Co przygotować** – nic przed startem; po wydaniu 1.5.1: zwykły import z mBanku (sprawdzić „Cofnij import” i saldo z
+   pliku), przejrzeć listę reguł w Ustawieniach → Import z banku.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2–3 h (plan był 3–5 h; grupy E, F i G zajęły po 1,5–2 h).
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
@@ -1010,3 +1059,8 @@ Do sprawdzenia przez użytkownika (Windows 11):
   dwa liczniki zamknięcia, a okno pamiętało tylko drugi – pierwszy chował okno otwarte na nowo (zależnie od tego, jak
   szybko główne okno odpowie, dlatego PR przeszedł). Test odtwarza to za każdym razem (druga odpowiedź 300 ms później),
   poprawka: jeden licznik; osobny PR do `main` – wydanie 1.4.3 po zielonym CI.
+- 19.10.2026 – PR #16 scalony, wydanie 1.4.3 opublikowane (job Windows na `main`). Grupa G (1.5.0): wspólne finansowanie
+  (równo / procenty / kwoty) w edytorze, szybkim wpisie, Operacjach i imporcie, prezent, konto „Gotówka”, operacje spoza sald
+  na start, zwroty domowników z importu, gra bez naruszeń za cudze zakupy, dokowanie (osierocone i podwójne dokowania,
+  pula, wpis usunięty, zasięg pliku, start po dacie pieniędzy, inna kwota), polskie święta; przegląd `/code-review` high –
+  10 poprawek; nowy E2E wspólnego finansowania; PR do `main`. Dwa pytania do użytkownika w „Przed grupą H”.

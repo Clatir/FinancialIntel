@@ -6,9 +6,9 @@
 import type { Account, Category, HouseholdMember } from '../schema/budget'
 import type { MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
-import { incomeShares, memberName } from '../calc/household'
+import { financersText, incomeShares, memberName } from '../calc/household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
-import { categoryIndex, financedOf, sum } from '../calc/operations'
+import { categoryIndex, sum } from '../calc/operations'
 import { debriefing } from '../calc/plan'
 import type { FleetEvent } from '../calc/fleet'
 import { monthOf } from '../calc/dates'
@@ -82,7 +82,7 @@ function whose(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id'
     const ids = [...new Set(incomeShares(t).map((x) => x.memberId).filter((x): x is string => !!x))]
     return ids.length ? `od: ${ids.map((id) => memberName(id, members)).join(', ')}` : ''
   }
-  return [...financedOf(t).keys()].map((id) => memberName(id, members)).join(', ')
+  return financersText(t, members)
 }
 
 const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Finansuje', 'Dziennik', 'Notatka'] as const

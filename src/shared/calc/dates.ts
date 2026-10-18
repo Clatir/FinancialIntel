@@ -66,6 +66,54 @@ export function weekdayOf(date: string): number {
   return d === 0 ? 7 : d
 }
 
+/** Easter Sunday of a year (the Gregorian computus – Meeus / Jones / Butcher). */
+export function easterOf(year: number): string {
+  const a = year % 19
+  const b = Math.floor(year / 100)
+  const c = year % 100
+  const d = Math.floor(b / 4)
+  const e = b % 4
+  const f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3)
+  const h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4)
+  const k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31)
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/** The fixed public holidays in Poland (MM-DD); Christmas Eve – from 2025. */
+const FIXED_HOLIDAYS = ['01-01', '01-06', '05-01', '05-03', '08-15', '11-01', '11-11', '12-25', '12-26']
+const holidays = new Map<number, ReadonlySet<string>>()
+
+/**
+ * A public holiday in Poland (F42): the fixed ones, Christmas Eve from 2025, Easter and Easter Monday, Pentecost and
+ * Corpus Christi – the banks book no transfers then.
+ */
+export function isPolishHoliday(date: string): boolean {
+  const year = Number(date.slice(0, 4))
+  let set = holidays.get(year)
+  if (!set) {
+    const easter = easterOf(year)
+    set = new Set([
+      ...FIXED_HOLIDAYS.map((md) => `${year}-${md}`),
+      ...(year >= 2025 ? [`${year}-12-24`] : []),
+      easter,
+      addDays(easter, 1),
+      addDays(easter, 49),
+      addDays(easter, 60)
+    ])
+    holidays.set(year, set)
+  }
+  return set.has(date)
+}
+
+/** Monday to Friday and no public holiday (F42). */
+export const isWorkingDay = (date: string): boolean => weekdayOf(date) <= 5 && !isPolishHoliday(date)
+
 /** The first moment of a Warsaw day. */
 export function warsawStartOf(date: string): Date {
   return DateTime.fromISO(date, { zone: WARSAW }).startOf('day').toJSDate()

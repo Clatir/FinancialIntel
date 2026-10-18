@@ -13,6 +13,8 @@ export interface Part {
   refundable: boolean
   /** Who finances it (a refundable part; null = the first member). */
   memberId: string | null
+  /** A refundable part as the member's gift (D83): nobody owes it. */
+  gift: boolean
 }
 
 export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0)
@@ -21,10 +23,10 @@ export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b,
  * Lines of an operation: its split receipt (a sum that does not match the amount – a file edited by hand – leaves the
  * rest as one more line of the operation's own category), or the operation itself as one line.
  */
-export function partsOf(t: Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & { memberId?: string | null }): Part[] {
-  const own = { refundable: t.refundable, memberId: t.refundable ? (t.memberId ?? null) : null }
+export function partsOf(t: Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & { memberId?: string | null; gift?: boolean }): Part[] {
+  const own = { refundable: t.refundable, memberId: t.refundable ? (t.memberId ?? null) : null, gift: t.refundable && !!t.gift }
   if (!t.splits.length) return [{ amount: t.amount, categoryId: t.categoryId, ...own }]
-  const parts: Part[] = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable, memberId: s.refundable ? (s.memberId ?? null) : null }))
+  const parts: Part[] = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable, memberId: s.refundable ? (s.memberId ?? null) : null, gift: s.refundable && !!s.gift }))
   const rest = t.amount - sum(parts.map((p) => p.amount))
   if (rest !== 0) parts.push({ amount: rest, categoryId: t.categoryId, ...own })
   return parts
@@ -99,6 +101,15 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
 export function costOf(t: Transaction): number {
   if (t.kind !== 'expense' || t.goalId) return 0
   return -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)) || 0
+}
+
+/**
+ * Money out of my own lines (grosze ≥ 0): what of a purchase is mine – not a household member's, financed or given
+ * (D80, D83). Unlike `costOf` a purchase paid from a goal's money counts: it is still my decision (N5).
+ */
+export function ownSpent(t: Transaction): number {
+  if (t.kind !== 'expense') return 0
+  return Math.max(0, -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)))
 }
 
 // ------------------------------------------------------------------ the captain's log marks

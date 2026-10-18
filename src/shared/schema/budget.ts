@@ -5,7 +5,7 @@
  */
 import { z } from 'zod'
 import { clockTime, grosze, isoDate, isoDateTime, ulidSchema } from './common'
-import { TX_KINDS } from './records'
+import { shareSchema, TX_KINDS } from './records'
 
 /** Fixed id of a default item: a valid ULID `01KDEF<kind><number>`. */
 const fixedId = (kind: 'ACC' | 'CAT' | 'REG' | 'MEM', n: number) => `01KDEF${kind}${String(n).padStart(17, '0')}`
@@ -26,7 +26,7 @@ function lenientList<T extends z.ZodType>(item: T) {
 
 // ------------------------------------------------------------------ accounts
 
-export const ACCOUNT_KINDS = ['bank', 'wallet', 'other'] as const
+export const ACCOUNT_KINDS = ['bank', 'wallet', 'cash', 'other'] as const
 export type AccountKind = (typeof ACCOUNT_KINDS)[number]
 
 export const accountSchema = z.looseObject({
@@ -41,12 +41,20 @@ export type Account = z.infer<typeof accountSchema>
 
 export const MBANK_ACCOUNT_ID = fixedId('ACC', 1)
 export const XTB_WALLET_ACCOUNT_ID = fixedId('ACC', 2)
+/** The cash in the wallet (D83, 1.5.0): money given back in cash comes onto it, cash expenses are typed from it. */
+export const CASH_ACCOUNT_ID = fixedId('ACC', 3)
 
-/** mBank (CSV import + quick entries) and Portfel XTB (the bank account with a card, quick entries only – D9, D68). */
+const cashAccount = (): Account => ({ id: CASH_ACCOUNT_ID, name: 'Gotówka', kind: 'cash', importFormat: null, archived: false })
+
+/**
+ * mBank (CSV import + quick entries), Portfel XTB (the bank account with a card, quick entries only – D9, D68) and the
+ * cash (D83: what household members give back in cash, the expenses paid with it).
+ */
 export function defaultAccounts(): Account[] {
   return [
     { id: MBANK_ACCOUNT_ID, name: 'mBank', kind: 'bank', importFormat: 'mbank', archived: false },
-    { id: XTB_WALLET_ACCOUNT_ID, name: 'Portfel XTB', kind: 'wallet', importFormat: null, archived: false }
+    { id: XTB_WALLET_ACCOUNT_ID, name: 'Portfel XTB', kind: 'wallet', importFormat: null, archived: false },
+    cashAccount()
   ]
 }
 
@@ -176,6 +184,10 @@ export const importRuleSchema = z.looseObject({
   household: z.boolean().default(false),
   /** The household member (D80): who finances an expense („refundable”), whose money an income is („household”); null = the first. */
   memberId: ulidSchema.nullable().catch(null).default(null),
+  /** A purchase the member gives (D83, with `refundable`): nobody owes it. Absent = no. */
+  gift: z.boolean().optional().catch(undefined),
+  /** A purchase financed by several people (D83): each row's amount split so (`calc/share.ts`). Absent / null = none. */
+  share: shareSchema.nullable().optional().catch(undefined),
   counterAccountId: ulidSchema.nullable().default(null),
   /** false = written or edited by the user in the settings (never overwritten by learning). */
   learned: z.boolean().default(true),
@@ -215,6 +227,11 @@ export const importSettingsSchema = z.looseObject({
   rules: lenientList(importRuleSchema).catch([]).default([]),
   /** Last import per account (a reminder of an overdue import, E4). */
   lastImport: z.record(ulidSchema, isoDateTime).catch({}).default({}),
+  /**
+   * The last day the files imported to each account cover (1.5.0, B18): the latest period's end – the money of the days
+   * up to it is in the budget (the docking's „Portfel XTB?” waits for it, not for the moment of the import).
+   */
+  coveredTo: z.record(ulidSchema, isoDate).catch({}).default({}),
   /**
    * The imports (E7: the mission „Łączność z bazą”): time → account, the last 100. A record, so two computers' imports
    * merge key by key (an array would be one conflicting field).
@@ -292,7 +309,14 @@ export const householdSettingsSchema = z.looseObject({
    * not income (the statistics). Absent = not chosen yet (1.4.0 sets the day it first opens the folder); null = from the
    * budget's start (as 1.3.0).
    */
-  since: isoDate.nullable().optional().catch(undefined)
+  since: isoDate.nullable().optional().catch(undefined),
+  /**
+   * The operations the members' balances at `since` take in (1.5.0, B14): the household's operations dated from the
+   * budget's start to the day before `since` when the balances were set (the seed, a new date; a folder of before 1.5.0
+   * – its first start of 1.5.0). One dated before `since` and not among them – added later (a late import of the bank,
+   * another computer), its date or its members changed since – counts right after them. Absent = all of them (1.4.x).
+   */
+  openingIds: z.array(z.string()).optional().catch(undefined)
 })
 export type HouseholdSettings = z.infer<typeof householdSettingsSchema>
 
@@ -348,28 +372,33 @@ const starterRule = (n: number, match: string, label: string, categoryId: string
  * Items a version adds to every folder once (D69): a new default category, a starter rule. `settings.seeded`
  * remembers what was added, so an archived category or a deleted rule never comes back.
  */
-const SEEDS: ReadonlyArray<{ id: string; category?: () => Category; rule?: ImportRule }> = [
+const SEEDS: ReadonlyArray<{ id: string; category?: () => Category; rule?: ImportRule; account?: () => Account }> = [
   { id: 'category:auto-przejazdy', category: () => defaultCategories().find((c) => c.id === defaultCategoryId(3, 5))! },
   // Taxi rides are going out, trains are travel (D69).
   { id: 'rule:bolt', rule: starterRule(1, 'bolt', 'Bolt', defaultCategoryId(6)) },
-  { id: 'rule:koleo', rule: starterRule(2, 'koleo', 'KOLEO', defaultCategoryId(3, 5)) }
+  { id: 'rule:koleo', rule: starterRule(2, 'koleo', 'KOLEO', defaultCategoryId(3, 5)) },
+  // The cash account (D83, 1.5.0) – a name the folder has already (an account typed by hand) keeps it out.
+  { id: 'account:gotowka', account: cashAccount }
 ]
 
-type Seedable = { categories: Category[]; import: ImportSettings; seeded: string[] }
+type Seedable = { accounts: Account[]; categories: Category[]; import: ImportSettings; seeded: string[] }
 
 /** The settings with the seeds not added yet (the same object when there is nothing to add). */
 export function seedSettings<T extends Seedable>(s: T): T {
   const todo = SEEDS.filter((x) => !s.seeded.includes(x.id))
   if (!todo.length) return s
+  let accounts = s.accounts
   let categories = s.categories
   let rules = s.import.rules
   for (const x of todo) {
+    const a = x.account?.()
+    if (a && !accounts.some((y) => y.id === a.id || y.name.toLowerCase() === a.name.toLowerCase())) accounts = [...accounts, a]
     const c = x.category?.()
     if (c && !categories.some((y) => y.id === c.id) && categories.some((y) => y.id === c.parentId)) categories = [...categories, c]
     const r = x.rule
     if (r && !rules.some((y) => y.id === r.id || (y.match === r.match && (y.direction ?? r.direction) === r.direction))) rules = [...rules, r]
   }
-  return { ...s, categories, import: { ...s.import, rules }, seeded: [...s.seeded, ...todo.map((x) => x.id)] }
+  return { ...s, accounts, categories, import: { ...s.import, rules }, seeded: [...s.seeded, ...todo.map((x) => x.id)] }
 }
 
 export const budgetSettingsShape = {

@@ -49,9 +49,38 @@ export const splitSchema = z.looseObject({
   memberId: ulidSchema.nullable().catch(null).default(null),
   /** A member's part of an income (D81): what they do not owe is their advance, not income. */
   advance: z.boolean().catch(false).default(false),
+  /**
+   * A member's line as their gift (D83, 1.5.0): it takes their advance first, the rest the shields pay – nobody owes it,
+   * and it is no cost of mine. An older version reads the line as financed (the member owes it). Absent = no.
+   */
+  gift: z.boolean().optional().catch(undefined),
   note: text
 })
 export type Split = z.infer<typeof splitSchema>
+
+/** How a shared purchase is split among the people (D83): equally, by percents or by amounts (the rest – mine). */
+export const SHARE_MODES = ['equal', 'percent', 'amounts'] as const
+export type ShareMode = (typeof SHARE_MODES)[number]
+
+/** One person of a shared purchase: me (`memberId` null) or a household member, their percent or amount, a gift. */
+export const shareLineSchema = z.looseObject({
+  memberId: ulidSchema.nullable().catch(null).default(null),
+  /** 'percent': the percent (0–100); 'amounts': grosze (mine – the rest); 'equal': not used. */
+  value: z.number().min(0).max(1e12).catch(0).default(0),
+  gift: z.boolean().catch(false).default(false)
+})
+export type ShareLine = z.infer<typeof shareLineSchema>
+
+/**
+ * A purchase financed by several people in one move (D83, 1.5.0): the way its lines (`splits`, one per person, the
+ * operation's category) were made – a new amount gives them again (`calc/share.ts`). The lines alone are what counts:
+ * an older version reads them as a split receipt.
+ */
+export const shareSchema = z.looseObject({
+  mode: z.enum(SHARE_MODES),
+  lines: z.array(shareLineSchema).min(2).max(20)
+})
+export type Share = z.infer<typeof shareSchema>
 
 /** The bank's row behind an operation (import from mBank, E2). */
 export const bankRowSchema = z.looseObject({
@@ -101,6 +130,10 @@ export const transactionSchema = z.looseObject({
   memberId: ulidSchema.nullable().catch(null).default(null),
   /** A household member's income: what they do not owe is their advance (held in the deposit), not income. */
   advance: z.boolean().catch(false).default(false),
+  /** A purchase a member finances as their gift (D83, with `refundable`): nobody owes it (`Split.gift`). Absent = no. */
+  gift: z.boolean().optional().catch(undefined),
+  /** Financed by several people in one move (D83): how its lines were made; absent / null = none (or a split receipt). */
+  share: shareSchema.nullable().optional().catch(undefined),
   /** A household member's income: the purchases it pays back first (operations' ids), then the oldest. */
   covers: z.array(ulidSchema).max(500).catch([]).default([]),
   /** A split receipt (its lines replace `categoryId` / `refundable`); the lines sum to `amount`. */

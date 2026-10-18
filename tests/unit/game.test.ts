@@ -93,8 +93,8 @@ describe('ocena dnia (D73): naruszenia zwykłe i poważne', () => {
   })
 
   it('osłony poniżej minimum: z decyzji – poważne; przez wypłatę pensji – nie', () => {
-    const house = rateDay(world({ transactions: [tx('2026-10-12', -zl(3500), { refundable: true })] }), '2026-10-12')
-    expect(orders(house)).toEqual([['shields', true, zl(400)]])
+    const lent = rateDay(world({ transactions: [tx('2026-10-12', -zl(3500), { kind: 'loan' })] }), '2026-10-12')
+    expect(orders(lent)).toEqual([['shields', true, zl(400)]])
     // 5 000 zł at the start: the salary leaves 1 900 zł in the shields – below the minimum, but not by a decision; a
     // purchase from the energy does not touch them either.
     const poor = world({ opening: zl(5000), transactions: [tx('2026-10-02', -zl(50))] })
@@ -271,5 +271,36 @@ describe('osiągnięcia (D73)', () => {
     expect(won).toContainEqual({ kind: 'achievement', id: 'dock', day: '2026-10-06' })
     expect(won).toContainEqual({ kind: 'achievement', id: 'streak7', day: '2026-10-11' })
     expect(advanceGame(world({ opening: zl(40000), transactions: [income], dockings: [dock], game: a.months }), '2026-10-15T10:00:00Z').events.filter((e) => e.kind === 'achievement')).toEqual([])
+  })
+})
+
+describe('N5: zakup sfinansowany przez domownika nie jest naruszeniem gry (D80 f, T107)', () => {
+  it('cisza nocna: liczy się tylko moja część – zakup „finansuje” albo prezent bez naruszenia, wspólny – moja część', () => {
+    const night = (over: Partial<Transaction>) => rateDay(world({ transactions: [tx('2026-10-12', -zl(30), { time: '23:30', counterparty: 'Żabka', ...over })] }), '2026-10-12')
+    expect(night({ refundable: true }).violations).toEqual([])
+    expect(night({ refundable: true, gift: true }).violations).toEqual([])
+    const half = night({
+      splits: [
+        { id: nextId(), amount: -zl(10), categoryId: FOOD, refundable: false, memberId: null, advance: false, note: '' },
+        { id: nextId(), amount: -zl(20), categoryId: FOOD, refundable: true, memberId: null, advance: false, note: '' }
+      ]
+    })
+    expect(half.violations).toEqual([{ order: 'quiet', serious: true, amount: zl(10), ref: expect.any(String), note: 'Żabka' }])
+  })
+
+  it('osłony poniżej minimum przez zakup domownika (osłony pożyczyły) albo jego prezent – bez naruszenia; misja ciszy nocnej go nie widzi', () => {
+    expect(rateDay(world({ transactions: [tx('2026-10-12', -zl(3500), { refundable: true })] }), '2026-10-12').violations).toEqual([])
+    expect(rateDay(world({ transactions: [tx('2026-10-12', -zl(3500), { refundable: true, gift: true })] }), '2026-10-12').violations).toEqual([])
+    const w = world({ transactions: [tx('2026-10-14', -zl(30), { time: '23:30', refundable: true })] })
+    expect(chooseMission(w, '2026-10-26', null).template).not.toBe('quiet')
+  })
+
+  it('B20: dzień z niezadokowaną parą wypłaty ICTTJ czeka – ani on, ani późniejsze nie zamarzają', () => {
+    const w = world()
+    const all = advanceGame(w, '2026-10-12T12:00:00+02:00')
+    const held = advanceGame(w, '2026-10-12T12:00:00+02:00', { hold: '2026-10-08' })
+    const days = (c: typeof all) => c.months.flatMap((m) => Object.keys(m.days)).sort()
+    expect(days(all).at(-1)).toBe('2026-10-10')
+    expect(days(held)).toEqual(['2026-10-05', '2026-10-06', '2026-10-07'])
   })
 })

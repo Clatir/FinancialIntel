@@ -8,7 +8,8 @@ import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { counterpartyKey } from '@shared/import/classify'
 import { newId } from '@shared/ids'
-import { envelopeKind, inflowOf, SCHEMA_VERSION, transactionSchema, ulidSchema, type Transaction } from '@shared/schema'
+import { shareSplits } from '@shared/calc/share'
+import { envelopeKind, inflowOf, SCHEMA_VERSION, shareSchema, transactionSchema, ulidSchema, type Share, type Transaction } from '@shared/schema'
 import { rememberInflows } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
@@ -107,7 +108,11 @@ export interface QuickDraft {
   memberId: string | null
   /** A household member's money: the rest beyond their debt is their advance (else income). */
   advance: boolean
-  splits: Array<{ amount: number; categoryId: string | null; refundable: boolean; memberId?: string | null }>
+  /** A purchase the member gives ('refundable', D83): nobody owes it. */
+  gift?: boolean
+  splits: Array<{ amount: number; categoryId: string | null; refundable: boolean; memberId?: string | null; gift?: boolean }>
+  /** A purchase financed by several people (D83, „Wspólnie”): its lines made from it. */
+  share?: Share | null
   /** A household member's money carrying others' (D81, „w tym za …”): their parts, the rest the sender's. */
   shares?: Array<{ memberId: string; amount: number; advance: boolean }>
 }
@@ -121,11 +126,25 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
   const household = income && d.household && !!d.memberId
   const shares = household ? (d.shares ?? []).filter((x) => x.amount > 0) : []
   if (shares.reduce((a, x) => a + x.amount, 0) > d.amount) return 'Części innych osób przekraczają kwotę wpłaty.'
+  // A shared purchase (D83): a share the schema reads (a window of another version sends what it sends).
+  const parsedShare = !income && d.share ? shareSchema.safeParse(d.share) : null
+  const share = parsedShare?.success ? parsedShare.data : null
   const splits = income
     ? shares.map((x) => ({ id: newId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, note: '' }))
-    : d.splits.length > 1
-      ? d.splits.map((x) => ({ id: newId(), amount: sign * Math.abs(x.amount), categoryId: x.categoryId, refundable: x.refundable, memberId: x.refundable ? (x.memberId ?? null) : null, advance: false, note: '' }))
-      : []
+    : share
+      ? shareSplits({ amount: sign * d.amount, categoryId: d.categoryId }, share)
+      : d.splits.length > 1
+        ? d.splits.map((x) => ({
+            id: newId(),
+            amount: sign * Math.abs(x.amount),
+            categoryId: x.categoryId,
+            refundable: x.refundable,
+            memberId: x.refundable ? (x.memberId ?? null) : null,
+            advance: false,
+            ...(x.refundable && x.gift ? { gift: true } : {}),
+            note: ''
+          }))
+        : []
   const refundable = d.kind === 'refundable' && !splits.length
   const parsed = transactionSchema.safeParse({
     schemaVersion: SCHEMA_VERSION,
@@ -142,6 +161,8 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
     // Who finances the purchase or whose money it is (D80); the ledger counts what it repays.
     memberId: refundable || household ? d.memberId : null,
     advance: household && d.advance,
+    ...(refundable && d.gift ? { gift: true } : {}),
+    ...(share ? { share } : {}),
     splits,
     counterparty: d.counterparty.trim(),
     note: d.note,

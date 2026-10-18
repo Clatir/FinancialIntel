@@ -132,7 +132,18 @@ export function RuleProposal({ g, choice }: { g: ImportGroup; choice: Choice }) 
   const label = (group: string) => groups.find((x) => x.group === group)?.label ?? ''
   const decision = choice.kind === 'expense' ? cats.label(choice.categoryId) : (TX_KIND_LABEL[choice.kind as TxKind] ?? choice.kind)
   const take = (text: string, rows: number) => {
-    const err = saveKeywordRule({ keyword: text, direction: g.direction, kind: choice.kind as TxKind, categoryId: choice.categoryId, refundable: choice.refundable, household: choice.household, memberId: choice.memberId, counterAccountId: choice.counterAccountId })
+    const err = saveKeywordRule({
+      keyword: text,
+      direction: g.direction,
+      kind: choice.kind as TxKind,
+      categoryId: choice.categoryId,
+      refundable: choice.refundable,
+      household: choice.household,
+      memberId: choice.memberId,
+      gift: choice.gift,
+      share: choice.share,
+      counterAccountId: choice.counterAccountId
+    })
     if (err) {
       toast(err, 'error', 5000)
       return

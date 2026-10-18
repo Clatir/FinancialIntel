@@ -9,6 +9,8 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { advanceGame, gameStartFor, gameView, rateDay, type DayRating, type GameInput, type GameView } from '@shared/calc/game'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
+import { pendingPairDays } from '@shared/calc/dock'
+import { useDeliveries } from '../features/dock/state'
 import type { RecordEntry } from '@shared/api'
 import type { GameMonth, GameSettings } from '@shared/schema'
 import { addRecords, listOf, updateRecord, updateSettings, useData } from './data'
@@ -40,12 +42,18 @@ const gameParts = (s: DataState): unknown[] => (s.fi ? [...GAME_SETTINGS.map((k)
 
 /** Days rated in one pass (W16): each is a whole run of the engine – a long backlog goes in portions, the window between them. */
 const DAYS_PER_PASS = 2
+/** A day of a payout still to dock waits this long (B20). */
+const HOLD_DAYS = 7
 
 /** Freeze what is due and give the week its mission; the game starts once the budget runs (main window only). */
 export function useGameAdvance(): void {
   const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly)
   const parts = useData(useShallow(gameParts))
   const today = useToday()
+  // A paired ICTTJ payout not docked yet (B20): its day waits – for a week at most (then it is frozen as it stands). The
+  // deliveries' own inputs (a skipped entry, ICTTJ read again, the bank's file) count too.
+  const deliveries = useDeliveries()
+  const hold = useMemo(() => pendingPairDays(deliveries).find((d) => daysBetween(d, today) <= HOLD_DAYS) ?? null, [deliveries, today])
   useEffect(() => {
     const { fi, records } = useData.getState()
     if (!ready || !fi) return
@@ -58,12 +66,12 @@ export function useGameAdvance(): void {
     // A portion; its months saved change the records, and the next portion runs after the window painted. Months a
     // newer version wrote are not this one's to write: passed over (a portion would never get past them).
     const locked = new Set(Object.values(records.game ?? {}).flatMap((e) => (e.readOnly ? [e.record.month] : [])))
-    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date(), { maxDays: DAYS_PER_PASS, locked }))
+    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date(), { maxDays: DAYS_PER_PASS, locked, hold }))
     if (!change.months.length) return
     const fresh = change.months.filter((m) => !records.game[m.id])
     if (fresh.length) addRecords('game', fresh)
     for (const m of change.months) if (records.game[m.id]) updateRecord('game', m.id, () => m, { background: true })
-  }, [parts, ready, today])
+  }, [parts, ready, today, hold])
 }
 
 const NO_GAME: Record<string, RecordEntry<GameMonth>> = {}
