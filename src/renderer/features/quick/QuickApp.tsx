@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { QuickData, QuickResult } from '@shared/api'
 import { inClockWindow, warsawNow } from '@shared/calc/dates'
 import { counterpartyKey } from '@shared/import/classify'
+import { HOUSE_MEMBER_ID } from '@shared/schema'
 import { AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -122,7 +123,8 @@ export function QuickApp() {
     const financed = new Map<string, number>()
     for (const p of parts) {
       if (p.refundable) {
-        const id = p.memberId ?? data.members[0]?.id ?? ''
+        // As the ledger reads it (`financerOf`): no member = the first one, „Dom”.
+        const id = p.memberId ?? HOUSE_MEMBER_ID
         financed.set(id, (financed.get(id) ?? 0) + p.amount)
         continue
       }
@@ -167,6 +169,7 @@ export function QuickApp() {
     if (data.readOnly) return setMsg({ ok: false, text: 'Folder jest tylko do odczytu.' })
     if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
     if (lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
+    if (d.kind === 'refundable' && lines.length <= 1 && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
     setBusy(true)
     setMsg(null)
@@ -252,7 +255,7 @@ export function QuickApp() {
                   title="Podziel paragon: kilka kategorii albo część domownika"
                   onClick={() =>
                     setLines([
-                      { amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null },
+                      { amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable' && !!d.memberId, memberId: d.kind === 'refundable' ? d.memberId : null },
                       { amount: 0, categoryId: null, refundable: false, memberId: null }
                     ])
                   }
@@ -283,7 +286,7 @@ export function QuickApp() {
                     data={data}
                     compact
                     none="ja"
-                    value={l.refundable ? (l.memberId ?? data.members[0]?.id ?? null) : null}
+                    value={l.refundable ? l.memberId : null}
                     onChange={(memberId) => setLines(lines.map((x, j) => (j === i ? { ...x, refundable: !!memberId, memberId } : x)))}
                     testId="quick-line-financer"
                   />

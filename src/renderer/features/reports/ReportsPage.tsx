@@ -107,7 +107,7 @@ function WatchReport() {
   const monday = useReportsUi((s) => s.watchMonday) ?? defaultWatchMonday(fleet.today, warsawNow().time)
   const setMonday = setWatchMonday
   const sunday = addDays(monday, 6)
-  const w = useMemo(() => weekNumbers(transactions, settings.categories, monday, fleet.start), [transactions, settings, monday, fleet.start])
+  const w = useMemo(() => weekNumbers(transactions, settings.categories, monday, fleet.household), [transactions, settings, monday, fleet.household])
   const kz = useMemo(() => killzoneGrid(transactions, monday, sunday), [transactions, monday, sunday])
   const top = [...kz.cells.values()].sort((a, b) => b.cost - a.cost)[0] ?? null
   const week = isoWeekOf(monday)
@@ -362,7 +362,7 @@ function YearReport() {
   const thisYear = fleet.today.slice(0, 4)
   // In January the review of the year just closed (spec).
   const [year, setYear] = useState(() => (fleet.today.slice(5, 7) === '01' ? String(Number(thisYear) - 1) : thisYear))
-  const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.start), [transactions, settings, year, fleet.start])
+  const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.household), [transactions, settings, year, fleet.household])
   const today = fleet.today
   const wealth = useMemo(() => yearWealth(transactions, balances, settings.accounts.map((a) => a.id), year, today), [transactions, balances, settings, year, today])
   const achievements = (game?.input.game ?? []).flatMap((g) => g.achievements).filter((a) => (a.day ?? '').startsWith(year) && (ACHIEVEMENTS as readonly string[]).includes(a.id))
@@ -430,7 +430,7 @@ function ExportPanel() {
   const [to, setTo] = useState(fleet.today)
   const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members)
   const months = () =>
-    monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today, start: fleet.start }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
+    monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today, ledger: fleet.household }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
   const csv = { name: 'CSV', extensions: ['csv'] }
   return (

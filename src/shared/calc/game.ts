@@ -10,8 +10,7 @@ import { SCHEMA_VERSION } from '../schema/common'
 import type { Settings } from '../schema/settings'
 import type { GameDay, GameMission, GameMonth, Transaction } from '../schema/records'
 import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, weekdayOf } from './dates'
-import { activeIn, budgetStartOf, cargoMass, computeFleet, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
-import { settleHousehold } from './household'
+import { activeIn, cargoMass, computeFleet, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
 import { categoryIndex, costOf, isNight, partsOf, sum } from './operations'
 import { debriefing } from './plan'
 
@@ -398,8 +397,8 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
       return { ok: cost <= num('target'), amount: cost }
     }
     case 'house': {
-      // What the household members paid back this week (D80: the ledger from the budget's start).
-      const ledger = settleHousehold(input.transactions, { until: to, from: budgetStartOf(input.settings, input.balances) })
+      // What the household members paid back this week (D80: the engine's ledger as it was on `upTo`).
+      const ledger = householdOf(input, upTo, to)
       const back = sum(txs.flatMap((t) => (ledger.byTx.get(t.id) ?? []).map((f) => f.repaid)))
       return { ok: back > 0, amount: back }
     }

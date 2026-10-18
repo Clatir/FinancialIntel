@@ -21,7 +21,8 @@ import type { Settings } from '../schema/settings'
 import { envelopeKind, type EnvelopeKind } from '../schema/budget'
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawNow, warsawStamp } from './dates'
-import { settleHousehold, type MemberBalance, type MemberFlow } from './household'
+import { openingsOf } from './balances'
+import { settleHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
 import { debtOf, loanStates, type LoanState } from './loans'
 import { categoryIndex, costOf, incomeOf, partsOf, splitEvenly, sum } from './operations'
 
@@ -197,13 +198,19 @@ export function dockingsByTx(dockings: readonly Docking[]): Map<string, Docking>
  */
 export function budgetStartOf(settings: Pick<Settings, 'budget'>, balances: readonly Balance[] = [], today?: string): string | null {
   if (settings.budget.start) return settings.budget.start
-  const latest = new Map<string, Balance>()
-  for (const b of balances) {
-    if (b.kind !== 'opening' || (today != null && b.date > today)) continue
-    const prev = latest.get(b.accountId)
-    if (!prev || b.date > prev.date || (b.date === prev.date && b.updatedAt > prev.updatedAt)) latest.set(b.accountId, b)
-  }
-  return [...latest.values()].map((o) => o.date).sort()[0] ?? null
+  return [...openingsOf(balances, today).values()].map((o) => o.date).sort()[0] ?? null
+}
+
+/** The ledger's options as the engine settles the household (D80): from the budget's start, each account from its opening. */
+const ledgerOptions = (start: string | null, openings: ReadonlyMap<string, Balance>, until: string) => ({ until, from: start, openings: new Map([...openings].map(([id, o]) => [id, o.date])) })
+
+/**
+ * The household's ledger as the engine keeps it on `today` (D80), up to `until` (default `today`): the same balances
+ * and flows as `FleetState.household` – for what has no fleet at hand (the game's missions).
+ */
+export function householdOf(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, today: string, until: string = today): HouseholdLedger {
+  const balances = input.balances ?? []
+  return settleHousehold(input.transactions, ledgerOptions(budgetStartOf(input.settings, balances, today), openingsOf(balances, today), until))
 }
 
 // ------------------------------------------------------------------ the whole state
@@ -303,6 +310,8 @@ export interface FleetState {
    * given still open (by loan; an operation without its loan record by `-`).
    */
   receivables: { house: number; houseSince: string | null; members: MemberBalance[]; loans: Record<string, number>; total: number }
+  /** The household's ledger (D80): each member's balance and each operation's flows – the editor's and the reports'. */
+  household: HouseholdLedger
   /** The loans with their schedules and payments (`calc/loans.ts`, E6). */
   loans: LoanState[]
   /** What the taken loans still want back (E6): the range counts the shields less it (D72). */
@@ -348,12 +357,7 @@ export function computeFleet(input: FleetInput): FleetState {
   const txs = input.transactions.filter((t) => t.date <= today)
 
   // ---------------------------------------------------------------- accounts and balances
-  const openings = new Map<string, Balance>()
-  for (const b of input.balances ?? []) {
-    if (b.kind !== 'opening' || b.date > today) continue
-    const prev = openings.get(b.accountId)
-    if (!prev || b.date > prev.date || (b.date === prev.date && b.updatedAt > prev.updatedAt)) openings.set(b.accountId, b)
-  }
+  const openings = openingsOf(input.balances ?? [], today)
   const accountIds = [...new Set([...settings.accounts.map((a) => a.id), ...txs.map((t) => t.accountId), ...openings.keys()])]
   const counts = (t: Transaction) => {
     const o = openings.get(t.accountId)
@@ -370,9 +374,10 @@ export function computeFleet(input: FleetInput): FleetState {
   const total = sum(accounts.map((a) => a.balance))
 
   // ---------------------------------------------------------------- the household (D80)
-  // Its balances from the budget's start (the layers'), the same ledger for the screens and the statistics.
+  // Its balances from the budget's start, the operations the layers count (`counts`) – the same ledger for the screens
+  // and the statistics.
   const budgetStart = budgetStartOf(settings, input.balances, today)
-  const household = settleHousehold(input.transactions, { until: today, from: budgetStart })
+  const household = settleHousehold(input.transactions, ledgerOptions(budgetStart, openings, today))
 
   // ---------------------------------------------------------------- statistics from the whole history
   const dataDates = [...txs.map((t) => t.date), ...[...openings.values()].map((o) => o.date)].sort()
@@ -889,6 +894,7 @@ export function computeFleet(input: FleetInput): FleetState {
     deposit,
     loot: { month: lootMonth, amount: loot },
     receivables: { house: household.owed, houseSince: household.since, members: household.members, loans: given, total: household.owed + sum(Object.values(given)) },
+    household,
     loans: loanList,
     debt,
     costs,

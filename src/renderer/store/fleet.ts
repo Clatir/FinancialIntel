@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
 import { computeFleet, type FleetInput, type FleetState } from '@shared/calc/fleet'
-import { settleHousehold, type HouseholdLedger } from '@shared/calc/household'
+import type { HouseholdLedger } from '@shared/calc/household'
 import type { RecordEntry } from '@shared/api'
 import { useData } from './data'
 
@@ -78,17 +78,6 @@ export function fleetNow(): FleetState | null {
 }
 
 /** The household's ledger as the engine counts it (D80: from the budget's start, up to today) – per operation too. */
-let ledgerMemo: { records: Records['transactions']; start: string | null; today: string; ledger: HouseholdLedger } | null = null
-
-function ledgerOf(records: Records['transactions'], start: string | null, today: string): HouseholdLedger {
-  if (ledgerMemo && ledgerMemo.records === records && ledgerMemo.start === start && ledgerMemo.today === today) return ledgerMemo.ledger
-  const ledger = settleHousehold(recordsOf(records), { until: today, from: start })
-  ledgerMemo = { records, start, today, ledger }
-  return ledger
-}
-
 export function useHousehold(): HouseholdLedger | null {
-  const fleet = useFleet()
-  const records = useData((s) => s.records.transactions)
-  return useMemo(() => (fleet ? ledgerOf(records, fleet.start, fleet.today) : null), [fleet, records])
+  return useFleet()?.household ?? null
 }

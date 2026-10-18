@@ -22,11 +22,20 @@ function nameOf(bankName: string): string {
   return (w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).slice(0, 40) || 'Domownik'
 }
 
+/** `name`, else „name 2”, „name 3”… – the screens tell the members by their names. */
+function freeName(name: string): string {
+  const taken = new Set(membersNow().map((m) => m.name.toLowerCase()))
+  const base = name.slice(0, 36)
+  let out = name
+  for (let i = 2; taken.has(out.toLowerCase()); i++) out = `${base} ${i}`
+  return out
+}
+
 /** A member from a counterparty of the import (D80 a): the bank's name is theirs; the id, or null (read-only folder). */
 export function addMemberFromBank(bankName: string): string | null {
   if (useData.getState().status?.readOnly) return null
   const id = newId()
-  const name = nameOf(bankName)
+  const name = freeName(nameOf(bankName))
   patchMembers((ms) => [...ms, { id, name, bankNames: [bankName.trim().slice(0, 120)], inflow: 'ask', archived: false }])
   toast(`Dopisano domownika „${name}” (Ustawienia → Domownicy – tam zmienisz imię).`, 'success', 4500)
   return id
@@ -35,7 +44,7 @@ export function addMemberFromBank(bankName: string): string | null {
 export function addMember(name: string): string | null {
   if (useData.getState().status?.readOnly || !name.trim()) return null
   const id = newId()
-  patchMembers((ms) => [...ms, { id, name: name.trim().slice(0, 40), bankNames: [], inflow: 'ask', archived: false }])
+  patchMembers((ms) => [...ms, { id, name: freeName(name.trim().slice(0, 40)), bankNames: [], inflow: 'ask', archived: false }])
   return id
 }
 

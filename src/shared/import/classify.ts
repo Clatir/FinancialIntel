@@ -307,8 +307,12 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const hint = hintFor(row.category, ctx.categories)
   const op = row.operation
   const out = (d: ImportDecision): Classified => ({ key, brand, target, direction, hint, decision: d })
+  // A household member's money (D80): by their names in the bank.
+  const member = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op) ? memberOf(row.counterparty, ctx.members) : null
   const rule = findRule(ctx.rules, target, direction)
-  if (rule) {
+  // A rule of plain income naming no member (learned before the person became a member, or before 1.3.0) gives way to
+  // the member: their money repays what they owe first.
+  if (rule && !(member && rule.kind === 'income' && !rule.memberId)) {
     const kind = rule.kind as TxKind
     const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
     const refundable = kind === 'expense' && direction === 'out' && rule.refundable
@@ -332,8 +336,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (isXtb(row)) return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
   if (/^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(op) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(op) && isOwnName(row.counterparty, ctx.ownNames)))
     return out(decision('transfer', 'przelew własny'))
-  // A household member's money (D80): by their names in the bank; asked once what the rest beyond their debt is.
-  const member = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op) ? memberOf(row.counterparty, ctx.members) : null
+  // A member's money: asked once what the rest beyond their debt is (D80 b).
   if (member) {
     const inflow = inflowOf(member)
     return out(

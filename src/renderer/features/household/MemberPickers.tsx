@@ -82,7 +82,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const members = useMembers()
   const ledger = useHousehold()
   const transactions = useData((s) => s.records.transactions)
-  const payer = payerOf(t)
+  // Chosen before the amount is typed (0 zł) – it stays chosen.
+  const payer = t.memberId ?? payerOf(t)
   const offered = useOffered(payer)
   const flow = ledger?.byTx.get(t.id)?.[0]
   const balance = payer && ledger ? balanceOf(ledger, payer) : null

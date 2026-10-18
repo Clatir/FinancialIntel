@@ -8,7 +8,7 @@ import type { Balance, Transaction } from '../schema/records'
 import type { Category, Orders } from '../schema/budget'
 import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthRange, mondayOf, weekdayOf } from './dates'
 import type { FleetEvent } from './fleet'
-import { financedBy, settleHousehold } from './household'
+import { financedBy, settleHousehold, type HouseholdLedger } from './household'
 import { asksImpulse, categoryIndex, costOf, incomeOf, partsOf, sum } from './operations'
 
 // ------------------------------------------------------------------ the wealth curve
@@ -249,7 +249,8 @@ export interface WeekNumbers {
 }
 
 /** A week in numbers (the watch report, spec: on Sunday); `start` = the budget's (the household's balances – D80). */
-export function weekNumbers(transactions: readonly Transaction[], categories: readonly Category[], monday: string, start: string | null = null): WeekNumbers {
+/** `ledger` – the household's (D80, `FleetState.household`): a member's money is income only beyond what they owed. */
+export function weekNumbers(transactions: readonly Transaction[], categories: readonly Category[], monday: string, ledger: Pick<HouseholdLedger, 'byTx'> = settleHousehold(transactions)): WeekNumbers {
   const to = addDays(monday, 6)
   const cats = categoryIndex(categories)
   const txs = transactions.filter((t) => t.date >= monday && t.date <= to)
@@ -266,7 +267,7 @@ export function weekNumbers(transactions: readonly Transaction[], categories: re
     from: monday,
     to,
     costs: sum(txs.map(costOf)),
-    income: sum(txs.map((t) => incomeOf(t, settleHousehold(transactions, { from: start })))),
+    income: sum(txs.map((t) => incomeOf(t, ledger))),
     days: Array.from({ length: 7 }, (_, i) => {
       const date = addDays(monday, i)
       return { date, costs: sum(txs.filter((t) => t.date === date).map(costOf)) }
@@ -299,10 +300,9 @@ export interface YearNumbers {
 }
 
 /** A year in numbers (the year's review, spec: in January); `start` = the budget's (the household's balances – D80). */
-export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, start: string | null = null): YearNumbers {
+export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ledger: Pick<HouseholdLedger, 'byTx'> = settleHousehold(transactions)): YearNumbers {
   const months = monthRange(`${year}-01`, `${year}-12`)
   const spend = spendingByMonth(transactions, categories, months)
-  const ledger = settleHousehold(transactions, { from: start })
   const income = months.map((m) => sum(transactions.filter((t) => monthOf(t.date) === m).map((t) => incomeOf(t, ledger))))
   return {
     year,

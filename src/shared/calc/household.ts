@@ -12,6 +12,8 @@
  *   oldest; the rest is their advance (`advance`) or income (docks as any delivery).
  * - A product return of a financed purchase is the member's money: it repays what they owe, the rest is their advance.
  * - An income of before 1.3.0 with `repaid` and no member is the first member's money repaying at most that much (D20).
+ * - An account joining the budget after its start: its operations before its opening balance are inside that balance
+ *   (as the layers' engine skips them) – they settle nothing.
  */
 import { HOUSE_MEMBER_ID, type HouseholdMember } from '../schema/budget'
 import type { Transaction } from '../schema/records'
@@ -104,17 +106,19 @@ const memo = new WeakMap<readonly Transaction[], Map<string, HouseholdLedger>>()
 
 /**
  * The household's balances from the operations up to `until` (a Warsaw date; none = all); `from` = the budget's start
- * (the balances are zero at its beginning; none = the whole history counts).
+ * (the balances are zero at its beginning; none = the whole history counts); `openings` = each account's opening
+ * balance's date (the engine's: `fleet.ts` `householdOf`).
  */
-export function settleHousehold(transactions: readonly Transaction[], opts: { until?: string; from?: string | null } = {}): HouseholdLedger {
-  const { until, from } = opts
-  const key = `${until ?? ''}|${from ?? ''}`
+export function settleHousehold(transactions: readonly Transaction[], opts: { until?: string; from?: string | null; openings?: ReadonlyMap<string, string> } = {}): HouseholdLedger {
+  const { until, from, openings } = opts
+  const key = `${until ?? ''}|${from ?? ''}|${openings ? [...openings].map(([id, date]) => `${id}:${date}`).sort().join(',') : ''}`
   const cached = memo.get(transactions)?.get(key)
   if (cached) return cached
   const states = new Map<string, State>()
   const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, queue: [] }).get(id)!
   const byTx = new Map<string, MemberFlow[]>()
-  const txs = transactions.filter((t) => (until == null || t.date <= until) && settlesHousehold(t)).sort(ledgerOrder)
+  const insideOpening = (t: Transaction) => from != null && t.date >= from && t.date < (openings?.get(t.accountId) ?? '')
+  const txs = transactions.filter((t) => (until == null || t.date <= until) && settlesHousehold(t) && !insideOpening(t)).sort(ledgerOrder)
   let started = !from
   for (const t of txs) {
     if (!started && t.date >= from!) {

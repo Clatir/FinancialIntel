@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { computeFleet, householdOf, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { balanceOf, settleHousehold } from '@shared/calc/household'
 import { costOf, financedOf, incomeOf } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
-import { balanceSchema, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Settings, type Transaction } from '@shared/schema'
+import { balanceSchema, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Settings, type Transaction } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-01-01T00:00:00.000Z'
@@ -153,6 +153,20 @@ describe('rozliczenia z domownikami (D80)', () => {
     expect(incomeOf(payment, settleHousehold([payment]))).toBe(zl(80))
     const marked = bought('2026-10-04', 80, MAMA)
     expect(incomeOf(payment, settleHousehold([marked, payment]))).toBe(0)
+  })
+
+  it('konto dołączone po starcie: operacje sprzed jego salda otwarcia są w tym saldzie – rozliczeń nie zmieniają', () => {
+    const opening = (date: string, accountId: string, amount: number) => balanceSchema.parse({ ...base(), date, accountId, kind: 'opening', amount })
+    const balances = [opening('2026-10-01', MBANK_ACCOUNT_ID, zl(27640)), opening('2026-10-10', XTB_WALLET_ACCOUNT_ID, zl(100))]
+    // Mama's advance into the wallet before it joined the budget: inside its opening balance (the shields' money).
+    const early = paid('2026-10-05', 100, MAMA, true, { accountId: XTB_WALLET_ACCOUNT_ID })
+    const purchase = bought('2026-10-12', 100, MAMA)
+    const s = fleet([early, purchase], { balances })
+    expect(s.deposit).toBe(0)
+    expect(s.receivables.members).toEqual([{ memberId: MAMA, owed: zl(100), deposit: 0, open: [{ txId: purchase.id, date: '2026-10-12', amount: zl(100) }], since: '2026-10-12' }])
+    expect(s.household.byTx.has(early.id)).toBe(false)
+    // The game's missions read the same ledger.
+    expect(householdOf({ settings: settings(), balances, transactions: [early, purchase] }, '2026-10-20')).toEqual(s.household)
   })
 
   it('jeden rejestr dla tych samych operacji (bez liczenia od nowa); kolejność silnika: data, godzina, zapis', () => {

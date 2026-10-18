@@ -271,3 +271,64 @@ describe('import: plan, zapis, kolejne importy', () => {
   })
 })
 
+describe('domownicy w imporcie (D80)', () => {
+  const TOMASZ = `01KMEM${'0'.repeat(19)}7`
+  const withMembers = (rules: ImportRule[], inflow: 'ask' | 'advance' | 'income') => ({
+    ...ctx(rules),
+    members: [...settings.household.members, { id: TOMASZ, name: 'Tomasz', bankNames: ['TOMASZ xxx'], inflow, archived: false }]
+  })
+  const tomaszRow = () => fixture().rows.find((r) => r.counterparty === 'TOMASZ xxx' && r.amount > 0)!
+  const rule = (over: Partial<ImportRule>): ImportRule => ({
+    id: makeId(),
+    match: 'tomaszxxx',
+    mode: 'exact',
+    direction: 'in',
+    label: 'TOMASZ xxx',
+    kind: 'income',
+    categoryId: null,
+    refundable: false,
+    household: false,
+    memberId: null,
+    counterAccountId: null,
+    learned: true,
+    hits: 3,
+    updatedAt: NOW,
+    ...over
+  })
+
+  it('wpłata osoby z listy po nazwie w banku: „pytaj” czeka na decyzję, „zaliczka” od razu', () => {
+    expect(classifyRow(tomaszRow(), withMembers([], 'ask')).decision).toMatchObject({ kind: 'income', household: true, memberId: TOMASZ, advance: false, source: 'none' })
+    expect(classifyRow(tomaszRow(), withMembers([], 'advance')).decision).toMatchObject({ kind: 'income', household: true, memberId: TOMASZ, advance: true, source: 'builtin' })
+  })
+
+  it('reguła zwykłego wpływu bez osoby (sprzed dopisania domownika) ustępuje domownikowi; reguła z osobą i przelew własny – nie', () => {
+    expect(classifyRow(tomaszRow(), withMembers([rule({})], 'income')).decision).toMatchObject({ household: true, memberId: TOMASZ, source: 'builtin' })
+    // Before 1.3.0 „od domownika” named no one: the member by the bank's name now (and asked about the rest).
+    expect(classifyRow(tomaszRow(), withMembers([rule({ household: true })], 'ask')).decision).toMatchObject({ household: true, memberId: TOMASZ, source: 'none' })
+    const named = rule({ household: true, memberId: TOMASZ })
+    expect(classifyRow(tomaszRow(), withMembers([named], 'ask')).decision).toMatchObject({ household: true, memberId: TOMASZ, source: 'rule', ruleId: named.id })
+    expect(classifyRow(tomaszRow(), withMembers([rule({ kind: 'transfer' })], 'ask')).decision).toMatchObject({ kind: 'transfer', source: 'rule' })
+    // Without the member the rule decides as before.
+    expect(classifyRow(tomaszRow(), ctx([rule({})])).decision).toMatchObject({ kind: 'income', household: false, source: 'rule' })
+  })
+
+  it('grupy domownika „pytaj” mają własny temat – decyzja tematu przelewów obcych osób go nie zabiera', () => {
+    const plan = planImport(fixture(), MBANK_ACCOUNT_ID, [], withMembers([], 'ask'))
+    const groups = importGroups(plan)
+    const own = groups.filter((g) => g.brand === 'tomaszxxx' && g.direction === 'in')
+    expect(own.length).toBeGreaterThan(0)
+    const themes = importThemes(groups)
+    const theme = themes.find((t) => t.theme === own[0]!.theme)!
+    expect(theme.basis).toMatchObject({ kind: 'proposal', choice: { kind: 'income', household: true, memberId: TOMASZ } })
+    expect(theme.groups.every((g) => g.brand === 'tomaszxxx')).toBe(true)
+    // A decision of the strangers' transfers' theme leaves Tomasz's money his.
+    const strangers = themes.filter((t) => t.direction === 'in' && t.basis.kind !== 'proposal')
+    expect(strangers.length).toBeGreaterThan(0)
+    const choices = emptyChoices()
+    for (const t of strangers) choices.themes[t.theme] = { kind: 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }
+    const result = buildImport(plan, choices, { now: NOW, makeId, rules: [] })
+    const fromTomasz = result.create.filter((t) => t.counterparty === 'TOMASZ xxx' && t.amount > 0)
+    expect(fromTomasz.length).toBeGreaterThan(10)
+    expect(new Set(fromTomasz.map((t) => `${t.kind}|${t.memberId}`))).toEqual(new Set([`income|${TOMASZ}`]))
+  })
+})

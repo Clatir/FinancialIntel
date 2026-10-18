@@ -262,6 +262,12 @@ export function opKindOf(operation: string): OpKind {
   return 'other'
 }
 
+/**
+ * Is a group's theme its proposal: a recognized one – or a household member's money still to be asked about (D80 b):
+ * never in one theme with strangers' money, whose decision would take the member away.
+ */
+const byProposal = (source: DecisionSource, d: Pick<ImportDecision, 'household'>): boolean => source !== 'none' || d.household
+
 /** The user's own rules are the surest; nothing is the weakest – a group is as sure as its least sure row. */
 const SURENESS: Record<DecisionSource, number> = { none: 0, keyword: 1, brand: 2, builtin: 3, rule: 4 }
 
@@ -356,7 +362,7 @@ export function importGroups(plan: ImportPlan | null): ImportGroup[] {
       byTitle: first.decision.byTitle,
       hint,
       bankCategory,
-      theme: source !== 'none' ? `${first.direction}|=${proposalSig(first.decision)}` : hint ? `${first.direction}|hint:${hint}` : `${first.direction}|op:${opKindOf(first.row.operation)}`
+      theme: byProposal(source, first.decision) ? `${first.direction}|=${proposalSig(first.decision)}` : hint ? `${first.direction}|hint:${hint}` : `${first.direction}|op:${opKindOf(first.row.operation)}`
     })
   }
   return out.sort((a, b) => b.rows.length - a.rows.length || a.label.localeCompare(b.label))
@@ -369,7 +375,7 @@ export function importThemes(groups: readonly ImportGroup[]): ImportTheme[] {
     let t = map.get(g.theme)
     if (!t) {
       const basis: ThemeBasis =
-        g.source !== 'none'
+        byProposal(g.source, g.proposed)
           ? { kind: 'proposal', choice: g.proposed, containerId: g.containerId }
           : g.hint
             ? { kind: 'hint', categoryId: g.hint, bankCategories: [] }
