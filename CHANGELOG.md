@@ -1,5 +1,29 @@
 # Financial Intel – zmiany
 
+## 1.3.0
+
+Rozliczenia z domownikami (prośba użytkownika: część wydatków finansują inne osoby, decyzja D80). Każdy domownik ma
+saldo w obie strony – ile ma oddać albo ile wpłacił z góry – a jego zakupy nie są Twoimi kosztami.
+
+- Ustawienia → Domownicy: osoby z nazwami nadawcy w banku i odpowiedzią, czym jest reszta ich wpłaty ponad to, co mają
+  oddać (pytaj / zaliczka / przychód); archiwum zamiast usuwania. Zakupy oznaczone wcześniej „do zwrotu” należą do
+  pierwszej osoby z listy („Dom”) – zmień jej imię, jeśli to konkretna osoba.
+- Wydatek – cały albo część paragonu – „finansuje: osoba”: nie zjada energii ani kopert, nie jest Twoim kosztem ani
+  naruszeniem w Dowództwie. Najpierw bierze z zaliczki tej osoby, resztę pożyczają osłony, aż odda. W edytorze, w
+  szybkim wpisie („Za domownika”), zbiorczo w Operacjach („Ustaw finansującego” z „Cofnij”), w imporcie i regułach.
+- Wpłata domownika najpierw wyrównuje to, co ma oddać (wskazane zakupy, inaczej od najstarszych); reszta to zaliczka
+  albo przychód (dokuje jak dotąd) – pytanie raz, odpowiedź zapamiętana dla osoby. Zakup oznaczony później sam zamienia
+  wcześniejszy przychód w spłatę.
+- Nowa warstwa „Depozyt domowników” w stanie okrętu: ich zaliczki na Twoich kontach, nie do wydania na siebie (suma
+  warstw nadal równa saldom kont).
+- Mostek i Radar: saldo każdej osoby (ma oddać od kiedy, albo zaliczka); ostatnie operacje mówią, kto finansuje.
+  Przypomnienie w odprawie i powiadomienie, gdy osoba nie oddała za zakup od ponad 30 dni (Ustawienia → Powiadomienia).
+- Import z mBanku: wpłaty osób z listy rozpoznane po nazwie nadawcy (osoba z „pytaj” ma osobny temat do decyzji),
+  „+ domownik” przy przelewie od nowej osoby; reguła zwykłego wpływu sprzed dopisania osoby ustępuje domownikowi.
+- Plan miesiąca i Raporty: „Sfinansowane przez domowników – nie Twoje koszty” w debriefingu i przeglądzie rocznym;
+  przychód w statystykach bez spłat i zaliczek domowników; CSV i Excel z kolumną „Finansuje”.
+- Bez zmiany formatu folderu: nowe pola są dodatkowe (wersja 1.2.x otworzy folder i je zachowa).
+
 ## 1.2.3
 
 Poprawka „Podobnych nazw” i propozycji słowa (zgłoszenie użytkownika, D79): w historii rachunku z mBanku nazwa sklepu

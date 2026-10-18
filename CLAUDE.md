@@ -65,7 +65,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
-  (pożyczki), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
@@ -325,9 +325,36 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/import-similar.test.ts` („dopiski banku”), `mbank.test.ts`, E2E `learning.spec.ts` na
   `tests/fixtures/mbank/historia_rachunku.csv` (syntetyczna historia rachunku).
 
+## Kod (1.3.0 – rozliczenia z domownikami, D80)
+- Shared:
+  - `schema/budget.ts` – `settings.household.members` (`householdMemberSchema`: `name`, `bankNames`, `inflow` ask /
+    advance / income – `inflowOf`, `archived`), `HOUSE_MEMBER_ID` = `fixedId('MEM', 1)` („Dom”, `defaultMembers`),
+    `importRuleSchema.memberId`; `schema/records.ts` – operacja `memberId` (kto finansuje / czyje pieniądze), `advance`,
+    `covers`, część paragonu `memberId`; `repaid` tylko zapisy sprzed 1.3.0 (T108);
+  - `calc/household.ts` – `settleHousehold` (rejestr: `byTx` przepływy `fromDeposit` / `lent` / `repaid` / `advance` /
+    `income`, salda `MemberBalance` z kolejką `open`; `from` = start budżetu, `openings` = salda otwarcia kont; memo po
+    tablicy), `payerOf`, `settlesHousehold`, `balanceOf`, `memberName`, `financedBy` (T105, T106);
+  - `calc/fleet.ts` – warstwa `deposit` w `layersSum`, `FleetState.household` (rejestr silnika – ekrany, raporty),
+    `receivables.members`, `householdOf` (rejestr bez floty – misje), `budgetStartOf`; `calc/balances.ts` `openingsOf` /
+    `openingOf` – jedna reguła salda otwarcia (T106, T107); `calc/operations.ts` `financerOf`, `financedOf`,
+    `incomeOf(t, rejestr)`;
+  - `import/classify.ts` – `memberOf` (nazwy w banku), domownik przed regułą zwykłego wpływu bez osoby;
+    `import/reconcile.ts` – `Choice.memberId` / `advance`, temat z propozycji dla domownika „pytaj” (`byProposal`) (T110);
+  - `calc/briefing.ts` / `notify.ts` / `machine.ts` – przypomnienie i powiadomienie na osobę (`notify.house`, T111);
+    `calc/game.ts` – misja „house” z `householdOf`; `calc/intel.ts` / `export/budget.ts` – przychód z rejestru, kolumna
+    „Finansuje” (T113).
+- Renderer:
+  - `features/household/` – `actions.ts` (`useMembers`, `addMember`, `addMemberFromBank`, `patchMember`,
+    `rememberInflows` – D80 b), `MemberPickers.tsx` (`FinancerSelect`, `FinancedNote`, `MemberIncome` z „Pokrywa”);
+  - `features/settings/HouseholdTab.tsx` (Ustawienia → Domownicy); `store/fleet.ts` `useHousehold` = `fleet.household`;
+  - import – `options.ts` (opcje `refundable:<id>`, `household:<id>:income|advance`), „+ domownik” (`NewMember`);
+    szybki wpis – „Za domownika”, `quick-financer`, `quick-payer`; Operacje – `financeTicked` („Ustaw finansującego”);
+    Mostek / Radar / Plan miesiąca / Raporty – salda, depozyt, „Sfinansowane przez domowników” (T112).
+- Testy: `tests/unit/household.test.ts`, domownicy w `tests/unit/import.test.ts`, E2E `tests/e2e/household.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
-fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, reguły importu, schemaVersion
+fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
 transactions/RRRR/RRRR-MM-DD_ULID.json   operacja (data warszawska)
 containers/ULID.json                     kontener ładowni albo opłata okresowa
 goals/ULID.json                          cel własny albo stan celu z prognozy ICTTJ
@@ -387,3 +414,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.2.1 Grupowanie importu z mBanku, decyzje zbiorcze, duplikaty (D75–D77)
 - [x] 1.2.2 Podobne nazwy i propozycja reguły z liczbą operacji (D78)
 - [x] 1.2.3 Poprawka podobnych nazw: dopiski banku w nazwach, wspólne słowa (D79)
+- [x] 1.3.0 Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80)

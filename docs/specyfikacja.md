@@ -92,10 +92,11 @@ Konto tradingowe XTB nie jest częścią FI; prowadzi je wyłącznie ICTTJ.
 | Kadłub | fundusz awaryjny | 6 × średnie miesięczne koszty netto z 12 miesięcy | nadwyżka ponad pełne osłony |
 | Cele (układy gwiezdne) | oszczędności na cele z priorytetami | kwota celu | nadwyżka ponad pełny kadłub, wypłata z puli Cele w ICTTJ |
 | Odkładki | zbiorniki na opłaty okresowe (asteroidy) | kwota opłaty w terminie | co miesiąc z energii |
-| Należności | zakupy „do zwrotu” i pożyczki udzielone | zero | pożyczają z osłon, zwrot wraca do osłon |
+| Depozyt domowników | zaliczki domowników – ich pieniądze na moich kontach, nie do wydania na siebie (1.3.0, D80) | zero | wpłata domownika ponad to, co ma oddać, jako zaliczka; schodzi na zakupy, które finansuje |
+| Należności | zakupy finansowane przez domowników (każda osoba osobno) i pożyczki udzielone | zero | pożyczają z osłon, zwrot wraca do osłon |
 
 Koszty netto to wydatki minus zwroty towarów. Nie liczą się do nich przelewy własne, dopłaty do XTB, zakupy
-„do zwrotu” ani PIT-38 z rezerwy.
+finansowane przez domowników ani PIT-38 z rezerwy.
 
 **Dokowanie: kolejność rozładunku każdego wpływu**
 1. Osłony do celu (3 pensje).
@@ -132,11 +133,12 @@ Dzień kończy się dopisaniem wydatków, a import z mBanku co 2–3 dni tylko j
 „energia dziś” jest aktualna mimo braku aplikacji na telefon.
 
 **Szybki wpis (globalny skrót, domyślnie Ctrl+Alt+B)**
-- Rodzaj: wydatek, wpływ albo zakup „do zwrotu”.
+- Rodzaj: wydatek, wpływ albo zakup za domownika (kto finansuje); wpływ – opcjonalnie od domownika (reszta ponad to,
+  co ma oddać: przychód albo zaliczka).
 - Pola: kwota, kategoria (oficer), konto (mBank albo Portfel XTB), godzina zakupu (domyślnie teraz, do poprawienia),
   notatka.
 - Podgląd energii po operacji, zanim zapiszesz.
-- Podział paragonu na kilka kategorii albo na część swoją i domową.
+- Podział paragonu na kilka kategorii albo na część swoją i domowników (każda część z osobą).
 - Od progu (domyślnie 200 zł, w ustawieniach) pytanie dziennika kapitańskiego: „plan czy impuls?”.
 - Cisza nocna (domyślnie 23:00–5:00): zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu.
 - Skrót można zmienić, gdy koliduje z platformą tradingową.
@@ -155,9 +157,16 @@ wydatki”.
 
 CSV z mBanku nie ma godzin, więc import nie wpływa na ciszę nocną ani na mapę godzin.
 
-**Wpłaty od domowników** – przy każdej wpłacie wybór: zwrot (zamyka należność „do zwrotu”) albo przychód (dokuje
-w osłonach). Gdy są otwarte należności, FI proponuje zwrot, a nadwyżkę jako przychód. Należność jest jedna dla całego
-domu, bez podziału na osoby.
+**Rozliczenia z domownikami (1.3.0, D80)** – domownicy w Ustawieniach (imię, nazwy nadawcy w banku). Każdy ma saldo
+w obie strony: ma oddać (zapłaciłem za jego zakup) albo zaliczkę (przelał z góry).
+- Wydatek – cały albo część paragonu – „finansuje: osoba”: nie zjada energii ani kopert, nie jest moim kosztem ani
+  naruszeniem w grze; najpierw bierze z zaliczki tej osoby, resztę pożyczają osłony.
+- Wpłata domownika najpierw wyrównuje to, co ma oddać (wskazane zakupy, inaczej od najstarszych); reszta to zaliczka
+  (depozyt) albo przychód (dokuje) – pytanie raz, potem zapamiętane dla osoby.
+- Import rozpoznaje wpłatę po nazwie nadawcy i podpowiada dopisanie nowej osoby; reguła może oznaczać, kto finansuje.
+- Salda osób na Mostku i Radarze; przypomnienie po 30 dniach od najstarszego nieoddanego zakupu (odprawa
+  i powiadomienie); sfinansowane wydatki osobno w debriefingu miesiąca i w Raportach.
+- Zakupy oznaczone przed 1.3.0 „do zwrotu” należą do pierwszej osoby z listy („Dom”).
 
 **Potwierdzanie sald (raz w tygodniu)** – saldo mBanku i Portfela XTB. Różnica daje alarm „rozbieżność w ładowni”
 i wpis korekty do wyjaśnienia.
@@ -257,17 +266,17 @@ się zapisują.
 
 | Ekran | Co zawiera | Etap |
 | --- | --- | --- |
-| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, zasięg, masa ładunku, klasa), koperty, do zwrotu, ostatnie operacje; później radar, wywiad i krzywa majątku | E4 |
-| Operacje | lista z filtrami i wyszukiwaniem, edycja z historią zmian, podział paragonu, oznaczenia (do zwrotu, plan lub impuls, noc) | E1 |
+| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, depozyt domowników, zasięg, masa ładunku, klasa), koperty, rozliczenia z domownikami, ostatnie operacje; później radar, wywiad i krzywa majątku | E4, 1.3.0 |
+| Operacje | lista z filtrami i wyszukiwaniem, edycja z historią zmian, podział paragonu, kto finansuje, oznaczenia (domownik, plan lub impuls, noc) | E1, 1.3.0 |
 | Import | kreator CSV z mBanku: podgląd, dopasowania, kategoryzacja grupowa, potwierdzenie | E2 |
 | Plan miesiąca | pensja, podział na ładownię, odkładki i koperty, dzienny przydział, debriefing | E3 |
 | Ładownia | kontenery, odkładki, linia zanurzenia, symulacja dodania i zrzutu | E3 |
 | Mapa gwiezdna | cele z prognozy ICTTJ i własne, priorytety, ETA | E5 |
-| Radar | 90 dni: pensje, asteroidy, spodziewane wpłaty, przypomnienie o PIT-38 | E6 |
+| Radar | 90 dni: pensje, asteroidy, spodziewane wpłaty, przypomnienie o PIT-38; należności – salda domowników i pożyczki | E6, 1.3.0 |
 | Dowództwo | rozkazy, stopień, klasa, seria, misje, osiągnięcia, dziennik wachty | E7 |
 | Wywiad | wykresy i analizy w języku ICT | E8 |
 | Raporty | odprawa, raport wachty, debriefing, przegląd roczny, eksport | E8 |
-| Ustawienia | folder, konta, kategorie, warstwy, rozkazy, powiadomienia, dźwięki, skróty, ICTTJ, import, kopie, aktualizacje | E0–E5 |
+| Ustawienia | folder, konta, kategorie, warstwy, rozkazy, domownicy, powiadomienia, dźwięki, skróty, ICTTJ, import, kopie, aktualizacje | E0–E5, 1.3.0 |
 
 **Okna i zasobnik**
 - Szybki wpis: małe okno nad wszystkimi, wywoływane skrótem.
