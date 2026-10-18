@@ -1,5 +1,56 @@
 # Financial Intel – zmiany
 
+## 1.4.2
+
+Pieniądze i dane się zgadzają – poprawki z przeglądu aplikacji po 1.4.1 (decyzje D84).
+
+Cele (Mapa gwiezdna):
+- Zmiana celu – kolejność, kwota, archiwizacja – i nowy cel liczą się od chwili zmiany: pieniądze, które przyszły
+  wcześniej, zostają tam, gdzie trafiły (wcześniej cała historia przeliczała się od nowa i pieniądze przeskakiwały
+  między celami i osłonami). Dostawa zadokowana później trafia do celów z chwili dokowania.
+- Archiwizacja celu z pieniędzmi pyta, co z nimi: do osłon, do innego celu albo zostają w celu (z „Cofnij”); na liście
+  zarchiwizowanych „przenieś środki” także później – również dla celów scenariusza ICTTJ zarchiwizowanych przy zmianie
+  scenariusza (wcześniej ich pieniądze były zamrożone).
+- Wydatek z pieniędzy celu: w edytorze operacji pole „Z celu” (cel płaci, ile ma, resztę osłony).
+- Podział łupów proponuje tylko cele, które teraz biorą pieniądze.
+- Scenariusz ICTTJ zapamiętany przy pierwszym podłączeniu; zmiana scenariusza dopiero po potwierdzeniu (cele
+  poprzedniego są archiwizowane, ich pieniądze zostają).
+
+Domownicy i import z mBanku:
+- Zmiana daty „Rozliczenia od” przelicza salda na start (komunikat z „Cofnij”) – sald domowników nic nie liczy drugi raz.
+- Każdy domownik „pytaj” ma w imporcie własny temat – decyzja jednej osoby nie przypisuje pieniędzy drugiej.
+- Ta sama operacja z „Historii rachunku” i z „Listy operacji” nie wchodzi drugi raz; panel duplikatów łączy takie
+  pary zaimportowane wcześniej.
+
+Ładownia i plan miesiąca:
+- Edytor kontenera: miesiące „od / do” i cykl „inny…” zapisują się po wyjściu z pola (wcześniej przy każdym znaku –
+  miesiąca nie dało się wpisać), nazwa nigdy pusta.
+- Opłata okresowa zapłacona przed terminem zamyka cykl: bez drugiego zbierania z energii, bez fałszywego „Za plan o …”
+  w Ładowni i ostrzeżeń w odprawie i na Radarze. Zaległa zapłata poprzedniego cyklu nie zamyka następnego.
+- Kontener dodany w trakcie budżetu zbiera od bieżącego miesiąca (nie wstecz), archiwizacja liczy się od swojego
+  miesiąca, a resztka zbiornika po końcu życia kontenera wraca do osłon.
+- Zmiana planu minionego miesiąca nie zmienia bieżącego ani kolejnych.
+- Debriefing i raport pokazują podział łupów taki, jak go zrobił silnik – z informacją, gdy łupy zmieniły się po decyzji.
+
+Folder danych i dwa komputery:
+- Nieudane usunięcie (plik zajęty przez OneDrive albo antywirusa) – komunikat, wpis zostaje; usunięcie jest ponawiane.
+- Plik chwilowo nieczytelny (OneDrive go jeszcze pobiera) nie jest „uszkodzony”: aplikacja czyta go ponownie i nigdy
+  go nie odsuwa.
+- Zamknięcie aplikacji czeka na wszystkie zapisy (najwyżej minutę, potem pyta).
+- Rozstrzygnięcie konfliktu odkłada odrzuconą wersję do historii wpisu; nie kasuje jedynej czytelnej wersji i nie
+  nadpisuje pliku zapisanego przez nowszą wersję aplikacji.
+- Plan miesiąca zrobiony na dwóch komputerach: druga wersja czeka w Synchronizacji jako kopia do wyboru (nowe plany mają
+  stałe id miesiąca).
+- Scalanie zmian z dwóch komputerów nie usuwa pól dodanych po jednej stronie (np. nowej koperty); wybór „Weź z …”
+  w trakcie zapisu trafia na dysk.
+- Wpis usunięty właśnie na drugim komputerze nie wraca po cichu przy zapisie – okno pyta, czy go zachować.
+- Folder z ponad 125 tys. plików się otwiera.
+
+Inne:
+- Szybki wpis zapisuje operację raz (drugi Enter, podwójne kliknięcie); Esc zamyka okno także z wpisaną kwotą.
+- Esc w polach kwoty, daty, godziny, miesiąca i nazwy odrzuca wpisaną wartość (wcześniej ją zapisywał).
+- Gra: długa notatka naruszenia nie blokuje zapisu miesiąca.
+
 ## 1.4.1
 
 Wczytywanie folderu krok po kroku (zgłoszenie użytkownika: na drugim komputerze aplikacja wisiała minutami przy

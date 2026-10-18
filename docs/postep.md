@@ -1,12 +1,13 @@
 # Financial Intel – postęp
 
-**Stan:** grupa E (1.4.2 – pieniądze i dane się zgadzają) w toku, gałąź `claude/grupa-e-1.4.2`; potem F, G, H jednym
-ciągiem (D84). Przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`). **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**Stan:** grupa E (1.4.2 – pieniądze i dane się zgadzają) zrobiona, gałąź `claude/grupa-e-1.4.2` – PR, CI i scalenie
+(D71); potem F, G, H jednym ciągiem (D84). Przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`). **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa E według „Przed grupą E” niżej; po E od razu F, G i H (każda z PR i wydaniem), po H pauza (D67).
-Odbiór 1.4.1 na drugim komputerze i 1.3.0 / 1.4.0 w aplikacji nadal aktualny.
+**Następny krok:** po scaleniu i wydaniu 1.4.2 grupa F według „Przed grupą F” niżej, potem G i H (każda z PR i wydaniem),
+po H pauza (D67). Odbiór 1.4.1 na drugim komputerze i 1.3.0 / 1.4.0 w aplikacji nadal aktualny; po 1.4.2 – kwoty celów,
+osłon i salda domowników na prawdziwych danych (punkt kontrolny bez przerwy w pracy – D84).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -34,12 +35,12 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.4.0 | Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dziś z saldem początkowym, panel przychodów (D81) | Opus 5.5 | **max** | ok. 2 h (szacunek z przebiegu sesji; plan był ok. 3 h) | 1.4.0 | ✅ odpowiedzi i komenda (D81) | ✅ wydane (PR #11) |
 | 1.4.1 | Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82) | Opus 5.5 | **xhigh** | ok. 1 h (szacunek z przebiegu sesji; plan był ok. 1,5 h) | 1.4.1 | ✅ zgłoszenie, diagnoza i komenda (D82) | ✅ wydane (PR #12) |
 | Przegląd | Przegląd całej aplikacji po 1.4.1: 10 obszarów × 3 soczewki (błędy, niespójności, wydajność), weryfikacja każdego znaleziska, pomiary na 30 tys. i 150 tys. operacji, brakujące funkcje (`docs/przeglad/`) | Opus 5.5 | **ultracode** | ok. 3 h (zegar sesji, bez przerwy na limit tygodniowy) | – | ✅ prośba, model i skala (150 tys.) | ✅ raport, PR #13 |
-| **E** | 1.4.2 Pieniądze i dane się zgadzają: B1–B5, B6, B9–B11, B13, B30, B32, B42–B51, B55, B56, N1 | Opus 5.5 | **max** | ok. 4–5 h | 1.4.2 | ✅ D84 (C1–C3) | ⏳ w toku |
-| **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | ok. 4–6 h | 1.4.3 | ✅ D84 (C4) | ⏳ po E |
-| **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | ok. 4–5 h | 1.5.0 | ✅ D83 | ⏳ po F |
-| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | ok. 5–6 h | 1.5.1 | ✅ D84 (C11) | ⏳ po G |
+| **E** | 1.4.2 Pieniądze i dane się zgadzają: B1–B5, B6, B9–B11, B13, B24, B30, B32, B42–B51, B55, B56, N1 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z przeglądem i E2E; plan był 4–5 h) | 1.4.2 | ✅ D84 (C1–C3) | ✅ zrobione – PR, CI, scalenie |
+| **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | ok. 3–5 h | 1.4.3 | ✅ D84 (C4) | ⏳ po E |
+| **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | ok. 3–4 h | 1.5.0 | ✅ D83 | ⏳ po F |
+| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | ok. 3–5 h | 1.5.1 | ✅ D84 (C11) | ⏳ po G |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd** | | | **ok. 23,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E** | | | **ok. 25,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -160,6 +161,49 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.4.1, Windows, drugi komputer):
 3. **Co przygotować** – nic przed startem; po wydaniu 1.4.2: kwoty celów, osłon i salda domowników na prawdziwych
    danych (punkt kontrolny bez przerwy w pracy – D84).
 4. **Model, thinking, czas** – Opus 5.5 · max · ok. 4–5 h.
+
+## 1.4.2 – pieniądze i dane się zgadzają (grupa E, 18.10.2026)
+
+Zakres: błędy z przeglądu po 1.4.1, które psują kwoty albo gubią dane (D84, „Przed grupą E” niżej). Zrobione:
+- Cele od chwili zmiany (C1, B2, B13): kolejność, kwota, archiwizacja i nowy cel nie przeliczają przeszłości; dostawa do
+  celów z chwili, gdy przyszła do FI; łupy tylko do celów, które biorą pieniądze (T128).
+- Pieniądze celu (C2, B30): archiwizacja z pieniędzmi pyta (osłony / inny cel / zostają, „Cofnij”), „przenieś środki”
+  później; scenariusz ICTTJ zapamiętany, zmiana z potwierdzeniem (C3); wydatek z celu w edytorze operacji (N1) (T129–T131).
+- Domownicy i import (B3–B5): saldo na start przeliczane przy zmianie daty rozliczeń, temat importu na osobę, ta sama
+  operacja z historii rachunku i listy operacji raz (także w panelu duplikatów, tylko w dniach plików) (T132–T134).
+- Ładownia, plan i łupy (B1, B6, B10, B11, B55, B56): edytor kontenera zapisuje po wyjściu z pola, opłata zapłacona przed
+  terminem zamyka cykl, życie kontenera od dodania do archiwizacji, resztka zbiornika do osłon, plan minionego miesiąca
+  nie zmienia kolejnych, stałe id planu, łupy na ekranie jak w silniku (T135–T139).
+- Folder danych i dwa komputery (B9, B42–B50): nieudane usunięcie, plik chwilowo nieczytelny, zamykanie po zapisach,
+  konflikty z historią i sprawdzaniem stron, plany miesiąca z dwóch komputerów, scalanie trójstronne, wpis usunięty
+  gdzie indziej, folder ponad 125 tys. plików (T140–T143).
+- Szybki wpis raz (B51), Esc w polach odrzuca szkic (B24 – z kolejnej grupy porządków, ten sam błąd), notatka gry (B32)
+  (T144).
+- Przegląd `/code-review` high: 10 kandydatów, 9 poprawionych, 1 bez zmian z uzasadnieniem (T145); przy okazji Esc w
+  szybkim wpisie z wpisaną kwotą.
+- Testy: 430 unit + fs (nowe `tests/unit/goals.test.ts`, `tests/fs/datastore-robust.test.ts`), E2E 22 (nowe
+  `tests/e2e/goals.spec.ts`, poszerzone month, household, ictj, bridge, operations). Każda poprawka z testem sprawdzonym
+  bez niej (test pada).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.4.2, Windows, prawdziwe dane – bez przerwy w pracy, D84):
+1. Mapa gwiezdna: kwoty celów takie jak przed aktualizacją; zmiana kolejności nie przesuwa odłożonych pieniędzy.
+2. Mostek: osłony, kadłub i salda domowników bez zmian po aktualizacji.
+3. Ładownia: opłata zapłacona przed terminem – bez „Za plan o …”; edytor kontenera – miesiące „od / do”.
+4. Import kolejnego pliku z mBanku: operacje z poprzedniego pliku w drugim formacie rozpoznane, nic podwójnie.
+
+## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa E (1.4.2) zrobiona. Grupa F (`docs/przeglad/wydajnosc.md`): zapis importu paczkami i
+   przyrostowe widoki w procesie głównym (W1, W8), pola tekstowe zapisują po wyjściu z pola (W2), bez podwójnego
+   przeliczenia po echu zapisu (W3), duplikaty na żądanie (W4), mniej kopii map i przeliczeń silnika i gry (W5, W9–W13,
+   W15), Ładownia bez kwadratowych propozycji (W6), wyszukiwanie operacji (W14), zaległe dni gry porcjami w tle (W16),
+   obserwator folderu i skan (W21–W24), kopie: przed importem i dzienna bez `.history`, dzienna także w zasobniku, 14
+   dziennych + 8 tygodniowych (W7, F2, N19, C4). Cel: folder 30 tys. operacji bez zacięć ponad 0,1 s przy pisaniu i
+   przełączaniu ekranów, 150 tys. – używalny; pomiar przed i po na syntetycznym folderze jak w przeglądzie.
+2. **Co użytkownik musi powiedzieć** – ✅ D84 (C4 kopie); nic nowego.
+3. **Co przygotować** – nic przed startem; po wydaniu 1.4.3: płynność na prawdziwym folderze w OneDrive, kopia dzienna
+   przy aplikacji w zasobniku.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3–5 h.
 
 ## Przegląd aplikacji po 1.4.1 (18.10.2026)
 
@@ -889,3 +933,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 18.10.2026 – PR #12 scalony, wydanie 1.4.1 opublikowane; prośba użytkownika: przegląd całej aplikacji (niespójności,
   brakujące funkcje, błędy, duże dane) – model ultracode, skala 150 tys.; pomiary i przegląd wieloagentowy (przerwa na
   limit tygodniowy), nowe wymaganie F0 (wielu finansujących, osoby bez konta); raport `docs/przeglad/`, PR #13.
+- 18.10.2026 – PR #13 scalony; odpowiedzi użytkownika na pytania z przeglądu (D83 – babcia i dziadek osobno, reszta
+  zalecanych; D84) i komenda „Start E–H”; grupa E (1.4.2): cele od chwili zmiany, pieniądze celu, domownicy i import,
+  Ładownia i łupy, folder danych i dwa komputery, szybki wpis, Esc w polach; przegląd i poprawki; PR grupy E do `main`.

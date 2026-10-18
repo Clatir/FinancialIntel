@@ -852,3 +852,74 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   przeplatanie dwóch otwarć i przeciek obserwatora (T125), stan wykrywania zawieszeń po awarii okna, etapy obliczeń
   mieszane między oknami (T126); bez zmian – 24 odczyty naraz zamiast 64 nie spowalniają lokalnego folderu (wcześniej
   i tak szły najwyżej 4 naraz – pula wątków).
+
+### 1.4.2 – pieniądze i dane się zgadzają (grupa E, 18.10.2026)
+
+- **T128** Cele od chwili zmiany (D84 C1, B2): cel ma `activeFrom` (dodany w 1.4.2 albo później – bierze pieniądze od
+  tej chwili), `past` (stan – kolejność, kwota, archiwizacja – sprzed każdej zmiany, z chwilą `until`) i `transfers`.
+  Pieniądze idą do celów w stanie z chwili, gdy przyszły do FI (`cameIn`): utworzenie dokowania (nie jego ostatni zapis –
+  scalenie duplikatów czy synchronizacja nie przenoszą pieniędzy), bez dokowania utworzenie operacji, nigdy wcześniej niż
+  początek jej dnia; łupy – chwila decyzji (`decidedAt`), dokowanie przy starcie – koniec dnia startu. Cel sprzed 1.4.2 bez
+  historii działa jak wcześniej (`goalDecided`). Każda zmiana zostaje w historii, także kilka w krótkim czasie: kolejność
+  jest wspólna dla wszystkich celów – stan wycięty z historii jednego celu remisowałby albo zamieniał go z innym (scalanie
+  bliskich zmian sprawdzone i odrzucone – archiwizacja tuż po dodaniu zabierała celowi pieniądze).
+- **T129** Pieniądze celu (D84 C2, B30): archiwizacja celu z pieniędzmi pyta – osłony / inny cel / zostają; przeniesienie =
+  wpis `transfers` {at, to, amount}, silnik na koniec dnia przenosi `min(kwota, stan)` (nigdy więcej, niż cel ma);
+  „przenieś środki” na liście zarchiwizowanych także później (cele ICTTJ spoza scenariusza też); „Cofnij” przywraca cel.
+- **T130** Scenariusz ICTTJ (D84 C3): scenariusz zapamiętany w `fi.json` przy pierwszym podłączeniu (ostatnio zmieniany
+  w ICTTJ – `chosenForecast`); zmiana w Ustawieniach → ICTTJ dopiero po potwierdzeniu z listą celów do archiwizacji (ich
+  pieniądze zostają).
+- **T131** Wydatek z celu (N1): `goalId` tylko przy wydatku; cel i kontener wykluczają się; cel płaci, ile ma, reszta z
+  osłon; zmiana rodzaju operacji zdejmuje cel.
+- **T132** Zmiana daty „Rozliczenia od” (B3): `rebaseOpenings` liczy nowe salda na start z rejestru – późniejsza data:
+  saldo w dniu przed nią; wcześniejsza: stare saldo na start minus to, co rejestr przypisuje dniom między datami; komunikat
+  z „Cofnij” (poprzednie salda i data).
+- **T133** Temat importu domownika „pytaj” (B4): podpis propozycji z osobą – każda osoba ma własny temat.
+- **T134** Dwa formaty pliku (B5): operacja z banku pamięta format pliku (`bank.source`; starsze – głos po `importedAt`,
+  `formatsOf`) i klucze drugiego formatu (`altKeys`, najwyżej 20). Wiersz drugiego formatu = zaksięgowana operacja tego
+  konta z tą samą kwotą ±3 dni i podobną nazwą, tylko z dni objętych plikiem (`coverageOf`: okres pliku, inaczej jego
+  pierwszy i ostatni dzień) – operacja spoza okresu nie może być w pliku, a wiersz obok niej to inna operacja. Panel
+  duplikatów (`bank-format`) łączy pary zaimportowane wcześniej, każdą w dniach importu drugiej strony.
+- **T135** Cykl opłaty okresowej (B55, B6): płatność zamyka cykl miesiąca terminu; przy cyklu ≥ 3 miesięcy także płatność
+  w miesiącu przed terminem (np. 1. w poniedziałek) – gdy poprzedni cykl jest zamknięty (zapłacony albo sprzed śledzenia
+  opłaty: przed startem budżetu i jej `from`), inaczej to zaległa zapłata poprzedniego cyklu. Zapłacony cykl: bez rat,
+  zbiornik zbiera na następny, odprawa i Radar pokazują następny termin (`nextUnpaidOf`, `paidDue`).
+- **T136** Życie kontenera (B56): opłata okresowa dodana albo zmieniona na okresową w trakcie budżetu zbiera od bieżącego
+  miesiąca (`from`); archiwizacja zapisuje `archivedAt` i liczy się do końca swojego miesiąca (zarchiwizowany sprzed 1.4.2
+  bez daty – nigdy); po końcu życia (`until`, archiwizacja) resztka zbiornika wraca do osłon (zdarzenie `tank`).
+- **T137** Edytor kontenera (B1): `MonthField` (zapis po wyjściu z pola, nieczytelny miesiąc – komunikat i poprzednia
+  wartość), cykl „inny…” liczbą po wyjściu z pola, nazwa przez `NameInput` (pusta – komunikat).
+- **T138** Plan miesiąca (B11, B46): nowy plan ma stałe id miesiąca (`monthPlanId`) – dwa komputery piszą ten sam rekord;
+  zmiana pensji albo kopert minionego miesiąca najpierw zamraża następny miesiąc jako jego własny plan (kopia planu w mocy),
+  więc bieżący i kolejne się nie zmieniają.
+- **T139** Łupy na ekranie (B10): debriefing i raport biorą podział z dziennika silnika (`lootApplied`, zdarzenie `loot` z
+  `ref` = miesiąc łupów), a nie zapisane kwoty decyzji; gdy łupy zmieniły się po decyzji – „było …, jest …”.
+- **T140** Folder danych – odczyt, zapis, usunięcie (B9, B42, B49, B50): błąd odczytu nie jest treścią pliku – problem
+  `readError` czytany ponownie przy następnym odświeżeniu i przed zapisem w to miejsce (tylko pliki tego wpisu; zbiór
+  `unreadable`), nigdy odsuwany jak uszkodzony; rekord przeczytany wcześniej zostaje. Zapis wpisu, którego plik właśnie
+  zniknął: przeniesiony (inna data) – w nowe miejsce, usunięty – `RemovedOutsideError` z usunięciem dla okna (pytanie),
+  zapis wraca po „Zachowaj”. Usunięcie: wersja „usunięty” w historii cofana, gdy plik się nie dał usunąć (ponawianie
+  `withRetry`, komunikat). Listy plików bez rozkładania tablic (stos przy 125 tys.); obcy błąd otwarcia (kod systemu,
+  błąd środowiska) po polsku z odesłaniem do logu.
+- **T141** Konflikty (B44–B46): odrzucona wersja do historii wpisu (powód 'discarded'; plan miesiąca o innym id – pod id
+  planu, który zostaje, więc nigdy „usunięty wpis”, który historia wstawiłaby drugi raz na ten miesiąc); „Zachowaj
+  oryginał” bez czytelnego oryginału – odmowa; kopia i oryginał w nowszym formacie – odmowa; uszkodzony oryginał
+  odsunięty, nie nadpisany. Plan miesiąca, którego plik ma już inny rekord: moja wersja jako kopia
+  `RRRR-MM-KOMPUTER.json` do wyboru w Synchronizacji (`ConflictCopyError`, okno go zapomina), bez ponawiania.
+- **T142** Zamykanie (B43): proces główny czeka na kolejkę zapisów (najwyżej 30 s), w trakcie zamykania bez skanu folderu
+  (fokus, obserwator); okno, które jeszcze zapisuje, mówi o tym co 1 s (`fi:flushing`) – cisza 4 s = okno nie odpowiada,
+  najwyżej 60 s, potem pytanie jak przy nieudanym zapisie.
+- **T143** Scalanie trójstronne (B47, B48): klucz nieobecny w znanej bazie (`MISSING`) dodany po jednej stronie to nie
+  konflikt; wybór „Weź z …” / „Usuń też tutaj” dla wpisu zapisanego w międzyczasie (`savedAfter`) zapisuje się jeszcze raz.
+- **T144** Szybki wpis i pola (B51, B24): id operacji nadaje okno szybkiego wpisu, główne okno odpowiada „Zapisano” bez
+  drugiego zapisu znanego id; po sukcesie okno zablokowane do następnego otwarcia, nowy szkic od razu; Esc okna w fazie
+  przechwytywania (pole ze szkicem by go zatrzymało); zegar chowania po „Zapisano” kasowany przy ponownym otwarciu. Esc w
+  polach kwoty, daty, godziny, miesiąca i nazwy odrzuca szkic (`cancelled` – blur po Esc idzie z propsami poprzedniego
+  renderu) i nie przechodzi dalej, gdy był szkic.
+- **T145** Przegląd grupy E (`/code-review` high, 10 kandydatów): poprawione 9 – drugi format tylko w dniach pliku i w
+  zakresach importów (T134), chwila wpływu z utworzenia dokowania (T128), Esc w polach (T144, przy okazji całe B24),
+  ponawianie usunięcia (T140), usunięcie i kopia planu do okna w tym samym kroku kolejki (T140, T141), zaległa zapłata
+  a wczesna (T135), zbiór nieczytelnych plików zamiast przeglądania wszystkich (T140), komunikat błędu otwarcia po
+  rodzaju błędu (T140), odrzucony plan miesiąca pod id zachowanego (T141); bez zmian – historia celów bez skracania (T128).
+  Przy okazji: Esc w szybkim wpisie z wpisaną kwotą nie zamykał okna (test przechodził dzięki zegarowi z poprzedniego
+  zapisu) – T144.
