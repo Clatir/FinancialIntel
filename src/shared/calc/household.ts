@@ -172,6 +172,11 @@ export interface LedgerOptions {
   until?: string
   /** The settlements' start (the budget's or later – D81): the balances are the members' openings then; none = the whole history counts. */
   from?: string | null
+  /**
+   * The budget's start, when the settlements start later (D81): the balances are zero then too – what was before it is
+   * in the opening balances of the accounts, as in 1.3.0; an account's operations before its opening count from it.
+   */
+  reset?: string | null
   /** Each account's opening balance's date (the engine's: `fleet.ts` `householdOf`). */
   openings?: ReadonlyMap<string, string>
   /** The members' balances at `from` (D81). */
@@ -181,10 +186,12 @@ export interface LedgerOptions {
 /** The household's balances from the operations (`LedgerOptions`). */
 export function settleHousehold(transactions: readonly Transaction[], opts: LedgerOptions = {}): HouseholdLedger {
   const { until, from, openings } = opts
+  const clearAt = opts.reset && from && opts.reset < from ? opts.reset : null
   const opened = from ? (opts.members ?? []).filter((m) => m.opening && (m.opening.owed > 0 || m.opening.deposit > 0)) : []
   const key = [
     until ?? '',
     from ?? '',
+    clearAt ?? '',
     openings ? [...openings].map(([id, date]) => `${id}:${date}`).sort().join(',') : '',
     opened.map((m) => `${m.id}:${m.opening!.owed}:${m.opening!.deposit}`).join(',')
   ].join('|')
@@ -201,10 +208,16 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
     }
   }
   const byTx = new Map<string, MemberFlow[]>()
-  const insideOpening = (t: Transaction) => from != null && t.date >= from && t.date < (openings?.get(t.accountId) ?? '')
+  const budgetFrom = clearAt ?? from
+  const insideOpening = (t: Transaction) => budgetFrom != null && t.date >= budgetFrom && t.date < (openings?.get(t.accountId) ?? '')
   const txs = transactions.filter((t) => (until == null || t.date <= until) && settlesHousehold(t) && !insideOpening(t)).sort(ledgerOrder)
+  let cleared = !clearAt
   let started = !from
   for (const t of txs) {
+    if (!cleared && t.date >= clearAt!) {
+      cleared = true
+      states.clear()
+    }
     if (!started && t.date >= from!) {
       started = true
       begin()

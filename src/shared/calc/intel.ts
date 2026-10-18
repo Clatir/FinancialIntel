@@ -300,7 +300,10 @@ export interface YearNumbers {
   financed: Array<{ memberId: string; amount: number }>
 }
 
-/** A year in numbers (the year's review, spec: in January); `start` = the budget's (the household's balances – D80). */
+/**
+ * A year in numbers (the year's review, spec: in January); `ctx` – what is income (D81). The year's income nets the
+ * trading over the whole year (a withdrawal in January and a top-up in March cancel out), each month over itself.
+ */
 export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ctx: IncomeContext = plainIncomeContext(transactions)): YearNumbers {
   const months = monthRange(`${year}-01`, `${year}-12`)
   const spend = spendingByMonth(transactions, categories, months)
@@ -309,7 +312,7 @@ export function yearNumbers(transactions: readonly Transaction[], categories: re
     year,
     months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]! })),
     costs: sum(spend.totals),
-    income: sum(income),
+    income: incomeOfPeriod(transactions.filter((t) => t.date.startsWith(`${year}-`)), ctx).total,
     categories: [...spend.rows.map((r) => ({ id: r.id, cost: r.total })), { id: 'cargo', cost: sum(spend.cargo) }].filter((c) => c.cost > 0).sort((a, b) => b.cost - a.cost),
     financed: financedBy(transactions.filter((t) => t.date.startsWith(`${year}-`)))
   }

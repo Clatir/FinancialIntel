@@ -3,10 +3,13 @@
  * and the decisions remembered for them (what their money beyond their debt is, D80 b).
  */
 import { useEffect } from 'react'
-import { warsawNow } from '@shared/calc/dates'
+import { addDays, warsawNow } from '@shared/calc/dates'
+import { householdOf } from '@shared/calc/fleet'
+import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow, type Transaction } from '@shared/schema'
 import { newId } from '@shared/ids'
 import { updateSettings, useData } from '../../store/data'
+import { fleetInputNow } from '../../store/fleet'
 import { toast } from '../../store/ui'
 
 const NO_MEMBERS: HouseholdMember[] = []
@@ -87,15 +90,35 @@ export function setHouseholdSince(since: string | null): void {
 }
 
 /**
- * The settlements from today (D81): a folder without the date chosen gets today, once – what was owed or held before
- * it goes in as the members' opening balances (Ustawienia → Domownicy).
+ * The settlements from today (D81): a folder without the date chosen gets today, once. What each member owed or held
+ * until yesterday (as 1.3.0 counted it) becomes their opening balance – nothing marked before is lost, and it can be
+ * changed in Ustawienia → Domownicy.
  */
 export function useHouseholdSinceSeed(): void {
   const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since === undefined)
   useEffect(() => {
     if (!unset) return
-    if (useData.getState().fi?.settings.household.since !== undefined) return
-    updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, since: warsawNow().date } } }), { background: true })
+    const input = fleetInputNow()
+    if (!input || useData.getState().fi?.settings.household.since !== undefined) return
+    const today = warsawNow().date
+    const before = householdOf(input, today, addDays(today, -1))
+    updateSettings(
+      (f) => ({
+        ...f,
+        settings: {
+          ...f.settings,
+          household: {
+            ...f.settings.household,
+            since: today,
+            members: f.settings.household.members.map((m) => {
+              const b = balanceOf(before, m.id)
+              return b.owed || b.deposit ? { ...m, opening: { owed: b.owed, deposit: b.deposit } } : m
+            })
+          }
+        }
+      }),
+      { background: true }
+    )
   }, [unset])
 }
 

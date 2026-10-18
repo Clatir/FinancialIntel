@@ -9,13 +9,13 @@
 import type { HouseholdMember } from '../schema/budget'
 import type { Docking, Transaction } from '../schema/records'
 import { addMonths, monthOf, monthRange } from './dates'
-import { heldOf, isMemberMoney, settleHousehold, type HouseholdLedger } from './household'
+import { heldOf, incomeShares, isMemberMoney, settleHousehold, type HouseholdLedger } from './household'
 import { sum } from './operations'
 
 export interface IncomeContext {
   /** The household's ledger (the engine's: `FleetState.household`). */
   ledger: Pick<HouseholdLedger, 'byTx'>
-  /** The settlements' start chosen (D81): a member's money before it is not income; null = none. */
+  /** The settlements' start (D81, `settleFromOf`): a member's money before it is not income; null = none. */
   since: string | null
   /** The members (their names in the bank tell their money from before the settlements). */
   members: ReadonlyArray<Pick<HouseholdMember, 'bankNames'>>
@@ -54,8 +54,9 @@ export function incomeParts(t: Transaction, ctx: IncomeContext): IncomeParts {
     if (t.amount <= 0) return NONE
     // A member's money before the settlements (D81): what of it was theirs cannot be told any more – not income.
     if (ctx.since && t.date < ctx.since && isMemberMoney(t, ctx.members)) return NONE
+    // The members' parts the ledger did not settle (an account's operation inside its opening balance) are theirs.
     const flows = ctx.ledger.byTx.get(t.id)
-    const kept = flows ? heldOf(flows) : Math.min(t.amount, t.repaid)
+    const kept = flows ? heldOf(flows) : sum(incomeShares(t).filter((x) => x.memberId).map((x) => x.amount))
     return { work: Math.max(0, t.amount - kept - tax), trading: 0 }
   }
   if (t.kind === 'trading') {

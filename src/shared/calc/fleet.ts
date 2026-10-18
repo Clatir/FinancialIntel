@@ -219,6 +219,7 @@ export function settleFromOf(settings: Pick<Settings, 'household'>, budgetStart:
 const ledgerOptions = (settings: Pick<Settings, 'household'>, budgetStart: string | null, openings: ReadonlyMap<string, Balance>, until: string) => ({
   until,
   from: settleFromOf(settings, budgetStart),
+  reset: budgetStart,
   openings: new Map([...openings].map(([id, o]) => [id, o.date])),
   members: settings.household.members
 })
@@ -417,7 +418,7 @@ export function computeFleet(input: FleetInput): FleetState {
     if (c) costsByMonth.set(m, (costsByMonth.get(m) ?? 0) + c)
   }
   // Income (D81): work and trading net, without the members' money and the pool „Podatek”.
-  const incomeContext: IncomeContext = { ledger: household, since: settings.household.since ?? null, members: settings.household.members, tax: taxOfDockings(dockingByTx, txs) }
+  const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax: taxOfDockings(dockingByTx, txs) }
   const incomeMonths = incomeByMonth(txs, incomeContext)
   const costsFor = (m: string): FleetState['costs'] => {
     const h = averageOf(costsByMonth, firstFull, m, 12)

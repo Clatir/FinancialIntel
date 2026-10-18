@@ -3,7 +3,7 @@ import { monthRows, monthsCsv, operationRows, operationsCsv, operationsSheet, pl
 import { xlsxParts } from '@shared/export/xlsx'
 import { defaultWatchMonday } from '@shared/calc/intel'
 import { createDefaultSettings } from '@shared/defaults'
-import { defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Transaction } from '@shared/schema'
+import { defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Transaction } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-01-01T00:00:00.000Z'
@@ -33,6 +33,14 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
     expect(operationsCsv(rows).split('\r\n')[2]).toBe('2026-10-03;09:15;mBank;Wydatek;-12,50;Jedzenie · zakupy spożywcze;Biedronka;;;impuls;')
     expect(operationsSheet(rows).rows[1]![4]).toBe(-12.5)
     expect(xlsxParts([operationsSheet(rows)]).map((p) => p.path)).toContain('xl/worksheets/sheet1.xml')
+    // An income carrying two members' money (D81): whose it is, no categories of its parts.
+    const shared = tx('2026-10-04', zl(500), {
+      kind: 'income',
+      categoryId: null,
+      memberId: HOUSE_MEMBER_ID,
+      splits: [{ id: nextId(), amount: zl(200), categoryId: null, refundable: false, memberId: null, advance: false, note: '' }]
+    })
+    expect(operationRows([shared], s.categories, s.accounts, '2026-10-01', '2026-10-31', s.household.members).map((r) => [r.category, r.financed])).toEqual([['', 'od: Dom']])
   })
 
   it('miesiące: pensja, koszty, wpływy, na plus', () => {

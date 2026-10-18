@@ -192,10 +192,12 @@ test('Domownicy bez bankowości (D81): rozliczenia od dziś z saldem na start, �
   })
   const { app, page, dataDir: dir, errors } = await launch({ dataDir })
   try {
-    // The settlements from today: last month's purchase for Mama is forgotten, Tata's money then is not income.
+    // The settlements from today: what Mama owed until yesterday (last month's purchase) is her opening balance; Tata's
+    // money then is not income.
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.household.since).toBe(today)
-    await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')
+    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(90), deposit: 0 })
+    await expect(page.getByTestId('bridge-house')).toHaveText('90,00 zł')
     const income = page.getByTestId('bridge-income')
     await expect(income.getByTestId('income-work-6')).toHaveText('4 000,00 zł')
     await expect(income.getByTestId('income-trading-6')).toHaveText('2 000,00 zł')

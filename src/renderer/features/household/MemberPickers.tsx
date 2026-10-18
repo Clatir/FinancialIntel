@@ -3,11 +3,14 @@
  * is – the rest beyond their debt as income or their advance, the purchases it pays back – and what the ledger made of
  * it.
  */
-import { balanceOf, incomeShares, memberName, payerOf, type HouseholdLedger } from '@shared/calc/household'
+import { useMemo } from 'react'
+import { warsawNow } from '@shared/calc/dates'
+import { householdOf } from '@shared/calc/fleet'
+import { balanceOf, incomeShares, ledgerOrder, memberName, payerOf, type HouseholdLedger } from '@shared/calc/household'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, inflowOf, type HouseholdMember, type Split, type Transaction } from '@shared/schema'
 import { useData } from '../../store/data'
-import { useHousehold } from '../../store/fleet'
+import { fleetInputNow, useHousehold } from '../../store/fleet'
 import { AmountField, plnText } from '../../components/fields'
 import { IconClose, IconPlus } from '../../components/icons'
 import { Segmented, cx } from '../../components/ui'
@@ -79,9 +82,17 @@ export function FinancedNote({ t }: { t: Transaction }) {
   )
 }
 
-/** What a member owes for purchases up to `date` (the ledger's open items then still open). */
-const owedUpTo = (ledger: HouseholdLedger | null, memberId: string, date: string): number =>
-  ledger ? balanceOf(ledger, memberId).open.filter((o) => o.date <= date).reduce((a, o) => a + o.amount, 0) : 0
+/** The ledger of the operations before `t` (the engine's order): what each member owed when it came. */
+function useLedgerBefore(t: Transaction): HouseholdLedger | null {
+  const records = useData((s) => s.records.transactions)
+  const fi = useData((s) => s.fi)
+  return useMemo(() => {
+    const input = fleetInputNow()
+    if (!input) return null
+    return householdOf({ ...input, transactions: input.transactions.filter((x) => x.id !== t.id && ledgerOrder(x, t) < 0) }, warsawNow().date, t.date)
+    // The engine's input is read whole: it changes with the records and the settings.
+  }, [records, fi, t.id, t.date, t.time, t.createdAt])
+}
 
 const INCOME_REST = [
   { value: 'income', label: 'przychód' },
@@ -101,6 +112,7 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const payer = t.memberId ?? payerOf(t)
   const offered = useOffered(payer)
   const flows = ledger?.byTx.get(t.id) ?? []
+  const before = useLedgerBefore(t)
   const parts = t.splits
   const partsSum = parts.reduce((a, x) => a + x.amount, 0)
   const rest = t.amount - partsSum
@@ -149,7 +161,7 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
       )}
       <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
         {through.map((m) => {
-          const owed = owedUpTo(ledger, m.id, t.date)
+          const owed = before ? balanceOf(before, m.id).owed : 0
           return (
             <button
               key={m.id}

@@ -205,6 +205,15 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     expect(fleet([before]).receivables.house).toBe(zl(120))
   })
 
+  it('rozliczenia od późniejszego dnia: przy starcie budżetu salda i tak zerowane (jak w 1.3.0)', () => {
+    // A purchase of before the budget (September): her transfer between the budget's start and the date is income.
+    const old = bought('2026-09-20', 200, MAMA)
+    const transfer = paid('2026-10-05', 200, MAMA)
+    const s = fleet([old, transfer], withHousehold({ since: SINCE }))
+    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(200) }])
+    expect(s.log.find((e) => e.txId === transfer.id)?.moves.house).toBeUndefined()
+  })
+
   it('zaliczka na start jest w depozycie (z osłon), a zaliczka sprzed daty wraca do osłon', () => {
     const plain = fleet([])
     const opening = fleet([], withHousehold({ since: SINCE }, setMember(TATA, { opening: { owed: 0, deposit: zl(200) } })))

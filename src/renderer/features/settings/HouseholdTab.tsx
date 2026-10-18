@@ -94,7 +94,9 @@ function SinceRow() {
 
 /** A member's balance at the settlements' start (D81): what they owed then, or what they had paid ahead. */
 function OpeningField({ m }: { m: HouseholdMember }) {
-  const [kind, setKind] = useState<'owed' | 'deposit'>(m.opening.deposit > 0 ? 'deposit' : 'owed')
+  // The kind follows the balance kept (also when another computer or „Cofnij” changes it); chosen here while empty.
+  const [chosen, setKind] = useState<'owed' | 'deposit'>('owed')
+  const kind = m.opening.deposit > 0 ? 'deposit' : m.opening.owed > 0 ? 'owed' : chosen
   const value = kind === 'deposit' ? m.opening.deposit : m.opening.owed
   const set = (k: 'owed' | 'deposit', v: number) => patchMember(m.id, { opening: k === 'deposit' ? { owed: 0, deposit: v } : { owed: v, deposit: 0 } })
   return (

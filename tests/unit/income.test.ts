@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { computeFleet } from '@shared/calc/fleet'
 import { settleHousehold } from '@shared/calc/household'
 import { incomeByMonth, incomeOfPeriod, incomeParts, incomeStats, taxOfDockings, type IncomeContext } from '@shared/calc/income'
+import { yearNumbers } from '@shared/calc/intel'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, dockingSchema, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Transaction } from '@shared/schema'
 
@@ -31,6 +32,13 @@ describe('przychody (D81): praca i trading XTB netto, bez pieniędzy domowników
     expect(incomeOfPeriod(list, c)).toEqual({ work: zl(4000), trading: zl(3000), total: zl(7000) })
     // More top-ups than withdrawals: no trading income (never below zero).
     expect(incomeOfPeriod([back], c)).toEqual({ work: 0, trading: 0, total: 0 })
+  })
+
+  it('rok w liczbach: trading netto w całym roku, każdy miesiąc osobno', () => {
+    const list = [xtb('2026-01-10', 3000), xtb('2026-03-10', -3000), salary('2026-02-10', 4000)]
+    const y = yearNumbers(list, createDefaultSettings(AT).settings.categories, '2026', ctx(list))
+    expect(y.income).toBe(zl(4000))
+    expect(y.months.slice(0, 3).map((m) => m.income)).toEqual([zl(3000), zl(4000), 0])
   })
 
   it('pula Podatek z dokowania: cała wypłata albo jej część z podziału', () => {
