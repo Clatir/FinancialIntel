@@ -247,6 +247,43 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   podpowiedź „Zawsze zachowuj na tym urządzeniu”, gdy pliki czytają się wolno, „Przerwij” (bez zmian w folderze) i
   „Otwórz folder logów”, czasy etapów i długich obliczeń okna w logu, okienko przy zawieszonym oknie, szybszy odczyt
   plików pobieranych z chmury; model i thinking podawane po diagnozie, przed zmianami (prośba użytkownika).
+- **D83** (18.10.2026) Wydatek finansowany przez wiele osób, także bez konta w banku (F0 z przeglądu po 1.4.1, prośba
+  użytkownika: „wydatki finansowane przez wiele osób oraz przez wiele osób bez konta bankowego, np. dziadków oraz tatę,
+  który może mieć albo nie mieć konta”). Odpowiedzi (zalecane przyjęte, B4 zmienione przez użytkownika):
+  - dziadkowie i tata oddają pieniądze na wszystkie sposoby: przelewem z własnego konta, przez innego domownika,
+    gotówką do ręki, czasem wcale (prezent);
+  - zwrot gotówką – wariant A: konto „Gotówka” (portfel) w budżecie; zwrot gotówką wpływa na to konto, wydatki z gotówki
+    dopisuje się szybkim wpisem;
+  - wspólne finansowanie jednym ruchem: równo / procenty / kwoty, bez rozbijania na kategorie; moja część = mój wydatek,
+    części innych osób do ich sald; to samo w szybkim wpisie, decyzji zbiorczej i regule importu;
+  - babcia i dziadek jako dwie osoby (wspólna wpłata – podział wpłaty, D81);
+  - opcja „sfinansowane jako prezent”: osoba płaci za mnie, nic nie jest winna, wydatek nie zjada energii.
+- **D84** (18.10.2026) Decyzje z przeglądu po 1.4.1 (`docs/przeglad/`, pytania A1, C1–C15 – zalecane odpowiedzi
+  przyjęte, komenda „Start E–H”):
+  - A1: kolejność grup E (1.4.2 pieniądze i dane) → F (1.4.3 szybkość) → G (1.5.0 domownicy, ICTTJ i dokowanie) → H
+    (1.5.1 import) jednym ciągiem bez czekania na komendę między grupami; każda grupa z własnym PR i wydaniem; przerwa
+    tylko przy czerwonym CI nie do naprawienia w grupie, pytaniu spoza tych odpowiedzi albo zgłoszonym problemie; po H
+    pauza (D67), I i J na kolejną komendę;
+  - C1: zmiany celów (archiwizacja, priorytet, kwota, nowy cel) działają od dnia zmiany – odłożone pieniądze zostają;
+  - C2: przy archiwizacji celu z pieniędzmi pytanie „przenieś środki do: osłony / inny cel / zostaw w celu”;
+  - C3: scenariusz ICTTJ zapamiętany przy pierwszym podłączeniu; zmiana tylko ręcznie, z ostrzeżeniem o archiwizacji
+    celów;
+  - C4: kopia dzienna także w zasobniku, kopie bez `.history`, 14 dziennych + 8 tygodniowych zamiast 30 dziennych;
+  - C5: baner „folder otwarty też na …” tylko, gdy drugi komputer był używany w ostatnich 10 min; komputer w zasobniku
+    nie zapisuje w tle;
+  - C6: aktualizacja – baner „Uruchom ponownie teraz”, instalacja także przy pełnym zamknięciu i przy starcie Windows;
+  - C7: próg dziennika kapitańskiego 0 zł = nie pytaj nigdy, wszędzie tak samo;
+  - C8: kreator startu z krokiem folderu ICTTJ i celów (krótkie, do pominięcia);
+  - C9: zrobić – odprawa o ustalonej godzinie z powiadomieniem, w debriefingu Raportów seria, trafność dziennika i plan
+    następnego miesiąca; wykreślić ze specyfikacji – automatyczny odsłuch, osobne godziny każdego powiadomienia, edycję
+    rozkazów w Dowództwie (zostają w Ustawieniach), radar / Wywiad / krzywą na Mostku;
+  - C10: ekran „Nowa klasa” najwyżej raz na miesiąc dla danej klasy;
+  - C11: potwierdzenie salda z pliku banku zalicza misję „Inwentaryzacja” tylko dla mBanku;
+  - C12: cel z terminem – tylko pokazanie potrzebnej raty (bez odkładania z pensji – D13);
+  - C13: ulgi z PIT-37 / PIT-36 (F39) – odpadają, jeśli brak takiego dochodu (do potwierdzenia przy grupie K);
+  - C14: wpisy z telefonu (F41) – nie teraz;
+  - C15: funkcje – pierwsza paczka F1–F8, F13, F21, F22, F42; druga (później) F9–F12, F16, F18, F19, F24, F25, F29; bez
+    F27, F32–F41, F43.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
