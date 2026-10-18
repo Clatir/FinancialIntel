@@ -59,7 +59,7 @@ export async function dirSize(dir: string): Promise<{ bytes: number; files: numb
   let bytes = 0
   let files = 0
   const rels = await walkFiles(dir, dir)
-  await mapLimit(rels, 64, async (rel) => {
+  await mapLimit(rels, 24, async (rel) => {
     try {
       const st = await fs.stat(join(dir, rel))
       bytes += st.size

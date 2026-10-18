@@ -1,5 +1,21 @@
 # Financial Intel – zmiany
 
+## 1.4.1
+
+Wczytywanie folderu krok po kroku (zgłoszenie użytkownika: na drugim komputerze aplikacja wisiała minutami przy
+otwieraniu folderu danych, decyzja D82).
+
+- Przyczyna: OneDrive trzyma na nowym komputerze pliki tylko online i pobiera każdy przy pierwszym odczycie, a aplikacja
+  czytała pliki tylko czterema „rękami” naraz – kilka czekających plików zatrzymywało całą resztę. Teraz czyta ich
+  znacznie więcej równolegle i zawsze zostawia zapas na zapis.
+- Przy otwieraniu folderu (ekran wyboru i start aplikacji) widać, co się dzieje: etap, „Wczytywanie plików: x z N” z
+  paskiem, plik, na który aplikacja czeka najdłużej, i czas. Gdy pliki czytają się wolno – podpowiedź „Zawsze zachowuj na
+  tym urządzeniu” (prawy klik na folderze w Eksploratorze).
+- „Przerwij” wraca do wyboru folderu i niczego w nim nie zmienia; „Spróbuj ponownie” otwiera go jeszcze raz.
+- „Otwórz folder logów” na ekranie wyboru folderu. Log zapisuje każdy etap otwierania (co 10 s, także gdy aplikację
+  zamknięto w trakcie), czasy i najwolniejsze pliki, długie obliczenia okna, a gdy okno przestaje odpowiadać – co
+  właśnie liczyło (po 10 s także okienko z informacją).
+
 ## 1.4.0
 
 Domownicy bez własnego konta i przychody ze średnich (zgłoszenie użytkownika po 1.3.0, decyzja D81).

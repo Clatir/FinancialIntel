@@ -37,6 +37,8 @@ export function OpenProgressPanel({ progress: p }: { progress: OpenProgress }) {
   const share = p.step === 'read' && p.total ? p.done / p.total : p.step === 'list' || p.step === 'inspect' ? 0 : 1
   const waitingLong = p.waiting && p.waiting.ms >= p.slowMs
   const cloud = p.slow > 0 || waitingLong
+  // Once the folder is read (migration, the other computers) the open no longer stops: it only finishes.
+  const canStop = p.step === 'inspect' || p.step === 'list' || p.step === 'read'
   const stop = () => {
     setStopping(true)
     void api.cancelOpen().catch((e) => toast(errorMessage(e), 'error'))
@@ -70,7 +72,13 @@ export function OpenProgressPanel({ progress: p }: { progress: OpenProgress }) {
         </div>
       )}
       <div className="flex gap-2">
-        <button className="btn" disabled={stopping} onClick={stop} data-testid="open-cancel">
+        <button
+          className="btn"
+          disabled={stopping || !canStop}
+          onClick={stop}
+          title={canStop ? 'Wróć do wyboru folderu – nic w nim nie zmieniam' : 'Folder jest już wczytany – kończę otwieranie'}
+          data-testid="open-cancel"
+        >
           {stopping ? 'Przerywanie…' : 'Przerwij'}
         </button>
         <button className="btn" onClick={openLogs} data-testid="open-logs">

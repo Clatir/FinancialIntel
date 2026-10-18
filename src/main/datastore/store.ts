@@ -74,10 +74,12 @@ export interface OpenOptions {
   slowMs?: number
   /** Test hook (E2E of the progress screen): every file read waits this long first. */
   readDelayMs?: number
+  /** Called once the folder is read, right before the migration: from here on the open no longer stops. */
+  onCommit?: () => void
 }
 
-/** Files read at once while opening: fewer than the thread pool (`main/threadpool.ts`), so other work still runs. */
-const READ_CONCURRENCY = 24
+/** Files read at once (open, rescan): fewer than the thread pool (`main/threadpool.ts`), so other work still runs. */
+export const READ_CONCURRENCY = 24
 
 export type FolderKind = 'data' | 'partial' | 'ictj' | 'empty' | 'other' | 'missing'
 
@@ -219,8 +221,10 @@ export class DataStore {
         const kind = await DataStore.inspect(this.root)
         if (kind !== 'data') throw new Error('W tym folderze nie ma pliku fi.json.')
         const times = await this.scanAll(tracker, opts)
-        // Stopped: an open nobody waits for any more never migrates or cleans up the folder.
+        // Stopped: an open nobody waits for any more never migrates or cleans up the folder. Past this point it is
+        // not stopped any more – the caller is told (no „nothing changed” while the migration rewrites files).
         opts.signal?.throwIfAborted()
+        opts.onCommit?.()
         this.applySettingsState()
         tracker.step = 'migrate'
         const tm = performance.now()
@@ -659,7 +663,7 @@ export class DataStore {
       if (needsFull) {
         const rels = await this.listDataFiles()
         const seen = new Set(rels)
-        const states = await mapLimit(rels, 64, (rel) => this.loadFile(rel))
+        const states = await mapLimit(rels, READ_CONCURRENCY, (rel) => this.loadFile(rel))
         for (const rel of [...this.files.keys()]) if (!seen.has(rel)) this.files.delete(rel)
         states.forEach((s) => s && this.files.set(s.relPath, s))
       } else {

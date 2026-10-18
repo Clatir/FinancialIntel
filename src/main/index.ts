@@ -255,12 +255,14 @@ async function trash(absPath: string): Promise<void> {
 }
 
 async function closeStore(): Promise<void> {
+  // Detach everything first: an open that switches meanwhile is never undone by this close resuming later.
+  const closing = store
   watcher?.stop()
   watcher = null
   if (presenceTimer) clearInterval(presenceTimer)
   presenceTimer = null
-  if (store) await clearPresence(store.root, machineName).catch(() => undefined)
   store = null
+  if (closing) await clearPresence(closing.root, machineName).catch(() => undefined)
 }
 
 async function heartbeat(): Promise<void> {
@@ -278,8 +280,10 @@ async function heartbeat(): Promise<void> {
   }
 }
 
-/** The open in progress (1.4.1): „Przerwij” aborts it, a new open replaces it. */
+/** The open in progress (1.4.1): „Przerwij” aborts it, a new open replaces it – until its folder is read. */
 let opening: AbortController | null = null
+/** Every open counts up: an older one that finished reading gives way to a newer one instead of switching folders. */
+let openGeneration = 0
 /** Test hooks (E2E of the progress screen): every file read waits so long; a read this long is slow. */
 const OPEN_DELAY_MS = Number(process.env.FI_OPEN_DELAY_MS) || 0
 const OPEN_SLOW_MS = Number(process.env.FI_OPEN_SLOW_MS) || undefined
@@ -293,6 +297,11 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
   opening?.abort()
   const controller = new AbortController()
   opening = controller
+  const generation = ++openGeneration
+  const superseded = (): OpenFolderResult => {
+    log('warn', `open superseded ${dir}: a newer open took over`)
+    return { ok: false, reason: 'aborted', dir, message: OPEN_ABORTED_MESSAGE }
+  }
   const signal = controller.signal
   const t0 = Date.now()
   let step: OpenStep = 'inspect'
@@ -369,16 +378,24 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
     }
     next = new DataStore(target, { machineName, trash, backupDir: config.get().backupDirOverride })
     step = 'list'
-    // Open the new folder first: if it fails or is stopped, the current one stays open and keeps saving.
-    const snapshot = await untilAborted(next.open({ signal, readDelayMs: OPEN_DELAY_MS, slowMs: OPEN_SLOW_MS }), signal)
-    // From here on the folder is switched: stopping no longer applies.
-    if (opening === controller) opening = null
-    await closeStore()
-    store = next
+    // Open the new folder first: if it fails or is stopped, the current one stays open and keeps saving. Once read
+    // (before a migration) it no longer stops: „Przerwij” would promise an untouched folder.
+    const commit = () => {
+      if (opening === controller) opening = null
+    }
+    const snapshot = await untilAborted(next.open({ signal, readDelayMs: OPEN_DELAY_MS, slowMs: OPEN_SLOW_MS, onCommit: commit }), signal)
+    commit()
     step = 'machines'
-    next.otherMachines = await Promise.race([readOtherMachines(target, machineName).catch(() => []), sleep(MACHINES_WAIT_MS).then(() => [])])
-    snapshot.status = next.status()
+    const others = await Promise.race([readOtherMachines(target, machineName).catch(() => []), sleep(MACHINES_WAIT_MS).then(() => [])])
+    if (generation !== openGeneration) return superseded()
+    await closeStore()
+    // A newer open may have closed the store meanwhile: it switches, this one gives way. From here on no await until
+    // the watcher and the heartbeat are set, so two opens never interleave.
+    if (generation !== openGeneration) return superseded()
     const opened = next
+    store = opened
+    opened.otherMachines = others
+    snapshot.status = opened.status()
     watcher = new FolderWatcher(
       target,
       (paths) => {
@@ -714,46 +731,55 @@ function broadcastPrefs(prefs: MachinePrefs): void {
   for (const w of wins) if (w && !w.isDestroyed()) w.webContents.send('fi:machinePrefs', prefs)
 }
 
-/** The long computation the window started last and has not finished (1.4.1): names a hang in the log. */
-let rendererStep: { name: string; at: number } | null = null
+/** The long computation each window started last and has not finished (1.4.1): names a hang in the log. */
+const rendererSteps = new Map<number, { name: string; at: number }>()
 /** Log a computation of the window this long or longer. */
 const RENDERER_STEP_LOG_MS = 500
 /** The window not answering this long after Chromium noticed: tell the user (once per hang). */
 const HANG_NOTICE_MS = 10_000
 
-function stepText(): string {
-  return rendererStep ? `, last step ${rendererStep.name} started ${Math.round((Date.now() - rendererStep.at) / 1000)} s ago` : ''
-}
-
 function registerRendererSteps(): void {
-  ipcMain.on('fi:step', (_e, name: unknown, ms: unknown) => {
+  ipcMain.on('fi:step', (e, name: unknown, ms: unknown) => {
     if (typeof name !== 'string') return
+    const id = e.sender.id
     if (typeof ms !== 'number') {
-      rendererStep = { name, at: Date.now() }
+      rendererSteps.set(id, { name, at: Date.now() })
       return
     }
-    if (rendererStep?.name === name) rendererStep = null
+    if (rendererSteps.get(id)?.name === name) rendererSteps.delete(id)
     if (ms >= RENDERER_STEP_LOG_MS) log('info', `window ${name} ${Math.round(ms)} ms`)
   })
 }
 
 /** A window that stops answering (a long computation) leaves a line in the log and, after a while, a message. */
 function watchHangs(win: BrowserWindow): void {
+  const id = win.webContents.id
+  const stepText = () => {
+    const step = rendererSteps.get(id)
+    return step ? `, last step ${step.name} started ${Math.round((Date.now() - step.at) / 1000)} s ago` : ''
+  }
   let since = 0
   let timer: NodeJS.Timeout | null = null
+  const reset = () => {
+    since = 0
+    if (timer) clearTimeout(timer)
+    timer = null
+  }
   win.on('unresponsive', () => {
     if (since) return
     since = Date.now()
     log('warn', `window unresponsive${stepText()}`)
     timer = setTimeout(() => {
       timer = null
+      if (win.isDestroyed()) return
+      const step = rendererSteps.get(id)
       log('warn', `window still unresponsive after ${Math.round((Date.now() - since) / 1000)} s${stepText()}`)
       void dialog
         .showMessageBox({
           type: 'warning',
           title: APP_TITLE,
           message: 'Okno Financial Intel nie odpowiada',
-          detail: `Aplikacja coś liczy albo się zawiesiła${rendererStep ? ` (etap: ${rendererStep.name})` : ''}. Szczegóły są w logu – folder logów można otworzyć poniżej. Jeśli to się powtarza, prześlij plik main.log.`,
+          detail: `Aplikacja coś liczy albo się zawiesiła${step ? ` (etap: ${step.name})` : ''}. Szczegóły są w logu – folder logów można otworzyć poniżej. Jeśli to się powtarza, prześlij plik main.log.`,
           buttons: ['Czekaj', 'Otwórz folder logów'],
           defaultId: 0,
           cancelId: 0,
@@ -767,9 +793,17 @@ function watchHangs(win: BrowserWindow): void {
   win.on('responsive', () => {
     if (!since) return
     log('info', `window responsive again after ${Math.round((Date.now() - since) / 1000)} s`)
-    since = 0
-    if (timer) clearTimeout(timer)
-    timer = null
+    reset()
+  })
+  // A renderer that died or reloaded while hung never says 'responsive': start over, forget its step.
+  win.webContents.on('render-process-gone', () => {
+    reset()
+    rendererSteps.delete(id)
+  })
+  win.webContents.on('did-start-loading', () => rendererSteps.delete(id))
+  win.on('closed', () => {
+    reset()
+    rendererSteps.delete(id)
   })
 }
 

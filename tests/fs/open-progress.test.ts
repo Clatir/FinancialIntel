@@ -70,6 +70,23 @@ describe('wczytywanie folderu krok po kroku (1.4.1)', () => {
     expect(await exists(temp)).toBe(false)
   })
 
+  it('po wczytaniu (od migracji) otwarcie już się nie przerywa – kończy się i sprząta folder', async () => {
+    const root = await folderWith(2)
+    const temp = await staleTemp(root)
+    const controller = new AbortController()
+    let committed = 0
+    const snap = await new DataStore(root, { machineName: 'DRUGI-PC' }).open({
+      signal: controller.signal,
+      onCommit: () => {
+        committed++
+        controller.abort()
+      }
+    })
+    expect(committed).toBe(1)
+    expect(snap.records.transactions).toHaveLength(2)
+    expect(await exists(temp)).toBe(false)
+  })
+
   it('przerwanie w trakcie listy plików i odczytu partiami', async () => {
     const root = await folderWith(3)
     const controller = new AbortController()
