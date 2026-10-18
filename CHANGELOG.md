@@ -1,5 +1,37 @@
 # Financial Intel – zmiany
 
+## 1.4.3
+
+Szybkość przy dużym folderze – poprawki z przeglądu aplikacji po 1.4.1 (decyzje D84). Zmierzone na syntetycznym folderze
+z 10 lat: 30 tys. i 150 tys. operacji.
+
+Praca w oknie:
+- Kontrahent, tytuł i notatki operacji i kontenera zapisują się po wyjściu z pola albo Enterze (Esc cofa) – pisanie nie
+  przelicza już całego budżetu przy każdym znaku. Gdy w tym czasie ten sam tekst zmienił się na innym komputerze, zostaje
+  wpisany tutaj, a okno o tym mówi (tamta wersja jest w historii wpisu).
+- Budżet i gra liczą się raz na dzień i tylko po zmianie danych, których potrzebują; zapis wpisu nie przelicza wszystkiego
+  drugi raz.
+- Operacje otwierają się w 0,1 s (było 0,5 s przy 30 tys. i 9 s przy 150 tys.), Raporty w 0,05 s (było 0,44 s);
+  „Możliwe duplikaty” liczą się chwilę po zmianie i do 13 razy szybciej.
+- Zaległe dni gry zamrażane porcjami w tle – okno nie zamiera po dłuższej przerwie.
+- Pamięć okna przy 30 tys. operacji: 45 MB zamiast 131 MB.
+
+Folder danych:
+- Import z banku zapisuje operacje jedną paczką: 2000 operacji w ok. 3 s (było kilka minut przy 30 tys. i ponad 20 min
+  przy 150 tys.); sprzątanie duplikatów i jego „Cofnij” też paczką. Zapis pojedynczej zmiany trwa milisekundy przy każdej
+  wielkości folderu.
+- Zapis na Windows nie skanuje całego folderu – aplikacja sprawdza tylko zmieniony katalog; pełna kontrola co 5 minut i
+  najwyżej raz na minutę przy przejściu do okna, bez wstrzymywania zapisów.
+- „Zachowaj nowsze” w Synchronizacji jednym ruchem, bez przeskanowania folderu po każdej pozycji.
+
+Kopie zapasowe:
+- Kopia dzienna także wtedy, gdy aplikacja tygodniami działa w zasobniku: co godzinę i po wybudzeniu komputera sprawdza,
+  czy jest dzisiejsza.
+- Zostaje 14 dziennych i 8 tygodniowych (było 30 dziennych); pierwsze tygodniowe powstają z dotychczasowych dziennych.
+- Kopia ZIP ok. 12 razy szybsza: 2 s przy 30 tys. operacji (było 23 s), 13 s przy 150 tys. (było ok. 3 min), bez historii
+  zmian; plik, którego nie da się odczytać, przerywa kopię zamiast zostać po cichu pominięty.
+- Ustawienia → Folder i kopie: „Ostatnia kopia: dziś / wczoraj / N dni temu”, ostrzeżenie, gdy ma ponad 3 dni.
+
 ## 1.4.2
 
 Pieniądze i dane się zgadzają – poprawki z przeglądu aplikacji po 1.4.1 (decyzje D84).

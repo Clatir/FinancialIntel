@@ -134,18 +134,26 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
 
 /**
  * A text kept as a draft while typed (`commit` – a record's field, W2): applied on leaving the field or Enter (Ctrl+Enter
- * in a text area), Esc throws it away – a record is not saved, nor everything counted again, at every key.
+ * in a text area), Esc throws it away – a record is not saved, nor everything counted again, at every key. The text
+ * changed meanwhile under the draft (another computer): the typed one wins and says so – the other version is in the
+ * record's history (main keeps another computer's version whenever it is overwritten).
  */
 function useTextDraft(value: string, onChange: (v: string) => void, commit: boolean | undefined, multiline: boolean) {
-  const [draft, setDraft] = useState<string | null>(null)
+  const [draft, setDraft] = useState<{ text: string; base: string } | null>(null)
   // Escape: the blur it causes runs with this render's draft – it must not apply it.
   const cancelled = useRef(false)
   if (!commit) return { value, onChange: (e: { currentTarget: { value: string } }) => onChange(e.currentTarget.value) }
   return {
-    value: draft ?? value,
-    onChange: (e: { currentTarget: { value: string } }) => setDraft(e.currentTarget.value),
+    value: draft?.text ?? value,
+    onChange: (e: { currentTarget: { value: string } }) => {
+      const text = e.currentTarget.value
+      setDraft((d) => ({ text, base: d?.base ?? value }))
+    },
     onBlur: () => {
-      if (draft != null && !cancelled.current && draft !== value) onChange(draft)
+      if (draft && !cancelled.current && draft.text !== value) {
+        onChange(draft.text)
+        if (value !== draft.base) toast('Ten tekst zmienił się w międzyczasie na innym komputerze – zapisano Twoją wersję, tamta jest w historii wpisu.', 'info', 8000)
+      }
       cancelled.current = false
       setDraft(null)
     },

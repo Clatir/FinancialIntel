@@ -519,7 +519,7 @@ export const gameStartFor = (now: Date | string): string => addDays(warsawNow(no
  * Freeze the days that ended 24 h ago and more (T9), judge the missions of their Sundays, change the rank, award the
  * achievements, and give the week its mission. Deterministic: two computers advancing the same data write the same.
  */
-export function advanceGame(input: GameInput, now: Date | string, opts: { maxDays?: number } = {}): GameChange {
+export function advanceGame(input: GameInput, now: Date | string, opts: { maxDays?: number; locked?: ReadonlySet<string> } = {}): GameChange {
   const gs = input.settings.game
   const start = gs.start
   if (!start) return { months: [], events: [] }
@@ -541,7 +541,9 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
   let rated = 0
   let more = false
   for (let d = start; d <= lastFreezable; d = addDays(d, 1)) {
-    if (frozen.has(d)) continue
+    // A month this version may not write (a newer one wrote it): its days are that version's to freeze – passed over,
+    // never a portion stuck on them.
+    if (frozen.has(d) || opts.locked?.has(monthOf(d))) continue
     if (opts.maxDays != null && rated >= opts.maxDays) {
       more = true
       break

@@ -501,7 +501,7 @@ function saveBatch(c: Collection, ids: readonly string[]): void {
     timers.delete(key)
     firstDirtyAt.delete(key)
   }
-  const p = Promise.all(keys.map((k) => inFlight.get(k))).then(() => runSaveMany(c, ids))
+  const p = Promise.all(keys.map((k) => settled(inFlight.get(k)))).then(() => runSaveMany(c, ids))
   for (const key of keys) {
     inFlight.set(key, p)
     void p.finally(() => {
@@ -519,32 +519,32 @@ async function runSaveMany(c: Collection, ids: readonly string[]): Promise<void>
     .map(({ id, key }) => ({ id, key, version: versions.get(key) ?? 0, record: mapOf(s, c)[id]!.record }))
   if (!sent.length) return
   bumpPending(1)
-  let results: Awaited<ReturnType<typeof api.saveRecords>>
+  let savedAt: string | null = null
   try {
-    results = await api.saveRecords(c, sent.map((x) => x.record))
+    const results = await api.saveRecords(c, sent.map((x) => x.record))
+    const byId = new Map(results.map((r) => [r.id, r]))
+    const saved: Saved[] = []
+    for (const x of sent) {
+      const r = byId.get(x.id)
+      if (r?.entry) saved.push({ id: x.id, key: x.key, version: x.version, entry: r.entry as RecordEntry<RecordTypes[Collection]> })
+      else saveFailed(c, x.id, x.key, r?.error ?? 'Nie udało się zapisać.')
+    }
+    applySaved(c, saved)
+    for (const x of saved) {
+      retryDelay.delete(x.key)
+      failed.delete(x.key)
+    }
+    savedAt = new Date().toISOString()
+    // A change from another computer came while these writes were on their way (B48): the decision must reach the disk.
+    const keys = new Set(saved.map((x) => x.key))
+    if (useRemote.getState().pending.some((p) => keys.has(p.key))) useRemote.setState((r) => ({ pending: r.pending.map((p) => (keys.has(p.key) ? { ...p, savedAfter: true } : p)) }))
   } catch (e) {
-    // The whole call failed (the folder gone): each is retried on its own.
+    // The whole call failed (the folder gone) or its answer could not be taken: what is still unsaved is retried on its own.
     const message = errorMessage(e)
-    for (const x of sent) saveFailed(c, x.id, x.key, message)
-    bumpPending(-1, { error: saveError() })
-    return
+    for (const x of sent) if (dirty.has(x.key)) saveFailed(c, x.id, x.key, message)
+  } finally {
+    bumpPending(-1, savedAt ? { lastSavedAt: savedAt, error: saveError() } : { error: saveError() })
   }
-  const byId = new Map(results.map((r) => [r.id, r]))
-  const saved: Saved[] = []
-  for (const x of sent) {
-    const r = byId.get(x.id)
-    if (r?.entry) saved.push({ id: x.id, key: x.key, version: x.version, entry: r.entry as RecordEntry<RecordTypes[Collection]> })
-    else saveFailed(c, x.id, x.key, r?.error ?? 'Nie udało się zapisać.')
-  }
-  applySaved(c, saved)
-  for (const x of saved) {
-    retryDelay.delete(x.key)
-    failed.delete(x.key)
-  }
-  bumpPending(-1, { lastSavedAt: new Date().toISOString(), error: saveError() })
-  // A change from another computer came while these writes were on their way (B48): the decision must reach the disk.
-  const keys = new Set(saved.map((x) => x.key))
-  if (useRemote.getState().pending.some((p) => keys.has(p.key))) useRemote.setState((r) => ({ pending: r.pending.map((p) => (keys.has(p.key) ? { ...p, savedAfter: true } : p)) }))
 }
 
 async function runSave(key: string): Promise<void> {
@@ -592,9 +592,12 @@ async function runSave(key: string): Promise<void> {
   }
 }
 
+/** A save's promise that never rejects: the next save of its records runs whatever became of it. */
+const settled = (p: Promise<void> | undefined): Promise<void> | undefined => p?.catch(() => undefined)
+
 /** Run the save of `key` after any save of it that is already in progress. */
 function enqueue(key: string): Promise<void> {
-  const prev = inFlight.get(key) ?? Promise.resolve()
+  const prev = settled(inFlight.get(key)) ?? Promise.resolve()
   const p = prev.then(() => runSave(key))
   inFlight.set(key, p)
   void p.finally(() => {
@@ -716,6 +719,7 @@ export function discardDraft(collection: Collection, id: string): void {
 export async function deleteRecord(collection: Collection, id: string): Promise<void> {
   const key = keyOf(collection, id)
   const entry = mapOf(get(), collection)[id]
+  const unsaved = dirty.has(key)
   forget(key)
   useRemote.setState((r) => ({ pending: r.pending.filter((p) => p.key !== key) }))
   bumpPending(0, { error: saveError() })
@@ -727,13 +731,17 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
     delete drafts[id]
     return { ...withMap(s, collection, map), drafts }
   })
-  await inFlight.get(key)
+  await settled(inFlight.get(key))
   if (wasDraft) return
   try {
     await api.deleteRecord(collection, id)
   } catch (e) {
-    // The file stays on the disk (held by another program – B9): the record back on the screen, the caller says why.
-    if (entry && !mapOf(get(), collection)[id]) set((s) => withMap(s, collection, { ...mapOf(s, collection), [id]: entry }))
+    // The file stays on the disk (held by another program – B9): the record back on the screen, the caller says why;
+    // its unsaved edits are saved after all.
+    if (entry && !mapOf(get(), collection)[id]) {
+      set((s) => withMap(s, collection, { ...mapOf(s, collection), [id]: entry }))
+      if (unsaved) scheduleSave(collection, id)
+    }
     throw e
   }
 }
@@ -747,6 +755,7 @@ export async function deleteRecords(collection: Collection, ids: readonly string
   const entries = new Map(ids.map((id) => [id, mapOf(s, collection)[id]]))
   const drafts = ids.filter((id) => s.drafts[id])
   const keys = ids.map((id) => keyOf(collection, id))
+  const unsaved = new Set(keys.filter((k) => dirty.has(k)))
   for (const key of keys) forget(key)
   useRemote.setState((r) => ({ pending: r.pending.filter((p) => !keys.includes(p.key)) }))
   bumpPending(0, { error: saveError() })
@@ -759,7 +768,7 @@ export async function deleteRecords(collection: Collection, ids: readonly string
     }
     return { ...withMap(st, collection, map), drafts: left }
   })
-  await Promise.all(keys.map((k) => inFlight.get(k)))
+  await Promise.all(keys.map((k) => settled(inFlight.get(k))))
   const onDisk = ids.filter((id) => !drafts.includes(id))
   if (!onDisk.length) return { deleted: [...ids], error: null }
   let results: Array<{ id: string; error?: string }>
@@ -768,17 +777,23 @@ export async function deleteRecords(collection: Collection, ids: readonly string
   } catch (e) {
     results = onDisk.map((id) => ({ id, error: errorMessage(e) }))
   }
-  // The files that stay on the disk (held by another program – B9): their records back on the screen.
+  // The files that stay on the disk (held by another program – B9): their records back on the screen, with their unsaved
+  // edits saved after all.
   const refused = results.filter((r) => r.error)
+  const back: string[] = []
   if (refused.length)
     set((st) => {
       const map = { ...mapOf(st, collection) }
       for (const r of refused) {
         const entry = entries.get(r.id)
-        if (entry && !map[r.id]) map[r.id] = entry
+        if (entry && !map[r.id]) {
+          map[r.id] = entry
+          back.push(r.id)
+        }
       }
       return withMap(st, collection, map)
     })
+  for (const id of back) if (unsaved.has(keyOf(collection, id))) scheduleSave(collection, id)
   const failedIds = new Set(refused.map((r) => r.id))
   return { deleted: ids.filter((id) => !failedIds.has(id)), error: refused[0]?.error ?? null }
 }
@@ -815,7 +830,7 @@ export async function flushSaves(): Promise<boolean> {
     firstDirtyAt.delete(key)
     void enqueue(key)
   }
-  await Promise.all([...inFlight.values()])
+  await Promise.all([...inFlight.values()].map(settled))
   return !hasUnsaved()
 }
 

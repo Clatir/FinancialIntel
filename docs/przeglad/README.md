@@ -272,35 +272,35 @@ Razem ok. 21–28 h.
 
 ### Priorytet wysoki
 
-- [ ] **W1** Zapis importu: każda operacja osobnym saveRecord – w main O(N) na zapis, w oknie kopia mapy, silnik i pełny render po każdym – `renderer/features/import/state.ts:460`, `renderer/features/import/state.ts:461` (+41)
-- [ ] **W2** Pola tekstowe edytora operacji i kontenera zapisują rekord przy każdym znaku (wbrew T34) – każdy znak przelicza silnik, grę i ekran – `renderer/components/ui.tsx:158`, `renderer/components/ui.tsx:197` (+28)
-- [ ] **W3** Każda edycja i każde usunięcie przelicza aplikację dwa razy (echo zapisu z dysku) – `renderer/store/data.ts:405`, `renderer/store/data.ts:415` (+3)
-- [ ] **W4** Operacje: „Możliwe duplikaty” liczone od nowa przy każdej zmianie operacji – każdy znak w edytorze uruchamia findDuplicates na całej historii – `renderer/features/operations/OperationsPage.tsx:211-212`, `renderer/features/operations/OperationsPage.tsx:443` (+18)
-- [ ] **W5** Każda zmiana `records` (znak w polu, potwierdzenie zapisu, lokalne usunięcie) kopiuje mapę całej kolekcji i przelicza cały silnik budżetu i grę – `renderer/store/data.ts:486`, `renderer/store/data.ts:501` (+35)
-- [ ] **W6** Ładownia: recurringPayments jest kwadratowe (kopiuje tablicę grupy przy każdej operacji), liczy się od nowa przy każdym znaku w kontenerze, a „Połącz płatności” skanuje wszystkie operacje przy każdym renderze – `shared/calc/plan.ts:158`, `shared/calc/plan.ts:72` (+10)
-- [ ] **W7** Kopia ZIP przed każdym importem (i dzienna, ręczna, eksport) trwa 22 s przy 30 tys. i ≈2 min przy 150 tys., przechodzi przez całe .history – `main/datastore/zip.ts:58-66`, `main/datastore/zip.ts:36-46` (+14)
-- [ ] **W8** Każdy zapis i usunięcie rekordu kosztuje w procesie głównym O(wszystkich plików), więc import tysięcy wierszy trwa minuty – `main/datastore/store.ts:807-846`, `main/datastore/store.ts:520-579` (+22)
+- [x] **W1** Zapis importu: każda operacja osobnym saveRecord – w main O(N) na zapis, w oknie kopia mapy, silnik i pełny render po każdym – `renderer/features/import/state.ts:460`, `renderer/features/import/state.ts:461` (+41)
+- [x] **W2** Pola tekstowe edytora operacji i kontenera zapisują rekord przy każdym znaku (wbrew T34) – każdy znak przelicza silnik, grę i ekran – `renderer/components/ui.tsx:158`, `renderer/components/ui.tsx:197` (+28)
+- [x] **W3** Każda edycja i każde usunięcie przelicza aplikację dwa razy (echo zapisu z dysku) – `renderer/store/data.ts:405`, `renderer/store/data.ts:415` (+3)
+- [x] **W4** Operacje: „Możliwe duplikaty” liczone od nowa przy każdej zmianie operacji – każdy znak w edytorze uruchamia findDuplicates na całej historii – `renderer/features/operations/OperationsPage.tsx:211-212`, `renderer/features/operations/OperationsPage.tsx:443` (+18)
+- [x] **W5** Każda zmiana `records` (znak w polu, potwierdzenie zapisu, lokalne usunięcie) kopiuje mapę całej kolekcji i przelicza cały silnik budżetu i grę – `renderer/store/data.ts:486`, `renderer/store/data.ts:501` (+35)
+- [x] **W6** Ładownia: recurringPayments jest kwadratowe (kopiuje tablicę grupy przy każdej operacji), liczy się od nowa przy każdym znaku w kontenerze, a „Połącz płatności” skanuje wszystkie operacje przy każdym renderze – `shared/calc/plan.ts:158`, `shared/calc/plan.ts:72` (+10)
+- [x] **W7** Kopia ZIP przed każdym importem (i dzienna, ręczna, eksport) trwa 22 s przy 30 tys. i ≈2 min przy 150 tys., przechodzi przez całe .history – `main/datastore/zip.ts:58-66`, `main/datastore/zip.ts:36-46` (+14)
+- [x] **W8** Każdy zapis i usunięcie rekordu kosztuje w procesie głównym O(wszystkich plików), więc import tysięcy wierszy trwa minuty – `main/datastore/store.ts:807-846`, `main/datastore/store.ts:520-579` (+22)
 
 ### Priorytet średni
 
-- [ ] **W9** Silnik budżetu (i dane gry) liczone od nowa co minutę, choć wynik zależy tylko od daty – na każdym ekranie i w zasobniku – `renderer/store/fleet.ts:31`, `renderer/store/fleet.ts:55` (+22)
-- [ ] **W10** Pamięć silnika i hooków unieważniana przez każdą zmianę dowolnej kolekcji albo dowolnego ustawienia – `renderer/store/fleet.ts:55`, `renderer/store/game.ts:55` (+13)
-- [ ] **W11** Raporty (wachta, debriefing, przegląd roczny) liczą co minutę ocenę dzisiejszego dnia, której nie pokazują – `renderer/features/reports/ReportsPage.tsx:103`, `renderer/features/reports/ReportsPage.tsx:206` (+4)
-- [ ] **W12** Przychody: memberOf po nazwie w banku liczone od nowa dla każdego wpływu sprzed daty rozliczeń przy każdym przeliczeniu silnika – `shared/calc/income.ts:56`, `shared/calc/household.ts:126` (+4)
-- [ ] **W13** Dostawy (deliveries) budują Map wszystkich operacji przy każdej zmianie dowolnej operacji, na każdym ekranie – `shared/calc/dock.ts:81`, `shared/calc/dock.ts:88` (+2)
-- [ ] **W14** Wyszukiwanie na liście operacji składa i normalizuje (NFD) tekst każdej operacji przy każdym znaku zapytania – `shared/operationsView.ts:77`, `shared/operationsView.ts:96` (+5)
-- [ ] **W15** Każde otwarcie szybkiego wpisu sortuje wszystkie wydatki (localeCompare) i może przeliczyć cały silnik – `renderer/store/quickHost.ts:30-75`, `main/quick.ts:111-122` (+5)
-- [ ] **W16** Zaległe dni gry: każdy dzień to osobny pełny computeFleet od startu budżetu, liczony synchronicznie w rendererze i bez górnej granicy – `shared/calc/game.ts:532`, `shared/calc/game.ts:534` (+4)
+- [x] **W9** Silnik budżetu (i dane gry) liczone od nowa co minutę, choć wynik zależy tylko od daty – na każdym ekranie i w zasobniku – `renderer/store/fleet.ts:31`, `renderer/store/fleet.ts:55` (+22)
+- [x] **W10** Pamięć silnika i hooków unieważniana przez każdą zmianę dowolnej kolekcji albo dowolnego ustawienia – `renderer/store/fleet.ts:55`, `renderer/store/game.ts:55` (+13)
+- [x] **W11** Raporty (wachta, debriefing, przegląd roczny) liczą co minutę ocenę dzisiejszego dnia, której nie pokazują – `renderer/features/reports/ReportsPage.tsx:103`, `renderer/features/reports/ReportsPage.tsx:206` (+4)
+- [x] **W12** Przychody: memberOf po nazwie w banku liczone od nowa dla każdego wpływu sprzed daty rozliczeń przy każdym przeliczeniu silnika – `shared/calc/income.ts:56`, `shared/calc/household.ts:126` (+4)
+- [x] **W13** Dostawy (deliveries) budują Map wszystkich operacji przy każdej zmianie dowolnej operacji, na każdym ekranie – `shared/calc/dock.ts:81`, `shared/calc/dock.ts:88` (+2)
+- [x] **W14** Wyszukiwanie na liście operacji składa i normalizuje (NFD) tekst każdej operacji przy każdym znaku zapytania – `shared/operationsView.ts:77`, `shared/operationsView.ts:96` (+5)
+- [x] **W15** Każde otwarcie szybkiego wpisu sortuje wszystkie wydatki (localeCompare) i może przeliczyć cały silnik – `renderer/store/quickHost.ts:30-75`, `main/quick.ts:111-122` (+5)
+- [x] **W16** Zaległe dni gry: każdy dzień to osobny pełny computeFleet od startu budżetu, liczony synchronicznie w rendererze i bez górnej granicy – `shared/calc/game.ts:532`, `shared/calc/game.ts:534` (+4)
 - [ ] **W17** Ekran importu bez wirtualizacji i memo: każda decyzja, zaznaczenie i znak w wyszukiwarce renderuje wszystkie grupy – `renderer/features/import/ImportPage.tsx:480`, `renderer/features/import/ImportPage.tsx:481` (+12)
 - [ ] **W18** Pełny ponowny plan importu po każdym zapisie fi.json – także gdy reguły się nie zmieniły – `renderer/features/import/ImportPage.tsx:786`, `renderer/features/import/ImportPage.tsx:791` (+7)
 - [ ] **W19** historyDeleted przy każdym wczytaniu pliku importu i na stronie Synchronizacja: przebudowa widoków na każdą kolekcję + sekwencyjny odczyt ostatniej wersji każdego usuniętego – `main/datastore/store.ts:1013`, `main/datastore/history.ts:131` (+10)
 - [ ] **W20** Import całej historii (kreator): koszt jednego wiersza 70–145 µs (brandOf liniowo po słowniku, findRule filtruje wszystkie reguły), a pełny plan liczy się od nowa po każdym słowie kluczowym czy połączeniu nazw – `shared/import/brands.ts:62`, `shared/import/brands.ts:639` (+7)
-- [ ] **W21** Pełne przeskanowanie folderu co 30 s i przy każdym fokusie okna, bez łączenia zaległych żądań – `main/datastore/watch.ts:52`, `main/index.ts:399-407` (+6)
-- [ ] **W22** Na Windows każdy zapis prawdopodobnie wywołuje pełne przeskanowanie folderu (zdarzenie katalogu z rekurencyjnego fs.watch) – `main/datastore/watch.ts:66-73`, `main/datastore/store.ts:662-668` (+3)
-- [ ] **W23** Rozstrzyganie konfliktów i „Do Kosza” robią pełny rescan na każdą pozycję; lista konfliktów bez wirtualizacji i w każdym ChangeSet – `main/datastore/store.ts:950`, `main/datastore/store.ts:987` (+4)
-- [ ] **W24** Otwarcie folderu: zbędny stat przed każdym odczytem, wolny fs.promises.readFile i drugi pełny listing (cleanupTempFiles) – `main/datastore/store.ts:309`, `main/datastore/store.ts:318` (+2)
+- [x] **W21** Pełne przeskanowanie folderu co 30 s i przy każdym fokusie okna, bez łączenia zaległych żądań – `main/datastore/watch.ts:52`, `main/index.ts:399-407` (+6)
+- [x] **W22** Na Windows każdy zapis prawdopodobnie wywołuje pełne przeskanowanie folderu (zdarzenie katalogu z rekurencyjnego fs.watch) – `main/datastore/watch.ts:66-73`, `main/datastore/store.ts:662-668` (+3)
+- [x] **W23** Rozstrzyganie konfliktów i „Do Kosza” robią pełny rescan na każdą pozycję; lista konfliktów bez wirtualizacji i w każdym ChangeSet – `main/datastore/store.ts:950`, `main/datastore/store.ts:987` (+4)
+- [x] **W24** Otwarcie folderu: zbędny stat przed każdym odczytem, wolny fs.promises.readFile i drugi pełny listing (cleanupTempFiles) – `main/datastore/store.ts:309`, `main/datastore/store.ts:318` (+2)
 - [ ] **W25** Tryb „pytaj” przy dużej paczce zmian z drugiego komputera: okno renderuje wszystkie karty, „Zastosuj” kopiuje mapę na każdą pozycję – `renderer/features/sync/RemoteChangesDialog.tsx:39`, `renderer/features/sync/RemoteChangesDialog.tsx:207` (+3)
-- [ ] **W26** Proces główny trzyma pełny tekst każdego pliku (FileState.text) – połowa pamięci magazynu – `main/datastore/store.ts:47`, `main/datastore/store.ts:364-373` (+2)
+- [x] **W26** Proces główny trzyma pełny tekst każdego pliku (FileState.text) – połowa pamięci magazynu – `main/datastore/store.ts:47`, `main/datastore/store.ts:364-373` (+2)
 - [ ] **W27** computeFleet odtwarza całą historię od startu przy każdym wywołaniu – stałe koszty O(n log n) z dużą alokacją, a pożyczki i konta po osobnym przebiegu każde – `shared/calc/fleet.ts:846`, `shared/calc/fleet.ts:850` (+8)
 
 ### Priorytet niski
@@ -342,7 +342,7 @@ Razem ok. 21–28 h.
 - [ ] **N16** Propozycja reguły na słowo pokazuje inną decyzję niż ta, którą zapisuje – `renderer/features/import/Learning.tsx:133`, `renderer/features/import/Learning.tsx:141` (+2)
 - [ ] **N17** Kopie konfliktu chmury nie mają „Scal” – jedna strona przepada w całości, choć okno zmian z drugiego komputera umie scalać tę samą sytuację – `renderer/features/sync/SyncPage.tsx:63`, `renderer/features/sync/SyncPage.tsx:81` (+4)
 - [ ] **N18** Historia zapisywana dla wszystkich wpisów, ale do obejrzenia tylko dla operacji, kontenerów i ustawień, mimo tekstów „jest w historii wpisu” – `renderer/features/operations/OperationEditor.tsx:114`, `renderer/features/cargo/CargoPage.tsx:270` (+4)
-- [ ] **N19** Kopia dzienna (D31 „codziennie”) robi się tylko przy otwarciu folderu, a aplikacja z założenia żyje tygodniami w zasobniku (D64) – `main/index.ts:411`, `main/datastore/backup.ts:52` (+3)
+- [x] **N19** Kopia dzienna (D31 „codziennie”) robi się tylko przy otwarciu folderu, a aplikacja z założenia żyje tygodniami w zasobniku (D64) – `main/index.ts:411`, `main/datastore/backup.ts:52` (+3)
 - [ ] **N20** Baner „Ten folder jest też otwarty na: …” stale widoczny, bo aplikacja zgodnie z D46/D64 działa w tle na każdym komputerze (heartbeat w OneDrive co minutę całą dobę) – `renderer/app/Banners.tsx:84`, `main/index.ts:268` (+2)
 - [ ] **N21** Mostek pokazuje „wolne do decyzji” przy niepełnym kadłubie, a dopłata do XTB z tej kwoty łamie firewall – `shared/calc/fleet.ts:931`, `shared/calc/fleet.ts:680` (+2)
 
@@ -437,7 +437,7 @@ Razem ok. 21–28 h.
 ### Priorytet wysoki
 
 - [ ] **F1** Opłaty stałe w miesiącu: zapłacone / czeka / po terminie, alarm brakującej płatności, kontenery miesięczne na Radarze *(nakład M)*
-- [ ] **F2** Kopia dzienna także wtedy, gdy aplikacja tygodniami działa w zasobniku *(nakład S)* · ⚠ Zmienia decyzję techniczną T20 („przy starcie raz dziennie”) – zgodnie z D31 (kopie codzienne).
+- [x] **F2** Kopia dzienna także wtedy, gdy aplikacja tygodniami działa w zasobniku *(nakład S)* · ⚠ Zmienia decyzję techniczną T20 („przy starcie raz dziennie”) – zgodnie z D31 (kopie codzienne).
 - [ ] **F3** Przywracanie z kopii zapasowej w aplikacji (cały folder albo wybrane wpisy) *(nakład M)*
 - [ ] **F4** „Cofnij import” – całe wczytanie pliku z mBanku jednym przyciskiem *(nakład M)* · ⚠ T39 (operacja usunięta przez użytkownika nie wraca z kolejnym importem): usunięcie przy cofnięciu importu nie może być liczone jako „usunięte przez użytkownika”, inaczej ponowny import pominie te wiersze.
 - [ ] **F5** Saldo z pliku banku: automatyczne potwierdzenie i wskazanie dnia rozbieżności *(nakład M)* · ⚠ D73: misja „Inwentaryzacja” liczy potwierdzenia sald, więc potwierdzenie z pliku zaliczy ją dla mBanku samo – trzeba zdecydować, czy tak ma być.

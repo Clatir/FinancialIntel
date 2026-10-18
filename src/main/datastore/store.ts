@@ -991,10 +991,12 @@ export class DataStore {
   private async rescanPaths(paths: readonly string[]): Promise<boolean> {
     const rels = new Set<string>()
     for (const p of new Set(paths)) {
-      const rel = sanitizeRelPath(p)
+      // `dir/`: a directory that appeared, went or was renamed – everything under it (FolderWatcher).
+      const deep = p.endsWith('/')
+      const rel = sanitizeRelPath(deep ? p.slice(0, -1) : p)
       if (!rel || isIgnoredPath(rel)) continue
-      if (rel.toLowerCase().endsWith('.json')) rels.add(rel)
-      else if (!(await this.changedInDir(rel, rels))) return false
+      if (!deep && rel.toLowerCase().endsWith('.json')) rels.add(rel)
+      else if (!(await this.changedInDir(rel, rels, deep))) return false
     }
     const list = [...rels]
     const states = await mapLimit(list, READ_CONCURRENCY, (rel) => this.loadFile(rel))
@@ -1024,11 +1026,26 @@ export class DataStore {
   /**
    * A reported path that is no JSON file: of a directory, the files to read – those added since and those known
    * there that are gone; a subdirectory with no file known under it, whole (new, or brought back). A path gone or
-   * not a directory: the files known under it. False = the directory could not be listed.
+   * not a directory: the files known under it. `deep` (the directory itself appeared, went or was renamed): every file
+   * known under it and every file in it, each read again where its stat changed. False = the directory could not be
+   * listed.
    */
-  private async changedInDir(dir: string, out: Set<string>): Promise<boolean> {
+  private async changedInDir(dir: string, out: Set<string>, deep = false): Promise<boolean> {
     // Outside the collections nothing is data (a full rescan does not look there either).
     if (!(COLLECTIONS as readonly string[]).includes(dir.split('/')[0]!)) return true
+    if (deep) {
+      let found: string[]
+      try {
+        found = await walkFiles(this.root, this.abs(dir), isIgnoredPath)
+      } catch (e) {
+        // A file of another kind renamed: nothing under it; a directory that cannot be listed: everything rescanned.
+        if ((e as NodeJS.ErrnoException).code !== 'ENOTDIR') return false
+        found = []
+      }
+      for (const f of found) if (f.toLowerCase().endsWith('.json')) out.add(f)
+      for (const [d, files] of this.files.dirs) if (d === dir || d.startsWith(`${dir}/`)) for (const rel of files) out.add(rel)
+      return true
+    }
     let entries
     try {
       entries = await fs.readdir(this.abs(dir), { withFileTypes: true })
@@ -1585,19 +1602,25 @@ export class DataStore {
   }
 
   /**
-   * A ZIP of the data (`isDataFile`) as this store has it (W7): the records written from memory – no file read, none
-   * scanned by the antivirus –, conflict copies and problem files read from the disk; one that could not be read
-   * (OneDrive) is left out.
+   * A ZIP of the data (`isDataFile`) as this store has it (W7): a record whose text written from memory is the file's
+   * very bytes (the same hash) goes from memory – no file read, none scanned by the antivirus; any other file (a copy,
+   * a problem, a record its parsing changed – an older or newer version wrote it, a hand edit) is read from the disk:
+   * one gone meanwhile is left out, one that cannot be read (OneDrive) fails the backup – never a backup without it.
    */
   async zipData(outFile: string): Promise<ZipResult> {
     const states = await this.mutex.run(async () => [...this.files.values()].filter((s) => isDataFile(s.relPath)))
     states.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0))
     const items = states.map((s): ZipSource => {
-      const { relPath, kind, record, mtimeMs } = s
-      if (s.status === 'record' && record && !s.readOnly && !s.migrated) {
-        return { name: relPath, read: () => ({ data: Buffer.from(serializeRecord(kind, record), 'utf8'), mtime: new Date(mtimeMs) }) }
+      const { relPath, kind, record, mtimeMs, hash } = s
+      const disk = diskSource(this.abs(relPath), relPath)
+      if (s.status !== 'record' || !record) return disk
+      return {
+        name: relPath,
+        read: () => {
+          const text = serializeRecord(kind, record)
+          return sha1(text) === hash ? { data: Buffer.from(text, 'utf8'), mtime: new Date(mtimeMs) } : disk.read()
+        }
       }
-      return s.readError ? { name: relPath, read: () => null } : diskSource(this.abs(relPath), relPath)
     })
     return writeZipFile(outFile, items)
   }

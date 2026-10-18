@@ -110,6 +110,24 @@ describe('zdarzenie katalogu odświeża tylko ten katalog (1.4.3, W22)', () => {
     expect((await store.snapshot()).records.transactions).toHaveLength(1)
   })
 
+  it('katalog odzyskany w całości (zgłoszony tylko on sam): pliki o tych samych nazwach czytane od nowa', async () => {
+    const store = await freshStore()
+    const t = sampleTransaction({ note: 'przed' })
+    const { entry } = await store.saveRecord('transactions', t)
+    // The year's folder goes to the bin and comes back in an older version: the same names, another content.
+    const dir = join(store.root, 'transactions', '2026')
+    const away = join(tempDir(), '2026')
+    await fs.rename(dir, away)
+    await fs.writeFile(join(away, entry.relPath.split('/').pop()!), JSON.stringify({ ...entry.record, note: 'z kosza' }, null, 2))
+    await fs.rename(away, dir).catch(async () => {
+      await fs.cp(away, dir, { recursive: true })
+    })
+    // Its entries only compared: the same name – nothing read; the directory itself: everything under it.
+    expect(await store.refresh(['transactions/2026'])).toBeNull()
+    const change = await store.refresh(['transactions/2026/'])
+    expect(change?.upserts.map((u) => (u.entry.record as { note: string }).note)).toEqual(['z kosza'])
+  })
+
   it('ścieżka poza kolekcjami i plik niebędący JSON-em: bez pełnego przeskanowania', async () => {
     const store = await freshStore()
     await fs.mkdir(join(store.root, 'kopie'), { recursive: true })
@@ -225,5 +243,30 @@ describe('kopie ZIP w jednym przejściu (1.4.3, W7)', () => {
     // Only the copy and the broken file were read from the disk (and the ZIP's own temp file written).
     const opened = reads.mock.calls.map(([p]) => String(p)).filter((p) => p.startsWith(store.root))
     expect(opened.sort()).toEqual([join(store.root, ...copyRel.split('/')), join(store.root, 'goals', 'zepsuty.json')].sort())
+  })
+
+  it('kopia z pamięci tylko bajt w bajt: plik zapisany inaczej z dysku, plik nieczytelny przerywa kopię', async () => {
+    const store = await freshStore()
+    const hand = sampleTransaction({ note: 'ręcznie' })
+    const rel = recordRelPath('transactions', hand)
+    // Another version or a hand edit: the same record, other bytes (no indent) – its parse writes it otherwise.
+    await fs.mkdir(join(store.root, 'transactions', '2026'), { recursive: true })
+    await fs.writeFile(join(store.root, ...rel.split('/')), JSON.stringify(hand))
+    await store.refresh()
+    const out = join(tempDir(), 'dane.zip')
+    await store.zipData(out)
+    expect((await readZip(out)).get(rel)).toBe(JSON.stringify(hand))
+    // A file OneDrive cannot bring: no backup without it.
+    const lost = sampleTransaction({ date: '2026-03-20' })
+    const lostRel = recordRelPath('transactions', lost)
+    await write(store, lostRel, lost)
+    const realOpen = fs.open
+    vi.spyOn(fs, 'open').mockImplementation(((path: Parameters<typeof fs.open>[0], ...rest: unknown[]) =>
+      String(path).endsWith(`${lost.id}.json`)
+        ? Promise.reject(Object.assign(new Error('EIO: i/o error'), { code: 'EIO' }))
+        : (realOpen as (...a: unknown[]) => Promise<unknown>).call(fs, path, ...rest)) as typeof fs.open)
+    await store.refresh([lostRel])
+    expect((await store.snapshot()).problems.map((p) => p.relPath)).toEqual([lostRel])
+    await expect(store.zipData(join(tempDir(), 'niepelna.zip'))).rejects.toThrow(/EIO/)
   })
 })

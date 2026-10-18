@@ -55,8 +55,10 @@ export function useGameAdvance(): void {
         updateSettings((f) => (f.settings.game.start ? f : { ...f, settings: { ...f.settings, game: { ...f.settings.game, start: gameStartFor(new Date()) } } }), { background: true })
       return
     }
-    // A portion; its months saved change the records, and the next portion runs after the window painted.
-    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date(), { maxDays: DAYS_PER_PASS }))
+    // A portion; its months saved change the records, and the next portion runs after the window painted. Months a
+    // newer version wrote are not this one's to write: passed over (a portion would never get past them).
+    const locked = new Set(Object.values(records.game ?? {}).flatMap((e) => (e.readOnly ? [e.record.month] : [])))
+    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date(), { maxDays: DAYS_PER_PASS, locked }))
     if (!change.months.length) return
     const fresh = change.months.filter((m) => !records.game[m.id])
     if (fresh.length) addRecords('game', fresh)

@@ -14,7 +14,7 @@ import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/s
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
-import { importBackup, listBackups, manualBackup, runBackups } from './datastore/backup'
+import { importBackup, listBackups, manualBackup, runBackups, type DataSource } from './datastore/backup'
 import { sleep, withRetry, writeFileAtomic } from './datastore/atomic'
 import { describeProgress, untilAborted } from './datastore/progress'
 import { htmlToPdf } from './export/pdf'
@@ -269,11 +269,24 @@ let backupRun: Promise<void> | null = null
 /** How often the daily backup is checked while the app runs – it lives in the tray for weeks (F2, N19). */
 const BACKUP_CHECK_MS = 60 * 60_000
 
+/**
+ * The data for a backup the folder's state of now: a full check first (what another computer changed and the watcher
+ * has not reported yet goes in too), then the ZIP from the store (W7).
+ */
+function checkedData(s: DataStore): DataSource {
+  return {
+    zipData: async (out) => {
+      if (store === s) await refreshes?.request().catch(() => undefined)
+      return s.zipData(out)
+    }
+  }
+}
+
 /** Today's backup if it is not there yet (D31): after an open, every hour and when the computer wakes up. */
 function dailyBackup(): void {
   const s = store
   if (!s || backupRun || opening || windowClosing || s.status().readOnly) return
-  backupRun = runBackups(s, s.backupsDir)
+  backupRun = runBackups(checkedData(s), s.backupsDir)
     .then(
       (file) => void (file && log('info', `backup ${file}`)),
       (e) => log('warn', 'backup failed', e)
@@ -669,7 +682,7 @@ function registerIpc(): void {
   })
   handle('backupNow', async () => {
     const s = requireStore()
-    return manualBackup(s, s.backupsDir)
+    return manualBackup(checkedData(s), s.backupsDir)
   })
   handle('importBackup', async () => {
     const s = requireStore()

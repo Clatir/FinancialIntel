@@ -45,6 +45,25 @@ describe('watcher folderu danych', () => {
   })
 })
 
+describe('watcher: katalog, który się pojawił (1.4.3, W22)', () => {
+  it('nowy katalog roku zgłaszany jako „katalog/” – do sprawdzenia całości', async () => {
+    const root = tempDir()
+    await fs.mkdir(join(root, 'transactions'), { recursive: true })
+    const batches: Array<string[] | null> = []
+    const w = new FolderWatcher(root, (p) => batches.push(p), { debounceMs: 60, pollMs: 60_000 })
+    w.start()
+    await w.ready()
+    await new Promise((r) => setTimeout(r, 100))
+    const away = join(tempDir(), '2027')
+    await fs.mkdir(away)
+    await fs.writeFile(join(away, 'a.json'), '{}')
+    await fs.rename(away, join(root, 'transactions', '2027')).catch(() => fs.cp(away, join(root, 'transactions', '2027'), { recursive: true }))
+    await new Promise((r) => setTimeout(r, 400))
+    w.stop()
+    expect(batches.flatMap((b) => b ?? [])).toContain('transactions/2027/')
+  })
+})
+
 describe('watcher po zapisach atomowych', () => {
   it('zmiana pliku z zewnątrz jest wykryta także po wcześniejszych zapisach przez rename (nowy inode)', async () => {
     const root = tempDir()

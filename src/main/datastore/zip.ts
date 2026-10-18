@@ -227,7 +227,7 @@ export interface ZipContent {
   mtime: Date
 }
 
-/** A file on the disk, read whole at once when its turn comes; gone = left out. */
+/** A file on the disk, read whole at once when its turn comes; gone = left out, unreadable = an error. */
 export function diskSource(abs: string, name: string): ZipSource {
   return {
     name,

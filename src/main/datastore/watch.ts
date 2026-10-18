@@ -20,8 +20,8 @@ export interface WatcherOptions {
 }
 
 /**
- * Watches the data folder recursively. Calls `onChange(paths)` with relative paths after a debounce,
- * or `onChange(null)` when a full rescan is needed (periodic poll, watcher error, unknown event).
+ * Watches the data folder recursively. Calls `onChange(paths)` with relative paths after a debounce (`dir/` = check
+ * everything under it), or `onChange(null)` when a full rescan is needed (periodic poll, watcher error, unknown event).
  */
 export class FolderWatcher {
   private native: FSWatcher | null = null
@@ -60,19 +60,24 @@ export class FolderWatcher {
     if (this.mode === 'per-directory') await this.watchTree(this.root)
   }
 
-  private record(rel: string): void {
+  /**
+   * A path to read again. A name that is no JSON file appeared, went or was renamed (`rename`): a directory brought
+   * back from the bin or by sync comes with its files reported only as itself – reported as `dir/`, everything under it
+   * is checked (W22); a directory only changed (`change`: a file renamed in it) – its entries are compared.
+   */
+  private record(rel: string, event?: string): void {
     if (isIgnoredPath(rel)) return
-    this.pending.add(rel)
+    this.pending.add(event === 'rename' && !rel.toLowerCase().endsWith('.json') ? `${rel}/` : rel)
     this.schedule()
   }
 
   private attachNative(): void {
     try {
-      this.native = watch(this.root, { recursive: true }, (_event, filename) => {
+      this.native = watch(this.root, { recursive: true }, (event, filename) => {
         if (!filename) {
           this.full = true
           this.schedule()
-        } else this.record(toPosix(filename.toString()))
+        } else this.record(toPosix(filename.toString()), event)
       })
       this.native.on('error', (e) => this.failed(e))
     } catch (e) {
@@ -86,7 +91,7 @@ export class FolderWatcher {
     if (rel && isIgnoredPath(rel)) return
     if (!this.dirWatchers.has(dir)) {
       try {
-        const w = watch(dir, (_event, filename) => {
+        const w = watch(dir, (event, filename) => {
           if (!filename) {
             this.full = true
             this.schedule()
@@ -94,7 +99,7 @@ export class FolderWatcher {
           }
           const childAbs = join(dir, filename.toString())
           const childRel = toPosix(relative(this.root, childAbs))
-          this.record(childRel)
+          this.record(childRel, event)
           // A new subdirectory needs its own watcher.
           void fs
             .stat(childAbs)

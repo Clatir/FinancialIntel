@@ -122,10 +122,17 @@ export function findDuplicates(txs: readonly Transaction[], dockings: readonly D
     if (list) list.push(t)
     else banked.set(k, [t])
   }
+  // The days around each date, once per date (W4: years of history, the same days again and again).
+  const near = new Map<string, string[]>()
+  const around = (date: string) => {
+    let days = near.get(date)
+    if (!days) near.set(date, (days = Array.from({ length: 2 * MATCH_DAYS + 1 }, (_, i) => addDays(date, i - MATCH_DAYS))))
+    return days
+  }
   const candidates: Array<{ own: Transaction; copy: Transaction; days: number; exact: boolean; similar: boolean }> = []
   for (const own of manual)
-    for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
-      for (const copy of banked.get(`${own.accountId}|${addDays(own.date, d)}`) ?? []) {
+    for (const day of around(own.date))
+      for (const copy of banked.get(`${own.accountId}|${day}`) ?? []) {
         const m = looseMatch(own, { amount: copy.amount, date: copy.date, name: copy.bank!.counterparty || copy.counterparty })
         if (!m || dismissed[duplicateKey([own.id, copy.id])]) continue
         candidates.push({ own, copy, ...m })
@@ -168,13 +175,14 @@ export function findDuplicates(txs: readonly Transaction[], dockings: readonly D
   }
   for (const a of txs) {
     if (!a.bank || a.bank.pending || used.has(a.id) || inRowGroups.has(a.id) || formatOf(a) !== 'historia') continue
-    for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
-      for (const b of banked.get(`${a.accountId}|${addDays(a.date, d)}`) ?? []) {
+    around(a.date).forEach((day, i) => {
+      for (const b of banked.get(`${a.accountId}|${day}`) ?? []) {
         if (b.amount !== a.amount || b.bank!.pending || used.has(b.id) || formatOf(b) !== 'lista') continue
-        if (!similarCounterparty(a.bank.counterparty || a.bank.description, b.bank!.counterparty || b.bank!.description)) continue
+        if (!similarCounterparty(a.bank!.counterparty || a.bank!.description, b.bank!.counterparty || b.bank!.description)) continue
         if (!within(a, b) || !within(b, a) || dismissed[duplicateKey([a.id, b.id])]) continue
-        bankFormat.push({ a, b, days: Math.abs(d) })
+        bankFormat.push({ a, b, days: Math.abs(i - MATCH_DAYS) })
       }
+    })
   }
   bankFormat.sort((x, y) => x.days - y.days || x.a.date.localeCompare(y.a.date) || x.a.id.localeCompare(y.a.id))
   for (const c of bankFormat) {

@@ -35,11 +35,13 @@ export const joinable = (t: Pick<Transaction, 'bank' | 'kind' | 'amount'>): bool
  */
 export function looseMatch(own: { amount: number; date: string; counterparty: string }, bank: { amount: number; date: string; name: string }): { days: number; exact: boolean; similar: boolean } | null {
   if (Math.sign(own.amount) !== Math.sign(bank.amount)) return null
+  // The cheap checks first: the names are compared only for an amount that may match (W4).
+  const exact = own.amount === bank.amount
+  if (!exact && !closeAmount(own.amount, bank.amount)) return null
   const days = Math.abs(daysBetween(own.date, bank.date))
   if (days > MATCH_DAYS) return null
-  const exact = own.amount === bank.amount
   const similar = similarCounterparty(own.counterparty, bank.name)
-  return exact || (similar && closeAmount(own.amount, bank.amount)) ? { days, exact, similar } : null
+  return exact || similar ? { days, exact, similar } : null
 }
 
 /**
@@ -75,10 +77,22 @@ export function similarCounterparty(a: string, b: string): boolean {
   const kb = counterpartyKey(b)
   if (!ka || !kb) return true
   if ((ka.length >= 3 && kb.includes(ka)) || (kb.length >= 3 && ka.includes(kb))) return true
-  const words = (s: string) => new Set(fold(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 4))
-  const wa = words(a)
-  return [...words(b)].some((w) => wa.has(w))
+  const wa = nameWords(a)
+  for (const w of nameWords(b)) if (wa.has(w)) return true
+  return false
 }
+
+/** A name's words of 4 letters and more, once per name (W4). */
+function nameWords(s: string): ReadonlySet<string> {
+  let words = wordSets.get(s)
+  if (!words) {
+    words = new Set(fold(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 4))
+    if (wordSets.size >= 50_000) wordSets.clear()
+    wordSets.set(s, words)
+  }
+  return words
+}
+const wordSets = new Map<string, Set<string>>()
 
 export type RowPlan =
   /**
