@@ -1,11 +1,13 @@
 # Financial Intel – postęp
 
-**Stan:** 1.4.1 – wczytywanie folderu krok po kroku (D82) gotowe: PR #12 do `main`, scalenie po zielonym CI (D71).
-**1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**Stan:** przegląd aplikacji po 1.4.1 gotowy – `docs/przeglad/` (129 błędów, 38 problemów wydajności, 104 niespójności,
+43 brakujące funkcje, propozycja kolejności etapów); nowe wymaganie użytkownika F0 (wydatek finansowany przez wiele osób, także
+bez konta w banku) czeka na odpowiedzi a–e. **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.4.1 na drugim komputerze (otwarcie folderu z postępem; przy wolnych plikach
+**Następny krok:** pauza – wybór etapów z `docs/przeglad/README.md` (propozycja: 1.4.2 pieniądze i dane, 1.4.3 szybkość,
+1.5.0 domownicy F0 …) i odpowiedzi a–e do F0; odbiór 1.4.1 na drugim komputerze (otwarcie folderu z postępem; przy wolnych plikach
 „Zawsze zachowuj na tym urządzeniu”, w razie problemu `main.log`), odbiór 1.3.0 i 1.4.0 w aplikacji (data rozliczeń i
 salda na start, pośrednik, podział pierwszej wspólnej wpłaty, panel „Przychody”), kalibracja progów gry po pierwszym miesiącu na prawdziwych danych;
 kolejny etap tylko na komendę użytkownika (D67).
@@ -34,9 +36,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79), sprawdzenie na prawdziwej historii rachunku (T104) | Opus 5.5 | **max** | zmierzone ok. 1,5 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ wydane (PR #9) |
 | 1.3.0 | Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80) | Opus 5.5 | **max** | ok. 3,5 h (szacunek z przebiegu sesji; plan był 2,5–3 h) | 1.3.0 | ✅ odpowiedzi i komenda (D80) | ✅ wydane (PR #10) |
 | 1.4.0 | Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dziś z saldem początkowym, panel przychodów (D81) | Opus 5.5 | **max** | ok. 2 h (szacunek z przebiegu sesji; plan był ok. 3 h) | 1.4.0 | ✅ odpowiedzi i komenda (D81) | ✅ wydane (PR #11) |
-| 1.4.1 | Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82) | Opus 5.5 | **xhigh** | ok. 1 h (szacunek z przebiegu sesji; plan był ok. 1,5 h) | 1.4.1 | ✅ zgłoszenie, diagnoza i komenda (D82) | ✅ gotowe, PR #12 – scalenie po zielonym CI |
+| 1.4.1 | Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82) | Opus 5.5 | **xhigh** | ok. 1 h (szacunek z przebiegu sesji; plan był ok. 1,5 h) | 1.4.1 | ✅ zgłoszenie, diagnoza i komenda (D82) | ✅ wydane (PR #12) |
+| Przegląd | Przegląd całej aplikacji po 1.4.1: 10 obszarów × 3 soczewki (błędy, niespójności, wydajność), weryfikacja każdego znaleziska, pomiary na 30 tys. i 150 tys. operacji, brakujące funkcje (`docs/przeglad/`) | Opus 5.5 | **ultracode** | ok. 3 h (zegar sesji, bez przerwy na limit tygodniowy) | – | ✅ prośba, model i skala (150 tys.) | ✅ raport, PR #13 |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1** | | | **ok. 20,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd** | | | **ok. 23,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -140,6 +143,21 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.4.1, Windows, drugi komputer):
 3. Gdy coś dalej trwa długo: „Folder logów (diagnostyka)” → `main.log` (linie „open progress …” pokazują, na czym
    stoi).
 
+
+## Przegląd aplikacji po 1.4.1 (18.10.2026)
+
+Prośba użytkownika: niespójności, brakujące funkcje typowe dla aplikacji budżetowych, potencjalne błędy, duże ilości
+danych i optymalizacja; model wybrany przez użytkownika (ultracode), skala próby obciążeniowej 150 tys. operacji.
+
+- Raport: `docs/przeglad/README.md` (najważniejsze, pomiary, proponowana kolejność etapów, lista do odhaczania) i
+  szczegóły `bledy.md`, `wydajnosc.md`, `niespojnosci.md`, `funkcje.md`. Kod bez zmian.
+- Metoda: 10 obszarów × 3 recenzentów + krytyk kompletności; błędy weryfikowane przez dwóch niezależnych weryfikatorów
+  (prześledzenie kodu i sonda), reszta przez jednego; 60 z 462 znalezisk obalonych, duplikaty między obszarami scalone.
+- Pomiary (syntetyczny folder 10 lat): 30 tys. – Mostek po 7 s, silnik 0,15–0,23 s przy każdej zmianie i co minutę,
+  duplikaty 0,4 s, kopia dzienna 20 MB / 23 s; 150 tys. – folder się nie otwiera (B50), po poprawce jednej linii Mostek
+  po 54 s, Operacje 8,8 s, pamięć ok. 2 GB.
+- Nowe wymaganie użytkownika F0 (w trakcie przeglądu): wydatek finansowany przez wiele osób, także bez konta w banku
+  (dziadkowie, tata) – co już jest, czego brakuje i pytania a–e w raporcie; etap 1.5.0 po odpowiedziach.
 ## 1.3.0 – rozliczenia z domownikami (18.10.2026)
 
 Prośba użytkownika: część wydatków finansują inne osoby (propozycja użytkownika – odjąć wydatek od wpływów tej osoby).
@@ -851,3 +869,6 @@ Do sprawdzenia przez użytkownika (Windows 11):
 - 18.10.2026 – PR #11 scalony, wydanie 1.4.0 opublikowane; zgłoszenie: otwarcie folderu na drugim komputerze wisi –
   diagnoza (log bez „opened”, OneDrive tylko online, 4 wątki), zakres przyjęty, model po diagnozie (D82); 1.4.1 (postęp
   wczytywania, „Przerwij”, log, pula wątków), przegląd i poprawki; PR #12 do `main`.
+- 18.10.2026 – PR #12 scalony, wydanie 1.4.1 opublikowane; prośba użytkownika: przegląd całej aplikacji (niespójności,
+  brakujące funkcje, błędy, duże dane) – model ultracode, skala 150 tys.; pomiary i przegląd wieloagentowy (przerwa na
+  limit tygodniowy), nowe wymaganie F0 (wielu finansujących, osoby bez konta); raport `docs/przeglad/`, PR #13.
