@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { briefing } from '@shared/calc/briefing'
-import { computeFleet, householdOf, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { computeFleet, householdOf, layersSum, rebaseOpenings, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { balanceOf, incomeShares, settleHousehold, type HouseholdLedger } from '@shared/calc/household'
 import { incomeParts } from '@shared/calc/income'
 import { costOf, financedOf } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
-import { balanceSchema, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type HouseholdMember, type Settings, type Transaction } from '@shared/schema'
+import { balanceSchema, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type HouseholdMember, type MemberOpening, type Settings, type Transaction } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-01-01T00:00:00.000Z'
@@ -203,6 +203,38 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     expect(t.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(50) })
     // No date chosen: from the budget's start, as in 1.3.0.
     expect(fleet([before]).receivables.house).toBe(zl(120))
+  })
+
+  it('zmiana daty rozliczeń przelicza saldo na start – w obie strony, bez liczenia operacji drugi raz; wpisana ręcznie część zostaje (B3)', () => {
+    const ops = [bought('2026-10-03', 120, MAMA), paid('2026-10-05', 500, MAMA, true)]
+    const balances = [balanceSchema.parse({ ...base(), date: '2026-10-01', accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(27640) })]
+    const at = (since: string | null, opening: MemberOpening) => ({ settings: withHousehold({ since }, setMember(MAMA, { opening })).settings!, balances, transactions: ops })
+    const moved = (from: ReturnType<typeof at>, since: string | null) => {
+      const openings = rebaseOpenings(from, '2026-10-20', since)
+      return at(since, openings?.get(MAMA) ?? from.settings.household.members.find((m) => m.id === MAMA)!.opening)
+    }
+    const mama = (input: ReturnType<typeof at>) => fleet(ops, input).receivables.members.find((m) => m.memberId === MAMA)
+    // The seed of 1.4.0: from today on, her advance until yesterday (500 − 120) as her opening.
+    const seeded = at('2026-10-20', { owed: 0, deposit: zl(380) })
+    expect(mama(seeded)).toMatchObject({ owed: 0, deposit: zl(380) })
+    // „Od startu budżetu”: as 1.3.0 – no opening, the operations count (not 760 zł).
+    const fromStart = moved(seeded, null)
+    expect(fromStart.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: 0, deposit: 0 })
+    expect(mama(fromStart)).toMatchObject({ owed: 0, deposit: zl(380) })
+    expect(fleet(ops, fromStart).deposit).toBe(zl(380))
+    // Earlier: what she owed then (the purchase of 3.10), her advance after it counts once.
+    const early = moved(seeded, '2026-10-04')
+    expect(early.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: zl(120), deposit: 0 })
+    expect(mama(early)).toMatchObject({ owed: 0, deposit: zl(380) })
+    // Later: the operations between the two starts go into the opening, none lost.
+    const later = moved(early, '2026-10-10')
+    expect(later.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: 0, deposit: zl(380) })
+    expect(mama(later)).toMatchObject({ owed: 0, deposit: zl(380) })
+    // A hand-typed part (100 zł more than the operations) stays when the start moves back.
+    const typed = moved(at('2026-10-20', { owed: 0, deposit: zl(480) }), '2026-10-04')
+    expect(mama(typed)).toMatchObject({ owed: 0, deposit: zl(480) })
+    // The same start (the budget's day = from the budget's start): nothing to change.
+    expect(rebaseOpenings(at('2026-10-01', { owed: 0, deposit: 0 }), '2026-10-20', null)).toBeNull()
   })
 
   it('rozliczenia od późniejszego dnia: przy starcie budżetu salda i tak zerowane (jak w 1.3.0)', () => {

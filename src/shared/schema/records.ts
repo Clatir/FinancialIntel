@@ -70,7 +70,11 @@ export const bankRowSchema = z.looseObject({
   category: z.string().max(200).default(''),
   /** „transakcja nierozliczona”: the bank may still change the amount or drop the row. */
   pending: z.boolean().default(false),
-  importedAt: isoDateTime
+  importedAt: isoDateTime,
+  /** The file it came from (1.4.2; before – `import/reconcile.ts` `formatsOf` tells it): a list of operations or the account history. */
+  source: z.enum(['lista', 'historia']).optional().catch(undefined),
+  /** The keys of the same row in the other format (1.4.2, B5): its description differs there, so its key too. */
+  altKeys: z.array(z.string().min(1).max(300)).max(20).optional().catch(undefined)
 })
 export type BankRow = z.infer<typeof bankRowSchema>
 

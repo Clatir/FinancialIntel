@@ -3,15 +3,18 @@
  * - the same row of the bank twice (one `bank.key` on one account): a file imported on two computers before the folder
  *   synced – the newer version stays (as „Zaakceptuj nowsze”), unless the other has more of the user's own data;
  * - an operation typed by hand and its copy from the bank the import did not join (typed after the import, another
- *   name, an amount off by grosze): the hand-typed one stays and takes the bank's date, amount and row.
+ *   name, an amount off by grosze): the hand-typed one stays and takes the bank's date, amount and row;
+ * - one row of the bank from both formats of the file (the list of operations and the account history describe it in
+ *   other words – B5, imported before 1.4.2 knew it): the same amount within ±3 days, a similar name; one stays and
+ *   keeps the other's key (`bank.altKeys`).
  * The kept one gets what only the copies had. A copy whose own decision (kind, category, container…) differs from the
  * kept one's is a conflict – shown, not ticked by default; both docked = blocked (one docking to undo by hand).
  */
 import { addDays } from '../calc/dates'
 import type { Docking, Transaction } from '../schema/records'
-import { joinable, looseMatch, MATCH_DAYS } from './reconcile'
+import { formatsOf, joinable, looseMatch, MATCH_DAYS, similarCounterparty } from './reconcile'
 
-export type DuplicateKind = 'same-row' | 'manual'
+export type DuplicateKind = 'same-row' | 'manual' | 'bank-format'
 
 export interface DuplicateGroup {
   /** Stable key of the group – the bank's row, or the two ids – „to nie duplikat” remembers it. */
@@ -143,6 +146,31 @@ export function findDuplicates(txs: readonly Transaction[], dockings: readonly D
       differs: !c.exact && !c.similar ? 'both' : !c.exact ? 'amount' : !c.similar ? 'name' : ''
     })
   }
+
+  // One row from both formats of the file (B5): bank operations of one account, the other format, the same amount
+  // within ±3 days, a similar name – the closest first, each once; the docked one stays, then the user's data, the older.
+  const bankFormat: Array<{ a: Transaction; b: Transaction; days: number }> = []
+  const formatOf = formatsOf(txs)
+  for (const a of txs) {
+    if (!a.bank || a.bank.pending || used.has(a.id) || inRowGroups.has(a.id) || formatOf(a) !== 'historia') continue
+    for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
+      for (const b of banked.get(`${a.accountId}|${addDays(a.date, d)}`) ?? []) {
+        if (b.amount !== a.amount || b.bank!.pending || used.has(b.id) || formatOf(b) !== 'lista') continue
+        if (!similarCounterparty(a.bank.counterparty || a.bank.description, b.bank!.counterparty || b.bank!.description)) continue
+        if (dismissed[duplicateKey([a.id, b.id])]) continue
+        bankFormat.push({ a, b, days: Math.abs(d) })
+      }
+  }
+  bankFormat.sort((x, y) => x.days - y.days || x.a.date.localeCompare(y.a.date) || x.a.id.localeCompare(y.a.id))
+  for (const c of bankFormat) {
+    if (used.has(c.a.id) || used.has(c.b.id)) continue
+    used.add(c.a.id)
+    used.add(c.b.id)
+    const [keep, copy] = [c.a, c.b].sort(
+      (x, y) => Number(docked.has(y.id)) - Number(docked.has(x.id)) || userContent(y) - userContent(x) || x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id)
+    ) as [Transaction, Transaction]
+    out.push({ key: duplicateKey([keep.id, copy.id]), kind: 'bank-format', keep: keep.id, remove: [copy.id], conflict: conflicting(keep, [copy]), blocked: blockedOf(keep, [copy]), differs: '' })
+  }
   return out
 }
 
@@ -157,6 +185,11 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
     out = { ...out, date: bankCopy.date, amount: bankCopy.amount, bank: bankCopy.bank, counterparty: out.counterparty || bankCopy.counterparty, title: out.title || bankCopy.title }
   }
   if (kind === 'same-row' && out.bank?.pending && copies.some((c) => c.bank && !c.bank.pending)) out = { ...out, bank: { ...out.bank, pending: false } }
+  // The other format's key stays with the kept one: a file of it finds the operation at once.
+  if (kind === 'bank-format' && out.bank) {
+    const keys = copies.flatMap((c) => (c.bank ? [c.bank.key, ...(c.bank.altKeys ?? [])] : [])).filter((k) => k !== out.bank!.key)
+    out = { ...out, bank: { ...out.bank, altKeys: [...new Set([...(out.bank.altKeys ?? []), ...keys])].slice(-20) } }
+  }
   for (const c of copies) {
     // Undecided (an expense without a category – a quick entry): the copy's whole decision, whatever its kind (XTB, an
     // own transfer, a loan…), so a docking moved onto it stays right.

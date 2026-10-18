@@ -142,7 +142,7 @@ export function DuplicatesPanel() {
             <input type="checkbox" className="mt-[3px]" checked={picked(g)} disabled={readOnly || !!g.blocked} onChange={() => toggle(g.key)} aria-label="Scal tę grupę" data-testid="duplicate-pick" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                <Badge>{g.kind === 'same-row' ? 'ten sam wiersz banku' : 'wpis ręczny + bank'}</Badge>
+                <Badge>{g.kind === 'same-row' ? 'ten sam wiersz banku' : g.kind === 'bank-format' ? 'lista operacji + historia rachunku' : 'wpis ręczny + bank'}</Badge>
                 {g.differs && <span className="text-dim">{DIFFERS[g.differs]}</span>}
                 {g.conflict && <Badge tone="warn">inna decyzja w kopii</Badge>}
                 {g.blocked && <span className="text-accent">{g.blocked}</span>}

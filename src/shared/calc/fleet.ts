@@ -18,11 +18,11 @@
  * money on the accounts then; the history before serves the statistics only (average costs and income).
  */
 import type { Settings } from '../schema/settings'
-import { envelopeKind, type EnvelopeKind } from '../schema/budget'
+import { envelopeKind, type EnvelopeKind, type MemberOpening } from '../schema/budget'
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
-import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawEndOf, warsawNow, warsawStamp, warsawStartOf } from './dates'
+import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawEndOf, warsawNow, warsawStamp, warsawStartOf } from './dates'
 import { openingsOf } from './balances'
-import { heldOf, settleHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
+import { balanceOf, heldOf, settleHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
 import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type IncomeStats } from './income'
 import { goalAt, goalDecided, goalTakes } from './goals'
 import { debtOf, loanStates, type LoanState } from './loans'
@@ -232,6 +232,34 @@ const ledgerOptions = (settings: Pick<Settings, 'household'>, budgetStart: strin
 export function householdOf(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, today: string, until: string = today): HouseholdLedger {
   const balances = input.balances ?? []
   return settleHousehold(input.transactions, ledgerOptions(input.settings, budgetStartOf(input.settings, balances, today), openingsOf(balances, today), until))
+}
+
+/**
+ * The members' opening balances for another settlements' start (B3, D81): each one's balance on the day before it as
+ * the ledger counts it now – a later start takes in the operations between the two, an earlier one gives them back and
+ * keeps what was typed beyond them (a debt from before the budget); from the budget's start nothing before it counts
+ * (1.3.0). null = the same start (nothing to change).
+ */
+export function rebaseOpenings(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, today: string, since: string | null): Map<string, MemberOpening> | null {
+  const { settings } = input
+  const budgetStart = budgetStartOf(settings, input.balances ?? [], today)
+  const from = settleFromOf(settings, budgetStart)
+  const next = settleFromOf({ household: { ...settings.household, since } }, budgetStart)
+  if (!from || !next || from === next) return null
+  const net = (b: { owed: number; deposit: number }) => b.deposit - b.owed
+  const value = new Map<string, number>()
+  if (next > from) {
+    const then = householdOf(input, today, addDays(next, -1))
+    for (const m of settings.household.members) value.set(m.id, net(balanceOf(then, m.id)))
+  } else {
+    // The balances as 1.3.0 counted them (from the budget's start, no openings) – the old opening's typed part on top.
+    const members = settings.household.members.map((m) => ({ ...m, opening: { owed: 0, deposit: 0 } }))
+    const plain = { ...input, settings: { ...settings, household: { ...settings.household, since: null, members } } }
+    const atNext = householdOf(plain, today, addDays(next, -1))
+    const atFrom = householdOf(plain, today, addDays(from, -1))
+    for (const m of settings.household.members) value.set(m.id, net(balanceOf(atNext, m.id)) + net(m.opening) - net(balanceOf(atFrom, m.id)))
+  }
+  return new Map([...value].map(([id, v]) => [id, v >= 0 ? { owed: 0, deposit: v } : { owed: -v, deposit: 0 }]))
 }
 
 // ------------------------------------------------------------------ the whole state

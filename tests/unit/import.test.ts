@@ -6,6 +6,8 @@ import { computeFleet } from '@shared/calc/fleet'
 import { createDefaultSettings } from '@shared/defaults'
 import { classifyRow, counterpartyKey, hintFor, isOwnName, matchRule, upsertRule } from '@shared/import/classify'
 import { parseMbank, type MbankFile, type MbankRow } from '@shared/import/mbank'
+import { findDuplicates, mergeDuplicate } from '@shared/import/duplicates'
+import { addDays } from '@shared/calc/dates'
 import { buildImport, choiceOf, importGroups, importThemes, planImport, similarCounterparty, type ImportChoices, type ImportPlan, type NewRow } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
 import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type ImportRule, type Transaction } from '@shared/schema'
@@ -271,6 +273,58 @@ describe('import: plan, zapis, kolejne importy', () => {
   })
 })
 
+describe('lista operacji i historia rachunku: ta sama operacja z dwóch formatów (B5)', () => {
+  /** The account history of the same operations: the type of operation first, then the name and the title; booked rows only. */
+  const asHistoria = (f: MbankFile): MbankFile => ({
+    ...f,
+    format: 'historia',
+    rows: f.rows.filter((r) => !r.pending).map((r) => ({ ...r, description: [r.operation, r.counterparty, r.title].filter(Boolean).join(' ') }))
+  })
+  const booked = (f: MbankFile) => withRows(f, f.rows.filter((r) => !r.pending))
+  /** As before 1.4.2: the file's format not written; `importedAt` – the import's moment (each file its own). */
+  const legacy = (txs: Transaction[], importedAt = NOW) => txs.map((t) => ({ ...t, bank: { ...t.bank!, source: undefined, importedAt } }))
+
+  it('historia po liście: te same operacje rozpoznane, nic drugi raz; klucz drugiego formatu zapamiętany', () => {
+    const lista = fixture()
+    const first = runImport(lista, []).after
+    expect(new Set(first.map((t) => t.bank?.source))).toEqual(new Set(['lista']))
+    const historia = asHistoria(lista)
+    const second = runImport(historia, first)
+    expect(counts(second.plan)).toEqual({ known: historia.rows.length })
+    expect(second.plan.rows.every((p) => p.status === 'known' && p.other)).toBe(true)
+    expect(second.result.create).toEqual([])
+    expect(second.result.update).toHaveLength(historia.rows.length)
+    // The next history knows them by key at once.
+    const third = planImport(historia, MBANK_ACCOUNT_ID, second.after, ctx())
+    expect(third.rows.every((p) => p.status === 'known' && !p.other)).toBe(true)
+  })
+
+  it('lista po historii także dla wpisów sprzed 1.4.2 (format rozpoznany po imporcie); dzień różnicy daty karty', () => {
+    const historia = asHistoria(fixture())
+    const first = legacy(runImport(historia, []).after)
+    const lista = booked(fixture())
+    expect(runImport(lista, first).result.create).toEqual([])
+    const shifted = withRows(lista, lista.rows.map((r) => ({ ...r, date: addDays(r.date, 1) })))
+    expect(runImport(shifted, first).result.create).toEqual([])
+    // Another operation of the same amount a week later is a new one.
+    const row = lista.rows[0]!
+    expect(runImport(withRows(lista, [{ ...row, date: addDays(row.date, 7) }]), first).result.create).toHaveLength(1)
+  })
+
+  it('zaimportowane dwa razy przed 1.4.2: panel duplikatów łączy wiersz z obu formatów, klucz drugiego zostaje', () => {
+    const lista = booked(fixture())
+    const both = [...legacy(runImport(asHistoria(lista), []).after), ...legacy(runImport(lista, []).after, '2026-10-18T09:00:00.000Z')]
+    const groups = findDuplicates(both, []).filter((g) => g.kind === 'bank-format')
+    expect(groups).toHaveLength(lista.rows.length)
+    const byId = new Map(both.map((t) => [t.id, t]))
+    const g = groups[0]!
+    const kept = mergeDuplicate(byId.get(g.keep)!, g.remove.map((id) => byId.get(id)!), g.kind, NOW)
+    expect(kept.bank!.altKeys).toEqual([byId.get(g.remove[0]!)!.bank!.key])
+    // A row of one format only stays alone.
+    expect(findDuplicates(legacy(runImport(lista, []).after), []).filter((x) => x.kind === 'bank-format')).toEqual([])
+  })
+})
+
 describe('domownicy w imporcie (D80)', () => {
   const TOMASZ = `01KMEM${'0'.repeat(19)}7`
   const withMembers = (rules: ImportRule[], inflow: 'ask' | 'advance' | 'income') => ({
@@ -330,5 +384,25 @@ describe('domownicy w imporcie (D80)', () => {
     const fromTomasz = result.create.filter((t) => t.counterparty === 'TOMASZ xxx' && t.amount > 0)
     expect(fromTomasz.length).toBeGreaterThan(10)
     expect(new Set(fromTomasz.map((t) => `${t.kind}|${t.memberId}`))).toEqual(new Set([`income|${TOMASZ}`]))
+  })
+
+  it('dwóch domowników „pytaj” w jednym pliku = dwa tematy; decyzja jednego nie oddaje mu pieniędzy drugiego ani reguły (B4)', () => {
+    const ANNA = `01KMEM${'0'.repeat(19)}8`
+    const f = fixture()
+    const tomasz = f.rows.filter((r) => r.counterparty === 'TOMASZ xxx' && r.amount > 0)
+    const anna = tomasz.map((r) => ({ ...r, counterparty: 'ANNA xxx', description: r.description.replace('TOMASZ xxx', 'ANNA xxx') }))
+    const both = withMembers([], 'ask')
+    const c = { ...both, members: [...both.members, { id: ANNA, name: 'Anna', bankNames: ['ANNA xxx'], inflow: 'ask' as const, archived: false }] }
+    const plan = planImport(withRows(f, [...tomasz, ...anna]), MBANK_ACCOUNT_ID, [], c)
+    const themes = importThemes(importGroups(plan))
+    const of = (memberId: string) => themes.filter((t) => t.basis.kind === 'proposal' && t.basis.choice.memberId === memberId)
+    expect(of(TOMASZ)).toHaveLength(1)
+    expect(of(ANNA)).toHaveLength(1)
+    const choices = emptyChoices()
+    choices.themes[of(TOMASZ)[0]!.theme] = { kind: 'income', categoryId: null, refundable: false, household: true, memberId: TOMASZ, advance: true, counterAccountId: null }
+    const result = buildImport(plan, choices, { now: NOW, makeId, rules: [] })
+    expect(new Set(result.create.filter((t) => t.counterparty === 'ANNA xxx').map((t) => t.memberId))).toEqual(new Set([ANNA]))
+    expect(new Set(result.create.filter((t) => t.counterparty === 'TOMASZ xxx').map((t) => `${t.memberId}|${t.advance}`))).toEqual(new Set([`${TOMASZ}|true`]))
+    expect(result.rules.filter((r) => r.memberId === TOMASZ).map((r) => r.match)).not.toContain('annaxxx')
   })
 })
