@@ -65,7 +65,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
-  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `quick.ts` (szybki wpis i globalny skrót),
@@ -352,6 +352,27 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
     Mostek / Radar / Plan miesiąca / Raporty – salda, depozyt, „Sfinansowane przez domowników” (T112).
 - Testy: `tests/unit/household.test.ts`, domownicy w `tests/unit/import.test.ts`, E2E `tests/e2e/household.spec.ts`.
 
+## Kod (1.4.0 – domownicy bez bankowości i przychody, D81)
+- Shared:
+  - `schema/budget.ts` – `settings.household.since` (brak = 1.4.0 ustawia dziś raz, null = od startu budżetu), osoba
+    `via` (przekazuje przez) i `opening` {owed, deposit} (`memberOpeningSchema`); `schema/records.ts` – część `advance`
+    (części wpływu = pieniądze osób);
+  - `calc/household.ts` – `LedgerOptions` (`from` = dzień rozliczeń z saldami `members[].opening`, `reset` = start
+    budżetu), `incomeShares` (części wpływu, reszta nadawcy), `heldOf`, `OPENING_TX` / `isOpeningItem`, `memberOf`
+    (przeniesione z importu), `isMemberMoney`; `calc/fleet.ts` – `settleFromOf`, zdarzenie `household` (depozyt = zaliczki
+    na start), `FleetState.incomeStats` / `incomeContext` / `settleFrom`, `income` = razem z 6 mies. (T115–T117);
+  - `calc/income.ts` – `IncomeContext`, `incomeParts` (praca / trading), `incomeOfPeriod` (trading netto ≥ 0),
+    `incomeByMonth`, `incomeStats` (okna 3 / 6 / 12, mediany), `taxOfDockings`, `plainIncomeContext`; `intel.ts` /
+    `export/budget.ts` – przychód z kontekstu, CSV „od: osoby” (T119, T120); `briefing.ts` – „przekazuje przez”, saldo na
+    start; `merge.ts` – etykiety pól.
+- Renderer: `features/household/actions.ts` (`setHouseholdSince`, `useHouseholdSinceSeed` w `App` – salda do wczoraj
+  jako saldo na start), `MemberPickers.tsx` `MemberIncome` (części wpłaty `income-split-*`, `operation-also-for`,
+  `useLedgerBefore`), `settings/HouseholdTab.tsx` (`SinceRow`, `OpeningField`, `member-via`), `month/IncomePanel.tsx`
+  (Plan miesiąca, Mostek `bridge-income`), szybki wpis `quick-share` (`QuickDraft.shares`), lista operacji „od: osoby”,
+  Radar „przekazuje przez”.
+- Testy: `tests/unit/income.test.ts`, D81 w `tests/unit/household.test.ts`, E2E D81 w `tests/e2e/household.spec.ts`
+  (testy E2E z należnościami sprzed dziś ustawiają `household.since`).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -415,3 +436,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.2.2 Podobne nazwy i propozycja reguły z liczbą operacji (D78)
 - [x] 1.2.3 Poprawka podobnych nazw: dopiski banku w nazwach, wspólne słowa (D79)
 - [x] 1.3.0 Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80)
+- [x] 1.4.0 Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dnia z saldem na start, panel przychodów (D81)

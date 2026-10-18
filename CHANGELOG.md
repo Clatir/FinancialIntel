@@ -1,5 +1,22 @@
 # Financial Intel – zmiany
 
+## 1.4.0
+
+Domownicy bez własnego konta i przychody ze średnich (zgłoszenie użytkownika po 1.3.0, decyzja D81).
+
+- Rozliczenia z domownikami od wybranego dnia – przy pierwszym uruchomieniu od dziś: to, co osoby były winne albo
+  wpłaciły z góry do wczoraj, jest ich saldem na start (Ustawienia → Domownicy: „Na start rozliczeń: ma oddać /
+  zaliczka”, do zmiany). Przelewy domowników sprzed tej daty nie są Twoim przychodem.
+- Jeden przelew z pieniędzmi kilku osób: przy wpłacie „podziel na osoby” – każda część spłaca to, co jej osoba ma oddać,
+  reszta to jej zaliczka albo przychód; reszta kwoty zostaje nadawcy.
+- Osoba bez konta: „Pieniądze przekazuje przez: Tata”. Przelew Taty dalej jest Taty, a przy nim pojawia się „+ także za
+  Mamę (ma oddać …)” – jedno kliknięcie, nic samo; w szybkim wpisie pole „W tym za Mamę”. Przypomnienie i Radar mówią,
+  przez kogo osoba przekazuje pieniądze.
+- Panel „Przychody” w Planie miesiąca i na Mostku: średnie z 3, 6 i 12 pełnych miesięcy i mediana (jedna premia jej nie
+  rusza), osobno praca i inne wpływy oraz trading XTB (wypłaty minus dopłaty, bez puli Podatek), porównanie z pensją.
+  Ostrzeżenie „pensja wyższa niż średnie wpływy” i raporty liczą przychód tak samo.
+- Lista operacji i CSV mówią, czyje są pieniądze wpłaty („od: Tata, Mama”).
+
 ## 1.3.0
 
 Rozliczenia z domownikami (prośba użytkownika: część wydatków finansują inne osoby, decyzja D80). Każdy domownik ma

@@ -167,6 +167,14 @@ w obie strony: ma oddać (zapłaciłem za jego zakup) albo zaliczkę (przelał z
 - Salda osób na Mostku i Radarze; przypomnienie po 30 dniach od najstarszego nieoddanego zakupu (odprawa
   i powiadomienie); sfinansowane wydatki osobno w debriefingu miesiąca i w Raportach.
 - Zakupy oznaczone przed 1.3.0 „do zwrotu” należą do pierwszej osoby z listy („Dom”).
+- Rozliczenia od wybranego dnia (1.4.0, D81 – pierwszy raz: od dziś, z dotychczasowymi saldami jako saldo na start
+  osoby); przelewy domowników sprzed tej daty nie są przychodem.
+- Osoba bez konta przekazuje pieniądze przez innego domownika: przelew należy do nadawcy, a „+ także za X” (w szybkim
+  wpisie „W tym za X”) dzieli go jednym kliknięciem; każdą wpłatę można podzielić na osoby ręcznie.
+
+**Przychody (1.4.0, D81)** – praca i inne wpływy oraz trading XTB (wypłaty minus dopłaty, bez puli Podatek), bez
+przelewów własnych, spłat i zaliczek domowników. Panel „Przychody” (Plan miesiąca, Mostek): średnie z 3, 6 i 12 pełnych
+miesięcy i mediana, porównanie z pensją; te same liczby w ostrzeżeniu o pensji i raportach.
 
 **Potwierdzanie sald (raz w tygodniu)** – saldo mBanku i Portfela XTB. Różnica daje alarm „rozbieżność w ładowni”
 i wpis korekty do wyjaśnienia.
@@ -266,10 +274,10 @@ się zapisują.
 
 | Ekran | Co zawiera | Etap |
 | --- | --- | --- |
-| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, depozyt domowników, zasięg, masa ładunku, klasa), koperty, rozliczenia z domownikami, ostatnie operacje; później radar, wywiad i krzywa majątku | E4, 1.3.0 |
+| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, depozyt domowników, zasięg, masa ładunku, klasa), koperty, rozliczenia z domownikami, przychody, ostatnie operacje; później radar, wywiad i krzywa majątku | E4, 1.3.0, 1.4.0 |
 | Operacje | lista z filtrami i wyszukiwaniem, edycja z historią zmian, podział paragonu, kto finansuje, oznaczenia (domownik, plan lub impuls, noc) | E1, 1.3.0 |
 | Import | kreator CSV z mBanku: podgląd, dopasowania, kategoryzacja grupowa, potwierdzenie | E2 |
-| Plan miesiąca | pensja, podział na ładownię, odkładki i koperty, dzienny przydział, debriefing | E3 |
+| Plan miesiąca | pensja, przychody (średnie i mediana), podział na ładownię, odkładki i koperty, dzienny przydział, debriefing | E3, 1.4.0 |
 | Ładownia | kontenery, odkładki, linia zanurzenia, symulacja dodania i zrzutu | E3 |
 | Mapa gwiezdna | cele z prognozy ICTTJ i własne, priorytety, ETA | E5 |
 | Radar | 90 dni: pensje, asteroidy, spodziewane wpłaty, przypomnienie o PIT-38; należności – salda domowników i pożyczki | E6, 1.3.0 |
