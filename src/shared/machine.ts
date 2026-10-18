@@ -41,6 +41,8 @@ export interface NotifyPrefs {
   loans: boolean
   /** PIT-38: 14 and 3 days before 30 April (E6). */
   pit38: boolean
+  /** A household member owes for longer than 30 days (D80). */
+  house: boolean
 }
 
 export interface SoundPrefs {
@@ -64,7 +66,7 @@ export const DEFAULT_QUICK_SHORTCUT = 'Control+Alt+B'
 export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   quickShortcut: DEFAULT_QUICK_SHORTCUT,
   hideAmounts: false,
-  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true },
+  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true },
   // Sounds on and quiet (D70).
   sounds: { enabled: true, volume: 0.3, events: { entry: true, docking: true, alarm: true, promotion: true, plus: true } }
 }
@@ -97,6 +99,7 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
       ictj: bool(n.ictj, d.notify.ictj),
       loans: bool(n.loans, d.notify.loans),
       pit38: bool(n.pit38, d.notify.pit38),
+      house: bool(n.house, d.notify.house),
       watch: bool(n.watch, d.notify.watch)
     },
     sounds: {

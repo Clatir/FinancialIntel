@@ -3,10 +3,11 @@
  * same rows for both formats; a report as a self-contained HTML document the main process prints to PDF (no scripts,
  * nothing loaded from outside). Always the real amounts – the hidden amounts are the screen's (D73).
  */
-import type { Category, Account } from '../schema/budget'
+import type { Account, Category, HouseholdMember } from '../schema/budget'
 import type { MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
-import { categoryIndex, incomeOf, sum } from '../calc/operations'
+import { memberName, settleHousehold, type HouseholdLedger } from '../calc/household'
+import { categoryIndex, financedOf, incomeOf, sum } from '../calc/operations'
 import { debriefing } from '../calc/plan'
 import type { FleetEvent } from '../calc/fleet'
 import { monthOf } from '../calc/dates'
@@ -39,12 +40,20 @@ export interface OperationRow {
   category: string
   counterparty: string
   title: string
-  refundable: boolean
+  /** The household members who finance it (D80), by name; '' = none. */
+  financed: string
   log: string
   note: string
 }
 
-export function operationRows(transactions: readonly Transaction[], categories: readonly Category[], accounts: readonly Account[], from: string, to: string): OperationRow[] {
+export function operationRows(
+  transactions: readonly Transaction[],
+  categories: readonly Category[],
+  accounts: readonly Account[],
+  from: string,
+  to: string,
+  members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = []
+): OperationRow[] {
   const cats = categoryIndex(categories)
   const accountName = new Map(accounts.map((a) => [a.id, a.name]))
   return transactions
@@ -59,18 +68,18 @@ export function operationRows(transactions: readonly Transaction[], categories: 
       category: t.splits.length ? t.splits.map((s) => cats.label(s.categoryId)).join(' + ') : cats.label(t.categoryId),
       counterparty: t.counterparty,
       title: t.title,
-      refundable: t.refundable || t.splits.some((s) => s.refundable),
+      financed: [...financedOf(t).keys()].map((id) => memberName(id, members)).join(', '),
       log: t.impulse ? IMPULSE_LABEL[t.impulse] : '',
       note: t.note
     }))
 }
 
-const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Do zwrotu', 'Dziennik', 'Notatka'] as const
+const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Finansuje', 'Dziennik', 'Notatka'] as const
 
 export function operationsCsv(rows: readonly OperationRow[]): string {
   return toCsv(
     OPERATION_HEADER,
-    rows.map((r) => [r.date, r.time, r.account, r.kind, plnCell(r.amount), r.category, r.counterparty, r.title, r.refundable ? 'tak' : '', r.log, r.note])
+    rows.map((r) => [r.date, r.time, r.account, r.kind, plnCell(r.amount), r.category, r.counterparty, r.title, r.financed, r.log, r.note])
   )
 }
 
@@ -87,11 +96,11 @@ export function operationsSheet(rows: readonly OperationRow[]): XlsxSheet {
       { header: 'Kategoria', kind: 'text', width: 28 },
       { header: 'Kontrahent', kind: 'text', width: 30 },
       { header: 'Tytuł', kind: 'text', width: 36 },
-      { header: 'Do zwrotu', kind: 'text', width: 9 },
+      { header: 'Finansuje', kind: 'text', width: 14 },
       { header: 'Dziennik', kind: 'text', width: 9 },
       { header: 'Notatka', kind: 'text', width: 30 }
     ],
-    rows: rows.map((r) => [r.date, r.time, r.account, r.kind, r.amount / 100, r.category, r.counterparty, r.title, r.refundable ? 'tak' : '', r.log, r.note])
+    rows: rows.map((r) => [r.date, r.time, r.account, r.kind, r.amount / 100, r.category, r.counterparty, r.title, r.financed, r.log, r.note])
   }
 }
 
@@ -106,10 +115,14 @@ export interface MonthRow {
   loot: number | null
 }
 
-export function monthRows(input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; today: string }, months: readonly string[]): MonthRow[] {
+export function monthRows(
+  input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; today: string; ledger?: Pick<HouseholdLedger, 'byTx'> },
+  months: readonly string[]
+): MonthRow[] {
+  const ledger = input.ledger ?? settleHousehold(input.transactions)
   return months.map((month) => {
     const d = debriefing(month, input)
-    return { month, salary: d.salary, costs: d.costs, income: sum(input.transactions.filter((t) => monthOf(t.date) === month).map(incomeOf)), plus: d.plus, loot: d.loot }
+    return { month, salary: d.salary, costs: d.costs, income: sum(input.transactions.filter((t) => monthOf(t.date) === month).map((t) => incomeOf(t, ledger))), plus: d.plus, loot: d.loot }
   })
 }
 

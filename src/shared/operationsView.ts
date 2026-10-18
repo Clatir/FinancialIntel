@@ -7,12 +7,12 @@ import type { Transaction, TxKind } from './schema/records'
 import { asksImpulse, costOf, isNight, type CategoryIndex } from './calc/operations'
 import { fold } from './fold'
 
-/** Marks of an operation (spec, „Ekrany”: do zwrotu, plan lub impuls, noc) and of its origin. */
+/** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
 export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual'] as const
 export type OperationMark = (typeof OPERATION_MARKS)[number]
 
 export const MARK_LABEL: Record<OperationMark, string> = {
-  refundable: 'do zwrotu',
+  refundable: 'domownik',
   impulse: 'impuls',
   plan: 'plan',
   night: 'noc',
@@ -120,7 +120,7 @@ export interface OperationsSums {
   inflow: number
   /** Money out: expenses, top-ups of XTB, PIT-38, loans given (without own transfers and corrections). */
   outflow: number
-  /** Net costs of the list as the layers count them (`costOf`: without purchases „do zwrotu” and goal spending). */
+  /** Net costs of the list as the layers count them (`costOf`: without what household members finance and goal spending). */
   costs: number
 }
 

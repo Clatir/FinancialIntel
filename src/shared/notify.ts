@@ -76,6 +76,8 @@ export function dueNotices(o: NotifyInput): Notice[] {
     // An overdue installment (once per installment), PIT-38 14 and 3 days before 30 April (D72).
     if (i.kind === 'loan' && p.loans) out.push({ key: i.key, tag: 'radar', title: 'Rata pożyczki po terminie', body: i.text })
     if (i.kind === 'pit38' && p.pit38) out.push({ key: i.key, tag: 'radar', title: 'PIT-38 na radarze', body: i.text })
+    // A household member's purchases still owed after 30 days (D80 e), once per member and oldest purchase.
+    if (i.kind === 'house' && p.house) out.push({ key: i.key, tag: 'radar', title: 'Rozliczenie z domownikiem', body: i.text })
   }
   // Sunday: this week's balances, unless confirmed since Monday already.
   const confirmed = o.lastConfirmation ? daysBetween(o.lastConfirmation, today) : null

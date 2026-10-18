@@ -65,7 +65,7 @@ test('Wywiad i Raporty: krzywa majątku, Killzones, FVG, zasięg, dziennik; rapo
     const csv = join(out, 'operacje.csv')
     await saveTo(app, csv)
     await page.getByTestId('export-operations-csv').click()
-    await expect.poll(async () => (await readFile(csv, 'utf8').catch(() => '')).split('\r\n')[0]).toBe('﻿Data;Godzina;Konto;Rodzaj;Kwota (zł);Kategoria;Kontrahent;Tytuł;Do zwrotu;Dziennik;Notatka')
+    await expect.poll(async () => (await readFile(csv, 'utf8').catch(() => '')).split('\r\n')[0]).toBe('﻿Data;Godzina;Konto;Rodzaj;Kwota (zł);Kategoria;Kontrahent;Tytuł;Finansuje;Dziennik;Notatka')
     const xlsx = join(out, 'budzet.xlsx')
     await saveTo(app, xlsx)
     await page.getByTestId('export-xlsx').click()

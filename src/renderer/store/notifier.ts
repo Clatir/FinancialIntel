@@ -96,7 +96,8 @@ function check(opened: boolean, shown = false): void {
     // The hidden amounts (Ctrl+$) stay hidden in the notifications too.
     money: (g) => `${plnText(g)} zł`,
     deliveries: deliveriesNow(),
-    ictjProblem: null
+    ictjProblem: null,
+    members: fi.settings.household.members
   })
   const already = sent()
   const fresh: Notice[] = notices.filter((n) => !already[n.key])

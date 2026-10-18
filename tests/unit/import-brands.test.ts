@@ -43,13 +43,14 @@ const rule = (over: Partial<ImportRule>): ImportRule => ({
   categoryId: null,
   refundable: false,
   household: false,
+  memberId: null,
   counterAccountId: null,
   learned: true,
   hits: 0,
   updatedAt: NOW,
   ...over
 })
-const expense = (categoryId: string | null): Choice => ({ kind: 'expense', categoryId, refundable: false, household: false, counterAccountId: null })
+const expense = (categoryId: string | null): Choice => ({ kind: 'expense', categoryId, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null })
 
 const GROCERIES = defaultCategoryId(1, 1)
 const PARKING = defaultCategoryId(3, 4)
@@ -109,7 +110,7 @@ describe('marka a rodzaj operacji (przegląd 1.2.1)', () => {
       choices.groups[g.group] = expense(g.rows.length === 2 ? GROCERIES : PARKING)
       choices.remember[g.group] = true
     }
-    const result = buildImport(p, choices, { now: NOW, house: 0, makeId, rules: [old] })
+    const result = buildImport(p, choices, { now: NOW, makeId, rules: [old] })
     expect(result.rules.filter((r) => r.match === 'orlen')).toEqual([expect.objectContaining({ categoryId: GROCERIES, hits: 3 })])
   })
 })
@@ -205,7 +206,7 @@ describe('tematy i „Przyjmij pewne” (D75, pomysł 4)', () => {
     choices.remember[zabka.group] = false
     const oneLidl = p.rows.find((r) => r.status === 'new' && r.brand === 'lidl')!
     choices.rows[oneLidl.key] = expense(null)
-    const result = buildImport(p, choices, { now: NOW, house: 0, makeId, rules: [] })
+    const result = buildImport(p, choices, { now: NOW, makeId, rules: [] })
     const cat = (name: string) => [...new Set(result.create.filter((t) => t.counterparty === name).map((t) => t.categoryId))]
     expect(cat('Biedronka')).toEqual([defaultCategoryId(1)])
     expect(cat('Żabka')).toEqual([defaultCategoryId(1, 3)])
@@ -226,7 +227,7 @@ describe('tematy i „Przyjmij pewne” (D75, pomysł 4)', () => {
         choices.themes[t.theme] = t.basis.choice
         choices.rememberThemes[t.theme] = true
       }
-    const result = buildImport(p, choices, { now: NOW, house: 0, makeId, rules: settings.import.rules })
+    const result = buildImport(p, choices, { now: NOW, makeId, rules: settings.import.rules })
     const learned = new Set(result.rules.map((r) => r.match))
     // Chains and keywords of names: learned.
     expect(learned).toContain('biedronka')
@@ -237,7 +238,7 @@ describe('tematy i „Przyjmij pewne” (D75, pomysł 4)', () => {
     // A keyword of a transfer's title („Doładowanie telefonu”, „KOLACJA”) is about that payment.
     expect(learned).not.toContain('bluemedia')
     expect(learned).not.toContain('marekxxx')
-    const plain = buildImport(p, emptyChoices(), { now: NOW, house: 0, makeId, rules: settings.import.rules })
+    const plain = buildImport(p, emptyChoices(), { now: NOW, makeId, rules: settings.import.rules })
     const shape = (r: typeof result) => r.create.map((t) => [t.date, t.amount, t.kind, t.categoryId]).sort()
     expect(shape(result)).toEqual(shape(plain))
   })
@@ -248,7 +249,7 @@ describe('tematy i „Przyjmij pewne” (D75, pomysł 4)', () => {
     const choices = emptyChoices()
     choices.themes[theme.theme] = expense(theme.basis.kind === 'hint' ? theme.basis.categoryId : null)
     choices.rememberThemes[theme.theme] = false
-    const result = buildImport(p, choices, { now: NOW, house: 0, makeId, rules: [] })
+    const result = buildImport(p, choices, { now: NOW, makeId, rules: [] })
     expect(result.rules).toEqual([])
     expect(new Set(result.create.filter((t) => /allegro/i.test(t.counterparty)).map((t) => t.categoryId))).toEqual(new Set([defaultCategoryId(8)]))
   })

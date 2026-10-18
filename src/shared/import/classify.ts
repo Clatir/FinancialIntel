@@ -8,9 +8,9 @@ import { fold } from '../fold'
 import { cleanBankName, counterpartyKey } from './names'
 import { resolveBrand, type BrandAliases } from './aliases'
 import { brandById, brandOf, keywordIn, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
-import type { Category, ImportRule } from '../schema/budget'
+import type { Category, HouseholdMember, ImportRule } from '../schema/budget'
 import type { Container } from '../schema/records'
-import { CASH_CATEGORY_ID, defaultCategoryId } from '../schema/budget'
+import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '../schema/budget'
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
 import type { MbankRow } from './mbank'
@@ -26,7 +26,7 @@ export const directionOf = (row: Pick<MbankRow, 'amount'>): Direction => (row.am
  */
 export function upsertRule(
   rules: readonly ImportRule[],
-  r: Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'counterAccountId'>,
+  r: Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'counterAccountId'>,
   opts: { now: string; makeId: () => string; hits: number }
 ): ImportRule[] {
   const out = [...rules]
@@ -180,9 +180,14 @@ export type DecisionSource = 'rule' | 'builtin' | 'brand' | 'keyword' | 'none'
 export interface ImportDecision {
   kind: TxKind
   categoryId: string | null
+  /** Financed by a household member (D80): not a cost of mine. */
   refundable: boolean
-  /** Money from a household member: it repays the house receivable first (D20). */
+  /** Money from a household member: it repays what they owe first (D20, D80). */
   household: boolean
+  /** The household member who finances (`refundable`) or whose money it is (`household`); null = the first one. */
+  memberId: string | null
+  /** A household member's money: what they do not owe is their advance (else income – D80 b). */
+  advance: boolean
   counterAccountId: string | null
   /** A payment of a container of the cargo (its counterparty): the cargo's, not an envelope's spending. */
   containerId: string | null
@@ -210,6 +215,8 @@ export interface ClassifyContext {
   containers?: ReadonlyArray<Pick<Container, 'id' | 'name' | 'counterparty' | 'categoryId' | 'archived'>>
   /** Names the user merged (1.2.2): grouped and ruled as one. */
   aliases?: BrandAliases
+  /** The household (D80): their transfers are their money, by their names in the bank. */
+  members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name' | 'bankNames' | 'inflow' | 'archived'>>
 }
 
 const isXtb = (row: MbankRow) => /\bxtb\b|x-trade brokers/i.test(`${row.counterparty} ${row.description}`)
@@ -223,11 +230,29 @@ export function isOwnName(counterparty: string, ownNames: readonly string[]): bo
   })
 }
 
+/**
+ * The household member a counterparty is (D80 a): all words of one of their bank names in it, in any order – a name of
+ * one word only when it is the whole counterparty („MAMA”). Archived members too: their money is still theirs.
+ */
+export function memberOf<M extends Pick<HouseholdMember, 'bankNames'>>(counterparty: string, members: readonly M[] | undefined): M | null {
+  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
+  if (!who.length) return null
+  for (const m of members ?? [])
+    for (const name of m.bankNames) {
+      const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
+      if (!parts.length) continue
+      if (parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))) return m
+    }
+  return null
+}
+
 const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = {}): ImportDecision => ({
   kind,
   categoryId: null,
   refundable: false,
   household: false,
+  memberId: null,
+  advance: false,
   counterAccountId: null,
   containerId: null,
   source: 'builtin',
@@ -282,18 +307,28 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const hint = hintFor(row.category, ctx.categories)
   const op = row.operation
   const out = (d: ImportDecision): Classified => ({ key, brand, target, direction, hint, decision: d })
+  // A household member's money (D80): by their names in the bank.
+  const member = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op) ? memberOf(row.counterparty, ctx.members) : null
   const rule = findRule(ctx.rules, target, direction)
-  if (rule) {
+  // A rule of plain income naming no member (learned before the person became a member, or before 1.3.0) gives way to
+  // the member: their money repays what they owe first.
+  if (rule && !(member && rule.kind === 'income' && !rule.memberId)) {
     const kind = rule.kind as TxKind
     const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
+    const refundable = kind === 'expense' && direction === 'out' && rule.refundable
+    const household = kind === 'income' && rule.household
+    const memberId = refundable || household ? rule.memberId : null
     return out(
       decision(kind, rule.mode === 'keyword' ? `Twoje słowo „${rule.label || rule.match}”${byTitle ? ' w tytule' : ''}` : 'reguła', {
         source: 'rule',
         ruleId: rule.id,
         byTitle,
         categoryId: kind === 'expense' ? rule.categoryId : null,
-        refundable: kind === 'expense' && direction === 'out' && rule.refundable,
-        household: kind === 'income' && rule.household,
+        refundable,
+        household,
+        memberId,
+        // What the member's money beyond their debt is, as the member's setting says (D80 b; „ask” = income, D20).
+        advance: household && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance',
         counterAccountId: kind === 'transfer' ? rule.counterAccountId : null
       })
     )
@@ -301,6 +336,18 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (isXtb(row)) return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
   if (/^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(op) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(op) && isOwnName(row.counterparty, ctx.ownNames)))
     return out(decision('transfer', 'przelew własny'))
+  // A member's money: asked once what the rest beyond their debt is (D80 b).
+  if (member) {
+    const inflow = inflowOf(member)
+    return out(
+      decision('income', inflow === 'ask' ? `od domownika: ${member.name} – reszta ponad należność: zaliczka czy przychód?` : `od domownika: ${member.name}`, {
+        household: true,
+        memberId: member.id,
+        advance: inflow === 'advance',
+        source: inflow === 'ask' ? 'none' : 'builtin'
+      })
+    )
+  }
   if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
   if (/^(POS )?ZWROT/.test(op) && direction === 'in') {
@@ -327,5 +374,5 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
       .join(' ')
     return out(decision('expense', `słowo „${found}”${inName ? '' : ' w tytule'}`, { categoryId: byWord, source: 'keyword', byTitle: !inName }))
   }
-  return out(decision('expense', /^(PRZELEW|BLIK P2P|ZLECENIE|POLECENIE)/.test(op) ? 'przelew wychodzący – wydatek, do zwrotu albo przelew własny?' : 'zakup', { source: 'none' }))
+  return out(decision('expense', /^(PRZELEW|BLIK P2P|ZLECENIE|POLECENIE)/.test(op) ? 'przelew wychodzący – wydatek, za domownika albo przelew własny?' : 'zakup', { source: 'none' }))
 }

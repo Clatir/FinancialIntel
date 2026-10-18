@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import type { FleetState } from '@shared/calc/fleet'
 import { debriefing, lootDeadline, planFor, proposeEnvelopes, proposeSalary, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
+import { memberName } from '@shared/calc/household'
+import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -270,6 +272,7 @@ function EnvelopesPanel({ month, current, fleet, brief }: { month: string; curre
 
 function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debriefing; fleet: FleetState; today: string; plans: MonthPlan[]; readOnly: boolean }) {
   const cats = useCategories()
+  const members = useMembers()
   const deadline = lootDeadline(brief.month)
   const decision = plans.find((p) => p.month === brief.month)?.loot ?? null
   const pending = fleet.loot.month === brief.month && fleet.loot.amount > 0 && today <= deadline
@@ -296,6 +299,13 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
         {brief.plus === null && <div className="text-[11.5px] text-dim">Bez pensji w tym miesiącu – nie ma z czym porównać kosztów ({zl(brief.costs)}).</div>}
         <div className="flex flex-col">
           <Row label="Ładownia i odkładki" value={zl(brief.cargo)} />
+          {brief.financed.length > 0 && (
+            <Row
+              label={`Sfinansowane przez domowników (${brief.financed.map((f) => memberName(f.memberId, members)).join(', ')}) – nie Twoje koszty`}
+              value={zl(brief.financed.reduce((a, f) => a + f.amount, 0))}
+              testId="debrief-financed"
+            />
+          )}
           {brief.uncategorized > 0 && <Row label="Bez kategorii" value={zl(brief.uncategorized)} />}
           {brief.envelopes.map((e) => (
             <Row

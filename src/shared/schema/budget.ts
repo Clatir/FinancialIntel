@@ -8,7 +8,7 @@ import { clockTime, grosze, isoDate, isoDateTime, ulidSchema } from './common'
 import { TX_KINDS } from './records'
 
 /** Fixed id of a default item: a valid ULID `01KDEF<kind><number>`. */
-const fixedId = (kind: 'ACC' | 'CAT' | 'REG', n: number) => `01KDEF${kind}${String(n).padStart(17, '0')}`
+const fixedId = (kind: 'ACC' | 'CAT' | 'REG' | 'MEM', n: number) => `01KDEF${kind}${String(n).padStart(17, '0')}`
 
 /**
  * A value of a known set that a newer version may extend (a new kind of account, a new system category): any string
@@ -174,6 +174,8 @@ export const importRuleSchema = z.looseObject({
   refundable: z.boolean().default(false),
   /** A household member (D20): money from them proposes repaying the house receivable first. */
   household: z.boolean().default(false),
+  /** The household member (D80): who finances an expense („refundable”), whose money an income is („household”); null = the first. */
+  memberId: ulidSchema.nullable().catch(null).default(null),
   counterAccountId: ulidSchema.nullable().default(null),
   /** false = written or edited by the user in the settings (never overwritten by learning). */
   learned: z.boolean().default(true),
@@ -237,6 +239,43 @@ export const importSettingsSchema = z.looseObject({
 })
 export type ImportSettings = z.infer<typeof importSettingsSchema>
 
+// ------------------------------------------------------------------ the household (D80, 1.3.0)
+
+/** What a member's money beyond what they owe is: asked once, then remembered (D80 b). */
+export const MEMBER_INFLOWS = ['ask', 'advance', 'income'] as const
+export type MemberInflow = (typeof MEMBER_INFLOWS)[number]
+
+export const householdMemberSchema = z.looseObject({
+  id: ulidSchema,
+  name: z.string().trim().min(1).max(40),
+  /** The member's names as the bank writes them: the import knows their transfers by them. */
+  bankNames: z.array(z.string().trim().min(1).max(120)).max(20).catch([]).default([]),
+  inflow: openEnum(MEMBER_INFLOWS).catch('ask').default('ask'),
+  archived: z.boolean().default(false)
+})
+export type HouseholdMember = z.infer<typeof householdMemberSchema>
+
+/**
+ * The first member: the house of D21 („do zwrotu”, one receivable). Operations marked before 1.3.0 – and any without a
+ * member – are theirs; renamed to the person who pays, they need no other change.
+ */
+export const HOUSE_MEMBER_ID = fixedId('MEM', 1)
+
+export function defaultMembers(): HouseholdMember[] {
+  return [{ id: HOUSE_MEMBER_ID, name: 'Dom', bankNames: [], inflow: 'ask', archived: false }]
+}
+
+/** A member's inflow as this version knows it (a value of a newer version = ask). */
+export function inflowOf(m: Pick<HouseholdMember, 'inflow'> | null | undefined): MemberInflow {
+  const v = m?.inflow
+  return v === 'advance' ? 'advance' : v === 'income' ? 'income' : 'ask'
+}
+
+export const householdSettingsSchema = z.looseObject({
+  members: lenientList(householdMemberSchema).catch(defaultMembers).default(defaultMembers)
+})
+export type HouseholdSettings = z.infer<typeof householdSettingsSchema>
+
 // ------------------------------------------------------------------ ICT Trade Journal (E5)
 
 /** What the folder keeps of ICTTJ (the same on every computer; the folder's path is the computer's – T12). */
@@ -278,6 +317,7 @@ const starterRule = (n: number, match: string, label: string, categoryId: string
   categoryId,
   refundable: false,
   household: false,
+  memberId: null,
   counterAccountId: null,
   learned: true,
   hits: 0,
@@ -319,6 +359,7 @@ export const budgetSettingsShape = {
   orders: ordersSchema.prefault({}),
   budget: budgetStartSchema.prefault({}),
   import: importSettingsSchema.prefault({}),
+  household: householdSettingsSchema.prefault({}),
   ictj: ictjSettingsSchema.prefault({}),
   game: gameSettingsSchema.prefault({}),
   /** `SEEDS` already added to this folder. */

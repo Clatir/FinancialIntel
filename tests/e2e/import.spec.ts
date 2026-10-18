@@ -67,12 +67,15 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await search.fill('koleo')
     await expect(brandGroup(page, 'koleo', 'out').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000305')
 
-    // Decisions by group: the user narrows Bolt to „wyjścia” (the starter rule learns it); Tomasz is a household member.
+    // Decisions by group: the user narrows Bolt to „wyjścia” (the starter rule learns it); Tomasz is a household member –
+    // „+ domownik” adds him by his name in the bank (D80) and makes his transfers his money.
     await search.fill('bolt')
     await group(page, 'Bolt').getByTestId('import-group-category').selectOption({ label: 'Rozrywka i hobby · wyjścia' })
     await expect(group(page, 'Bolt').getByTestId('import-group-remember')).toBeChecked()
     await search.fill('tomasz')
-    await brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-kind').selectOption('household')
+    await brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-new-member').click()
+    await expect(brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-kind')).toHaveValue(/^household:[0-9A-Z]{26}:income$/)
+    await expect(brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-new-member')).toHaveCount(0)
     await search.fill('')
 
     // The bank's hints for whole themes – no decision of the user, not remembered (D68); then the sure ones in one click.
@@ -132,6 +135,13 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     expect(fi.settings.import.rules.find((r: { match: string }) => r.match === 'automat')).toMatchObject({ mode: 'keyword', direction: 'out', categoryId: '01KDEFCAT00000000000000103' })
     expect(fi.settings.import.rules.find((r: { match: string; mode: string }) => r.match === 'chess' && r.mode === 'keyword')).toMatchObject({ direction: 'out', categoryId: '01KDEFCAT00000000000000602' })
     expect(fi.settings.import.ownNames).toEqual(['JAN KAPITAN'])
+    // The member added from the import: his name in the bank, his money beyond his debt as income (asked once, D80 b).
+    const tomasz = fi.settings.household.members.find((m: { name: string }) => m.name === 'Tomasz')
+    expect(tomasz).toMatchObject({ bankNames: ['TOMASZ xxx'], inflow: 'income' })
+    expect(fi.settings.import.rules.find((r: { match: string; direction: string }) => r.match === 'tomaszxxx' && r.direction === 'in')).toMatchObject({ kind: 'income', household: true, memberId: tomasz.id })
+    const fromTomasz = ops.filter((t) => t.counterparty === 'TOMASZ xxx' && (t.amount as number) > 0)
+    expect(fromTomasz.length).toBeGreaterThan(10)
+    expect(new Set(fromTomasz.map((t) => `${t.kind}|${t.memberId}|${t.advance}`))).toEqual(new Set([`income|${tomasz.id}|false`]))
     expect((await fs.readdir(join(dataDir, 'backups', 'pre-import'))).length).toBe(1)
     await expect(page.getByTestId('import-to-operations')).toBeVisible()
 

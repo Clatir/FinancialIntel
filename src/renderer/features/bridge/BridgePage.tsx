@@ -1,9 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { BIAS_LABEL, briefing, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
-import { isoWeekOf } from '@shared/calc/dates'
+import { daysBetween, isoWeekOf } from '@shared/calc/dates'
+import { memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
 import { SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
-import { sum } from '@shared/calc/operations'
+import { financedOf, sum } from '@shared/calc/operations'
 import { amountTone } from '@shared/operationsView'
 import { shortcutLabel } from '@shared/machine'
 import type { DetachEvent } from '@shared/api'
@@ -27,6 +28,7 @@ import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
 import { useIctj } from '../../store/ictj'
 import { useGameRecords } from '../../store/game'
+import { useMembers } from '../household/actions'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).replace('.', ',')} mies.`)
@@ -34,7 +36,7 @@ const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).repl
 /** What the bridge's panels draw – in the main window and in their own windows (D45) alike, as plain JSON. */
 export type BridgeFleet = Pick<
   FleetState,
-  'today' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
+  'today' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'deposit' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
 >
 
 export const bridgeFleet = (f: FleetState): BridgeFleet => ({
@@ -47,6 +49,7 @@ export const bridgeFleet = (f: FleetState): BridgeFleet => ({
   energy: f.energy,
   tanks: f.tanks,
   taxHold: f.taxHold,
+  deposit: f.deposit,
   loot: f.loot,
   costs: f.costs,
   range: f.range,
@@ -111,6 +114,7 @@ export function BridgePage() {
   const transactions = useRecordList('transactions')
   const shortcut = useMachine((s) => s.prefs.quickShortcut)
   const cats = useCategories()
+  const members = useMembers()
   const items = useBriefingItems(fleet)
   const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
   const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
@@ -125,6 +129,14 @@ export function BridgePage() {
   }, [view, items, labels])
   if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
   const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 10)
+  // A household member's purchase or money (D80) says whose it is instead of the category.
+  const noteOf = (t: (typeof recent)[number]): string => {
+    const financed = [...financedOf(t).keys()]
+    if (financed.length) return `finansuje: ${financed.map((id) => memberName(id, members)).join(', ')}`
+    const payer = payerOf(t)
+    if (payer) return `od: ${memberName(payer, members)}`
+    return t.categoryId ? cats.label(t.categoryId) : ''
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-bridge">
@@ -182,7 +194,7 @@ export function BridgePage() {
                       >
                         <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(t.date).slice(0, 5)}</span>
                         <span className="min-w-0 flex-1 truncate text-fg-strong">{t.counterparty || t.title || '—'}</span>
-                        <span className="w-[130px] truncate text-[11px] text-dim">{t.categoryId ? cats.label(t.categoryId) : ''}</span>
+                        <span className="w-[130px] truncate text-[11px] text-dim">{noteOf(t)}</span>
                         <span className={cx('num w-[100px] text-right', tone === 'up' ? 'text-up' : tone === 'muted' ? 'text-muted' : tone === 'accent' ? 'text-accent' : 'text-fg')}>{signedPln(t.amount)}</span>
                       </button>
                     )
@@ -296,7 +308,7 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
     const week = isoWeekOf(fleet.today)
     const m = game.flatMap((g) => g.missions).find((x) => x.week === week)
     const mission = m ? { week, title: missionTitle(m.template), text: missionText(m, cats.label, zl) } : null
-    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem, mission })
+    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem, mission, members: fi.settings.household.members })
     // `hidden`: the amounts of the texts mask on a change.
   }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game])
 }
@@ -373,6 +385,7 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
       {fleet.goals.length > 0 && <Line metaphor="Układy gwiezdne" name="cele" value={zl(goals)} />}
       {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" value={zl(tanks)} />}
       {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" value={zl(fleet.taxHold)} />}
+      {fleet.deposit !== 0 && <Line metaphor="Depozyt domowników" name="ich zaliczki – nie do wydania na siebie" value={zl(fleet.deposit)} testId="state-deposit" />}
       {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" value={zl(fleet.loot.amount)} />}
       {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" value={zl(fleet.debt)} testId="state-debt" />}
       <div className="grid grid-cols-3 gap-2 border-t border-line pt-2">
@@ -399,13 +412,25 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
   )
 }
 
+/** The household's balances (D80): what each member owes or holds as their advance; the loans given beside. */
 function Receivables({ fleet }: { fleet: FleetState }) {
   const r = fleet.receivables
+  const members = useMembers()
+  const shown = r.members.filter((m) => m.owed > 0 || m.deposit > 0)
   return (
-    <Panel title="Do zwrotu" testId="bridge-receivables">
+    <Panel title="Rozliczenia z domownikami" testId="bridge-receivables">
       <div className="flex flex-col gap-1 text-[12px]">
-        <div className="flex items-baseline gap-2">
-          <span className="text-muted">Należność domu (zakupy „do zwrotu”)</span>
+        {shown.map((m) => (
+          <div key={m.memberId} className="flex items-baseline gap-2" data-testid="bridge-member">
+            <span className="text-fg-strong">{memberName(m.memberId, members)}</span>
+            <span className="text-[11px] text-dim">
+              {m.owed > 0 ? `ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${daysBetween(m.since, fleet.today)} dni)` : ''}` : 'zaliczka – czeka na wydatki'}
+            </span>
+            <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>
+          </div>
+        ))}
+        <div className="flex items-baseline gap-2 border-t border-line/60 pt-1">
+          <span className="text-muted">Domownicy mają oddać razem</span>
           <span className="num ml-auto text-fg-strong" data-testid="bridge-house">
             {zl(r.house)}
           </span>
@@ -417,9 +442,9 @@ function Receivables({ fleet }: { fleet: FleetState }) {
           </div>
         )}
         <button className="self-start text-[11.5px] text-accent hover:underline" onClick={openRefundables}>
-          zakupy „do zwrotu” ›
+          wydatki domowników ›
         </button>
-        <p className="text-[11px] text-dim">Wpłata domownika najpierw spłaca należność (szybki wpis: „Wpływ” → od domownika).</p>
+        <p className="text-[11px] text-dim">Wpłata domownika najpierw wyrównuje to, co ma oddać; reszta to jego zaliczka albo przychód (Ustawienia → Domownicy).</p>
       </div>
     </Panel>
   )

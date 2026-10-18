@@ -6,7 +6,7 @@ import { updateRecord, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { AmountField, DateField, plnText, TimeField } from '../../components/fields'
-import { Badge, Empty, Field, Segmented, TextArea, TextField, Toggle, cx } from '../../components/ui'
+import { Badge, Empty, Field, Segmented, TextArea, TextField, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
 import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
@@ -14,6 +14,7 @@ import { AccountSelect, CategorySelect, useAccounts } from './pickers'
 import { deleteOperation, rememberAccount } from './state'
 import { rememberCategory, ruleFor } from '../import/rules'
 import { useCategories } from './pickers'
+import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberPickers'
 
 /** The kinds on the first row of the editor; the rest under „inne”. */
 const MAIN_KINDS: TxKind[] = ['expense', 'income', 'transfer', 'trading']
@@ -44,6 +45,10 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     kind,
     amount: sign * abs,
     refundable: kind === 'expense' ? t.refundable : false,
+    // Who finances a purchase and whose money an income is are other things (D80): the member stays with the same kind.
+    memberId: kind === t.kind ? t.memberId : null,
+    advance: kind === 'income' ? t.advance : false,
+    covers: kind === 'income' ? t.covers : [],
     splits: kind === 'expense' ? t.splits : [],
     repaid: kind === 'income' ? t.repaid : 0,
     counterAccountId: kind === 'transfer' ? t.counterAccountId : null,
@@ -84,12 +89,11 @@ export function OperationEditor({ id }: { id: string }) {
   const setDirection = (s: 1 | -1) => {
     setZeroSign(s)
     if (abs === 0 && t.splits.every((x) => x.amount === 0)) return
-    // The lines of a split receipt turn with it; money coming back is never „do zwrotu”.
+    // The lines of a split receipt turn with it; a product return of a member's purchase is theirs (D80).
     update((r) => ({
       ...r,
       amount: s * Math.abs(r.amount),
-      refundable: s < 0 ? r.refundable : false,
-      splits: r.splits.map((x) => ({ ...x, amount: s * Math.abs(x.amount), refundable: s < 0 ? x.refundable : false }))
+      splits: r.splits.map((x) => ({ ...x, amount: s * Math.abs(x.amount) }))
     }))
   }
   const directions = DIRECTIONS[t.kind]
@@ -218,12 +222,12 @@ export function OperationEditor({ id }: { id: string }) {
                   onClick={() =>
                     patch({
                       splits: [
-                        { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, note: '' },
-                        { id: newId(), amount: 0, categoryId: null, refundable: false, note: '' }
+                        { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, note: '' },
+                        { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, note: '' }
                       ]
                     })
                   }
-                  title="Kilka kategorii albo część swoja i część domowa"
+                  title="Kilka kategorii albo część swoja i część domownika"
                   data-testid="operation-split"
                 >
                   Podziel paragon
@@ -241,14 +245,11 @@ export function OperationEditor({ id }: { id: string }) {
                 </button>
               )}
               {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId })} />}
-              {outgoing && (
-                <Toggle
-                  checked={t.refundable}
-                  onChange={(refundable) => patch({ refundable })}
-                  label={<span>Do zwrotu – zakup dla domu (nie zjada energii, dom odda)</span>}
-                  data-testid="operation-refundable"
-                />
-              )}
+              <div className="flex items-center gap-2">
+                <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
+                <FinancerSelect refundable={t.refundable} memberId={t.memberId} onChange={(p) => patch(p)} testId="operation-financer" />
+              </div>
+              <FinancedNote t={t} />
             </>
           ) : (
             <SplitEditor t={t} sign={sign} update={update} />
@@ -256,31 +257,7 @@ export function OperationEditor({ id }: { id: string }) {
         </Section>
       )}
 
-      {t.kind === 'income' && (
-        <Section title="Zwrot należności">
-          <div className="flex items-center gap-2">
-            <AmountField
-              className="w-[120px]"
-              value={t.repaid}
-              onChange={(v) => patch({ repaid: Math.min(abs, v ?? 0) })}
-              allowEmpty
-              aria-label="Część zwracająca należność"
-              data-testid="operation-repaid"
-            />
-            <span className="text-muted">zł z tej wpłaty spłaca zakupy „do zwrotu”</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
-            <span data-testid="operation-house-open">Należność domu teraz: {plnText(fleet?.receivables.house ?? 0)} zł</span>
-            <button type="button" className="text-accent hover:underline" onClick={() => patch({ repaid: Math.min(abs, Math.max(0, (fleet?.receivables.house ?? 0) + t.repaid)) })}>
-              zwrot do wysokości należności
-            </button>
-            <button type="button" className="text-accent hover:underline" onClick={() => patch({ repaid: 0 })}>
-              cały wpływ jako przychód
-            </button>
-          </div>
-          <p className="text-[11.5px] text-dim">Wpłata domownika: zwrot zamyka należność (pieniądze wracają do osłon), reszta dokuje jako przychód.</p>
-        </Section>
-      )}
+      {t.kind === 'income' && t.amount >= 0 && <MemberIncome t={t} patch={patch} />}
 
       {t.kind === 'transfer' && (
         <Field label={outgoing ? 'Na konto' : 'Z konta'}>
@@ -391,7 +368,7 @@ function CargoSelect({ value, onChange }: { value: string | null; onChange: (id:
   )
 }
 
-/** A split receipt: lines with their own category, the house part „do zwrotu”; the lines sum to the amount. */
+/** A split receipt: lines with their own category, a household member's part (D80); the lines sum to the amount. */
 function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update: (fn: (r: Transaction) => Transaction) => void }) {
   const rest = useMemo(() => t.amount - sum(t.splits.map((s) => s.amount)), [t])
   const setLine = (id: string, p: Partial<Split>) => update((r) => ({ ...r, splits: r.splits.map((s) => (s.id === id ? { ...s, ...p } : s)) }))
@@ -401,14 +378,7 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
         <div key={s.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto_auto] items-center gap-1.5" data-testid="split-line">
           <AmountField value={Math.abs(s.amount)} onChange={(v) => setLine(s.id, { amount: sign * (v ?? 0) })} aria-label={`Kwota części ${i + 1}`} data-testid="split-amount" />
           <CategorySelect value={s.categoryId} onChange={(categoryId) => setLine(s.id, { categoryId })} data-testid="split-category" />
-          {sign < 0 ? (
-            <label className="flex items-center gap-1 text-[11px] text-muted" title="Część domowa: należność, nie wydatek">
-              <input type="checkbox" checked={s.refundable} onChange={(e) => setLine(s.id, { refundable: e.currentTarget.checked })} data-testid="split-refundable" />
-              dom
-            </label>
-          ) : (
-            <span />
-          )}
+          <FinancerSelect refundable={s.refundable} memberId={s.memberId} onChange={(p) => setLine(s.id, p)} compact testId="split-financer" />
           <button
             type="button"
             className="btn btn-ghost h-[22px] px-1"
@@ -419,7 +389,7 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
                 // One line left: back to a plain operation of that line's category.
                 if (splits.length > 1) return { ...r, splits }
                 const only = splits[0]
-                return { ...r, splits: [], categoryId: only?.categoryId ?? r.categoryId, refundable: only?.refundable ?? false }
+                return { ...r, splits: [], categoryId: only?.categoryId ?? r.categoryId, refundable: only?.refundable ?? false, memberId: only?.refundable ? only.memberId : null }
               })
             }
           >
@@ -428,7 +398,7 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
         </div>
       ))}
       <div className="flex items-center gap-2 text-[11.5px]">
-        <button type="button" className="btn h-[22px]" onClick={() => update((r) => ({ ...r, splits: [...r.splits, { id: newId(), amount: Math.sign(rest) === sign ? rest : 0, categoryId: null, refundable: false, note: '' }] }))} data-testid="split-add">
+        <button type="button" className="btn h-[22px]" onClick={() => update((r) => ({ ...r, splits: [...r.splits, { id: newId(), amount: Math.sign(rest) === sign ? rest : 0, categoryId: null, refundable: false, memberId: null, note: '' }] }))} data-testid="split-add">
           <IconPlus size={12} /> część
         </button>
         {rest !== 0 ? (

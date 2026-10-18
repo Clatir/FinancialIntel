@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
 import { computeFleet, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import type { HouseholdLedger } from '@shared/calc/household'
 import type { RecordEntry } from '@shared/api'
 import { useData } from './data'
 
@@ -74,4 +75,9 @@ export function useFleet(): FleetState | null {
 export function fleetNow(): FleetState | null {
   const s = useData.getState()
   return s.fi ? fleetOf(s.fi, s.records, Math.floor(Date.now() / 60_000) * 60_000) : null
+}
+
+/** The household's ledger as the engine counts it (D80: from the budget's start, up to today) – per operation too. */
+export function useHousehold(): HouseholdLedger | null {
+  return useFleet()?.household ?? null
 }

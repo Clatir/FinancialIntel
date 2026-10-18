@@ -9,6 +9,7 @@ import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { counterpartyKey } from '../import/classify'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
 import { cyclePosition, rangeMonths, sinkingSchedule, type FleetEvent } from './fleet'
+import { financedBy } from './household'
 import { categoryIndex, costOf, partsOf, sum } from './operations'
 
 /** Months of the salary's average (D70). */
@@ -261,6 +262,8 @@ export interface Debriefing {
   uncategorized: number
   /** The energy left at the month's end: the loot (D18). null = the month has not ended in the engine. */
   loot: number | null
+  /** What household members financed this month (D80): apart from my costs, by member (the most first). */
+  financed: Array<{ memberId: string; amount: number }>
 }
 
 /** The planned month in force for `month`: its own plan or the last earlier one. */
@@ -324,7 +327,8 @@ export function debriefing(
     envelopes,
     cargo,
     uncategorized,
-    loot: ended ? Math.max(0, end?.amount ?? 0) : null
+    loot: ended ? Math.max(0, end?.amount ?? 0) : null,
+    financed: financedBy(txs)
   }
 }
 

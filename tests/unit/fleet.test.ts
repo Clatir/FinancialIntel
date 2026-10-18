@@ -22,6 +22,7 @@ import {
   defaultCategoryId,
   dockingSchema,
   goalSchema,
+  HOUSE_MEMBER_ID,
   MBANK_ACCOUNT_ID,
   monthPlanSchema,
   SCHEMA_VERSION,
@@ -276,7 +277,13 @@ describe('zakup „do zwrotu” i wpłata domownika (D20, D21)', () => {
     expect(s.energy).toBe(plain.energy)
     expect(s.daily?.spentBefore).toBe(0)
     expect(s.shields.amount).toBe(plain.shields.amount - zl(150))
-    expect(s.receivables).toEqual({ house: zl(150), houseSince: '2026-10-05', loans: {}, total: zl(150) })
+    expect(s.receivables).toEqual({
+      house: zl(150),
+      houseSince: '2026-10-05',
+      members: [{ memberId: HOUSE_MEMBER_ID, owed: zl(150), deposit: 0, open: [{ txId: bought.id, date: '2026-10-05', amount: zl(150) }], since: '2026-10-05' }],
+      loans: {},
+      total: zl(150)
+    })
     expect(costOf(bought)).toBe(0)
   })
 
@@ -296,8 +303,8 @@ describe('zakup „do zwrotu” i wpłata domownika (D20, D21)', () => {
   it('podział paragonu: część swoja z energii, część domowa jako należność', () => {
     const receipt = tx('2026-10-06', zl(-120), {
       splits: [
-        { id: nextId(), amount: zl(-80), categoryId: GROCERIES, refundable: false, note: '' },
-        { id: nextId(), amount: zl(-40), categoryId: GROCERIES, refundable: true, note: 'dla domu' }
+        { id: nextId(), amount: zl(-80), categoryId: GROCERIES, refundable: false, memberId: null, note: '' },
+        { id: nextId(), amount: zl(-40), categoryId: GROCERIES, refundable: true, memberId: null, note: 'dla domu' }
       ]
     })
     expect(partsOf(receipt).map((p) => [p.amount, p.refundable])).toEqual([

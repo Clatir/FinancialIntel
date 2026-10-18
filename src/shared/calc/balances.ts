@@ -6,14 +6,21 @@
 import type { Balance, Transaction } from '../schema/records'
 import { sum } from './operations'
 
+/** Is `b` an account's opening balance in force rather than `prev`: the later one, of one day the last edited. */
+const laterOpening = (b: Balance, prev: Balance | null | undefined): boolean => !prev || b.date > prev.date || (b.date === prev.date && b.updatedAt > prev.updatedAt)
+
 /** The opening balance in force for an account: the latest one (an opening moved later restarts the account). */
 export function openingOf(accountId: string, balances: readonly Balance[]): Balance | null {
   let found: Balance | null = null
-  for (const b of balances) {
-    if (b.accountId !== accountId || b.kind !== 'opening') continue
-    if (!found || b.date > found.date || (b.date === found.date && b.updatedAt > found.updatedAt)) found = b
-  }
+  for (const b of balances) if (b.accountId === accountId && b.kind === 'opening' && laterOpening(b, found)) found = b
   return found
+}
+
+/** Each account's opening balance in force on `today` – the ones dated later do not count yet (none = all of them). */
+export function openingsOf(balances: readonly Balance[], today?: string): Map<string, Balance> {
+  const out = new Map<string, Balance>()
+  for (const b of balances) if (b.kind === 'opening' && (today == null || b.date <= today) && laterOpening(b, out.get(b.accountId))) out.set(b.accountId, b)
+  return out
 }
 
 /** Balance of an account at the end of `date`: the opening plus the operations from its day to `date`. */

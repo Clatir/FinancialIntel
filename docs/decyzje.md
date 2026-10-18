@@ -208,6 +208,27 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **D79** (17.10.2026) Zgłoszenie użytkownika po 1.2.2: rozpoznawanie podobnych transakcji nie działa – wiele nazw ma
   datę transakcji, a to samo słowo w nazwach (nazwa miasta, „bar”) łączy niezwiązane transakcje. Poprawka 1.2.3: nazwy bez
   dopisków banku, ostrożniejsze podobieństwo i propozycje, łączenie tylko parami, „Rozłącz wszystkie”.
+- **D80** (17.10.2026) Rozliczenia z domownikami (1.3.0, prośba użytkownika: część wydatków finansują inne osoby;
+  propozycja użytkownika – odjąć wydatek od wpływów tej osoby; wybrany wariant A z „Przed etapem 1.3.0”, komenda „Ok”).
+  Zastępuje „jedna należność od domu (bez osób)” z D21 i rozszerza D20. Odpowiedzi użytkownika: kto płaci pierwszy –
+  różnie (oba kierunki); tylko domownicy; sfinansowane wydatki widać osobno; nic dotąd nie oznaczone („do zwrotu”,
+  „od domownika”) – bez przenoszenia danych. Przyjęte propozycje:
+  - każdy domownik ma saldo w obie strony: należność (zapłaciłem za niego) albo zaliczka (przelał z góry);
+  - wydatek – cały albo część paragonu – „finansuje: osoba”: nie zjada energii ani kopert, nie jest moim kosztem; najpierw
+    bierze z zaliczki tej osoby, brakujące pieniądze pożyczają osłony (jak dotąd „do zwrotu”);
+  - a. domownicy w Ustawieniach (imię i nazwy nadawcy z banku); import rozpoznaje przelew po nadawcy i podpowiada
+    dopisanie nowej osoby;
+  - b. wpływ od domownika najpierw wyrównuje jego należność; reszta: zaliczka albo przychód – pytanie raz, potem
+    zapamiętane dla tej osoby;
+  - c. zaliczka = pieniądze domowników na moim koncie, nie do wydania na siebie: osobno w stanie okrętu („Depozyt
+    domowników”), nie w energii; wydatek „finansuje X” najpierw zużywa zaliczkę X;
+  - d. pomost: należność bez zaliczki pożyczają osłony, zwrot wraca do osłon;
+  - e. przypomnienie (odprawa i powiadomienie) o należności starszej niż 30 dni – dla każdej osoby; zaliczka tylko
+    pokazywana;
+  - f. gra: wydatek sfinansowany przez domownika nie jest naruszeniem i nie liczy się do kopert dnia;
+  - g. w Operacjach zbiorczo „finansuje: X”; przy wpływie opcjonalnie wskazanie pokrytych wydatków (inaczej od
+    najstarszych); reguła importu może oznaczać, kto finansuje (po sklepie);
+  - salda na Mostku i Radarze, sfinansowane wydatki osobno w debriefingu miesiąca i Raportach.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -639,3 +660,73 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     (zmiana klucza zgubiłaby reguły i połączenia zapisane na nim).
   Wynik: 4 pary podobnych nazw (wszystkie trafne), 193 grupy, propozycje słowa przy 43 grupach – bez miast, słów banku i
   pośredników; lista operacji użytkownika (271) bez zmian (1 trafna para).
+
+### 1.3.0 – rozliczenia z domownikami (18.10.2026)
+
+- **T105** Rejestr rozliczeń (D80, `shared/calc/household.ts` `settleHousehold`): liczony z operacji, nigdy zapisywany,
+  w kolejności silnika (data, godzina – bez godziny pierwsza, utworzenie, id). Saldo osoby w obie strony: ma oddać
+  (kolejka otwartych zakupów, od najstarszego) albo zaliczka. Wydatek finansowany (część z `refundable`, osoba
+  `financerOf` = `memberId`, bez niego pierwszy domownik) bierze najpierw z zaliczki, resztę pożyczają osłony; wpłata
+  domownika (`income` z `memberId`) spłaca najpierw zakupy z `covers`, potem najstarsze, reszta to zaliczka (`advance`)
+  albo przychód; zwrot towaru z zakupu domownika to jego pieniądze (spłata, reszta zaliczka). Spłata jest dynamiczna:
+  zakup oznaczony później z wcześniejszą datą sam zamienia przychód w spłatę. Przepływy operacji (`byTx`: z zaliczki,
+  pożyczone, spłata, zaliczka, przychód) czytają silnik warstw, edytor, raporty i misja – jeden rejestr
+  (`FleetState.household`; bez floty `fleet.ts` `householdOf`).
+- **T106** Start budżetu: salda osób zerowane przy pierwszej operacji od startu (jak pożyczki – T70) – to, co było przed
+  startem, jest w saldzie otwarcia; przepływy sprzed startu zostają dla statystyk (ile z wpłaty było przychodem). Konto
+  dołączone po starcie: jego operacje sprzed jego salda otwarcia są w tym saldzie (silnik je pomija – `counts`), więc
+  rejestr też (`openings`). Jedna reguła salda otwarcia w mocy (`balances.ts` `openingsOf` / `openingOf`: najpóźniejsze
+  do dziś, z jednego dnia ostatnio edytowane) – silnik, start budżetu i rejestr.
+- **T107** Warstwy (`fleet.ts`): nowa warstwa `deposit` (zaliczki domowników), wliczona do sumy warstw – suma warstw =
+  salda kont. Zakup finansowany: część z zaliczki z depozytu, reszta z osłon (+ należność); wpłata: spłata do osłon
+  (− należność), zaliczka do depozytu, przychód dokuje jak dostawa. Zakup finansowany nie zjada energii ani kopert,
+  nie jest kosztem (`costOf`) ani naruszeniem w grze; wpłata domownika jest przychodem statystyk tylko w części
+  „przychód” (`incomeOf(t, rejestr)`). `receivables.members` – saldo każdej osoby, `house` – suma należności,
+  `houseSince` – najstarszy otwarty zakup.
+- **T108** Zapisy sprzed 1.3.0: `refundable` bez `memberId` należy do pierwszego domownika (`HOUSE_MEMBER_ID` =
+  `fixedId('MEM', 1)`, „Dom” na domyślnej liście); wpływ z `repaid` > 0 bez osoby to pieniądze „Domu” spłacające
+  najwyżej `repaid` (D20), reszta przychód. Nowe zapisy mają `repaid` = 0 – decyduje rejestr. Pola addytywne
+  (`memberId`, `advance`, `covers` w operacji, `memberId` w części paragonu i w regule, `settings.household`) –
+  `SCHEMA_VERSION` bez zmian; 1.2.x zachowuje je (`looseObject`), ale liczy po swojemu (jedna należność domu).
+- **T109** Domownicy (`settings.household.members`: `id`, `name` 1–40 znaków, `bankNames` do 20, `inflow` pytaj /
+  zaliczka / przychód, `archived`): usunięcie = archiwum (saldo nadal liczone; w listach wyboru aktywni i już wybrany).
+  Imiona unikalne (Ustawienia; „+ domownik” z importu dopisuje „2”, „3”…). Odpowiedź „zaliczka / przychód” (D80 b,
+  `rememberInflows`): pierwsza jawna decyzja dla osoby z „pytaj” (import – decyzja tematu, grupy albo wiersza; edytor;
+  szybki wpis; przy kilku w jednym imporcie – częstsza) zostaje jej ustawieniem; potem zmiana tylko w Ustawieniach,
+  a pojedyncza wpłata może być inna.
+- **T110** Import (`classify.ts`, `reconcile.ts`): domownik po nazwie w banku (`memberOf`: każde słowo nazwy z banku
+  ≥ 2 litery w nazwie nadawcy; nazwa z jednego słowa – tylko cała nazwa nadawcy), tylko przelewy przychodzące
+  (PRZELEW, BLIK P2P, WPŁATA, UZNANIE, ZLECENIE), po przelewie własnym. „Pytaj” = propozycja „od domownika – reszta
+  jako przychód” do decyzji (`source: 'none'`) we własnym temacie (temat z propozycji, nie temat przelewów obcych osób
+  – jego decyzja nie zabiera osoby); inaczej rozpoznane (`builtin`). Reguła zwykłego wpływu bez osoby (nauczona przed
+  dopisaniem osoby albo przed 1.3.0, także „od domownika” bez osoby) ustępuje domownikowi; reguła z osobą, przelew
+  własny i inne rodzaje – nie. Opcje decyzji: „Finansuje: X” (wydatek z kategorią) i „Od domownika: X – reszta jako
+  przychód / zaliczka” dla każdej aktywnej osoby (i tej, którą decyzja już wskazuje). „+ domownik” przy grupie
+  przelewów przychodzących od nieznanej osoby: osoba z pierwszego słowa nazwy z banku, grupa od razu jej (plan liczony
+  od nowa przenosi decyzję po operacjach). Reguły, słowa kluczowe, duplikaty i scalanie zachowują osobę (`memberId`).
+- **T111** Przypomnienie (D80 e): zakup osoby nieoddany dłużej niż 30 dni (`HOUSE_DAYS`) od najstarszego otwartego –
+  pozycja odprawy dla każdej osoby (klucz: osoba i data najstarszego zakupu – nowy zakup jej nie odnawia, spłata
+  najstarszego tak) i powiadomienie „Rozliczenie z domownikiem” (tag radar, `notify.house`, domyślnie włączone).
+  Zaliczka jest tylko pokazywana. Misja „Rozlicz się z domownikami” = suma spłat tygodnia z rejestru silnika na dzień
+  oceny (`householdOf`).
+- **T112** Ekrany:
+  - Ustawienia → Domownicy: lista, nazwy w banku (Enter dodaje), pytaj / zaliczka / przychód, saldo, archiwum;
+  - edytor operacji: „Finansuje” (cały wydatek i każda część paragonu) z tym, co zrobił z tego rejestr („z zaliczki …,
+    pożyczone z osłon … (ma oddać)”); przy wpływie „Od domownika”: reszta przychód / zaliczka, przepływy, saldo osoby,
+    „Pokrywa” (otwarte zakupy osoby do daty wpłaty; inaczej od najstarszych); osoba wybrana przed wpisaniem kwoty
+    zostaje;
+  - szybki wpis: rodzaj „Za domownika” (bez wybranej osoby zapis odmawia), osoba przy części paragonu, „Od domownika”
+    przy wpływie z podglądem („wyrównuje …, reszta … jako zaliczka / przychód”);
+  - Operacje: „Ustaw finansującego” dla zaznaczonych wydatków bez podziału (z „Cofnij”), oznaczenie „domownik”;
+  - Mostek: „Depozyt domowników” w stanie okrętu, „Rozliczenia z domownikami” (osoba: ma oddać od …, albo zaliczka),
+    ostatnie operacje „finansuje: X” / „od: X” zamiast kategorii; Radar – salda osób w „Należnościach”;
+  - Plan miesiąca i Raporty: „Sfinansowane przez domowników (osoby) – nie Twoje koszty” w debriefingu i przeglądzie
+    rocznym; CSV i Excel – kolumna „Finansuje” zamiast „Do zwrotu”.
+- **T113** Statystyki (`weekNumbers`, `yearNumbers`, `monthRows`): przychód z rejestru silnika (`FleetState.household`),
+  liczonego raz; bez floty – rejestr całej historii.
+- **T114** Przegląd 1.3.0 (`/code-review` high, 10 kandydatów – wszystkie poprawione): rejestr jak silnik przy koncie
+  dołączonym później (T106); reguła sprzed dopisania osoby i osobny temat domownika (T110); szybki wpis bez osoby (T112;
+  podgląd i zapis czytają brak osoby jak rejestr); misja na dzień oceny (T111); osoba wybrana przy kwocie 0; jeden
+  rejestr dla ekranów zamiast drugiego liczenia; rejestr tygodnia liczony raz; jedna reguła salda otwarcia; unikalne
+  imiona.
+

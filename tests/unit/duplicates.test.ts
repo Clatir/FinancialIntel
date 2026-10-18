@@ -43,7 +43,7 @@ describe('import: wpis ręczny nie wchodzi drugi raz (D77)', () => {
       [coffee.id, 'name'],
       [shop.id, 'amount']
     ])
-    const result = buildImport(plan, empty(), { now: NOW, house: 0, makeId: id, rules: [] })
+    const result = buildImport(plan, empty(), { now: NOW, makeId: id, rules: [] })
     expect(result.create).toEqual([])
     expect(result.update.find((t) => t.id === shop.id)).toMatchObject({ amount: -4999, date: '2026-10-12', categoryId: FOOD, counterparty: 'Biedronka' })
     // Another name and a transfer, or two days apart: asks – joined only when ticked (ICTTJ: never by itself).
@@ -51,8 +51,8 @@ describe('import: wpis ręczny nie wchodzi drugi raz (D77)', () => {
     const p2p = planImport(file([row({ operation: 'BLIK P2P-WYCHODZĄCY', counterparty: 'ANNA X', date: '2026-10-09' })]), MBANK_ACCOUNT_ID, [gift], ctx)
     const asks = p2p.rows[0]!
     expect(asks).toMatchObject({ status: 'merge', loose: 'name', ask: true })
-    expect(buildImport(p2p, empty(), { now: NOW, house: 0, makeId: id, rules: [] }).create).toHaveLength(1)
-    expect(buildImport(p2p, { ...empty(), noMerge: { [asks.key]: false } }, { now: NOW, house: 0, makeId: id, rules: [] }).create).toHaveLength(0)
+    expect(buildImport(p2p, empty(), { now: NOW, makeId: id, rules: [] }).create).toHaveLength(1)
+    expect(buildImport(p2p, { ...empty(), noMerge: { [asks.key]: false } }, { now: NOW, makeId: id, rules: [] }).create).toHaveLength(0)
     // A correction of a balance is never a hand-typed purchase.
     const correction = tx({ kind: 'correction', counterparty: 'Korekta salda' })
     expect(planImport(file([row({ counterparty: 'SKLEP' })]), MBANK_ACCOUNT_ID, [correction], ctx).rows[0]!.status).toBe('new')

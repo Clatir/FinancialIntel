@@ -2,14 +2,18 @@
  * Operations as the budget sees them: the lines of a (split) receipt, categories and their envelopes, what counts as a
  * net cost and as income, the captain's log marks. Pure; used by the layers' engine (fleet.ts) and the screens.
  */
-import { envelopeKind, type Category, type EnvelopeKind, type Orders } from '../schema/budget'
+import { envelopeKind, HOUSE_MEMBER_ID, type Category, type EnvelopeKind, type Orders } from '../schema/budget'
 import type { Transaction } from '../schema/records'
 import { inClockWindow } from './dates'
+import type { HouseholdLedger } from './household'
 
 export interface Part {
   amount: number
   categoryId: string | null
+  /** Financed by a household member (D80): not a cost of mine. */
   refundable: boolean
+  /** Who finances it (a refundable part; null = the first member). */
+  memberId: string | null
 }
 
 export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0)
@@ -18,12 +22,27 @@ export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b,
  * Lines of an operation: its split receipt (a sum that does not match the amount – a file edited by hand – leaves the
  * rest as one more line of the operation's own category), or the operation itself as one line.
  */
-export function partsOf(t: Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'>): Part[] {
-  if (!t.splits.length) return [{ amount: t.amount, categoryId: t.categoryId, refundable: t.refundable }]
-  const parts: Part[] = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable }))
+export function partsOf(t: Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & { memberId?: string | null }): Part[] {
+  const own = { refundable: t.refundable, memberId: t.refundable ? (t.memberId ?? null) : null }
+  if (!t.splits.length) return [{ amount: t.amount, categoryId: t.categoryId, ...own }]
+  const parts: Part[] = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable, memberId: s.refundable ? (s.memberId ?? null) : null }))
   const rest = t.amount - sum(parts.map((p) => p.amount))
-  if (rest !== 0) parts.push({ amount: rest, categoryId: t.categoryId, refundable: t.refundable })
+  if (rest !== 0) parts.push({ amount: rest, categoryId: t.categoryId, ...own })
   return parts
+}
+
+/** The household member of a part financed by one (D80): its own, else the first member („Dom”, D21). */
+export const financerOf = (p: Pick<Part, 'memberId'>): string => p.memberId ?? HOUSE_MEMBER_ID
+
+/**
+ * What household members financed in an operation (D80), by member: money out of the purchases they finance less what
+ * comes back of them (a product return). Not a cost of mine – the reports show it apart.
+ */
+export function financedOf(t: Transaction): Map<string, number> {
+  const out = new Map<string, number>()
+  if (t.kind !== 'expense') return out
+  for (const p of partsOf(t)) if (p.refundable) out.set(financerOf(p), (out.get(financerOf(p)) ?? 0) - p.amount)
+  return out
 }
 
 /** Split `amount` grosze into `n` parts: equal parts rounded down, the rest in the last one (T3). */
@@ -75,17 +94,24 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
 
 /**
  * Net cost of an operation (grosze, > 0 = a cost, < 0 = a product return): expenses minus product returns, without
- * own transfers, XTB top-ups, purchases for the house („do zwrotu”) and PIT-38 (spec). An expense paid from a goal's
- * money is not a monthly cost either (T24).
+ * own transfers, XTB top-ups, purchases a household member finances (D80) and PIT-38 (spec). An expense paid from a
+ * goal's money is not a monthly cost either (T24).
  */
 export function costOf(t: Transaction): number {
   if (t.kind !== 'expense' || t.goalId) return 0
   return -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)) || 0
 }
 
-/** Income of an operation for the statistics (the salary warning): deliveries, without repaid receivables. */
-export function incomeOf(t: Transaction): number {
-  if (t.kind === 'income') return Math.max(0, t.amount - t.repaid)
+/**
+ * Income of an operation for the statistics (the salary warning): deliveries, without what a household member pays back
+ * or pays ahead (D80) – the ledger (`settleHousehold`) says how much of their money is income.
+ */
+export function incomeOf(t: Transaction, ledger?: Pick<HouseholdLedger, 'byTx'>): number {
+  if (t.kind === 'income') {
+    const flows = ledger?.byTx.get(t.id)
+    if (flows) return Math.max(0, sum(flows.map((f) => f.income)))
+    return Math.max(0, t.amount - t.repaid)
+  }
   if (t.kind === 'trading') return Math.max(0, t.amount)
   return 0
 }

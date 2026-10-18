@@ -1,13 +1,13 @@
 # Financial Intel – postęp
 
-**Stan:** 1.2.3 – poprawka podobnych nazw i propozycji słowa po zgłoszeniu użytkownika (D79: daty transakcji w nazwach,
-wspólne słowa łączyły niezwiązane) zrobiona na gałęzi `claude/import-1.2.3`, PR do `main` – scalenie przy zielonym CI
-(D71). **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
+**Stan:** 1.3.0 – rozliczenia z domownikami (D80) gotowe: PR #10 do `main`, scalenie po zielonym CI (D71). **1.2.3
+wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – odbiór 1.2.3 w aplikacji (sprawdzone już na prawdziwej historii rachunku użytkownika –
-T104); potem kalibracja progów gry po pierwszym miesiącu (na prawdziwych danych).
+**Następny krok:** pauza – odbiór 1.2.3 i 1.3.0 w aplikacji (domownicy w Ustawieniach, kilka wspólnych wydatków
+oznaczonych „finansuje”, salda na Mostku, import z wpłatami domowników), kalibracja progów gry po pierwszym miesiącu na
+prawdziwych danych; kolejny etap tylko na komendę użytkownika (D67).
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -30,9 +30,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **D** | E7 Dowództwo + E8 Wywiad i raporty | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 2–3 h) | 1.2.0 | ✅ komenda i propozycje (D73) | ✅ wydane (PR #6) |
 | 1.2.1 | Grupowanie importu z mBanku (1 + 3 + 4 + 2) + wyszukiwarka i decyzje zbiorcze + duplikaty jak w ICTTJ | Opus 5.5 | **max** | zmierzone ok. 2 h (plan był 1–1,5 h + 0,5 h + 0,75 h) | 1.2.1 | ✅ wybór pomysłów (D75–D77) | ✅ wydane (PR #7) |
 | 1.2.2 | Podobne nazwy (5) + propozycja reguły z liczbą operacji (6) | Opus 5.5 | **max** | zmierzone ok. 1 h (plan był 1–1,5 h) | 1.2.2 | ✅ wybór „opcja 2” (D78) | ✅ wydane (PR #8) |
-| 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79) | Opus 5.5 | **max** | zmierzone ok. 1 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ zrobione, PR do `main` |
+| 1.2.3 | Poprawka: dopiski banku w nazwach, ostrożniejsze podobieństwo i propozycje (D79), sprawdzenie na prawdziwej historii rachunku (T104) | Opus 5.5 | **max** | zmierzone ok. 1,5 h | 1.2.3 | ✅ zgłoszenie (D79) | ✅ wydane (PR #9) |
+| 1.3.0 | Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80) | Opus 5.5 | **max** | ok. 3,5 h (szacunek z przebiegu sesji; plan był 2,5–3 h) | 1.3.0 | ✅ odpowiedzi i komenda (D80) | ✅ gotowe, PR #10 – scalenie po zielonym CI |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.2.3** | | | **zmierzone ok. 13,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.3.0** | | | **ok. 17,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -47,23 +48,52 @@ obecne środki i proponuje pensję z silnika, a szybki wpis liczy energię przed
 Dla porównania: programista człowiek potrzebowałby wielokrotnie więcej – E0 ok. 1–2 tygodni, MVP ok. 2–3 miesięcy,
 całość ok. 4–6 miesięcy (szacunek zgrubny).
 
-## Przed etapem 1.2.2 – podobne nazwy i propozycja reguły (17.10.2026)
+## Przed etapem 1.3.0 – rozliczenia z domownikami (17.10.2026)
 
-1. **Co trzeba wiedzieć** – 1.2.1 wydane (PR #7): marki, słownik sieci, słowa kluczowe, tematy, decyzje zbiorcze,
-   duplikaty. Zostały pomysły 5 i 6 z propozycji (D75: „na razie bez”); użytkownik wybrał je jako „opcję 2” (D78).
-   Zmiana dotyczy tylko importu i reguł; bez AI, bez sieci.
-2. **Co użytkownik musi powiedzieć** – wybór ✅ (D78). Rozstrzygam sam (T-decyzje, do zmiany na życzenie):
-   - podobne nazwy tylko spoza słownika sieci (sieci ze słownika łączą się już same), także z markami Twoich reguł
-     z wcześniejszych importów („MOKKA CAFE” ⟷ reguła „KAWIARNIA MOKKA”); nic nie łączy się samo – „Połącz” albo
-     „To nie to samo”, oba zapamiętane (połączone nazwy kolejne importy grupują razem, odrzucona para nie wraca);
-     połączenie można cofnąć w Ustawieniach → Import z banku;
-   - do tego ręczne „Połącz nazwy” dla zaznaczonych grup (gdy podobieństwo nie wystarcza – „MOKKA DWORZEC” i „MOKKA
-     ARKADIA”);
-   - propozycja reguły: po Twojej decyzji dla grupy słowa z jej nazwy (przy przelewach – z tytułu), które są też w innych
-     operacjach pliku bez Twojej decyzji, z liczbą operacji, które reguła zmieni; kliknięcie = Twoje słowo kluczowe
-     (jak w Ustawieniach), plik liczony od nowa od razu.
-3. **Co przygotować** – nic.
-4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1–1,5 h.
+1. **Co trzeba wiedzieć** – część wydatków finansują domownicy; dotąd FI miał jedną należność „od domu” (D21) i wybór
+   zwrot / przychód przy wpłacie (D20). Zakres: saldo każdego domownika w obie strony (należność albo zaliczka),
+   wydatek albo część paragonu „finansuje: osoba” (nie zjada energii, nie jest kosztem), wpływ od domownika najpierw
+   wyrównuje należność, reszta zaliczka albo przychód; salda na Mostku i Radarze, przypomnienia, sfinansowane osobno
+   w debriefingu i Raportach. 1.2.3 wydane (PR #9), nic nie jest otwarte.
+2. **Co użytkownik musi powiedzieć** – ✅ odpowiedzi (kto płaci pierwszy: różnie; tylko domownicy; sfinansowane widać
+   osobno; nic dotąd nie oznaczone) i propozycje a–g przyjęte komendą „Ok” (D80).
+3. **Co przygotować** – nic przed startem; po wydaniu: domownicy w Ustawieniach, oznaczenie kilku wspólnych wydatków,
+   sprawdzenie sald na Mostku i dopasowania po imporcie.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2,5–3 h.
+
+## 1.3.0 – rozliczenia z domownikami (18.10.2026)
+
+Prośba użytkownika: część wydatków finansują inne osoby (propozycja użytkownika – odjąć wydatek od wpływów tej osoby).
+Wybrany wariant A: saldo każdego domownika w obie strony (D80, propozycje a–g przyjęte komendą „Ok”).
+
+Zrobione:
+- Rejestr rozliczeń (`calc/household.ts`): liczony z operacji w kolejności silnika, nigdy zapisywany; zakup „finansuje:
+  osoba” najpierw z jej zaliczki, resztę pożyczają osłony; wpłata najpierw spłaca (wskazane zakupy, inaczej od
+  najstarszych), reszta zaliczka albo przychód; zwrot towaru z zakupu domownika = jego pieniądze; salda od startu budżetu
+  (jak pożyczki), konto dołączone później – bez operacji sprzed jego salda otwarcia (T105, T106).
+- Silnik warstw: nowa warstwa „Depozyt domowników” (suma warstw = salda kont), należności każdej osoby, przychód bez
+  spłat i zaliczek, zakup finansowany nie jest kosztem ani naruszeniem w grze (T107); zapisy sprzed 1.3.0 – „Dom”
+  (T108); misja „Rozlicz się z domownikami” z tego samego rejestru.
+- Ustawienia → Domownicy (nazwy w banku, „pytaj / zaliczka / przychód” zapamiętane po pierwszej odpowiedzi – T109).
+- Import: domownik po nazwie nadawcy (z „pytaj” we własnym temacie), „+ domownik”, opcje „Finansuje: X” i „Od
+  domownika: X – reszta jako …”, reguły i słowa kluczowe z osobą; reguła zwykłego wpływu sprzed dopisania osoby
+  ustępuje domownikowi (T110).
+- Ekrany (T112): edytor (kto finansuje – cały wydatek i część paragonu; wpłata od domownika z „Pokrywa”), szybki wpis
+  („Za domownika”, „Od domownika” z podglądem), Operacje („Ustaw finansującego” z „Cofnij”), Mostek (depozyt, rozliczenia,
+  kto finansuje w ostatnich operacjach), Radar, Plan miesiąca i Raporty („Sfinansowane przez domowników”), CSV / Excel
+  („Finansuje”); przypomnienie po 30 dniach w odprawie i powiadomieniu (T111).
+- Przegląd `/code-review` high: 10 znalezisk, wszystkie poprawione (T114) – najważniejsze: rejestr jak silnik przy koncie
+  dołączonym później (depozyt mógł zejść poniżej zera), stara reguła „wpływ” wygrywała z dopisanym domownikiem, decyzja
+  tematu przelewów obcych osób zabierała osobę, szybki wpis bez wybranej osoby księgował „Dom”.
+- Testy: 381 unit + fs (nowe `tests/unit/household.test.ts`, domownicy w `import.test.ts`), E2E 18 (nowy
+  `tests/e2e/household.spec.ts`; Mostek, Operacje, import i CSV dostosowane).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.3.0, Windows):
+1. Ustawienia → Domownicy: osoby z nazwami nadawcy z banku (albo „+ domownik” w imporcie), odpowiedź „zaliczka /
+   przychód”; pierwsza osoba „Dom” – zmień imię, jeśli to konkretna osoba.
+2. Kilka wspólnych wydatków oznaczonych „finansuje” (edytor, szybki wpis albo „Ustaw finansującego” w Operacjach) –
+   salda na Mostku i Radarze, energia bez tych zakupów.
+3. Import z wpłatami domowników: spłata, reszta jako zaliczka (depozyt w stanie okrętu) albo przychód.
 
 ## 1.2.3 – poprawka podobnych nazw (17.10.2026)
 
@@ -730,3 +760,7 @@ Do sprawdzenia przez użytkownika (Windows 11):
   słowa); poprawka 1.2.3 – nazwy bez dopisków banku, ostrożniejsze podobieństwo i propozycje; przegląd i poprawki; PR
   #9 do `main`; użytkownik przysłał historię rachunku – sprawdzenie na niej (T104), poprawki formatu banku, prowizji,
   zwrotu towaru i pośredników, drugi przegląd.
+- 17.10.2026 – PR #9 scalony, wydanie 1.2.3 opublikowane; prośba użytkownika: część wydatków finansują domownicy –
+  propozycja (wariant A: saldo każdej osoby w obie strony), odpowiedzi i komenda „Ok” (D80); start 1.3.0.
+- 18.10.2026 – 1.3.0 (rejestr rozliczeń, depozyt w warstwach, domownicy w Ustawieniach, import z osobami, edytor, szybki
+  wpis, Operacje, Mostek, Radar, raporty), przegląd i poprawki; PR #10 do `main`.

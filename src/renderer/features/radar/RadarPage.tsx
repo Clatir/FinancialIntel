@@ -17,6 +17,8 @@ import { Columns } from '../../components/layout'
 import { Badge, Empty, Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
+import { useMembers } from '../household/actions'
+import { memberName } from '@shared/calc/household'
 import { openRefundables } from '../operations/state'
 import { addLoan, closeLoan, deleteLoan, recordPayment, type NewLoan } from './actions'
 
@@ -27,6 +29,7 @@ const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', astero
 export function RadarPage() {
   const fleet = useFleet()
   const plans = useRecordList('months')
+  const members = useMembers()
   const containers = useRecordList('containers')
   const readOnly = useData((s) => !!s.status?.readOnly)
   const items = useMemo(
@@ -37,7 +40,6 @@ export function RadarPage() {
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const loans = fleet.loans
   const r = fleet.receivables
-  const houseDays = r.houseSince ? daysBetween(r.houseSince, fleet.today) : null
   const active = loans.filter((l) => !l.loan.closedAt)
   const closed = loans.filter((l) => l.loan.closedAt)
   const pit = pit38Deadline(fleet.today)
@@ -83,17 +85,32 @@ export function RadarPage() {
             {!readOnly && <NewLoanPanel today={fleet.today} />}
             <Panel title="Należności" testId="radar-receivables">
               <div className="flex flex-col gap-1 text-[12px]">
+                {/* The household (D80): each member's balance both ways – owed purchases, their advance held. */}
+                {r.members
+                  .filter((m) => m.owed > 0 || m.deposit > 0)
+                  .map((m) => {
+                    const days = m.since ? daysBetween(m.since, fleet.today) : null
+                    return (
+                      <div key={m.memberId} className="flex flex-col" data-testid="radar-member">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-muted">{memberName(m.memberId, members)}</span>
+                          <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : 'zaliczka (depozyt)'}</span>
+                          <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>
+                        </div>
+                        {m.since && m.owed > 0 && (
+                          <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
+                            najstarszy zakup z {plDate(m.since)} ({days} dni)
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
                 <div className="flex items-baseline gap-2">
-                  <span className="text-muted">Dom (zakupy „do zwrotu”)</span>
+                  <span className="text-muted">Domownicy mają oddać razem</span>
                   <span className="num ml-auto text-fg-strong" data-testid="radar-house">
                     {zl(r.house)}
                   </span>
                 </div>
-                {r.houseSince && r.house > 0 && (
-                  <span className={cx('text-[11.5px]', (houseDays ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
-                    najstarszy niespłacony zakup z {plDate(r.houseSince)} ({houseDays} dni)
-                  </span>
-                )}
                 <div className="flex items-baseline gap-2">
                   <span className="text-muted">Pożyczki udzielone</span>
                   <span className="num ml-auto">{zl(r.total - r.house)}</span>
@@ -107,7 +124,7 @@ export function RadarPage() {
                   </div>
                 )}
                 <button className="self-start text-[11.5px] text-accent hover:underline" onClick={openRefundables}>
-                  zakupy „do zwrotu” ›
+                  wydatki domowników ›
                 </button>
               </div>
             </Panel>

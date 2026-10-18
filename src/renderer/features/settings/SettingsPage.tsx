@@ -12,6 +12,7 @@ import { CategoriesTab } from './CategoriesTab'
 import { ImportTab } from './ImportTab'
 import { LayersTab, NotifyTab } from './MachineTabs'
 import { IctjTab } from './IctjTab'
+import { HouseholdTab } from './HouseholdTab'
 import { IconFolder, IconPlus, IconSync } from '../../components/icons'
 import { Field, NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
@@ -25,6 +26,7 @@ export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'accounts', label: 'Konta' },
   { id: 'categories', label: 'Kategorie' },
   { id: 'layers', label: 'Warstwy i rozkazy' },
+  { id: 'household', label: 'Domownicy' },
   { id: 'import', label: 'Import z banku' },
   { id: 'ictj', label: 'ICTTJ' },
   { id: 'notify', label: 'Powiadomienia i dźwięki' },
@@ -64,6 +66,7 @@ export function SettingsPage() {
           {tab === 'accounts' && <AccountsTab />}
           {tab === 'categories' && <CategoriesTab />}
           {tab === 'layers' && <LayersTab />}
+          {tab === 'household' && <HouseholdTab />}
           {tab === 'import' && <ImportTab />}
           {tab === 'ictj' && <IctjTab />}
           {tab === 'notify' && <NotifyTab />}

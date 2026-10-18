@@ -156,6 +156,7 @@ export function keywordProposals(
       categoryId: choice.kind === 'expense' ? choice.categoryId : null,
       refundable: choice.kind === 'expense' && group.direction === 'out' && choice.refundable,
       household: choice.kind === 'income' && choice.household,
+      memberId: (choice.kind === 'expense' && group.direction === 'out' && choice.refundable) || (choice.kind === 'income' && choice.household) ? choice.memberId : null,
       counterAccountId: choice.kind === 'transfer' ? choice.counterAccountId : null,
       learned: false,
       hits: 0,

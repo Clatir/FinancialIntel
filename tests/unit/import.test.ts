@@ -8,7 +8,8 @@ import { classifyRow, counterpartyKey, hintFor, isOwnName, matchRule, upsertRule
 import { parseMbank, type MbankFile, type MbankRow } from '@shared/import/mbank'
 import { buildImport, choiceOf, importGroups, importThemes, planImport, similarCounterparty, type ImportChoices, type ImportPlan, type NewRow } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
-import { CASH_CATEGORY_ID, defaultCategoryId, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type ImportRule, type Transaction } from '@shared/schema'
+import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type ImportRule, type Transaction } from '@shared/schema'
+import { settleHousehold } from '@shared/calc/household'
 
 const FIXTURE = join(__dirname, '..', 'fixtures', 'mbank', 'lista_operacji.csv')
 const fixture = (): MbankFile => parseMbank(decodeText(new Uint8Array(readFileSync(FIXTURE))))
@@ -28,7 +29,7 @@ const GROCERIES = defaultCategoryId(1, 1)
 /** Import a file into `existing` with the decisions as proposed (plus `choices`): the operations after it. */
 function runImport(file: MbankFile, existing: Transaction[], choices: ImportChoices = emptyChoices(), rules: ImportRule[] = [], house = 0) {
   const plan = planImport(file, MBANK_ACCOUNT_ID, existing, ctx(rules))
-  const result = buildImport(plan, choices, { now: NOW, house, makeId, rules })
+  const result = buildImport(plan, choices, { now: NOW, makeId, rules })
   const byId = new Map(existing.map((t) => [t.id, t]))
   for (const t of result.update) byId.set(t.id, t)
   for (const id of result.remove) byId.delete(id)
@@ -82,15 +83,15 @@ describe('rozpoznawanie wierszy', () => {
   })
 
   it('reguła zapamiętana drugi raz: to samo id, licznik trafień, nowa decyzja', () => {
-    const one = upsertRule([], { match: 'bolt', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: AUTO, refundable: false, household: false, counterAccountId: null }, { now: NOW, makeId, hits: 3 })
-    const two = upsertRule(one, { match: 'bolt', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: GROCERIES, refundable: false, household: false, counterAccountId: null }, { now: NOW, makeId, hits: 2 })
+    const one = upsertRule([], { match: 'bolt', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: AUTO, refundable: false, household: false, memberId: null, counterAccountId: null }, { now: NOW, makeId, hits: 3 })
+    const two = upsertRule(one, { match: 'bolt', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: GROCERIES, refundable: false, household: false, memberId: null, counterAccountId: null }, { now: NOW, makeId, hits: 2 })
     expect(two).toHaveLength(1)
     expect(two[0]).toMatchObject({ id: one[0]!.id, categoryId: GROCERIES, hits: 5, learned: true, mode: 'exact' })
     expect(upsertRule(two, { ...two[0]!, direction: 'in' }, { now: NOW, makeId, hits: 1 })).toHaveLength(2)
   })
 
   it('reguły: dokładny klucz przed „zawiera”, kierunek, zwrot towaru z kategorią zakupów', () => {
-    const rule = (over: Partial<ImportRule>): ImportRule => ({ id: makeId(), match: 'bolt', mode: 'exact', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: AUTO, refundable: false, household: false, counterAccountId: null, learned: true, hits: 1, updatedAt: NOW, ...over })
+    const rule = (over: Partial<ImportRule>): ImportRule => ({ id: makeId(), match: 'bolt', mode: 'exact', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: AUTO, refundable: false, household: false, memberId: null, counterAccountId: null, learned: true, hits: 1, updatedAt: NOW, ...over })
     const rules = [rule({}), rule({ match: 'koleo', categoryId: defaultCategoryId(6, 3) }), rule({ match: 'klinika', mode: 'contains', categoryId: defaultCategoryId(5, 2) })]
     expect(matchRule(rules, 'bolt', 'out')?.categoryId).toBe(AUTO)
     expect(matchRule(rules, 'bolt', 'in')).toBeNull()
@@ -107,12 +108,12 @@ describe('ładownia w imporcie', () => {
     const containers = [{ id: '01K6H3Z0W8Q4M2N5P7R9S1T3V1', name: 'Spotify', counterparty: 'SPOTIFY', categoryId: defaultCategoryId(7, 3), archived: false }]
     const spotify = file.rows.find((r) => r.counterparty === 'Spotify' && r.amount < 0)!
     expect(classifyRow(spotify, { ...ctx(), containers }).decision).toMatchObject({ containerId: containers[0]!.id, categoryId: defaultCategoryId(7, 3), reason: 'opłata z ładowni: Spotify' })
-    const rule: ImportRule = { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V2', match: 'spotify', mode: 'exact', direction: 'out', label: 'Spotify', kind: 'expense', categoryId: defaultCategoryId(6, 2), refundable: false, household: false, counterAccountId: null, learned: true, hits: 1, updatedAt: NOW }
+    const rule: ImportRule = { id: '01K6H3Z0W8Q4M2N5P7R9S1T3V2', match: 'spotify', mode: 'exact', direction: 'out', label: 'Spotify', kind: 'expense', categoryId: defaultCategoryId(6, 2), refundable: false, household: false, memberId: null, counterAccountId: null, learned: true, hits: 1, updatedAt: NOW }
     expect(classifyRow(spotify, { ...ctx([rule]), containers }).decision).toMatchObject({ containerId: containers[0]!.id, categoryId: defaultCategoryId(6, 2), source: 'rule' })
     // An archived container, or money in from that counterparty: no link.
     expect(classifyRow(spotify, { ...ctx(), containers: [{ ...containers[0]!, archived: true }] }).decision.containerId).toBeNull()
     const plan = planImport(withRows(file, [spotify]), MBANK_ACCOUNT_ID, [], { ...ctx(), containers })
-    expect(buildImport(plan, emptyChoices(), { now: NOW, house: 0, makeId, rules: [] }).create[0]).toMatchObject({ containerId: containers[0]!.id, kind: 'expense' })
+    expect(buildImport(plan, emptyChoices(), { now: NOW, makeId, rules: [] }).create[0]).toMatchObject({ containerId: containers[0]!.id, kind: 'expense' })
   })
 })
 
@@ -192,27 +193,34 @@ describe('import: plan, zapis, kolejne importy', () => {
     const plan = planImport(f, MBANK_ACCOUNT_ID, [], ctx())
     const choices = emptyChoices()
     const boltGroup = groupOf(plan, 'bolt', 'out')
-    choices.groups[boltGroup] = { kind: 'expense', categoryId: AUTO, refundable: false, household: false, counterAccountId: null }
+    choices.groups[boltGroup] = { kind: 'expense', categoryId: AUTO, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }
     choices.remember[boltGroup] = true
     const tomasz = groupOf(plan, 'tomaszxxx', 'in')
-    choices.groups[tomasz] = { kind: 'income', categoryId: null, refundable: false, household: true, counterAccountId: null }
+    choices.groups[tomasz] = { kind: 'income', categoryId: null, refundable: false, household: true, memberId: null, advance: false, counterAccountId: null }
     choices.remember[tomasz] = true
     // One row of the group decided apart (a row override wins over the group).
     const oneBolt = plan.rows.find((p) => p.status === 'new' && p.group === boltGroup)!
-    choices.rows[oneBolt.key] = { kind: 'expense', categoryId: defaultCategoryId(6, 3), refundable: false, household: false, counterAccountId: null }
-    const result = buildImport(plan, choices, { now: NOW, house: 10000, makeId, rules: [] })
+    choices.rows[oneBolt.key] = { kind: 'expense', categoryId: defaultCategoryId(6, 3), refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }
+    const result = buildImport(plan, choices, { now: NOW, makeId, rules: [] })
     expect(result.rules.map((r) => [r.match, r.direction, r.kind, r.categoryId, r.household]).sort()).toEqual([
       ['bolt', 'out', 'expense', AUTO, false],
       ['tomaszxxx', 'in', 'income', null, true]
     ])
     const bolts = result.create.filter((t) => t.counterparty === 'Bolt')
     expect(bolts.filter((t) => t.categoryId === AUTO)).toHaveLength(bolts.length - 1)
-    // 100 zł open: the earliest payments of the household member repay it (D20), the rest is income.
-    const payments = result.create.filter((t) => t.counterparty === 'TOMASZ xxx')
+    // The household member's money says whose it is (D80); with 100 zł owed before the file (a purchase for the house)
+    // the ledger has the earliest payments repay it (D20), the rest is income.
+    const payments = result.create.filter((t) => t.counterparty === 'TOMASZ xxx' && t.memberId)
+    expect(payments.length).toBeGreaterThan(0)
+    expect(payments.every((t) => t.memberId === HOUSE_MEMBER_ID && !t.advance && t.repaid === 0)).toBe(true)
+    const owed = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, date: '2025-08-01', accountId: MBANK_ACCOUNT_ID, kind: 'expense', amount: -10000, refundable: true })
+    const ledger = settleHousehold([owed, ...result.create])
     const first = payments.map((t) => t.date).sort()[0]
     expect(first).toBe('2025-08-08')
-    expect(payments.filter((t) => t.repaid > 0).every((t) => t.date === first)).toBe(true)
-    expect(payments.reduce((s, t) => s + t.repaid, 0)).toBe(10000)
+    const repaid = payments.map((t) => ({ date: t.date, repaid: ledger.byTx.get(t.id)![0]!.repaid })).filter((p) => p.repaid > 0)
+    expect(repaid.every((p) => p.date === first)).toBe(true)
+    expect(repaid.reduce((s, p) => s + p.repaid, 0)).toBe(10000)
+    expect(ledger.owed).toBe(0)
     // The rule decides the next file by itself.
     const next = planImport(f, MBANK_ACCOUNT_ID, [], ctx(result.rules))
     const bolt = next.rows.find((p) => p.status === 'new' && p.row.counterparty === 'Bolt')
@@ -227,8 +235,8 @@ describe('import: plan, zapis, kolejne importy', () => {
     const left = first.filter((t) => t.id !== gone.id)
     const plan = planImport(f, MBANK_ACCOUNT_ID, left, ctx(), new Set([gone.bank!.key]))
     expect(counts(plan)).toEqual({ known: 268, deleted: 1 })
-    expect(buildImport(plan, emptyChoices(), { now: NOW, house: 0, makeId, rules: [] }).counts).toMatchObject({ created: 0, skipped: 1 })
-    const back = buildImport(plan, { ...emptyChoices(), restoreDeleted: { [gone.bank!.key]: true } }, { now: NOW, house: 0, makeId, rules: [] })
+    expect(buildImport(plan, emptyChoices(), { now: NOW, makeId, rules: [] }).counts).toMatchObject({ created: 0, skipped: 1 })
+    const back = buildImport(plan, { ...emptyChoices(), restoreDeleted: { [gone.bank!.key]: true } }, { now: NOW, makeId, rules: [] })
     expect(back.create.map((t) => t.counterparty)).toEqual(['SKLEP REMONTOWY'])
   })
 
@@ -237,11 +245,12 @@ describe('import: plan, zapis, kolejne importy', () => {
     const plan = planImport(f, MBANK_ACCOUNT_ID, [], ctx())
     const choices = emptyChoices()
     // Allegro (out) for the house, Tomasz (in) a household member: nothing open before the file.
-    choices.groups[groupOf(plan, 'allegro', 'out')] = { kind: 'expense', categoryId: null, refundable: true, household: false, counterAccountId: null }
-    choices.groups[groupOf(plan, 'tomaszxxx', 'in')] = { kind: 'income', categoryId: null, refundable: false, household: true, counterAccountId: null }
-    const result = buildImport(plan, choices, { now: NOW, house: 0, makeId, rules: [] })
+    choices.groups[groupOf(plan, 'allegro', 'out')] = { kind: 'expense', categoryId: null, refundable: true, household: false, memberId: null, advance: false, counterAccountId: null }
+    choices.groups[groupOf(plan, 'tomaszxxx', 'in')] = { kind: 'income', categoryId: null, refundable: false, household: true, memberId: null, advance: false, counterAccountId: null }
+    const result = buildImport(plan, choices, { now: NOW, makeId, rules: [] })
     const bought = result.create.filter((t) => /allegro/i.test(t.counterparty)).reduce((s, t) => s - t.amount, 0)
-    const repaid = result.create.filter((t) => t.counterparty === 'TOMASZ xxx').reduce((s, t) => s + t.repaid, 0)
+    const ledger = settleHousehold(result.create)
+    const repaid = result.create.filter((t) => t.counterparty === 'TOMASZ xxx').reduce((s, t) => s + (ledger.byTx.get(t.id)?.[0]?.repaid ?? 0), 0)
     expect(bought).toBeGreaterThan(0)
     expect(repaid).toBe(bought)
     // The engine agrees: nothing stays owed.
@@ -262,3 +271,64 @@ describe('import: plan, zapis, kolejne importy', () => {
   })
 })
 
+describe('domownicy w imporcie (D80)', () => {
+  const TOMASZ = `01KMEM${'0'.repeat(19)}7`
+  const withMembers = (rules: ImportRule[], inflow: 'ask' | 'advance' | 'income') => ({
+    ...ctx(rules),
+    members: [...settings.household.members, { id: TOMASZ, name: 'Tomasz', bankNames: ['TOMASZ xxx'], inflow, archived: false }]
+  })
+  const tomaszRow = () => fixture().rows.find((r) => r.counterparty === 'TOMASZ xxx' && r.amount > 0)!
+  const rule = (over: Partial<ImportRule>): ImportRule => ({
+    id: makeId(),
+    match: 'tomaszxxx',
+    mode: 'exact',
+    direction: 'in',
+    label: 'TOMASZ xxx',
+    kind: 'income',
+    categoryId: null,
+    refundable: false,
+    household: false,
+    memberId: null,
+    counterAccountId: null,
+    learned: true,
+    hits: 3,
+    updatedAt: NOW,
+    ...over
+  })
+
+  it('wpłata osoby z listy po nazwie w banku: „pytaj” czeka na decyzję, „zaliczka” od razu', () => {
+    expect(classifyRow(tomaszRow(), withMembers([], 'ask')).decision).toMatchObject({ kind: 'income', household: true, memberId: TOMASZ, advance: false, source: 'none' })
+    expect(classifyRow(tomaszRow(), withMembers([], 'advance')).decision).toMatchObject({ kind: 'income', household: true, memberId: TOMASZ, advance: true, source: 'builtin' })
+  })
+
+  it('reguła zwykłego wpływu bez osoby (sprzed dopisania domownika) ustępuje domownikowi; reguła z osobą i przelew własny – nie', () => {
+    expect(classifyRow(tomaszRow(), withMembers([rule({})], 'income')).decision).toMatchObject({ household: true, memberId: TOMASZ, source: 'builtin' })
+    // Before 1.3.0 „od domownika” named no one: the member by the bank's name now (and asked about the rest).
+    expect(classifyRow(tomaszRow(), withMembers([rule({ household: true })], 'ask')).decision).toMatchObject({ household: true, memberId: TOMASZ, source: 'none' })
+    const named = rule({ household: true, memberId: TOMASZ })
+    expect(classifyRow(tomaszRow(), withMembers([named], 'ask')).decision).toMatchObject({ household: true, memberId: TOMASZ, source: 'rule', ruleId: named.id })
+    expect(classifyRow(tomaszRow(), withMembers([rule({ kind: 'transfer' })], 'ask')).decision).toMatchObject({ kind: 'transfer', source: 'rule' })
+    // Without the member the rule decides as before.
+    expect(classifyRow(tomaszRow(), ctx([rule({})])).decision).toMatchObject({ kind: 'income', household: false, source: 'rule' })
+  })
+
+  it('grupy domownika „pytaj” mają własny temat – decyzja tematu przelewów obcych osób go nie zabiera', () => {
+    const plan = planImport(fixture(), MBANK_ACCOUNT_ID, [], withMembers([], 'ask'))
+    const groups = importGroups(plan)
+    const own = groups.filter((g) => g.brand === 'tomaszxxx' && g.direction === 'in')
+    expect(own.length).toBeGreaterThan(0)
+    const themes = importThemes(groups)
+    const theme = themes.find((t) => t.theme === own[0]!.theme)!
+    expect(theme.basis).toMatchObject({ kind: 'proposal', choice: { kind: 'income', household: true, memberId: TOMASZ } })
+    expect(theme.groups.every((g) => g.brand === 'tomaszxxx')).toBe(true)
+    // A decision of the strangers' transfers' theme leaves Tomasz's money his.
+    const strangers = themes.filter((t) => t.direction === 'in' && t.basis.kind !== 'proposal')
+    expect(strangers.length).toBeGreaterThan(0)
+    const choices = emptyChoices()
+    for (const t of strangers) choices.themes[t.theme] = { kind: 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }
+    const result = buildImport(plan, choices, { now: NOW, makeId, rules: [] })
+    const fromTomasz = result.create.filter((t) => t.counterparty === 'TOMASZ xxx' && t.amount > 0)
+    expect(fromTomasz.length).toBeGreaterThan(10)
+    expect(new Set(fromTomasz.map((t) => `${t.kind}|${t.memberId}`))).toEqual(new Set([`income|${TOMASZ}`]))
+  })
+})
