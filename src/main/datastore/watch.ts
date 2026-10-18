@@ -5,7 +5,10 @@ import { isIgnoredPath, toPosix } from '@shared/paths'
 
 export interface WatcherOptions {
   debounceMs?: number
-  /** Safety-net full rescan interval (sync tools and network drives may not emit events). */
+  /**
+   * Safety-net full rescan interval (sync tools and network drives may not emit events): 5 min with the native
+   * watcher, 30 s per directory (W21).
+   */
   pollMs?: number
   onError?: (e: unknown) => void
   /**
@@ -40,9 +43,9 @@ export class FolderWatcher {
     opts: WatcherOptions = {}
   ) {
     this.debounceMs = opts.debounceMs ?? 300
-    this.pollMs = opts.pollMs ?? 30_000
     this.onError = opts.onError
     this.mode = opts.mode ?? (process.platform === 'win32' || process.platform === 'darwin' ? 'native' : 'per-directory')
+    this.pollMs = opts.pollMs ?? (this.mode === 'native' ? 5 * 60_000 : 30_000)
   }
 
   start(): void {
@@ -162,5 +165,47 @@ export class FolderWatcher {
     for (const t of [this.timer, this.restart]) if (t) clearTimeout(t)
     if (this.poll) clearInterval(this.poll)
     this.timer = this.restart = this.poll = null
+  }
+}
+
+/**
+ * Refreshes of the folder one at a time (W21): what is asked while one runs waits as one more – the paths joined, a
+ * full rescan instead when any asks for it. `request` resolves when the refresh covering it is done.
+ */
+export class RefreshQueue {
+  private running: Promise<void> | null = null
+  private full = false
+  private paths: Set<string> | null = null
+
+  constructor(private readonly run: (paths: string[] | undefined) => Promise<void>) {}
+
+  request(paths?: readonly string[]): Promise<void> {
+    if (!paths) this.full = true
+    else if (!this.full) {
+      this.paths ??= new Set()
+      for (const p of paths) this.paths.add(p)
+    }
+    this.running ??= this.drain()
+    return this.running
+  }
+
+  /** Runs until nothing waits; a run that failed fails the requests it covered, the next ones still run. */
+  private async drain(): Promise<void> {
+    let failure: unknown = null
+    try {
+      while (this.full || this.paths) {
+        const paths = this.full ? undefined : [...this.paths!]
+        this.full = false
+        this.paths = null
+        try {
+          await this.run(paths)
+        } catch (e) {
+          failure = e
+        }
+      }
+    } finally {
+      this.running = null
+    }
+    if (failure) throw failure
   }
 }

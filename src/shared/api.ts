@@ -103,7 +103,7 @@ export type HistoryKind = FileKind
 export interface BackupInfo {
   name: string
   path: string
-  kind: 'daily' | 'manual' | 'pre-import' | 'pre-migration'
+  kind: 'daily' | 'weekly' | 'manual' | 'pre-import' | 'pre-migration'
   bytes: number
   mtimeMs: number
 }
@@ -225,6 +225,11 @@ export interface FiApi {
   historyKeep(kind: HistoryKind, record: unknown, reason: HistoryReason): Promise<void>
   saveSettings(fi: SettingsFile): Promise<SettingsFile>
   resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<void>
+  /**
+   * Many conflicts in the order given, one change for the window (W23); a group whose copy could not be kept leaves
+   * its other conflicts as they are (`skipped`).
+   */
+  resolveConflicts(items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>): Promise<Array<{ id: string; error?: string; skipped?: boolean }>>
   trashProblemFile(relPath: string): Promise<void>
   showInFolder(relPath: string | null): Promise<void>
   openExternal(url: string): Promise<void>

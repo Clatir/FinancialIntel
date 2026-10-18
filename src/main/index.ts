@@ -5,17 +5,16 @@ import { existsSync, promises as fs } from 'node:fs'
 import { hostname } from 'node:os'
 import { basename, dirname, join, parse } from 'node:path'
 import { Readable } from 'node:stream'
-import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import type { Collection } from '@shared/paths'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/store'
-import { FolderWatcher } from './datastore/watch'
+import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
-import { importBackup, isDataFile, listBackups, manualBackup, runBackups } from './datastore/backup'
-import { zipFolder } from './datastore/zip'
+import { importBackup, listBackups, manualBackup, runBackups } from './datastore/backup'
 import { sleep, withRetry, writeFileAtomic } from './datastore/atomic'
 import { describeProgress, untilAborted } from './datastore/progress'
 import { htmlToPdf } from './export/pdf'
@@ -51,6 +50,11 @@ let mainWindow: BrowserWindow | null = null
 let detach: { closeAll: () => void; windows: () => BrowserWindow[] } | null = null
 let store: DataStore | null = null
 let watcher: FolderWatcher | null = null
+/** The open folder's refreshes, one at a time (W21). */
+let refreshes: RefreshQueue | null = null
+/** A full check on the window's focus at most this often (W21): the watcher reports changes, this catches a miss. */
+const FOCUS_REFRESH_MS = 60_000
+let lastFocusRefresh = 0
 let presenceTimer: NodeJS.Timeout | null = null
 let updater: Updater | null = null
 let tray: AppTray | null = null
@@ -260,6 +264,25 @@ async function trash(absPath: string): Promise<void> {
   }
 }
 
+/** The daily backup in progress (one at a time). */
+let backupRun: Promise<void> | null = null
+/** How often the daily backup is checked while the app runs – it lives in the tray for weeks (F2, N19). */
+const BACKUP_CHECK_MS = 60 * 60_000
+
+/** Today's backup if it is not there yet (D31): after an open, every hour and when the computer wakes up. */
+function dailyBackup(): void {
+  const s = store
+  if (!s || backupRun || opening || windowClosing || s.status().readOnly) return
+  backupRun = runBackups(s, s.backupsDir)
+    .then(
+      (file) => void (file && log('info', `backup ${file}`)),
+      (e) => log('warn', 'backup failed', e)
+    )
+    .finally(() => {
+      backupRun = null
+    })
+}
+
 /** The longest quitting waits for the writes already queued (B43). */
 const QUIT_DRAIN_MS = 30_000
 
@@ -268,6 +291,7 @@ async function closeStore(): Promise<void> {
   const closing = store
   watcher?.stop()
   watcher = null
+  refreshes = null
   if (presenceTimer) clearInterval(presenceTimer)
   presenceTimer = null
   store = null
@@ -286,7 +310,7 @@ async function heartbeat(): Promise<void> {
     const others = await readOtherMachines(s.root, machineName)
     if (JSON.stringify(others) !== JSON.stringify(s.otherMachines)) {
       s.otherMachines = others
-      send(await s.refresh([]))
+      await refreshes?.request([])
     }
   } catch (e) {
     log('warn', 'heartbeat failed', e)
@@ -409,26 +433,25 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
     store = opened
     opened.otherMachines = others
     snapshot.status = opened.status()
-    watcher = new FolderWatcher(
-      target,
-      (paths) => {
-        const s = store
-        // Closing: no rescan before the last writes (B43).
-        if (s !== opened || windowClosing) return
-        s.refresh(paths ?? undefined).then(send, (e) => log('error', 'refresh failed', e))
-      },
-      { onError: (e) => log('warn', 'watcher error', e) }
-    )
+    const queue = new RefreshQueue(async (paths) => {
+      // Closing: no rescan before the last writes (B43); another folder opened meanwhile: nothing to read here.
+      if (store !== opened || windowClosing) return
+      try {
+        send(await opened.refresh(paths))
+      } catch (e) {
+        log('error', 'refresh failed', e)
+        throw e
+      }
+    })
+    refreshes = queue
+    watcher = new FolderWatcher(target, (paths) => void queue.request(paths ?? undefined).catch(() => undefined), {
+      onError: (e) => log('warn', 'watcher error', e)
+    })
     watcher.start()
     void heartbeat()
     presenceTimer = setInterval(() => void heartbeat(), 60_000)
-    if (!opened.status().readOnly) {
-      // Daily backup (decision D31), in the background.
-      runBackups(target, opened.backupsDir).then(
-        (file) => file && log('info', `backup ${file}`),
-        (e) => log('warn', 'backup failed', e)
-      )
-    }
+    // Daily backup (decision D31), in the background.
+    dailyBackup()
     await config.rememberDir(target)
     const count = Object.values(snapshot.records).reduce((n, list) => n + list.length, 0)
     const st = opened.loadStats
@@ -563,6 +586,11 @@ function registerIpc(): void {
   handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy') => {
     send(await requireStore().resolveConflict(id, keep))
   })
+  handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
+    const { results, change } = await requireStore().resolveConflicts(items)
+    send(change)
+    return results
+  })
   handle('trashProblemFile', async (rel: string) => {
     send(await requireStore().trashFile(rel))
   })
@@ -601,7 +629,7 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   handle('rescan', async () => {
-    if (store) send(await store.refresh())
+    await refreshes?.request()
   })
   handle('exportZip', async () => {
     const s = requireStore()
@@ -610,7 +638,7 @@ function registerIpc(): void {
       filters: [{ name: 'ZIP', extensions: ['zip'] }]
     })
     if (res.canceled || !res.filePath) return null
-    await zipFolder(s.root, res.filePath, isDataFile)
+    await s.zipData(res.filePath)
     return res.filePath
   })
   // Exports (E8): a file the user names – CSV, Excel, PDF of a report (the window prints it, nothing else loads).
@@ -641,11 +669,11 @@ function registerIpc(): void {
   })
   handle('backupNow', async () => {
     const s = requireStore()
-    return manualBackup(s.root, s.backupsDir)
+    return manualBackup(s, s.backupsDir)
   })
   handle('importBackup', async () => {
     const s = requireStore()
-    return importBackup(s.root, s.backupsDir)
+    return importBackup(s, s.backupsDir)
   })
   handle('pickImportFile', async () => {
     const res = await dialog.showOpenDialog(mainWindow!, {
@@ -955,9 +983,10 @@ function createWindow(): void {
     win.webContents.send('fi:flush')
   })
   win.on('focus', () => {
-    // No full rescan while closing: it would stand before the last writes (B43).
-    if (windowClosing) return
-    store?.refresh().then(send, () => undefined)
+    // No full rescan while closing: it would stand before the last writes (B43); at most once a minute (W21).
+    if (windowClosing || Date.now() - lastFocusRefresh < FOCUS_REFRESH_MS) return
+    lastFocusRefresh = Date.now()
+    void refreshes?.request().catch(() => undefined)
   })
   watchHangs(win)
   // Shutdown / log-off (Windows): no installer or swap helper now, the update waits for the next close.
@@ -1031,6 +1060,9 @@ app.whenReady().then(async () => {
     if (mainWindow && !mainWindow.isDestroyed()) quick?.ensure()
   }, 3000).unref?.()
   tray?.refresh()
+  // The daily backup also while the app lives in the tray (F2): every hour and after the computer slept.
+  setInterval(dailyBackup, BACKUP_CHECK_MS).unref?.()
+  powerMonitor.on('resume', dailyBackup)
   const u = updater
   void u.init().then(
     () => u.startAuto(updateCheckDelayMs()),

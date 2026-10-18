@@ -137,7 +137,7 @@ describe('kopia ZIP przy plikach zapisywanych w trakcie (ICTTJ 1.17.2)', () => {
     while (n < 2) await new Promise((r) => setTimeout(r, 2))
     let file: string | null
     try {
-      file = await runBackups(store.root, backups, new Date('2026-10-16T09:00:00Z'))
+      file = await runBackups(store, backups, new Date('2026-10-16T09:00:00Z'))
     } finally {
       stop = true
       await churn

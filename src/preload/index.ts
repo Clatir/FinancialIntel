@@ -34,6 +34,7 @@ const api: FiApi = {
   historyKeep: (kind, record, reason) => invoke('historyKeep', kind, record, reason),
   saveSettings: (fi) => invoke('saveSettings', fi),
   resolveConflict: (id, keep) => invoke('resolveConflict', id, keep),
+  resolveConflicts: (items) => invoke('resolveConflicts', items),
   trashProblemFile: (rel) => invoke('trashProblemFile', rel),
   showInFolder: (rel) => invoke('showInFolder', rel),
   openExternal: (url) => invoke('openExternal', url),

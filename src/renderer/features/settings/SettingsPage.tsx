@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { BackupInfo, TrayPrefs } from '@shared/api'
 import { DEFAULT_SHIP_NAME } from '@shared/schema'
+import { daysBetween, warsawNow } from '@shared/calc/dates'
 import { api, errorMessage } from '../../lib/api'
 import { fmtBytes } from '../../lib/format'
 import { flushSaves, openResult, updateSettings, useData } from '../../store/data'
@@ -141,7 +142,37 @@ function TwoComputersPanel() {
 
 // ---------------------------------------------------------------- folder
 
-const BACKUP_KIND: Record<BackupInfo['kind'], string> = { daily: 'dzienna', manual: 'ręczna', 'pre-import': 'przed importem', 'pre-migration': 'przed migracją' }
+const BACKUP_KIND: Record<BackupInfo['kind'], string> = {
+  daily: 'dzienna',
+  weekly: 'tygodniowa',
+  manual: 'ręczna',
+  'pre-import': 'przed importem',
+  'pre-migration': 'przed migracją'
+}
+
+/** A backup this old or older is a warning (F2): the daily one is made every day the app runs. */
+const BACKUP_STALE_DAYS = 3
+
+/** How old the newest backup is, in whole days of Warsaw ('dziś', 'wczoraj', 'N dni temu'); null = none. */
+function backupAge(files: readonly BackupInfo[], now = new Date()): { text: string; days: number } | null {
+  if (!files.length) return null
+  const newest = Math.max(...files.map((f) => f.mtimeMs))
+  const days = daysBetween(warsawNow(new Date(newest)).date, warsawNow(now).date)
+  return { text: days <= 0 ? 'dziś' : days === 1 ? 'wczoraj' : `${days} dni temu`, days }
+}
+
+/** The newest backup's age; a warning when it is older than 3 days (F2). */
+function BackupAge({ files }: { files: readonly BackupInfo[] }) {
+  const age = backupAge(files.filter((f) => f.kind !== 'pre-migration'))
+  if (!age) return null
+  const stale = age.days > BACKUP_STALE_DAYS
+  return (
+    <p className={cx('mb-2 text-[11.5px]', stale ? 'text-accent' : 'text-muted')} data-testid="backup-age" data-stale={stale ? '1' : '0'}>
+      Ostatnia kopia: {age.text}
+      {stale && ' – starsza niż 3 dni: sprawdź folder kopii albo zrób kopię teraz.'}
+    </p>
+  )
+}
 
 function FolderTab() {
   const status = useData((s) => s.status)
@@ -274,10 +305,11 @@ function FolderTab() {
         }
       >
         <p className="mb-2 text-[11.5px] text-muted">
-          Przy każdym starcie raz dziennie ZIP całego folderu danych (zostaje 30 ostatnich); przed każdym importem z banku (10 ostatnich) i przed
-          migracją formatu zawsze. Folder:{' '}
+          Raz dziennie – przy starcie i w tle, gdy aplikacja działa w zasobniku – ZIP danych bez historii zmian (zostaje 14 dziennych i 8
+          tygodniowych); przed każdym importem z banku (10 ostatnich) i przed migracją formatu zawsze. Folder:{' '}
           <span className="num">{backups?.dir}</span>
         </p>
+        {backups && <BackupAge files={backups.files} />}
         {backups && backups.files.length === 0 && <span className="text-[11.5px] text-dim">Brak kopii.</span>}
         {backups?.files.map((b) => (
           <div key={b.path} className="grid grid-cols-[120px_minmax(0,1fr)_90px_150px] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="backup-row">

@@ -10,12 +10,19 @@ import { CREATED, exists, freshStore, sampleMonth, sampleTransaction, tempDir } 
 import { CONFLICT_COPY_MESSAGE } from '@shared/api'
 
 const realReadFile = fs.readFile
-/** Reads of files whose path ends with `suffix` fail like a file OneDrive has not brought yet. */
-const failReads = (suffix: string) =>
-  vi.spyOn(fs, 'readFile').mockImplementation(((path: Parameters<typeof fs.readFile>[0], ...rest: unknown[]) => {
-    if (String(path).endsWith(suffix)) return Promise.reject(Object.assign(new Error('EIO: i/o error, read'), { code: 'EIO' }))
-    return (realReadFile as (...a: unknown[]) => Promise<unknown>).call(fs, path, ...rest)
-  }) as typeof fs.readFile)
+const realOpen = fs.open
+/**
+ * Reads of files whose path ends with `suffix` fail like a file OneDrive has not brought yet – a file known before is
+ * read by `readFile`, a new one through `open` (W24).
+ */
+const failReads = (suffix: string) => {
+  const fail = () => Promise.reject(Object.assign(new Error('EIO: i/o error, read'), { code: 'EIO' }))
+  const read = vi.spyOn(fs, 'readFile').mockImplementation(((path: Parameters<typeof fs.readFile>[0], ...rest: unknown[]) =>
+    String(path).endsWith(suffix) ? fail() : (realReadFile as (...a: unknown[]) => Promise<unknown>).call(fs, path, ...rest)) as typeof fs.readFile)
+  const open = vi.spyOn(fs, 'open').mockImplementation(((path: Parameters<typeof fs.open>[0], ...rest: unknown[]) =>
+    String(path).endsWith(suffix) ? fail() : (realOpen as (...a: unknown[]) => Promise<unknown>).call(fs, path, ...rest)) as typeof fs.open)
+  return { mockRestore: () => (read.mockRestore(), open.mockRestore()) }
+}
 
 afterEach(() => vi.restoreAllMocks())
 

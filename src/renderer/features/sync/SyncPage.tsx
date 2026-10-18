@@ -206,7 +206,8 @@ function DeletedRecords() {
 
 /**
  * "Zachowaj nowsze" for the chosen conflicts or all: the version changed later of each (`newestResolutions` –
- * several copies of one file decided together), one by one; the other versions go to the bin as with the buttons.
+ * several copies of one file decided together), in one request (W23); the other versions go to the bin as with the
+ * buttons.
  */
 function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictEntry[]; sel: Selection; busy: boolean; setBusy: (b: boolean) => void }) {
   const chosen = conflicts.filter((c) => sel.selected.has(c.id))
@@ -221,21 +222,14 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
         toast('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.', 'error', 6000)
         return
       }
-      const failedGroups = new Set<string>()
-      for (const r of plan.resolutions) {
-        // The newest copy of a file could not be kept: the older ones of that file stay (nothing newer is binned).
-        if (failedGroups.has(r.group)) {
-          untouched++
-          continue
-        }
-        try {
-          await api.resolveConflict(r.id, r.keep)
-          done++
-        } catch (e) {
-          errors.add(errorMessage(e))
-          if (r.keep === 'copy') failedGroups.add(r.group)
-        }
+      // The newest copy of a file could not be kept: the older ones of that file stay (nothing newer is binned).
+      for (const r of await api.resolveConflicts(plan.resolutions)) {
+        if (r.skipped) untouched++
+        else if (r.error) errors.add(r.error)
+        else done++
       }
+    } catch (e) {
+      errors.add(errorMessage(e))
     } finally {
       setBusy(false)
       sel.drop()
