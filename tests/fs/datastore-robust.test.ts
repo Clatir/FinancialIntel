@@ -70,7 +70,10 @@ describe('folder danych: odporność (1.4.2)', () => {
     await store.saveRecord('transactions', t)
     const abs = join(store.root, ...recordRelPath('transactions', t).split('/'))
     await fs.rm(abs)
-    await expect(store.saveRecord('transactions', { ...t, note: 'moja zmiana' })).rejects.toBeInstanceOf(RemovedOutsideError)
+    const removed = await store.saveRecord('transactions', { ...t, note: 'moja zmiana' }).catch((e: unknown) => e)
+    expect(removed).toBeInstanceOf(RemovedOutsideError)
+    // The window learns it with the error, as a change from outside (its question about the edits).
+    expect((removed as RemovedOutsideError).change).toMatchObject({ origin: 'external', removals: [{ collection: 'transactions', id: t.id }] })
     expect(await exists(abs)).toBe(false)
     // Kept in the dialog („Zachowaj”): the next write brings it back.
     await store.saveRecord('transactions', { ...t, note: 'moja zmiana' })
@@ -151,14 +154,23 @@ describe('folder danych: odporność (1.4.2)', () => {
     const error = await store.saveRecord('months', mine).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ConflictCopyError)
     expect((error as Error).message.startsWith(CONFLICT_COPY_MESSAGE)).toBe(true)
-    const change = await store.refresh()
     const snap = await store.snapshot()
     expect(snap.records.months.map((e) => [e.record.id, e.record.salary])).toEqual([[theirs.id, 400000]])
-    const conflict = (change?.conflicts ?? snap.conflicts).find((c) => c.kind === 'months')!
+    // The copy reaches the window with the error.
+    const conflict = (error as ConflictCopyError).change!.conflicts.find((c) => c.kind === 'months')!
     expect(conflict.copy.relPath).toBe('months/2026-11-TEST-PC.json')
-    // Picked in Synchronizacja: mine becomes the month's plan, theirs kept in its history.
+    // Picked in Synchronizacja: mine becomes the month's plan, theirs kept in its history – a version of the month's
+    // plan, never a „deleted” record of its own (restored, it would stand on the month again).
     await store.resolveConflict(conflict.id, 'copy')
     expect((await store.snapshot()).records.months.map((e) => [e.record.id, e.record.salary])).toEqual([[mine.id, 300000]])
-    expect((await store.historyList('months', theirs.id)).map((e) => e.reason)).toEqual(['discarded'])
+    const kept = await store.historyList('months', mine.id)
+    expect(kept.map((e) => e.reason)).toEqual(['discarded'])
+    expect(await store.historyRead('months', mine.id, kept[0]!.file)).toMatchObject({ id: mine.id, salary: 400000 })
+    expect(await store.historyList('months', theirs.id)).toEqual([])
+    expect(await store.historyDeleted('months')).toEqual([])
+    // Restored: the month's plan as theirs was, no conflict.
+    await store.historyRestore('months', mine.id, kept[0]!.file)
+    expect((await store.snapshot()).records.months.map((e) => [e.record.id, e.record.salary])).toEqual([[mine.id, 400000]])
+    expect((await store.snapshot()).conflicts).toEqual([])
   })
 })

@@ -182,11 +182,13 @@ export function nextUnpaidOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'du
 
 /**
  * The cycle (its due month) a payment of a periodic fee in `month` closes (B55): the due month's, or – a cycle of 3
- * months or more – the next due month's when paid the month before it (early: the 1st on a Monday); null = paid late.
+ * months or more – the next due month's when paid the month before it (early: the 1st on a Monday), only while the cycle
+ * before is closed (`closed` – paid, or before the fee was followed): else it is that cycle's, late. null = paid late.
  */
-export function paidCycleOf(c: Pick<Container, 'cycleMonths' | 'dueMonth'>, month: string): string | null {
+export function paidCycleOf(c: Pick<Container, 'cycleMonths' | 'dueMonth'>, month: string, closed: (dueMonth: string) => boolean = () => true): string | null {
   const due = cyclePosition(c, month).dueMonth
-  return due === month || (c.cycleMonths >= 3 && addMonths(month, 1) === due) ? due : null
+  if (due === month) return due
+  return c.cycleMonths >= 3 && addMonths(month, 1) === due && closed(addMonths(due, -c.cycleMonths)) ? due : null
 }
 
 /** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
@@ -579,7 +581,8 @@ export function computeFleet(input: FleetInput): FleetState {
    * else when the operation came to FI (an import, a hand entry), never before its day – the goals then, as the
    * docking window shows them now.
    */
-  const cameIn = (t: Transaction, d: Docking | undefined): number => Math.max(Date.parse(d?.updatedAt ?? t.createdAt), warsawStartOf(t.date).getTime())
+  // The docking's creation, never its last save: a later edit or a merge of duplicates moves no money docked before (C1).
+  const cameIn = (t: Transaction, d: Docking | undefined): number => Math.max(Date.parse(d?.createdAt ?? t.createdAt), warsawStartOf(t.date).getTime())
   const applySplit = (v: number, split: NonNullable<Docking['split']>, moves: Moves) => {
     let rest = v
     if (split.hull) {
@@ -709,7 +712,9 @@ export function computeFleet(input: FleetInput): FleetState {
             } else addGoal(goal, p.amount, moves)
           } else if (periodic) {
             if (p.amount < 0) {
-              const cycle = paidCycleOf(periodic, monthOf(t.date))
+              // The cycle before closed – paid, or before the fee was followed (the budget's start, its `from`).
+              const followed = start ? [monthOf(start), periodic.from ?? ''].sort().at(-1)! : ''
+              const cycle = paidCycleOf(periodic, monthOf(t.date), (due) => due < followed || !!paidCycles.get(periodic.id)?.has(due))
               if (cycle) paidCycles.set(periodic.id, (paidCycles.get(periodic.id) ?? new Set()).add(cycle))
               const tank = tanks.get(periodic.id) ?? 0
               const fromTank = Math.min(-p.amount, Math.max(0, tank))

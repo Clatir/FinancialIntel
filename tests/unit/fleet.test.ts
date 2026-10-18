@@ -272,6 +272,25 @@ describe('odkładki (spec: OC 1 240 zł rocznie)', () => {
     expect(paidCycleOf({ cycleMonths: 2, dueMonth: '2027-03' }, '2027-02')).toBeNull()
   })
 
+  it('zaległa zapłata poprzedniego cyklu w miesiącu przed terminem nie zamyka następnego (B55)', () => {
+    const water = containerSchema.parse({ ...base(), name: 'Woda', amount: zl(300), cycleMonths: 3, dueMonth: '2027-03', dueDay: 10 })
+    const input = { settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(60000))], months: monthsFrom('2026-10', 10), containers: [water] }
+    // December paid on time, March not: the May payment is March's, late – June still to pay.
+    const dec = tx('2026-12-10', -zl(300), { containerId: water.id })
+    const may = tx('2027-05-20', -zl(300), { containerId: water.id })
+    const late = fleet({ ...input, transactions: [dec, may], now: '2027-05-25T12:00:00+02:00' })
+    expect(late.tanks[0]).toMatchObject({ dueMonth: '2027-06', paidDue: null })
+    // June's installment still collected (paid early – none).
+    const june = (txs: Transaction[]) => fleet({ ...input, transactions: txs, now: '2027-06-02T12:00:00+02:00' }).log.some((e) => e.kind === 'sinking' && e.date === '2027-06-01')
+    expect(june([dec, may])).toBe(true)
+    // March paid in March: the May payment is June's, early.
+    const mar = tx('2027-03-10', -zl(300), { containerId: water.id })
+    expect(fleet({ ...input, transactions: [dec, mar, may], now: '2027-05-25T12:00:00+02:00' }).tanks[0]).toMatchObject({ dueMonth: '2027-09', paidDue: '2027-06' })
+    expect(june([dec, mar, may])).toBe(false)
+    // The first cycle followed: the one before it is the budget's past – a payment the month before is early.
+    expect(fleet({ ...input, transactions: [tx('2026-11-20', -zl(300), { containerId: water.id })], now: '2026-11-25T12:00:00+01:00' }).tanks[0]).toMatchObject({ dueMonth: '2027-03', paidDue: '2026-12' })
+  })
+
   it('archiwizacja kontenera liczy się od jej miesiąca, a resztka zbiornika po końcu życia wraca do osłon (B56)', () => {
     const fee = containerSchema.parse({ ...base(), name: 'OC', amount: zl(1200), cycleMonths: 12, dueMonth: '2027-09', dueDay: 1 })
     const input = { settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(60000))], months: monthsFrom('2026-10', 6), containers: [fee] }

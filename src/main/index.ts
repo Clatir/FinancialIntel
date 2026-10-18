@@ -16,7 +16,7 @@ import { clearPresence, readOtherMachines, writePresence } from './datastore/pre
 import { initLog, log } from './log'
 import { importBackup, isDataFile, listBackups, manualBackup, runBackups } from './datastore/backup'
 import { zipFolder } from './datastore/zip'
-import { sleep, writeFileAtomic } from './datastore/atomic'
+import { sleep, withRetry, writeFileAtomic } from './datastore/atomic'
 import { describeProgress, untilAborted } from './datastore/progress'
 import { htmlToPdf } from './export/pdf'
 import { writeXlsx } from './export/xlsx'
@@ -254,8 +254,9 @@ async function trash(absPath: string): Promise<void> {
   try {
     await shell.trashItem(absPath)
   } catch {
-    // Removable or network drives may have no recycle bin; a file held for a moment (OneDrive, an antivirus) – retried.
-    await fs.rm(absPath, { force: true, maxRetries: 5, retryDelay: 200 })
+    // Removable or network drives may have no recycle bin; a file held for a moment (OneDrive, an antivirus) – retried
+    // (`fs.rm` retries only recursive removals by itself).
+    await withRetry(() => fs.rm(absPath, { force: true }))
   }
 }
 
@@ -449,12 +450,12 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
 }
 
 /**
- * A folder's open failure for the screen: the app's own messages as they are; a system's or the runtime's (English,
- * e.g. a stack overflow – B50) said in Polish, the details in the log.
+ * A folder's open failure for the screen: the app's own messages as they are; a system's (an error code) or the
+ * runtime's (English, e.g. a stack overflow – B50) said in Polish, the details in the log.
  */
 function openErrorMessage(e: unknown): string {
   const message = e instanceof Error ? e.message : String(e)
-  const foreign = (e as NodeJS.ErrnoException)?.code != null || e instanceof RangeError || e instanceof TypeError || !/[ąćęłńóśźż]/i.test(message)
+  const foreign = !(e instanceof Error) || (e as NodeJS.ErrnoException).code != null || e instanceof RangeError || e instanceof TypeError || e instanceof SyntaxError || e instanceof ReferenceError
   return foreign ? `Nie udało się wczytać folderu danych (${message}). Szczegóły są w logu – „Otwórz folder logów”.` : message
 }
 
@@ -530,9 +531,8 @@ function registerIpc(): void {
       return entry
     } catch (e) {
       // Removed on another computer a moment ago (B49): the window gets the removal (its question), the write waits.
-      if (e instanceof RemovedOutsideError) send(await s.refresh([e.relPath], 'external'))
       // Its month made on another computer (B46): the copy shows in Synchronizacja.
-      if (e instanceof ConflictCopyError) send(await s.refresh([e.relPath], 'local'))
+      if (e instanceof RemovedOutsideError || e instanceof ConflictCopyError) send(e.change)
       throw e
     }
   })

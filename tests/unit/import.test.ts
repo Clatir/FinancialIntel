@@ -323,6 +323,21 @@ describe('lista operacji i historia rachunku: ta sama operacja z dwóch formató
     // A row of one format only stays alone.
     expect(findDuplicates(legacy(runImport(lista, []).after), []).filter((x) => x.kind === 'bank-format')).toEqual([])
   })
+
+  it('wiersz dzień po okresie wcześniejszego pliku to inna operacja – nigdy „ta sama z drugiego formatu”', () => {
+    const row = booked(fixture()).rows[0]!
+    const next = addDays(row.date, 1)
+    // The list up to the row's day, then the history from the next day: the same amount and name a day later.
+    const lista = { ...withRows(fixture(), [row]), period: { from: addDays(row.date, -9), to: row.date } }
+    const historia = { ...asHistoria(withRows(fixture(), [{ ...row, date: next }])), period: { from: next, to: addDays(next, 20) } }
+    const first = runImport(lista, []).after
+    const second = runImport(historia, first)
+    expect(counts(second.plan)).toEqual({ new: 1 })
+    expect(second.result.create.map((t) => t.date)).toEqual([next])
+    // Both imported (before 1.4.2): the duplicates panel does not offer them as one row either.
+    const both = [...legacy(runImport(lista, []).after), ...legacy(runImport(historia, []).after, '2026-10-18T09:00:00.000Z')]
+    expect(findDuplicates(both, []).filter((g) => g.kind === 'bank-format')).toEqual([])
+  })
 })
 
 describe('domownicy w imporcie (D80)', () => {

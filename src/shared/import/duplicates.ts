@@ -149,15 +149,30 @@ export function findDuplicates(txs: readonly Transaction[], dockings: readonly D
 
   // One row from both formats of the file (B5): bank operations of one account, the other format, the same amount
   // within ±3 days, a similar name – the closest first, each once; the docked one stays, then the user's data, the older.
+  // Each within the days the other's import covered (its operations' first and last day): a row a day after one file's
+  // period is another operation, not that file's.
   const bankFormat: Array<{ a: Transaction; b: Transaction; days: number }> = []
   const formatOf = formatsOf(txs)
+  const spans = new Map<string, { from: string; to: string }>()
+  for (const t of txs) {
+    if (!t.bank) continue
+    const k = `${t.accountId}|${t.bank.importedAt}`
+    const span = spans.get(k)
+    if (!span) spans.set(k, { from: t.date, to: t.date })
+    else if (t.date < span.from) span.from = t.date
+    else if (t.date > span.to) span.to = t.date
+  }
+  const within = (t: Transaction, of: Transaction) => {
+    const span = spans.get(`${of.accountId}|${of.bank!.importedAt}`)
+    return !!span && t.date >= span.from && t.date <= span.to
+  }
   for (const a of txs) {
     if (!a.bank || a.bank.pending || used.has(a.id) || inRowGroups.has(a.id) || formatOf(a) !== 'historia') continue
     for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
       for (const b of banked.get(`${a.accountId}|${addDays(a.date, d)}`) ?? []) {
         if (b.amount !== a.amount || b.bank!.pending || used.has(b.id) || formatOf(b) !== 'lista') continue
         if (!similarCounterparty(a.bank.counterparty || a.bank.description, b.bank!.counterparty || b.bank!.description)) continue
-        if (dismissed[duplicateKey([a.id, b.id])]) continue
+        if (!within(a, b) || !within(b, a) || dismissed[duplicateKey([a.id, b.id])]) continue
         bankFormat.push({ a, b, days: Math.abs(d) })
       }
   }

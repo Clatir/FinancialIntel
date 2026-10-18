@@ -3,7 +3,7 @@
  * draft and applied on leaving the field or Enter – an intermediate value is never saved; a value that cannot be read
  * goes back to the saved one with a message.
  */
-import { forwardRef, useState } from 'react'
+import { forwardRef, useRef, useState } from 'react'
 import { formatPln } from '@shared/format'
 import { parseAmountInput, parseClockInput, parseDateInput, parseMonthInput } from '../lib/format'
 import { toast } from '../store/ui'
@@ -49,6 +49,8 @@ export const AmountField = forwardRef<
   }
 >(function AmountField({ value, onChange, allowNegative, allowEmpty, placeholder, className, autoFocus, ...rest }, ref) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
   const parse = (t: string): number | null | undefined => {
     const v = parseAmountInput(t)
     if (v === undefined) return undefined
@@ -80,17 +82,19 @@ export const AmountField = forwardRef<
       }}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null) {
+        if (draft != null && !cancelled.current) {
           const v = parse(draft)
           if (v === undefined) toast('Nieprawidłowa kwota – zostaje poprzednia.', 'error')
           else if (v !== value) onChange(v)
         }
+        cancelled.current = false
         setDraft(null)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
         if (e.key === 'Escape' && draft != null) {
           e.stopPropagation()
+          cancelled.current = true
           setDraft(null)
           e.currentTarget.blur()
         }
@@ -161,6 +165,8 @@ export function MonthField({
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
   const parsed = draft == null ? value : parseMonthInput(draft)
   const invalid = draft != null && (parsed === undefined || (parsed === null && !allowEmpty))
   return (
@@ -175,15 +181,18 @@ export function MonthField({
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null) {
+        if (draft != null && !cancelled.current) {
           if (invalid) toast(`Nieprawidłowy miesiąc – zostaje ${value ? 'poprzedni' : 'pusty'} (wpisz RRRR-MM${allowEmpty ? ' albo zostaw puste' : ''}).`, 'error')
           else if (parsed !== value) onChange(parsed ?? null)
         }
+        cancelled.current = false
         setDraft(null)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape') {
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
           setDraft(null)
           e.currentTarget.blur()
         }

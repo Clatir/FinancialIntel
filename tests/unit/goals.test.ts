@@ -23,7 +23,7 @@ const tx = (date: string, amount: number, over: Partial<Transaction> = {}): Tran
 /** A withdrawal from ICTTJ's pool „Cele” (straight to the goals), docked at `docked` (by default on its own day). */
 const toGoals = (date: string, amount: number, docked = AT) => {
   const t = tx(date, amount)
-  return { t, d: dockingSchema.parse({ ...base(), updatedAt: docked, date, transactionId: t.id, pool: 'goals' }) }
+  return { t, d: dockingSchema.parse({ ...base(), createdAt: docked, updatedAt: docked, date, transactionId: t.id, pool: 'goals' }) }
 }
 
 function settingsWith(over: { layers?: Partial<Settings['layers']> } = {}): Settings {
@@ -113,10 +113,12 @@ describe('cele: zmiana liczy się od chwili zmiany (1.4.2, D84 C1, B2)', () => {
   it('dostawa zadokowana później: cele z chwili dokowania (cel scenariusza ICTTJ bierze starszą wypłatę z puli Cele)', () => {
     const trip = fresh('Wakacje', zl(3000), 1, { source: 'ictj', activeFrom: '2026-10-18T08:00:00.000Z' })
     const t = tx('2026-10-08', zl(500))
-    const docked = (at: string) => dockingSchema.parse({ ...base(), updatedAt: at, date: t.date, transactionId: t.id, pool: 'goals' })
+    const docked = (at: string, saved = at) => dockingSchema.parse({ ...base(), createdAt: at, updatedAt: saved, date: t.date, transactionId: t.id, pool: 'goals' })
     expect(amounts(fleet([trip], [{ t, d: docked('2026-10-18T09:00:00.000Z') }]))).toEqual({ Wakacje: zl(500) })
     // Docked on its own day, before the goal came: the shields.
     expect(amounts(fleet([trip], [{ t, d: docked('2026-10-08T09:00:00.000Z') }]))).toEqual({ Wakacje: 0 })
+    // Saved again later (a merge of duplicates, a sync): docked when it was docked – the money does not move.
+    expect(amounts(fleet([trip], [{ t, d: docked('2026-10-08T09:00:00.000Z', '2026-10-19T09:00:00.000Z') }]))).toEqual({ Wakacje: 0 })
   })
 
   it('operacja dopisana po zmianie (późny import): cele z chwili, gdy przyszła do FI', () => {

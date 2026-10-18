@@ -31,7 +31,8 @@ export const goalDecided = (g: Dated, at: number): boolean => goalTakes(g, at) |
 /**
  * A change of a goal counting from now on, never back (C1): when its priority, target or archiving changes, the state
  * before is kept in `past` – money that came in before keeps going where it went. Not in the moment the goal was
- * added (nothing came in before).
+ * added (nothing came in before). Every change is kept, however close to the one before: the order is the goals'
+ * together – a state dropped from one goal's history would tie or swap it with another in the money of that moment.
  */
 export function changeGoal(g: Goal, patch: Partial<Omit<Goal, 'past' | 'id'>>, now: string): Goal {
   const next: Goal = { ...g, ...patch, updatedAt: now }

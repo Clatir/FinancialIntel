@@ -57,6 +57,18 @@ export function formatsOf(txs: readonly Transaction[]): (t: Transaction) => Mban
   return (t) => t.bank?.source ?? ((votes.get(t.bank?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')
 }
 
+/** The days a file covers: its period, else its rows' first and last day. */
+export function coverageOf(file: Pick<MbankFile, 'period' | 'rows'>): (date: string) => boolean {
+  let from = file.period?.from ?? ''
+  let to = file.period?.to ?? ''
+  if (!from || !to)
+    for (const r of file.rows) {
+      if (!from || r.date < from) from = r.date
+      if (!to || r.date > to) to = r.date
+    }
+  return (date) => date >= from && date <= to
+}
+
 /** The same counterparty in other words: an empty one (a quick entry without it), one key in the other, a common word. */
 export function similarCounterparty(a: string, b: string): boolean {
   const ka = counterpartyKey(a)
@@ -170,11 +182,13 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
 
   // The same row of the other format (B5): the account history and the list of operations describe a row in other
   // words, so its key differs – a booked operation of the bank from the other format, the same amount within ±3 days
-  // (a card's date may differ), a similar name. The closest first, each side once.
+  // (a card's date may differ), a similar name. The closest first, each side once. Only operations of the days this
+  // file covers: one outside its period is not in it – a row of the same amount and name next to it is another one.
   const other = new Map<string, Transaction[]>()
   const formatOf = formatsOf(mine)
+  const covers = coverageOf(file)
   for (const t of mine) {
-    if (!t.bank || t.bank.pending || used.has(t.id) || formatOf(t) === file.format) continue
+    if (!t.bank || t.bank.pending || used.has(t.id) || formatOf(t) === file.format || !covers(t.date)) continue
     const k = `${t.date}|${t.amount}`
     const list = other.get(k)
     if (list) list.push(t)

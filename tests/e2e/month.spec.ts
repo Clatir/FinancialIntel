@@ -121,6 +121,12 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await until.press('Enter')
     await expect(page.getByRole('status').filter({ hasText: 'Nieprawidłowy miesiąc' })).toBeVisible()
     await expect(until).toHaveValue('2027-06')
+    // Escape throws the typed month away – the editor stays open.
+    await until.fill('2030-01')
+    await until.press('Escape')
+    await expect(until).toHaveValue('2027-06')
+    await expect(page.getByTestId('cargo-editor')).toBeVisible()
+    expect((await oc()).until).toBe('2027-06')
     await page.getByTestId('container-cycle').selectOption('0')
     expect((await oc()).cycleMonths).toBe(12)
     const cycle = page.getByTestId('container-cycle-months')
@@ -167,7 +173,12 @@ test('Plan miesiąca (1.4.2): zmiana minionego miesiąca nie zmienia bieżącego
     await page.getByTestId('month-next').click()
     await expect(page.getByTestId('month-label')).toHaveText(monthLabel(m1))
     const salary = page.getByTestId('month-salary')
-    // Focused first: the field puts its draft in on focus (a fill racing it would type after it).
+    // Focused first: the field puts its draft in on focus (a fill racing it would type after it). Escape throws the
+    // typed amount away.
+    await salary.click()
+    await salary.fill('9999')
+    await salary.press('Escape')
+    await expect(salary).toHaveValue('4 000,00')
     await salary.click()
     await salary.fill('3000')
     await salary.press('Enter')
