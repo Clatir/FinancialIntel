@@ -20,10 +20,11 @@
 import type { Settings } from '../schema/settings'
 import { envelopeKind, type EnvelopeKind } from '../schema/budget'
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
-import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawNow, warsawStamp } from './dates'
+import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawEndOf, warsawNow, warsawStamp, warsawStartOf } from './dates'
 import { openingsOf } from './balances'
 import { heldOf, settleHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
 import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type IncomeStats } from './income'
+import { goalAt, goalDecided, goalTakes } from './goals'
 import { debtOf, loanStates, type LoanState } from './loans'
 import { categoryIndex, costOf, partsOf, splitEvenly, sum } from './operations'
 
@@ -290,7 +291,8 @@ export interface Moves {
 
 export interface FleetEvent {
   date: string
-  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'month-end' | 'loot' | TxKind
+  /** 'goal' = a goal's money moved out (to the shields or another goal – 1.4.2). */
+  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'month-end' | 'loot' | 'goal' | TxKind
   amount: number
   txId?: string
   moves: Moves
@@ -317,7 +319,8 @@ export interface FleetState {
   total: number
   shields: { amount: number; target: number | null; free: number; min: number | null }
   hull: { amount: number; target: number | null }
-  goals: Array<{ id: string; name: string; amount: number; target: number; priority: number }>
+  /** Every goal, archived too; `takes` = it takes money today (the loot's and an expense's choice – B13, N1). */
+  goals: Array<{ id: string; name: string; amount: number; target: number; priority: number; takes: boolean }>
   energy: number
   tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; due: number }>
   taxHold: number
@@ -374,6 +377,7 @@ function averageOf(byMonth: ReadonlyMap<string, number>, firstFull: string | nul
 
 export function computeFleet(input: FleetInput): FleetState {
   const { date: today, month } = warsawNow(input.now)
+  const nowMs = typeof input.now === 'string' ? Date.parse(input.now) : input.now.getTime()
   const { settings } = input
   const cats = categoryIndex(settings.categories)
   const containers = input.containers ?? []
@@ -466,7 +470,14 @@ export function computeFleet(input: FleetInput): FleetState {
   const alarms: Alarm[] = []
   const log: FleetEvent[] = []
 
-  const activeGoals = () => goalsAll.filter((g) => !g.archived).map((g) => ({ id: g.id, amount: goalAmount.get(g.id) ?? 0, target: g.target, ictj: g.source === 'ictj' }))
+  // The goals as they were that day (C1): added by then, not archived then, by the priority and target then – a change
+  // of the list never moves money docked before it.
+  const activeGoals = (at: number) =>
+    goalsAll
+      .filter((g) => goalTakes(g, at))
+      .map((g) => ({ g, at: goalAt(g, at) }))
+      .sort((a, b) => a.at.priority - b.at.priority || a.g.createdAt.localeCompare(b.g.createdAt) || a.g.id.localeCompare(b.g.id))
+      .map(({ g, at }) => ({ id: g.id, amount: goalAmount.get(g.id) ?? 0, target: at.target, ictj: g.source === 'ictj' }))
   const addGoal = (id: string, v: number, moves: Moves) => {
     goalAmount.set(id, (goalAmount.get(id) ?? 0) + v)
     moves.goals = { ...moves.goals, [id]: (moves.goals?.[id] ?? 0) + v }
@@ -483,8 +494,9 @@ export function computeFleet(input: FleetInput): FleetState {
     if (fromHull) moves.hull = (moves.hull ?? 0) - fromHull
     addShields(-(v - fromHull), moves)
   }
-  const dock = (v: number, date: string, moves: Moves) => {
-    const split = dockAmount(v, { shields, hull, goals: activeGoals() }, targetsAt(date))
+  /** A delivery docked by the order: shields, hull, the goals that take money at `at` (when it came in – `cameIn`). */
+  const dock = (v: number, date: string, at: number, moves: Moves) => {
+    const split = dockAmount(v, { shields, hull, goals: activeGoals(at) }, targetsAt(date))
     addShields(split.shields, moves)
     hull += split.hull
     if (split.hull) moves.hull = (moves.hull ?? 0) + split.hull
@@ -494,9 +506,9 @@ export function computeFleet(input: FleetInput): FleetState {
    * Straight into the goals (the ICTTJ pool „Cele”): the goals of the ICTTJ forecast first – the money was set aside
    * for them – then the own ones, each by the common priority list (D72); what they do not need stays in the shields.
    */
-  const fillGoals = (v: number, moves: Moves) => {
+  const fillGoals = (v: number, at: number, moves: Moves) => {
     let rest = v
-    const goals = activeGoals()
+    const goals = activeGoals(at)
     for (const g of [...goals.filter((x) => x.ictj), ...goals.filter((x) => !x.ictj)]) {
       const take = Math.min(rest, Math.max(0, g.target - g.amount))
       if (take > 0) addGoal(g.id, take, moves)
@@ -505,6 +517,12 @@ export function computeFleet(input: FleetInput): FleetState {
     if (rest) addShields(rest, moves)
   }
   const knownGoal = (id: string) => goalsAll.some((g) => g.id === id)
+  /**
+   * When a delivery came in, for the goals it may fill (C1 – a goal's change counts from its moment on): its docking,
+   * else when the operation came to FI (an import, a hand entry), never before its day – the goals then, as the
+   * docking window shows them now.
+   */
+  const cameIn = (t: Transaction, d: Docking | undefined): number => Math.max(Date.parse(d?.updatedAt ?? t.createdAt), warsawStartOf(t.date).getTime())
   const applySplit = (v: number, split: NonNullable<Docking['split']>, moves: Moves) => {
     let rest = v
     if (split.hull) {
@@ -651,7 +669,7 @@ export function computeFleet(input: FleetInput): FleetState {
         const d = dockingByTx.get(t.id)
         if (!rest) break
         if (d?.split) applySplit(rest, d.split, moves)
-        else dock(rest, t.date, moves)
+        else dock(rest, t.date, cameIn(t, d), moves)
         break
       }
       case 'trading': {
@@ -659,11 +677,11 @@ export function computeFleet(input: FleetInput): FleetState {
           // A withdrawal from the trading account (D55): the pool decides – Cele → goals, Podatek → outside the budget.
           const d = dockingByTx.get(t.id)
           if (d?.split) applySplit(amt, d.split, moves)
-          else if (d?.pool === 'goals') fillGoals(amt, moves)
+          else if (d?.pool === 'goals') fillGoals(amt, cameIn(t, d), moves)
           else if (d?.pool === 'tax') {
             taxHold += amt
             moves.taxHold = amt
-          } else dock(amt, t.date, moves)
+          } else dock(amt, t.date, cameIn(t, d), moves)
         } else if (amt < 0) {
           // The tax money going back to the trading capital (an ICTTJ return of the pool „Podatek”): out of the tax
           // hold, not the budget's money – no firewall.
@@ -715,7 +733,7 @@ export function computeFleet(input: FleetInput): FleetState {
             moves.loans = { [key]: -back }
             addShields(back, moves)
           }
-          if (amt > back) dock(amt - back, t.date, moves)
+          if (amt > back) dock(amt - back, t.date, cameIn(t, undefined), moves)
         }
         break
       }
@@ -747,7 +765,7 @@ export function computeFleet(input: FleetInput): FleetState {
             rest -= g
           }
           addShields(rest, moves)
-        } else if (startTotal > 0) dock(startTotal, start, moves)
+        } else if (startTotal > 0) dock(startTotal, start, warsawEndOf(start).getTime(), moves)
         else addShields(startTotal, moves)
         record({ date: start, kind: 'start', amount: startTotal, moves })
         payMonth(monthOf(start), start)
@@ -824,7 +842,9 @@ export function computeFleet(input: FleetInput): FleetState {
               let rest = loot
               for (const [id, g] of Object.entries(decision.goals)) {
                 const take = Math.min(rest, g)
-                if (!take || !knownGoal(id)) continue
+                const target = goalsAll.find((x) => x.id === id)
+                // A goal archived by then takes nothing more (B13): its share stays in the shields.
+                if (!take || !target || !goalDecided(target, Date.parse(decision.decidedAt))) continue
                 addGoal(id, take, moves)
                 rest -= take
               }
@@ -847,6 +867,25 @@ export function computeFleet(input: FleetInput): FleetState {
       if (t.date < start || !counts(t)) continue
       events.push({ key: at(t.date, 3, `${t.time ?? ''} ${t.createdAt} ${t.id}`), run: () => runTx(t) })
     }
+    // A goal's money moved out (C2, B30) at the end of its day: what it held then (never more than it holds), to the
+    // shields or another goal.
+    for (const g of goalsAll)
+      for (const [i, tr] of (g.transfers ?? []).entries()) {
+        const date = warsawNow(tr.at).date
+        if (date < start || date > today) continue
+        events.push({
+          key: at(date, 4, `${g.id} ${String(i).padStart(4, '0')}`),
+          run: () => {
+            const move = Math.min(tr.amount, goalAmount.get(g.id) ?? 0)
+            if (move <= 0) return
+            const moves: Moves = {}
+            addGoal(g.id, -move, moves)
+            if (tr.to !== g.id && knownGoal(tr.to)) addGoal(tr.to, move, moves)
+            else addShields(move, moves)
+            record({ date, kind: 'goal', amount: move, moves })
+          }
+        })
+      }
     events.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
     for (const e of events) e.run()
   }
@@ -930,7 +969,7 @@ export function computeFleet(input: FleetInput): FleetState {
     total,
     shields: { amount: shields, target: targets.shields, free: targets.shields != null ? Math.max(0, shields - targets.shields) : 0, min: minShields },
     hull: { amount: hull, target: targets.hull },
-    goals: goalsAll.map((g) => ({ id: g.id, name: g.name, amount: goalAmount.get(g.id) ?? 0, target: g.target, priority: g.priority })),
+    goals: goalsAll.map((g) => ({ id: g.id, name: g.name, amount: goalAmount.get(g.id) ?? 0, target: g.target, priority: g.priority, takes: goalTakes(g, nowMs) })),
     energy,
     tanks: containers
       .filter((c) => c.cycleMonths > 1 && (activeIn(c, month) || (tanks.get(c.id) ?? 0) !== 0))

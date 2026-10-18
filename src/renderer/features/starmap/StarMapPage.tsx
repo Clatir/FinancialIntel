@@ -16,8 +16,9 @@ import { AmountField, plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, NameInput, Panel, cx } from '../../components/ui'
+import { Modal } from '../../components/Modal'
 import { countLabel, monthLabel } from '../../lib/format'
-import { addGoal, archiveGoal, moveGoal, patchGoal } from './actions'
+import { addGoal, archiveGoal, moveGoal, moveGoalMoney, patchGoal, type GoalMoneyTarget } from './actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -33,11 +34,15 @@ export function StarMapPage() {
   const monthly = fleet ? goalInflow(fleet.log, fleet.started ? fleet.start : null, fleet.month) : null
   const etas = useMemo(() => (fleet ? goalEtas(active.map((g) => ({ id: g.id, amount: amounts.get(g.id) ?? 0, target: g.target })), monthly, fleet.month) : {}), [fleet, active, amounts, monthly])
   const [dragged, setDragged] = useState<string | null>(null)
+  // The goal whose money is being moved (C2, B30): archiving it, or an archived one.
+  const [moving, setMoving] = useState<{ goal: Goal; archive: boolean } | null>(null)
+  const archiveOrAsk = (g: Goal) => ((amounts.get(g.id) ?? 0) > 0 ? setMoving({ goal: g, archive: true }) : archiveGoal(g, true))
   // Draw on Liquidity (D73, ICT): the first goal not reached yet – where the next delivery for the goals flows.
   const dol = active.find((g) => g.target > 0 && (amounts.get(g.id) ?? 0) < g.target)?.id ?? null
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const forecast = snap.status === 'ok' ? chosenForecast(snap.forecasts, forecastId) : null
-  const total = active.reduce((n, g) => n + (amounts.get(g.id) ?? 0), 0)
+  // All the money in goals, the archived ones' too (it is still there – C1).
+  const total = goalsAll.reduce((n, g) => n + (amounts.get(g.id) ?? 0), 0)
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-starmap">
@@ -76,6 +81,7 @@ export function StarMapPage() {
                       }}
                       scenario={g.source === 'ictj' && forecast && forecast.id === g.ictj?.forecastId ? forecast.name : null}
                       dol={g.id === dol}
+                      onArchive={() => archiveOrAsk(g)}
                     />
                   ))}
                   <div
@@ -101,6 +107,11 @@ export function StarMapPage() {
                       <span className="min-w-0 flex-1 truncate">{g.name}</span>
                       {g.source === 'ictj' ? <span className="text-[11px] text-dim">poza wybranym scenariuszem ICTTJ</span> : null}
                       <span className="num text-muted">{zl(amounts.get(g.id) ?? 0)}</span>
+                      {(amounts.get(g.id) ?? 0) > 0 && !readOnly && (
+                        <button className="text-[11.5px] text-accent hover:underline" onClick={() => setMoving({ goal: g, archive: false })} data-testid="starmap-archived-move">
+                          przenieś środki
+                        </button>
+                      )}
                       {g.source === 'own' && !readOnly && (
                         <button className="text-[11.5px] text-accent hover:underline" onClick={() => archiveGoal(g, false)}>
                           przywróć
@@ -108,7 +119,10 @@ export function StarMapPage() {
                       )}
                     </div>
                   ))}
-                  <p className="pt-1 text-[11px] text-dim">Środki zarchiwizowanego celu zostają w nim (wydatek z tego celu je zużywa); nowe dostawy już do niego nie trafiają.</p>
+                  <p className="pt-1 text-[11px] text-dim">
+                    Środki zarchiwizowanego celu zostają w nim, dopóki ich nie przeniesiesz (wydatek z tego celu też je zużywa); nowe dostawy już do niego nie
+                    trafiają.
+                  </p>
                 </div>
               </Panel>
             )}
@@ -150,7 +164,78 @@ export function StarMapPage() {
           </div>
         </Columns>
       </div>
+      {moving && (
+        <GoalMoneyDialog
+          goal={moving.goal}
+          amount={amounts.get(moving.goal.id) ?? 0}
+          archive={moving.archive}
+          others={active.filter((g) => g.id !== moving.goal.id)}
+          onClose={() => setMoving(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * Where a goal's money goes (C2, B30): archiving a goal with money asks – to the shields, to another goal, or it stays
+ * (then „przenieś środki” on the archived list later); an archived goal's money moved the same way.
+ */
+function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goal; amount: number; archive: boolean; others: readonly Goal[]; onClose: () => void }) {
+  const [to, setTo] = useState<'shields' | 'goal' | 'stay'>('shields')
+  const [goalTo, setGoalTo] = useState(others[0]?.id ?? '')
+  const target: GoalMoneyTarget | null = to === 'stay' ? null : to === 'goal' ? goalTo || null : 'shields'
+  const confirm = () => {
+    if (to === 'goal' && !goalTo) return toast('Wybierz cel.', 'error')
+    if (archive) archiveGoal(goal, true, target ? { to: target, amount } : null)
+    else if (target) moveGoalMoney(goal, target, amount)
+    onClose()
+  }
+  return (
+    <Modal
+      title={archive ? `Archiwizacja celu „${goal.name}”` : `Środki celu „${goal.name}”`}
+      width={440}
+      onClose={onClose}
+      testId="starmap-money"
+      footer={
+        <>
+          <span className="flex-1" />
+          <button className="btn h-[26px]" onClick={onClose}>
+            Anuluj
+          </button>
+          <button className="btn btn-accent h-[26px]" disabled={!archive && to === 'stay'} onClick={confirm} data-testid="starmap-money-ok">
+            {archive ? 'Zarchiwizuj' : 'Przenieś'}
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 text-[12px]">
+        <p>
+          W celu jest <span className="num text-fg-strong">{zl(amount)}</span>.{archive ? ' Od dziś nie trafią do niego nowe pieniądze. Co z tymi, które są?' : ' Dokąd je przenieść?'}
+        </p>
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={to === 'shields'} onChange={() => setTo('shields')} data-testid="starmap-money-shields" />
+          do osłon (bufor)
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={to === 'goal'} disabled={!others.length} onChange={() => setTo('goal')} data-testid="starmap-money-goal" />
+          do celu
+          <select className="input h-[24px] min-w-0 flex-1" value={goalTo} disabled={to !== 'goal'} onChange={(e) => setGoalTo(e.currentTarget.value)} aria-label="Cel">
+            {others.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {archive && (
+          <label className="flex items-center gap-2">
+            <input type="radio" checked={to === 'stay'} onChange={() => setTo('stay')} data-testid="starmap-money-stay" />
+            zostaw w celu (przeniesiesz później albo wydasz z tego celu)
+          </label>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -167,7 +252,8 @@ function GoalRow({
   onDragEnd,
   onDrop,
   scenario,
-  dol
+  dol,
+  onArchive
 }: {
   goal: Goal
   index: number
@@ -182,6 +268,7 @@ function GoalRow({
   onDrop: () => void
   scenario: string | null
   dol: boolean
+  onArchive: () => void
 }) {
   const ictj = g.source === 'ictj'
   const noTarget = g.target <= 0
@@ -258,7 +345,7 @@ function GoalRow({
           g.deadline && <span className="text-[11.5px] text-dim">termin {monthLabel(g.deadline)}</span>
         )}
         {!ictj && !readOnly && (
-          <button className="btn btn-ghost h-[20px] px-1.5 text-[11px]" onClick={() => archiveGoal(g, true)} title="Zarchiwizuj cel" data-testid="starmap-archive">
+          <button className="btn btn-ghost h-[20px] px-1.5 text-[11px]" onClick={onArchive} title="Zarchiwizuj cel" data-testid="starmap-archive">
             archiwizuj
           </button>
         )}
