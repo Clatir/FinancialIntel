@@ -73,11 +73,30 @@ export interface FilterContext {
   orders: Pick<Orders, 'quietHours'>
 }
 
+/**
+ * The search's texts, once per record object while the categories and accounts stay (W14: built and folded at every
+ * key of the query before); a record changes as a new object, so its text is built anew.
+ */
+let texts: { categories: CategoryIndex; accounts: readonly Account[]; names: Map<string, string>; byTx: WeakMap<Transaction, string> } | null = null
+
 /** Text the search looks in: counterparty, title, notes, the bank's description, category, account. */
 export function searchTextOf(t: Transaction, ctx: FilterContext): string {
-  const cats = [t.categoryId, ...t.splits.map((s) => s.categoryId)].filter(Boolean).map((id) => ctx.categories.label(id))
-  const account = ctx.accounts.find((a) => a.id === t.accountId)?.name ?? ''
-  return fold([t.counterparty, t.title, t.note, t.logNote, t.bank?.description ?? '', ...cats, account].join(' \u0001 '))
+  if (!texts || texts.categories !== ctx.categories || texts.accounts !== ctx.accounts)
+    texts = { categories: ctx.categories, accounts: ctx.accounts, names: new Map(ctx.accounts.map((a) => [a.id, a.name])), byTx: new WeakMap() }
+  let text = texts.byTx.get(t)
+  if (text === undefined) {
+    const cats = [t.categoryId, ...t.splits.map((s) => s.categoryId)].filter(Boolean).map((id) => ctx.categories.label(id))
+    text = fold([t.counterparty, t.title, t.note, t.logNote, t.bank?.description ?? '', ...cats, texts.names.get(t.accountId) ?? ''].join(' \u0001 '))
+    texts.byTx.set(t, text)
+  }
+  return text
+}
+
+/** The query as the search uses it – its words and the amount typed, once per query (not per operation). */
+let parsed: { q: string; amount: number | null; words: string[] } = { q: '', amount: null, words: [] }
+function parsedQuery(q: string) {
+  if (parsed.q !== q) parsed = { q, amount: queryAmount(q), words: fold(q).split(/\s+/).filter(Boolean) }
+  return parsed
 }
 
 export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterContext): boolean {
@@ -95,9 +114,8 @@ export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterCo
   }
   const q = f.query.trim()
   if (q) {
-    const amount = queryAmount(q)
+    const { amount, words } = parsedQuery(q)
     if (amount != null && Math.abs(t.amount) === amount) return true
-    const words = fold(q).split(/\s+/).filter(Boolean)
     const text = searchTextOf(t, ctx)
     if (!words.every((w) => text.includes(w))) return false
   }

@@ -124,16 +124,27 @@ export const isOpeningItem = (txId: string): boolean => txId.startsWith(OPENING_
  * one word only when it is the whole counterparty („MAMA”). Archived members too: their money is still theirs.
  */
 export function memberOf<M extends Pick<HouseholdMember, 'bankNames'>>(counterparty: string, members: readonly M[] | undefined): M | null {
+  if (!members?.length) return null
+  // The members' names split once per list, each counterparty answered once (W12: the engine asks for every income).
+  let cache = memberCache.get(members)
+  if (!cache) {
+    const names = members.flatMap((m) => m.bankNames.map((name) => ({ m, parts: fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2) })).filter((n) => n.parts.length))
+    memberCache.set(members, (cache = { names, by: new Map() }))
+  }
+  const known = cache.by.get(counterparty)
+  if (known !== undefined) return known as M | null
   const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
-  if (!who.length) return null
-  for (const m of members ?? [])
-    for (const name of m.bankNames) {
-      const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
-      if (!parts.length) continue
-      if (parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))) return m
-    }
-  return null
+  let found: M | null = null
+  if (who.length)
+    for (const { m, parts } of cache.names)
+      if (parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))) {
+        found = m as M
+        break
+      }
+  cache.by.set(counterparty, found)
+  return found
 }
+const memberCache = new WeakMap<object, { names: Array<{ m: unknown; parts: string[] }>; by: Map<string, unknown> }>()
 
 /** Is an income a household member's money – marked so, split among members, or from a member's name in the bank? */
 export function isMemberMoney(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'splits' | 'counterparty'>, members: ReadonlyArray<Pick<HouseholdMember, 'bankNames'>>): boolean {

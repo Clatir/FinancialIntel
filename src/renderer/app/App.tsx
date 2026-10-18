@@ -244,6 +244,18 @@ function TrayStatus() {
   return null
 }
 
+/**
+ * The work in the background (the game's days, the ICTTJ goals, the household's start, the celebrations): its own
+ * component – a change of the records renders it, never the whole window (W5).
+ */
+function Background() {
+  useIctjGoalSync()
+  useHouseholdSinceSeed()
+  useGameAdvance()
+  useGameCelebrations()
+  return null
+}
+
 export function App() {
   const phase = useData((s) => s.phase)
   // Ctrl+$ (D30): every amount of the tree renders masked; the change renders the whole tree again (no memoized parts).
@@ -252,10 +264,6 @@ export function App() {
   const route = useUi((s) => s.route)
   useGlobalHotkeys()
   useBackNavigation()
-  useIctjGoalSync()
-  useHouseholdSinceSeed()
-  useGameAdvance()
-  useGameCelebrations()
   useEffect(() => {
     void boot()
     void loadMachinePrefs()
@@ -265,15 +273,25 @@ export function App() {
     initUpdates()
   }, [])
 
-  if (phase === 'boot') return <BootScreen />
-  if (phase === 'setup')
-    return (
-      <>
-        <FolderSetup />
-        <Toasts />
-      </>
-    )
+  // The background first and in one place: it stays mounted whatever the phase.
+  return (
+    <>
+      <Background />
+      {phase === 'boot' ? <BootScreen /> : phase === 'setup' ? <SetupPhase /> : <Window route={route} hideAmounts={hideAmounts} />}
+    </>
+  )
+}
 
+function SetupPhase() {
+  return (
+    <>
+      <FolderSetup />
+      <Toasts />
+    </>
+  )
+}
+
+function Window({ route, hideAmounts }: { route: Route; hideAmounts: boolean }) {
   return (
     <div className="flex h-full" data-amounts={hideAmounts ? 'hidden' : 'shown'}>
       <SideMenu route={route} />

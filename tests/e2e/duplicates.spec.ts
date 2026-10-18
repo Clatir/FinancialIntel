@@ -13,6 +13,7 @@ async function typeExpense(page: Page, amount: string, counterparty: string, dat
   await field.fill(amount)
   await field.press('Enter')
   await page.getByTestId('operation-counterparty').fill(counterparty)
+  await page.getByTestId('operation-counterparty').press('Enter')
   await page.getByTestId('operation-date').fill(date)
   await page.getByTestId('operation-date').press('Enter')
 }

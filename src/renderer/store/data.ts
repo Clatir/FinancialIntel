@@ -4,7 +4,7 @@ import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { RecordTypes } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
-import { chooser, merge3, pathKey, type Path, type Side } from '@shared/merge'
+import { chooser, deepEqual, merge3, pathKey, sameContentAs, type Path, type Side } from '@shared/merge'
 import { changedPaths, decideRemote, decideRemoteRemoval, isoMs, newerChoice, newerFields, relatedPaths, type RemoteMode } from '@shared/remoteChanges'
 import { api, errorMessage } from '../lib/api'
 import { useRemote, type PendingRemote } from './remote'
@@ -135,6 +135,49 @@ const set = useData.setState
 const get = useData.getState
 /** The records of one collection as a loosely typed map (the store is generic over collections). */
 const mapOf = (s: DataState, c: Collection): AnyMap => s.records[c] as AnyMap
+
+/** The records of a map as a list: one list per map object, shared by every screen and the engine (W5, W13). */
+const lists = new WeakMap<object, unknown[]>()
+export function listOf<T>(map: Record<string, RecordEntry<T>>): T[] {
+  let list = lists.get(map) as T[] | undefined
+  if (!list) lists.set(map, (list = Object.values(map).map((e) => e.record)))
+  return list
+}
+
+/** The same entry but its save stamps: the path, the read-only mark and the content (W3). */
+const sameEntry = (a: RecordEntry<unknown>, b: RecordEntry<unknown>) => a.relPath === b.relPath && a.readOnly === b.readOnly && sameContentAs(a.record, b.record)
+
+/**
+ * The version on the disk of what memory has (a save's stamps only – W3): put in place, no new map, so the screens and
+ * the engine do not count everything again; the map's list is built anew when asked. False = it differs.
+ */
+function stampInPlace(map: AnyMap, id: string, entry: RecordEntry<RecordTypes[Collection]>): boolean {
+  const latest = map[id]
+  if (!latest || !sameEntry(latest, entry)) return false
+  map[id] = entry
+  lists.delete(map)
+  return true
+}
+
+const STAMPS = ['updatedAt', 'updatedBy', 'schemaVersion'] as const
+
+/** `next` with the settings' parts equal to `prev`'s as `prev`'s objects: memories keyed on them stay (W10). */
+function shareSettings(prev: SettingsFile | null, next: SettingsFile): SettingsFile {
+  if (!prev) return next
+  const before = prev.settings as Record<string, unknown>
+  const settings = { ...next.settings } as Record<string, unknown>
+  for (const k of Object.keys(settings)) if (k in before && deepEqual(before[k], settings[k])) settings[k] = before[k]
+  return { ...next, settings: settings as SettingsFile['settings'] }
+}
+
+/** Settings from the disk: the same content – memory's object with the new stamps (nothing counted again); else shared parts. */
+function adoptSaved(prev: SettingsFile | null, saved: SettingsFile): SettingsFile | null {
+  if (prev && sameContentAs(prev, saved)) {
+    for (const k of STAMPS) (prev as Record<string, unknown>)[k] = saved[k]
+    return null
+  }
+  return shareSettings(prev, saved)
+}
 /** State patch replacing the map of one collection. */
 const withMap = (s: DataState, c: Collection, map: AnyMap): Pick<DataState, 'records'> => ({ records: { ...s.records, [c]: map } as RecordMaps })
 
@@ -203,7 +246,8 @@ export function applyChange(change: ChangeSet): void {
       const key = keyOf(collection, id)
       const local = mapOf(s, collection)[id]
       if (!external) {
-        if (!dirty.has(key)) mapFor(collection)[id] = entry
+        // This computer's own write as memory has it (its stamps only): in place, nothing counted again (W3).
+        if (!dirty.has(key) && !stampInPlace(maps[collection] ?? mapOf(s, collection), id, entry)) mapFor(collection)[id] = entry
         continue
       }
       const pending = pendingFor(key)
@@ -225,7 +269,8 @@ export function applyChange(change: ChangeSet): void {
       const key = keyOf(collection, id)
       const local = mapOf(s, collection)[id]
       if (!external) {
-        if (!dirty.has(key)) delete mapFor(collection)[id]
+        // Gone from memory already (deleted here): no new map (W3).
+        if (!dirty.has(key) && id in (maps[collection] ?? mapOf(s, collection))) delete mapFor(collection)[id]
         continue
       }
       if (!local) continue
@@ -237,18 +282,21 @@ export function applyChange(change: ChangeSet): void {
     if (change.fi) {
       const key = FI_KEY
       if (!external) {
-        if (!dirty.has(key)) next.fi = change.fi
+        if (!dirty.has(key)) {
+          const fi = adoptSaved(s.fi, change.fi)
+          if (fi) next.fi = fi
+        }
       } else if (s.fi) {
         const pending = pendingFor(key)
         const localEdits = dirty.has(key)
         const busy = localEdits || !!pending
         const base = pending ? pending.base : (bases.get(key) ?? (busy ? undefined : s.fi))
         const d = decideRemote({ mode, dirty: busy, base, mine: s.fi, theirs: change.fi })
-        if (d.action === 'take') next.fi = change.fi
+        if (d.action === 'take') next.fi = shareSettings(s.fi, change.fi)
         else if (d.action === 'ignore') {
           if (!pending) bases.set(key, change.fi)
         } else if (d.action === 'merge') {
-          next.fi = d.merged as SettingsFile
+          next.fi = shareSettings(s.fi, d.merged as SettingsFile)
           bases.set(key, change.fi)
           toSave.push({ collection: 'fi', id: 'fi', from: change.fi.updatedBy ?? null })
         } else queue({ key, collection: 'fi', id: 'fi', type: 'update', base, theirs: change.fi }, localEdits)
@@ -384,6 +432,36 @@ export function acceptNewer(keys: readonly string[]): { decided: number; left: n
   return { decided, left }
 }
 
+/** A record's save answered: the version on the disk in memory – in place when only its stamps changed (W3). */
+function applySaved(c: Collection, id: string, key: string, version: number, entry: RecordEntry<RecordTypes[Collection]>): void {
+  const latestVersion = (versions.get(key) ?? 0) === version
+  if (latestVersion) {
+    dirty.delete(key)
+    bases.delete(key)
+    forgetEdits(key)
+  } else if (mapOf(get(), c)[id]) {
+    // Disk now holds what was sent: the base of a later merge.
+    bases.set(key, entry.record)
+  }
+  const s = get()
+  const latest = mapOf(s, c)[id]
+  // Deleted while the save was in flight: do not bring it back.
+  if (!latest) return
+  const draft = !!s.drafts[id]
+  if (!draft && (latestVersion ? stampInPlace(mapOf(s, c), id, entry) : latest.relPath === entry.relPath)) return
+  set((st) => {
+    const map = { ...mapOf(st, c) }
+    // Newer local edits pending: keep them, but adopt the new path.
+    if (map[id]) map[id] = latestVersion ? entry : { ...map[id]!, relPath: entry.relPath }
+    let drafts = st.drafts
+    if (drafts[id]) {
+      drafts = { ...drafts }
+      delete drafts[id]
+    }
+    return { ...withMap(st, c, map), drafts }
+  })
+}
+
 async function runSave(key: string): Promise<void> {
   const target = dirty.get(key)
   if (!target) return
@@ -404,31 +482,14 @@ async function runSave(key: string): Promise<void> {
         dirty.delete(key)
         bases.delete(key)
         forgetEdits(key)
-        set({ fi: saved })
+        const next = adoptSaved(get().fi, saved)
+        if (next) set({ fi: next })
       } else bases.set(key, saved)
     } else {
       const c = target.collection
       const current = mapOf(get(), c)[target.id] as RecordEntry<RecordTypes[Collection]>
       const entry = await api.saveRecord(c, current.record)
-      set((s) => {
-        const map = { ...mapOf(s, c) }
-        const latest = map[target.id]
-        if ((versions.get(key) ?? 0) === version) {
-          dirty.delete(key)
-          bases.delete(key)
-          forgetEdits(key)
-          // Deleted while the save was in flight: do not bring it back.
-          if (latest) map[target.id] = entry
-        } else if (latest) {
-          // Disk now holds what was sent: the base of a later merge.
-          bases.set(key, entry.record)
-          // Newer local edits pending: keep them, but adopt the new path.
-          map[target.id] = { ...latest, relPath: entry.relPath }
-        }
-        const drafts = { ...s.drafts }
-        delete drafts[target.id]
-        return { ...withMap(s, c, map), drafts }
-      })
+      applySaved(c, target.id, key, version, entry)
     }
     retryDelay.delete(key)
     failed.delete(key)
@@ -607,7 +668,7 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
 /** Settings written by the main process (restored from the history): replace the in-memory copy. */
 export function adoptSettings(fi: SettingsFile): void {
   forget(FI_KEY)
-  set({ fi })
+  set((s) => ({ fi: shareSettings(s.fi, fi) }))
   bumpPending(0, { error: saveError() })
 }
 

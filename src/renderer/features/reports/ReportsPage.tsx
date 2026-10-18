@@ -16,7 +16,7 @@ import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operat
 import { formatPln } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
-import { useGame } from '../../store/game'
+import { useGameView } from '../../store/game'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { api } from '../../lib/api'
@@ -100,7 +100,7 @@ function BriefingReport() {
 
 function WatchReport() {
   const fleet = useFleet()!
-  const game = useGame()
+  const game = useGameView()
   const settings = useData((s) => s.fi!.settings)
   const transactions = useRecordList('transactions')
   const cats = useCategories()
@@ -203,7 +203,7 @@ function useDebrief(month: string) {
   const settings = useData((s) => s.fi!.settings)
   const transactions = useRecordList('transactions')
   const plans = useRecordList('months')
-  const game = useGame()
+  const game = useGameView()
   return useMemo(() => {
     const brief = debriefing(month, { transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today })
     const log = logAccuracy(transactions, settings.orders, [month])[0]!
@@ -358,7 +358,7 @@ function YearReport() {
   const settings = useData((s) => s.fi!.settings)
   const transactions = useRecordList('transactions')
   const balances = useRecordList('balances')
-  const game = useGame()
+  const game = useGameView()
   const cats = useCategories()
   const thisYear = fleet.today.slice(0, 4)
   // In January the review of the year just closed (spec).

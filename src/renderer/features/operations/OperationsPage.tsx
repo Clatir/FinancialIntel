@@ -2,10 +2,10 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, compareOperations, marksOf, matchesFilter, needsLog, sumOperations, type OperationMark, type PeriodFilter } from '@shared/operationsView'
-import { useDuplicates } from '../import/DuplicatesPanel'
+import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
-import { discardDraft, useData } from '../../store/data'
+import { discardDraft, listOf, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { navigate, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
@@ -209,7 +209,7 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
 
 /** Duplicates waiting (D77): to the import screen, where they are merged. */
 function DuplicatesLink() {
-  const n = useDuplicates().groups.length
+  const n = useDuplicateCount()
   if (!n) return null
   return (
     <button type="button" className="text-accent hover:underline" onClick={() => navigate({ page: 'import' })} title="Ta sama operacja dwa razy – scal na ekranie Import" data-testid="operations-duplicates">
@@ -325,7 +325,7 @@ export function OperationsPage() {
   const searchRef = useRef<HTMLInputElement>(null)
   const deferred = useDeferredValue(filter)
 
-  const all = useMemo(() => Object.values(records).map((e) => e.record), [records])
+  const all = useMemo(() => listOf(records), [records])
   const rows = useMemo(() => {
     if (!fi) return []
     const ctx = { categories: cats, accounts, orders: fi.settings.orders }

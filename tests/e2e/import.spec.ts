@@ -31,6 +31,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await amount.fill('16,16')
     await amount.press('Enter')
     await page.getByTestId('operation-counterparty').fill('Biedronka')
+    await page.getByTestId('operation-counterparty').press('Enter')
     await page.getByTestId('operation-date').fill('02.10.2025')
     await page.getByTestId('operation-date').press('Enter')
     await page.getByTestId('operation-time').fill('18:40')

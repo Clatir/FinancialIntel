@@ -68,8 +68,14 @@ type CounterpartyOf = Pick<Container, 'counterparty' | 'archived'>
 const containerKeys = (containers: readonly CounterpartyOf[]): Set<string> =>
   new Set(containers.filter((c) => !c.archived).map((c) => counterpartyKey(c.counterparty)).filter(Boolean))
 
+/** Each record's payee key, once per record object (W6: a record never changes in place). */
+const payeeKeys = new WeakMap<object, string>()
 /** Who an operation pays, as a container and the import name them: the counterparty, else the title (`counterpartyKey`). */
-export const payeeKey = (t: Pick<Transaction, 'counterparty' | 'title'>): string => counterpartyKey(t.counterparty || t.title)
+export function payeeKey(t: Pick<Transaction, 'counterparty' | 'title'>): string {
+  let key = payeeKeys.get(t)
+  if (key === undefined) payeeKeys.set(t, (key = counterpartyKey(t.counterparty || t.title)))
+  return key
+}
 
 /** Does an operation pay a container (linked, or the same payee as one)? Fixed costs are no envelope's spending. */
 const paysContainer = (t: Transaction, keys: ReadonlySet<string>) => !!t.containerId || (keys.size > 0 && keys.has(payeeKey(t)))
@@ -155,9 +161,13 @@ export function recurringPayments(transactions: readonly Transaction[], month: s
     if (t.kind !== 'expense' || t.amount >= 0 || t.containerId || t.goalId || t.date >= firstDayOf(month)) continue
     const key = payeeKey(t)
     if (!key || known.has(key)) continue
-    groups.set(key, [...(groups.get(key) ?? []), t])
+    // Pushed, never copied (W6: a shop of thousands of payments made this quadratic).
+    const list = groups.get(key)
+    if (list) list.push(t)
+    else groups.set(key, [t])
   }
   const window = fullMonthsBefore(transactions, month, SALARY_MONTHS)
+  const inWindowMonths = new Set(window)
   const out: RecurringPayment[] = []
   for (const [key, list] of groups) {
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
@@ -169,7 +179,7 @@ export function recurringPayments(transactions: readonly Transaction[], month: s
       return { key, label: last.counterparty || last.title, amount: -last.amount, cycleMonths, dueMonth: monthOf(last.date), dueDay: dayOfMonth(last.date), categoryId, accountId: last.accountId, payments, last: last.date }
     }
     if (window.length >= 3) {
-      const inWindow = sorted.filter((t) => window.includes(monthOf(t.date)))
+      const inWindow = sorted.filter((t) => inWindowMonths.has(monthOf(t.date)))
       const months = new Set(inWindow.map((t) => monthOf(t.date)))
       if (months.size >= Math.max(3, window.length - 1) && inWindow.length <= window.length + 1 && steady(inWindow.map((t) => -t.amount))) {
         out.push(candidate(1, inWindow.length))

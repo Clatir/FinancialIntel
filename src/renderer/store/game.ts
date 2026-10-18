@@ -6,40 +6,48 @@
  */
 import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
+import { useShallow } from 'zustand/shallow'
 import { advanceGame, gameStartFor, gameView, rateDay, type DayRating, type GameInput, type GameView } from '@shared/calc/game'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
 import type { RecordEntry } from '@shared/api'
 import type { GameMonth, GameSettings } from '@shared/schema'
-import { addRecords, updateRecord, updateSettings, useData } from './data'
-import { fleetNow, useMinute } from './fleet'
+import { addRecords, listOf, updateRecord, updateSettings, useData } from './data'
+import { fleetNow, useToday } from './fleet'
 import { timed } from '../lib/timing'
 
-const recordsOf = <T,>(map: Record<string, RecordEntry<T>>): T[] => Object.values(map).map((e) => e.record)
-
-type Records = ReturnType<typeof useData.getState>['records']
-type Fi = NonNullable<ReturnType<typeof useData.getState>['fi']>
+type DataState = ReturnType<typeof useData.getState>
+type Records = DataState['records']
+type Fi = NonNullable<DataState['fi']>
 
 export function gameInputOf(fi: Fi, records: Records): GameInput {
   return {
     settings: fi.settings,
-    transactions: recordsOf(records.transactions),
-    containers: recordsOf(records.containers),
-    goals: recordsOf(records.goals),
-    months: recordsOf(records.months),
-    dockings: recordsOf(records.dockings),
-    loans: recordsOf(records.loans),
-    balances: recordsOf(records.balances),
-    game: recordsOf(records.game)
+    transactions: listOf(records.transactions),
+    containers: listOf(records.containers),
+    goals: listOf(records.goals),
+    months: listOf(records.months),
+    dockings: listOf(records.dockings),
+    loans: listOf(records.loans),
+    balances: listOf(records.balances),
+    game: listOf(records.game)
   }
 }
 
+/** What the game reads (W10): the engine's parts, its settings and its records – a change of anything else is not its. */
+const GAME_SETTINGS = ['accounts', 'budget', 'categories', 'household', 'layers', 'orders', 'game'] as const
+const GAME_COLLECTIONS = ['transactions', 'containers', 'goals', 'months', 'dockings', 'loans', 'balances', 'game'] as const
+const gameParts = (s: DataState): unknown[] => (s.fi ? [...GAME_SETTINGS.map((k) => s.fi!.settings[k]), ...GAME_COLLECTIONS.map((c) => s.records[c])] : [])
+
+/** Days rated in one pass (W16): each is a whole run of the engine – a long backlog goes in portions, the window between them. */
+const DAYS_PER_PASS = 2
+
 /** Freeze what is due and give the week its mission; the game starts once the budget runs (main window only). */
 export function useGameAdvance(): void {
-  const fi = useData((s) => s.fi)
-  const records = useData((s) => s.records)
   const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly)
-  const minute = useMinute()
+  const parts = useData(useShallow(gameParts))
+  const today = useToday()
   useEffect(() => {
+    const { fi, records } = useData.getState()
     if (!ready || !fi) return
     if (!fi.settings.game.start) {
       // The game starts from zero (spec): the first full day after the budget runs with this version.
@@ -47,37 +55,45 @@ export function useGameAdvance(): void {
         updateSettings((f) => (f.settings.game.start ? f : { ...f, settings: { ...f.settings, game: { ...f.settings.game, start: gameStartFor(new Date()) } } }), { background: true })
       return
     }
-    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date()))
+    // A portion; its months saved change the records, and the next portion runs after the window painted.
+    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date(), { maxDays: DAYS_PER_PASS }))
     if (!change.months.length) return
     const fresh = change.months.filter((m) => !records.game[m.id])
     if (fresh.length) addRecords('game', fresh)
     for (const m of change.months) if (records.game[m.id]) updateRecord('game', m.id, () => m, { background: true })
-  }, [fi, records, ready, minute])
+  }, [parts, ready, today])
 }
 
 const NO_GAME: Record<string, RecordEntry<GameMonth>> = {}
 
-/** The game's view and today's rating so far (the screens of the command). */
-export function useGame(): { view: GameView; today: DayRating | null; input: GameInput } | null {
-  const fi = useData((s) => s.fi)
-  const records = useData((s) => s.records)
-  const minute = useMinute()
+/** The game's view and its records (the reports – W11): no rating of today, recomputed when what the game reads or the day changes. */
+export function useGameView(): { view: GameView; input: GameInput } | null {
+  const today = useToday()
+  const parts = useData(useShallow(gameParts))
   return useMemo(() => {
+    const { fi, records } = useData.getState()
     if (!fi) return null
     const input = gameInputOf(fi, records)
-    const today = warsawNow(new Date(minute)).date
-    return timed('gra: widok', () => {
-      const view = gameView(input.game, fi.settings.game, today)
-      const start = fi.settings.game.start
-      return { view, today: start && start <= today ? rateDay(input, today) : null, input }
-    })
-  }, [fi, records, minute])
+    return { view: timed('gra: widok', () => gameView(input.game, fi.settings.game, today)), input }
+    // `parts` and `today` are the key (read inside from the store's state of now).
+  }, [parts, today])
+}
+
+/** The game's view and today's rating so far (the command's screen). */
+export function useGame(): { view: GameView; today: DayRating | null; input: GameInput } | null {
+  const base = useGameView()
+  const today = useToday()
+  return useMemo(() => {
+    if (!base) return null
+    const start = base.input.settings.game.start
+    return { ...base, today: start && start <= today ? timed('gra: dziś', () => rateDay(base.input, today)) : null }
+  }, [base, today])
 }
 
 /** The game's records alone (the briefing's mission). */
 export function useGameRecords(): GameMonth[] {
   const map = useData((s) => s.records.game ?? NO_GAME)
-  return useMemo(() => recordsOf(map), [map])
+  return useMemo(() => listOf(map), [map])
 }
 
 // ------------------------------------------------------------------ celebrations

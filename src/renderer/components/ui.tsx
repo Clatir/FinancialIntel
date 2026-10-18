@@ -1,5 +1,5 @@
 // adapted from ICTTJ src/renderer/components/ui.tsx @ 84a8339
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from 'react'
+import { forwardRef, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { parseNumberInput } from '../lib/format'
 import { toast } from '../store/ui'
 
@@ -132,12 +132,42 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
   )
 })
 
+/**
+ * A text kept as a draft while typed (`commit` – a record's field, W2): applied on leaving the field or Enter (Ctrl+Enter
+ * in a text area), Esc throws it away – a record is not saved, nor everything counted again, at every key.
+ */
+function useTextDraft(value: string, onChange: (v: string) => void, commit: boolean | undefined, multiline: boolean) {
+  const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not apply it.
+  const cancelled = useRef(false)
+  if (!commit) return { value, onChange: (e: { currentTarget: { value: string } }) => onChange(e.currentTarget.value) }
+  return {
+    value: draft ?? value,
+    onChange: (e: { currentTarget: { value: string } }) => setDraft(e.currentTarget.value),
+    onBlur: () => {
+      if (draft != null && !cancelled.current && draft !== value) onChange(draft)
+      cancelled.current = false
+      setDraft(null)
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && (!multiline || e.ctrlKey)) e.currentTarget.blur()
+      if (e.key === 'Escape' && draft != null) {
+        e.stopPropagation()
+        cancelled.current = true
+        setDraft(null)
+        e.currentTarget.blur()
+      }
+    }
+  }
+}
+
 export function TextField({
   value,
   onChange,
   placeholder,
   className,
   mono,
+  commit,
   ...rest
 }: {
   value: string
@@ -145,20 +175,14 @@ export function TextField({
   placeholder?: string
   className?: string
   mono?: boolean
+  /** Applied on leaving the field (a record's field – W2). */
+  commit?: boolean
   maxLength?: number
   'aria-label'?: string
   'data-testid'?: string
 }) {
-  return (
-    <input
-      className={cx('input', mono && 'num', className)}
-      value={value}
-      placeholder={placeholder}
-      spellCheck={false}
-      onChange={(e) => onChange(e.currentTarget.value)}
-      {...rest}
-    />
-  )
+  const text = useTextDraft(value, onChange, commit, false)
+  return <input className={cx('input', mono && 'num', className)} placeholder={placeholder} spellCheck={false} {...text} {...rest} />
 }
 
 export function TextArea({
@@ -167,6 +191,7 @@ export function TextArea({
   placeholder,
   rows = 3,
   className,
+  commit,
   ...rest
 }: {
   value: string
@@ -174,30 +199,21 @@ export function TextArea({
   placeholder?: string
   rows?: number
   className?: string
+  /** Applied on leaving the field or Ctrl+Enter (a record's field – W2). */
+  commit?: boolean
   'aria-label'?: string
   'data-testid'?: string
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const text = useTextDraft(value, onChange, commit, true)
   // Grow with content up to a limit; manual resize still possible.
   useEffect(() => {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(260, Math.max(el.scrollHeight + 2, rows * 18 + 12))}px`
-  }, [value, rows])
-  return (
-    <textarea
-      ref={ref}
-      className={cx('input', className)}
-      value={value}
-      rows={rows}
-      placeholder={placeholder}
-      spellCheck
-      lang="pl"
-      onChange={(e) => onChange(e.currentTarget.value)}
-      {...rest}
-    />
-  )
+  }, [text.value, rows])
+  return <textarea ref={ref} className={cx('input', className)} rows={rows} placeholder={placeholder} spellCheck lang="pl" {...text} {...rest} />
 }
 
 export function Segmented<T extends string>({
