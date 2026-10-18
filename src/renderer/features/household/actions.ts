@@ -2,6 +2,8 @@
  * The household (D80): the members (`settings.household.members`) – who finances a purchase, whose money comes in –
  * and the decisions remembered for them (what their money beyond their debt is, D80 b).
  */
+import { useEffect } from 'react'
+import { warsawNow } from '@shared/calc/dates'
 import { inflowOf, type HouseholdMember, type MemberInflow, type Transaction } from '@shared/schema'
 import { newId } from '@shared/ids'
 import { updateSettings, useData } from '../../store/data'
@@ -73,3 +75,27 @@ export function rememberInflows(incomes: ReadonlyArray<Pick<Transaction, 'kind' 
   }
   patchMembers((ms) => ms.map((m) => (ask.some((a) => a.id === m.id) ? { ...m, inflow: answer(m.id) } : m)))
 }
+
+/** The settlements' start (D81): a date (not in the future), or null = from the budget's start. */
+export function setHouseholdSince(since: string | null): void {
+  if (useData.getState().status?.readOnly) return
+  if (since && since > warsawNow().date) {
+    toast('Rozliczenia nie mogą zaczynać się w przyszłości.', 'error')
+    return
+  }
+  updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, since } } }))
+}
+
+/**
+ * The settlements from today (D81): a folder without the date chosen gets today, once – what was owed or held before
+ * it goes in as the members' opening balances (Ustawienia → Domownicy).
+ */
+export function useHouseholdSinceSeed(): void {
+  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since === undefined)
+  useEffect(() => {
+    if (!unset) return
+    if (useData.getState().fi?.settings.household.since !== undefined) return
+    updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, since: warsawNow().date } } }), { background: true })
+  }, [unset])
+}
+

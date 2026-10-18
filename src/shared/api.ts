@@ -291,9 +291,10 @@ export interface QuickData {
   counterparties: string[]
   /**
    * The household (D80): the active members, what each owes now (their money repays it first) and their advance (a
-   * purchase they finance takes it first); `inflow` – what their money beyond their debt is by default.
+   * purchase they finance takes it first); `inflow` – what their money beyond their debt is by default; `via` – whom
+   * their money comes through (D81: „w tym za …” at that member's money).
    */
-  members: Array<{ id: string; name: string; owed: number; deposit: number; inflow: 'ask' | 'advance' | 'income' }>
+  members: Array<{ id: string; name: string; owed: number; deposit: number; inflow: 'ask' | 'advance' | 'income'; via: string | null }>
   hideAmounts: boolean
   readOnly: boolean
 }

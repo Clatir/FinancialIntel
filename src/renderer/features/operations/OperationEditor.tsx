@@ -49,7 +49,8 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     memberId: kind === t.kind ? t.memberId : null,
     advance: kind === 'income' ? t.advance : false,
     covers: kind === 'income' ? t.covers : [],
-    splits: kind === 'expense' ? t.splits : [],
+    // A receipt's lines and an income's parts (D81) are other things too: they stay with the same kind.
+    splits: kind === t.kind && (kind === 'expense' || kind === 'income') ? t.splits : [],
     repaid: kind === 'income' ? t.repaid : 0,
     counterAccountId: kind === 'transfer' ? t.counterAccountId : null,
     impulse: kind === 'expense' ? t.impulse : null,

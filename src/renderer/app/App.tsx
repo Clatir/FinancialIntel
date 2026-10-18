@@ -20,6 +20,7 @@ import { BridgePage } from '../features/bridge/BridgePage'
 import { StarMapPage } from '../features/starmap/StarMapPage'
 import { RadarPage } from '../features/radar/RadarPage'
 import { useIctjGoalSync } from '../features/starmap/sync'
+import { useHouseholdSinceSeed } from '../features/household/actions'
 import { CommandPage } from '../features/command/CommandPage'
 import { IntelPage } from '../features/intel/IntelPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
@@ -251,6 +252,7 @@ export function App() {
   useGlobalHotkeys()
   useBackNavigation()
   useIctjGoalSync()
+  useHouseholdSinceSeed()
   useGameAdvance()
   useGameCelebrations()
   useEffect(() => {

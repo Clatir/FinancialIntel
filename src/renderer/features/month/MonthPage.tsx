@@ -18,6 +18,7 @@ import { dayLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { decideLoot, setEnvelope, setEnvelopes, setSalary, usePlans } from './actions'
 import { EnvelopeBars, monthElapsed } from './EnvelopeBars'
+import { IncomePanel } from './IncomePanel'
 import { playSound } from '../../lib/sounds'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
@@ -86,6 +87,7 @@ export function MonthPage() {
         <Columns id="month" tracks={['minmax(380px,1.1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
             <SalaryPanel month={month} plan={plan} fleet={fleet} current={current} readOnly={readOnly} transactions={transactions} />
+            {month === current && <IncomePanel fleet={fleet} salary={plan?.salary ?? null} />}
             {split && plan ? (
               <SplitPanel month={month} plan={plan} split={split} readOnly={readOnly} onPropose={() => applyProposals(month)} />
             ) : (

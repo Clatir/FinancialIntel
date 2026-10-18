@@ -23,6 +23,7 @@ import { dayLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { newOperation, openRefundables, selectOperation, setFilter } from '../operations/state'
 import { EnvelopeBars, monthElapsed } from '../month/EnvelopeBars'
+import { IncomePanel } from '../month/IncomePanel'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
@@ -174,6 +175,7 @@ export function BridgePage() {
               <Envelopes rows={fleet.envelopes} elapsed={monthElapsed(fleet.today)} />
             </Panel>
             <Receivables fleet={fleet} />
+            <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" />
             <Panel title="Ostatnie operacje" testId="bridge-recent">
               {!recent.length ? (
                 <Empty>Brak operacji – szybki wpis albo import z mBanku.</Empty>

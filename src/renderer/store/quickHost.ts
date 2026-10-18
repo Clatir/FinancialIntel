@@ -70,7 +70,7 @@ export function quickData(): QuickData | null {
       .filter((m) => !m.archived)
       .map((m) => {
         const b = fleet?.receivables.members.find((x) => x.memberId === m.id)
-        return { id: m.id, name: m.name, owed: b?.owed ?? 0, deposit: b?.deposit ?? 0, inflow: inflowOf(m) }
+        return { id: m.id, name: m.name, owed: b?.owed ?? 0, deposit: b?.deposit ?? 0, inflow: inflowOf(m), via: m.via ?? null }
       }),
     hideAmounts: useMachine.getState().prefs.hideAmounts,
     readOnly: !!s.status?.readOnly
@@ -97,6 +97,8 @@ export interface QuickDraft {
   /** A household member's money: the rest beyond their debt is their advance (else income). */
   advance: boolean
   splits: Array<{ amount: number; categoryId: string | null; refundable: boolean; memberId?: string | null }>
+  /** A household member's money carrying others' (D81, „w tym za …”): their parts, the rest the sender's. */
+  shares?: Array<{ memberId: string; amount: number; advance: boolean }>
 }
 
 /** The operation of a quick draft (or why not). */
@@ -105,9 +107,15 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
   if (!d.accountId) return 'Wybierz konto.'
   const income = d.kind === 'income'
   const sign = income ? 1 : -1
-  const splits = !income && d.splits.length > 1 ? d.splits.map((x) => ({ id: newId(), amount: sign * Math.abs(x.amount), categoryId: x.categoryId, refundable: x.refundable, memberId: x.refundable ? (x.memberId ?? null) : null, note: '' })) : []
-  const refundable = d.kind === 'refundable' && !splits.length
   const household = income && d.household && !!d.memberId
+  const shares = household ? (d.shares ?? []).filter((x) => x.amount > 0) : []
+  if (shares.reduce((a, x) => a + x.amount, 0) > d.amount) return 'Części innych osób przekraczają kwotę wpłaty.'
+  const splits = income
+    ? shares.map((x) => ({ id: newId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, note: '' }))
+    : d.splits.length > 1
+      ? d.splits.map((x) => ({ id: newId(), amount: sign * Math.abs(x.amount), categoryId: x.categoryId, refundable: x.refundable, memberId: x.refundable ? (x.memberId ?? null) : null, advance: false, note: '' }))
+      : []
+  const refundable = d.kind === 'refundable' && !splits.length
   const parsed = transactionSchema.safeParse({
     schemaVersion: SCHEMA_VERSION,
     id: newId(),

@@ -16,7 +16,7 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
   const due = addDays(today, 20)
   const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-radar-')), 'FinancialIntel')
   seedFolder(dataDir, {
-    settings: (s) => ({ ...s, budget: { ...s.budget, start }, layers: { ...s.layers, assumedCosts: zl(3000) } }),
+    settings: (s) => ({ ...s, budget: { ...s.budget, start }, layers: { ...s.layers, assumedCosts: zl(3000) }, household: { ...s.household, since: start } }),
     records: {
       balances: [{ date: start, accountId: MBANK, kind: 'opening', amount: zl(30000) }],
       months: [{ month: addMonths(month, -3), salary: zl(4000), envelopes: {} }],
