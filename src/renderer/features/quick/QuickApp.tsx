@@ -62,6 +62,8 @@ export function QuickApp() {
   // Sending, or saved and closing (B51): no second save until the window opens again.
   const [busy, setBusy] = useState(false)
   const sending = useRef(false)
+  // Hiding after „Zapisano”: never the window opened again meanwhile.
+  const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [officer, setOfficer] = useState<string | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
@@ -73,6 +75,8 @@ export function QuickApp() {
   useEffect(() => {
     document.title = 'Szybki wpis – Financial Intel'
     const offData = api.onQuickData((next) => {
+      if (closing.current) clearTimeout(closing.current)
+      closing.current = null
       setData(next)
       setAmountsHidden(!!next?.hideAmounts)
       setD(blank(next))
@@ -93,7 +97,10 @@ export function QuickApp() {
         setD((x) => ({ ...blank(null), accountId: x.accountId }))
         setLines([])
         setShares({})
-        setTimeout(() => void api.quickClose(), 450)
+        closing.current = setTimeout(() => {
+          closing.current = null
+          void api.quickClose()
+        }, 450)
       } else {
         sending.current = false
         setBusy(false)
@@ -206,19 +213,26 @@ export function QuickApp() {
   const saveRef = useRef(save)
   saveRef.current = save
   useEffect(() => {
+    // Esc closes before any field takes it (a field cancelling its draft stops it there).
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      void api.quickClose()
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        void api.quickClose()
-      } else if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
+      if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
         e.preventDefault()
         // The field being typed in applies its value first (amounts are drafts until left).
         ;(document.activeElement as HTMLElement | null)?.blur()
         setTimeout(() => saveRef.current(), 0)
       }
     }
+    window.addEventListener('keydown', onEscape, true)
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onEscape, true)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [])
 
   const onCounterparty = (counterparty: string) => {

@@ -119,6 +119,8 @@ export function DateField({
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
   const year = Number(value.slice(0, 4)) || new Date().getFullYear()
   const invalid = draft != null && parseDateInput(draft, year) == null
   return (
@@ -132,14 +134,23 @@ export function DateField({
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null) {
+        if (draft != null && !cancelled.current) {
           const d = parseDateInput(draft, year)
           if (!d) toast('Nieprawidłowa data – zostaje poprzednia.', 'error')
           else if (d !== value) onChange(d)
         }
+        cancelled.current = false
         setDraft(null)
       }}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
     />
   )
 }
@@ -217,6 +228,8 @@ export function TimeField({
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not save it.
+  const cancelled = useRef(false)
   const read = (t: string) => (t.trim() === '' ? (allowEmpty ? null : undefined) : (parseClockInput(t) ?? undefined))
   const invalid = draft != null && read(draft) === undefined
   return (
@@ -231,14 +244,23 @@ export function TimeField({
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null) {
+        if (draft != null && !cancelled.current) {
           const v = read(draft)
           if (v === undefined) toast('Nieprawidłowa godzina – zostaje poprzednia.', 'error')
           else if (v !== value) onChange(v)
         }
+        cancelled.current = false
         setDraft(null)
       }}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
     />
   )
 }

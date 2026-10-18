@@ -399,9 +399,15 @@ export const NameInput = forwardRef<
   }
 >(function NameInput({ value, onChange, validate, emptyMessage, className, maxLength, placeholder, ...rest }, ref) {
   const [draft, setDraft] = useState<string | null>(null)
+  // Escape: the blur it causes runs with this render's draft – it must not apply it (B24).
+  const cancelled = useRef(false)
   const apply = () => {
     const next = draft?.trim()
     setDraft(null)
+    if (cancelled.current) {
+      cancelled.current = false
+      return
+    }
     if (draft != null && !next && emptyMessage) return toast(emptyMessage, 'error')
     if (!next || next === value) return
     const problem = validate?.(next) ?? null
@@ -422,7 +428,9 @@ export const NameInput = forwardRef<
       onBlur={apply}
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape') {
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
           setDraft(null)
           e.currentTarget.blur()
         }
