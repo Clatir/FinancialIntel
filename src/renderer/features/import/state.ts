@@ -7,7 +7,7 @@ import { buildImport, importGroups, planImport, sameChoice, type Choice, type Im
 import { decodeText } from '@shared/import/text'
 import { HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, type HouseholdMember, type ImportRule, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
-import { addRecords, deleteRecord, flushSaves, replaceRecords, updateSettings, useData } from '../../store/data'
+import { addRecords, deleteRecords, flushSaves, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
@@ -459,7 +459,9 @@ export async function runImport(): Promise<void> {
     const result = buildImport(plan, st.choices, { now, makeId: newId, rules: s.fi.settings.import.rules })
     addRecords('transactions', result.create)
     replaceRecords('transactions', result.update as Transaction[])
-    for (const id of result.remove) await deleteRecord('transactions', id)
+    // One call for all (W1); a file the disk refused stays – said after the rest is done.
+    const removal = result.remove.length ? await deleteRecords('transactions', result.remove) : null
+    if (removal?.error) throw new Error(removal.error)
     const client = st.file.client
     const learned = result.rules.length - s.fi.settings.import.rules.length
     updateSettings((f) => ({

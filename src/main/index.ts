@@ -536,6 +536,16 @@ function registerIpc(): void {
       throw e
     }
   })
+  handle('saveRecords', async (collection: Collection, records: never[]) => {
+    const { results, changes } = await requireStore().saveRecords(collection, records)
+    for (const change of changes) send(change)
+    return results
+  })
+  handle('deleteRecords', async (collection: Collection, ids: string[]) => {
+    const { results, change } = await requireStore().deleteRecords(collection, ids)
+    send(change)
+    return results
+  })
   handle('deleteRecord', async (collection: Collection, id: string) => {
     send(await requireStore().deleteRecord(collection, id))
   })

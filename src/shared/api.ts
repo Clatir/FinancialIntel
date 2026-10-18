@@ -208,7 +208,11 @@ export interface FiApi {
   /** A long computation in the window (1.4.1): `ms` undefined = it starts, a number = it took so long (logged ≥ 500 ms). */
   rendererStep(name: string, ms?: number): void
   saveRecord<C extends Collection>(collection: C, record: RecordTypes[C]): Promise<RecordEntry<RecordTypes[C]>>
+  /** Many records with one call (an import, a bulk change – W1): each written, or why not. */
+  saveRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): Promise<Array<{ id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string }>>
   deleteRecord(collection: Collection, id: string): Promise<void>
+  /** Many records deleted with one call (W1): each deleted, or why not. */
+  deleteRecords(collection: Collection, ids: readonly string[]): Promise<Array<{ id: string; error?: string }>>
   /** Kept versions of a record, newest first (the settings: `kind` 'fi', `id` = the id of fi.json). */
   historyList(kind: HistoryKind, id: string): Promise<HistoryEntry[]>
   /** The record of one kept version (null when gone). */

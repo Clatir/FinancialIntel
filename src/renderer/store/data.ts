@@ -432,34 +432,119 @@ export function acceptNewer(keys: readonly string[]): { decided: number; left: n
   return { decided, left }
 }
 
-/** A record's save answered: the version on the disk in memory – in place when only its stamps changed (W3). */
-function applySaved(c: Collection, id: string, key: string, version: number, entry: RecordEntry<RecordTypes[Collection]>): void {
-  const latestVersion = (versions.get(key) ?? 0) === version
-  if (latestVersion) {
-    dirty.delete(key)
-    bases.delete(key)
-    forgetEdits(key)
-  } else if (mapOf(get(), c)[id]) {
-    // Disk now holds what was sent: the base of a later merge.
-    bases.set(key, entry.record)
+type Saved = { id: string; key: string; version: number; entry: RecordEntry<RecordTypes[Collection]> }
+
+/**
+ * Saves answered: the versions on the disk in memory – in place when only their stamps changed (W3), the rest with one
+ * change of the state for all of them (W1).
+ */
+function applySaved(c: Collection, saved: readonly Saved[]): void {
+  const reactive: Array<{ id: string; entry: RecordEntry<RecordTypes[Collection]>; latestVersion: boolean }> = []
+  for (const { id, key, version, entry } of saved) {
+    const latestVersion = (versions.get(key) ?? 0) === version
+    if (latestVersion) {
+      dirty.delete(key)
+      bases.delete(key)
+      forgetEdits(key)
+    } else if (mapOf(get(), c)[id]) {
+      // Disk now holds what was sent: the base of a later merge.
+      bases.set(key, entry.record)
+    }
+    const s = get()
+    const latest = mapOf(s, c)[id]
+    // Deleted while the save was in flight: do not bring it back.
+    if (!latest) continue
+    if (!s.drafts[id] && (latestVersion ? stampInPlace(mapOf(s, c), id, entry) : latest.relPath === entry.relPath)) continue
+    reactive.push({ id, entry, latestVersion })
   }
-  const s = get()
-  const latest = mapOf(s, c)[id]
-  // Deleted while the save was in flight: do not bring it back.
-  if (!latest) return
-  const draft = !!s.drafts[id]
-  if (!draft && (latestVersion ? stampInPlace(mapOf(s, c), id, entry) : latest.relPath === entry.relPath)) return
+  if (!reactive.length) return
   set((st) => {
     const map = { ...mapOf(st, c) }
-    // Newer local edits pending: keep them, but adopt the new path.
-    if (map[id]) map[id] = latestVersion ? entry : { ...map[id]!, relPath: entry.relPath }
     let drafts = st.drafts
-    if (drafts[id]) {
-      drafts = { ...drafts }
-      delete drafts[id]
+    for (const { id, entry, latestVersion } of reactive) {
+      // Newer local edits pending: keep them, but adopt the new path.
+      if (map[id]) map[id] = latestVersion ? entry : { ...map[id]!, relPath: entry.relPath }
+      if (drafts[id]) {
+        if (drafts === st.drafts) drafts = { ...drafts }
+        delete drafts[id]
+      }
     }
     return { ...withMap(st, c, map), drafts }
   })
+}
+
+/** A save that failed: its month made on another computer (B46) – the copy waits in Synchronizacja; else retried. */
+function saveFailed(c: Collection, id: string, key: string, message: string): void {
+  if (message.startsWith(CONFLICT_COPY_MESSAGE)) {
+    forget(key)
+    set((s) => {
+      const map = { ...mapOf(s, c) }
+      delete map[id]
+      return withMap(s, c, map)
+    })
+    toast(message, 'info', 9000)
+    return
+  }
+  // A record deleted meanwhile is no longer dirty: nothing to report or retry.
+  if (dirty.has(key)) failed.set(key, message)
+  scheduleRetry(key)
+}
+
+/** Many records saved with one call (W1: an import, a bulk change), after any save of them already on its way. */
+function saveBatch(c: Collection, ids: readonly string[]): void {
+  const keys = ids.map((id) => keyOf(c, id))
+  for (const [i, key] of keys.entries()) {
+    versions.set(key, (versions.get(key) ?? 0) + 1)
+    dirty.set(key, { collection: c, id: ids[i]! })
+    const t = timers.get(key)
+    if (t) clearTimeout(t)
+    timers.delete(key)
+    firstDirtyAt.delete(key)
+  }
+  const p = Promise.all(keys.map((k) => inFlight.get(k))).then(() => runSaveMany(c, ids))
+  for (const key of keys) {
+    inFlight.set(key, p)
+    void p.finally(() => {
+      if (inFlight.get(key) === p) inFlight.delete(key)
+    })
+  }
+}
+
+async function runSaveMany(c: Collection, ids: readonly string[]): Promise<void> {
+  const s = get()
+  // Still to write: changed, no decision about another computer's change waiting, still in memory.
+  const sent = ids
+    .map((id) => ({ id, key: keyOf(c, id) }))
+    .filter(({ id, key }) => dirty.has(key) && !pendingFor(key) && mapOf(s, c)[id])
+    .map(({ id, key }) => ({ id, key, version: versions.get(key) ?? 0, record: mapOf(s, c)[id]!.record }))
+  if (!sent.length) return
+  bumpPending(1)
+  let results: Awaited<ReturnType<typeof api.saveRecords>>
+  try {
+    results = await api.saveRecords(c, sent.map((x) => x.record))
+  } catch (e) {
+    // The whole call failed (the folder gone): each is retried on its own.
+    const message = errorMessage(e)
+    for (const x of sent) saveFailed(c, x.id, x.key, message)
+    bumpPending(-1, { error: saveError() })
+    return
+  }
+  const byId = new Map(results.map((r) => [r.id, r]))
+  const saved: Saved[] = []
+  for (const x of sent) {
+    const r = byId.get(x.id)
+    if (r?.entry) saved.push({ id: x.id, key: x.key, version: x.version, entry: r.entry as RecordEntry<RecordTypes[Collection]> })
+    else saveFailed(c, x.id, x.key, r?.error ?? 'Nie udało się zapisać.')
+  }
+  applySaved(c, saved)
+  for (const x of saved) {
+    retryDelay.delete(x.key)
+    failed.delete(x.key)
+  }
+  bumpPending(-1, { lastSavedAt: new Date().toISOString(), error: saveError() })
+  // A change from another computer came while these writes were on their way (B48): the decision must reach the disk.
+  const keys = new Set(saved.map((x) => x.key))
+  if (useRemote.getState().pending.some((p) => keys.has(p.key))) useRemote.setState((r) => ({ pending: r.pending.map((p) => (keys.has(p.key) ? { ...p, savedAfter: true } : p)) }))
 }
 
 async function runSave(key: string): Promise<void> {
@@ -489,7 +574,7 @@ async function runSave(key: string): Promise<void> {
       const c = target.collection
       const current = mapOf(get(), c)[target.id] as RecordEntry<RecordTypes[Collection]>
       const entry = await api.saveRecord(c, current.record)
-      applySaved(c, target.id, key, version, entry)
+      applySaved(c, [{ id: target.id, key, version, entry }])
     }
     retryDelay.delete(key)
     failed.delete(key)
@@ -498,24 +583,12 @@ async function runSave(key: string): Promise<void> {
     if (pendingFor(key)) useRemote.setState((r) => ({ pending: r.pending.map((p) => (p.key === key ? { ...p, savedAfter: true } : p)) }))
   } catch (e) {
     const message = errorMessage(e)
-    // Its month made on another computer meanwhile (B46): this version waits in Synchronizacja as a copy – not kept
-    // here as a second plan of the month, never retried.
-    if (target.collection !== 'fi' && message.startsWith(CONFLICT_COPY_MESSAGE)) {
-      forget(key)
-      const c = target.collection
-      set((s) => {
-        const map = { ...mapOf(s, c) }
-        delete map[target.id]
-        return withMap(s, c, map)
-      })
-      bumpPending(-1, { error: saveError() })
-      toast(message, 'info', 9000)
-      return
+    if (target.collection !== 'fi') saveFailed(target.collection, target.id, key, message)
+    else {
+      if (dirty.has(key)) failed.set(key, message)
+      scheduleRetry(key)
     }
-    // A record deleted meanwhile is no longer dirty: nothing to report or retry.
-    if (dirty.has(key)) failed.set(key, message)
     bumpPending(-1, { error: saveError() })
-    scheduleRetry(key)
   }
 }
 
@@ -597,7 +670,7 @@ export function addRecord<C extends Collection>(collection: C, record: RecordTyp
   if (!opts.draft) scheduleSave(collection, record.id, 0)
 }
 
-/** Many new records at once (an import): one change of the state, each saved right after. */
+/** Many new records at once (an import): one change of the state, all saved with one call right after (W1). */
 export function addRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): void {
   if (folderReadOnly() || !records.length) return
   set((s) => {
@@ -605,7 +678,7 @@ export function addRecords<C extends Collection>(collection: C, records: readonl
     for (const r of records) map[r.id] = { record: r, relPath: '', readOnly: false } as RecordEntry<RecordTypes[Collection]>
     return withMap(s, collection, map)
   })
-  for (const r of records) scheduleSave(collection, r.id, 0)
+  saveBatch(collection, records.map((r) => r.id))
 }
 
 /** Many changed records at once (an import's merges and settled rows): each like `updateRecord`, one change of the state. */
@@ -625,7 +698,7 @@ export function replaceRecords<C extends Collection>(collection: C, records: rea
     for (const r of changed) delete drafts[r.id]
     return { ...withMap(s, collection, map), drafts }
   })
-  for (const r of changed) scheduleSave(collection, r.id, 0)
+  saveBatch(collection, changed.map((r) => r.id))
 }
 
 /** Drop an untouched draft (never written to disk). */
@@ -663,6 +736,51 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
     if (entry && !mapOf(get(), collection)[id]) set((s) => withMap(s, collection, { ...mapOf(s, collection), [id]: entry }))
     throw e
   }
+}
+
+/**
+ * Many records deleted with one call (W1: an import's, duplicates): gone from memory at once; those the disk refused come
+ * back. Returns the ids deleted and the first error.
+ */
+export async function deleteRecords(collection: Collection, ids: readonly string[]): Promise<{ deleted: string[]; error: string | null }> {
+  const s = get()
+  const entries = new Map(ids.map((id) => [id, mapOf(s, collection)[id]]))
+  const drafts = ids.filter((id) => s.drafts[id])
+  const keys = ids.map((id) => keyOf(collection, id))
+  for (const key of keys) forget(key)
+  useRemote.setState((r) => ({ pending: r.pending.filter((p) => !keys.includes(p.key)) }))
+  bumpPending(0, { error: saveError() })
+  set((st) => {
+    const map = { ...mapOf(st, collection) }
+    const left = { ...st.drafts }
+    for (const id of ids) {
+      delete map[id]
+      delete left[id]
+    }
+    return { ...withMap(st, collection, map), drafts: left }
+  })
+  await Promise.all(keys.map((k) => inFlight.get(k)))
+  const onDisk = ids.filter((id) => !drafts.includes(id))
+  if (!onDisk.length) return { deleted: [...ids], error: null }
+  let results: Array<{ id: string; error?: string }>
+  try {
+    results = await api.deleteRecords(collection, onDisk)
+  } catch (e) {
+    results = onDisk.map((id) => ({ id, error: errorMessage(e) }))
+  }
+  // The files that stay on the disk (held by another program – B9): their records back on the screen.
+  const refused = results.filter((r) => r.error)
+  if (refused.length)
+    set((st) => {
+      const map = { ...mapOf(st, collection) }
+      for (const r of refused) {
+        const entry = entries.get(r.id)
+        if (entry && !map[r.id]) map[r.id] = entry
+      }
+      return withMap(st, collection, map)
+    })
+  const failedIds = new Set(refused.map((r) => r.id))
+  return { deleted: ids.filter((id) => !failedIds.has(id)), error: refused[0]?.error ?? null }
 }
 
 /** Settings written by the main process (restored from the history): replace the in-memory copy. */
