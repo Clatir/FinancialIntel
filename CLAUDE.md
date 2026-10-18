@@ -24,7 +24,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Po wznowieniu pracy (limit, nowa sesja, streszczenie rozmowy) najpierw przeczytaj `docs/postep.md` i kontynuuj od
   zapisanego miejsca.
 - Dokumenty: `docs/specyfikacja.md` (co budujemy), `docs/decyzje.md` (decyzje użytkownika D1… i techniczne T1… – nie
-  zmieniaj decyzji użytkownika bez pytania), `docs/plan.md` (etapy i kryteria „gotowe, gdy”), `docs/postep.md`.
+  zmieniaj decyzji użytkownika bez pytania), `docs/plan.md` (etapy i kryteria „gotowe, gdy”), `docs/postep.md`, `docs/przeglad/` (przegląd po 1.4.1: błędy B…,
+  wydajność W…, niespójności N…, brakujące funkcje F… – lista do odhaczania i propozycja kolejności etapów).
 - Gdy specyfikacja milczy: sprawę techniczną rozstrzygnij sam i dopisz jako T-decyzję; zachowanie widoczne dla
   użytkownika – zapytaj z propozycją (najlepiej w „Przed etapem N”).
 
@@ -454,3 +455,4 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.3.0 Rozliczenia z domownikami: saldo każdej osoby w obie strony, depozyt, import, Mostek, Radar, raporty (D80)
 - [x] 1.4.0 Domownicy bez bankowości (pośrednik, podział wpłaty), rozliczenia od dnia z saldem na start, panel przychodów (D81)
 - [x] 1.4.1 Wczytywanie folderu krok po kroku: postęp, „Przerwij”, log diagnostyczny, większa pula wątków (D82)
+- [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0
