@@ -18,7 +18,7 @@ import { Badge, Empty, Field, NumberField, Panel, Segmented, Toggle, cx } from '
 import { monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
-import { memberName } from '@shared/calc/household'
+import { isOpeningItem, memberName } from '@shared/calc/household'
 import { openRefundables } from '../operations/state'
 import { addLoan, closeLoan, deleteLoan, recordPayment, type NewLoan } from './actions'
 
@@ -30,6 +30,11 @@ export function RadarPage() {
   const fleet = useFleet()
   const plans = useRecordList('months')
   const members = useMembers()
+  // Whom a member's money comes through (D81).
+  const via = (id: string) => {
+    const v = members.find((m) => m.id === id)?.via
+    return v ? memberName(v, members) : null
+  }
   const containers = useRecordList('containers')
   const readOnly = useData((s) => !!s.status?.readOnly)
   const items = useMemo(
@@ -99,7 +104,8 @@ export function RadarPage() {
                         </div>
                         {m.since && m.owed > 0 && (
                           <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
-                            najstarszy zakup z {plDate(m.since)} ({days} dni)
+                            {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({days} dni)
+                            {via(m.memberId) ? ` · przekazuje przez: ${via(m.memberId)}` : ''}
                           </span>
                         )}
                       </div>

@@ -14,10 +14,14 @@
  * - An income of before 1.3.0 with `repaid` and no member is the first member's money repaying at most that much (D20).
  * - An account joining the budget after its start: its operations before its opening balance are inside that balance
  *   (as the layers' engine skips them) – they settle nothing.
+ * - An income split among members (D81 – one transfer carrying the money of several): each part is its member's money
+ *   (a part without a member is income); the rest of the amount is the sender's (`memberId`).
+ * - The settlements start at `from` (the budget's start, or later – D81): each member's balance is then their `opening`.
  */
-import { HOUSE_MEMBER_ID, type HouseholdMember } from '../schema/budget'
+import { fold } from '../fold'
+import { HOUSE_MEMBER_ID, type HouseholdMember, type MemberOpening } from '../schema/budget'
 import type { Transaction } from '../schema/records'
-import { financedOf, financerOf, partsOf } from './operations'
+import { financedOf, financerOf, partsOf, sum } from './operations'
 
 /** One member's share of an operation (grosze, all ≥ 0). */
 export interface MemberFlow {
@@ -75,8 +79,67 @@ export function payerOf(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'r
   return t.memberId ?? (t.repaid > 0 ? HOUSE_MEMBER_ID : null)
 }
 
+/** One member's part of an income (or mine: `memberId` null). */
+export interface IncomeShare {
+  memberId: string | null
+  amount: number
+  /** What they do not owe is their advance. */
+  advance: boolean
+  /** An income of before 1.3.0: it repays at most this much (`repaid`, D20). */
+  limit?: number
+}
+
+/**
+ * Whose money an income is, by parts (D81): its split – a part's member, null = mine – and the rest of the amount the
+ * sender's (`payerOf`); unsplit, all of it the sender's. Parts summing to more than the amount (a file edited by hand)
+ * are cut at it.
+ */
+export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'advance' | 'splits'>): IncomeShare[] {
+  const payer = payerOf(t)
+  if (t.kind !== 'income' || t.amount <= 0) return []
+  const own = (amount: number): IncomeShare =>
+    t.memberId ? { memberId: t.memberId, amount, advance: t.advance } : payer ? { memberId: payer, amount, advance: false, limit: Math.min(amount, t.repaid) } : { memberId: null, amount, advance: false }
+  if (!t.splits.length) return [own(t.amount)]
+  const out: IncomeShare[] = []
+  let left = t.amount
+  for (const s of t.splits) {
+    const amount = Math.min(s.amount, left)
+    if (amount <= 0) continue
+    out.push({ memberId: s.memberId ?? null, amount, advance: !!s.memberId && !!s.advance })
+    left -= amount
+  }
+  if (left > 0) out.push(own(left))
+  return out
+}
+
 /** Does the operation touch a member's balance (a financed part, a member's income)? */
-export const settlesHousehold = (t: Transaction): boolean => (t.kind === 'expense' ? partsOf(t).some((p) => p.refundable) : payerOf(t) != null)
+export const settlesHousehold = (t: Transaction): boolean => (t.kind === 'expense' ? partsOf(t).some((p) => p.refundable) : incomeShares(t).some((s) => s.memberId != null))
+
+/** The open item of a member's opening balance (it has no operation): `OpenPurchase.txId`. */
+export const OPENING_TX = 'opening:'
+export const isOpeningItem = (txId: string): boolean => txId.startsWith(OPENING_TX)
+
+/**
+ * The household member a counterparty is (D80 a): all words of one of their bank names in it, in any order – a name of
+ * one word only when it is the whole counterparty („MAMA”). Archived members too: their money is still theirs.
+ */
+export function memberOf<M extends Pick<HouseholdMember, 'bankNames'>>(counterparty: string, members: readonly M[] | undefined): M | null {
+  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
+  if (!who.length) return null
+  for (const m of members ?? [])
+    for (const name of m.bankNames) {
+      const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
+      if (!parts.length) continue
+      if (parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))) return m
+    }
+  return null
+}
+
+/** Is an income a household member's money – marked so, split among members, or from a member's name in the bank? */
+export function isMemberMoney(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'splits' | 'counterparty'>, members: ReadonlyArray<Pick<HouseholdMember, 'bankNames'>>): boolean {
+  if (t.kind !== 'income' || t.amount <= 0) return false
+  return payerOf(t) != null || t.splits.some((s) => s.memberId) || memberOf(t.counterparty, members) != null
+}
 
 interface State {
   owed: number
@@ -104,27 +167,60 @@ function repay(st: State, v: number, covers: readonly string[]): number {
 
 const memo = new WeakMap<readonly Transaction[], Map<string, HouseholdLedger>>()
 
-/**
- * The household's balances from the operations up to `until` (a Warsaw date; none = all); `from` = the budget's start
- * (the balances are zero at its beginning; none = the whole history counts); `openings` = each account's opening
- * balance's date (the engine's: `fleet.ts` `householdOf`).
- */
-export function settleHousehold(transactions: readonly Transaction[], opts: { until?: string; from?: string | null; openings?: ReadonlyMap<string, string> } = {}): HouseholdLedger {
+export interface LedgerOptions {
+  /** A Warsaw date: the operations up to it (none = all). */
+  until?: string
+  /** The settlements' start (the budget's or later – D81): the balances are the members' openings then; none = the whole history counts. */
+  from?: string | null
+  /**
+   * The budget's start, when the settlements start later (D81): the balances are zero then too – what was before it is
+   * in the opening balances of the accounts, as in 1.3.0; an account's operations before its opening count from it.
+   */
+  reset?: string | null
+  /** Each account's opening balance's date (the engine's: `fleet.ts` `householdOf`). */
+  openings?: ReadonlyMap<string, string>
+  /** The members' balances at `from` (D81). */
+  members?: ReadonlyArray<Pick<HouseholdMember, 'id'> & { opening?: MemberOpening }>
+}
+
+/** The household's balances from the operations (`LedgerOptions`). */
+export function settleHousehold(transactions: readonly Transaction[], opts: LedgerOptions = {}): HouseholdLedger {
   const { until, from, openings } = opts
-  const key = `${until ?? ''}|${from ?? ''}|${openings ? [...openings].map(([id, date]) => `${id}:${date}`).sort().join(',') : ''}`
+  const clearAt = opts.reset && from && opts.reset < from ? opts.reset : null
+  const opened = from ? (opts.members ?? []).filter((m) => m.opening && (m.opening.owed > 0 || m.opening.deposit > 0)) : []
+  const key = [
+    until ?? '',
+    from ?? '',
+    clearAt ?? '',
+    openings ? [...openings].map(([id, date]) => `${id}:${date}`).sort().join(',') : '',
+    opened.map((m) => `${m.id}:${m.opening!.owed}:${m.opening!.deposit}`).join(',')
+  ].join('|')
   const cached = memo.get(transactions)?.get(key)
   if (cached) return cached
   const states = new Map<string, State>()
   const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, queue: [] }).get(id)!
+  // The settlements' start: what was owed or held before it is in the opening balances – the members' own (D81).
+  const begin = () => {
+    states.clear()
+    for (const m of opened) {
+      const { owed, deposit } = m.opening!
+      states.set(m.id, { owed, deposit, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date: from!, amount: owed }] : [] })
+    }
+  }
   const byTx = new Map<string, MemberFlow[]>()
-  const insideOpening = (t: Transaction) => from != null && t.date >= from && t.date < (openings?.get(t.accountId) ?? '')
+  const budgetFrom = clearAt ?? from
+  const insideOpening = (t: Transaction) => budgetFrom != null && t.date >= budgetFrom && t.date < (openings?.get(t.accountId) ?? '')
   const txs = transactions.filter((t) => (until == null || t.date <= until) && settlesHousehold(t) && !insideOpening(t)).sort(ledgerOrder)
+  let cleared = !clearAt
   let started = !from
   for (const t of txs) {
-    if (!started && t.date >= from!) {
-      // The start: what was owed or held before it is in the opening balance.
-      started = true
+    if (!cleared && t.date >= clearAt!) {
+      cleared = true
       states.clear()
+    }
+    if (!started && t.date >= from!) {
+      started = true
+      begin()
     }
     const flows = new Map<string, MemberFlow>()
     const flow = (id: string) => flows.get(id) ?? flows.set(id, flowOf(id)).get(id)!
@@ -155,20 +251,28 @@ export function settleHousehold(transactions: readonly Transaction[], opts: { un
         }
       }
     } else {
-      const id = payerOf(t)!
-      const st = stateOf(id)
-      const f = flow(id)
-      // Before 1.3.0 an income said how much of it repays (`repaid`); the rest was income.
-      const back = repay(st, t.memberId ? t.amount : Math.min(t.amount, t.repaid), t.covers)
-      const rest = t.amount - back
-      f.repaid = back
-      f.advance = t.memberId && t.advance ? rest : 0
-      f.income = rest - f.advance
-      st.deposit += f.advance
+      // Each member's part (D81: one transfer may carry the money of several); a part without a member is income.
+      for (const share of incomeShares(t)) {
+        if (!share.memberId) continue
+        const st = stateOf(share.memberId)
+        const f = flow(share.memberId)
+        // Before 1.3.0 an income said how much of it repays (`repaid`); the rest was income.
+        const back = repay(st, share.limit ?? share.amount, t.covers)
+        const rest = share.amount - back
+        const advance = share.advance ? rest : 0
+        f.repaid += back
+        f.advance += advance
+        f.income += rest - advance
+        st.deposit += advance
+      }
     }
     if (flows.size) byTx.set(t.id, [...flows.values()])
   }
-  if (!started) states.clear()
+  // No operation since the start (yet): the balances are the openings – a start still to come leaves none.
+  if (!started) {
+    if (from && (until == null || from <= until)) begin()
+    else states.clear()
+  }
   const members: MemberBalance[] = [...states].map(([memberId, st]) => ({ memberId, owed: st.owed, deposit: st.deposit, open: st.queue.map((i) => ({ ...i })), since: st.queue[0]?.date ?? null }))
   const since = members.map((m) => m.since).filter((d): d is string => d != null).sort()[0] ?? null
   const out: HouseholdLedger = {
@@ -183,6 +287,9 @@ export function settleHousehold(transactions: readonly Transaction[], opts: { un
   memo.set(transactions, forList)
   return out
 }
+
+/** What of an income's money stays with the members (repaid, held as advances): the rest is income – it docks. */
+export const heldOf = (flows: readonly MemberFlow[] | undefined): number => sum((flows ?? []).map((f) => f.repaid + f.advance))
 
 /** The deposit's change of one operation (advances in, advances spent). */
 export const depositMove = (flows: readonly MemberFlow[] | undefined): number => (flows ?? []).reduce((a, f) => a + f.advance - f.fromDeposit, 0)

@@ -56,7 +56,8 @@ function decision(t: Transaction): string | null {
   return [
     t.kind,
     t.categoryId ?? '',
-    t.splits.map((s) => `${s.categoryId}:${s.amount}:${member(s.refundable, s.memberId)}`).join(','),
+    // An income's parts are its members' money (D81): the member and the rest as an advance decide too.
+    t.splits.map((s) => `${s.categoryId}:${s.amount}:${member(s.refundable || t.kind === 'income', s.memberId)}:${t.kind === 'income' && s.advance ? 'a' : ''}`).join(','),
     t.refundable,
     member(t.refundable || t.kind === 'income', t.memberId),
     t.counterAccountId ?? '',

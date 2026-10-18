@@ -245,13 +245,27 @@ export type ImportSettings = z.infer<typeof importSettingsSchema>
 export const MEMBER_INFLOWS = ['ask', 'advance', 'income'] as const
 export type MemberInflow = (typeof MEMBER_INFLOWS)[number]
 
+/** A member's balance when the settlements start (D81): what they owed then and what they had paid ahead (grosze). */
+export const memberOpeningSchema = z.looseObject({
+  owed: z.number().int().min(0).catch(0).default(0),
+  deposit: z.number().int().min(0).catch(0).default(0)
+})
+export type MemberOpening = z.infer<typeof memberOpeningSchema>
+
 export const householdMemberSchema = z.looseObject({
   id: ulidSchema,
   name: z.string().trim().min(1).max(40),
   /** The member's names as the bank writes them: the import knows their transfers by them. */
   bankNames: z.array(z.string().trim().min(1).max(120)).max(20).catch([]).default([]),
   inflow: openEnum(MEMBER_INFLOWS).catch('ask').default('ask'),
-  archived: z.boolean().default(false)
+  archived: z.boolean().default(false),
+  /**
+   * Another member their money usually comes through (D81: no bank of their own) – a hint at that member's transfers
+   * („+ także za …”), never applied by itself.
+   */
+  via: ulidSchema.nullable().catch(null).default(null),
+  /** Their balance at the settlements' start (`HouseholdSettings.since`). */
+  opening: memberOpeningSchema.catch({ owed: 0, deposit: 0 }).prefault({})
 })
 export type HouseholdMember = z.infer<typeof householdMemberSchema>
 
@@ -262,7 +276,7 @@ export type HouseholdMember = z.infer<typeof householdMemberSchema>
 export const HOUSE_MEMBER_ID = fixedId('MEM', 1)
 
 export function defaultMembers(): HouseholdMember[] {
-  return [{ id: HOUSE_MEMBER_ID, name: 'Dom', bankNames: [], inflow: 'ask', archived: false }]
+  return [{ id: HOUSE_MEMBER_ID, name: 'Dom', bankNames: [], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }]
 }
 
 /** A member's inflow as this version knows it (a value of a newer version = ask). */
@@ -272,7 +286,13 @@ export function inflowOf(m: Pick<HouseholdMember, 'inflow'> | null | undefined):
 }
 
 export const householdSettingsSchema = z.looseObject({
-  members: lenientList(householdMemberSchema).catch(defaultMembers).default(defaultMembers)
+  members: lenientList(householdMemberSchema).catch(defaultMembers).default(defaultMembers),
+  /**
+   * The settlements' start (D81): the members' balances count from it (their `opening` then); their money before it is
+   * not income (the statistics). Absent = not chosen yet (1.4.0 sets the day it first opens the folder); null = from the
+   * budget's start (as 1.3.0).
+   */
+  since: isoDate.nullable().optional().catch(undefined)
 })
 export type HouseholdSettings = z.infer<typeof householdSettingsSchema>
 

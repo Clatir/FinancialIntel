@@ -13,6 +13,7 @@ import type { Container } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '../schema/budget'
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
+import { memberOf } from '../calc/household'
 import type { MbankRow } from './mbank'
 
 export { counterpartyKey }
@@ -230,21 +231,7 @@ export function isOwnName(counterparty: string, ownNames: readonly string[]): bo
   })
 }
 
-/**
- * The household member a counterparty is (D80 a): all words of one of their bank names in it, in any order – a name of
- * one word only when it is the whole counterparty („MAMA”). Archived members too: their money is still theirs.
- */
-export function memberOf<M extends Pick<HouseholdMember, 'bankNames'>>(counterparty: string, members: readonly M[] | undefined): M | null {
-  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
-  if (!who.length) return null
-  for (const m of members ?? [])
-    for (const name of m.bankNames) {
-      const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
-      if (!parts.length) continue
-      if (parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))) return m
-    }
-  return null
-}
+export { memberOf } from '../calc/household'
 
 const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = {}): ImportDecision => ({
   kind,

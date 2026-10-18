@@ -6,8 +6,9 @@
 import type { Account, Category, HouseholdMember } from '../schema/budget'
 import type { MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
-import { memberName, settleHousehold, type HouseholdLedger } from '../calc/household'
-import { categoryIndex, financedOf, incomeOf, sum } from '../calc/operations'
+import { incomeShares, memberName } from '../calc/household'
+import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
+import { categoryIndex, financedOf, sum } from '../calc/operations'
 import { debriefing } from '../calc/plan'
 import type { FleetEvent } from '../calc/fleet'
 import { monthOf } from '../calc/dates'
@@ -65,13 +66,23 @@ export function operationRows(
       account: accountName.get(t.accountId) ?? '',
       kind: TX_KIND_LABEL[t.kind],
       amount: t.amount,
-      category: t.splits.length ? t.splits.map((s) => cats.label(s.categoryId)).join(' + ') : cats.label(t.categoryId),
+      // An income's parts are its members' money (D81), not categories.
+      category: t.kind === 'income' ? '' : t.splits.length ? t.splits.map((s) => cats.label(s.categoryId)).join(' + ') : cats.label(t.categoryId),
       counterparty: t.counterparty,
       title: t.title,
-      financed: [...financedOf(t).keys()].map((id) => memberName(id, members)).join(', '),
+      financed: whose(t, members),
       log: t.impulse ? IMPULSE_LABEL[t.impulse] : '',
       note: t.note
     }))
+}
+
+/** Whose an operation is (D80, D81): who finances a purchase, whose money an income is (its parts' members too). */
+function whose(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>): string {
+  if (t.kind === 'income') {
+    const ids = [...new Set(incomeShares(t).map((x) => x.memberId).filter((x): x is string => !!x))]
+    return ids.length ? `od: ${ids.map((id) => memberName(id, members)).join(', ')}` : ''
+  }
+  return [...financedOf(t).keys()].map((id) => memberName(id, members)).join(', ')
 }
 
 const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Finansuje', 'Dziennik', 'Notatka'] as const
@@ -116,13 +127,13 @@ export interface MonthRow {
 }
 
 export function monthRows(
-  input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; today: string; ledger?: Pick<HouseholdLedger, 'byTx'> },
+  input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; today: string; income?: IncomeContext },
   months: readonly string[]
 ): MonthRow[] {
-  const ledger = input.ledger ?? settleHousehold(input.transactions)
+  const ctx = input.income ?? plainIncomeContext(input.transactions)
   return months.map((month) => {
     const d = debriefing(month, input)
-    return { month, salary: d.salary, costs: d.costs, income: sum(input.transactions.filter((t) => monthOf(t.date) === month).map((t) => incomeOf(t, ledger))), plus: d.plus, loot: d.loot }
+    return { month, salary: d.salary, costs: d.costs, income: incomeOfPeriod(input.transactions.filter((t) => monthOf(t.date) === month), ctx).total, plus: d.plus, loot: d.loot }
   })
 }
 

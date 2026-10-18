@@ -8,8 +8,9 @@ import type { Balance, Transaction } from '../schema/records'
 import type { Category, Orders } from '../schema/budget'
 import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthRange, mondayOf, weekdayOf } from './dates'
 import type { FleetEvent } from './fleet'
-import { financedBy, settleHousehold, type HouseholdLedger } from './household'
-import { asksImpulse, categoryIndex, costOf, incomeOf, partsOf, sum } from './operations'
+import { financedBy } from './household'
+import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from './income'
+import { asksImpulse, categoryIndex, costOf, partsOf, sum } from './operations'
 
 // ------------------------------------------------------------------ the wealth curve
 
@@ -249,8 +250,8 @@ export interface WeekNumbers {
 }
 
 /** A week in numbers (the watch report, spec: on Sunday); `start` = the budget's (the household's balances – D80). */
-/** `ledger` – the household's (D80, `FleetState.household`): a member's money is income only beyond what they owed. */
-export function weekNumbers(transactions: readonly Transaction[], categories: readonly Category[], monday: string, ledger: Pick<HouseholdLedger, 'byTx'> = settleHousehold(transactions)): WeekNumbers {
+/** `income` – what is income (D81, `FleetState.incomeContext`): not the household members' money, trading net. */
+export function weekNumbers(transactions: readonly Transaction[], categories: readonly Category[], monday: string, income: IncomeContext = plainIncomeContext(transactions)): WeekNumbers {
   const to = addDays(monday, 6)
   const cats = categoryIndex(categories)
   const txs = transactions.filter((t) => t.date >= monday && t.date <= to)
@@ -267,7 +268,7 @@ export function weekNumbers(transactions: readonly Transaction[], categories: re
     from: monday,
     to,
     costs: sum(txs.map(costOf)),
-    income: sum(txs.map((t) => incomeOf(t, ledger))),
+    income: incomeOfPeriod(txs, income).total,
     days: Array.from({ length: 7 }, (_, i) => {
       const date = addDays(monday, i)
       return { date, costs: sum(txs.filter((t) => t.date === date).map(costOf)) }
@@ -299,16 +300,19 @@ export interface YearNumbers {
   financed: Array<{ memberId: string; amount: number }>
 }
 
-/** A year in numbers (the year's review, spec: in January); `start` = the budget's (the household's balances – D80). */
-export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ledger: Pick<HouseholdLedger, 'byTx'> = settleHousehold(transactions)): YearNumbers {
+/**
+ * A year in numbers (the year's review, spec: in January); `ctx` – what is income (D81). The year's income nets the
+ * trading over the whole year (a withdrawal in January and a top-up in March cancel out), each month over itself.
+ */
+export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ctx: IncomeContext = plainIncomeContext(transactions)): YearNumbers {
   const months = monthRange(`${year}-01`, `${year}-12`)
   const spend = spendingByMonth(transactions, categories, months)
-  const income = months.map((m) => sum(transactions.filter((t) => monthOf(t.date) === m).map((t) => incomeOf(t, ledger))))
+  const income = months.map((m) => incomeOfPeriod(transactions.filter((t) => monthOf(t.date) === m), ctx).total)
   return {
     year,
     months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]! })),
     costs: sum(spend.totals),
-    income: sum(income),
+    income: incomeOfPeriod(transactions.filter((t) => t.date.startsWith(`${year}-`)), ctx).total,
     categories: [...spend.rows.map((r) => ({ id: r.id, cost: r.total })), { id: 'cargo', cost: sum(spend.cargo) }].filter((c) => c.cost > 0).sort((a, b) => b.cost - a.cost),
     financed: financedBy(transactions.filter((t) => t.date.startsWith(`${year}-`)))
   }

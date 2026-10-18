@@ -22,9 +22,10 @@ import { envelopeKind, type EnvelopeKind } from '../schema/budget'
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawNow, warsawStamp } from './dates'
 import { openingsOf } from './balances'
-import { settleHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
+import { heldOf, settleHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
+import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type IncomeStats } from './income'
 import { debtOf, loanStates, type LoanState } from './loans'
-import { categoryIndex, costOf, incomeOf, partsOf, splitEvenly, sum } from './operations'
+import { categoryIndex, costOf, partsOf, splitEvenly, sum } from './operations'
 
 // ------------------------------------------------------------------ the rules as small pure functions
 
@@ -201,8 +202,27 @@ export function budgetStartOf(settings: Pick<Settings, 'budget'>, balances: read
   return [...openingsOf(balances, today).values()].map((o) => o.date).sort()[0] ?? null
 }
 
-/** The ledger's options as the engine settles the household (D80): from the budget's start, each account from its opening. */
-const ledgerOptions = (start: string | null, openings: ReadonlyMap<string, Balance>, until: string) => ({ until, from: start, openings: new Map([...openings].map(([id, o]) => [id, o.date])) })
+/**
+ * The settlements with the household start (D81): on the day chosen (`settings.household.since`), not before the
+ * budget's start; none chosen = the budget's start (as 1.3.0).
+ */
+export function settleFromOf(settings: Pick<Settings, 'household'>, budgetStart: string | null): string | null {
+  const since = settings.household.since
+  if (!since) return budgetStart
+  return budgetStart && since < budgetStart ? budgetStart : since
+}
+
+/**
+ * The ledger's options as the engine settles the household (D80, D81): from the settlements' start with the members'
+ * opening balances, each account's operations from its opening.
+ */
+const ledgerOptions = (settings: Pick<Settings, 'household'>, budgetStart: string | null, openings: ReadonlyMap<string, Balance>, until: string) => ({
+  until,
+  from: settleFromOf(settings, budgetStart),
+  reset: budgetStart,
+  openings: new Map([...openings].map(([id, o]) => [id, o.date])),
+  members: settings.household.members
+})
 
 /**
  * The household's ledger as the engine keeps it on `today` (D80), up to `until` (default `today`): the same balances
@@ -210,13 +230,13 @@ const ledgerOptions = (start: string | null, openings: ReadonlyMap<string, Balan
  */
 export function householdOf(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, today: string, until: string = today): HouseholdLedger {
   const balances = input.balances ?? []
-  return settleHousehold(input.transactions, ledgerOptions(budgetStartOf(input.settings, balances, today), openingsOf(balances, today), until))
+  return settleHousehold(input.transactions, ledgerOptions(input.settings, budgetStartOf(input.settings, balances, today), openingsOf(balances, today), until))
 }
 
 // ------------------------------------------------------------------ the whole state
 
 export interface FleetInput {
-  settings: Pick<Settings, 'accounts' | 'categories' | 'layers' | 'orders' | 'budget'>
+  settings: Pick<Settings, 'accounts' | 'categories' | 'layers' | 'orders' | 'budget' | 'household'>
   transactions: readonly Transaction[]
   containers?: readonly Container[]
   goals?: readonly Goal[]
@@ -270,7 +290,7 @@ export interface Moves {
 
 export interface FleetEvent {
   date: string
-  kind: 'start' | 'account' | 'salary' | 'sinking' | 'month-end' | 'loot' | TxKind
+  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'month-end' | 'loot' | TxKind
   amount: number
   txId?: string
   moves: Moves
@@ -317,7 +337,14 @@ export interface FleetState {
   /** What the taken loans still want back (E6): the range counts the shields less it (D72). */
   debt: number
   costs: { average: number | null; months: number; source: 'history' | 'assumed' | null }
+  /** The average income of the last 6 full months (`calc/income.ts`): work and trading, as the panel „Przychody”. */
   income: { average: number | null; months: number }
+  /** Income by month, averages of 3, 6 and 12 months and medians (D81). */
+  incomeStats: IncomeStats
+  /** What the statistics count as income (the reports read it too). */
+  incomeContext: IncomeContext
+  /** The settlements with the household start (D81): `settleFromOf`. */
+  settleFrom: string | null
   range: number | null
   shipClass: ShipClass | null
   cargo: { monthly: number; pct: number | null; limitPct: number; over: boolean }
@@ -377,21 +404,22 @@ export function computeFleet(input: FleetInput): FleetState {
   // Its balances from the budget's start, the operations the layers count (`counts`) – the same ledger for the screens
   // and the statistics.
   const budgetStart = budgetStartOf(settings, input.balances, today)
-  const household = settleHousehold(input.transactions, ledgerOptions(budgetStart, openings, today))
+  const settleFrom = settleFromOf(settings, budgetStart)
+  const household = settleHousehold(input.transactions, ledgerOptions(settings, budgetStart, openings, today))
 
   // ---------------------------------------------------------------- statistics from the whole history
   const dataDates = [...txs.map((t) => t.date), ...[...openings.values()].map((o) => o.date)].sort()
   const coverage = dataDates[0] ?? null
   const firstFull = coverage ? (coverage.endsWith('-01') ? monthOf(coverage) : addMonths(monthOf(coverage), 1)) : null
   const costsByMonth = new Map<string, number>()
-  const incomeByMonth = new Map<string, number>()
   for (const t of txs) {
     const m = monthOf(t.date)
     const c = costOf(t)
     if (c) costsByMonth.set(m, (costsByMonth.get(m) ?? 0) + c)
-    const i = incomeOf(t, household)
-    if (i) incomeByMonth.set(m, (incomeByMonth.get(m) ?? 0) + i)
   }
+  // Income (D81): work and trading net, without the members' money and the pool „Podatek”.
+  const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax: taxOfDockings(dockingByTx, txs) }
+  const incomeMonths = incomeByMonth(txs, incomeContext)
   const costsFor = (m: string): FleetState['costs'] => {
     const h = averageOf(costsByMonth, firstFull, m, 12)
     const assumed = settings.layers.assumedCosts
@@ -615,11 +643,11 @@ export function computeFleet(input: FleetInput): FleetState {
           drawShields(-amt, moves)
           break
         }
-        // A household member's money (D80): it repays what they owe (back to the shields), then it is their advance or
-        // income – only income docks.
+        // A household member's money (D80, D81 – by parts): it repays what they owe (back to the shields), then it is
+        // their advance or income – only income docks (a part of no member too).
         const flows = household.byTx.get(t.id)
         settle(flows, moves)
-        const rest = flows ? sum(flows.map((f) => f.income)) : amt
+        const rest = amt - heldOf(flows)
         const d = dockingByTx.get(t.id)
         if (!rest) break
         if (d?.split) applySplit(rest, d.split, moves)
@@ -737,6 +765,22 @@ export function computeFleet(input: FleetInput): FleetState {
         }
       })
     }
+    // The settlements with the household start (D81): the deposit is the members' opening advances from then on – what
+    // was held for them before goes to the shields (or the shields hold the advances now).
+    if (settleFrom && settleFrom >= start && settleFrom <= today)
+      events.push({
+        key: at(settleFrom, 1, 'h'),
+        run: () => {
+          const target = sum(settings.household.members.map((m) => m.opening?.deposit ?? 0))
+          const delta = target - deposit
+          if (!delta) return
+          const moves: Moves = { deposit: delta }
+          deposit = target
+          if (delta > 0) drawShields(delta, moves)
+          else addShields(-delta, moves)
+          record({ date: settleFrom, kind: 'household', amount: delta, moves })
+        }
+      })
     // Month by month: the energy left becomes the loot, the salary, the tanks; the loot without a decision in 7 days → shields.
     for (const m of monthRange(addMonths(monthOf(start), 1), month)) {
       const prev = addMonths(m, -1)
@@ -812,7 +856,8 @@ export function computeFleet(input: FleetInput): FleetState {
   const salary = plan?.salary ?? null
   const targets = targetsAt(today)
   const costs = costsAt(month)
-  const income = averageOf(incomeByMonth, firstFull, month, 6)
+  const incomeNow = incomeStats(incomeMonths, firstFull, month)
+  const income = { average: incomeNow.windows[6].total, months: incomeNow.windows[6].months }
   // A loan taken is in the shields, but it is not the ship's money: the range counts the shields less the debt (D72).
   const loanList = loanStates(input.loans ?? [], txs, containers, today)
   const debt = debtOf(loanList)
@@ -899,6 +944,9 @@ export function computeFleet(input: FleetInput): FleetState {
     debt,
     costs,
     income,
+    incomeStats: incomeNow,
+    incomeContext,
+    settleFrom,
     range,
     shipClass: range != null ? shipClass(range) : null,
     cargo,

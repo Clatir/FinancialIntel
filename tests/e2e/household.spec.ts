@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
@@ -11,13 +11,14 @@ const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
 const GROCERIES = '01KDEFCAT00000000000000101'
 const MAMA = '01KMEMMAMA0000000000000001'
+const TATA = '01KMEMTATA0000000000000002'
 
 type Member = { id: string; name: string; bankNames: string[]; inflow: string; archived: boolean }
 const members = async (dataDir: string): Promise<Member[]> => (await json(join(dataDir, 'fi.json'))).settings.household.members
 const operations = (dataDir: string) => records(dataDir, 'transactions')
 
-async function typeAmount(page: Page, testId: string, text: string) {
-  const field = page.getByTestId(testId)
+async function typeAmount(page: Page, target: string | Locator, text: string) {
+  const field = typeof target === 'string' ? page.getByTestId(target) : target
   await field.click()
   await field.fill(text)
   await field.press('Enter')
@@ -41,7 +42,7 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     settings: (s) => ({
       ...s,
       budget: { ...s.budget, start },
-      household: { members: [...s.household.members, { id: MAMA, name: 'Mama', bankNames: ['ANNA TESTOWA'], inflow: 'advance', archived: false }] }
+      household: { since: start, members: [...s.household.members, { id: MAMA, name: 'Mama', bankNames: ['ANNA TESTOWA'], inflow: 'advance', archived: false, via: null, opening: { owed: 0, deposit: 0 } }] }
     }),
     records: {
       balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],
@@ -166,3 +167,96 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     await app.close()
   }
 })
+
+test('Domownicy bez bankowości (D81): rozliczenia od dziś z saldem na start, „+ także za”, „w tym za” w szybkim wpisie, przychody z pracy i XTB', async () => {
+  const { date: today, month } = warsawNow()
+  const prev = addMonths(month, -1)
+  const start = `${prev}-01`
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-household-d81-')), 'FinancialIntel')
+  const person = (id: string, name: string, bankNames: string[]) => ({ id, name, bankNames, inflow: 'income', archived: false, via: null, opening: { owed: 0, deposit: 0 } })
+  seedFolder(dataDir, {
+    // No settlements' date: the app takes today, once.
+    settings: (s) => ({ ...s, budget: { ...s.budget, start }, household: { members: [...s.household.members, person(MAMA, 'Mama', []), person(TATA, 'Tata', ['PIOTR TESTOWY'])] } }),
+    records: {
+      balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],
+      months: [{ month: prev, salary: zl(4000), envelopes: { [FOOD]: zl(1500) } }],
+      transactions: [
+        // Last month: the salary, XTB (5 000 out, 3 000 back – 2 000 net), Tata's money before the settlements, a purchase for Mama.
+        { date: `${prev}-10`, accountId: ACC, kind: 'income', amount: zl(4000), counterparty: 'Pracodawca' },
+        { date: `${prev}-12`, accountId: ACC, kind: 'trading', amount: zl(5000), counterparty: 'XTB' },
+        { date: `${prev}-20`, accountId: ACC, kind: 'trading', amount: -zl(3000), counterparty: 'XTB' },
+        { date: `${prev}-15`, accountId: ACC, kind: 'income', amount: zl(800), counterparty: 'PIOTR TESTOWY' },
+        { date: `${prev}-05`, accountId: ACC, amount: -zl(90), categoryId: GROCERIES, counterparty: 'Apteka', refundable: true, memberId: MAMA }
+      ]
+    }
+  })
+  const { app, page, dataDir: dir, errors } = await launch({ dataDir })
+  try {
+    // The settlements from today: what Mama owed until yesterday (last month's purchase) is her opening balance; Tata's
+    // money then is not income.
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.household.since).toBe(today)
+    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(90), deposit: 0 })
+    await expect(page.getByTestId('bridge-house')).toHaveText('90,00 zł')
+    const income = page.getByTestId('bridge-income')
+    await expect(income.getByTestId('income-work-6')).toHaveText('4 000,00 zł')
+    await expect(income.getByTestId('income-trading-6')).toHaveText('2 000,00 zł')
+    await expect(income.getByTestId('income-total-6')).toHaveText('6 000,00 zł')
+    await expect(income.getByTestId('income-vs-salary')).toContainText('2 000,00 zł / mies.')
+
+    // Settings: what Mama owed before the date as her opening balance; her money comes through Tata.
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-household').click()
+    await expect(page.getByTestId('household-since')).toHaveValue(`${today.slice(8, 10)}.${today.slice(5, 7)}.${today.slice(0, 4)}`)
+    const mama = page.locator('[data-testid="member-row"][data-name="Mama"]')
+    await typeAmount(page, mama.getByTestId('member-opening'), '150')
+    await mama.getByTestId('member-via').selectOption({ label: 'Tata' })
+    await expect
+      .poll(async () => (await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown; via: unknown })
+      .toMatchObject({ opening: { owed: zl(150), deposit: 0 }, via: TATA })
+    await page.screenshot({ path: join('test-results', 'screens', '17-domownicy-start.png') })
+
+    // Tata's transfer carries Mama's money: „+ także za Mama” – her part pays her opening balance, the rest is his.
+    await page.keyboard.press('Control+2')
+    await page.keyboard.press('Control+n')
+    await page.getByRole('radio', { name: 'Wpływ' }).click()
+    await typeAmount(page, page.getByTestId('operation-amount'), '500')
+    await page.getByTestId('operation-counterparty').fill('PIOTR TESTOWY')
+    await page.getByTestId('operation-payer').selectOption({ label: 'Tata' })
+    await expect(page.getByTestId('operation-also-for')).toHaveText('+ także za Mama (ma oddać 150,00 zł)')
+    await page.getByTestId('operation-also-for').click()
+    await expect(page.getByTestId('income-split-amount')).toHaveValue('150,00')
+    await expect(page.getByTestId('income-split-rest')).toHaveText('Reszta 350,00 zł – Tata.')
+    await expect(page.getByTestId('operation-member-flow')).toContainText('Mama: spłaca 150,00 zł')
+    await expect(page.getByTestId('operation-member-flow')).toContainText('Tata: przychód 350,00 zł')
+    await page.screenshot({ path: join('test-results', 'screens', '18-podzial-wplaty.png') })
+    await expect
+      .poll(async () => (await operations(dir)).filter((t) => t.amount === zl(500)).map((t) => [t.memberId, (t.splits as Array<{ memberId: string; amount: number }>).map((x) => [x.memberId, x.amount])]))
+      .toEqual([[TATA, [[MAMA, zl(150)]]]])
+
+    // The quick entry: „w tym za Mama” at Tata's money.
+    const quick = await quickWindow(app, page)
+    await quick.getByRole('radio', { name: 'Wpływ' }).click()
+    await quick.getByTestId('quick-amount').fill('300')
+    await quick.getByTestId('quick-amount').press('Tab')
+    await quick.getByTestId('quick-payer').selectOption({ label: 'Tata' })
+    await quick.getByTestId('quick-share').fill('100')
+    await quick.getByTestId('quick-share').press('Tab')
+    await expect(quick.getByTestId('quick-preview-share')).toContainText('W tym za: Mama')
+    await quick.getByTestId('quick-save').click()
+    await expect
+      .poll(async () => (await operations(dir)).filter((t) => t.amount === zl(300)).map((t) => [t.memberId, (t.splits as Array<{ memberId: string; amount: number }>).map((x) => [x.memberId, x.amount])]))
+      .toEqual([[TATA, [[MAMA, zl(100)]]]])
+
+    // Mostek: Mama paid her opening balance; the panel of income on the month's plan too.
+    await page.keyboard.press('Control+1')
+    await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')
+    await page.keyboard.press('Control+4')
+    await expect(page.getByTestId('income-panel').getByTestId('income-total-6')).toHaveText('6 000,00 zł')
+    await page.screenshot({ path: join('test-results', 'screens', '16-przychody.png') })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+

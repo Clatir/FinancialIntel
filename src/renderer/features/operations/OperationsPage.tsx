@@ -20,6 +20,7 @@ import { OperationEditor } from './OperationEditor'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
 import { categorizeTicked, clearTicked, financeTicked, newOperation, resetFilter, selectOperation, setFilter, tickOperations, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
+import { incomeShares, memberName } from '@shared/calc/household'
 
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
@@ -142,7 +143,17 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
   const draft = useData((s) => !!s.drafts[t.id])
   const marks = orders ? marksOf(t, orders) : []
   const tone = amountTone(t)
-  const category = t.splits.length ? `${t.splits.length} części` : t.kind === 'expense' ? cats.label(t.categoryId) : TX_KIND_LABEL[t.kind]
+  const members = useMembers()
+  // A member's money says whose (D80, D81: the parts of a split income – the sender's rest last).
+  const shares = t.kind === 'income' ? incomeShares(t) : []
+  const whose = [...new Set(shares.map((x) => x.memberId))].filter((x): x is string => !!x)
+  const category = whose.length
+    ? `od: ${whose.map((id) => memberName(id, members)).join(', ')}`
+    : t.splits.length
+      ? `${t.splits.length} ${plural(t.splits.length, 'część', 'części', 'części')}`
+      : t.kind === 'expense'
+        ? cats.label(t.categoryId)
+        : TX_KIND_LABEL[t.kind]
   const account = accounts.find((a) => a.id === t.accountId)?.name ?? '?'
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split'].includes(m))
   const ticked = useOperationsUi((s) => !!s.ticked[t.id])

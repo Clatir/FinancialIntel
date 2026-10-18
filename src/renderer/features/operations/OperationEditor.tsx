@@ -49,7 +49,8 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     memberId: kind === t.kind ? t.memberId : null,
     advance: kind === 'income' ? t.advance : false,
     covers: kind === 'income' ? t.covers : [],
-    splits: kind === 'expense' ? t.splits : [],
+    // A receipt's lines and an income's parts (D81) are other things too: they stay with the same kind.
+    splits: kind === t.kind && (kind === 'expense' || kind === 'income') ? t.splits : [],
     repaid: kind === 'income' ? t.repaid : 0,
     counterAccountId: kind === 'transfer' ? t.counterAccountId : null,
     impulse: kind === 'expense' ? t.impulse : null,
@@ -222,8 +223,8 @@ export function OperationEditor({ id }: { id: string }) {
                   onClick={() =>
                     patch({
                       splits: [
-                        { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, note: '' },
-                        { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, note: '' }
+                        { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, note: '' },
+                        { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
                       ]
                     })
                   }
@@ -398,7 +399,7 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
         </div>
       ))}
       <div className="flex items-center gap-2 text-[11.5px]">
-        <button type="button" className="btn h-[22px]" onClick={() => update((r) => ({ ...r, splits: [...r.splits, { id: newId(), amount: Math.sign(rest) === sign ? rest : 0, categoryId: null, refundable: false, memberId: null, note: '' }] }))} data-testid="split-add">
+        <button type="button" className="btn h-[22px]" onClick={() => update((r) => ({ ...r, splits: [...r.splits, { id: newId(), amount: Math.sign(rest) === sign ? rest : 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }] }))} data-testid="split-add">
           <IconPlus size={12} /> część
         </button>
         {rest !== 0 ? (

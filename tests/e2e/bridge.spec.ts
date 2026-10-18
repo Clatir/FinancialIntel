@@ -31,7 +31,8 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
   const due = addDays(today, 5)
   const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-bridge-')), 'FinancialIntel')
   seedFolder(dataDir, {
-    settings: (s) => ({ ...s, shipName: 'Sokół', budget: { ...s.budget, start } }),
+    // The settlements with the household from the budget's start (D81): the purchase for the house counts.
+    settings: (s) => ({ ...s, shipName: 'Sokół', budget: { ...s.budget, start }, household: { ...s.household, since: start } }),
     records: {
       balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],
       months: [{ month: addMonths(month, -1), salary: zl(4000), envelopes: { [FOOD]: zl(1500), [AUTO]: zl(300) } }],

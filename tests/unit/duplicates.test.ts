@@ -71,6 +71,11 @@ describe('duplikaty zapisanych operacji (D77)', () => {
     expect(mergeDuplicate(own, [copy], 'manual', NOW)).toMatchObject({ id: own.id, date: '2026-10-11', bank: { key: 'mbank:aa:0' }, categoryId: COFFEE, time: '08:10', note: 'z Anią', counterparty: 'Kawa' })
     const decided = { ...copy, categoryId: FOOD }
     expect(findDuplicates([own, decided], [])[0]?.conflict).toBe(true)
+    // An income's parts of different members (D81) are different decisions too.
+    const part = (memberId: string) => [{ id: id(), amount: 30000, categoryId: null, refundable: false, memberId, advance: false, note: '' }]
+    const incomeA = tx({ kind: 'income', amount: 50000, categoryId: null, counterparty: 'PIOTR TESTOWY', splits: part(`01KMEM${'0'.repeat(19)}2`) })
+    const incomeB = tx({ kind: 'income', amount: 50000, categoryId: null, counterparty: 'PIOTR TESTOWY', splits: part(`01KMEM${'0'.repeat(19)}3`), bank: bank('mbank:ee:0', 'PIOTR TESTOWY') })
+    expect(findDuplicates([incomeA, incomeB], [])[0]?.conflict).toBe(true)
     // An undecided quick entry takes the copy's whole decision (an XTB top-up), not only a category.
     const quick = tx({ counterparty: 'xtb' })
     const xtb = tx({ kind: 'trading', counterparty: 'xtb.com', bank: bank('mbank:dd:0', 'xtb.com') })

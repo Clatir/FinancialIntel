@@ -166,11 +166,12 @@ const LABELS: Record<string, string> = {
   memberId: 'Domownik',
   advance: 'Reszta jako zaliczka',
   covers: 'Pokrywa wydatki',
-  splits: 'Podział paragonu',
-  'splits.amount': 'Podział paragonu – kwota',
-  'splits.categoryId': 'Podział paragonu – kategoria',
-  'splits.refundable': 'Podział paragonu – finansuje domownik',
-  'splits.memberId': 'Podział paragonu – domownik',
+  splits: 'Podział',
+  'splits.amount': 'Podział – kwota',
+  'splits.categoryId': 'Podział – kategoria',
+  'splits.refundable': 'Podział – finansuje domownik',
+  'splits.memberId': 'Podział – domownik',
+  'splits.advance': 'Podział – reszta jako zaliczka',
   counterparty: 'Kontrahent',
   title: 'Tytuł',
   impulse: 'Plan czy impuls',
@@ -207,7 +208,16 @@ const LABELS: Record<string, string> = {
   'settings.budget': 'Start budżetu',
   'settings.import': 'Import',
   'settings.import.rules': 'Reguły importu',
-  'settings.import.ownNames': 'Własne nazwy w banku'
+  'settings.import.ownNames': 'Własne nazwy w banku',
+  'settings.household': 'Domownicy',
+  'settings.household.since': 'Rozliczenia z domownikami od',
+  'settings.household.members': 'Domownicy',
+  'settings.household.members.name': 'Domownicy – imię',
+  'settings.household.members.bankNames': 'Domownicy – nazwy w banku',
+  'settings.household.members.inflow': 'Domownicy – reszta wpłaty',
+  'settings.household.members.via': 'Domownicy – przekazuje przez',
+  'settings.household.members.opening': 'Domownicy – saldo na start',
+  'settings.household.members.archived': 'Domownicy – archiwum'
 }
 
 /** Polish label of a changed field: known fields by name, items of lists by their position in the path. */

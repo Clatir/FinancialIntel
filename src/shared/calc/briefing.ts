@@ -10,7 +10,7 @@ import type { HouseholdMember } from '../schema/budget'
 import type { Container } from '../schema/records'
 import { daysBetween, firstDayOf, warsawNow } from './dates'
 import type { Delivery } from './dock'
-import { memberName } from './household'
+import { isOpeningItem, memberName } from './household'
 import { HOUSE_DAYS } from './loans'
 import { pit38Deadline } from './radar'
 import { activeIn, nextPaymentOf, type Alarm, type FleetState } from './fleet'
@@ -90,8 +90,8 @@ export interface BriefingInput {
   ictjProblem?: string | null
   /** This week's mission of the command (E7): its title and what to do. */
   mission?: { week: string; title: string; text: string } | null
-  /** The household (D80): the members' names. */
-  members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>
+  /** The household (D80): the members' names, whom their money comes through (D81). */
+  members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'> & { via?: string | null }>
 }
 
 /** Silver Bullet (D73): the briefing opened between 10:00 and 11:00 New York time comes short. */
@@ -213,8 +213,13 @@ export function briefing(o: BriefingInput): BriefingItem[] {
   // What a household member owes for longer than 30 days (D80 e): each member apart; their advance is only shown.
   for (const m of f.receivables.members) {
     const days = m.since ? daysBetween(m.since, f.today) : 0
-    if (m.owed > 0 && m.since && days > HOUSE_DAYS)
-      items.push({ level: 'info', kind: 'house', key: `house:${m.memberId}:${m.since}`, text: `${memberName(m.memberId, o.members)}: do oddania ${zl(m.owed)} – najstarszy zakup z ${dm(m.since)} (${days} dni).` })
+    if (m.owed > 0 && m.since && days > HOUSE_DAYS) {
+      // The oldest still owed: a purchase, or the balance at the settlements' start (D81); their money's way (D81).
+      const oldest = m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń' : 'najstarszy zakup'
+      const via = o.members?.find((x) => x.id === m.memberId)?.via
+      const through = via ? ` – przekazuje przez: ${memberName(via, o.members)}` : ''
+      items.push({ level: 'info', kind: 'house', key: `house:${m.memberId}:${m.since}`, text: `${memberName(m.memberId, o.members)}: do oddania ${zl(m.owed)} – ${oldest} z ${dm(m.since)} (${days} dni)${through}.` })
+    }
   }
   if (o.mission) items.push({ level: 'info', kind: 'mission', key: `mission:${o.mission.week}`, text: `Misja tygodnia – ${o.mission.title}: ${o.mission.text}` })
   return items

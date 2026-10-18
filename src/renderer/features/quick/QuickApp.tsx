@@ -55,6 +55,8 @@ export function QuickApp() {
   const [data, setData] = useState<QuickData | null>(null)
   const [d, setD] = useState<QuickDraft>(() => blank(null))
   const [lines, setLines] = useState<Line[]>([])
+  // Others' money in a member's transfer (D81, „w tym za …”), by member.
+  const [shares, setShares] = useState<Record<string, number>>({})
   const [nightOk, setNightOk] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -72,6 +74,7 @@ export function QuickApp() {
       setAmountsHidden(!!next?.hideAmounts)
       setD(blank(next))
       setLines([])
+      setShares({})
       setNightOk(false)
       setMsg(null)
       setOfficer(null)
@@ -106,15 +109,23 @@ export function QuickApp() {
     if (d.kind === 'income') {
       const m = d.household ? data.members.find((x) => x.id === d.memberId) : undefined
       if (!m) return <span>Wpływ – dokuje w warstwach okrętu.</span>
-      // A household member's money (D80): what they owe first, the rest their advance or income.
-      const back = Math.min(d.amount, m.owed)
-      const rest = d.amount - back
+      // Others' money in it first (D81), then the sender's: what each owes first, the rest their advance or income.
+      const others = data.members.filter((x) => x.via === m.id && (shares[x.id] ?? 0) > 0)
+      const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0)
+      const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean) => {
+        const back = Math.min(amount, who.owed)
+        const rest = amount - back
+        return `${who.name}${back ? ` – wyrównuje ${money(back)} (ma oddać ${money(who.owed)})` : ''}${rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'}` : ''}.`
+      }
       return (
-        <span data-testid="quick-preview-member">
-          Od: {m.name}
-          {back ? ` – wyrównuje ${money(back)} (ma oddać ${money(m.owed)})` : ''}
-          {rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${d.advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'}` : ''}.
-        </span>
+        <div className="flex flex-col">
+          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : <span data-testid="quick-preview-member">Od: {line(m, own, d.advance)}</span>}
+          {others.map((x) => (
+            <span key={x.id} data-testid="quick-preview-share">
+              W tym za: {line(x, shares[x.id]!, x.inflow === 'advance')}
+            </span>
+          ))}
+        </div>
       )
     }
     const parts: Line[] = lines.length > 1 ? lines : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null }]
@@ -162,7 +173,7 @@ export function QuickApp() {
       )
     }
     return out
-  }, [data, d, lines, cats, money])
+  }, [data, d, lines, cats, money, shares])
 
   const save = useCallback(() => {
     if (busy || !data) return
@@ -173,8 +184,10 @@ export function QuickApp() {
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
     setBusy(true)
     setMsg(null)
-    void api.quickAdd({ ...d, splits: lines.length > 1 ? lines : [] } satisfies QuickDraft)
-  }, [busy, data, d, lines, night, nightOk])
+    // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
+    const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
+    void api.quickAdd({ ...d, splits: lines.length > 1 ? lines : [], shares: parts } satisfies QuickDraft)
+  }, [busy, data, d, lines, night, nightOk, shares])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -344,6 +357,19 @@ export function QuickApp() {
               </div>
             </Row>
           )}
+          {/* Who passes money through this member (D81): their part of this transfer, typed or left empty. */}
+          {d.kind === 'income' &&
+            d.household &&
+            data.members
+              .filter((m) => m.via === d.memberId)
+              .map((m) => (
+                <Row key={m.id} label={`W tym za ${m.name}`}>
+                  <div className="flex items-center gap-2">
+                    <AmountField className="w-[110px]" value={shares[m.id] || null} allowEmpty onChange={(v) => setShares((x) => ({ ...x, [m.id]: v ?? 0 }))} aria-label={`W tym za ${m.name}`} data-testid="quick-share" />
+                    <span className="text-[11px] text-muted">{m.owed ? `ma oddać ${money(m.owed)}` : 'nic do oddania'}</span>
+                  </div>
+                </Row>
+              ))}
           <Row label="Notatka">
             <input className="input" value={d.note} onChange={(e) => set({ note: e.currentTarget.value })} maxLength={500} data-testid="quick-note" />
           </Row>

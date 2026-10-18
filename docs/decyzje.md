@@ -229,6 +229,18 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   - g. w Operacjach zbiorczo „finansuje: X”; przy wpływie opcjonalnie wskazanie pokrytych wydatków (inaczej od
     najstarszych); reguła importu może oznaczać, kto finansuje (po sklepie);
   - salda na Mostku i Radarze, sfinansowane wydatki osobno w debriefingu miesiąca i Raportach.
+- **D81** (18.10.2026) Domownicy bez bankowości i przychody ze średnich (1.4.0, zgłoszenie użytkownika po 1.3.0: część
+  domowników nie ma konta – przekazuje pieniądze innemu domownikowi, który przelewa; w jednym przelewie bywają pieniądze
+  kilku osób, a rozsupłanie historii jest niemożliwe; przychody mają wynikać też ze średnich). Odpowiedzi i komenda „Ok”:
+  - przelew domyślnie należy do nadawcy; „pośrednik” (osoba, przez którą ktoś przekazuje pieniądze) to tylko
+    podpowiedź – przy wpłacie przycisk „+ także za X” dzieli ją z kwotą tego, co X ma oddać (do zmiany); do tego ręczny
+    podział wpłaty na dowolne osoby (jak podział paragonu); przypomnienie mówi „przekazuje przez Y”;
+  - rozliczenia z domownikami od dziś (data do zmiany) z opcjonalnym saldem początkowym osoby; przelewy domowników
+    sprzed tej daty nie są przychodem w statystykach;
+  - panel „Przychody” (Plan miesiąca, Mostek): średnia z 3, 6 i 12 miesięcy oraz mediana, osobno „Praca i inne” i
+    „Trading (XTB)” oraz suma; trading = wypłaty minus dopłaty, bez wypłat z puli Podatek; bez przelewów własnych, spłat
+    i zaliczek domowników; porównanie z pensją; te same liczby w średnich przychodach silnika (ostrzeżenie „pensja
+    wyższa niż średnie wpływy”). Tryb „pensja automatyczna” – nie (nie wybrany).
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -729,4 +741,43 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   podgląd i zapis czytają brak osoby jak rejestr); misja na dzień oceny (T111); osoba wybrana przy kwocie 0; jeden
   rejestr dla ekranów zamiast drugiego liczenia; rejestr tygodnia liczony raz; jedna reguła salda otwarcia; unikalne
   imiona.
+
+### 1.4.0 – domownicy bez bankowości i przychody (18.10.2026)
+
+- **T115** Data rozliczeń (D81, `settings.household.since`): brak = jeszcze nie wybrana – 1.4.0 przy pierwszym otwarciu
+  folderu (zapis w tle, nie w folderze tylko do odczytu) ustawia dziś, a salda osób do wczoraj (tak, jak liczyła je 1.3.0)
+  zapisuje jako ich saldo na start – nic oznaczonego wcześniej nie ginie; null = od startu budżetu (jak 1.3.0); data z
+  przyszłości odrzucana. Data obowiązuje nie wcześniej niż start budżetu (`settleFromOf`). Rejestr zeruje salda przy
+  starcie budżetu (jak 1.3.0) i drugi raz w dniu rozliczeń – wtedy salda osób to ich `opening` (należność jako otwarta
+  pozycja `opening:<osoba>` z tą datą; przypomnienie mówi „saldo na start rozliczeń”). Operacje konta sprzed jego salda
+  otwarcia liczone od startu budżetu, jak w silniku.
+- **T116** Silnik w dniu rozliczeń (zdarzenie `household`, po saldach otwarcia kont, przed operacjami dnia): depozyt
+  ustawiany na sumę zaliczek na start – to, co trzymał wcześniej, wraca do osłon, brakujące bierze z osłon (zaliczki to
+  pieniądze domowników na moich kontach). Suma warstw = salda kont dalej.
+- **T117** Podział wpłaty (D81): `splits` wpływu = części innych osób (`memberId`, null = mój przychód; `advance` – reszta
+  części jako zaliczka); reszta kwoty jest nadawcy (`memberId` operacji, jego `advance`); części ponad kwotę ucinane
+  (`incomeShares`). Każda część spłaca swoją osobę (zakupy z „Pokrywa” najpierw), reszta to zaliczka albo przychód; do
+  warstw dokuje kwota minus spłaty i zaliczki (`heldOf`). Podział zostaje tylko przy tym samym rodzaju operacji (paragon
+  wydatku i części wpływu to różne rzeczy). Lista operacji i CSV pokazują „od: osoby”, duplikaty porównują osoby części.
+- **T118** Pośrednik (`member.via`): tylko podpowiedź – przy wpłacie nadawcy przycisk „+ także za X (ma oddać …)”
+  (kwota = co X był winien tuż przed tą wpłatą – rejestr operacji przed nią, nie dzisiejszy), w szybkim wpisie pole „W tym
+  za X”; nigdy nic samo. Przypomnienie i Radar: „przekazuje przez: Y”.
+- **T119** Przychód do statystyk (`calc/income.ts`, jedno źródło dla panelu „Przychody”, średniej silnika i raportów):
+  praca = wpływy bez spłat i zaliczek domowników (`heldOf`; części domowników, których rejestr nie rozliczył, też nie);
+  pieniądze domowników sprzed daty rozliczeń (oznaczone, podzielone albo po nazwie w banku – `isMemberMoney`) – nie
+  przychód; trading = wypłaty z konta tradingowego minus dopłaty, bez pieniędzy puli Podatek (dokowanie z pulą albo
+  część `split.taxHold`; także zwrot puli do kapitału), netto w okresie i nigdy poniżej zera (miesiąc, okno, rok – rok
+  netto w całym roku, miesiące każdy osobno).
+- **T120** Panel „Przychody” (`FleetState.incomeStats`): pełne miesiące przed bieżącym od pierwszego pełnego miesiąca
+  historii, ostatnie 12; średnie 3 / 6 / 12 (krótsza historia – tyle, ile jest) i mediany 12 miesięcy, osobno praca,
+  trading, razem; porównanie średniej 6 miesięcy z pensją. `FleetState.income` (ostrzeżenie „pensja wyższa niż średnie
+  wpływy”) = razem z 6 miesięcy.
+- **T121** Ustawienia → Domownicy: „Rozliczenia od” (data albo „od startu budżetu”), przy osobie „Na start rozliczeń: ma
+  oddać / zaliczka” (rodzaj wynika z zapisanego salda, wybierany przy pustym) i „Pieniądze przekazuje przez”; historia
+  zmian nazywa nowe pola.
+- **T122** Przegląd 1.4.0 (`/code-review` high, 10 kandydatów – wszystkie poprawione): salda 1.3.0 przenoszone przy
+  pierwszym ustawieniu daty (T115), zerowanie przy starcie budżetu przy późniejszej dacie (T115), wykluczenie
+  przychodów od efektywnej daty rozliczeń (T119), części domowników bez rozliczenia poza przychodem (T119), trading
+  netto w całym roku (T119), pole salda na start zgodne z danymi (T121), kwota „+ także za” na dzień wpłaty (T118), CSV i
+  duplikaty z częściami wpłaty (T117), decyzje T115–T122.
 

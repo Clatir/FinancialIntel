@@ -45,7 +45,7 @@ describe('różnice pól', () => {
     expect(fieldLabel(['settings', 'sync', 'remoteChanges'])).toBe('Zmiany z drugiego komputera')
     expect(fieldLabel(['settings', 'layoutPresets', '#x', 'name'])).toBe('Zapisane układy – name')
     expect(fieldLabel(['settings', 'accounts'])).toBe('Konta')
-    expect(fieldLabel(['splits', '#s1', 'amount'])).toBe('Podział paragonu – kwota')
+    expect(fieldLabel(['splits', '#s1', 'amount'])).toBe('Podział – kwota')
     expect(fieldLabel(['settings', 'categories', '#c', 'envelope'])).toBe('Kategorie – koperta')
     expect(fieldLabel(['settings', 'futureThing'])).toBe('Ustawienia – futureThing')
     expect(fieldLabel(['nieznane', 'pole'])).toBe('nieznane.pole')

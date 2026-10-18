@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import { warsawNow } from '@shared/calc/dates'
 import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow } from '@shared/schema'
 import { useData } from '../../store/data'
-import { useHousehold } from '../../store/fleet'
-import { plnText } from '../../components/fields'
+import { useFleet, useHousehold } from '../../store/fleet'
+import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
-import { addMember, patchMember, useMembers } from '../household/actions'
+import { plDate } from '../../lib/format'
+import { addMember, patchMember, setHouseholdSince, useMembers } from '../household/actions'
 
 const INFLOW_OPTIONS: Array<{ value: MemberInflow; label: string }> = [
   { value: 'ask', label: 'pytaj' },
@@ -45,16 +47,81 @@ export function HouseholdTab() {
         pożyczają osłony, aż odda. Jego wpłata najpierw wyrównuje to, co ma oddać, reszta to zaliczka albo przychód. Zakupy oznaczone przed 1.3.0 („do
         zwrotu”) należą do pierwszej osoby z listy – zmień jej imię, jeśli to konkretna osoba.
       </p>
+      <SinceRow />
       <div className="flex flex-col">
         {members.map((m) => (
-          <MemberRow key={m.id} m={m} taken={names} />
+          <MemberRow key={m.id} m={m} taken={names} others={members.filter((x) => x.id !== m.id && !x.archived)} />
         ))}
       </div>
     </Panel>
   )
 }
 
-function MemberRow({ m, taken }: { m: HouseholdMember; taken: Set<string> }) {
+/**
+ * The settlements' start (D81): the members' balances count from it – what they owed or had paid ahead before goes in as
+ * their opening balance; their money before it is not income.
+ */
+function SinceRow() {
+  const since = useData((s) => s.fi?.settings.household.since)
+  const budgetStart = useFleet()?.start ?? null
+  const readOnly = useData((s) => !!s.status?.readOnly)
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 border-y border-line/70 py-2 text-[11.5px]" data-testid="household-since-row">
+      <span className="text-fg-strong">Rozliczenia od:</span>
+      {since ? (
+        <>
+          <DateField className="w-[104px]" value={since} onChange={(d) => !readOnly && setHouseholdSince(d)} aria-label="Rozliczenia od" data-testid="household-since" />
+          <button type="button" className="text-dim hover:text-fg-strong" disabled={readOnly} onClick={() => setHouseholdSince(null)} data-testid="household-since-budget">
+            od startu budżetu
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="num" data-testid="household-since-none">
+            startu budżetu{budgetStart ? ` (${plDate(budgetStart)})` : ''}
+          </span>
+          <button type="button" className="text-accent hover:underline" disabled={readOnly} onClick={() => setHouseholdSince(warsawNow().date)} data-testid="household-since-today">
+            od dziś
+          </button>
+        </>
+      )}
+      <span className="basis-full text-muted">
+        Wcześniejsze przelewy domowników nie są Twoim przychodem. To, co ktoś był winien albo wpłacił z góry przed tą datą, wpisz niżej jako jego saldo na start.
+      </span>
+    </div>
+  )
+}
+
+/** A member's balance at the settlements' start (D81): what they owed then, or what they had paid ahead. */
+function OpeningField({ m }: { m: HouseholdMember }) {
+  // The kind follows the balance kept (also when another computer or „Cofnij” changes it); chosen here while empty.
+  const [chosen, setKind] = useState<'owed' | 'deposit'>('owed')
+  const kind = m.opening.deposit > 0 ? 'deposit' : m.opening.owed > 0 ? 'owed' : chosen
+  const value = kind === 'deposit' ? m.opening.deposit : m.opening.owed
+  const set = (k: 'owed' | 'deposit', v: number) => patchMember(m.id, { opening: k === 'deposit' ? { owed: 0, deposit: v } : { owed: v, deposit: 0 } })
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="text-muted">Na start rozliczeń:</span>
+      <Segmented
+        size="sm"
+        value={kind}
+        onChange={(k) => {
+          setKind(k)
+          if (value) set(k, value)
+        }}
+        options={[
+          { value: 'owed', label: 'ma oddać' },
+          { value: 'deposit', label: 'zaliczka' }
+        ]}
+        aria-label="Saldo na start rozliczeń"
+      />
+      <AmountField className="w-[100px]" value={value || null} allowEmpty onChange={(v) => set(kind, v ?? 0)} aria-label="Kwota na start rozliczeń" data-testid="member-opening" />
+      <span className="text-muted">zł</span>
+    </span>
+  )
+}
+
+function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string>; others: readonly HouseholdMember[] }) {
   const ledger = useHousehold()
   const [bankName, setBankName] = useState('')
   const b = ledger ? balanceOf(ledger, m.id) : null
@@ -112,6 +179,23 @@ function MemberRow({ m, taken }: { m: HouseholdMember; taken: Set<string> }) {
         <button type="button" className="btn h-[22px]" onClick={addBankName} data-testid="member-bank-add">
           Dodaj
         </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px]">
+        <OpeningField m={m} />
+        <span className="flex items-center gap-1.5">
+          <span className="text-muted" title="Bez własnego konta: jego pieniądze przychodzą przelewem innego domownika. Przy jego wpłacie pojawi się „+ także za …” – nic nie dzieje się samo.">
+            Pieniądze przekazuje przez:
+          </span>
+          <select className="input h-[22px] w-[150px] py-0 text-[11.5px]" value={m.via ?? ''} onChange={(e) => patchMember(m.id, { via: e.currentTarget.value || null })} aria-label="Przekazuje przez" data-testid="member-via">
+            <option value="">— sam(a) —</option>
+            {others.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+            {m.via && !others.some((o) => o.id === m.via) && <option value={m.via}>(domownik spoza listy)</option>}
+          </select>
+        </span>
       </div>
     </div>
   )
