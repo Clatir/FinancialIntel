@@ -6,6 +6,9 @@ import { openResult, useData } from '../../store/data'
 import { IconFolder, IconPlus } from '../../components/icons'
 import { OpenProgressPanel, openLogs, useOpenProgress } from './OpenProgress'
 
+/** A folder that is not ready yet is tried again this often (B109). */
+const RETRY_MS = 30_000
+
 /** The same folder whatever the case and the trailing separator (Windows paths). */
 const samePath = (a: string, b: string) => {
   const n = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
@@ -45,7 +48,14 @@ export function FolderSetup() {
   // Stopped, failed, unavailable, FI data without fi.json yet (OneDrive still syncing) or the remembered folder found
   // empty: a retry. New data never goes to the remembered folder unasked – it would split the budget once OneDrive
   // brings the old one (B53): only „Utwórz tu nowe dane…” with a confirmation.
-  const canRetry = why?.reason === 'aborted' || why?.reason === 'error' || p === 'missing' || p === 'unavailable' || p === 'partial' || (p === 'empty' && remembered)
+  const canRetry = why?.reason === 'aborted' || why?.reason === 'error' || p === 'missing' || p === 'unavailable' || p === 'partial' || p === 'settings-unreadable' || (p === 'empty' && remembered)
+  // A folder not ready yet (OneDrive starting with Windows – B109): tried again by itself, while nothing else is going on.
+  const waiting = !!dir && (p === 'settings-unreadable' || p === 'unavailable' || p === 'partial')
+  useEffect(() => {
+    if (!waiting || busy || !dir) return
+    const t = setTimeout(() => void run(() => api.openDataDir(dir, false)), RETRY_MS)
+    return () => clearTimeout(t)
+  }, [waiting, busy, dir, message])
   const canCreate = p === 'empty' && !remembered
   const canStartOver = remembered && (p === 'empty' || p === 'missing')
   const subfolder = p === 'other' ? why?.subfolder : undefined
@@ -75,6 +85,11 @@ export function FolderSetup() {
                   {canRetry && (
                     <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.openDataDir(dir, false))} data-testid="retry-folder">
                       Spróbuj ponownie
+                    </button>
+                  )}
+                  {p === 'settings-broken' && (
+                    <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.repairSettings(dir))} data-testid="repair-settings">
+                      Weź ustawienia z historii
                     </button>
                   )}
                   {canCreate && (

@@ -5,7 +5,8 @@ import { debriefing, lootApplied, lootDeadline, lootExtraOf, planFor, proposeEnv
 import { memberName } from '@shared/calc/household'
 import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
-import { useData, useFolderLocked } from '../../store/data'
+import { tooNewMonths, useData, useFolderLocked } from '../../store/data'
+import { NewerNote } from '../../components/NewerNote'
 import { clearDraft, useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
@@ -50,7 +51,10 @@ export function MonthPage() {
   const transactions = useRecordList('transactions')
   const containers = useRecordList('containers')
   const categories = useData((s) => s.fi?.settings.categories)
-  const readOnly = useFolderLocked()
+  const folderLocked = useFolderLocked()
+  // The month's own plan a newer version of the app wrote – or its file, unreadable here (B67): looked at, not changed.
+  const planNewer = useData((s) => Object.values(s.records.months ?? {}).some((e) => e.record.month === month && e.readOnly) || tooNewMonths(s.problems, 'months').has(month))
+  const readOnly = folderLocked || planNewer
   const plan = planFor(plans, month)
   const own = plans.find((p) => p.month === month) ?? null
   // The tanks' installments and the loot given to the month as the engine took them (N11).
@@ -94,6 +98,7 @@ export function MonthPage() {
         {/* The plan's earlier versions – also the one set aside when two computers changed it (N18). */}
         {own && <HistoryButton kind="months" id={own.id} current={own} small />}
       </div>
+      <NewerNote show={planNewer} />
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="month" tracks={['minmax(380px,1.1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">

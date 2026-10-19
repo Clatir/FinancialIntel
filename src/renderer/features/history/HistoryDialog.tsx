@@ -24,20 +24,31 @@ const REASON: Record<HistoryEntry['reason'], string> = {
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' }) : '—')
 
-/** id → name of every named settings item (categories, accounts… – E1), so changed references read as names. */
+/**
+ * id → name of every named item (categories, accounts, household members, containers, goals, loans – N92), so changed
+ * references read as names.
+ */
 export function useDictNames(): Map<string, string> {
   const fi = useData((s) => s.fi)
-  return useMemo(() => dictNames(fi), [fi])
+  const containers = useData((s) => s.records.containers)
+  const goals = useData((s) => s.records.goals)
+  const loans = useData((s) => s.records.loans)
+  return useMemo(() => dictNames(fi, [containers, goals, loans]), [fi, containers, goals, loans])
 }
 
-export function dictNames(fi: SettingsFile | null): Map<string, string> {
+type Named = Record<string, { record: { id: string; name?: unknown } }> | undefined
+
+export function dictNames(fi: SettingsFile | null, records: readonly Named[] = []): Map<string, string> {
   const out = new Map<string, string>()
-  if (!fi) return out
-  // Every list of settings items with an id and a name (categories, accounts, layers…).
-  for (const v of Object.values(fi.settings as Record<string, unknown>)) {
-    if (!Array.isArray(v)) continue
-    for (const item of v) if (item && typeof item === 'object' && typeof item.id === 'string' && typeof item.name === 'string') out.set(item.id, item.name)
+  const add = (item: unknown) => {
+    const x = item as { id?: unknown; name?: unknown } | null
+    if (x && typeof x === 'object' && typeof x.id === 'string' && typeof x.name === 'string') out.set(x.id, x.name)
   }
+  for (const map of records) for (const e of Object.values(map ?? {})) add(e.record)
+  if (!fi) return out
+  // Every list of settings items with an id and a name (categories, accounts, layers…), the household's members too.
+  for (const v of Object.values(fi.settings as Record<string, unknown>)) if (Array.isArray(v)) v.forEach(add)
+  fi.settings.household.members.forEach(add)
   return out
 }
 
@@ -63,7 +74,7 @@ export function ChangeList({ changes, beforeLabel, afterLabel, testId }: { chang
       {changes.slice(0, 80).map((c) => (
         <div key={c.path.join('.')} className="grid grid-cols-[180px_1fr_1fr] gap-2 border-b border-line/60 px-2 py-0.5 last:border-b-0" data-testid="change-row">
           <span className="truncate text-muted" title={c.path.join('.')}>
-            {fieldLabel(c.path)}
+            {fieldLabel(c.path, names)}
           </span>
           <span className="truncate" title={displayValue(c.before, names, c.path)}>
             {displayValue(c.before, names, c.path)}

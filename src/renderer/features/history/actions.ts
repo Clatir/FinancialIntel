@@ -2,13 +2,13 @@
 import type { HistoryKind } from '@shared/api'
 import type { Collection } from '@shared/paths'
 import { api, errorMessage } from '../../lib/api'
-import { adoptSettings, deleteRecord, deleteRecords, flushSaves } from '../../store/data'
+import { adoptSettings, deleteRecord, deleteRecords, saveFirst } from '../../store/data'
 import { toast } from '../../store/ui'
 
 /** Make a kept version current: pending edits are written first, the current version goes to the history. */
 export async function restoreVersion(kind: HistoryKind, id: string, file: string, label: string): Promise<boolean> {
   try {
-    if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – spróbuj ponownie za chwilę.')
+    await saveFirst('odzyskanie wersji')
     const fi = await api.historyRestore(kind, id, file)
     if (fi) adoptSettings(fi)
     toast(`Przywrócono: ${label}. Poprzednia wersja jest w historii.`, 'success', 5000)
@@ -72,7 +72,11 @@ export async function deleteManyWithUndo(collection: Collection, ids: readonly s
         void (async () => {
           // What changed with the deletion (a merged record, a moved link) goes back first.
           onUndo?.()
-          if (!(await flushSaves())) return toast('Nie udało się zapisać bieżących zmian – spróbuj ponownie za chwilę.', 'error', 7000)
+          try {
+            await saveFirst('cofnięcie')
+          } catch (e) {
+            return toast(errorMessage(e), 'error', 7000)
+          }
           let missing = 0
           for (const id of deleted) {
             const last = (await api.historyList(collection, id)).find((e) => e.reason === 'delete')

@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { Command } from 'cmdk'
 import type { LayoutPreset } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
-import { flushSaves, useData } from '../../store/data'
+import { saveFirst, saveNow, useData } from '../../store/data'
 import { navigate, setPalette, toast, useUi } from '../../store/ui'
 import { checkForUpdates } from '../../store/update'
 import { applyPageLayout } from '../../store/layout'
@@ -53,17 +53,14 @@ export function CommandPalette() {
         id: 'save',
         label: 'Zapisz teraz',
         keys: 'Ctrl S',
-        run: () => void flushSaves().then((ok) => toast(ok ? 'Zapisano.' : 'Nie udało się zapisać – aplikacja ponowi zapis.', ok ? 'success' : 'error'))
+        run: () => void saveNow()
       },
       {
         id: 'backup',
         label: 'Kopia zapasowa teraz',
         run: () =>
-          void flushSaves()
-            .then((saved) => {
-              if (!saved) throw new Error('Nie udało się zapisać bieżących zmian – kopia wstrzymana. Spróbuj ponownie za chwilę.')
-              return api.backupNow()
-            })
+          void saveFirst('kopia')
+            .then(() => api.backupNow())
             .then(
               (path) => toast(`Utworzono kopię: ${path}`, 'success', 6000),
               (e) => toast(errorMessage(e), 'error')

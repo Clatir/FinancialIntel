@@ -1,5 +1,50 @@
 # Financial Intel – zmiany
 
+## 1.6.5
+
+Poprawki z przeglądu aplikacji (grupa Q, D87): folder danych, system i dwa komputery.
+
+Niezapisane zmiany mówią prawdę:
+- Zmiana czekająca na decyzję o zmianach z drugiego komputera: zamknięcie aplikacji pyta „Zdecyduj o zmianach z drugiego
+  komputera” (okno decyzji otwarte za pytaniem), a kopia, eksport, import, odzyskanie, aktualizacja i zmiana folderu
+  mówią, że czekają na Twoją decyzję – zamiast „plik zablokowany, spróbuj ponownie”.
+- Ctrl+S i „Zapisz teraz” z palety działają tak samo; po imporcie i kreatorze komunikat mówi, co jeszcze się zapisuje i
+  dlaczego.
+
+Wpisy zapisane przez nowszą wersję aplikacji (zanim fi.json dotarł z drugiego komputera):
+- Kontener, cel, pożyczka i plan miesiąca – do obejrzenia, z dopiskiem „zaktualizuj aplikację”; zmiana takiego wpisu nie
+  znika po cichu, usunięcie nie zdejmuje go z ekranu, zmiany zbiorcze liczą go osobno.
+- Zmiana, której ta wersja nie zapisze, nie ponawia się bez końca (jeden komunikat); gra i plan miesiąca nie tworzą wpisu
+  w miejscu pliku nowszej wersji.
+
+Folder danych i kopie:
+- Uszkodzony fi.json: „Weź ustawienia z historii” na ekranie wyboru folderu (uszkodzony plik zostaje obok jako kopia);
+  nieczytelny chwilowo (start z Windows przed OneDrive) – „Spróbuj ponownie” i ponowienie co 30 s.
+- Własny folder kopii: osobny podfolder dla każdego folderu danych (dotychczasowe kopie zostają na miejscu); kopie
+  usuwają tylko pliki z nazwami Financial Intel, folder kopii nie może być w folderze ICT Trade Journal.
+- Nieudana kopia dzienna widoczna w Ustawieniach (kiedy i dlaczego), powiadomienie, gdy kopii nie ma od 3 dni.
+- Eksport całego folderu zawiera historię zmian; Synchronizacja podaje prawdziwy folder kopii.
+- Usunięcie wpisu, który ma drugą kopię z innego komputera – najpierw rozstrzygnięcie w Synchronizacji; bez wersji w
+  historii wpis nie jest usuwany (nie dałoby się go odzyskać).
+- Folder na dysku, którego nie ma: ponowne podłączanie coraz rzadziej (do 5 min), w logu najwyżej wpis na godzinę;
+  folder na udziale sieciowym bez prawa listowania – „niedostępny”, nie błąd otwierania.
+
+Dwa komputery i Synchronizacja:
+- Karta kopii konfliktu pokazuje różnice jak Historia – nazwy pól po polsku, nazwy kategorii, celów i domowników zamiast
+  identyfikatorów (także w Historii i oknie zmian).
+- Plik z problemem: nieczytelny teraz – „Wczytaj ponownie”, nowszy format – „zaktualizuj aplikację”, uszkodzony – „Do
+  Kosza” z potwierdzeniem; zachowana kopia konfliktu zapisana jako zmiana tego komputera; „Zaakceptuj nowsze” wszędzie.
+
+System:
+- config.json tego komputera nieczytelny chwilowo – ustawienia komputera (folder, autostart, skrót, token) nie są
+  nadpisywane domyślnymi, a zmiany z tej chwili dochodzą, gdy plik da się odczytać; uszkodzony – odsunięty obok.
+- Pobrana aktualizacja nie przepada, gdy pobranie nowszej się nie uda; przy zamykaniu do zasobnika Ustawienia mówią, że
+  instaluje się po „Zakończ”, a powiadomienie przypomina o czekającej.
+- Kreator nie zmienia skrótu szybkiego wpisu ani zamykania do zasobnika; drugi komputer z działającym budżetem pyta raz
+  o start z Windows.
+- Okno szybkiego wpisu i panele odłączone po awarii otwierają się od nowa; start z systemem pamięta maksymalizację; dymek
+  zasobnika z energią także po włączeniu zasobnika w trakcie pracy; przeładowane okno nie czyta folderu od nowa.
+
 ## 1.6.4
 
 Poprawki z przeglądu aplikacji (grupa P, D87): operacje, edytor i szybki wpis.

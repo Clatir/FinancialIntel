@@ -6,7 +6,7 @@ import { asPayout, type Delivery } from '@shared/calc/dock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { derivedId, newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteRecord, updateRecord, updateSettings, useData } from '../../store/data'
+import { addRecord, canWrite, deleteOrSay, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
@@ -83,14 +83,14 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
   else addRecord('dockings', docking)
   // Dockings of this payout whose operation is gone (B15): they dock nothing – out of the folder.
   const orphans = d.orphans.filter((o) => o.id !== docking.id)
-  for (const o of orphans) void deleteRecord('dockings', o.id)
+  for (const o of orphans) deleteOrSay('dockings', o.id)
   playSound('docking')
   toast(`Zadokowano ${plnText(d.amount)} zł${created ? ' na Portfelu XTB' : ''}.`, 'success', 6000, {
     label: 'Cofnij',
     run: () => {
       if (before) updateRecord('dockings', before.id, () => before)
-      else void deleteRecord('dockings', docking.id)
-      if (created) void deleteRecord('transactions', created.id)
+      else deleteOrSay('dockings', docking.id)
+      if (created) deleteOrSay('transactions', created.id)
       if (typed) updateRecord('transactions', typed.id, (cur) => ({ ...cur, kind: typed.kind, categoryId: typed.categoryId, counterparty: typed.counterparty, repaid: typed.repaid }))
       for (const o of orphans) addRecord('dockings', o)
     }
@@ -105,8 +105,8 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
 export function removeExtraDockings(d: Delivery): void {
   if (!d.extra.length || !canWrite()) return
   const ops = d.extra.filter((x) => x.transaction.accountId === XTB_WALLET_ACCOUNT_ID && !x.transaction.bank).map((x) => x.transaction)
-  for (const x of d.extra) void deleteRecord('dockings', x.docking.id)
-  for (const t of ops) void deleteRecord('transactions', t.id)
+  for (const x of d.extra) deleteOrSay('dockings', x.docking.id)
+  for (const t of ops) deleteOrSay('transactions', t.id)
   toast(`Usunięto podwójne dokowanie${ops.length ? ` i ${ops.length === 1 ? 'jego operację' : 'ich operacje'} na Portfelu XTB` : ''}.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {

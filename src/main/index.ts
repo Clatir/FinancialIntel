@@ -7,19 +7,20 @@ import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
 import { IMPORT_MAX_BYTES } from '@shared/import/text'
-import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
+import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
+import { SAVED, unsavedQuestion } from '@shared/unsaved'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
-import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/store'
+import { ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { IN_USE_MS, clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
 import { importBackup, listBackups, manualBackup, runBackups, type DataSource } from './datastore/backup'
 import { readBackupZip, unpackBackup, type BackupData } from './datastore/restore'
-import { sleep, withRetry, writeFileAtomic } from './datastore/atomic'
+import { pathExists, sleep, withRetry, writeFileAtomic } from './datastore/atomic'
 import { describeProgress, untilAborted } from './datastore/progress'
 import { htmlToPdf } from './export/pdf'
 import { writeXlsx } from './export/xlsx'
@@ -124,6 +125,7 @@ function noteActivity(): void {
 function showMainWindow(): void {
   noteActivity()
   if (!mainWindow || mainWindow.isDestroyed()) return
+  inTray = false
   if (mainWindow.isMinimized()) mainWindow.restore()
   if (pendingMaximize) {
     pendingMaximize = false
@@ -140,8 +142,16 @@ function quitApp(): void {
   else app.quit()
 }
 
+/** The tray's second line (today's energy) as the window sent it last – also while there is no icon (N99). */
+let trayStatus: string | null = null
+/** The window hidden in the tray (started with the system, or closed to it) – shown again by `showMainWindow`. */
+let inTray = false
+/** The update version a notification said is ready (N98). */
+let readyNoticed: string | null = null
+
 function appTray(): AppTray {
-  tray ??= new AppTray({
+  if (tray) return tray
+  tray = new AppTray({
     title: APP_TITLE,
     show: showMainWindow,
     quick: () => quick?.show(),
@@ -159,6 +169,7 @@ function appTray(): AppTray {
     },
     log
   })
+  tray.setStatus(trayStatus)
   return tray
 }
 
@@ -278,6 +289,12 @@ function createUpdater(): Updater {
     onState: (state) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:update', state)
       tray?.refresh()
+      // Ready while the window lives in the tray (N98): closing it installs nothing – said once a version.
+      const v = state.phase === 'ready' ? state.release?.version : undefined
+      if (v && v !== readyNoticed && inTray) {
+        readyNoticed = v
+        systemNotify('Aktualizacja czeka', `Wersja ${v} jest pobrana – zainstaluje się po „Zakończ” albo „Uruchom ponownie i zaktualizuj” w menu ikony przy zegarze.`, 'update')
+      }
     }
   })
 }
@@ -339,18 +356,59 @@ function checkedData(s: DataStore): DataSource {
   }
 }
 
+/**
+ * The last daily backup that did not come (B123): Ustawienia → Kopie say it; cleared by the next one made. Several days
+ * without a backup – one notification a day.
+ */
+let backupFailure: { at: string; message: string; dir: string } | null = null
+/** Since when the daily backups of the folder fail without a break (a success, or another folder, clears it). */
+let backupFailingSince: number | null = null
+let backupNoticeDay: string | null = null
+const BACKUP_STALE_DAYS = 3
+
 /** Today's backup if it is not there yet (D31): after an open, every hour and when the computer wakes up. */
 function dailyBackup(): void {
   const s = store
   if (!s || backupRun || opening || windowClosing || s.status().readOnly) return
   backupRun = runBackups(checkedData(s), s.backupsDir)
     .then(
-      (file) => void (file && log('info', `backup ${file}`)),
-      (e) => log('warn', 'backup failed', e)
+      (file) => {
+        if (s === store) backupSucceeded()
+        if (file) log('info', `backup ${file}`)
+      },
+      async (e) => {
+        log('warn', 'backup failed', e)
+        if (s !== store) return
+        backupFailure = { at: new Date().toISOString(), message: e instanceof Error ? e.message : String(e), dir: s.backupsDir }
+        backupFailingSince ??= Date.now()
+        await noticeStaleBackups(s)
+      }
     )
     .finally(() => {
       backupRun = null
     })
+}
+
+/** A backup made (daily or by hand): the warning of the failed ones goes. */
+function backupSucceeded(): void {
+  backupFailure = null
+  backupFailingSince = null
+}
+
+/**
+ * Backups failing for days (a backup folder on a drive unplugged for weeks – B123): said once a day, not only logged. The
+ * newest backup seen – or, none to be seen (the folder away, a new subfolder), the failures lasting – 3 days at least.
+ */
+async function noticeStaleBackups(s: DataStore): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10)
+  if (backupNoticeDay === today) return
+  const files = (await listBackups(s.backupsDir).catch(() => [])).filter((f) => f.kind !== 'pre-migration')
+  const newest = files.length ? Math.max(...files.map((f) => f.mtimeMs)) : null
+  const days = newest == null ? null : Math.floor((Date.now() - newest) / 86_400_000)
+  const failingDays = backupFailingSince == null ? 0 : (Date.now() - backupFailingSince) / 86_400_000
+  if (days != null ? days < BACKUP_STALE_DAYS : failingDays < BACKUP_STALE_DAYS) return
+  backupNoticeDay = today
+  systemNotify('Kopie zapasowe nie powstają', `${days == null ? `Kopie dzienne nie powstają od ${Math.floor(failingDays)} dni` : `Ostatnia kopia: ${days} dni temu`} – folder kopii jest niedostępny. Ustawienia → Folder i kopie.`, 'backups')
 }
 
 /** The longest quitting waits for the writes already queued (B43). */
@@ -382,7 +440,11 @@ async function heartbeat(force = false): Promise<void> {
       presenceWrittenAt = Date.now()
       await writePresence(s.root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null).catch(() => undefined)
     }
+    // Another folder opened meanwhile (B116): nothing of the closed one goes on – its presence cleared stays cleared; the
+    // same folder opened again keeps the presence its new store wrote.
+    if (s !== store) return void (store?.root === s.root ? undefined : await clearPresence(s.root, machineName).catch(() => undefined))
     const others = await readOtherMachines(s.root, machineName)
+    if (s !== store) return
     if (JSON.stringify(others) !== JSON.stringify(s.otherMachines)) {
       s.otherMachines = others
       await refreshes?.request([])
@@ -544,7 +606,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
         message: `W tym folderze nie ma danych Financial Intel (fi.json). Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
       }
     }
-    next = new DataStore(target, { machineName, trash, backupDir: config.get().backupDirOverride })
+    next = new DataStore(target, { machineName, trash, backupDir: config.get().backupDirOverride, log })
     step = 'list'
     // Open the new folder first: if it fails or is stopped, the current one stays open and keeps saving. Once read
     // (before a migration) it no longer stops: „Przerwij” would promise an untouched folder.
@@ -562,6 +624,8 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     if (generation !== openGeneration) return superseded()
     const opened = next
     store = opened
+    // Another folder: its own backups – the failures of the one before are not its (the same folder keeps them).
+    if (backupFailure?.dir !== opened.backupsDir) backupSucceeded()
     snapshot.generation = ++storeGeneration
     unshown = []
     opened.otherMachines = others
@@ -579,7 +643,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     })
     refreshes = queue
     watcher = new FolderWatcher(target, (paths) => void queue.request(paths ?? undefined).catch(() => undefined), {
-      onError: (e) => log('warn', 'watcher error', e)
+      onError: (e, repeated) => log('warn', `watcher error${repeated ? ` (i ${repeated} kolejnych od poprzedniego wpisu)` : ''}`, e)
     })
     watcher.start()
     void heartbeat(true)
@@ -601,6 +665,27 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       return { ok: false, reason: 'aborted', dir, message: OPEN_ABORTED_MESSAGE }
     }
     log('error', `open failed ${dir}: ${describeProgress(progress(), Date.now() - t0)}`, e)
+    // fi.json not readable now (the start with Windows before OneDrive) or broken (B109): a retry, or its history.
+    if (e instanceof SettingsFileError && e.kind !== 'too-new') {
+      const target = next?.root ?? dir
+      return e.kind === 'unreadable'
+        ? {
+            ok: false,
+            reason: 'not-data',
+            dir: target,
+            problem: 'settings-unreadable',
+            remembered: rememberedDir(target),
+            message: 'Plik fi.json jest teraz niedostępny – OneDrive pewnie jeszcze się nie uruchomił albo dopiero go pobiera. Aplikacja spróbuje ponownie sama za chwilę.'
+          }
+        : {
+            ok: false,
+            reason: 'not-data',
+            dir: target,
+            problem: 'settings-broken',
+            remembered: rememberedDir(target),
+            message: `Plik fi.json jest uszkodzony (${e.message.replace(/^Nie można wczytać fi\.json: /, '')}). Ostatnią dobrą wersję ustawień można wziąć z historii zmian – uszkodzony plik zostanie obok jako kopia.`
+          }
+    }
     return { ok: false, reason: 'error', dir, message: openErrorMessage(e) }
   } finally {
     clearInterval(ticker)
@@ -618,9 +703,12 @@ function openErrorMessage(e: unknown): string {
   return foreign ? `Nie udało się wczytać folderu danych (${message}). Szczegóły są w logu – „Otwórz folder logów”.` : message
 }
 
-/** The folder or one of its parents up to the drive is an ICT Trade Journal data folder (journal.json). */
+/**
+ * The folder or one of its parents up to the drive is an ICT Trade Journal data folder (journal.json). Only the file is
+ * looked for – a parent that may not be listed (a network share – B120) is no ICTTJ folder, never an error.
+ */
 async function insideIctj(dir: string): Promise<boolean> {
-  for (let d = dirname(dir), prev = dir; d !== prev; prev = d, d = dirname(d)) if ((await DataStore.inspect(d)) === 'ictj') return true
+  for (let d = dirname(dir), prev = dir; d !== prev; prev = d, d = dirname(d)) if (await pathExists(join(d, 'journal.json'))) return true
   return false
 }
 
@@ -680,12 +768,42 @@ function registerIpc(): void {
   handle('inUseNow', () => inUseNow())
   // The renderer needs the recent folders; the GitHub token stays here.
   handle('getConfig', () => publicConfig(config.get()))
-  handle('loadCurrent', async () => {
+  handle('loadCurrent', async (): Promise<OpenFolderResult | null> => {
     const preset = process.env.FI_DATA_DIR
+    // This computer's settings not readable yet (B114): its folder is not known – no first-run screen pretending it is.
+    if (config.loadFailed && !preset) {
+      return {
+        ok: false,
+        reason: 'error',
+        message: `Ustawienia tego komputera (config.json) są chwilowo niedostępne – pewnie trzyma je antywirus albo program kopii. Nic nie zostało nadpisane; aplikacja spróbuje ponownie sama za chwilę. (${config.loadFailed})`
+      }
+    }
+    const dir = preset || config.get().dataDir
+    // A window loaded again (its renderer crashed – W37): the folder open here, kept current by the watcher, is given
+    // from memory – never read from the disk again while the old copy waits. Its changes wait for the new window's
+    // snapshot (a new generation, B31).
+    const open = store
+    if (dir && open && !opening && sameDir(open.root, dir)) {
+      const generation = ++storeGeneration
+      unshown = []
+      const snapshot = await open.snapshot()
+      if (open === store && generation === storeGeneration) {
+        snapshot.generation = generation
+        snapshot.status = open.status()
+        log('info', `window loaded again: ${open.root} from memory`)
+        return { ok: true, snapshot }
+      }
+    }
     // The tests' folder (FI_DATA_DIR) is meant for new data whatever this computer remembers.
     if (preset) return openFolder(preset, true, true)
-    const dir = config.get().dataDir
     return dir ? openFolder(dir, false) : null
+  })
+  handle('repairSettings', async (dir: string): Promise<OpenFolderResult> => {
+    if ((await DataStore.inspect(dir)) !== 'data') return { ok: false, reason: 'error', dir, message: 'W tym folderze nie ma pliku fi.json.' }
+    const at = await DataStore.repairSettings(dir, machineName)
+    if (!at) return { ok: false, reason: 'error', dir, message: 'W historii zmian nie ma poprawnej wersji ustawień. Rozpakuj ostatnią kopię zapasową (backups/daily w folderze danych) do pustego folderu i otwórz go.' }
+    log('warn', `fi.json uszkodzony – wzięty z historii (${at}) w ${dir}`)
+    return openFolder(dir, false)
   })
   handle('defaultDataDir', () => defaultDataDir())
   handle('pickDataDir', async (mode: 'open' | 'create'): Promise<OpenFolderResult> => {
@@ -750,7 +868,12 @@ function registerIpc(): void {
     // Restored settings go back to the caller (they are not part of a change set's upserts).
     return fi
   })
-  handle('saveSettings', (fi: never) => writableStore().saveSettings(fi))
+  handle('saveSettings', async (fi: never) => {
+    const s = writableStore()
+    const { fi: saved, change } = await s.writeSettings(fi)
+    sendFrom(s, change)
+    return saved
+  })
   handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy') => {
     const s = writableStore()
     sendFrom(s, await s.resolveConflict(id, keep))
@@ -780,12 +903,14 @@ function registerIpc(): void {
     shell.showItemInFolder(s.abs(rel))
   })
   handle('trayPrefs', () => trayView())
-  handle('setTrayPrefs', async (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin'>>) => {
+  handle('setTrayPrefs', async (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>) => {
     const cur = config.get().tray
     const next: TrayPrefs = {
       ...cur,
       ...(typeof patch?.closeToTray === 'boolean' ? { closeToTray: patch.closeToTray } : {}),
-      ...(typeof patch?.launchAtLogin === 'boolean' ? { launchAtLogin: patch.launchAtLogin } : {})
+      // The start with Windows set or answered here: chosen on this computer, never asked again (N100).
+      ...(typeof patch?.launchAtLogin === 'boolean' ? { launchAtLogin: patch.launchAtLogin, autostartAsked: true } : {}),
+      ...(patch?.autostartAsked === true ? { autostartAsked: true } : {})
     }
     await config.update({ tray: next })
     const view = trayView()
@@ -815,7 +940,7 @@ function registerIpc(): void {
       filters: [{ name: 'ZIP', extensions: ['zip'] }]
     })
     if (res.canceled || !res.filePath) return null
-    await s.zipData(res.filePath)
+    await s.zipData(res.filePath, { history: true })
     return res.filePath
   })
   // Exports (E8): a file the user names – CSV, Excel, PDF of a report (the window prints it, nothing else loads).
@@ -842,11 +967,14 @@ function registerIpc(): void {
   })
   handle('listBackups', async () => {
     const s = requireStore()
-    return { dir: s.backupsDir, files: await listBackups(s.backupsDir) }
+    return { dir: s.backupsDir, files: await listBackups(s.backupsDir), failure: backupFailure?.dir === s.backupsDir ? backupFailure : null }
   })
   handle('backupNow', async () => {
     const s = requireStore()
-    return manualBackup(checkedData(s), s.backupsDir)
+    const file = await manualBackup(checkedData(s), s.backupsDir)
+    // A backup made in the folder of the failed ones: the warning goes (B123).
+    if (s === store && backupFailure?.dir === s.backupsDir) backupSucceeded()
+    return file
   })
   handle('importBackup', async () => {
     const s = writableStore()
@@ -913,6 +1041,8 @@ function registerIpc(): void {
       const res = await dialog.showOpenDialog(mainWindow!, { title: 'Folder na kopie zapasowe (na tym komputerze)', properties: ['openDirectory', 'createDirectory', 'promptToCreate'] })
       if (res.canceled || !res.filePaths[0]) return s.backupsDir
       dir = res.filePaths[0]
+      // Financial Intel never writes in ICT Trade Journal's data folder (B121) – its backups neither.
+      if ((await DataStore.inspect(dir)) === 'ictj' || (await insideIctj(dir))) throw new Error('To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder na kopie.')
     }
     await config.update({ backupDirOverride: dir })
     s.setBackupDir(dir)
@@ -950,7 +1080,9 @@ function registerIpc(): void {
     return prefs
   })
   handle('setTrayStatus', (text: unknown) => {
-    tray?.setStatus(typeof text === 'string' && text ? text.slice(0, 200) : null)
+    // Kept also without the icon (N99): one made later (closing to the tray turned on) shows today's energy at once.
+    trayStatus = typeof text === 'string' && text ? text.slice(0, 200) : null
+    tray?.setStatus(trayStatus)
   })
   handle('ictjState', () => ictjSource().snapshot)
   // Only the path from ICTTJ's own config.json (FI_ICTJ_APPDATA in test runs).
@@ -1000,18 +1132,20 @@ function registerIpc(): void {
     log('info', 'ICTTJ uruchomiony')
     return { ok: true, message: exe }
   })
-  handle('notify', (n: { title?: unknown; body?: unknown; tag?: unknown; silent?: unknown }) => {
-    if (!Notification.isSupported()) return
-    const note = new Notification({ title: String(n?.title ?? APP_TITLE).slice(0, 120), body: String(n?.body ?? '').slice(0, 500), silent: n?.silent === true })
-    const tag = String(n?.tag ?? '')
-    note.on('click', () => {
-      showMainWindow()
-      mainWindow?.webContents.send('fi:notificationClick', tag)
-    })
-    note.on('close', () => notifications.delete(note))
-    notifications.add(note)
-    note.show()
+  handle('notify', (n: { title?: unknown; body?: unknown; tag?: unknown; silent?: unknown }) => systemNotify(String(n?.title ?? APP_TITLE), String(n?.body ?? ''), String(n?.tag ?? ''), n?.silent === true))
+}
+
+/** A system notification; its click shows the window on what it is about (`tag`, the window's `openTag`). */
+function systemNotify(title: string, body: string, tag: string, silent = false): void {
+  if (!Notification.isSupported()) return
+  const note = new Notification({ title: title.slice(0, 120), body: body.slice(0, 500), silent })
+  note.on('click', () => {
+    showMainWindow()
+    mainWindow?.webContents.send('fi:notificationClick', tag)
   })
+  note.on('close', () => notifications.delete(note))
+  notifications.add(note)
+  note.show()
 }
 
 /** The preferences of this computer to every window of the app (the main one, the quick entry, detached panels). */
@@ -1126,7 +1260,10 @@ function createWindow(): void {
     win.maximize()
   }
   win.once('ready-to-show', () => {
-    if (startHidden && appTray().ensure()) log('info', 'start w zasobniku (uruchomienie z systemem)')
+    if (startHidden && appTray().ensure()) {
+      inTray = true
+      log('info', 'start w zasobniku (uruchomienie z systemem)')
+    }
     else showMainWindow()
   })
 
@@ -1145,8 +1282,9 @@ function createWindow(): void {
     // "Zamykaj do zasobnika": the window only hides; reminders and notifications keep working.
     if (!quitting && config.get().tray.closeToTray && appTray().ensure()) {
       const b = win.getNormalBounds()
-      void config.update({ window: { ...b, maximized: win.isMaximized() } })
+      void config.update({ window: { ...b, maximized: win.isMaximized() || pendingMaximize } })
       win.hide()
+      inTray = true
       log('info', 'okno ukryte w zasobniku')
       if (!config.get().tray.notified) {
         appTray().notifyHidden()
@@ -1157,25 +1295,19 @@ function createWindow(): void {
     closing = true
     windowClosing = true
     const b = win.getNormalBounds()
-    void config.update({ window: { ...b, maximized: win.isMaximized() } })
-    const finish = (saved: boolean) => {
+    // Started in the tray and never shown (B119): its maximize is still to come – kept for the next start.
+    void config.update({ window: { ...b, maximized: win.isMaximized() || pendingMaximize } })
+    const finish = (result: FlushResult) => {
       clearTimeout(timeout)
       clearTimeout(limit)
       ipcMain.removeListener('fi:flushed', onFlushed)
       ipcMain.removeListener('fi:flushing', onFlushing)
       if (allowClose || win.isDestroyed()) return
-      if (!saved) {
-        // The renderer keeps unsaved changes and retries; closing now would lose them.
-        const choice = dialog.showMessageBoxSync(win, {
-          type: 'warning',
-          title: 'Niezapisane zmiany',
-          message: 'Nie udało się zapisać ostatnich zmian.',
-          detail:
-            'Folder danych może być niedostępny albo plik jest zablokowany (OneDrive, antywirus). Wybierz „Anuluj”, żeby aplikacja spróbowała ponownie, albo zamknij i utrać te zmiany.',
-          buttons: ['Anuluj', 'Zamknij mimo to'],
-          defaultId: 0,
-          cancelId: 0
-        })
+      if (!result.saved) {
+        // The renderer keeps unsaved changes; closing now would lose them. The question says why (B108) – the window
+        // is shown for it (closed from the tray), and a waiting decision's dialog is open in it already.
+        if (!win.isVisible() || win.isMinimized()) showMainWindow()
+        const choice = dialog.showMessageBoxSync(win, { type: 'warning', ...unsavedQuestion(result), buttons: ['Anuluj', 'Zamknij mimo to'], defaultId: 0, cancelId: 0 })
         if (choice === 0) {
           closing = false
           windowClosing = false
@@ -1187,15 +1319,15 @@ function createWindow(): void {
       allowClose = true
       win.close()
     }
-    const onFlushed = (_e: Electron.IpcMainEvent, saved?: boolean) => finish(saved !== false)
+    const onFlushed = (_e: Electron.IpcMainEvent, result?: FlushResult) => finish(result ?? SAVED)
     // An unresponsive renderer must not keep the window open forever; one still saving (it says so every second)
     // gets time – up to a minute, then the question (B43).
-    let timeout = setTimeout(() => finish(true), FLUSH_SILENT_MS)
+    let timeout = setTimeout(() => finish(SAVED), FLUSH_SILENT_MS)
     const onFlushing = () => {
       clearTimeout(timeout)
-      timeout = setTimeout(() => finish(true), FLUSH_SILENT_MS)
+      timeout = setTimeout(() => finish(SAVED), FLUSH_SILENT_MS)
     }
-    const limit = setTimeout(() => finish(false), FLUSH_LIMIT_MS)
+    const limit = setTimeout(() => finish({ saved: false, waiting: 0, newer: 0, error: 'zapis trwa ponad minutę' }), FLUSH_LIMIT_MS)
     ipcMain.on('fi:flushed', onFlushed)
     ipcMain.on('fi:flushing', onFlushing)
     win.webContents.send('fi:flush')
@@ -1256,16 +1388,46 @@ app.on('before-quit', () => {
   quitting = true
 })
 
+/** config.json read again while it is not readable (B114) – this often. */
+const CONFIG_RETRY_MS = 15_000
+
+/** Reads config.json again until it is readable; then this computer's settings take effect and the window may open its folder. */
+function retryConfig(): void {
+  const timer = setInterval(() => {
+    void config.load().then(() => {
+      if (config.loadFailed) return
+      clearInterval(timer)
+      log('info', 'config.json odczytany ponownie – ustawienia tego komputera wczytane')
+      applyLoginItem(trayView(), log)
+      if (config.get().tray.closeToTray) appTray().ensure()
+      else tray?.destroy()
+      quick?.applyShortcut(config.get().prefs.quickShortcut)
+      void ictjSource().setDir(ictjDirOf())
+      // The checks of updates as this computer set them (the defaults ran meanwhile).
+      updater?.startAuto(updateCheckDelayMs())
+      broadcastPrefs(config.get().prefs)
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:configReady')
+    })
+  }, CONFIG_RETRY_MS)
+  timer.unref?.()
+}
+
 app.whenReady().then(async () => {
   if (!isPrimaryInstance) return
   Menu.setApplicationMenu(null)
   initLog(app.getPath('userData'))
   log('info', `start v${app.getVersion()} on ${machineName}`)
   await config.load()
+  if (config.setAside) log('warn', `config.json uszkodzony – odłożony jako ${config.setAside}, ustawienia domyślne`)
+  if (config.loadFailed) {
+    log('warn', `config.json nieczytelny: ${config.loadFailed} – nic nie jest nadpisywane, ponowna próba co ${CONFIG_RETRY_MS / 1000} s`)
+    retryConfig()
+  }
   updater = createUpdater()
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
-  applyLoginItem(trayView(), log)
+  // The autostart only from a config.json read (B114): defaults in its place would remove the entry.
+  if (!config.loadFailed) applyLoginItem(trayView(), log)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()
   createWindow()

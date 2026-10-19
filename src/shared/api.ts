@@ -22,6 +22,8 @@ export interface Problem {
   relPath: string
   kind: ProblemKind
   message: string
+  /** Not readable now (OneDrive brings it, a file only online – N95): read again, never to the bin. */
+  unreadable?: boolean
 }
 
 export interface ConflictSide {
@@ -173,6 +175,8 @@ export interface TrayPrefs {
   launchAtLogin: boolean
   /** The "works in the tray" notification was shown once. */
   notified: boolean
+  /** The start with Windows chosen on this computer (the wizard, the banner, Ustawienia – N100); absent before 1.6.5. */
+  autostartAsked?: boolean
 }
 
 export interface AppInfo {
@@ -193,7 +197,8 @@ export interface AppInfo {
  * such folder), unavailable (it cannot be read now), empty, other (other files), partial (FI's folders without fi.json –
  * OneDrive still fetching), ictj (ICT Trade Journal's).
  */
-export type FolderProblem = 'missing' | 'unavailable' | 'empty' | 'other' | 'partial' | 'ictj'
+/** Why a folder did not open; 'settings-unreadable' / 'settings-broken' – its fi.json not readable now / broken (B109). */
+export type FolderProblem = 'missing' | 'unavailable' | 'empty' | 'other' | 'partial' | 'ictj' | 'settings-unreadable' | 'settings-broken'
 
 export type OpenFolderResult =
   | { ok: true; snapshot: Snapshot }
@@ -244,11 +249,24 @@ export const CONFLICT_COPY_MESSAGE = 'Ten miesiąc zapisał już inny komputer'
 export const OPEN_ABORTED_MESSAGE =
   'Przerwano wczytywanie folderu – nic w nim nie zostało zmienione. Jeśli pliki pobiera OneDrive, ustaw na folderze „Zawsze zachowuj na tym urządzeniu”, poczekaj na zielone ptaszki i spróbuj ponownie.'
 
+/** What a flush before closing left unsaved and why (B108): closing tells the user the real reason. */
+export interface FlushResult {
+  saved: boolean
+  /** Unsaved records held by a decision about another computer's change – only that decision saves them. */
+  waiting: number
+  /** Unsaved records whose file a newer version of the app wrote – this version never writes them (B67). */
+  newer: number
+  /** The last write error of the others (null = none). */
+  error: string | null
+}
+
 export interface FiApi {
   appInfo(): Promise<AppInfo>
   getConfig(): Promise<MachineConfig>
   /** Open the configured folder (or null when none is configured yet). */
   loadCurrent(): Promise<OpenFolderResult | null>
+  /** A broken fi.json taken from its history (B109), then the folder opened. */
+  repairSettings(dir: string): Promise<OpenFolderResult>
   /** Proposed folder for new data: `OneDrive\FinancialIntel`, without OneDrive `Dokumenty\FinancialIntel`. */
   defaultDataDir(): Promise<{ dir: string; oneDrive: boolean }>
   /** Show a folder picker. mode=create initializes an empty folder as new data. */
@@ -262,7 +280,7 @@ export interface FiApi {
   rendererStep(name: string, ms?: number): void
   saveRecord<C extends Collection>(collection: C, record: RecordTypes[C]): Promise<RecordEntry<RecordTypes[C]>>
   /** Many records with one call (an import, a bulk change – W1): each written, or why not. */
-  saveRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): Promise<Array<{ id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string }>>
+  saveRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): Promise<Array<{ id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string; newer?: boolean }>>
   deleteRecord(collection: Collection, id: string): Promise<void>
   /** Many records deleted with one call (W1): each deleted, or why not. */
   /** `reason` 'undo': taken back with its import (F4); 'drop': an old batch of `imports` – no version in the history. */
@@ -296,7 +314,7 @@ export interface FiApi {
   openLogs(): Promise<void>
   /** Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows). */
   trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean }>
-  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin'>>): Promise<TrayPrefs & { loginSupported: boolean }>
+  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean }>
   rescan(): Promise<void>
   /** ZIP of the whole data folder (without backups). */
   exportZip(): Promise<string | null>
@@ -306,7 +324,8 @@ export interface FiApi {
   /** A report's self-contained HTML printed to an A4 PDF. */
   savePdf(defaultName: string, html: string): Promise<string | null>
   copyText(text: string): Promise<void>
-  listBackups(): Promise<{ dir: string; files: BackupInfo[] }>
+  /** `failure` – the last daily backup that did not come (B123), null when the last one did. */
+  listBackups(): Promise<{ dir: string; files: BackupInfo[]; failure: { at: string; message: string; dir: string } | null }>
   backupNow(): Promise<string>
   /** The backup before an import from the bank (backups/pre-import); returns its path. */
   importBackup(): Promise<string>
@@ -341,8 +360,8 @@ export interface FiApi {
   dismissUpdateNotice(): Promise<UpdateState>
   onUpdateState(cb: (state: UpdateState) => void): () => void
   onChange(cb: (change: ChangeSet) => void): () => void
-  /** Main asks the renderer to flush pending saves before the window closes (false = something stayed unsaved). */
-  onFlushRequest(cb: () => Promise<boolean>): () => void
+  /** Main asks the renderer to flush pending saves before the window closes – what stayed unsaved and why (B108). */
+  onFlushRequest(cb: () => Promise<FlushResult>): () => void
   /** Detached panels, main window side: open (or focus) the window of `key`, its new data, close, focus. */
   detachOpen(key: string, payload: DetachPayload): Promise<void>
   detachSend(key: string, payload: DetachPayload): Promise<void>
@@ -364,6 +383,8 @@ export interface FiApi {
   /** This computer in use – a move in one of its windows within 10 min (D86); the change comes as `onInUse`. */
   inUseNow(): Promise<boolean>
   onInUse(cb: (inUse: boolean) => void): () => void
+  /** This computer's config.json read at last (B114: it was not readable at the start) – the folder can be opened now. */
+  onConfigReady(cb: () => void): () => void
   /** The quick entry's global shortcut: registered, or taken by another program. */
   /** `replaced` = the shortcut the start replaced with the default (it took a Polish letter – B29); null = none. */
   quickShortcutState(): Promise<{ accelerator: string; registered: boolean; replaced: string | null }>

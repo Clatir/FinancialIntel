@@ -4,12 +4,13 @@
  */
 import { monthlySchedule, type LoanState } from '@shared/calc/loans'
 import { newId } from '@shared/ids'
-import { containerSchema, loanSchema, SCHEMA_VERSION, transactionSchema, type Loan, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteRecord, updateRecord, useData } from '../../store/data'
+import { containerSchema, loanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Loan, type Transaction } from '@shared/schema'
+import { addRecord, canWrite, deleteOrSay, deleteRecord, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
 import { countLabel } from '../../lib/format'
+import { errorMessage } from '../../lib/api'
 
 export interface NewLoan {
   direction: Loan['direction']
@@ -114,7 +115,7 @@ export function recordPayment(s: LoanState, amount: number, date: string): Trans
   })
   addRecord('transactions', t)
   playSound('entry')
-  toast(`${taken ? 'Rata' : 'Spłata'} ${plnText(amount)} zł zapisana.`, 'success', 5000, { label: 'Cofnij', run: () => void deleteRecord('transactions', t.id) })
+  toast(`${taken ? 'Rata' : 'Spłata'} ${plnText(amount)} zł zapisana.`, 'success', 5000, { label: 'Cofnij', run: () => deleteOrSay('transactions', t.id) })
   return t
 }
 
@@ -131,8 +132,20 @@ export async function deleteLoan(loan: Loan): Promise<void> {
     toast('Ta pożyczka ma operacje – zamknij ją zamiast usuwać.', 'error', 5000)
     return
   }
-  for (const c of containers) await deleteRecord('containers', c.id)
-  await deleteRecord('loans', loan.id)
+  // A file the disk or this version refused (B9, B67): said, the rest as it is – never an unhandled error with the loan
+  // gone from the screen. A container deleted before it comes back with the loan's „Cofnij” only, so the loan goes last.
+  const gone: Container[] = []
+  try {
+    for (const c of containers) {
+      await deleteRecord('containers', c.id)
+      gone.push(c)
+    }
+    await deleteRecord('loans', loan.id)
+  } catch (e) {
+    for (const c of gone) addRecord('containers', c)
+    toast(errorMessage(e), 'error', 8000)
+    return
+  }
   toast(`Pożyczka „${loan.name}” usunięta.`, 'info', 6000, {
     label: 'Cofnij',
     run: () => {

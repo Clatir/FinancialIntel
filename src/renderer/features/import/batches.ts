@@ -7,7 +7,7 @@ import { latestImport, settingsRedone, settingsUndone, undoPlan, type UndoPlan }
 import type { Balance, ImportBatch, Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { countLabel } from '../../lib/format'
-import { addRecords, deleteRecords, flushSaves, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
+import { addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
 const byTime = (a: ImportBatch, b: ImportBatch) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id)
@@ -66,7 +66,7 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
     const batch = s0.records.imports[batchId]?.record
     if (!batch || batch.undoneAt) throw new Error('Ten import jest już cofnięty.')
     if (latestImport(listOf(s0.records.imports))?.id !== batch.id) throw new Error('Najpierw cofnij późniejszy import – importy cofa się od ostatniego.')
-    if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – spróbuj ponownie za chwilę.')
+    await saveFirst('cofnięcie importu')
     const waiting = force ? 0 : await notArrived(batch, (id) => !!useData.getState().records.transactions[id])
     if (waiting) {
       toast(
@@ -100,14 +100,14 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
     updateSettings((f) => ({ ...f, settings: settingsUndone(f.settings, batch) }))
     const at = new Date().toISOString()
     updateRecord('imports', batch.id, (b) => ({ ...b, undoneAt: at }))
-    const saved = await flushSaves()
+    const note = await unsavedNote()
     const parts = [
       `usunięte operacje: ${undone.deleted.length}`,
       ...(undone.restored.length ? [`wpisy sprzed importu: ${undone.restored.length}`] : []),
       ...(plan.readd.length ? [`odzyskane nierozliczone: ${plan.readd.length}`] : []),
       ...(plan.rulesBack ? [`reguły cofnięte: ${plan.rulesBack}`] : [])
     ]
-    if (!saved) toast('Import cofnięty – część zmian zapisze się, gdy folder będzie dostępny (ponawianie automatyczne).', 'error', 8000)
+    if (note) toast(`Import cofnięty – ${note}.`, 'error', 9000)
     else toast(`Import cofnięty: ${parts.join(', ')}.`, 'success', 10000, { label: 'Cofnij', run: () => void redoImport(undone) })
     return true
   } catch (e) {

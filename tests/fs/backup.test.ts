@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DAILY_KEEP, IMPORT_KEEP, MANUAL_KEEP, WEEKLY_KEEP, importBackup, listBackups, manualBackup, runBackups } from '../../src/main/datastore/backup'
-import { DataStore } from '../../src/main/datastore/store'
+import { DataStore, backupFolderName } from '../../src/main/datastore/store'
 import { freshStore, readZip, sampleMonth, sampleTransaction } from './helpers'
 
 const DAY = 86400_000
@@ -81,12 +81,16 @@ describe('kopie zapasowe', () => {
     expect(daily.at(-1)).toBe('2026-10-16.zip')
   })
 
-  it(`kopia ręczna: backups/manual, zostaje ${MANUAL_KEEP}; folder kopii poza folderem danych`, async () => {
+  it(`kopia ręczna: backups/manual, zostaje ${MANUAL_KEEP}; folder kopii poza folderem danych – osobny podfolder na folder danych (B115)`, async () => {
     const store = await freshStore()
     await store.saveRecord('transactions', sampleTransaction())
-    const backups = join(store.root, '..', 'kopie-tego-komputera')
-    store.setBackupDir(backups)
+    const chosen = join(store.root, '..', 'kopie-tego-komputera')
+    store.setBackupDir(chosen)
+    // Two data folders with one backup folder of this computer: each its own subfolder – never each other's rotation.
+    const backups = join(chosen, backupFolderName(store.root))
     expect(store.backupsDir).toBe(backups)
+    expect(backupFolderName(store.root)).toMatch(/^dane-[0-9a-f]{8}$/)
+    expect(backupFolderName(join(store.root, '..', 'inne', 'dane'))).not.toBe(backupFolderName(store.root))
     const files: string[] = []
     for (let i = 0; i < MANUAL_KEEP + 2; i++) files.push(await manualBackup(store, backups, new Date(Date.parse('2026-10-16T10:00:00Z') + i * 60_000)))
     const left = (await fs.readdir(join(backups, 'manual'))).sort()
@@ -111,9 +115,10 @@ describe('kopie zapasowe', () => {
     await runBackups(store, backups, new Date('2026-10-16T09:00:00Z'))
     await new Promise((r) => setTimeout(r, 20))
     await manualBackup(store, backups, new Date('2026-10-16T10:00:00Z'))
-    // Not a backup: stray files are left out.
+    // Not a backup: stray files are left out – a ZIP of the user's own under another name too, never rotated (B121).
     await fs.writeFile(join(backups, 'daily', 'notatka.txt'), 'x')
     await fs.writeFile(join(backups, 'daily', '.2026-10-17.zip.tmp-1'), 'x')
+    await fs.writeFile(join(backups, 'daily', 'moja-kopia.zip'), 'x')
     const list = await listBackups(backups)
     expect(list.map((b) => b.kind).sort()).toEqual(['daily', 'manual', 'pre-migration', 'weekly'])
     expect(list[0]?.kind).toBe('manual')

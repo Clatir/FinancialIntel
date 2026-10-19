@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/main/datastore/store.ts @ 84a8339
 import { promises as fs } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { CONFLICT_COPY_MESSAGE, SLOW_FILE_MS, type BackupDiffItem, type BackupPreview, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import {
@@ -20,12 +20,12 @@ import {
   type FileKind
 } from '@shared/paths'
 import { sameContentAs } from '@shared/merge'
-import { SCHEMAS, parseRecordText, serializeRecord, type AnyRecord, type RecordTypes } from '@shared/records'
+import { SCHEMAS, parseRecordObject, parseRecordText, serializeRecord, type AnyRecord, type RecordTypes } from '@shared/records'
 import { SCHEMA_VERSION, type SettingsFile } from '@shared/schema'
 import { pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
 import { mapLimit, walkFiles } from './fsutil'
 import { ReadTracker, type LoadProgress, type LoadStats } from './progress'
-import { RecordHistory } from './history'
+import { HISTORY_DIR, RecordHistory } from './history'
 import { isDataFile } from './backup'
 import type { BackupData } from './restore'
 import { diskSource, writeZipFile, zipFolder, type ZipResult, type ZipSource } from './zip'
@@ -59,6 +59,19 @@ export class ReadOnlyError extends Error {
   }
 }
 
+export const NEWER_FILE_MESSAGE = 'Ten wpis zapisała nowsza wersja aplikacji (na drugim komputerze) – ta wersja go nie zmieni. Zaktualizuj aplikację (Ustawienia → Aktualizacje).'
+
+/**
+ * A record's file a newer version of the app wrote (B67): never written over nor deleted by this one – unlike a folder
+ * read-only for a while (gone, a pendrive), trying again changes nothing until the app is updated.
+ */
+export class NewerFileError extends ReadOnlyError {
+  constructor(message = NEWER_FILE_MESSAGE) {
+    super(message)
+    this.name = 'NewerFileError'
+  }
+}
+
 /**
  * A month's record written as a sync copy beside the month's file of another record (B46): the user picks in
  * Synchronizacja. `change` – the copy, for the window at once.
@@ -78,6 +91,19 @@ export class ConflictCopyError extends Error {
  * `change` – the removal as a change from outside, for the window at once (a later write's change would carry it as
  * this computer's own).
  */
+/**
+ * fi.json did not read at the open (B109): 'unreadable' – not now (OneDrive not started yet, a file only online),
+ * 'broken' – its content, 'too-new' – a newer version's.
+ */
+export class SettingsFileError extends Error {
+  constructor(
+    readonly kind: 'unreadable' | 'broken' | 'too-new',
+    message: string
+  ) {
+    super(message)
+  }
+}
+
 export class RemovedOutsideError extends Error {
   constructor(
     readonly relPath: string,
@@ -94,7 +120,7 @@ type FileStat = { mtimeMs: number; size: number }
 export type ConflictResult = { id: string; error?: string; skipped?: boolean }
 
 /** One record of `saveRecords`: written (the entry as on the disk) or why not. */
-export type SaveResult<C extends Collection> = { id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string }
+export type SaveResult<C extends Collection> = { id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string; newer?: boolean }
 
 export interface DataStoreOptions {
   machineName: string
@@ -108,6 +134,8 @@ export interface DataStoreOptions {
   now?: () => string
   /** Per-machine override of the backups folder (absolute). */
   backupDir?: string | null
+  /** The main process's log: what the folder could not do quietly (a version not kept in the history – B112). */
+  log?: (level: 'info' | 'warn' | 'error', message: string, detail?: unknown) => void
 }
 
 /**
@@ -243,6 +271,16 @@ const byNewest = (a: FileState, b: FileState): number => {
   return a.relPath < b.relPath ? -1 : 1
 }
 
+/**
+ * The subfolder of a data folder in a folder of backups set on this computer (B115): its name and a short hash of its
+ * path – the same folder always the same subfolder, another folder of the same name another one.
+ */
+export function backupFolderName(root: string): string {
+  const path = resolve(root).replace(/[\\/]+$/, '')
+  const name = basename(path).replace(/[^\p{L}\p{N} _.-]/gu, '_').slice(0, 40) || 'FinancialIntel'
+  return `${name}-${sha1(process.platform === 'linux' ? path : path.toLowerCase()).slice(0, 8)}`
+}
+
 function stamp(iso: string): string {
   return iso.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
 }
@@ -326,7 +364,7 @@ export class DataStore {
   private tracker: ReadTracker | null = null
   /** How the last open went (logged by the main process). */
   loadStats: LoadStats | null = null
-  private readonly opts: Required<Omit<DataStoreOptions, 'backupDir'>> & { backupDir: string | null }
+  private readonly opts: Required<Omit<DataStoreOptions, 'backupDir' | 'log'>> & { backupDir: string | null }
   fi!: SettingsFile
   private folderReadOnlyReason: string | null = null
   private folderSchemaVersion = SCHEMA_VERSION
@@ -345,7 +383,7 @@ export class DataStore {
       now: opts.now ?? (() => new Date().toISOString()),
       backupDir: opts.backupDir ?? null
     }
-    this.history = new RecordHistory(root, this.opts.machineName, this.opts.now)
+    this.history = new RecordHistory(root, this.opts.machineName, this.opts.now, (e) => opts.log?.('warn', 'history snapshot failed', e))
   }
 
   // ---------------------------------------------------------------- folder lifecycle
@@ -361,9 +399,51 @@ export class DataStore {
     }
     if (await pathExists(join(root, SETTINGS_FILE))) return 'data'
     if (await pathExists(join(root, ICTJ_FILE))) return 'ictj'
-    const entries = (await fs.readdir(root)).filter((n) => !n.startsWith('.') && n !== 'desktop.ini' && n !== 'Thumbs.db')
+    let names: string[]
+    try {
+      names = await fs.readdir(root)
+    } catch {
+      // A folder one may pass through but not list (a network share – B120): there, but unread.
+      return 'unavailable'
+    }
+    const entries = names.filter((n) => !n.startsWith('.') && n !== 'desktop.ini' && n !== 'Thumbs.db')
     if (entries.length === 0) return 'empty'
     return entries.some((n) => (COLLECTIONS as readonly string[]).includes(n)) ? 'partial' : 'other'
+  }
+
+  /**
+   * A broken fi.json (B109) made good from its history: the newest version in `.history/fi/` that reads (an older format
+   * migrated, a newer one skipped) becomes fi.json; the broken file is moved aside as `fi-uszkodzona-<czas>.json` – a
+   * copy in Synchronizacja. Returns when that version was kept; null = no version to take.
+   */
+  static async repairSettings(root: string, machineName: string, now = new Date().toISOString()): Promise<string | null> {
+    const base = join(root, HISTORY_DIR, 'fi')
+    const versions: Array<{ file: string; name: string }> = []
+    for (const id of await fs.readdir(base).catch(() => [] as string[])) {
+      for (const name of await fs.readdir(join(base, id)).catch(() => [] as string[])) if (name.endsWith('.json') && !name.startsWith('.')) versions.push({ file: join(base, id, name), name })
+    }
+    // The names begin with the time they were kept: the newest first.
+    versions.sort((a, b) => (a.name < b.name ? 1 : -1))
+    for (const v of versions) {
+      let kept: { record?: unknown; savedAt?: unknown }
+      try {
+        kept = JSON.parse(await fs.readFile(v.file, 'utf8')) as typeof kept
+      } catch {
+        continue
+      }
+      const parsed = parseRecordObject('fi', kept.record)
+      if (!parsed.ok) continue
+      const fi = SCHEMAS.fi.parse({ ...parsed.value, schemaVersion: SCHEMA_VERSION, updatedAt: now, updatedBy: machineName })
+      const target = join(root, SETTINGS_FILE)
+      try {
+        await withRetry(() => fs.rename(target, join(root, SETTINGS_FILE.replace(/\.json$/, `-uszkodzona-${stamp(now)}.json`))))
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+      }
+      await writeFileAtomic(target, serializeRecord('fi', fi))
+      return typeof kept.savedAt === 'string' ? kept.savedAt : now
+    }
+    return null
   }
 
   /** Create the folder layout and a default fi.json in an empty folder. */
@@ -374,8 +454,12 @@ export class DataStore {
     await writeFileAtomic(join(root, SETTINGS_FILE), serializeRecord('fi', fi))
   }
 
+  /**
+   * Where the backups go: `backups/` of the folder, or – with a folder of backups set on this computer – its subfolder
+   * of this data folder (B115): two data folders of one computer never share their daily backups and their rotation.
+   */
   get backupsDir(): string {
-    return this.opts.backupDir ?? join(this.root, BACKUPS_DIR)
+    return this.opts.backupDir ? join(this.opts.backupDir, backupFolderName(this.root)) : join(this.root, BACKUPS_DIR)
   }
 
   /** Per-machine backup location (null = backups/ inside the data folder). */
@@ -626,7 +710,7 @@ export class DataStore {
     const state = this.files.get(SETTINGS_FILE)
     if (!state || state.status !== 'record' || !state.record) {
       const msg = state?.error ?? 'Brak pliku fi.json'
-      throw new Error(`Nie można wczytać fi.json: ${msg}`)
+      throw new SettingsFileError(state?.readError ? 'unreadable' : state?.problemKind === 'too-new' ? 'too-new' : 'broken', `Nie można wczytać fi.json: ${msg}`)
     }
     this.fi = state.record as SettingsFile
     this.folderSchemaVersion = state.readOnly ? state.fromVersion : SCHEMA_VERSION
@@ -805,7 +889,7 @@ export class DataStore {
     return [...this.files.problemPaths]
       .map((rel) => {
         const s = this.files.get(rel)!
-        return { relPath: s.relPath, kind: s.problemKind ?? 'invalid', message: s.error ?? '' }
+        return { relPath: s.relPath, kind: s.problemKind ?? 'invalid', message: s.error ?? '', ...(s.readError ? { unreadable: true } : {}) }
       })
       .sort((a, b) => a.relPath.localeCompare(b.relPath))
   }
@@ -1115,7 +1199,7 @@ export class DataStore {
    */
   private async keepDuplicate(occupant: FileState | undefined, existing: FileState | null, kind: Collection, id: string): Promise<void> {
     if (occupant?.status !== 'record' || occupant === existing || (occupant.record as AnyRecord | null)?.id !== id) return
-    if (occupant.readOnly) throw new ReadOnlyError(`Plik ${occupant.relPath} zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby go zmienić.`)
+    if (occupant.readOnly) throw new NewerFileError(`Plik ${occupant.relPath} zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby go zmienić.`)
     await this.history.snapshot(kind, occupant.record as AnyRecord, 'discarded')
   }
 
@@ -1135,7 +1219,7 @@ export class DataStore {
    */
   private async setAsideProblem(state: FileState): Promise<void> {
     if (state.problemKind === 'too-new') {
-      throw new ReadOnlyError(`Plik ${state.relPath} zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby go zmienić.`)
+      throw new NewerFileError(`Plik ${state.relPath} zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby go zmienić.`)
     }
     // Unreadable now, not broken: never moved aside – the write waits (B42).
     if (state.readError) throw new Error(`Plik ${state.relPath} jest teraz niedostępny (OneDrive może go jeszcze pobierać) – zapis wstrzymany, spróbuj za chwilę.`)
@@ -1231,7 +1315,7 @@ export class DataStore {
           results.push({ id: input.id, entry: this.entry<C>(await this.writeRecord(collection, input)) })
         } catch (e) {
           if (e instanceof RemovedOutsideError) removed.add(input.id)
-          results.push({ id: input.id, error: (e as Error).message })
+          results.push({ id: input.id, error: (e as Error).message, ...(e instanceof NewerFileError ? { newer: true } : {}) })
         }
       }
       const change = this.diff(this.buildViews(), false)
@@ -1278,7 +1362,7 @@ export class DataStore {
     const rel = recordRelPath(collection, record as unknown as Record<string, unknown>)
     await this.reread((r) => r === rel)
     const existing = this.currentState(collection, input.id)
-    if (existing?.readOnly) throw new ReadOnlyError('Ten wpis zapisała nowsza wersja aplikacji - jest tylko do odczytu.')
+    if (existing?.readOnly) throw new NewerFileError()
     const occupant = this.files.get(rel)
     if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== record.id) {
       // The month's file of another record (two computers made the month's plan before syncing – B46): this version
@@ -1375,13 +1459,19 @@ export class DataStore {
   private async removeRecord(collection: Collection, id: string, reason: 'delete' | 'undo' | 'drop' = 'delete'): Promise<boolean> {
     const state = this.currentState(collection, id)
     if (!state) return false
-    if (state.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
+    if (state.readOnly) throw new NewerFileError()
+    // A second file of the record (the same id from two computers – a conflict in Synchronizacja): deleting one, the
+    // other would come back as the record at once (B111) – the conflict is resolved first.
+    if ((this.files.ids.get(`${collection}:${id}`)?.size ?? 0) > 1)
+      throw new Error('Ten wpis ma drugą kopię z innego komputera (ten sam identyfikator) – najpierw rozstrzygnij ją w Synchronizacji, potem usuń.')
     const kept = reason === 'drop' ? null : await this.history.snapshot(collection, state.record as AnyRecord, reason)
+    // Without its version in the history a deleted record could never be brought back („Cofnij”, „Usunięte wpisy”), and
+    // a deleted operation from the bank would come back with the next import (T39): not deleted then (B112).
+    if (!kept && reason !== 'drop') throw new Error('Nie udało się odłożyć wersji do historii (folder .history niedostępny?) – wpis nie został usunięty. Spróbuj ponownie za chwilę.')
     try {
       // The history keeps the version (on every computer – B44), or it is an import's batch dropped on purpose: the
-      // file goes at once. Only a version the history could not keep goes to the bin.
-      if (kept || reason === 'drop') await this.opts.remove(this.abs(state.relPath))
-      else await this.opts.trash(this.abs(state.relPath))
+      // file goes at once.
+      await this.opts.remove(this.abs(state.relPath))
     } catch (e) {
       // The file stays (held by OneDrive, an antivirus): no „deleted” version in the history either (B9).
       await this.history.drop(kept)
@@ -1425,6 +1515,14 @@ export class DataStore {
   }
 
   saveSettings(input: SettingsFile): Promise<SettingsFile> {
+    return this.writeSettings(input).then((r) => r.fi)
+  }
+
+  /**
+   * The settings written, with what the folder changed beside them (B107): the other computer's fi.json kept as a copy
+   * „-zewnetrzna-”, a broken fi.json moved aside – the window learns it now, not after a restart.
+   */
+  writeSettings(input: SettingsFile): Promise<{ fi: SettingsFile; change: ChangeSet | null }> {
     return this.mutex.run(async () => {
       this.assertWritable()
       const fi = SCHEMAS.fi.parse({ ...input, schemaVersion: SCHEMA_VERSION, updatedAt: this.opts.now(), updatedBy: this.opts.machineName })
@@ -1435,8 +1533,7 @@ export class DataStore {
       if (existing?.status === 'record' && existing.record) await this.history.snapshot('fi', existing.record as SettingsFile, 'edit')
       await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
       this.fi = fi
-      this.commit(this.buildViews())
-      return fi
+      return { fi, change: this.diff(this.buildViews(), false) }
     })
   }
 
@@ -1535,8 +1632,9 @@ export class DataStore {
     // The kept version is rewritten (newest updatedAt) at its canonical path; every other file of the pair goes to the bin.
     let keptPath: string
     let keptId: string
+    // Written here now (N91): this computer's stamp, as every other write.
     if (conflict.kind === 'fi') {
-      const fi = SCHEMAS.fi.parse({ ...(source as unknown as SettingsFile), updatedAt: this.opts.now() })
+      const fi = SCHEMAS.fi.parse({ ...(source as unknown as SettingsFile), ...this.stampNow() })
       await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
       this.fi = fi
       settingsWritten = true
@@ -1544,7 +1642,7 @@ export class DataStore {
       keptId = fi.id
     } else {
       const kind = conflict.kind as Collection
-      const record = (merged !== undefined ? SCHEMAS[kind].parse({ ...source, updatedAt: this.opts.now() }) : { ...source, updatedAt: this.opts.now() }) as AnyRecord
+      const record = (merged !== undefined ? SCHEMAS[kind].parse({ ...source, ...this.stampNow() }) : { ...source, ...this.stampNow() }) as AnyRecord
       keptPath = recordRelPath(kind, record as unknown as Record<string, unknown>)
       keptId = record.id
       await this.writeState(keptPath, kind, record, serializeRecord(kind, record))
@@ -1608,8 +1706,8 @@ export class DataStore {
       if (!old) throw new Error('Tej wersji nie ma już w historii (mogła zostać usunięta na innym komputerze).')
       if (kind === 'fi') {
         const fi = await this.putSettings(old)
-        this.commit(this.buildViews())
-        return { change: null, fi }
+        // A broken fi.json moved aside by it: the window learns it (B107).
+        return { change: this.diff(this.buildViews(), false), fi }
       }
       await this.putVersion(kind, id, old)
       return { change: this.diff(this.buildViews(), false), fi: null }
@@ -1624,6 +1722,8 @@ export class DataStore {
   private async putSettings(old: unknown): Promise<SettingsFile> {
     const fi = SCHEMAS.fi.parse({ ...(old as object), ...this.stampNow() })
     const existing = this.files.get(SETTINGS_FILE)
+    // A broken fi.json is moved aside, never overwritten (B107) – as a save of the settings does.
+    if (existing?.status === 'problem') await this.setAsideProblem(existing)
     if (existing?.status === 'record' && existing.record) await this.history.snapshot('fi', existing.record as SettingsFile, 'restore')
     await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
     this.fi = fi
@@ -1639,7 +1739,7 @@ export class DataStore {
     if (!parsed.success) throw new Error(`Tej wersji nie da się odtworzyć: ${parsed.error.issues[0]?.path.join('.')}: ${parsed.error.issues[0]?.message}`)
     const record = parsed.data as AnyRecord
     const existing = this.currentState(kind, id)
-    if (existing?.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
+    if (existing?.readOnly) throw new NewerFileError()
     const rel = recordRelPath(kind, record as unknown as Record<string, unknown>)
     const occupant = this.files.get(rel)
     if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== id) {
@@ -1724,8 +1824,10 @@ export class DataStore {
    * very bytes (the same hash) goes from memory – no file read, none scanned by the antivirus; any other file (a copy,
    * a problem, a record its parsing changed – an older or newer version wrote it, a hand edit) is read from the disk:
    * one gone meanwhile is left out, one that cannot be read (OneDrive) fails the backup – never a backup without it.
+   * `history` – the export of the whole folder (N96) carries `.history/` too: restored from it, the versions of the
+   * records and the deleted ones (T39) come with it; the daily backups stay without it (T20).
    */
-  async zipData(outFile: string): Promise<ZipResult> {
+  async zipData(outFile: string, opts: { history?: boolean } = {}): Promise<ZipResult> {
     const states = await this.mutex.run(async () => [...this.files.values()].filter((s) => isDataFile(s.relPath)))
     states.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0))
     const items = states.map((s): ZipSource => {
@@ -1740,6 +1842,10 @@ export class DataStore {
         }
       }
     })
+    if (opts.history) {
+      const rels = await walkFiles(this.root, join(this.root, HISTORY_DIR), (rel) => rel.includes('.tmp-'))
+      for (const rel of rels.sort()) items.push(diskSource(this.abs(rel), rel))
+    }
     return writeZipFile(outFile, items)
   }
 

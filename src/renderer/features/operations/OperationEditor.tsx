@@ -4,6 +4,7 @@ import { asksImpulse, isNight, sum } from '@shared/calc/operations'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
 import { HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { updateRecord, useData, useFolderLocked } from '../../store/data'
+import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
@@ -136,6 +137,7 @@ export function OperationEditor({ id }: { id: string }) {
         {!isDraft && <HistoryButton kind="transactions" id={t.id} current={t} small />}
         {!isDraft && !readOnly && <DeleteButton title="Usuń operację" onConfirm={() => void deleteOperation(t, operationLabel(t))} testId="operation-delete" />}
       </div>
+      <NewerNote show={entry.readOnly && !folderReadOnly} />
       <fieldset className="contents" disabled={readOnly}>
 
         <div className="flex flex-wrap items-center gap-1.5">

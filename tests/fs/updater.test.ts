@@ -394,6 +394,22 @@ describe('aktualizacje: sprawdzanie', () => {
     // A manual check keeps the downloaded update when the release is the same.
     expect((await t.updater.check(true)).phase).toBe('ready')
   })
+
+  it('nowsza wersja nie pobrała się: zostaje pobrana wcześniej – gotowa do instalacji z komunikatem (B122)', async () => {
+    const t = await setup()
+    expect((await checkAndWait(t.updater)).phase).toBe('ready')
+    const staged = `${t.portableFile}.update`
+    // 1.3.0 is out, its file comes damaged: 1.2.0 downloaded before is not lost.
+    t.site.version = '1.3.0'
+    t.site.files[PORTABLE_ASSET] = { body: randomBytes(300_000), digest: true, serve: 'corrupt' }
+    const s = await checkAndWait(t.updater)
+    expect(s).toMatchObject({ phase: 'ready', release: { version: '1.2.0' } })
+    expect(s.error).toMatch(/Nie udało się pobrać wersji 1\.3\.0 .* zainstaluje się pobrana wcześniej 1\.2\.0/)
+    expect(sha(await fs.readFile(staged))).toBe(sha(t.portableBody))
+    expect(t.cfg.pending?.version).toBe('1.2.0')
+    expect(t.updater.applyOnQuit()).toBe(true)
+    expect(t.applied.at(-1)).toMatchObject({ kind: 'portable', p: { staged, version: '1.2.0' } })
+  })
 })
 
 describe('aktualizacje: prywatne repozytorium (token)', () => {

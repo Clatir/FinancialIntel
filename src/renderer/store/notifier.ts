@@ -66,6 +66,8 @@ export function openTag(tag: string): void {
   } else if (tag === 'asteroid' || tag === 'cargo') navigate({ page: 'cargo' })
   else if (tag === 'import') navigate({ page: 'import' })
   else if (tag === 'balances') navigate({ page: 'settings', tab: 'accounts' })
+  else if (tag === 'backups') navigate({ page: 'settings', tab: 'folder' })
+  else if (tag === 'update') navigate({ page: 'settings', tab: 'updates' })
   else if (tag === 'debriefing' || tag === 'low' || tag === 'overrun') navigate({ page: 'month' })
   else if (tag === 'radar') navigate({ page: 'radar' })
   else if (tag === 'reports') openWatchReport()

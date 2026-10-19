@@ -732,6 +732,41 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   wpływ, domownik zarchiwizowany i spoza folderu), `operations.spec.ts` (pytanie przy różnicy salda, saldo zostaje w polu),
   `series.spec.ts` (cisza nocna bez północy).
 
+## Kod (1.6.5 – folder, system, dwa komputery, grupa Q, D87)
+- Wpisy nowszej wersji (T246): `main/datastore/store.ts` `NewerFileError` (podklasa `ReadOnlyError`, `NEWER_FILE_MESSAGE`;
+  wpis / plik nowszej wersji przy zapisie i usunięciu), `SaveResult.newer`; okno `lib/api.ts` `isNewerFileError`,
+  `store/data.ts` – `newer` (bez pętli prób, komunikat raz – `refusedForGood`), `NEWER_RECORD_MESSAGE`, `updateRecord` z
+  komunikatem, `deleteRecord` odmawia, `deleteOrSay` (usunięcia bez czekania), `useEntryNewer`, `tooNewMonths` /
+  `monthTooNew` (gra – `lockedKey` w `store/game.ts`, `editPlan`); `components/NewerNote.tsx` (`entry-newer`) w edytorach
+  kontenera, celu, pożyczki, planu miesiąca i operacji; zmiany zbiorcze – `newerNote`.
+- Przyczyna niezapisanych (T247): `shared/api.ts` `FlushResult`, `shared/unsaved.ts` (`unsavedQuestion`, `SAVED` – pytanie
+  main przy zamykaniu), `store/data.ts` `unsavedReport`, `flushForClose` (`onFlushRequest`), `saveFirst(co)` (kopia,
+  eksport, import, cofnięcie, odzyskanie, aktualizacja, zmiana folderu – `switchFolder` → `{unsaved}`, konflikty),
+  `unsavedNote` (po imporcie, cofnięciu importu, kreatorze), `saveNow` (Ctrl+S w `App.tsx`, paleta).
+- fi.json (T248): `writeSettings` → `{fi, change}`, `historyRestore('fi')` / `putSettings` odsuwają uszkodzony;
+  `SettingsFileError` (`unreadable` / `broken` / `too-new`), `DataStore.repairSettings`, IPC `repairSettings`, wyniki
+  `settings-unreadable` / `settings-broken` (`FolderProblem`); `FolderSetup.tsx` – ponowienie co 30 s, `repair-settings`.
+- Folder i kopie (T249): `backupFolderName` (podfolder własnego folderu kopii), `backup.ts` `BACKUP_NAMES` (rotacja i lista
+  tylko nazw FI), `removeRecord` – odmowa przy drugiej kopii id i bez wersji w historii (`RecordHistory` z `failed` →
+  log), `zipData(…, {history})` (eksport), `inspect` – `unavailable` bez listowania; `watch.ts` – ponowienia 5 s → 5 min,
+  `onError(e, repeated)` raz na godzinę (nowa awaria po minucie spokoju – od razu), `nextRestartMs`; main
+  `backupFailure` / `backupFailingSince` / `noticeStaleBackups` (powiadomienie `backups`), `listBackups` → `failure`
+  (`backup-failure` w Ustawieniach), `insideIctj` po `journal.json`, `setBackupDir` bez ICTTJ; `log.ts` – rotacja co 200 linii.
+- config.json (T250): `config.ts` – odczyt z `withRetry`, `loadFailed` (zapisy wstrzymane), `held` + `leafChanges` /
+  `withValueAt` (zmiany z tej chwili pole po polu po odczycie), `setAside`; main `retryConfig` (co 15 s, `fi:configReady` →
+  `onConfigReady` w oknie), `TrayPrefs.autostartAsked`.
+- System i okna (T251): `updater.ts` `staged` (pobrana wcześniej zostaje przy nieudanym pobraniu nowszej); `quick.ts` /
+  `detach.ts` – `render-process-gone`; main – heartbeat po przełączeniu folderu, `pendingMaximize` w zapisie okna,
+  `trayStatus`, `readyNoticed` (powiadomienie `update`), migawka z pamięci po przeładowaniu (W37); okno `store/tray.ts`
+  (`useTray`, `installWhen`, `asksAutostart` – baner `banner-autostart-yes` / `-no`), kreator bez skrótu i zasobnika.
+- Synchronizacja (T252): `shared/merge.ts` `fieldLabel(ścieżka, nazwy)` + etykiety; `HistoryDialog` `dictNames`;
+  `RemoteChangesDialog` „z drugiego komputera”; `SyncPage.tsx` – karta konfliktu przez `diffRecords` + `ChangeList`
+  (`conflict-changes`, `conflict-same`), `ProblemAction` (`problem-reread`, `problem-too-new`, `problem-trash` z
+  potwierdzeniem), prawdziwy folder kopii; `resolveOne` – zachowana kopia ze znacznikiem tego komputera.
+- Testy: `tests/fs/folder-q.test.ts`, poszerzone `backup`, `config`, `datastore`, `updater`, `watch`,
+  `tests/unit/data-store.test.ts` (przyczyny, `saveFirst`, `saveNow`, wpisy nowszej wersji, zasobnik), `merge.test.ts`,
+  `system.test.ts`; E2E `tests/e2e/folder-q.spec.ts` (kontener nowszej wersji, Synchronizacja, naprawa fi.json, nieudana kopia).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -834,4 +869,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   z innego ekranu nie zmienia zapisanego filtra, „bez kategorii” jedno znaczenie, „Cofnij” zbiorczych zmian tylko swoich
   pól, pytanie przy różnicy salda dziś, szybki wpis ze świeżymi listami, szkice formularzy po zmianie ekranu, limity
   notatek, kwoty do grosza, wieczór w ciszy nocnej
+- [x] 1.6.5 Folder, system, dwa komputery (grupa Q, D87): prawdziwa przyczyna niezapisanych zmian (decyzja z drugiego
+  komputera, wpis nowszej wersji, błąd zapisu), wpisy nowszej wersji tylko do obejrzenia, naprawa fi.json z historii,
+  config.json bez nadpisywania domyślnymi, kopie w podfolderze na folder danych, ostrzeżenie o nieudanych kopiach,
+  Synchronizacja z nazwami pól, eksport z historią, aktualizacja pobrana wcześniej nie przepada
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

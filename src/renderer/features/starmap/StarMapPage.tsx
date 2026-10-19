@@ -7,7 +7,8 @@ import { useMemo, useState } from 'react'
 import { byPriority, goalEtas, goalLate, goalPace } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
-import { useData, useFolderLocked } from '../../store/data'
+import { useData, useEntryNewer, useFolderLocked } from '../../store/data'
+import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useIctj } from '../../store/ictj'
@@ -28,6 +29,7 @@ export function StarMapPage() {
   const fleet = useFleet()
   const goalsAll = useRecordList('goals')
   const readOnly = useFolderLocked()
+  const goalEntries = useData((s) => s.records.goals)
   const snap = useIctj((s) => s.snap)
   const forecastId = useData((s) => s.fi?.settings.ictj.forecastId ?? null)
   const active = useMemo(() => byPriority(goalsAll.filter((g) => !g.archived)), [goalsAll])
@@ -125,12 +127,12 @@ export function StarMapPage() {
                       <span className="min-w-0 flex-1 truncate">{g.name}</span>
                       {g.source === 'ictj' ? <span className="text-[11px] text-dim">poza wybranym scenariuszem ICTTJ</span> : null}
                       <span className="num text-muted">{zl(amounts.get(g.id) ?? 0)}</span>
-                      {(amounts.get(g.id) ?? 0) > 0 && !readOnly && (
+                      {(amounts.get(g.id) ?? 0) > 0 && !readOnly && !goalEntries[g.id]?.readOnly && (
                         <button className="text-[11.5px] text-accent hover:underline" onClick={() => setMoving({ goal: g, archive: false })} data-testid="starmap-archived-move">
                           przenieś środki
                         </button>
                       )}
-                      {g.source === 'own' && !readOnly && (
+                      {g.source === 'own' && !readOnly && !goalEntries[g.id]?.readOnly && (
                         <button className="text-[11.5px] text-accent hover:underline" onClick={() => archiveGoal(g, false)}>
                           przywróć
                         </button>
@@ -264,7 +266,7 @@ function GoalRow({
   amount,
   eta,
   pace,
-  readOnly,
+  readOnly: folderLocked,
   dragging,
   onDragStart,
   onDragEnd,
@@ -292,6 +294,9 @@ function GoalRow({
   month: string
   onArchive: () => void
 }) {
+  // Written by a newer version of the app (B67): looked at, not changed here.
+  const newer = useEntryNewer('goals', g.id)
+  const readOnly = folderLocked || newer
   const ictj = g.source === 'ictj'
   const noTarget = g.target <= 0
   const reached = !noTarget && amount >= g.target
@@ -408,6 +413,7 @@ function GoalRow({
       </div>
       <div className="pl-[26px]">
         <Meter value={amount} max={noTarget ? null : g.target} />
+        <NewerNote show={newer} />
       </div>
     </div>
   )

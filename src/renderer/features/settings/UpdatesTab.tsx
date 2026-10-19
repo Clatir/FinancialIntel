@@ -5,6 +5,7 @@ import { api, errorMessage } from '../../lib/api'
 import { fmtBytes } from '../../lib/format'
 import { checkForUpdates, downloadUpdate, restartToUpdate, setUpdatePrefs, setUpdateToken, useUpdate } from '../../store/update'
 import { toast } from '../../store/ui'
+import { installWhen, useTray } from '../../store/tray'
 import { IconExternal, IconSync } from '../../components/icons'
 import { Badge, Field, Panel, Toggle, cx } from '../../components/ui'
 
@@ -116,6 +117,7 @@ export function ReleaseNotes({ text }: { text: string }) {
 
 function StatusLine({ s }: { s: UpdateState }) {
   const v = s.release?.version
+  const closeToTray = useTray((x) => x.prefs?.closeToTray)
   const pct = s.progress && s.progress.total ? Math.min(100, Math.round((s.progress.received / s.progress.total) * 100)) : null
   switch (s.phase) {
     case 'idle':
@@ -147,7 +149,9 @@ function StatusLine({ s }: { s: UpdateState }) {
     case 'ready':
       return (
         <span className="text-fg-strong">
-          Wersja {v} pobrana i sprawdzona (SHA-256). Zainstaluje się sama po zamknięciu aplikacji.
+          Wersja {v} pobrana i sprawdzona (SHA-256). Zainstaluje się sama {installWhen(closeToTray)}.
+          {/* A newer version that would not download (B122): this one stays ready. */}
+          {s.error && <span className="block text-accent">{s.error}</span>}
         </span>
       )
     case 'error':

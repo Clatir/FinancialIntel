@@ -137,8 +137,10 @@ export function categorizeTicked(visibleIds: readonly string[], categoryId: stri
     .filter((id) => ticked[id] && !data.drafts[id])
     .map((id) => data.records.transactions[id]?.record)
     .filter((t): t is Transaction => !!t)
+  // Written by a newer version of the app (B67): this one changes none of them – counted apart, never as changed.
+  const newer = ops.filter((t) => data.records.transactions[t.id]?.readOnly).length
   // One category: an expense without lines, or a shared purchase (D83 – its lines take the category with it).
-  const fit = ops.filter((t) => t.kind === 'expense' && (!t.splits.length || shareOf(t)))
+  const fit = ops.filter((t) => t.kind === 'expense' && (!t.splits.length || shareOf(t)) && !data.records.transactions[t.id]?.readOnly)
   const before = fit.filter((t) => t.categoryId !== categoryId)
   const rulesBefore = data.fi?.settings.import.rules ?? null
   replaceRecords(
@@ -156,7 +158,7 @@ export function categorizeTicked(visibleIds: readonly string[], categoryId: stri
     const err = saveKeywordRule({ keyword: filter.query, direction, kind: 'expense', categoryId })
     note = err ? ` · słowo kluczowe: ${err}` : ` · słowo kluczowe „${filter.query.trim()}”`
   }
-  const skipped = ops.length - fit.length
+  const skipped = ops.length - fit.length - newer
   const rulesAfter = useData.getState().fi?.settings.import.rules ?? null
   clearTicked()
   // „Cofnij” takes back what the action set and nothing else (B66): a category still the one set (a change made since –
@@ -174,7 +176,7 @@ export function categorizeTicked(visibleIds: readonly string[], categoryId: stri
     undoneNote(back.length, before.length)
   }
   toast(
-    `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział): ${skipped}` : ''}${note}.`,
+    `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział): ${skipped}` : ''}${newerNote(newer)}${note}.`,
     'success',
     7000,
     before.length || remember !== 'none' ? { label: 'Cofnij', run: undo } : undefined
@@ -192,6 +194,9 @@ const financing = (t: Transaction) => JSON.stringify([t.refundable, t.refundable
  * amount, so an amount changed after a bulk change leaves the financing the one set.
  */
 const financers = (t: Transaction): unknown => [t.refundable, t.refundable ? t.memberId : null, !!t.gift, t.share ?? null, t.share ? null : t.splits.map((s) => [s.refundable, s.memberId, !!s.gift])]
+
+/** Ticked operations a newer version of the app wrote (B67): left as they are, said in the toast. */
+const newerNote = (n: number): string => (n ? `, bez zmian (zapisane przez nowszą wersję aplikacji): ${n}` : '')
 
 /** „Cofnij” of a bulk change that left out operations changed since (B66): said, never a silent half. */
 function undoneNote(done: number, of: number): void {
@@ -211,7 +216,8 @@ export function financeTicked(visibleIds: readonly string[], choice: FinanceChoi
     .filter((id) => ticked[id] && !data.drafts[id])
     .map((id) => data.records.transactions[id]?.record)
     .filter((t): t is Transaction => !!t)
-  const fit = ops.filter((t) => t.kind === 'expense' && (!t.splits.length || shareOf(t)))
+  const newer = ops.filter((t) => data.records.transactions[t.id]?.readOnly).length
+  const fit = ops.filter((t) => t.kind === 'expense' && (!t.splits.length || shareOf(t)) && !data.records.transactions[t.id]?.readOnly)
   const next = (t: Transaction): Transaction => {
     if ('share' in choice) return withShare(t, choice.share)
     const plain = shareOf(t) ? withShare(t, null) : t
@@ -223,7 +229,7 @@ export function financeTicked(visibleIds: readonly string[], choice: FinanceChoi
     'transactions',
     pairs.map(([, b]) => b)
   )
-  const skipped = ops.length - fit.length
+  const skipped = ops.length - fit.length - newer
   clearTicked()
   // Only the financing, and only while it is still the one set (B66): an amount or a note changed since stays.
   const undo = () => {
@@ -240,7 +246,7 @@ export function financeTicked(visibleIds: readonly string[], choice: FinanceChoi
     undoneNote(back.length, pairs.length)
   }
   toast(
-    `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział paragonu): ${skipped}` : ''}.`,
+    `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział paragonu): ${skipped}` : ''}${newerNote(newer)}.`,
     'success',
     7000,
     before.length ? { label: 'Cofnij', run: undo } : undefined

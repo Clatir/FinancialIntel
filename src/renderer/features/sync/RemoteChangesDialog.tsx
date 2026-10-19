@@ -28,10 +28,15 @@ function useMine(item: PendingRemote): unknown {
   return useData((s) => (item.collection === 'fi' ? s.fi : ((s.records[item.collection] as Record<string, RecordEntry<unknown>>)[item.id]?.record ?? null)))
 }
 
-function machineOf(item: PendingRemote): string {
+/** The computer the version comes from; null = not said in it (a file written by hand, an older format – N97). */
+function machineOf(item: PendingRemote): string | null {
   const r = theirsRecord(item) as { updatedBy?: string | null } | null
-  return r?.updatedBy ?? 'inny komputer'
+  return r?.updatedBy || null
 }
+
+/** „z LAPTOP” – or „z drugiego komputera” when the version does not say which (N97). */
+const fromText = (machine: string | null): string => (machine ? `z ${machine}` : 'z drugiego komputera')
+const FromText = (machine: string | null): string => (machine ? `Z ${machine}` : 'Z drugiego komputera')
 
 /** Which version "Zaakceptuj nowsze" would take. */
 const UNDECIDED: Record<'removal' | 'time', string> = {
@@ -40,7 +45,7 @@ const UNDECIDED: Record<'removal' | 'time', string> = {
 }
 
 /** Decided now, at every render of its card (edits made while the dialog waits count) – a card is drawn again only for itself (W25). */
-function NewerBadge({ item, machine }: { item: PendingRemote; machine: string }) {
+function NewerBadge({ item, machine }: { item: PendingRemote; machine: string | null }) {
   // A three-way merge of the whole record (W36: fi.json with its rules) – once per item, local version and write: the
   // times of local edits change with the record, a finished write (the settings' stamps taken in place, no local edits
   // left) with the count of writes on the way.
@@ -59,9 +64,9 @@ function NewerBadge({ item, machine }: { item: PendingRemote; machine: string })
         ? 'nowsze: usunięcie'
         : 'nowsza: Twoja (po usunięciu)'
       : n.newer === 'both'
-        ? `nowsze: część Twoja, część z ${machine}`
+        ? `nowsze: część Twoja, część ${fromText(machine)}`
         : n.newer === 'theirs'
-          ? `nowsza: z ${machine}`
+          ? `nowsza: ${fromText(machine)}`
           : 'nowsza: Twoja'
   return (
     <Badge tone="accent" data-testid="remote-newer">
@@ -131,7 +136,7 @@ const ItemCard = memo(function ItemCard({
       <div className="flex flex-wrap items-center gap-2">
         <SelectBox checked={selected} onChange={(v) => onSelect(item.key, v)} label={`Zaznacz: ${title}`} />
         <span className="text-[12.5px] text-fg-strong">{title}</span>
-        <Badge>z komputera {machine}</Badge>
+        <Badge>{machine ? `z komputera ${machine}` : 'z drugiego komputera'}</Badge>
         {item.hadLocalEdits ? <Badge tone="accent">masz niezapisane zmiany ({localChanges.length})</Badge> : <Badge>bez Twoich zmian</Badge>}
         {conflicts.length > 0 && <Badge tone="warn">to samo pole zmienione po obu stronach: {conflicts.length}</Badge>}
         <NewerBadge item={item} machine={machine} />
@@ -148,7 +153,7 @@ const ItemCard = memo(function ItemCard({
             ? [
                 { value: 'merge', label: 'Scal' },
                 { value: 'mine', label: 'Zachowaj moją' },
-                { value: 'theirs', label: `Weź z ${machine}` }
+                { value: 'theirs', label: `Weź ${fromText(machine)}` }
               ]
             : [
                 { value: 'theirs', label: 'Przyjmij zmiany' },
@@ -161,14 +166,14 @@ const ItemCard = memo(function ItemCard({
           <div className="grid grid-cols-[170px_1fr_1fr] gap-2 border-b border-line bg-raised px-2 py-1 text-[10.5px] tracking-wide text-muted uppercase">
             <span>Pole</span>
             <span>Moja wersja</span>
-            <span>Z {machine}</span>
+            <span>{FromText(machine)}</span>
           </div>
           {conflicts.map((c) => {
             const k = pathKey(c.path)
             const side = fields[k] ?? 'mine'
             return (
               <div key={k} className="grid grid-cols-[170px_1fr_1fr] items-center gap-2 border-b border-line/60 px-2 py-0.5 last:border-b-0" data-testid="remote-conflict">
-                <span className="truncate text-muted">{fieldLabel(c.path)}</span>
+                <span className="truncate text-muted">{fieldLabel(c.path, names)}</span>
                 {(['mine', 'theirs'] as const).map((s) => (
                   <button
                     key={s}
@@ -185,9 +190,11 @@ const ItemCard = memo(function ItemCard({
         </div>
       )}
       <details>
-        <summary className="cursor-default text-[11.5px] text-muted">Zmiany z {machine}: {remoteChanges.length}</summary>
+        <summary className="cursor-default text-[11.5px] text-muted">
+          Zmiany {fromText(machine)}: {remoteChanges.length}
+        </summary>
         <div className="mt-1">
-          <ChangeList changes={remoteChanges} beforeLabel="Było" afterLabel={`Z ${machine}`} />
+          <ChangeList changes={remoteChanges} beforeLabel="Było" afterLabel={FromText(machine)} />
         </div>
       </details>
     </div>

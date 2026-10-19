@@ -1,16 +1,16 @@
 // adapted from ICTTJ src/renderer/features/sync/SyncPage.tsx @ 84a8339
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSelection, type Selection } from '../../lib/selection'
-import type { ConflictEntry, HistoryEntry, HistoryKind } from '@shared/api'
+import type { ConflictEntry, HistoryEntry, HistoryKind, Problem } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import { newerSide, newestResolutions } from '@shared/conflicts'
-import { chooser, deepEqual, fieldLabel, formatValue, isAmountKey, isAmountPath, merge3, pathKey, valueAt, type MergeConflict, type Side } from '@shared/merge'
+import { chooser, deepEqual, diffRecords, fieldLabel, formatValue, isAmountPath, merge3, pathKey, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText } from '../../components/fields'
 import { recordTitle } from '../../lib/recordTitle'
-import { HistoryButton } from '../history/HistoryDialog'
+import { ChangeList, HistoryButton, useDictNames } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
 import { api, errorMessage } from '../../lib/api'
-import { flushSaves, useData, useFolderLocked } from '../../store/data'
+import { saveFirst, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
 import { Badge, Panel, cx } from '../../components/ui'
@@ -32,17 +32,6 @@ const PROBLEM_LABEL: Record<string, string> = {
   invalid: 'zła struktura',
   'too-new': 'nowszy format',
   'unknown-file': 'nieznany plik'
-}
-
-function flatten(value: unknown, prefix = '', out: Record<string, string> = {}): Record<string, string> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) flatten(v, prefix ? `${prefix}.${k}` : k, out)
-  } else if (Array.isArray(value) && value.length && value.every((v) => v && typeof v === 'object')) {
-    value.forEach((v, i) => flatten(v, `${prefix}[${i}]`, out))
-  } else {
-    out[prefix] = typeof value === 'string' ? value : JSON.stringify(value)
-  }
-  return out
 }
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
@@ -73,6 +62,7 @@ const shownValue = (path: readonly string[], v: unknown) => (typeof v === 'numbe
  */
 function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClose: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const [state, setState] = useState<{ fields: MergeConflict[]; choices: Record<string, Side> } | null>(null)
+  const names = useDictNames()
   const readOnly = useFolderLocked()
   // Every change of the folder brings new conflict objects: only other versions of the two files start it again.
   const seen = useRef(c)
@@ -102,7 +92,7 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
   const save = async () => {
     setBusy(true)
     try {
-      if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.')
+      await saveFirst('scalenie')
       const now = seen.current
       const { merged } = merge3(undefined, now.canonical.record, now.copy.record, chooser(state.choices))
       // The versions the choices were made on: a side changed meanwhile (a save just now, OneDrive) refuses the merge.
@@ -128,7 +118,7 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
         return (
           <div key={key} className="grid grid-cols-[180px_1fr_1fr] items-baseline gap-2 text-[11.5px]" data-testid="conflict-merge-field" data-path={key}>
             <span className="truncate text-muted" title={key}>
-              {fieldLabel(x.path)}
+              {fieldLabel(x.path, names)}
             </span>
             {(['mine', 'theirs'] as const).map((side) => (
               <label key={side} className="flex min-w-0 items-baseline gap-1.5">
@@ -158,16 +148,14 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
   const newer = newerSide(c)
   const readOnly = useFolderLocked()
   const [merging, setMerging] = useState(false)
-  const a = flatten(c.canonical.record ?? {})
-  const b = flatten(c.copy.record ?? {})
-  // An amount in grosze (B7): in złoty, hidden with the amounts (Ctrl+$).
-  const shown = (k: string, v: string | undefined) => (v != null && isAmountKey(k) && /^-?\d+$/.test(v) ? `${plnText(Number(v))} zł` : v)
-  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k] && k !== 'updatedAt')
+  // As the history and the window of changes compare (N94): list items by their id, the stamps of a save left out,
+  // Polish names of the fields and of what they point to.
+  const changes = useMemo(() => (c.canonical.record != null && c.copy.record != null ? diffRecords(c.canonical.record, c.copy.record) : []), [c.canonical.record, c.copy.record])
   const resolve = async (keep: 'canonical' | 'copy') => {
     setBusy(true)
     try {
       // Unsaved local edits would be written over the version kept here (e.g. a kept copy of fi.json).
-      if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.')
+      await saveFirst('rozstrzygnięcie konfliktu')
       await api.resolveConflict(c.id, keep)
       toast('Konflikt rozstrzygnięty – odrzucona wersja jest w historii wpisu (i w Koszu).', 'success')
     } catch (e) {
@@ -227,33 +215,56 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         {side('Oryginał', c.canonical, 'canonical')}
         {side('Kopia', c.copy, 'copy')}
       </div>
-      {keys.length > 0 && c.canonical.record != null && c.copy.record != null && (
-        <div className="mt-2 border border-line">
-          <div className="grid grid-cols-[180px_1fr_1fr] border-b border-line bg-raised px-2 py-1 text-[10.5px] tracking-wide text-muted uppercase">
-            <span>Pole</span>
-            <span>Oryginał</span>
-            <span>Kopia</span>
-          </div>
-          {keys.slice(0, 40).map((k) => (
-            <div key={k} className="grid grid-cols-[180px_1fr_1fr] gap-2 border-b border-line/60 px-2 py-0.5 text-[11.5px] last:border-b-0">
-              <span className="num truncate text-muted" title={k}>
-                {k}
-              </span>
-              <span className="truncate" title={shown(k, a[k])}>
-                {shown(k, a[k]) ?? <span className="text-dim">—</span>}
-              </span>
-              <span className="truncate text-fg-strong" title={shown(k, b[k])}>
-                {shown(k, b[k]) ?? <span className="text-dim">—</span>}
-              </span>
-            </div>
-          ))}
-          {keys.length > 40 && <div className="px-2 py-1 text-[11px] text-muted">… i {keys.length - 40} innych różnic</div>}
+      {changes.length > 0 && (
+        <div className="mt-2">
+          <ChangeList changes={changes} beforeLabel="Oryginał" afterLabel="Kopia" testId="conflict-changes" />
         </div>
       )}
-      {keys.length === 0 && c.canonical.record != null && c.copy.record != null && (
-        <div className="mt-2 text-[11.5px] text-muted">Treść identyczna (różni się tylko czas zapisu) – można bezpiecznie zachować oryginał.</div>
+      {changes.length === 0 && c.canonical.record != null && c.copy.record != null && (
+        <div className="mt-2 text-[11.5px] text-muted" data-testid="conflict-same">
+          Treść identyczna (różni się tylko czas zapisu albo komputer) – można bezpiecznie zachować oryginał.
+        </div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * What a problem file allows (N95): one not readable now is read again, one of a newer version waits for the update –
+ * neither goes to the bin; a broken one does, after a second click.
+ */
+function ProblemAction({ p, locked }: { p: Problem; locked: boolean }) {
+  const [sure, setSure] = useState(false)
+  useEffect(() => {
+    if (!sure) return
+    const t = setTimeout(() => setSure(false), 4000)
+    return () => clearTimeout(t)
+  }, [sure])
+  if (p.unreadable)
+    return (
+      <button className="btn h-[22px]" onClick={() => api.rescan().then(() => toast('Folder przeczytany ponownie.', 'success'), (e) => toast(errorMessage(e), 'error'))} data-testid="problem-reread">
+        <IconSync size={12} /> Wczytaj ponownie
+      </button>
+    )
+  if (p.kind === 'too-new')
+    return (
+      <span className="text-[11px] text-muted" data-testid="problem-too-new">
+        zaktualizuj aplikację
+      </span>
+    )
+  return (
+    <button
+      className={cx('btn h-[22px]', sure ? 'border-down/60 text-down' : 'hover:text-down')}
+      disabled={locked}
+      onClick={() => {
+        if (!sure) return setSure(true)
+        setSure(false)
+        void api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))
+      }}
+      data-testid="problem-trash"
+    >
+      <IconTrash size={12} /> {sure ? 'Do Kosza na pewno' : 'Do Kosza'}
+    </button>
   )
 }
 
@@ -329,7 +340,7 @@ function DeletedRecords() {
 }
 
 /**
- * "Zachowaj nowsze" for the chosen conflicts or all: the version changed later of each (`newestResolutions` –
+ * "Zaakceptuj nowsze" for the chosen conflicts or all: the version changed later of each (`newestResolutions` –
  * several copies of one file decided together), in one request (W23); the other versions go to the bin as with the
  * buttons.
  */
@@ -343,8 +354,10 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
     let untouched = 0
     const errors = new Set<string>()
     try {
-      if (!(await flushSaves())) {
-        toast('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.', 'error', 6000)
+      try {
+        await saveFirst('rozstrzygnięcie konfliktów')
+      } catch (e) {
+        toast(errorMessage(e), 'error', 7000)
         return
       }
       // The newest copy of a file could not be kept: the older ones of that file stay (nothing newer is binned).
@@ -362,7 +375,7 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
     const skipped = plan.skipped.length ? ` Nieczytelna wersja – wybierz ręcznie: ${plan.skipped.length}.` : ''
     const left = untouched ? ` Pozostawione bez zmian (nie udało się zachować nowszej kopii tego pliku): ${untouched}.` : ''
     if (errors.size) toast(`Rozstrzygnięto ${done} z ${ids.length}. ${[...errors].join(' ')}${left}${skipped}`, 'error', 8000)
-    else toast(`Zachowano nowsze wersje: ${done} – odrzucone są w historii wpisów (i w Koszu).${skipped}`, plan.skipped.length ? 'info' : 'success', plan.skipped.length ? 6000 : 3200)
+    else toast(`Zaakceptowano nowsze wersje: ${done} – odrzucone są w historii wpisów (i w Koszu).${skipped}`, plan.skipped.length ? 'info' : 'success', plan.skipped.length ? 6000 : 3200)
   }
   return (
     <div className="flex flex-wrap items-center gap-2 border border-line bg-panel px-2.5 py-1.5" data-testid="conflicts-bulk">
@@ -375,13 +388,13 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
         />
         zaznacz wszystkie
       </label>
-      <span className="text-[11.5px] text-dim">„Zachowaj nowsze” bierze wersję zmienioną później (czas zapisu w pliku, inaczej czas pliku).</span>
+      <span className="text-[11.5px] text-dim">„Zaakceptuj nowsze” bierze wersję zmienioną później (czas zapisu w pliku, inaczej czas pliku).</span>
       <div className="flex-1" />
       <button className="btn" disabled={busy || readOnly || chosen.length === 0} onClick={() => void run(chosen.map((c) => c.id))} data-testid="conflicts-newer-selected">
-        Zachowaj nowsze: zaznaczone ({chosen.length})
+        Zaakceptuj nowsze: zaznaczone ({chosen.length})
       </button>
       <button className="btn" disabled={busy || readOnly} onClick={() => void run(conflicts.map((c) => c.id))} data-testid="conflicts-newer-all">
-        Zachowaj nowsze: wszystkie ({conflicts.length})
+        Zaakceptuj nowsze: wszystkie ({conflicts.length})
       </button>
     </div>
   )
@@ -398,6 +411,11 @@ export function SyncPage() {
   // The newest record another computer wrote (F21) – none = only this one writes here.
   const lastRemote = useData((s) => s.lastRemote)
   const fi = useData((s) => s.fi)
+  // Where this computer keeps the backups (N96): another folder may be set in Ustawienia.
+  const [backupsDir, setBackupsDir] = useState<string | null>(null)
+  useEffect(() => {
+    void api.listBackups().then((b) => setBackupsDir(b.dir), () => undefined)
+  }, [status?.dataDir])
   return (
     <div className="h-full overflow-y-auto p-3">
       <div className="mx-auto flex max-w-[1080px] flex-col gap-3">
@@ -463,21 +481,15 @@ export function SyncPage() {
                   <button className="btn h-[22px]" onClick={() => api.showInFolder(p.relPath)}>
                     <IconFolder size={12} /> Pokaż
                   </button>
-                  <button
-                    className="btn h-[22px] hover:text-down"
-                    disabled={locked}
-                    onClick={() => api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))}
-                  >
-                    <IconTrash size={12} /> Do Kosza
-                  </button>
+                  <ProblemAction p={p} locked={locked} />
                 </div>
               </div>
             ))}
           </div>
         )}
         <p className="text-[11.5px] text-muted">
-          Uszkodzone pliki są pomijane i nigdy nie są nadpisywane – możesz je naprawić w edytorze tekstu (to zwykły JSON) albo przywrócić z kopii w
-          folderze backups/.
+          Uszkodzone pliki są pomijane i nigdy nie są nadpisywane – możesz je naprawić w edytorze tekstu (to zwykły JSON) albo odzyskać z kopii
+          zapasowej (Ustawienia → Folder i kopie{backupsDir ? `: ${backupsDir}` : ''}).
         </p>
       </div>
     </div>

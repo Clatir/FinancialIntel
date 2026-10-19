@@ -8,16 +8,16 @@ import type { SettingsFile } from '@shared/schema'
 import type { Collection } from '@shared/paths'
 import { api, errorMessage } from '../../lib/api'
 import { plural } from '../../lib/format'
-import { adoptSettings, canWrite, deleteRecords, flushSaves, useData } from '../../store/data'
+import { adoptSettings, canWrite, deleteRecords, saveFirst, useData } from '../../store/data'
 import { toast } from '../../store/ui'
-
-const UNSAVED = 'Nie udało się zapisać bieżących zmian – spróbuj ponownie za chwilę.'
 
 /** The chosen records (and the settings) of the backup made current; false = nothing written. */
 export async function recoverFromBackup(preview: BackupPreview, picks: readonly BackupDiffItem[], settings: boolean): Promise<boolean> {
   if (!canWrite()) return false
-  if (!(await flushSaves())) {
-    toast(UNSAVED, 'error', 7000)
+  try {
+    await saveFirst('odzyskanie z kopii')
+  } catch (e) {
+    toast(errorMessage(e), 'error', 8000)
     return false
   }
   // What the recovery replaces, as saved (the saves are flushed): „Cofnij” writes it back.
@@ -54,8 +54,8 @@ const keyOf = (i: Pick<BackupDiffItem, 'collection' | 'id'>) => `${i.collection}
  * a record that came back from deletion is deleted again.
  */
 async function undoRecover(items: readonly BackupDiffItem[], previous: ReadonlyMap<string, unknown>, previousFi: SettingsFile | null): Promise<void> {
-  if (!(await flushSaves())) return toast(UNSAVED, 'error', 7000)
   try {
+    await saveFirst('cofnięcie')
     const back = items.flatMap((i) => {
       const record = i.change === 'changed' ? previous.get(keyOf(i)) : null
       return record ? [{ collection: i.collection, record }] : []

@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa P** (1.6.4 – operacje, edytor,
-szybki wpis) na gałęzi `claude/grupa-p-1.6.4`, PR do `main`; po niej od razu Q, R (niskie pozycje przeglądu) i funkcje
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa Q** (1.6.5 – folder, system, dwa
+komputery) na gałęzi `claude/grupa-q-1.6.5`, PR do `main`; po niej od razu R (niskie pozycje przeglądu) i funkcje
 S, T, U, V – każda grupa z własnym PR i wydaniem (D71).
-**1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**1.6.4 scalone** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,9 +12,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa P → scalenie po zielonym CI → wydanie 1.6.4 → od razu grupa Q (D87). Po wznowieniu
+**Następny krok:** grupa Q → scalenie po zielonym CI → wydanie 1.6.5 → od razu grupa R (D87). Po wznowieniu
 pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.6.4 – listy w sekcjach niżej.
+aplikacji: 1.5.0–1.6.5 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -53,15 +53,15 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **M** | 1.6.1 Liczby, plan, raporty, Mostek: B61–B63, B65, B84, B85, B92, B126–B128, N22–N28, N30, N52, N54, N56, N59, N63, N65, N66, N101–N103, W28–W30, W38 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.1 | ✅ D87 | ✅ wydane (PR #23) |
 | **N** | 1.6.2 Gra, ICTTJ, domownicy, cele, kreator: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.2 | ✅ D87 | ✅ wydane (PR #24) |
 | **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.3 | ✅ D87 | ✅ wydane (PR #25) |
-| **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ PR do `main` |
-| **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.5 | ✅ D87 | czeka |
+| **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ scalone (PR #26) |
+| **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 | ✅ D87 | ✅ PR do `main` |
 | **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **xhigh** (w ciągu na max) | plan ok. 1,5 h | 1.6.6 | ✅ D87 | czeka |
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | plan ok. 3 h | 1.7.0 | ✅ D87 | czeka |
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | czeka |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P** | | | **ok. 42,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q** | | | **ok. 44,5 h** | | | |
 | | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -690,6 +690,51 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.6.4, Windows):
    pokazuje.
 3. Ustawienia → Konta → „Potwierdź saldo” z różnicą: pytanie, „Dopiszę i potwierdzę później” zostawia wpisaną kwotę.
 4. Szybki wpis otwarty, w głównym oknie archiwizacja kategorii albo domownika – okno mówi, że lista się zmieniła.
+
+## Przed grupą Q – folder, system, dwa komputery (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa P scalona (1.6.4 – PR #26). Grupa Q (1.6.5): niskie pozycje przeglądu dotyczące
+   folderu danych, procesu głównego i dwóch komputerów – B67, B107–B117, B119–B124, N62, N91–N100, W37 (przyczyna
+   niezapisanych zmian, wpisy nowszej wersji, fi.json i config.json, kopie, obserwator, aktualizacje, Synchronizacja).
+   Format folderu bez zmian. B110, B117 i N93 poprawione już wcześniej (W23 w 1.4.3, B31 w 1.5.3, `CLOCK_AHEAD_MS` w
+   1.5.3) – tylko odhaczone.
+2. **Co użytkownik musi powiedzieć** – ✅ D87. Wybory z przeglądu: B67 – zmiana wpisu nowszej wersji zostaje w oknie z
+   komunikatem (bez pętli prób), kroki wymagające zapisu na nią nie czekają; B115 – podfolder na folder danych (stare
+   kopie zostają na miejscu); N100 – start z Windows pytany raz banerem na komputerze z działającym budżetem; zapisane
+   jako T-decyzje do zmiany na życzenie.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2 h.
+
+## 1.6.5 – folder, system, dwa komputery (grupa Q, 19.10.2026)
+
+Zakres: „Przed grupą Q” wyżej. Zrobione:
+- Wpisy nowszej wersji (T246): `NewerFileError` bez pętli prób, edytory kontenera, celu, pożyczki i planu tylko do
+  obejrzenia z dopiskiem, usunięcie bez znikania, zmiany zbiorcze liczą je osobno, gra i plan nie tworzą wpisu na pliku
+  nowszej wersji.
+- Przyczyna niezapisanych (T247): zamknięcie pyta według przyczyny (decyzja z drugiego komputera – okno decyzji za
+  pytaniem), `saveFirst` w kopii, eksporcie, imporcie, cofnięciu, odzyskaniu, aktualizacji i zmianie folderu, `unsavedNote`
+  po imporcie i kreatorze, jedno `saveNow` dla Ctrl+S i palety.
+- fi.json (T248): zmiany folderu obok zapisu ustawień od razu w oknie, „Weź ustawienia z historii”, ponowienie
+  nieczytelnego co 30 s.
+- Folder i kopie (T249): odmowa usunięcia przy drugiej kopii i bez historii, obserwator z odstępami do 5 min i logiem raz
+  na godzinę, podfolder kopii na folder danych, rotacja tylko nazw FI, kopia nie w ICTTJ, „niedostępny” bez listowania,
+  ostrzeżenie i powiadomienie o nieudanych kopiach, eksport z historią.
+- config.json (T250): nigdy nie nadpisany domyślnymi; zmiany z chwili nieczytelności dochodzą pole po polu.
+- System (T251): pobrana aktualizacja nie przepada, tekst instalacji przy zasobniku i powiadomienie, kreator bez skrótu i
+  zasobnika, baner startu z Windows, okna po awarii, maksymalizacja, dymek zasobnika, migawka po przeładowaniu.
+- Synchronizacja (T252): nazwy pól i nazw zamiast identyfikatorów, karta konfliktu jak Historia, akcje plików z
+  problemem z potwierdzeniem, znacznik zachowanej kopii, „Zaakceptuj nowsze”.
+- Przegląd `/code-review` high: 9 kandydatów – 8 poprawionych, 1 bez zmian (T253).
+- Testy: 652 unit + fs (nowe `tests/fs/folder-q.test.ts`; poszerzone `data-store`, `backup`, `config`, `datastore`,
+  `updater`, `watch`, `merge`, `system`; każda poprawka i każde znalezisko przeglądu sprawdzone mutacją – 31 mutacji, test
+  pada bez poprawki; mutacje wykryły błąd logu obserwatora – każdy błąd zamiast raz na godzinę), E2E 52 (nowy
+  `folder-q.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.6.5, Windows):
+1. Edycja tej samej operacji tutaj i na drugim komputerze, „Później” w oknie zmian, potem zamknięcie aplikacji z menu
+   zasobnika – pytanie „Zdecyduj o zmianach z drugiego komputera”, „Anuluj” zostawia okno decyzji.
+2. Ustawienia → Folder i kopie z własnym folderem kopii: nowy podfolder z nazwą folderu danych; stare kopie na miejscu.
+3. Ustawienia → Aktualizacje przy zamykaniu do zasobnika: „zainstaluje się po „Zakończ” w menu ikony…”.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 

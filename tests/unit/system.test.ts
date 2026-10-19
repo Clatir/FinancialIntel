@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { windowBounds } from '@shared/bounds'
 import { DEFAULT_QUICK_SHORTCUT, altGrConflict, machinePrefsFrom } from '@shared/machine'
+import { SAVED, unsavedQuestion } from '@shared/unsaved'
 
 describe('system (1.5.3, grupa J)', () => {
   it('skrót Ctrl+Alt+litera polskiego znaku to AltGr – nie do ustawienia, ustawiony wraca do domyślnego (B29)', () => {
@@ -33,5 +34,20 @@ describe('system (1.5.3, grupa J)', () => {
     expect(windowBounds({ x: 1880, y: 100, width: 1600, height: 1000 }, [primary], primary)).toEqual({ width: 1600, height: 1000 })
     expect(windowBounds({ x: 100, y: -20, width: 1600, height: 1000 }, [primary], primary)).toEqual({ width: 1600, height: 1000 })
     expect(windowBounds(null, [primary], primary)).toEqual({ width: 1440, height: 900 })
+  })
+})
+
+describe('pytanie przy zamykaniu z niezapisanymi zmianami (1.6.5, B108, B67)', () => {
+  it('przyczyna: decyzja o zmianach z drugiego komputera, błąd zapisu, wpis nowszej wersji', () => {
+    const waiting = unsavedQuestion({ saved: false, waiting: 2, newer: 0, error: null })
+    expect(waiting.message).toBe('Zdecyduj o zmianach z drugiego komputera (2).')
+    expect(waiting.detail).not.toMatch(/zablokowany/)
+    const failed = unsavedQuestion({ saved: false, waiting: 0, newer: 1, error: 'EBUSY: plik zablokowany.' })
+    // A write that may still work goes first – and says its reason once, without a doubled full stop.
+    expect(failed.detail).toMatch(/^Powód: EBUSY: plik zablokowany\. Folder danych może być niedostępny/)
+    const newer = unsavedQuestion({ saved: false, waiting: 0, newer: 1, error: null })
+    expect(newer.detail).toMatch(/nowsza wersja aplikacji/)
+    expect(newer.detail).toMatch(/Zaktualizuj aplikację/)
+    expect(SAVED.saved).toBe(true)
   })
 })

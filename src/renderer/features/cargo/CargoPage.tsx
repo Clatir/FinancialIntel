@@ -5,7 +5,8 @@ import { sum } from '@shared/calc/operations'
 import { monthlyShare, recurringPayments, simulateCargo, type CargoSimulation } from '@shared/calc/plan'
 import { rangeText } from '@shared/format'
 import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/schema'
-import { useData, useFolderLocked } from '../../store/data'
+import { useData, useEntryNewer, useFolderLocked } from '../../store/data'
+import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
@@ -310,8 +311,11 @@ function NewContainer({ draft, setDraft, sim, limitPct, onAdded }: { draft: Cont
   )
 }
 
-function ContainerEditor({ c, status, readOnly, onDeleted, sim }: { c: Container; status: CargoStatus | undefined; readOnly: boolean; onDeleted: () => void; sim: CargoSimulation }) {
+function ContainerEditor({ c, status, readOnly: folderLocked, onDeleted, sim }: { c: Container; status: CargoStatus | undefined; readOnly: boolean; onDeleted: () => void; sim: CargoSimulation }) {
   const paidDue = useFleet()?.tanks.find((t) => t.containerId === c.id)?.paidDue ?? null
+  // Written by a newer version of the app (B67): looked at, not changed here.
+  const newer = useEntryNewer('containers', c.id)
+  const readOnly = folderLocked || newer
   return (
     <Panel
       title={`Kontener: ${c.name}`}
@@ -334,6 +338,7 @@ function ContainerEditor({ c, status, readOnly, onDeleted, sim }: { c: Container
       }
     >
       <fieldset disabled={readOnly} className="flex flex-col gap-2">
+        <NewerNote show={newer} />
         {status && <ThisMonth c={c} s={status} />}
         <ContainerFields c={c} set={(p) => patchContainer(c.id, p)} saved paidDue={paidDue} />
         {c.counterparty.trim() && <LinkPayments c={c} />}

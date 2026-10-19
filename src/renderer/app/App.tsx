@@ -1,8 +1,7 @@
 // adapted from ICTTJ src/renderer/app/App.tsx @ 84a8339
 import { useEffect, type ReactNode } from 'react'
-import { boot, flushSaves, useData } from '../store/data'
-import { goBack, navigate, setPalette, toast, useUi, type Route } from '../store/ui'
-import { setRemoteDialog, useRemote } from '../store/remote'
+import { boot, saveNow, useData } from '../store/data'
+import { goBack, navigate, setPalette, useUi, type Route } from '../store/ui'
 import { initUpdates } from '../store/update'
 import { FolderSetup } from '../features/setup/FolderSetup'
 import { OpenProgressPanel, useOpenProgress } from '../features/setup/OpenProgress'
@@ -111,16 +110,8 @@ function useGlobalHotkeys(): void {
         navigate({ page: 'settings' })
       } else if (k === 's' && !e.shiftKey) {
         e.preventDefault()
-        if (useRemote.getState().pending.length) {
-          setRemoteDialog(true)
-          toast('Czekają zmiany z drugiego komputera – te wpisy zapiszą się po Twojej decyzji.', 'info', 5000)
-          return
-        }
-        void flushSaves().then((saved) =>
-          saved
-            ? toast('Zapisano. (Zapis jest automatyczny – Ctrl+S nie jest potrzebne.)', 'success', 2200)
-            : toast(`Nie udało się zapisać: ${useData.getState().save.error ?? 'błąd zapisu'}. Aplikacja ponowi zapis automatycznie.`, 'error', 6000)
-        )
+        // The palette's „Zapisz teraz” does the same (N62).
+        void saveNow()
       } else return
       // Every shortcut the app handled closes the palette.
       if (useUi.getState().paletteOpen) setPalette(false)

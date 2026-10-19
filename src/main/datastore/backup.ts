@@ -29,7 +29,19 @@ export function isDataFile(rel: string): boolean {
   return rel.endsWith('.json') && COLLECTIONS.some((c) => rel.startsWith(`${c}/`))
 }
 
-async function list(dir: string): Promise<Array<{ name: string; path: string; mtimeMs: number; bytes: number }>> {
+/**
+ * The names of this app's backups, by kind (B121): a folder of backups shared with another program (ICT Trade
+ * Journal's has the same subfolders) never has its files listed, taken back or removed by the rotation.
+ */
+const BACKUP_NAMES: Record<BackupInfo['kind'], RegExp> = {
+  daily: /^\d{4}-\d{2}-\d{2}\.zip$/,
+  weekly: /^\d{4}-W\d{2}\.zip$/,
+  manual: /^\d{4}-\d{2}-\d{2}_\d{6}\.zip$/,
+  'pre-import': /^\d{4}-\d{2}-\d{2}_\d{6}\.zip$/,
+  'pre-migration': /^\d{8}T\d{6}Z_v\d+-v\d+\.zip$/
+}
+
+async function list(dir: string, kind: BackupInfo['kind']): Promise<Array<{ name: string; path: string; mtimeMs: number; bytes: number }>> {
   let names: string[]
   try {
     names = await fs.readdir(dir)
@@ -37,7 +49,7 @@ async function list(dir: string): Promise<Array<{ name: string; path: string; mt
     return []
   }
   const out = []
-  for (const name of names.filter((n) => n.endsWith('.zip') && !n.startsWith('.'))) {
+  for (const name of names.filter((n) => BACKUP_NAMES[kind].test(n))) {
     try {
       const st = await fs.stat(join(dir, name))
       out.push({ name, path: join(dir, name), mtimeMs: st.mtimeMs, bytes: st.size })
@@ -48,8 +60,8 @@ async function list(dir: string): Promise<Array<{ name: string; path: string; mt
   return out.sort((a, b) => (a.name < b.name ? 1 : -1))
 }
 
-async function rotate(dir: string, keep: number): Promise<void> {
-  for (const old of (await list(dir)).slice(keep)) await fs.rm(old.path, { force: true })
+async function rotate(dir: string, kind: BackupInfo['kind'], keep: number): Promise<void> {
+  for (const old of (await list(dir, kind)).slice(keep)) await fs.rm(old.path, { force: true })
 }
 
 /** A copy of a backup under another name, atomically. */
@@ -78,13 +90,13 @@ export async function runBackups(source: DataSource, backupsDir: string, now = n
   const weeklyDir = join(backupsDir, 'weekly')
   const name = `${day.toISODate()}.zip`
   const file = join(dailyDir, name)
-  const dailies = await list(dailyDir)
+  const dailies = await list(dailyDir, 'daily')
   let made: string | null = null
   if (!dailies.some((f) => f.name === name)) {
     await source.zipData(file)
     made = file
   }
-  const weeklies = await list(weeklyDir)
+  const weeklies = await list(weeklyDir, 'weekly')
   if (!weeklies.length) {
     // Before the first weekly copy: the daily ones kept so far stand for their weeks.
     await fs.mkdir(weeklyDir, { recursive: true })
@@ -101,8 +113,8 @@ export async function runBackups(source: DataSource, backupsDir: string, now = n
     await fs.mkdir(weeklyDir, { recursive: true })
     await copyBackup(file, join(weeklyDir, weekOf(day)))
   }
-  await rotate(dailyDir, DAILY_KEEP)
-  await rotate(weeklyDir, WEEKLY_KEEP)
+  await rotate(dailyDir, 'daily', DAILY_KEEP)
+  await rotate(weeklyDir, 'weekly', WEEKLY_KEEP)
   return made
 }
 
@@ -111,7 +123,7 @@ async function datedBackup(source: DataSource, backupsDir: string, kind: 'manual
   const dir = join(backupsDir, kind)
   const file = join(dir, `${DateTime.fromJSDate(now).toFormat('yyyy-LL-dd_HHmmss')}.zip`)
   await source.zipData(file)
-  await rotate(dir, keep)
+  await rotate(dir, kind, keep)
   return file
 }
 
@@ -128,7 +140,7 @@ export function importBackup(source: DataSource, backupsDir: string, now = new D
 export async function listBackups(backupsDir: string): Promise<BackupInfo[]> {
   const out: BackupInfo[] = []
   for (const kind of ['daily', 'weekly', 'manual', 'pre-import', 'pre-migration'] as const) {
-    for (const f of await list(join(backupsDir, kind))) out.push({ ...f, kind })
+    for (const f of await list(join(backupsDir, kind), kind)) out.push({ ...f, kind })
   }
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs)
 }

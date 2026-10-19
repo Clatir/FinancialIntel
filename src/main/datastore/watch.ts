@@ -10,7 +10,11 @@ export interface WatcherOptions {
    * watcher, 30 s per directory (W21).
    */
   pollMs?: number
-  onError?: (e: unknown) => void
+  /**
+   * A failure of the watcher (B113): the first one, then at most one an hour – `repeated` = the failures since the last
+   * one reported.
+   */
+  onError?: (e: unknown, repeated: number) => void
   /**
    * 'native' = fs.watch({recursive}) (Windows ReadDirectoryChangesW, macOS FSEvents).
    * 'per-directory' = one non-recursive watcher per directory. Used on Linux, where Node's emulated
@@ -18,6 +22,12 @@ export interface WatcherOptions {
    */
   mode?: 'native' | 'per-directory'
 }
+
+const RESTART_FIRST_MS = 5000
+const RESTART_MAX_MS = 5 * 60_000
+/** A watcher that ran this long before failing starts the waits from the first again. */
+const STABLE_MS = 60_000
+const REPORT_EVERY_MS = 60 * 60_000
 
 /**
  * Watches the data folder recursively. Calls `onChange(paths)` with relative paths after a debounce (`dir/` = check
@@ -32,9 +42,15 @@ export class FolderWatcher {
   private timer: NodeJS.Timeout | null = null
   private poll: NodeJS.Timeout | null = null
   private restart: NodeJS.Timeout | null = null
+  /** The next restart's wait (B113): 5 s, doubled up to 5 min while the folder stays away. */
+  private restartMs = RESTART_FIRST_MS
+  private attachedAt = 0
+  /** Failures not reported yet, and when one was reported last (B113: one an hour). */
+  private unreported = 0
+  private reportedAt = 0
   private readonly debounceMs: number
   private readonly pollMs: number
-  private readonly onError?: (e: unknown) => void
+  private readonly onError?: (e: unknown, repeated: number) => void
   readonly mode: 'native' | 'per-directory'
 
   constructor(
@@ -73,6 +89,7 @@ export class FolderWatcher {
 
   private attachNative(): void {
     try {
+      this.attachedAt = Date.now()
       this.native = watch(this.root, { recursive: true }, (event, filename) => {
         if (!filename) {
           this.full = true
@@ -91,6 +108,7 @@ export class FolderWatcher {
     if (rel && isIgnoredPath(rel)) return
     if (!this.dirWatchers.has(dir)) {
       try {
+        if (dir === this.root) this.attachedAt = Date.now()
         const w = watch(dir, (event, filename) => {
           if (!filename) {
             this.full = true
@@ -133,7 +151,16 @@ export class FolderWatcher {
   }
 
   private failed(e: unknown): void {
-    this.onError?.(e)
+    // A folder away for weeks (a drive unplugged – B113): the log gets the first failure, then one an hour with their
+    // number – never one every few seconds.
+    this.unreported++
+    // A watcher that ran a while failed anew: a new outage – logged at once, as the first one.
+    const stable = !!this.attachedAt && Date.now() - this.attachedAt >= STABLE_MS
+    if (!this.reportedAt || stable || Date.now() - this.reportedAt >= REPORT_EVERY_MS) {
+      this.onError?.(e, this.unreported - 1)
+      this.unreported = 0
+      this.reportedAt = Date.now()
+    }
     this.native?.close()
     this.native = null
     for (const w of this.dirWatchers.values()) w.close()
@@ -141,12 +168,21 @@ export class FolderWatcher {
     this.full = true
     this.schedule()
     if (this.restart || this.stopped) return
+    // A watcher that ran a while failed anew: the waits start over; one failing at once – each wait twice the last.
+    if (this.attachedAt && Date.now() - this.attachedAt >= STABLE_MS) this.restartMs = RESTART_FIRST_MS
+    const wait = this.restartMs
+    this.restartMs = Math.min(this.restartMs * 2, RESTART_MAX_MS)
     this.restart = setTimeout(() => {
       this.restart = null
       if (this.stopped) return
       if (this.mode === 'native') this.attachNative()
       else void this.watchTree(this.root)
-    }, 5000)
+    }, wait)
+  }
+
+  /** The next restart's wait (tests). */
+  get nextRestartMs(): number {
+    return this.restartMs
   }
 
   private schedule(): void {
