@@ -1,18 +1,15 @@
 import { useState } from 'react'
-import { TX_KIND_LABEL, type BrandAlias, type ImportRule, type TxKind } from '@shared/schema'
+import type { BrandAlias } from '@shared/schema'
 import { useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { countLabel } from '../../lib/format'
 import { IconPlus } from '../../components/icons'
 import { Panel, TextField } from '../../components/ui'
 import { KeywordRules } from '../import/KeywordRules'
-import { clearDismissedSimilar, deleteRule, inactiveAlias, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
-import { useAccounts, useCategories } from '../operations/pickers'
-import { useMembers } from '../household/actions'
-import { shareNames } from '../household/ShareEditor'
-import { memberName } from '@shared/calc/household'
+import { RecentImports } from '../import/RecentImports'
+import { MixedBrandsPanel, RulesPanel, useRuleAudit } from '../import/RulesAudit'
+import { clearDismissedSimilar, inactiveAlias, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
 
-const NO_RULES: ImportRule[] = []
 const NO_NAMES: string[] = []
 const NO_ALIASES: Record<string, BrandAlias> = {}
 const NO_DISMISSED: Record<string, string> = {}
@@ -95,49 +92,18 @@ function MergedNames() {
  * and the account holder's names (own transfers).
  */
 export function ImportTab() {
-  const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const names = useData((s) => s.fi?.settings.import.ownNames ?? NO_NAMES)
-  const cats = useCategories()
-  const accounts = useAccounts()
-  const members = useMembers()
   const [name, setName] = useState('')
-  const decision = (r: ImportRule) => {
-    const kind = TX_KIND_LABEL[r.kind as TxKind] ?? r.kind
-    if (r.kind === 'expense')
-      return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)}` : r.share ? `wspólnie: ${shareNames(r.share, members)}` : kind}${r.categoryId ? ` · ${cats.label(r.categoryId)}` : ''}`
-    if (r.kind === 'income' && r.household) return `od domownika: ${memberName(r.memberId, members)}`
-    if (r.kind === 'transfer') return `${kind}${r.counterAccountId ? ` · ${accounts.find((a) => a.id === r.counterAccountId)?.name ?? '?'}` : ''}`
-    return kind
-  }
-  const sorted = rules.filter((r) => r.mode !== 'keyword').sort((a, b) => b.hits - a.hits || a.label.localeCompare(b.label))
+  // The rules' audit (F22): counted once for both panels.
+  const { audit, progress } = useRuleAudit()
   return (
     <>
-      <Panel title="Reguły importu">
-        <p className="mb-2 text-[11.5px] text-muted">
-          Powstają z Twoich decyzji przy imporcie z mBanku („zapamiętaj”, „Przyjmij pewne”) i z przycisku „Zapamiętaj” w Operacjach – dla marki: sieć w
-          każdym mieście to jedna reguła. Kategoria mBanku nie tworzy reguł – jest tylko podpowiedzią. Usunięta reguła wróci, gdy znów zdecydujesz za
-          kontrahenta.
-        </p>
-        {sorted.length === 0 && <span className="text-[11.5px] text-dim">Brak reguł – pojawią się po pierwszym imporcie.</span>}
-        <div className="flex flex-col" data-testid="import-rules">
-          {sorted.map((r) => (
-            <div key={r.id} className="grid grid-cols-[minmax(0,1.2fr)_70px_minmax(0,1.5fr)_70px_auto] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="import-rule">
-              <span className="truncate text-fg-strong" title={`klucz: ${r.match}${r.mode === 'contains' ? ' (zawiera)' : ''}`}>
-                {r.label || r.match}
-              </span>
-              <span className="text-muted">{r.direction === 'in' ? 'wpływy' : r.direction === 'out' ? 'wydatki' : 'oba'}</span>
-              <span className="truncate text-muted">{decision(r)}</span>
-              <span className="num text-right text-dim">{r.hits}×</span>
-              <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => deleteRule(r.id)} data-testid="import-rule-delete">
-                usuń
-              </button>
-            </div>
-          ))}
-        </div>
-      </Panel>
+      <RulesPanel audit={audit} progress={progress} />
+      <MixedBrandsPanel audit={audit} />
       <Panel title="Słowa kluczowe">
         <KeywordRules />
       </Panel>
+      <RecentImports />
       <MergedNames />
       <Panel title="Twoje nazwiska w banku">
         <p className="mb-2 text-[11.5px] text-muted">

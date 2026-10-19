@@ -172,7 +172,13 @@ export const importRuleSchema = z.looseObject({
    * word may go on – „cukierni” = cukiernia). An older version ignores a mode it does not know.
    */
   match: z.string().min(1).max(200),
-  mode: openEnum(['exact', 'contains', 'keyword'] as const).default('exact'),
+  /**
+   * 'amount' (1.5.1, F22): the brand key as 'exact', for an operation up to `maxAmount` – before the brand's 'exact' one
+   * („Orlen do 40 zł → kawa”, the rest „paliwo”); an older version ignores it and takes the brand's plain rule.
+   */
+  mode: openEnum(['exact', 'contains', 'keyword', 'amount'] as const).default('exact'),
+  /** The 'amount' rule's limit: the operation's amount up to it (grosze, without the sign). */
+  maxAmount: z.number().int().positive().nullable().optional().catch(undefined),
   /** Money in or out; null = both. */
   direction: openEnum(['in', 'out'] as const).nullable().default(null),
   /** The counterparty as the bank writes it (for the list of rules). */
@@ -237,6 +243,11 @@ export const importSettingsSchema = z.looseObject({
    * merge key by key (an array would be one conflicting field).
    */
   log: z.record(isoDateTime, ulidSchema).catch({}).default({}),
+  /**
+   * The bank's account number of each account's files (1.5.1, F4): a file of another account is said before it is
+   * imported. The last imported one (a new account at the bank says it once).
+   */
+  accountNumbers: lenientRecord(z.string().max(80)),
   /**
    * Groups of operations the user said are no duplicates (`duplicateKey` / `rowKey` → when, 1.2.1): not offered again.
    * One bad entry (a hand-edited fi.json) drops itself, not the others.

@@ -1,18 +1,18 @@
 # Financial Intel – postęp
 
-**Stan:** grupa G (1.5.0 – domownicy, ICTTJ i dokowanie) zrobiona na gałęzi `claude/grupa-g-1.5.0` – PR, CI, scalenie
-(D71) i wydanie w toku; potem grupa H (1.5.1, import) według „Przed grupą H” niżej (D84 A1: E–H jednym ciągiem), po H
-pauza (D67). **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik
-zamknięcia okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
+**Stan:** grupa H (1.5.1 – import z mBanku) zrobiona na gałęzi `claude/grupa-h-1.5.1` – PR, CI, scalenie (D71) i
+wydanie w toku; po H **pauza** (D67) – grupy E–H z D84 (A1) są zamknięte. **1.5.0 wydane** (PR #17), **1.4.3 wydane**
+(PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia okna), **1.4.2 wydane**
+(PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
 **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu i wydaniu 1.5.0 grupa H według „Przed grupą H” niżej, po niej pauza (D67). Dwa pytania
-czekają na odpowiedź użytkownika (w „Przed grupą H”): reszta prezentu bez zaliczki i słowo kluczowe z tytułu wobec wpłaty
-domownika (B41 część 1). Odbiór 1.4.1 na drugim komputerze i 1.3.0 / 1.4.0 / 1.4.2 / 1.4.3 w aplikacji nadal aktualny;
-po 1.5.0 – babcia i dziadek, konto „Gotówka”, pierwszy wspólny wydatek, dokowanie najbliższej wypłaty z ICTTJ (punkt
-kontrolny bez przerwy w pracy – D84).
+**Następny krok:** pauza – czekam na komendę użytkownika (D67). Dwa pytania z „Przed grupą H” nadal bez odpowiedzi
+(wdrożona propozycja albo nic do czasu odpowiedzi): reszta prezentu bez zaliczki i słowo kluczowe z tytułu wobec wpłaty
+domownika (B41 część 1). Do sprawdzenia w aplikacji: 1.5.0 (domownicy, „Gotówka”, wspólne wydatki, dokowanie) i 1.5.1
+(„Cofnij import”, telemetria z banku, oficer, audyt reguł) – listy w sekcjach niżej. Dalsze pozycje przeglądu po 1.4.1
+(`docs/przeglad/README.md`: grupy I i dalej – nakład i model w tabeli) po wyborze użytkownika.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -42,10 +42,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | Przegląd | Przegląd całej aplikacji po 1.4.1: 10 obszarów × 3 soczewki (błędy, niespójności, wydajność), weryfikacja każdego znaleziska, pomiary na 30 tys. i 150 tys. operacji, brakujące funkcje (`docs/przeglad/`) | Opus 5.5 | **ultracode** | ok. 3 h (zegar sesji, bez przerwy na limit tygodniowy) | – | ✅ prośba, model i skala (150 tys.) | ✅ raport, PR #13 |
 | **E** | 1.4.2 Pieniądze i dane się zgadzają: B1–B5, B6, B9–B11, B13, B24, B30, B32, B42–B51, B55, B56, N1 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z przeglądem i E2E; plan był 4–5 h) | 1.4.2 | ✅ D84 (C1–C3) | ✅ wydane (PR #14) |
 | **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, W26, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z pomiarami 30 / 150 tys., przeglądem i E2E; plan był 3–5 h) | 1.4.3 | ✅ D84 (C4) | ✅ wydane (PR #15, poprawka PR #16) |
-| **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 3–4 h) | 1.5.0 | ✅ D83 | ✅ zrobione – PR, CI, scalenie |
-| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | ok. 2–3 h (plan był 3–5 h; E–G zajęły po 1,5–2 h) | 1.5.1 | ✅ D84 (C11) | ⏳ po G |
+| **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 3–4 h) | 1.5.0 | ✅ D83 | ✅ wydane (PR #17) |
+| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.1 | ✅ D84 (C11) | ✅ zrobione – PR, CI, scalenie |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G** | | | **ok. 29 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H** | | | **ok. 31,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -303,6 +303,37 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.5.0, Windows – bez przerwy w p
 3. **Co przygotować** – nic przed startem; po wydaniu 1.5.1: zwykły import z mBanku (sprawdzić „Cofnij import” i saldo z
    pliku), przejrzeć listę reguł w Ustawieniach → Import z banku.
 4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2–3 h (plan był 3–5 h; grupy E, F i G zajęły po 1,5–2 h).
+
+## 1.5.1 – import z mBanku (grupa H, 19.10.2026)
+
+Zakres: poprawki z przeglądu po 1.4.1 – B34–B39, N12–N16 – i funkcje F4, F5, F8, F22 („Przed grupą H” wyżej). Zrobione:
+- Import (B34–B39, T166): przelew od osoby z otwartą pożyczką z Radaru – jej zwrot (opcje pożyczek Radaru w decyzjach);
+  plik zaimportowany najpierw na złe konto – operacje się przenoszą, nie wchodzą drugi raz (klucz wiersza zależy od
+  konta; dwa rachunki banku z różnymi numerami – dwie operacje); „Nie łącz” – wiersz z rozpoznaniem; „Ustaw” bez
+  kategorii niedostępne, wydatek bez kategorii nie uczy reguły; podgląd od nowa po zmianie nazwisk, kategorii, kontenerów,
+  pożyczek i operacji, przed zapisem sprawdzony jeszcze raz; temat zachowuje decyzję.
+- Sesja importu (N12–N16, T167): zamknięcie i inny plik z „Cofnij”, zapis bez zmian, pożyczka / PIT-38 / XTB nie
+  regułą, „Zapamiętaj” po nazwie z banku, propozycja reguły na słowo z całą decyzją.
+- „Cofnij import” (F4, T168): paczka każdego importu (`imports/`, dziesięć ostatnich), cofnięcie od ostatniego z oknem „co
+  się stanie” i „Cofnij” w toaście, ponowny import wczytuje wszystko, operacje cofniętego importu do odzyskania z listy
+  usuniętych, ostrzeżenie o pliku z innego rachunku i o pliku już zaimportowanym.
+- Telemetria z banku (F5, T169, C11): historia rachunku – saldo potwierdzone samo, gdy FI się zgadza; inaczej dzień
+  rozbieżności i jej przyczyny (brak w FI, nadmiar w FI, inna kwota, różnica sprzed pliku, luki w pliku).
+- Oficer (F8, T170): marka, reguły importu i słownik sieci – szybki wpis i edytor operacji.
+- Audyt reguł (F22, T171): wyszukiwarka, trafienia dziś, zmiana reguły, niespójne operacje z „Zastosuj do historii”,
+  reguły bez trafień, marki z kilkoma kategoriami i reguła z progiem kwoty.
+- Przegląd `/code-review` high: 10 kandydatów, wszystkie poprawione (T172).
+- Testy: 504 unit + fs (nowe `import-batch`, `import-statement`, `officer`, `rules-audit`, grupa H w `import.test.ts`,
+  powody `undo` / `drop` w `tests/fs/history.test.ts`), E2E 28 (nowy `tests/e2e/import-tools.spec.ts`). Poprawki z
+  przeglądu z testem sprawdzonym bez nich (padają).
+
+Nie zrobione – czeka na decyzję użytkownika: B41 część 1 i reszta prezentu bez zaliczki („Przed grupą H”).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.5.1, Windows):
+1. Zwykły import z mBanku, potem „Cofnij import” na ekranie wyniku – i „Cofnij” w toaście; ten sam plik jeszcze raz.
+2. Historia rachunku (CSV z saldami) – panel „Telemetria z banku”: zgodne saldo potwierdzone samo albo dzień rozbieżności.
+3. Szybki wpis: kontrahent wpisany jak w życiu („Biedronka”, „Orlen”) – podpowiedź oficera.
+4. Ustawienia → Import z banku: reguły z liczbą trafień, „niespójne”, „zmień”, marki z kilkoma kategoriami.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 

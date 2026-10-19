@@ -32,7 +32,7 @@ const row = (over: Partial<MbankRow>): MbankRow => ({
   ...over
 })
 const file = (rows: MbankRow[]): MbankFile => ({ format: 'lista', client: null, account: null, period: null, rows, skipped: [] })
-const empty = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {} })
+const empty = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {}, moveHere: {} })
 
 describe('import: wpis ręczny nie wchodzi drugi raz (D77)', () => {
   it('możliwy duplikat: ta sama kwota pod inną nazwą albo prawie ta sama przy podobnej – łączony, oznaczony', () => {

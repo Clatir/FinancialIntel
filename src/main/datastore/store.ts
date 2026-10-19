@@ -1340,14 +1340,18 @@ export class DataStore {
     })
   }
 
-  /** Many records deleted at once (an import's, duplicates – W1): one change set; a record that fails says why. */
-  deleteRecords(collection: Collection, ids: readonly string[]): Promise<{ results: Array<{ id: string; error?: string }>; change: ChangeSet | null }> {
+  /**
+   * Many records deleted at once (an import's, duplicates – W1): one change set; a record that fails says why. `reason`
+   * 'undo': taken back with its import (F4) – its last version in the history is no deletion by the user (T39); 'drop':
+   * no version kept (old batches of `imports`).
+   */
+  deleteRecords(collection: Collection, ids: readonly string[], reason: 'delete' | 'undo' | 'drop' = 'delete'): Promise<{ results: Array<{ id: string; error?: string }>; change: ChangeSet | null }> {
     return this.mutex.run(async () => {
       this.assertWritable()
       const results: Array<{ id: string; error?: string }> = []
       for (const id of ids) {
         try {
-          await this.removeRecord(collection, id)
+          await this.removeRecord(collection, id, reason)
           results.push({ id })
         } catch (e) {
           results.push({ id, error: (e as Error).message })
@@ -1358,11 +1362,11 @@ export class DataStore {
   }
 
   /** One record deleted (inside the queue); false = not there. */
-  private async removeRecord(collection: Collection, id: string): Promise<boolean> {
+  private async removeRecord(collection: Collection, id: string, reason: 'delete' | 'undo' | 'drop' = 'delete'): Promise<boolean> {
     const state = this.currentState(collection, id)
     if (!state) return false
     if (state.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
-    const kept = await this.history.snapshot(collection, state.record as AnyRecord, 'delete')
+    const kept = reason === 'drop' ? null : await this.history.snapshot(collection, state.record as AnyRecord, reason)
     try {
       await this.opts.trash(this.abs(state.relPath))
     } catch (e) {

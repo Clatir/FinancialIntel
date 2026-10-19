@@ -61,6 +61,25 @@ describe('historia zmian wpisów (.history/)', () => {
     ])
   })
 
+  it('usunięcie przy cofnięciu importu (F4): na liście usuniętych z powodem „undo” (import go nie blokuje – T39); stara paczka importu bez wersji', async () => {
+    const store = await freshStore()
+    const undone = sampleTransaction({ note: 'z importu' })
+    const mine = sampleTransaction({ note: 'moja', date: '2026-03-12' })
+    await store.saveRecord('transactions', undone)
+    await store.saveRecord('transactions', mine)
+    const { results } = await store.deleteRecords('transactions', [undone.id], 'undo')
+    expect(results).toEqual([{ id: undone.id }])
+    await store.deleteRecords('transactions', [mine.id])
+    expect((await store.historyDeleted('transactions')).map((d) => [d.id, d.reason]).sort()).toEqual([[mine.id, 'delete'], [undone.id, 'undo']].sort())
+    expect((await store.historyList('transactions', undone.id)).map((e) => e.reason)).toEqual(['undo'])
+    expect((await store.snapshot()).records.transactions).toHaveLength(0)
+    // An old batch of the imports dropped: nothing kept.
+    const batch = sampleTransaction({ note: 'paczka' })
+    await store.saveRecord('transactions', batch)
+    await store.deleteRecords('transactions', [batch.id], 'drop')
+    expect(await store.historyList('transactions', batch.id)).toEqual([])
+  })
+
   it('usunięty wpis można przywrócić; przywrócenie odkłada bieżącą wersję', async () => {
     const store = await freshStore()
     const t = sampleTransaction({ note: 'oryginał' })

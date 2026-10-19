@@ -406,3 +406,52 @@ export const gameMonthSchema = z.looseObject({
   achievements: z.array(z.looseObject({ id: z.string().max(60), at: isoDateTime, day: isoDate.nullable().default(null) })).default([])
 })
 export type GameMonth = z.infer<typeof gameMonthSchema>
+
+// ------------------------------------------------------------------ imports of the bank's files (1.5.1)
+
+/** What of the settings an import set, before and after it (each one goes back only when nothing changed it since). */
+export const importBatchSettingsSchema = z.looseObject({
+  /** The account's last import (`settings.import.lastImport`). */
+  lastImport: isoDateTime.nullable().catch(null).default(null),
+  /** The last day the account's files cover (`settings.import.coveredTo`). */
+  coveredTo: isoDate.nullable().catch(null).default(null),
+  /** The bank's account number of the account's files (`settings.import.accountNumbers`). */
+  accountNumber: z.string().max(80).nullable().catch(null).default(null),
+  /** The members' inflows the import remembered (`HouseholdMember.inflow`, D80 b). */
+  inflows: z.record(ulidSchema, z.string().max(20)).catch({}).default({})
+})
+export type ImportBatchSettings = z.infer<typeof importBatchSettingsSchema>
+
+/**
+ * One import of a bank's file (F4 „Cofnij import”): what it wrote – the operations it created, the versions of the ones
+ * it changed before and after it, the ones it deleted, the rules before and after it, the settings before and after it –
+ * so it can be taken back as a whole. The last ten are kept.
+ */
+export const importBatchSchema = z.looseObject({
+  ...recordBase,
+  /** When the import ran (its operations' `bank.importedAt`, the key of `settings.import.log`). */
+  at: isoDateTime,
+  /** When its records were written: an operation changed after it is the user's work. */
+  savedAt: isoDateTime,
+  accountId: ulidSchema,
+  fileName: z.string().max(300).catch('').default(''),
+  period: z.object({ from: isoDate, to: isoDate }).nullable().catch(null).default(null),
+  counts: z.record(z.string(), z.number()).catch({}).default({}),
+  /** The operations it created. */
+  created: lenientList(ulidSchema).catch([]).default([]),
+  /** The operations it changed (merged, settled, moved to the account): each one before and after it. */
+  updated: lenientList(z.object({ before: transactionSchema, after: transactionSchema })).catch([]).default([]),
+  /** The operations it deleted (pending ones the bank dropped). */
+  removed: lenientList(transactionSchema).catch([]).default([]),
+  /** The rules it learned or changed: each one before (null = new) and after it, as written. */
+  rules: lenientList(z.object({ id: z.string().max(60), before: z.looseObject({}).nullable(), after: z.looseObject({}).nullable() })).catch([]).default([]),
+  before: importBatchSettingsSchema.prefault({}),
+  after: importBatchSettingsSchema.prefault({}),
+  /** The holder's name (`#Klient`) it added to `settings.import.ownNames`. */
+  ownName: z.string().max(120).nullable().catch(null).default(null),
+  /** The balance confirmed by the file's balances (F5): goes with it. */
+  confirmations: lenientList(ulidSchema).catch([]).default([]),
+  /** When it was taken back (null = it stands). */
+  undoneAt: isoDateTime.nullable().catch(null).default(null)
+})
+export type ImportBatch = z.infer<typeof importBatchSchema>

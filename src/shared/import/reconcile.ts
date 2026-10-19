@@ -18,8 +18,8 @@ import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, isFeeOperation, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
-import { rowKeys, type MbankFile, type MbankRow } from './mbank'
+import { classifyRow, counterpartyKey, isFeeOperation, PER_OPERATION_KINDS, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
+import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 
 /** Days around the bank's date a manual entry may be (spec: ±3). */
 export const MATCH_DAYS = 3
@@ -98,9 +98,16 @@ const wordSets = new Map<string, Set<string>>()
 export type RowPlan =
   /**
    * Imported before; `settled` = it was pending and is settled now (the mark goes); `other` = from the other format of
-   * the file (the list of operations ↔ the account history, B5) – its key joins the operation's.
+   * the file (the list of operations ↔ the account history, B5) – its key joins the operation's; `moved` = moved to this
+   * account from the one it was imported to (B35) – it takes this account's key.
    */
-  | { status: 'known'; row: MbankRow; key: string; tx: Transaction; settled: boolean; other?: boolean }
+  | { status: 'known'; row: MbankRow; key: string; tx: Transaction; settled: boolean; other?: boolean; moved?: boolean }
+  /**
+   * Imported before onto another account of the budget (B35: the file of this account imported there by mistake, or the
+   * operation moved there): never a second operation – moved here when the user says so (`ImportChoices.moveHere`;
+   * by default when it was imported there, not moved there by the user).
+   */
+  | { status: 'elsewhere'; row: MbankRow; key: string; tx: Transaction; move: boolean }
   /** A pending operation that came back changed: it takes the row's amount, date and description. */
   | { status: 'settle'; row: MbankRow; key: string; tx: Transaction }
   /**
@@ -108,15 +115,19 @@ export type RowPlan =
    * possible duplicate (1.2.1, D77): the same amount under another name, or a close amount (max(1 zł, 3%)) under a
    * similar one – joined too, so nothing comes in twice; the preview shows it to check.
    */
-  | { status: 'merge'; row: MbankRow; key: string; tx: Transaction; loose?: 'name' | 'amount'; ask?: boolean }
+  | { status: 'merge'; row: MbankRow; key: string; tx: Transaction; loose?: 'name' | 'amount'; ask?: boolean; planned: Planned }
   | ({ status: 'new' } & PlannedRow)
   /** An operation the user deleted (its version is in the history): left out unless brought back. */
   | ({ status: 'deleted' } & PlannedRow)
 
 /** A row of the file that gets a decision: its group (brand, direction, proposal) and the proposal. */
-interface PlannedRow {
+interface PlannedRow extends Planned {
   row: MbankRow
   key: string
+}
+
+/** What a row of the file is recognized as (a matched hand-typed one too – B36: imported apart, it is decided so). */
+interface Planned {
   group: string
   /** The brand key (`brandOf`, with the user's merges): a decision of the group is remembered by it. */
   brand: string
@@ -132,6 +143,9 @@ interface PlannedRow {
 }
 
 export type NewRow = Extract<RowPlan, { status: 'new' }>
+
+/** A row's plan before the matched hand-typed ones get their decision (`planImport`). */
+type Draft = Exclude<RowPlan, { status: 'merge' }> | Omit<Extract<RowPlan, { status: 'merge' }>, 'planned'>
 
 export interface ImportPlan {
   accountId: string
@@ -150,7 +164,7 @@ export interface ImportPlan {
 export function proposalSig(d: ImportDecision): string {
   if (d.source === 'none') return d.household ? `?${d.kind}:d:${d.memberId ?? '-'}` : `?${d.kind}`
   const member = d.refundable || d.household ? (d.memberId ?? '-') : ''
-  return [d.kind, d.categoryId ?? '', d.refundable ? 'z' : '', d.household ? 'd' : '', member, d.household && d.advance ? 'a' : '', d.counterAccountId ?? '', d.containerId ?? '', d.byTitle ? 't' : '', d.refundable && d.gift ? 'g' : '', shareKey(d.share)].join(':')
+  return [d.kind, d.categoryId ?? '', d.refundable ? 'z' : '', d.household ? 'd' : '', member, d.household && d.advance ? 'a' : '', d.counterAccountId ?? '', d.containerId ?? '', d.byTitle ? 't' : '', d.refundable && d.gift ? 'g' : '', shareKey(d.share), d.kind === 'loan' ? (d.loanId ?? '') : ''].join(':')
 }
 
 /** A shared purchase's split as one text (D83): '' = none. */
@@ -171,12 +185,41 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   // The keys of the same rows in the other format (B5), never over an operation's own key.
   for (const t of mine) for (const k of t.bank?.altKeys ?? []) if (!byKey.has(k)) byKey.set(k, t)
   const used = new Set<string>()
-  const plans: Array<RowPlan | null> = file.rows.map((row, i) => {
+  const plans: Array<Draft | null> = file.rows.map((row, i) => {
     const tx = byKey.get(keys[i]!)
     if (!tx) return null
     used.add(tx.id)
     return { status: 'known', row, key: keys[i]!, tx, settled: !!tx.bank?.pending && !row.pending }
   })
+
+  // The same row imported before onto another account, or moved here from the one it was imported to (B35): the key
+  // its row has on this account – its date, the bank's description and amount, its occurrence. Only operations of the
+  // file's days (years of history otherwise).
+  const days = file.rows.map((r) => r.date).sort()
+  const lo = days.length ? addDays(days[0]!, -MATCH_DAYS) : ''
+  const hi = days.length ? addDays(days.at(-1)!, MATCH_DAYS) : ''
+  const keyOn = (account: string, t: Transaction) => keyOnAccount(account, rowIdentity({ date: t.date, description: t.bank!.description, amount: t.amount }), keyOccurrence(t.bank!.key))
+  // An account whose files come from another bank account (both numbers known): its operations are its own (T166).
+  const fileNumber = accountNumberOf(file.account)
+  const numbers = fileNumber ? { ...ctx.accountNumbers, [accountId]: fileNumber } : ctx.accountNumbers
+  const here = new Map<string, Transaction>()
+  for (const t of existing) {
+    if (!t.bank?.description || used.has(t.id) || t.date < lo || t.date > hi || otherBankAccount(numbers, accountId, t.accountId)) continue
+    const k = keyOn(accountId, t)
+    // One of this account with its own key is the first pass's.
+    if ((t.accountId !== accountId || k !== t.bank.key) && !here.has(k)) here.set(k, t)
+  }
+  if (here.size)
+    file.rows.forEach((row, i) => {
+      if (plans[i]) return
+      const tx = here.get(keys[i]!)
+      if (!tx || used.has(tx.id)) return
+      used.add(tx.id)
+      if (tx.accountId === accountId) plans[i] = { status: 'known', row, key: keys[i]!, tx, settled: !!tx.bank?.pending && !row.pending, moved: true }
+      // Imported there (the key of that account): this account's file went there by mistake – moved here by default;
+      // moved there by the user – it stays where they put it.
+      else plans[i] = { status: 'elsewhere', row, key: keys[i]!, tx, move: tx.bank!.key === keyOn(tx.accountId, tx) }
+    })
 
   // Pending operations that changed when settled: same counterparty, close date, close amount (a currency conversion).
   const pending = mine.filter((t) => t.bank?.pending && !used.has(t.id))
@@ -271,25 +314,18 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     plans[c.i] = { status: 'merge', row, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount', ask: !sure }
   }
 
-  const classified = file.rows.map((row, i) => (plans[i] ? null : classifyRow(row, ctx)))
+  // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is).
+  const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, ctx)))
   shareMerged(classified, file.rows)
+  const plannedOf = (i: number): Planned => {
+    const { decision, hint, brand, direction, target } = classified[i]!
+    return { group: groupKey(brand.key, direction, decision), brand: brand.key, brandLabel: brand.brand?.label ?? null, words: brand.words, target, direction, decision, hint }
+  }
   const rows: RowPlan[] = file.rows.map((row, i) => {
     const p = plans[i]
+    if (p?.status === 'merge') return { ...p, planned: plannedOf(i) }
     if (p) return p
-    const { decision, hint, brand, direction, target } = classified[i]!
-    return {
-      status: deletedKeys.has(keys[i]!) ? 'deleted' : 'new',
-      row,
-      key: keys[i]!,
-      group: groupKey(brand.key, direction, decision),
-      brand: brand.key,
-      brandLabel: brand.brand?.label ?? null,
-      words: brand.words,
-      target,
-      direction,
-      decision,
-      hint
-    }
+    return { status: deletedKeys.has(keys[i]!) ? 'deleted' : 'new', row, key: keys[i]!, ...plannedOf(i) }
   })
 
   const dates = file.rows.map((r) => r.date).sort()
@@ -529,7 +565,15 @@ export interface Choice {
   /** A purchase financed by several people (D83): each row's amount split so. */
   share?: Share | null
   counterAccountId: string | null
+  /** The loan of the Radar a loan's operation belongs to (B34); none = a loan without its record. */
+  loanId?: string | null
 }
+
+/**
+ * Does a decision teach the import a rule of its brand? Never a loan, the tax, XTB (decided operation by operation –
+ * N14), nor an expense of no category nobody else pays (B37: it says nothing of the brand, and would hide its chain).
+ */
+export const learnable = (c: Choice): boolean => !PER_OPERATION_KINDS.includes(c.kind) && !(c.kind === 'expense' && !c.categoryId && !c.refundable && !c.share)
 
 export interface ImportChoices {
   /** Per theme (`ImportGroup.theme`): the decision for all its groups… */
@@ -553,7 +597,12 @@ export interface ImportChoices {
   restoreDeleted: Record<string, boolean>
   /** New rows (`RowPlan.key`) the user leaves out of this import (1.2.1): the next file brings them again. */
   skip: Record<string, boolean>
+  /** Rows imported before onto another account (`RowPlan.key`, B35): moved here (true) or left there (false); missing = as proposed. */
+  moveHere: Record<string, boolean>
 }
+
+/** Is an operation imported onto another account moved here (B35)? */
+export const movesHere = (p: Extract<RowPlan, { status: 'elsewhere' }>, choices: Pick<ImportChoices, 'moveHere'>): boolean => choices.moveHere[p.key] ?? p.move
 
 /** Is a matched hand-typed operation joined? `noMerge` false = ticked by the user (a possible duplicate that asks). */
 export const joins = (p: Extract<RowPlan, { status: 'merge' }>, choices: Pick<ImportChoices, 'noMerge'>): boolean => (p.ask ? choices.noMerge[p.key] === false : !choices.noMerge[p.key])
@@ -567,7 +616,8 @@ export const choiceOf = (d: ImportDecision): Choice => ({
   advance: d.household && d.advance,
   gift: d.refundable && d.gift,
   share: d.kind === 'expense' && !d.refundable ? d.share : null,
-  counterAccountId: d.counterAccountId
+  counterAccountId: d.counterAccountId,
+  loanId: d.kind === 'loan' ? d.loanId : null
 })
 
 /** The member of a choice that has one (null = the first; '' = none). */
@@ -582,7 +632,8 @@ export const sameChoice = (a: Choice, b: Choice): boolean =>
   (a.household && a.advance) === (b.household && b.advance) &&
   (a.refundable && !!a.gift) === (b.refundable && !!b.gift) &&
   shareKey(a.share) === shareKey(b.share) &&
-  a.counterAccountId === b.counterAccountId
+  a.counterAccountId === b.counterAccountId &&
+  (a.kind === 'loan' ? (a.loanId ?? null) : null) === (b.kind === 'loan' ? (b.loanId ?? null) : null)
 
 export interface ImportResult {
   create: Transaction[]
@@ -590,13 +641,30 @@ export interface ImportResult {
   remove: string[]
   rules: ImportRule[]
   /** Counts for the summary; `excluded` = new rows the user left out (`ImportChoices.skip`). */
-  counts: { created: number; merged: number; settled: number; known: number; removed: number; skipped: number; excluded: number }
+  counts: ImportCounts
 }
+
+/** `moved` = operations of this file found on another account and moved here (B35). */
+export type ImportCounts = { created: number; merged: number; settled: number; known: number; removed: number; skipped: number; excluded: number; moved: number }
 
 /**
  * The records an import writes; `makeId` gives new ids (ULIDs), `now` the time of the import. A household member's money
  * says whose it is: what it repays and what is their advance the ledger counts (`calc/household.ts`, D80).
  */
+/** What a rule says, from a decision (the import's learning, a rule edited in the settings – F22). */
+export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'> {
+  return {
+    kind: c.kind,
+    categoryId: c.kind === 'expense' ? c.categoryId : null,
+    refundable: c.kind === 'expense' && c.refundable,
+    household: c.kind === 'income' && c.household,
+    memberId: (c.kind === 'expense' && c.refundable) || (c.kind === 'income' && c.household) ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
+    gift: c.kind === 'expense' && c.refundable && c.gift ? true : undefined,
+    share: c.kind === 'expense' && !c.refundable && c.share ? c.share : undefined,
+    counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null
+  }
+}
+
 export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { now: string; makeId: () => string; rules: readonly ImportRule[] }): ImportResult {
   const groups = importGroups(plan)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
@@ -614,14 +682,27 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
   })
   const create: Transaction[] = []
   const update: Transaction[] = []
-  const counts = { created: 0, merged: 0, settled: 0, known: 0, removed: 0, skipped: 0, excluded: 0 }
+  const counts: ImportCounts = { created: 0, merged: 0, settled: 0, known: 0, removed: 0, skipped: 0, excluded: 0, moved: 0 }
+  const keyed = (t: Transaction, key: string, settled = false): Transaction => ({
+    ...t,
+    bank: { ...t.bank!, key, altKeys: [...(t.bank!.altKeys ?? []), t.bank!.key].slice(-20), pending: settled ? false : t.bank!.pending }
+  })
   const fresh = [...plan.rows].sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
   for (const p of fresh) {
     if (p.status === 'known') {
       counts.known++
       // The row of the other format: its key remembered, so the next file of it is known at once.
       if (p.other) update.push({ ...p.tx, bank: { ...p.tx.bank!, altKeys: [...(p.tx.bank!.altKeys ?? []), p.key].slice(-20) } })
+      // Moved here from the account it was imported to (B35): this account's key, the old one kept.
+      else if (p.moved) update.push(keyed(p.tx, p.key, p.settled))
       else if (p.settled) update.push({ ...p.tx, bank: { ...p.tx.bank!, pending: false } })
+      continue
+    }
+    if (p.status === 'elsewhere') {
+      if (movesHere(p, choices)) {
+        counts.moved++
+        update.push({ ...keyed(p.tx, p.key, !!p.tx.bank?.pending && !p.row.pending), accountId: plan.accountId })
+      } else counts.known++
       continue
     }
     if (p.status === 'settle') {
@@ -656,12 +737,11 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
       )
       continue
     }
-    const group = p.status === 'new' || p.status === 'deleted' ? p.group : null
-    const theme = group ? themeOf.get(group) : undefined
-    const base: Choice =
-      p.status === 'new' || p.status === 'deleted'
-        ? choiceOf(p.decision)
-        : { kind: p.row.amount < 0 ? 'expense' : 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }
+    // A matched hand-typed operation left apart (B36): its row decided as the file's (its group, theme, proposal).
+    const planned = p.status === 'merge' ? p.planned : p
+    const group = planned.group
+    const theme = themeOf.get(group)
+    const base: Choice = choiceOf(planned.decision)
     // The row's own decision, else its group's, else its theme's, else the proposal.
     const c = choices.rows[p.key] ?? (group ? choices.groups[group] : undefined) ?? (theme ? choices.themes[theme] : undefined) ?? base
     const out = p.row.amount < 0
@@ -691,7 +771,8 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
         counterparty: p.row.counterparty,
         title: p.row.title,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null,
-        containerId: c.kind === 'expense' && out && (p.status === 'new' || p.status === 'deleted') ? p.decision.containerId : null,
+        loanId: c.kind === 'loan' ? (c.loanId ?? null) : null,
+        containerId: c.kind === 'expense' && out ? planned.decision.containerId : null,
         bank: bankOf(p)
       })
     )
@@ -703,37 +784,34 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
   // decision of a theme teaches every brand in it. Nothing new to learn when the group's own rule or the app's own
   // recognition says the same; a keyword of a title is about that payment, not the counterparty. One brand split
   // into groups with other decisions: the decision of the most operations is the rule.
-  const learned = new Map<string, { g: ImportGroup; c: Choice; rows: number; total: number }>()
+  // A group decided by a rule up to an amount (F22): its decision changes that rule, never the brand's plain one.
+  const amountRuleOf = (g: ImportGroup): ImportRule | null => {
+    const ids = new Set(g.rows.map((p) => p.decision.ruleId))
+    const id = ids.size === 1 ? [...ids][0] : null
+    const r = id ? opts.rules.find((x) => x.id === id) : undefined
+    return r?.mode === 'amount' ? r : null
+  }
+  const learned = new Map<string, { g: ImportGroup; c: Choice; rows: number; total: number; rule: ImportRule | null }>()
   for (const g of groups) {
     const own = choices.groups[g.group]
     const c = own ?? choices.themes[g.theme]
     const imported = g.rows.filter((p) => !choices.skip[p.key]).length
-    if (!c || !g.brand || g.byTitle || !imported) continue
+    if (!c || !g.brand || g.byTitle || !imported || !learnable(c)) continue
     if (!(own ? choices.remember[g.group] : choices.rememberThemes[g.theme])) continue
     if ((g.source === 'rule' || g.source === 'builtin') && sameChoice(c, g.proposed)) continue
-    const key = `${g.brand}|${g.direction}`
+    const rule = amountRuleOf(g)
+    const key = rule ? `amount|${rule.id}` : `${g.brand}|${g.direction}`
     const prev = learned.get(key)
     const total = (prev?.total ?? 0) + imported
-    learned.set(key, !prev || imported > prev.rows ? { g, c, rows: imported, total } : { ...prev, total })
+    learned.set(key, !prev || imported > prev.rows ? { g, c, rows: imported, total, rule } : { ...prev, total })
   }
-  let rules: ImportRule[] = [...opts.rules]
-  for (const { g, c, total } of learned.values())
-    rules = upsertRule(
-      rules,
-      {
-        match: g.brand,
-        direction: g.direction,
-        label: g.label,
-        kind: c.kind,
-        categoryId: c.kind === 'expense' ? c.categoryId : null,
-        refundable: c.kind === 'expense' && c.refundable,
-        household: c.kind === 'income' && c.household,
-        memberId: (c.kind === 'expense' && c.refundable) || (c.kind === 'income' && c.household) ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
-        gift: c.kind === 'expense' && c.refundable && c.gift ? true : undefined,
-        share: c.kind === 'expense' && !c.refundable && c.share ? c.share : undefined,
-        counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null
-      },
-      { now: opts.now, makeId: opts.makeId, hits: total }
-    )
+  // The same list when nothing is learned (N13: an import of nothing new changes nothing).
+  let rules = opts.rules as ImportRule[]
+  for (const { g, c, total, rule } of learned.values()) {
+    const decided = ruleDecisionOf(c)
+    rules = rule
+      ? rules.map((r) => (r.id === rule.id ? { ...r, ...decided, hits: r.hits + total, updatedAt: opts.now } : r))
+      : upsertRule(rules, { match: g.brand, direction: g.direction, label: g.label, ...decided }, { now: opts.now, makeId: opts.makeId, hits: total })
+  }
   return { create, update, remove, rules, counts }
 }

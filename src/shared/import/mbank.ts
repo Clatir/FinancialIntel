@@ -37,6 +37,8 @@ export interface MbankRow {
   pending: boolean
   /** Balance after the operation (the account history only). */
   balanceAfter: number | null
+  /** The day it was booked, when the file has it and it is another than `date` (1.5.1: the balances follow the booking). */
+  booked?: string
 }
 
 export interface MbankFile {
@@ -214,6 +216,8 @@ export function parseMbank(text: string): MbankFile {
       pending: parts.pending,
       balanceAfter: c.balance >= 0 ? (parseBankAmount(r[c.balance] ?? '')?.grosze ?? null) : null
     }
+    const booked = c.booking >= 0 && c.date >= 0 ? parseBankDate(r[c.booking] ?? '') : null
+    if (booked && booked !== date) row.booked = booked
     if (historia) {
       // The account history: the type of operation in its own column, the title and the other side next to it; a card
       // payment has the shop in the title („ŻABKA Z1234 /WARSZAWA DATA TRANSAKCJI: 2026-10-01”) – the name, no title.
@@ -266,6 +270,28 @@ export function rowKeys(rows: readonly MbankRow[], accountId: string): string[] 
     const id = rowIdentity(r)
     const n = seen.get(id) ?? 0
     seen.set(id, n + 1)
-    return `mbank:${fingerprint(`${accountId}|${id}`)}:${n}`
+    return keyOnAccount(accountId, id, n)
   })
 }
+
+/** The bank's account number of a file's header (`#dla rachunków`, `#Numer rachunku`): its digits, null = none. */
+export function accountNumberOf(account: string | null | undefined): string | null {
+  const digits = (account ?? '').replace(/\D/g, '')
+  return digits.length >= 10 ? digits : null
+}
+
+/** An account number as shown: its last four digits („…1234”). */
+export const accountNumberText = (n: string): string => `…${n.slice(-4)}`
+
+/**
+ * Two accounts of the budget with the files of two different bank accounts (their numbers known – 1.5.1): the same
+ * payment on both the same day is two operations, never one row of a file imported twice.
+ */
+export const otherBankAccount = (numbers: Readonly<Record<string, string>> | undefined, a: string, b: string): boolean =>
+  a !== b && !!numbers?.[a] && !!numbers[b] && numbers[a] !== numbers[b]
+
+/** The key a row has on an account (`rowKeys`): its identity (`rowIdentity`) and its occurrence among identical rows. */
+export const keyOnAccount = (accountId: string, identity: string, n: number): string => `mbank:${fingerprint(`${accountId}|${identity}`)}:${n}`
+
+/** The occurrence of a row's key (its last part; 0 when it cannot be read). */
+export const keyOccurrence = (key: string): number => Number(key.slice(key.lastIndexOf(':') + 1)) || 0

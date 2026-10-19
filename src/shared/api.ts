@@ -3,7 +3,8 @@
 import type { XlsxSheet } from './export/xlsx'
 import type { Collection, FileKind } from './paths'
 import type { RecordTypes } from './records'
-import type { SettingsFile } from './schema'
+import type { ImportRule, SettingsFile } from './schema'
+import type { BrandAliases } from './import/aliases'
 import type { PendingUpdate, UpdatePrefs, UpdateState } from './update'
 import type { MachinePrefs } from './machine'
 import type { IctjSnapshot } from './ictj'
@@ -83,7 +84,8 @@ export interface ChangeSet {
 }
 
 /** Why a version was kept in the history. */
-export type HistoryReason = 'edit' | 'delete' | 'restore' | 'import' | 'merge' | 'discarded'
+/** `undo`: deleted by „Cofnij import” (1.5.1, F4) – not the user's deletion, so the next import brings its row (T39). */
+export type HistoryReason = 'edit' | 'delete' | 'restore' | 'import' | 'merge' | 'discarded' | 'undo'
 
 /** One kept version of a record (`.history/`). */
 export interface HistoryEntry {
@@ -212,7 +214,8 @@ export interface FiApi {
   saveRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): Promise<Array<{ id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string }>>
   deleteRecord(collection: Collection, id: string): Promise<void>
   /** Many records deleted with one call (W1): each deleted, or why not. */
-  deleteRecords(collection: Collection, ids: readonly string[]): Promise<Array<{ id: string; error?: string }>>
+  /** `reason` 'undo': taken back with its import (F4); 'drop': an old batch of `imports` – no version in the history. */
+  deleteRecords(collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop'): Promise<Array<{ id: string; error?: string }>>
   /** Kept versions of a record, newest first (the settings: `kind` 'fi', `id` = the id of fi.json). */
   historyList(kind: HistoryKind, id: string): Promise<HistoryEntry[]>
   /** The record of one kept version (null when gone). */
@@ -335,9 +338,14 @@ export interface QuickData {
   envelopesLeft: Record<string, number>
   quietHours: { from: string; to: string }
   impulseThreshold: number
-  /** The officer: the category used last with a counterparty (its key) and the recent counterparties. */
-  lastCategory: Record<string, string>
+  /**
+   * The officer (F8): the category used last with each brand (`officerData`), the recent counterparties (one per
+   * brand), the import's rules and merged names – a name typed gets the category its brand has.
+   */
+  lastByBrand: Record<string, string>
   counterparties: string[]
+  rules: ImportRule[]
+  aliases: BrandAliases
   /**
    * The household (D80): the active members, what each owes now (their money repays it first) and their advance (a
    * purchase they finance takes it first); `inflow` – what their money beyond their debt is by default; `via` – whom

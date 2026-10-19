@@ -21,16 +21,16 @@ type Duplicates = { groups: DuplicateGroup[]; byId: Record<string, Transaction> 
 let last: { inputs: readonly unknown[]; out: Duplicates } | null = null
 
 type DataState = ReturnType<typeof useData.getState>
-const duplicateInputs = (s: DataState) => [s.records.transactions, s.records.dockings, s.fi?.settings.import.notDuplicates ?? NO_DISMISSED, s.drafts] as const
+const duplicateInputs = (s: DataState) => [s.records.transactions, s.records.dockings, s.fi?.settings.import.notDuplicates ?? NO_DISMISSED, s.drafts, s.fi?.settings.import.accountNumbers] as const
 
 /** The duplicates among the saved operations (drafts left out): computed once for the inputs of now. */
 function duplicatesNow(): Duplicates {
   const inputs = duplicateInputs(useData.getState())
   if (last && last.inputs.every((x, i) => x === inputs[i])) return last.out
-  const [records, dockings, dismissed, drafts] = inputs
+  const [records, dockings, dismissed, drafts, numbers] = inputs
   const all = listOf(records)
   const txs = Object.keys(drafts).length ? all.filter((t) => !drafts[t.id]) : all
-  const out = { groups: findDuplicates(txs, listOf(dockings), dismissed), byId: Object.fromEntries(txs.map((t) => [t.id, t])) }
+  const out = { groups: findDuplicates(txs, listOf(dockings), dismissed, numbers), byId: Object.fromEntries(txs.map((t) => [t.id, t])) }
   last = { inputs, out }
   return out
 }

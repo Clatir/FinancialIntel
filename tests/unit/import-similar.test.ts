@@ -56,7 +56,7 @@ const rule = (over: Partial<ImportRule>): ImportRule => ({
   ...over
 })
 const expense = (categoryId: string | null): Choice => ({ kind: 'expense', categoryId, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null })
-const empty = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {} })
+const empty = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {}, moveHere: {} })
 const groupsOf = (rows: MbankRow[], rules: ImportRule[] = [], aliases: BrandAliases = {}) =>
   importGroups(planImport(file(rows), MBANK_ACCOUNT_ID, [], { rules, ownNames: ['JAN KAPITAN'], categories, aliases }))
 const byLabel = (groups: readonly ImportGroup[], label: string) => groups.find((g) => g.label === label)!

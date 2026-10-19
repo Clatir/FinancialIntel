@@ -5,7 +5,7 @@ import { categoryIndex } from '@shared/calc/operations'
 import { computeFleet } from '@shared/calc/fleet'
 import { createDefaultSettings } from '@shared/defaults'
 import { classifyRow, counterpartyKey, hintFor, isOwnName, matchRule, upsertRule } from '@shared/import/classify'
-import { parseMbank, type MbankFile, type MbankRow } from '@shared/import/mbank'
+import { accountNumberOf, parseMbank, type MbankFile, type MbankRow } from '@shared/import/mbank'
 import { findDuplicates, mergeDuplicate } from '@shared/import/duplicates'
 import { addDays } from '@shared/calc/dates'
 import { buildImport, choiceOf, importGroups, importThemes, planImport, similarCounterparty, type ImportChoices, type ImportPlan, type NewRow } from '@shared/import/reconcile'
@@ -21,7 +21,7 @@ const NOW = '2026-10-17T09:00:00.000Z'
 let seq = 0
 const makeId = () => `01K1${String(++seq).padStart(22, '0')}`
 const ctx = (rules: ImportRule[] = [], ownNames: string[] = ['JAN KAPITAN']) => ({ rules, ownNames, categories })
-const emptyChoices = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {} })
+const emptyChoices = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {}, moveHere: {} })
 /** The group of a brand's new rows in the plan (one proposal in the file). */
 const groupOf = (plan: ImportPlan, brand: string, direction: 'in' | 'out') => plan.rows.find((p): p is NewRow => p.status === 'new' && p.brand === brand && p.direction === direction)!.group
 
@@ -509,5 +509,123 @@ describe('grupa G (1.5.0): zwrot zakupu domownika, połączone nazwy, wspólne f
       [true, TOMASZ, 'none'],
       [true, TOMASZ, 'none']
     ])
+  })
+})
+
+describe('grupa H (1.5.1): pożyczka z Radaru, operacja na innym koncie, niepołączone dopasowanie, reguły bez wiedzy', () => {
+  const LOAN = `01KRADAR${'0'.repeat(17)}1`
+  const loan = (over: Partial<{ closedAt: string | null; counterparty: string }> = {}) => ({ id: LOAN, name: 'Tomek – laptop', direction: 'given' as const, counterparty: 'Tomasz xxx', date: '2025-09-01', closedAt: null, ...over })
+  const tomasz = () => fixture().rows.filter((r) => r.counterparty === 'TOMASZ xxx' && r.amount > 0).slice(0, 1)
+
+  it('B34: przelew od osoby z otwartą pożyczką z Radaru – zwrot tej pożyczki (do sprawdzenia), operacja z jej id; zamknięta – nie', () => {
+    const f = fixture()
+    const rows = tomasz()
+    const d = classifyRow(rows[0]!, { ...ctx(), loans: [loan()] }).decision
+    expect(d).toMatchObject({ kind: 'loan', loanId: LOAN, source: 'builtin' })
+    expect(classifyRow(rows[0]!, { ...ctx(), loans: [loan({ closedAt: NOW })] }).decision.kind).toBe('income')
+    const plan = planImport(withRows(f, rows), MBANK_ACCOUNT_ID, [], { ...ctx(), loans: [loan()] })
+    const created = buildImport(plan, emptyChoices(), { now: NOW, makeId, rules: [] }).create[0]!
+    expect(created).toMatchObject({ kind: 'loan', loanId: LOAN })
+  })
+
+  it('N14: decyzja „pożyczka” i „podatek” nie zostaje regułą; reguła pożyczki sprzed 1.5.1 – tylko propozycja z pożyczką z Radaru', () => {
+    const f = fixture()
+    const rows = tomasz()
+    const plan = planImport(withRows(f, rows), MBANK_ACCOUNT_ID, [], ctx())
+    const group = plan.rows.find((p): p is NewRow => p.status === 'new')!.group
+    for (const kind of ['loan', 'tax'] as const) {
+      const choices = emptyChoices()
+      choices.groups[group] = { ...choiceOf(plan.rows.find((p): p is NewRow => p.status === 'new')!.decision), kind }
+      choices.remember[group] = true
+      expect(buildImport(plan, choices, { now: NOW, makeId, rules: [] }).rules).toEqual([])
+    }
+    const old: ImportRule = { id: makeId(), match: plan.rows.find((p): p is NewRow => p.status === 'new')!.brand, mode: 'exact', direction: 'in', label: 'TOMASZ', kind: 'loan', categoryId: null, refundable: false, household: false, memberId: null, counterAccountId: null, learned: true, hits: 2, updatedAt: NOW }
+    expect(classifyRow(rows[0]!, { ...ctx([old]), loans: [loan()] }).decision).toMatchObject({ kind: 'loan', loanId: LOAN, source: 'builtin' })
+  })
+
+  it('B37: wydatek bez kategorii (nikt inny nie płaci) nie uczy reguły – zasłoniłby sieć', () => {
+    const f = fixture()
+    const rows = f.rows.filter((r) => r.counterparty.startsWith('KOLEO') && r.amount < 0).slice(0, 1)
+    const plan = planImport(withRows(f, rows), MBANK_ACCOUNT_ID, [], ctx())
+    const group = plan.rows.find((p): p is NewRow => p.status === 'new')!.group
+    const choices = emptyChoices()
+    choices.groups[group] = { kind: 'expense', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null }
+    choices.remember[group] = true
+    expect(buildImport(plan, choices, { now: NOW, makeId, rules: [] }).rules).toEqual([])
+  })
+
+  it('B35 a numery rachunków: ta sama płatność na dwóch rachunkach banku to dwie operacje – nie plik złego konta ani duplikat', () => {
+    const f = fixture()
+    const rows = f.rows.filter((r) => r.counterparty.startsWith('KOLEO')).slice(0, 2)
+    const OTHER = `01KXTBW${'0'.repeat(18)}2`
+    const fileA = { ...withRows(f, rows), account: 'eKonto - 11 1111 1111 1111 1111 1111 1111' }
+    const fileB = { ...withRows(f, rows), account: 'eKonto - 22 2222 2222 2222 2222 2222 2222' }
+    const numA = accountNumberOf(fileA.account)!
+    const onA = buildImport(planImport(fileA, OTHER, [], ctx()), emptyChoices(), { now: NOW, makeId, rules: [] }).create
+    // The other account's files come from another bank account: its operations are its own.
+    const plan = planImport(fileB, MBANK_ACCOUNT_ID, onA, { ...ctx(), accountNumbers: { [OTHER]: numA } })
+    expect(counts(plan)).toEqual({ new: 2 })
+    // No numbers known (files of before 1.5.1), or this file's number there – its rows went there by mistake: moved here.
+    expect(counts(planImport(fileB, MBANK_ACCOUNT_ID, onA, ctx()))).toEqual({ elsewhere: 2 })
+    expect(counts(planImport(fileA, MBANK_ACCOUNT_ID, onA, { ...ctx(), accountNumbers: { [OTHER]: numA } }))).toEqual({ elsewhere: 2 })
+    // Duplicates: the same payment of two bank accounts is not one.
+    const both = [...onA, ...buildImport(plan, emptyChoices(), { now: NOW, makeId, rules: [] }).create]
+    expect(findDuplicates(both, [], {}, { [OTHER]: numA, [MBANK_ACCOUNT_ID]: accountNumberOf(fileB.account)! })).toEqual([])
+    expect(findDuplicates(both, [])).toHaveLength(2)
+  })
+
+  it('B35: plik zaimportowany najpierw na złe konto – przy imporcie na właściwe operacje się przenoszą, nie wchodzą drugi raz; przeniesiona przez użytkownika zostaje', () => {
+    const f = fixture()
+    const rows = f.rows.filter((r) => r.counterparty.startsWith('KOLEO')).slice(0, 2)
+    const file = withRows(f, rows)
+    const WALLET = `01KXTBW${'0'.repeat(18)}1`
+    // Imported onto the wallet by mistake.
+    const wrong = buildImport(planImport(file, WALLET, [], ctx()), emptyChoices(), { now: NOW, makeId, rules: [] }).create
+    const plan = planImport(file, MBANK_ACCOUNT_ID, wrong, ctx())
+    expect(plan.rows.map((p) => [p.status, p.status === 'elsewhere' && p.move])).toEqual([
+      ['elsewhere', true],
+      ['elsewhere', true]
+    ])
+    const moved = buildImport(plan, emptyChoices(), { now: NOW, makeId, rules: [] })
+    expect(moved.create).toEqual([])
+    expect(moved.counts.moved).toBe(2)
+    expect(moved.update.map((t) => t.accountId)).toEqual([MBANK_ACCOUNT_ID, MBANK_ACCOUNT_ID])
+    // The next file of this account knows them at once.
+    expect(counts(planImport(file, MBANK_ACCOUNT_ID, moved.update, ctx()))).toEqual({ known: 2 })
+    // One the user moved to another account on purpose: known – it stays there, never a second operation.
+    const right = buildImport(planImport(file, MBANK_ACCOUNT_ID, [], ctx()), emptyChoices(), { now: NOW, makeId, rules: [] }).create
+    const elsewhere = [{ ...right[0]!, accountId: WALLET }, right[1]!]
+    const again = planImport(file, MBANK_ACCOUNT_ID, elsewhere, ctx())
+    // (The operations are created by date – the file lists the newest first.)
+    expect(again.rows.map((p) => [p.status, p.status === 'elsewhere' && p.move, 'tx' in p ? p.tx.id : '']).sort()).toEqual(
+      [
+        ['elsewhere', false, right[0]!.id],
+        ['known', false, right[1]!.id]
+      ].sort()
+    )
+    const kept = buildImport(again, emptyChoices(), { now: NOW, makeId, rules: [] })
+    expect([kept.create.length, kept.update.length, kept.counts.known]).toEqual([0, 0, 2])
+    // Moved here from the wrong account by hand: known, its key of this account taken.
+    const back = planImport(file, MBANK_ACCOUNT_ID, wrong.map((t) => ({ ...t, accountId: MBANK_ACCOUNT_ID })), ctx())
+    expect(back.rows.map((p) => [p.status, p.status === 'known' && p.moved])).toEqual([
+      ['known', true],
+      ['known', true]
+    ])
+    const rekeyed = buildImport(back, emptyChoices(), { now: NOW, makeId, rules: [] }).update
+    expect(rekeyed.map((t) => t.bank!.key).sort()).toEqual(back.rows.map((p) => p.key).sort())
+    // Imported twice before 1.5.1 (once on each account): the duplicates panel sees one row of the bank.
+    expect(findDuplicates([...wrong, ...right], []).filter((g) => g.kind === 'same-row')).toHaveLength(2)
+  })
+
+  it('B36: możliwy duplikat niepołączony (domyślnie przy „zaznacz sam”) wchodzi z rozpoznaniem – wypłata XTB, nie zwykły wpływ', () => {
+    const f = fixture()
+    const base = tomasz()[0]!
+    const xtb = { ...base, counterparty: 'XTB S.A.', description: base.description.replace('TOMASZ xxx', 'XTB S.A.') }
+    const own = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, date: xtb.date, accountId: MBANK_ACCOUNT_ID, kind: 'income', amount: xtb.amount, counterparty: 'Ania zwrot za bilety' })
+    const plan = planImport(withRows(f, [xtb]), MBANK_ACCOUNT_ID, [own], ctx())
+    const p = plan.rows[0]!
+    expect([p.status, p.status === 'merge' && p.ask]).toEqual(['merge', true])
+    const created = buildImport(plan, emptyChoices(), { now: NOW, makeId, rules: [] }).create[0]!
+    expect(created).toMatchObject({ kind: 'trading', amount: xtb.amount })
   })
 })

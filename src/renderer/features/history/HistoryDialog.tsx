@@ -17,7 +17,8 @@ const REASON: Record<HistoryEntry['reason'], string> = {
   restore: 'przed przywróceniem',
   import: 'przed importem',
   merge: 'przed scaleniem',
-  discarded: 'odrzucona przy scalaniu'
+  discarded: 'odrzucona przy scalaniu',
+  undo: 'usunięty przy cofnięciu importu'
 }
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' }) : '—')

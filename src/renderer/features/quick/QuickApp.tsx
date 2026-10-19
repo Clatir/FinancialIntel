@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { QuickData, QuickResult } from '@shared/api'
 import { inClockWindow, warsawNow } from '@shared/calc/dates'
-import { counterpartyKey } from '@shared/import/classify'
+import { OFFICER_SOURCE_LABEL, officerHint, type OfficerSource } from '@shared/import/officer'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
@@ -71,7 +71,7 @@ export function QuickApp() {
   // Hiding after „Zapisano”: never the window opened again meanwhile.
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const [officer, setOfficer] = useState<string | null>(null)
+  const [officer, setOfficer] = useState<{ categoryId: string; source: OfficerSource } | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const [opened, setOpened] = useState(0)
   useEffect(() => {
@@ -254,9 +254,10 @@ export function QuickApp() {
 
   const onCounterparty = (counterparty: string) => {
     set({ counterparty })
-    const hint = data?.lastCategory[counterpartyKey(counterparty)]
-    setOfficer(hint && cats.has(hint) ? hint : null)
-    if (hint && cats.has(hint) && !d.categoryId) set({ counterparty, categoryId: hint })
+    // F8: by the brand – what was used with it last, the import's rule, the chain's category.
+    const hint = data ? officerHint({ counterparty }, data, { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id) }) : null
+    setOfficer(hint)
+    if (hint && !d.categoryId) set({ counterparty, categoryId: hint.categoryId })
   }
 
   return (
@@ -334,9 +335,9 @@ export function QuickApp() {
                   </button>
                 )}
               </div>
-              {officer && officer !== d.categoryId && (
-                <button className="mt-0.5 text-[11px] text-accent hover:underline" onClick={() => set({ categoryId: officer })}>
-                  oficer: {cats.get(officer)?.label}
+              {officer && officer.categoryId !== d.categoryId && (
+                <button className="mt-0.5 text-[11px] text-accent hover:underline" onClick={() => set({ categoryId: officer.categoryId })} title={OFFICER_SOURCE_LABEL[officer.source]} data-testid="quick-officer">
+                  oficer: {cats.get(officer.categoryId)?.label}
                 </button>
               )}
             </Row>

@@ -10,8 +10,8 @@
  * - 'month': `<dir>/RRRR-MM.json` – one file per calendar month (`month` field).
  */
 
-export type Collection = 'transactions' | 'containers' | 'goals' | 'months' | 'dockings' | 'loans' | 'balances' | 'game'
-export const COLLECTIONS: readonly Collection[] = ['transactions', 'containers', 'goals', 'months', 'dockings', 'loans', 'balances', 'game']
+export type Collection = 'transactions' | 'containers' | 'goals' | 'months' | 'dockings' | 'loans' | 'balances' | 'game' | 'imports'
+export const COLLECTIONS: readonly Collection[] = ['transactions', 'containers', 'goals', 'months', 'dockings', 'loans', 'balances', 'game', 'imports']
 /** `fi` = fi.json (settings, categories, accounts, layers, orders, import rules). */
 export type FileKind = Collection | 'fi'
 
@@ -24,7 +24,9 @@ export const LAYOUTS: Record<Collection, Layout> = {
   dockings: 'dated',
   loans: 'id',
   balances: 'dated',
-  game: 'month'
+  game: 'month',
+  // The imports of the bank's files (1.5.1, F4 „Cofnij import”).
+  imports: 'id'
 }
 
 export const SETTINGS_FILE = 'fi.json'

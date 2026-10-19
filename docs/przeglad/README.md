@@ -128,6 +128,11 @@ Propozycja do decyzji użytkownika (D67 – każdy etap na komendę). Model i th
 
 Razem ok. 21–28 h.
 
+Wykonane według D84 (grupy E–H jednym ciągiem, `docs/postep.md`): **1.4.2** = E, **1.4.3** = F, **1.5.0** = G (domownicy
+oraz ICTTJ i dokowanie – B14–B22, B40, B41, N5, F0, F42), **1.5.1** = H (import – B34–B39, N12–N16 i z listy funkcji F4,
+F5, F8, F22). Zostają m.in.: porządki w ekranach (wiersz 1.5.3 propozycji), funkcje F1–F3, F6, F7 i dalsze, niskie
+pozycje – niezaznaczone niżej.
+
 ## Lista do odhaczania
 
 ## Błędy (129: 5 wysokich, 55 średnich, 69 niskich)
@@ -170,12 +175,12 @@ Razem ok. 21–28 h.
 - [ ] **B31** Przełączanie folderu z Ustawień bez blokady i postępu: zapisy w trakcie trafiają do nowego folderu albo przepadają, brak „Przerwij”, drugie kliknięcie wypiera otwarcie – `renderer/features/settings/SettingsPage.tsx:175`, `renderer/features/settings/SettingsPage.tsx:195` (+15)
 - [x] **B32** Notatka naruszenia „cargo” bez limitu długości – miesiąc gry nie przechodzi schematu i nie zapisuje się – `shared/calc/game.ts:220`, `shared/calc/game.ts:222` (+6)
 - [ ] **B33** Zamrażanie dni od razu po otwarciu folderu – przed synchronizacją OneDrive oceny zapadają na nieaktualnych danych – `renderer/store/game.ts:37`, `renderer/store/game.ts:43` (+4)
-- [ ] **B34** „Zwrot pożyczki” / „Pożyczka udzielona” z importu bez powiązania z pożyczką z Radaru – pożyczka zostaje otwarta i zaległa, a zapamiętana reguła powtarza błąd – `renderer/features/import/options.ts:17`, `renderer/features/import/options.ts:25` (+9)
-- [ ] **B35** Operacja z banku przeniesiona na inne konto wraca przy kolejnym imporcie jako druga – panel duplikatów jej nie widzi – `shared/import/reconcile.ts:115`, `shared/import/reconcile.ts:116` (+9)
-- [ ] **B36** Niepołączony możliwy duplikat (domyślnie przy `ask`) importuje się bez rozpoznania – przelew własny jako wydatek, wypłata XTB jako zwykły wpływ – `shared/import/reconcile.ts:188`, `shared/import/reconcile.ts:556` (+9)
-- [ ] **B37** „Ustaw” dla zaznaczonych bez wybranej kategorii nadpisuje propozycje sieci i uczy reguł „wydatek bez kategorii” – kolejne importy pokazują te marki jako gotowe – `renderer/features/import/ImportPage.tsx:562`, `renderer/features/import/ImportPage.tsx:571` (+5)
-- [ ] **B38** Plan na ekranie nie jest liczony od nowa po zmianie nazwisk właściciela, kontenerów, kategorii ani operacji – import liczy go od nowa i decyzje o zmienionych kluczach przepadają po cichu – `renderer/features/import/ImportPage.tsx:791`, `renderer/features/import/state.ts:40` (+7)
-- [ ] **B39** Po przeliczeniu planu (słowo kluczowe, połączenie nazw, „+ domownik”) temat traci swoją decyzję, a jej późniejsza zmiana nie obejmuje żadnej grupy – `renderer/features/import/state.ts:192`, `renderer/features/import/state.ts:243` (+4)
+- [x] **B34** „Zwrot pożyczki” / „Pożyczka udzielona” z importu bez powiązania z pożyczką z Radaru – pożyczka zostaje otwarta i zaległa, a zapamiętana reguła powtarza błąd – `renderer/features/import/options.ts:17`, `renderer/features/import/options.ts:25` (+9)
+- [x] **B35** Operacja z banku przeniesiona na inne konto wraca przy kolejnym imporcie jako druga – panel duplikatów jej nie widzi – `shared/import/reconcile.ts:115`, `shared/import/reconcile.ts:116` (+9)
+- [x] **B36** Niepołączony możliwy duplikat (domyślnie przy `ask`) importuje się bez rozpoznania – przelew własny jako wydatek, wypłata XTB jako zwykły wpływ – `shared/import/reconcile.ts:188`, `shared/import/reconcile.ts:556` (+9)
+- [x] **B37** „Ustaw” dla zaznaczonych bez wybranej kategorii nadpisuje propozycje sieci i uczy reguł „wydatek bez kategorii” – kolejne importy pokazują te marki jako gotowe – `renderer/features/import/ImportPage.tsx:562`, `renderer/features/import/ImportPage.tsx:571` (+5)
+- [x] **B38** Plan na ekranie nie jest liczony od nowa po zmianie nazwisk właściciela, kontenerów, kategorii ani operacji – import liczy go od nowa i decyzje o zmienionych kluczach przepadają po cichu – `renderer/features/import/ImportPage.tsx:791`, `renderer/features/import/state.ts:40` (+7)
+- [x] **B39** Po przeliczeniu planu (słowo kluczowe, połączenie nazw, „+ domownik”) temat traci swoją decyzję, a jej późniejsza zmiana nie obejmuje żadnej grupy – `renderer/features/import/state.ts:192`, `renderer/features/import/state.ts:243` (+4)
 - [x] **B40** Zwrot towaru z zakupu, który finansuje domownik, trafia do mnie: import nigdy nie tworzy zwrotu „finansuje: X” – `shared/import/classify.ts:340-347`, `shared/import/reconcile.ts:562-564` (+3)
 - [ ] **B41** Wpłata domownika traci rozpoznanie przez regułę bez osoby: słowo kluczowe z tytułu albo reguła połączonej nazwy – `shared/import/classify.ts:298-302`, `shared/import/classify.ts:327-336` (+3) · 1.5.0: część 2 (połączone nazwy) zrobiona; część 1 (słowo z tytułu) czeka na decyzję użytkownika – „Przed grupą H”
 - [x] **B42** Jednorazowy błąd odczytu pliku zostaje „uszkodzonym plikiem” aż do restartu, a zapis w to miejsce odsuwa poprawny plik – `main/datastore/store.ts:314`, `main/datastore/store.ts:315` (+6)
@@ -337,11 +342,11 @@ Razem ok. 21–28 h.
 - [ ] **N9** Kreator pokazuje inne odkładki i inną pierwszą pensję niż potem silnik i Plan miesiąca – `renderer/features/wizard/WizardPage.tsx:75`, `renderer/features/wizard/WizardPage.tsx:77` (+6)
 - [ ] **N10** Edytor operacji: zakup w ciszy nocnej bez potwierdzenia (D40), a godzina domyślnie „teraz” – gra liczy to jako poważne naruszenie – `renderer/features/operations/state.ts:179`, `renderer/features/operations/OperationEditor.tsx:186` (+4)
 - [ ] **N11** Dzienny przydział: silnik dolicza łupy „na następny miesiąc” i wydatki bez kategorii, a „Podział pensji” i debriefing nie – `shared/calc/fleet.ts:835`, `shared/calc/fleet.ts:897` (+7)
-- [ ] **N12** Nowy plik, błędny plik albo „Zamknij plik” kasują wszystkie decyzje otwartej sesji bez pytania; sesja nie przeżywa też przeładowania okna – `renderer/features/import/state.ts:120`, `renderer/features/import/state.ts:126` (+6)
-- [ ] **N13** Import pliku bez nowych operacji nie da się zapisać – „ostatni import” stoi, alarm „Zaległy import” zostaje, a Portfel XTB czeka – `renderer/features/import/ImportPage.tsx:156`, `renderer/features/import/ImportPage.tsx:200` (+4)
-- [ ] **N14** Decyzja grupy „Pożyczka” / „Podatek PIT-38” zostaje regułą: kolejne przelewy do tej osoby albo urzędu są pożyczką / podatkiem bez pytania – `shared/import/reconcile.ts:597-626`, `shared/import/learn.ts:135-137` (+5)
-- [ ] **N15** „Zapamiętaj” i decyzja zbiorcza w Operacjach uczą regułę z nazwy poprawionej przez użytkownika, a import szuka jej po nazwie z banku – `renderer/features/import/rules.ts:15`, `renderer/features/import/rules.ts:25-36` (+6)
-- [ ] **N16** Propozycja reguły na słowo pokazuje inną decyzję niż ta, którą zapisuje – `renderer/features/import/Learning.tsx:133`, `renderer/features/import/Learning.tsx:141` (+2)
+- [x] **N12** Nowy plik, błędny plik albo „Zamknij plik” kasują wszystkie decyzje otwartej sesji bez pytania; sesja nie przeżywa też przeładowania okna – `renderer/features/import/state.ts:120`, `renderer/features/import/state.ts:126` (+6)
+- [x] **N13** Import pliku bez nowych operacji nie da się zapisać – „ostatni import” stoi, alarm „Zaległy import” zostaje, a Portfel XTB czeka – `renderer/features/import/ImportPage.tsx:156`, `renderer/features/import/ImportPage.tsx:200` (+4)
+- [x] **N14** Decyzja grupy „Pożyczka” / „Podatek PIT-38” zostaje regułą: kolejne przelewy do tej osoby albo urzędu są pożyczką / podatkiem bez pytania – `shared/import/reconcile.ts:597-626`, `shared/import/learn.ts:135-137` (+5)
+- [x] **N15** „Zapamiętaj” i decyzja zbiorcza w Operacjach uczą regułę z nazwy poprawionej przez użytkownika, a import szuka jej po nazwie z banku – `renderer/features/import/rules.ts:15`, `renderer/features/import/rules.ts:25-36` (+6)
+- [x] **N16** Propozycja reguły na słowo pokazuje inną decyzję niż ta, którą zapisuje – `renderer/features/import/Learning.tsx:133`, `renderer/features/import/Learning.tsx:141` (+2)
 - [ ] **N17** Kopie konfliktu chmury nie mają „Scal” – jedna strona przepada w całości, choć okno zmian z drugiego komputera umie scalać tę samą sytuację – `renderer/features/sync/SyncPage.tsx:63`, `renderer/features/sync/SyncPage.tsx:81` (+4)
 - [ ] **N18** Historia zapisywana dla wszystkich wpisów, ale do obejrzenia tylko dla operacji, kontenerów i ustawień, mimo tekstów „jest w historii wpisu” – `renderer/features/operations/OperationEditor.tsx:114`, `renderer/features/cargo/CargoPage.tsx:270` (+4)
 - [x] **N19** Kopia dzienna (D31 „codziennie”) robi się tylko przy otwarciu folderu, a aplikacja z założenia żyje tygodniami w zasobniku (D64) – `main/index.ts:411`, `main/datastore/backup.ts:52` (+3)
@@ -441,11 +446,11 @@ Razem ok. 21–28 h.
 - [ ] **F1** Opłaty stałe w miesiącu: zapłacone / czeka / po terminie, alarm brakującej płatności, kontenery miesięczne na Radarze *(nakład M)*
 - [x] **F2** Kopia dzienna także wtedy, gdy aplikacja tygodniami działa w zasobniku *(nakład S)* · ⚠ Zmienia decyzję techniczną T20 („przy starcie raz dziennie”) – zgodnie z D31 (kopie codzienne).
 - [ ] **F3** Przywracanie z kopii zapasowej w aplikacji (cały folder albo wybrane wpisy) *(nakład M)*
-- [ ] **F4** „Cofnij import” – całe wczytanie pliku z mBanku jednym przyciskiem *(nakład M)* · ⚠ T39 (operacja usunięta przez użytkownika nie wraca z kolejnym importem): usunięcie przy cofnięciu importu nie może być liczone jako „usunięte przez użytkownika”, inaczej ponowny import pominie te wiersze.
-- [ ] **F5** Saldo z pliku banku: automatyczne potwierdzenie i wskazanie dnia rozbieżności *(nakład M)* · ⚠ D73: misja „Inwentaryzacja” liczy potwierdzenia sald, więc potwierdzenie z pliku zaliczy ją dla mBanku samo – trzeba zdecydować, czy tak ma być.
+- [x] **F4** „Cofnij import” – całe wczytanie pliku z mBanku jednym przyciskiem *(nakład M)* · ⚠ T39 (operacja usunięta przez użytkownika nie wraca z kolejnym importem): usunięcie przy cofnięciu importu nie może być liczone jako „usunięte przez użytkownika”, inaczej ponowny import pominie te wiersze.
+- [x] **F5** Saldo z pliku banku: automatyczne potwierdzenie i wskazanie dnia rozbieżności *(nakład M)* · ⚠ D73: misja „Inwentaryzacja” liczy potwierdzenia sald, więc potwierdzenie z pliku zaliczy ją dla mBanku samo – trzeba zdecydować, czy tak ma być.
 - [ ] **F6** „Meldunki do rozpatrzenia”: skrzynka zaległych spraw i diagnostyka danych z licznikiem w menu *(nakład M)*
 - [ ] **F7** Szybki wpis seriami: „Zapisz i następny”, szablony, powtórz ostatni, działania w kwocie, „wczoraj”, szkic po Esc *(nakład M)* · ⚠ D70 (Enter zapisuje, Esc zamyka) zostaje bez zmian – seria działa pod Ctrl+Enter.
-- [ ] **F8** Oficer szybkiego wpisu zna marki, reguły importu i słownik sieci *(nakład S)*
+- [x] **F8** Oficer szybkiego wpisu zna marki, reguły importu i słownik sieci *(nakład S)*
 
 ### Priorytet średni
 
@@ -462,7 +467,7 @@ Razem ok. 21–28 h.
 - [ ] **F19** Paleta (Ctrl+K) szuka też wpisów: operacji, kontenerów, celów, pożyczek, domowników i ustawień *(nakład M)*
 - [ ] **F20** Wywiad z drążeniem: podkategorie, kontrahenci, porównania okresów *(nakład M)*
 - [ ] **F21** Dwa komputery: „w użyciu” zamiast „otwarty” – komputer w zasobniku nie pisze w tle i nie powiela powiadomień *(nakład M)*
-- [ ] **F22** Audyt reguł importu: edycja, niespójności, „Zastosuj do historii”, warunek kwoty *(nakład M)*
+- [x] **F22** Audyt reguł importu: edycja, niespójności, „Zastosuj do historii”, warunek kwoty *(nakład M)*
 - [ ] **F23** Wykrywanie opłat cyklicznych: kwartalne, półroczne, zmienne kwoty i harmonogram dat *(nakład M)* · ⚠ T48 (zasady wykrywania stałych opłat: cykl miesięczny ±15% albo roczny) – do rozszerzenia.
 - [ ] **F24** Majątek netto: krzywa z długiem i należnościami *(nakład M)* · ⚠ D73 i T81 (krzywa majątku = suma sald kont na koniec tygodnia) – propozycja dodaje drugą linię zamiast zmieniać definicję; do decyzji użytkownika.
 - [ ] **F25** Stopa oszczędności i bilans paliwa miesiąca *(nakład S)*

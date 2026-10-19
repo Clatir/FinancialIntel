@@ -3,24 +3,35 @@ import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
 import { findRule, ruleTargetOf, upsertRule } from '@shared/import/classify'
 import { cleanBankName } from '@shared/import/names'
 import { newId } from '@shared/ids'
-import { TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
+import { importRuleSchema, TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
+import { ruleDecisionOf, type Choice } from '@shared/import/reconcile'
+import { sameContentAs } from '@shared/merge'
 import { memberName } from '@shared/calc/household'
 import { shareOf } from '@shared/calc/share'
 import { membersNow } from '../household/actions'
 import { shareNames } from '../household/ShareEditor'
-import { updateSettings, useData } from '../../store/data'
+import { replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
+import { countLabel } from '../../lib/format'
 
 const NO_ALIASES: BrandAliases = {}
 /** The names the user merged (1.2.2): an operation's brand is looked up and remembered through them. */
 const aliasesNow = (): BrandAliases => useData.getState().fi?.settings.import.aliases ?? NO_ALIASES
-const targetOf = (t: Transaction) => ruleTargetOf({ counterparty: t.counterparty, title: t.title, operation: t.bank?.operation, bankName: t.bank?.bankName }, aliasesNow())
+/**
+ * What a rule of an operation is learned and looked up by: the bank's name of it, as the import reads its rows (N15 – a
+ * name the user changed is not the bank's: a rule of it would never be found); an operation typed by hand – its own.
+ */
+const targetOf = (t: Transaction) =>
+  ruleTargetOf({ counterparty: t.bank ? t.bank.counterparty : t.counterparty, title: t.title, operation: t.bank?.operation, bankName: t.bank?.bankName }, aliasesNow())
+
+/** The name a rule of an operation is learned by (`targetOf`): the bank's, else the operation's own. */
+export const bankNameOf = (t: Pick<Transaction, 'bank' | 'counterparty'>): string => (t.bank ? t.bank.counterparty || t.bank.operation || t.counterparty : t.counterparty)
 
 /** The rule an operation from the bank would get now (its brand, its name, its words, its direction). */
 export function ruleFor(t: Transaction): ImportRule | null {
   const rules = useData.getState().fi?.settings.import.rules ?? []
   const { target } = targetOf(t)
-  return target.key ? findRule(rules, target, t.amount < 0 ? 'out' : 'in') : null
+  return target.key ? findRule(rules, target, t.amount < 0 ? 'out' : 'in', t.amount) : null
 }
 
 /**
@@ -38,12 +49,12 @@ export function rememberCategory(t: Transaction, label: string): void {
   const { brand } = targetOf(t)
   if (!brand.key || t.kind !== 'expense') return
   const direction = t.amount < 0 ? 'out' : 'in'
-  const rule = { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId: t.categoryId, ...financingOf(t), household: false, counterAccountId: null } as const
+  const rule = { match: brand.key, direction, label: brand.brand?.label ?? bankNameOf(t), kind: 'expense', categoryId: t.categoryId, ...financingOf(t), household: false, counterAccountId: null } as const
   updateSettings((f) => ({
     ...f,
     settings: { ...f.settings, import: { ...f.settings.import, rules: upsertRule(f.settings.import.rules, rule, { now: new Date().toISOString(), makeId: newId, hits: 1 }) } }
   }))
-  toast(`Zapamiętano: „${t.counterparty}” → ${label}. Kolejne importy skategoryzują go same.`, 'success', 4500)
+  toast(`Zapamiętano: „${bankNameOf(t)}” → ${label}. Kolejne importy skategoryzują go same.`, 'success', 4500)
 }
 
 /**
@@ -60,7 +71,7 @@ export function rememberBrands(ops: readonly Transaction[], categoryId: string):
     const prev = rules.get(key)
     if (prev) prev.hits++
     else {
-      rules.set(key, { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId, ...financingOf(t), household: false, counterAccountId: null, hits: 1 })
+      rules.set(key, { match: brand.key, direction, label: brand.brand?.label ?? bankNameOf(t), kind: 'expense', categoryId, ...financingOf(t), household: false, counterAccountId: null, hits: 1 })
     }
   }
   if (!rules.size) return 0
@@ -88,7 +99,92 @@ export function ruleDecisionText(r: ImportRule, catLabel: (id: string | null) =>
 }
 
 export function deleteRule(id: string): void {
-  updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: f.settings.import.rules.filter((r) => r.id !== id) } } }))
+  setRules((rules) => rules.filter((r) => r.id !== id))
+}
+
+function setRules(next: (rules: ImportRule[]) => ImportRule[]): void {
+  updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next(f.settings.import.rules) } } }))
+}
+
+/** A rule's decision as the import's (the rule's editor – F22). */
+export const choiceOfRule = (r: ImportRule): Choice => ({
+  kind: r.kind as TxKind,
+  categoryId: r.categoryId,
+  refundable: r.refundable,
+  household: r.household,
+  memberId: r.memberId,
+  advance: false,
+  gift: r.gift,
+  share: r.share ?? null,
+  counterAccountId: r.counterAccountId
+})
+
+/**
+ * A rule changed in the settings (F22): its direction, decision and – a rule up to an amount – its limit; the user's
+ * own from now on (`learned` false), with „Cofnij”.
+ */
+export function editRule(id: string, patch: { direction: 'in' | 'out' | null; choice: Choice; maxAmount?: number | null }): void {
+  const rule = useData.getState().fi?.settings.import.rules.find((r) => r.id === id)
+  if (!rule) return
+  const next: ImportRule = {
+    ...rule,
+    direction: patch.direction,
+    ...ruleDecisionOf(patch.choice),
+    ...(rule.mode === 'amount' && patch.maxAmount ? { maxAmount: patch.maxAmount } : {}),
+    learned: false,
+    updatedAt: new Date().toISOString()
+  }
+  setRules((rules) => rules.map((r) => (r.id === id ? next : r)))
+  toast(`Reguła „${rule.label || rule.match}” zmieniona.`, 'success', 6000, { label: 'Cofnij', run: () => setRules((rules) => rules.map((r) => (r.id === id ? rule : r))) })
+}
+
+/**
+ * A rule of a brand up to an amount (F22): its expenses up to `maxAmount` get `categoryId`, the rest – the brand's plain
+ * rule („Orlen do 40 zł → kawa”). With „Cofnij”.
+ */
+export function addAmountRule(input: { brand: string; label: string; maxAmount: number; categoryId: string }): void {
+  const rule = importRuleSchema.parse({
+    id: newId(),
+    match: input.brand,
+    mode: 'amount',
+    maxAmount: input.maxAmount,
+    direction: 'out',
+    label: input.label,
+    kind: 'expense',
+    categoryId: input.categoryId,
+    learned: false,
+    hits: 0,
+    updatedAt: new Date().toISOString()
+  })
+  setRules((rules) => [...rules, rule])
+  toast(`Nowa reguła: ${input.label} do ${(input.maxAmount / 100).toLocaleString('pl-PL')} zł.`, 'success', 6000, { label: 'Cofnij', run: () => deleteRule(rule.id) })
+}
+
+/**
+ * „Zastosuj do historii” (F22): a rule's category and financing for the operations it catches decided otherwise – those
+ * not changed since they were counted; „Cofnij” takes back those still as it left them.
+ */
+export function applyRuleToHistory(items: ReadonlyArray<{ before: Transaction; after: Transaction }>, label: string): void {
+  const s = useData.getState()
+  if (s.status?.readOnly) return
+  // By content: a save stamps a record in place (a new object, the same operation).
+  const now = items.filter(({ before }) => sameContentAs(s.records.transactions[before.id]?.record, before))
+  if (!now.length) {
+    toast('Te operacje zmieniły się od sprawdzenia – lista liczy się od nowa.', 'info', 5000)
+    return
+  }
+  replaceRecords(
+    'transactions',
+    now.map((x) => x.after)
+  )
+  const undo = () => {
+    const current = useData.getState().records.transactions
+    replaceRecords(
+      'transactions',
+      now.filter((x) => sameContentAs(current[x.after.id]?.record, x.after)).map((x) => x.before)
+    )
+  }
+  toast(`Reguła „${label}” zastosowana do historii: ${countLabel(now.length, 'operacja', 'operacje', 'operacji')}.`, 'success', 8000, { label: 'Cofnij', run: undo })
 }
 
 /**

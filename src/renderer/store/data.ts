@@ -748,9 +748,10 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
 
 /**
  * Many records deleted with one call (W1: an import's, duplicates): gone from memory at once; those the disk refused come
- * back. Returns the ids deleted and the first error.
+ * back. Returns the ids deleted and the first error. `reason` 'undo': taken back with their import (F4 – T39); 'drop': old
+ * batches of `imports`, no version in the history.
  */
-export async function deleteRecords(collection: Collection, ids: readonly string[]): Promise<{ deleted: string[]; error: string | null }> {
+export async function deleteRecords(collection: Collection, ids: readonly string[], opts: { reason?: 'undo' | 'drop' } = {}): Promise<{ deleted: string[]; error: string | null }> {
   const s = get()
   const entries = new Map(ids.map((id) => [id, mapOf(s, collection)[id]]))
   const drafts = ids.filter((id) => s.drafts[id])
@@ -773,7 +774,7 @@ export async function deleteRecords(collection: Collection, ids: readonly string
   if (!onDisk.length) return { deleted: [...ids], error: null }
   let results: Array<{ id: string; error?: string }>
   try {
-    results = await api.deleteRecords(collection, onDisk)
+    results = await api.deleteRecords(collection, onDisk, opts.reason)
   } catch (e) {
     results = onDisk.map((id) => ({ id, error: errorMessage(e) }))
   }
