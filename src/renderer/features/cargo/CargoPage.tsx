@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { addMonths, daysInMonth, monthsBetween, warsawNow } from '@shared/calc/dates'
+import { glossaryOf } from '@shared/glossary'
 import { paymentsIndex } from '@shared/calc/cargoStatus'
 import { cycleText, deadText, priceText, SHORT_MONTHS, type DeadContainer, type PriceChange } from '@shared/calc/cargoWatch'
 import { amountIn, cyclePosition, nextUnpaidOf, scheduleOf, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
@@ -631,7 +632,7 @@ function LinkPayments({ c }: { c: Container }) {
 function LoadLine({ fleet }: { fleet: FleetState }) {
   const c = fleet.cargo
   return (
-    <Panel title="Linia zanurzenia" testId="cargo-load-line">
+    <Panel title="Linia zanurzenia" hint={glossaryOf('Ładownia')} testId="cargo-load-line">
       <div className="flex flex-col gap-1.5 text-[12px]">
         <div className="flex items-baseline gap-2">
           <span className="text-muted">Masa ładunku</span>
@@ -653,7 +654,7 @@ function LoadLine({ fleet }: { fleet: FleetState }) {
 
 function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container[] }) {
   return (
-    <Panel title="Odkładki" testId="cargo-tanks">
+    <Panel title="Odkładki" hint={glossaryOf('Zbiornik')} testId="cargo-tanks">
       {!fleet.tanks.length ? (
         <Empty>Brak opłat okresowych – dodaj kontener z cyklem dłuższym niż miesiąc (np. OC co rok).</Empty>
       ) : (

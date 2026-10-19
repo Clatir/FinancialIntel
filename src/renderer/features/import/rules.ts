@@ -139,7 +139,7 @@ export const choiceOfRule = (r: ImportRule): Choice => ({
  * A rule changed in the settings (F22): its direction, decision and – a rule up to an amount – its limit; the user's
  * own from now on (`learned` false), with „Cofnij”.
  */
-export function editRule(id: string, patch: { direction: 'in' | 'out' | null; choice: Choice; maxAmount?: number | null }): void {
+export function editRule(id: string, patch: { direction: 'in' | 'out' | null; choice: Choice; maxAmount?: number | null; tags?: readonly string[] }): void {
   if (!canWrite()) return
   const rule = useData.getState().fi?.settings.import.rules.find((r) => r.id === id)
   if (!rule) return
@@ -148,6 +148,8 @@ export function editRule(id: string, patch: { direction: 'in' | 'out' | null; ch
     direction: patch.direction,
     ...ruleDecisionOf(patch.choice),
     ...(rule.mode === 'amount' && patch.maxAmount ? { maxAmount: patch.maxAmount } : {}),
+    // Its tags (F17 – „Netia → #ulga-internet”): the operations it makes carry them; none – the field goes.
+    ...(patch.tags ? { tags: patch.tags.length ? [...patch.tags] : undefined } : {}),
     learned: false,
     updatedAt: new Date().toISOString()
   }

@@ -66,7 +66,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
-  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `calc/scheduled.ts` (boje), `calc/ahead.ts` (salda kont naprzód), `calc/course.ts` (kurs i manewry), `calc/yearPlan.ts` (plan roczny), `calc/cargoWatch.ts` (ceny i ciche kontenery), `calc/anomalies.ts` (radar anomalii), `calc/returns.ts` (zwroty w drodze), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `calc/scheduled.ts` (boje), `calc/ahead.ts` (salda kont naprzód), `calc/course.ts` (kurs i manewry), `calc/yearPlan.ts` (plan roczny), `calc/cargoWatch.ts` (ceny i ciche kontenery), `calc/anomalies.ts` (radar anomalii), `calc/returns.ts` (zwroty w drodze), `calc/tags.ts` (tagi i wyprawy), `calc/drill.ts` (marki, porównania), `calc/fuel.ts` (bilans paliwa), `calc/netWorth.ts` (majątek netto), `calc/inflation.ts` (osobista inflacja), `calc/why.ts` („skąd ta liczba?”), `glossary.ts` (słowniczek), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `threadpool.ts` (pula wątków plików), `quick.ts` (szybki wpis i globalny skrót),
@@ -917,6 +917,46 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `cargo-actions.test.ts` (dwa ostatnie ze sklepami okna – w `tsconfig.web.json`), `tests/fs/bank-files.test.ts`,
   poszerzone `fleet`, `inbox`, `briefing`; E2E `tests/e2e/sensors.spec.ts`.
 
+## Kod (1.10.0 – wywiad, grupa V, D87)
+- Tagi i wyprawy (F17, T291): `transaction.tags`, `split.tags`, `importRule.tags` (`tagListSchema` w
+  `schema/common.ts`), `settings.intel` (`intelSettingsSchema`: `tagGoals` – klucz tagu → cel, `cpi` – RRRR-MM → %);
+  `calc/tags.ts` (`tagLabel` / `tagKey`, `parseTags`, `withTags`, `hashTags` / `withoutHashTags`, `hasTag`, `tagKeysOf`,
+  `taggedParts`, `tagSummaries` – wpływ tylko moje części `incomeShares` z `line`, `knownTags`, `lastTag` –
+  `LAST_TAG_DAYS`, `MAX_TAGS`); `operationsView.ts` – `filter.tags` (w `LIST_KEYS`), tekst wyszukiwania z „#tag”;
+  `reconcile.ts` `buildImport` – tagi reguły przy jej decyzji; `export/budget.ts` kolumna „Tagi”; renderer:
+  `components/TagsField.tsx` (`<testId>`, `-input`, `-chip`, `-remove`), `features/tags/state.ts` (`knownTagsOf` /
+  `useKnownTags`, `lastTagOf` – raz na listę i dzień, `useTagSummaries`, `setTagGoal`, `showTag`), edytor
+  `operation-tags`, część paragonu `split-tags-open` / `split-tags`, wiersz `operation-row-tags`, filtr
+  `operations-more-tags` / `operations-more-tag-<klucz>`, szybki wpis `quick-tags`, `quick-tag-last`
+  (`QuickData.knownTags` / `lastTag`, `QuickDraft.tags`), reguła `import-rule-tags`, `import-rule-tag-list`
+  (`editRule(…, tags)`), Wywiad `features/intel/Expeditions.tsx` (`intel-expeditions`, `intel-expedition` z `data-tag`,
+  `-open`, `-spent`, `-card`, `-categories`, `-months`, `-goal`, `-goal-select`, `-operations`,
+  `intel-expeditions-more`).
+- Wywiad do szczegółu (F20, T292): `calc/intel.ts` `SpendingRow.children`; `calc/drill.ts` (`brandStats`,
+  `monthComparison`, `isOver` / `OVER_SHARE`, `brandYears` / `brandYearOf`); renderer `features/intel/Drill.tsx`
+  (`SpendingTable` – `intel-spend-row` / `-sub` z `data-label`, `intel-spend-toggle`, `intel-spend-cell`, „bez
+  podkategorii” bez kliknięcia – `intel-spend-value`; `showSpending`, `showBrandKey`; `TargetsPanel` – `intel-targets`,
+  `intel-target` z `data-name`, `intel-target-total`, `intel-targets-more`; `ComparisonPanel` – `intel-comparison`,
+  `-month`, `-row` z `data-id` / `data-over`; `BrandYearLine` – `operation-brand-year`).
+- Majątek netto i bilans paliwa (F24, F25, T293, T294): `calc/netWorth.ts` (`netAdjustments` – operacje pożyczek z
+  `loans.ts` `forEachLoanOperation`, jak stan pożyczek; `netWorthCurve`), `features/intel/wealth.ts` `useNetWorth`,
+  `charts.tsx` `WealthChart net` (`data-second`), Wywiad – przełącznik linii (`fi.intel.wealthBasis`),
+  `intel-wealth-accounts` / `intel-wealth-net`; `calc/fuel.ts` (`fuelMonths`, `fuelSummary`, `medianRate`,
+  `savingsRate`, `fuelWindow`, `rateText`), `features/intel/Fuel.tsx` (`intel-fuel`, `-row` z `data-month`, `-balance`,
+  `-rate`, `-median6`, `-work`), debriefing `debrief-fuel` (`MonthPage.tsx` `FuelLine`), Raporty – debriefing i przegląd
+  roczny (siła floty netto, bilans roku), `MonthRow.balance` / `rate` (eksport „Miesiące”).
+- „Skąd ta liczba?” i słowniczek (F29, T295): `calc/why.ts` (`energyWhy`, `rangeWhy`, `targetsWhy`, `deliveryWhy`,
+  `WhyLine`), `shared/glossary.ts` (`GLOSSARY`, `glossaryOf`); Mostek – `BridgeFleet` z `month`, `plan`, `layers`,
+  `lastDelivery` (`bridgeFleet(f, layers)`), `WhyList`, `bridge-energy-why` / `-lines`, `state-range-why` / `-lines`,
+  `state-targets-why` / `-lines`, `state-delivery-why` / `-lines`, `why-line`; `Panel hint` (`panel-hint`); F1 –
+  `shortcuts-glossary`, `glossary-term`; dymek zasobnika (`App.tsx` `TrayStatus`).
+- Osobista inflacja (F36, T296): `calc/inflation.ts` (`personalInflation`, `INFLATION_MIN_PURCHASES`, `parseCpi`),
+  `features/intel/Inflation.tsx` (`setCpi`; `intel-inflation`, `-personal`, `-cpi`, `-hull`, `-months`, `-brand` /
+  `-container` z `data-name`, `-categories`; `intel-cpi`, `-month`, `-value`).
+- Przegląd (T298): poprawki z testami w `intel-v.test.ts` („poprawki z przeglądu grupy V”) i `intel-v-store.test.ts`.
+- Testy: `tests/unit/intel-v.test.ts`, `intel-v-store.test.ts` (sklepy okna – w `tsconfig.web.json`), poszerzone
+  `export`, `plan-reports`, `household` (`line`); E2E `tests/e2e/intel-v.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -1038,4 +1078,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.9.0 Ładownia i czujniki (grupa U, D87): nowa cena kontenera z „Zaktualizuj” i historią kwot, kontener bez
   płatności, opłaty co 2 / 3 / 6 miesięcy, harmonogram miesięcy i rachunki o zmiennej kwocie, plik z mBanku w Pobranych
   (import jednym kliknięciem, plik do Kosza), radar anomalii z „to w porządku”, zwroty w drodze
+- [x] 1.10.0 Wywiad (grupa V, D87): tagi i wyprawy (koszt wyjazdu przez wiele kategorii, z celem), wydatki do
+  podkategorii i operacji, namierzone cele (marki), porównanie miesiąca, siła floty netto, bilans paliwa i stopa
+  oszczędności, „skąd ta liczba?” na Mostku i słowniczek okrętu, osobista inflacja z CPI GUS wpisanym ręcznie
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

@@ -28,6 +28,10 @@ import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberP
 import { ShareEditor } from '../household/ShareEditor'
 import { useMembers } from '../household/actions'
 import { AnomalyNote, AwaitReturnBox } from '../sensors/EditorBoxes'
+import { TagsField } from '../../components/TagsField'
+import { useKnownTags } from '../tags/state'
+import { BrandYearLine } from '../intel/Drill'
+import { withTags } from '@shared/calc/tags'
 
 /** The kinds on the first row of the editor; the rest under „inne”. */
 const MAIN_KINDS: TxKind[] = ['expense', 'income', 'transfer', 'trading']
@@ -69,6 +73,7 @@ export function OperationEditor({ id }: { id: string }) {
   const loans = useRecordList('loans')
   const balances = useRecordList('balances')
   const members = useMembers()
+  const knownTags = useKnownTags()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
   // An edit that changes a confirmed balance or a bank's amount (F12): asked before it is made.
@@ -238,7 +243,7 @@ export function OperationEditor({ id }: { id: string }) {
             data-testid="operation-account"
           />
         </Field>
-        <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'}>
+        <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'} hint={isDraft ? undefined : <BrandYearLine t={t} />}>
           <div className="flex min-w-0 items-center gap-2">
             <TextField commit className="min-w-0 flex-1" value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
             {/* F18: every operation of this counterparty – the brand the import knows it by, the whole history. */}
@@ -445,6 +450,13 @@ export function OperationEditor({ id }: { id: string }) {
           </Section>
         )}
 
+        {/* F17: what the money was for across categories – a trip, a renovation (its card in Wywiad → „Wyprawy”). */}
+        {(t.kind === 'expense' || t.kind === 'income' || !!t.tags?.length) && (
+          <Field label="Tagi" hint={t.splits.length && t.kind === 'expense' ? 'Tag całego paragonu; część może mieć też własny (#).' : undefined}>
+            <TagsField value={t.tags ?? []} onChange={(tags) => patch({ tags: tags.length ? tags : undefined })} known={knownTags} disabled={readOnly} testId="operation-tags" />
+          </Field>
+        )}
+
         <Field label="Notatka">
           <TextArea commit value={t.note} onChange={(note) => patch({ note })} rows={2} maxLength={5000} data-testid="operation-note" />
         </Field>
@@ -564,6 +576,9 @@ function GoalSelect({ value, outgoing, goals, onChange }: { value: string | null
 /** A split receipt: lines with their own category, a household member's part (D80); the lines sum to the amount. */
 function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update: (fn: (r: Transaction) => Transaction) => void }) {
   const cats = useCategories()
+  const knownTags = useKnownTags()
+  // Lines whose tags field is open (F17): one with tags shows it always.
+  const [tagLines, setTagLines] = useState<ReadonlySet<string>>(() => new Set())
   const rest = useMemo(() => t.amount - sum(t.splits.map((s) => s.amount)), [t])
   const lastAmount = t.splits.at(-1)?.amount ?? 0
   // Lines changed by hand are a receipt of their own: no shared purchase's split is kept for them (D83).
@@ -571,10 +586,19 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
   return (
     <div className="flex flex-col gap-1.5" data-testid="operation-splits">
       {t.splits.map((s, i) => (
-        <div key={s.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto_auto] items-center gap-1.5" data-testid="split-line">
+        <div key={s.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto_auto_auto] items-center gap-1.5" data-testid="split-line">
           <AmountField value={Math.abs(s.amount)} onChange={(v) => setLine(s.id, { amount: sign * (v ?? 0) })} aria-label={`Kwota części ${i + 1}`} data-testid="split-amount" />
           <CategorySelect value={s.categoryId} onChange={(categoryId) => setLine(s.id, { categoryId })} data-testid="split-category" />
           <FinancerSelect refundable={s.refundable} memberId={s.memberId} gift={s.gift} onChange={(p) => setLine(s.id, p)} compact testId="split-financer" />
+          <button
+            type="button"
+            className={cx('btn btn-ghost h-[22px] px-1 text-[11px]', (!!s.tags?.length || tagLines.has(s.id)) && 'text-accent')}
+            title="Tagi tej części (F17) – np. jedna rzecz z paragonu na wyprawę"
+            onClick={() => setTagLines((x) => (x.has(s.id) ? new Set([...x].filter((y) => y !== s.id)) : new Set([...x, s.id])))}
+            data-testid="split-tags-open"
+          >
+            #{s.tags?.length ? s.tags.length : ''}
+          </button>
           <button
             type="button"
             className="btn btn-ghost h-[22px] px-1"
@@ -592,13 +616,20 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
                   categoryId: only?.categoryId ?? r.categoryId,
                   refundable: only?.refundable ?? false,
                   memberId: only?.refundable ? only.memberId : null,
-                  gift: only?.refundable && only.gift ? true : undefined
+                  gift: only?.refundable && only.gift ? true : undefined,
+                  // The line's tags stay the operation's (F17).
+                  ...(only?.tags?.length ? { tags: withTags(r.tags ?? [], only.tags) } : {})
                 }
               })
             }
           >
             <IconClose size={12} />
           </button>
+          {(!!s.tags?.length || tagLines.has(s.id)) && (
+            <div className="col-span-full pl-[100px]">
+              <TagsField value={s.tags ?? []} onChange={(tags) => setLine(s.id, { tags: tags.length ? tags : undefined })} known={knownTags} compact placeholder="tag tej części…" testId="split-tags" />
+            </div>
+          )}
         </div>
       ))}
       <div className="flex flex-wrap items-center gap-2 text-[11.5px]">

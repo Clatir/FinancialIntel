@@ -14,6 +14,8 @@ import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
 import { BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
 import { sum } from '@shared/calc/operations'
+import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
+import { netAdjustments } from '@shared/calc/netWorth'
 import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
 import { formatPln, rangeText } from '@shared/format'
 import { useData } from '../../store/data'
@@ -237,6 +239,7 @@ function useDebrief(month: string) {
     return {
       brief,
       log,
+      fuel: fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths),
       plan: planFor(plans, month),
       game: {
         ok: days.filter((d) => d.status === 'ok').length,
@@ -278,6 +281,13 @@ function DebriefReport() {
           ? ([
               ['Energia miesiąca (pensja po odkładkach, z łupami)', money(b.energy.budget)],
               ['Wydane z energii (i ponad nią z osłon)', money(b.energy.used)]
+            ] as Array<[string, string]>)
+          : []),
+        // F25: what the month added to the ship and its savings rate beside the median of the 6 months before.
+        ...(d.fuel.month
+          ? ([
+              ['Bilans paliwa (przychód − koszty netto)', signed(money, d.fuel.month.balance)],
+              ['Stopa oszczędności', `${rateText(d.fuel.month.rate)}${d.fuel.median6 != null ? ` (mediana 6 mies.: ${rateText(d.fuel.median6)})` : ''}`]
             ] as Array<[string, string]>)
           : []),
         // A month in progress is never „na plus” yet (N65).
@@ -409,6 +419,14 @@ function YearReport() {
   const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.incomeContext), [transactions, settings, year, fleet.incomeContext])
   const today = fleet.today
   const wealth = useMemo(() => yearWealth(transactions, balances, settings.accounts.map((a) => a.id), year, today), [transactions, balances, settings, year, today])
+  // F24: „Siła floty netto” at both ends – the loans' open amounts and the household's balance beside the accounts.
+  const loans = useRecordList('loans')
+  const containers = useRecordList('containers')
+  const net = useMemo(() => {
+    const ends = [addDays(`${year}-01-01`, -1), `${year}-12-31` < today ? `${year}-12-31` : today]
+    const adj = netAdjustments(ends, { loans, transactions, containers, household: fleet.household, today })
+    return { start: wealth.start + adj[0]!, end: wealth.end + adj[1]! }
+  }, [wealth, year, today, loans, transactions, containers, fleet.household])
   const achievements = (game?.input.game ?? []).flatMap((g) => g.achievements).filter((a) => (a.day ?? '').startsWith(year) && (ACHIEVEMENTS as readonly string[]).includes(a.id))
   const reached = goalsReachedIn(fleet.log, fleet.goals, year)
   const sections = (money: (g: number) => string): ReportSection[] => [
@@ -421,6 +439,10 @@ function YearReport() {
         // The sum of the accounts' balances (T81, N63) – borrowed money and the household's advances in it.
         ['Pieniądze na kontach na początku (31.12 roku wcześniej)', money(wealth.start)],
         [`Pieniądze na kontach na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(wealth.end)],
+        ['Siła floty netto na początku (z należnościami, bez długu)', money(net.start)],
+        [`Siła floty netto na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(net.end)],
+        // F25: what the year added to the ship.
+        ['Bilans paliwa roku (przychody − koszty netto)', `${signed(money, y.income - y.costs)} · stopa oszczędności ${rateText(savingsRate(y.income - y.costs, y.income))}`],
         ['Zasięg teraz', fleet.range == null ? '—' : `${rangeText(fleet.range)}${fleet.shipClass ? ` (${SHIP_CLASS_LABEL[fleet.shipClass]})` : ''}`]
       ]
     },

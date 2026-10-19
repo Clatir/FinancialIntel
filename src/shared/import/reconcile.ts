@@ -983,6 +983,7 @@ export function buildImport(
 ): ImportResult {
   const groups = importGroups(plan, choices.restoreDeleted)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
+  const ruleById = new Map(opts.rules.map((r) => [r.id, r]))
   const bankOf = (p: RowPlan): BankRow => ({
     format: 'mbank',
     key: p.key,
@@ -1086,6 +1087,8 @@ export function buildImport(
     const refundable = c.kind === 'expense' && c.refundable
     const household = c.kind === 'income' && !out && c.household
     const share = c.kind === 'expense' && !refundable && c.share ? c.share : null
+    // The rule's tags (F17 – „Netia → #ulga-internet”): when its decision stands.
+    const ruleTags = planned.decision.ruleId && sameChoice(c, base) ? ruleById.get(planned.decision.ruleId)?.tags : undefined
     counts.created++
     create.push(
       transactionSchema.parse({
@@ -1112,6 +1115,7 @@ export function buildImport(
         ...(c.kind === 'transfer' && c.counterAccountId && c.counterAccountId !== plan.accountId && (!opts.accounts || opts.accounts.includes(c.counterAccountId)) ? { bothSides: true } : {}),
         loanId: c.kind === 'loan' ? (c.loanId ?? null) : null,
         containerId: c.kind === 'expense' && out ? planned.decision.containerId : null,
+        ...(ruleTags?.length ? { tags: [...ruleTags] } : {}),
         bank: bankOf(p)
       })
     )

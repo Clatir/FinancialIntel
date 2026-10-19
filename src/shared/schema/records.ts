@@ -4,7 +4,7 @@
  * The states of the layers are never stored: `shared/calc/fleet.ts` computes them from these records (T4).
  */
 import { z } from 'zod'
-import { clockTime, grosze, isoDate, isoDateTime, isoMonth, recordBase, text, ulidSchema } from './common'
+import { clockTime, grosze, isoDate, isoDateTime, isoMonth, recordBase, tagListSchema, text, ulidSchema } from './common'
 
 // ------------------------------------------------------------------ operations
 
@@ -54,7 +54,9 @@ export const splitSchema = z.looseObject({
    * and it is no cost of mine. An older version reads the line as financed (the member owes it). Absent = no.
    */
   gift: z.boolean().optional().catch(undefined),
-  note: text
+  note: text,
+  /** The line's own tags (1.10.0, F17) besides the operation's: one receipt for two trips. */
+  tags: tagListSchema.optional().catch(undefined)
 })
 export type Split = z.infer<typeof splitSchema>
 
@@ -183,7 +185,9 @@ export const transactionSchema = z.looseObject({
    * A return of money awaited for this purchase (1.9.0, F34 – goods sent back, a complaint, a booking cancelled): the
    * amount and its last day; an incoming operation of the same brand (±10%) closes it, or the user does (`closedAt`).
    */
-  awaitReturn: awaitReturnSchema.nullable().optional().catch(undefined)
+  awaitReturn: awaitReturnSchema.nullable().optional().catch(undefined),
+  /** Tags (1.10.0, F17): the trip or the project the operation is for; its receipt's lines may add their own. */
+  tags: tagListSchema.optional().catch(undefined)
 })
 export type Transaction = z.infer<typeof transactionSchema>
 

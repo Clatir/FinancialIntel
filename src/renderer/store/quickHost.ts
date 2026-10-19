@@ -5,6 +5,8 @@
  */
 import type { QuickData, QuickResult } from '@shared/api'
 import { quickTemplates } from '@shared/calc/quick'
+import { hashTags, withoutHashTags, withTags } from '@shared/calc/tags'
+import { knownTagsOf, lastTagOf } from '../features/tags/state'
 import { daysInMonth, warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
@@ -65,7 +67,9 @@ export function quickData(): QuickData | null {
       }),
     hideAmounts: useMachine.getState().prefs.hideAmounts,
     readOnly: !!s.status?.readOnly,
-    ...quickTemplates(listOf(s.records.transactions))
+    ...quickTemplates(listOf(s.records.transactions)),
+    knownTags: knownTagsOf(listOf(s.records.transactions)),
+    lastTag: lastTagOf(listOf(s.records.transactions), warsawNow().date)
   }
 }
 
@@ -99,6 +103,8 @@ export interface QuickDraft {
   shares?: Array<{ memberId: string; amount: number; advance: boolean }>
   /** „Zaliczka / przychód” switched by the user (N39): only then remembered for a member still asked (D80 b). */
   advanceChosen?: boolean
+  /** Its tags (F17); „#słowo” in the counterparty or the note adds one too. */
+  tags?: string[]
 }
 
 /** The operation of a quick draft (or why not). */
@@ -130,6 +136,9 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
           }))
         : []
   const refundable = d.kind === 'refundable' && !splits.length
+  // F17: the tags of the field and the „#słowo” typed in the counterparty (taken out of the name) or the note.
+  const counterparty = withoutHashTags(d.counterparty)
+  const tags = withTags(Array.isArray(d.tags) ? d.tags.filter((x): x is string => typeof x === 'string') : [], [...hashTags(d.counterparty), ...hashTags(d.note)])
   const parsed = transactionSchema.safeParse({
     schemaVersion: SCHEMA_VERSION,
     id: ulidSchema.safeParse(d.id).success ? d.id : newId(),
@@ -148,8 +157,9 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
     ...(refundable && d.gift ? { gift: true } : {}),
     ...(share ? { share } : {}),
     splits,
-    counterparty: d.counterparty.trim(),
+    counterparty,
     note: d.note,
+    ...(tags.length ? { tags } : {}),
     impulse: income ? null : d.impulse,
     logNote: d.logNote
   })

@@ -3,6 +3,7 @@
  * operation (or for Portfel XTB), XTB inflows without an entry – and the latest docked ones; the ICTTJ folder's state.
  */
 import type { Delivery } from '@shared/calc/dock'
+import { glossaryOf } from '@shared/glossary'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { useIctj } from '../../store/ictj'
 import { navigate } from '../../store/ui'
@@ -31,7 +32,7 @@ export function DockPanel() {
   const rest = list.filter((d) => d.state === 'skipped' || d.state === 'before-start')
   const toSettings = () => navigate({ page: 'settings', tab: 'ictj' })
   return (
-    <Panel title={open.length ? `Dokowanie (${open.length})` : 'Dokowanie'} name="Dokowanie" testId="bridge-docking">
+    <Panel title={open.length ? `Dokowanie (${open.length})` : 'Dokowanie'} name="Dokowanie" hint={glossaryOf('Dostawa')} testId="bridge-docking">
       <div className="flex flex-col gap-1 text-[12px]">
         {snap.status !== 'ok' && (
           <button className="self-start text-left text-[11.5px] text-muted hover:text-fg-strong" onClick={toSettings} data-testid="docking-ictj-state">

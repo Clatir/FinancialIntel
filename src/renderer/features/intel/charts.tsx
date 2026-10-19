@@ -13,7 +13,21 @@ import { cx } from '../../components/ui'
 const zl = (g: number) => `${plnText(g)} zł`
 
 /** The wealth (the budget's money) at each week's end; the drawdown below; BOS / CHoCH where the structure broke. */
-export function WealthChart({ points, marks, height = 280, testId = 'intel-wealth-chart' }: { points: readonly WealthPoint[]; marks: readonly StructureMark[]; height?: number; testId?: string }) {
+export function WealthChart({
+  points,
+  marks,
+  net,
+  height = 280,
+  testId = 'intel-wealth-chart'
+}: {
+  /** The line the structure and the drawdown are of (the accounts' money, or the net worth – F24). */
+  points: readonly WealthPoint[]
+  marks: readonly StructureMark[]
+  /** The other line, thin and dashed (F24: the net worth beside the accounts, or the accounts beside it). */
+  net?: readonly WealthPoint[]
+  height?: number
+  testId?: string
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const fill = usePanelFill()
@@ -40,6 +54,10 @@ export function WealthChart({ points, marks, height = 280, testId = 'intel-wealt
     chartRef.current = chart
     const line = chart.addSeries(LineSeries, { color: '#e8edf2', lineWidth: 2, priceLineVisible: false, lastValueVisible: !hidden })
     line.setData(points.map((p) => ({ time: p.date as Time, value: p.value / 100 })))
+    if (net?.length) {
+      const second = chart.addSeries(LineSeries, { color: '#7a838e', lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false })
+      second.setData(net.map((p) => ({ time: p.date as Time, value: p.value / 100 })))
+    }
     createSeriesMarkers(
       line,
       marks.map((m) => ({
@@ -59,10 +77,10 @@ export function WealthChart({ points, marks, height = 280, testId = 'intel-wealt
       chart.remove()
       chartRef.current = null
     }
-  }, [points, marks, height, fill, hidden])
+  }, [points, marks, net, height, fill, hidden])
   return (
     <div className={cx(fill ? 'flex min-h-0 w-full flex-1 flex-col' : 'w-full')}>
-      <div ref={ref} style={fill ? { minHeight: 200 } : { height }} className={cx(fill ? 'w-full flex-1' : 'w-full')} data-testid={testId} data-points={points.length} data-marks={marks.length} />
+      <div ref={ref} style={fill ? { minHeight: 200 } : { height }} className={cx(fill ? 'w-full flex-1' : 'w-full')} data-testid={testId} data-points={points.length} data-marks={marks.length} data-second={net?.length ?? 0} />
     </div>
   )
 }

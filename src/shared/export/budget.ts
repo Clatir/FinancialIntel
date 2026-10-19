@@ -9,6 +9,8 @@ import { TX_KIND_LABEL } from '../schema/records'
 import { financersText, incomeShares, memberName } from '../calc/household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
 import { amountOn, categoryIndex, isTwoSided, sum, touchesAccount } from '../calc/operations'
+import { tagsOf, withTags } from '../calc/tags'
+import { savingsRate } from '../calc/fuel'
 import { debriefing, transactionsOfMonth } from '../calc/plan'
 import type { Alarm, FleetEvent } from '../calc/fleet'
 import type { XlsxSheet } from './xlsx'
@@ -44,6 +46,8 @@ export interface OperationRow {
   financed: string
   log: string
   note: string
+  /** Its tags (F17): the operation's and its lines', „#wakacje #remont”; '' = none. */
+  tags: string
 }
 
 export function operationRows(
@@ -94,7 +98,10 @@ export function operationRowsOf(
     title: t.title,
     financed: whose(t, members),
     log: t.impulse ? IMPULSE_LABEL[t.impulse] : '',
-    note: t.note
+    note: t.note,
+    tags: withTags(tagsOf(t), t.splits.flatMap((s) => s.tags ?? []))
+      .map((x) => `#${x}`)
+      .join(' ')
   }))
 }
 
@@ -107,12 +114,12 @@ function whose(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id'
   return financersText(t, members)
 }
 
-const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Finansuje', 'Dziennik', 'Notatka'] as const
+const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Finansuje', 'Dziennik', 'Notatka', 'Tagi'] as const
 
 export function operationsCsv(rows: readonly OperationRow[]): string {
   return toCsv(
     OPERATION_HEADER,
-    rows.map((r) => [r.date, r.time, r.account, r.kind, plnCell(r.amount), r.category, r.counterparty, r.title, r.financed, r.log, r.note])
+    rows.map((r) => [r.date, r.time, r.account, r.kind, plnCell(r.amount), r.category, r.counterparty, r.title, r.financed, r.log, r.note, r.tags])
   )
 }
 
@@ -131,9 +138,10 @@ export function operationsSheet(rows: readonly OperationRow[]): XlsxSheet {
       { header: 'Tytuł', kind: 'text', width: 36 },
       { header: 'Finansuje', kind: 'text', width: 14 },
       { header: 'Dziennik', kind: 'text', width: 9 },
-      { header: 'Notatka', kind: 'text', width: 30 }
+      { header: 'Notatka', kind: 'text', width: 30 },
+      { header: 'Tagi', kind: 'text', width: 22 }
     ],
-    rows: rows.map((r) => [r.date, r.time, r.account, r.kind, r.amount / 100, r.category, r.counterparty, r.title, r.financed, r.log, r.note])
+    rows: rows.map((r) => [r.date, r.time, r.account, r.kind, r.amount / 100, r.category, r.counterparty, r.title, r.financed, r.log, r.note, r.tags])
   }
 }
 
@@ -148,6 +156,9 @@ export interface MonthRow {
   inProgress: boolean
   /** The energy left at the month's end. */
   loot: number | null
+  /** „Bilans paliwa” (F25): the income less the costs, and the savings rate (% of the income; null – no income). */
+  balance: number
+  rate: number | null
 }
 
 export function monthRows(
@@ -158,18 +169,20 @@ export function monthRows(
   // The month's operations from the list's index by month (W30): never the whole history for each month.
   return months.map((month) => {
     const d = debriefing(month, input)
-    return { month, salary: d.salary, costs: d.costs, income: incomeOfPeriod(transactionsOfMonth(input.transactions, month), ctx).total, plus: d.plus, inProgress: !d.ended, loot: d.loot }
+    const income = incomeOfPeriod(transactionsOfMonth(input.transactions, month), ctx).total
+    return { month, salary: d.salary, costs: d.costs, income, plus: d.plus, inProgress: !d.ended, loot: d.loot, balance: income - d.costs, rate: savingsRate(income - d.costs, income) }
   })
 }
 
 // The income as D81 counts it – „Przychody” everywhere it means that (N24).
-const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)'] as const
+const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)', 'Bilans (zł)', 'Stopa oszczędności (%)'] as const
+const rateCell = (rate: number | null) => (rate == null ? '' : String(rate).replace('.', ','))
 const plusText = (r: Pick<MonthRow, 'plus' | 'inProgress'>) => (r.inProgress ? 'w toku' : r.plus == null ? '' : r.plus ? 'tak' : 'nie')
 
 export function monthsCsv(rows: readonly MonthRow[]): string {
   return toCsv(
     MONTH_HEADER,
-    rows.map((r) => [r.month, r.salary == null ? '' : plnCell(r.salary), plnCell(r.costs), plnCell(r.income), plusText(r), r.loot == null ? '' : plnCell(r.loot)])
+    rows.map((r) => [r.month, r.salary == null ? '' : plnCell(r.salary), plnCell(r.costs), plnCell(r.income), plusText(r), r.loot == null ? '' : plnCell(r.loot), plnCell(r.balance), rateCell(r.rate)])
   )
 }
 
@@ -183,9 +196,11 @@ export function monthsSheet(rows: readonly MonthRow[]): XlsxSheet {
       { header: 'Koszty netto (zł)', kind: 'money', width: 16 },
       { header: 'Przychody (zł)', kind: 'money', width: 15 },
       { header: 'Na plus', kind: 'text', width: 9 },
-      { header: 'Łupy (zł)', kind: 'money', width: 12 }
+      { header: 'Łupy (zł)', kind: 'money', width: 12 },
+      { header: 'Bilans (zł)', kind: 'money', width: 13 },
+      { header: 'Stopa oszczędności (%)', kind: 'number', width: 12 }
     ],
-    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100])
+    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100, r.balance / 100, r.rate])
   }
 }
 

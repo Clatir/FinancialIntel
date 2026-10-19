@@ -99,7 +99,7 @@ describe('liczby, plan, raporty (1.6.1, grupa M)', () => {
     // The export says the month still runs (N65).
     const rows = monthRows({ transactions, categories, plans, log: [], today: '2026-10-20' }, ['2026-10'])
     expect(rows[0]).toMatchObject({ plus: null, inProgress: true })
-    expect(monthsCsv(rows).split('\r\n')[1]).toBe('2026-10;3000,00;1680,00;0,00;w toku;')
+    expect(monthsCsv(rows).split('\r\n')[1]).toBe('2026-10;3000,00;1680,00;0,00;w toku;;-1680,00;')
   })
 
   it('łupy tylko z miesiąca, który silnik przeszedł do końca (B92); indeksy po miesiącach (W30, W38)', () => {

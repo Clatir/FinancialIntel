@@ -47,9 +47,12 @@ export function Panel({
   name,
   detach,
   testId,
-  style
+  style,
+  hint
 }: {
   title?: ReactNode
+  /** The metaphor's meaning (F29, the glossary): a „?” beside the title, the text on hover. */
+  hint?: string
   actions?: ReactNode
   children: ReactNode
   className?: string
@@ -189,6 +192,12 @@ export function Panel({
           >
             {title}
           </h2>
+          {/* Beside the title, not in it: the heading stays the panel's name (layouts, the „Układ” menu, tests). */}
+          {hint && (
+            <span className="cursor-help text-[11px] text-dim" title={hint} data-testid="panel-hint">
+              ?
+            </span>
+          )}
           {!collapsed && actions}
           {controls && (
             <span className="-mr-1 flex shrink-0 items-center">

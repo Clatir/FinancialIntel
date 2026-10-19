@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import { structureOf, wealthCurve, type StructureMark, type WealthPoint } from '@shared/calc/intel'
+import { netWorthCurve } from '@shared/calc/netWorth'
+import type { HouseholdLedger } from '@shared/calc/household'
 import type { Account, Balance, Transaction } from '@shared/schema'
 import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
@@ -30,4 +32,19 @@ export function useWealth(today: string | null): Wealth {
   const balances = useRecordList('balances')
   const accounts = useData((s) => s.fi?.settings.accounts)
   return useMemo(() => (today && accounts ? wealthOf(transactions, balances, accounts, today) : NONE), [transactions, balances, accounts, today])
+}
+
+/**
+ * „Siła floty netto” (1.10.0, F24): the wealth's weeks with the loans' open amounts and the household's balance – the
+ * second line of Wywiad's chart, with its own structure and drawdown.
+ */
+export function useNetWorth(points: readonly WealthPoint[], today: string | null, household: HouseholdLedger | null): Wealth {
+  const transactions = useRecordList('transactions')
+  const loans = useRecordList('loans')
+  const containers = useRecordList('containers')
+  return useMemo(() => {
+    if (!today || !household || points.length < 2) return NONE
+    const net = netWorthCurve(points, { loans, transactions, containers, household, today })
+    return { points: net, ...structureOf(net) }
+  }, [points, today, household, loans, transactions, containers])
 }

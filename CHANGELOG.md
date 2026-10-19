@@ -1,5 +1,46 @@
 # Financial Intel – zmiany
 
+## 1.10.0
+
+Wywiad (grupa V, D87): skąd liczby, dokąd idą pieniądze i ile zostaje – do szczegółu, z wyprawami, majątkiem netto,
+bilansem paliwa i osobistą inflacją.
+
+Wyprawy:
+- Tagi operacji i części paragonu („Wakacje Chorwacja”, „Remont łazienki”): pole „Tagi” w edytorze, „#” przy części
+  paragonu, w szybkim wpisie pole, „+ #tag” ostatnich dni jednym kliknięciem i „#słowo” w nazwie albo notatce („Zapisz
+  i następny” zachowuje tagi – paragony z wyjazdu po kolei). Reguła importu też może dawać tagi („Netia →
+  #ulga-internet”).
+- Wywiad → „Wyprawy”: ile kosztowała wyprawa przez wszystkie kategorie (zwrot zaliczki odejmuje, część domownika nie
+  jest Twoim kosztem), po kategoriach i miesiącach, z celem z Mapy gwiezdnej („Ekspedycja „Wakacje”: wydano 880 z
+  2 000 zł celu”) i „Pokaż w Operacjach”.
+- Filtr „Tag” w Operacjach (także w zapisanych widokach), wyszukiwanie po „#tag”, tagi w wierszu listy i kolumna
+  „Tagi” w eksporcie CSV i Excel.
+
+Wywiad do szczegółu:
+- „Wydatki w czasie” rozwijają podkategorie (Jedzenie → zakupy spożywcze, na mieście, kawa), a kwota w komórce
+  otwiera jej operacje.
+- „Namierzone cele” – sklepy i usługi, w których zostawiasz pieniądze: suma, kontakty, średni paragon, trend, udział w
+  kategorii, ostatnia wizyta; klik – wszystkie operacje marki.
+- „Porównanie” – miesiąc wobec średniej z 3 i 12 miesięcy i roku wcześniej, z akcentem tylko przy przekroczeniach.
+- W edytorze zakupu: „u tego kontrahenta w 2026 – 34 zakupy, 1 240 zł, średnio 36 zł”.
+
+Majątek i paliwo:
+- Siła floty netto: druga linia na krzywej majątku – konta plus należności (domownicy, pożyczki udzielone) minus dług
+  (pożyczki wzięte); wzięta pożyczka już nie wygląda jak wzrost. Przełącznik wybiera linię dla BOS / CHoCH i drawdownu;
+  przegląd roczny podaje siłę floty netto na początku i końcu roku.
+- Bilans paliwa: ile każdy miesiąc dołożył do okrętu (przychód minus koszty netto) i stopa oszczędności z medianami 6
+  i 12 miesięcy, także bez tradingu – w Wywiadzie, w debriefingu („Stopa oszczędności 23% (mediana 6 mies.: 18%)”), w
+  Raportach i w eksporcie „Miesiące” (kolumny „Bilans” i „Stopa oszczędności”).
+- Osobista inflacja: koszty kategorii rok do roku, średni paragon u tych samych marek, ceny kontenerów i „Twoja
+  inflacja” obok CPI GUS wpisanego ręcznie (bez sieci); o ile urósł cel kadłuba.
+
+Skąd ta liczba:
+- Mostek rozbija „Energię dziś” (koperty codzienne, wydane do wczoraj, dni do końca miesiąca, przydział, wydane dziś),
+  zasięg, cele osłon i kadłuba oraz podział ostatniej dostawy – także w osobnym oknie. Dymek zasobnika mówi, z czego
+  jest energia dziś.
+- Słowniczek okrętu (Osłony = bufor na pensje, Kadłub = fundusz awaryjny…) pod F1, w nagłówkach paneli („?”) i w
+  dymkach stanu okrętu.
+
 ## 1.9.0
 
 Ładownia i czujniki (grupa U, D87): okręt sam zauważa nowe ceny, ciche kontenery, nowe opłaty, pliki z banku,

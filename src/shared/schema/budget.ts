@@ -4,7 +4,7 @@
  * every folder and on every computer – so a folder created from an older fi.json gets them on read.
  */
 import { z } from 'zod'
-import { clockTime, grosze, isoDate, isoDateTime, ulidSchema } from './common'
+import { clockTime, grosze, isoDate, isoDateTime, tagListSchema, ulidSchema } from './common'
 import { shareSchema, TX_KINDS } from './records'
 
 /** Fixed id of a default item: a valid ULID `01KDEF<kind><number>`. */
@@ -195,6 +195,8 @@ export const importRuleSchema = z.looseObject({
   /** A purchase financed by several people (D83): each row's amount split so (`calc/share.ts`). Absent / null = none. */
   share: shareSchema.nullable().optional().catch(undefined),
   counterAccountId: ulidSchema.nullable().default(null),
+  /** Tags the rule gives (1.10.0, F17 – „Netia → #ulga-internet”); absent = none. An older version ignores them. */
+  tags: tagListSchema.optional().catch(undefined),
   /** false = written or edited by the user in the settings (never overwritten by learning). */
   learned: z.boolean().default(true),
   hits: z.number().int().min(0).default(0),
@@ -431,6 +433,18 @@ export const anomalySettingsSchema = z.looseObject({
   ok: z.array(z.string().max(200)).catch([]).default([])
 })
 
+// ------------------------------------------------------------------ the intelligence (1.10.0)
+
+export const intelSettingsSchema = z.looseObject({
+  /** A tag's goal of the star map (F17 – „Ekspedycja: wydano 4 320 z 5 000 zł celu”): the tag's key → the goal's id. */
+  tagGoals: lenientRecord(ulidSchema),
+  /**
+   * The CPI of GUS typed by hand, month by month (F36, D87 – no network): the year-on-year change in % as published
+   * („4,9”) – „Twoja inflacja” against it.
+   */
+  cpi: lenientRecord(z.number().min(-50).max(200)).transform((r) => Object.fromEntries(Object.entries(r).filter(([k]) => /^\d{4}-(0[1-9]|1[0-2])$/.test(k))))
+})
+
 // ------------------------------------------------------------------ saved views of Operacje (1.7.0, F18)
 
 export const operationViewSchema = z.looseObject({
@@ -458,5 +472,6 @@ export const budgetSettingsShape = {
   /** Saved views of Operacje (F18): chips over the list, shared by the computers. */
   operationViews: lenientList(operationViewSchema).catch([]).default([]),
   cargo: cargoSettingsSchema.prefault({}),
-  anomalies: anomalySettingsSchema.prefault({})
+  anomalies: anomalySettingsSchema.prefault({}),
+  intel: intelSettingsSchema.prefault({})
 }

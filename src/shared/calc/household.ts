@@ -99,6 +99,8 @@ export interface IncomeShare {
   advance: boolean
   /** An income of before 1.3.0: it repays at most this much (`repaid`, D20). */
   limit?: number
+  /** The line of the split it is (its index); none – the rest of the amount. */
+  line?: number
 }
 
 /**
@@ -114,10 +116,10 @@ export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId'
   if (!t.splits.length) return [own(t.amount)]
   const out: IncomeShare[] = []
   let left = t.amount
-  for (const s of t.splits) {
+  for (const [line, s] of t.splits.entries()) {
     const amount = Math.min(s.amount, left)
     if (amount <= 0) continue
-    out.push({ memberId: s.memberId ?? null, amount, advance: !!s.memberId && !!s.advance })
+    out.push({ memberId: s.memberId ?? null, amount, advance: !!s.memberId && !!s.advance, line })
     left -= amount
   }
   if (left > 0) out.push(own(left))

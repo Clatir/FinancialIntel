@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
+import { glossaryOf } from '@shared/glossary'
 import { goalInstallment, ratedIn, type FleetState } from '@shared/calc/fleet'
 import { debriefing, envelopeExtraOf, lootApplied, lootDeadline, lootExtraOf, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
+import { fuelSummary, rateText } from '@shared/calc/fuel'
 import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
 import { tooNewMonths, useData, useFolderLocked } from '../../store/data'
@@ -169,7 +171,7 @@ function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { 
   const aboveIncome = month === current ? fleet.alarms.find((a) => a.kind === 'salary-above-income') : undefined
   const paid = month === current ? fleet.salary : null
   return (
-    <Panel title="Pensja" testId="month-salary-panel">
+    <Panel title="Pensja" hint={glossaryOf('Pensja')} testId="month-salary-panel">
       <div className="flex flex-col gap-2 text-[12px]">
         <div className="flex items-center gap-2">
           <AmountField className="w-[140px]" value={plan?.salary ?? null} allowEmpty onChange={(v) => setSalary(month, v ?? 0)} disabled={readOnly} aria-label="Pensja" data-testid="month-salary" />
@@ -315,7 +317,7 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
 function DailyPanel({ fleet }: { fleet: FleetState }) {
   const d = fleet.daily
   return (
-    <Panel title="Dzienny przydział" testId="month-daily">
+    <Panel title="Dzienny przydział" hint={glossaryOf('Energia')} testId="month-daily">
       {!d ? (
         <Empty>Bez planu tego miesiąca nie ma przydziału – wpisz pensję i koperty codzienne.</Empty>
       ) : (
@@ -351,7 +353,7 @@ function EnvelopesPanel({ month, current, fleet, brief, readOnly }: { month: str
   const [covering, setCovering] = useState<string | null>(null)
   if (month > current) return null
   return (
-    <Panel title="Koperty" testId="month-envelopes">
+    <Panel title="Koperty" hint={glossaryOf('Koperty')} testId="month-envelopes">
       {!rows.length ? (
         <Empty>Brak kopert w tym miesiącu.</Empty>
       ) : (
@@ -451,6 +453,23 @@ function Gap({ value }: { value: number }) {
   return <span className={amountsHidden() ? undefined : value < 0 ? 'text-down' : 'text-up'}>{value >= 0 && !amountsHidden() ? `+${plnText(value)}` : signedPln(value)} zł</span>
 }
 
+/** „Bilans paliwa” of the month (F25): its income less its costs, the savings rate beside the median of 6 months before
+ * (green / red – neutral while the amounts are hidden, B61). */
+function FuelLine({ month, fleet, running }: { month: string; fleet: FleetState; running: boolean }) {
+  const transactions = useRecordList('transactions')
+  const s = useMemo(() => fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths), [transactions, fleet.incomeContext, month, fleet.historyMonths])
+  const m = s.month
+  if (!m || (!m.income && !m.costs)) return null
+  return (
+    <div className="text-[11.5px] text-muted" data-testid="debrief-fuel">
+      Bilans paliwa: <span className={cx('num', !amountsHidden() && (m.balance >= 0 ? 'text-up' : 'text-down'))}>{signedPln(m.balance)} zł</span> (przychód {zl(m.income)} − koszty {zl(m.costs)}) · stopa
+      oszczędności <span className="num text-fg-strong">{rateText(m.rate)}</span>
+      {s.median6 != null ? ` (mediana 6 mies.: ${rateText(s.median6)})` : ''}
+      {running ? ' – miesiąc w toku' : ''}
+    </div>
+  )
+}
+
 function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debriefing; fleet: FleetState; today: string; plans: MonthPlan[]; readOnly: boolean }) {
   const cats = useCategories()
   const members = useMembers()
@@ -501,6 +520,7 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
           </div>
         )}
         {brief.plus === null && <div className="text-[11.5px] text-dim">{brief.salary ? 'Miesiąc trwa – wynik po jego końcu.' : `Bez pensji w tym miesiącu – nie ma z czym porównać kosztów (${zl(brief.costs)}).`}</div>}
+        <FuelLine month={brief.month} fleet={fleet} running={!brief.ended} />
         {brief.energy && (
           <div className="flex flex-col" data-testid="debrief-energy">
             <Row
