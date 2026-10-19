@@ -177,13 +177,70 @@ export const shareKey = (s: Share | null | undefined): string =>
  */
 export const groupKey = (brand: string, direction: Direction, d: ImportDecision) => `${brand}|${direction}|${proposalSig(d)}`
 
-/** `deletedKeys` = `bank.key` of the operations the user deleted (`.history/`): their rows do not come back by themselves. */
-export function planImport(file: MbankFile, accountId: string, existing: readonly Transaction[], ctx: ClassifyContext, deletedKeys: ReadonlySet<string> = new Set()): ImportPlan {
-  const keys = rowKeys(file.rows, accountId)
+/**
+ * What a plan reads of the budget's operations, built once per list of operations and account (W18): a plan again after
+ * a keyword, a merge of names or a member (the same operations) reads it as it is. All lists in the operations' order.
+ */
+interface Budgeted {
+  /** The account's operations. */
+  mine: Transaction[]
+  /** The bank's keys of the account's operations (and their keys of the other format – B5) → the operation. */
+  byKey: Map<string, Transaction>
+  /** Operations of any account with the bank's description, by day. */
+  described: Map<string, Transaction[]>
+  /** The account's pending operations of the bank. */
+  pending: Transaction[]
+  /** The account's booked operations of the bank, by day. */
+  booked: Map<string, Transaction[]>
+  formatOf: (t: Transaction) => MbankFile['format']
+  /** The account's operations typed by hand (`joinable`), by day, with their place among them. */
+  manual: Map<string, Array<{ tx: Transaction; at: number }>>
+}
+
+const budgetedMemo = new WeakMap<readonly Transaction[], Map<string, Budgeted>>()
+
+function push<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const list = map.get(key)
+  if (list) list.push(value)
+  else map.set(key, [value])
+}
+
+function budgetedOf(existing: readonly Transaction[], accountId: string): Budgeted {
+  let byAccount = budgetedMemo.get(existing)
+  if (!byAccount) budgetedMemo.set(existing, (byAccount = new Map()))
+  const known = byAccount.get(accountId)
+  if (known) return known
   const mine = existing.filter((t) => t.accountId === accountId)
-  const byKey = new Map(mine.filter((t) => t.bank).map((t) => [t.bank!.key, t]))
+  const byKey = new Map<string, Transaction>()
+  for (const t of mine) if (t.bank) byKey.set(t.bank.key, t)
   // The keys of the same rows in the other format (B5), never over an operation's own key.
   for (const t of mine) for (const k of t.bank?.altKeys ?? []) if (!byKey.has(k)) byKey.set(k, t)
+  const described = new Map<string, Transaction[]>()
+  for (const t of existing) if (t.bank?.description) push(described, t.date, t)
+  const booked = new Map<string, Transaction[]>()
+  for (const t of mine) if (t.bank && !t.bank.pending) push(booked, t.date, t)
+  const manual = new Map<string, Array<{ tx: Transaction; at: number }>>()
+  mine.filter(joinable).forEach((tx, at) => push(manual, tx.date, { tx, at }))
+  const out: Budgeted = { mine, byKey, described, pending: mine.filter((t) => t.bank?.pending), booked, formatOf: formatsOf(mine), manual }
+  byAccount.set(accountId, out)
+  return out
+}
+
+/** The keys of a file's rows on an account (`rowKeys`), once per file and account (W18). */
+const keysMemo = new WeakMap<readonly MbankRow[], Map<string, string[]>>()
+function keysOf(rows: readonly MbankRow[], accountId: string): string[] {
+  let byAccount = keysMemo.get(rows)
+  if (!byAccount) keysMemo.set(rows, (byAccount = new Map()))
+  let keys = byAccount.get(accountId)
+  if (!keys) byAccount.set(accountId, (keys = rowKeys(rows, accountId)))
+  return keys
+}
+
+/** `deletedKeys` = `bank.key` of the operations the user deleted (`.history/`): their rows do not come back by themselves. */
+export function planImport(file: MbankFile, accountId: string, existing: readonly Transaction[], ctx: ClassifyContext, deletedKeys: ReadonlySet<string> = new Set()): ImportPlan {
+  const keys = keysOf(file.rows, accountId)
+  const budget = budgetedOf(existing, accountId)
+  const { byKey, formatOf } = budget
   const used = new Set<string>()
   const plans: Array<Draft | null> = file.rows.map((row, i) => {
     const tx = byKey.get(keys[i]!)
@@ -203,11 +260,15 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   const fileNumber = accountNumberOf(file.account)
   const numbers = fileNumber ? { ...ctx.accountNumbers, [accountId]: fileNumber } : ctx.accountNumbers
   const here = new Map<string, Transaction>()
-  for (const t of existing) {
-    if (!t.bank?.description || used.has(t.id) || t.date < lo || t.date > hi || otherBankAccount(numbers, accountId, t.accountId)) continue
-    const k = keyOn(accountId, t)
-    // One of this account with its own key is the first pass's.
-    if ((t.accountId !== accountId || k !== t.bank.key) && !here.has(k)) here.set(k, t)
+  // By day (a key holds its day: the first operation of a key is still the first in the operations' order).
+  for (const [date, list] of budget.described) {
+    if (date < lo || date > hi) continue
+    for (const t of list) {
+      if (used.has(t.id) || otherBankAccount(numbers, accountId, t.accountId)) continue
+      const k = keyOn(accountId, t)
+      // One of this account with its own key is the first pass's.
+      if ((t.accountId !== accountId || k !== t.bank!.key) && !here.has(k)) here.set(k, t)
+    }
   }
   if (here.size)
     file.rows.forEach((row, i) => {
@@ -222,7 +283,7 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     })
 
   // Pending operations that changed when settled: same counterparty, close date, close amount (a currency conversion).
-  const pending = mine.filter((t) => t.bank?.pending && !used.has(t.id))
+  const pending = budget.pending.filter((t) => !used.has(t.id))
   file.rows.forEach((row, i) => {
     if (plans[i]) return
     let best: { tx: Transaction; score: number } | null = null
@@ -247,14 +308,10 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   // (a card's date may differ), a similar name. The closest first, each side once. Only operations of the days this
   // file covers: one outside its period is not in it – a row of the same amount and name next to it is another one.
   const other = new Map<string, Transaction[]>()
-  const formatOf = formatsOf(mine)
   const covers = coverageOf(file)
-  for (const t of mine) {
-    if (!t.bank || t.bank.pending || used.has(t.id) || formatOf(t) === file.format || !covers(t.date)) continue
-    const k = `${t.date}|${t.amount}`
-    const list = other.get(k)
-    if (list) list.push(t)
-    else other.set(k, [t])
+  for (const [date, list] of budget.booked) {
+    if (!covers(date)) continue
+    for (const t of list) if (!used.has(t.id) && formatOf(t) !== file.format) push(other, `${t.date}|${t.amount}`, t)
   }
   if (other.size) {
     const pairs: Array<{ i: number; tx: Transaction; days: number }> = []
@@ -272,12 +329,23 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     }
   }
 
-  // Operations typed by hand (the evening entries, D26): the same amount within ±3 days, a similar counterparty.
-  const manual = mine.filter(joinable)
+  // Operations typed by hand (the evening entries, D26): the same amount within ±3 days, a similar counterparty. A row
+  // looks at the hand-typed ones of ±3 days (W18), in their order still.
+  const nearOf = new Map<string, Transaction[]>()
+  const manualNear = (date: string): Transaction[] => {
+    if (!budget.manual.size) return []
+    let near = nearOf.get(date)
+    if (!near) {
+      const found: Array<{ tx: Transaction; at: number }> = []
+      for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++) for (const x of budget.manual.get(addDays(date, d)) ?? []) found.push(x)
+      nearOf.set(date, (near = found.sort((a, b) => a.at - b.at).map((x) => x.tx)))
+    }
+    return near
+  }
   const candidates: Array<{ i: number; tx: Transaction; days: number; named: boolean }> = []
   file.rows.forEach((row, i) => {
     if (plans[i]) return
-    for (const tx of manual) {
+    for (const tx of manualNear(row.date)) {
       if (tx.amount !== row.amount) continue
       const days = Math.abs(daysBetween(tx.date, row.date))
       if (days > MATCH_DAYS || !similarCounterparty(tx.counterparty, row.counterparty || row.description)) continue
@@ -299,9 +367,10 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   const loose: Array<{ i: number; tx: Transaction; days: number; exact: boolean; similar: boolean }> = []
   file.rows.forEach((row, i) => {
     if (plans[i]) return
-    for (const tx of manual) {
+    const bank = { amount: row.amount, date: row.date, name: row.counterparty || row.description }
+    for (const tx of manualNear(row.date)) {
       if (used.has(tx.id)) continue
-      const m = looseMatch(tx, { amount: row.amount, date: row.date, name: row.counterparty || row.description })
+      const m = looseMatch(tx, bank)
       if (m) loose.push({ i, tx, ...m })
     }
   })
@@ -328,10 +397,9 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     return { status: deletedKeys.has(keys[i]!) ? 'deleted' : 'new', row, key: keys[i]!, ...plannedOf(i) }
   })
 
-  const dates = file.rows.map((r) => r.date).sort()
-  const period = file.period ?? (dates.length ? { from: dates[0]!, to: dates.at(-1)! } : null)
+  const period = file.period ?? (days.length ? { from: days[0]!, to: days.at(-1)! } : null)
   // Only a list of operations shows pending rows (the account history has the booked ones only).
-  const vanished = period && file.format === 'lista' ? mine.filter((t) => t.bank?.pending && !used.has(t.id) && t.date >= period.from && t.date <= period.to) : []
+  const vanished = period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && t.date >= period.from && t.date <= period.to) : []
   return { accountId, format: file.format, rows, vanished, period }
 }
 

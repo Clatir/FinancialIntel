@@ -595,7 +595,7 @@ describe('kolejność zdarzeń silnika (W27: bez kluczy tekstowych, sortowanie r
   })
 
   it('części operacji z pamięci: te same dla tego samego wpisu, nowe dla zmienionej kopii', () => {
-    const t = tx('2026-10-03', zl(-100), { categoryId: FOOD, splits: [{ id: nextId(), amount: zl(-60), categoryId: GROCERIES, refundable: true, memberId: null }] })
+    const t = tx('2026-10-03', zl(-100), { categoryId: FOOD, splits: [{ id: nextId(), amount: zl(-60), categoryId: GROCERIES, refundable: true, memberId: null, advance: false, note: '' }] })
     expect(partsOf(t)).toBe(partsOf(t))
     expect(partsOf(t).map((p) => [p.amount, p.refundable])).toEqual([[zl(-60), true], [zl(-40), false]])
     const changed = { ...t, amount: zl(-150) }

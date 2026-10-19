@@ -67,8 +67,13 @@ function find(ws: readonly string[], p: Pattern): number {
 
 /** A keyword typed by the user (a rule of the 'keyword' mode): its words, the last one may go on. */
 export function keywordMatches(ws: readonly string[], keyword: string): boolean {
+  return keywordMatcher(keyword)(ws)
+}
+
+/** A keyword's test made once (W20: the rules' keywords are tried on every row). */
+export function keywordMatcher(keyword: string): (ws: readonly string[]) => boolean {
   const p = pattern(`${keyword}*`)
-  return p.words.length > 0 && find(ws, p) >= 0
+  return p.words.length > 0 ? (ws) => find(ws, p) >= 0 : () => false
 }
 
 /** A keyword as a rule keeps it: folded words, one space between them („Stacja  Paliw” → „stacja paliw”). */
@@ -383,7 +388,11 @@ export const BRANDS: readonly Brand[] = [
   brand('ebay', 'eBay', null, '^ebay')
 ]
 
-const BRAND_PATTERNS = BRANDS.map((b) => ({ brand: b, patterns: b.patterns.map(pattern) }))
+const BRAND_PATTERNS = BRANDS.map((b) => {
+  const patterns = b.patterns.map(pattern)
+  // The other side of a transfer: a chain only at the start of its name.
+  return { brand: b, patterns, atStart: patterns.map((p) => ({ ...p, start: true })) }
+})
 
 const BRAND_BY_ID = new Map(BRANDS.map((b) => [b.id, b]))
 
@@ -576,13 +585,22 @@ export const isKindWord = (word: string): boolean => KINDS.has(word)
 
 /** The first keyword of `KEYWORDS` in the words of a name or a title, and where (`at`, `length` words – „weterynaryjna”). */
 export function keywordIn(ws: readonly string[]): { keyword: Keyword; at: number; length: number } | null {
-  for (const k of KEYWORD_PATTERNS)
+  // The words of a rule target are shared (W20): asked once for them.
+  if (keywordMemo.has(ws)) return keywordMemo.get(ws)!
+  let found: { keyword: Keyword; at: number; length: number } | null = null
+  search: for (const k of KEYWORD_PATTERNS)
     for (const p of k.patterns) {
       const at = find(ws, p)
-      if (at >= 0) return { keyword: k.keyword, at, length: p.words.length }
+      if (at >= 0) {
+        found = { keyword: k.keyword, at, length: p.words.length }
+        break search
+      }
     }
-  return null
+  keywordMemo.set(ws, found)
+  return found
 }
+
+const keywordMemo = new WeakMap<readonly string[], { keyword: Keyword; at: number; length: number } | null>()
 
 // ------------------------------------------------------------------ the brand key
 
@@ -656,12 +674,26 @@ function withoutCities(ws: readonly string[]): string[] {
  * before 1.2.3 made – their rules still decide).
  */
 export function brandOf(name: string, opts: { dictionary?: boolean; transfer?: boolean; raw?: boolean } = {}): BrandMatch {
+  // Once per name and way (W20): a history names the same shops thousands of times. Read only – shared.
+  const id = `${opts.dictionary === false ? 0 : 1}${opts.transfer ? 1 : 0}${opts.raw ? 1 : 0}${name}`
+  let found = brandMemo.get(id)
+  if (!found) {
+    if (brandMemo.size >= BRAND_MEMO_MAX) brandMemo.clear()
+    brandMemo.set(id, (found = brandOfName(name, opts)))
+  }
+  return found
+}
+
+const BRAND_MEMO_MAX = 50_000
+const brandMemo = new Map<string, BrandMatch>()
+
+function brandOfName(name: string, opts: { dictionary?: boolean; transfer?: boolean; raw?: boolean }): BrandMatch {
   // The town after „/” of a shop's name (not of a transfer's side, not of a person paid by BLIK).
   const shop = !opts.transfer && opts.dictionary !== false
   const cleaned = withoutLegalForms(fold(opts.raw ? name : cleanBankName(name, { town: shop }))).trim().replace(WWW, '$1').replace(DOMAIN, ' ').replace(PROCESSOR, '').replace(SHOPIFY, '')
   const ws = words(cleaned)
   if (opts.dictionary !== false)
-    for (const b of BRAND_PATTERNS) if (b.patterns.some((p) => find(ws, opts.transfer ? { ...p, start: true } : p) >= 0)) return { key: b.brand.id, brand: b.brand, words: [] }
+    for (const b of BRAND_PATTERNS) if ((opts.transfer ? b.atStart : b.patterns).some((p) => find(ws, p) >= 0)) return { key: b.brand.id, brand: b.brand, words: [] }
   let rest = opts.transfer ? [...ws] : withoutCities(ws)
   while (rest.length > 1 && COUNTRY.has(rest.at(-1)!)) rest = rest.slice(0, -1)
   const kept = rest.filter((w) => !/^\d+$/.test(w) && !STORE_CODE.test(w))
