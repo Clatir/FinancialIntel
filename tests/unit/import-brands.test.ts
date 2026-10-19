@@ -18,7 +18,7 @@ const NOW = '2026-10-17T09:00:00.000Z'
 let seq = 0
 const makeId = () => `01K2${String(++seq).padStart(22, '0')}`
 const ctx = (rules: ImportRule[] = []) => ({ rules, ownNames: ['JAN KAPITAN'], categories })
-const emptyChoices = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {} })
+const emptyChoices = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {}, moveHere: {} })
 const row = (over: Partial<MbankRow>): MbankRow => ({
   line: 1,
   date: '2026-10-01',

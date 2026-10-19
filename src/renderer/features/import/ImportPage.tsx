@@ -1,8 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
-import { importThemes, joins, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
-import { SHARE_MODES, TX_KIND_LABEL, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
+import { choiceOf, importThemes, joins, learnable, movesHere, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { TX_KIND_LABEL, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
 import { opKindOf } from '@shared/import/reconcile'
@@ -17,11 +17,16 @@ import { Columns } from '../../components/layout'
 import { Badge, Panel, cx } from '../../components/ui'
 import { confirmBalance } from '../balances/actions'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
+import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
+import { DecisionFields, IMPORT_SHARE_MODES } from './DecisionFields'
 import { DuplicatesPanel } from './DuplicatesPanel'
+import { useLatestImport } from './batches'
+import { BankTelemetry } from './BankTelemetry'
+import { UndoImportButton } from './RecentImports'
 import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
-import { bulkOptions, choiceFor, hasCategory, optionOf, optionsFor, type Option } from './options'
+import { bulkOptions, hasCategory, type LoanPick, type Option } from './options'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
@@ -38,12 +43,14 @@ import {
   hintable,
   loadImportFile,
   pickImportFile,
+  planInputsNow,
   replanIfChanged,
   runImport,
   selectImport,
   selectedRowKeys,
   setImportAccount,
   setImportQuery,
+  setMoveHere,
   setNoMerge,
   setRemember,
   setRememberTheme,
@@ -71,8 +78,30 @@ const STATUS_LABEL: Record<ThemeStatus, string> = { todo: 'Do decyzji', check: '
 const count = (n: number, one: string, few: string, many: string) => `${n} ${n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many}`
 const operations = (n: number) => count(n, 'operacja', 'operacje', 'operacji')
 
+/**
+ * The file's bank account against the one the budget's account had (F4): a file of another account is said before the
+ * import – the import goes on when the user wants it (a new account at the bank).
+ */
+function AccountWarning({ account, accountId }: { account: string | null; accountId: string }) {
+  const numbers = useData((s) => s.fi?.settings.import.accountNumbers)
+  const accounts = useAccounts()
+  const number = accountNumberOf(account)
+  if (!number || !numbers) return null
+  const name = (id: string) => accounts.find((a) => a.id === id)?.name ?? 'inne konto'
+  const other = Object.entries(numbers).find(([id, n]) => n === number && id !== accountId)?.[0]
+  const mine = numbers[accountId]
+  if (!other && (!mine || mine === number)) return null
+  return (
+    <div className="border border-accent/50 px-2 py-1.5 text-[11.5px] text-accent" data-testid="import-account-warning">
+      {other
+        ? `Pliki z tego rachunku (${accountNumberText(number)}) trafiały dotąd na konto „${name(other)}” – sprawdź, czy wybrane konto się zgadza.`
+        : `Plik jest z rachunku ${accountNumberText(number)}, a na konto „${name(accountId)}” trafiały dotąd pliki z rachunku ${accountNumberText(mine!)} – sprawdź wybrane konto. Nowy rachunek w banku? Import go zapamięta.`}
+    </div>
+  )
+}
+
 function FilePanel() {
-  const { fileName, file, error, accountId, busy } = useImport()
+  const { fileName, file, error, errorName, accountId, busy } = useImport()
   const accounts = useAccounts()
   const [over, setOver] = useState(false)
   const onDrop = (e: DragEvent) => {
@@ -111,7 +140,8 @@ function FilePanel() {
         </p>
         {error && (
           <div className="border border-down/50 px-2 py-1.5 text-down" data-testid="import-error">
-            {fileName}: {error}
+            {errorName ?? fileName}: {error}
+            {file && errorName && errorName !== fileName && <span className="text-muted"> – otwarty plik „{fileName}” zostaje bez zmian.</span>}
           </div>
         )}
         {file && (
@@ -129,6 +159,7 @@ function FilePanel() {
               <AccountSelect className="w-[180px]" value={accountId} onChange={(id) => id && setImportAccount(id)} data-testid="import-account" />
             </label>
             {importable.length > 1 && <span className="text-[11px] text-dim">Plik z mBanku trafia na wybrane konto; Portfel XTB nie ma eksportu – jego operacje dopisujesz ręcznie.</span>}
+            <AccountWarning account={file.account} accountId={accountId} />
             {file.skipped.length > 0 && (
               <div className="text-[11.5px] text-accent" data-testid="import-skipped">
                 Pominięte wiersze: {file.skipped.map((s) => `linia ${s.line} (${s.reason})`).join('; ')}
@@ -153,13 +184,20 @@ function Summary() {
   const excluded = plan.rows.filter((p) => (p.status === 'new' || (p.status === 'deleted' && choices.restoreDeleted[p.key])) && choices.skip[p.key]).length
   const created = n('new') + merges.length - merged + restored - excluded
   const removed = plan.vanished.filter((t) => choices.removeVanished[t.id]).length
-  const known = n('known')
+  const elsewhere = plan.rows.filter((p): p is Extract<RowPlan, { status: 'elsewhere' }> => p.status === 'elsewhere')
+  const moved = elsewhere.filter((p) => movesHere(p, choices)).length
+  const known = n('known') + elsewhere.length - moved
   const settledFlags = plan.rows.filter((p) => p.status === 'known' && p.settled).length
   const otherFormat = plan.rows.filter((p) => p.status === 'known' && p.other).length
-  const nothing = created + merged + n('settle') + removed + settledFlags === 0
+  const nothing = created + merged + n('settle') + removed + settledFlags + moved === 0
   return (
     <Panel title="Podgląd">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-summary">
+        {nothing && known > 0 && (
+          <div className="border border-accent/50 px-2 py-1.5 text-[11.5px] text-accent" data-testid="import-already">
+            Wszystkie operacje z tego pliku są już w budżecie – ten plik (albo okres) był już zaimportowany.
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           <span className="text-muted">nowe operacje</span>
           <span className="num text-right text-fg-strong" data-testid="import-count-new">
@@ -177,6 +215,16 @@ function Summary() {
           <span className="num text-right text-muted" data-testid="import-count-known">
             {known - settledFlags}
           </span>
+          {elsewhere.length > 0 && (
+            <>
+              <span className="text-muted" title="Te operacje są już w budżecie na innym koncie (plik tego konta trafił tam wcześniej albo operację przeniesiono) – nie wchodzą drugi raz.">
+                przeniesione z innego konta
+              </span>
+              <span className="num text-right" data-testid="import-count-moved">
+                {moved}
+              </span>
+            </>
+          )}
           {otherFormat > 0 && (
             <>
               <span className="pl-3 text-dim" title="Ta sama operacja z drugiego formatu pliku (lista operacji ↔ historia rachunku): opis jest tam inny, więc FI łączy ją po kwocie, dacie (±3 dni) i nazwie.">
@@ -210,8 +258,15 @@ function Summary() {
             </>
           )}
         </div>
-        <button className="btn btn-accent h-[30px] justify-center" disabled={busy || nothing || readOnly} onClick={() => void runImport()} data-testid="import-run">
-          {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Nic nowego w tym pliku' : `Importuj (${created + merged + n('settle') + settledFlags + removed})`}
+        <button
+          className="btn btn-accent h-[30px] justify-center"
+          disabled={busy || readOnly}
+          onClick={() => void runImport()}
+          // A file with nothing new is imported too (N13): the time of the import and what the file covers are saved.
+          title={nothing ? 'W pliku nie ma nic nowego – zapis zapamięta czas importu i okres pliku (odprawa, Portfel XTB, misja „Łączność z bazą”)' : undefined}
+          data-testid="import-run"
+        >
+          {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Zapisz import (bez zmian)' : `Importuj (${created + merged + n('settle') + settledFlags + removed + moved})`}
         </button>
         <p className="text-[11px] text-dim">
           Rozpoznane (sieci, słowa kluczowe, reguły) wejdą z pokazaną decyzją; tematy bez decyzji – jako wydatki / wpływy bez kategorii, skategoryzujesz je później w
@@ -225,11 +280,21 @@ function Summary() {
 function MatchesPanel() {
   const { plan, choices } = useImport()
   const cats = useCategories()
+  const accounts = useAccounts()
+  const members = useMembers()
+  const loans = useRecordList('loans')
   if (!plan) return null
   const merges = plan.rows.filter((p): p is Extract<RowPlan, { status: 'merge' }> => p.status === 'merge')
   const settles = plan.rows.filter((p): p is Extract<RowPlan, { status: 'settle' }> => p.status === 'settle')
   const deleted = plan.rows.filter((p): p is Extract<RowPlan, { status: 'deleted' }> => p.status === 'deleted')
-  if (!merges.length && !settles.length && !plan.vanished.length && !deleted.length) return null
+  const elsewhere = plan.rows.filter((p): p is Extract<RowPlan, { status: 'elsewhere' }> => p.status === 'elsewhere')
+  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '?'
+  // A matched hand-typed operation left apart (B36): what its row comes in as – its group's, theme's or the proposal.
+  const decidedAs = (p: Extract<RowPlan, { status: 'merge' }>) => {
+    const c = choices.rows[p.key] ?? choices.groups[p.planned.group] ?? choiceOf(p.planned.decision)
+    return choiceText(c, p.row.amount < 0 ? 'out' : 'in', (id) => cats.label(id), members, loans)
+  }
+  if (!merges.length && !settles.length && !plan.vanished.length && !deleted.length && !elsewhere.length) return null
   return (
     <Panel title="Dopasowania">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-matches">
@@ -258,6 +323,29 @@ function MatchesPanel() {
                       {p.ask ? ' · zaznacz, jeśli to ta sama operacja' : ''}
                     </span>
                   )}
+                  {!joins(p, choices) && (
+                    <span className="ml-1 text-dim" data-testid="import-merge-apart">
+                      osobno – wejdzie jako: {decidedAs(p)}
+                    </span>
+                  )}
+                </span>
+                <span className="num">{signedPln(p.row.amount)}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        {elsewhere.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="label">Już w budżecie na innym koncie ({elsewhere.length})</span>
+            <p className="text-[11px] text-dim">
+              Te operacje z banku są na innym koncie – plik tego konta trafił tam wcześniej albo operację przeniesiono. Nie wejdą drugi raz; zaznaczone
+              przeniosę na to konto (z kategorią i notatkami).
+            </p>
+            {elsewhere.map((p) => (
+              <label key={p.key} className="flex items-center gap-2" data-testid="import-elsewhere">
+                <input type="checkbox" checked={movesHere(p, choices)} onChange={(e) => setMoveHere(p.key, e.currentTarget.checked)} data-testid="import-elsewhere-move" />
+                <span className="min-w-0 flex-1 truncate">
+                  {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· teraz na: {accountName(p.tx.accountId)}</span>
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -317,62 +405,38 @@ function MatchesPanel() {
 }
 
 /** A theme's name: its category (or kind, container), the bank's category it hints at, or the kind of operation. */
-function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, containerName: (id: string) => string, members: readonly Pick<HouseholdMember, 'id' | 'name'>[]): string {
+function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, containerName: (id: string) => string, members: readonly Pick<HouseholdMember, 'id' | 'name'>[], loans: readonly LoanPick[]): string {
   const b = t.basis
   if (b.kind === 'hint') return `mBank: ${b.bankCategories.join(', ') || 'kategoria'}`
   if (b.kind === 'op') return OP_LABEL[t.direction][b.op]
   if (b.containerId) return `Ładownia · ${containerName(b.containerId)}`
-  const c = b.choice
+  return choiceText(b.choice, t.direction, catLabel, members, loans, true)
+}
+
+/** What a decision is, in a few words (a theme's name – `title` capitalized; a matched row's preview). */
+function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | null) => string, members: readonly Pick<HouseholdMember, 'id' | 'name'>[], loans: readonly LoanPick[], title = false): string {
   if (c.kind === 'expense') {
     const cat = catLabel(c.categoryId) || 'bez kategorii'
     // Who (D80, D83): a member, their gift, several people; a product return – for whom (B40).
-    const who = c.refundable ? `${t.direction === 'in' ? 'dla' : c.gift ? 'prezent od' : 'finansuje'}: ${memberName(c.memberId, members)}` : c.share ? `wspólnie: ${shareNames(c.share, members)}` : ''
-    return t.direction === 'in' ? `Zwroty${who ? ` ${who}` : ''} · ${cat}` : who ? `${who.charAt(0).toUpperCase()}${who.slice(1)} · ${cat}` : cat
+    const who = c.refundable ? `${direction === 'in' ? 'dla' : c.gift ? 'prezent od' : 'finansuje'}: ${memberName(c.memberId, members)}` : c.share ? `wspólnie: ${shareNames(c.share, members)}` : ''
+    if (direction === 'in') return `${title ? 'Zwroty' : 'zwrot towaru'}${who ? ` ${who}` : ''} · ${cat}`
+    return who ? `${title ? who.charAt(0).toUpperCase() + who.slice(1) : who} · ${cat}` : cat
   }
-  if (c.kind === 'income') return c.household ? `Od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}` : 'Wpływy (przychód)'
-  if (c.kind === 'transfer') return 'Przelewy własne'
-  if (c.kind === 'trading') return t.direction === 'out' ? 'XTB – dopłaty do konta tradingowego' : 'XTB – wypłaty z konta tradingowego'
-  if (c.kind === 'loan') return 'Pożyczki'
-  if (c.kind === 'tax') return 'Podatek PIT-38'
-  return TX_KIND_LABEL[c.kind as TxKind] ?? c.kind
+  const text = (() => {
+    if (c.kind === 'income') return c.household ? `od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'
+    if (c.kind === 'transfer') return title ? 'przelewy własne' : 'przelew własny'
+    if (c.kind === 'trading') return direction === 'out' ? 'XTB – dopłata do konta tradingowego' : 'XTB – wypłata z konta tradingowego'
+    if (c.kind === 'loan') {
+      const loan = c.loanId ? loans.find((l) => l.id === c.loanId) : undefined
+      return loan ? `${direction === 'in' ? 'zwrot pożyczki' : 'pożyczka'}: ${loan.name}` : title ? 'pożyczki' : 'pożyczka'
+    }
+    if (c.kind === 'tax') return 'podatek PIT-38'
+    return TX_KIND_LABEL[c.kind as TxKind] ?? c.kind
+  })()
+  return title ? text.charAt(0).toUpperCase() + text.slice(1) : text
 }
 
 const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out' ? 'expense' : 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null })
-
-/** The kind and the category of a decision (a theme's, a group's); the household's per member (D80). */
-/** A shared purchase's split for the import (D83): equally or by percents – each row has its own amount. */
-const IMPORT_SHARE_MODES = SHARE_MODES.filter((m) => m !== 'amounts')
-
-function DecisionFields({ choice, direction, onChange, testId }: { choice: Choice; direction: 'in' | 'out'; onChange: (c: Choice) => void; testId: string }) {
-  const members = useMembers()
-  const option = optionOf(choice, direction)
-  const first = members.find((m) => !m.archived)
-  return (
-    <>
-      <select
-        className="input h-[24px] w-[230px] py-0"
-        value={option}
-        onChange={(e) => onChange(choiceFor(e.currentTarget.value as Option, choice, first ? startShare(first.id) : null))}
-        aria-label="Co to jest"
-        data-testid={`${testId}-kind`}
-      >
-        {optionsFor(direction, members, choice).map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      {choice.kind === 'expense' && (
-        <CategorySelect className="h-[24px] min-w-[180px] flex-1 py-0" value={choice.categoryId} onChange={(categoryId) => onChange({ ...choice, categoryId })} data-testid={`${testId}-category`} />
-      )}
-      {choice.kind === 'expense' && choice.share && (
-        <div className="basis-full pl-1">
-          <ShareEditor share={choice.share} total={null} members={members} onChange={(share: Share) => onChange({ ...choice, share })} modes={IMPORT_SHARE_MODES} testId={`${testId}-share`} />
-        </div>
-      )}
-    </>
-  )
-}
 
 /**
  * Money in from a person not of the household (D80 a): „+ domownik” adds them (their name in the bank) and decides the
@@ -439,7 +503,7 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
         <Badge tone={g.source === 'none' && !own && !themeDecided ? 'warn' : 'default'} title={g.reason}>
           {badge}
         </Badge>
-        {own && !g.byTitle && (
+        {own && !g.byTitle && learnable(own) && (
           <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają tę markę same">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(g.group, e.currentTarget.checked)} data-testid="import-group-remember" />
             zapamiętaj
@@ -536,7 +600,7 @@ function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; labe
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-6">
         <DecisionFields choice={choice} direction={t.direction} onChange={(c) => chooseTheme(t.theme, c)} testId="import-theme" />
         <Badge tone={status === 'todo' ? 'warn' : status === 'check' ? 'accent' : 'default'}>{decided ? 'Twoja decyzja' : THEME_SOURCE[t.source]}</Badge>
-        {decided && (
+        {decided && learnable(decided) && (
           <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają marki tego tematu same">
             <input type="checkbox" checked={remember} onChange={(e) => setRememberTheme(t.theme, e.currentTarget.checked)} data-testid="import-theme-remember" />
             zapamiętaj
@@ -577,6 +641,7 @@ const KEYWORD_KIND: Partial<Record<Option, { kind: TxKind; direction: 'in' | 'ou
 
 function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const members = useMembers()
+  const loans = useRecordList('loans')
   const selected = useImport((s) => s.selected)
   const readOnly = useData((s) => !!s.status?.readOnly)
   const query = useImport((s) => s.query)
@@ -620,7 +685,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
         aria-label="Decyzja dla zaznaczonych"
         data-testid="import-bulk-kind"
       >
-        {bulkOptions(members).map((o) => (
+        {bulkOptions(members, loans).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -637,8 +702,10 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
       <button
         type="button"
         className="btn btn-accent h-[24px]"
-        // Percents of the people not summing to 100 % (D83): never applied as typed – the quick entry refuses them too.
-        disabled={option === 'share' && (!share || !shareComplete(share, null))}
+        // Percents of the people not summing to 100 % (D83): never applied as typed – the quick entry refuses them too; no
+        // category – it would only wipe the proposals of the chains out (B37).
+        disabled={(option === 'share' && (!share || !shareComplete(share, null))) || (hasCategory(option) && !categoryId)}
+        title={hasCategory(option) && !categoryId ? 'Wybierz kategorię' : undefined}
         onClick={apply}
         data-testid="import-bulk-apply"
       >
@@ -676,6 +743,7 @@ function ThemesPanel() {
   const cats = useCategories()
   const members = useMembers()
   const containers = useRecordList('containers')
+  const loans = useRecordList('loans')
   const groups = useImportGroups()
   const themes = useMemo(() => importThemes(groups), [groups])
   const search = useDeferredValue(query)
@@ -753,7 +821,7 @@ function ThemesPanel() {
                 {STATUS_LABEL[st]} · {list.length}
               </button>
               {!isClosed &&
-                list.map((t) => <ThemeRow key={t.theme} t={t} label={themeLabel(t, (id) => cats.label(id), containerName, members)} status={st} found={found} searching={searching} />)}
+                list.map((t) => <ThemeRow key={t.theme} t={t} label={themeLabel(t, (id) => cats.label(id), containerName, members, loans)} status={st} found={found} searching={searching} />)}
             </div>
           )
         })}
@@ -808,6 +876,8 @@ export function BalanceCheck() {
 
 function DonePanel() {
   const done = useImport((s) => s.done)
+  const batch = useData((s) => (done?.batchId ? s.records.imports[done.batchId]?.record : undefined))
+  const latest = useLatestImport()
   if (!done) return null
   return (
     <Panel title="Import zakończony">
@@ -816,15 +886,23 @@ function DonePanel() {
           Nowe: <b className="num">{done.counts.created}</b> · połączone z wpisami: <b className="num">{done.counts.merged}</b> · rozliczone: <b className="num">{done.counts.settled}</b> · usunięte: <b className="num">{done.counts.removed}</b>
           {done.counts.skipped > 0 ? ` · pominięte (usunięte wcześniej): ${done.counts.skipped}` : ''}
           {done.counts.excluded > 0 ? ` · nie importowane (Twój wybór): ${done.counts.excluded}` : ''}
+          {done.counts.moved > 0 ? ` · przeniesione z innego konta: ${done.counts.moved}` : ''}
           {done.rules > 0 ? ` · nowe reguły: ${done.rules}` : ''}
         </span>
         <span className="num truncate text-[11px] text-dim" title={done.backup}>
           kopia przed importem: {done.backup}
         </span>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button className="btn h-[24px]" onClick={() => navigate({ page: 'operations' })} data-testid="import-to-operations">
             Zobacz w Operacjach
           </button>
+          {/* F4: the whole file taken back at once (the latest import that stands). */}
+          {batch && !batch.undoneAt && latest?.id === batch.id && <UndoImportButton batch={batch} />}
+          {batch?.undoneAt && (
+            <span className="text-[11.5px] text-muted" data-testid="import-undone">
+              Import cofnięty.
+            </span>
+          )}
         </div>
       </div>
     </Panel>
@@ -836,9 +914,14 @@ export function ImportPage() {
   const rules = useData((s) => s.fi?.settings.import.rules)
   const aliases = useData((s) => s.fi?.settings.import.aliases)
   const members = useData((s) => s.fi?.settings.household.members)
-  // A keyword added, a rule deleted, names merged, a member added (here, in the settings, on another computer): the open
-  // file planned again.
-  useEffect(() => replanIfChanged(rules, aliases, members), [rules, aliases, members])
+  const ownNames = useData((s) => s.fi?.settings.import.ownNames)
+  const categories = useData((s) => s.fi?.settings.categories)
+  const containers = useData((s) => s.records.containers)
+  const loans = useData((s) => s.records.loans)
+  const transactions = useData((s) => s.records.transactions)
+  // A keyword added, a rule deleted, names merged, a member added; the holder's names, a category, a container, a loan,
+  // the operations (B38) – here, in the settings, on another computer: the open file planned again.
+  useEffect(() => replanIfChanged(planInputsNow()), [rules, aliases, members, ownNames, categories, containers, loans, transactions])
   const done = useImport((s) => s.done)
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()
@@ -870,6 +953,7 @@ export function ImportPage() {
               </Panel>
             )}
             <DonePanel />
+            {done?.statement && <BankTelemetry statement={done.statement} confirmed={done.confirmed} />}
             {!plan && <DuplicatesPanel />}
             {(done || !plan) && <BalanceCheck />}
           </div>

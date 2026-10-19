@@ -218,6 +218,13 @@ export async function deleteOperation(t: Transaction, label: string): Promise<vo
   if (ok && dockings.length) await deleteRecords('dockings', dockings)
 }
 
+/** One operation open in Operacje: its month, no filters hiding it (the bank's balances – F5, the rules – F22). */
+export function openOperation(t: Pick<Transaction, 'id' | 'date'>): void {
+  setFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+  navigate({ page: 'operations' })
+  selectOperation(t.id)
+}
+
 /** Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80). */
 export function openRefundables(): void {
   setFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })

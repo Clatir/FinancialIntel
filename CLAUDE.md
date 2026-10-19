@@ -480,6 +480,43 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/share.test.ts`, poszerzone `dock`, `import`, `game`, `household`, `fleet`, `settings-defaults`,
   `tests/fs/ictj.test.ts`; E2E `tests/e2e/shared.spec.ts`.
 
+## Kod (1.5.1 – import z mBanku, grupa H, D84)
+- Import (B34–B39, N12–N16, T166–T167): `mbank.ts` `keyOnAccount` / `keyOccurrence` (klucz wiersza zależy od konta),
+  `MbankRow.booked` (data księgowania, gdy inna), `accountNumberOf` / `accountNumberText`, `otherBankAccount` (dwa
+  rachunki banku – `ClassifyContext.accountNumbers`, `findDuplicates(…, accountNumbers)`); `classify.ts` `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB – nigdy
+  regułą), `loanOf` + `decision.loanId` (zwrot pożyczki z Radaru), `findRule(…, amount)`; `reconcile.ts` – status
+  `elsewhere` (operacja na innym koncie, `ImportChoices.moveHere`, `movesHere`), `known.moved`, `merge.planned` (wpis ręczny
+  „Nie łącz” z rozpoznaniem), `learnable`, `Choice.loanId`, `ruleDecisionOf`, liczniki `moved`; `duplicates.ts` – także
+  między kontami; renderer `features/import/state.ts` (`planInputsNow` / `replanIfChanged`, `planSignature` przed zapisem,
+  tematy po przeliczeniu, `snapshot` / `restore` – „Cofnij” przy zamknięciu i innym pliku, `errorName`, zapis bez zmian),
+  `options.ts` (`loan:<id>`, `LoanPick`), `DecisionFields.tsx` (wydzielone z `ImportPage.tsx`, `exclude`), `rules.ts`
+  (`bankNameOf`, `choiceOfRule`, `editRule`, `addAmountRule`, `applyRuleToHistory`).
+- „Cofnij import” (F4, T168): kolekcja `imports/` (`importBatchSchema`, `ImportBatchSettings`; `paths.ts` układ 'id',
+  `records.ts`, migracje, etykiety Synchronizacji i historii), `shared/import/batch.ts` (`importBatch`, `rulesChanged`,
+  `latestImport`, `batchesToDrop` – 10, `undoPlan` – merge3 zmienionych, `rulesUndone`, `settingsUndone`,
+  `settingsRedone`); `settings.import.accountNumbers`; powody usunięcia `undo` (na liście usuniętych, `deletedBankKeys`
+  je pomija) i `drop` (bez historii, tylko `imports/`) – `DataStore.deleteRecords(…, reason)`, IPC
+  `deleteRecords(collection, ids, reason)`, `deleteRecords(…, {reason})` w `store/data.ts`, `history.deleted` z `_undo_`;
+  renderer `features/import/batches.ts` (`useImportBatches`, `useLatestImport`, `undoPreview`, `undoImport(id, force)` –
+  `notArrived` i „Cofnij mimo to”, odmowa dysku zostawia import; „Cofnij” = `redoImport`), `RecentImports.tsx` (`UndoImportButton` – `import-undo`, `import-undo-dialog`,
+  `import-undo-plan`, `import-undo-confirm`; „Ostatnie importy” – `recent-import`, `recent-import-undo`,
+  `recent-import-undone`), `runImport` `writeBatch`, `ImportDone.batchId`, `AccountWarning` (`import-account-warning`),
+  `import-already`, `import-undone`.
+- Saldo z pliku (F5, T169): `shared/import/statement.ts` (`bookingOrder`, `statementOf`, `statementCheck`), `runImport`
+  `confirmFromStatement` (potwierdzenie w paczce – `confirmations`), `ImportDone.statement` / `confirmed`,
+  `features/import/BankTelemetry.tsx` („Telemetria z banku” – `bank-telemetry`, `-match`, `-diff`, `-before`, `-missing`,
+  `-extra`, `-amounts`, `-gaps`, `-confirm`), `operations/state.ts` `openOperation`.
+- Oficer (F8, T170): `shared/import/officer.ts` (`officerData`, `officerHint`, `officerTarget` z WeakMap,
+  `OFFICER_SOURCE_LABEL`), `store/officer.ts` (`officerNow`), `QuickData.lastByBrand` / `rules` / `aliases`, szybki wpis
+  `quick-officer`, edytor `operation-officer`.
+- Audyt reguł (F22, T171): tryb reguły `amount` + `maxAmount` (`importRuleSchema`), `shared/import/audit.ts` (`withRule`,
+  `startAudit` / `feedAudit` / `finishAudit`, `auditRules`, `MixedBrand.limit`), `features/import/RulesAudit.tsx`
+  (`useRuleAudit` porcjami, `RulesPanel` – `import-rules-search`, `import-rules-show-*`, `import-rule` z `data-match`,
+  `import-rule-hits`, `-differ`, `-differ-row`, `-apply`, `-edit`, `-editor`, `-direction`, `-limit`, `-save`;
+  `MixedBrandsPanel` – `import-mixed`, `import-mixed-limit`), Ustawienia → Import z banku (`ImportTab`).
+- Testy: `tests/unit/import-batch.test.ts`, `import-statement.test.ts`, `officer.test.ts`, `rules-audit.test.ts`,
+  grupa H w `import.test.ts`, `tests/fs/history.test.ts` (powód `undo`), E2E `tests/e2e/import-tools.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -552,4 +589,6 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.5.0 Domownicy, ICTTJ i dokowanie (grupa G, D83 / D84): wspólne finansowanie (równo / procenty / kwoty), prezent,
   konto „Gotówka”, operacje spoza sald na start, zwroty domowników z importu, gra bez naruszeń za cudze zakupy, dokowanie
   odporne na usunięcia, zmiany puli, dwa komputery, zasięg pliku, inne kwoty i święta
+- [x] 1.5.1 Import z mBanku (grupa H, D84): „Cofnij import”, saldo z pliku banku (telemetria), oficer zna marki, audyt
+  reguł (próg kwoty, „Zastosuj do historii”), pożyczka z Radaru, operacje z pliku złego konta, sesja importu z „Cofnij”
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

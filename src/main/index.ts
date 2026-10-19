@@ -577,8 +577,9 @@ function registerIpc(): void {
     for (const change of changes) send(change)
     return results
   })
-  handle('deleteRecords', async (collection: Collection, ids: string[]) => {
-    const { results, change } = await requireStore().deleteRecords(collection, ids)
+  handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown) => {
+    // 'drop' (no version in the history) only for the imports' batches: never the user's records.
+    const { results, change } = await requireStore().deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
     send(change)
     return results
   })

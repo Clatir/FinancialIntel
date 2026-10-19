@@ -1,7 +1,8 @@
 /**
  * Operations that are one and the same (1.2.1, D77 – after ICTTJ's „Duplikaty z importu”, 1.19.1):
  * - the same row of the bank twice (one `bank.key` on one account): a file imported on two computers before the folder
- *   synced – the newer version stays (as „Zaakceptuj nowsze”), unless the other has more of the user's own data;
+ *   synced – the newer version stays (as „Zaakceptuj nowsze”), unless the other has more of the user's own data; also
+ *   one row on two accounts (B35: a file imported onto the wrong account and then the right one);
  * - an operation typed by hand and its copy from the bank the import did not join (typed after the import, another
  *   name, an amount off by grosze): the hand-typed one stays and takes the bank's date, amount and row;
  * - one row of the bank from both formats of the file (the list of operations and the account history describe it in
@@ -12,6 +13,7 @@
  */
 import { addDays } from '../calc/dates'
 import type { Docking, Transaction } from '../schema/records'
+import { keyOccurrence, keyOnAccount, rowIdentity } from './mbank'
 import { formatsOf, joinable, looseMatch, MATCH_DAYS, similarCounterparty } from './reconcile'
 
 export type DuplicateKind = 'same-row' | 'manual' | 'bank-format'
@@ -82,7 +84,13 @@ const conflicting = (keep: Transaction, copies: readonly Transaction[]): boolean
  * The duplicates among the operations (drafts left out by the caller); `dismissed` = groups the user said are none
  * (`settings.import.notDuplicates`).
  */
-export function findDuplicates(txs: readonly Transaction[], dockings: readonly Docking[], dismissed: Readonly<Record<string, unknown>> = {}): DuplicateGroup[] {
+export function findDuplicates(
+  txs: readonly Transaction[],
+  dockings: readonly Docking[],
+  dismissed: Readonly<Record<string, unknown>> = {},
+  /** The bank's account numbers of the accounts (F4): the same payment on two bank accounts is two operations. */
+  accountNumbers?: Readonly<Record<string, string>>
+): DuplicateGroup[] {
   const docked = new Set(dockings.map((d) => d.transactionId))
   const out: DuplicateGroup[] = []
   const blockedOf = (keep: Transaction, copies: readonly Transaction[]) =>
@@ -109,6 +117,39 @@ export function findDuplicates(txs: readonly Transaction[], dockings: readonly D
     for (const t of list) inRowGroups.add(t.id)
     if (dismissed[key]) continue
     out.push({ key, kind: 'same-row', keep: keep.id, remove: copies.map((t) => t.id), conflict: conflicting(keep, copies), blocked: blockedOf(keep, copies), differs: '' })
+  }
+
+  // The same row of the bank on two accounts (B35: one account's file imported onto another too – before 1.5.1 the next
+  // file of the right one brought it again): the row as the bank wrote it – date, description, amount, its occurrence.
+  const byIdentity = new Map<string, Transaction[]>()
+  for (const t of txs) {
+    if (!t.bank?.description || inRowGroups.has(t.id)) continue
+    const k = keyOnAccount('*', rowIdentity({ date: t.date, description: t.bank.description, amount: t.amount }), keyOccurrence(t.bank.key))
+    const list = byIdentity.get(k)
+    if (list) list.push(t)
+    else byIdentity.set(k, [t])
+  }
+  for (const [k, all] of byIdentity) {
+    if (all.length < 2) continue
+    // Accounts of two bank accounts (their numbers known and different): each one's operations apart; the ones of
+    // accounts without a number known stay together.
+    const byNumber = new Map<string, Transaction[]>()
+    for (const t of all) {
+      const n = accountNumbers?.[t.accountId] ?? ''
+      byNumber.set(n, [...(byNumber.get(n) ?? []), t])
+    }
+    const known = [...byNumber.keys()].filter(Boolean)
+    const parts: Array<[string, Transaction[]]> = known.length > 1 ? [...byNumber] : [['', all]]
+    for (const [n, list] of parts) {
+      if (list.length < 2) continue
+      const [keep, ...copies] = [...list].sort(
+        (a, b) => Number(docked.has(b.id)) - Number(docked.has(a.id)) || userContent(b) - userContent(a) || b.updatedAt.localeCompare(a.updatedAt) || a.createdAt.localeCompare(b.createdAt)
+      ) as [Transaction, ...Transaction[]]
+      const key = rowKey('*', n ? `${k}|${n}` : k)
+      for (const t of list) inRowGroups.add(t.id)
+      if (dismissed[key]) continue
+      out.push({ key, kind: 'same-row', keep: keep.id, remove: copies.map((t) => t.id), conflict: conflicting(keep, copies), blocked: blockedOf(keep, copies), differs: '' })
+    }
   }
 
   // A hand-typed operation and its copy from the bank (`looseMatch`, the import's rule): the closest first, each side

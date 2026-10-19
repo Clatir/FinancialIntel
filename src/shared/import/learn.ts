@@ -135,6 +135,9 @@ export function keywordProposals(
   // An expense without a category teaches nothing; a loan, XTB, the tax are decided operation by operation (a keyword
   // holds an expense, money in or an own transfer – as in the settings).
   if ((choice.kind === 'expense' && !choice.categoryId) || !KEYWORD_KINDS.includes(choice.kind)) return []
+  // A person's money – a member's purchase or money in, several people paying – is a decision about the counterparty,
+  // never a word of other operations' names (N16).
+  if (choice.refundable || choice.household || choice.share) return []
   // A bank's fee without a name: its title tells of another operation („PROWIZJA ZA ZAKUP” – the shop of the purchase),
   // not of what was decided (as `ruleTargetOf` reads it).
   if (group.rows.every((p) => !p.row.counterparty && isFeeOperation(p.row.operation))) return []
@@ -168,7 +171,7 @@ export function keywordProposals(
     let overreach = false
     for (const p of others) {
       if (!keywordMatches(p.target.name, word) && !keywordMatches(p.target.title, word)) continue
-      if (findRule(rules, p.target, p.direction) !== proposal || sameChoice(choiceOf(p.decision), choice)) continue
+      if (findRule(rules, p.target, p.direction, p.row.amount) !== proposal || sameChoice(choiceOf(p.decision), choice)) continue
       // A word that would decide another word's operations („auto” → „AUTOMATSPEC”) is not offered: the count would
       // say one thing, the rule do another.
       if (catchOf(p.target.name, word) !== 'near' && catchOf(p.target.title, word) !== 'near') {

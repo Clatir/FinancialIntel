@@ -1,5 +1,47 @@
 # Financial Intel – zmiany
 
+## 1.5.1
+
+Import z mBanku: cofnięcie całego importu, saldo z pliku banku, oficer zna marki, audyt reguł i poprawki z przeglądu
+aplikacji po 1.4.1 (D84).
+
+Nowe:
+- „Cofnij import” – całe wczytanie pliku jednym przyciskiem: na ekranie wyniku i w Ustawienia → Import z banku
+  („Ostatnie importy”, dziesięć ostatnich). Okno mówi, co się stanie: ile operacji zniknie (także zmienionych potem przez
+  Ciebie), w ilu wpisach cofną się zmiany połączenia z bankiem albo rozliczenia (Twoje późniejsze zmiany zostają), ile
+  reguł się cofnie. Toast ma „Cofnij” – import wraca w całości. Kolejny import tego pliku wczytuje te operacje od nowa
+  (nie są „usunięte przez Ciebie”); operacje cofniętego importu są też na liście usuniętych w Synchronizacji – razem z
+  Twoimi zmianami. Importy cofa się od ostatniego. Gdy część operacji importu nie dotarła jeszcze z drugiego komputera,
+  cofnięcie czeka (albo „Cofnij mimo to”).
+- Plik z innego rachunku – ostrzeżenie przed importem (numer rachunku z nagłówka pliku zapamiętany przy koncie); plik w
+  całości już zaimportowany – komunikat.
+- Telemetria z banku: po imporcie historii rachunku FI porównuje saldo z banku po ostatnim dniu pliku z saldem w FI. Gdy
+  się zgadza – saldo jest potwierdzone samo (misja „Inwentaryzacja” dla mBanku, C11). Gdy nie – pokazuje, od którego dnia
+  salda się rozjeżdżają i dlaczego: operacje z banku, których nie ma w FI, wpisy z FI, których nie ma w banku (wpisane
+  ręcznie, podwójne, jeszcze niezaksięgowane), inna kwota, różnica sprzed pliku, luki w saldach samego pliku
+  (przefiltrowana lista). Korekta zostaje ostatnią opcją. Cofnięcie importu usuwa też to potwierdzenie.
+- Oficer szybkiego wpisu i edytora zna marki: „Dino” wpisane ręcznie dostaje kategorię operacji z banku „DINO TESTOWO 4”,
+  reguły importu (także połączone nazwy) i słownik sieci – bez historii wpisów ręcznych. Lista kontrahentów w szybkim
+  wpisie jedna na markę. W edytorze operacji bez kategorii – podpowiedź „oficer: …”.
+- Audyt reguł importu (Ustawienia → Import z banku): wyszukiwarka, przy każdej regule liczba operacji z banku, które łapie
+  dziś, „zmień” (kierunek, decyzja, kategoria), reguły bez trafień, operacje marki z inną kategorią niż jej reguła –
+  „Zastosuj do historii” z „Cofnij”. Marki z kilkoma kategoriami; gdy kwoty je rozdzielają (Orlen do 40 zł – kawa, więcej –
+  paliwo), FI proponuje regułę z progiem kwoty.
+
+Import z mBanku:
+- Przelew od osoby z otwartą pożyczką z Radaru – „zwrot pożyczki: …” z tą pożyczką; w decyzjach także pożyczki z Radaru.
+  Pożyczka, PIT-38 i XTB nie stają się regułą – sprawdzane przy każdej operacji.
+- Plik zaimportowany najpierw na złe konto – przy imporcie na właściwe operacje się przenoszą, nie wchodzą drugi raz. Ta
+  sama płatność na dwóch rachunkach mBanku (różne numery rachunków) to dwie operacje.
+- Wpis ręczny „Nie łącz” z wierszem banku – wiersz wchodzi z rozpoznaniem jak inne wiersze pliku.
+- „Ustaw” zaznaczonych bez kategorii jest niedostępne; wydatek bez kategorii nie uczy reguły.
+- Podgląd liczy się od nowa po zmianie nazwisk, kategorii, kontenerów, pożyczek i operacji (też z drugiego komputera);
+  przed zapisem sprawdzany jeszcze raz. Decyzja tematu zostaje po przeliczeniu.
+- Zamknięcie pliku albo wczytanie innego z decyzjami – z „Cofnij”; błędny plik nie zamyka otwartego.
+- Plik bez nowych operacji – „Zapisz import (bez zmian)” zapisuje czas importu i okres pliku.
+- „Zapamiętaj” w edytorze uczy reguły po nazwie z banku (Twoja nazwa obok); propozycja reguły na słowo pokazuje całą
+  decyzję, którą zapisze.
+
 ## 1.5.0
 
 Domownicy, ICTTJ i dokowanie: wspólne finansowanie wydatków (D83) i poprawki z przeglądu aplikacji po 1.4.1 (D84).

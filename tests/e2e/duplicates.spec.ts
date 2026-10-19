@@ -58,7 +58,7 @@ test('Duplikaty (D77): wpis ręczny pod inną nazwą łączony przy imporcie, wp
     expect(lidl[0]).toMatchObject({ counterparty: 'Lidl', categoryId: '01KDEFCAT00000000000000101' })
     expect((lidl[0]!.bank as { counterparty: string }).counterparty).toBe('LIDL')
     await expect(page.getByTestId('duplicates')).toHaveCount(0)
-    await page.getByRole('button', { name: 'Cofnij' }).click()
+    await page.getByRole('button', { name: 'Cofnij', exact: true }).click()
     await expect.poll(async () => (await operations()).length).toBe(270)
     // The kept entry is as it was before the merge (no bank row), the copy is back.
     await expect.poll(async () => (await operations()).find((t) => t.counterparty === 'Lidl')?.bank ?? null).toBeNull()

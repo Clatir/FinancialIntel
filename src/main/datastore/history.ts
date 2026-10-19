@@ -125,7 +125,11 @@ export class RecordHistory {
     return (await this.readFile(this.dir(kind, id), file))?.record ?? null
   }
 
-  /** Records of `kind` whose latest version is a deletion and that do not exist any more, newest first. */
+  /**
+   * Records of `kind` whose latest version is a deletion and that do not exist any more, newest first – also those taken
+   * back with their import (reason 'undo', F4: their versions can be brought back; the import's own rows are not
+   * blocked by them – T39).
+   */
   async deleted(kind: FileKind, existing: ReadonlySet<string>): Promise<Array<HistoryEntry & { id: string; record: SnapshotFile['record'] }>> {
     const base = join(this.root, HISTORY_DIR, kind)
     let ids: string[]
@@ -140,7 +144,7 @@ export class RecordHistory {
       const dir = join(base, id)
       const names = await this.files(dir)
       const last = names.at(-1)
-      if (!last || !last.includes('_delete_')) continue
+      if (!last || !(last.includes('_delete_') || last.includes('_undo_'))) continue
       const s = await this.readFile(dir, last)
       if (s) out.push({ ...this.entryOf(last, s), id, record: s.record })
     }

@@ -26,6 +26,8 @@ export function recordTitle(kind: HistoryKind, record: unknown): string {
       return `Saldo ${s(r.date)}`
     case 'game':
       return `Dowództwo ${s(r.month)}`
+    case 'imports':
+      return `Import z banku ${s(r.at).slice(0, 10)}${s(r.fileName) ? `: ${s(r.fileName)}` : ''}`
     case 'fi':
       return 'Ustawienia'
     default:

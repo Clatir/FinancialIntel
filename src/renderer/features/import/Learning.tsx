@@ -3,7 +3,7 @@ import type { BrandAliases } from '@shared/import/aliases'
 import { keywordProposals } from '@shared/import/learn'
 import type { Choice, ImportGroup } from '@shared/import/reconcile'
 import { mergeTarget, similarPairs, type SimilarPair, type SimilarSide, type SimilarWhy } from '@shared/import/similar'
-import { TX_KIND_LABEL, type ImportRule, type TxKind } from '@shared/schema'
+import type { ImportRule, TxKind } from '@shared/schema'
 import { countLabel } from '../../lib/format'
 import { useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -130,7 +130,11 @@ export function RuleProposal({ g, choice }: { g: ImportGroup; choice: Choice }) 
   const proposals = useMemo(() => keywordProposals(groups, g, choice, { rules, choices, ownNames: ownNamesWith(own, file) }), [groups, g, choice, rules, choices, file, own])
   if (!proposals.length) return null
   const label = (group: string) => groups.find((x) => x.group === group)?.label ?? ''
-  const decision = choice.kind === 'expense' ? cats.label(choice.categoryId) : (TX_KIND_LABEL[choice.kind as TxKind] ?? choice.kind)
+  // The decision as the settings write the rule (N16): what the keyword will hold.
+  const decision = ruleDecisionText(
+    { kind: choice.kind, categoryId: choice.categoryId, refundable: choice.refundable, household: choice.household, memberId: choice.memberId, gift: choice.gift, share: choice.share } as ImportRule,
+    (id) => cats.label(id)
+  )
   const take = (text: string, rows: number) => {
     const err = saveKeywordRule({
       keyword: text,

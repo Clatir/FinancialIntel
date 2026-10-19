@@ -1048,3 +1048,79 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   linii paragonu (T156), wpis usunięty w ICTTJ także przy ostrzeżeniach odczytu (T162), procenty ≠ 100 % niezapisywane
   zbiorczo i w imporcie (T156), wstrzymanie gry liczone z bieżących dostaw (T163), jedna reguła reszty i procentów po równo
   w edytorze i obliczeniach (T156). Każda poprawka z testem sprawdzonym bez niej (pada).
+- **T166** Import z mBanku (grupa H, B34–B39): przelew przychodzący od osoby z otwartą pożyczką udzieloną z Radaru
+  (`loanOf` – nazwa w banku, najstarsza otwarta) to jej zwrot (`decision.loanId`, propozycja do sprawdzenia); opcje
+  `loan:<id>` w decyzjach (Radar), zamknięta pożyczka tylko gdy już wybrana. Klucz wiersza zależy od konta
+  (`keyOnAccount`): ta sama operacja na innym koncie budżetu to `elsewhere` – zaimportowana tam (klucz tamtego konta) =
+  plik trafił na złe konto, przenoszona tu domyślnie; przeniesiona tam przez użytkownika – zostaje (`ImportChoices.moveHere`);
+  duplikaty szukają też między kontami. Konto, którego pliki są z innego rachunku banku (oba numery znane – T168,
+  `otherBankAccount`), ma swoje operacje: ta sama płatność tego samego dnia na dwóch rachunkach to dwie operacje – ani
+  `elsewhere`, ani duplikat. Wpis ręczny „Nie łącz” dostaje rozpoznanie i grupę jak inne wiersze pliku
+  (`merge.planned`). Decyzja „Ustaw” bez kategorii niedostępna, wydatek bez kategorii nikogo innego nie uczy reguły
+  (`learnable`, zasłoniłby sieć). Plan od nowa po zmianie reguł, połączonych nazw, domowników, nazwisk, kategorii,
+  kontenerów, pożyczek i operacji (`planInputs`, porównanie referencji), tuż przed zapisem jeszcze raz z historią usunięć –
+  inny wynik (`planSignature`) = podgląd od nowa i komunikat; temat zachowuje decyzję użytkownika po przeliczeniu, propozycja
+  przyjęta hurtem („Przyjmij pewne”) ustępuje nowej.
+- **T167** Sesja importu (N12–N16): zamknięcie pliku albo wczytanie innego, gdy są decyzje – stan sesji w toaście z
+  „Cofnij” (przeliczony na danych z tej chwili); błędny plik nie zamyka otwartego (błąd z nazwą pliku). Plik bez nic
+  nowego zapisuje „ostatni import”, okres pliku i wpis do dziennika misji, bez kopii przed importem i bez rekordów (N13).
+  Pożyczka, PIT-38 i XTB (`PER_OPERATION_KINDS`) nigdy nie są regułą; reguła sprzed 1.5.1 takiego rodzaju daje tylko
+  propozycję (N14). „Zapamiętaj” uczy po nazwie, którą pisze bank (`bankNameOf`, nazwa użytkownika w nawiasie – N15);
+  propozycja reguły na słowo pokazuje całą decyzję (`ruleDecisionText` – N16).
+- **T168** „Cofnij import” (F4): każdy import, który coś zmienia, zapisuje paczkę – kolekcja `imports/` (`importBatchSchema`,
+  układ 'id', addytywnie; starsza wersja jej nie czyta): utworzone operacje (id), zmienione – wersja przed i po importie,
+  usunięte (nierozliczone, które zniknęły z banku), reguły przed i po (`rulesChanged`), ustawienia przed i po (ostatni
+  import, zasięg plików, numer rachunku, zapamiętane wpłaty domowników), dopisane nazwisko z pliku, potwierdzenie salda z
+  pliku (T169); dziesięć ostatnich (`batchesToDrop`). Cofa się od ostatniej stojącej paczki (`latestImport` – stos: późniejszy
+  import mógł rozliczyć albo połączyć to, co utworzył wcześniejszy). Cofnięcie (`undoPlan`, `settingsUndone`): utworzone
+  operacje usuwane – także zmienione potem (okno podaje ich liczbę, toast ma „Cofnij”) – z powodem historii `undo`: są na
+  liście usuniętych (Synchronizacja – do odzyskania z ich zmianami), ale kolejnego importu nie blokują (T39 –
+  `deletedBankKeys` pomija `undo`; starsza wersja szuka tylko `_delete_`); zmienione wpisy – scalanie trójstronne
+  (baza = wersja po imporcie, zmiana użytkownika wygrywa); usunięte – odzyskane, gdy ich nie ma; reguła nowa – usunięta,
+  zmieniona – jak przed importem, zmieniona albo usunięta potem – zostaje; ustawienia – każde tylko, gdy wciąż jest takie,
+  jak import je ustawił; wpis dziennika misji znika. Operacja paczki, której na tym komputerze nie ma i nigdy nie było (bez
+  wersji w historii – jeszcze się synchronizuje albo usunięta poza aplikacją), wstrzymuje cofnięcie z komunikatem i
+  „Cofnij mimo to”; plik, którego dysk nie oddał (zajęty), zostawia import nietknięty – ponowne „Cofnij import” kończy.
+  „Cofnij” cofnięcia (`settingsRedone`) ustawia znowu tylko to, co cofnięcie zmieniło – zmiana z międzyczasu zostaje.
+  Paczka zapisuje się także, gdy folder nie przyjął jeszcze zapisów (ponawiane), a stan „po imporcie” (reguły, ustawienia,
+  domownicy) jest brany zaraz po zmianach importu, nie po czekaniu na dysk. Najstarsze paczki ponad dziesięć usuwane bez
+  wersji w historii (powód `drop`, main dopuszcza go tylko dla `imports/`). Numer rachunku z
+  nagłówka (`accountNumberOf` – cyfry, min. 10) zapamiętany przy koncie (`settings.import.accountNumbers`, ostatni
+  zaimportowany): plik z innego rachunku albo rachunku innego konta – ostrzeżenie przed importem; plik w całości
+  znany – komunikat. Nieudane usunięcie nierozliczonej (plik zajęty) nie przerywa już importu – komunikat po wszystkim.
+- **T169** Saldo z pliku banku (F5, C11): historia rachunku – kolejność księgowania z łańcucha sald (kolejność pliku albo
+  odwrotna, potem dzień księgowania – `bookingOrder`), saldo otwarcia i zamknięcia dnia z końców łańcucha dnia (kolejność
+  w dniu bez znaczenia), luka = pieniądze między dniami (albo w dniu) bez wiersza (`statementOf`; data księgowania
+  `MbankRow.booked`, addytywnie). FI liczy po dacie operacji: saldo banku na koniec dnia D (od pierwszego księgowania pliku)
+  = saldo przed plikiem + wiersze z datą operacji ≤ D. Porównanie (`statementCheck`) na koniec ostatniego dnia pliku;
+  różnica rozłożona na: sprzed pliku (albo saldo otwarcia późniejsze niż plik – porównanie od niego), wiersze banku bez
+  operacji w FI, operacje FI bez wiersza (ręczne, podwójne, niezaksięgowane, korekty), inna kwota, luki pliku, reszta;
+  pierwszy dzień = najwcześniejszy z nich. Zgodne i konto ma saldo otwarcia – potwierdzenie z datą ostatniego dnia pliku
+  zapisuje się samo (bez drugiego takiego samego), jest w paczce importu (cofnięcie je usuwa). Misja „Inwentaryzacja”
+  liczy je jak każde potwierdzenie – dla konta pliku (C11). Bez zgodności nic się nie zapisuje samo: „Potwierdź z korektą”
+  (albo „Ustaw saldo otwarcia z pliku”) to ręczna, ostatnia opcja. Lista operacji (bez sald) – bez telemetrii.
+- **T170** Oficer (F8): kategoria po kluczu marki (`ruleTargetOf` z nazwy, a operacji z banku – z jej nazwy w banku, jak
+  reguły; połączone nazwy), kolejno: ostatnio użyta z marką (wydatki, 2000 najnowszych – W15), reguła importu (także
+  słowo kluczowe), kategoria sieci ze słownika (`officerHint`); zarchiwizowana nie. Szybki wpis dostaje `lastByBrand`,
+  reguły i połączone nazwy (`QuickData`), lista kontrahentów – jedna nazwa na markę (sieć – jej nazwa). Edytor operacji
+  bez kategorii – „oficer: …”. Marka operacji liczona raz na wersję rekordu (`officerTarget`, WeakMap; rekordy nie
+  zmieniają się w miejscu); 2000 najnowszych bez sortowania całej listy (próg dnia z liczników dni).
+- **T171** Audyt reguł (F22): reguła z progiem kwoty to nowy tryb `amount` (klucz marki + `maxAmount` w groszach, bez
+  znaku; addytywnie – starsza wersja nie zna trybu i bierze zwykłą regułę marki): przed regułą `exact` marki, najciaśniejszy
+  próg, tylko gdy kwota jest znana (`findRule(…, amount)`). Uczenie z decyzji grupy, którą rozstrzygnęła reguła z progiem,
+  zmienia tę regułę, nie zwykłą (`ruleDecisionOf`); `upsertRule` progów nie dotyka. Audyt (`startAudit` / `feedAudit` /
+  `finishAudit`, porcjami po 2000 operacji – duży folder nie zatrzymuje ekranu): operacje z banku, które reguła łapie dziś,
+  wydatki reguły wydatku z inną kategorią albo finansującym (`withRule` – kategoria, finansujący, prezent, wspólny podział;
+  paragon podzielony ręcznie pominięty), operacje innego rodzaju (tylko pokazane), reguły bez trafień (bez pożyczki, PIT-38,
+  XTB), marki z dwiema i więcej kategoriami – próg proponowany, gdy dokładnie dwie kategorie nie zachodzą na siebie kwotami
+  (pełne złote nad największą mniejszą, o ile nie łapie większej). „Zastosuj do historii” – tylko operacje o treści
+  niezmienionej od policzenia (zapis podmienia rekord w miejscu – porównanie treści, nie obiektu), „Cofnij” – te, które
+  wciąż są takie, jak je zostawiło. Zmiana reguły w ustawieniach = `learned` false.
+- **T172** Przegląd grupy H (`/code-review` high, 10 kandydatów): poprawione wszystkie – ta sama płatność na dwóch
+  rachunkach banku (numery rachunków – T166), cofnięcie importu z operacjami w drodze albo z plikiem zajętym, operacje
+  cofniętego importu do odzyskania z listy usuniętych, paczka zapisana także przy nieudanym zapisie i ze stanem „po
+  imporcie” z chwili importu, stare paczki bez historii, „Cofnij” cofnięcia bez nadpisywania zmian z międzyczasu (T168),
+  „Zastosuj do historii” po treści (T171), podgląd importu nieliczony w trakcie zapisu (`replanIfChanged` czeka, po
+  imporcie jedno sprawdzenie), oficer bez sortowania całej listy (T170). Poprawki z testami (numery rachunków, „Cofnij”
+  cofnięcia, powód `drop`, E2E operacji usuniętej poza aplikacją) sprawdzonymi bez nich (padają).
+

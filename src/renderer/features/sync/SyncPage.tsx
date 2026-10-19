@@ -22,6 +22,7 @@ const KIND_LABEL: Record<string, string> = {
   loans: 'Pożyczka',
   balances: 'Saldo',
   game: 'Dowództwo',
+  imports: 'Import z banku',
   fi: 'Ustawienia (fi.json)'
 }
 const PROBLEM_LABEL: Record<string, string> = {
@@ -184,7 +185,7 @@ function DeletedRecords() {
             <div key={`${d.kind}:${d.id}`} className="flex items-center gap-3 border-b border-line/60 py-1 text-[12px] last:border-b-0" data-testid="deleted-row">
               <span className="min-w-0 flex-1 truncate">{recordTitle(d.kind, d.record)}</span>
               <span className="num text-[11px] text-muted">
-                usunięty {new Date(d.savedAt).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })} · {d.savedBy ?? '?'}
+                {d.reason === 'undo' ? 'usunięty przy cofnięciu importu' : 'usunięty'} {new Date(d.savedAt).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })} · {d.savedBy ?? '?'}
               </span>
               <button
                 className="btn h-[22px]"

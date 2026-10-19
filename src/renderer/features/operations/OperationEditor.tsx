@@ -14,7 +14,9 @@ import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
 import { AccountSelect, CategorySelect, useAccounts } from './pickers'
 import { deleteOperation, rememberAccount } from './state'
-import { rememberCategory, ruleFor } from '../import/rules'
+import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
+import { OFFICER_SOURCE_LABEL, officerHint } from '@shared/import/officer'
+import { officerNow } from '../../store/officer'
 import { useCategories } from './pickers'
 import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberPickers'
 import { ShareEditor } from '../household/ShareEditor'
@@ -86,6 +88,7 @@ export function OperationEditor({ id }: { id: string }) {
   const accounts = useAccounts()
   const cats = useCategories()
   const rules = useData((s) => s.fi?.settings.import.rules)
+  const aliases = useData((s) => s.fi?.settings.import.aliases)
   const loans = useRecordList('loans')
   const members = useMembers()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
@@ -95,6 +98,15 @@ export function OperationEditor({ id }: { id: string }) {
   const readOnly = folderReadOnly || entry.readOnly
   const update = (fn: (r: Transaction) => Transaction) => updateRecord('transactions', id, fn)
   const patch = (p: Partial<Transaction>) => update((r) => ({ ...r, ...p }))
+  // F8: an expense without a category – what the officer knows of its brand (history, the import's rule, the chain).
+  const officer =
+    t.kind === 'expense' && !t.categoryId && !t.splits.length && rules && !readOnly
+      ? officerHint({ counterparty: t.bank ? t.bank.counterparty : t.counterparty, title: t.title, operation: t.bank?.operation, bankName: t.bank?.bankName }, officerNow(), {
+          rules,
+          aliases: aliases ?? {},
+          usable: (c) => !!cats.byId.get(c) && !cats.byId.get(c)!.archived
+        })
+      : null
   const abs = Math.abs(t.amount)
   const sign: 1 | -1 = t.amount < 0 ? -1 : t.amount > 0 ? 1 : t.kind === 'income' ? 1 : (zeroSign ?? DEFAULT_SIGN[t.kind])
   const setDirection = (s: 1 | -1) => {
@@ -246,15 +258,27 @@ export function OperationEditor({ id }: { id: string }) {
                   </button>
                 )}
               </div>
-              {!share && t.bank && t.counterparty && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
+              {!share && t.bank && bankNameOf(t) && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
                 <button
                   type="button"
                   className="self-start text-[11.5px] text-accent hover:underline"
                   onClick={() => rememberCategory(t, cats.label(t.categoryId))}
-                  title="Kolejne importy z banku dadzą temu kontrahentowi tę kategorię"
+                  title="Kolejne importy z banku dadzą temu kontrahentowi tę kategorię – po nazwie, którą pisze bank"
                   data-testid="operation-remember"
                 >
-                  Zapamiętaj: „{t.counterparty}” → {cats.label(t.categoryId)}
+                  {/* The bank's name: the one the rule learns (N15); the user's own in brackets. */}
+                  Zapamiętaj: „{bankNameOf(t)}”{t.counterparty && t.counterparty !== bankNameOf(t) ? ` (${t.counterparty})` : ''} → {cats.label(t.categoryId)}
+                </button>
+              )}
+              {officer && (
+                <button
+                  type="button"
+                  className="self-start text-[11.5px] text-accent hover:underline"
+                  onClick={() => update((r) => (shareOf(r) ? withShare({ ...r, categoryId: officer.categoryId }, r.share!) : { ...r, categoryId: officer.categoryId }))}
+                  title={`Oficer: ${OFFICER_SOURCE_LABEL[officer.source]}`}
+                  data-testid="operation-officer"
+                >
+                  oficer: {cats.label(officer.categoryId)}
                 </button>
               )}
               {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId, goalId: containerId ? null : t.goalId })} />}

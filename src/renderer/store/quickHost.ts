@@ -6,14 +6,14 @@
 import type { QuickData, QuickResult } from '@shared/api'
 import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
-import { counterpartyKey } from '@shared/import/classify'
 import { newId } from '@shared/ids'
 import { shareSplits } from '@shared/calc/share'
 import { envelopeKind, inflowOf, SCHEMA_VERSION, shareSchema, transactionSchema, ulidSchema, type Share, type Transaction } from '@shared/schema'
 import { rememberInflows } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
-import { addRecord, listOf, useData } from './data'
+import { addRecord, useData } from './data'
+import { officerNow } from './officer'
 import { fleetNow } from './fleet'
 import { useMachine } from './machine'
 import { toast } from './ui'
@@ -26,29 +26,6 @@ function lastAccount(): string | null {
   } catch {
     return null
   }
-}
-
-/** The officer's hints (W15): computed once per change of the operations, not at every opening of the window. */
-let officer: { map: object; lastCategory: Record<string, string>; counterparties: string[] } | null = null
-
-function officerOf(map: ReturnType<typeof useData.getState>['records']['transactions']) {
-  if (officer?.map === map) return officer
-  // The latest category per counterparty, the counterparties used most of late (plain comparisons of ISO stamps).
-  const txs = listOf(map)
-    .filter((t) => t.kind === 'expense' && t.counterparty.trim())
-    .sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
-  const lastCategory: Record<string, string> = {}
-  const uses = new Map<string, { name: string; n: number }>()
-  for (const t of txs.slice(0, 2000)) {
-    const key = counterpartyKey(t.counterparty)
-    if (!key) continue
-    if (t.categoryId && !lastCategory[key]) lastCategory[key] = t.categoryId
-    const u = uses.get(key)
-    if (u) u.n++
-    else uses.set(key, { name: t.counterparty.trim(), n: 1 })
-  }
-  officer = { map, lastCategory, counterparties: [...uses.values()].sort((a, b) => b.n - a.n).slice(0, 40).map((u) => u.name) }
-  return officer
 }
 
 export function quickData(): QuickData | null {
@@ -64,7 +41,7 @@ export function quickData(): QuickData | null {
     })
   const accounts = fi.settings.accounts.filter((a) => !a.archived).map((a) => ({ id: a.id, name: a.name }))
   const fleet = fleetNow()
-  const { lastCategory, counterparties } = officerOf(s.records.transactions)
+  const { lastByBrand, counterparties } = officerNow()
   const last = lastAccount()
   return {
     categories,
@@ -74,8 +51,10 @@ export function quickData(): QuickData | null {
     envelopesLeft: Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, e.left])),
     quietHours: fi.settings.orders.quietHours,
     impulseThreshold: fi.settings.orders.impulseThreshold,
-    lastCategory,
+    lastByBrand,
     counterparties,
+    rules: fi.settings.import.rules,
+    aliases: fi.settings.import.aliases,
     members: fi.settings.household.members
       .filter((m) => !m.archived)
       .map((m) => {

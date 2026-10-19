@@ -9,7 +9,7 @@ import { cleanBankName, counterpartyKey } from './names'
 import { resolveBrand, type BrandAliases } from './aliases'
 import { brandById, brandOf, keywordIn, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
 import type { Category, HouseholdMember, ImportRule } from '../schema/budget'
-import type { Container, Share } from '../schema/records'
+import type { Container, Loan, Share } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '../schema/budget'
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
@@ -69,13 +69,19 @@ export interface RuleTarget {
  * whole name's key (learned before 1.2.1), then the longest „contains” fragment, then the longest keyword of the user
  * (in the name or the title); a rule of the other direction does not count.
  */
-export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction): ImportRule | null {
+export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction, amount?: number): ImportRule | null {
   const usable = rules.filter((r) => (r.direction == null || r.direction === direction) && (TX_KINDS as readonly string[]).includes(r.kind))
   const exact = (key: string) => {
     const hits = key ? usable.filter((r) => r.mode === 'exact' && r.match === key) : []
     return hits.find((r) => r.direction === direction) ?? hits[0] ?? null
   }
   const keys = new Set([t.brand, t.raw, ...(t.legacy ?? []), t.key].filter(Boolean))
+  // A rule of the brand up to an amount (F22): the tightest one the amount fits, before the brand's plain rule.
+  if (amount != null) {
+    let best: ImportRule | null = null
+    for (const r of usable) if (r.mode === 'amount' && r.maxAmount && keys.has(r.match) && Math.abs(amount) <= r.maxAmount && (!best || r.maxAmount < best.maxAmount!)) best = r
+    if (best) return best
+  }
   for (const k of keys) {
     const byKey = exact(k)
     if (byKey) return byKey
@@ -197,6 +203,8 @@ export interface ImportDecision {
   /** A purchase financed by several people (D83): the row's amount split so. */
   share: Share | null
   counterAccountId: string | null
+  /** The loan of the Radar an operation of kind 'loan' belongs to (B34): its repayment, its money. */
+  loanId: string | null
   /** A payment of a container of the cargo (its counterparty): the cargo's, not an envelope's spending. */
   containerId: string | null
   /**
@@ -225,6 +233,30 @@ export interface ClassifyContext {
   aliases?: BrandAliases
   /** The household (D80): their transfers are their money, by their names in the bank. */
   members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name' | 'bankNames' | 'inflow' | 'archived'>>
+  /** The loans of the Radar (B34): money back from the person a loan was given to is its repayment. */
+  loans?: ReadonlyArray<Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>>
+  /** The bank's account numbers of the budget's accounts (`settings.import.accountNumbers`, F4). */
+  accountNumbers?: Readonly<Record<string, string>>
+}
+
+/**
+ * Kinds decided operation by operation (N14, T98): a loan, the tax, XTB – never learned as a rule; a rule of them from
+ * before 1.5.1 is only proposed (the user checks it each time).
+ */
+export const PER_OPERATION_KINDS: readonly string[] = ['loan', 'tax', 'trading']
+
+/** All words of a person's name in the bank's counterparty – a name of one word only when it is the whole counterparty. */
+function nameIn(name: string, counterparty: string): boolean {
+  const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
+  if (!parts.length) return false
+  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
+  return parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))
+}
+
+/** The open loan given to the person a transfer comes from (B34): the oldest when there are more. */
+export function loanOf(counterparty: string, loans: ClassifyContext['loans']): NonNullable<ClassifyContext['loans']>[number] | null {
+  const open = (loans ?? []).filter((l) => l.direction === 'given' && !l.closedAt && nameIn(l.counterparty || l.name, counterparty))
+  return open.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))[0] ?? null
 }
 
 const isXtb = (row: MbankRow) => /\bxtb\b|x-trade brokers/i.test(`${row.counterparty} ${row.description}`)
@@ -250,6 +282,7 @@ const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = 
   gift: false,
   share: null,
   counterAccountId: null,
+  loanId: null,
   containerId: null,
   source: 'builtin',
   ruleId: null,
@@ -304,13 +337,25 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const op = row.operation
   const out = (d: ImportDecision): Classified => ({ key, brand, target, direction, hint, decision: d })
   // A household member's money (D80): by their names in the bank.
-  const member = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op) ? memberOf(row.counterparty, ctx.members) : null
-  const rule = findRule(ctx.rules, target, direction)
+  const transferIn = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op)
+  const member = transferIn ? memberOf(row.counterparty, ctx.members) : null
+  // Money back from the person a loan of the Radar was given to (B34): its repayment.
+  const loan = transferIn ? loanOf(row.counterparty, ctx.loans) : null
+  const rule = findRule(ctx.rules, target, direction, row.amount)
   // A rule of plain income naming no member (learned before the person became a member, or before 1.3.0) gives way to
   // the member: their money repays what they owe first.
   if (rule && !(member && rule.kind === 'income' && !rule.memberId)) {
     const kind = rule.kind as TxKind
     const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
+    // A loan, the tax, XTB from a rule of before 1.5.1 (N14): proposed only – the user checks it for each operation.
+    if (PER_OPERATION_KINDS.includes(kind))
+      return out(
+        decision(kind, 'Twoja reguła – pożyczkę, podatek i XTB sprawdź przy każdej operacji', {
+          ruleId: rule.id,
+          byTitle,
+          loanId: kind === 'loan' ? (loan?.id ?? null) : null
+        })
+      )
     // A member's purchase (D80) – its product return is theirs too (B40); a shared purchase (D83) is split the same way.
     const refundable = kind === 'expense' && rule.refundable
     const household = kind === 'income' && rule.household
@@ -333,6 +378,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     )
   }
   if (isXtb(row)) return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
+  if (loan) return out(decision('loan', `zwrot pożyczki: ${loan.name}`, { loanId: loan.id }))
   if (/^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(op) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(op) && isOwnName(row.counterparty, ctx.ownNames)))
     return out(decision('transfer', 'przelew własny'))
   // A member's money: asked once what the rest beyond their debt is (D80 b).
@@ -352,7 +398,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (/^(POS )?ZWROT/.test(op) && direction === 'in') {
     // A product return: a negative expense of the purchase's category (spec) – the purchases' rule says which, else the
     // chain's category.
-    const bought = findRule(ctx.rules, target, 'out')
+    const bought = findRule(ctx.rules, target, 'out', row.amount)
     if (bought) {
       // Of a purchase a member finances – their money (B40); of a shared one – split as the purchase (D83).
       const expense = bought.kind === 'expense'
