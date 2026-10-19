@@ -4,6 +4,8 @@ import { useSelection, type Selection } from '../../lib/selection'
 import type { ConflictEntry, HistoryEntry } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import { newerSide, newestResolutions } from '@shared/conflicts'
+import { isAmountKey } from '@shared/merge'
+import { plnText } from '../../components/fields'
 import { recordTitle } from '../../lib/recordTitle'
 import { HistoryButton } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
@@ -47,6 +49,8 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
   const newer = newerSide(c)
   const a = flatten(c.canonical.record ?? {})
   const b = flatten(c.copy.record ?? {})
+  // An amount in grosze (B7): in złoty, hidden with the amounts (Ctrl+$).
+  const shown = (k: string, v: string | undefined) => (v != null && isAmountKey(k) && /^-?\d+$/.test(v) ? `${plnText(Number(v))} zł` : v)
   const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k] && k !== 'updatedAt')
   const resolve = async (keep: 'canonical' | 'copy') => {
     setBusy(true)
@@ -116,11 +120,11 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
               <span className="num truncate text-muted" title={k}>
                 {k}
               </span>
-              <span className="truncate" title={a[k]}>
-                {a[k] ?? <span className="text-dim">—</span>}
+              <span className="truncate" title={shown(k, a[k])}>
+                {shown(k, a[k]) ?? <span className="text-dim">—</span>}
               </span>
-              <span className="truncate text-fg-strong" title={b[k]}>
-                {b[k] ?? <span className="text-dim">—</span>}
+              <span className="truncate text-fg-strong" title={shown(k, b[k])}>
+                {shown(k, b[k]) ?? <span className="text-dim">—</span>}
               </span>
             </div>
           ))}

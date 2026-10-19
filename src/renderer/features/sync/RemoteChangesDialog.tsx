@@ -160,7 +160,7 @@ function ItemCard({
                     onClick={() => onField(k, s)}
                     data-testid={`remote-pick-${s}`}
                   >
-                    {displayValue(s === 'mine' ? c.mine : c.theirs, names)}
+                    {displayValue(s === 'mine' ? c.mine : c.theirs, names, c.path)}
                   </button>
                 ))}
               </div>

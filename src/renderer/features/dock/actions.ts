@@ -49,7 +49,8 @@ export function dockingOf(d: Delivery, tx: Transaction, split: SplitDraft | null
     transactionId: tx.id,
     ictjEntryId: d.entry?.id ?? kept?.ictjEntryId ?? null,
     pool: d.entry?.pool ?? kept?.pool ?? null,
-    split: split ? { shields: Math.max(0, d.amount - others), hull: split.hull, goals: Object.fromEntries(Object.entries(split.goals).filter(([, v]) => v > 0)), taxHold: split.taxHold } : null
+    // The engine splits the operation's amount – the bank's when it differs from the entry's (B22, B59).
+    split: split ? { shields: Math.max(0, Math.abs(tx.amount) - others), hull: split.hull, goals: Object.fromEntries(Object.entries(split.goals).filter(([, v]) => v > 0)), taxHold: split.taxHold } : null
   })
 }
 

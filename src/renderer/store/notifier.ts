@@ -6,10 +6,11 @@ import { openWatchReport } from '../features/reports/state'
 import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { dueNotices, type Notice } from '@shared/notify'
+import { confirmationsOf } from '@shared/calc/briefing'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
 import { plnText } from '../components/fields'
-import { useData } from './data'
+import { listOf, useData } from './data'
 import { fleetNow } from './fleet'
 import { useMachine } from './machine'
 import { navigate } from './ui'
@@ -74,20 +75,13 @@ function check(opened: boolean, shown = false): void {
   const fi = s.fi
   const cats = categoryIndex(fi.settings.categories)
   const containers = Object.values(s.records.containers).map((e) => e.record)
-  const confirmed =
-    Object.values(s.records.balances)
-      .map((e) => e.record)
-      .filter((b) => b.kind === 'confirmation')
-      .map((b) => b.date)
-      .sort()
-      .at(-1) ?? null
   const { time } = warsawNow()
   const prefs = useMachine.getState().prefs
   const notices = dueNotices({
     fleet,
     containers,
     imports: fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null })),
-    lastConfirmation: confirmed,
+    confirmations: confirmationsOf(fi.settings.accounts, listOf(s.records.balances)),
     label: (id) => containers.find((c) => c.id === id)?.name ?? cats.label(id),
     prefs: prefs.notify,
     quietHours: fi.settings.orders.quietHours,

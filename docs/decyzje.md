@@ -284,6 +284,31 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   - C14: wpisy z telefonu (F41) – nie teraz;
   - C15: funkcje – pierwsza paczka F1–F8, F13, F21, F22, F42; druga (później) F9–F12, F16, F18, F19, F24, F25, F29; bez
     F27, F32–F41, F43.
+- **D85** (19.10.2026) Dwa pytania z grupy G – „zgadzam się na to, jak jest teraz”:
+  - prezent bez zaliczki: osoba „płaci za mnie” (prezent), a nie ma u mnie zaliczki – resztę pokrywają osłony, nikt nic
+    nie jest winien (jak w 1.5.0);
+  - B41 część 1: słowo kluczowe z tytułu decyduje także przy przelewie od rozpoznanego domownika (np. „oszczędności” →
+    przelew własny) – bez zmian; B41 zamknięte.
+- **D86** (19.10.2026) Komenda „Start I–L” i zgoda na wszystkie propozycje: grupy I (1.5.2 liczby się zgadzają), J
+  (1.5.3 system, folder, dwa komputery), K (1.5.4 wydajność – reszta), L (1.6.0 funkcje) jednym ciągiem jak E–H (D84
+  A1: własny PR i wydanie na grupę, pauza po L). Przyjęte propozycje:
+  - J, B29: skrót szybkiego wpisu Ctrl+Alt+litera polskiego znaku (A, C, E, L, N, O, S, X, Z) nie do ustawienia, a już
+    ustawiony zamieniany na domyślny z komunikatem;
+  - J, N20 / F21: komputer „w użyciu” = ruch w oknie w ostatnich 10 min; baner „folder otwarty też na …” tylko wtedy;
+    komputer tylko w zasobniku nie zamraża dni gry w tle; powiadomienia na komputerze w użyciu, a gdy żaden nie jest –
+    na każdym (jak dotąd); kopia dzienna na każdym (jak dotąd);
+  - L, F1: kontener miesięczny ma stan zapłacone / czeka / po terminie (termin = dzień płatności z historii, „po terminie”
+    3 dni po nim), alarm w odprawie i powiadomienie do wyłączenia, kontenery miesięczne na Radarze;
+  - L, F3: odzyskanie z kopii – wybrane wpisy (podgląd różnic, nowa wersja z historią i „Cofnij”) albo cały folder
+    (kopia rozpakowana do nowego folderu obok i przełączenie na niego; bieżący nigdy nienadpisywany);
+  - L, F6: „Meldunki do rozpatrzenia” – jedna skrzynka z licznikiem w menu bocznym (niezadokowane wypłaty z ICTTJ,
+    konflikty i pliki z błędem, operacje bez kategorii, możliwe duplikaty, otwarte zwroty, saldo niepotwierdzone ponad
+    30 dni, nierozstrzygnięte łupy), bez nowych powiadomień;
+  - L, F7: szybki wpis seriami – Enter zapisuje, Esc zamyka (D70 bez zmian), Ctrl+Enter = zapisz i następny; „Powtórz
+    ostatni” i 5 ostatnich kombinacji kontrahent + kategoria jako szablony (bez edytora szablonów); „wczoraj”; działania
+    w kwocie („12+8,5”); szkic po Esc czeka do następnego otwarcia (najwyżej 30 min).
+  W zakresie także pozycje, o których użytkownik już zdecydował: N7 – krok folderu ICTTJ i celów w kreatorze (D84 C8),
+  F13 – mądrzejsze wieczorne przypomnienie (pierwsza paczka funkcji, D84 C15) w grupie L.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -1124,3 +1149,75 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   imporcie jedno sprawdzenie), oficer bez sortowania całej listy (T170). Poprawki z testami (numery rachunków, „Cofnij”
   cofnięcia, powód `drop`, E2E operacji usuniętej poza aplikacją) sprawdzonymi bez nich (padają).
 
+
+### 1.5.2 – liczby się zgadzają (grupa I, 19.10.2026)
+
+- **T173** Historia średnich (B23, B25; doprecyzowuje T27 i T47): jedna reguła dla silnika (średnie koszty i przychody,
+  cel kadłuba) i propozycji planu (`calc/history.ts`). Początek = najstarsza operacja z banku; bez operacji z banku –
+  najwcześniejsze z sald otwarcia kont i wydatków / wpływów wpisanych ręcznie (pożyczka, korekta ani przelew nigdy). Przy
+  historii z banku saldo otwarcia ani wpis ręczny sprzed niej nie robią z jej pierwszego, niepełnego miesiąca pełnego.
+  Pełne miesiące kalendarzowe od pierwszego objętego w całości do miesiąca przed bieżącym; miesiąc bez żadnej operacji
+  (luka importów) pominięty, nie liczy się jako zero. Propozycje pensji, kopert i stałych opłat (kreator, Plan miesiąca,
+  Ładownia) czytają miesiące silnika (`FleetState.historyMonths`) – miesiąc w przód nigdy nie uśrednia bieżącego; kreator
+  pokazuje pierwszy z nich. Brak propozycji kopert – komunikat zamiast ciszy.
+- **T174** Pożyczka bez rekordu z Radaru (B57, doprecyzowuje T31): operacja „Pożyczka” bez `loanId` zmienia tylko osłony –
+  nie przychód, nie dokowanie. Po kontrahencie (klucz nazwy): wpływ najpierw zamyka otwartą pożyczkę udzieloną bez
+  rekordu, reszta to pieniądze pożyczone (`borrowedNoRecord`); wypływ najpierw oddaje to, co od niego pożyczono, reszta
+  to pożyczka udzielona (należność). Spłata pożyczki udzielonej z Radaru zawsze z rekordu pożyczki. Edytor mówi, że bez
+  pożyczki z Radaru liczą się tylko osłony; wpływ przy jednej otwartej pożyczce udzielonej – „zwrot pożyczki …? przypisz”.
+- **T175** Kontener usunięty (B58): płatność z `containerId` kontenera, którego nie ma, jest zwykłym wydatkiem
+  (`isCargoPayment` – energia, koperty, debriefing, propozycje, gra), jak w silniku. Usunięcie kontenera zdejmuje
+  `containerId` z jego płatności (zapis paczką); „Cofnij” łączy je ponownie – te, których w międzyczasie nie połączono z
+  innym. Płatności kontenera usuniętego na innym komputerze albo przed 1.5.2 może przejąć nowy kontener tego odbiorcy
+  (`unlinkedPayments` / `paymentsToLink` z id istniejących kontenerów).
+- **T176** Podział dokowania a kwota (B59, B22; doprecyzowuje T63 i T162): zapisany podział (`docking.split`) silnik
+  dopasowuje do kwoty operacji (`fitSplit`): podatek, potem kadłub, potem cele (zarchiwizowany pominięty), reszta do
+  osłon. Okno pokazuje dopasowany podział z notką, „Zapisz podział” go utrwala. Podział liczy się zawsze od kwoty operacji
+  – przy parze „inna kwota” od kwoty z banku: osłony w oknie i w zapisanym podziale też.
+- **T177** Saldo otwarcia przed pensją (B60): zdarzenie salda otwarcia konta ma w dniu klucz przed pensją (`0 0a`) –
+  konto otwarte 1. dnia miesiąca zasila osłony, zanim silnik wypłaci pensję tego dnia.
+- **T178** Miesiąc na plus (N6; zmienia T52 w części „na plus”): miesiąc zamknięty na plus = wynik energii ≥ 0 po końcu
+  miesiąca. Energia = pensja wypłacona − raty odkładek + łupy poprzedniego miesiąca dane temu (`lootExtraOf`); zużyta =
+  wydatki z energii (log silnika, po zwrotach) + to, co po jej wyczerpaniu zapłaciły osłony (alarm „energia wyczerpana”).
+  Opłata zapłacona ze zbiornika nie jest kosztem pensji. Bez miesiąca silnika (przed startem, bez pensji z silnika) –
+  koszty netto ≤ pensja. Ten sam rachunek w debriefingu (Plan miesiąca, Raporty, eksport „Miesiące”) i misji hattrick;
+  tekst alarmu: „ponad energię miesiąca (pensja po ratach odkładek) poszło z osłon”.
+- **T179** Koperta zarchiwizowanej kategorii (N8): archiwizacja kategorii głównej zdejmuje jej kopertę z planu bieżącego
+  miesiąca (własny plan z planu w mocy – T46) i z planów późniejszych; minione zostają (debriefing). Toast z „Cofnij” –
+  kategoria i koperty wracają (miesiąc, który ma ją już znowu, zostaje przy swojej). Koperta, która została w planie
+  (archiwizacja sprzed 1.5.2, minione miesiące), jest na formularzu oznaczona.
+- **T180** Łupy w dziennym przydziale (N11, doprecyzowuje T28 i T30): łupy z decyzji „na następny miesiąc” podnoszą dzienne
+  koperty także w „Podziale pensji” (`salarySplit` – podstawowy przydział z łupami, wiersz „w tym łupy”) i w debriefingu
+  (pula dzienna = koperty dzienne + łupy wobec wydatków dziennych i bez kategorii – jak T30).
+- **T181** Wolne do decyzji (N21, zgodnie z D23 i T31): `shields.free` = nadwyżka ponad cel osłon tylko przy pełnym
+  kadłubie (cel znany i osiągnięty) – ta sama reguła co firewall; inaczej Mostek pokazuje „ponad cel osłon” z powodem
+  (kadłub niepełny albo jego cel jeszcze nieznany).
+- **T182** Kwoty w historii i synchronizacji (B7): ścieżki pól kwot w groszach (`AMOUNT_FIELDS`, `isAmountPath` /
+  `isAmountKey` w `merge.ts` – segmenty `#id` i indeksy pomijane) pokazywane przez `plnText` (maska Ctrl+$) w historii
+  zmian, „Zmianach z drugiego komputera”, Synchronizacji i tytułach rekordów.
+- **T183** Kreator (B8, N7, N9): konto z saldem otwarcia i pustym polem – kwota silnika (saldo na koniec wczoraj,
+  `balanceAt`). Krok „ICTTJ i cele” (folder ICTTJ jak w Ustawieniach, cele własne); podział środków z celami w kolejności
+  priorytetów (`startSplit` jak dokowanie – D13, D70; `budget.initial.goals` tylko > 0; kadłub + cele ≤ środki). Odkładki
+  pierwszego miesiąca `sinkingInstallment(c, miesiąc, 0)` dla kontenerów i wybranych propozycji z cyklem > 1, osobno rata
+  dalszych miesięcy; „wydane w tym miesiącu” bez płatności opłat okresowych. Bez tekstów o „wersji 1.1”.
+- **T184** Daty i liczby całkowite (B12, B26): data operacji wpisana bez roku (edytor, szybki wpis – `DateField notAfter`)
+  = dzień najbliższy dacie pola spośród trzech lat, nie później niż tydzień po dziś (o ile taki dzień jest – 29.02 zostaje);
+  późniejsza – z rokiem. Operacja z datą w przyszłości ma znaczek „w przyszłości”. `NumberField` z `decimals` 0 odrzuca
+  ułamki; `splitEvenly` bierze całe części (harmonogram pożyczki).
+- **T185** Potwierdzenia sald per konto (B28): przypomnienie w odprawie i niedzielne powiadomienie dla każdego aktywnego
+  konta budżetu poza gotówką (`confirmationsOf`), klucz pozycji per konto; powiadomienie wymienia konta.
+- **T186** Szybki wpis i przychody (N3, N4): podgląd szybkiego wpisu jak silnik (T30) – bez kategorii albo koperta dzienna:
+  energia dziś (`energyAfter`; wydatek z wcześniejszego dnia miesiąca zmniejsza przydział pozostałych dni, inny miesiąc albo
+  przyszłość – bez zmian), koperta planowana – jej stan (ten miesiąc), kategoria bez koperty – „poza kopertami”. Panel
+  „Przychody”: miesiąc liczy trading jak raporty (T119 – nigdy poniżej zera), okno – netto ze wszystkich jego miesięcy
+  (okres jak `incomeOfPeriod`); suma miesięcy może się więc różnić od okna, gdy trading miał w nim straty.
+- **T187** Cisza nocna potwierdzona (N10; doprecyzowuje D40 i T75): nocny zakup w grze (naruszenie, smaczki, misja
+  „cicho”) = godzina w ciszy nocnej i wpis w dzienniku (`isConfirmedNight`). Edytor przy godzinie w ciszy nocnej bez wpisu
+  prosi o potwierdzenie albo „usuń godzinę”; nowa operacja w ciszy nocnej – bez godziny (`newOperation`).
+- **T188** Przegląd grupy I (`/code-review` high, 10 kandydatów): poprawione – dzień bez roku najbliższy dacie pola
+  (T184), początek historii bez banku także sprzed sald otwarcia z kreatora (T173), podział dokowania od kwoty z banku w
+  oknie i w zapisie (T176), licznik płatności do połączenia z id istniejących kontenerów (T175), propozycje Ładowni z
+  miesięcy silnika (T173), powód „cel kadłuba nieznany” na Mostku (T181), jedna pętla wydatków kopert w misjach gry,
+  harmonogram pożyczki bez podwójnego obcięcia. Bez zmian: data bez roku dalej niż tydzień naprzód – rok wcześniej (B12 w
+  D84: operacja to zapis tego, co było; późniejsza data z rokiem); okno „Przychody” netto (T186). Poprawki z testami
+  sprawdzonymi bez nich (padają).

@@ -218,11 +218,13 @@ describe('kreator startu (spec: „Kreator startu”, D70)', () => {
     const targets = startTargets(zl(4000), zl(3650), { shieldSalaries: 3, hullMonths: 6 })
     expect(targets).toEqual({ shields: zl(12000), hull: zl(21900) })
     // 30 000 zł: shields full (12 000), the hull takes 18 000 – not full yet, nothing free.
-    expect(startSplit(zl(30000), targets)).toEqual({ shields: zl(12000), hull: zl(18000), free: 0 })
+    expect(startSplit(zl(30000), targets)).toEqual({ shields: zl(12000), hull: zl(18000), goals: {}, free: 0 })
     // 40 000 zł: both full, 6 100 zł free in the shields.
-    expect(startSplit(zl(40000), targets)).toEqual({ shields: zl(18100), hull: zl(21900), free: zl(6100) })
+    expect(startSplit(zl(40000), targets)).toEqual({ shields: zl(18100), hull: zl(21900), goals: {}, free: zl(6100) })
+    // A goal (N7): after the hull, by priority – what it does not need stays free.
+    expect(startSplit(zl(40000), targets, [{ id: 'g', target: zl(5000) }])).toEqual({ shields: zl(13100), hull: zl(21900), goals: { g: zl(5000) }, free: zl(1100) })
     // No costs known: everything in the shields.
-    expect(startSplit(zl(5000), startTargets(zl(4000), null, { shieldSalaries: 3, hullMonths: 6 }))).toEqual({ shields: zl(5000), hull: 0, free: 0 })
+    expect(startSplit(zl(5000), startTargets(zl(4000), null, { shieldSalaries: 3, hullMonths: 6 }))).toEqual({ shields: zl(5000), hull: 0, goals: {}, free: 0 })
   })
 })
 

@@ -4,13 +4,13 @@
  * nothing loaded from outside). Always the real amounts – the hidden amounts are the screen's (D73).
  */
 import type { Account, Category, HouseholdMember } from '../schema/budget'
-import type { MonthPlan, Transaction } from '../schema/records'
+import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
 import { financersText, incomeShares, memberName } from '../calc/household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
 import { categoryIndex, sum } from '../calc/operations'
 import { debriefing } from '../calc/plan'
-import type { FleetEvent } from '../calc/fleet'
+import type { Alarm, FleetEvent } from '../calc/fleet'
 import { monthOf } from '../calc/dates'
 import type { XlsxSheet } from './xlsx'
 
@@ -120,14 +120,14 @@ export interface MonthRow {
   salary: number | null
   costs: number
   income: number
-  /** Costs not above the salary (spec: „Miesiąc zamknięty na plus”). */
+  /** „Miesiąc zamknięty na plus” (spec) – as the debriefing tells it (N6). */
   plus: boolean | null
   /** The energy left at the month's end. */
   loot: number | null
 }
 
 export function monthRows(
-  input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; today: string; income?: IncomeContext },
+  input: { transactions: readonly Transaction[]; categories: readonly Category[]; plans: readonly MonthPlan[]; log: readonly FleetEvent[]; alarms?: readonly Alarm[]; containers?: readonly Pick<Container, 'id'>[]; today: string; income?: IncomeContext },
   months: readonly string[]
 ): MonthRow[] {
   const ctx = input.income ?? plainIncomeContext(input.transactions)

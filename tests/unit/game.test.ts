@@ -84,8 +84,10 @@ describe('ocena dnia (D73): naruszenia zwykłe i poważne', () => {
   })
 
   it('zakup w ciszy nocnej i dopłata do XTB wbrew firewallowi – poważne', () => {
-    const night = rateDay(world({ transactions: [tx('2026-10-10', -zl(30), { time: '23:30', counterparty: 'Żabka' })] }), '2026-10-10')
+    const night = rateDay(world({ transactions: [tx('2026-10-10', -zl(30), { time: '23:30', counterparty: 'Żabka', logNote: 'głodny' })] }), '2026-10-10')
     expect(night.violations).toEqual([{ order: 'quiet', serious: true, amount: zl(30), ref: expect.any(String), note: 'Żabka' }])
+    // A night time without its entry in the log (N10, D40): a purchase of the day written down at night – no violation.
+    expect(rateDay(world({ transactions: [tx('2026-10-10', -zl(30), { time: '23:30', counterparty: 'Żabka' })] }), '2026-10-10').violations).toEqual([])
     // Shields 6 200 zł against their target 9 300 zł: a top-up of the trading account breaks the firewall (the shields stay
     // above their minimum of 3 100 zł).
     const top = rateDay(world({ transactions: [tx('2026-10-11', -zl(1000), { kind: 'trading', categoryId: null })] }), '2026-10-11')
@@ -180,7 +182,7 @@ describe('zamrażanie (T9), seria, stopnie (D73)', () => {
   })
 
   it('degradacja przy 3. poważnym naruszeniu w miesiącu; Kadet nie spada niżej', () => {
-    const night = (date: string) => tx(date, -zl(10), { time: '23:30' })
+    const night = (date: string) => tx(date, -zl(10), { time: '23:30', logNote: 'nocny zakup' })
     const promoted = { ...newGameMonth('2026-10', AT), promotions: [{ id: rankChangeId('2026-10-04'), at: AT, rank: 'ensign', change: 'up' as const, day: '2026-10-04' }] }
     const a = advanceGame(world({ game: [promoted], transactions: [night('2026-10-07'), night('2026-10-12'), night('2026-10-20')] }), '2026-10-25T10:00:00Z')
     expect(a.events.filter((e) => e.kind === 'rank')).toEqual([{ kind: 'rank', change: 'down', rank: 'cadet', day: '2026-10-20' }])
@@ -223,7 +225,7 @@ describe('zamrażanie (T9), seria, stopnie (D73)', () => {
 
 describe('misje tygodniowe (D73)', () => {
   it('słaby punkt z 4 tygodni: cisza nocna, potem kolejny; bez słabych punktów – po kolei', () => {
-    const w = world({ transactions: [tx('2026-10-20', -zl(15), { time: '01:10' })] })
+    const w = world({ transactions: [tx('2026-10-20', -zl(15), { time: '01:10', logNote: 'nocny zakup' })] })
     expect(chooseMission(w, '2026-10-26', null).template).toBe('quiet')
     expect(chooseMission(w, '2026-10-26', 'quiet').template).not.toBe('quiet')
   })
@@ -276,7 +278,7 @@ describe('osiągnięcia (D73)', () => {
 
 describe('N5: zakup sfinansowany przez domownika nie jest naruszeniem gry (D80 f, T107)', () => {
   it('cisza nocna: liczy się tylko moja część – zakup „finansuje” albo prezent bez naruszenia, wspólny – moja część', () => {
-    const night = (over: Partial<Transaction>) => rateDay(world({ transactions: [tx('2026-10-12', -zl(30), { time: '23:30', counterparty: 'Żabka', ...over })] }), '2026-10-12')
+    const night = (over: Partial<Transaction>) => rateDay(world({ transactions: [tx('2026-10-12', -zl(30), { time: '23:30', counterparty: 'Żabka', logNote: 'nocny zakup', ...over })] }), '2026-10-12')
     expect(night({ refundable: true }).violations).toEqual([])
     expect(night({ refundable: true, gift: true }).violations).toEqual([])
     const half = night({

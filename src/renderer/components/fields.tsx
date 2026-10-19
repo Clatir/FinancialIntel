@@ -105,16 +105,22 @@ export const AmountField = forwardRef<
 
 const plDate = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`
 
-/** A date shown as 16.10.2026; typed as 16.10, 16.10.2026 or 2026-10-16. */
+/**
+ * A date shown as 16.10.2026; typed as 16.10, 16.10.2026 or 2026-10-16. `notAfter` (an operation's date – B12): typed
+ * without a year, the day nearest to the field's date, never more than a week after `notAfter` – 28.12 typed on
+ * 3 January is the December gone by, 02.01 typed on an operation of 30.12 the January after.
+ */
 export function DateField({
   value,
   onChange,
   className,
+  notAfter,
   ...rest
 }: {
   value: string
   onChange: (date: string) => void
   className?: string
+  notAfter?: string
   'aria-label'?: string
   'data-testid'?: string
 }) {
@@ -122,7 +128,8 @@ export function DateField({
   // Escape: the blur it causes runs with this render's draft – it must not save it.
   const cancelled = useRef(false)
   const year = Number(value.slice(0, 4)) || new Date().getFullYear()
-  const invalid = draft != null && parseDateInput(draft, year) == null
+  const parse = (text: string): string | null => parseDateInput(text, year, notAfter, value)
+  const invalid = draft != null && parse(draft) == null
   return (
     <input
       className={cx('input num', className)}
@@ -135,7 +142,7 @@ export function DateField({
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
         if (draft != null && !cancelled.current) {
-          const d = parseDateInput(draft, year)
+          const d = parse(draft)
           if (!d) toast('Nieprawidłowa data – zostaje poprzednia.', 'error')
           else if (d !== value) onChange(d)
         }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeFleet } from '@shared/calc/fleet'
+import { monthRange } from '@shared/calc/dates'
 import { settleHousehold } from '@shared/calc/household'
 import { incomeByMonth, incomeOfPeriod, incomeParts, incomeStats, taxOfDockings, type IncomeContext } from '@shared/calc/income'
 import { yearNumbers } from '@shared/calc/intel'
@@ -69,15 +70,25 @@ describe('przychody (D81): praca i trading XTB netto, bez pieniędzy domowników
     for (let i = 1; i <= 12; i++) months.set(`2025-${String(i).padStart(2, '0')}`, { work: zl(4000), trading: 0 })
     months.set('2025-12', { work: zl(16000), trading: zl(-1000) })
     months.set('2025-11', { work: zl(4000), trading: zl(3000) })
-    const s = incomeStats(months, '2025-01', '2026-01')
+    const s = incomeStats(months, monthRange('2025-01', '2025-12'))
     expect(s.months).toHaveLength(12)
     expect(s.windows[3]).toEqual({ months: 3, work: zl(8000), trading: zl(666.67), total: zl(8666.67) })
     expect(s.windows[12]).toMatchObject({ months: 12, work: zl(5000), trading: zl(166.67) })
     expect(s.median).toEqual({ months: 12, work: zl(4000), trading: 0, total: zl(4000) })
     // A short history: every window has the months there are.
-    const short = incomeStats(new Map([['2025-12', { work: zl(3000), trading: 0 }]]), '2025-12', '2026-01')
+    const short = incomeStats(new Map([['2025-12', { work: zl(3000), trading: 0 }]]), ['2025-12'])
     expect(short.windows[12]).toEqual({ months: 1, work: zl(3000), trading: 0, total: zl(3000) })
-    expect(incomeStats(new Map(), null, '2026-01').windows[6]).toEqual({ months: 0, work: null, trading: null, total: null })
+    expect(incomeStats(new Map(), []).windows[6]).toEqual({ months: 0, work: null, trading: null, total: null })
+  })
+
+  it('mediana „Razem” jak raporty: miesiąc z dopłatą do XTB to sama praca, nie mniej (N4)', () => {
+    const months = new Map<string, { work: number; trading: number }>()
+    for (let i = 1; i <= 6; i++) months.set(`2026-0${i}`, { work: zl(5000), trading: i % 2 ? zl(-6000) : 0 })
+    const s = incomeStats(months, monthRange('2026-01', '2026-06'))
+    expect(s.months.map((m) => m.total)).toEqual(Array(6).fill(zl(5000)))
+    expect(s.median).toEqual({ months: 6, work: zl(5000), trading: 0, total: zl(5000) })
+    // The window's average keeps the trading net of the window, never below zero.
+    expect(s.windows[6]).toEqual({ months: 6, work: zl(5000), trading: 0, total: zl(5000) })
   })
 
   it('silnik: średnia 6 miesięcy z pracy i tradingu netto – ta sama w ostrzeżeniu o pensji', () => {

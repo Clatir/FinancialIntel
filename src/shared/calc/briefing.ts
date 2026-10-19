@@ -6,8 +6,9 @@
 import { DateTime } from 'luxon'
 import { formatPln } from '../format'
 import { ICTJ_POOL_LABEL } from '../ictj'
-import type { HouseholdMember } from '../schema/budget'
-import type { Container } from '../schema/records'
+import type { Account, HouseholdMember } from '../schema/budget'
+import type { Balance, Container } from '../schema/records'
+import { lastConfirmation } from './balances'
 import { daysBetween, firstDayOf, warsawNow } from './dates'
 import type { Delivery } from './dock'
 import { isOpeningItem, memberName } from './household'
@@ -49,7 +50,7 @@ export function alarmText(a: Alarm, label: (id: string) => string = () => '', zl
     case 'salary-partial':
       return `Pensja częściowa: brakuje ${zl(a.amount)} – osłony i kadłub puste.`
     case 'energy-exhausted':
-      return `Energia wyczerpana: ${zl(a.amount)} ponad pensję poszło z osłon.`
+      return `Energia wyczerpana: ${zl(a.amount)} ponad energię miesiąca (pensja po ratach odkładek) poszło z osłon.`
     case 'firewall':
       return `Firewall: dopłata do XTB ${zl(a.amount)} wbrew rozkazowi.`
     case 'sinking-short':
@@ -78,8 +79,10 @@ export interface BriefingInput {
   containers: readonly Container[]
   /** Accounts with the mBank import and their last import (ISO time; null = never). */
   imports: ReadonlyArray<{ name: string; last: string | null }>
-  /** The last confirmed balance date of the budget's accounts (null = never). */
-  lastConfirmation: string | null
+  /** The last confirmed balance date of the budget's accounts (null = never) – when `confirmations` are not given. */
+  lastConfirmation?: string | null
+  /** Each account to confirm with its last confirmed balance (B28, `confirmationsOf`): a reminder per account. */
+  confirmations?: ReadonlyArray<AccountConfirmation>
   /** Names of categories and containers. */
   label: (id: string) => string
   /** Formats an amount with its currency (default '1 240,00 zł'; the hidden amounts mask them). */
@@ -92,6 +95,21 @@ export interface BriefingInput {
   mission?: { week: string; title: string; text: string } | null
   /** The household (D80): the members' names, whom their money comes through (D81). */
   members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'> & { via?: string | null }>
+}
+
+export interface AccountConfirmation {
+  accountId: string
+  name: string
+  /** The last confirmed balance's day; null = never. */
+  last: string | null
+}
+
+/**
+ * The accounts whose balances the weekly confirmation asks for (B28): every budget account in use – not archived, not
+ * the cash (counted when it matters, D83) – with its own last confirmation: a confirmed mBank never hides Portfel XTB.
+ */
+export function confirmationsOf(accounts: readonly Pick<Account, 'id' | 'name' | 'archived' | 'kind'>[], balances: readonly Balance[]): AccountConfirmation[] {
+  return accounts.filter((a) => !a.archived && a.kind !== 'cash').map((a) => ({ accountId: a.id, name: a.name, last: lastConfirmation(a.id, balances)?.date ?? null }))
 }
 
 /** Silver Bullet (D73): the briefing opened between 10:00 and 11:00 New York time comes short. */
@@ -179,9 +197,22 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     if (days != null && days <= IMPORT_DUE_DAYS) continue
     items.push({ level: 'info', kind: 'import', key: `import:${imp.name}:${f.today}`, text: days == null ? `${imp.name}: jeszcze bez importu z banku.` : `${imp.name}: ostatni import ${days} dni temu – zaimportuj nowy plik.` })
   }
-  const confirmed = o.lastConfirmation ? daysBetween(o.lastConfirmation, f.today) : null
-  if (confirmed == null || confirmed > BALANCES_DUE_DAYS)
-    items.push({ level: 'info', kind: 'balances', key: `balances:${f.today}`, text: confirmed == null ? 'Potwierdź salda kont z bankiem (raz w tygodniu).' : `Salda potwierdzone ${confirmed} dni temu – sprawdź z bankiem.` })
+  if (o.confirmations)
+    for (const a of o.confirmations) {
+      const days = a.last ? daysBetween(a.last, f.today) : null
+      if (days != null && days <= BALANCES_DUE_DAYS) continue
+      items.push({
+        level: 'info',
+        kind: 'balances',
+        key: `balances:${a.accountId}:${f.today}`,
+        text: days == null ? `${a.name}: potwierdź saldo z bankiem (raz w tygodniu).` : `${a.name}: saldo potwierdzone ${days} dni temu – sprawdź z bankiem.`
+      })
+    }
+  else {
+    const confirmed = o.lastConfirmation ? daysBetween(o.lastConfirmation, f.today) : null
+    if (confirmed == null || confirmed > BALANCES_DUE_DAYS)
+      items.push({ level: 'info', kind: 'balances', key: `balances:${f.today}`, text: confirmed == null ? 'Potwierdź salda kont z bankiem (raz w tygodniu).' : `Salda potwierdzone ${confirmed} dni temu – sprawdź z bankiem.` })
+  }
   if (f.loot.month && f.loot.amount > 0)
     items.push({ level: 'yellow', kind: 'loot', key: `loot:${f.loot.month}`, text: `Łupy z poprzedniego miesiąca: ${zl(f.loot.amount)} – podział do 7. dnia, potem trafią do osłon.` })
   for (const d of o.deliveries ?? []) {

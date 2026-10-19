@@ -55,11 +55,20 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await expect(page.locator('[data-testid="wizard-envelope"][data-name="Jedzenie"] input')).toHaveValue('780,00')
     await expect(page.locator('[data-testid="wizard-envelope"][data-name="Rozrywka i hobby"] input')).toHaveValue('150,00')
     await page.getByTestId('wizard-next').click()
-    // 5. The split: the shields to 3 salaries, the hull to 6 × 2 479,99 zł, the rest free in the shields.
-    await expect(page.getByTestId('wizard-split-hull')).toHaveValue('14 879,94')
-    await expect(page.getByTestId('wizard-split-shields')).toContainText('10 120,06')
+    // 5. ICTTJ and the goals (D84 C8, N7): no ICTTJ here – an own goal added.
+    await expect(page.getByTestId('wizard-ictj')).toBeVisible()
+    await page.getByTestId('wizard-goal-name').fill('Rower')
+    await page.getByTestId('wizard-goal-target').fill('1000')
+    await page.getByTestId('wizard-goal-target').press('Enter')
+    await page.getByTestId('wizard-goal-add').click()
+    await expect(page.locator('[data-testid="wizard-goal"][data-name="Rower"]')).toBeVisible()
     await page.getByTestId('wizard-next').click()
-    // 6. The ship.
+    // 6. The split: the shields to 3 salaries, the hull to 6 × 2 479,99 zł, the goal, the rest free in the shields.
+    await expect(page.getByTestId('wizard-split-hull')).toHaveValue('14 879,94')
+    await expect(page.getByTestId('wizard-split-goal-input')).toHaveValue('1 000,00')
+    await expect(page.getByTestId('wizard-split-shields')).toContainText('9 120,06')
+    await page.getByTestId('wizard-next').click()
+    // 7. The ship.
     await page.getByTestId('wizard-ship').fill('Sokół')
     await page.getByTestId('wizard-finish').click()
     await expect(page.getByTestId('page-bridge')).toBeVisible()
@@ -68,7 +77,9 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await expect.poll(async () => (await json(join(dataDir, 'fi.json'))).settings.budget.start).toBe(today)
     const fi = await json(join(dataDir, 'fi.json'))
     expect(fi.settings.shipName).toBe('Sokół')
-    expect(fi.settings.budget.initial).toMatchObject({ hull: 1487994, goals: {} })
+    expect(fi.settings.budget.initial).toMatchObject({ hull: 1487994 })
+    const goal = (await records(dataDir, 'goals')).find((g) => g.name === 'Rower')!
+    expect(fi.settings.budget.initial.goals).toEqual({ [goal.id as string]: zl(1000) })
     await expect.poll(async () => (await json(join(dataDir, 'months', `${month}.json`))).salary).toBe(zl(2500))
     const plan = await json(join(dataDir, 'months', `${month}.json`))
     expect(plan.envelopes).toMatchObject({ [FOOD]: zl(780), [FUN]: zl(150) })

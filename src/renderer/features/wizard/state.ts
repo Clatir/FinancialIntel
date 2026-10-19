@@ -15,7 +15,7 @@ import { setOpening } from '../balances/actions'
 import { editPlan } from '../month/actions'
 import { playSound } from '../../lib/sounds'
 
-export const WIZARD_STEPS = ['Konta i salda', 'Historia z mBanku', 'Pensja i warstwy', 'Ładownia i koperty', 'Podział środków', 'Okręt i rozkazy'] as const
+export const WIZARD_STEPS = ['Konta i salda', 'Historia z mBanku', 'Pensja i warstwy', 'Ładownia i koperty', 'ICTTJ i cele', 'Podział środków', 'Okręt i rozkazy'] as const
 
 /** The start wizard's answers (spec, „Kreator startu”); applied together at the end. */
 export interface WizardState {
@@ -35,6 +35,8 @@ export interface WizardState {
   cargo: Record<string, RecurringPayment>
   /** The hull at the start (null = the docking order's proposal). */
   hull: number | null
+  /** The goals' money at the start (null = the docking order's proposal – N7). */
+  goals: Record<string, number> | null
   shipName: string
   orders: Orders | null
   shortcut: string
@@ -52,6 +54,7 @@ const initial = (): WizardState => ({
   envelopes: null,
   cargo: {},
   hull: null,
+  goals: null,
   shipName: '',
   orders: null,
   shortcut: DEFAULT_QUICK_SHORTCUT,
@@ -92,7 +95,7 @@ export function cancelWizard(): void {
  * settings (the ship, the layers, the orders, the start and its split), this month's plan, the chosen containers, the
  * shortcut and the start with Windows (D64: the wizard turns it on).
  */
-export async function finishWizard(o: { salary: number; hull: number; envelopes: Record<string, number> }): Promise<boolean> {
+export async function finishWizard(o: { salary: number; hull: number; goals: Record<string, number>; envelopes: Record<string, number> }): Promise<boolean> {
   const s = useData.getState()
   if (!s.fi || s.status?.readOnly) {
     toast('Folder jest tylko do odczytu – budżetu nie można uruchomić.', 'error')
@@ -117,7 +120,7 @@ export async function finishWizard(o: { salary: number; hull: number; envelopes:
       shipName: w.shipName.trim() || f.settings.shipName,
       layers: { ...f.settings.layers, shieldSalaries: w.shieldSalaries, hullMonths: w.hullMonths, assumedCosts: w.assumedCosts },
       orders: w.orders ?? f.settings.orders,
-      budget: { start: today, initial: { shields: 0, hull: o.hull, goals: {} } }
+      budget: { start: today, initial: { shields: 0, hull: o.hull, goals: Object.fromEntries(Object.entries(o.goals).filter(([, v]) => v > 0)) } }
     }
   }))
   editPlan(month, (p) => ({ ...p, salary: o.salary, envelopes: { ...o.envelopes } }))

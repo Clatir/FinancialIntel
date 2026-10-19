@@ -1,5 +1,6 @@
 // adapted from ICTTJ src/renderer/lib/recordTitle.ts @ 84a8339
 import type { HistoryKind } from '@shared/api'
+import { signedPln } from '../components/fields'
 
 const s = (v: unknown) => (typeof v === 'string' ? v : '')
 
@@ -9,7 +10,8 @@ export function recordTitle(kind: HistoryKind, record: unknown): string {
   const named = (prefix: string) => `${prefix}${s(r.name) ? `: ${s(r.name)}` : ''}`
   switch (kind) {
     case 'transactions': {
-      const amount = typeof r.amount === 'number' ? ` ${r.amount > 0 ? '+' : r.amount < 0 ? '−' : ''}${(Math.abs(r.amount) / 100).toFixed(2).replace('.', ',')} zł` : ''
+      // As the lists write amounts – hidden with them (Ctrl+$, B7).
+      const amount = typeof r.amount === 'number' ? ` ${signedPln(r.amount)} zł` : ''
       return `Operacja ${s(r.date)}${s(r.counterparty) ? `: ${s(r.counterparty)}` : ''}${amount}`
     }
     case 'containers':

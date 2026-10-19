@@ -61,6 +61,36 @@ export function setEnvelope(month: string, categoryId: string, limit: number | n
 
 export const setEnvelopes = (month: string, envelopes: Record<string, number>) => editPlan(month, (p) => ({ ...p, envelopes: { ...p.envelopes, ...envelopes } }))
 
+/**
+ * A category archived (N8): its envelope leaves the plan of this month and of the months after – it would still count
+ * in the plan's sums and today's energy, unseen on the form. The months gone by keep it (their debriefing). Returns the
+ * envelopes taken off (month → limit), to give back with „Cofnij”.
+ */
+export function dropEnvelope(categoryId: string): Map<string, number> {
+  const taken = new Map<string, number>()
+  if (useData.getState().status?.readOnly) return taken
+  const current = warsawNow().month
+  const plans = allPlans()
+  const inForce = planFor(plans, current)
+  const limit = inForce?.envelopes[categoryId]
+  if (limit != null) {
+    taken.set(current, limit)
+    setEnvelope(current, categoryId, null)
+  }
+  for (const p of plans)
+    if (p.month > current && p.envelopes[categoryId] != null) {
+      taken.set(p.month, p.envelopes[categoryId]!)
+      setEnvelope(p.month, categoryId, null)
+    }
+  return taken
+}
+
+/** The envelopes `dropEnvelope` took off, back in their months (a month that has it again meanwhile keeps its own). */
+export function restoreEnvelope(categoryId: string, taken: ReadonlyMap<string, number>): void {
+  const plans = allPlans()
+  for (const [month, limit] of taken) if (planFor(plans, month)?.envelopes[categoryId] == null) setEnvelope(month, categoryId, limit)
+}
+
 /** The loot split of `month` (D18): next month's daily envelopes and goals; the rest to the shields. */
 export function decideLoot(month: string, loot: number, choice: { nextMonth: number; goals: Record<string, number> }): void {
   const decision = lootDecision(loot, choice, new Date().toISOString())

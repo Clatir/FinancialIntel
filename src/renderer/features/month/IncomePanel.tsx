@@ -14,7 +14,7 @@ const COLUMNS = [
 
 const LINES: Array<{ key: keyof IncomeFigures; label: string; title: string }> = [
   { key: 'work', label: 'Praca i inne', title: 'Wpływy bez przelewów własnych, spłat i zaliczek domowników (D81)' },
-  { key: 'trading', label: 'Trading (XTB)', title: 'Wypłaty z konta tradingowego minus dopłaty, bez puli Podatek (rezerwa na PIT-38)' },
+  { key: 'trading', label: 'Trading (XTB)', title: 'Wypłaty z konta tradingowego minus dopłaty, bez puli Podatek (rezerwa na PIT-38); w oknie netto z jego wszystkich miesięcy, nigdy poniżej zera' },
   { key: 'total', label: 'Razem', title: 'Praca i inne + trading' }
 ]
 

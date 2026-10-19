@@ -4,7 +4,7 @@
  * owns the data folder's records.
  */
 import type { QuickData, QuickResult } from '@shared/api'
-import { warsawNow } from '@shared/calc/dates'
+import { daysInMonth, warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import { shareSplits } from '@shared/calc/share'
@@ -49,6 +49,7 @@ export function quickData(): QuickData | null {
     accountId: accounts.find((a) => a.id === last)?.id ?? accounts[0]?.id ?? '',
     energyLeft: fleet?.daily ? fleet.daily.left : null,
     envelopesLeft: Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, e.left])),
+    daily: fleet?.daily ? { today: fleet.today, limit: fleet.daily.limit, spentBefore: fleet.daily.spentBefore, spentToday: fleet.daily.spentToday, days: daysInMonth(fleet.month) } : null,
     quietHours: fi.settings.orders.quietHours,
     impulseThreshold: fi.settings.orders.impulseThreshold,
     lastByBrand,

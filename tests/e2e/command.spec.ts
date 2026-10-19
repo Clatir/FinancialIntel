@@ -23,11 +23,11 @@ test('Dowództwo: dni zamrożone w tle, naruszenie poważne, awans z ekranem, mi
     records: {
       balances: [{ date: budget, accountId: MBANK, kind: 'opening', amount: zl(40000) }],
       months: [{ month: addMonths(month, -3), salary: zl(4000), envelopes: { [FOOD]: zl(1500) } }],
-      // A purchase in the quiet hours before the game: no violation (the game starts from zero); one tonight – today's
-      // rating so far is broken.
+      // A purchase in the quiet hours before the game: no violation (the game starts from zero); one tonight, confirmed in
+      // the log (D40, N10) – today's rating so far is broken.
       transactions: [
-        { date: night, time: '23:40', accountId: MBANK, amount: -zl(25), categoryId: FOOD, counterparty: 'Żabka' },
-        { date: today, time: '23:30', accountId: MBANK, amount: -zl(30), categoryId: FOOD, counterparty: 'Nocny sklep' }
+        { date: night, time: '23:40', accountId: MBANK, amount: -zl(25), categoryId: FOOD, counterparty: 'Żabka', logNote: 'głodny' },
+        { date: today, time: '23:30', accountId: MBANK, amount: -zl(30), categoryId: FOOD, counterparty: 'Nocny sklep', logNote: 'zapomniałem' }
       ]
     }
   })

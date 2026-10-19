@@ -67,10 +67,10 @@ function linkFrom(start = useData.getState().fi?.settings.budget.start ?? null):
   return start ? firstDayOf(monthOf(start)) : null
 }
 
-/** The payments of the container's counterparty not linked yet (in the budget's time). */
-export function paymentsToLink(counterparty: string, txs: readonly Transaction[], start: string | null): number {
+/** The payments of the container's counterparty not linked yet (in the budget's time; one of a deleted container is not – B58). */
+export function paymentsToLink(counterparty: string, txs: readonly Transaction[], start: string | null, containerIds: ReadonlySet<string>): number {
   const from = linkFrom(start)
-  return from ? unlinkedPayments(txs, counterparty, from).length : 0
+  return from ? unlinkedPayments(txs, counterparty, from, containerIds).length : 0
 }
 
 /**
@@ -80,7 +80,9 @@ export function paymentsToLink(counterparty: string, txs: readonly Transaction[]
 export function linkPayments(containerId: string, counterparty: string, quiet = false): number {
   const from = linkFrom()
   if (!from || useData.getState().status?.readOnly) return 0
-  const found = unlinkedPayments(listOf(useData.getState().records.transactions), counterparty, from)
+  const records = useData.getState().records
+  // A payment of a container deleted (B58) is not linked: it may join this one.
+  const found = unlinkedPayments(listOf(records.transactions), counterparty, from, new Set(Object.keys(records.containers)))
   if (found.length) replaceRecords('transactions', found.map((t) => ({ ...t, containerId })))
   if (found.length || !quiet) toast(found.length ? `Połączono z kontenerem: ${found.length} płatności od ${from.slice(8, 10)}.${from.slice(5, 7)}.${from.slice(0, 4)}.` : 'Brak płatności do połączenia.', 'info', 3500)
   return found.length
@@ -95,4 +97,22 @@ export const patchContainer = (id: string, p: Partial<Container>) =>
 /** Dropped from the hold (or brought back): it still counts until this month's end – the months before stay as they were (B56). */
 export const archiveContainer = (c: Container, archived: boolean) => patchContainer(c.id, { archived, archivedAt: archived ? new Date().toISOString() : null })
 
-export const deleteContainer = (c: Container) => deleteWithUndo('containers', c.id, c.name, `Usunięto kontener „${c.name}”.`)
+/**
+ * Deleted with its payments let go (B58): they are ordinary expenses again – of the energy, the envelopes and the
+ * debriefing alike. „Cofnij” brings the container back and links them again (those not linked to another meanwhile).
+ */
+export async function deleteContainer(c: Container): Promise<boolean> {
+  const linked = listOf(useData.getState().records.transactions).filter((t) => t.containerId === c.id)
+  const ids = linked.map((t) => t.id)
+  const ok = await deleteWithUndo('containers', c.id, c.name, `Usunięto kontener „${c.name}”${ids.length ? ` – jego płatności (${ids.length}) liczą się teraz jak zwykłe wydatki` : ''}.`, undefined, async () => {
+    const now = useData.getState().records.transactions
+    const back = ids.map((id) => now[id]?.record).filter((t): t is Transaction => !!t && t.containerId == null)
+    if (back.length) replaceRecords('transactions', back.map((t) => ({ ...t, containerId: c.id })))
+  })
+  if (ok && linked.length) {
+    const now = useData.getState().records.transactions
+    const still = ids.map((id) => now[id]?.record).filter((t): t is Transaction => !!t && t.containerId === c.id)
+    if (still.length) replaceRecords('transactions', still.map((t) => ({ ...t, containerId: null })))
+  }
+  return ok
+}

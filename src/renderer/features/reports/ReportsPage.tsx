@@ -203,9 +203,10 @@ function useDebrief(month: string) {
   const settings = useData((s) => s.fi!.settings)
   const transactions = useRecordList('transactions')
   const plans = useRecordList('months')
+  const containers = useRecordList('containers')
   const game = useGameView()
   return useMemo(() => {
-    const brief = debriefing(month, { transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today })
+    const brief = debriefing(month, { transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today })
     const log = logAccuracy(transactions, settings.orders, [month])[0]!
     const g = game?.input.game.find((x) => x.month === month)
     const days = Object.values(g?.days ?? {})
@@ -225,7 +226,7 @@ function useDebrief(month: string) {
         achievements: achievements.map((a) => a.id).filter((id): id is AchievementId => (ACHIEVEMENTS as readonly string[]).includes(id))
       }
     }
-  }, [month, fleet, settings, transactions, plans, game])
+  }, [month, fleet, settings, transactions, plans, containers, game])
 }
 
 function DebriefReport() {
@@ -248,13 +249,28 @@ function DebriefReport() {
         ['Ładownia i odkładki', money(b.cargo)],
         // What household members financed (D80): not my costs, shown apart.
         ['Sfinansowane przez domowników', financedText(b.financed, money, settings.household.members)],
+        // The month's energy as the engine ran it (N6): the salary less the tanks' installments, the loot given to it.
+        ...(b.energy
+          ? ([
+              ['Energia miesiąca (pensja po odkładkach, z łupami)', money(b.energy.budget)],
+              ['Wydane z energii (i ponad nią z osłon)', money(b.energy.used)]
+            ] as Array<[string, string]>)
+          : []),
         ['Miesiąc zamknięty na plus', b.plus == null ? '—' : b.plus ? 'tak' : 'nie'],
         ['Łupy (energia na koniec miesiąca)', b.loot == null ? 'miesiąc trwa' : money(b.loot)]
       ]
     },
     {
       title: 'FVG kopert (plan − fakt)',
-      table: { head: ['Koperta', 'Limit', 'Wydane', 'FVG'], rows: b.envelopes.map((e) => [label(e.categoryId), money(e.limit), money(e.spent), money(e.gap)]), numeric: [1, 2, 3] }
+      table: {
+        head: ['Koperta', 'Limit', 'Wydane', 'FVG'],
+        rows: [
+          ...b.envelopes.map((e) => [label(e.categoryId), money(e.limit), money(e.spent), money(e.gap)]),
+          // The daily pool as the engine's daily energy (N11): the daily envelopes, the loot, the spending without a category.
+          ...(b.daily ? [['Pula codzienna (z łupami i bez kategorii)', money(b.daily.limit), money(b.daily.spent), money(b.daily.gap)]] : [])
+        ],
+        numeric: [1, 2, 3]
+      }
     },
     {
       title: 'Dowództwo',
@@ -427,11 +443,12 @@ function ExportPanel() {
   const settings = useData((s) => s.fi!.settings)
   const transactions = useRecordList('transactions')
   const plans = useRecordList('months')
+  const containers = useRecordList('containers')
   const [from, setFrom] = useState(`${fleet.today.slice(0, 4)}-01-01`)
   const [to, setTo] = useState(fleet.today)
   const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members)
   const months = () =>
-    monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
+    monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
   const csv = { name: 'CSV', extensions: ['csv'] }
   return (

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import type { FleetState } from '@shared/calc/fleet'
-import { debriefing, lootApplied, lootDeadline, planFor, proposeEnvelopes, proposeSalary, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
+import { debriefing, lootApplied, lootDeadline, lootExtraOf, planFor, proposeEnvelopes, proposeSalary, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
-import { navigate } from '../../store/ui'
+import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
@@ -51,12 +51,14 @@ export function MonthPage() {
   const readOnly = useData((s) => !!s.status?.readOnly)
   const plan = planFor(plans, month)
   const own = plans.find((p) => p.month === month) ?? null
-  const split = useMemo(() => (plan && categories ? salarySplit(plan, month, containers, categories, month <= current && fleet ? sinkingOf(fleet.log, month) : undefined) : null), [plan, month, containers, categories, current, fleet])
-  const briefMonth = month < current ? month : addMonths(current, -1)
-  const brief = useMemo(
-    () => (categories ? debriefing(briefMonth, { transactions, categories, plans, log: fleet?.log ?? [], today }) : null),
-    [briefMonth, transactions, categories, plans, fleet, today]
+  // The tanks' installments and the loot given to the month as the engine took them (N11).
+  const split = useMemo(
+    () => (plan && categories ? salarySplit(plan, month, containers, categories, month <= current && fleet ? sinkingOf(fleet.log, month) : undefined, fleet ? lootExtraOf(fleet.log, month) : 0) : null),
+    [plan, month, containers, categories, current, fleet]
   )
+  const briefMonth = month < current ? month : addMonths(current, -1)
+  const briefOf = (m: string) => debriefing(m, { transactions, categories: categories!, plans, log: fleet?.log ?? [], alarms: fleet?.alarms ?? [], containers, today })
+  const brief = useMemo(() => (categories ? briefOf(briefMonth) : null), [briefMonth, transactions, categories, plans, fleet, today, containers])
   if (!fleet || !categories) return <Empty>Wczytywanie…</Empty>
 
   return (
@@ -98,7 +100,7 @@ export function MonthPage() {
           </div>
           <div className="flex min-w-0 flex-col">
             {month === current && <DailyPanel fleet={fleet} />}
-            <EnvelopesPanel month={month} current={current} fleet={fleet} brief={month < current ? debriefing(month, { transactions, categories, plans, log: fleet.log, today }) : null} />
+            <EnvelopesPanel month={month} current={current} fleet={fleet} brief={month < current ? briefOf(month) : null} />
             {brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? (
               <DebriefPanel brief={brief} fleet={fleet} today={today} plans={plans} readOnly={readOnly} />
             ) : (
@@ -113,15 +115,21 @@ export function MonthPage() {
   )
 
   function applyProposals(m: string) {
-    const p = proposeEnvelopes(transactions, categories!, m, containers)
+    // The engine's history months (B23): a month ahead never averages the current one.
+    const p = proposeEnvelopes(transactions, categories!, m, containers, fleet?.historyMonths)
     const limits = Object.fromEntries(p.envelopes.filter((e) => e.limit > 0).map((e) => [e.categoryId, e.limit]))
-    if (!Object.keys(limits).length) return
+    if (!Object.keys(limits).length) {
+      toast(p.months.length ? 'Brak wydatków w kategoriach z kopertą w pełnych miesiącach historii – nic do zaproponowania.' : 'Za mało historii: koperty ze średnich po pierwszym pełnym miesiącu z danymi.', 'info', 5000)
+      return
+    }
     setEnvelopes(m, limits)
+    toast(`Koperty ze średnich z ${p.months.length} mies. (${p.months.map((x) => monthLabel(x)).join(', ')}).`, 'info', 4000)
   }
 }
 
 function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { month: string; plan: MonthPlan | null; fleet: FleetState; current: string; readOnly: boolean; transactions: ReturnType<typeof useRecordList<'transactions'>> }) {
-  const proposal = useMemo(() => proposeSalary(transactions, month), [transactions, month])
+  // The engine's history months (B23, B25): a month ahead never averages the current one.
+  const proposal = useMemo(() => proposeSalary(transactions, month, fleet.historyMonths), [transactions, month, fleet.historyMonths])
   const alarms = fleet.alarms.filter((a) => (a.kind === 'salary-from-hull' || a.kind === 'salary-partial') && a.ref === month)
   const aboveIncome = month === current ? fleet.alarms.find((a) => a.kind === 'salary-above-income') : undefined
   const paid = month === current ? fleet.salary : null
@@ -169,7 +177,8 @@ function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { 
 
 function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string; plan: MonthPlan; split: NonNullable<ReturnType<typeof salarySplit>>; readOnly: boolean; onPropose: () => void }) {
   const cats = useCategories()
-  const mains = cats.mains.filter((c) => !c.archived && envelopeKind(c))
+  // An archived category whose envelope the plan still has (N8): it still counts – shown, so it can be cleared.
+  const mains = cats.mains.filter((c) => envelopeKind(c) && (!c.archived || plan.envelopes[c.id] != null))
   const [open, setOpen] = useState(false)
   return (
     <Panel
@@ -206,7 +215,14 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
               .filter((c) => envelopeKind(c) === kind)
               .map((c) => (
                 <div key={c.id} className="flex items-center gap-2 py-0.5" data-testid="month-envelope" data-name={c.name}>
-                  <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {c.name}
+                    {c.archived && (
+                      <span className="ml-1.5 text-[11px] text-accent" title="Kategoria zarchiwizowana – koperta dalej liczy się w planie i energii dnia; wyczyść pole, żeby ją zdjąć" data-testid="month-envelope-archived">
+                        zarchiwizowana
+                      </span>
+                    )}
+                  </span>
                   <AmountField
                     className="h-[22px] w-[110px]"
                     value={plan.envelopes[c.id] ?? null}
@@ -218,6 +234,9 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
                   />
                 </div>
               ))}
+            {kind === 'daily' && split.lootExtra > 0 && (
+              <Row className="text-[11.5px]" label={`+ łupy z ${monthLabel(addMonths(month, -1))} (decyzja „na następny miesiąc”)`} value={zl(split.lootExtra)} testId="split-loot-extra" />
+            )}
             {kind === 'daily' && <div className="mt-0.5 text-[11px] text-dim">Podstawowy przydział: {zl(split.dailyBase)} dziennie</div>}
           </div>
         ))}
@@ -252,7 +271,7 @@ function DailyPanel({ fleet }: { fleet: FleetState }) {
           <Meter value={d.allowance - Math.max(0, d.left)} max={d.allowance} over />
           <Row label="Wydane dziś (koperty codzienne)" value={zl(d.spentToday)} />
           <Row label="Podstawowy przydział" value={zl(d.base)} />
-          <Row label={`Koperty codzienne: wydane / limit`} value={`${zl(d.spentBefore + d.spentToday)} / ${zl(d.limit)}`} />
+          <Row label={`Koperty codzienne: wydane / limit`} sub={lootExtraOf(fleet.log, fleet.month) > 0 ? `w tym łupy ${zl(lootExtraOf(fleet.log, fleet.month))}` : undefined} value={`${zl(d.spentBefore + d.spentToday)} / ${zl(d.limit)}`} />
           <Row label="Dni do końca miesiąca (z dziś)" value={d.daysLeft} />
           <Row label="Energia miesiąca (pensja do wydania)" value={zl(fleet.energy)} />
           <p className="text-[11px] text-dim">Niewydana energia przechodzi na kolejne dni, przekroczenie zmniejsza przydział kolejnych dni.</p>
@@ -292,16 +311,33 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
         {brief.plus === true && (
           <div className="relative overflow-hidden border border-accent/40 px-3 py-2" data-testid="month-plus">
             <div className="animate-event-in text-[13px] font-medium text-accent">Miesiąc zamknięty na plus</div>
-            <div className="animate-event-in text-[11.5px] text-muted">Koszty netto {zl(brief.costs)} nie przekroczyły pensji {zl(brief.salary ?? 0)}.</div>
+            <div className="animate-event-in text-[11.5px] text-muted">
+              {brief.energy
+                ? `Wydatki z energii ${zl(brief.energy.used)} nie przekroczyły energii miesiąca ${zl(brief.energy.budget)}.`
+                : `Koszty netto ${zl(brief.costs)} nie przekroczyły pensji ${zl(brief.salary ?? 0)}.`}
+            </div>
             <div className="absolute bottom-0 left-0 h-px w-full origin-left animate-sweep bg-accent" />
           </div>
         )}
         {brief.plus === false && (
           <div className="text-[11.5px] text-accent" data-testid="month-minus">
-            Koszty netto {zl(brief.costs)} – ponad pensję {zl(brief.salary ?? 0)} o {zl(brief.costs - (brief.salary ?? 0))}.
+            {brief.energy
+              ? `Energia wyczerpana: ${zl(-brief.energy.result)} ponad energię miesiąca ${zl(brief.energy.budget)} poszło z osłon.`
+              : `Koszty netto ${zl(brief.costs)} – ponad pensję ${zl(brief.salary ?? 0)} o ${zl(brief.costs - (brief.salary ?? 0))}.`}
           </div>
         )}
-        {brief.plus === null && <div className="text-[11.5px] text-dim">Bez pensji w tym miesiącu – nie ma z czym porównać kosztów ({zl(brief.costs)}).</div>}
+        {brief.plus === null && <div className="text-[11.5px] text-dim">{brief.salary ? 'Miesiąc trwa – wynik po jego końcu.' : `Bez pensji w tym miesiącu – nie ma z czym porównać kosztów (${zl(brief.costs)}).`}</div>}
+        {brief.energy && (
+          <div className="flex flex-col" data-testid="debrief-energy">
+            <Row
+              label="Energia miesiąca"
+              sub={`pensja ${zl(brief.energy.salary)}${brief.energy.sinking ? ` − odkładki ${zl(brief.energy.sinking)}` : ''}${brief.energy.loot ? ` + łupy ${zl(brief.energy.loot)}` : ''}`}
+              value={zl(brief.energy.budget)}
+            />
+            <Row label="Wydane z energii (i ponad nią z osłon)" value={zl(brief.energy.used)} />
+            <Row label="Koszty netto miesiąca" sub="z opłatami ze zbiorników, bez rat odkładek" value={zl(brief.costs)} />
+          </div>
+        )}
         <div className="flex flex-col">
           <Row label="Ładownia i odkładki" value={zl(brief.cargo)} />
           {brief.financed.length > 0 && (
@@ -311,7 +347,15 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
               testId="debrief-financed"
             />
           )}
-          {brief.uncategorized > 0 && <Row label="Bez kategorii" value={zl(brief.uncategorized)} />}
+          {brief.uncategorized > 0 && <Row label="Bez kategorii" sub="liczy się do puli codziennej" value={zl(brief.uncategorized)} />}
+          {brief.daily && (
+            <Row
+              label="Pula codzienna (koperty codzienne, łupy i bez kategorii)"
+              sub={`${zl(brief.daily.spent)} z ${zl(brief.daily.limit)}`}
+              value={<span className={brief.daily.gap < 0 ? 'text-down' : 'text-up'}>{brief.daily.gap >= 0 ? `+${plnText(brief.daily.gap)}` : plnText(brief.daily.gap)} zł</span>}
+              testId="debrief-daily"
+            />
+          )}
           {brief.envelopes.map((e) => (
             <Row
               key={e.categoryId}

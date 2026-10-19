@@ -1,4 +1,5 @@
 // adapted from ICTTJ src/renderer/lib/format.ts @ 84a8339
+import { addDays } from '@shared/calc/dates'
 const MINUS = '−'
 
 export function fmtNum(v: number | null | undefined, decimals = 2): string {
@@ -126,25 +127,37 @@ export function parseClockInput(text: string): string | null {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-/** Parse "2026-03-16", "16.03.2026", "16.03" (current year). */
-export function parseDateInput(text: string, fallbackYear = new Date().getFullYear()): string | null {
-  const t = text.trim()
-  let y: number
-  let mo: number
-  let d: number
-  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
-  if (m) {
-    y = Number(m[1])
-    mo = Number(m[2])
-    d = Number(m[3])
-  } else if ((m = /^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}))?$/.exec(t))) {
-    d = Number(m[1])
-    mo = Number(m[2])
-    y = m[3] ? Number(m[3]) : fallbackYear
-  } else return null
+/** 'RRRR-MM-DD' of a real day; null = no such day (31.02, 29.02 of a common year). */
+function isoDay(y: number, mo: number, d: number): string | null {
   const dt = new Date(Date.UTC(y, mo - 1, d))
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null
   return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+const dayMs = (iso: string) => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)))
+
+/**
+ * Parse "2026-03-16", "16.03.2026", "16.03" (the fallback year). `notAfter` (an operation's date – B12): "16.03" without
+ * a year is the day nearest to `near` (the field's date: 02.01 typed on an operation of 30.12 is the January after) and
+ * never more than a week after `notAfter` – 28.12 typed on 3 January is the December gone by. A later day needs its year.
+ */
+export function parseDateInput(text: string, fallbackYear = new Date().getFullYear(), notAfter?: string, near?: string): string | null {
+  const t = text.trim()
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
+  if (m) return isoDay(Number(m[1]), Number(m[2]), Number(m[3]))
+  if (!(m = /^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}))?$/.exec(t))) return null
+  const d = Number(m[1])
+  const mo = Number(m[2])
+  if (m[3] || !notAfter) return isoDay(m[3] ? Number(m[3]) : fallbackYear, mo, d)
+  const ref = near && /^\d{4}-\d{2}-\d{2}$/.test(near) ? near : notAfter
+  const base = Number(ref.slice(0, 4))
+  const days = [base - 1, base, base + 1].map((y) => isoDay(y, mo, d)).filter((x): x is string => x != null)
+  if (!days.length) return null
+  const limit = addDays(notAfter, 7)
+  const allowed = days.filter((x) => x <= limit)
+  // Nearest first; a tie goes to the earlier day. Only a day that exists nowhere before the limit (29.02) stays later.
+  const pool = allowed.length ? allowed : days
+  return pool.reduce((best, x) => (Math.abs(dayMs(x) - dayMs(ref)) < Math.abs(dayMs(best) - dayMs(ref)) ? x : best))
 }
 
 /** Parse a month: "2027-03", "2027-3", "03.2027", "3/2027"; '' = none (null); undefined = not a month. */

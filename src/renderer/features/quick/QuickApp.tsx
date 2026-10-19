@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { QuickData, QuickResult } from '@shared/api'
 import { inClockWindow, warsawNow } from '@shared/calc/dates'
+import { energyAfter } from '@shared/calc/fleet'
+import { dm } from '@shared/calc/briefing'
 import { OFFICER_SOURCE_LABEL, officerHint, type OfficerSource } from '@shared/import/officer'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
@@ -164,6 +166,8 @@ export function QuickApp() {
         ? lines
         : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift }]
     let daily = 0
+    // A category without an envelope (N3): the month's energy only – today's energy stays.
+    let outside = 0
     const planned = new Map<string, number>()
     const financed = new Map<string, { amount: number; gift: boolean }>()
     for (const p of parts) {
@@ -175,18 +179,32 @@ export function QuickApp() {
         continue
       }
       const c = p.categoryId ? cats.get(p.categoryId) : undefined
-      if (!c || c.envelope !== 'planned') daily += p.amount
-      else planned.set(c.mainId, (planned.get(c.mainId) ?? 0) + p.amount)
+      // As the engine (T30): no category = a daily purchase (careful), a category without an envelope is neither.
+      if (!c || c.envelope === 'daily') daily += p.amount
+      else if (c.envelope === 'planned') planned.set(c.mainId, (planned.get(c.mainId) ?? 0) + p.amount)
+      else outside += p.amount
     }
     const out: ReactNode[] = []
-    if (daily && data.energyLeft != null)
+    const today = data.daily?.today ?? warsawNow().date
+    const otherMonth = d.date.slice(0, 7) !== today.slice(0, 7) || d.date > today
+    if (daily && data.daily) {
+      const e = energyAfter(data.daily, d.date, daily)
       out.push(
-        <div key="daily" data-testid="quick-preview-energy">
-          Energia dziś: <span className="num">{money(data.energyLeft)}</span> → <span className={cx('num', data.energyLeft - daily < 0 ? 'text-down' : 'text-fg-strong')}>{money(data.energyLeft - daily)}</span>
-        </div>
+        e ? (
+          <div key="daily" data-testid="quick-preview-energy">
+            Energia dziś: <span className="num">{money(e.before)}</span> → <span className={cx('num', e.after < 0 ? 'text-down' : 'text-fg-strong')}>{money(e.after)}</span>
+            {d.date < today && <span className="text-dim"> (wydatek z {dm(d.date)} – rozłożony na pozostałe dni)</span>}
+          </div>
+        ) : (
+          <div key="daily" data-testid="quick-preview-energy">
+            {d.date > today ? 'Data w przyszłości – energia dziś bez zmian.' : 'Wydatek z innego miesiąca – energia dziś bez zmian.'}
+          </div>
+        )
       )
-    if (daily && data.energyLeft == null) out.push(<div key="daily">Bez planu miesiąca – wydatek idzie z osłon.</div>)
-    for (const [mainId, v] of planned) {
+    }
+    if (daily && !data.daily && data.energyLeft == null) out.push(<div key="daily">Bez planu miesiąca – wydatek idzie z osłon.</div>)
+    if (outside) out.push(<div key="outside" data-testid="quick-preview-outside">Poza kopertami {money(outside)} – energia dziś bez zmian (zmniejsza energię miesiąca).</div>)
+    for (const [mainId, v] of otherMonth ? [] : planned) {
       const left = data.envelopesLeft[mainId]
       const name = (data.categories.find((c) => c.id === mainId)?.label ?? 'koperta').split(' · ')[0]
       out.push(
@@ -396,9 +414,14 @@ export function QuickApp() {
           </Row>
           <Row label="Kiedy">
             <div className="flex items-center gap-2">
-              <DateField className="w-[104px]" value={d.date} onChange={(date) => date && set({ date })} aria-label="Data" data-testid="quick-date" />
+              <DateField className="w-[104px]" value={d.date} notAfter={warsawNow().date} onChange={(date) => date && set({ date })} aria-label="Data" data-testid="quick-date" />
               <TimeField className="w-[64px]" value={d.time} allowEmpty onChange={(time) => set({ time })} aria-label="Godzina" data-testid="quick-time" />
               {night && <span className="text-[11px] text-accent">cisza nocna</span>}
+              {d.date > warsawNow().date && (
+                <span className="text-[11px] text-accent" data-testid="quick-future">
+                  w przyszłości – do salda od {d.date.slice(8, 10)}.{d.date.slice(5, 7)}
+                </span>
+              )}
             </div>
           </Row>
           {d.kind === 'income' && data.members.length > 0 && (

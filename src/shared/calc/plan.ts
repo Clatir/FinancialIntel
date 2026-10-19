@@ -8,9 +8,10 @@ import { envelopeKind, type Category, type EnvelopeKind } from '../schema/budget
 import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { counterpartyKey } from '../import/classify'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
-import { cyclePosition, rangeMonths, sinkingSchedule, type FleetEvent } from './fleet'
+import { cyclePosition, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
+import { coveredMonths, firstFullOf, historyStart, monthsBefore } from './history'
 import { financedBy } from './household'
-import { categoryIndex, costOf, partsOf, sum } from './operations'
+import { categoryIndex, costOf, isCargoPayment, partsOf, sum } from './operations'
 
 /** Months of the salary's average (D70). */
 export const SALARY_MONTHS = 6
@@ -21,20 +22,17 @@ const SALARY_STEP = 100_00
 /** Envelopes in tens of złoty (D70). */
 const ENVELOPE_STEP = 10_00
 
-/** The first month the history covers in whole (the earliest operation on its 1st, else the next month). */
-export function firstFullMonth(transactions: readonly Pick<Transaction, 'date'>[]): string | null {
-  let first: string | null = null
-  for (const t of transactions) if (first == null || t.date < first) first = t.date
-  if (!first) return null
-  return first.endsWith('-01') ? monthOf(first) : addMonths(monthOf(first), 1)
+/** The first month the history covers in whole (`calc/history.ts`: where the bank's history starts – B25). */
+export function firstFullMonth(transactions: readonly Pick<Transaction, 'date' | 'kind' | 'bank'>[]): string | null {
+  return firstFullOf(historyStart(transactions))
 }
 
-/** The last `count` full months of data before `month` (fewer when the history is shorter). */
-export function fullMonthsBefore(transactions: readonly Pick<Transaction, 'date'>[], month: string, count: number): string[] {
-  const first = firstFullMonth(transactions)
-  const last = addMonths(month, -1)
-  if (!first || last < first) return []
-  return monthRange(first, last).slice(-count)
+/**
+ * The last `count` full months of data before `month` (fewer when the history is shorter): the months the engine's
+ * averages read (`FleetState.historyMonths` – before the current month, B23), else the history of `transactions` alone.
+ */
+export function fullMonthsBefore(transactions: readonly Pick<Transaction, 'date' | 'kind' | 'bank'>[], month: string, count: number, covered?: readonly string[]): string[] {
+  return monthsBefore(covered ?? coveredMonths(transactions, month), month, count)
 }
 
 /** Net costs (fleet.ts `costOf`) month by month. */
@@ -54,16 +52,20 @@ export interface SalaryProposal {
   months: string[]
 }
 
-/** The salary (D70): the average net costs of the last 6 full months, up to whole hundreds; null without a full month. */
-export function proposeSalary(transactions: readonly Transaction[], month: string): SalaryProposal | null {
-  const months = fullMonthsBefore(transactions, month, SALARY_MONTHS)
+/**
+ * The salary (D70): the average net costs of the last 6 full months, up to whole hundreds; null without a full month.
+ * `covered` – the engine's history months (a month ahead never averages the current one – B23).
+ */
+export function proposeSalary(transactions: readonly Transaction[], month: string, covered?: readonly string[]): SalaryProposal | null {
+  const months = fullMonthsBefore(transactions, month, SALARY_MONTHS, covered)
   if (!months.length) return null
   const byMonth = costsByMonth(transactions)
   const average = Math.round(sum(months.map((m) => byMonth.get(m) ?? 0)) / months.length)
   return { amount: Math.max(SALARY_STEP, Math.ceil(average / SALARY_STEP) * SALARY_STEP), average, months }
 }
 
-type CounterpartyOf = Pick<Container, 'counterparty' | 'archived'>
+/** A container as the proposals read it: its payee, and its id – a payment linked to it is the cargo's (B58). */
+type CounterpartyOf = Pick<Container, 'counterparty' | 'archived'> & { id?: string }
 
 const containerKeys = (containers: readonly CounterpartyOf[]): Set<string> =>
   new Set(containers.filter((c) => !c.archived).map((c) => counterpartyKey(c.counterparty)).filter(Boolean))
@@ -77,8 +79,10 @@ export function payeeKey(t: Pick<Transaction, 'counterparty' | 'title'>): string
   return key
 }
 
-/** Does an operation pay a container (linked, or the same payee as one)? Fixed costs are no envelope's spending. */
-const paysContainer = (t: Transaction, keys: ReadonlySet<string>) => !!t.containerId || (keys.size > 0 && keys.has(payeeKey(t)))
+const containerIdsOf = (containers: readonly CounterpartyOf[]): Set<string> => new Set(containers.map((c) => c.id).filter((id): id is string => !!id))
+
+/** Does an operation pay a container (linked to one that exists, or the same payee as one)? Fixed costs are no envelope's spending. */
+const paysContainer = (t: Transaction, keys: ReadonlySet<string>, ids: ReadonlySet<string>) => isCargoPayment(t, ids) || (keys.size > 0 && keys.has(payeeKey(t)))
 
 export interface EnvelopeProposal {
   categoryId: string
@@ -97,17 +101,19 @@ export function proposeEnvelopes(
   transactions: readonly Transaction[],
   categories: readonly Category[],
   month: string,
-  containers: readonly CounterpartyOf[] = []
+  containers: readonly CounterpartyOf[] = [],
+  covered?: readonly string[]
 ): { envelopes: EnvelopeProposal[]; uncategorized: number; months: string[] } {
-  const months = fullMonthsBefore(transactions, month, ENVELOPE_MONTHS)
+  const months = fullMonthsBefore(transactions, month, ENVELOPE_MONTHS, covered)
   if (!months.length) return { envelopes: [], uncategorized: 0, months }
   const cats = categoryIndex(categories)
   const keys = containerKeys(containers)
+  const ids = containerIdsOf(containers)
   const inWindow = new Set(months)
   const spent = new Map<string, number>()
   let uncategorized = 0
   for (const t of transactions) {
-    if (t.kind !== 'expense' || t.goalId || !inWindow.has(monthOf(t.date)) || paysContainer(t, keys)) continue
+    if (t.kind !== 'expense' || t.goalId || !inWindow.has(monthOf(t.date)) || paysContainer(t, keys, ids)) continue
     for (const p of partsOf(t)) {
       if (p.refundable) continue
       const main = cats.mainOf(p.categoryId)
@@ -154,11 +160,12 @@ function steady(amounts: readonly number[]): boolean {
  * once a month for nearly every one of the last full months (at least 3), or once a year (two payments 11–13 months
  * apart), with a steady amount. Counterparties of existing containers are left out.
  */
-export function recurringPayments(transactions: readonly Transaction[], month: string, containers: readonly CounterpartyOf[] = []): RecurringPayment[] {
+export function recurringPayments(transactions: readonly Transaction[], month: string, containers: readonly CounterpartyOf[] = [], covered?: readonly string[]): RecurringPayment[] {
   const known = containerKeys(containers)
+  const ids = containerIdsOf(containers)
   const groups = new Map<string, Transaction[]>()
   for (const t of transactions) {
-    if (t.kind !== 'expense' || t.amount >= 0 || t.containerId || t.goalId || t.date >= firstDayOf(month)) continue
+    if (t.kind !== 'expense' || t.amount >= 0 || isCargoPayment(t, ids) || t.goalId || t.date >= firstDayOf(month)) continue
     const key = payeeKey(t)
     if (!key || known.has(key)) continue
     // Pushed, never copied (W6: a shop of thousands of payments made this quadratic).
@@ -166,7 +173,7 @@ export function recurringPayments(transactions: readonly Transaction[], month: s
     if (list) list.push(t)
     else groups.set(key, [t])
   }
-  const window = fullMonthsBefore(transactions, month, SALARY_MONTHS)
+  const window = fullMonthsBefore(transactions, month, SALARY_MONTHS, covered)
   const inWindowMonths = new Set(window)
   const out: RecurringPayment[] = []
   for (const [key, list] of groups) {
@@ -204,7 +211,9 @@ export interface SalarySplit {
   /** The month's installments of the periodic fees' tanks (actual for a month the engine ran, else the plan's). */
   tanks: { items: Array<{ containerId: string; name: string; amount: number; dueMonth: string; due: number }>; total: number }
   envelopes: Record<EnvelopeKind, { items: Array<{ categoryId: string; limit: number }>; total: number }>
-  /** „Podstawowy przydział”: the daily envelopes over the days of the month. */
+  /** The loot of the month before given to this month (T28 – it adds to the daily envelopes, N11): not the salary's. */
+  lootExtra: number
+  /** „Podstawowy przydział”: the daily envelopes and the loot added to them over the days of the month (as the engine). */
   dailyBase: number
   allocated: number
   /** The salary not given to anything: it stays in the energy and becomes the loot (or a reserve for overspending). */
@@ -213,14 +222,16 @@ export interface SalarySplit {
 
 /**
  * How a month's salary divides (spec, „Podział pensji”): the cargo, the tanks, the planned and the daily envelopes.
- * `sinking` = the tanks' installments the engine took that month (the log), else the plan's installments.
+ * `sinking` = the tanks' installments the engine took that month (the log), else the plan's installments; `lootExtra` =
+ * the loot of the month before the engine gave to this one (`lootExtraOf`) – the daily envelopes' too.
  */
 export function salarySplit(
   plan: Pick<MonthPlan, 'salary' | 'envelopes'>,
   month: string,
   containers: readonly Container[],
   categories: readonly Category[],
-  sinking?: ReadonlyMap<string, number>
+  sinking?: ReadonlyMap<string, number>,
+  lootExtra = 0
 ): SalarySplit {
   const active = containers.filter((c) => activeIn(c, month))
   const cargoItems = active.filter((c) => c.cycleMonths <= 1).map((c) => ({ containerId: c.id, name: c.name, amount: c.amount }))
@@ -243,7 +254,12 @@ export function salarySplit(
   const cargo = { items: cargoItems, total: sum(cargoItems.map((c) => c.amount)) }
   const tanks = { items: tankItems, total: sum(tankItems.map((c) => c.amount)) }
   const allocated = cargo.total + tanks.total + envelopes.planned.total + envelopes.daily.total
-  return { salary: plan.salary, cargo, tanks, envelopes, dailyBase: Math.floor(envelopes.daily.total / daysInMonth(month)), allocated, unallocated: plan.salary - allocated }
+  return { salary: plan.salary, cargo, tanks, envelopes, lootExtra, dailyBase: Math.floor((envelopes.daily.total + lootExtra) / daysInMonth(month)), allocated, unallocated: plan.salary - allocated }
+}
+
+/** The loot of the month before the engine gave to `month` (a decision „na następny miesiąc” – N11): its daily envelopes'. */
+export function lootExtraOf(log: readonly FleetEvent[], month: string): number {
+  return sum(log.filter((e) => e.kind === 'loot' && monthOf(e.date) === month).map((e) => Math.max(0, e.moves.energy ?? 0)))
 }
 
 /** The tanks' installments the engine took in `month` (its log). */
@@ -263,8 +279,24 @@ export interface Debriefing {
   paid: number | null
   /** Net costs of the month. */
   costs: number
-  /** Costs not above the salary: „Miesiąc zamknięty na plus” (spec). null = no salary to compare with. */
+  /**
+   * „Miesiąc zamknięty na plus” (spec, T52 – N6): the month's spending did not take more than its energy, as the engine
+   * counts it – a periodic fee its tank paid is no cost of the salary, the tanks' installments are. Without the engine's
+   * month (no log, a month before the start): net costs not above the salary. null = no salary, or the month still runs.
+   */
   plus: boolean | null
+  /**
+   * The month's energy as the engine ran it (N6, N11): `budget` = the salary paid less the tanks' installments plus the
+   * loot of the month before given to it; `used` = what the spending took of it and over it (from the shields);
+   * `result` = budget − used (+ left – the loot at the month's end, − the shields paid). null = no salary paid by the engine
+   * that month.
+   */
+  energy: { salary: number; sinking: number; loot: number; budget: number; used: number; exhausted: number; result: number } | null
+  /**
+   * The daily pool as the engine's daily energy counts it (N11): the daily envelopes and the loot added to them against
+   * their spending and the spending without a category. null = no daily envelope that month.
+   */
+  daily: { limit: number; extra: number; spent: number; gap: number } | null
   /** Plan against fact per envelope – the FVG of the debriefing (+ = left, − = over). */
   envelopes: Array<{ categoryId: string; kind: EnvelopeKind; limit: number; spent: number; gap: number }>
   /** Spending of the containers linked to them (the cargo and the periodic fees). */
@@ -296,6 +328,10 @@ export function debriefing(
     categories: readonly Category[]
     plans: readonly MonthPlan[]
     log?: readonly FleetEvent[]
+    /** The engine's alarms (`FleetState.alarms`): the energy run out in the month (N6). */
+    alarms?: readonly Alarm[]
+    /** The containers now: a payment of one deleted is an envelope's spending again (B58). */
+    containers?: readonly Pick<Container, 'id'>[]
     /** The budget's day: the loot is known once the month has ended. */
     today: string
   }
@@ -307,10 +343,12 @@ export function debriefing(
   const spent = new Map<string, number>()
   let cargo = 0
   let uncategorized = 0
+  // Without the containers (an older caller): every linked payment is the cargo's.
+  const ids = input.containers ? new Set(input.containers.map((c) => c.id)) : null
   for (const t of txs) {
     if (t.kind !== 'expense' || t.goalId) continue
-    // The cargo as the engine sees it: payments linked to a container (`containerId`).
-    if (t.containerId) {
+    // The cargo as the engine sees it: payments linked to a container that exists (B58).
+    if (ids ? isCargoPayment(t, ids) : t.containerId) {
       cargo += costOf(t)
       continue
     }
@@ -330,20 +368,47 @@ export function debriefing(
     envelopes.push({ categoryId: main.id, kind, limit: limit ?? 0, spent: s, gap: (limit ?? 0) - s })
   }
   const log = input.log ?? []
-  const salaries = log.filter((e) => e.kind === 'salary' && monthOf(e.date) === month)
+  const inMonth = log.filter((e) => monthOf(e.date) === month)
+  const salaries = inMonth.filter((e) => e.kind === 'salary')
   const end = log.find((e) => e.kind === 'month-end' && e.date === firstDayOf(addMonths(month, 1)))
   const ended = input.today >= firstDayOf(addMonths(month, 1))
   const salary = plan?.salary ?? null
+  const loot = ended ? Math.max(0, end?.amount ?? 0) : null
+  let energy: Debriefing['energy'] = null
+  if (salaries.length) {
+    const paid = sum(salaries.map((e) => e.amount))
+    const sinking = -sum(inMonth.filter((e) => e.kind === 'sinking').map((e) => e.moves.energy ?? 0))
+    const extra = lootExtraOf(log, month)
+    // What the operations took of the energy (less what came back to it) and what the shields paid when it ran out.
+    const spent = -sum(inMonth.filter((e) => e.txId).map((e) => e.moves.energy ?? 0))
+    const exhausted = sum((input.alarms ?? []).filter((a) => a.kind === 'energy-exhausted' && monthOf(a.date) === month).map((a) => a.amount))
+    const budget = paid - sinking + extra
+    const used = spent + exhausted
+    energy = { salary: paid, sinking, loot: extra, budget, used, exhausted, result: budget - used }
+  }
+  // The daily pool (N11): the daily envelopes, the loot added to them; their spending and the spending without a category.
+  const dailyRows = envelopes.filter((e) => e.kind === 'daily')
+  const extra = energy?.loot ?? lootExtraOf(log, month)
+  const daily =
+    dailyRows.length || extra
+      ? (() => {
+          const limit = sum(dailyRows.map((e) => e.limit)) + extra
+          const spent = sum(dailyRows.map((e) => e.spent)) + uncategorized
+          return { limit, extra, spent, gap: limit - spent }
+        })()
+      : null
   return {
     month,
     salary,
     paid: salaries.length ? sum(salaries.map((e) => e.amount)) : null,
     costs,
-    plus: salary != null && salary > 0 ? costs <= salary : null,
+    plus: energy ? (ended ? energy.result >= 0 : null) : salary != null && salary > 0 ? costs <= salary : null,
+    energy,
+    daily,
     envelopes,
     cargo,
     uncategorized,
-    loot: ended ? Math.max(0, end?.amount ?? 0) : null,
+    loot,
     financed: financedBy(txs)
   }
 }
@@ -415,9 +480,13 @@ export function simulateCargo(
   }
 }
 
-/** Expense payments of a counterparty not linked to any container yet, from `from` on (the import links new ones itself). */
-export function unlinkedPayments(transactions: readonly Transaction[], counterparty: string, from: string): Transaction[] {
+/**
+ * Expense payments of a counterparty not linked to any container yet, from `from` on (the import links new ones itself);
+ * `containerIds` given – a payment of a container deleted counts as not linked (B58).
+ */
+export function unlinkedPayments(transactions: readonly Transaction[], counterparty: string, from: string, containerIds?: ReadonlySet<string>): Transaction[] {
   const key = counterpartyKey(counterparty)
   if (!key) return []
-  return transactions.filter((t) => t.kind === 'expense' && t.amount < 0 && !t.containerId && t.date >= from && payeeKey(t) === key)
+  const linked = (t: Transaction) => (containerIds ? isCargoPayment(t, containerIds) : !!t.containerId)
+  return transactions.filter((t) => t.kind === 'expense' && t.amount < 0 && !linked(t) && t.date >= from && payeeKey(t) === key)
 }

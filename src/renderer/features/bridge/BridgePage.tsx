@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { BIAS_LABEL, briefing, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
+import { BIAS_LABEL, briefing, confirmationsOf, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
 import { daysBetween, isoWeekOf } from '@shared/calc/dates'
 import { financersText, memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
@@ -304,13 +304,12 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
   return useMemo(() => {
     if (!fleet || !fi) return []
     const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
-    const confirmed = balances.filter((b) => b.kind === 'confirmation').map((b) => b.date).sort().at(-1) ?? null
     const label = (id: string) => containers.find((c) => c.id === id)?.name ?? cats.label(id)
     // This week's mission of the command (E7).
     const week = isoWeekOf(fleet.today)
     const m = game.flatMap((g) => g.missions).find((x) => x.week === week)
     const mission = m ? { week, title: missionTitle(m.template), text: missionText(m, cats.label, zl) } : null
-    return briefing({ fleet, containers, imports, lastConfirmation: confirmed, label, money: zl, deliveries, ictjProblem, mission, members: fi.settings.household.members })
+    return briefing({ fleet, containers, imports, confirmations: confirmationsOf(fi.settings.accounts, balances), label, money: zl, deliveries, ictjProblem, mission, members: fi.settings.household.members })
     // `hidden`: the amounts of the texts mask on a change.
   }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game])
 }
@@ -379,6 +378,11 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
       <Line metaphor="Osłony" name="bufor na pensje" value={<>{zl(s.amount)}{s.target != null && <span className="text-dim"> / {zl(s.target)}</span>}</>} testId="state-shields">
         <Meter value={s.amount} max={s.target} mark={s.min != null && s.target ? s.min / s.target : undefined} />
         {s.free > 0 && <span className="text-[11px] text-muted">wolne do decyzji: {zl(s.free)}</span>}
+        {s.free === 0 && s.over > 0 && (
+          <span className="text-[11px] text-muted" data-testid="state-shields-over">
+            ponad cel osłon: {zl(s.over)} – {fleet.hull.target == null ? 'cel kadłuba jeszcze nieznany (za krótka historia kosztów)' : 'kadłub niepełny'}, nie do dopłaty XTB
+          </span>
+        )}
       </Line>
       <Line metaphor="Energia" name="pensja miesiąca do wydania" value={zl(fleet.energy)} testId="state-energy" />
       <Line metaphor="Kadłub" name="fundusz awaryjny" value={<>{zl(fleet.hull.amount)}{fleet.hull.target != null && <span className="text-dim"> / {zl(fleet.hull.target)}</span>}</>} testId="state-hull">

@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
 import { asksImpulse, isNight, sum } from '@shared/calc/operations'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
-import { HOUSE_MEMBER_ID, TX_KIND_LABEL, type Split, type Transaction, type TxKind } from '@shared/schema'
+import { HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { updateRecord, useData } from '../../store/data'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
@@ -196,11 +196,16 @@ export function OperationEditor({ id }: { id: string }) {
       </Field>
       <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
         <div className="flex items-center gap-2">
-          <DateField className="w-[110px]" value={t.date} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
+          <DateField className="w-[110px]" value={t.date} notAfter={fleet?.today} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
           <TimeField className="w-[70px]" value={t.time} allowEmpty onChange={(time) => patch({ time })} aria-label="Godzina" data-testid="operation-time" />
           {night && (
             <Badge tone="warn" title={`Cisza nocna ${orders.quietHours.from}–${orders.quietHours.to}`} data-testid="operation-night">
               noc
+            </Badge>
+          )}
+          {fleet && t.date > fleet.today && (
+            <Badge tone="warn" title="Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia" data-testid="operation-future">
+              w przyszłości
             </Badge>
           )}
         </div>
@@ -344,6 +349,7 @@ export function OperationEditor({ id }: { id: string }) {
               </option>
             ))}
           </select>
+          {!t.loanId && <LoanHint t={t} fleet={fleet} loans={loans} readOnly={readOnly} onPick={(loanId) => patch({ loanId })} />}
         </Field>
       )}
 
@@ -375,6 +381,14 @@ export function OperationEditor({ id }: { id: string }) {
             placeholder={night ? 'Zakup w ciszy nocnej – krótko: dlaczego teraz?' : 'Krótko: skąd ten zakup?'}
             data-testid="operation-log"
           />
+          {night && !t.logNote.trim() && (
+            <p className="text-[11.5px] text-accent" data-testid="operation-night-confirm">
+              Godzina w ciszy nocnej ({orders.quietHours.from}–{orders.quietHours.to}): zakup o tej porze potwierdź krótkim wpisem wyżej (D40). Dopisujesz zakup z dnia?{' '}
+              <button type="button" className="text-accent underline" onClick={() => patch({ time: null })} data-testid="operation-night-clear">
+                usuń godzinę
+              </button>
+            </p>
+          )}
         </Section>
       )}
 
@@ -516,5 +530,24 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * A loan's operation without its loan of Radar (B57): the engine moves only the shields – never income, never a
+ * receivable it pays back. Money in with exactly one given loan open: it is likely its repayment – one click links it.
+ */
+function LoanHint({ t, fleet, loans, readOnly, onPick }: { t: Transaction; fleet: FleetState | null; loans: readonly Loan[]; readOnly: boolean; onPick: (loanId: string) => void }) {
+  const open = (fleet?.loans ?? []).filter((l) => l.loan.direction === 'given' && l.open > 0).map((l) => loans.find((x) => x.id === l.loan.id)).filter((l): l is Loan => !!l)
+  const likely = t.amount > 0 && open.length === 1 ? open[0]! : null
+  return (
+    <span className="text-[11px] text-muted" data-testid="operation-loan-hint">
+      Bez pożyczki z Radaru liczy się tylko w osłonach (nie jako przychód ani należność).
+      {likely && (
+        <button className="ml-1 text-accent hover:underline" disabled={readOnly} onClick={() => onPick(likely.id)} data-testid="operation-loan-likely">
+          zwrot pożyczki „{likely.name}”? przypisz
+        </button>
+      )}
+    </span>
   )
 }
