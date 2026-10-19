@@ -826,6 +826,10 @@ Zakres: „Przed grupą S” wyżej. Zrobione:
 - CI PR #29: E2E palety raz na kilka przebiegów otwierał poprzednio szukaną operację – po ponownym otwarciu palety
   wyszukiwanie (opóźnione za pisaniem) przez chwilę pokazywało wyniki poprzedniego otwarcia, a Enter wpisany szybko brał
   pierwszy z nich. Każde otwarcie palety ma teraz własne pisanie i wyniki; test czeka na wynik tego zapytania.
+- CI PR #29 (Windows): w oknie o najmniejszej szerokości (1024 px) nagłówek listy Operacji wchodził pod panel
+  „Szczegóły” – kolejność po kwocie nie dała się kliknąć. Kolumny kontrahenta i kategorii ustępują w wąskim oknie,
+  nagłówek nie wychodzi poza listę; E2E filtrów biegnie teraz w oknie 1024 px (błąd odtworzony lokalnie, przed poprawką
+  test pada).
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 1. Meldunki → „Przelewy między kontami” → „Połącz…”: lista par, odznaczenie pary do sprawdzenia, „Połącz zaznaczone”;

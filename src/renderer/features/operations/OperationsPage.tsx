@@ -32,7 +32,11 @@ import { EveningReport } from '../evening/EveningReport'
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
 const ROW = 28
-const TEMPLATE = '16px 78px 44px minmax(120px, 1.6fr) minmax(90px, 1fr) minmax(0, auto) 110px'
+/**
+ * The list's columns: the counterparty and the category give way in a narrow window (the window's least width with the
+ * details at their width – CI on Windows): the header never reaches under the details' panel.
+ */
+const TEMPLATE = '16px 78px 44px minmax(64px, 1.6fr) minmax(0, 1fr) minmax(0, auto) 110px'
 
 
 const TONE_CLASS = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
@@ -544,7 +548,7 @@ export function OperationsPage() {
         </div>
 
         <BulkBar visible={rows} />
-        <div className="grid h-[24px] shrink-0 items-center gap-x-2 border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: TEMPLATE }}>
+        <div className="grid h-[24px] shrink-0 items-center gap-x-2 overflow-hidden border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: TEMPLATE }}>
           <TickAll rows={rows} />
           <SortHeader sort={filter.sort} by="date">
             Data

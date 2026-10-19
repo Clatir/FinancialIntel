@@ -150,8 +150,11 @@ test('filtry zaawansowane, kolejność, widok zapisany w fi.json, eksport widocz
   const files = mkdtempSync(join(tmpdir(), 'fi-ops-s2-out-'))
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
+    // The window's least width (as on CI's Windows): the list's header beside the details stays clickable.
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1024, 740))
     await page.keyboard.press('Control+2')
     await expect(page.getByTestId('operation-row')).toHaveCount(3)
+    await page.getByTestId('operation-row').first().click()
     // The biggest amounts first.
     await page.getByTestId('operations-sort-amount').click()
     await expect(page.getByTestId('operation-row').first()).toContainText('Duże Zakupy')
