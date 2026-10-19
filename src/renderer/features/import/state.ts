@@ -192,13 +192,21 @@ async function deletedBankRows(): Promise<{ deletedKeys: Set<string>; deletedPen
     const vanished = new Set(listOf(useData.getState().records.imports).flatMap((b) => b.removed.map((t) => t.id)))
     const deletedKeys = new Set<string>()
     const deletedPending: DeletedPending[] = []
+    type Row = { key?: unknown; pending?: unknown; counterparty?: unknown; description?: unknown }
+    type Deleted = { accountId?: unknown; date?: unknown; amount?: unknown; bank?: Row | null; counterAccountId?: unknown; counterDate?: unknown; counterBank?: Row | null }
     for (const d of deleted) {
-      const r = d.record as { accountId?: unknown; date?: unknown; amount?: unknown; bank?: { key?: unknown; pending?: unknown; counterparty?: unknown; description?: unknown } } | null
-      const key = r?.bank?.key
-      if (typeof key !== 'string') continue
-      deletedKeys.add(key)
-      if (r!.bank!.pending === true && !vanished.has(d.id) && typeof r!.accountId === 'string' && typeof r!.date === 'string' && typeof r!.amount === 'number')
-        deletedPending.push({ accountId: r!.accountId, date: r!.date, amount: r!.amount, name: String(r!.bank!.counterparty || r!.bank!.description || ''), deletedAt: d.savedAt })
+      const r = d.record as Deleted | null
+      if (!r) continue
+      // A transfer in one operation (F10): the other account's row is the user's deletion too – on that account's day.
+      const sides: Array<[Row | null | undefined, unknown, unknown, unknown]> = [[r.bank, r.accountId, r.date, r.amount]]
+      if (r.counterBank) sides.push([r.counterBank, r.counterAccountId, r.counterDate ?? r.date, typeof r.amount === 'number' ? -r.amount : null])
+      for (const [bank, accountId, date, amount] of sides) {
+        const key = bank?.key
+        if (typeof key !== 'string') continue
+        deletedKeys.add(key)
+        if (bank!.pending === true && !vanished.has(d.id) && typeof accountId === 'string' && typeof date === 'string' && typeof amount === 'number')
+          deletedPending.push({ accountId, date, amount, name: String(bank!.counterparty || bank!.description || ''), deletedAt: d.savedAt })
+      }
     }
     return { deletedKeys, deletedPending }
   } catch {
@@ -786,7 +794,7 @@ export async function runImport(): Promise<void> {
     const now = new Date().toISOString()
     const acc = st.accountId
     const rulesBefore = s.fi.settings.import.rules
-    const result = buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore })
+    const result = buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore, accounts: s.fi.settings.accounts.map((a) => a.id) })
     // Nothing new (N13): no backup, no records – only the time of the import and what the file covers.
     const changes = result.create.length + result.update.length + result.remove.length > 0 || result.rules !== rulesBefore
     const backup = changes ? await api.importBackup() : ''
@@ -871,7 +879,11 @@ export async function runImport(): Promise<void> {
       lastDecided: null,
       noProposal: {}
     })
-    toast(`Zaimportowano: ${countLabel(result.counts.created, 'nowa operacja', 'nowe operacje', 'nowych operacji')}; połączone z wpisami: ${result.counts.merged}, rozliczone: ${result.counts.settled}.`, 'success', 6000)
+    toast(
+      `Zaimportowano: ${countLabel(result.counts.created, 'nowa operacja', 'nowe operacje', 'nowych operacji')}; połączone z wpisami: ${result.counts.merged}, rozliczone: ${result.counts.settled}${result.counts.sides ? `, drugie strony przelewów: ${result.counts.sides}` : ''}.`,
+      'success',
+      6000
+    )
   } catch (e) {
     toast(errorMessage(e), 'error', 8000)
   } finally {

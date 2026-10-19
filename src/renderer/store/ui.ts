@@ -16,19 +16,31 @@ export interface Toast {
   action?: { label: string; run: () => void }
 }
 
+/** Records the palette opens on their screens (F19). */
+export type FocusKind = 'container' | 'goal' | 'loan' | 'member'
+
 interface UiState {
   route: Route
   history: Route[]
   paletteOpen: boolean
   toasts: Toast[]
+  /** A record to show on its screen (F19): `components/focus.ts` `useFocusRecord`. */
+  focus: { kind: FocusKind; id: string } | null
 }
 
 export const useUi = create<UiState>(() => ({
   route: { page: 'bridge' },
   history: [],
   paletteOpen: false,
-  toasts: []
+  toasts: [],
+  focus: null
 }))
+
+/** A record opened on its screen (F19): the screen shows it – selected, scrolled to, marked for a moment. */
+export function focusRecord(kind: FocusKind, id: string, route: Route): void {
+  navigate(route)
+  useUi.setState({ focus: { kind, id } })
+}
 
 /**
  * Apply what the focused field holds: the budget's fields (amount, date, names) keep a draft until they are left, so

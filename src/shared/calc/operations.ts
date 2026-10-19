@@ -19,6 +19,36 @@ export interface Part {
 
 export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0)
 
+/**
+ * A transfer between two accounts of the budget in one operation (1.7.0, F10, D87): its other account gets the
+ * opposite amount and the layers do not change.
+ */
+export const isTwoSided = (t: Pick<Transaction, 'kind' | 'accountId' | 'counterAccountId' | 'bothSides'>): boolean =>
+  t.kind === 'transfer' && t.bothSides === true && !!t.counterAccountId && t.counterAccountId !== t.accountId
+
+/** Is this account the other side of a two-sided transfer (F10)? */
+const isOtherSide = (t: Transaction, accountId: string): boolean => t.accountId !== accountId && isTwoSided(t) && t.counterAccountId === accountId
+
+/** The operation's money on this account (F10): its own account – `amount`, a two-sided transfer's other one – the opposite, else 0. */
+export function amountOn(t: Transaction, accountId: string): number {
+  if (t.accountId === accountId) return t.amount
+  return isOtherSide(t, accountId) ? -t.amount : 0
+}
+
+/** The operation's day on this account (F10): the bank may book a transfer's other side a day or two later. */
+export const dateOn = (t: Transaction, accountId: string): string => (isOtherSide(t, accountId) ? (t.counterDate ?? t.date) : t.date)
+
+/** Does the operation move money on this account (its own, or the other one of a two-sided transfer)? */
+export const touchesAccount = (t: Transaction, accountId: string): boolean => t.accountId === accountId || isOtherSide(t, accountId)
+
+/** One account's side of an operation: the account, the money on it and its day. */
+export type AccountSide = readonly [accountId: string, amount: number, date: string]
+
+/** Each account the operation moves money on, with the amount and the day (F10): one, or two for a two-sided transfer. */
+export function accountAmounts(t: Transaction): readonly AccountSide[] {
+  return isTwoSided(t) ? [[t.accountId, t.amount, t.date], [t.counterAccountId!, -t.amount, t.counterDate ?? t.date]] : [[t.accountId, t.amount, t.date]]
+}
+
 type PartsSource = Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & { memberId?: string | null; gift?: boolean }
 
 /** The lines of each operation object (W27): records are never changed in place – a change is a new object. */

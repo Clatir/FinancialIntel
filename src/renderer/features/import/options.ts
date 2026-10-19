@@ -1,22 +1,24 @@
 import type { Choice } from '@shared/import/reconcile'
-import { HOUSE_MEMBER_ID, type HouseholdMember, type Loan, type Share } from '@shared/schema'
+import { HOUSE_MEMBER_ID, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
 
 /**
  * What a theme, a group or a row becomes, as offered by the direction of the money: 'expense', 'refund', 'income',
- * 'transfer', 'trading', 'loan', 'tax', and the household's per member (D80) – `refundable:<member>` (they finance it;
- * money in – a product return of their purchase, B40), `gift:<member>` (their gift, D83), 'share' (several people,
- * D83), `household:<member>:income|advance` (their money; the rest beyond their debt is income or their advance),
- * `loan:<loan>` (a loan of the Radar – B34: its repayment, its money).
+ * 'transfer' (an own account outside the budget), `transfer:<account>` (another account of the budget – one operation
+ * for both sides, F10), 'trading', 'loan', 'tax', and the household's per member (D80) – `refundable:<member>` (they
+ * finance it; money in – a product return of their purchase, B40), `gift:<member>` (their gift, D83), 'share' (several
+ * people, D83), `household:<member>:income|advance` (their money; the rest beyond their debt is income or their
+ * advance), `loan:<loan>` (a loan of the Radar – B34: its repayment, its money).
  */
 export type Option = string
 
 type Member = Pick<HouseholdMember, 'id' | 'name' | 'archived'>
+/** An account of the budget a transfer may go to or come from (F10). */
+export type AccountPick = Pick<Account, 'id' | 'name' | 'archived'>
 /** A loan of the Radar offered for a loan's operation (B34). */
 export type LoanPick = Pick<Loan, 'id' | 'name' | 'direction' | 'closedAt'>
 
 const OUT_BEFORE = [{ value: 'expense', label: 'Wydatek' }]
 const OUT_AFTER = [
-  { value: 'transfer', label: 'Przelew własny' },
   { value: 'trading', label: 'XTB – dopłata do konta tradingowego' },
   { value: 'loan', label: 'Pożyczka udzielona' },
   { value: 'tax', label: 'Podatek PIT-38' }
@@ -24,7 +26,6 @@ const OUT_AFTER = [
 const IN_BEFORE = [{ value: 'income', label: 'Wpływ (przychód)' }]
 const IN_AFTER = [
   { value: 'refund', label: 'Zwrot towaru (ujemny wydatek)' },
-  { value: 'transfer', label: 'Przelew własny' },
   { value: 'trading', label: 'XTB – wypłata z konta tradingowego' },
   { value: 'loan', label: 'Zwrot pożyczki' }
 ]
@@ -63,17 +64,39 @@ function loanOptions(direction: 'in' | 'out', loans: readonly LoanPick[], curren
     }))
 }
 
-export function optionsFor(direction: 'in' | 'out', members: readonly Member[], current?: Choice, loans: readonly LoanPick[] = []): Array<{ value: Option; label: string }> {
+/**
+ * An own transfer (F10): to / from each other account of the budget – the active ones and the one a decision names –,
+ * then to / from an own account outside the budget. `own` = the file's account (never its own other side).
+ */
+export function transferOptions(direction: 'in' | 'out' | 'both', accounts: readonly AccountPick[], own?: string, current?: Choice): Array<{ value: Option; label: string }> {
+  const keep = current?.kind === 'transfer' ? current.counterAccountId : null
+  const arrow = direction === 'out' ? '→' : direction === 'in' ? '←' : '↔'
+  const budget = accounts
+    .filter((a) => a.id !== own && (!a.archived || a.id === keep))
+    .map((a) => ({ value: `transfer:${a.id}`, label: `Przelew własny ${arrow} ${a.name}` }))
+  if (keep && keep !== own && !accounts.some((a) => a.id === keep)) budget.push({ value: `transfer:${keep}`, label: `Przelew własny ${arrow} konto spoza listy` })
+  return [...budget, { value: 'transfer', label: budget.length ? 'Przelew własny – konto spoza budżetu' : 'Przelew własny' }]
+}
+
+export function optionsFor(
+  direction: 'in' | 'out',
+  members: readonly Member[],
+  current?: Choice,
+  loans: readonly LoanPick[] = [],
+  accounts: readonly AccountPick[] = [],
+  own?: string
+): Array<{ value: Option; label: string }> {
   const ms = offered(members, current)
   const share = ms.length ? [shared(direction)] : []
   const radar = loanOptions(direction, loans, current)
-  if (direction === 'out') return [...OUT_BEFORE, ...ms.map(financed), ...ms.map(gifted), ...share, ...OUT_AFTER, ...radar]
+  const transfers = transferOptions(direction, accounts, own, current)
+  if (direction === 'out') return [...OUT_BEFORE, ...ms.map(financed), ...ms.map(gifted), ...share, ...transfers, ...OUT_AFTER, ...radar]
   const [refund, ...rest] = IN_AFTER
-  return [...IN_BEFORE, ...ms.flatMap(fromMember), refund!, ...ms.map(returned), ...share, ...rest, ...radar]
+  return [...IN_BEFORE, ...ms.flatMap(fromMember), refund!, ...ms.map(returned), ...share, ...transfers, ...rest, ...radar]
 }
 
 /** The bulk decision for selected groups and rows of both directions (each gets what fits its money). */
-export function bulkOptions(members: readonly Member[], loans: readonly LoanPick[] = []): Array<{ value: Option; label: string }> {
+export function bulkOptions(members: readonly Member[], loans: readonly LoanPick[] = [], accounts: readonly AccountPick[] = [], own?: string): Array<{ value: Option; label: string }> {
   const ms = offered(members)
   return [
     { value: 'expense', label: 'Wydatek / zwrot towaru – kategoria' },
@@ -82,7 +105,7 @@ export function bulkOptions(members: readonly Member[], loans: readonly LoanPick
     ...(ms.length ? [{ value: 'share', label: 'Wspólnie – kilka osób płaci' }] : []),
     { value: 'income', label: 'Wpływ (przychód)' },
     ...ms.flatMap(fromMember),
-    { value: 'transfer', label: 'Przelew własny' },
+    ...transferOptions('both', accounts, own),
     { value: 'trading', label: 'XTB – konto tradingowe' },
     { value: 'loan', label: 'Pożyczka' },
     ...loans.filter((l) => !l.closedAt).map((l) => ({ value: `loan:${l.id}`, label: `Pożyczka – ${l.name} (Radar)` })),
@@ -98,14 +121,16 @@ export function optionOf(c: Choice, direction: 'in' | 'out'): Option {
   }
   if (c.kind === 'income') return c.household ? `household:${memberOfChoice(c)}:${c.advance ? 'advance' : 'income'}` : 'income'
   if (c.kind === 'loan') return c.loanId ? `loan:${c.loanId}` : 'loan'
-  if (c.kind === 'transfer' || c.kind === 'trading' || c.kind === 'tax') return c.kind
+  if (c.kind === 'transfer') return c.counterAccountId ? `transfer:${c.counterAccountId}` : 'transfer'
+  if (c.kind === 'trading' || c.kind === 'tax') return c.kind
   return direction === 'in' ? 'income' : 'expense'
 }
 
 /** Can money of this direction be it? („Wydatek” in = a product return.) */
 export function fits(option: Option, direction: 'in' | 'out'): boolean {
   // A member's purchase and a shared one: money in = its product return (B40, D83).
-  if (option === 'expense' || option === 'transfer' || option === 'trading' || option === 'loan' || option === 'share' || option.startsWith('refundable:') || option.startsWith('loan:')) return true
+  if (option === 'expense' || option === 'transfer' || option === 'trading' || option === 'loan' || option === 'share' || option.startsWith('refundable:') || option.startsWith('loan:') || option.startsWith('transfer:'))
+    return true
   if (option.startsWith('gift:') || option === 'tax') return direction === 'out'
   return direction === 'in' && (option === 'income' || option === 'refund' || option.startsWith('household:'))
 }
@@ -127,5 +152,6 @@ export function choiceFor(option: Option, prev: Pick<Choice, 'kind' | 'categoryI
     return { ...base, kind: 'income', household: true, memberId: memberId || null, advance: rest === 'advance' }
   }
   if (option.startsWith('loan:')) return { ...base, kind: 'loan', loanId: option.slice('loan:'.length) || null }
+  if (option.startsWith('transfer:')) return { ...base, kind: 'transfer', counterAccountId: option.slice('transfer:'.length) || null }
   return { ...base, kind: option as Choice['kind'] }
 }

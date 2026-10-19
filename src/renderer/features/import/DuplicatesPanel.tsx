@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { findDuplicates, mergeDuplicate, type DuplicateGroup } from '@shared/import/duplicates'
+import { noNarrowing } from '@shared/operationsView'
 import { TX_KIND_LABEL, type Transaction, type TxKind } from '@shared/schema'
 import { errorMessage } from '../../lib/api'
 import { plural } from '../../lib/format'
@@ -194,7 +195,7 @@ export function DuplicatesPanel() {
         type="button"
         className="grid w-full grid-cols-[76px_minmax(0,1fr)_88px] items-center gap-2 text-left hover:text-fg-strong"
         onClick={() => {
-          showFilter({ period: { kind: 'all' }, query: '' })
+          showFilter({ period: { kind: 'all' }, ...noNarrowing() })
           selectOperation(t.id)
           navigate({ page: 'operations' })
         }}

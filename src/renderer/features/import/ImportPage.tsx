@@ -1,7 +1,7 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useShallow } from 'zustand/shallow'
 import type { DecisionSource } from '@shared/import/classify'
-import { choiceOf, importThemes, joins, learnable, movesHere, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { choiceOf, importThemes, joins, learnable, movesHere, realOf, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
 import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
@@ -184,18 +184,21 @@ function Summary() {
   if (!plan) return null
   const n = (status: RowPlan['status']) => plan.rows.filter((p) => p.status === status).length
   const merges = plan.rows.filter((p) => p.status === 'merge')
-  const merged = merges.filter((p) => joins(p, choices)).length
+  const joined = merges.filter((p) => joins(p, choices))
+  // The other sides of transfers between the budget's accounts (F10): joined to their transfer, not „wpisy ręczne”.
+  const sides = joined.filter((p) => p.side).length
+  const merged = joined.length - sides
   const deleted = plan.rows.filter((p) => p.status === 'deleted')
   const restored = deleted.filter((p) => choices.restoreDeleted[p.key]).length
   const excluded = plan.rows.filter((p) => (p.status === 'new' || (p.status === 'deleted' && choices.restoreDeleted[p.key])) && choices.skip[p.key]).length
-  const created = n('new') + merges.length - merged + restored - excluded
+  const created = n('new') + merges.length - merged - sides + restored - excluded
   const removed = plan.vanished.filter((t) => choices.removeVanished[t.id]).length
   const elsewhere = plan.rows.filter((p): p is Extract<RowPlan, { status: 'elsewhere' }> => p.status === 'elsewhere')
   const moved = elsewhere.filter((p) => movesHere(p, choices)).length
   const known = n('known') + elsewhere.length - moved
   const settledFlags = plan.rows.filter((p) => p.status === 'known' && p.settled).length
   const otherFormat = plan.rows.filter((p) => p.status === 'known' && p.other).length
-  const nothing = created + merged + n('settle') + removed + settledFlags + moved === 0
+  const nothing = created + merged + sides + n('settle') + removed + settledFlags + moved === 0
   return (
     <Panel title="Podgląd">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-summary">
@@ -213,6 +216,16 @@ function Summary() {
           <span className="num text-right" data-testid="import-count-merge">
             {merged}
           </span>
+          {sides > 0 && (
+            <>
+              <span className="text-muted" title="Przelew między kontami budżetu jest jedną operacją z obiema stronami – wiersz tego konta dołącza do przelewu, który już jest.">
+                druga strona przelewu między kontami
+              </span>
+              <span className="num text-right" data-testid="import-count-sides">
+                {sides}
+              </span>
+            </>
+          )}
           <span className="text-muted">nierozliczone → rozliczone</span>
           <span className="num text-right" data-testid="import-count-settle">
             {n('settle') + settledFlags}
@@ -289,14 +302,16 @@ const PAGE = 100
 function MatchesPanel() {
   const { plan, choices, file } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices, file: s.file })))
   // Each list its own page, from the first one again with another file.
-  const [limits, setLimits] = useState({ merges: PAGE, deleted: PAGE })
-  useEffect(() => setLimits({ merges: PAGE, deleted: PAGE }), [file])
+  const [limits, setLimits] = useState({ merges: PAGE, sides: PAGE, deleted: PAGE })
+  useEffect(() => setLimits({ merges: PAGE, sides: PAGE, deleted: PAGE }), [file])
   const cats = useCategories()
   const accounts = useAccounts()
   const members = useMembers()
   const loans = useRecordList('loans')
   if (!plan) return null
-  const merges = plan.rows.filter((p): p is Extract<RowPlan, { status: 'merge' }> => p.status === 'merge')
+  const merges = plan.rows.filter((p): p is Extract<RowPlan, { status: 'merge' }> => p.status === 'merge' && !p.side)
+  // The other sides of transfers between the budget's accounts (F10): joined to their transfer.
+  const sides = plan.rows.filter((p): p is Extract<RowPlan, { status: 'merge' }> => p.status === 'merge' && !!p.side)
   const settles = plan.rows.filter((p): p is Extract<RowPlan, { status: 'settle' }> => p.status === 'settle')
   const deleted = plan.rows.filter((p): p is Extract<RowPlan, { status: 'deleted' }> => p.status === 'deleted')
   const elsewhere = plan.rows.filter((p): p is Extract<RowPlan, { status: 'elsewhere' }> => p.status === 'elsewhere')
@@ -306,7 +321,7 @@ function MatchesPanel() {
     const c = choices.rows[p.key] ?? choices.groups[p.planned.group] ?? choiceOf(p.planned.decision)
     return choiceText(c, p.row.amount < 0 ? 'out' : 'in', (id) => cats.label(id), members, loans)
   }
-  if (!merges.length && !settles.length && !plan.vanished.length && !deleted.length && !elsewhere.length) return null
+  if (!merges.length && !sides.length && !settles.length && !plan.vanished.length && !deleted.length && !elsewhere.length) return null
   return (
     <Panel title="Dopasowania">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-matches">
@@ -345,6 +360,39 @@ function MatchesPanel() {
               </label>
             ))}
             <ShowMore page={PAGE} shown={limits.merges} total={merges.length} onMore={() => setLimits((l) => ({ ...l, merges: l.merges + PAGE }))} testId="import-merge-more" />
+          </div>
+        )}
+        {sides.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="label">Druga strona przelewu między kontami ({sides.length})</span>
+            <p className="text-[11px] text-dim">
+              Przelew między kontami budżetu jest jedną operacją z obiema stronami: wiersz tego konta (ta sama kwota, ±3 dni) dołącza do przelewu, który już
+              jest – nic nie wchodzi drugi raz. Przelew zapisany przed 1.7.0 jako jedna strona staje się przy tym jedną operacją.
+            </p>
+            {sides.slice(0, limits.sides).map((p) => {
+              const from = p.row.amount < 0 ? plan.accountId : p.tx.counterAccountId
+              const to = p.row.amount < 0 ? p.tx.counterAccountId : plan.accountId
+              return (
+                <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-side">
+                  <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-side-join" />
+                  <span className="min-w-0 truncate">
+                    <span className="text-fg-strong">
+                      {accountName(from ?? '')} → {accountName(to ?? '')}
+                    </span>
+                    <span className="text-muted"> {fullDay(realOf(p.tx).date)}</span>
+                    <span className="text-dim"> ⟷ bank {fullDay(p.row.date)}: {p.row.counterparty || p.row.description}</span>
+                    {p.side === 'legacy' && <span className="ml-1 text-dim">· zapisany jako jedna strona – stanie się jedną operacją</span>}
+                    {!joins(p, choices) && (
+                      <span className="ml-1 text-accent" data-testid="import-side-apart">
+                        osobno – wejdzie jako: {decidedAs(p)} (przelew policzony dwa razy)
+                      </span>
+                    )}
+                  </span>
+                  <span className="num">{signedPln(p.row.amount)}</span>
+                </label>
+              )
+            })}
+            <ShowMore page={PAGE} shown={limits.sides} total={sides.length} onMore={() => setLimits((l) => ({ ...l, sides: l.sides + PAGE }))} testId="import-side-more" />
           </div>
         )}
         {elsewhere.length > 0 && (
@@ -438,7 +486,12 @@ function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | 
   }
   const text = (() => {
     if (c.kind === 'income') return c.household ? `od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'
-    if (c.kind === 'transfer') return title ? 'przelewy własne' : 'przelew własny'
+    if (c.kind === 'transfer') {
+      // To / from another account of the budget (F10): its name.
+      const account = c.counterAccountId ? (useData.getState().fi?.settings.accounts.find((a) => a.id === c.counterAccountId)?.name ?? 'konto spoza listy') : null
+      const own = title ? 'przelewy własne' : 'przelew własny'
+      return account ? `${own} ${direction === 'out' ? '→' : '←'} ${account}` : own
+    }
     if (c.kind === 'trading') return direction === 'out' ? 'XTB – dopłata do konta tradingowego' : 'XTB – wypłata z konta tradingowego'
     if (c.kind === 'loan') {
       const loan = c.loanId ? loans.find((l) => l.id === c.loanId) : undefined
@@ -552,6 +605,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
   const checked = useImport((s) => !!s.selected.groups[g.group])
   const proposing = useImport((s) => s.lastDecided === g.group && !s.noProposal[g.group])
   const skipped = useImport((s) => skippedIn(s.choices.skip, g.rows))
+  const fileAccount = useImport((s) => s.accountId)
   const cats = useCategories()
   const [open, setOpen] = useState(false)
   const [limit, setLimit] = useState(PAGE)
@@ -580,7 +634,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
         <span className={cx('num shrink-0 text-right', g.sum > 0 ? 'text-up' : 'text-fg-strong')}>{signedPln(g.sum)}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-12">
-        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} testId="import-group" />
+        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} own={fileAccount} testId="import-group" />
         <Badge tone={implicit || (g.source === 'none' && !own && !themeDecided) ? 'warn' : 'default'} title={implicit ? 'Wybierz „reszta jako zaliczka” albo „reszta jako przychód” – odpowiedź zostanie zapamiętana dla tej osoby' : g.reason}>
           {badge}
         </Badge>
@@ -627,6 +681,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
   const decided = useImport((s) => s.choices.themes[t.theme])
   const remember = useImport((s) => s.choices.rememberThemes[t.theme] ?? false)
   const accepted = useImport((s) => !!s.accepted.themes[t.theme])
+  const fileAccount = useImport((s) => s.accountId)
   // Every group decided on its own (N78): their one decision, or „różne” – never the theme's empty proposal.
   const groupsDecided = useImport((s) => {
     if (s.choices.themes[t.theme]) return 'theme'
@@ -674,7 +729,13 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
             różne – patrz marki
           </span>
         ) : (
-          <DecisionFields choice={common ?? choice} direction={t.direction} onChange={(c) => (common ? chooseThemeOverGroups(t, c) : chooseTheme(t.theme, c))} testId="import-theme" />
+          <DecisionFields
+            choice={common ?? choice}
+            direction={t.direction}
+            onChange={(c) => (common ? chooseThemeOverGroups(t, c) : chooseTheme(t.theme, c))}
+            own={fileAccount}
+            testId="import-theme"
+          />
         )}
         <Badge tone={status === 'todo' ? 'warn' : status === 'check' ? 'accent' : 'default'}>
           {decided
@@ -724,8 +785,9 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
  * The decisions a keyword rule can hold (as `KeywordRules` and the proposal of a word – N76): an expense, money in, an own
  * transfer, a member's purchase or money (D80). The search kept as a key for the next imports.
  */
-function keywordKindOf(option: Option): { kind: TxKind; refundable?: boolean; household?: boolean; memberId?: string | null } | null {
+function keywordKindOf(option: Option): { kind: TxKind; refundable?: boolean; household?: boolean; memberId?: string | null; counterAccountId?: string | null } | null {
   if (option === 'expense' || option === 'income' || option === 'transfer') return { kind: option }
+  if (option.startsWith('transfer:')) return { kind: 'transfer', counterAccountId: option.slice('transfer:'.length) || null }
   if (option.startsWith('refundable:')) return { kind: 'expense', refundable: true, memberId: option.slice('refundable:'.length) || null }
   if (option.startsWith('household:')) {
     const [, memberId] = option.split(':')
@@ -737,6 +799,8 @@ function keywordKindOf(option: Option): { kind: TxKind; refundable?: boolean; ho
 function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const members = useMembers()
   const loans = useRecordList('loans')
+  const accounts = useAccounts()
+  const fileAccount = useImport((s) => s.accountId)
   const selected = useImport((s) => s.selected)
   const readOnly = useFolderLocked()
   const query = useImport((s) => s.query)
@@ -790,7 +854,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
         aria-label="Decyzja dla zaznaczonych"
         data-testid="import-bulk-kind"
       >
-        {bulkOptions(members, loans).map((o) => (
+        {bulkOptions(members, loans, accounts, fileAccount).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -1017,6 +1081,7 @@ function DonePanel() {
       <div className="flex flex-col gap-1.5 text-[12px]" data-testid="import-done">
         <span>
           Nowe: <b className="num">{done.counts.created}</b> · połączone z wpisami: <b className="num">{done.counts.merged}</b> · rozliczone: <b className="num">{done.counts.settled}</b> · usunięte: <b className="num">{done.counts.removed}</b>
+          {done.counts.sides > 0 ? ` · drugie strony przelewów: ${done.counts.sides}` : ''}
           {done.counts.skipped > 0 ? ` · pominięte (usunięte wcześniej): ${done.counts.skipped}` : ''}
           {done.counts.excluded > 0 ? ` · nie importowane (Twój wybór): ${done.counts.excluded}` : ''}
           {done.counts.moved > 0 ? ` · przeniesione z innego konta: ${done.counts.moved}` : ''}

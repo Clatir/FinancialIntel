@@ -1712,3 +1712,75 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ekranu, „otwórz” pożyczki tylko dla rat zdjętych zamknięciem, „Cofnij” tylko zmienionych kontenerów, krzywa majątku raz
   na stan danych i tylko przy widocznym panelu, próg bezczynności spoza listy pokazany jak jest, jedno wczytanie ustawień
   komputera w oknie (odpowiedź nie cofa zmiany w drodze), przesunięte komentarze i T-decyzje.
+- **T262** Przelew między kontami budżetu jako jedna operacja (F10, D87): operacja `transfer` z `bothSides: true` i
+  `counterAccountId` = drugie konto budżetu ma kwotę na swoim koncie i przeciwną na drugim (`calc/operations.ts`
+  `isTwoSided`, `accountAmounts`, `amountOn`, `dateOn`, `touchesAccount`); `counterBank` = wiersz z banku drugiego konta,
+  `counterDate` = dzień drugiej strony, gdy bank zaksięgował ją innego dnia (pola addytywne – starsza wersja czyta taką
+  operację jak jedną stronę). Salda, saldo na dzień, krzywa majątku, saldo „teraz” kreatora, telemetria z banku i
+  potwierdzenia liczą każdą stronę na jej koncie i w jej dniu. Warstwy się nie zmieniają, póki obie strony są w biegu
+  silnika; strona poza nim (przed startem budżetu – jest w pieniądzach startu, po dziś – nie ma jej w żadnym saldzie,
+  przed saldem otwarcia swojego konta) zostawia drugą stronę jako ruch osłon w jej własnym dniu (przegląd S – suma warstw
+  zawsze równa saldom). Nowy przelew (zmiana rodzaju na „Przelew”, `withKind`) jest jedną operacją; przelew sprzed 1.7.0
+  (jedna strona, T31) zostaje jedną stroną także po wybraniu „Na konto” albo zmianie zbiorczej – jego druga strona może
+  być osobną operacją, łączy je ramka w edytorze albo Meldunki (przegląd S).
+- **T263** Import i przelew w jednej operacji (F10): plik drugiego konta dołącza wiersz o kwocie przelewu ±3 dni od strony
+  tego konta do przelewu (`reconcile.ts` `sideOf` / `legacySideOf`, `budgetedOf.waiting`, `RowPlan.merge.side`), bez
+  porównania nazwy (bank drugiego konta nazywa przelew po swojemu) – najbliższe dni najpierw, przelew w jednej operacji
+  przed jednostronnym; przelew sprzed 1.7.0 bez wskazanego konta (import go nie oferował) tylko z wierszem, który bank
+  nazywa przelewem własnym (`isOwnTransferRow`), i tylko gdy to konto nie ma swojej strony tej pary (T31). Nowy wiersz
+  przelewu własnego na konto budżetu – jedna operacja dla obu stron (opcje `transfer:<konto>`), na konto spoza budżetu –
+  jedna strona. Nierozliczona druga strona rozliczona z innym opisem zmienia tylko swój wiersz; zniknięta z listy nie
+  jest proponowana do usunięcia (usunęłaby cały przelew). Licznik `sides` w podsumowaniu importu.
+- **T264** Przelewy sprzed 1.7.0 w Meldunkach (F10): `calc/transfers.ts` `transferIssues` – para (dwie jednostronne
+  operacje jednego ruchu: przeciwne kwoty na dwóch kontach, ±3 dni, żadna nie wskazuje trzeciego konta – połączenie nie
+  zmienia sald), podwójna (przelew w jednej operacji i osobna strona jego drugiego konta – liczy się dwa razy), brakująca
+  (jednostronna wskazująca konto budżetu bez drugiej strony – od dnia po ostatnim potwierdzonym saldzie tego konta, inaczej
+  od salda otwarcia: wcześniej różnicę wyrównała korekta). Połączenie nigdy nie przenosi strony przez potwierdzone saldo
+  (`joinedDay`); podwójna z obiema stronami przed potwierdzeniem (`settled`) nie jest meldunkiem – edytor dalej ją łączy,
+  pytając (F12). Pary razem: najpierw lista z zaznaczeniem (`TransferPairs`, „Połącz…”) – para, której żadna strona nie
+  wskazuje konta, oznaczona do sprawdzenia; „zostaw tak” (`notDuplicates`). Połączenie z jednym „Cofnij”; druga strona,
+  której dysk nie usunął (nowsza wersja, plik zajęty), cofa połączenie swojej pary – pieniądze nigdy dwa razy na drugim
+  koncie (przegląd S).
+- **T265** Zmiana zaznaczonych operacji naraz (F11): usuń, inne konto, inny rodzaj (przelew – z kontem docelowym), data
+  przesunięta o N dni (z dniem drugiej strony) – najpierw podgląd: ile operacji, pominięte (zadokowana zachowuje rodzaj,
+  przelew na konto swojej drugiej strony), zapisane przez nowszą wersję (bez zmian), skutek – energia dziś, koperty,
+  osłony, salda kont (`calc/effect.ts`: stan pokazywany na ekranach wobec silnika ze zmianą – przegląd S: stan „przed” z
+  pamięci, liczony raz) i potwierdzone salda, które zmiana ruszy. Jedno „Cofnij”: usunięte wracają z historii (z
+  dokowaniami – tylko operacji, które dysk usunął), reszta dostaje swoje pola, póki są takie, jak zmiana je ustawiła
+  (B66).
+- **T266** Ostrzeżenie w potwierdzonym okresie (F12, D28 – ostrzeżenie, nie blokada): `balances.ts` `confirmedChanges`
+  (zmiana salda konta w dniu jego ostatniego potwierdzenia – suma zmian, przelew w jednej operacji obiema stronami, przed
+  saldem otwarcia nic) i `confirmedPeriodOf` (znaczek „okres potwierdzony” w edytorze). Zmiana kwoty, daty albo konta,
+  która ruszy potwierdzone saldo, i zmiana kwoty operacji z banku pyta „Zmienić operację?” z kwotą i dniem; zamrożone dni
+  gry zostają bez zmian. Nowy wpis w trakcie pierwszego pisania nie pyta (`fresh` – data wsteczna zwykłego wpisu to nie
+  zmiana potwierdzonego okresu). Połączenie i dopisanie strony przelewu w edytorze pytają tak samo; zmiana zbiorcza
+  pokazuje to w podglądzie.
+- **T267** Lista Operacji (F18): filtry „Więcej filtrów” – kwota od / do bez znaku (granice włącznie, „do” poniżej „od” =
+  bez górnej granicy), domownik (finansuje zakup – także część, wpłata od niego), kontrahent po marce importu
+  (`brandKeyOf` z połączonymi nazwami), kontener, cel, pożyczka, konto przelewu ('' = spoza budżetu; przelew w jednej
+  operacji – oba konta); kategoria główna bierze podkategorie, podkategoria sama. Kolejność: data, kwota bez znaku od
+  największej, kontrahent A–Z po polsku (bez nazwy na końcu). Widoki w fi.json (`settings.operationViews`, wspólne dla
+  komputerów, ta sama nazwa – zastąpiony, okres tylko na życzenie; `filterOf` sprawdza każde pole – wartość nowszej wersji
+  pominięta), filtr komputera pamięta też kwoty i kolejność. Eksport CSV / Excel widocznej listy w jej kolejności, na
+  liście jednego konta z kwotą przelewu na tym koncie (przegląd S). Przejście do operacji z innego ekranu i nowa operacja
+  zdejmują wszystkie filtry, które mogą ją ukryć (`noNarrowing`), a „wszystkie” w edytorze jest widokiem – zapisany filtr
+  zostaje (przegląd S).
+- **T268** Paleta szuka wpisów (F19): `shared/search.ts` `searchRecords` – operacje jak wyszukiwanie Operacji (najnowsze 30),
+  kontenery, cele, pożyczki, domownicy i pozycje Ustawień (po 10; sama kwota nie szuka ustawień); cmdk bez własnego
+  filtra (`shouldFilter={false}`), komendy po słowach bez polskich znaków. Wybrany wpis otwiera swój ekran
+  (`focusRecord` + `useFocusRecord`: rozwinięcie szczegółów, przewinięcie, wyróżnienie `focus-mark` na 2 s), operacja –
+  w Operacjach jak z Meldunków.
+- **T269** Dziennik zmian folderu (F33, Synchronizacja): ostatni zapis każdego wpisu (`updatedAt` / `updatedBy`) z dziś,
+  7 albo 30 dni, po komputerze i rodzaju, najnowsze najpierw (`shared/changeLog.ts`); „nowy” = utworzony w tym okresie
+  (przegląd S – wpis pisany w edytorze zapisuje się wiele razy). „Zmiany” porównuje z najnowszą wersją z historii
+  wpisu (odkładaną najwyżej co 10 min edycji tego komputera, zawsze przy zmianie z innego), „Weź poprzednią wersję”,
+  „pokaż” – wpis na jego ekranie. Lista czyta znaczniki zapisu, które zapis wpisuje w miejscu (W26) – liczona ponownie po
+  każdym zapisie.
+- **T270** Przegląd grupy S (`/code-review` high, 10 kandydatów – 9 poprawionych z testem, 1 wydajnościowy bez testu):
+  strony przelewu w dniach po dwóch stronach startu budżetu albo dzisiejszego dnia (T262), filtry 1.7.0 przy przejściu
+  do operacji i „wszystkie” jako widok (T267), „Na konto” przelewu sprzed 1.7.0 (T262), połączenie pary bez usuniętej
+  drugiej strony i błąd usunięcia pokazany (T264), lista par przed połączeniem (T264), scalenie duplikatów z przelewem w
+  jednej operacji (cała decyzja: obie strony, wiersz i dzień drugiej; jedna strona to inna decyzja), eksport listy jednego
+  konta (T267), podgląd zmiany zbiorczej bez drugiego liczenia stanu sprzed zmiany (T265), „nowy” w dzienniku zmian
+  (T269). Mutacje: 64, 63 wykryte przez testy, 1 równoważna (zdarzenie drugiej strony przelewu, gdy obie są w biegu –
+  ruch 0 zł, bez wpisu w dzienniku silnika).

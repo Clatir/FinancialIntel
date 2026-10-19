@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa R** (1.6.6 – teksty, wygląd,
-wygoda) na gałęzi `claude/grupa-r-1.6.6`, PR do `main`; po niej od razu funkcje S, T, U, V – każda grupa z własnym PR i
-wydaniem (D71).
-**1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa S** (1.7.0 – operacje, funkcje)
+na gałęzi `claude/grupa-s-1.7.0`, PR do `main`; po niej od razu funkcje T, U, V – każda grupa z własnym PR i wydaniem
+(D71).
+**1.6.6 scalone** (PR #28, z 1.6.5), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,9 +12,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa R → scalenie po zielonym CI → wydanie 1.6.6 → od razu grupa S (D87). Po wznowieniu
+**Następny krok:** grupa S → scalenie po zielonym CI → wydanie 1.7.0 → od razu grupa T (D87). Po wznowieniu
 pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.6.6 – listy w sekcjach niżej.
+aplikacji: 1.5.0–1.7.0 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -55,13 +55,13 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.3 | ✅ D87 | ✅ wydane (PR #25) |
 | **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ scalone (PR #26) |
 | **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 (w 1.6.6) | ✅ D87 | ✅ scalone (PR #27), wydanie przepadło – wchodzi w 1.6.6 |
-| **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1 h (zegar sesji, z przeglądem, 47 mutacjami i pełnym E2E; plan był ok. 1,5 h) | 1.6.6 | ✅ D87 | ✅ PR do `main` |
-| **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | plan ok. 3 h | 1.7.0 | ✅ D87 | czeka |
+| **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1,5 h (zegar sesji, z przeglądem, 47 mutacjami, pełnym E2E i dwiema poprawkami CI; plan był ok. 1,5 h) | 1.6.6 (z 1.6.5) | ✅ D87 | ✅ scalone (PR #28) |
+| **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar gałęzi, z przeglądem, 64 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy R; plan był ok. 3 h) | 1.7.0 | ✅ D87 | ✅ PR do `main` |
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | czeka |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R** | | | **ok. 45,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S** | | | **ok. 48,5 h** | | | |
 | | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -788,6 +788,43 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.6.6, Windows):
    Wygląd i prywatność.
 2. „Ukryj po bezczynności: po 1 min” – po minucie bez ruchu kwoty ukryte, „Pokaż na 5 min”; Win+L – kwoty ukryte.
 3. Radar → „zamknij” pożyczkę wziętą, „Cofnij” w komunikacie – rata wraca do Ładowni.
+
+## Przed grupą S – operacje, funkcje (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa R w PR #28 (1.6.6, z niewydanym 1.6.5). Grupa S (1.7.0): funkcje Operacji z przeglądu
+   po 1.4.1 – F10 (przelew między kontami budżetu jedną operacją), F11 (zmiana zaznaczonych naraz), F12 (ostrzeżenie w
+   potwierdzonym okresie), F18 (filtry zaawansowane, kolejność, zapisane widoki, eksport widocznej listy), F19 (paleta
+   szuka wpisów), F33 (dziennik zmian folderu). Format folderu addytywny: pola przelewu w operacji, `operationViews` w
+   fi.json – starsza wersja je zachowuje (przelew w jednej operacji czyta jak jedną stronę).
+2. **Co użytkownik musi powiedzieć** – ✅ D87: F10 – „przelew między kontami budżetu = jedna operacja z kontem źródłowym
+   i docelowym; import z banku łączy z nią obie strony zamiast dwóch osobnych wpisów”. Reszta wg propozycji przeglądu
+   (F12 – tylko ostrzeżenie, D28 zostaje).
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3 h.
+
+## 1.7.0 – operacje, funkcje (grupa S, 19.10.2026)
+
+Zakres: „Przed grupą S” wyżej. Zrobione:
+- Przelew w jednej operacji (T262): każda strona na swoim koncie i w swoim dniu (salda, saldo na dzień, krzywa majątku,
+  telemetria), warstwy bez zmian; nowy przelew – jedna operacja, przelew sprzed 1.7.0 zostaje jedną stroną do decyzji.
+- Import (T263): wiersz drugiego konta dołącza do przelewu (±3 dni, ta sama kwota; przelew bez konta – tylko wiersz
+  przelewu własnego), nowy przelew własny na konto budżetu – jedna operacja.
+- Meldunki (T264): pary sprzed 1.7.0 z listą do zaznaczenia i „zostaw tak”, przelew liczony dwa razy, brakująca strona
+  (od dnia po potwierdzeniu); połączenie nie przenosi strony przez potwierdzone saldo.
+- Zmiana zaznaczonych z podglądem skutku i jednym „Cofnij” (T265); ostrzeżenie w potwierdzonym okresie (T266).
+- Lista: filtry zaawansowane, kolejność, widoki w fi.json, eksport widocznej listy (T267); paleta szuka wpisów (T268);
+  dziennik zmian w Synchronizacji (T269).
+- Przegląd `/code-review` high: 10 kandydatów – 9 poprawionych z testem, 1 wydajnościowy bez testu (T270); najważniejszy –
+  strony przelewu po dwóch stronach startu budżetu albo dzisiejszego dnia rozjeżdżały sumę warstw z saldami.
+- Testy: 707 unit + fs (nowe `transfers`, `operations-list`, `search`, `change-log`; poszerzone `operations-state`,
+  `inbox`, `duplicates`), E2E 58 (nowy `operations-s.spec.ts`); 64 mutacje – 63 wykryte, 1 równoważna (T270).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
+1. Meldunki → „Przelewy między kontami” → „Połącz…”: lista par, odznaczenie pary do sprawdzenia, „Połącz zaznaczone”;
+   salda kont bez zmian, „Cofnij”.
+2. Operacje: zaznacz kilka, „Zmień zaznaczone” → podgląd skutku → „Cofnij”; „Więcej filtrów”, widok zapisany na drugim
+   komputerze.
+3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 

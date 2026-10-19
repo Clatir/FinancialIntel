@@ -419,6 +419,18 @@ export function seedSettings<T extends Seedable>(s: T): T {
   return { ...s, accounts, categories, import: { ...s.import, rules }, seeded: [...s.seeded, ...todo.map((x) => x.id)] }
 }
 
+// ------------------------------------------------------------------ saved views of Operacje (1.7.0, F18)
+
+export const operationViewSchema = z.looseObject({
+  id: z.string().min(1).max(64),
+  name: z.string().trim().min(1).max(80),
+  /** The list's filter as Operacje keeps it – `shared/operationsView.ts` `filterOf` reads it (a newer version's fields kept). */
+  filter: z.record(z.string(), z.unknown()).catch({}),
+  /** The view's period comes with it; without it the list keeps the period it shows. */
+  withPeriod: z.boolean().catch(false).default(false)
+})
+export type OperationView = z.infer<typeof operationViewSchema>
+
 export const budgetSettingsShape = {
   accounts: lenientList(accountSchema).catch(defaultAccounts).default(defaultAccounts),
   categories: lenientList(categorySchema).catch(defaultCategories).default(defaultCategories),
@@ -430,5 +442,7 @@ export const budgetSettingsShape = {
   ictj: ictjSettingsSchema.prefault({}),
   game: gameSettingsSchema.prefault({}),
   /** `SEEDS` already added to this folder. */
-  seeded: z.array(z.string().max(60)).catch([]).default([])
+  seeded: z.array(z.string().max(60)).catch([]).default([]),
+  /** Saved views of Operacje (F18): chips over the list, shared by the computers. */
+  operationViews: lenientList(operationViewSchema).catch([]).default([])
 }

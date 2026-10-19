@@ -11,11 +11,12 @@ import { daysBetween } from './dates'
 import { deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
 import { isOpeningItem, type MemberBalance } from './household'
+import type { TransferIssue } from './transfers'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'corrections' | 'refunds' | 'balances'
+export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'transfers' | 'corrections' | 'refunds' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'corrections', 'refunds', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'corrections', 'refunds', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
@@ -23,6 +24,7 @@ export const INBOX_TITLE: Record<InboxKind, string> = {
   folder: 'Folder danych',
   uncategorized: 'Bez kategorii',
   duplicates: 'Możliwe duplikaty',
+  transfers: 'Przelewy między kontami',
   corrections: 'Podwójne korekty',
   refunds: 'Do zwrotu',
   balances: 'Salda kont'
@@ -36,7 +38,10 @@ export interface InboxItem {
   text: string
   /** Its button. */
   action: string
-  /** The delivery's key ('dock'), the member's id ('refunds'), the account's id ('balances'), the operation's ('corrections'). */
+  /**
+   * The delivery's key ('dock'), the member's id ('refunds'), the account's id ('balances'), the operation's
+   * ('corrections'); a transfer's report – its key (`transferKey`, none for all the pairs together).
+   */
   ref?: string
 }
 
@@ -81,6 +86,8 @@ export interface InboxInput {
   corrections?: ReadonlyArray<{ later: Pick<Transaction, 'id' | 'date' | 'amount' | 'accountId'>; earlier: Pick<Transaction, 'date' | 'updatedBy'> }>
   accountName?: (id: string) => string
   money?: (grosze: number) => string
+  /** Transfers of before 1.7.0 (F10, `calc/transfers.ts`) with the key each is said „zostaw tak” under. */
+  transfers?: ReadonlyArray<{ issue: TransferIssue; key: string }>
 }
 
 const dmy = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
@@ -115,6 +122,40 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     })
   if (o.duplicates)
     out.push({ kind: 'duplicates', key: 'duplicates', text: `${o.duplicates} ${plural(o.duplicates, 'możliwy duplikat', 'możliwe duplikaty', 'możliwych duplikatów')} – ta sama operacja dwa razy.`, action: 'Scal na ekranie Import' })
+  // Transfers of before 1.7.0 (F10): the pairs together – joining them changes no balance –, each of the others apart.
+  const transfers = o.transfers ?? []
+  const pairs = transfers.filter((x) => x.issue.kind === 'pair').length
+  const name = (id: string | null) => (id ? (o.accountName?.(id) ?? 'konto') : 'konto spoza budżetu')
+  if (pairs)
+    out.push({
+      kind: 'transfers',
+      key: 'transfers:pairs',
+      text: `${pairs} ${plural(pairs, 'przelew', 'przelewy', 'przelewów')} między kontami ${pairs === 1 ? 'zapisany' : 'zapisane'} jako dwie osobne operacje (sprzed 1.7.0) – połączenie w jedną operację nie zmienia żadnego salda.`,
+      // The list of the pairs first (the S review): a pair by the amount and the day only is checked.
+      action: 'Połącz…'
+    })
+  for (const { issue, key } of transfers) {
+    if (issue.kind === 'double') {
+      const t = issue.keep
+      out.push({
+        kind: 'transfers',
+        key: `transfers:${key}`,
+        ref: key,
+        text: `${name(t.accountId)} → ${name(t.counterAccountId)} ${dm(t.date)}, ${zl(Math.abs(t.amount))}: strona konta ${name(t.counterAccountId)} zapisana też osobno (${dm(issue.drop.date)}) – liczy się dwa razy.`,
+        action: 'Połącz'
+      })
+    } else if (issue.kind === 'lone') {
+      const t = issue.tx
+      const [from, to] = t.amount < 0 ? [t.accountId, t.counterAccountId] : [t.counterAccountId, t.accountId]
+      out.push({
+        kind: 'transfers',
+        key: `transfers:${key}`,
+        ref: key,
+        text: `${name(from)} → ${name(to)} ${dm(t.date)}, ${zl(Math.abs(t.amount))}: zapisany tylko na koncie ${name(t.accountId)} – saldo konta ${name(t.counterAccountId)} go nie ma.`,
+        action: 'Dopisz drugą stronę'
+      })
+    }
+  }
   for (const c of o.corrections ?? [])
     out.push({
       kind: 'corrections',

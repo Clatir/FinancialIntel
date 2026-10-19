@@ -27,7 +27,7 @@ import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type Inc
 import { goalAt, goalDecided, goalTakes } from './goals'
 import { debtOf, loanStates, type LoanState } from './loans'
 import { coveredMonths, monthsBefore } from './history'
-import { categoryIndex, costOf, isCargoPayment, partsOf, splitEvenly, sum } from './operations'
+import { accountAmounts, categoryIndex, costOf, isCargoPayment, isTwoSided, partsOf, splitEvenly, sum } from './operations'
 
 // ------------------------------------------------------------------ the rules as small pure functions
 
@@ -577,21 +577,25 @@ export function computeFleet(input: FleetInput): FleetState {
   // ---------------------------------------------------------------- accounts and balances
   const openings = openingsOf(input.balances ?? [], today)
   const budgetStart = budgetStartOf(settings, input.balances, today)
-  const counts = (t: Transaction) => {
-    const o = openings.get(t.accountId)
-    return !o || t.date >= o.date
+  const countsOn = (accountId: string, date: string) => {
+    const o = openings.get(accountId)
+    return !o || date >= o.date
   }
-  // Each account's operations counted, all of them and those before the budget's start – one pass (W27).
+  const counts = (t: Transaction) => countsOn(t.accountId, t.date)
+  // Each account's operations counted, all of them and those before the budget's start – one pass (W27); a transfer in
+  // one operation on both of its accounts, each side on its day (F10).
   const accountIdSet = new Set<string>()
   for (const a of settings.accounts) accountIdSet.add(a.id)
   const moved = new Map<string, number>()
   const movedBeforeStart = new Map<string, number>()
-  for (const t of txs) {
-    accountIdSet.add(t.accountId)
-    if (!counts(t)) continue
-    moved.set(t.accountId, (moved.get(t.accountId) ?? 0) + t.amount)
-    if (budgetStart != null && t.date < budgetStart) movedBeforeStart.set(t.accountId, (movedBeforeStart.get(t.accountId) ?? 0) + t.amount)
-  }
+  for (const t of input.transactions)
+    for (const [id, amount, date] of accountAmounts(t)) {
+      if (date > today) continue
+      accountIdSet.add(id)
+      if (!countsOn(id, date)) continue
+      moved.set(id, (moved.get(id) ?? 0) + amount)
+      if (budgetStart != null && date < budgetStart) movedBeforeStart.set(id, (movedBeforeStart.get(id) ?? 0) + amount)
+    }
   for (const id of openings.keys()) accountIdSet.add(id)
   const accountIds = [...accountIdSet]
   const accounts = accountIds.map((id) => {
@@ -651,6 +655,13 @@ export function computeFleet(input: FleetInput): FleetState {
   // ---------------------------------------------------------------- the layers
   const start = budgetStart
   const started = start != null && start <= today
+  /**
+   * A side of a transfer in one operation (F10) moves the layers in their run – from the budget's start to today, its
+   * account counting then –, each side on its own day as the balances count it (one before the start is in the start's
+   * money, one after today in no balance yet).
+   */
+  const inRun = (accountId: string, date: string) => start != null && date >= start && date <= today && countsOn(accountId, date)
+  const otherInRun = (t: Transaction) => isTwoSided(t) && inRun(t.counterAccountId!, t.counterDate ?? t.date)
   let shields = 0
   let hull = 0
   let energy = 0
@@ -840,7 +851,8 @@ export function computeFleet(input: FleetInput): FleetState {
     }
   }
 
-  const runTx = (t: Transaction) => {
+  /** An operation in the run; `on` – the day it moves the layers (a transfer's other side alone – its own day). */
+  const runTx = (t: Transaction, on = t.date) => {
     const moves: Moves = {}
     const amt = t.amount
     switch (t.kind) {
@@ -989,12 +1001,18 @@ export function computeFleet(input: FleetInput): FleetState {
         }
         break
       }
-      case 'transfer':
+      case 'transfer': {
+        // Both sides in one operation (F10, D87): the money stays in the budget – only a side outside the run (its
+        // account not counting yet, its day before the start or after today) leaves the other one moving the shields.
+        const delta = isTwoSided(t) ? (inRun(t.accountId, t.date) ? amt : 0) - (otherInRun(t) ? amt : 0) : amt
+        if (delta) addShields(delta, moves)
+        break
+      }
       case 'correction':
         addShields(amt, moves)
         break
     }
-    record({ date: t.date, kind: t.kind, amount: amt, txId: t.id, moves })
+    record({ date: on, kind: t.kind, amount: amt, txId: t.id, moves })
   }
 
   if (started && start) {
@@ -1149,6 +1167,13 @@ export function computeFleet(input: FleetInput): FleetState {
           }
         })
       }
+    // A transfer in one operation whose own side is outside the run (F10): its other side alone, on that side's day, in
+    // the operations' order there.
+    for (const t of input.transactions) {
+      if (!otherInRun(t) || inRun(t.accountId, t.date)) continue
+      const date = t.counterDate ?? t.date
+      events.push({ date, slot: 3, rest: opRest(t), run: () => runTx(t, date) })
+    }
     const keys = new Map(events.map((e) => [e, evKey(e)]))
     events.sort((a, b) => order(keys.get(a)!, keys.get(b)!))
     // The operations in their order, merged with the calendar's events (W27) – no event, key or closure for each.

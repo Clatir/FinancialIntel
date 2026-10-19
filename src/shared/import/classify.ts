@@ -368,6 +368,10 @@ export function isOwnName(counterparty: string, ownNames: readonly string[]): bo
 
 export { memberOf } from '../calc/household'
 
+/** Does the bank say an own transfer (its kind, or a transfer to / from one of the holder's names)? */
+export const isOwnTransferRow = (row: Pick<MbankRow, 'operation' | 'counterparty'>, ownNames: readonly string[]): boolean =>
+  /^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(row.operation) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(row.operation) && isOwnName(row.counterparty, ownNames))
+
 const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = {}): ImportDecision => ({
   kind,
   categoryId: null,
@@ -495,8 +499,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   }
   if (loan) return out(decision('loan', `zwrot pożyczki: ${loan.name}`, { loanId: loan.id }))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
-  if (/^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(op) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(op) && isOwnName(row.counterparty, ctx.ownNames)))
-    return out(decision('transfer', 'przelew własny'))
+  if (isOwnTransferRow(row, ctx.ownNames)) return out(decision('transfer', 'przelew własny'))
   // A member's money: asked once what the rest beyond their debt is (D80 b).
   if (member) {
     const inflow = inflowOf(member)

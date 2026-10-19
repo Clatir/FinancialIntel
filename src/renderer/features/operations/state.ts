@@ -1,14 +1,19 @@
 import { create } from 'zustand'
-import { inClockWindow, warsawNow } from '@shared/calc/dates'
+import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
+import { effectOf, type Effect } from '@shared/calc/effect'
+import { computeFleet } from '@shared/calc/fleet'
+import { withKind } from '@shared/calc/kinds'
 import { newId } from '@shared/ids'
-import { emptyFilter, inPeriod, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
+import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, showsView, viewFilter, type OperationsFilter } from '@shared/operationsView'
+import type { BrandAliases } from '@shared/import/aliases'
 import { shareOf, withShare } from '@shared/calc/share'
 import { deepEqual } from '@shared/merge'
-import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type ImportRule, type Share, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteRecords, discardDraft, replaceRecords, updateSettings, useData } from '../../store/data'
+import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type ImportRule, type OperationView, type Share, type Transaction, type TxKind } from '@shared/schema'
+import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateSettings, useData } from '../../store/data'
+import { fleetInputNow, fleetNow } from '../../store/fleet'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
-import { deleteWithUndo, restoreDeleted } from '../history/actions'
+import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
 
 /** Filters of this computer (the period and the search start fresh: this month, empty). */
@@ -17,14 +22,8 @@ const ACCOUNT_KEY = 'fi.operations.account'
 
 function readStored(): Partial<OperationsFilter> {
   try {
-    const raw = JSON.parse(localStorage.getItem(FILTER_KEY) ?? '{}') as Partial<OperationsFilter>
-    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
-    return {
-      accounts: strings(raw.accounts),
-      kinds: strings(raw.kinds).filter((k): k is OperationsFilter['kinds'][number] => (TX_KINDS as readonly string[]).includes(k)),
-      categories: strings(raw.categories),
-      marks: strings(raw.marks).filter((m): m is OperationsFilter['marks'][number] => (OPERATION_MARKS as readonly string[]).includes(m))
-    }
+    const f = filterOf(JSON.parse(localStorage.getItem(FILTER_KEY) ?? '{}'), currentMonth)
+    return Object.fromEntries(STORED_KEYS.map((k) => [k, f[k]]))
   } catch {
     return {}
   }
@@ -32,7 +31,7 @@ function readStored(): Partial<OperationsFilter> {
 
 function store(f: OperationsFilter): void {
   try {
-    localStorage.setItem(FILTER_KEY, JSON.stringify({ accounts: f.accounts, kinds: f.kinds, categories: f.categories, marks: f.marks }))
+    localStorage.setItem(FILTER_KEY, JSON.stringify(Object.fromEntries(STORED_KEYS.map((k) => [k, f[k]]))))
   } catch {
     /* storage unavailable: the filter lives for the session */
   }
@@ -54,15 +53,15 @@ interface OperationsUi {
 /** The month the list's default period was last set to (B81): the app lives in the tray for weeks. */
 let currentMonth = warsawNow().month
 
+/** The parts of the filter remembered on this computer (the period and the search start fresh). */
+const STORED_KEYS: ReadonlyArray<keyof OperationsFilter> = [...LIST_KEYS, 'amountMin', 'amountMax', 'sort']
+
 export const useOperationsUi = create<OperationsUi>(() => ({
   filter: { ...emptyFilter(currentMonth), ...readStored() },
   selectedId: null,
   ticked: {},
   shown: false
 }))
-
-/** The parts of the filter remembered on this computer (the period and the search start fresh). */
-const STORED_KEYS: ReadonlyArray<keyof OperationsFilter> = ['accounts', 'kinds', 'categories', 'marks']
 
 export function setFilter(patch: Partial<OperationsFilter>): void {
   useOperationsUi.setState((s) => {
@@ -89,7 +88,10 @@ export function showFilter(patch: Partial<OperationsFilter>): void {
 
 /** The filter stored on this computer again (after a view asked from elsewhere): changes are stored from now on. */
 export function showStoredFilter(): void {
-  useOperationsUi.setState((s) => ({ filter: { ...s.filter, accounts: [], kinds: [], categories: [], marks: [], ...readStored() }, ticked: {}, shown: false }))
+  useOperationsUi.setState((s) => {
+    const empty = emptyFilter(currentMonth)
+    return { filter: { ...s.filter, ...Object.fromEntries(STORED_KEYS.map((k) => [k, empty[k]])), ...readStored() }, ticked: {}, shown: false }
+  })
 }
 
 /** „Wyczyść filtry”: the stored filter too – but in a view asked from elsewhere only the view (B88). */
@@ -316,10 +318,10 @@ export function newOperation(over: Partial<Transaction> = {}): string {
   addRecord('transactions', record, { draft: true })
   navigate({ page: 'operations' })
   // A new entry is always visible: its month when the period does not hold its day (B77 – a range too), without filters
-  // that could hide it – a view, the stored filters stay (B88).
+  // that could hide it (F18's too) – a view, the stored filters stay (B88).
   const f = useOperationsUi.getState().filter
   if (!inPeriod(record.date, f.period)) showFilter({ period: { kind: 'month', month: record.date.slice(0, 7) } })
-  if (f.accounts.length || f.kinds.length || f.categories.length || f.marks.length || f.query) showFilter({ accounts: [], kinds: [], categories: [], marks: [], query: '' })
+  if (narrows(f)) showFilter(noNarrowing())
   selectOperation(record.id)
   return record.id
 }
@@ -338,13 +340,193 @@ export async function deleteOperation(t: Transaction, label: string): Promise<vo
 
 /** One operation open in Operacje: its month, no filters hiding it (the bank's balances – F5, the rules – F22). */
 export function openOperation(t: Pick<Transaction, 'id' | 'date'>): void {
-  showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+  showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, ...noNarrowing() })
   navigate({ page: 'operations' })
   selectOperation(t.id)
 }
 
+/** Every operation of this counterparty (F18: its brand, the whole history) – a view: the stored filter stays (B88). */
+export function showBrand(t: Transaction, aliases?: BrandAliases): void {
+  showFilter({ period: { kind: 'all' }, ...noNarrowing(), brands: [brandKeyOf(t, aliases)] })
+}
+
 /** Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80). */
 export function openRefundables(): void {
-  showFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })
+  showFilter({ period: { kind: 'all' }, ...noNarrowing(), marks: ['refundable'] })
   navigate({ page: 'operations' })
+}
+
+// ------------------------------------------------------------------ saved views (1.7.0, F18)
+
+/** A saved view chosen: its filter on the list – the list's period stays unless the view keeps one. */
+export function applyView(view: OperationView): void {
+  const f = filterOf(view.filter, currentMonth)
+  setFilter({ ...f, period: view.withPeriod ? f.period : useOperationsUi.getState().filter.period })
+}
+
+/** Is the list showing this view now (its chip marked). */
+export const isShownView = (filter: OperationsFilter, view: OperationView): boolean => showsView(filter, view, currentMonth)
+
+/** The list's filter saved as a view of the folder (F18): a chip on every computer; a view of the same name is replaced. */
+export function saveView(name: string, withPeriod: boolean): boolean {
+  const n = name.trim().slice(0, 80)
+  if (!n || !canWrite()) return false
+  const filter = viewFilter(useOperationsUi.getState().filter, withPeriod)
+  return updateSettings((f) => {
+    const views = f.settings.operationViews
+    const same = views.find((v) => v.name.toLowerCase() === n.toLowerCase())
+    const view: OperationView = { id: same?.id ?? newId(), name: n, filter, withPeriod }
+    return { ...f, settings: { ...f.settings, operationViews: same ? views.map((v) => (v === same ? view : v)) : [...views, view] } }
+  })
+}
+
+/** A view deleted – „Cofnij” puts it back in its place. */
+export function deleteView(id: string): void {
+  const views = useData.getState().fi?.settings.operationViews ?? []
+  const at = views.findIndex((v) => v.id === id)
+  const view = views[at]
+  if (!view) return
+  const without = (list: readonly OperationView[]) => list.filter((v) => v.id !== id)
+  if (!updateSettings((f) => ({ ...f, settings: { ...f.settings, operationViews: without(f.settings.operationViews) } }))) return
+  toast(`Widok „${view.name}” usunięty.`, 'info', 7000, {
+    label: 'Cofnij',
+    run: () =>
+      void updateSettings((f) => {
+        const list = without(f.settings.operationViews)
+        list.splice(Math.min(at, list.length), 0, view)
+        return { ...f, settings: { ...f.settings, operationViews: list } }
+      })
+  })
+}
+
+// ------------------------------------------------------------------ bulk changes (1.7.0, F11)
+
+/** A change of the ticked operations at once (F11): deleted, moved onto another account, another kind, a shifted date. */
+export type BulkChange =
+  | { kind: 'delete' }
+  | { kind: 'account'; accountId: string }
+  | { kind: 'kind'; to: TxKind; counterAccountId?: string | null }
+  | { kind: 'shift'; days: number }
+
+export interface BulkPlan {
+  change: BulkChange
+  /** The operations the change takes, as they are now… */
+  before: Transaction[]
+  /** …and as it makes them (none for a deletion). */
+  after: Transaction[]
+  /** Left as they are: the change does not fit them (a docked one's kind, a transfer onto its own other account). */
+  skipped: number
+  /** Written by a newer version of the app (B67). */
+  newer: number
+}
+
+/** What a change makes of one operation: the same object – nothing to change; null – it does not fit. */
+function changedBy(t: Transaction, c: BulkChange, docked: ReadonlySet<string>): Transaction | null {
+  switch (c.kind) {
+    case 'delete':
+      return { ...t }
+    case 'account':
+      if (t.accountId === c.accountId) return t
+      // A transfer onto the account of its other side would be a transfer to itself.
+      if (t.kind === 'transfer' && t.counterAccountId === c.accountId) return null
+      return { ...t, accountId: c.accountId }
+    case 'kind': {
+      const counter = c.to === 'transfer' ? (c.counterAccountId ?? null) : null
+      if (t.kind === c.to && (c.to !== 'transfer' || t.counterAccountId === counter)) return t
+      // A docked one keeps its kind (the docking is about it – Mostek → Dokowanie); a transfer never goes to its own account.
+      if ((docked.has(t.id) && t.kind !== c.to) || (counter && counter === t.accountId)) return null
+      const k = withKind(t, c.to)
+      if (c.to !== 'transfer') return k
+      // Another account: its bank row and day go. A new transfer is one operation for both sides (`withKind` – F10); one
+      // of before 1.7.0 stays one side (its other side may be an operation of its own – the inbox joins them).
+      return { ...k, counterAccountId: counter, ...(counter !== t.counterAccountId ? { counterBank: undefined, counterDate: undefined } : {}) }
+    }
+    case 'shift':
+      if (!c.days) return t
+      return { ...t, date: addDays(t.date, c.days), ...(t.counterDate ? { counterDate: addDays(t.counterDate, c.days) } : {}) }
+  }
+}
+
+/** The ticked operations shown that a change takes (F11) and what it makes of them – nothing written yet. */
+export function bulkPlan(visibleIds: readonly string[], change: BulkChange): BulkPlan {
+  const { ticked } = useOperationsUi.getState()
+  const data = useData.getState()
+  const entries = visibleIds.filter((id) => ticked[id] && !data.drafts[id]).flatMap((id) => (data.records.transactions[id] ? [data.records.transactions[id]!] : []))
+  const docked = new Set(listOf(data.records.dockings).map((d) => d.transactionId))
+  const plan: BulkPlan = { change, before: [], after: [], skipped: 0, newer: entries.filter((e) => e.readOnly).length }
+  for (const e of entries) {
+    if (e.readOnly) continue
+    const next = changedBy(e.record, change, docked)
+    if (!next) plan.skipped++
+    else if (next !== e.record) {
+      plan.before.push(e.record)
+      if (change.kind !== 'delete') plan.after.push(next)
+    }
+  }
+  return plan
+}
+
+/**
+ * What the change does to today's energy, the envelopes, the balances and the shields: the state the screens show (the
+ * engine's, computed once) against the engine run with the change.
+ */
+export function bulkEffect(plan: BulkPlan): Effect | null {
+  const input = fleetInputNow()
+  const now = fleetNow()
+  if (!input || !now || !plan.before.length) return null
+  const gone = new Set(plan.change.kind === 'delete' ? plan.before.map((t) => t.id) : [])
+  const changed = new Map(plan.after.map((t) => [t.id, t]))
+  const transactions = input.transactions.flatMap((t) => (gone.has(t.id) ? [] : [changed.get(t.id) ?? t]))
+  const dockings = (input.dockings ?? []).filter((d) => !gone.has(d.transactionId))
+  return effectOf(now, computeFleet({ ...input, transactions, dockings }))
+}
+
+/** The fields a change set (F11): „Cofnij” takes back these, while they are still the ones set (B66). */
+function setFields(before: Transaction, after: Transaction): string[] {
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+  return [...keys].filter((k) => k !== 'updatedAt' && k !== 'updatedBy' && !deepEqual((before as Record<string, unknown>)[k], (after as Record<string, unknown>)[k]))
+}
+
+const BULK_LABEL: Record<BulkChange['kind'], string> = { delete: 'Usunięto', account: 'Przeniesiono na konto', kind: 'Zmieniono rodzaj', shift: 'Przesunięto datę' }
+
+/** The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields. */
+export async function applyBulk(plan: BulkPlan, what = ''): Promise<void> {
+  if (!plan.before.length || !canWrite()) return
+  const n = plan.before.length
+  const tail = `${plan.skipped ? `, pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : ''}${newerNote(plan.newer)}`
+  clearTicked()
+  if (plan.change.kind === 'delete') {
+    const ids = plan.before.map((t) => t.id)
+    if (ids.includes(useOperationsUi.getState().selectedId ?? '')) useOperationsUi.setState({ selectedId: null })
+    // Their dockings go with them (B15) and come back with them – of the operations the disk took off only.
+    const all = listOf(useData.getState().records.dockings)
+    let dockings: string[] = []
+    const deleted = new Set(
+      await deleteManyWithUndo('transactions', ids, 'operacje', (k) => `Usunięto ${k} ${plural(k, 'operację', 'operacje', 'operacji')}${tail}.`, () => {
+        if (dockings.length) void restoreDeleted('dockings', dockings)
+      })
+    )
+    dockings = all.filter((d) => deleted.has(d.transactionId)).map((d) => d.id)
+    if (dockings.length) await deleteRecords('dockings', dockings)
+    return
+  }
+  if (!replaceRecords('transactions', plan.after)) return
+  const pairs = plan.before.map((b, i) => ({ before: b, after: plan.after[i]!, fields: setFields(b, plan.after[i]!) }))
+  const undo = () => {
+    const now = useData.getState().records.transactions
+    const back = pairs.flatMap(({ before, after, fields }) => {
+      const cur = now[before.id]?.record as Record<string, unknown> | undefined
+      if (!cur || !fields.every((k) => deepEqual(cur[k], (after as Record<string, unknown>)[k]))) return []
+      const out: Record<string, unknown> = { ...cur }
+      for (const k of fields) {
+        const v = (before as Record<string, unknown>)[k]
+        if (v === undefined) delete out[k]
+        else out[k] = v
+      }
+      return [out as Transaction]
+    })
+    replaceRecords('transactions', back)
+    undoneNote(back.length, pairs.length)
+  }
+  toast(`${BULK_LABEL[plan.change.kind]}${what ? ` ${what}` : ''}: ${n} ${plural(n, 'operacja', 'operacje', 'operacji')}${tail}.`, 'success', 8000, { label: 'Cofnij', run: undo })
 }

@@ -6,19 +6,22 @@
  *   operation;
  * - a row matching an operation typed by hand (amount, date ±3 days, counterparty) is merged: the operation keeps the
  *   user's category and time and takes the bank's data;
+ * - a row of the other side of a transfer between two accounts of the budget (F10) joins its operation – one operation
+ *   for both sides (a one-sided transfer of before 1.7.0 becomes one too);
  * - a row of an operation the user deleted stays out (unless they bring it back);
  * - the rest is new and gets a decision (`classify.ts`);
  * - pending operations of the period a list of operations no longer has (a cancelled card authorization) are offered
  *   for removal – never ticked by themselves: a filtered list lacks rows too.
  */
 import { addDays, daysBetween } from '../calc/dates'
+import { isTwoSided } from '../calc/operations'
 import { shareSplits, withBankAmount } from '../calc/share'
 import { fold } from '../fold'
 import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, isFeeOperation, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
+import { classifyRow, counterpartyKey, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
@@ -27,6 +30,52 @@ export const MATCH_DAYS = 3
 
 /** An amount a hand-typed operation may be off by (a typo, grosze left out): max(1 zł, 3%), the same direction. */
 export const closeAmount = (a: number, b: number): boolean => Math.sign(a) === Math.sign(b) && Math.abs(a - b) <= Math.max(100, Math.round(Math.max(Math.abs(a), Math.abs(b)) * 0.03))
+
+/**
+ * A transfer in one operation seen from its other account (F10): that account's side as an operation of the account –
+ * its amount and day, the bank's row joined to it –, so a plan's passes take it as one of the account's own. Never
+ * saved: the import writes back only that side's row and day (`withOtherSide`).
+ */
+const sideViews = new WeakMap<Transaction, Transaction>()
+const realOfView = new WeakMap<Transaction, Transaction>()
+function sideOf(t: Transaction): Transaction {
+  let view = sideViews.get(t)
+  if (!view) {
+    view = { ...t, accountId: t.counterAccountId!, counterAccountId: t.accountId, amount: -t.amount, date: t.counterDate ?? t.date, bank: t.counterBank ?? null, counterBank: t.bank }
+    sideViews.set(t, view)
+    realOfView.set(view, t)
+  }
+  return view
+}
+
+/** A one-sided transfer of before 1.7.0 seen from the account it names (F10): its side there, were it in one operation. */
+const legacyViews = new WeakMap<Transaction, Map<string, Transaction>>()
+function legacySideOf(t: Transaction, accountId: string): Transaction {
+  let views = legacyViews.get(t)
+  if (!views) legacyViews.set(t, (views = new Map()))
+  let view = views.get(accountId)
+  if (!view) {
+    view = { ...t, accountId, counterAccountId: t.accountId, amount: -t.amount, bank: null, counterBank: t.bank }
+    views.set(accountId, view)
+    realOfView.set(view, t)
+  }
+  return view
+}
+
+/** The operation a plan's row is about (`sideOf` gives back its operation). */
+export const realOf = (t: Transaction): Transaction => realOfView.get(t) ?? t
+
+/** Is a plan's operation the other side of a transfer in one operation (F10)? */
+export const isSideView = (t: Transaction): boolean => realOfView.has(t)
+
+/**
+ * The transfer in one operation with its other side's row from the bank (F10): one of before 1.7.0 becomes one; the
+ * other side's day kept when the bank booked it on another one.
+ */
+export function withOtherSide(t: Transaction, accountId: string, bank: BankRow, date: string): Transaction {
+  const { counterDate: _day, ...rest } = t
+  return { ...rest, bothSides: true, counterAccountId: accountId, counterBank: bank, ...(date !== t.date ? { counterDate: date } : {}) }
+}
 
 /** A hand-typed operation that may be joined with the bank's (a correction of a balance never is). */
 export const joinable = (t: Pick<Transaction, 'bank' | 'kind' | 'amount'>): boolean => !t.bank && t.kind !== 'correction' && t.amount !== 0
@@ -167,7 +216,21 @@ export type RowPlan =
    * possible duplicate (1.2.1, D77): the same amount under another name, or a close amount (max(1 zł, 3%)) under a
    * similar one – joined too, so nothing comes in twice; the preview shows it to check.
    */
-  | { status: 'merge'; row: MbankRow; key: string; tx: Transaction; loose?: 'name' | 'amount'; ask?: boolean; planned: Planned }
+  | {
+      status: 'merge'
+      row: MbankRow
+      key: string
+      tx: Transaction
+      loose?: 'name' | 'amount'
+      ask?: boolean
+      /**
+       * The other side of a transfer between two accounts of the budget (F10): 'other' – of a transfer in one operation
+       * (`tx` = its side here, `sideOf`), 'legacy' – of a one-sided transfer of before 1.7.0 naming this account, which
+       * becomes one operation for both sides.
+       */
+      side?: 'other' | 'legacy'
+      planned: Planned
+    }
   | ({ status: 'new' } & PlannedRow)
   /** An operation the user deleted (its version is in the history): left out unless brought back. */
   | ({ status: 'deleted' } & PlannedRow)
@@ -234,7 +297,7 @@ export const groupKey = (brand: string, direction: Direction, d: ImportDecision)
  * a keyword, a merge of names or a member (the same operations) reads it as it is. All lists in the operations' order.
  */
 interface Budgeted {
-  /** The account's operations. */
+  /** The account's operations (the other sides of transfers in one operation as `sideOf` – F10). */
   mine: Transaction[]
   /** The bank's keys of the account's operations (and their keys of the other format – B5) → the operation. */
   byKey: Map<string, Transaction>
@@ -247,11 +310,18 @@ interface Budgeted {
   formatOf: (t: Transaction) => MbankFile['format']
   /** The account's operations typed by hand (`joinable`), by day, with their place among them. */
   manual: Map<string, Array<{ tx: Transaction; at: number }>>
+  /**
+   * Transfers waiting for this account's row (F10), by the day of their side here: the other sides of transfers in one
+   * operation without the bank's row (`sideOf`); one-sided transfers of other accounts (before 1.7.0) naming this one –
+   * or no account (`named` false: the import offered none before 1.7.0) –, seen as their side here, when this account
+   * has no side of its own for them.
+   */
+  waiting: Map<string, Array<{ tx: Transaction; side: 'other' | 'legacy'; named: boolean }>>
 }
 
 const budgetedMemo = new WeakMap<readonly Transaction[], Map<string, Budgeted>>()
 
-function push<T>(map: Map<string, T[]>, key: string, value: T): void {
+function push<K, T>(map: Map<K, T[]>, key: K, value: T): void {
   const list = map.get(key)
   if (list) list.push(value)
   else map.set(key, [value])
@@ -262,7 +332,11 @@ function budgetedOf(existing: readonly Transaction[], accountId: string): Budget
   if (!byAccount) budgetedMemo.set(existing, (byAccount = new Map()))
   const known = byAccount.get(accountId)
   if (known) return known
-  const mine = existing.filter((t) => t.accountId === accountId)
+  // The account's operations – and the other sides of transfers in one operation (F10), in the operations' order.
+  const mine: Transaction[] = []
+  for (const t of existing)
+    if (t.accountId === accountId) mine.push(t)
+    else if (t.counterAccountId === accountId && isTwoSided(t)) mine.push(sideOf(t))
   const byKey = new Map<string, Transaction>()
   for (const t of mine) if (t.bank) byKey.set(t.bank.key, t)
   // The keys of the same rows in the other format (B5), never over an operation's own key.
@@ -272,8 +346,21 @@ function budgetedOf(existing: readonly Transaction[], accountId: string): Budget
   const booked = new Map<string, Transaction[]>()
   for (const t of mine) if (t.bank && !t.bank.pending) push(booked, t.date, t)
   const manual = new Map<string, Array<{ tx: Transaction; at: number }>>()
-  mine.filter(joinable).forEach((tx, at) => push(manual, tx.date, { tx, at }))
-  const out: Budgeted = { mine, byKey, described, pending: mine.filter((t) => t.bank?.pending), booked, formatOf: formatsOf(mine), manual }
+  // A transfer's other side waiting for its row is the transfers' pass's (its counterparty is the other account's).
+  mine.filter((t) => joinable(t) && !isSideView(t)).forEach((tx, at) => push(manual, tx.date, { tx, at }))
+  const waiting = new Map<string, Array<{ tx: Transaction; side: 'other' | 'legacy'; named: boolean }>>()
+  for (const t of mine) if (isSideView(t) && !t.bank) push(waiting, t.date, { tx: t, side: 'other', named: true })
+  // A one-sided transfer of before 1.7.0 whose side here is an operation of its own already (the pair, T31): not a side.
+  const ownSides = new Map<number, Transaction[]>()
+  for (const t of mine) if (t.kind === 'transfer' && !isSideView(t) && !isTwoSided(t)) push(ownSides, t.amount, t)
+  const hasOwnSide = (t: Transaction) =>
+    (ownSides.get(-t.amount) ?? []).some((o) => (o.counterAccountId === t.accountId || !o.counterAccountId) && Math.abs(daysBetween(o.date, t.date)) <= MATCH_DAYS)
+  for (const t of existing)
+    if (t.kind === 'transfer' && t.accountId !== accountId && (t.counterAccountId === accountId || !t.counterAccountId) && !isTwoSided(t) && t.amount && !hasOwnSide(t)) {
+      const view = legacySideOf(t, accountId)
+      push(waiting, view.date, { tx: view, side: 'legacy', named: t.counterAccountId === accountId })
+    }
+  const out: Budgeted = { mine, byKey, described, pending: mine.filter((t) => t.bank?.pending), booked, formatOf: formatsOf(mine), manual, waiting }
   byAccount.set(accountId, out)
   return out
 }
@@ -364,6 +451,8 @@ export function planImport(
     let best: { tx: Transaction; score: number } | null = null
     for (const tx of pending) {
       if (used.has(tx.id)) continue
+      // A transfer's other side (F10): the bank moves the same amount on both accounts.
+      if (isSideView(tx) && tx.amount !== row.amount) continue
       const score = settleScore(tx.bank!.counterparty || tx.bank!.description, tx, row)
       if (score != null && (!best || score < best.score)) best = { tx, score }
     }
@@ -429,6 +518,28 @@ export function planImport(
       rowTaken.add(c.i)
       goneTaken.add(c.at)
       if (!plans[c.i]) deletedRows.add(c.i)
+    }
+  }
+
+  // The other side of a transfer between two accounts of the budget (F10, D87): a row of the transfer's amount here, ±3
+  // days from its side here, joins the transfer – one operation for both sides (a one-sided one of before 1.7.0 becomes
+  // one). No name to compare: the other account's bank names the transfer its own way. The closest days first, a
+  // transfer in one operation before a one-sided one; each side and row once; a row of an operation the user deleted
+  // never.
+  if (budget.waiting.size) {
+    const pairs: Array<{ i: number; tx: Transaction; days: number; side: 'other' | 'legacy' }> = []
+    file.rows.forEach((row, i) => {
+      if (plans[i] || deletedRows.has(i) || deletedKeys.has(keys[i]!)) return
+      // A transfer naming no account (an import before 1.7.0 offered none): only a row the bank calls an own transfer.
+      const own = isOwnTransferRow(row, ctx.ownNames)
+      for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
+        for (const w of budget.waiting.get(addDays(row.date, d)) ?? []) if (w.tx.amount === row.amount && (w.named || own)) pairs.push({ i, tx: w.tx, days: Math.abs(d), side: w.side })
+    })
+    pairs.sort((a, b) => a.days - b.days || Number(a.side === 'legacy') - Number(b.side === 'legacy') || a.i - b.i)
+    for (const c of pairs) {
+      if (plans[c.i] || used.has(c.tx.id) || locked(c.tx)) continue
+      used.add(c.tx.id)
+      plans[c.i] = { status: 'merge', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx, side: c.side }
     }
   }
 
@@ -502,7 +613,9 @@ export function planImport(
   const period = file.period ?? (days.length ? { from: days[0]!, to: days.at(-1)! } : null)
   // Only a list of operations shows pending rows (the account history has the booked ones only).
   // A pending operation of a newer version (B95) is read only here: never offered for removal.
-  const vanished = period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && !locked(t) && t.date >= period.from && t.date <= period.to) : []
+  // A transfer's other side gone from the list (F10) is not offered: removing it would take the transfer's other side too.
+  const vanished =
+    period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && !locked(t) && !isSideView(t) && t.date >= period.from && t.date <= period.to) : []
   return { accountId, format: file.format, rows, vanished, period }
 }
 
@@ -825,8 +938,19 @@ export interface ImportResult {
   counts: ImportCounts
 }
 
-/** `moved` = operations of this file found on another account and moved here (B35). */
-export type ImportCounts = { created: number; merged: number; settled: number; known: number; removed: number; skipped: number; excluded: number; moved: number }
+/** `moved` = operations of this file found on another account and moved here (B35); `sides` – see the type. */
+export type ImportCounts = {
+  created: number
+  merged: number
+  settled: number
+  known: number
+  removed: number
+  skipped: number
+  excluded: number
+  moved: number
+  /** Rows joined as the other side of a transfer between two accounts of the budget (F10). */
+  sides: number
+}
 
 /**
  * The records an import writes; `makeId` gives new ids (ULIDs), `now` the time of the import. A household member's money
@@ -846,7 +970,17 @@ export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId
   }
 }
 
-export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { now: string; makeId: () => string; rules: readonly ImportRule[] }): ImportResult {
+export function buildImport(
+  plan: ImportPlan,
+  choices: ImportChoices,
+  opts: {
+    now: string
+    makeId: () => string
+    rules: readonly ImportRule[]
+    /** The budget's accounts (F10): a transfer to one of them is one operation for both sides; none given – any. */
+    accounts?: readonly string[]
+  }
+): ImportResult {
   const groups = importGroups(plan, choices.restoreDeleted)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
   const bankOf = (p: RowPlan): BankRow => ({
@@ -863,13 +997,28 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
   })
   const create: Transaction[] = []
   const update: Transaction[] = []
-  const counts: ImportCounts = { created: 0, merged: 0, settled: 0, known: 0, removed: 0, skipped: 0, excluded: 0, moved: 0 }
+  const counts: ImportCounts = { created: 0, merged: 0, settled: 0, known: 0, removed: 0, skipped: 0, excluded: 0, moved: 0, sides: 0 }
   const keyed = (t: Transaction, key: string, settled = false): Transaction => ({
     ...t,
     bank: { ...t.bank!, key, altKeys: [...(t.bank!.altKeys ?? []), t.bank!.key].slice(-20), pending: settled ? false : t.bank!.pending }
   })
   const fresh = [...plan.rows].sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
   for (const p of fresh) {
+    // The other side of a transfer in one operation (F10): only its row and day change – on the operation itself.
+    if ((p.status === 'known' || p.status === 'settle') && isSideView(p.tx)) {
+      const real = realOf(p.tx)
+      const bank = real.counterBank!
+      if (p.status === 'settle') {
+        counts.settled++
+        update.push(withOtherSide(real, plan.accountId, bankOf(p), p.row.date))
+      } else {
+        if (p.settled) counts.settled++
+        else counts.known++
+        if (p.other) update.push({ ...real, counterBank: { ...bank, altKeys: [...(bank.altKeys ?? []), p.key].slice(-20) } })
+        else if (p.settled) update.push({ ...real, counterBank: { ...bank, pending: false } })
+      }
+      continue
+    }
     if (p.status === 'known') {
       // A pending one settled with the same content (N77): „rozliczone”, as the preview counts it.
       if (p.settled) counts.settled++
@@ -902,6 +1051,11 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
     }
     if ((p.status === 'new' || p.status === 'deleted') && choices.skip[p.key]) {
       counts.excluded++
+      continue
+    }
+    if (p.status === 'merge' && joins(p, choices) && p.side) {
+      counts.sides++
+      update.push(withOtherSide(realOf(p.tx), plan.accountId, bankOf(p), p.row.date))
       continue
     }
     if (p.status === 'merge' && joins(p, choices)) {
@@ -954,6 +1108,8 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
         counterparty: p.row.counterparty,
         title: p.row.title,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null,
+        // An own transfer to another account of the budget (F10, D87): one operation for both sides.
+        ...(c.kind === 'transfer' && c.counterAccountId && c.counterAccountId !== plan.accountId && (!opts.accounts || opts.accounts.includes(c.counterAccountId)) ? { bothSides: true } : {}),
         loanId: c.kind === 'loan' ? (c.loanId ?? null) : null,
         containerId: c.kind === 'expense' && out ? planned.decision.containerId : null,
         bank: bankOf(p)

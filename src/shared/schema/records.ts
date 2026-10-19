@@ -154,6 +154,16 @@ export const transactionSchema = z.looseObject({
   repaid: grosze.min(0).default(0),
   /** Own transfer: the budget's other account (null = an account outside the budget). */
   counterAccountId: ulidSchema.nullable().default(null),
+  /**
+   * The whole own transfer in this one operation (1.7.0, F10, D87): `amount` on `accountId`, the opposite on
+   * `counterAccountId` – the layers do not change. Absent / false = this side only (before 1.7.0): the other side, if
+   * any, is an operation of its own and the pair cancels out in the shields (T31).
+   */
+  bothSides: z.boolean().optional().catch(undefined),
+  /** The other side's row from the bank (1.7.0, F10): the import of that account's file joined it to this operation. */
+  counterBank: bankRowSchema.nullable().optional().catch(undefined),
+  /** The day of the other side when the bank booked it on another one (1.7.0, F10); absent / null = `date`. */
+  counterDate: isoDate.nullable().optional().catch(undefined),
   /** Payment of a container (fixed cost or periodic fee – a periodic one is paid from its tank). */
   containerId: ulidSchema.nullable().default(null),
   /** Paid from a goal's money. */

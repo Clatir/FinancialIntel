@@ -457,16 +457,16 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 ### Priorytet średni
 
 - [ ] **F9** Ładownia pilnuje cen: podwyżki abonamentów, opłaty o zmiennej kwocie, martwe kontenery *(nakład M)*
-- [ ] **F10** Przelew między kontami budżetu z drugą nogą *(nakład M)*
-- [ ] **F11** Zbiorcze naprawy w Operacjach: usuń, zmień konto, rodzaj albo datę zaznaczonych – z „Cofnij” *(nakład M)*
-- [ ] **F12** Ostrzeżenie przy edycji operacji z potwierdzonego okresu albo z banku *(nakład S)* · ⚠ D28 (pełna edycja) – zostaje, bo to tylko ostrzeżenie, bez blokady.
+- [x] **F10** Przelew między kontami budżetu z drugą nogą *(nakład M)*
+- [x] **F11** Zbiorcze naprawy w Operacjach: usuń, zmień konto, rodzaj albo datę zaznaczonych – z „Cofnij” *(nakład M)*
+- [x] **F12** Ostrzeżenie przy edycji operacji z potwierdzonego okresu albo z banku *(nakład S)* · ⚠ D28 (pełna edycja) – zostaje, bo to tylko ostrzeżenie, bez blokady.
 - [x] **F13** Mądrzejsze wieczorne przypomnienie: „Dziś bez wydatków”, „Przypomnij za 30 min”, pominięcie po dopisaniu *(nakład S)*
 - [ ] **F14** Nowy plik z mBanku wykryty sam w folderze Pobrane – import jednym kliknięciem *(nakład S)*
 - [ ] **F15** Cel z terminem: potrzebna rata miesięczna i opcjonalna odkładka z pensji *(nakład M)* · ⚠ Samo pokazanie potrzebnej raty – bez konfliktu. Rata z pensji omija kolejność D13 (osłony → kadłub → cele) i D72 (cele zasilane z dokowania) – do decyzji użytkownika.
 - [ ] **F16** Zaplanowane operacje jednorazowe, spodziewane wpływy i przypomnienia własne na Radarze *(nakład M)*
 - [ ] **F17** Tagi i „wyprawy” – koszt wyjazdu albo projektu przez wiele kategorii *(nakład M)*
-- [ ] **F18** Operacje: filtry zaawansowane, sortowanie, zapisane widoki, eksport widocznej listy *(nakład M)*
-- [ ] **F19** Paleta (Ctrl+K) szuka też wpisów: operacji, kontenerów, celów, pożyczek, domowników i ustawień *(nakład M)*
+- [x] **F18** Operacje: filtry zaawansowane, sortowanie, zapisane widoki, eksport widocznej listy *(nakład M)*
+- [x] **F19** Paleta (Ctrl+K) szuka też wpisów: operacji, kontenerów, celów, pożyczek, domowników i ustawień *(nakład M)*
 - [ ] **F20** Wywiad z drążeniem: podkategorie, kontrahenci, porównania okresów *(nakład M)*
 - [x] **F21** Dwa komputery: „w użyciu” zamiast „otwarty” – komputer w zasobniku nie pisze w tle i nie powiela powiadomień *(nakład M)*
 - [x] **F22** Audyt reguł importu: edycja, niespójności, „Zastosuj do historii”, warunek kwoty *(nakład M)*
@@ -483,7 +483,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 
 ### Priorytet niski
 
-- [ ] **F33** Dziennik zmian folderu i historia przy każdym wpisie *(nakład M)*
+- [x] **F33** Dziennik zmian folderu i historia przy każdym wpisie *(nakład M)*
 - [ ] **F34** Zwroty w drodze: oczekiwany zwrot pieniędzy *(nakład M)*
 - [ ] **F35** Symulator manewrów „co jeśli” *(nakład M)*
 - [ ] **F36** Osobista inflacja koszyka *(nakład M)* · ⚠ Automatyczne pobieranie CPI z GUS łamałoby zasadę „sieć tylko do aktualizacji” (D74), stąd wariant z CPI wpisywanym ręcznie.

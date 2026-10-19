@@ -5,7 +5,7 @@
  */
 import type { Balance, Transaction } from '../schema/records'
 import { daysBetween } from './dates'
-import { sum } from './operations'
+import { accountAmounts, amountOn, dateOn, touchesAccount } from './operations'
 
 /** Is `b` an account's opening balance in force rather than `prev`: the later one, of one day the last edited. */
 const laterOpening = (b: Balance, prev: Balance | null | undefined): boolean => !prev || b.date > prev.date || (b.date === prev.date && b.updatedAt > prev.updatedAt)
@@ -28,7 +28,19 @@ export function openingsOf(balances: readonly Balance[], today?: string): Map<st
 export function balanceAt(accountId: string, date: string, transactions: readonly Transaction[], balances: readonly Balance[]): number {
   const opening = openingOf(accountId, balances)
   const from = opening?.date ?? ''
-  return (opening?.amount ?? 0) + sum(transactions.filter((t) => t.accountId === accountId && t.date >= from && t.date <= date).map((t) => t.amount))
+  // Both sides of a transfer in one operation (F10): the other account's side counts here too, on its own day.
+  return (opening?.amount ?? 0) + movedOn(accountId, from, date, transactions)
+}
+
+/** The money an account's operations moved from `from` to `date` (both days in), each side on its own day (F10). */
+function movedOn(accountId: string, from: string, date: string, transactions: readonly Transaction[]): number {
+  let moved = 0
+  for (const t of transactions) {
+    if (!touchesAccount(t, accountId)) continue
+    const d = dateOn(t, accountId)
+    if (d >= from && d <= date) moved += amountOn(t, accountId)
+  }
+  return moved
 }
 
 /** Days apart two equal corrections of one account may be one confirmation made twice (B129). */
@@ -84,11 +96,61 @@ export function planConfirmation(accountId: string, amount: number, date: string
   const opening = openingOf(accountId, balances)
   if (opening && date < opening.date) return { kind: 'before-opening', opening: opening.date }
   if (!opening) {
-    const first = transactions.filter((t) => t.accountId === accountId && t.date <= date).reduce<string | null>((m, t) => (m == null || t.date < m ? t.date : m), null)
+    let first: string | null = null
+    for (const t of transactions) {
+      if (!touchesAccount(t, accountId)) continue
+      const d = dateOn(t, accountId)
+      if (d <= date && (first == null || d < first)) first = d
+    }
     const start = first ?? date
-    const moved = sum(transactions.filter((t) => t.accountId === accountId && t.date >= start && t.date <= date).map((t) => t.amount))
+    const moved = movedOn(accountId, start, date, transactions)
     return { kind: 'opening', date: start, amount: amount - moved }
   }
   const computed = balanceAt(accountId, date, transactions, balances)
   return computed === amount ? { kind: 'match', computed } : { kind: 'correction', computed, diff: amount - computed }
+}
+
+/** A confirmed balance an edit changes (F12): the account, the day of its last confirmation, by how much. */
+export interface ConfirmedChange {
+  accountId: string
+  date: string
+  delta: number
+}
+
+/** One operation's change: before and after it (null – a new one, a deleted one). */
+export type OperationEdit = readonly [before: Transaction | null, after: Transaction | null]
+
+/**
+ * What edits of operations do to the confirmed balances (F12): for each account they are on – before or after, each side
+ * of a transfer in one operation on its day – the change of the balance on the day of the account's last confirmation
+ * (an operation before the account's opening balance never counted); the edits summed (a transfer of two operations made
+ * one moves nothing). None – no confirmed balance moves.
+ */
+export function confirmedChanges(edits: readonly OperationEdit[], balances: readonly Balance[]): ConfirmedChange[] {
+  const accounts = new Set<string>()
+  for (const [before, after] of edits) for (const t of [before, after]) if (t) for (const [id] of accountAmounts(t)) accounts.add(id)
+  const out: ConfirmedChange[] = []
+  for (const accountId of accounts) {
+    const confirmed = lastConfirmation(accountId, balances)
+    if (!confirmed) continue
+    const from = openingOf(accountId, balances)?.date ?? ''
+    const counted = (t: Transaction | null) => {
+      if (!t || !touchesAccount(t, accountId)) return 0
+      const d = dateOn(t, accountId)
+      return d >= from && d <= confirmed.date ? amountOn(t, accountId) : 0
+    }
+    let delta = 0
+    for (const [before, after] of edits) delta += counted(after) - counted(before)
+    if (delta) out.push({ accountId, date: confirmed.date, delta })
+  }
+  return out
+}
+
+/** The confirmed balance an operation is in (F12): the first of its accounts whose last confirmation covers its day. */
+export function confirmedPeriodOf(t: Transaction, balances: readonly Balance[]): { accountId: string; date: string } | null {
+  for (const [accountId, , day] of accountAmounts(t)) {
+    const confirmed = lastConfirmation(accountId, balances)
+    if (confirmed && day <= confirmed.date && day >= (openingOf(accountId, balances)?.date ?? '')) return { accountId, date: confirmed.date }
+  }
+  return null
 }

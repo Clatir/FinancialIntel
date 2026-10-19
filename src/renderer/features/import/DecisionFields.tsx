@@ -6,7 +6,7 @@ import { startShare } from '@shared/calc/share'
 import type { Choice } from '@shared/import/reconcile'
 import { SHARE_MODES, type Share } from '@shared/schema'
 import { useRecordList } from '../../store/records'
-import { CategorySelect } from '../operations/pickers'
+import { CategorySelect, useAccounts } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { ShareEditor } from '../household/ShareEditor'
 import { choiceFor, optionOf, optionsFor, type Option } from './options'
@@ -19,7 +19,8 @@ export function DecisionFields({
   direction,
   onChange,
   testId,
-  exclude
+  exclude,
+  own
 }: {
   choice: Choice
   direction: 'in' | 'out'
@@ -27,9 +28,12 @@ export function DecisionFields({
   testId: string
   /** Options not offered (a rule: no kind decided operation by operation – N14). */
   exclude?: (o: Option) => boolean
+  /** The file's account: an own transfer goes to / comes from the others (F10). */
+  own?: string
 }) {
   const members = useMembers()
   const loans = useRecordList('loans')
+  const accounts = useAccounts()
   const option = optionOf(choice, direction)
   const first = members.find((m) => !m.archived)
   return (
@@ -41,7 +45,7 @@ export function DecisionFields({
         aria-label="Co to jest"
         data-testid={`${testId}-kind`}
       >
-        {optionsFor(direction, members, choice, loans)
+        {optionsFor(direction, members, choice, loans, accounts, own)
           .filter((o) => o.value === option || !exclude?.(o.value))
           .map((o) => (
             <option key={o.value} value={o.value}>

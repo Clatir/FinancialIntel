@@ -7,6 +7,7 @@ import { rangeText } from '@shared/format'
 import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/schema'
 import { useData, useEntryNewer, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
+import { useFocusRecord } from '../../components/focus'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
@@ -65,6 +66,11 @@ export function CargoPage() {
   const setDraft = (d: ContainerDraft | null) => (d ? setForm((f) => ({ ...f, draft: d })) : clearForm())
   const openDraft = (d: ContainerDraft) => setForm((f) => ({ draft: d, key: f.key + 1 }))
   const [showArchived, setShowArchived] = useState(false)
+  // Opened from the palette (F19): selected, the archive shown for an archived one.
+  useFocusRecord('container', (id) => {
+    setSelected(id)
+    if (useData.getState().records.containers[id]?.record.archived) setShowArchived(true)
+  })
   const month = fleet?.month ?? ''
   const sorted = useMemo(() => [...containers].sort((a, b) => Number(a.archived) - Number(b.archived) || monthlyShare(b) - monthlyShare(a) || a.name.localeCompare(b.name)), [containers])
   // The proposals change with the payees of the containers only – not with a note or an amount (W6).
@@ -116,6 +122,7 @@ export function CargoPage() {
                       onClick={() => setSelected(c.id === selected ? null : c.id)}
                       data-testid="cargo-row"
                       data-name={c.name}
+                      data-focus={`container:${c.id}`}
                     >
                       <span className="min-w-0 flex-1 truncate text-fg-strong">{c.name}</span>
                       <span className="text-[11px] text-dim">{TYPE_LABEL[c.type as ContainerType] ?? c.type}</span>

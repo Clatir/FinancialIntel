@@ -6,7 +6,7 @@ import { financersText, memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
 import { SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
-import { amountTone, newestOperations } from '@shared/operationsView'
+import { amountTone, newestOperations, noNarrowing } from '@shared/operationsView'
 import { shortcutLabel } from '@shared/machine'
 import { plural, rangeText } from '@shared/format'
 import type { DetachEvent } from '@shared/api'
@@ -335,7 +335,7 @@ export function BridgePage() {
                         key={t.id}
                         className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 text-left last:border-b-0 hover:bg-hover"
                         onClick={() => {
-                          showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+                          showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, ...noNarrowing() })
                           navigate({ page: 'operations' })
                           selectOperation(t.id)
                         }}

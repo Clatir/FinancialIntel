@@ -22,6 +22,7 @@ import { Modal } from '../../components/Modal'
 import { countLabel, monthLabel } from '../../lib/format'
 import { addGoal, archiveGoal, moveGoal, moveGoalMoney, patchGoal, type GoalMoneyTarget } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
+import { useFocusRecord } from '../../components/focus'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -29,6 +30,8 @@ export function StarMapPage() {
   const fleet = useFleet()
   const goalsAll = useRecordList('goals')
   const readOnly = useFolderLocked()
+  // Opened from the palette (F19): the goal marked on the map.
+  useFocusRecord('goal')
   const goalEntries = useData((s) => s.records.goals)
   const snap = useIctj((s) => s.snap)
   const forecastId = useData((s) => s.fi?.settings.ictj.forecastId ?? null)
@@ -123,7 +126,7 @@ export function StarMapPage() {
               <Panel title={`Zarchiwizowane (${archived.length})`} name="Zarchiwizowane" testId="starmap-archived">
                 <div className="flex flex-col text-[12px]">
                   {archived.map((g) => (
-                    <div key={g.id} className="flex items-baseline gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="starmap-archived-row">
+                    <div key={g.id} className="flex items-baseline gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="starmap-archived-row" data-focus={`goal:${g.id}`}>
                       <span className="min-w-0 flex-1 truncate">{g.name}</span>
                       {g.source === 'ictj' ? <span className="text-[11px] text-dim">poza wybranym scenariuszem ICTTJ</span> : null}
                       <span className="num text-muted">{zl(amounts.get(g.id) ?? 0)}</span>
@@ -320,6 +323,7 @@ function GoalRow({
       }}
       data-testid="starmap-goal"
       data-name={g.name}
+      data-focus={`goal:${g.id}`}
     >
       <div className="flex items-center gap-2">
         <span className="num w-[18px] cursor-grab text-[11px] text-dim" title="Przeciągnij, żeby zmienić kolejność">

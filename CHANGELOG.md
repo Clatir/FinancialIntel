@@ -1,5 +1,35 @@
 # Financial Intel – zmiany
 
+## 1.7.0
+
+Nowe funkcje Operacji (grupa S, D87).
+
+Przelew między kontami budżetu to jedna operacja:
+- Przelew z konta na konto budżetu (np. mBank → Portfel XTB) zapisuje się raz – z kontem źródłowym i docelowym; każde
+  konto ma swoją stronę, w swoim dniu, a warstwy się nie zmieniają.
+- Import pliku drugiego konta dołącza jego wiersz do przelewu zamiast tworzyć drugą operację; nowy przelew własny na
+  konto budżetu z importu jest od razu jedną operacją.
+- Przelewy zapisane wcześniej jako dwie osobne operacje: Meldunki pokazują listę par do połączenia (z zaznaczeniem i
+  „zostaw tak”), przelew liczony dwa razy i stronę, której brakuje; edytor przelewu ma „Połącz z drugą stroną” albo
+  „Dopisz drugą stronę”. Wszystko z „Cofnij”.
+
+Operacje:
+- Zmiana zaznaczonych naraz: usuń, przenieś na inne konto, zmień rodzaj albo przesuń datę – najpierw podgląd skutku
+  (energia dziś, koperty, osłony, salda kont), potem jedno „Cofnij”.
+- Ostrzeżenie przy zmianie operacji z okresu potwierdzonego saldem: o ile zmieni się potwierdzone saldo konta – zmiana
+  dopiero po „Zmień mimo to”; tak samo przy zmianie kwoty operacji z banku. Znaczek „okres potwierdzony” w edytorze.
+- „Więcej filtrów”: kwota od–do, domownik, kontrahent (wszystkie zapisy jednej sieci razem), kontener, cel, pożyczka,
+  konto przelewu; kategoria główna razem z podkategoriami. „wszystkie” przy kontrahencie w edytorze.
+- Kolejność listy: data, kwota albo kontrahent (klik w nagłówek).
+- Zapisane widoki listy – przyciski nad listą, wspólne dla wszystkich komputerów (z okresem albo bez).
+- Eksport widocznej listy do CSV i Excela – z jej filtrami i w jej kolejności.
+
+Paleta i Synchronizacja:
+- Paleta (Ctrl+K) szuka też operacji, kontenerów, celów, pożyczek, domowników i pozycji Ustawień; wybrany wpis otwiera
+  się na swoim ekranie z wyróżnieniem.
+- Dziennik zmian w Synchronizacji: co zmieniło się dziś, w 7 albo 30 dni – na którym komputerze, które pola; „Weź
+  poprzednią wersję” jednym kliknięciem.
+
 ## 1.6.6
 
 Poprawki z przeglądu aplikacji (grupa R, D87): teksty, wygląd i wygoda.

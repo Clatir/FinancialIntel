@@ -6,6 +6,7 @@ import { openWatchReport } from '../features/reports/state'
 import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { dueNotices, type Notice } from '@shared/notify'
+import { noNarrowing } from '@shared/operationsView'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
@@ -62,7 +63,7 @@ export function openTag(tag: string): void {
   clickedAt = Date.now()
   const today = warsawNow().date
   if (tag === 'today' || tag === 'evening') {
-    showFilter({ period: { kind: 'range', from: today, to: today }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+    showFilter({ period: { kind: 'range', from: today, to: today }, ...noNarrowing() })
     navigate({ page: 'operations' })
   } else if (tag === 'asteroid' || tag === 'cargo') navigate({ page: 'cargo' })
   else if (tag === 'import') navigate({ page: 'import' })

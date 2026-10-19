@@ -5,15 +5,16 @@
  */
 import type { Transaction } from '../schema/records'
 import { dockAmount } from './fleet'
-import { sum } from './operations'
+import { amountOn, dateOn, sum } from './operations'
 
 /**
  * The opening balance at the start of `today` from the balance read in the bank now: the operations of today already in
  * the budget are part of that balance, so they come off. One dated later (a payment planned ahead) is not in the bank's
  * balance yet (B127) – the engine takes it on its day.
  */
-export function openingFromNow(accountId: string, balanceNow: number, today: string, transactions: readonly Pick<Transaction, 'accountId' | 'date' | 'amount'>[]): number {
-  return balanceNow - sum(transactions.filter((t) => t.accountId === accountId && t.date === today).map((t) => t.amount))
+export function openingFromNow(accountId: string, balanceNow: number, today: string, transactions: readonly Transaction[]): number {
+  // The other side of a transfer in one operation (F10) is in the bank's balance too.
+  return balanceNow - sum(transactions.filter((t) => dateOn(t, accountId) === today).map((t) => amountOn(t, accountId)))
 }
 
 export interface StartTargets {

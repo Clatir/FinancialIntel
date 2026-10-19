@@ -10,7 +10,7 @@ import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthR
 import type { FleetEvent } from './fleet'
 import { financedBy } from './household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from './income'
-import { asksImpulse, categoryIndex, costOf, partsOf, sum } from './operations'
+import { accountAmounts, asksImpulse, categoryIndex, costOf, partsOf, sum } from './operations'
 
 // ------------------------------------------------------------------ the wealth curve
 
@@ -31,19 +31,21 @@ export function balancesAt(dates: readonly string[], transactions: readonly Tran
     const prev = openings.get(b.accountId)
     if (!prev || b.date > prev.date || (b.date === prev.date && b.updatedAt > prev.updatedAt)) openings.set(b.accountId, b)
   }
-  // Per account: the operations by date with running sums – a day's balance by a binary search (years of history).
-  const byAccount = new Map<string, Transaction[]>()
-  for (const t of transactions) {
-    if (t.date > today) continue
-    const list = byAccount.get(t.accountId)
-    if (list) list.push(t)
-    else byAccount.set(t.accountId, [t])
-  }
+  // Per account: the operations by date with running sums – a day's balance by a binary search (years of history); a
+  // transfer in one operation on both of its accounts (F10).
+  const byAccount = new Map<string, Array<{ date: string; amount: number }>>()
+  for (const t of transactions)
+    for (const [id, amount, date] of accountAmounts(t)) {
+      if (date > today) continue
+      const list = byAccount.get(id)
+      if (list) list.push({ date, amount })
+      else byAccount.set(id, [{ date, amount }])
+    }
   const ledgers = new Map<string, { dates: string[]; cum: number[] }>()
   for (const [id, list] of byAccount) {
     list.sort((a, b) => a.date.localeCompare(b.date))
     let run = 0
-    ledgers.set(id, { dates: list.map((t) => t.date), cum: list.map((t) => (run += t.amount)) })
+    ledgers.set(id, { dates: list.map((e) => e.date), cum: list.map((e) => (run += e.amount)) })
   }
   /** The sum of an account's operations dated before `date` (`inclusive`: on it too). */
   const upTo = (id: string, date: string, inclusive: boolean): number => {

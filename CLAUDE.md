@@ -797,6 +797,41 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   ukrywanie kwot, późny config.json, krzywa na Mostku), `radar.spec.ts` („zamknij” z „Cofnij”), `intel.spec.ts` (FVG ze
   znakiem, zł w raporcie wachty).
 
+## Kod (1.7.0 – operacje, funkcje, grupa S, D87)
+- Przelew w jednej operacji (F10, T262–T264): operacja `bothSides` / `counterBank` / `counterDate` (addytywne);
+  `calc/operations.ts` `isTwoSided`, `accountAmounts`, `amountOn`, `dateOn`, `touchesAccount` (salda, `balanceAt`,
+  `balancesAt`, `openingFromNow`, telemetria – każda strona na swoim koncie i w swoim dniu); silnik `fleet.ts` – `inRun` /
+  `otherInRun` (strona poza biegiem silnika: druga strona rusza osłony w swoim dniu, zdarzenie w slocie 3), `runTx(t, on)`;
+  `calc/kinds.ts` `withKind` (nowy przelew – obie strony), `DEFAULT_SIGN`; `calc/transfers.ts` `transferIssues` (pair /
+  double / lone, `TRANSFER_DAYS`, `joinedDay`, `settled`), `joinTransfer`, `withBothSides`; import `reconcile.ts` – `sideOf`
+  / `legacySideOf`, `realOf`, `isSideView`, `withOtherSide`, `Budgeted.waiting`, `RowPlan.merge.side`,
+  `ImportCounts.sides`, `buildImport(…, {accounts})`; `classify.ts` `isOwnTransferRow`; `inbox.ts` rodzaj `transfers`;
+  renderer `operations/transfers.ts` (`transferIssuesOf` – od dnia po potwierdzeniu, `transferEdits`, `joinTransfers` –
+  para bez usuniętej drugiej strony cofnięta, `addOtherSide`, `dismissTransfer`), `inbox/TransferPairs.tsx` (`inbox-pairs`,
+  `inbox-pair` z `data-unnamed`, `inbox-pair-tick`, `-dismiss`, `inbox-pairs-join`, `-all`, `-none`), edytor
+  `TransferSides` (`operation-transfer-both`, `-legacy`, `-join`, `-add`), opcje importu `transfer:<konto>`.
+- Zmiana zaznaczonych (F11, T265): `operations/state.ts` `bulkPlan` / `changedBy` / `bulkEffect` (`fleetNow` + silnik ze
+  zmianą, `calc/effect.ts` `effectOf` / `noEffect`) / `applyBulk` (jedno „Cofnij”, `setFields`), `BulkChange.tsx`
+  (`operations-bulk-change`, `-account`, `-kind`, `-counter`, `-days`, `-preview`, `-dialog`, `-effect`, `-confirm`,
+  `-confirmed`); `history/actions.ts` `deleteManyWithUndo` zwraca usunięte id (błąd – komunikat).
+- Potwierdzony okres (F12, T266): `balances.ts` `OperationEdit`, `confirmedChanges`, `confirmedPeriodOf`; edytor –
+  `guarded`, `fresh`, `operation-confirmed`, okno `operation-guard` (`-cancel`, `-confirm`).
+- Lista (F18, T267): `operationsView.ts` – `OperationsFilter` (`amountMin` / `amountMax`, `members`, `brands`, `containers`,
+  `goals`, `loans`, `transferAccounts`, `sort`), `LIST_KEYS`, `noNarrowing` / `narrows`, `filterOf`, `viewFilter`,
+  `showsView`, `membersIn`, `brandTargetOf` / `brandKeyOf`, `sortOperations`, `OPERATION_SORTS`; `settings.operationViews`
+  (`operationViewSchema`); `export/budget.ts` `operationRowsOf(…, view)`; renderer `operations/ListTools.tsx`
+  (`MoreFilters` – `operations-more*`, `SortHeader` – `operations-sort-*`, `ViewsBar` / `SaveView` – `operations-view*`,
+  `ExportVisible` – `operations-export-csv` / `-xlsx`), `state.ts` `STORED_KEYS`, `applyView`, `saveView`, `deleteView`,
+  `showBrand` (`operation-same-brand`), `openOperation` / `newOperation` z `noNarrowing`.
+- Paleta (F19, T268): `shared/search.ts` `searchRecords` / `SEARCH_LIMITS`; `store/ui.ts` `focusRecord` / `FocusKind`;
+  `components/focus.ts` `useFocusRecord` (`data-focus`, `.focus-mark`); `CommandPalette.tsx` `SETTINGS_ITEMS`, grupy
+  `palette-operation` / `-container` / `-goal` / `-loan` / `-member` / `-setting`.
+- Dziennik zmian (F33, T269): `shared/changeLog.ts` `changeLog`, `changeLogMachines`, `CHANGELOG_KINDS`;
+  `sync/ChangeLog.tsx` (`sync-changelog`, `changelog-period-*`, `-machine`, `-kind`, `-row`, `-changes`, `-diff`,
+  `-take-back`, `-open`, `-no-version`).
+- Testy: `tests/unit/transfers.test.ts`, `operations-list.test.ts`, `search.test.ts`, `change-log.test.ts`, poszerzone
+  `operations-state`, `inbox`, `duplicates`; E2E `tests/e2e/operations-s.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -907,4 +942,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   bezczynności, blokadzie ekranu i przy starcie („Pokaż na 5 min” / „do końca sesji”), krzywa majątku na Mostku, „zamknij”
   pożyczkę z „Cofnij”, metafory z prawdziwą nazwą, daty i odmiana jak w całej aplikacji, jedna nazwa ładowni, bez martwego
   kodu
+- [x] 1.7.0 Operacje – funkcje (grupa S, D87): przelew między kontami budżetu jedną operacją (import łączy drugą stronę,
+  pary sprzed 1.7.0 w Meldunkach), zmiana zaznaczonych z podglądem skutku i „Cofnij”, ostrzeżenie w potwierdzonym
+  okresie, filtry zaawansowane, kolejność, zapisane widoki i eksport widocznej listy, paleta szuka wpisów, dziennik zmian
+  folderu
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

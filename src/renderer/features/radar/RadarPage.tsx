@@ -26,6 +26,7 @@ import { openRefundables } from '../operations/state'
 import { addLoan, closeLoan, deleteLoan, recordPayment, type NewLoan } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 import { useCargoStatuses } from '../cargo/status'
+import { useFocusRecord } from '../../components/focus'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -35,6 +36,8 @@ export function RadarPage() {
   const fleet = useFleet()
   const plans = useRecordList('months')
   const members = useMembers()
+  // Opened from the palette (F19): the loan marked (a closed one's list opened).
+  useFocusRecord('loan')
   // Whom a member's money comes through (D81).
   const via = (id: string) => {
     const v = members.find((m) => m.id === id)?.via
@@ -81,7 +84,7 @@ export function RadarPage() {
                   <details className="pt-1 text-[11.5px] text-muted">
                     <summary className="cursor-pointer select-none">Zamknięte ({closed.length})</summary>
                     {closed.map((s) => (
-                      <div key={s.loan.id} className="flex items-baseline gap-2 py-0.5">
+                      <div key={s.loan.id} className="flex items-baseline gap-2 py-0.5" data-focus={`loan:${s.loan.id}`}>
                         <span className="min-w-0 flex-1 truncate">{s.loan.name}</span>
                         <span className="num">{zl(s.total)}</span>
                         {!readOnly && (
@@ -190,7 +193,7 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
   const [amount, setAmount] = useState<number | null>(s.next?.amount ?? s.open)
   const [date, setDate] = useState(today)
   return (
-    <div className="flex flex-col gap-1 border-b border-line/60 py-1.5 last:border-b-0" data-testid="loan-row" data-name={s.loan.name}>
+    <div className="flex flex-col gap-1 border-b border-line/60 py-1.5 last:border-b-0" data-testid="loan-row" data-name={s.loan.name} data-focus={`loan:${s.loan.id}`}>
       <div className="flex items-baseline gap-2">
         <span className="min-w-0 flex-1 truncate text-fg-strong">{s.loan.name}</span>
         <Badge tone={taken ? 'warn' : 'default'}>{taken ? 'wzięta' : 'udzielona'}</Badge>
