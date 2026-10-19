@@ -44,6 +44,7 @@ export function CommandPalette() {
       { id: 'dock', label: 'Dokowanie: następna dostawa z XTB', run: () => (openFirstDocking() ? navigate({ page: 'bridge' }) : toast('Brak dostaw do zadokowania.')) },
       ...PAGES.map((p) => ({ id: `page-${p.page}`, label: `${p.label} – ${p.sub}`, keys: `Ctrl ${p.key}`, run: () => navigate({ page: p.page }) })),
       { id: 'sync', label: 'Synchronizacja i problemy', keys: 'Ctrl Shift Y', run: () => navigate({ page: 'sync' }) },
+      { id: 'inbox', label: 'Meldunki do rozpatrzenia', keys: 'Ctrl Shift M', run: () => navigate({ page: 'inbox' }) },
       ...SETTINGS_TABS.map((t) => ({ id: `settings-${t.id}`, label: `Ustawienia: ${t.label}`, run: () => navigate({ page: 'settings', tab: t.id }) })),
       ...layoutPresets
         .filter((p) => p.page === page)

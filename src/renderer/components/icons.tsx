@@ -244,6 +244,13 @@ export const IconBox = base(
   </>
 )
 /** Star map: a star. */
+/** An inbox tray: „Meldunki do rozpatrzenia” (F6). */
+export const IconInbox = base(
+  <>
+    <path d="M2 9.5 3.8 3.5h8.4L14 9.5v3H2z" />
+    <path d="M2 9.5h3.3l.9 1.6h3.6l.9-1.6H14" />
+  </>
+)
 export const IconStar = base(<path d="m8 2 1.8 3.8 4.1.5-3 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1-3-2.9 4.1-.5z" />)
 /** Command (Dowództwo): rank chevrons. */
 export const IconRank = base(<path d="m3 6.5 5-3 5 3M3 10l5-3 5 3M3 13.5l5-3 5 3" />)

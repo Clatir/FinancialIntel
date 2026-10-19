@@ -8,6 +8,7 @@ import { WATCH_TIME } from './calc/intel'
 import { dayOfMonth, daysBetween, inClockWindow, monthOf, warsawNow, weekdayOf } from './calc/dates'
 import type { FleetState } from './calc/fleet'
 import { ICTJ_POOL_LABEL } from './ictj'
+import { plural } from './format'
 import type { NotifyPrefs } from './machine'
 import type { Transaction } from './schema/records'
 
@@ -51,13 +52,11 @@ export function eveningState(transactions: readonly Transaction[], today: string
   return { written, done: !!noSpend[today] || late, snooze }
 }
 
-const operations = (n: number) => (n === 1 ? 'operację' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'operacje' : 'operacji')
-
 /** The evening reminder's text (F13). */
 export function eveningText(written: number | null): string {
   if (written == null) return 'Dopisz dzisiejsze wydatki – szybki wpis albo Operacje.'
   if (written === 0) return 'Dziś nic jeszcze nie dopisano – szybki wpis albo „Dziś bez wydatków”, gdy nic nie wydano.'
-  return `Dziś dopisano ${written} ${operations(written)} z godziną – dopisz resztę albo potwierdź „Dziś bez wydatków”.`
+  return `Dziś dopisano ${written} ${plural(written, 'operację', 'operacje', 'operacji')} z godziną – dopisz resztę albo potwierdź „Dziś bez wydatków”.`
 }
 
 export interface NotifyInput extends Omit<BriefingInput, 'fleet'> {

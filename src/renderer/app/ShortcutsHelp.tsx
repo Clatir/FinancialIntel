@@ -13,7 +13,7 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
       ['Ctrl N', 'nowa operacja'],
       ['Ctrl Alt B', 'szybki wpis – w całym systemie (zmiana: Ustawienia → Powiadomienia i dźwięki)'],
       ['Ctrl $', 'ukryj / pokaż kwoty'],
-      ['Esc / mysz „wstecz”', 'poprzednia strona (Ustawienia, Synchronizacja)'],
+      ['Esc / mysz „wstecz”', 'poprzednia strona (Ustawienia, Synchronizacja, Meldunki)'],
       ['? lub F1', 'ta ściąga']
     ]
   },
@@ -22,6 +22,7 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
     items: [
       ...PAGES.map((p): [string, string] => [`Ctrl ${p.key}`, p.label.toLowerCase()]),
       ['Ctrl Shift Y', 'synchronizacja i problemy'],
+      ['Ctrl Shift M', 'meldunki do rozpatrzenia'],
       ['Ctrl ,', 'ustawienia']
     ]
   },

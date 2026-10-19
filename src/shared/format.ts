@@ -8,3 +8,17 @@ export function formatPln(grosze: number, group = true): string {
   const int = group ? zl.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : zl
   return `${grosze < 0 ? '−' : ''}${int},${String(abs % 100).padStart(2, '0')}`
 }
+
+/**
+ * Polish plural form of the noun after a number: 1 → `one`, 2–4 (except 12–14) → `few`, otherwise `many`;
+ * a fractional number takes `fraction` (genitive singular: "2.5 pipsa"), by default the `few` form.
+ */
+export function plural(n: number, one: string, few: string, many: string, fraction = few): string {
+  if (!Number.isFinite(n)) return many
+  const abs = Math.abs(n)
+  if (!Number.isInteger(abs)) return fraction
+  if (abs === 1) return one
+  const last = abs % 10
+  const lastTwo = abs % 100
+  return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? few : many
+}

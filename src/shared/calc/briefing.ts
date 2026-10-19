@@ -131,8 +131,8 @@ export const MISSING_ENTRY_DAYS = 30
 /** '2026-10-16' → '16.10' (the briefing's and the notifications' short date). */
 export const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
 
-/** The line of a delivery in the briefing (null = nothing to say). */
-function deliveryItem(d: Delivery, today: string, zl: (grosze: number) => string): BriefingItem | null {
+/** The line of a delivery in the briefing (null = nothing to say); the inbox says the same of one to dock (F6). */
+export function deliveryItem(d: Delivery, today: string, zl: (grosze: number) => string): BriefingItem | null {
   const e = d.entry
   if (d.state === 'pending') {
     const text = e

@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 
 /** Screens of the side menu (docs/specyfikacja.md, „Ekrany”). */
-export type Page = 'bridge' | 'operations' | 'import' | 'month' | 'cargo' | 'starmap' | 'radar' | 'command' | 'intel' | 'reports' | 'settings' | 'sync' | 'wizard'
+export type Page = 'bridge' | 'operations' | 'import' | 'month' | 'cargo' | 'starmap' | 'radar' | 'command' | 'intel' | 'reports' | 'settings' | 'sync' | 'wizard' | 'inbox'
 
 export type Route = { page: Exclude<Page, 'settings'> } | { page: 'settings'; tab?: SettingsTab }
 
