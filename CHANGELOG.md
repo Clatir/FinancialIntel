@@ -1,5 +1,45 @@
 # Financial Intel – zmiany
 
+## 1.6.0
+
+Nowe funkcje z przeglądu aplikacji po 1.4.1 (D86): opłaty stałe w miesiącu, szybki wpis seriami, wieczorny raport
+wachty, meldunki do rozpatrzenia i odzyskanie z kopii.
+
+Opłaty stałe (Ładownia):
+- Kontener miesięczny ma stan w tym miesiącu: zapłacone, czeka albo po terminie. Termin to dzień płatności z historii
+  (środkowy z ostatnich płatności, bez historii – dzień kontenera); „po terminie” zaczyna się 3 dni po nim. Dopóki
+  pliki z banku nie obejmą tych dni, opłata czeka na import zamiast być „po terminie”.
+- „Kontener niezaładowany” w odprawie i powiadomienie (do wyłączenia w Ustawienia → Powiadomienia i dźwięki).
+- „Zapłacone” w Ładowni zapisuje płatność gotówką albo z konta bez importu – od 14 dni przed terminem.
+- Radar pokazuje opłaty miesięczne w każdym miesiącu; zaległa – z oznaczeniem.
+
+Szybki wpis:
+- Ctrl+Enter zapisuje i zostawia okno na następny wpis („Dopisano: 3 · energia dziś …”); Enter zapisuje i zamyka, Esc
+  zamyka jak dotąd.
+- „Powtórz ostatni” (także z pieniędzmi domownika) i 5 ostatnich par kontrahent + kategoria jako szablony.
+- Działania w kwocie („12,50+8,30”, „3*4,99”), „wczoraj” jednym kliknięciem, data słowem („wczoraj”, „-3”).
+- Szkic zamknięty Esc czeka do następnego otwarcia (najwyżej 30 minut) – „Wyczyść” zaczyna od nowa.
+
+Wieczorny raport wachty:
+- Od godziny przypomnienia w Operacjach pasek „Raport wachty dnia”: ile dziś dopisano operacji z godziną, „Dopisz”,
+  „Dziś bez wydatków” (zapisane przy dniu – dziennik wachty to oznacza) i „Przypomnij za 30 min”; te same akcje w menu
+  zasobnika.
+- Bez przypomnienia, gdy po 18:00 dopisano wydatek albo dzień jest potwierdzony.
+
+Meldunki do rozpatrzenia (menu boczne, Ctrl+Shift+M):
+- Jedna skrzynka z licznikiem: wypłaty z ICTTJ do zadokowania, łupy do podziału, konflikty kopii i pliki z błędem,
+  wydatki bez kategorii od startu budżetu, możliwe duplikaty, zwroty od domowników, salda niepotwierdzone ponad 30 dni.
+  Każdy meldunek prowadzi do decyzji (okno dokowania, Operacje z filtrem, Synchronizacja, Plan miesiąca, Konta).
+  Bez nowych powiadomień.
+- Płatność kontenera i wydatek z celu nie są już „bez kategorii” (mają swoje miejsce w budżecie) – lista operacji
+  pisze przy nich „ładownia” albo „z celu”.
+
+Odzyskanie z kopii (Ustawienia → Folder i kopie → „Odzyskaj…” przy kopii):
+- Podgląd: co zmieniło się i co usunięto od kopii (z różnicami pól), co dodano po niej.
+- Wybrane wpisy i ustawienia wracają jako nowa wersja – bieżące zostają w historii, toast ma „Cofnij”.
+- Cały folder: kopia rozpakowana do nowego folderu obok bieżącego („… – kopia z RRRR-MM-DD GG.MM”) i otwarta; bieżący
+  folder nie jest nadpisywany. Rozpakowanie bezpieczne – tylko pliki danych, ścieżka z ../ odrzuca kopię.
+
 ## 1.5.4
 
 Szybkość przy dużym folderze – reszta poprawek wydajności z przeglądu aplikacji po 1.4.1 (D86). Wszystko liczy się tak

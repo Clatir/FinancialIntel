@@ -604,6 +604,35 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `fleet.test.ts` / `loans.test.ts` (W27), `import.test.ts` (grupa K), `import-replan.test.ts`, `tests/fs/history.test.ts`
   (W19), `data-store.test.ts` (W25), E2E `tests/e2e/speed.spec.ts` (duży import, wiele zmian z drugiego komputera).
 
+## Kod (1.6.0 – funkcje, grupa L, D86)
+- Opłaty stałe (F1, T208): `shared/calc/cargoStatus.ts` (`cargoStatuses` – stan zapłacone / czeka / po terminie, `day` /
+  `dayFrom` z historii płatności, `due`, `from` – okno płatności, `importPending`; `dueIn`, `EARLY_DAYS`), `briefing.ts`
+  pozycja `cargo`, `notify.ts` tag `cargo` (`machine.ts` `notify.cargo`), `radar.ts` rodzaj `fixed` i opłata okresowa tego
+  miesiąca w dniu z historii; renderer `features/cargo/status.ts` (`useCargoStatuses`, `cargoStatusesNow`), Ładownia
+  `cargo-state`, `container-month`, `container-paid` / `container-paid-from` (`payContainer`).
+- Szybki wpis seriami (F7, T209): `shared/calc/quick.ts` (`quickTemplates`, `QUICK_TEMPLATES`), `QuickData.last` /
+  `templates`, `QuickTemplate`, `QuickResult.data`; `lib/format.ts` `parseAmountInput` (działania), `parseDateInput`
+  (`DAY_WORDS`, „-N”); `QuickApp.tsx` – Ctrl+Enter (`quick-series`), `quick-repeat`, `quick-template`, `quick-yesterday`,
+  szkic po Esc (`KEEP_DRAFT_MS`, `quick-restored`, `quick-clear`).
+- Wieczorny raport (F13, T210): `settings.game.noSpend`, `notify.ts` `eveningState` / `eveningText` / `EVENING_FROM`,
+  `features/evening/` (`state.ts` – `confirmNoSpend`, `snoozeEvening`, `eveningSnooze`, `eveningNow`; `EveningReport.tsx` w
+  Operacjach – `evening-report`, `evening-quick`, `evening-nospend`, `evening-snooze`), zasobnik `TrayDeps.evening`,
+  `notifier.ts` `openTag('evening:…')`, znacznik gry `nospend`; `shared/format.ts` `plural` (renderer go re-eksportuje).
+- Meldunki (F6, T211): `shared/calc/inbox.ts` (`inboxItems`, `INBOX_KINDS`, `INBOX_TITLE`, `uncategorizedOf`,
+  `INBOX_BALANCE_DAYS`), `operationsView.ts` `isUncategorized`, `briefing.ts` `deliveryItem` (eksport); renderer
+  `features/inbox/` (`state.ts` – `useInbox(duplikaty, money)`, `useInboxCount`, `openInboxItem`; `InboxPage.tsx` –
+  `page-inbox`, `inbox-count`, `inbox-item` z `data-kind`, `inbox-open`), menu `nav-inbox` z `data-badge`, Ctrl+Shift+M,
+  paleta; `DuplicatesPanel.tsx` `useDuplicatesKnown` / `useKnownDuplicateCount`.
+- Odzyskanie z kopii (F3, T212): `main/datastore/restore.ts` (adapted from ICTTJ transfer.ts – `extractZip`,
+  `readBackupZip`, `unpackBackup`), `DataStore.compareBackup` / `restoreVersions` / `putVersion` / `putSettings`
+  (`historyRestore` przez nie), IPC `backupPreview`, `backupRecover`, `putVersions`, `backupToFolder`
+  (`BackupPreview`, `BackupDiffItem` w `shared/api.ts`); renderer `features/settings/RecoverDialog.tsx` (`recover-dialog`,
+  `recover-summary`, `recover-added`, `recover-item` z `data-change`, `recover-pick`, `recover-diff`, `recover-changes`,
+  `recover-all`, `recover-settings`, `recover-selected`, `recover-folder`), `recover.ts` (`recoverFromBackup` z „Cofnij”),
+  przycisk `backup-recover` przy kopii.
+- Testy: `tests/unit/cargo-status.test.ts`, `inbox.test.ts`, poszerzone `notify`, `format`, `game`, `operations-view`;
+  `tests/fs/restore.test.ts`; E2E `tests/e2e/fees.spec.ts`, `series.spec.ts`, `inbox.spec.ts`, `recover.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -688,4 +717,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.5.4 Szybkość – reszta (grupa K, D86): ekran importu bez rysowania wszystkiego, plan importu bez przeglądania
   wszystkiego (także kreator), lista usuniętych bez blokady zapisów, zmiany z drugiego komputera naraz, silnik floty bez
   sortowania całej historii
+- [x] 1.6.0 Funkcje (grupa L, D86): opłaty stałe w miesiącu (stan, alarm, Radar), szybki wpis seriami, wieczorny raport
+  wachty z „Dziś bez wydatków”, meldunki do rozpatrzenia z licznikiem w menu, odzyskanie z kopii (wybrane wpisy albo cały
+  folder do nowego)
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

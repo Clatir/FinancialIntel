@@ -1332,3 +1332,47 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   każdym rysowaniu swojej karty (bez pamięci, która nie widziała stanu edycji); indeks reguł tylko pytanego kierunku i
   wzorce słów przy pierwszym użyciu (`keywordProposals` buduje listę na każde słowo); pominięte w marce liczone raz na
   stan pominięć, nie przy każdym znaku w wyszukiwarce.
+- **T208** Opłaty stałe w miesiącu (F1, D86): `cargoStatuses` (`shared/calc/cargoStatus.ts`) – dzień płatności =
+  środkowy (dolny) z ostatnich 6 płatności kontenera przed miesiącem, bez nich `dueDay` kontenera; płatności terminu
+  liczą się w oknie [termin − 14 dni, następny termin − 14 dni) (`from`), opłata okresowa także ze zbiornika silnika
+  (`paidDue`); „po terminie” od 3. dnia po terminie (`OVERDUE_DAYS`), chyba że pliki z banku konta (`coveredTo` albo
+  ostatni wiersz z banku) nie obejmują jeszcze tych dni – wtedy „czeka na import”. Odprawa: pozycja `cargo` raz na termin,
+  powiadomienie z tagiem `cargo` (`notify.cargo`, domyślnie włączone). Radar: kontenery miesięczne w każdym miesiącu w ich
+  dniu płatności (`fixed`), opłata okresowa tego miesiąca raz – w dniu z historii, bez drugiej w dniu kontenera.
+  „Zapłacone” w Ładowni (płatność dziś na koncie kontenera) dopiero od początku okna – wcześniejsza należy do poprzedniego
+  terminu.
+- **T209** Szybki wpis seriami (F7): Ctrl+Enter zapisuje i zostawia okno (świeży szkic z tym samym kontem, dniem, godziną i
+  kierunkiem; `QuickResult.data` – energia po zapisie), Enter i Esc bez zmian (D70); `quickTemplates` jednym przejściem –
+  ostatni wpis ręczny z jedną linią (z pieniędzmi domownika: zakup / prezent, wpłata z zaliczką) i 5 najnowszych par
+  `counterpartyKey` + kategoria własnych zakupów; działania w kwocie w `parseAmountInput` (+ − * / :, mnożenie i dzielenie
+  najpierw, wynik do grosza; zwykła liczba jak dotąd); data słowem w `parseDateInput` (dziś, wczoraj, przedwczoraj, „-N”,
+  `Object.hasOwn`); szkic zamknięty bez zapisu czeka 30 min od ostatniej zmiany albo zamknięcia (`visibilitychange`, Esc,
+  przycisk); fokus pola kwoty po narysowaniu nowego formularza (szablon, „Wyczyść”).
+- **T210** Wieczorny raport wachty (F13, D84 C15): `settings.game.noSpend` (dzień → chwila potwierdzenia, addytywne,
+  400 dni); `eveningState` – dopisane dziś = operacje dnia spoza banku z godziną, raport zrobiony = dzień potwierdzony albo
+  własny wydatek dziś z godziną od 18:00 lub dopisany od 18:00 (`EVENING_FROM`); „Przypomnij za 30 min” per komputer
+  (localStorage `fi.evening.snooze`), powiadomienie po odłożeniu pod nowym kluczem `evening:<dzień>:<n>`; menu zasobnika
+  wysyła `evening:nospend` / `evening:snooze` do okna (przy ukrytym oknie odpowiedź powiadomieniem); znacznik gry
+  `nospend` przy potwierdzonym dniu bez kosztu – jak liczy misja „Dzień bez wydatków”.
+- **T211** Meldunki do rozpatrzenia (F6): `inboxItems` (`shared/calc/inbox.ts`) – jeden meldunek = jedna linia, licznik w
+  menu = liczba linii; kolejność: dokowanie (każda dostawa `pending`), łupy, folder danych (konflikty + pliki z błędem),
+  bez kategorii (od startu budżetu, `isUncategorized` wspólne ze znacznikiem Operacji – bez płatności kontenerów i
+  wydatków z celu, w liście „ładownia” / „z celu”), możliwe duplikaty, zwroty (domownik z należnością), salda (ostatnie
+  potwierdzenie albo saldo otwarcia sprzed ponad 30 dni); przed startem budżetu tylko folder. Duplikaty: menu bierze
+  ostatnią liczbę policzoną przez ekran, który je pokazuje (`useDuplicatesKnown` – W4: bez 0,6 s przy 150 tys. po każdej
+  zmianie na każdym ekranie), sam liczy raz 10 s po otwarciu folderu; skrzynka liczy je 3 s po zmianie. Trasa `inbox`,
+  Ctrl+Shift+M, Esc wraca jak z Synchronizacji.
+- **T212** Odzyskanie z kopii (F3): proces główny czyta ZIP kopii w pamięci (`readBackupZip`: yauzl, `sanitizeRelPath`,
+  tylko `isDataFile`, `parseRecordText` z migracjami, kopie konfliktów pominięte) – tylko kopię z listy folderu kopii;
+  porównanie pod blokadą magazynu (`compareBackup`: `sameContentAs` bez pól zapisu; paczki importów pominięte; dodane po
+  kopii tylko policzone); zapis `restoreVersions` = `putVersion` na wpis (bieżąca wersja do historii z powodem
+  'restore', nowa `updatedAt`, ścieżka kanoniczna – zajęta przez inny wpis = błąd tego wpisu) i ustawienia osobno (błąd
+  zgłoszony, zmiana wpisów i tak idzie do okna); odczytana kopia trzymana 10 min albo do odzyskania. „Cofnij” = wersje
+  zastąpione (z pamięci okna) zapisane jednym wywołaniem `putVersions`, odtworzone z kopii usuwane ponownie. Cały folder:
+  `unpackBackup` do `<folder> – kopia z RRRR-MM-DD GG.MM` obok folderu danych (numer, gdy nazwa zajęta) przez ukryty folder
+  tymczasowy przemianowany po całości, wymagany fi.json, potem otwarcie jak przy zmianie folderu (zapis zmian, postęp).
+- **T213** Przegląd grupy L (`/code-review` high, 10 kandydatów): 9 poprawionych z testami sprawdzonymi bez poprawki
+  (okno „Zapłacone”, opłata okresowa raz na Radarze, ustawienia odzyskania osobno, „bez kategorii” bez ładowni i celów,
+  „Powtórz ostatni” z pieniędzmi domownika, wpisy kopii po id, licznik meldunków bez liczenia duplikatów na każdym ekranie,
+  „Cofnij” odzyskania jednym wywołaniem, słowa dni bez nazw prototypu); znacznik „Dziś bez wydatków” zostaje liczony jak
+  misja „Dzień bez wydatków” (bez kosztu dnia, także stałych opłat) – poprawiony tylko komentarz.
