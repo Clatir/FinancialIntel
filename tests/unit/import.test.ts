@@ -629,3 +629,55 @@ describe('grupa H (1.5.1): pożyczka z Radaru, operacja na innym koncie, niepoł
     expect(created).toMatchObject({ kind: 'trading', amount: xtb.amount })
   })
 })
+
+describe('grupa K (1.5.4): plan i rozpoznanie bez przeglądania wszystkiego (W18, W20)', () => {
+  const manualOf = (over: Partial<Transaction>) => transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, date: '2025-10-02', accountId: MBANK_ACCOUNT_ID, amount: -1616, counterparty: 'Biedronka', categoryId: GROCERIES, ...over })
+
+  it('wpis ręczny 3 dni od wiersza łączy się, 4 dni – nie; z kilku do wyboru ten bliżej, potem pierwszy na liście', () => {
+    const f = fixture()
+    const row = f.rows.find((r) => r.amount === -1616 && r.counterparty.includes('Biedronka'))!
+    expect(row.date).toBe('2025-10-03')
+    const near = manualOf({ date: addDays(row.date, -3) })
+    const far = manualOf({ date: addDays(row.date, 4) })
+    const merged = (existing: Transaction[]) => planImport(f, MBANK_ACCOUNT_ID, existing, ctx()).rows.find((p) => p.status === 'merge')
+    expect(merged([far])).toBeUndefined()
+    expect(merged([far, near])?.status === 'merge' && merged([far, near])).toMatchObject({ tx: { id: near.id } })
+    // Two of the same distance: the one first on the list.
+    const a = manualOf({ date: addDays(row.date, 2) })
+    const b = manualOf({ date: addDays(row.date, -2) })
+    expect(merged([a, b])).toMatchObject({ tx: { id: a.id } })
+    expect(merged([b, a])).toMatchObject({ tx: { id: b.id } })
+    expect(merged([a, b, manualOf({ date: addDays(row.date, 1) })])).toMatchObject({ tx: { date: addDays(row.date, 1) } })
+  })
+
+  it('plan znowu na tej samej liście operacji: nowa reguła działa od razu; nowa lista (wpis ręczny dopisany) – łączy', () => {
+    const f = fixture()
+    const existing: Transaction[] = []
+    const lidl = (plan: ImportPlan) => plan.rows.find((p): p is NewRow => p.status === 'new' && p.row.counterparty === 'LIDL')!
+    const first = planImport(f, MBANK_ACCOUNT_ID, existing, ctx())
+    expect(lidl(first).decision).toMatchObject({ source: 'brand', categoryId: GROCERIES })
+    // A rule of the brand (a new list of rules): the same list of operations, the new decision.
+    const rules = upsertRule([], { match: lidl(first).brand, direction: 'out', label: 'LIDL', kind: 'expense', categoryId: AUTO, refundable: false, household: false, memberId: null, gift: false, share: null, counterAccountId: null }, { now: NOW, makeId, hits: 1 })
+    expect(lidl(planImport(f, MBANK_ACCOUNT_ID, existing, ctx(rules))).decision).toMatchObject({ source: 'rule', categoryId: AUTO })
+    // A rule deleted: the brand's proposal again (no rule kept from an earlier list).
+    expect(lidl(planImport(f, MBANK_ACCOUNT_ID, existing, ctx([]))).decision).toMatchObject({ source: 'brand' })
+    // A hand-typed entry in a new list of operations: joined.
+    const withManual = [...existing, manualOf({})]
+    expect(counts(planImport(f, MBANK_ACCOUNT_ID, withManual, ctx()))).toEqual({ new: 268, merge: 1 })
+    expect(counts(planImport(f, MBANK_ACCOUNT_ID, existing, ctx()))).toEqual({ new: 269 })
+  })
+
+  it('słowo kluczowe i połączone nazwy: ta sama nazwa, inne połączenia – inna marka (pamięć rozpoznania po połączeniach)', () => {
+    const f = fixture()
+    const row = f.rows.find((r) => r.counterparty === 'LIDL')!
+    const before = classifyRow(row, { ...ctx(), aliases: {} })
+    expect(before.brand.key).toBe('lidl')
+    const merged = classifyRow(row, { ...ctx(), aliases: { lidl: { to: 'biedronka', label: 'LIDL', toLabel: 'Biedronka', at: NOW } } })
+    expect(merged.brand.key).toBe('biedronka')
+    expect(classifyRow(row, { ...ctx(), aliases: {} }).brand.key).toBe('lidl')
+    // A keyword of the user's: in the name, then gone with the rule.
+    const kw: ImportRule = { id: makeId(), match: 'lidl', mode: 'keyword', direction: 'out', label: 'lidl', kind: 'expense', categoryId: AUTO, refundable: false, household: false, memberId: null, counterAccountId: null, learned: false, hits: 0, updatedAt: NOW }
+    expect(classifyRow(row, ctx([kw])).decision).toMatchObject({ source: 'rule', categoryId: AUTO })
+    expect(classifyRow(row, ctx([])).decision).toMatchObject({ source: 'brand' })
+  })
+})

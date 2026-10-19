@@ -5,6 +5,7 @@ import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mba
 import { buildImport, importGroups, joins, planImport, sameChoice, type Choice, type ImportChoices, type ImportCounts, type ImportGroup, type ImportPlan, type ImportTheme } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
 import { shareComplete } from '@shared/calc/share'
+import { deepEqual } from '@shared/merge'
 import { batchesToDrop, importBatch, type BatchFacts } from '@shared/import/batch'
 import { accountNumberOf } from '@shared/import/mbank'
 import { statementCheck, statementOf, type Statement } from '@shared/import/statement'
@@ -85,8 +86,6 @@ export const useImport = create<ImportSession>(() => ({
   done: null
 }))
 
-const records = <T,>(map: Record<string, { record: T }>): T[] => Object.values(map).map((e) => e.record)
-
 /** What a plan reads (as the store keeps it – compared by reference). */
 export interface PlanInputs {
   rules: unknown
@@ -126,18 +125,19 @@ function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<st
   const { rules, aliases } = s.fi.settings.import
   const { members } = s.fi.settings.household
   useImport.setState({ planInputs: planInputsNow() })
+  // The store's lists (W18): the same while the records are – a plan again after a keyword reads their indexes as they are.
   return planImport(
     file,
     accountId,
-    records(s.records.transactions),
+    listOf(s.records.transactions),
     {
       rules,
       ownNames: ownNamesWith(s.fi.settings.import.ownNames, file),
       categories: categoryIndex(s.fi.settings.categories),
-      containers: records(s.records.containers),
+      containers: listOf(s.records.containers),
       aliases,
       members,
-      loans: records(s.records.loans ?? {}),
+      loans: listOf(s.records.loans ?? {}),
       accountNumbers: s.fi.settings.import.accountNumbers
     },
     deletedKeys
@@ -257,8 +257,19 @@ export function replanIfChanged(inputs: PlanInputs | null): void {
   const { plan, planInputs, busy } = useImport.getState()
   // The import writing its own records: planned once more by it (and after it, when the file stays open).
   if (!plan || !inputs || !planInputs || busy) return
-  if ((Object.keys(inputs) as Array<keyof PlanInputs>).some((k) => inputs[k] !== planInputs[k])) replanImport()
+  const changed = (Object.keys(inputs) as Array<keyof PlanInputs>).filter((k) => inputs[k] !== planInputs[k])
+  if (!changed.length) return
+  // The settings' parts in new objects of the same content (W18: the settings saved here or on another computer, another
+  // of their parts changed): nothing to plan again – the new objects kept, so the next look is by reference again.
+  if (changed.every((k) => BY_CONTENT.has(k) && deepEqual(inputs[k], planInputs[k]))) {
+    useImport.setState({ planInputs: inputs })
+    return
+  }
+  replanImport()
 }
+
+/** What a plan reads from the settings (small, compared by content); the records' maps change only with their content. */
+const BY_CONTENT: ReadonlySet<keyof PlanInputs> = new Set(['rules', 'aliases', 'members', 'ownNames', 'categories', 'accountNumbers'])
 
 /**
  * The plan once more (the rules changed – a keyword added, a rule deleted – or the operations did): the decisions stay;
@@ -439,8 +450,9 @@ export const setImportQuery = (query: string) => useImport.setState({ query })
 /** Tick or untick groups and rows (a theme's tick = its groups). */
 export function selectImport(target: { groups?: readonly string[]; rows?: readonly string[] }, on: boolean): void {
   useImport.setState((s) => {
-    const groups = { ...s.selected.groups }
-    const rows = { ...s.selected.rows }
+    // A map not touched stays the same object (W17).
+    const groups = target.groups?.length ? { ...s.selected.groups } : s.selected.groups
+    const rows = target.rows?.length ? { ...s.selected.rows } : s.selected.rows
     for (const g of target.groups ?? []) if (on) groups[g] = true
     else delete groups[g]
     for (const r of target.rows ?? []) if (on) rows[r] = true

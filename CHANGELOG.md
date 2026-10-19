@@ -1,5 +1,33 @@
 # Financial Intel – zmiany
 
+## 1.5.4
+
+Szybkość przy dużym folderze – reszta poprawek wydajności z przeglądu aplikacji po 1.4.1 (D86). Wszystko liczy się tak
+samo jak dotąd, krócej.
+
+Import z mBanku:
+- Ekran importu przy pliku z setkami marek: temat z ponad 30 markami do rozstrzygnięcia jest na start zwinięty, marki,
+  wiersze, dopasowania i usunięte pokazują się po 100 z „pokaż kolejne”, a decyzja, zaznaczenie czy znak w wyszukiwarce
+  odświeża tylko to, co się zmieniło – przy 150 tys. operacji ekran rysuje się w ok. 0,2 s zamiast 2,2–2,6 s.
+- Plan importu: wpisy ręczne szukane w dniach wokół operacji, reguły i marki z pamięci – plik z 90 dni przy 150 tys.
+  operacji planuje się w ok. 0,07 s zamiast 3,5 s, cała historia w kreatorze (30 tys. wierszy) w ok. 0,25 s zamiast 5,3 s.
+- Plan liczy się od nowa tylko wtedy, gdy zmieni się to, co czyta (reguły, połączone nazwy, domownicy, nazwiska,
+  kategorie, numery rachunków), a nie po każdym zapisie ustawień.
+- Lista operacji usuniętych przez Ciebie (ich wiersze z banku nie wracają same) czyta historię kilka plików naraz i nie
+  wstrzymuje zapisów; wersję usuniętej operacji czyta raz – na drugim komputerze plik historii z chmury jest pobierany
+  raz, a nie przy każdym pliku importu.
+
+Zmiany z drugiego komputera:
+- „Zastosuj” i „Zaakceptuj nowsze” rozstrzygają całą paczkę naraz i zapisują ją jednym wywołaniem: 1000 zmian przy
+  30 tys. operacji w ok. 0,05 s zamiast 30 s (przy 150 tys. – 0,25 s zamiast 4 min).
+- Okno pokazuje 50 wpisów z „pokaż kolejne”; „Zastosuj” obejmuje wszystkie – jeszcze niepokazane z wyborem domyślnym
+  (okno to mówi).
+
+Silnik budżetu:
+- Stan okrętu liczy się bez sortowania całej historii przy każdym przeliczeniu: operacje posortowane raz, salda kont i
+  pożyczek jednym przejściem – przy 150 tys. operacji ok. 0,6–1,0 s zamiast 1,2–1,9 s, przy 30 tys. ok. 0,15 s zamiast
+  0,24 s.
+
 ## 1.5.3
 
 System, folder danych i dwa komputery – poprawki z przeglądu aplikacji po 1.4.1 (D84, D86).

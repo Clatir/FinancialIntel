@@ -7,7 +7,7 @@
 import { fold } from '../fold'
 import { cleanBankName, counterpartyKey } from './names'
 import { resolveBrand, type BrandAliases } from './aliases'
-import { brandById, brandOf, keywordIn, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
+import { brandById, brandOf, keywordIn, keywordMatcher, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
 import type { Category, HouseholdMember, ImportRule } from '../schema/budget'
 import type { Container, Loan, Share } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '../schema/budget'
@@ -70,29 +70,63 @@ export interface RuleTarget {
  * (in the name or the title); a rule of the other direction does not count.
  */
 export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction, amount?: number): ImportRule | null {
-  const usable = rules.filter((r) => (r.direction == null || r.direction === direction) && (TX_KINDS as readonly string[]).includes(r.kind))
-  const exact = (key: string) => {
-    const hits = key ? usable.filter((r) => r.mode === 'exact' && r.match === key) : []
-    return hits.find((r) => r.direction === direction) ?? hits[0] ?? null
-  }
+  const usable = ruleIndexOf(rules, direction)
   const keys = new Set([t.brand, t.raw, ...(t.legacy ?? []), t.key].filter(Boolean))
   // A rule of the brand up to an amount (F22): the tightest one the amount fits, before the brand's plain rule.
   if (amount != null) {
     let best: ImportRule | null = null
-    for (const r of usable) if (r.mode === 'amount' && r.maxAmount && keys.has(r.match) && Math.abs(amount) <= r.maxAmount && (!best || r.maxAmount < best.maxAmount!)) best = r
+    for (const r of usable.amount) if (keys.has(r.match) && Math.abs(amount) <= r.maxAmount! && (!best || r.maxAmount! < best.maxAmount!)) best = r
     if (best) return best
   }
   for (const k of keys) {
-    const byKey = exact(k)
-    if (byKey) return byKey
+    const hits = usable.exact.get(k)
+    if (hits) return hits.find((r) => r.direction === direction) ?? hits[0]!
   }
   let best: ImportRule | null = null
-  for (const r of usable)
-    if (r.mode === 'contains' && r.match && (t.key.includes(r.match) || t.brand.includes(r.match) || t.raw.includes(r.match)) && (!best || r.match.length > best.match.length)) best = r
+  for (const r of usable.contains) if ((t.key.includes(r.match) || t.brand.includes(r.match) || t.raw.includes(r.match)) && (!best || r.match.length > best.match.length)) best = r
   if (best) return best
-  for (const r of usable)
-    if (r.mode === 'keyword' && r.match && (keywordMatches(t.name, r.match) || keywordMatches(t.title, r.match)) && (!best || r.match.length > best.match.length)) best = r
+  for (const k of usable.keyword) {
+    const matches = (k.matches ??= keywordMatcher(k.rule.match))
+    if ((matches(t.name) || matches(t.title)) && (!best || k.rule.match.length > best.match.length)) best = k.rule
+  }
   return best
+}
+
+/**
+ * The rules of one direction by how they are looked up, in their order (W20: one pass over the rules per list). A
+ * keyword's pattern made at its first use – only when no exact or „contains” rule decides.
+ */
+interface RuleIndex {
+  exact: Map<string, ImportRule[]>
+  amount: ImportRule[]
+  contains: ImportRule[]
+  keyword: Array<{ rule: ImportRule; matches?: (ws: readonly string[]) => boolean }>
+}
+
+const ruleIndexes = new WeakMap<readonly ImportRule[], Partial<Record<Direction, RuleIndex>>>()
+
+/** One direction at a time: a list made for one question (`keywordProposals`) builds only what it asks. */
+function ruleIndexOf(rules: readonly ImportRule[], direction: Direction): RuleIndex {
+  let byDirection = ruleIndexes.get(rules)
+  if (!byDirection) ruleIndexes.set(rules, (byDirection = {}))
+  let out = byDirection[direction]
+  if (out) return out
+  out = { exact: new Map(), amount: [], contains: [], keyword: [] }
+  for (const r of rules) {
+    if (!(r.direction == null || r.direction === direction) || !(TX_KINDS as readonly string[]).includes(r.kind)) continue
+    if (r.mode === 'exact') {
+      if (!r.match) continue
+      const list = out.exact.get(r.match)
+      if (list) list.push(r)
+      else out.exact.set(r.match, [r])
+    } else if (r.mode === 'amount') {
+      if (r.maxAmount) out.amount.push(r)
+    } else if (r.mode === 'contains') {
+      if (r.match) out.contains.push(r)
+    } else if (r.mode === 'keyword' && r.match) out.keyword.push({ rule: r })
+  }
+  byDirection[direction] = out
+  return out
 }
 
 /** An ATM withdrawal (by the type of operation). */
@@ -107,7 +141,25 @@ const ATM = /WYPŁATA (W|Z) BANKOMA|WYPLATA (W|Z) BANKOMA|WYPŁATA GOTÓWKI|WYPL
 /** A bank's fee, interest or tax (no shop, no person – `opKindOf` 'fee'). */
 export const isFeeOperation = (operation: string): boolean => /^(PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK)/.test(operation)
 
-export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string; bankName?: string }, aliases: BrandAliases = {}): { target: RuleTarget; brand: BrandMatch } {
+export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string; bankName?: string }, aliases: BrandAliases = NO_ALIASES): { target: RuleTarget; brand: BrandMatch } {
+  // Once per name, title and type of operation with these merged names (W20): a history repeats them thousands of
+  // times. Read only – shared by the rows.
+  let memo = targetMemo.get(aliases)
+  if (!memo) targetMemo.set(aliases, (memo = new Map()))
+  const id = `${o.counterparty}\u0000${o.title}\u0000${o.operation ?? ''}\u0000${o.bankName ?? '\u0001'}`
+  let found = memo.get(id)
+  if (!found) {
+    if (memo.size >= TARGET_MEMO_MAX) memo.clear()
+    memo.set(id, (found = targetOf(o, aliases)))
+  }
+  return found
+}
+
+const NO_ALIASES: BrandAliases = {}
+const TARGET_MEMO_MAX = 50_000
+const targetMemo = new WeakMap<BrandAliases, Map<string, { target: RuleTarget; brand: BrandMatch }>>()
+
+function targetOf(o: { counterparty: string; title: string; operation?: string; bankName?: string }, aliases: BrandAliases): { target: RuleTarget; brand: BrandMatch } {
   const op = o.operation ?? ''
   const name = o.counterparty || op
   const opts = { dictionary: !/^BLIK P2P/.test(op) && !ATM.test(op), transfer: /^(PRZELEW|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|PRZEKAZ|OBCIĄŻENIE|OBCIAZENIE)/.test(op) }
@@ -171,6 +223,18 @@ const MBANK_HINTS: Record<string, [number, number]> = {
 
 /** The category the bank's category hints at – only an existing, not archived one (the user may have changed them). */
 export function hintFor(bankCategory: string, categories: CategoryIndex): string | null {
+  let memo = hintMemo.get(categories)
+  if (!memo) hintMemo.set(categories, (memo = new Map()))
+  if (memo.has(bankCategory)) return memo.get(bankCategory)!
+  const hint = hintOf(bankCategory, categories)
+  memo.set(bankCategory, hint)
+  return hint
+}
+
+/** The bank's categories are few (W20): each one's hint once per category tree. */
+const hintMemo = new WeakMap<CategoryIndex, Map<string, string | null>>()
+
+function hintOf(bankCategory: string, categories: CategoryIndex): string | null {
   const key = fold(bankCategory.trim())
   if (key === 'wyplata gotowki') return usable(CASH_CATEGORY_ID, categories)
   const at = MBANK_HINTS[key]
@@ -311,7 +375,7 @@ export function classifyRow(row: MbankRow, ctx: ClassifyContext): Classified {
   // A payment of a container of the cargo (the same payee – the counterparty, else the title – as `plan.ts` names it):
   // paid from the cargo (a periodic fee from its tank).
   const payee = counterpartyKey(row.counterparty || row.title)
-  const c = payee ? ctx.containers?.find((x) => !x.archived && counterpartyKey(x.counterparty) === payee) : undefined
+  const c = payee && ctx.containers?.length ? payeesOf(ctx.containers).get(payee) : undefined
   if (!c) return out
   const d = out.decision
   const known = d.source === 'rule' || d.source === 'builtin'
@@ -327,11 +391,27 @@ export function classifyRow(row: MbankRow, ctx: ClassifyContext): Classified {
   }
 }
 
+type PayeeContainer = NonNullable<ClassifyContext['containers']>[number]
+const payees = new WeakMap<NonNullable<ClassifyContext['containers']>, Map<string, PayeeContainer>>()
+
+/** The containers not archived by their payee's key – the first of a key (W20: once per list, not per row). */
+function payeesOf(containers: NonNullable<ClassifyContext['containers']>): Map<string, PayeeContainer> {
+  let map = payees.get(containers)
+  if (!map) {
+    map = new Map()
+    for (const x of containers) {
+      if (x.archived) continue
+      const k = counterpartyKey(x.counterparty)
+      if (!map.has(k)) map.set(k, x)
+    }
+    payees.set(containers, map)
+  }
+  return map
+}
+
 function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const { brand, target } = ruleTargetOf(row, ctx.aliases)
   const key = target.key
-  const nameTokens = tokens(row.counterparty)
-  const titleTokens = tokens(row.title)
   const direction = directionOf(row)
   const hint = hintFor(row.category, ctx.categories)
   const op = row.operation
@@ -428,7 +508,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const kw = inName ?? keywordIn(target.title)
   const byWord = kw ? placed(kw.keyword.category, ctx.categories) : null
   if (kw && byWord) {
-    const found = (inName ? nameTokens : titleTokens)
+    const found = tokens(inName ? row.counterparty : row.title)
       .slice(kw.at, kw.at + kw.length)
       .map((t) => t.text)
       .join(' ')

@@ -36,24 +36,37 @@ export interface LoanState {
   left: Array<{ date: string; amount: number }>
 }
 
-/** The money of a loan's operations: out of the budget (< 0) and into it (> 0); a taken loan's container pays it too. */
-function flowsOf(loan: Loan, transactions: readonly Transaction[], containers: readonly Container[], today: string): { out: number; in: number } {
-  const own = new Set(containers.filter((c) => c.loanId === loan.id).map((c) => c.id))
-  let out = 0
-  let into = 0
+interface Flows {
+  out: number
+  in: number
+}
+
+/**
+ * The money of the loans' operations, by loan, in one pass over the operations (W27): out of the budget (< 0) and into
+ * it (> 0) – the loan's own operations, and the payments of its container (an installment of a taken loan is the
+ * cargo's).
+ */
+function flowsByLoan(loans: readonly Loan[], transactions: readonly Transaction[], containers: readonly Container[], today: string): Map<string, Flows> {
+  const flows = new Map<string, Flows>()
+  for (const l of loans) flows.set(l.id, { out: 0, in: 0 })
+  const loanOfContainer = new Map<string, string>()
+  for (const c of containers) if (c.loanId != null && flows.has(c.loanId)) loanOfContainer.set(c.id, c.loanId)
   for (const t of transactions) {
     if (t.date > today) continue
-    // The loan's own operations, and the payments of its container (an installment of a taken loan is the cargo's).
-    const mine = (t.kind === 'loan' && t.loanId === loan.id) || (t.kind === 'expense' && t.containerId != null && own.has(t.containerId))
-    if (!mine) continue
-    if (t.amount < 0) out += -t.amount
-    else into += t.amount
+    const id = t.kind === 'loan' ? t.loanId : t.kind === 'expense' && t.containerId != null ? loanOfContainer.get(t.containerId) : undefined
+    const f = id != null ? flows.get(id) : undefined
+    if (!f) continue
+    if (t.amount < 0) f.out += -t.amount
+    else f.in += t.amount
   }
-  return { out, in: into }
+  return flows
 }
 
 export function loanState(loan: Loan, transactions: readonly Transaction[], containers: readonly Container[], today: string): LoanState {
-  const flows = flowsOf(loan, transactions, containers, today)
+  return stateOf(loan, flowsByLoan([loan], transactions, containers, today).get(loan.id)!, today)
+}
+
+function stateOf(loan: Loan, flows: Flows, today: string): LoanState {
   const schedule = [...loan.schedule].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
   const total = loan.direction === 'taken' && schedule.length ? sum(schedule.map((s) => s.amount)) : loan.amount
   const paid = loan.direction === 'given' ? flows.in : flows.out
@@ -73,7 +86,9 @@ export function loanState(loan: Loan, transactions: readonly Transaction[], cont
 }
 
 export function loanStates(loans: readonly Loan[], transactions: readonly Transaction[], containers: readonly Container[], today: string): LoanState[] {
-  return loans.map((l) => loanState(l, transactions, containers, today))
+  if (!loans.length) return []
+  const flows = flowsByLoan(loans, transactions, containers, today)
+  return loans.map((l) => stateOf(l, flows.get(l.id)!, today))
 }
 
 /** The debt of the taken loans still to pay (the range counts the shields less it – D72). */

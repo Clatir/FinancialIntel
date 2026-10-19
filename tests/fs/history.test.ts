@@ -1,7 +1,7 @@
 // adapted from ICTTJ tests/fs/history.test.ts @ 84a8339
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { DataStore } from '../../src/main/datastore/store'
 import { HISTORY_DIR, MAX_PER_RECORD } from '../../src/main/datastore/history'
 import { exists, freshStore, sampleGoal, sampleMonth, sampleTransaction } from './helpers'
@@ -169,5 +169,50 @@ describe('historia zmian wpisów (.history/)', () => {
     expect(list).toHaveLength(MAX_PER_RECORD)
     // A bad file name never leaves the record's folder.
     expect(await store.historyRead('transactions', t.id, '../../fi.json')).toBeNull()
+  })
+
+  it('lista usuniętych (W19): wiele naraz czytanych równolegle – wszystkie, najnowsze pierwsze; istniejące i edytowane pominięte', async () => {
+    const base = await freshStore()
+    const store = await storeWithClock(base.root, 'PC-A', clock('2026-10-05T08:00:00.000Z', 1000))
+    const txs = Array.from({ length: 120 }, (_, i) => sampleTransaction({ note: `n${i}` }))
+    await store.saveRecords('transactions', txs)
+    // Every other one deleted (one at a time: each a minute later), one more only edited.
+    const gone = txs.filter((_, i) => i % 2 === 0)
+    for (const t of gone) await store.deleteRecord('transactions', t.id)
+    await store.saveRecord('transactions', { ...txs[1]!, note: 'zmienione' })
+    const deleted = await store.historyDeleted('transactions')
+    expect(deleted.map((d) => d.id)).toEqual(gone.map((t) => t.id).reverse())
+    expect(deleted.every((d) => d.reason === 'delete')).toBe(true)
+    // One brought back is no longer on the list.
+    await store.historyRestore('transactions', gone[0]!.id, deleted.at(-1)!.file)
+    expect((await store.historyDeleted('transactions')).map((d) => d.id)).toEqual(gone.slice(1).map((t) => t.id).reverse())
+  })
+
+  it('lista usuniętych (W19): wersja usuniętego czytana raz – następny plik importu nie czyta jej znowu, nowe usunięcie tak', async () => {
+    const base = await freshStore()
+    const store = await storeWithClock(base.root, 'PC-A', clock('2026-10-05T08:00:00.000Z', 1000))
+    const txs = Array.from({ length: 30 }, (_, i) => sampleTransaction({ note: `n${i}` }))
+    await store.saveRecords('transactions', txs)
+    for (const t of txs.slice(0, 20)) await store.deleteRecord('transactions', t.id)
+    expect(await store.historyDeleted('transactions')).toHaveLength(20)
+    const reads = vi.spyOn(fs, 'readFile')
+    const historyReads = () => reads.mock.calls.filter(([path]) => String(path).includes(HISTORY_DIR)).length
+    try {
+      expect(await store.historyDeleted('transactions')).toHaveLength(20)
+      expect(historyReads()).toBe(0)
+      // One more deleted, and one brought back and deleted again: only their new versions read.
+      await store.deleteRecord('transactions', txs[20]!.id)
+      const first = (await store.historyDeleted('transactions')).find((d) => d.id === txs[0]!.id)!
+      await store.historyRestore('transactions', txs[0]!.id, first.file)
+      await store.deleteRecord('transactions', txs[0]!.id)
+      reads.mockClear()
+      const after = await store.historyDeleted('transactions')
+      expect(after.map((d) => d.id).slice(0, 2)).toEqual([txs[0]!.id, txs[20]!.id])
+      expect(after).toHaveLength(21)
+      expect(after[0]!.file).not.toBe(first.file)
+      expect(historyReads()).toBe(1)
+    } finally {
+      reads.mockRestore()
+    }
   })
 })

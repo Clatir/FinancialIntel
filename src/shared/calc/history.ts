@@ -37,7 +37,13 @@ export function coveredMonths(transactions: readonly HistoryTx[], current: strin
   const last = addMonths(current, -1)
   if (!first || last < first) return []
   const withData = new Set<string>()
-  for (const t of transactions) withData.add(monthOf(t.date))
+  let seen = ''
+  for (const t of transactions) {
+    // Mostly the month of the operation before (W27): no new text for it.
+    if (seen && t.date.startsWith(seen)) continue
+    seen = monthOf(t.date)
+    withData.add(seen)
+  }
   return monthRange(first, last).filter((m) => withData.has(m))
 }
 

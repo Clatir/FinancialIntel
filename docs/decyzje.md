@@ -1289,3 +1289,46 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   odrzucane; nowe dane w zapamiętanym pustym folderze z Ustawień – na wyraźne „Utwórz tu nowe dane”; słowo kluczowe nie
   melduje zapisu w trakcie zmiany folderu; „Odznacz” w folderze tylko do odczytu; ostatnia zmiana z innego komputera
   liczona przyrostowo zamiast przeglądania wszystkich wpisów.
+
+### 1.5.4 – szybkość, reszta (grupa K, 19.10.2026)
+
+Poprawki wydajności z przeglądu po 1.4.1 (W17–W20, W25, W27, D86). Wyniki bez zmian – każdy refaktor porównany z
+wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomiary na 30 i 150 tys. operacji
+(`docs/postep.md` „1.5.4”).
+
+- **T202** Silnik floty bez kluczy tekstowych (W27): operacje sortowane raz na listę (`sortedOps`, WeakMap po tablicy
+  z magazynu) komparatorem (data, godzina, `createdAt`, id) – ten sam porządek co dawne sklejone klucze, bo żadna część
+  nie zawiera znaku ≤ spacji; kilkaset zdarzeń kalendarza (pensja, łupy, zbiorniki…) sortowanych osobno i wplatanych
+  przed operacje dwoma wskaźnikami (`evFirst`: przy równym kluczu najpierw zdarzenie – jak dotąd); salda wszystkich kont
+  i ruchy sprzed startu jednym przejściem; pożyczki – przepływy wszystkich jednym przejściem (`flowsByLoan`); części
+  operacji z pamięci (`partsOf`, WeakMap po rekordzie), własna część bez podziału bez tworzenia części; miesiące historii
+  bez powtórzeń. Wzorzec: 800 różnych wejść + 30 tys. + skrót wyniku przy 150 tys.
+- **T203** Plan importu i rozpoznanie (W18, W20): indeksy operacji konta raz na listę operacji (`budgetedOf`: po kluczu
+  wiersza, opisane po dniu, nierozliczone, zaksięgowane, format, wpisy ręczne), wpisy ręczne z ±3 dni (`manualNear`,
+  raz na datę); reguły jednego kierunku po trybie (`ruleIndexOf` – budowane przy pierwszym pytaniu o ten kierunek,
+  wzorzec słowa kluczowego przy pierwszym użyciu), pamięć `brandOf` i `ruleTargetOf` (do 50 tys. nazw), `keywordIn`,
+  `hintFor` (na indeks kategorii), odbiorcy kontenerów (`payeesOf`). Plan od nowa: po zmianie referencji tego, co czyta;
+  reguły, połączone nazwy, domownicy, nazwiska, kategorie i numery rachunków w nowym obiekcie o tej samej treści
+  (`deepEqual`) – bez nowego planu. Wzorzec: rozpoznanie 30 tys. wierszy przy 3 zestawach reguł (z regułami kwot,
+  wpływów, domownika), plany z dopasowaniami, luźnymi, rozliczeniami, usuniętymi i znanymi, kreator.
+- **T204** Ekran importu (W17): temat, marka i wiersz w `memo`, stan czytany po kluczu (`useShallow`, selektory wartości),
+  temat z ponad 30 markami do rozstrzygnięcia zwinięty na start (`BIG_THEME`), listy po 100 (`ShowMore` – wspólny z oknem
+  zmian): marki, wiersze, dopasowania i usunięte osobno, od pierwszej strony przy innym pliku; pominięte w marce liczone
+  raz na stan pominięć (`skippedIn`); opcje kategorii raz na indeks kategorii (`categoryOptions`).
+- **T205** Lista usuniętych (W19): id istniejących wpisów brane pod blokadą magazynu (jedna chwila), historia czytana
+  poza nią – 16 plików naraz, zapis nie czeka; ostatnia wersja usuniętego zapamiętana w procesie głównym po nazwie pliku
+  (plik historii nigdy się nie zmienia – nowa wersja to nowy plik), więc następne wczytanie czyta tylko nowe usunięcia.
+  Pamięć kluczy usuniętych w oknie (pierwsza wersja K-b) odrzucona: usunięcie operacji dodanej po zapamiętaniu jej nie
+  unieważniało, a historia usunięcia z drugiego komputera może przyjść później niż samo usunięcie.
+- **T206** Zmiany z drugiego komputera naraz (W25): `resolveRemoteMany(decyzje)` – jedna zmiana listy czekających, jedna
+  kopia mapy na kolekcję, potem zapisy (kilka wpisów kolekcji jedną paczką, jeden jak dotąd); ta sama zmiana dwa razy w
+  paczce – rozstrzygnięta raz; `resolveRemote` to paczka z jedną decyzją; `acceptNewer` liczy plany przed zastosowaniem
+  (plan wpisu zależy tylko od niego); `applyChange` szuka czekających po kluczu. Okno: 50 wpisów i „pokaż kolejne”,
+  karta w `memo` z wywołaniami po kluczu, „Zastosuj” obejmuje wszystkie (niepokazane z wyborem domyślnym – napis pod
+  listą).
+- **T207** Przegląd grupy K (`/code-review` high, 7 kandydatów – wszystkie poprawione): pamięć kluczy usuniętych w oknie
+  i żywa mapa w liście usuniętych (T205); paczka zapisu zapomina wpis, którego nie ma już w pamięci (jak pojedynczy
+  zapis – nic nie zostaje „niezapisane”); „pokaż kolejne” dopasowań i usuniętych osobno; plakietka „nowsza” liczona przy
+  każdym rysowaniu swojej karty (bez pamięci, która nie widziała stanu edycji); indeks reguł tylko pytanego kierunku i
+  wzorce słów przy pierwszym użyciu (`keywordProposals` buduje listę na każde słowo); pominięte w marce liczone raz na
+  stan pominięć, nie przy każdym znaku w wyszukiwarce.

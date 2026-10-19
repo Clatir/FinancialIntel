@@ -19,17 +19,37 @@ export interface Part {
 
 export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0)
 
+type PartsSource = Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & { memberId?: string | null; gift?: boolean }
+
+/** The lines of each operation object (W27): records are never changed in place – a change is a new object. */
+const partsMemo = new WeakMap<PartsSource, readonly Part[]>()
+
 /**
  * Lines of an operation: its split receipt (a sum that does not match the amount – a file edited by hand – leaves the
- * rest as one more line of the operation's own category), or the operation itself as one line.
+ * rest as one more line of the operation's own category), or the operation itself as one line. Read only: the same
+ * lines for the same object.
  */
-export function partsOf(t: Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & { memberId?: string | null; gift?: boolean }): Part[] {
+export function partsOf(t: PartsSource): readonly Part[] {
+  const known = partsMemo.get(t)
+  if (known) return known
   const own = { refundable: t.refundable, memberId: t.refundable ? (t.memberId ?? null) : null, gift: t.refundable && !!t.gift }
-  if (!t.splits.length) return [{ amount: t.amount, categoryId: t.categoryId, ...own }]
-  const parts: Part[] = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable, memberId: s.refundable ? (s.memberId ?? null) : null, gift: s.refundable && !!s.gift }))
-  const rest = t.amount - sum(parts.map((p) => p.amount))
-  if (rest !== 0) parts.push({ amount: rest, categoryId: t.categoryId, ...own })
+  let parts: Part[]
+  if (!t.splits.length) parts = [{ amount: t.amount, categoryId: t.categoryId, ...own }]
+  else {
+    parts = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable, memberId: s.refundable ? (s.memberId ?? null) : null, gift: s.refundable && !!s.gift }))
+    const rest = t.amount - sum(parts.map((p) => p.amount))
+    if (rest !== 0) parts.push({ amount: rest, categoryId: t.categoryId, ...own })
+  }
+  partsMemo.set(t, parts)
   return parts
+}
+
+/** The sum of an operation's own lines – not a household member's (D80, D83). */
+function ownLines(t: PartsSource): number {
+  if (!t.splits.length) return t.refundable ? 0 : t.amount
+  let mine = 0
+  for (const p of partsOf(t)) if (!p.refundable) mine += p.amount
+  return mine
 }
 
 /** The household member of a part financed by one (D80): its own, else the first member („Dom”, D21). */
@@ -102,7 +122,7 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
  */
 export function costOf(t: Transaction): number {
   if (t.kind !== 'expense' || t.goalId) return 0
-  return -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)) || 0
+  return -ownLines(t) || 0
 }
 
 /**
@@ -111,7 +131,7 @@ export function costOf(t: Transaction): number {
  */
 export function ownSpent(t: Transaction): number {
   if (t.kind !== 'expense') return 0
-  return Math.max(0, -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)))
+  return Math.max(0, -ownLines(t))
 }
 
 /**

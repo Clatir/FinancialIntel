@@ -483,9 +483,39 @@ export interface FleetState {
   log: FleetEvent[]
 }
 
+/**
+ * An event of the calendar (the start, an account joining, a month's turn, the loot, a goal's money moved): its place
+ * among the operations is `${date} ${slot} ${rest}` – an operation's is `${date} 3 ${time} ${createdAt} ${id}`.
+ */
 interface Ev {
-  key: string
+  date: string
+  slot: number
+  rest: string
   run: () => void
+}
+
+const order = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+const evKey = (e: Ev) => `${e.date} ${e.slot} ${e.rest}`
+/** An operation's rest of its place (`Ev`). */
+const opRest = (t: Transaction) => `${t.time ?? ''} ${t.createdAt} ${t.id}`
+/**
+ * The operations in their order (W27): as their places `${date} 3 ${time} ${createdAt} ${id}` would sort – none built;
+ * the parts never hold a space (a date, HH:MM, an ISO moment, a ULID), so part by part is the text's order.
+ */
+const opOrder = (a: Transaction, b: Transaction): number => order(a.date, b.date) || order(a.time ?? '', b.time ?? '') || order(a.createdAt, b.createdAt) || order(a.id, b.id)
+/** Each list of operations in that order, sorted once (W27): the game rates many days of one list. */
+const sortedMemo = new WeakMap<readonly Transaction[], readonly Transaction[]>()
+function sortedOps(list: readonly Transaction[]): readonly Transaction[] {
+  let sorted = sortedMemo.get(list)
+  if (!sorted) sortedMemo.set(list, (sorted = [...list].sort(opOrder)))
+  return sorted
+}
+/** The calendar's event before the operation; the same place – the event (it came first before W27 too). */
+const evFirst = (e: Ev, t: Transaction): boolean => (e.date !== t.date ? e.date < t.date : e.slot !== 3 ? e.slot < 3 : e.rest <= opRest(t))
+
+function hasKeys(o: object): boolean {
+  for (const k in o) if (Object.hasOwn(o, k)) return true
+  return false
 }
 
 export function computeFleet(input: FleetInput): FleetState {
@@ -495,6 +525,8 @@ export function computeFleet(input: FleetInput): FleetState {
   const cats = categoryIndex(settings.categories)
   const containers = input.containers ?? []
   const containerIds = new Set(containers.map((c) => c.id))
+  const containerById = new Map<string, Container>()
+  for (const c of containers) if (!containerById.has(c.id)) containerById.set(c.id, c)
   const goalsAll = [...(input.goals ?? [])].sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
   const plans = [...(input.months ?? [])].sort((a, b) => a.month.localeCompare(b.month))
   const dockingByTx = dockingsByTx(input.dockings ?? [])
@@ -503,25 +535,33 @@ export function computeFleet(input: FleetInput): FleetState {
 
   // ---------------------------------------------------------------- accounts and balances
   const openings = openingsOf(input.balances ?? [], today)
-  const accountIds = [...new Set([...settings.accounts.map((a) => a.id), ...txs.map((t) => t.accountId), ...openings.keys()])]
+  const budgetStart = budgetStartOf(settings, input.balances, today)
   const counts = (t: Transaction) => {
     const o = openings.get(t.accountId)
     return !o || t.date >= o.date
   }
-  const balanceAt = (accountId: string, beforeDate: string | null) => {
-    const o = openings.get(accountId)
-    return (o?.amount ?? 0) + sum(txs.filter((t) => t.accountId === accountId && counts(t) && (beforeDate == null || t.date < beforeDate)).map((t) => t.amount))
+  // Each account's operations counted, all of them and those before the budget's start – one pass (W27).
+  const accountIdSet = new Set<string>()
+  for (const a of settings.accounts) accountIdSet.add(a.id)
+  const moved = new Map<string, number>()
+  const movedBeforeStart = new Map<string, number>()
+  for (const t of txs) {
+    accountIdSet.add(t.accountId)
+    if (!counts(t)) continue
+    moved.set(t.accountId, (moved.get(t.accountId) ?? 0) + t.amount)
+    if (budgetStart != null && t.date < budgetStart) movedBeforeStart.set(t.accountId, (movedBeforeStart.get(t.accountId) ?? 0) + t.amount)
   }
+  for (const id of openings.keys()) accountIdSet.add(id)
+  const accountIds = [...accountIdSet]
   const accounts = accountIds.map((id) => {
     const o = openings.get(id)
-    return { id, name: settings.accounts.find((a) => a.id === id)?.name ?? '(usunięte konto)', balance: balanceAt(id, null), opening: o ? { date: o.date, amount: o.amount } : null }
+    return { id, name: settings.accounts.find((a) => a.id === id)?.name ?? '(usunięte konto)', balance: (o?.amount ?? 0) + (moved.get(id) ?? 0), opening: o ? { date: o.date, amount: o.amount } : null }
   })
   const total = sum(accounts.map((a) => a.balance))
 
   // ---------------------------------------------------------------- the household (D80)
   // Its balances from the budget's start, the operations the layers count (`counts`) – the same ledger for the screens
   // and the statistics.
-  const budgetStart = budgetStartOf(settings, input.balances, today)
   const settleFrom = settleFromOf(settings, budgetStart)
   const household = settleHousehold(input.transactions, ledgerOptions(settings, budgetStart, openings, today))
 
@@ -640,7 +680,9 @@ export function computeFleet(input: FleetInput): FleetState {
    * docking window shows them now.
    */
   // The docking's creation, never its last save: a later edit or a merge of duplicates moves no money docked before (C1).
-  const cameIn = (t: Transaction, d: Docking | undefined): number => Math.max(Date.parse(d?.createdAt ?? t.createdAt), warsawStartOf(t.date).getTime())
+  const dayStarts = new Map<string, number>()
+  const dayStart = (date: string) => dayStarts.get(date) ?? dayStarts.set(date, warsawStartOf(date).getTime()).get(date)!
+  const cameIn = (t: Transaction, d: Docking | undefined): number => Math.max(Date.parse(d?.createdAt ?? t.createdAt), dayStart(t.date))
   const applySplit = (v: number, split: NonNullable<Docking['split']>, moves: Moves) => {
     // Fitted to the amount (B59): a goal gone since takes nothing – its part stays in the shields.
     const fit = fitSplit(v, { hull: split.hull, taxHold: split.taxHold, goals: Object.fromEntries(Object.entries(split.goals).filter(([id]) => knownGoal(id))) })
@@ -672,7 +714,7 @@ export function computeFleet(input: FleetInput): FleetState {
     moves.energy = (moves.energy ?? 0) + v
   }
   const record = (ev: FleetEvent) => {
-    if (Object.keys(ev.moves).length) log.push(ev)
+    if (hasKeys(ev.moves)) log.push(ev)
   }
   /**
    * The household's share of an operation (D80, `calc/household.ts`): a financed purchase takes the member's advance,
@@ -708,7 +750,11 @@ export function computeFleet(input: FleetInput): FleetState {
   const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
   /** The cycles (due months) of each periodic fee paid already (B55). */
   const paidCycles = new Map<string, Set<string>>()
-  const startMonthSpent = start ? sum(txs.filter((t) => monthOf(t.date) === monthOf(start) && t.date < start && !(t.containerId && periodicIds.has(t.containerId))).map(costOf)) : 0
+  let startMonthSpent = 0
+  if (start) {
+    const startMonth = monthOf(start)
+    for (const t of txs) if (t.date < start && monthOf(t.date) === startMonth && !(t.containerId && periodicIds.has(t.containerId))) startMonthSpent += costOf(t)
+  }
   const payMonth = (m: string, date: string) => {
     // A periodic fee's life over (its `until`, its archiving): what its tank still holds goes back to the shields (B56).
     for (const c of containers) {
@@ -751,7 +797,7 @@ export function computeFleet(input: FleetInput): FleetState {
     const amt = t.amount
     switch (t.kind) {
       case 'expense': {
-        const container = t.containerId ? containers.find((c) => c.id === t.containerId) : undefined
+        const container = t.containerId ? containerById.get(t.containerId) : undefined
         // Its tank pays only during the fee's life: a payment before it (the history linked to a fee added later – B56)
         // or after it is an ordinary expense.
         const periodic = container && container.cycleMonths > 1 && activeIn(container, monthOf(t.date)) ? container : undefined
@@ -904,13 +950,14 @@ export function computeFleet(input: FleetInput): FleetState {
 
   if (started && start) {
     const events: Ev[] = []
-    const at = (date: string, slot: number, rest = '') => `${date} ${slot} ${rest}`
     // The start: the money on the accounts then, split as the wizard said or by the docking order; this month's salary.
     events.push({
-      key: at(start, 0, '0'),
+      date: start,
+      slot: 0,
+      rest: '0',
       run: () => {
         const moves: Moves = {}
-        const startTotal = sum(accountIds.filter((id) => (openings.get(id)?.date ?? start) <= start).map((id) => balanceAt(id, start)))
+        const startTotal = sum(accountIds.filter((id) => (openings.get(id)?.date ?? start) <= start).map((id) => (openings.get(id)?.amount ?? 0) + (movedBeforeStart.get(id) ?? 0)))
         const initial = settings.budget.initial
         if (initial) {
           hull += initial.hull
@@ -933,7 +980,9 @@ export function computeFleet(input: FleetInput): FleetState {
     for (const [id, o] of openings) {
       if (o.date <= start) continue
       events.push({
-        key: at(o.date, 0, '0a'),
+        date: o.date,
+        slot: 0,
+        rest: '0a',
         run: () => {
           const moves: Moves = {}
           addShields(o.amount, moves)
@@ -945,7 +994,9 @@ export function computeFleet(input: FleetInput): FleetState {
     // was held for them before goes to the shields (or the shields hold the advances now).
     if (settleFrom && settleFrom >= start && settleFrom <= today)
       events.push({
-        key: at(settleFrom, 1, 'h'),
+        date: settleFrom,
+        slot: 1,
+        rest: 'h',
         run: () => {
           // The operations dated before it and added after the openings were set (B14) count after them: their part too.
           const target = sum(settings.household.members.map((m) => m.opening?.deposit ?? 0)) + household.lateDeposit
@@ -962,7 +1013,9 @@ export function computeFleet(input: FleetInput): FleetState {
     for (const m of monthRange(addMonths(monthOf(start), 1), month)) {
       const prev = addMonths(m, -1)
       events.push({
-        key: at(firstDayOf(m), 0, '1'),
+        date: firstDayOf(m),
+        slot: 0,
+        rest: '1',
         run: () => {
           if (lootMonth && loot) {
             shields += loot
@@ -979,7 +1032,9 @@ export function computeFleet(input: FleetInput): FleetState {
       const deadline = `${m}-08`
       if (deadline <= today)
         events.push({
-          key: at(deadline, 2),
+          date: deadline,
+          slot: 2,
+          rest: '',
           run: () => {
             if (lootMonth !== prev || !loot) return
             shields += loot
@@ -994,7 +1049,9 @@ export function computeFleet(input: FleetInput): FleetState {
         const date = stamp.slice(0, 10)
         if (date >= firstDayOf(m) && date < deadline && date <= today)
           events.push({
-            key: at(date, 3, stamp.slice(11)),
+            date,
+            slot: 3,
+            rest: stamp.slice(11),
             run: () => {
               if (lootMonth !== prev || !loot) return
               const moves: Moves = { loot: -loot }
@@ -1022,10 +1079,6 @@ export function computeFleet(input: FleetInput): FleetState {
           })
       }
     }
-    for (const t of txs) {
-      if (t.date < start || !counts(t)) continue
-      events.push({ key: at(t.date, 3, `${t.time ?? ''} ${t.createdAt} ${t.id}`), run: () => runTx(t) })
-    }
     // A goal's money moved out (C2, B30) at the end of its day: what it held then (never more than it holds), to the
     // shields or another goal.
     for (const g of goalsAll)
@@ -1033,7 +1086,9 @@ export function computeFleet(input: FleetInput): FleetState {
         const date = warsawNow(tr.at).date
         if (date < start || date > today) continue
         events.push({
-          key: at(date, 4, `${g.id} ${String(i).padStart(4, '0')}`),
+          date,
+          slot: 4,
+          rest: `${g.id} ${String(i).padStart(4, '0')}`,
           run: () => {
             const move = Math.min(tr.amount, goalAmount.get(g.id) ?? 0)
             if (move <= 0) return
@@ -1045,8 +1100,16 @@ export function computeFleet(input: FleetInput): FleetState {
           }
         })
       }
-    events.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-    for (const e of events) e.run()
+    const keys = new Map(events.map((e) => [e, evKey(e)]))
+    events.sort((a, b) => order(keys.get(a)!, keys.get(b)!))
+    // The operations in their order, merged with the calendar's events (W27) – no event, key or closure for each.
+    let next = 0
+    for (const t of sortedOps(input.transactions)) {
+      if (t.date < start || t.date > today || !counts(t)) continue
+      while (next < events.length && evFirst(events[next]!, t)) events[next++]!.run()
+      runTx(t)
+    }
+    while (next < events.length) events[next++]!.run()
   }
 
   // ---------------------------------------------------------------- now

@@ -17,5 +17,5 @@
     "tests/**/*",
     "scripts/**/*"
   ],
-  "exclude": ["tests/unit/data-store.test.ts"]
+  "exclude": ["tests/unit/data-store.test.ts", "tests/unit/import-replan.test.ts"]
 }
