@@ -178,7 +178,8 @@ export function celebrationsOf(game: readonly GameMonth[], gs: GameSettings, tod
   for (const e of gameView(game, gs, today).log) {
     if (daysBetween(e.date, today) > RECENT_DAYS) continue
     if (e.kind === 'rank') out.push({ key: `rank:${e.date}:${e.change}`, kind: 'rank', change: e.change, rank: e.rank, day: e.date })
-    else if (e.kind === 'class' && e.up) out.push({ key: `class:${e.date}`, kind: 'class', cls: e.cls, from: e.from, day: e.date })
+    // A new class only (N64): a return to one held within 30 days stays in the watch's log.
+    else if (e.kind === 'class' && e.up && e.peak) out.push({ key: `class:${e.date}`, kind: 'class', cls: e.cls, from: e.from, day: e.date })
     else if (e.kind === 'achievement') out.push({ key: `achievement:${e.id}`, kind: 'achievement', id: e.id, day: e.date })
     else if (e.kind === 'mission' && e.done != null) out.push({ key: `mission:${e.week}`, kind: 'mission', template: e.template, done: e.done, week: e.week })
   }

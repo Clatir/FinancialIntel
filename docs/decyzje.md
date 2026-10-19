@@ -770,7 +770,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   pożyczone, spłata, zaliczka, przychód) czytają silnik warstw, edytor, raporty i misja – jeden rejestr
   (`FleetState.household`; bez floty `fleet.ts` `householdOf`).
 - **T106** Start budżetu: salda osób zerowane przy pierwszej operacji od startu (jak pożyczki – T70) – to, co było przed
-  startem, jest w saldzie otwarcia; przepływy sprzed startu zostają dla statystyk (ile z wpłaty było przychodem). Konto
+  startem, jest w saldzie otwarcia; przepływy sprzed startu zostają dla statystyk (ile z wpłaty było przychodem – od 1.4.0
+  przychód sprzed daty rozliczeń pomijany, T119; N49). Konto
   dołączone po starcie: jego operacje sprzed jego salda otwarcia są w tym saldzie (silnik je pomija – `counts`), więc
   rejestr też (`openings`). Jedna reguła salda otwarcia w mocy (`balances.ts` `openingsOf` / `openingOf`: najpóźniejsze
   do dziś, z jednego dnia ostatnio edytowane) – silnik, start budżetu i rejestr.
@@ -1444,3 +1445,62 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   konta, z odmianą „operacji”; baner N23 tylko przy saldzie otwarcia z dziś albo wcześniej (reguła `budgetStartOf`);
   powiadomienie koperty z `envelopeOverrun` i progiem Dowództwa (dopisek „ponad próg poważnego naruszenia”); Dowództwo
   pokazuje minimum osłon, które silnik stosuje (przy minimum ponad cel – cel z dopiskiem).
+
+### 1.6.2 – gra, ICTTJ, domownicy, cele, kreator (grupa N, 19.10.2026)
+
+- **T224** ICTTJ i dokowanie (B69, B70, N38, N43–N45 – grupa N, D87): wpływ wpisany na Portfelu XTB (rodzaj „wpływ”, kwota
+  dodatnia, bez domownika, zaliczki, podziału i „Pokrywa”) jest kandydatem na parę wypłaty z ICTTJ tej samej kwoty w oknie –
+  operacja z banku ma pierwszeństwo; „Zadokuj” zmienia mu rodzaj na trading (`asPayout` na bieżącym rekordzie – zmiany
+  wpisane w międzyczasie zostają; „Cofnij” cofa tylko rodzaj, kategorię, kontrahenta i spłatę), bez drugiej operacji; bez
+  wpisu w ICTTJ zostaje zwykłym przychodem (nigdy „bez wpisu w ICTTJ”). Pula Podatek z podziałem zmienionym w oknie:
+  podatkiem jest część z podziału (`taxHold`, najwyżej kwota). Wypłaty z puli Podatek sparowane przed startem budżetu nie
+  są przychodem z tradingu: okno liczy mapę operacja → kwota (`preStartTaxOf`, te same reguły pary co dostawy) i podaje ją
+  silnikowi (`FleetInput.preStartTax`) – silnik dalej nie czyta ICTTJ; w kluczu silnika treść mapy (nowa migawka ICTTJ z
+  tymi samymi wypłatami niczego nie przelicza). Pominięty wpis trzyma swoją operację z banku – parowany po wszystkich
+  wpisach do zadokowania, więc nie zabiera im pary: wpływ nie jest „bez wpisu w ICTTJ”, Mostek pokazuje „· wpływ w banku
+  DD.MM”. Teksty okna wg kierunku (zwrot do masy – wypływ do XTB), „wraca z rezerwy na PIT-38” w odprawie i powiadomieniu
+  (bez „firewall”), przy wyłączonym rozkazie „Rozkaz firewall wyłączony – dopłata bez sprawdzania osłon i kadłuba.”;
+  nazwy „Wypłata z ICTTJ” / „Zwrot do masy z ICTTJ”.
+- **T225** Odczyt ICTTJ (B71–B73): jeden wpis na id (nowszy `updatedAt`, przy remisie mniejsza ścieżka – reguła ICTTJ) z
+  ostrzeżeniem „Wpis ICTTJ w dwóch plikach …”; pusta lista tylko przy ENOENT – inny błąd listowania `payouts/` albo roku =
+  stan „błąd” z kodem („nie udało się odczytać payouts/RRRR: KOD”), brak folderu roku = odczyt niepełny (`complete`
+  false – żaden wpis nie jest „usunięty w ICTTJ”), błąd `forecasts/` = ostrzeżenie; jeden nieudany odczyt po dobrym
+  zostawia dobrą migawkę z ostrzeżeniem „Ostatni odczyt folderu ICTTJ nieudany – FI pokazuje poprzedni: …”. Szybka zmiana
+  folderu: okno bierze tylko odpowiedź ostatniego wyboru, a odczyt folderu już niewybranego oddaje stan wybranego.
+- **T226** Cele (B87, N42, N46, N48): tempo w dwóch częściach (`goalPace`: wypłaty z puli Cele i reszta; razem = „Tempo”,
+  jedno przejście dziennika); ETA – pula Cele najpierw do celów ICTTJ, reszta w kolejności listy (jak silnik, T65); znaczek
+  „DOL · pula Cele” przy celu, do którego trafi wypłata z puli Cele, gdy to inny cel niż DOL. Cel ICTTJ bez kwoty (N46 –
+  wariant a, reguła ICTTJ): w swoim miesiącu bierze całą resztę puli Cele, poza nim nic; miesiąc = dzień wpisu ICTTJ
+  (`docking.entryDate`, addytywne; dokowania sprzed 1.6.2 – dzień operacji); Mapa: „bez kwoty – pula Cele w {miesiąc}”.
+  „Po terminie” (`goalLate`, akcent, nigdy czerwień – T74): nieosiągnięty z ETA po terminie, bez ETA przy tempie > 0
+  („ponad 50 lat – po terminie”) albo bez tempa po minionym terminie; osiągnięty – nigdy. Kwota istniejącego celu 0
+  odrzucona z komunikatem jak przy dodawaniu (cel bez kwoty nie dostaje dostaw – archiwizacja).
+- **T227** Gra (B89–B91, N29, N64, N68–N70, N73): kontener ma dzień zmiany masy (`container.amountAt`, addytywne – przy
+  zmianie kwoty, cyklu, terminu; sprzed 1.6.2 `updatedAt`); dzień zamrażany po późniejszej zmianie zostaje przy masie dnia
+  poprzedniego (wzrost ocenia dzień zmiany), a bez dnia do porównania (1. dzień miesiąca, dzień po nieznanym) zapisuje
+  masę nieznaną (`cargo` null) – zmiana masy tego dnia ponad linią liczy się, zmiana nazwy nie (rozszerza T75). Misja o
+  szablonie spoza tej wersji nie jest oceniana (oceni ją wersja, która go zna); stopień nowszej wersji pokazany z nazwy, bez
+  awansu i degradacji od niego. „Pełna energia”: dni jeszcze niezamrożone ocenia silnik na koniec dnia, jak ocena dnia
+  (wybór misji w poniedziałek widzi niedzielę – doprecyzowuje T78; status w tygodniu widzi dziś); wynik dnia pamiętany na
+  dane silnika. „Dzień bez wydatków”: liczą się dni zakończone, dzisiejszy osobno („+1, jeśli dziś bez wydatków”). Klasa
+  świętowana tylko ponad najwyższą z 30 dni (`CLASS_PEAK_DAYS`), ponowne wejście – wpis w dzienniku „(powtórnie w ciągu 30
+  dni)” (doprecyzowuje T80). „Poważne naruszenia od DD.MM (do degradacji)”, gdy stopień zmienił się w tym miesiącu (T77).
+  Rozkaz dzienny opisany tak, jak go ocenia gra („wydatki dnia ≤ energia dziś”, podstawa w dopisku); rozkazy edytowalne w
+  Dowództwie tymi samymi polami co w Ustawieniach (specyfikacja, N73).
+- **T228** Domownicy, salda, kreator (N40, N41, N47, N49, B75, B129): „Pokrywa” i „+ także za” z tego samego stanu –
+  rejestru tuż przed wpłatą. Saldo na start ma datę najstarszego otwartego zakupu (`opening.since`, addytywne): seed 1.4.0
+  ją zapisuje, folder po seedzie dostaje ją raz z rejestru 1.3.0 do dnia przed datą rozliczeń (gdy należność się zgadza;
+  inaczej bez daty – dzień rozliczeń), saldo wpisane ręcznie – bez daty. Data rozliczeń sprzed startu budżetu z dopiskiem
+  „Data sprzed startu budżetu – rozliczenia liczą się od startu (DD.MM.RRRR).”. Kreator: koperty wpisane ręcznie zostają
+  przy zmianie ładowni (stan kreatora trzyma tylko zmiany ręczne nad propozycją). Potwierdzenie salda: korekta i
+  potwierdzenie z deterministycznym id (konto, dzień, kwota z banku; korekta także różnica) – to samo potwierdzenie na dwóch
+  komputerach to jeden wpis; dwie korekty jednego konta o tej samej kwocie w 7 dni z dwóch komputerów (`doubleCorrections`)
+  – meldunek „Podwójne korekty” z „Pokaż korektę” i „to nie powtórzenie” (na stałe: `settings.import.notDuplicates`,
+  klucz `correction:<id>`).
+- **T229** Raporty (N71): raport wachty pamięta wybrany tydzień razem z tygodniem domyślnym z chwili wyboru – nowy tydzień
+  domyślny (niedziela od 18:00) unieważnia wybór; przycisk „bieżący”.
+- **T230** Przegląd grupy N (`/code-review` high, 10 kandydatów – wszystkie poprawione, każdy z testem sprawdzonym bez
+  poprawki): pominięty wpis parowany po wpisach do zadokowania; masa nieznana bez dnia do porównania i dzień zmiany masy
+  (`amountAt`); dokowanie wpływu z Portfela na bieżącym rekordzie; miesiąc celu bez kwoty z dnia wpisu ICTTJ; „to nie
+  powtórzenie”; klucz silnika z treści mapy podatku, nie z tablicy wpisów; pamięć ocen dni niezamrożonych; „po terminie”
+  bez ETA przy tempie; „Tempo” z tego samego przejścia dziennika; dokumentacja `chooseMission`.

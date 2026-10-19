@@ -27,7 +27,8 @@ const delivery = (state: Delivery['state'], amount: number, date = '2026-10-17')
   poolChanged: false,
   extra: [],
   orphans: [],
-  entryGone: false
+  entryGone: false,
+  walletTyped: false
 })
 
 const input = (over: Partial<InboxInput> = {}): InboxInput => ({
@@ -67,10 +68,12 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
           { accountId: MBANK_ACCOUNT_ID, name: 'mBank', last: '2026-09-10', opened: '2026-09-01' },
           { accountId: XTB_WALLET_ACCOUNT_ID, name: 'Portfel XTB', last: null, opened: '2026-09-01' }
         ],
-        loot: { month: '2026-09', amount: zl(340) }
+        loot: { month: '2026-09', amount: zl(340) },
+        corrections: [{ later: { id: 'C2', date: '2026-10-12', amount: zl(50), accountId: MBANK_ACCOUNT_ID }, earlier: { date: '2026-10-11', updatedBy: 'LAPTOP' } }],
+        accountName: () => 'mBank'
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'refunds', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'corrections', 'refunds', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
@@ -80,6 +83,8 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(text('folder')).toEqual(['1 konflikt kopii, 2 pliki z błędem – do rozstrzygnięcia w Synchronizacji.'])
     expect(text('uncategorized')).toEqual(['3 wydatki bez kategorii od 01.09.2026 – razem 54.20 zł.'])
     expect(text('duplicates')).toEqual(['2 możliwe duplikaty – ta sama operacja dwa razy.'])
+    // A balance confirmed twice on two computers (B129).
+    expect(text('corrections')).toEqual(['mBank: korekta salda 50.00 zł z 12.10 wygląda na powtórzoną – taka sama z 11.10 (LAPTOP); saldo potwierdzone dwa razy, zanim OneDrive przyniósł pierwszą.'])
     expect(text('refunds')).toEqual(['Babcia: do oddania 120.00 zł – najstarszy zakup z 03.10 (16 dni).'])
     expect(text('balances')).toEqual(['mBank: saldo potwierdzone 39 dni temu – sprawdź z bankiem.', 'Portfel XTB: saldo bez potwierdzenia od salda otwarcia z 01.09.2026 (48 dni) – sprawdź z bankiem.'])
   })

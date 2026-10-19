@@ -141,8 +141,9 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   // Who passes money through the sender (D81): a hint, one click each – never applied by itself.
   const through = payer ? members.filter((m) => !m.archived && m.via === payer && !parts.some((x) => x.memberId === m.id)) : []
   const shareMembers = [...new Set(incomeShares({ ...t, amount: Math.max(t.amount, partsSum) }).map((x) => x.memberId).filter((x): x is string => !!x))]
-  // The purchases it may pay back: still owed by its members (up to its date) and the ones it covers already.
-  const choices = [...new Set([...shareMembers.flatMap((id) => (ledger ? balanceOf(ledger, id).open : []).filter((o) => o.date <= t.date).map((o) => o.txId)), ...t.covers])]
+  // The purchases it may pay back: owed by its members just before it (N40 – the ledger without it, as „+ także za”
+  // reads: the one it pays back is still open there) up to its date, and the ones it covers already.
+  const choices = [...new Set([...shareMembers.flatMap((id) => (before ? balanceOf(before, id).open : []).filter((o) => o.date <= t.date).map((o) => o.txId)), ...t.covers])]
     .map((id) => transactions[id]?.record)
     .filter((x): x is Transaction => !!x)
   const setMember = (id: string) => {

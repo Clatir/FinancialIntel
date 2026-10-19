@@ -212,7 +212,7 @@ describe('B14: operacje domowników sprzed dnia rozliczeń, których salda na st
     const now = input([t], [])
     expect(owed(fleet([], now))).toBe(zl(100))
     const rebased = rebaseOpenings(now as FleetInput, '2026-10-20', '2026-10-05')!
-    expect(rebased.get(MAMA)).toEqual({ owed: 0, deposit: 0 })
+    expect(rebased.get(MAMA)).toEqual({ owed: 0, deposit: 0, since: null })
     const after = fleet([], input([t], openingIdsOf(now as FleetInput, '2026-10-20', '2026-10-05'), rebased.get(MAMA), '2026-10-05'))
     expect(owed(after)).toBe(zl(100))
     expect(after.deposit).toBe(0)

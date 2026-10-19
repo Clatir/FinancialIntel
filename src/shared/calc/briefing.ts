@@ -141,7 +141,9 @@ export function deliveryItem(d: Delivery, today: string, zl: (grosze: number) =>
         ? d.wallet
           ? `Wypłata z ICTTJ ${zl(d.amount)} (${dm(d.date)}, pula ${ICTJ_POOL_LABEL[e.pool]}) bez pary w mBanku – zadokuj na Portfelu XTB albo poczekaj na import.`
           : `Wypłata z ICTTJ ${zl(d.amount)} (pula ${ICTJ_POOL_LABEL[e.pool]}) do zadokowania.`
-        : `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}) do potwierdzenia – firewall.`
+        : e.pool === 'tax'
+          ? `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}, pula Podatek) do potwierdzenia – wraca z rezerwy na PIT-38.`
+          : `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}) do potwierdzenia – firewall.`
       : `Wpływ z XTB ${zl(d.amount)} (${dm(d.date)}) do zadokowania${d.missingEntry ? ' – dopisz wypłatę w ICTTJ' : ''}.`
     return { level: 'yellow', kind: 'dock', key: `dock:${d.key}`, text }
   }

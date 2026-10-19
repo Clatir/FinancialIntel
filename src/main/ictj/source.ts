@@ -11,6 +11,8 @@ import { readIctjFolder } from './reader'
 
 const SUBDIRS = ['payouts', 'forecasts'] as const
 const POLL_MS = 30_000
+/** The warning of a read that failed after a good one (B73): the good one stays. */
+const LAST_READ_FAILED = 'Ostatni odczyt folderu ICTTJ nieudany – FI pokazuje poprzedni:'
 
 /** What a window needs to know changed (the time of the reading does not count). */
 const signature = (s: IctjSnapshot) => JSON.stringify([s.dir, s.status, s.message, s.entries, s.forecasts, s.warnings])
@@ -64,7 +66,12 @@ export class IctjSource {
         this.again = false
         snap = await readIctjFolder(dir)
       }
-      if (this.dir !== dir) return snap
+      // A folder no longer chosen (B72): its snapshot is nobody's – the caller gets the chosen folder's (its read in
+      // progress, else the last one published).
+      if (this.dir !== dir) return (this.readingDir === this.dir ? this.reading : null) ?? this.snap
+      // One failed read after a good one (B73 – OneDrive busy with the folder): the good one stays, with a warning.
+      if (snap.status === 'error' && this.snap.dir === dir && this.snap.status === 'ok')
+        snap = { ...this.snap, warnings: [...this.snap.warnings.filter((w) => !w.startsWith(LAST_READ_FAILED)), `${LAST_READ_FAILED} ${snap.message ?? ''}`.trim()] }
       this.attach(dir)
       this.publish(snap)
       return snap

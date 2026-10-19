@@ -4,7 +4,7 @@ import { Empty, Panel } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { useFleet } from '../../store/fleet'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
-import { DUPLICATES_AFTER_MS, openInboxItem, useInbox } from './state'
+import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, useInbox } from './state'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -60,6 +60,12 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
   return (
     <div className="flex items-baseline gap-3" data-testid="inbox-item" data-kind={item.kind}>
       <span className="min-w-0 flex-1 text-fg">{item.text}</span>
+      {/* Two real corrections of the same amount (B129): said once, never reported again. */}
+      {item.kind === 'corrections' && item.ref && (
+        <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => dismissCorrection(item.ref!)} data-testid="inbox-dismiss">
+          to nie powtórzenie
+        </button>
+      )}
       <button type="button" className="btn h-[22px] shrink-0" onClick={onOpen} data-testid="inbox-open">
         {item.action}
       </button>

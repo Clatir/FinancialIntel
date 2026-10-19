@@ -1,5 +1,5 @@
 import { openingOf, planConfirmation, type ConfirmationPlan } from '@shared/calc/balances'
-import { newId } from '@shared/ids'
+import { derivedId, newId } from '@shared/ids'
 import { balanceSchema, SCHEMA_VERSION, transactionSchema, type Balance, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, updateRecord, useData } from '../../store/data'
 import { plnText } from '../../components/fields'
@@ -42,10 +42,15 @@ export function confirmBalance(accountId: string, amount: number, date: string, 
     return plan
   }
   let correctionId: string | null = null
+  // One confirmation of one balance on one day is one record on every computer (B129): two computers confirming it
+  // before OneDrive brings the other's write the same files – never a second correction of the same difference.
+  const key = `${accountId}:${date}:${amount}`
   if (plan.kind === 'correction') {
-    const correction: Transaction = transactionSchema.parse({
+    const id = derivedId(accountId, `correction:${key}:${plan.diff}`)
+    const known = s.records.transactions[id]?.record
+    const correction: Transaction = known ?? transactionSchema.parse({
       ...base,
-      id: newId(),
+      id,
       date,
       accountId,
       kind: 'correction',
@@ -53,11 +58,14 @@ export function confirmBalance(accountId: string, amount: number, date: string, 
       counterparty: 'Korekta salda',
       note: CORRECTION_NOTE
     })
-    addRecord('transactions', correction)
+    if (!known) addRecord('transactions', correction)
     correctionId = correction.id
   }
-  const record: Balance = balanceSchema.parse({ ...base, id: newId(), date, accountId, kind: 'confirmation', amount, correctionId })
-  addRecord('balances', record)
+  const recordId = derivedId(accountId, `confirmation:${key}`)
+  const knownRecord = s.records.balances[recordId]?.record
+  const record: Balance = balanceSchema.parse({ ...(knownRecord ?? base), id: recordId, updatedAt: now, date, accountId, kind: 'confirmation', amount, correctionId: correctionId ?? knownRecord?.correctionId ?? null })
+  if (knownRecord) updateRecord('balances', recordId, () => record)
+  else addRecord('balances', record)
   if (plan.kind === 'match') toast(`${accountName}: saldo zgodne z operacjami (${plnText(amount)} zł).`, 'success', 4000)
   else toast(`${accountName}: rozbieżność w ładowni ${plnText(plan.diff)} zł – dodano korektę do wyjaśnienia (Operacje).`, 'info', 7000)
   return plan

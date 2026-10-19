@@ -3,7 +3,7 @@
  * the window's days, this week's mission, the achievements (the hidden ones only counted), the orders with the game's
  * thresholds and the watch log – the frozen days' violations, the ICT flavour, the changes of rank and class.
  */
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import {
   ACHIEVEMENT_INFO,
   firstMissionMonday,
@@ -33,6 +33,7 @@ import { Columns } from '../../components/layout'
 import { Badge, Empty, Field, NumberField, Panel, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
+import { OrdersFields } from '../settings/MachineTabs'
 
 const zl = (g: number) => `${plnText(g)} zł`
 const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
@@ -69,10 +70,12 @@ export function CommandPage() {
   const settings = useData((s) => s.fi?.settings ?? null)
   const readOnly = useFolderLocked()
   const cats = useCategories()
+  // Once per day and change (N68: the days not frozen yet run the engine) – before any early return (the hooks' order).
+  const day = fleet?.today ?? null
+  const status = useMemo(() => (game?.view.mission && day ? missionStatus(game.input, game.view.mission, day) : null), [game, day])
   if (!game || !fleet || !settings) return <Empty>Wczytywanie…</Empty>
   const { view, today, input } = game
   const label = (id: string) => cats.label(id)
-  const status = view.mission ? missionStatus(input, view.mission, fleet.today) : null
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-command">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
@@ -97,7 +100,11 @@ export function CommandPage() {
                     <span className="text-fg">{capitalize(missionText(view.mission, label, zl))}</span>
                     {status && (
                       <span className={cx('text-[11.5px]', status.ok ? 'text-accent' : 'text-muted')} data-testid="command-mission-status">
-                        {status.need != null ? `Na razie: ${status.have} z ${status.need}` : status.ok ? 'Na razie: kurs utrzymany' : 'Na razie: cel chybiony'}
+                        {status.need != null
+                          ? `Na razie: ${status.have} z ${status.need}${status.pending ? ` (+${status.pending}, jeśli dziś bez wydatków)` : ''}`
+                          : status.ok
+                            ? 'Na razie: kurs utrzymany'
+                            : 'Na razie: cel chybiony'}
                         {status.amount != null && ` (${zl(status.amount)})`}
                       </span>
                     )}
@@ -168,16 +175,19 @@ export function CommandPage() {
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 function RankPanel({ view }: { view: GameView }) {
-  const next = RANKS[RANKS.indexOf(view.rank) + 1]
+  // A rank of a newer version (B90): its name, no way to the next one from here.
+  const next = view.rankNewer ? undefined : RANKS[RANKS.indexOf(view.rank) + 1]
   const p = view.progress
+  // The serious violations count from the last change of rank (T77, N70): said so when it was this month.
+  const sinceChange = !view.serious.from.endsWith('-01')
   return (
     <Panel title="Stopień" testId="command-rank">
       <div className="flex flex-col gap-2 text-[12px]">
         <div className="flex items-center gap-3">
           <Insignia rank={view.rank} />
           <div className="flex flex-col">
-            <span className="text-[18px] font-medium text-fg-strong" data-testid="command-rank-name">
-              {RANK_LABEL[view.rank]}
+            <span className="text-[18px] font-medium text-fg-strong" data-testid="command-rank-name" title={view.rankNewer ? 'Stopień z nowszej wersji aplikacji – zaktualizuj Financial Intel' : undefined}>
+              {view.rankNewer ?? RANK_LABEL[view.rank]}
             </span>
             <span className="text-[11px] text-dim">{view.rankSince ? `od ${plDate(view.rankSince)}` : view.start ? `od startu gry (${plDate(view.start)})` : 'gra jeszcze nie wystartowała'}</span>
           </div>
@@ -196,10 +206,10 @@ function RankPanel({ view }: { view: GameView }) {
             </span>
           </div>
         ) : (
-          <span className="text-muted">{next ? 'Postęp policzy się po pierwszym zamrożonym dniu.' : 'Najwyższy stopień floty.'}</span>
+          <span className="text-muted">{view.rankNewer ? 'Stopień nadała nowsza wersja aplikacji – postęp policzy ona.' : next ? 'Postęp policzy się po pierwszym zamrożonym dniu.' : 'Najwyższy stopień floty.'}</span>
         )}
         <div className="flex items-baseline gap-2 border-t border-line pt-1.5" data-testid="command-serious">
-          <span className="text-muted">Poważne naruszenia w tym miesiącu</span>
+          <span className="text-muted">{sinceChange ? `Poważne naruszenia od ${dm(view.serious.from)} (do degradacji)` : 'Poważne naruszenia w tym miesiącu (do degradacji)'}</span>
           <span className={cx('num ml-auto', view.serious.count >= view.serious.limit - 1 && view.serious.count > 0 ? 'text-accent' : 'text-fg-strong')}>
             {view.serious.count} / {view.serious.limit}
           </span>
@@ -320,7 +330,7 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
       text = TAG_LABEL[e.tag] ?? e.tag
       break
     case 'class':
-      text = `Klasa: ${SHIP_CLASS_LABEL[e.from]} → ${SHIP_CLASS_LABEL[e.cls]}`
+      text = `Klasa: ${SHIP_CLASS_LABEL[e.from]} → ${SHIP_CLASS_LABEL[e.cls]}${e.up && !e.peak ? ' (powtórnie w ciągu 30 dni)' : ''}`
       mark = e.up ? 'bg-fg-strong' : 'bg-line-strong'
       break
     case 'rank':
@@ -366,18 +376,21 @@ function OrdersPanel({ game, orders, shieldSalaries, readOnly }: { game: GameSet
   return (
     <Panel title="Rozkazy i progi" testId="command-orders">
       <div className="flex flex-col gap-1 text-[12px]">
-        <Order label="Dzienny przydział energii" value="koperty codzienne ÷ dni miesiąca" />
+        {/* What the game judges (N29): the day's spending against today's energy – not the plain base. */}
+        <Order label="Dzienny przydział energii" value="wydatki dnia ≤ energia dziś" />
+        <span className="text-[11px] text-dim">
+          Energia dziś = koperty codzienne, które zostały, ÷ dni do końca miesiąca (z dziś); podstawa – koperty codzienne ÷ dni miesiąca.
+        </span>
         {/* The minimum the engine applies (B84): never above the shields' target. */}
-        <Order
-          label="Minimalne osłony"
-          value={orders.minShieldSalaries > shieldSalaries ? `${shieldSalaries} × pensja (cel osłon; ustawione ${orders.minShieldSalaries})` : `${orders.minShieldSalaries} × pensja`}
-        />
-        <Order label="Linia zanurzenia" value={`${orders.cargoLimitPct}% pensji`} />
-        <Order label="Cisza nocna" value={`${orders.quietHours.from}–${orders.quietHours.to}`} />
-        <Order label="Firewall dopłat do XTB" value={orders.firewall ? 'włączony' : 'wyłączony'} />
-        <Order label="Dziennik kapitański" value={`od ${zl(orders.impulseThreshold)}`} />
+        {orders.minShieldSalaries > shieldSalaries && (
+          <span className="text-[11px] text-accent">Minimalne osłony ponad cel osłon – liczy się cel ({shieldSalaries} pensji).</span>
+        )}
+        {/* The orders changed here too (spec, N73) – the same fields as in the settings. */}
+        <fieldset disabled={readOnly} data-testid="command-orders-fields">
+          <OrdersFields labelWidth={170} />
+        </fieldset>
         <button className="self-start text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'settings', tab: 'layers' })} data-testid="command-orders-edit">
-          zmień rozkazy ›
+          warstwy okrętu w Ustawieniach ›
         </button>
         <div className="mt-1 flex flex-col gap-1 border-t border-line pt-1.5">
           <span className="label">Progi gry</span>

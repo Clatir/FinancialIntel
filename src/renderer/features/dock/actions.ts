@@ -2,7 +2,7 @@
  * Docking a delivery (E5, D72): the docking record (each ICTTJ entry at most once – T15) and, for a payout without a
  * pair in the bank, its operation on Portfel XTB. Undone with „Cofnij”.
  */
-import type { Delivery } from '@shared/calc/dock'
+import { asPayout, type Delivery } from '@shared/calc/dock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { derivedId, newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
@@ -32,7 +32,8 @@ export function walletOperation(d: Delivery, now: string): Transaction {
     kind: 'trading',
     amount: d.direction === 'in' ? d.amount : -d.amount,
     counterparty: 'XTB',
-    title: d.direction === 'in' ? `Wypłata z konta tradingowego${pool}` : 'Zwrot do konta tradingowego',
+    // The names of the docking window and the bridge (N43).
+    title: d.direction === 'in' ? `Wypłata z ICTTJ${pool}` : `Zwrot do masy z ICTTJ${pool}`,
     note: d.entry?.note ?? ''
   })
 }
@@ -48,6 +49,7 @@ export function dockingOf(d: Delivery, tx: Transaction, split: SplitDraft | null
     date: tx.date,
     transactionId: tx.id,
     ictjEntryId: d.entry?.id ?? kept?.ictjEntryId ?? null,
+    entryDate: d.entry?.date ?? kept?.entryDate ?? null,
     pool: d.entry?.pool ?? kept?.pool ?? null,
     // The engine splits the operation's amount – the bank's when it differs from the entry's (B22, B59).
     split: split ? { shields: Math.max(0, Math.abs(tx.amount) - others), hull: split.hull, goals: Object.fromEntries(Object.entries(split.goals).filter(([, v]) => v > 0)), taxHold: split.taxHold } : null
@@ -67,11 +69,16 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
   const wallet = d.transaction ? null : walletOperation(d, now)
   const existing = wallet ? (records.transactions[wallet.id]?.record ?? null) : null
   const created = existing ? null : wallet
-  const tx = d.transaction ?? existing ?? created!
+  // An inflow typed on Portfel XTB (B69): it becomes the payout – never a second operation for the same money. The
+  // record as it is now (an edit since the window opened stays); „Cofnij” gives back only what the docking changed.
+  const typed = d.walletTyped && d.transaction ? (records.transactions[d.transaction.id]?.record ?? d.transaction) : null
+  const payout = typed ? { ...asPayout(typed), updatedAt: now } : null
+  const tx = payout ?? d.transaction ?? existing ?? created!
   const stored = records.dockings?.[dockingOf(d, tx, split, now).id]?.record
   const docking = dockingOf(stored && !d.docking ? { ...d, docking: stored } : d, tx, split, now)
   const before = d.docking ?? stored ?? null
   if (created) addRecord('transactions', created)
+  if (payout) updateRecord('transactions', payout.id, (cur) => ({ ...asPayout(cur), updatedAt: now }))
   if (before) updateRecord('dockings', before.id, () => docking)
   else addRecord('dockings', docking)
   // Dockings of this payout whose operation is gone (B15): they dock nothing – out of the folder.
@@ -84,6 +91,7 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
       if (before) updateRecord('dockings', before.id, () => before)
       else void deleteRecord('dockings', docking.id)
       if (created) void deleteRecord('transactions', created.id)
+      if (typed) updateRecord('transactions', typed.id, (cur) => ({ ...cur, kind: typed.kind, categoryId: typed.categoryId, counterparty: typed.counterparty, repaid: typed.repaid }))
       for (const o of orphans) addRecord('dockings', o)
     }
   })

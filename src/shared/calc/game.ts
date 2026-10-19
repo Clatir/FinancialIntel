@@ -149,10 +149,17 @@ const allChanges = (game: readonly GameMonth[]) =>
 
 const isRank = (x: string): x is Rank => (RANKS as readonly string[]).includes(x)
 
-/** The rank now and the day of its last change (null = none since the start). */
-export function rankOf(game: readonly GameMonth[]): { rank: Rank; since: string | null } {
-  const last = allChanges(game).at(-1)
-  return last && isRank(last.rank) ? { rank: last.rank, since: last.day } : { rank: 'cadet', since: null }
+/**
+ * The rank now and the day of its last change (null = none since the start). A rank a newer version gave (B90) – unknown
+ * here – is `newer`: shown by its name, never a step from it (the version that knows it decides).
+ */
+export function rankOf(game: readonly GameMonth[]): { rank: Rank; since: string | null; newer?: string } {
+  const changes = allChanges(game)
+  const last = changes.at(-1)
+  if (!last) return { rank: 'cadet', since: null }
+  if (isRank(last.rank)) return { rank: last.rank, since: last.day }
+  const known = changes.filter((c) => isRank(c.rank)).at(-1)
+  return { rank: known && isRank(known.rank) ? known.rank : 'cadet', since: last.day, newer: last.rank }
 }
 
 /** Compliant days in a row ending at `date` (a broken or missing day ends the streak). */
@@ -226,8 +233,29 @@ export function rateDay(input: GameInput, date: string, prev: GameDay | null = n
     const mass = cargoMass(known, monthOf(date), f.plan?.salary ?? null, settings.orders.cargoLimitPct)
     cargo = mass.monthly
     const added = known.filter((c) => dateOf(c.createdAt) === date && activeIn(c, monthOf(date)))
-    const grew = prev?.cargo != null && monthOf(addDays(date, -1)) === monthOf(date) ? mass.monthly > prev.cargo : added.length > 0
-    if (mass.over && grew) add('cargo', mass.monthly, added[0]?.id ?? null, namesNote(added.map((c) => c.name)))
+    // A container has no history of its amounts (B89): the day is frozen with today's amounts. A raise made on a later day
+    // is that day's – this one keeps the mass of the day before (and its day sees the growth); a change on this day counts.
+    // The day of a change of the mass (`amountAt`; before 1.6.2 its last change of any kind).
+    const changedOn = (c: (typeof known)[number]) => dateOf(c.amountAt ?? c.updatedAt)
+    const changed = known.filter((c) => changedOn(c) >= date && activeIn(c, monthOf(date)))
+    const changedToday = changed.filter((c) => changedOn(c) === date)
+    const later = changed.length > changedToday.length
+    let grew: boolean
+    if (prev?.cargo != null && monthOf(addDays(date, -1)) === monthOf(date)) {
+      grew = mass.monthly > prev.cargo
+      if (grew && !added.length && !changedToday.length && later) {
+        grew = false
+        cargo = prev.cargo
+      }
+    } else {
+      // No day before to compare with (a month's first day, a day frozen after a later change): a container added or
+      // changed this day over the line counts; one changed later leaves this day's mass unknown – the days after judge
+      // by their own changes.
+      grew = added.length > 0 || (mass.over && changedToday.length > 0)
+      if (later && !added.length && !changedToday.length) cargo = null
+    }
+    const why = added.length ? added : changedToday
+    if (mass.over && grew) add('cargo', mass.monthly, why[0]?.id ?? null, namesNote(why.map((c) => c.name)))
     // The shields below their minimum at the day's end after the day's decisions took money out of them – what they lent
     // for a household member's purchase or paid of their gift is no decision of mine (D80 f, D83, N5).
     const min = f.shields.min
@@ -309,6 +337,48 @@ export function killzoneOf(transactions: readonly Transaction[]): { top: Slot | 
 const KILLZONE_MIN_COUNT = 8
 const KILLZONE_SHARE = 0.25
 
+/** What the engine reads of the game's input – the key of a day's energy remembered (the renderer's lists are stable). */
+const engineParts = (input: GameInput): unknown[] => [
+  input.settings.accounts,
+  input.settings.budget,
+  input.settings.categories,
+  input.settings.household,
+  input.settings.layers,
+  input.settings.orders,
+  input.settings.game.seriousEnvelopePct,
+  input.preStartTax,
+  input.containers,
+  input.goals,
+  input.months,
+  input.dockings,
+  input.loans,
+  input.balances
+]
+
+/** The days not frozen yet, judged once per what the engine reads: the screen asks on every render (a run each). */
+const overMemo = new WeakMap<readonly Transaction[], { parts: readonly unknown[]; days: Map<string, boolean> }>()
+
+/**
+ * The day's energy went below zero – the 'daily' order: as frozen, else (a day not frozen yet – B91, N68) as `rateDay`
+ * will judge it, from the engine at the day's end. Before the game's start never.
+ */
+function dailyOver(input: GameInput, days: ReadonlyMap<string, GameDay>, date: string): boolean {
+  const day = days.get(date)
+  if (day) return day.violations.some((v) => v.order === 'daily')
+  const start = input.settings.game.start
+  if (!start || date < start) return false
+  const parts = engineParts(input)
+  let memo = overMemo.get(input.transactions)
+  if (!memo || memo.parts.some((p, i) => p !== parts[i])) overMemo.set(input.transactions, (memo = { parts, days: new Map() }))
+  let over = memo.days.get(date)
+  if (over === undefined) {
+    const f = computeFleet({ ...input, now: warsawEndOf(date) })
+    over = f.started && !!f.daily && f.daily.left < 0
+    memo.days.set(date, over)
+  }
+  return over
+}
+
 /**
  * The week's mission (D73): the first weak point of the 4 weeks before its Monday – in this order – other than last
  * week's mission; without one, the next of the missions every week can have.
@@ -342,8 +412,9 @@ export function chooseMission(input: GameInput, monday: string, lastTemplate: st
       return limit > 0 ? { template: 'envelope', params: { categoryId: best.id, target: Math.floor((limit * 7 * 0.8) / daysInMonth(month)) } } : null
     },
     energy: () => {
+      // The days not frozen yet count too (B91: on a Monday the Sunday) – the same pick whichever day the week starts.
       let over = 0
-      for (let d = from; d <= to; d = addDays(d, 1)) if (days.get(d)?.violations.some((v) => v.order === 'daily')) over++
+      for (let d = from; d <= to; d = addDays(d, 1)) if (dailyOver(input, days, d)) over++
       return over >= 2 ? { template: 'energy', params: {} } : null
     },
     impulse: () => (txs.filter((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0).length >= 2 ? { template: 'impulse', params: {} } : null),
@@ -388,6 +459,8 @@ export interface MissionStatus {
   need?: number
   /** An amount the target counts (spent in the envelope, in the killzone). */
   amount?: number
+  /** Today so far, not counted in `have` (N69): a day still running may get a purchase yet. */
+  pending?: number
 }
 
 /** A mission over its week up to `upTo` (the Sunday when judged; today while it runs). */
@@ -402,9 +475,10 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
     case 'impulse':
       return { ok: !txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0) }
     case 'energy': {
+      // The days not frozen yet as the day's rating sees them (N68) – the same as „Dziś na razie” on the same screen.
       const days = allDays(game)
       let over = 0
-      for (let d = monday; d <= to; d = addDays(d, 1)) if (days.get(d)?.violations.some((v) => v.order === 'daily')) over++
+      for (let d = monday; d <= to; d = addDays(d, 1)) if (dailyOver(input, days, d)) over++
       return { ok: over === 0 }
     }
     case 'envelope': {
@@ -431,9 +505,16 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
       return { ok: accounts.length > 0 && have >= accounts.length, have, need: accounts.length }
     }
     case 'nospend': {
+      // Only the days over (N69): today while the week runs is apart – „+1, if today stays without spending”.
+      const days = allDays(game)
       let have = 0
-      for (let d = monday; d <= to; d = addDays(d, 1)) if (dayCost(txs.filter((t) => t.date === d)) <= 0) have++
-      return { ok: have >= 2, have, need: 2 }
+      let pending = 0
+      for (let d = monday; d <= to; d = addDays(d, 1)) {
+        if (dayCost(txs.filter((t) => t.date === d)) > 0) continue
+        if (d === upTo && !days.has(d)) pending++
+        else have++
+      }
+      return { ok: have >= 2, have, need: 2, ...(pending ? { pending } : {}) }
     }
     default:
       return { ok: false }
@@ -447,7 +528,9 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
  * threshold demotes – also when the threshold was lowered meanwhile; else 30 of 35 promotes.
  */
 function rankStep(game: readonly GameMonth[], date: string, gs: GameSettings, start: string): { rank: Rank; change: 'up' | 'down' } | null {
-  const { rank, since } = rankOf(game)
+  const { rank, since, newer } = rankOf(game)
+  // A rank of a newer version (B90): no promotion nor demotion from here – the order of its ranks is not known.
+  if (newer) return null
   const idx = RANKS.indexOf(rank)
   const days = allDays(game)
   const after = since ? addDays(since, 1) : start
@@ -574,10 +657,11 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
     update(monthOf(d), (g) => ({ ...g, days: { ...g.days, [d]: day } }))
     // The week's mission is judged when its Sunday freezes – before the rank, so a mission done counts at once.
     const found = weekdayOf(d) === 7 ? missionOf(isoWeekOf(d)) : null
-    if (found && !found.mission.evaluatedAt) {
+    // A mission of a newer version's template (B90): that version judges it – never „not done” for a rule unknown here.
+    if (found && !found.mission.evaluatedAt && (MISSIONS as readonly string[]).includes(found.mission.template)) {
       const done = missionStatus(input, found.mission, d, [...months.values()]).ok
       update(found.month, (g) => ({ ...g, missions: g.missions.map((m) => (m.id === found.mission.id ? { ...m, done, evaluatedAt: stamp } : m)) }))
-      if ((MISSIONS as readonly string[]).includes(found.mission.template)) events.push({ kind: 'mission', template: found.mission.template as MissionTemplate, week: found.mission.week, done })
+      events.push({ kind: 'mission', template: found.mission.template as MissionTemplate, week: found.mission.week, done })
     }
     const change = rankStep([...months.values()], d, gs, start)
     if (change) {
@@ -609,7 +693,7 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
 export type WatchEntry =
   | { kind: 'violation'; date: string; order: string; serious: boolean; amount: number | null; ref: string | null; note: string }
   | { kind: 'tag'; date: string; tag: string }
-  | { kind: 'class'; date: string; cls: ShipClass; from: ShipClass; up: boolean }
+  | { kind: 'class'; date: string; cls: ShipClass; from: ShipClass; up: boolean; peak: boolean }
   | { kind: 'rank'; date: string; rank: Rank; change: 'up' | 'down' }
   | { kind: 'mission'; date: string; template: string; week: string; done: boolean | null; params: GameMission['params'] }
   | { kind: 'achievement'; date: string; id: AchievementId }
@@ -619,12 +703,14 @@ export interface GameView {
   /** The game starts on a later day. */
   waiting: boolean
   rank: Rank
+  /** A rank a newer version gave (B90): its name as written – shown instead of `rank`. */
+  rankNewer: string | null
   /** The day of the last change of rank; null = none since the start. */
   rankSince: string | null
   /** The way to the next rank (null at the top). */
   progress: ReturnType<typeof promotionProgress> | null
-  /** Serious violations this month since the last change of rank, against the demotion's threshold. */
-  serious: { count: number; limit: number }
+  /** Serious violations this month since the last change of rank, against the demotion's threshold; `from` – counted from. */
+  serious: { count: number; limit: number; from: string }
   streak: number
   record: number
   lastFrozen: string | null
@@ -641,12 +727,15 @@ export interface GameView {
 
 const SHIP_ORDER = (c: string) => (SHIP_CLASSES as readonly string[]).indexOf(c)
 
+/** Days a class must stay above to be celebrated again (N64): a return to a class held lately is no news. */
+export const CLASS_PEAK_DAYS = 30
+
 export function gameView(game: readonly GameMonth[], gs: GameSettings, today: string): GameView {
   const start = gs.start
   const days = allDays(game)
   const dates = [...days.keys()].sort()
   const lastFrozen = dates.at(-1) ?? null
-  const { rank, since } = rankOf(game)
+  const { rank, since, newer } = rankOf(game)
   let record = 0
   let run = 0
   let prev: string | null = null
@@ -674,8 +763,16 @@ export function gameView(game: readonly GameMonth[], gs: GameSettings, today: st
     const day = days.get(d)!
     for (const v of day.violations) log.push({ kind: 'violation', date: d, order: v.order, serious: v.serious, amount: v.amount, ref: v.ref, note: v.note })
     for (const tag of day.tags) log.push({ kind: 'tag', date: d, tag })
-    if (day.cls && prevCls && day.cls !== prevCls && SHIP_ORDER(day.cls) >= 0 && SHIP_ORDER(prevCls) >= 0)
-      log.push({ kind: 'class', date: d, cls: day.cls as ShipClass, from: prevCls as ShipClass, up: SHIP_ORDER(day.cls) > SHIP_ORDER(prevCls) })
+    if (day.cls && prevCls && day.cls !== prevCls && SHIP_ORDER(day.cls) >= 0 && SHIP_ORDER(prevCls) >= 0) {
+      const up = SHIP_ORDER(day.cls) > SHIP_ORDER(prevCls)
+      // A peak (N64): above every class of the last 30 days – a range moving around a class's threshold celebrates once.
+      let peak = up
+      for (let back = 1; peak && back <= CLASS_PEAK_DAYS; back++) {
+        const c = days.get(addDays(d, -back))?.cls
+        if (c && SHIP_ORDER(c) >= SHIP_ORDER(day.cls)) peak = false
+      }
+      log.push({ kind: 'class', date: d, cls: day.cls as ShipClass, from: prevCls as ShipClass, up, peak })
+    }
     if (day.cls) prevCls = day.cls
   }
   for (const c of allChanges(game)) if (isRank(c.rank)) log.push({ kind: 'rank', date: c.day, rank: c.rank, change: c.change })
@@ -692,9 +789,10 @@ export function gameView(game: readonly GameMonth[], gs: GameSettings, today: st
     start,
     waiting: !start || start > today,
     rank,
+    rankNewer: newer ?? null,
     rankSince: since,
-    progress: start && rank !== 'admiral' && lastFrozen ? promotionProgress(game, lastFrozen, gs, start) : null,
-    serious: { count: seriousIn(days, from, today), limit: gs.demoteSerious },
+    progress: start && rank !== 'admiral' && !newer && lastFrozen ? promotionProgress(game, lastFrozen, gs, start) : null,
+    serious: { count: seriousIn(days, from, today), limit: gs.demoteSerious, from },
     streak,
     record,
     lastFrozen,

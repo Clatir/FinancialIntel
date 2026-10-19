@@ -50,6 +50,8 @@ export function DockPanel() {
                 <span className="num w-[68px] shrink-0">{plDate(d.date)}</span>
                 <span className="min-w-0 flex-1 truncate">
                   {d.entry ? ICTJ_POOL_LABEL[d.entry.pool] : 'XTB'} · {STATE_LABEL[d.state]}
+                  {/* A skipped entry with its inflow in the bank (N45): the money is in the budget, in the usual order. */}
+                  {d.state === 'skipped' && d.transaction && <span title="Wpływ w banku liczy się zwykłą kolejnością dokowania; po cofnięciu pominięcia zadokuje się z pulą wpisu"> · wpływ w banku {plDate(d.transaction.date)}</span>}
                 </span>
                 <span className="num">{zl(d.amount)}</span>
                 {d.state === 'skipped' && d.entry && (
@@ -68,7 +70,7 @@ export function DockPanel() {
 }
 
 function DeliveryRow({ d }: { d: Delivery }) {
-  const what = d.entry ? (d.entry.kind === 'withdrawal' ? 'Wypłata ICTTJ' : 'Zwrot do masy') : 'Wpływ z XTB'
+  const what = d.entry ? (d.entry.kind === 'withdrawal' ? 'Wypłata z ICTTJ' : 'Zwrot do masy') : 'Wpływ z XTB'
   const detail = d.entry ? ICTJ_POOL_LABEL[d.entry.pool] : d.missingEntry ? 'bez wpisu w ICTTJ' : ''
   return (
     <button

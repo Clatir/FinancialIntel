@@ -8,7 +8,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { addDays, isoWeekOf, mondayOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
 import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekNumbers, yearNumbers, yearWealth } from '@shared/calc/intel'
-import { setReportTab, setWatchMonday, useReportsUi, type ReportTab } from './state'
+import { setReportTab, setWatchMonday, useReportsUi, watchMondayOf, type ReportTab } from './state'
 import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
@@ -109,7 +109,9 @@ function WatchReport() {
   const settings = useData((s) => s.fi!.settings)
   const transactions = useRecordList('transactions')
   const cats = useCategories()
-  const monday = useReportsUi((s) => s.watchMonday) ?? defaultWatchMonday(fleet.today, warsawNow().time)
+  // A week chosen weeks ago is not kept (N71): the week due now once another one is due.
+  const due = defaultWatchMonday(fleet.today, warsawNow().time)
+  const monday = watchMondayOf(useReportsUi((s) => s.watch), due)
   const setMonday = setWatchMonday
   const sunday = addDays(monday, 6)
   const w = useMemo(() => weekNumbers(transactions, settings.categories, monday, fleet.incomeContext), [transactions, settings, monday, fleet.incomeContext])
@@ -117,7 +119,7 @@ function WatchReport() {
   const top = [...kz.cells.values()].sort((a, b) => b.cost - a.cost)[0] ?? null
   const week = isoWeekOf(monday)
   const mission = game?.view.missions.find((m) => m.week === week) ?? null
-  const status = mission && game ? missionStatus(game.input, mission, fleet.today) : null
+  const status = useMemo(() => (mission && game ? missionStatus(game.input, mission, fleet.today) : null), [mission, game, fleet.today])
   const days = game ? new Map(game.input.game.flatMap((g) => Object.entries(g.days))) : new Map()
   const current = monday === mondayOf(fleet.today)
   const next = current || addDays(monday, 7) === mondayOf(fleet.today) ? nextWeekEnvelopes(fleet.envelopes, fleet.today) : []
@@ -134,6 +136,11 @@ function WatchReport() {
               <button className="btn h-[22px]" disabled={monday >= mondayOf(fleet.today)} onClick={() => setMonday(addDays(monday, 7))}>
                 później ›
               </button>
+              {monday !== due && (
+                <button className="btn btn-ghost h-[22px]" onClick={() => setMonday(due)} data-testid="reports-watch-current">
+                  bieżący
+                </button>
+              )}
             </div>
             <Line label="Koszty netto" value={zl(w.costs)} strong testId="reports-watch-costs" />
             <Line label={<span title="Przychód (D81): praca i trading netto – bez zwrotów, pożyczek i pieniędzy domowników">Przychody</span>} value={zl(w.income)} />

@@ -4,7 +4,8 @@
  * on my accounts, the deposit). Computed from the operations alone, in the order of the layers' engine (date, time,
  * creation, id), never stored – every computer sees the same, and a purchase marked later settles by itself. Before
  * the budget's start everything is settled in the opening balance (as the loans – T70): the balances start at zero
- * then; the history before still says what of a member's money was income (the statistics).
+ * then; the flows before are kept for the editor's preview only – the income statistics skip a member's money before
+ * the settlements' start (T119, N49).
  *
  * - A purchase a member finances (a refundable part, `financerOf`) takes their advance first; the rest the shields lend
  *   and the member owes it.
@@ -16,7 +17,8 @@
  *   (as the layers' engine skips them) – they settle nothing.
  * - An income split among members (D81 – one transfer carrying the money of several): each part is its member's money
  *   (a part without a member is income); the rest of the amount is the sender's (`memberId`).
- * - The settlements start at `from` (the budget's start, or later – D81): each member's balance is then their `opening`.
+ * - The settlements start at `from` (the budget's start, or later – D81): each member's balance is then their `opening`,
+ *   its debt dated by its oldest purchase when known (`opening.since` – N41).
  *   An operation dated before `from` the openings do not take in (`covered` – added later by a late import of the bank or
  *   another computer, its date or its members changed since: B14) counts right after them.
  * - A member's part as their gift (D83): their advance first, the rest the shields pay – nobody owes it; a returned gift
@@ -234,7 +236,7 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
     clearAt ?? '',
     covered?.n ?? '',
     openings ? [...openings].map(([id, date]) => `${id}:${date}`).sort().join(',') : '',
-    opened.map((m) => `${m.id}:${m.opening!.owed}:${m.opening!.deposit}`).join(',')
+    opened.map((m) => `${m.id}:${m.opening!.owed}:${m.opening!.deposit}:${m.opening!.since ?? ''}`).join(',')
   ].join('|')
   const cached = memo.get(transactions)?.get(key)
   if (cached) return cached
@@ -244,8 +246,10 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
   const begin = () => {
     states.clear()
     for (const m of opened) {
-      const { owed, deposit } = m.opening!
-      states.set(m.id, { owed, deposit, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date: from!, amount: owed }] : [] })
+      const { owed, deposit, since } = m.opening!
+      // Dated by its oldest purchase when known (N41): a debt from June is not „from the settlements' start”.
+      const date = since && since < from! ? since : from!
+      states.set(m.id, { owed, deposit, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date, amount: owed }] : [] })
     }
   }
   const byTx = new Map<string, MemberFlow[]>()
