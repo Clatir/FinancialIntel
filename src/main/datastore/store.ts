@@ -1583,9 +1583,8 @@ export class DataStore {
   }
 
   async historyDeleted(collection: Collection): Promise<Array<HistoryEntry & { id: string; record: unknown }>> {
-    // The records there now straight from the views (W19: no copy of their ids); the history read outside the lock –
-    // no save waits for it.
-    const existing = await this.mutex.run(async () => this.buildViews().records[collection])
+    // The records there at one moment, under the lock; the history read outside it (W19) – no save waits for it.
+    const existing = await this.mutex.run(async () => new Set(this.buildViews().records[collection].keys()))
     return this.history.deleted(collection, existing)
   }
 

@@ -39,9 +39,9 @@ const UNDECIDED: Record<'removal' | 'time', string> = {
   time: 'Brak czasu zmiany po jednej ze stron – wybierz ręcznie.'
 }
 
-const NewerBadge = memo(function NewerBadge({ item, mine, machine }: { item: PendingRemote; mine: unknown; machine: string }) {
-  // Decided again when this computer's version changes (an edit made while the dialog waits), not at every render (W25).
-  const n = useMemo(() => newerOf(item), [item, mine])
+/** Decided now, at every render of its card (edits made while the dialog waits count) – a card is drawn again only for itself (W25). */
+function NewerBadge({ item, machine }: { item: PendingRemote; machine: string }) {
+  const n = newerOf(item)
   if (n.choice == null)
     return (
       <Badge title={UNDECIDED[n.reason]} data-testid="remote-newer">
@@ -63,7 +63,7 @@ const NewerBadge = memo(function NewerBadge({ item, mine, machine }: { item: Pen
       {text}
     </Badge>
   )
-})
+}
 
 function SelectBox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return <input type="checkbox" checked={checked} onChange={(e) => onChange(e.currentTarget.checked)} aria-label={label} data-testid="remote-select" />
@@ -104,7 +104,7 @@ const ItemCard = memo(function ItemCard({
           <span className="text-[12.5px] text-fg-strong">{title}</span>
           <Badge tone="warn">usunięty na innym komputerze</Badge>
           {item.hadLocalEdits && <Badge tone="accent">masz niezapisane zmiany</Badge>}
-          <NewerBadge item={item} mine={mine} machine={machine} />
+          <NewerBadge item={item} machine={machine} />
           <span className="flex-1" />
           <HistoryButton kind={item.collection} id={item.id} current={mine ?? theirs} variant="link" />
         </div>
@@ -129,7 +129,7 @@ const ItemCard = memo(function ItemCard({
         <Badge>z komputera {machine}</Badge>
         {item.hadLocalEdits ? <Badge tone="accent">masz niezapisane zmiany ({localChanges.length})</Badge> : <Badge>bez Twoich zmian</Badge>}
         {conflicts.length > 0 && <Badge tone="warn">to samo pole zmienione po obu stronach: {conflicts.length}</Badge>}
-        <NewerBadge item={item} mine={mine} machine={machine} />
+        <NewerBadge item={item} machine={machine} />
         {/* The versions set aside so far – the one dropped here goes there too (N18). */}
         <span className="flex-1" />
         <HistoryButton kind={item.collection} id={item.id} current={mine ?? theirs} variant="link" />

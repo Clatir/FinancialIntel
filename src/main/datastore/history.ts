@@ -27,11 +27,16 @@ interface SnapshotFile {
   record: { id?: string; updatedAt?: string; updatedBy?: string | null } & Record<string, unknown>
 }
 
+/** A deleted record's last version (`RecordHistory.deleted`). */
+type DeletedVersion = HistoryEntry & { id: string; record: SnapshotFile['record'] }
+
 const safeId = (id: string) => id.replace(/[^0-9A-Za-z_-]/g, '')
 const fileStamp = (iso: string) => iso.replace(/[-:.]/g, '')
 
 export class RecordHistory {
   private lastSnapshot = new Map<string, number>()
+  /** The last version of a deleted record by the name of its file (W19): read once, not at every file of an import. */
+  private deletedRead = new Map<string, { file: string; entry: DeletedVersion }>()
 
   constructor(
     private readonly root: string,
@@ -133,7 +138,7 @@ export class RecordHistory {
    * back with their import (reason 'undo', F4: their versions can be brought back; the import's own rows are not
    * blocked by them – T39).
    */
-  async deleted(kind: FileKind, existing: { has(id: string): boolean }): Promise<Array<HistoryEntry & { id: string; record: SnapshotFile['record'] }>> {
+  async deleted(kind: FileKind, existing: ReadonlySet<string>): Promise<DeletedVersion[]> {
     const base = join(this.root, HISTORY_DIR, kind)
     let ids: string[]
     try {
@@ -149,8 +154,14 @@ export class RecordHistory {
         const dir = join(base, id)
         const last = (await this.files(dir)).at(-1)
         if (!last || !(last.includes('_delete_') || last.includes('_undo_'))) return null
+        // A file of the history never changes (a new version is a new file): the one read before is the same.
+        const known = this.deletedRead.get(`${kind}/${id}`)
+        if (known?.file === last) return known.entry
         const s = await this.readFile(dir, last)
-        return s ? { ...this.entryOf(last, s), id, record: s.record } : null
+        if (!s) return null
+        const entry: DeletedVersion = { ...this.entryOf(last, s), id, record: s.record }
+        this.deletedRead.set(`${kind}/${id}`, { file: last, entry })
+        return entry
       }
     )
     return found.filter((x) => x != null).sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1))

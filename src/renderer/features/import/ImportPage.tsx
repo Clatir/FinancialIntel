@@ -283,8 +283,10 @@ function Summary() {
 const PAGE = 100
 
 function MatchesPanel() {
-  const { plan, choices } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices })))
-  const [limit, setLimit] = useState(PAGE)
+  const { plan, choices, file } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices, file: s.file })))
+  // Each list its own page, from the first one again with another file.
+  const [limits, setLimits] = useState({ merges: PAGE, deleted: PAGE })
+  useEffect(() => setLimits({ merges: PAGE, deleted: PAGE }), [file])
   const cats = useCategories()
   const accounts = useAccounts()
   const members = useMembers()
@@ -312,7 +314,7 @@ function MatchesPanel() {
               inną nazwą (łączony przy zakupie kartą do dnia różnicy, inaczej zaznacz sam). Wpis zachowuje Twoją kategorię i godzinę, bierze dane z banku. Nie
               połączony możliwy duplikat znajdziesz potem w „Duplikatach operacji”.
             </p>
-            {merges.slice(0, limit).map((p) => (
+            {merges.slice(0, limits.merges).map((p) => (
               <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-merge">
                 <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-merge-join" />
                 <span className="min-w-0 truncate">
@@ -338,7 +340,7 @@ function MatchesPanel() {
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
             ))}
-            <ShowMore page={PAGE} shown={limit} total={merges.length} onMore={() => setLimit(limit + PAGE)} testId="import-merge-more" />
+            <ShowMore page={PAGE} shown={limits.merges} total={merges.length} onMore={() => setLimits((l) => ({ ...l, merges: l.merges + PAGE }))} testId="import-merge-more" />
           </div>
         )}
         {elsewhere.length > 0 && (
@@ -378,7 +380,7 @@ function MatchesPanel() {
           <div className="flex flex-col gap-1">
             <span className="label">Usunięte przez Ciebie wcześniej ({deleted.length})</span>
             <p className="text-[11px] text-dim">Te operacje z banku były już zaimportowane i je usunąłeś – nie wracają same. Zaznacz, żeby zaimportować mimo to.</p>
-            {deleted.slice(0, limit).map((p) => (
+            {deleted.slice(0, limits.deleted).map((p) => (
               <label key={p.key} className="flex items-center gap-2" data-testid="import-deleted">
                 <input type="checkbox" checked={!!choices.restoreDeleted[p.key]} onChange={(e) => setRestoreDeleted(p.key, e.currentTarget.checked)} />
                 <span className="min-w-0 flex-1 truncate">
@@ -387,7 +389,7 @@ function MatchesPanel() {
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
             ))}
-            <ShowMore page={PAGE} shown={limit} total={deleted.length} onMore={() => setLimit(limit + PAGE)} testId="import-deleted-more" />
+            <ShowMore page={PAGE} shown={limits.deleted} total={deleted.length} onMore={() => setLimits((l) => ({ ...l, deleted: l.deleted + PAGE }))} testId="import-deleted-more" />
           </div>
         )}
         {plan.vanished.length > 0 && (
@@ -507,17 +509,27 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
   )
 })
 
+/** Rows of a group left out, counted once per state of the skips (a keystroke of the search counts nothing again). */
+const skippedMemo = new WeakMap<object, WeakMap<readonly unknown[], number>>()
+function skippedIn(skip: Record<string, boolean>, rows: ImportGroup['rows']): number {
+  let byRows = skippedMemo.get(skip)
+  if (!byRows) skippedMemo.set(skip, (byRows = new WeakMap()))
+  let n = byRows.get(rows)
+  if (n == null) {
+    n = 0
+    for (const p of rows) if (skip[p.key]) n++
+    byRows.set(rows, n)
+  }
+  return n
+}
+
 /** A group (brand, direction, proposal): its decision and ticks read by its key (W17) – rendered again only when they change. */
 const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inherited: Choice; themeDecided: boolean; found: NewRow[] | 'all' | undefined }) {
   const own = useImport((s) => s.choices.groups[g.group])
   const remember = useImport((s) => s.choices.remember[g.group] ?? false)
   const checked = useImport((s) => !!s.selected.groups[g.group])
   const proposing = useImport((s) => s.lastDecided === g.group && !s.noProposal[g.group])
-  const skipped = useImport((s) => {
-    let n = 0
-    for (const p of g.rows) if (s.choices.skip[p.key]) n++
-    return n
-  })
+  const skipped = useImport((s) => skippedIn(s.choices.skip, g.rows))
   const cats = useCategories()
   const [open, setOpen] = useState(false)
   const [limit, setLimit] = useState(PAGE)

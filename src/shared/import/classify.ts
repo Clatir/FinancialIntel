@@ -70,7 +70,7 @@ export interface RuleTarget {
  * (in the name or the title); a rule of the other direction does not count.
  */
 export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction, amount?: number): ImportRule | null {
-  const usable = ruleIndexOf(rules)[direction]
+  const usable = ruleIndexOf(rules, direction)
   const keys = new Set([t.brand, t.raw, ...(t.legacy ?? []), t.key].filter(Boolean))
   // A rule of the brand up to an amount (F22): the tightest one the amount fits, before the brand's plain rule.
   if (amount != null) {
@@ -85,42 +85,48 @@ export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction:
   let best: ImportRule | null = null
   for (const r of usable.contains) if ((t.key.includes(r.match) || t.brand.includes(r.match) || t.raw.includes(r.match)) && (!best || r.match.length > best.match.length)) best = r
   if (best) return best
-  for (const { rule: r, matches } of usable.keyword) if ((matches(t.name) || matches(t.title)) && (!best || r.match.length > best.match.length)) best = r
+  for (const k of usable.keyword) {
+    const matches = (k.matches ??= keywordMatcher(k.rule.match))
+    if ((matches(t.name) || matches(t.title)) && (!best || k.rule.match.length > best.match.length)) best = k.rule
+  }
   return best
 }
 
-/** The rules of one direction by how they are looked up, in their order (W20: one pass over the rules per list). */
+/**
+ * The rules of one direction by how they are looked up, in their order (W20: one pass over the rules per list). A
+ * keyword's pattern made at its first use – only when no exact or „contains” rule decides.
+ */
 interface RuleIndex {
   exact: Map<string, ImportRule[]>
   amount: ImportRule[]
   contains: ImportRule[]
-  keyword: Array<{ rule: ImportRule; matches: (ws: readonly string[]) => boolean }>
+  keyword: Array<{ rule: ImportRule; matches?: (ws: readonly string[]) => boolean }>
 }
 
-const ruleIndexes = new WeakMap<readonly ImportRule[], Record<Direction, RuleIndex>>()
+const ruleIndexes = new WeakMap<readonly ImportRule[], Partial<Record<Direction, RuleIndex>>>()
 
-function ruleIndexOf(rules: readonly ImportRule[]): Record<Direction, RuleIndex> {
-  let index = ruleIndexes.get(rules)
-  if (index) return index
-  const of = (direction: Direction): RuleIndex => {
-    const out: RuleIndex = { exact: new Map(), amount: [], contains: [], keyword: [] }
-    for (const r of rules) {
-      if (!(r.direction == null || r.direction === direction) || !(TX_KINDS as readonly string[]).includes(r.kind)) continue
-      if (r.mode === 'exact') {
-        if (!r.match) continue
-        const list = out.exact.get(r.match)
-        if (list) list.push(r)
-        else out.exact.set(r.match, [r])
-      } else if (r.mode === 'amount') {
-        if (r.maxAmount) out.amount.push(r)
-      } else if (r.mode === 'contains') {
-        if (r.match) out.contains.push(r)
-      } else if (r.mode === 'keyword' && r.match) out.keyword.push({ rule: r, matches: keywordMatcher(r.match) })
-    }
-    return out
+/** One direction at a time: a list made for one question (`keywordProposals`) builds only what it asks. */
+function ruleIndexOf(rules: readonly ImportRule[], direction: Direction): RuleIndex {
+  let byDirection = ruleIndexes.get(rules)
+  if (!byDirection) ruleIndexes.set(rules, (byDirection = {}))
+  let out = byDirection[direction]
+  if (out) return out
+  out = { exact: new Map(), amount: [], contains: [], keyword: [] }
+  for (const r of rules) {
+    if (!(r.direction == null || r.direction === direction) || !(TX_KINDS as readonly string[]).includes(r.kind)) continue
+    if (r.mode === 'exact') {
+      if (!r.match) continue
+      const list = out.exact.get(r.match)
+      if (list) list.push(r)
+      else out.exact.set(r.match, [r])
+    } else if (r.mode === 'amount') {
+      if (r.maxAmount) out.amount.push(r)
+    } else if (r.mode === 'contains') {
+      if (r.match) out.contains.push(r)
+    } else if (r.mode === 'keyword' && r.match) out.keyword.push({ rule: r })
   }
-  ruleIndexes.set(rules, (index = { in: of('in'), out: of('out') }))
-  return index
+  byDirection[direction] = out
+  return out
 }
 
 /** An ATM withdrawal (by the type of operation). */

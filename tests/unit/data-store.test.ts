@@ -375,6 +375,22 @@ describe('zapis i usuwanie paczkami (1.4.3, przegląd grupy F)', () => {
     expect(api.saveRecord.mock.calls.map((c) => c[1].id)).toEqual([ID2])
   })
 
+  it('paczka zapisu, z której wpis zniknął z pamięci przed wysłaniem: nic nie zostaje „niezapisane” (przegląd 1.5.4)', async () => {
+    load(transaction())
+    api.saveRecords.mockImplementation(async (_c: string, rs: Transaction[]) => rs.map((r) => ({ id: r.id, entry: saved(r) })))
+    const ID3 = '01K6H3Z0W8Q4M2N5P7R9S1T3V7'
+    store.addRecords('transactions', [transaction(ID2), transaction(ID3)])
+    // Gone from memory before the batch goes, its key not forgotten.
+    store.useData.setState((s) => {
+      const map = { ...s.records.transactions }
+      delete map[ID2]
+      return { records: { ...s.records, transactions: map } }
+    })
+    await vi.advanceTimersByTimeAsync(10)
+    expect((api.saveRecords.mock.calls[0]?.[1] as Transaction[]).map((r) => r.id)).toEqual([ID3])
+    expect(store.hasUnsaved()).toBe(false)
+  })
+
   it('usunięcie, którego dysk nie przyjął: wpis wraca razem ze swoją niezapisaną zmianą i ją zapisuje', async () => {
     const t = transaction()
     load(t)

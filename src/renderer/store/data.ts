@@ -613,10 +613,21 @@ function saveBatch(c: Collection, ids: readonly string[]): void {
 
 async function runSaveMany(c: Collection, ids: readonly string[]): Promise<void> {
   const s = get()
+  const waiting = new Set(useRemote.getState().pending.map((p) => p.key))
+  // Gone from memory meanwhile with its key still unsaved: nothing to write – forgotten, as one save does (`runSave`).
+  let gone = false
+  for (const id of ids) {
+    const key = keyOf(c, id)
+    if (dirty.has(key) && !waiting.has(key) && !mapOf(s, c)[id]) {
+      forget(key)
+      gone = true
+    }
+  }
+  if (gone) bumpPending(0, { error: saveError() })
   // Still to write: changed, no decision about another computer's change waiting, still in memory.
   const sent = ids
     .map((id) => ({ id, key: keyOf(c, id) }))
-    .filter(({ id, key }) => dirty.has(key) && !pendingFor(key) && mapOf(s, c)[id])
+    .filter(({ id, key }) => dirty.has(key) && !waiting.has(key) && mapOf(s, c)[id])
     .map(({ id, key }) => ({ id, key, version: versions.get(key) ?? 0, record: mapOf(s, c)[id]!.record }))
   if (!sent.length) return
   bumpPending(1)
