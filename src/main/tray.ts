@@ -97,13 +97,30 @@ export class AppTray {
   }
 }
 
+/** The name of the entry in Windows' Run key: one per kind of the app, the same in every version (B52). */
+export const loginItemName = (portable: boolean): string => (portable ? 'Financial Intel (portable)' : 'Financial Intel')
+
+const samePath = (a: string, b: string) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)
+
 /** Start at login (Windows / macOS; packaged app only – in development it would register electron.exe). */
 export function applyLoginItem(prefs: TrayPrefs, log: TrayDeps['log']): void {
   if (!app.isPackaged || (process.platform !== 'win32' && process.platform !== 'darwin')) return
   try {
     // The portable build runs from a temporary folder: its launcher exe is the one to start.
+    const portable = !!process.env.PORTABLE_EXECUTABLE_FILE
     const path = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
-    app.setLoginItemSettings({ openAtLogin: prefs.launchAtLogin, path, args: [HIDDEN_ARG] })
+    const args = [HIDDEN_ARG]
+    const name = loginItemName(portable)
+    if (process.platform === 'win32') {
+      // Before 1.5.3 the entry was named after the app's id – for the portable a temporary folder new in every version:
+      // the entries piled up and switching off removed only the last one (B52). Every other entry of this exe goes.
+      for (const item of app.getLoginItemSettings({ path, args }).launchItems ?? []) {
+        if (item.name === name || !samePath(item.path, path)) continue
+        app.setLoginItemSettings({ openAtLogin: false, name: item.name, path: item.path, args: item.args })
+        log('info', `uruchamianie z systemem: usunięty stary wpis „${item.name}”`)
+      }
+    }
+    app.setLoginItemSettings({ openAtLogin: prefs.launchAtLogin, path, args, name })
   } catch (e) {
     log('warn', 'uruchamianie z systemem – nie udało się zapisać', e)
   }

@@ -20,6 +20,8 @@ export class QuickEntry {
   private win: BrowserWindow | null = null
   private accelerator = ''
   private registered = false
+  /** The shortcut config.json had before the start replaced it (it took a Polish letter – B29): told to the window once. */
+  replaced: string | null = null
 
   constructor(private readonly d: QuickDeps) {
     const fromMain = (e: IpcMainInvokeEvent) => {
@@ -52,7 +54,7 @@ export class QuickEntry {
     ipcMain.handle('fi:quickClose', (e) => {
       if (fromQuick(e)) this.hide()
     })
-    ipcMain.handle('fi:quickShortcutState', () => ({ accelerator: this.accelerator, registered: this.registered }))
+    ipcMain.handle('fi:quickShortcutState', () => ({ accelerator: this.accelerator, registered: this.registered, replaced: this.replaced }))
   }
 
   private send(channel: string, payload: unknown): void {

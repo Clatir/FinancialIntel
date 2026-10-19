@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/renderer/store/journal.ts @ 84a8339
 import { create } from 'zustand'
-import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry, type FolderStatus, type Problem, type RecordEntry, type Snapshot } from '@shared/api'
+import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry, type FolderStatus, type OpenFolderResult, type Problem, type RecordEntry, type Snapshot } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { RecordTypes } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
@@ -24,6 +24,8 @@ interface DataState {
   phase: 'boot' | 'setup' | 'ready'
   setupMessage: string | null
   setupDir: string | null
+  /** Why the folder did not open (B53): the setup screen's buttons by it, never by the message. */
+  setupProblem: SetupProblem | null
   appInfo: AppInfo | null
   /** fi.json: the folder's settings. */
   fi: SettingsFile | null
@@ -120,6 +122,7 @@ export const useData = create<DataState>(() => ({
   phase: 'boot',
   setupMessage: null,
   setupDir: null,
+  setupProblem: null,
   appInfo: null,
   fi: null,
   records: emptyMaps(),
@@ -200,6 +203,7 @@ export function applySnapshot(snapshot: Snapshot): void {
     phase: 'ready',
     setupMessage: null,
     setupDir: null,
+    setupProblem: null,
     fi: snapshot.fi,
     records: Object.fromEntries(COLLECTIONS.map((c) => [c, toMap(snapshot.records[c] ?? [])])) as unknown as RecordMaps,
     problems: snapshot.problems,
@@ -846,7 +850,14 @@ export async function boot(): Promise<void> {
   api.onFlushRequest(flushSaves)
   const res = await api.loadCurrent()
   if (res?.ok) applySnapshot(res.snapshot)
-  else set({ phase: 'setup', setupMessage: res && !res.ok ? res.message : null, setupDir: res && !res.ok ? (res.dir ?? null) : null })
+  else set({ phase: 'setup', ...setupOf(res) })
+}
+
+export type SetupProblem = Pick<Extract<OpenFolderResult, { ok: false }>, 'reason' | 'problem' | 'remembered' | 'subfolder'>
+
+function setupOf(res: OpenFolderResult | null): Pick<DataState, 'setupMessage' | 'setupDir' | 'setupProblem'> {
+  if (!res || res.ok) return { setupMessage: null, setupDir: null, setupProblem: null }
+  return { setupMessage: res.message, setupDir: res.dir ?? null, setupProblem: { reason: res.reason, problem: res.problem, remembered: res.remembered, subfolder: res.subfolder } }
 }
 
 export async function openResult(res: Awaited<ReturnType<typeof api.pickDataDir>>): Promise<boolean> {
@@ -854,6 +865,6 @@ export async function openResult(res: Awaited<ReturnType<typeof api.pickDataDir>
     applySnapshot(res.snapshot)
     return true
   }
-  if (res.reason !== 'cancelled') set({ setupMessage: res.message, setupDir: res.dir ?? null })
+  if (res.reason !== 'cancelled') set(setupOf(res))
   return false
 }

@@ -29,7 +29,7 @@ import { GameCelebrations } from '../features/command/Celebration'
 import { useGameAdvance, useGameCelebrations } from '../store/game'
 import { DockingDialog } from '../features/dock/DockingDialog'
 import { initIctj, openIctj } from '../store/ictj'
-import { loadMachinePrefs, toggleHideAmounts, useMachine } from '../store/machine'
+import { loadMachinePrefs, noticeReplacedShortcut, toggleHideAmounts, useMachine } from '../store/machine'
 import { initQuickHost } from '../store/quickHost'
 import { initNotifier } from '../store/notifier'
 import { useFleet } from '../store/fleet'
@@ -292,6 +292,8 @@ function SetupPhase() {
 }
 
 function Window({ route, hideAmounts }: { route: Route; hideAmounts: boolean }) {
+  // The window is up: a shortcut the start replaced (AltGr – B29) is told once.
+  useEffect(noticeReplacedShortcut, [])
   return (
     <div className="flex h-full" data-amounts={hideAmounts ? 'hidden' : 'shown'}>
       <SideMenu route={route} />

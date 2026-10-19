@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_MACHINE_PREFS, patchMachinePrefs, type MachinePrefs } from '@shared/machine'
+import { DEFAULT_MACHINE_PREFS, patchMachinePrefs, shortcutLabel, type MachinePrefs } from '@shared/machine'
 import { api } from '../lib/api'
 import { toast } from './ui'
 
@@ -30,6 +30,25 @@ export async function setMachinePrefs(patch: Partial<MachinePrefs>): Promise<voi
   } catch (e) {
     toast(`Nie udało się zapisać ustawień tego komputera: ${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
   }
+}
+
+let shortcutNoticed = false
+
+/** Once per run, with the window ready: the start replaced a shortcut that took a Polish letter (AltGr – B29). */
+export function noticeReplacedShortcut(): void {
+  if (shortcutNoticed) return
+  shortcutNoticed = true
+  void api.quickShortcutState().then(
+    (s) => {
+      if (s.replaced)
+        toast(
+          `Skrót szybkiego wpisu ${shortcutLabel(s.replaced)} zabierał polską literę (AltGr) w innych programach – teraz jest ${s.accelerator ? shortcutLabel(s.accelerator) : 'bez skrótu'}. Inny ustawisz w Ustawienia → Powiadomienia i dźwięki.`,
+          'info',
+          15000
+        )
+    },
+    () => undefined
+  )
 }
 
 /** Ctrl+$: amounts masked or shown (also in the tray's tooltip). */

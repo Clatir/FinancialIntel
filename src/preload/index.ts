@@ -19,7 +19,7 @@ const api: FiApi = {
   loadCurrent: () => invoke('loadCurrent'),
   defaultDataDir: () => invoke('defaultDataDir'),
   pickDataDir: (mode) => invoke('pickDataDir', mode),
-  openDataDir: (dir, createIfEmpty) => invoke('openDataDir', dir, createIfEmpty),
+  openDataDir: (dir, createIfEmpty, force) => invoke('openDataDir', dir, createIfEmpty, force === true),
   cancelOpen: () => invoke('cancelOpen'),
   onOpenProgress: (cb) => listen<[OpenProgress]>('openProgress', cb),
   rendererStep: (name, ms) => ipcRenderer.send('fi:step', name, ms),

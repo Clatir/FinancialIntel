@@ -3,9 +3,9 @@
 import './threadpool'
 import { existsSync, promises as fs } from 'node:fs'
 import { hostname } from 'node:os'
-import { basename, dirname, join, parse } from 'node:path'
+import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
-import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import type { Collection } from '@shared/paths'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
@@ -26,6 +26,7 @@ import { setupDetach } from './detach'
 import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
 import { QuickEntry } from './quick'
 import { patchMachinePrefs, type MachinePrefs } from '@shared/machine'
+import { windowBounds } from '@shared/bounds'
 import { IctjSource } from './ictj/source'
 import { findIctjExe, suggestIctjDir } from './ictj/locate'
 
@@ -343,7 +344,15 @@ const PROGRESS_LOG_MS = 10_000
 /** The other computers' heartbeats are a nicety: an open never waits for them longer than this. */
 const MACHINES_WAIT_MS = 2000
 
-async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFolderResult> {
+const sameDir = (a: string, b: string): boolean => {
+  const n = (p: string) => resolve(p).replace(/[\\/]+$/, '')
+  return process.platform === 'linux' ? n(a) === n(b) : n(a).toLowerCase() === n(b).toLowerCase()
+}
+
+/** This computer's data folder now or before (B53): found empty or missing, it gets no new data unasked. */
+const rememberedDir = (dir: string): boolean => [config.get().dataDir, ...config.get().recentDirs].some((d) => !!d && sameDir(d, dir))
+
+async function openFolder(dir: string, createIfEmpty: boolean, force = false): Promise<OpenFolderResult> {
   opening?.abort()
   const controller = new AbortController()
   opening = controller
@@ -385,7 +394,7 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
     let target = dir
     let kind = await untilAborted(DataStore.inspect(target), signal)
     if (kind === 'ictj' || (await untilAborted(insideIctj(dir), signal))) {
-      return { ok: false, reason: 'not-data', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
+      return { ok: false, reason: 'not-data', problem: 'ictj', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
     }
     // A folder of other files gets a FinancialIntel subfolder – not the proposal itself (already named so) and not a
     // folder of FI data whose fi.json has not arrived yet.
@@ -398,22 +407,42 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
         ok: false,
         reason: 'not-data',
         dir: target,
+        problem: kind,
+        remembered: rememberedDir(target),
         message:
           kind === 'partial'
             ? 'W tym folderze są już dane Financial Intel, ale bez pliku fi.json – OneDrive pewnie jeszcze go pobiera. Poczekaj chwilę i spróbuj ponownie (nowe dane nie są tworzone, żeby nie rozdzielić budżetu).'
             : `Folder ${DATA_FOLDER_NAME} zawiera inne pliki – wybierz pusty folder.`
       }
     }
+    if (kind === 'unavailable') {
+      return {
+        ok: false,
+        reason: 'not-data',
+        dir: target,
+        problem: kind,
+        remembered: rememberedDir(target),
+        message: 'Folder danych jest teraz niedostępny (np. OneDrive jeszcze się nie uruchomił, dysk nie jest gotowy albo brak dostępu). Spróbuj ponownie albo wskaż inny folder.'
+      }
+    }
     if (kind === 'missing' || kind === 'empty') {
-      if (!createIfEmpty) {
+      // The remembered folder found empty or missing is most likely not synced yet: new data there would split the
+      // budget when OneDrive brings the old one – only with the user's confirmation (B53).
+      const remembered = rememberedDir(target)
+      if (!createIfEmpty || (remembered && !force)) {
         return {
           ok: false,
           reason: 'not-data',
-          dir,
-          message:
-            kind === 'empty'
-              ? 'Folder jest pusty – można w nim utworzyć nowe dane.'
+          dir: target,
+          problem: kind,
+          remembered,
+          message: remembered
+            ? kind === 'empty'
+              ? 'Zapamiętany folder danych jest pusty – OneDrive mógł go jeszcze nie pobrać. Spróbuj ponownie za chwilę; nowe dane twórz tu tylko, gdy budżet ma zacząć się od nowa.'
               : 'Zapamiętany folder danych jest niedostępny (np. OneDrive jeszcze się nie uruchomił albo dysk jest odłączony). Spróbuj ponownie albo wskaż inny folder.'
+            : kind === 'empty'
+              ? 'Folder jest pusty – można w nim utworzyć nowe dane.'
+              : 'Tego folderu nie ma. Wskaż inny folder.'
         }
       }
       signal.throwIfAborted()
@@ -423,6 +452,8 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
         ok: false,
         reason: 'not-data',
         dir,
+        problem: kind,
+        subfolder: join(dir, DATA_FOLDER_NAME),
         message: `W tym folderze nie ma danych Financial Intel (fi.json). Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
       }
     }
@@ -541,7 +572,8 @@ function registerIpc(): void {
   handle('getConfig', () => publicConfig(config.get()))
   handle('loadCurrent', async () => {
     const preset = process.env.FI_DATA_DIR
-    if (preset) return openFolder(preset, true)
+    // The tests' folder (FI_DATA_DIR) is meant for new data whatever this computer remembers.
+    if (preset) return openFolder(preset, true, true)
     const dir = config.get().dataDir
     return dir ? openFolder(dir, false) : null
   })
@@ -555,7 +587,7 @@ function registerIpc(): void {
     if (res.canceled || !dir) return { ok: false, reason: 'cancelled', message: '' }
     return openFolder(dir, mode === 'create')
   })
-  handle('openDataDir', (dir: string, createIfEmpty: boolean) => openFolder(dir, createIfEmpty))
+  handle('openDataDir', (dir: string, createIfEmpty: boolean, force?: boolean) => openFolder(dir, createIfEmpty, force === true))
   handle('cancelOpen', () => {
     opening?.abort()
   })
@@ -740,7 +772,10 @@ function registerIpc(): void {
     const prefs = patchMachinePrefs(config.get().prefs, patch)
     await config.update({ prefs })
     // The shortcut registered again only when it was set (also the same one: a retry after another program let it go).
-    if (patch && typeof patch === 'object' && 'quickShortcut' in patch) quick?.applyShortcut(prefs.quickShortcut)
+    if (patch && typeof patch === 'object' && 'quickShortcut' in patch) {
+      quick?.applyShortcut(prefs.quickShortcut)
+      if (quick) quick.replaced = null
+    }
     broadcastPrefs(prefs)
     return prefs
   })
@@ -893,11 +928,10 @@ function watchHangs(win: BrowserWindow): void {
 
 function createWindow(): void {
   const saved = config.get().window
+  // Closed on a monitor that is not here now: centred on the primary one instead of off every screen (B54).
+  const bounds = windowBounds(saved, screen.getAllDisplays().map((d) => d.workArea), screen.getPrimaryDisplay().workArea)
   const win = new BrowserWindow({
-    width: saved?.width ?? 1440,
-    height: saved?.height ?? 900,
-    x: saved?.x,
-    y: saved?.y,
+    ...bounds,
     minWidth: 1024,
     minHeight: 640,
     show: false,
@@ -1041,7 +1075,10 @@ function createWindow(): void {
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
-app.on('second-instance', () => showMainWindow())
+// A second start with the system (an old autostart entry – B52) leaves the window in the tray; any other shows it.
+app.on('second-instance', (_e, argv) => {
+  if (!argv.includes(HIDDEN_ARG)) showMainWindow()
+})
 
 // app.quit() from anywhere (the system, the updater): windows close for real, not to the tray.
 app.on('before-quit', () => {
@@ -1069,6 +1106,12 @@ app.whenReady().then(async () => {
     log
   })
   quick.applyShortcut(config.get().prefs.quickShortcut)
+  // A shortcut that took a Polish letter (AltGr – B29) is the default now: saved, and the window says so once.
+  if (config.replacedShortcut) {
+    quick.replaced = config.replacedShortcut
+    log('warn', `skrót szybkiego wpisu ${config.replacedShortcut} zabierał polską literę (AltGr) – zamieniony na ${config.get().prefs.quickShortcut}`)
+    void config.update({ prefs: config.get().prefs }).catch((e) => log('warn', 'zapis skrótu – nie udało się', e))
+  }
   // Created hidden a moment after the start: the shortcut then shows it at once.
   setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed()) quick?.ensure()

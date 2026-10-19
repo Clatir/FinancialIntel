@@ -126,7 +126,7 @@ export interface OpenOptions {
 /** Files read at once (open, rescan): fewer than the thread pool (`main/threadpool.ts`), so other work still runs. */
 export const READ_CONCURRENCY = 24
 
-export type FolderKind = 'data' | 'partial' | 'ictj' | 'empty' | 'other' | 'missing'
+export type FolderKind = 'data' | 'partial' | 'ictj' | 'empty' | 'other' | 'missing' | 'unavailable'
 
 type ViewKey = string
 
@@ -351,9 +351,11 @@ export class DataStore {
   static async inspect(root: string): Promise<FolderKind> {
     try {
       const st = await fs.stat(root)
-      if (!st.isDirectory()) return 'missing'
-    } catch {
-      return 'missing'
+      if (!st.isDirectory()) return 'other'
+    } catch (e) {
+      // Only „no such folder” is missing; any other error (a drive not ready, no access) is a folder there but unread (B53).
+      const code = (e as NodeJS.ErrnoException).code
+      return code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'unavailable'
     }
     if (await pathExists(join(root, SETTINGS_FILE))) return 'data'
     if (await pathExists(join(root, ICTJ_FILE))) return 'ictj'

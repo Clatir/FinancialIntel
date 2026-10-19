@@ -155,9 +155,26 @@ export interface AppInfo {
   isPortable: boolean
 }
 
+/**
+ * Why a folder is not data to open (B53) – the setup screen picks its buttons by it, never by the message: missing (no
+ * such folder), unavailable (it cannot be read now), empty, other (other files), partial (FI's folders without fi.json –
+ * OneDrive still fetching), ictj (ICT Trade Journal's).
+ */
+export type FolderProblem = 'missing' | 'unavailable' | 'empty' | 'other' | 'partial' | 'ictj'
+
 export type OpenFolderResult =
   | { ok: true; snapshot: Snapshot }
-  | { ok: false; reason: 'cancelled' | 'aborted' | 'not-data' | 'error'; message: string; dir?: string }
+  | {
+      ok: false
+      reason: 'cancelled' | 'aborted' | 'not-data' | 'error'
+      message: string
+      dir?: string
+      problem?: FolderProblem
+      /** The folder is this computer's data folder (now or before): never new data in it without a confirmation. */
+      remembered?: boolean
+      /** A folder of other files: its `FinancialIntel` subfolder for new data. */
+      subfolder?: string
+    }
 
 /** The steps of reading the folder itself (1.4.1). */
 export type LoadStep = 'list' | 'read' | 'migrate' | 'prepare'
@@ -203,7 +220,8 @@ export interface FiApi {
   defaultDataDir(): Promise<{ dir: string; oneDrive: boolean }>
   /** Show a folder picker. mode=create initializes an empty folder as new data. */
   pickDataDir(mode: 'open' | 'create'): Promise<OpenFolderResult>
-  openDataDir(dir: string, createIfEmpty: boolean): Promise<OpenFolderResult>
+  /** `force`: new data also in the remembered folder found empty or missing – the user confirmed it (B53). */
+  openDataDir(dir: string, createIfEmpty: boolean, force?: boolean): Promise<OpenFolderResult>
   /** Stop opening a folder (1.4.1): the open in progress returns `aborted`, nothing in the folder changes. */
   cancelOpen(): Promise<void>
   onOpenProgress(cb: (p: OpenProgress) => void): () => void
@@ -290,7 +308,8 @@ export interface FiApi {
   setMachinePrefs(patch: Partial<MachinePrefs>): Promise<MachinePrefs>
   onMachinePrefs(cb: (prefs: MachinePrefs) => void): () => void
   /** The quick entry's global shortcut: registered, or taken by another program. */
-  quickShortcutState(): Promise<{ accelerator: string; registered: boolean }>
+  /** `replaced` = the shortcut the start replaced with the default (it took a Polish letter – B29); null = none. */
+  quickShortcutState(): Promise<{ accelerator: string; registered: boolean; replaced: string | null }>
   /** Show the quick entry window (the tray, the palette, the bridge). */
   quickOpen(): Promise<void>
   /** Main window: the quick window wants its data (categories, today's energy…) – answer with `quickData`. */

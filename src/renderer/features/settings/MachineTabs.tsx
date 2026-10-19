@@ -106,7 +106,7 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
 /** Ustawienia → Powiadomienia i dźwięki (config.json – this computer only): the quick entry's shortcut too. */
 export function NotifyTab() {
   const prefs = useMachine((s) => s.prefs)
-  const [state, setState] = useState<{ accelerator: string; registered: boolean } | null>(null)
+  const [state, setState] = useState<{ accelerator: string; registered: boolean; replaced: string | null } | null>(null)
   useEffect(() => {
     let alive = true
     void api.quickShortcutState().then((s) => alive && setState(s), () => undefined)
