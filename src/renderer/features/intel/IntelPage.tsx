@@ -8,6 +8,7 @@ import { addMonths, monthRange } from '@shared/calc/dates'
 import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth, structureOf, wealthCurve } from '@shared/calc/intel'
 import { debriefing } from '@shared/calc/plan'
 import { sum } from '@shared/calc/operations'
+import { rangeText } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
@@ -72,7 +73,7 @@ export function IntelPage() {
               ) : (
                 <div className="flex flex-col gap-2 text-[12px]">
                   <div className="flex flex-wrap items-baseline gap-4">
-                    <Fact label="Majątek" value={last ? zl(last.value) : '—'} strong />
+                    <Fact label="Na kontach" value={last ? zl(last.value) : '—'} strong />
                     <Fact label="Szczyt" value={zl(peak)} />
                     <Fact label="Największy drawdown" value={zl(maxDd)} />
                     <Fact
@@ -83,7 +84,8 @@ export function IntelPage() {
                   </div>
                   <WealthChart points={wealth} marks={structure.marks} />
                   <span className="text-[11px] text-dim">
-                    Suma sald kont budżetu na koniec każdego tygodnia. BOS – przebicie ostatniego swingu zgodnie z trendem, CHoCH – pierwsze przebicie przeciw
+                    Suma sald kont budżetu na koniec każdego tygodnia – z pieniędzmi pożyczonymi i depozytem domowników (zasięg i klasa okrętu odejmują
+                    dług). BOS – przebicie ostatniego swingu zgodnie z trendem, CHoCH – pierwsze przebicie przeciw
                     trendowi (zmiana charakteru). Pod spodem drawdown od szczytu.
                   </span>
                   {structure.marks.length > 0 && (
@@ -176,7 +178,7 @@ export function IntelPage() {
                 <span className="text-fg-strong" data-testid="intel-range-text">
                   {forecast.emptyIn == null
                     ? 'Brak średnich kosztów – prognoza po pierwszym pełnym miesiącu.'
-                    : `Bez żadnej wypłaty paliwa starczy na ${forecast.emptyIn.toFixed(1).replace('.', ',')} mies. (${monthLabel(addMonths(fleet.month, Math.floor(forecast.emptyIn)))}).`}
+                    : `Bez żadnej wypłaty paliwa starczy na ${rangeText(forecast.emptyIn)} (${monthLabel(addMonths(fleet.month, Math.floor(forecast.emptyIn)))}).`}
                 </span>
                 {forecast.points.map((p) => (
                   <div key={p.month} className="flex items-center gap-2 text-[11.5px]">

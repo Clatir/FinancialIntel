@@ -10,6 +10,7 @@ import { pit38Deadline, radar, type RadarItem } from '@shared/calc/radar'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
 import { canWrite, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
+import { useMachine } from '../../store/machine'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
@@ -40,10 +41,12 @@ export function RadarPage() {
   const containers = useRecordList('containers')
   const cargo = useCargoStatuses()
   const readOnly = useFolderLocked()
+  // The notes carry amounts (B61): masked or shown at once with Ctrl+$, not at the next minute's fleet.
+  const hidden = useMachine((s) => s.prefs.hideAmounts)
   const items = useMemo(
     () => (fleet ? radar({ today: fleet.today, plans, containers, tanks: fleet.tanks, loans: fleet.loans, money: zl, cargo }) : []),
-    // The notes carry amounts (masked while hidden): computed again with the fleet.
-    [fleet, plans, containers, cargo]
+    // `hidden` is no input of the radar, but it changes what `zl` writes.
+    [fleet, plans, containers, cargo, hidden]
   )
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const loans = fleet.loans
@@ -164,7 +167,7 @@ function Timeline({ items }: { items: RadarItem[] }) {
               <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(i.date).slice(0, 5)}</span>
               <span className="w-[72px] shrink-0 text-[11px] text-dim">{KIND_LABEL[i.kind]}</span>
               <span className="min-w-0 flex-1 truncate text-fg-strong">{i.name}</span>
-              <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{i.overdue ? 'po terminie' : i.note}</span>
+              <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{i.overdue ? i.note || 'po terminie' : i.note}</span>
               <span className={cx('num w-[110px] text-right', i.direction === 'in' ? 'text-up' : 'text-fg')}>
                 {i.amount == null ? '—' : `${i.direction === 'in' ? '+' : i.direction === 'out' ? '−' : ''}${zl(i.amount)}`}
               </span>
@@ -271,6 +274,8 @@ function NewLoanPanel({ today }: { today: string }) {
     if (!o.name.trim()) return toast('Nazwij pożyczkę (np. „Pożyczka dla Ani”).', 'error')
     if (o.amount <= 0) return toast('Podaj kwotę pożyczki.', 'error')
     if (o.firstDue < o.date) return toast('Pierwsza rata nie może być przed datą pożyczki.', 'error')
+    // A rate typed as the total would cut the debt and inflate the range (B85).
+    if (taken && o.total > 0 && o.total < o.amount) return toast('„Do spłaty razem” nie może być mniej niż kwota pożyczki (puste = kwota).', 'error', 6000)
     if (!canWrite()) return
     addLoan({ ...o, total: taken && o.total > 0 ? o.total : o.amount })
     setO(blank())

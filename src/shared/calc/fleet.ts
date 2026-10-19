@@ -150,6 +150,32 @@ export interface DailyAllowance {
   daysLeft: number
 }
 
+/** The serious overrun's threshold of a folder without game settings (the schema's default). */
+export const SERIOUS_ENVELOPE_PCT = 20
+
+/**
+ * An envelope over its limit (N102) – one rule for the engine's alarm, the game and the notifications: over = spent
+ * above the limit (0 zł too: „nic na prezenty”), serious = above the game's threshold (`seriousEnvelopePct`, a limit of
+ * 0 never – a part of nothing is no measure). A daily envelope's own overrun is no alarm: the daily pool decides (D16).
+ */
+export function envelopeOverrun(e: { limit: number; spent: number }, seriousPct: number): { over: boolean; serious: boolean } {
+  if (e.spent <= e.limit) return { over: false, serious: false }
+  return { over: true, serious: e.limit > 0 && e.spent > Math.floor((e.limit * (100 + seriousPct)) / 100) }
+}
+
+/**
+ * What the budget's first month spent before its start (T45, B126): its salary is paid less this – that money is gone
+ * from the opening balances already. The net costs of the month's days before the start (a refund nets a purchase),
+ * never below 0 – a refund is no salary; `periodic` – a periodic fee's payment is its tank's, not the salary's (N9).
+ * The engine and the start wizard count it so.
+ */
+export function startMonthSpentOf(transactions: readonly Transaction[], start: string, periodic: (t: Transaction) => boolean): number {
+  const month = monthOf(start)
+  let spent = 0
+  for (const t of transactions) if (t.date < start && monthOf(t.date) === month && !periodic(t)) spent += costOf(t)
+  return Math.max(0, spent)
+}
+
 /** Today's energy (spec, „Dzienny przydział”): unspent energy carries to the next days, an overspent day lowers them. */
 export function dailyAllowance(o: { limit: number; spentBefore: number; spentToday: number; day: number; daysInMonth: number }): DailyAllowance {
   const daysLeft = Math.max(1, o.daysInMonth - o.day + 1)
@@ -350,7 +376,8 @@ export function openingIdsOf(input: Pick<FleetInput, 'settings' | 'balances' | '
 // ------------------------------------------------------------------ the whole state
 
 export interface FleetInput {
-  settings: Pick<Settings, 'accounts' | 'categories' | 'layers' | 'orders' | 'budget' | 'household'>
+  /** `game`: the serious overrun's threshold of Dowództwo (N102) – without it the default 20%. */
+  settings: Pick<Settings, 'accounts' | 'categories' | 'layers' | 'orders' | 'budget' | 'household'> & { game?: Pick<Settings['game'], 'seriousEnvelopePct'> }
   transactions: readonly Transaction[]
   containers?: readonly Container[]
   goals?: readonly Goal[]
@@ -750,11 +777,7 @@ export function computeFleet(input: FleetInput): FleetState {
   const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
   /** The cycles (due months) of each periodic fee paid already (B55). */
   const paidCycles = new Map<string, Set<string>>()
-  let startMonthSpent = 0
-  if (start) {
-    const startMonth = monthOf(start)
-    for (const t of txs) if (t.date < start && monthOf(t.date) === startMonth && !(t.containerId && periodicIds.has(t.containerId))) startMonthSpent += costOf(t)
-  }
+  const startMonthSpent = start ? startMonthSpentOf(txs, start, (t) => !!t.containerId && periodicIds.has(t.containerId)) : 0
   const payMonth = (m: string, date: string) => {
     // A periodic fee's life over (its `until`, its archiving): what its tank still holds goes back to the shields (B56).
     for (const c of containers) {
@@ -1126,7 +1149,9 @@ export function computeFleet(input: FleetInput): FleetState {
   // The loans given still open: by their records (closed = none); operations of a loan without its record as counted.
   const given = Object.fromEntries(loanList.filter((l) => l.loan.direction === 'given' && l.open > 0).map((l) => [l.loan.id, l.open]))
   for (const [key, open] of loanOpen) if (open > 0 && !loansById.has(key)) given[key] = open
-  const minShields = salary ? Math.round(settings.orders.minShieldSalaries * salary) : null
+  // The minimum never above the shields' target (B84): the dockings fill the shields only up to the target – a higher
+  // minimum would be a lasting alarm, a Bearish bias and the game's violations.
+  const minShields = salary ? Math.round(Math.min(settings.orders.minShieldSalaries, settings.layers.shieldSalaries) * salary) : null
 
   // Envelopes and today's energy: the whole month counts (spending before the budget's start too).
   const envelopes: EnvelopeState[] = []
@@ -1165,7 +1190,9 @@ export function computeFleet(input: FleetInput): FleetState {
       const s = spentBy.get(main.id) ?? { before: 0, today: 0 }
       const spent = s.before + s.today
       envelopes.push({ categoryId: main.id, kind, limit, spent, left: limit - spent, today: s.today })
-      if (kind === 'planned' && spent > limit) alarms.push({ kind: 'envelope-over', level: spent > limit * 1.2 ? 'red' : 'yellow', date: today, amount: spent - limit, ref: main.id })
+      // Red as the game's serious violation (N102): one threshold – the one of Dowództwo.
+      const over = kind === 'planned' ? envelopeOverrun({ limit, spent }, settings.game?.seriousEnvelopePct ?? SERIOUS_ENVELOPE_PCT) : null
+      if (over?.over) alarms.push({ kind: 'envelope-over', level: over.serious ? 'red' : 'yellow', date: today, amount: spent - limit, ref: main.id })
     }
     const d = dailyAllowance({ limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, day: dayOfMonth(today), daysInMonth: daysInMonth(month) })
     daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday }

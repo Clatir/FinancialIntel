@@ -8,11 +8,12 @@ import { dockAmount } from './fleet'
 import { sum } from './operations'
 
 /**
- * The opening balance at the start of `today` from the balance read in the bank now: the operations of today (and any
- * dated later) already in the budget are part of that balance, so they come off.
+ * The opening balance at the start of `today` from the balance read in the bank now: the operations of today already in
+ * the budget are part of that balance, so they come off. One dated later (a payment planned ahead) is not in the bank's
+ * balance yet (B127) – the engine takes it on its day.
  */
 export function openingFromNow(accountId: string, balanceNow: number, today: string, transactions: readonly Pick<Transaction, 'accountId' | 'date' | 'amount'>[]): number {
-  return balanceNow - sum(transactions.filter((t) => t.accountId === accountId && t.date >= today).map((t) => t.amount))
+  return balanceNow - sum(transactions.filter((t) => t.accountId === accountId && t.date === today).map((t) => t.amount))
 }
 
 export interface StartTargets {

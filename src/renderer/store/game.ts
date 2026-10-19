@@ -88,8 +88,9 @@ export function useGameAdvance(): void {
     const { fi, records } = useData.getState()
     if (!ready || !fi) return
     if (!fi.settings.game.start) {
-      // The game starts from zero (spec): the first full day after the budget runs with this version.
-      if (fleetNow()?.started)
+      // The game starts from zero (spec): the first full day after the budget runs with this version – once the start
+      // wizard ran (N23): a budget the engine counts from an opening balance alone has no salary and no plan to judge by.
+      if (fi.settings.budget.start && fleetNow()?.started)
         updateSettings((f) => (f.settings.game.start ? f : { ...f, settings: { ...f.settings, game: { ...f.settings.game, start: gameStartFor(new Date()) } } }), { background: true })
       return
     }

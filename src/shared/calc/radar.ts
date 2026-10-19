@@ -108,7 +108,9 @@ export function radar(o: RadarInput): RadarItem[] {
     const taken = s.loan.direction === 'taken'
     for (const inst of s.left) {
       if (inst.date > end) break
-      const late = inst.date < o.today
+      // „Zaległa” as the loans and the briefing say it (N59, D72): from 3 days after the due; before – days past it.
+      const days = daysBetween(inst.date, o.today)
+      const note = days >= OVERDUE_DAYS ? (taken ? 'zaległa rata' : 'spóźniona spłata') : days > 0 ? `po terminie ${days} ${days === 1 ? 'dzień' : 'dni'}` : s.loan.counterparty
       out.push({
         key: `loan:${s.loan.id}:${inst.date}`,
         date: inst.date,
@@ -116,9 +118,9 @@ export function radar(o: RadarInput): RadarItem[] {
         name: `${taken ? 'Rata' : 'Spłata'}: ${s.loan.name}`,
         amount: inst.amount,
         direction: taken ? 'out' : 'in',
-        note: late ? (taken ? 'zaległa' : 'spóźniona') : s.loan.counterparty,
+        note,
         ref: s.loan.id,
-        overdue: daysBetween(inst.date, o.today) >= OVERDUE_DAYS
+        overdue: days >= OVERDUE_DAYS
       })
     }
   }

@@ -264,7 +264,8 @@ korekta danych zmienia budżet, ale nie odbiera awansu. Dzień zgodny to dzień 
 - Turtle Soup: zwrot towaru.
 - Liquidity sweep: dzień zakończony z energią równą dokładnie 0 zł.
 - Order Blocks: kontenery ładowni na wykresie miesiąca.
-- Silver Bullet: krótka odprawa w oknie 10:00–11:00 czasu NY.
+- Silver Bullet: w oknie 10:00–11:00 czasu NY nad odprawą jej skrót w trzech zdaniach (energia dziś, Daily Bias,
+  najważniejszy alarm); pełna lista zostaje pod nim (T214).
 
 ## Ekrany
 
@@ -274,7 +275,7 @@ się zapisują.
 
 | Ekran | Co zawiera | Etap |
 | --- | --- | --- |
-| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, depozyt domowników, zasięg, masa ładunku, klasa), koperty, rozliczenia z domownikami, przychody, ostatnie operacje; później radar, wywiad i krzywa majątku | E4, 1.3.0, 1.4.0 |
+| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, depozyt domowników, zasięg, masa ładunku, klasa), koperty, rozliczenia z domownikami, przychody, ostatnie operacje; radar, wywiad i krzywa majątku na własnych ekranach | E4, 1.3.0, 1.4.0 |
 | Operacje | lista z filtrami i wyszukiwaniem, edycja z historią zmian, podział paragonu, kto finansuje, oznaczenia (domownik, plan lub impuls, noc) | E1, 1.3.0 |
 | Import | kreator CSV z mBanku: podgląd, dopasowania, kategoryzacja grupowa, potwierdzenie | E2 |
 | Plan miesiąca | pensja, przychody (średnie i mediana), podział na ładownię, odkładki i koperty, dzienny przydział, debriefing | E3, 1.4.0 |
@@ -320,9 +321,9 @@ Podstawowy przydział to suma kopert codziennych podzielona przez liczbę dni mi
 
 | Rytuał | Kiedy | Treść |
 | --- | --- | --- |
-| Odprawa poranna | przy pierwszym uruchomieniu komputera danego dnia albo o ustalonej godzinie | Daily Bias, przydział dnia, alerty (asteroidy, rozbieżności, zaległy import), misja; odsłuch polskim głosem Windows przyciskiem albo automatycznie |
+| Odprawa poranna | przy pierwszym otwarciu okna danego dnia (po ciszy nocnej) | Daily Bias, przydział dnia, alerty (asteroidy, rozbieżności, zaległy import), misja; odsłuch polskim głosem Windows przyciskiem (bez polskiego głosu – podpowiedź, T7) |
 | Raport wachty | w niedzielę | tydzień w liczbach, killzone, plan kopert na tydzień, misja |
-| Debriefing | od 1. dnia miesiąca | wynik wobec planu (FVG), seria, naruszenia, trafność dziennika, podział łupów, „miesiąc na plus”, plan następnego miesiąca |
+| Debriefing | od 1. dnia miesiąca | wynik wobec planu (FVG), naruszenia, trafność dziennika, podział łupów, „miesiąc na plus” (seria – w Dowództwie, plan następnego miesiąca – w Planie miesiąca, T214) |
 | Przegląd roczny | w styczniu | rok w liczbach, majątek, zasięg, cele, przypomnienie o PIT-38 |
 
 **Eksport:** CSV i Excel (operacje, miesiące), PDF (debriefing, przegląd roczny), pełna kopia danych w ZIP.
@@ -331,7 +332,8 @@ Bez asystenta AI (D74 – etap „Pierwszy oficer” wypadł).
 
 ## Powiadomienia, dźwięki i prywatność
 
-Każde powiadomienie ma własny przełącznik i godzinę w jednej sekcji ustawień, osobno dla każdego komputera. Działają
+Każde powiadomienie ma własny przełącznik w jednej sekcji ustawień, osobno dla każdego komputera; godzinę ma
+wieczorne dopisanie wydatków (pozostałe przychodzą wtedy, gdy jest ich powód – T56). Działają
 w tle, bo FI startuje z Windows ukryty w zasobniku.
 
 | Powiadomienie | Domyślnie |

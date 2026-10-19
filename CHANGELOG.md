@@ -1,5 +1,48 @@
 # Financial Intel – zmiany
 
+## 1.6.1
+
+Poprawki z przeglądu aplikacji (grupa M, D87): liczby planu i raportów, Mostek, Radar i Ładownia.
+
+Plan miesiąca i debriefing:
+- Koperty tylko z planu miesiąca – także z limitem 0 zł. Wydatki kategorii bez koperty są osobno („Bez koperty”), bez
+  czerwieni „ponad plan”.
+- Pula dzienna liczy wydatki wszystkich kategorii codziennych i operacji bez kategorii – tak jak energia dnia.
+- „Miesiąc na plus” dopiero po końcu miesiąca: w Raportach „miesiąc trwa”, w CSV i Excelu „w toku”.
+- Łupy tylko z miesięcy, które budżet przeszedł do końca (miesiąc sprzed startu ich nie ma).
+- Przekroczenie koperty ma jedną regułę: czerwony alarm odprawy = próg poważnego naruszenia z Dowództwa. Koperta
+  codzienna ponad swój podział daje łagodne powiadomienie bez dźwięku alarmu (liczy się pula dzienna), Daily Bias patrzy
+  tylko na koperty planowe; koperta 0 zł też powiadamia.
+
+Raporty i nazwy:
+- „Przychody” wszędzie tam, gdzie chodzi o przychód (raport wachty, przegląd roczny, CSV i Excel miesięcy, alarm
+  pensji); „Wpływy” w Operacjach mają podpowiedź, że to wszystkie pieniądze na plus.
+- Odprawa w Raportach z Daily Bias, debriefing z trafnością dziennika kapitańskiego.
+- Przegląd roczny i Wywiad: „Pieniądze na kontach” / „Na kontach” – suma sald z pożyczonymi i depozytem domowników.
+- Zasięg nigdy nie pokazuje progu klasy, której okręt nie ma (11,96 mies. to „11,9 mies.”), „brakuje” co najmniej
+  0,1 mies.
+
+Mostek, Radar, Ładownia, Mapa gwiezdna:
+- Kliknięcie alarmu w odprawie prowadzi do przyczyny: Ładownia, operacja korekty albo Operacje.
+- „Odsłuchaj” tylko z polskim głosem systemu (bez niego podpowiedź o pakiecie mowy); energia ponad przydział czytana
+  „przekroczona o …”.
+- Każda dopłata do XTB wbrew firewallowi w osobnej linii odprawy.
+- Radar: rata po terminie pokazuje dni po terminie, a od 3 dni „zaległa rata” / „spóźniona spłata”; Ctrl+$ ukrywa
+  kwoty od razu także w Radarze i otwartym szybkim wpisie.
+- Ładownia: najbliższa płatność liczona od dziś, rata zbiornika z harmonogramu („ostatnia …”), „/m” jako średnia.
+- Mapa gwiezdna podaje, ile z kwoty w celach leży w celach zarchiwizowanych.
+- Pożyczka zaciągnięta z „Do spłaty razem” mniejszym niż kwota jest odrzucana z komunikatem.
+
+Start budżetu i ustawienia:
+- Minimalne osłony nigdy ponad cel osłon (Ustawienia i kreator odrzucają taką parę, silnik bierze mniejszą).
+- Kreator: wydane w miesiącu startu przed startem liczy jak silnik (zwrot pomniejsza zakup), saldo otwarcia nie odejmuje
+  operacji z datą w przyszłości.
+- Tempo celów na Mapie gwiezdnej bez środków na start, konta dołączonego później i depozytu domowników.
+- Budżet liczony od samego salda otwarcia: baner mówi, co ustawi kreator, a Dowództwo zaczyna się po kreatorze.
+
+Szybkość: debriefing, eksport miesięcy, propozycje Planu miesiąca i „Ostatnie operacje” Mostka bez przeglądania całej
+historii przy każdym miesiącu i każdej minucie.
+
 ## 1.6.0
 
 Nowe funkcje z przeglądu aplikacji po 1.4.1 (D86): opłaty stałe w miesiącu, szybki wpis seriami, wieczorny raport

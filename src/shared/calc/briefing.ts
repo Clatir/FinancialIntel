@@ -27,7 +27,8 @@ export function dailyBias(f: Pick<FleetState, 'daily' | 'envelopes' | 'shields' 
   const base = f.daily.base
   const belowMin = f.shields.min != null && f.shields.amount < f.shields.min
   if (f.daily.left < base / 2 || belowMin) return 'bearish'
-  if (f.daily.left >= base && f.envelopes.every((e) => e.spent <= e.limit)) return 'bullish'
+  // The planned envelopes on plan; the daily ones are the energy itself (N102 – D16: their pool decides).
+  if (f.daily.left >= base && f.envelopes.every((e) => e.kind !== 'planned' || e.spent <= e.limit)) return 'bullish'
   return 'neutral'
 }
 
@@ -70,7 +71,7 @@ export function alarmText(a: Alarm, label: (id: string) => string = () => '', zl
     case 'cargo-over':
       return 'Masa ładunku ponad linią zanurzenia.'
     case 'salary-above-income':
-      return `Pensja wyższa niż średnie wpływy z 6 mies. o ${zl(a.amount)} – osłony będą się kurczyć.`
+      return `Pensja wyższa niż średni przychód z 6 mies. o ${zl(a.amount)} – osłony będą się kurczyć.`
   }
 }
 
@@ -171,7 +172,8 @@ export function briefing(o: BriefingInput): BriefingItem[] {
   const alarms = [...f.alarms].filter((a) => a.date >= from).sort((a, b) => Number(b.level === 'red') - Number(a.level === 'red'))
   const summed = new Map<string, Alarm>()
   for (const a of alarms) {
-    const key = `${a.kind}:${a.ref ?? ''}${a.kind === 'correction' ? `:${a.txId}` : ''}`
+    // A correction and a top-up of XTB against the firewall: one line each (N103) – the game counts each of them.
+    const key = `${a.kind}:${a.ref ?? ''}${a.kind === 'correction' || a.kind === 'firewall' ? `:${a.txId}` : ''}`
     const prev = summed.get(key)
     if (prev && (a.kind === 'energy-exhausted' || a.kind === 'sinking-short')) summed.set(key, { ...prev, amount: prev.amount + a.amount })
     else if (!prev) summed.set(key, a)

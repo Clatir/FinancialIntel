@@ -162,6 +162,24 @@ export function sumOperations(rows: readonly Transaction[]): OperationsSums {
 }
 
 /**
+ * The `n` newest operations – the latest date first, then the latest entry – in one pass (W29): the bridge's list of
+ * 10 without a sort of the whole history every minute. Ties keep the list's order, as a stable sort would.
+ */
+export function newestOperations<T extends Pick<Transaction, 'date' | 'createdAt'>>(list: readonly T[], n: number): T[] {
+  if (n <= 0) return []
+  const top: T[] = []
+  const newer = (a: T, b: T) => a.date > b.date || (a.date === b.date && a.createdAt > b.createdAt)
+  for (const t of list) {
+    if (top.length === n && !newer(t, top[n - 1]!)) continue
+    let i = top.length
+    while (i > 0 && newer(t, top[i - 1]!)) i--
+    top.splice(i, 0, t)
+    if (top.length > n) top.pop()
+  }
+  return top
+}
+
+/**
  * How an amount is shown (D68): money in green with „+”, expenses neutral with „−”, a product return green; own
  * transfers and loans muted, a correction in the accent (to explain). Red stays for overruns and alarms.
  */

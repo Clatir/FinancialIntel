@@ -35,15 +35,68 @@ export function fullMonthsBefore(transactions: readonly Pick<Transaction, 'date'
   return monthsBefore(covered ?? coveredMonths(transactions, month), month, count)
 }
 
-/** Net costs (fleet.ts `costOf`) month by month. */
-export function costsByMonth(transactions: readonly Transaction[]): Map<string, number> {
-  const out = new Map<string, number>()
+/** Each list's costs by month, once per list (W38: a proposal for each month never walks the whole history again). */
+const costsMemo = new WeakMap<readonly Transaction[], ReadonlyMap<string, number>>()
+
+/** Net costs (fleet.ts `costOf`) month by month – shared, never to be changed by the caller. */
+export function costsByMonth(transactions: readonly Transaction[]): ReadonlyMap<string, number> {
+  let out = costsMemo.get(transactions) as Map<string, number> | undefined
+  if (out) return out
+  out = new Map<string, number>()
   for (const t of transactions) {
     const c = costOf(t)
     if (c) out.set(monthOf(t.date), (out.get(monthOf(t.date)) ?? 0) + c)
   }
+  costsMemo.set(transactions, out)
   return out
 }
+
+/** Each list's operations by month, once per list (W30, W38): a month's debriefing never filters the whole history. */
+const txMonths = new WeakMap<readonly Transaction[], Map<string, Transaction[]>>()
+
+/** The operations of one month (in the list's order), from the list's index by month. */
+export function transactionsOfMonth(transactions: readonly Transaction[], month: string): readonly Transaction[] {
+  let by = txMonths.get(transactions)
+  if (!by) {
+    by = new Map()
+    for (const t of transactions) {
+      const m = monthOf(t.date)
+      const list = by.get(m)
+      if (list) list.push(t)
+      else by.set(m, [t])
+    }
+    txMonths.set(transactions, by)
+  }
+  return by.get(month) ?? []
+}
+
+/** The engine's log by month, its months' ends and its start – once per log (W30, W38). */
+interface LogIndex {
+  months: Map<string, FleetEvent[]>
+  /** The 'month-end' events by their date (the 1st of the month after). */
+  ends: Map<string, FleetEvent>
+  /** The day the engine started (its 'start' event); null = no start in this log. */
+  start: string | null
+}
+const logIndexes = new WeakMap<readonly FleetEvent[], LogIndex>()
+
+function logIndex(log: readonly FleetEvent[]): LogIndex {
+  let ix = logIndexes.get(log)
+  if (ix) return ix
+  ix = { months: new Map(), ends: new Map(), start: null }
+  for (const e of log) {
+    const m = monthOf(e.date)
+    const list = ix.months.get(m)
+    if (list) list.push(e)
+    else ix.months.set(m, [e])
+    if (e.kind === 'month-end') ix.ends.set(e.date, e)
+    else if (e.kind === 'start' && (ix.start == null || e.date < ix.start)) ix.start = e.date
+  }
+  logIndexes.set(log, ix)
+  return ix
+}
+
+const logOfMonth = (log: readonly FleetEvent[], month: string): readonly FleetEvent[] => logIndex(log).months.get(month) ?? []
 
 export interface SalaryProposal {
   /** The proposal: the average up to whole hundreds of złoty. */
@@ -259,13 +312,13 @@ export function salarySplit(
 
 /** The loot of the month before the engine gave to `month` (a decision „na następny miesiąc” – N11): its daily envelopes'. */
 export function lootExtraOf(log: readonly FleetEvent[], month: string): number {
-  return sum(log.filter((e) => e.kind === 'loot' && monthOf(e.date) === month).map((e) => Math.max(0, e.moves.energy ?? 0)))
+  return sum(logOfMonth(log, month).filter((e) => e.kind === 'loot').map((e) => Math.max(0, e.moves.energy ?? 0)))
 }
 
 /** The tanks' installments the engine took in `month` (its log). */
 export function sinkingOf(log: readonly FleetEvent[], month: string): Map<string, number> {
   const out = new Map<string, number>()
-  for (const e of log) if (e.kind === 'sinking' && monthOf(e.date) === month) for (const [id, v] of Object.entries(e.moves.tanks ?? {})) out.set(id, (out.get(id) ?? 0) + v)
+  for (const e of logOfMonth(log, month)) if (e.kind === 'sinking') for (const [id, v] of Object.entries(e.moves.tanks ?? {})) out.set(id, (out.get(id) ?? 0) + v)
   return out
 }
 
@@ -279,10 +332,13 @@ export interface Debriefing {
   paid: number | null
   /** Net costs of the month. */
   costs: number
+  /** The month has ended (today is past it): its result and its loot are final. */
+  ended: boolean
   /**
    * „Miesiąc zamknięty na plus” (spec, T52 – N6): the month's spending did not take more than its energy, as the engine
    * counts it – a periodic fee its tank paid is no cost of the salary, the tanks' installments are. Without the engine's
-   * month (no log, a month before the start): net costs not above the salary. null = no salary, or the month still runs.
+   * month (no log, a month before the start): net costs not above the salary. null = no salary, or the month still runs
+   * (N65 – never „tak” before its end).
    */
   plus: boolean | null
   /**
@@ -297,12 +353,20 @@ export interface Debriefing {
    * their spending and the spending without a category. null = no daily envelope that month.
    */
   daily: { limit: number; extra: number; spent: number; gap: number } | null
-  /** Plan against fact per envelope – the FVG of the debriefing (+ = left, − = over). */
+  /** Plan against fact per envelope of the month's plan – the FVG of the debriefing (+ = left, − = over); 0 zł is a limit too. */
   envelopes: Array<{ categoryId: string; kind: EnvelopeKind; limit: number; spent: number; gap: number }>
+  /**
+   * Spending of the main categories without an envelope that month (N25, N54, N101): no limit to be over – shown apart,
+   * without red. A daily one still counts in the daily pool (as the engine's daily energy); the most first.
+   */
+  outside: Array<{ categoryId: string; spent: number }>
   /** Spending of the containers linked to them (the cargo and the periodic fees). */
   cargo: number
   uncategorized: number
-  /** The energy left at the month's end: the loot (D18). null = the month has not ended in the engine. */
+  /**
+   * The energy left at the month's end: the loot (D18). null = the month has not ended, or the engine did not run
+   * through its end (a month before the budget's start – B92).
+   */
   loot: number | null
   /** What household members financed this month (D80): apart from my costs, by member (the most first). */
   financed: Array<{ memberId: string; amount: number }>
@@ -338,7 +402,7 @@ export function debriefing(
 ): Debriefing {
   const plan = planFor(input.plans, month)
   const cats = categoryIndex(input.categories)
-  const txs = input.transactions.filter((t) => monthOf(t.date) === month)
+  const txs = transactionsOfMonth(input.transactions, month)
   const costs = sum(txs.map(costOf))
   const spent = new Map<string, number>()
   let cargo = 0
@@ -360,30 +424,39 @@ export function debriefing(
     }
   }
   const envelopes: Debriefing['envelopes'] = []
+  const outside: Debriefing['outside'] = []
+  // The daily pool's spending as the engine's daily energy counts it: every daily category's, with an envelope or not.
+  let dailySpent = uncategorized
   for (const main of cats.mains) {
     const kind = envelopeKind(main)
     const limit = plan?.envelopes[main.id]
-    if (!kind || (limit == null && !spent.get(main.id))) continue
     const s = spent.get(main.id) ?? 0
-    envelopes.push({ categoryId: main.id, kind, limit: limit ?? 0, spent: s, gap: (limit ?? 0) - s })
+    if (kind === 'daily') dailySpent += s
+    if (kind && limit != null) envelopes.push({ categoryId: main.id, kind, limit, spent: s, gap: limit - s })
+    else if (s) outside.push({ categoryId: main.id, spent: s })
   }
+  outside.sort((a, b) => b.spent - a.spent)
   const log = input.log ?? []
-  const inMonth = log.filter((e) => monthOf(e.date) === month)
+  const ix = logIndex(log)
+  const inMonth = ix.months.get(month) ?? []
   const salaries = inMonth.filter((e) => e.kind === 'salary')
-  const end = log.find((e) => e.kind === 'month-end' && e.date === firstDayOf(addMonths(month, 1)))
-  const ended = input.today >= firstDayOf(addMonths(month, 1))
+  const next = firstDayOf(addMonths(month, 1))
+  const end = ix.ends.get(next)
+  const ended = input.today >= next
+  // The engine ran through the month's end (B92): its start was before it – without a log (the game) as before.
+  const ranThrough = !input.log || (ix.start != null && ix.start < next)
   const salary = plan?.salary ?? null
-  const loot = ended ? Math.max(0, end?.amount ?? 0) : null
+  const loot = ended && ranThrough ? Math.max(0, end?.amount ?? 0) : null
   let energy: Debriefing['energy'] = null
   if (salaries.length) {
     const paid = sum(salaries.map((e) => e.amount))
     const sinking = -sum(inMonth.filter((e) => e.kind === 'sinking').map((e) => e.moves.energy ?? 0))
     const extra = lootExtraOf(log, month)
     // What the operations took of the energy (less what came back to it) and what the shields paid when it ran out.
-    const spent = -sum(inMonth.filter((e) => e.txId).map((e) => e.moves.energy ?? 0))
+    const spentOf = -sum(inMonth.filter((e) => e.txId).map((e) => e.moves.energy ?? 0))
     const exhausted = sum((input.alarms ?? []).filter((a) => a.kind === 'energy-exhausted' && monthOf(a.date) === month).map((a) => a.amount))
     const budget = paid - sinking + extra
-    const used = spent + exhausted
+    const used = spentOf + exhausted
     energy = { salary: paid, sinking, loot: extra, budget, used, exhausted, result: budget - used }
   }
   // The daily pool (N11): the daily envelopes, the loot added to them; their spending and the spending without a category.
@@ -393,8 +466,7 @@ export function debriefing(
     dailyRows.length || extra
       ? (() => {
           const limit = sum(dailyRows.map((e) => e.limit)) + extra
-          const spent = sum(dailyRows.map((e) => e.spent)) + uncategorized
-          return { limit, extra, spent, gap: limit - spent }
+          return { limit, extra, spent: dailySpent, gap: limit - dailySpent }
         })()
       : null
   return {
@@ -402,10 +474,13 @@ export function debriefing(
     salary,
     paid: salaries.length ? sum(salaries.map((e) => e.amount)) : null,
     costs,
-    plus: energy ? (ended ? energy.result >= 0 : null) : salary != null && salary > 0 ? costs <= salary : null,
+    ended,
+    // Never „na plus” before the month's end (N65): the rest of it may still take the energy.
+    plus: !ended ? null : energy ? energy.result >= 0 : salary != null && salary > 0 ? costs <= salary : null,
     energy,
     daily,
     envelopes,
+    outside,
     cargo,
     uncategorized,
     loot,

@@ -1,5 +1,6 @@
 // adapted from ICTTJ src/renderer/app/Banners.tsx @ 84a8339
 import { useState, type ReactNode } from 'react'
+import { warsawNow } from '@shared/calc/dates'
 import { useData } from '../store/data'
 import { navigate, useUi } from '../store/ui'
 import { startWizard } from '../features/wizard/state'
@@ -77,6 +78,13 @@ export function Banners() {
   const problems = useData((s) => s.problems.filter((p) => p.kind !== 'unknown-file').length)
   const updates = useUpdateBanners()
   const budgetStart = useData((s) => (s.fi ? s.fi.settings.budget.start : undefined))
+  // The engine already counts from an opening balance (N23, T25 – `budgetStartOf`: one dated today or before): the wizard
+  // is still to run, the banner says what it adds. Looked at only before the start.
+  const fromOpening = useData((s) => {
+    if (!s.fi || s.fi.settings.budget.start) return false
+    const today = warsawNow().date
+    return Object.values(s.records.balances ?? {}).some((e) => e.record.kind === 'opening' && e.record.date <= today)
+  })
   const page = useUi((s) => s.route.page)
   const items: BannerItem[] = []
   if (status?.readOnlyReason) items.push({ key: 'ro', text: status.readOnlyReason })
@@ -100,7 +108,9 @@ export function Banners() {
     items.push({
       key: 'wizard',
       icon: <IconWarn size={14} className="shrink-0 text-accent" />,
-      text: 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
+      text: fromOpening
+        ? 'Budżet liczy się na razie od salda otwarcia, bez planu: kreator startu ustawi od dziś salda, pensję, warstwy okrętu i koperty. Dowództwo zacznie się po kreatorze.'
+        : 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
       actions: [{ label: 'Kreator startu', onClick: startWizard, accent: true, testId: 'banner-wizard-start' }]
     })
   items.push(...updates)

@@ -22,3 +22,16 @@ export function plural(n: number, one: string, few: string, many: string, fracti
   const lastTwo = abs % 100
   return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? few : many
 }
+
+/**
+ * A range in months to one place, cut down (N56): 11,96 shows „11,9” – never the „12,0” of a class the ship has not
+ * reached (the class reads the number itself). null = no range.
+ */
+export function rangeText(months: number | null): string {
+  return months == null ? '—' : `${(Math.floor(months * 10) / 10).toFixed(1).replace('.', ',')} mies.`
+}
+
+/** What a range lacks to a threshold, cut up and at least 0,1 (N56): never „brakuje 0,0 mies.”. */
+export function rangeGapText(months: number): string {
+  return `${Math.max(0.1, Math.ceil(Math.round(months * 1e6) / 1e5) / 10).toFixed(1).replace('.', ',')} mies.`
+}

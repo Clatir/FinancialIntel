@@ -32,7 +32,8 @@ export function StarMapPage() {
   const active = useMemo(() => byPriority(goalsAll.filter((g) => !g.archived)), [goalsAll])
   const archived = useMemo(() => byPriority(goalsAll.filter((g) => g.archived)), [goalsAll])
   const amounts = useMemo(() => new Map((fleet?.goals ?? []).map((g) => [g.id, g.amount])), [fleet])
-  const monthly = fleet ? goalInflow(fleet.log, fleet.started ? fleet.start : null, fleet.month) : null
+  // Once per fleet (W38): the pace walks the engine's log.
+  const monthly = useMemo(() => (fleet ? goalInflow(fleet.log, fleet.started ? fleet.start : null, fleet.month) : null), [fleet])
   const etas = useMemo(() => (fleet ? goalEtas(active.map((g) => ({ id: g.id, amount: amounts.get(g.id) ?? 0, target: g.target })), monthly, fleet.month) : {}), [fleet, active, amounts, monthly])
   const [dragged, setDragged] = useState<string | null>(null)
   // The goal whose money is being moved (C2, B30): archiving it, or an archived one.
@@ -44,6 +45,8 @@ export function StarMapPage() {
   const forecast = snap.status === 'ok' ? chosenForecast(snap.forecasts, forecastId) : null
   // All the money in goals, the archived ones' too (it is still there – C1).
   const total = goalsAll.reduce((n, g) => n + (amounts.get(g.id) ?? 0), 0)
+  // The archived ones' part said apart (N22): the bridge's sum and this one are the same layer.
+  const inArchived = archived.reduce((n, g) => n + (amounts.get(g.id) ?? 0), 0)
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-starmap">
@@ -52,7 +55,8 @@ export function StarMapPage() {
         <span className="text-[12px] text-muted">cele – układy gwiezdne</span>
         <span className="flex-1" />
         <span className="text-[12px] text-muted">
-          w celach <span className="num text-fg-strong">{zl(total)}</span>
+          w celach <span className="num text-fg-strong" data-testid="starmap-total">{zl(total)}</span>
+          {inArchived > 0 && <span className="text-dim"> (w tym zarchiwizowane {zl(inArchived)})</span>}
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">

@@ -10,7 +10,7 @@ import { SCHEMA_VERSION } from '../schema/common'
 import type { Settings } from '../schema/settings'
 import type { GameDay, GameMission, GameMonth, Transaction } from '../schema/records'
 import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, weekdayOf } from './dates'
-import { activeIn, cargoMass, computeFleet, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
+import { activeIn, cargoMass, computeFleet, envelopeOverrun, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
 import { categoryIndex, costOf, isCargoPayment, isConfirmedNight, ownSpent, partsOf, sum } from './operations'
 import { debriefing } from './plan'
 
@@ -213,10 +213,11 @@ export function rateDay(input: GameInput, date: string, prev: GameDay | null = n
     // A planned envelope going over its limit today; over by more than the threshold – serious (once each).
     for (const e of f.envelopes) {
       if (e.kind !== 'planned') continue
-      const before = e.spent - e.today
-      const serious = e.limit > 0 ? Math.floor((e.limit * (100 + settings.game.seriousEnvelopePct)) / 100) : null
-      if (serious != null && e.spent > serious && before <= serious) add('envelope-serious', e.spent - e.limit, e.categoryId)
-      else if (e.spent > e.limit && before <= e.limit) add('envelope', e.spent - e.limit, e.categoryId)
+      // As the engine's alarm (N102): the same rule, the step crossed today.
+      const now = envelopeOverrun(e, settings.game.seriousEnvelopePct)
+      const before = envelopeOverrun({ limit: e.limit, spent: e.spent - e.today }, settings.game.seriousEnvelopePct)
+      if (now.serious && !before.serious) add('envelope-serious', e.spent - e.limit, e.categoryId)
+      else if (now.over && !before.over) add('envelope', e.spent - e.limit, e.categoryId)
     }
     // The cargo above the load line after a container was added or raised: the mass grew against the day before (as
     // that day was frozen), else a container added today – the containers known at the day's end.

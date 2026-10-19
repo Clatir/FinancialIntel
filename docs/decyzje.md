@@ -309,6 +309,22 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     w kwocie („12+8,5”); szkic po Esc czeka do następnego otwarcia (najwyżej 30 min).
   W zakresie także pozycje, o których użytkownik już zdecydował: N7 – krok folderu ICTTJ i celów w kreatorze (D84 C8),
   F13 – mądrzejsze wieczorne przypomnienie (pierwsza paczka funkcji, D84 C15) w grupie L.
+- **D87** (19.10.2026) Zgoda na całość dalszych prac jednym ciągiem, bez przerw między grupami (komenda po propozycji
+  z 19.10.2026 – D67 na ten ciąg zawieszone): poprawki niskich pozycji przeglądu po 1.4.1 – M (1.6.1 liczby, plan,
+  raporty, Mostek), N (1.6.2 gra, ICTTJ, domownicy, cele, kreator), O (1.6.3 import), P (1.6.4 Operacje, edytor, szybki
+  wpis), Q (1.6.5 folder, system, dwa komputery), R (1.6.6 teksty, wygląd, wygoda z F30 i F40) – i funkcje: S (1.7.0
+  Operacje: F10, F11, F12, F18, F19, F33), T (1.8.0 przyszłość: F15, F16, F26, F27, F28, F35, F37), U (1.9.0 ładownia i
+  czujniki: F9, F14, F23, F31, F34), V (1.10.0 Wywiad: F17, F20, F24, F25, F29, F36). Każda grupa z własnym PR i
+  wydaniem (D71). Przyjęte zalecane odpowiedzi:
+  - F10: przelew między kontami budżetu = jedna operacja z kontem źródłowym i docelowym; import z banku łączy z nią obie
+    strony zamiast dwóch osobnych wpisów;
+  - F15: potrzebna rata miesięczna celu z terminem zawsze widoczna; odkładka z pensji tylko jako opcja celu, brana po
+    osłonach i kadłubie (kolejność D13 bez zmian);
+  - F28: „pokryj przekroczenie z innej koperty” – gra ocenia dzień według stanu sprzed przesunięcia (D73 bez zmian);
+  - F24: majątek netto jako druga linia wykresu; krzywa majątku (D73, T81) bez zmian;
+  - F36: inflacja GUS wpisywana ręcznie, bez pobierania z sieci.
+  Poza zakresem, każda do osobnej decyzji: F32 (flota rezerwowa), F38 (paragony i gwarancje), F39 (ulgi PIT-37 / 36),
+  F41 (wpisy z telefonu), F43 (archiwizacja starych lat).
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -1376,3 +1392,55 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Powtórz ostatni” z pieniędzmi domownika, wpisy kopii po id, licznik meldunków bez liczenia duplikatów na każdym ekranie,
   „Cofnij” odzyskania jednym wywołaniem, słowa dni bez nazw prototypu); znacznik „Dziś bez wydatków” zostaje liczony jak
   misja „Dzień bez wydatków” (bez kosztu dnia, także stałych opłat) – poprawiony tylko komentarz.
+- **T214** Raporty i specyfikacja (N26, N30, T83 – grupa M, D87): debriefing w Raportach bez serii i planu następnego
+  miesiąca – seria jest w Dowództwie, plan w Planie miesiąca (zdanie dopisane do specyfikacji); „Dziennik kapitański”
+  podaje trafność (plan ÷ oznaczone wpisy, jak Wywiad); odprawa w Raportach ma Daily Bias jak Mostek. Silver Bullet:
+  specyfikacja mówi o 3 zdaniach nad pełną odprawą (tak jest od E7) – zwijanie zależne od godziny dnia nie powstaje
+  (T80 bez zmian).
+- **T215** Debriefing (N25, N54, N65, N101, B92): koperty tylko z planu miesiąca (0 zł też jest limitem – „nic na
+  prezenty”), kategorie bez koperty osobno (`outside`: „Bez koperty”, bez czerwieni i bez paska limitu); pula dzienna =
+  wydatki wszystkich kategorii codziennych i operacji bez kategorii, jak energia silnika; „miesiąc na plus” dopiero po
+  końcu miesiąca (`ended`; w Raportach „miesiąc trwa”, w CSV / Excel „w toku”); łupy tylko z miesiąca, którego koniec silnik
+  przeszedł (start budżetu przed tym końcem) – miesiąc sprzed startu nie ma łupów.
+- **T216** Przekroczenie koperty – jedna reguła (N102): `envelopeOverrun` (`calc/fleet.ts`) dla alarmu silnika (czerwony =
+  próg poważnego naruszenia z Dowództwa, `seriousEnvelopePct`), gry i powiadomień; limit 0 zł – przekroczenie bez
+  „poważnego” (część z zera nie jest miarą), powiadomienie jest, „ponad 80%” nie. Koperta codzienna ponad swój podział:
+  łagodne powiadomienie bez dźwięku alarmu („ponad podział – liczy się pula dzienna”), bez alarmu i naruszenia; Daily Bias
+  patrzy tylko na koperty planowe (D16: pulę dzienną ocenia energia). Do zmiany na życzenie.
+- **T217** Nazwy (N24, N63, N66): „Przychody” = przychód wg D81 wszędzie (raport wachty, przegląd roczny – linia i tabela,
+  nagłówek CSV / Excel, alarm pensji „średni przychód z 6 mies.”); „Wpływy” w Operacjach zostają sumą brutto z podpowiedzią
+  („to nie przychód”). Wywiad: „Na kontach” zamiast „Majątek” z dopiskiem, że suma sald obejmuje pożyczone i depozyt
+  domowników; przegląd roczny „Pieniądze na kontach na początku / na końcu” i dopisek o tradingu netto miesiąc po miesiącu
+  (T119). Krzywa majątku (T81, D73) bez zmian – majątek netto (bez długu i depozytu) przychodzi drugą linią w grupie V
+  (F24, D87).
+- **T218** Zasięg (N56): `rangeText` (`shared/format.ts`) obcina w dół do 0,1 mies. – napis nigdy nie pokazuje progu klasy,
+  której okręt nie ma (klasa czyta tę samą liczbę); „brakuje” (`rangeGapText`) w górę i co najmniej 0,1. Mostek,
+  Ładownia, Raporty, Dowództwo i Wywiad tą samą funkcją.
+- **T219** Minimum osłon (B84): silnik liczy `minShields` = min(minimum, cel osłon) × pensja – dokowanie napełnia osłony
+  tylko do celu, wyższe minimum byłoby stałym alarmem, Bearish i naruszeniami gry. Ustawienia i kreator odrzucają minimum
+  wyższe od celu (i cel niższy od minimum) z komunikatem, ostrzegają przy minimum > cel − 1.
+- **T220** Start budżetu (B126, B127, B128, N23): `startMonthSpentOf` – jedna reguła silnika i kreatora (koszty netto dni
+  przed startem w miesiącu startu, zwrot pomniejsza zakup, nigdy poniżej zera, płatności opłat okresowych i kontenerów
+  wybranych w kreatorze poza); saldo otwarcia z salda teraz odejmuje tylko operacje z dziś (z datą w przyszłości nie ma
+  ich jeszcze w banku); tempo celów bez środków na start, konta dołączonego później i depozytu domowników. Gra startuje
+  dopiero po kreatorze (`settings.budget.start`) – budżet liczony od samego salda otwarcia nie ma pensji ani planu; baner
+  mówi wtedy, że budżet liczy się od salda otwarcia, a kreator ustawi resztę od dziś (T25, T51 bez zmian).
+- **T221** Mostek, Radar, Ładownia (N22, N27, N28, N52, N59, N103, B61, B63, B85): alarm odprawy prowadzi do przyczyny
+  (masa ładunku i zbiornik – Ładownia, korekta – ta operacja, firewall – Operacje, reszta – Plan miesiąca); „Odsłuchaj”
+  tylko z polskim głosem systemu (bez niego podpowiedź o pakiecie mowy, T7), energia ujemna czytana „przekroczona o …”;
+  każda dopłata do XTB wbrew firewallowi w osobnej linii; Radar: „po terminie N dni”, a od 3 dni „zaległa rata” /
+  „spóźniona spłata” (jak odprawa, D72); Mapa gwiezdna podaje część w celach zarchiwizowanych; Ctrl+$ od razu w Radarze i
+  otwartym szybkim wpisie; Ładownia: najbliższa płatność od dziś (`nextPaymentOf` jak Radar), rata zbiornika z harmonogramu
+  („ostatnia …”, gdy inna), „/m” = średnio; pożyczka zaciągnięta z „Do spłaty razem” mniejszym niż kwota – odrzucona.
+- **T222** Wydajność (W28–W30, W38): indeksy w WeakMap po tablicy z magazynu – operacje po miesiącach
+  (`transactionsOfMonth`), dziennik silnika po miesiącach z końcami miesięcy i startem (`logIndex`), koszty po miesiącach
+  (`costsByMonth`, wynik wspólny – tylko do odczytu); „Ostatnie operacje” Mostka jednym przejściem (`newestOperations`);
+  debriefing Planu miesiąca liczony raz, tempo celów Mapy gwiezdnej w pamięci. Okno dokowania liczy podgląd tylko przy
+  zmianie tego, co czyta silnik (od 1.4.3).
+- **T223** Przegląd grupy M (`/code-review` high, 8 kandydatów – wszystkie poprawione): pamięć „Ostatnich operacji”
+  Mostka przed wczesnym wyjściem (stała kolejność hooków); silnik liczony od nowa tylko przy zmianie progu poważnego
+  naruszenia, nie każdego zapisu ustawień gry („Dziś bez wydatków”, start gry); „Najbliższa” płatność w Ładowni pomija cykl
+  już opłacony ze zbiornika (`nextUnpaidOf`, jak Radar i odprawa); kreator – operacje z przyszłą datą liczone raz na
+  konta, z odmianą „operacji”; baner N23 tylko przy saldzie otwarcia z dziś albo wcześniej (reguła `budgetStartOf`);
+  powiadomienie koperty z `envelopeOverrun` i progiem Dowództwa (dopisek „ponad próg poważnego naruszenia”); Dowództwo
+  pokazuje minimum osłon, które silnik stosuje (przy minimum ponad cel – cel z dopiskiem).

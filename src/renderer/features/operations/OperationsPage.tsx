@@ -469,7 +469,7 @@ export function OperationsPage() {
           <span className="text-muted">
             Operacje <span className="num text-fg-strong">{rows.length === all.length ? all.length : `${rows.length} / ${all.length}`}</span>
           </span>
-          <span className="text-muted">
+          <span className="text-muted" title="Wpływy na konta – razem z oddanymi przez domowników, zwrotami i pożyczkami; to nie przychód (Raporty, panel Przychody)">
             Wpływy <span className="num text-up">{signedPln(sums.inflow)} zł</span>
           </span>
           <span className="text-muted">

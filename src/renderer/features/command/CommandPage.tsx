@@ -21,6 +21,7 @@ import {
   type WatchEntry
 } from '@shared/calc/game'
 import { CLASS_FROM, SHIP_CLASS_LABEL, SHIP_CLASSES, type ShipClass } from '@shared/calc/fleet'
+import { rangeGapText, rangeText } from '@shared/format'
 import type { GameSettings } from '@shared/schema'
 import { updateSettings, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -143,7 +144,7 @@ export function CommandPage() {
                 </span>
               </div>
             </Panel>
-            <OrdersPanel game={settings.game} orders={settings.orders} readOnly={readOnly} />
+            <OrdersPanel game={settings.game} orders={settings.orders} shieldSalaries={settings.layers.shieldSalaries} readOnly={readOnly} />
           </div>
           <div className="flex min-w-0 flex-col">
             <Panel title="Dziennik wachty" testId="command-log">
@@ -218,9 +219,9 @@ function ClassPanel({ shipClass, range }: { shipClass: ShipClass | null; range: 
           <span className="text-[15px] font-medium text-fg-strong" data-testid="command-class-name">
             {shipClass ? SHIP_CLASS_LABEL[shipClass] : '—'}
           </span>
-          <span className="num ml-auto text-muted">{range == null ? 'zasięg —' : `zasięg ${range.toFixed(1).replace('.', ',')} mies.`}</span>
+          <span className="num ml-auto text-muted">{range == null ? 'zasięg —' : `zasięg ${rangeText(range)}`}</span>
         </div>
-        {next && range != null && <span className="text-[11.5px] text-dim">Do klasy {SHIP_CLASS_LABEL[next]} brakuje {(CLASS_FROM[next] - range).toFixed(1).replace('.', ',')} mies. zasięgu.</span>}
+        {next && range != null && <span className="text-[11.5px] text-dim">Do klasy {SHIP_CLASS_LABEL[next]} brakuje {rangeGapText(CLASS_FROM[next] - range)} zasięgu.</span>}
         <div className="flex flex-col pt-0.5">
           {SHIP_CLASSES.map((c) => (
             <div key={c} className={cx('flex items-baseline gap-2 py-0.5 text-[11.5px]', c === shipClass ? 'text-fg-strong' : 'text-dim')}>
@@ -346,7 +347,7 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
 type Orders = NonNullable<ReturnType<typeof useData.getState>['fi']>['settings']['orders']
 type Threshold = 'promoteDays' | 'windowDays' | 'seriousEnvelopePct' | 'demoteSerious' | 'missionDays'
 
-function OrdersPanel({ game, orders, readOnly }: { game: GameSettings; orders: Orders; readOnly: boolean }) {
+function OrdersPanel({ game, orders, shieldSalaries, readOnly }: { game: GameSettings; orders: Orders; shieldSalaries: number; readOnly: boolean }) {
   const setGame = (patch: Partial<GameSettings>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, game: { ...f.settings.game, ...patch } } }))
   const field = (key: Threshold, min: number, max: number, testId: string) => (
     <NumberField
@@ -366,7 +367,11 @@ function OrdersPanel({ game, orders, readOnly }: { game: GameSettings; orders: O
     <Panel title="Rozkazy i progi" testId="command-orders">
       <div className="flex flex-col gap-1 text-[12px]">
         <Order label="Dzienny przydział energii" value="koperty codzienne ÷ dni miesiąca" />
-        <Order label="Minimalne osłony" value={`${orders.minShieldSalaries} × pensja`} />
+        {/* The minimum the engine applies (B84): never above the shields' target. */}
+        <Order
+          label="Minimalne osłony"
+          value={orders.minShieldSalaries > shieldSalaries ? `${shieldSalaries} × pensja (cel osłon; ustawione ${orders.minShieldSalaries})` : `${orders.minShieldSalaries} × pensja`}
+        />
         <Order label="Linia zanurzenia" value={`${orders.cargoLimitPct}% pensji`} />
         <Order label="Cisza nocna" value={`${orders.quietHours.from}–${orders.quietHours.to}`} />
         <Order label="Firewall dopłat do XTB" value={orders.firewall ? 'włączony' : 'wyłączony'} />
