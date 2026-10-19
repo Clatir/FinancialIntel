@@ -771,6 +771,9 @@ Zakres: „Przed grupą R” wyżej. Zrobione:
   raporty, Radar, Mostek); mutacje i E2E wykryły dwa błędy przed przeglądem – klawisze rozmiaru nie trafiały do
   `before-input-event` z testów (obsługa przeniesiona do okien) i odpowiedź starszej zmiany ustawień komputera cofała
   nowszą (dwa Ctrl+Plus = jeden krok).
+- CI (PR #28): E2E kontrastu czerwone dwa razy – diagnostyka w CI pokazała, że reguła pasuje od razu, ale Chromium oddaje
+  wyliczony rozmiar części napisów klatkę później (11,5 px tuż po zmianie, 12 px ok. 20 ms dalej, bez żadnej zmiany w
+  aplikacji); test czeka na rozmiar jak na inne wartości (lokalnie nie do odtworzenia, także na jednym rdzeniu).
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.6.6, Windows):
 1. Ctrl+Plus / Ctrl+Minus w oknie głównym i w szybkim wpisie, Ctrl+Shift+0 – 100 %; „Wyższy kontrast” w Ustawieniach →
