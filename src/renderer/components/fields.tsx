@@ -5,7 +5,7 @@
  */
 import { forwardRef, useRef, useState } from 'react'
 import { formatPln } from '@shared/format'
-import { parseAmountInput, parseClockInput, parseDateInput, parseMonthInput } from '../lib/format'
+import { parseAmountInput, parseClockInput, parseDateInput, parseMonthInput, plDate } from '../lib/format'
 import { toast } from '../store/ui'
 import { cx } from './ui'
 
@@ -105,7 +105,6 @@ export const AmountField = forwardRef<
   )
 })
 
-const plDate = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`
 
 /**
  * A date shown as 16.10.2026; typed as 16.10, 16.10.2026 or 2026-10-16. `notAfter` (an operation's date – B12): typed

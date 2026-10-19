@@ -4,7 +4,7 @@
  * window draws what the main window sends (categories, today's energy, the officer's hints) and gives the typed
  * operation back to it: the main window owns the data and saves it.
  */
-import { BrowserWindow, globalShortcut, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, globalShortcut, ipcMain, screen, type IpcMainInvokeEvent, type Rectangle } from 'electron'
 import type { QuickData, QuickResult } from '@shared/api'
 
 export interface QuickDeps {
@@ -13,8 +13,14 @@ export interface QuickDeps {
   /** Load the renderer with `?quick=1`. */
   load: (win: BrowserWindow) => Promise<void>
   devUrl: string | null
+  /** This computer's size of the windows (F30): the window grows with its content. */
+  zoom?: () => number
   log: (level: 'info' | 'warn', msg: string, e?: unknown) => void
 }
+
+/** The window's size at 100 %. */
+const WIDTH = 440
+const HEIGHT = 600
 
 export class QuickEntry {
   private win: BrowserWindow | null = null
@@ -68,9 +74,10 @@ export class QuickEntry {
   /** The window, created hidden once (later shows are instant). */
   ensure(): BrowserWindow {
     if (this.win && !this.win.isDestroyed()) return this.win
+    const zoom = this.d.zoom?.() ?? 1
     const win = new BrowserWindow({
-      width: 440,
-      height: 600,
+      width: Math.round(WIDTH * zoom),
+      height: Math.round(HEIGHT * zoom),
       show: false,
       frame: false,
       resizable: false,
@@ -129,14 +136,44 @@ export class QuickEntry {
     if (main && !main.isDestroyed()) main.webContents.send('fi:quickRequest')
     else this.send('fi:quickData', null)
     const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+    this.fit(win, area)
     const [w, h] = win.getSize() as [number, number]
-    win.setPosition(Math.round(area.x + (area.width - w) / 2), Math.round(area.y + (area.height - h) / 3))
+    win.setPosition(Math.round(area.x + Math.max(0, (area.width - w) / 2)), Math.round(area.y + Math.max(0, (area.height - h) / 3)))
     win.show()
     win.focus()
   }
 
   hide(): void {
     if (this.win && !this.win.isDestroyed()) this.win.hide()
+  }
+
+  /**
+   * The window as big as this computer's size asks (F30) – it is not resizable by hand –, never bigger than the display
+   * it is on (a small laptop at 150 %: its content scrolls).
+   */
+  private fit(win: BrowserWindow, area: Rectangle): void {
+    const zoom = this.d.zoom?.() ?? 1
+    const w = Math.min(Math.round(WIDTH * zoom), area.width)
+    const h = Math.min(Math.round(HEIGHT * zoom), area.height)
+    const [cw, ch] = win.getSize() as [number, number]
+    if (cw === w && ch === h) return
+    // On Linux a window that is not resizable keeps its size even against setSize.
+    win.setResizable(true)
+    win.setSize(w, h)
+    win.setResizable(false)
+  }
+
+  /** The size of this computer changed (F30) – Ctrl+Plus in this window too: it grows on its display, kept on it. */
+  rescale(): void {
+    const win = this.win
+    if (!win || win.isDestroyed()) return
+    const area = screen.getDisplayMatching(win.getBounds()).workArea
+    this.fit(win, area)
+    if (!win.isVisible()) return
+    const [x, y] = win.getPosition() as [number, number]
+    const [w, h] = win.getSize() as [number, number]
+    const inside = (v: number, from: number, size: number, length: number) => Math.round(Math.min(Math.max(v, from), from + Math.max(0, length - size)))
+    win.setPosition(inside(x, area.x, w, area.width), inside(y, area.y, h, area.height))
   }
 
   get isOpen(): boolean {

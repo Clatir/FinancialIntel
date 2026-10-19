@@ -9,6 +9,7 @@ import { dueNotices, type Notice } from '@shared/notify'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
+import { countLabel, plural } from '../lib/format'
 import { plnText } from '../components/fields'
 import { listOf, useData } from './data'
 import { fleetNow } from './fleet'
@@ -121,7 +122,7 @@ function check(opened: boolean, shown = false): void {
   const elsewhere = (s.status?.otherMachines ?? []).some((m) => m.inUse)
   if (elsewhere && !opened && !usePresence.getState().inUse) return
   const docks = fresh.filter((n) => n.tag === 'dock')
-  const toasts = docks.length >= DOCK_GROUP ? [...fresh.filter((n) => n.tag !== 'dock'), { key: 'dock:group', tag: 'dock' as const, title: 'Nowe wypłaty w ICTTJ do zadokowania', body: `${docks.length} wpisów czeka na dokowanie (Mostek).` }] : fresh
+  const toasts = docks.length >= DOCK_GROUP ? [...fresh.filter((n) => n.tag !== 'dock'), { key: 'dock:group', tag: 'dock' as const, title: 'Nowe wypłaty w ICTTJ do zadokowania', body: `${countLabel(docks.length, 'wpis', 'wpisy', 'wpisów')} ${plural(docks.length, 'czeka', 'czekają', 'czeka')} na dokowanie (Mostek).` }] : fresh
   // Silent toasts: the app's own sounds (switches and volume of this computer) are the only ones – the alarm's here.
   for (const n of toasts) void api.notify({ title: n.title, body: n.body, tag: n.target ?? n.tag, silent: true })
   if (fresh.some((n) => n.alarm)) playSound('alarm')

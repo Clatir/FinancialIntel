@@ -21,7 +21,7 @@ import { AMOUNT_MASK, amountsHidden, plnText, signedPln } from '../../components
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
-import { dayLabel, plDate } from '../../lib/format'
+import { countLabel, dayLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { newOperation, openOperation, openRefundables, selectOperation, showFilter } from '../operations/state'
 import { EnvelopeBars, monthElapsed } from '../month/EnvelopeBars'
@@ -33,6 +33,8 @@ import { useCargoStatuses } from '../cargo/status'
 import { useIctj } from '../../store/ictj'
 import { useGameRecords } from '../../store/game'
 import { useMembers } from '../household/actions'
+import { WealthChart } from '../intel/charts'
+import { useWealth } from '../intel/wealth'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 // Cut down (N56): never the threshold of a class the ship has not reached.
@@ -215,10 +217,51 @@ function speak(text: string): boolean {
   return true
 }
 
+/** The weeks of the wealth curve on the bridge (N58): half a year – the whole history, the structure and the drawdown in Wywiad. */
+const BRIDGE_WEEKS = 26
+
+/** The wealth curve's last half-year (N58, spec „Ekrany”): the money on the budget's accounts at each week's end. */
+function BridgeWealth({ today }: { today: string }) {
+  return (
+    <Panel
+      title="Krzywa majątku"
+      testId="bridge-wealth"
+      actions={
+        <button className="text-[11px] text-muted hover:text-fg-strong" onClick={() => navigate({ page: 'intel' })} title="Cała historia, struktura i drawdown – Wywiad (Ctrl+9)" data-testid="bridge-wealth-open">
+          Wywiad →
+        </button>
+      }
+    >
+      <BridgeWealthChart today={today} />
+    </Panel>
+  )
+}
+
+/** The panel's content – computed only while it is shown (a collapsed or hidden panel renders nothing inside). */
+function BridgeWealthChart({ today }: { today: string }) {
+  const wealth = useWealth(today)
+  const shown = useMemo(() => {
+    const points = wealth.points.slice(-(BRIDGE_WEEKS + 1))
+    const from = points[0]?.date ?? ''
+    // The structure of the whole history – a break is the same break on the shorter chart.
+    return { points, marks: wealth.marks.filter((m) => m.date >= from) }
+  }, [wealth])
+  const last = shown.points.at(-1)
+  if (shown.points.length < 2 || !last) return <Empty>Za mało danych – krzywa pojawi się po dwóch tygodniach historii.</Empty>
+  return (
+    <div className="flex flex-col gap-1.5 text-[12px]">
+      <span className="text-muted">
+        Na kontach budżetu <span className="num text-fg-strong">{zl(last.value)}</span> · ostatnie {BRIDGE_WEEKS} tygodni, koniec każdego tygodnia
+      </span>
+      <WealthChart points={shown.points} marks={shown.marks} height={170} testId="bridge-wealth-chart" />
+    </div>
+  )
+}
+
 /**
  * Mostek (spec, „Ekrany”): the morning briefing, the ship's state (the shields, today's energy, the hull, the range,
- * the cargo's mass, the class), the envelopes, what the house owes and the latest operations. The metaphor always
- * with the real name and the amount (D34).
+ * the cargo's mass, the class), the docking, the wealth curve, the envelopes, what the household owes, the income and the
+ * latest operations. The metaphor always with the real name and the amount (D34).
  */
 export function BridgePage() {
   const fleet = useFleet()
@@ -272,6 +315,7 @@ export function BridgePage() {
               </Panel>
             )}
             {fleet.started && <DockPanel />}
+            <BridgeWealth today={fleet.today} />
           </div>
           <div className="flex min-w-0 flex-col">
             <Panel title="Koperty" testId="bridge-envelopes" detach={specs.envelopes}>
@@ -373,7 +417,7 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
             <span className="text-[11px] text-dim">{d ? `przydział ${zl(d.allowance)} · podstawowy ${zl(d.base)}` : 'bez planu tego miesiąca'}</span>
           </div>
           {bias && (
-            <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-down' : bias === 'bullish' ? 'text-accent' : 'text-muted')} data-testid="bridge-bias" title="Daily Bias (spec, Wywiad)">
+            <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-accent' : bias === 'bullish' ? 'text-fg-strong' : 'text-muted')} data-testid="bridge-bias" title="Daily Bias (spec, Wywiad)">
               {bias === 'bullish' ? '▲' : bias === 'bearish' ? '▼' : '◆'} {BIAS_LABEL[bias]}
             </span>
           )}
@@ -524,7 +568,9 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
         <button className="flex flex-col text-left hover:text-accent" onClick={() => onOpen('cargo')}>
           <span className="label">Masa ładunku</span>
           <span className={cx('num text-[14px]', fleet.cargo.over ? 'text-down' : 'text-fg-strong')}>{fleet.cargo.pct != null ? `${fleet.cargo.pct.toFixed(1).replace('.', ',')}%` : '—'}</span>
-          <span className="text-[10.5px] text-dim">linia {fleet.cargo.limitPct}%</span>
+          <span className="text-[10.5px] text-dim" data-testid="state-cargo">
+            stałe koszty {zl(fleet.cargo.monthly)}/mies. · linia {fleet.cargo.limitPct}%
+          </span>
         </button>
       </div>
       <div className="text-[11px] text-dim">Suma kont budżetu: {zl(fleet.total)}</div>
@@ -544,7 +590,7 @@ function Receivables({ fleet }: { fleet: FleetState }) {
           <div key={m.memberId} className="flex items-baseline gap-2" data-testid="bridge-member">
             <span className="text-fg-strong">{memberName(m.memberId, members)}</span>
             <span className="text-[11px] text-dim">
-              {m.owed > 0 ? `ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${daysBetween(m.since, fleet.today)} dni)` : ''}` : 'zaliczka – czeka na wydatki'}
+              {m.owed > 0 ? `ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${countLabel(daysBetween(m.since, fleet.today), 'dzień', 'dni', 'dni')})` : ''}` : 'zaliczka – czeka na wydatki'}
             </span>
             <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>
           </div>

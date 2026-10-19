@@ -88,9 +88,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   (`schema/records.ts`, T19); `fi.json` = rodzaj `fi` (`schema/settings.ts`: `shipName`, `sync.remoteChanges`,
   `layoutPresets`); `shared/defaults.ts` `createDefaultSettings`.
 - Okno: menu boczne `app/App.tsx` (`SideMenu`, ekrany z `features/screens/pages.tsx` `PAGES` – strona, etykieta,
-  podtytuł, etap, klawisz Ctrl+1…0, `mvp`), pasek nad stroną `app/PageBar.tsx` (folder, zmiany z drugiego komputera,
-  zapis, „Układ”, paleta), ekrany-zaślepki `features/screens/PlaceholderPage.tsx` (panele planowane w specyfikacji),
-  pierwsze uruchomienie `features/setup/FolderSetup.tsx` (`api.defaultDataDir`: `%OneDrive%\FinancialIntel`, D62),
+  podtytuł, klawisz Ctrl+1…0), pasek nad stroną `app/PageBar.tsx` (folder, ukryte kwoty, zmiany z drugiego komputera,
+  zapis, „Układ”, paleta; ekrany-zaślepki usunięte w 1.6.6 – N34), pierwsze uruchomienie `features/setup/FolderSetup.tsx` (`api.defaultDataDir`: `%OneDrive%\FinancialIntel`, D62),
   Ustawienia `features/settings/SettingsPage.tsx` (Okręt, Folder i kopie, Zasobnik i start, Aktualizacje).
 - Proces główny `main/index.ts`: IPC `fi:*`, preload `window.fi` (`shared/api.ts` `FiApi`), zasobnik domyślnie przy
   zamknięciu (D64, `config.tray`), `--hidden` przy starcie z Windows, kopia dzienna przy otwarciu folderu
@@ -98,7 +97,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/*`, `tests/fs/*` (folder danych, historia, kopie, watcher, aktualizacje), `tests/e2e/smoke.spec.ts`,
   `tests/update/*` (tylko Windows CI). Zmienne testowe: `FI_USER_DATA`, `FI_DATA_DIR`, `FI_MACHINE_NAME`,
   `FI_DEFAULT_DATA_DIR` (propozycja folderu), `FI_UPDATE_URL`, `FI_UPDATE_CHECK_DELAY_MS`, `FI_UPDATE_TOKEN`,
-  `FI_E2E_EXECUTABLE`, od E5 `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` / `FI_ICTJ_LAUNCH`; Windows CI: `FI_UPDATE_FROM` /
+  `FI_E2E_EXECUTABLE`, od E5 `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` / `FI_ICTJ_LAUNCH`, od 1.6.6 `FI_SYSTEM_IDLE` (stała
+  bezczynność systemu w s), `FI_IDLE_CHECK_MS`, `FI_CONFIG_RETRY_MS`; Windows CI: `FI_UPDATE_FROM` /
   `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E
   `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Ikona: `node scripts/make-icon.mjs` (`CHROMIUM_PATH=…` jeśli trzeba) → `resources/icon.png`.
@@ -218,7 +218,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
     `DockPanel.tsx` (Mostek → „Dokowanie”);
   - `features/starmap/` – `StarMapPage.tsx` (Mapa gwiezdna), `actions.ts` (`addGoal`, `patchGoal`, `archiveGoal`,
     `moveGoal`), `sync.ts` (`useIctjGoalSync` w `App`);
-  - `features/settings/IctjTab.tsx` (Ustawienia → ICTTJ); menu boczne „Otwórz ICTTJ”; `PAGES` – pole `ready`.
+  - `features/settings/IctjTab.tsx` (Ustawienia → ICTTJ); menu boczne „Otwórz ICTTJ”.
 - Testy: `tests/unit/dock.test.ts`, `tests/fs/ictj.test.ts`, E2E `tests/e2e/ictj.spec.ts` (`FI_ICTJ_APPDATA`,
   `FI_ICTJ_LAUNCH=dry`, `FI_ICTJ_DIR` – T69); E2E czytają folder przez `tests/e2e/files.ts` (pomija pliki znikające
   w trakcie odczytu i pliki tymczasowe).
@@ -304,7 +304,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
     `reconcile.ts` – `PlannedRow.words` / `target`, `ImportGroup.chain`, `shareMerged` (połączone nazwy dzielą
     rozpoznanie).
 - Schemat: `settings.import.aliases`, `settings.import.notSimilar` (addytywnie, `lenientRecord`).
-- Renderer `features/import/`: `Learning.tsx` (`SimilarPanel` – „Podobne nazwy”, `mergePairs`, `namesToMerge` /
+- Renderer `features/import/`: `Learning.tsx` (`SimilarPanel` – „Podobne nazwy”, `namesToMerge` /
   `mergeSelectedNames` – „Połącz nazwy” w `BulkBar`, `RuleProposal` – pod grupą `lastDecided`), `state.ts`
   (`useImportGroups`, `planInputs` – plan od nowa po zmianie reguł albo połączeń, `decideGroup`, `closeProposal`,
   `ownNamesWith`), `rules.ts` (`mergeNames` / `unmergeName` z „Cofnij”, `dismissSimilar`, `clearDismissedSimilar`,
@@ -767,6 +767,36 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `tests/unit/data-store.test.ts` (przyczyny, `saveFirst`, `saveNow`, wpisy nowszej wersji, zasobnik), `merge.test.ts`,
   `system.test.ts`; E2E `tests/e2e/folder-q.spec.ts` (kontener nowszej wersji, Synchronizacja, naprawa fi.json, nieudana kopia).
 
+## Kod (1.6.6 – teksty, wygląd, wygoda, grupa R, D87)
+- Wygląd i prywatność komputera (F30, F40, T259, T260): `shared/machine.ts` – `prefs.zoom` (`ZOOM_MIN` / `ZOOM_MAX`,
+  `clampZoom`, `zoomStep`, `zoomFromKey` / `KeyInput`), `highContrast`, `hideIdleMin` (`HIDE_IDLE_CHOICES`, 0 = nigdy),
+  `hideOnStart`; main `index.ts` – `changePrefs` (jedna droga zmian: IPC `setMachinePrefs`, bezczynność), `applyZoom` /
+  `prepareWindow` (`setZoomFactor` wszystkich okien, po każdym wczytaniu), `watchIdleAmounts` (`powerMonitor`, blokada
+  ekranu), `revealAmounts` (IPC: minuty albo do końca sesji – `revealTimer` / `revealedForSession`, `clearReveal`),
+  `hideOnStart` (start albo późny odczyt config.json); `quick.ts` – `fit` / `rescale` (okno szybkiego wpisu z rozmiarem, w
+  granicach ekranu); okno `store/machine.ts` – `installZoomKeys` (Ctrl+Plus / Ctrl+Minus / Ctrl+Shift+0 w każdym oknie,
+  faza przechwytywania), `installLook` (`data-contrast`), `revealAmounts`, `pending` (odpowiedź starszej zmiany nie cofa
+  nowszej), `main.tsx` – ustawienia komputera raz w każdym oknie; `styles/index.css` – kontrast poza warstwami; Ustawienia →
+  „Wygląd i prywatność” (`MachineTabs.tsx` `ViewTab`, `ZoomSlider` – `settings-zoom`, `-zoom-value`, `-zoom-reset`,
+  `settings-contrast`, `settings-hide-amounts`, `settings-hide-idle`, `settings-hide-start`), `PageBar` `HiddenAmounts`
+  (`amounts-hidden`, `reveal-5`, `reveal-session`), paleta (pokazanie tylko przy ukrytych kwotach), ściągawka skrótów.
+- Mostek i Radar (N35, N58, N60, T256–T258): `features/intel/wealth.ts` (`wealthOf` / `useWealth` – krzywa i struktura raz
+  na stan danych dla Mostka i Wywiadu), Mostek `BridgeWealth` / `BridgeWealthChart` (`bridge-wealth`, `bridge-wealth-chart`,
+  `bridge-wealth-open`; 26 tygodni, liczone tylko przy widocznym panelu), `WealthChart testId`; Bearish w akcencie;
+  `radar/actions.ts` `closeLoan` z „Cofnij” (raty zdjęte z czasem `closedAt`, „otwórz” tylko dla nich – `loan-close`,
+  `loan-reopen`).
+- Teksty (N31, N33, N53, N57, N61, N72, T254): `game.ts` `RANK_GENITIVE`, `MISSION_TITLE.house`, metafory w
+  `VIOLATION_LABEL` / `ACHIEVEMENT_INFO`; `briefing.ts` `alarmText` z prawdziwymi nazwami; `ReportsPage.tsx` `CARGO_LABEL`,
+  `signed` (FVG ze znakiem), `reports-watch-day`; `plDate` w Ustawieniach → Konta, `balances/actions.ts`, Operacjach, PDF;
+  eksport ZIP z `warsawNow`; `countLabel` / `plural` w importie, kreatorze, ładowni, Radarze, Mostku, Dowództwie,
+  powiadomieniach; `panels.ts` `PAGE_LABELS` (kreator, meldunki), `PageBar` bez „Układ” na kreatorze.
+- Martwy kod (N34, T255): bez `PlaceholderPage`, `PageDef.stage` / `ready`, rodzaju okna 'placeholder', `copyText`,
+  `isPortable`, `importRecords`, formaterów z ICTTJ (`fmtNum`, `fmtPln`, `tone` …); `GameChange.events` – świadomie.
+- Testy: `tests/unit/texts-look.test.ts`, `machine-store.test.ts`, `loan-close.test.ts`, `wealth-memo.test.ts` (trzy ostatnie
+  ze sklepami okna – w `tsconfig.web.json`), E2E `tests/e2e/look.spec.ts` (rozmiar we wszystkich oknach, kontrast,
+  ukrywanie kwot, późny config.json, krzywa na Mostku), `radar.spec.ts` („zamknij” z „Cofnij”), `intel.spec.ts` (FVG ze
+  znakiem, zł w raporcie wachty).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -873,4 +903,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   komputera, wpis nowszej wersji, błąd zapisu), wpisy nowszej wersji tylko do obejrzenia, naprawa fi.json z historii,
   config.json bez nadpisywania domyślnymi, kopie w podfolderze na folder danych, ostrzeżenie o nieudanych kopiach,
   Synchronizacja z nazwami pól, eksport z historią, aktualizacja pobrana wcześniej nie przepada
+- [x] 1.6.6 Teksty, wygląd, wygoda (grupa R, D87): rozmiar interfejsu 90–150 % i wyższy kontrast, kwoty ukryte po
+  bezczynności, blokadzie ekranu i przy starcie („Pokaż na 5 min” / „do końca sesji”), krzywa majątku na Mostku, „zamknij”
+  pożyczkę z „Cofnij”, metafory z prawdziwą nazwą, daty i odmiana jak w całej aplikacji, jedna nazwa ładowni, bez martwego
+  kodu
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

@@ -9,8 +9,7 @@ import { SettingsPage } from '../features/settings/SettingsPage'
 import { SyncPage } from '../features/sync/SyncPage'
 import { RemoteChangesDialog } from '../features/sync/RemoteChangesDialog'
 import { CommandPalette } from '../features/palette/CommandPalette'
-import { PAGES, pageDef } from '../features/screens/pages'
-import { PlaceholderPage } from '../features/screens/PlaceholderPage'
+import { PAGES } from '../features/screens/pages'
 import { OperationsPage } from '../features/operations/OperationsPage'
 import { newOperation } from '../features/operations/state'
 import { ImportPage } from '../features/import/ImportPage'
@@ -31,7 +30,7 @@ import { GameCelebrations } from '../features/command/Celebration'
 import { useGameAdvance, useGameCelebrations } from '../store/game'
 import { DockingDialog } from '../features/dock/DockingDialog'
 import { initIctj, openIctj } from '../store/ictj'
-import { loadMachinePrefs, noticeReplacedShortcut, toggleHideAmounts, useMachine } from '../store/machine'
+import { noticeReplacedShortcut, toggleHideAmounts, useMachine } from '../store/machine'
 import { initQuickHost } from '../store/quickHost'
 import { initNotifier } from '../store/notifier'
 import { useFleet } from '../store/fleet'
@@ -128,7 +127,6 @@ function NavItem({
   label,
   sub,
   keys,
-  dim,
   badge,
   testId
 }: {
@@ -138,22 +136,20 @@ function NavItem({
   label: string
   sub?: string
   keys?: string
-  /** A screen of a later stage (after the 1.0 release). */
-  dim?: string
   badge?: number
   testId?: string
 }) {
   return (
     <button
       onClick={onClick}
-      title={[keys ? `${label} (${keys})` : label, dim].filter(Boolean).join(' – ')}
+      title={keys ? `${label} (${keys})` : label}
       data-testid={testId}
       data-badge={badge || undefined}
       aria-current={active ? 'page' : undefined}
       className={cx(
         'relative flex h-[38px] w-full shrink-0 items-center gap-2.5 border-l-2 px-3 text-left transition-colors duration-100',
         active ? 'border-accent bg-accent-soft text-accent' : 'border-transparent hover:bg-hover hover:text-fg-strong',
-        !active && (dim ? 'text-dim' : 'text-fg')
+        !active && 'text-fg'
       )}
     >
       <span className="shrink-0">{icon}</span>
@@ -190,7 +186,6 @@ function SideMenu({ route }: { route: Route }) {
             label={p.label}
             sub={p.sub}
             keys={`Ctrl ${p.key}`}
-            dim={p.ready ? undefined : `etap ${p.stage} – w przygotowaniu`}
             testId={`nav-${p.page}`}
           />
         ))}
@@ -245,8 +240,7 @@ function Page({ route }: { route: Route }) {
   if (route.page === 'command') return <CommandPage />
   if (route.page === 'intel') return <IntelPage />
   if (route.page === 'reports') return <ReportsPage />
-  const def = pageDef(route.page)
-  return def ? <PlaceholderPage key={def.page} def={def} /> : null
+  return null
 }
 
 /** Today's energy in the tray's tooltip (masked with the amounts). */
@@ -282,7 +276,6 @@ export function App() {
   useBackNavigation()
   useEffect(() => {
     void boot()
-    void loadMachinePrefs()
     initIctj()
     initQuickHost()
     initPresence()

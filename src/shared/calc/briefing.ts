@@ -49,29 +49,29 @@ const zlotych = (grosze: number) => `${formatPln(grosze)} zł`
 export function alarmText(a: Alarm, label: (id: string) => string = () => '', zl: (grosze: number) => string = zlotych): string {
   switch (a.kind) {
     case 'salary-from-hull':
-      return `Pensja z kadłuba: ${zl(a.amount)} (za mało w osłonach).`
+      return `Pensja z kadłuba (funduszu awaryjnego): ${zl(a.amount)} – za mało w osłonach (buforze na pensje).`
     case 'salary-partial':
-      return `Pensja częściowa: brakuje ${zl(a.amount)} – osłony i kadłub puste.`
+      return `Pensja częściowa: brakuje ${zl(a.amount)} – osłony (bufor na pensje) i kadłub (fundusz awaryjny) puste.`
     case 'energy-exhausted':
-      return `Energia wyczerpana: ${zl(a.amount)} ponad energię miesiąca (pensja po ratach odkładek) poszło z osłon.`
+      return `Energia wyczerpana: ${zl(a.amount)} ponad energię miesiąca (pensja po ratach odkładek) poszło z osłon (bufora na pensje).`
     case 'firewall':
       return `Firewall: dopłata do XTB ${zl(a.amount)} wbrew rozkazowi.`
     case 'sinking-short':
-      return `Za mało w zbiorniku ${a.ref ? label(a.ref) : ''}: ${zl(a.amount)} z energii.`.replace('  ', ' ')
+      return `Za mało w zbiorniku (odkładce) ${a.ref ? label(a.ref) : ''}: ${zl(a.amount)} z energii (pensji miesiąca).`.replace('  ', ' ')
     case 'deficit':
-      return `Deficyt: osłony poniżej zera o ${zl(a.amount)}.`
+      return `Deficyt: osłony (bufor na pensje) poniżej zera o ${zl(a.amount)}.`
     case 'shields-below-min':
-      return `Osłony poniżej minimum o ${zl(a.amount)}.`
+      return `Osłony (bufor na pensje) poniżej minimum o ${zl(a.amount)}.`
     case 'correction':
-      return `Rozbieżność w ładowni: korekta ${zl(a.amount)} do wyjaśnienia.`
+      return `Rozbieżność salda: korekta ${zl(a.amount)} do wyjaśnienia.`
     case 'daily-over':
       return `Przydział dnia przekroczony o ${zl(a.amount)}.`
     case 'envelope-over':
       return `Koperta ${a.ref ? label(a.ref) : ''} ponad limit o ${zl(a.amount)}.`.replace('  ', ' ')
     case 'cargo-over':
-      return 'Masa ładunku ponad linią zanurzenia.'
+      return `Masa ładunku (stałe koszty ${zl(a.amount)}/mies.) ponad linią zanurzenia.`
     case 'salary-above-income':
-      return `Pensja wyższa niż średni przychód z 6 mies. o ${zl(a.amount)} – osłony będą się kurczyć.`
+      return `Pensja wyższa niż średni przychód (do 6 ostatnich mies.) o ${zl(a.amount)} – osłony (bufor na pensje) będą się kurczyć.`
   }
 }
 

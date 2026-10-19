@@ -59,6 +59,14 @@ export interface MachinePrefs {
   quickShortcut: string
   /** Amounts masked in the window and the tray's tooltip (Ctrl+$). */
   hideAmounts: boolean
+  /** Hidden by themselves after this many minutes without a move of the mouse or a key in the system (F40); 0 = never. */
+  hideIdleMin: number
+  /** Every start of the app with the amounts hidden (F40). */
+  hideOnStart: boolean
+  /** The size of every window of the app on this computer (F30): 0.9–1.5, 1 = as ICTTJ. */
+  zoom: number
+  /** Brighter dimmed texts and the smallest ones at 12 px (F30). */
+  highContrast: boolean
   notify: NotifyPrefs
   sounds: SoundPrefs
 }
@@ -85,9 +93,50 @@ export function altGrConflict(accelerator: string): string | null {
   return char && mods.has('shift') ? char.toUpperCase() : char
 }
 
+/** The window's size (F30): 90–150 % in steps of 10. */
+export const ZOOM_MIN = 0.9
+export const ZOOM_MAX = 1.5
+export const ZOOM_STEP = 0.1
+
+/** A size within the bounds, to a whole per cent. */
+export const clampZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100))
+
+/** One step bigger or smaller, on the grid of 10 % (an odd size from a hand-edited file snaps to it). */
+export const zoomStep = (z: number, dir: 1 | -1): number => clampZoom((dir > 0 ? Math.floor(z * 10 + 1e-6) + 1 : Math.ceil(z * 10 - 1e-6) - 1) / 10)
+
+/** A key pressed in a window (its keydown). */
+export interface KeyInput {
+  key: string
+  code: string
+  control: boolean
+  meta: boolean
+  alt: boolean
+  shift: boolean
+}
+
+/**
+ * The size the window's key asks for (F30), null = not a key of the size: Ctrl+Plus (also Ctrl+= and the numeric
+ * keypad's plus), Ctrl+Minus, Ctrl+Shift+0 = 100 % (Ctrl+0 is Raporty); AltGr (Ctrl+Alt) never. The application menu
+ * is off – nothing else zooms.
+ */
+export function zoomFromKey(input: KeyInput, zoom: number): number | null {
+  if (!(input.control || input.meta) || input.alt) return null
+  if (input.key === '+' || input.key === '=' || input.code === 'NumpadAdd') return zoomStep(zoom, 1)
+  if (input.key === '-' || input.code === 'NumpadSubtract' || input.code === 'Minus') return zoomStep(zoom, -1)
+  if (input.shift && input.code === 'Digit0') return 1
+  return null
+}
+
+/** The idle times offered (F40), in minutes; 0 = never. */
+export const HIDE_IDLE_CHOICES = [0, 1, 5, 10, 15, 30, 60] as const
+
 export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   quickShortcut: DEFAULT_QUICK_SHORTCUT,
   hideAmounts: false,
+  hideIdleMin: 0,
+  hideOnStart: false,
+  zoom: 1,
+  highContrast: false,
   notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, cargo: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true },
   // Sounds on and quiet (D70).
   sounds: { enabled: true, volume: 0.3, events: { entry: true, docking: true, alarm: true, promotion: true, plus: true } }
@@ -109,6 +158,10 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     // One that takes a Polish letter (set before 1.5.3, a hand-edited file) gives way to the default (B29).
     quickShortcut: typeof r.quickShortcut === 'string' && r.quickShortcut.length <= 60 && !altGrConflict(r.quickShortcut) ? r.quickShortcut : d.quickShortcut,
     hideAmounts: bool(r.hideAmounts, d.hideAmounts),
+    hideIdleMin: typeof r.hideIdleMin === 'number' && Number.isInteger(r.hideIdleMin) && r.hideIdleMin >= 0 && r.hideIdleMin <= 240 ? r.hideIdleMin : d.hideIdleMin,
+    hideOnStart: bool(r.hideOnStart, d.hideOnStart),
+    zoom: typeof r.zoom === 'number' && Number.isFinite(r.zoom) ? clampZoom(r.zoom) : d.zoom,
+    highContrast: bool(r.highContrast, d.highContrast),
     notify: {
       briefing: bool(n.briefing, d.notify.briefing),
       evening: bool(n.evening, d.notify.evening),

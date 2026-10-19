@@ -275,7 +275,7 @@ się zapisują.
 
 | Ekran | Co zawiera | Etap |
 | --- | --- | --- |
-| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, depozyt domowników, zasięg, masa ładunku, klasa), koperty, rozliczenia z domownikami, przychody, ostatnie operacje; radar, wywiad i krzywa majątku na własnych ekranach | E4, 1.3.0, 1.4.0 |
+| Mostek | odprawa, stan okrętu (osłony, energia dziś, kadłub, depozyt domowników, zasięg, masa ładunku, klasa), dokowanie, krzywa majątku z ostatnich 26 tygodni (całość w Wywiadzie), koperty, rozliczenia z domownikami, przychody, ostatnie operacje; radar i reszta wywiadu na własnych ekranach | E4, 1.3.0, 1.4.0, 1.6.6 |
 | Operacje | lista z filtrami i wyszukiwaniem, edycja z historią zmian, podział paragonu, kto finansuje, oznaczenia (domownik, plan lub impuls, noc) | E1, 1.3.0 |
 | Import | kreator CSV z mBanku: podgląd, dopasowania, kategoryzacja grupowa, potwierdzenie | E2 |
 | Plan miesiąca | pensja, przychody (średnie i mediana), podział na ładownię, odkładki i koperty, dzienny przydział, debriefing | E3, 1.4.0 |

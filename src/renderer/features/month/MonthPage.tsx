@@ -167,8 +167,8 @@ function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { 
         {paid && (
           <div className="text-[11.5px] text-muted" data-testid="month-salary-paid">
             Wypłacono: {zl(paid.paid)}
-            {paid.fromHull > 0 && ` (z osłon ${zl(paid.fromShields)}, z kadłuba ${zl(paid.fromHull)})`}
-            {fleet.start && fleet.start.slice(0, 7) === month && plan && paid.paid < plan.salary && paid.alarm == null && ' – pierwszy miesiąc budżetu: bez tego, co wydał przed startem'}
+            {paid.fromHull > 0 && ` (z osłon – bufora na pensje ${zl(paid.fromShields)}, z kadłuba – funduszu awaryjnego ${zl(paid.fromHull)})`}
+            {fleet.start && fleet.start.slice(0, 7) === month && plan && paid.paid < plan.salary && paid.alarm == null && ' – pierwszy miesiąc budżetu: bez tego, co wydano przed startem'}
           </div>
         )}
         {alarms.map((a) => (

@@ -16,7 +16,7 @@ const samePath = (a: string, b: string) => {
 }
 
 /**
- * First run (or a missing folder): where the data lives. The proposal is `OneDrive\FinancialIntel` (decision E0-2) –
+ * First run (or a missing folder): where the data lives. The proposal is `OneDrive\FinancialIntel` (decision D62) –
  * one click creates it there; another folder (new or existing) through the system dialog. The buttons follow why the
  * folder did not open (B53), never the message's words.
  */

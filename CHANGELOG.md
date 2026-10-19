@@ -1,5 +1,38 @@
 # Financial Intel – zmiany
 
+## 1.6.6
+
+Poprawki z przeglądu aplikacji (grupa R, D87): teksty, wygląd i wygoda.
+
+Wygląd i prywatność (nowa zakładka Ustawienia → Wygląd i prywatność – ustawienia tego komputera):
+- Rozmiar interfejsu 90–150 % we wszystkich oknach, także w szybkim wpisie i panelach odłączonych: suwak albo Ctrl+Plus /
+  Ctrl+Minus, Ctrl+Shift+0 – 100 %.
+- „Wyższy kontrast”: jaśniejsze przygaszone napisy, najmniejsze napisy 12 px. Domyślnie wygląd bez zmian.
+- Kwoty mogą chować się same po wybranym czasie bez ruchu myszy i klawiatury albo po zablokowaniu ekranu; opcja
+  „Startuj z ukrytymi kwotami”. Przy ukrytych kwotach na pasku u góry „Pokaż na 5 min” i „do końca sesji”, Ctrl+$ jak
+  dotąd. Dymek zasobnika, powiadomienia i szybki wpis są wtedy też zamaskowane. To nie blokada.
+
+Mostek i Radar:
+- Krzywa majątku z ostatnich 26 tygodni na Mostku, „Wywiad →” prowadzi do całej historii.
+- Masa ładunku ze stałymi kosztami miesięcznie obok procentu; Daily Bias „Bearish” w kolorze akcentu – czerwień tylko
+  dla kwot.
+- „zamknij” pożyczkę z „Cofnij”; raty schodzą z ładowni jak zrzucony kontener (liczą się do końca miesiąca), a „otwórz”
+  oddaje tylko raty zdjęte zamknięciem.
+
+Teksty i formaty:
+- Metafory z prawdziwą nazwą obok (osłony – bufor na pensje, kadłub – fundusz awaryjny, ładunek – stałe koszty) w
+  alarmach, kreatorze, planie miesiąca, grze i Wywiadzie.
+- Daty jak w całej aplikacji (18.10.2026): potwierdzone saldo w Ustawieniach, saldo otwarcia, podpowiedź salda w
+  Operacjach, podtytuł PDF; eksport ZIP z datą warszawską.
+- Raporty: FVG kopert ze znakiem „+”, kwoty dni raportu wachty w zł, jedna nazwa „Ładownia (kontenery i opłaty
+  okresowe)”.
+- Odmiana i język: „1 operacja”, „3 nowe wpisy”, „(1 dzień)”, „Połączono z kontenerem: 2 płatności”, „Zaimportowano:
+  1 nowa operacja”, „Do stopnia porucznika”, misja „Rozliczenie z domownikami”, „Za planem o …”, „Komu pożyczasz”.
+- Szybki wpis: ukryta kwota „••• zł” jak w oknie głównym; Ustawienia → Zasobnik i start bez nieaktualnej zapowiedzi; na
+  kreatorze startu bez menu „Układ”.
+
+Wewnętrzne: usunięty nieużywany kod (formatery z ICTTJ, ekran-zaślepka, nieużywane wywołania procesu głównego).
+
 ## 1.6.5
 
 Poprawki z przeglądu aplikacji (grupa Q, D87): folder danych, system i dwa komputery.

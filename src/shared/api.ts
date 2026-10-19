@@ -184,7 +184,6 @@ export interface AppInfo {
   machineName: string
   platform: string
   userDataDir: string
-  isPortable: boolean
   /**
    * The first freeze of the game's days after a folder opened waits this long, and for this long without a change
    * from another computer (B33); test runs shorten them.
@@ -323,7 +322,6 @@ export interface FiApi {
   saveXlsx(defaultName: string, sheets: XlsxSheet[]): Promise<string | null>
   /** A report's self-contained HTML printed to an A4 PDF. */
   savePdf(defaultName: string, html: string): Promise<string | null>
-  copyText(text: string): Promise<void>
   /** `failure` – the last daily backup that did not come (B123), null when the last one did. */
   listBackups(): Promise<{ dir: string; files: BackupInfo[]; failure: { at: string; message: string; dir: string } | null }>
   backupNow(): Promise<string>
@@ -378,6 +376,8 @@ export interface FiApi {
   /** Preferences of this computer (shortcut, notifications, sounds, hidden amounts): a patch, the result for all windows. */
   setMachinePrefs(patch: Partial<MachinePrefs>): Promise<MachinePrefs>
   onMachinePrefs(cb: (prefs: MachinePrefs) => void): () => void
+  /** The hidden amounts shown (F40): for these minutes (then hidden again), null = till the app quits (no hiding by idleness). */
+  revealAmounts(minutes: number | null): Promise<MachinePrefs>
   /** A move in a window (D86): sent at most twice a minute by every window. */
   reportActivity(): Promise<void>
   /** This computer in use – a move in one of its windows within 10 min (D86); the change comes as `onInUse`. */
@@ -418,7 +418,7 @@ export interface FiApi {
   ictjState(): Promise<IctjSnapshot>
   /** The folder ICTTJ itself uses on this computer (only its path is read), to confirm; null = none found. */
   ictjSuggest(): Promise<string | null>
-  /** A folder chosen in a dialog (not used yet); null = cancelled. */
+  /** A folder chosen in a dialog; null = cancelled. */
   ictjPickDir(): Promise<string | null>
   /** Use this folder on this computer (null = none): it must hold ICTTJ's data; read and watched from now on. */
   ictjSetDir(dir: string | null): Promise<IctjSnapshot>

@@ -18,7 +18,7 @@ import { toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
-import { monthLabel, plDate } from '../../lib/format'
+import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName } from '@shared/calc/household'
@@ -85,7 +85,7 @@ export function RadarPage() {
                         <span className="min-w-0 flex-1 truncate">{s.loan.name}</span>
                         <span className="num">{zl(s.total)}</span>
                         {!readOnly && (
-                          <button className="text-accent hover:underline" onClick={() => closeLoan(s.loan, false)}>
+                          <button className="text-accent hover:underline" onClick={() => closeLoan(s.loan, false)} data-testid="loan-reopen">
                             otwórz
                           </button>
                         )}
@@ -112,7 +112,7 @@ export function RadarPage() {
                         </div>
                         {m.since && m.owed > 0 && (
                           <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
-                            {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({days} dni)
+                            {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({countLabel(days ?? 0, 'dzień', 'dni', 'dni')})
                             {via(m.memberId) ? ` · przekazuje przez: ${via(m.memberId)}` : ''}
                           </span>
                         )}
@@ -222,7 +222,7 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
             >
               {taken ? 'zapłać ratę' : 'spłata otrzymana'}
             </button>
-            <button className="hover:text-fg-strong" onClick={() => closeLoan(s.loan, true)} title="Zamknij pożyczkę (spłacona albo umorzona)">
+            <button className="hover:text-fg-strong" onClick={() => closeLoan(s.loan, true)} title="Zamknij pożyczkę (spłacona albo umorzona)" data-testid="loan-close">
               zamknij
             </button>
             <button className="hover:text-fg-strong" onClick={() => void deleteLoan(s.loan)} title="Usuń (tylko bez operacji)">
@@ -302,7 +302,7 @@ function NewLoanPanel({ today }: { today: string }) {
         <Field label="Nazwa" labelWidth={130}>
           <input className="input h-[24px] w-full" value={o.name} maxLength={80} onChange={(e) => set({ name: e.currentTarget.value })} placeholder={taken ? 'np. Kredyt na laptop' : 'np. Pożyczka dla Ani'} data-testid="loan-name" />
         </Field>
-        <Field label={taken ? 'Pożyczkodawca' : 'Kto pożycza'} labelWidth={130} hint="Jak w wyciągu z banku – import połączy przelewy.">
+        <Field label={taken ? 'Pożyczkodawca' : 'Komu pożyczasz'} labelWidth={130} hint="Jak w wyciągu z banku – import połączy przelewy.">
           <input className="input h-[24px] w-full" value={o.counterparty} maxLength={200} onChange={(e) => set({ counterparty: e.currentTarget.value })} data-testid="loan-counterparty" />
         </Field>
         <Field label="Kwota" labelWidth={130}>

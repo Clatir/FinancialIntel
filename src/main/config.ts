@@ -13,7 +13,7 @@ const DEFAULTS: MachineConfig = {
   backupDirOverride: null,
   window: null,
   updates: { prefs: { ...DEFAULT_UPDATE_PREFS }, pending: null, lastRunVersion: null, token: null, tokenEncrypted: false },
-  // Closing hides to the tray (decision E0-4: notifications work in the background); start with Windows off until the
+  // Closing hides to the tray (decision D64: notifications work in the background); start with Windows off until the
   // start wizard (E3) asks.
   tray: { closeToTray: true, launchAtLogin: false, notified: false },
   prefs: DEFAULT_MACHINE_PREFS,

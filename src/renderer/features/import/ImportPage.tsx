@@ -28,6 +28,7 @@ import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { bulkOptions, fits, hasCategory, type LoanPick, type Option } from './options'
+import { countLabel } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
@@ -153,7 +154,7 @@ function FilePanel() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="num text-fg-strong">{fileName}</span>
               <span className="text-muted">
-                {file.format === 'lista' ? 'lista operacji' : 'historia rachunku'} · {file.rows.length} operacji
+                {file.format === 'lista' ? 'lista operacji' : 'historia rachunku'} · {countLabel(file.rows.length, 'operacja', 'operacje', 'operacji')}
                 {file.period ? ` · ${fullDay(file.period.from)} – ${fullDay(file.period.to)}` : ''}
               </span>
             </div>

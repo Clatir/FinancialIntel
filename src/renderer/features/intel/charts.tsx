@@ -13,7 +13,7 @@ import { cx } from '../../components/ui'
 const zl = (g: number) => `${plnText(g)} zł`
 
 /** The wealth (the budget's money) at each week's end; the drawdown below; BOS / CHoCH where the structure broke. */
-export function WealthChart({ points, marks, height = 280 }: { points: readonly WealthPoint[]; marks: readonly StructureMark[]; height?: number }) {
+export function WealthChart({ points, marks, height = 280, testId = 'intel-wealth-chart' }: { points: readonly WealthPoint[]; marks: readonly StructureMark[]; height?: number; testId?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const fill = usePanelFill()
@@ -62,7 +62,7 @@ export function WealthChart({ points, marks, height = 280 }: { points: readonly 
   }, [points, marks, height, fill, hidden])
   return (
     <div className={cx(fill ? 'flex min-h-0 w-full flex-1 flex-col' : 'w-full')}>
-      <div ref={ref} style={fill ? { minHeight: 200 } : { height }} className={cx(fill ? 'w-full flex-1' : 'w-full')} data-testid="intel-wealth-chart" data-points={points.length} data-marks={marks.length} />
+      <div ref={ref} style={fill ? { minHeight: 200 } : { height }} className={cx(fill ? 'w-full flex-1' : 'w-full')} data-testid={testId} data-points={points.length} data-marks={marks.length} />
     </div>
   )
 }

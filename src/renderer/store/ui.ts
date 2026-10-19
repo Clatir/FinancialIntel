@@ -6,7 +6,7 @@ export type Page = 'bridge' | 'operations' | 'import' | 'month' | 'cargo' | 'sta
 
 export type Route = { page: Exclude<Page, 'settings'> } | { page: 'settings'; tab?: SettingsTab }
 
-export type SettingsTab = 'general' | 'accounts' | 'categories' | 'layers' | 'household' | 'import' | 'ictj' | 'notify' | 'folder' | 'system' | 'updates'
+export type SettingsTab = 'general' | 'accounts' | 'categories' | 'layers' | 'household' | 'import' | 'ictj' | 'notify' | 'view' | 'folder' | 'system' | 'updates'
 
 export interface Toast {
   id: number

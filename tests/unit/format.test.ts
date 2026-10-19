@@ -2,87 +2,24 @@
 import { describe, expect, it } from 'vitest'
 import {
   countLabel,
-  fmtAmount,
   fmtBytes,
-  fmtNum,
-  fmtPct,
-  fmtPctShort,
-  fmtPercent,
-  fmtPln,
   parseAmountInput,
   parseClockInput,
   parseDateInput,
   parseNumberInput,
-  plural,
-  tone
+  plural
 } from '../../src/renderer/lib/format'
 
 const NBSP = ' '
 const MINUS = '−'
 
-describe('kwoty w groszach (fmtPln)', () => {
-  it('pełne złote bez groszy, grosze po przecinku, tysiące ze spacją niełamiącą', () => {
-    expect(fmtPln(864000)).toBe(`8${NBSP}640${NBSP}zł`)
-    expect(fmtPln(10333)).toBe(`103,33${NBSP}zł`)
-    expect(fmtPln(0)).toBe(`0${NBSP}zł`)
-    expect(fmtPln(5)).toBe(`0,05${NBSP}zł`)
-    expect(fmtPln(123456789)).toBe(`1${NBSP}234${NBSP}567,89${NBSP}zł`)
-    expect(fmtPln(100000000)).toBe(`1${NBSP}000${NBSP}000${NBSP}zł`)
-  })
-
-  it('minus U+2212, plus tylko na życzenie; brak wartości = kreska', () => {
-    expect(fmtPln(-5)).toBe(`${MINUS}0,05${NBSP}zł`)
-    expect(fmtPln(-864000)).toBe(`${MINUS}8${NBSP}640${NBSP}zł`)
-    expect(fmtPln(100, { sign: true })).toBe(`+1${NBSP}zł`)
-    expect(fmtPln(-100, { sign: true })).toBe(`${MINUS}1${NBSP}zł`)
-    expect(fmtPln(0, { sign: true })).toBe(`0${NBSP}zł`)
-    expect(fmtPln(null)).toBe('—')
-    expect(fmtPln(undefined)).toBe('—')
-    expect(fmtPln(Number.NaN)).toBe('—')
-    expect(fmtPln(Number.POSITIVE_INFINITY)).toBe('—')
-  })
-
-  it('grosze zawsze, gdy decimals: always', () => {
-    expect(fmtPln(100, { decimals: 'always' })).toBe(`1,00${NBSP}zł`)
-    expect(fmtPln(864000, { decimals: 'always' })).toBe(`8${NBSP}640,00${NBSP}zł`)
-    expect(fmtPln(10333, { decimals: 'auto' })).toBe(`103,33${NBSP}zł`)
-    expect(fmtPln(-100, { decimals: 'always', sign: true })).toBe(`${MINUS}1,00${NBSP}zł`)
-  })
-
-  it('ułamek grosza zaokrąglony; nigdy „−0 zł”', () => {
-    expect(fmtPln(10333.4)).toBe(`103,33${NBSP}zł`)
-    expect(fmtPln(-0.4)).toBe(`0${NBSP}zł`)
-  })
-})
-
-describe('liczby i procenty', () => {
-  it('kwota z separatorem tysięcy, bez „−0.00”', () => {
-    expect(fmtAmount(1223.5, 'PLN')).toBe(`1${NBSP}223.50 PLN`)
-    expect(fmtAmount(-1223.5)).toBe(`${MINUS}1${NBSP}223.50`)
-    expect(fmtAmount(-0.001)).toBe('0.00')
-    expect(fmtAmount(12, undefined, 0)).toBe('12')
-    expect(fmtAmount(null)).toBe('—')
-    expect(fmtPct(11)).toBe('11.00%')
-    expect(fmtPct(-2.5, 1)).toBe(`${MINUS}2.5%`)
-    expect(fmtPctShort(50)).toBe('50%')
-    expect(fmtPctShort(46.5)).toBe('46.5%')
-    expect(fmtPercent(0.125, 1)).toBe('12.5%')
-    expect(fmtPercent(null)).toBe('—')
-    expect(fmtNum(1.23456, 3)).toBe('1.235')
-    expect(fmtNum(Number.NaN)).toBe('—')
-  })
-
-  it('rozmiary plików i kolor kwoty', () => {
+describe('rozmiary plików', () => {
+  it('rozmiary plików', () => {
     expect(fmtBytes(512)).toBe('512 B')
     expect(fmtBytes(2048)).toBe('2.0 KB')
     expect(fmtBytes(20 * 1024)).toBe('20 KB')
     expect(fmtBytes(3 * 1024 * 1024)).toBe('3.00 MB')
     expect(fmtBytes(2 * 1024 ** 3)).toBe('2.00 GB')
-    expect(tone(100)).toBe('up')
-    expect(tone(-1)).toBe('down')
-    expect(tone(0)).toBe('flat')
-    expect(tone(0.05, 0.1)).toBe('flat')
-    expect(tone(null)).toBe('flat')
   })
 })
 

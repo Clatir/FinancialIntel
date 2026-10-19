@@ -219,5 +219,7 @@ export function samePageLayout(a: PageLayout, b: PageLayout): boolean {
 /** Names of the pages outside the screens' list (the screens: `PAGES` in renderer/features/screens/pages.tsx). */
 export const PAGE_LABELS: Record<string, string> = {
   settings: 'Ustawienia',
-  sync: 'Synchronizacja'
+  sync: 'Synchronizacja',
+  inbox: 'Meldunki',
+  wizard: 'Kreator startu'
 }

@@ -78,6 +78,15 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
     await expect(page.getByTestId('state-debt')).toContainText('3 300,00 zł')
     await page.keyboard.press('Control+5')
     await expect(page.locator('[data-testid="cargo-row"][data-name="Rata: Laptop"]')).toBeVisible()
+
+    // „zamknij” with „Cofnij” (1.6.6, N35): the debt and the installments go, and come back as they were.
+    await page.keyboard.press('Control+7')
+    await page.locator('[data-testid="loan-row"][data-name="Laptop"]').getByTestId('loan-close').click()
+    await expect(page.getByTestId('radar-debt')).toHaveCount(0)
+    await expect.poll(async () => (await records(dir, 'containers')).filter((c) => c.loanId).map((c) => [c.archived, !!c.archivedAt])).toEqual([[true, true]])
+    await page.getByRole('status').filter({ hasText: 'Pożyczka „Laptop” zamknięta' }).getByTestId('toast-action').click()
+    await expect(page.getByTestId('radar-debt')).toHaveText('3 300,00 zł')
+    await expect.poll(async () => (await records(dir, 'containers')).filter((c) => c.loanId).map((c) => [c.archived, c.archivedAt])).toEqual([[false, null]])
     expect(errors).toEqual([])
   } finally {
     await app.close()

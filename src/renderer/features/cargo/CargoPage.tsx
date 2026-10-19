@@ -442,7 +442,7 @@ function LoadLine({ fleet }: { fleet: FleetState }) {
         </div>
         <Meter value={c.pct ?? 0} max={100} mark={c.limitPct / 100} />
         {c.pct == null && <p className="text-[11.5px] text-dim">Bez pensji w planie miesiąca nie ma z czym porównać.</p>}
-        {c.over && <p className="text-[11.5px] text-down">Ładunek ponad linią zanurzenia: stałe koszty zjadają za dużo pensji.</p>}
+        {c.over && <p className="text-[11.5px] text-down">Ładunek (stałe koszty) ponad linią zanurzenia – zjadają za dużo pensji.</p>}
         <p className="text-[11px] text-dim">Opłaty okresowe liczą się miesięczną częścią (np. OC 1 240 zł rocznie ≈ 103,33 zł miesięcznie).</p>
       </div>
     </Panel>
@@ -481,7 +481,7 @@ function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container
                     Opłata za {monthLabel(t.paidDue)} zapłacona – zbiornik zbiera na następny termin.
                   </span>
                 )}
-                {short > 0 && <span className="text-[11px] text-accent">Za plan o {zl(short)} – kolejne raty będą większe.</span>}
+                {short > 0 && <span className="text-[11px] text-accent">Za planem o {zl(short)} – kolejne raty będą większe.</span>}
               </div>
             )
           })}

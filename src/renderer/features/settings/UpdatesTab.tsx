@@ -12,7 +12,7 @@ import { Badge, Field, Panel, Toggle, cx } from '../../components/ui'
 /** GitHub's page for a new fine-grained token (only this repository, Contents: read-only). */
 const NEW_TOKEN_PAGE = 'https://github.com/settings/personal-access-tokens/new'
 
-/** Access to a private repository: the token of this computer, stored like the EODHD key. */
+/** Access to a private repository: the token of this computer, encrypted by the system where it can (safeStorage), as in ICTTJ. */
 function TokenPanel({ s }: { s: UpdateState }) {
   const [token, setToken] = useState('')
   const save = async () => {

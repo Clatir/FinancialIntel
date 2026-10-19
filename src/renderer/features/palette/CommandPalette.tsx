@@ -11,7 +11,7 @@ import { Kbd } from '../../components/ui'
 import { PAGES } from '../screens/pages'
 import { SETTINGS_TABS } from '../settings/SettingsPage'
 import { startWizard } from '../wizard/state'
-import { toggleHideAmounts } from '../../store/machine'
+import { revealAmounts, toggleHideAmounts, useMachine } from '../../store/machine'
 import { newOperation } from '../operations/state'
 import { openIctj } from '../../store/ictj'
 import { openFirstDocking } from '../dock/state'
@@ -33,6 +33,8 @@ export function CommandPalette() {
   const open = useUi((s) => s.paletteOpen)
   const layoutPresets = useData((s) => s.fi?.settings.layoutPresets ?? NO_PRESETS)
   const page = useUi((s) => s.route.page)
+  // „Pokaż na 5 minut” / „do końca sesji” only with the amounts hidden (F40): nothing to hide again otherwise.
+  const hidden = useMachine((s) => s.prefs.hideAmounts)
 
   const actions: Action[] = useMemo(
     () => [
@@ -40,6 +42,12 @@ export function CommandPalette() {
       { id: 'wizard', label: 'Kreator startu budżetu', run: () => startWizard() },
       { id: 'quick', label: 'Szybki wpis (okno nad wszystkimi)', run: () => void api.quickOpen() },
       { id: 'hide-amounts', label: 'Ukryj / pokaż kwoty', keys: 'Ctrl $', run: () => toggleHideAmounts() },
+      ...(hidden
+        ? [
+            { id: 'reveal-5', label: 'Pokaż ukryte kwoty na 5 minut', run: () => void revealAmounts(5) },
+            { id: 'reveal-session', label: 'Pokaż ukryte kwoty do końca sesji', run: () => void revealAmounts(null) }
+          ]
+        : []),
       { id: 'open-ictj', label: 'Otwórz ICT Trade Journal', run: () => void openIctj(() => navigate({ page: 'settings', tab: 'ictj' })) },
       { id: 'dock', label: 'Dokowanie: następna dostawa z XTB', run: () => (openFirstDocking() ? navigate({ page: 'bridge' }) : toast('Brak dostaw do zadokowania.')) },
       ...PAGES.map((p) => ({ id: `page-${p.page}`, label: `${p.label} – ${p.sub}`, keys: `Ctrl ${p.key}`, run: () => navigate({ page: p.page }) })),
@@ -71,7 +79,7 @@ export function CommandPalette() {
       { id: 'updates', label: 'Sprawdź aktualizacje', run: () => void checkForUpdates().then(() => navigate({ page: 'settings', tab: 'updates' })) },
       { id: 'help', label: 'Skróty klawiszowe', keys: '?', run: () => window.dispatchEvent(new Event('fi:shortcuts')) }
     ],
-    [layoutPresets, page]
+    [layoutPresets, page, hidden]
   )
 
   if (!open) return null

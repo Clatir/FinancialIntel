@@ -366,11 +366,11 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **N28** Kliknięcie alarmu w odprawie zawsze prowadzi do Planu miesiąca – `renderer/features/bridge/BridgePage.tsx:73`, `renderer/features/bridge/BridgePage.tsx:85` (+6)
 - [x] **N29** Dowództwo opisuje rozkaz „Dzienny przydział energii” wzorem podstawowego przydziału, a egzekwuje coś innego – `renderer/features/command/CommandPage.tsx:368`, `shared/calc/fleet.ts:130` (+1)
 - [x] **N30** Specyfikacja odprawy i powiadomień: brak godziny odprawy, automatycznego odsłuchu i godzin powiadomień; Silver Bullet nie skraca odprawy – `docs/specyfikacja.md:323`, `docs/specyfikacja.md:334` (+7)
-- [ ] **N31** Mostek: „Masa ładunku” bez prawdziwej nazwy i kwoty (reguła D34) – `renderer/features/bridge/BridgePage.tsx:406`, `renderer/features/bridge/BridgePage.tsx:408` (+22)
+- [x] **N31** Mostek: „Masa ładunku” bez prawdziwej nazwy i kwoty (reguła D34) – `renderer/features/bridge/BridgePage.tsx:406`, `renderer/features/bridge/BridgePage.tsx:408` (+22)
 - [x] **N32** Próg dziennika kapitańskiego 0 zł: szybki wpis nigdy nie pyta, reszta aplikacji pyta o każdy wydatek – `renderer/features/quick/QuickApp.tsx:102`, `shared/calc/operations.ts:112` (+5)
-- [ ] **N33** Niespójne formaty kwot, dat i tekstów między ekranami – `renderer/features/quick/QuickApp.tsx:104`, `renderer/app/App.tsx:240` (+18)
-- [ ] **N34** Martwy kod: nieużywane formatery z ICTTJ, ekran-zaślepka i flaga „ready” – `renderer/lib/format.ts:4`, `renderer/lib/format.ts:41` (+60)
-- [ ] **N35** „Cofnij” niespójnie przy archiwizacji i zamykaniu – `renderer/features/radar/actions.ts:143`, `renderer/features/radar/RadarPage.tsx:214` (+14)
+- [x] **N33** Niespójne formaty kwot, dat i tekstów między ekranami – `renderer/features/quick/QuickApp.tsx:104`, `renderer/app/App.tsx:240` (+18)
+- [x] **N34** Martwy kod: nieużywane formatery z ICTTJ, ekran-zaślepka i flaga „ready” – `renderer/lib/format.ts:4`, `renderer/lib/format.ts:41` (+60)
+- [x] **N35** „Cofnij” niespójnie przy archiwizacji i zamykaniu – `renderer/features/radar/actions.ts:143`, `renderer/features/radar/RadarPage.tsx:214` (+14)
 - [x] **N36** Formularze „Nowa pożyczka”, „Nowy kontener”, „Nowy cel” i podział łupów giną po przejściu na inny ekran – `renderer/features/radar/RadarPage.tsx:263`, `renderer/features/cargo/CargoPage.tsx:51` (+3)
 - [x] **N37** Ściągawka skrótów pokazuje stały „Ctrl Alt B”, choć skrót szybkiego wpisu można zmienić albo może się nie zarejestrować – `renderer/app/ShortcutsHelp.tsx:14`, `renderer/features/bridge/BridgePage.tsx:158-160` (+4)
 - [x] **N38** Panel „Przychody” liczy wypłaty z puli Podatek sprzed startu budżetu (i niezadokowane) jako przychód z tradingu – `shared/calc/income.ts:39`, `shared/calc/income.ts:62` (+4)
@@ -388,15 +388,15 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **N50** Filtr „Kategoria → bez kategorii” łapie wpływy, przelewy, XTB i zakupy domowników – inaczej niż oznaczenie „bez kategorii” – `shared/operationsView.ts:87`, `shared/operationsView.ts:32` (+4)
 - [x] **N51** Filtr „Oznaczenia” działa jako I (AND), pozostałe menu jako LUB – ten sam wygląd, inne znaczenie – `shared/operationsView.ts:92`, `shared/operationsView.ts:85` (+2)
 - [x] **N52** Zaokrąglenie odkładki: Ładownia pokazuje Math.round, harmonogram i Plan – trunc z resztą w ostatniej racie – `renderer/features/cargo/CargoPage.tsx:102`, `renderer/features/cargo/CargoPage.tsx:173` (+3)
-- [ ] **N53** Błędy językowe w tekstach ekranów – `renderer/features/month/MonthPage.tsx:149`, `renderer/features/wizard/WizardPage.tsx:114` (+11)
+- [x] **N53** Błędy językowe w tekstach ekranów – `renderer/features/month/MonthPage.tsx:149`, `renderer/features/wizard/WizardPage.tsx:114` (+11)
 - [x] **N54** Panel „Koperty” bieżącego miesiąca pomija kategorie bez koperty, a dla minionych miesięcy je pokazuje – `renderer/features/month/MonthPage.tsx:266`, `shared/calc/fleet.ts:902` (+1)
 - [x] **N55** Historia operacji niedostępna w trybie tylko do odczytu i dla wpisu z nowszej wersji – przycisk leży w fieldset disabled – `renderer/features/operations/OperationEditor.tsx:107`, `renderer/features/operations/OperationEditor.tsx:114` (+1)
 - [x] **N56** Zasięg zaokrąglony do 0,1 miesiąca pokazuje próg klasy, której okręt nie ma – `renderer/features/bridge/BridgePage.tsx:35`, `renderer/features/bridge/BridgePage.tsx:150` (+9)
-- [ ] **N57** Nieaktualne teksty w UI: „w późniejszych etapach” zasobnik pokaże energię, ICTTJ „w wersji 1.1” – `renderer/features/settings/SettingsPage.tsx:366`, `renderer/features/wizard/WizardPage.tsx:280` (+3)
-- [ ] **N58** Specyfikacja zapowiada na Mostku radar, wywiad i krzywą majątku – po E6 i E8 ich tam nie ma – `docs/specyfikacja.md:277`, `renderer/features/bridge/BridgePage.tsx:163`
+- [x] **N57** Nieaktualne teksty w UI: „w późniejszych etapach” zasobnik pokaże energię, ICTTJ „w wersji 1.1” – `renderer/features/settings/SettingsPage.tsx:366`, `renderer/features/wizard/WizardPage.tsx:280` (+3)
+- [x] **N58** Specyfikacja zapowiada na Mostku radar, wywiad i krzywą majątku – po E6 i E8 ich tam nie ma – `docs/specyfikacja.md:277`, `renderer/features/bridge/BridgePage.tsx:163`
 - [x] **N59** „Zaległa” na Radarze od 1. dnia po terminie, a w pożyczce i odprawie dopiero po 3 dniach – `shared/calc/radar.ts:89`, `renderer/features/radar/RadarPage.tsx:164` (+5)
-- [ ] **N60** Czerwień i zieleń poza kwotami: ETA po terminie, Bearish, plakietka „zaszyfrowany” – `renderer/features/starmap/StarMapPage.tsx:245`, `renderer/features/bridge/BridgePage.tsx:263` (+1)
-- [ ] **N61** Menu „Układ” na ekranie kreatora pokazuje identyfikator „wizard” zamiast nazwy – `renderer/features/layout/LayoutMenu.tsx:51`, `shared/panels.ts:220`
+- [x] **N60** Czerwień i zieleń poza kwotami: ETA po terminie, Bearish, plakietka „zaszyfrowany” – `renderer/features/starmap/StarMapPage.tsx:245`, `renderer/features/bridge/BridgePage.tsx:263` (+1)
+- [x] **N61** Menu „Układ” na ekranie kreatora pokazuje identyfikator „wizard” zamiast nazwy – `renderer/features/layout/LayoutMenu.tsx:51`, `shared/panels.ts:220`
 - [x] **N62** „Zapisz teraz” w palecie pomija pytanie o zmiany z drugiego komputera, które obsługuje Ctrl+S – `renderer/features/palette/CommandPalette.tsx:52`, `renderer/app/App.tsx:100`
 - [x] **N63** Krzywa majątku i przegląd roczny liczą pożyczkę zaciągniętą i depozyt domowników jako majątek – fałszywy BOS/CHoCH w górę – `shared/calc/intel.ts:27-88`, `shared/calc/intel.ts:330-334` (+8)
 - [x] **N64** Klasa okrętu bez histerezy: każdy powrót ponad tę samą granicę to nowy ekran „Nowa klasa” z fanfarą (D73) – `shared/calc/game.ts:636-643`, `renderer/store/game.ts:124` (+5)
@@ -407,7 +407,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **N69** Status misji „Dzień bez wydatków” liczy dzisiejszy, niezakończony dzień jako wolny od wydatków – `shared/calc/game.ts:414-417`, `renderer/features/command/CommandPage.tsx:74` (+3)
 - [x] **N70** „Poważne naruszenia w tym miesiącu” w Dowództwie liczone od ostatniej zmiany stopnia, w debriefingu – za cały miesiąc – `shared/calc/game.ts:589`, `shared/calc/game.ts:652-660` (+3)
 - [x] **N71** Raport wachty: wybrany tydzień zostaje w pamięci na tygodnie – „Raporty” z menu otwierają stary tydzień – `renderer/features/reports/state.ts:12-15`, `renderer/features/reports/ReportsPage.tsx:107` (+1)
-- [ ] **N72** Jedna wielkość pod trzema nazwami: „Ładownia” / „Ładownia i odkładki” / „Order Block · ładownia”; misja „Rozliczenie z domem” po D80 – `renderer/features/reports/ReportsPage.tsx:156`, `renderer/features/reports/ReportsPage.tsx:247` (+4)
+- [x] **N72** Jedna wielkość pod trzema nazwami: „Ładownia” / „Ładownia i odkładki” / „Order Block · ładownia”; misja „Rozliczenie z domem” po D80 – `renderer/features/reports/ReportsPage.tsx:156`, `renderer/features/reports/ReportsPage.tsx:247` (+4)
 - [x] **N73** Rozkazów nie da się zmienić w Dowództwie (spec), są tylko do odczytu z odnośnikiem do Ustawień – `renderer/features/command/CommandPage.tsx:366-376`, `docs/specyfikacja.md:226`
 - [x] **N74** „to nie duplikat” jest nieodwracalne, a „To nie to samo” w podobnych nazwach ma powrót w Ustawieniach – `renderer/features/import/DuplicatesPanel.tsx:98`, `renderer/features/import/DuplicatesPanel.tsx:150` (+2)
 - [x] **N75** Odnośnik „Możliwe duplikaty: N” z Operacji prowadzi do Importu, który przy otwartym pliku nie pokazuje panelu duplikatów – `renderer/features/operations/OperationsPage.tsx:215`, `renderer/features/import/ImportPage.tsx:823` (+1)
@@ -477,7 +477,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **F27** Kurs na 12 miesięcy: prognoza przepływów z wpływami *(nakład L)*
 - [ ] **F28** Reszta koperty planowej na następny miesiąc i „pokryj przekroczenie z innej koperty” *(nakład M)* · ⚠ D18 (łupy: osłony / cel / następny miesiąc) – rozszerzenie trzeciej opcji. „Pokryj przekroczenie” przed końcem dnia może usunąć naruszenie koperty (D73, T75) – trzeba zdecydować, czy gra ocenia stan przed przesunięciem, czy po nim.
 - [ ] **F29** „Skąd ta liczba?” – rozbicie energii dziś, zasięgu i warstw oraz słowniczek metafory *(nakład M)*
-- [ ] **F30** Skala interfejsu i tryb wyższego kontrastu (ustawienie komputera) *(nakład S)* · ⚠ D33 (wygląd jak ICTTJ) – tylko jako opcja komputera, domyślnie bez zmian.
+- [x] **F30** Skala interfejsu i tryb wyższego kontrastu (ustawienie komputera) *(nakład S)* · ⚠ D33 (wygląd jak ICTTJ) – tylko jako opcja komputera, domyślnie bez zmian.
 - [ ] **F31** Radar anomalii: nietypowe kwoty i możliwe podwójne obciążenia *(nakład M)*
 - [ ] **F32** Flota rezerwowa: IKE, IKZE, PPK, obligacje i lokaty poza budżetem *(nakład L)* · ⚠ D10 (jeden zbiór kont, podział wirtualny) i T31 – aktywa wychodzą poza warstwy, więc nie zmieniają osłon ani zasięgu. D73 / T81 – krzywa majątku jako suma sald kont budżetu. D54 – konto tradingowe (maklerskie) XTB nie może tu trafić. Jeśli IKE / IKZE są w XTB, trzeba potwierdzić, że to nie konto tradingowe.
 
@@ -490,7 +490,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **F37** Plan roczny: siatka kopert i pensji na 12 miesięcy *(nakład M)*
 - [ ] **F38** Paragony, faktury i gwarancje przy operacji – z terminem zwrotu lub rękojmi *(nakład M)* · ⚠ Brak sprzeczności z decyzją użytkownika. Trzeba zmienić decyzje techniczne T22 („bez protokołu plików – FI nie ma screenów”) i T20 (kopia „folder FI jest mały, bez screenów”) – kopie bez załączników albo tygodniowe, pilnowanie rozmiaru folderu na OneDrive.
 - [ ] **F39** Ulgi z PIT-37 / PIT-36: wydatki do odliczenia w roku *(nakład M)* · ⚠ D58 dotyczy tylko PIT-38 (termin bez kwoty) – PIT-37/36 to nowa sprawa. D8 (trading bez ZUS) sugeruje, że dochodu z PIT-37 może nie być – do potwierdzenia przez użytkownika.
-- [ ] **F40** Automatyczne ukrycie kwot po bezczynności i przy starcie z Windows *(nakład S)* · ⚠ D30 (bez blokady) – zgodne, bo to tylko ukrycie kwot.
+- [x] **F40** Automatyczne ukrycie kwot po bezczynności i przy starcie z Windows *(nakład S)* · ⚠ D30 (bez blokady) – zgodne, bo to tylko ukrycie kwot.
 - [ ] **F41** Wpisy z telefonu przez skrzynkę na OneDrive *(nakład M)* · ⚠ D2 (bez wersji na iPhone'a) – to nie aplikacja na telefon, tylko skrót iOS zapisujący plik; do decyzji użytkownika.
 - [x] **F42** Polskie dni wolne w liczeniu dni roboczych *(nakład S)* · ⚠ T63 (decyzja techniczna: „pon–pt, bez świąt”) – do zmiany. D72 mówi o „3 dniach roboczych”, więc uwzględnienie świąt jest zgodne z intencją użytkownika.
 - [ ] **F43** Zamknięcie i archiwizacja starych lat, porządki w folderze *(nakład L)* · ⚠ Brak sprzeczności z decyzją użytkownika. Zmienia decyzję techniczną T2 (jeden plik JSON na rekord) dla zamkniętych lat i wymaga ostrożności przy scalaniu / konfliktach (T18).

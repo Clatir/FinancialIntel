@@ -4,6 +4,7 @@ import { balanceSchema, SCHEMA_VERSION, transactionSchema, type Balance, type Tr
 import { addRecord, canWrite, updateRecord, useData } from '../../store/data'
 import { plnText } from '../../components/fields'
 import { toast } from '../../store/ui'
+import { plDate } from '../../lib/format'
 
 const records = <T,>(map: Record<string, { record: T }>): T[] => Object.values(map).map((e) => e.record)
 
@@ -39,7 +40,7 @@ export function confirmBalance(accountId: string, amount: number, date: string, 
   }
   if (plan.kind === 'opening') {
     setOpening(accountId, plan.amount, plan.date)
-    toast(`${accountName}: saldo otwarcia ustawione na początek ${plan.date} (${plnText(plan.amount)} zł).`, 'success', 5000)
+    toast(`${accountName}: saldo otwarcia ustawione na początek ${plDate(plan.date)} (${plnText(plan.amount)} zł).`, 'success', 5000)
     return plan
   }
   let correctionId: string | null = null
