@@ -162,13 +162,23 @@ export function planSignature(plan: ImportPlan | null): string {
  * with their import (F4, T39: the next import brings their rows).
  */
 async function deletedBankKeys(): Promise<Set<string>> {
+  // Read again only when an operation is gone since (W19): the next file of a session reads no history.
+  const { records, status } = useData.getState()
+  const now = records.transactions
+  const known = deletedMemo
+  if (known && known.dataDir === status?.dataDir && known.ids.every((id) => id in now)) return known.keys
   try {
     const deleted = (await api.historyDeleted('transactions')).filter((d) => d.reason !== 'undo')
-    return new Set(deleted.map((d) => (d.record as { bank?: { key?: unknown } } | null)?.bank?.key).filter((k): k is string => typeof k === 'string'))
+    const keys = new Set(deleted.map((d) => (d.record as { bank?: { key?: unknown } } | null)?.bank?.key).filter((k): k is string => typeof k === 'string'))
+    deletedMemo = { dataDir: status?.dataDir ?? null, ids: Object.keys(now), keys }
+    return keys
   } catch {
     return new Set()
   }
 }
+
+/** The deleted operations' keys and the operations there were when they were read (`deletedBankKeys`). */
+let deletedMemo: { dataDir: string | null; ids: string[]; keys: Set<string> } | null = null
 
 /** The account a file goes to: the one with the mBank import (the first), else mBank. */
 function importAccount(): string {

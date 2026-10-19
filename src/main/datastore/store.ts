@@ -1582,11 +1582,11 @@ export class DataStore {
     return this.history.read(kind, id, file)
   }
 
-  historyDeleted(collection: Collection): Promise<Array<HistoryEntry & { id: string; record: unknown }>> {
-    return this.mutex.run(async () => {
-      const existing = new Set(this.buildViews().records[collection].keys())
-      return this.history.deleted(collection, existing)
-    })
+  async historyDeleted(collection: Collection): Promise<Array<HistoryEntry & { id: string; record: unknown }>> {
+    // The records there now straight from the views (W19: no copy of their ids); the history read outside the lock –
+    // no save waits for it.
+    const existing = await this.mutex.run(async () => this.buildViews().records[collection])
+    return this.history.deleted(collection, existing)
   }
 
   /** Keep a version that is dropped without ever being written (local edits discarded when merging). */

@@ -170,4 +170,21 @@ describe('historia zmian wpisów (.history/)', () => {
     // A bad file name never leaves the record's folder.
     expect(await store.historyRead('transactions', t.id, '../../fi.json')).toBeNull()
   })
+
+  it('lista usuniętych (W19): wiele naraz czytanych równolegle – wszystkie, najnowsze pierwsze; istniejące i edytowane pominięte', async () => {
+    const base = await freshStore()
+    const store = await storeWithClock(base.root, 'PC-A', clock('2026-10-05T08:00:00.000Z', 1000))
+    const txs = Array.from({ length: 120 }, (_, i) => sampleTransaction({ note: `n${i}` }))
+    await store.saveRecords('transactions', txs)
+    // Every other one deleted (one at a time: each a minute later), one more only edited.
+    const gone = txs.filter((_, i) => i % 2 === 0)
+    for (const t of gone) await store.deleteRecord('transactions', t.id)
+    await store.saveRecord('transactions', { ...txs[1]!, note: 'zmienione' })
+    const deleted = await store.historyDeleted('transactions')
+    expect(deleted.map((d) => d.id)).toEqual(gone.map((t) => t.id).reverse())
+    expect(deleted.every((d) => d.reason === 'delete')).toBe(true)
+    // One brought back is no longer on the list.
+    await store.historyRestore('transactions', gone[0]!.id, deleted.at(-1)!.file)
+    expect((await store.historyDeleted('transactions')).map((d) => d.id)).toEqual(gone.slice(1).map((t) => t.id).reverse())
+  })
 })

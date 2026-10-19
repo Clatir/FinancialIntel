@@ -12,8 +12,11 @@ import { randomBytes } from 'node:crypto'
 import type { HistoryEntry, HistoryReason } from '@shared/api'
 import type { FileKind } from '@shared/paths'
 import { removeFile, writeFileAtomic } from './atomic'
+import { mapLimit } from './fsutil'
 
 export const HISTORY_DIR = '.history'
+/** Versions of the deleted records read at once (W19). */
+const HISTORY_READS = 16
 const EDIT_THROTTLE_MS = 10 * 60 * 1000
 export const MAX_PER_RECORD = 40
 
@@ -130,7 +133,7 @@ export class RecordHistory {
    * back with their import (reason 'undo', F4: their versions can be brought back; the import's own rows are not
    * blocked by them – T39).
    */
-  async deleted(kind: FileKind, existing: ReadonlySet<string>): Promise<Array<HistoryEntry & { id: string; record: SnapshotFile['record'] }>> {
+  async deleted(kind: FileKind, existing: { has(id: string): boolean }): Promise<Array<HistoryEntry & { id: string; record: SnapshotFile['record'] }>> {
     const base = join(this.root, HISTORY_DIR, kind)
     let ids: string[]
     try {
@@ -138,16 +141,18 @@ export class RecordHistory {
     } catch {
       return []
     }
-    const out: Array<HistoryEntry & { id: string; record: SnapshotFile['record'] }> = []
-    for (const id of ids) {
-      if (existing.has(id)) continue
-      const dir = join(base, id)
-      const names = await this.files(dir)
-      const last = names.at(-1)
-      if (!last || !(last.includes('_delete_') || last.includes('_undo_'))) continue
-      const s = await this.readFile(dir, last)
-      if (s) out.push({ ...this.entryOf(last, s), id, record: s.record })
-    }
-    return out.sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1))
+    // Several at once (W19): a file of the history on the second computer may come from the cloud first.
+    const found = await mapLimit(
+      ids.filter((id) => !existing.has(id)),
+      HISTORY_READS,
+      async (id) => {
+        const dir = join(base, id)
+        const last = (await this.files(dir)).at(-1)
+        if (!last || !(last.includes('_delete_') || last.includes('_undo_'))) return null
+        const s = await this.readFile(dir, last)
+        return s ? { ...this.entryOf(last, s), id, record: s.record } : null
+      }
+    )
+    return found.filter((x) => x != null).sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1))
   }
 }
