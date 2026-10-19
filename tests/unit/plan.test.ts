@@ -126,7 +126,7 @@ describe('podział pensji (spec: ładownia, odkładki, koperty planowe i codzien
     expect(s.cargo).toEqual({ items: [{ containerId: rent.id, name: 'Czynsz', amount: zl(2000) }], total: zl(2000) })
     // OC 1 240 zł a year = 11 × 103,33 + 103,37; October 2026 is the 7th month of the cycle ending in March 2027.
     expect(s.tanks.items).toEqual([{ containerId: oc.id, name: 'OC', amount: 10333, dueMonth: '2027-03', due: zl(1240) }])
-    expect(s.envelopes.daily).toEqual({ items: [{ categoryId: FOOD, limit: zl(1000) }, { categoryId: FUN, limit: zl(400) }], total: zl(1400) })
+    expect(s.envelopes.daily).toEqual({ items: [{ categoryId: FOOD, limit: zl(1000), extra: 0 }, { categoryId: FUN, limit: zl(400), extra: 0 }], total: zl(1400), extra: 0 })
     expect(s.envelopes.planned.total).toBe(zl(300))
     expect(s.allocated).toBe(zl(2000) + 10333 + zl(300) + zl(1400))
     expect(s.unallocated).toBe(zl(5000) - s.allocated)
@@ -153,8 +153,8 @@ describe('debriefing i łupy (D18)', () => {
     const d = debriefing('2026-09', { transactions, categories, plans: months, log: fleet.log, today: fleet.today })
     expect(d).toMatchObject({ salary: zl(3000), paid: zl(3000), costs: zl(2400), plus: true, cargo: zl(800), uncategorized: 0 })
     expect(d.envelopes).toEqual([
-      { categoryId: FOOD, kind: 'daily', limit: zl(2000), spent: zl(1200), gap: zl(800) },
-      { categoryId: AUTO, kind: 'planned', limit: zl(300), spent: zl(400), gap: -zl(100) }
+      { categoryId: FOOD, kind: 'daily', limit: zl(2000), extra: 0, spent: zl(1200), gap: zl(800) },
+      { categoryId: AUTO, kind: 'planned', limit: zl(300), extra: 0, spent: zl(400), gap: -zl(100) }
     ])
     // The energy left on 1 October: 3 000 − 2 400 = 600 zł – the loot, waiting for a decision (fleet.loot).
     expect(d.loot).toBe(zl(600))
@@ -166,8 +166,8 @@ describe('debriefing i łupy (D18)', () => {
   })
 
   it('podział łupów: na następny miesiąc i cele, reszta do osłon; za dużo – przycięte', () => {
-    expect(lootDecision(zl(600), { nextMonth: zl(200), goals: { G1: zl(100) } }, AT)).toEqual({ decidedAt: AT, shields: zl(300), nextMonth: zl(200), goals: { G1: zl(100) } })
-    expect(lootDecision(zl(600), { nextMonth: zl(5000), goals: {} }, AT)).toEqual({ decidedAt: AT, shields: 0, nextMonth: zl(600), goals: {} })
+    expect(lootDecision(zl(600), { nextMonth: zl(200), goals: { G1: zl(100) } }, AT)).toEqual({ decidedAt: AT, shields: zl(300), nextMonth: zl(200), goals: { G1: zl(100) }, envelopes: {} })
+    expect(lootDecision(zl(600), { nextMonth: zl(5000), goals: {} }, AT)).toEqual({ decidedAt: AT, shields: 0, nextMonth: zl(600), goals: {}, envelopes: {} })
   })
 })
 

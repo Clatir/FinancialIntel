@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
-import type { FleetState } from '@shared/calc/fleet'
-import { debriefing, lootApplied, lootDeadline, lootExtraOf, planFor, proposeEnvelopes, proposeSalary, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
+import { goalInstallment, ratedIn, type FleetState } from '@shared/calc/fleet'
+import { debriefing, envelopeExtraOf, lootApplied, lootDeadline, lootExtraOf, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
@@ -15,10 +15,12 @@ import { AmountField, amountsHidden, plnText, signedPln } from '../../components
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
+import { Modal } from '../../components/Modal'
 import { IconBack, IconNext } from '../../components/icons'
-import { dayLabel, monthLabel, plDate } from '../../lib/format'
+import { dayLabel, monthGenLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
-import { decideLoot, setEnvelope, setEnvelopes, setSalary, usePlans } from './actions'
+import { coverEnvelope, decideLoot, setEnvelope, setEnvelopes, setSalary, usePlans } from './actions'
+import { YearPlanPanel } from './YearPlan'
 import { EnvelopeBars, monthElapsed } from './EnvelopeBars'
 import { IncomePanel } from './IncomePanel'
 import { playSound } from '../../lib/sounds'
@@ -57,11 +59,26 @@ export function MonthPage() {
   const readOnly = folderLocked || planNewer
   const plan = planFor(plans, month)
   const own = plans.find((p) => p.month === month) ?? null
-  // The tanks' installments and the loot given to the month as the engine took them (N11).
-  const split = useMemo(
-    () => (plan && categories ? salarySplit(plan, month, containers, categories, month <= current && fleet ? sinkingOf(fleet.log, month) : undefined, fleet ? lootExtraOf(fleet.log, month) : 0) : null),
-    [plan, month, containers, categories, current, fleet]
-  )
+  const goalRecords = useRecordList('goals')
+  const [year, setYear] = useState(false)
+  // The tanks' and the goals' installments, the loot given to the month and the envelopes' extras as the engine took them
+  // (N11, F15, F28); a month ahead – the goals' installments of the plan (taken only with the shields and the hull full).
+  const split = useMemo(() => {
+    if (!plan || !categories) return null
+    const ran = month <= current && !!fleet
+    const log = fleet?.log ?? []
+    const byId = new Map(goalRecords.map((g) => [g.id, g]))
+    const items = ran
+      ? [...ratesOf(log, month)].map(([id, amount]) => ({ goalId: id, name: byId.get(id)?.name ?? '?', amount, deadline: byId.get(id)?.deadline ?? null }))
+      : goalRecords
+          .filter((g) => !g.archived && g.deadline && ratedIn(g.rates, month))
+          .map((g) => ({ goalId: g.id, name: g.name, amount: goalInstallment(g.target - (fleet?.goals.find((x) => x.id === g.id)?.amount ?? 0), month, g.deadline!), deadline: g.deadline }))
+          .filter((r) => r.amount > 0)
+    return salarySplit(plan, month, containers, categories, ran ? sinkingOf(log, month) : undefined, fleet ? lootExtraOf(log, month) : 0, {
+      rates: { items, planned: !ran },
+      extra: ran ? envelopeExtraOf(log, month, plans) : undefined
+    })
+  }, [plan, month, containers, categories, current, fleet, goalRecords, plans])
   const briefMonth = month < current ? month : addMonths(current, -1)
   const briefOf = (m: string) => debriefing(m, { transactions, categories: categories!, plans, log: fleet?.log ?? [], alarms: fleet?.alarms ?? [], containers, today })
   const brief = useMemo(() => (categories ? briefOf(briefMonth) : null), [briefMonth, transactions, categories, plans, fleet, today, containers])
@@ -92,6 +109,9 @@ export function MonthPage() {
             </button>
           )}
         </div>
+        <button className={cx('btn h-[22px]', year && 'border-accent/60 text-accent')} aria-pressed={year} onClick={() => setYear(!year)} title="Plan kampanii: pensja i koperty na 12 miesięcy roku" data-testid="month-year-toggle">
+          Plan kampanii
+        </button>
         <span className="text-[11.5px] text-muted" data-testid="month-source">
           {own ? 'plan tego miesiąca' : plan ? `korzysta z planu: ${monthLabel(plan.month)} – zmiana utworzy własny` : 'brak planu – wpisz pensję'}
         </span>
@@ -100,6 +120,7 @@ export function MonthPage() {
       </div>
       <NewerNote show={planNewer} />
       <div className="min-h-0 flex-1 overflow-auto">
+        {year && <YearPlanPanel year={month.slice(0, 4)} today={today} readOnly={folderLocked} onYear={(y) => setMonth(`${y}-${month.slice(5, 7)}`)} onMonth={(m) => setMonth(m)} />}
         <Columns id="month" tracks={['minmax(380px,1.1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
             <SalaryPanel month={month} plan={plan} fleet={fleet} current={current} readOnly={readOnly} transactions={transactions} />
@@ -114,7 +135,7 @@ export function MonthPage() {
           </div>
           <div className="flex min-w-0 flex-col">
             {month === current && <DailyPanel fleet={fleet} />}
-            <EnvelopesPanel month={month} current={current} fleet={fleet} brief={shownBrief} />
+            <EnvelopesPanel month={month} current={current} fleet={fleet} brief={shownBrief} readOnly={readOnly} />
             {brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? (
               <DebriefPanel brief={brief} fleet={fleet} today={today} plans={plans} readOnly={readOnly} />
             ) : (
@@ -219,6 +240,19 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
           split.tanks.items.map((t) => (
             <Row key={t.containerId} className="pl-3 text-[11.5px]" label={t.name} sub={`termin ${monthLabel(t.dueMonth)} · ${zl(t.due)}`} value={zl(t.amount)} />
           ))}
+        {split.rates.items.length > 0 && (
+          <>
+            <Row
+              label="Kurs przechwycenia – raty celów z terminem"
+              sub={split.rates.planned ? 'gdy osłony i kadłub pełne 1. dnia' : undefined}
+              value={zl(split.rates.total)}
+              testId="split-rates"
+            />
+            {split.rates.items.map((r) => (
+              <Row key={r.goalId} className="pl-3 text-[11.5px]" label={r.name} sub={r.deadline ? `do ${monthGenLabel(r.deadline)}` : undefined} value={zl(r.amount)} />
+            ))}
+          </>
+        )}
         {(['planned', 'daily'] as const).map((kind) => (
           <div key={kind} className="mt-2 flex flex-col">
             <div className="flex items-baseline justify-between border-b border-line pb-0.5">
@@ -237,6 +271,16 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
                       </span>
                     )}
                   </span>
+                  {(() => {
+                    // What the month adds to its limit (F28): the loot kept in it, the covers (± ).
+                    const extra = split.envelopes[kind].items.find((i) => i.categoryId === c.id)?.extra ?? 0
+                    return extra ? (
+                      <span className="num text-[11px] text-dim" title="Zapas z łupów poprzedniego miesiąca i pokrycia przekroczeń w tym miesiącu" data-testid="month-envelope-extra">
+                        {extra > 0 ? '+' : '−'}
+                        {plnText(Math.abs(extra))}
+                      </span>
+                    ) : null
+                  })()}
                   <AmountField
                     className="h-[22px] w-[110px]"
                     value={plan.envelopes[c.id] ?? null}
@@ -250,7 +294,7 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
                 </div>
               ))}
             {kind === 'daily' && split.lootExtra > 0 && (
-              <Row className="text-[11.5px]" label={`+ łupy z ${monthLabel(addMonths(month, -1))} (decyzja „na następny miesiąc”)`} value={zl(split.lootExtra)} testId="split-loot-extra" />
+              <Row className="text-[11.5px]" label={`+ łupy z ${monthGenLabel(addMonths(month, -1))} (decyzja „na następny miesiąc”)`} value={zl(split.lootExtra)} testId="split-loot-extra" />
             )}
             {kind === 'daily' && <div className="mt-0.5 text-[11px] text-dim">Podstawowy przydział: {zl(split.dailyBase)} dziennie</div>}
           </div>
@@ -300,16 +344,92 @@ function DailyPanel({ fleet }: { fleet: FleetState }) {
  * The envelopes of the month's plan against their limits – this month and a month that ended the same way (N54): only
  * categories with an envelope; the spending without one is a neutral line apart.
  */
-function EnvelopesPanel({ month, current, fleet, brief }: { month: string; current: string; fleet: FleetState; brief: Debriefing | null }) {
+function EnvelopesPanel({ month, current, fleet, brief, readOnly }: { month: string; current: string; fleet: FleetState; brief: Debriefing | null; readOnly: boolean }) {
   const cats = useCategories()
   const rows = month === current ? fleet.envelopes : (brief?.envelopes ?? [])
   const outside = brief?.outside ?? []
+  const [covering, setCovering] = useState<string | null>(null)
   if (month > current) return null
   return (
     <Panel title="Koperty" testId="month-envelopes">
-      {!rows.length ? <Empty>Brak kopert w tym miesiącu.</Empty> : <EnvelopeBars rows={rows} elapsed={month === current ? monthElapsed(fleet.today) : undefined} />}
+      {!rows.length ? (
+        <Empty>Brak kopert w tym miesiącu.</Empty>
+      ) : (
+        <EnvelopeBars rows={rows} elapsed={month === current ? monthElapsed(fleet.today) : undefined} onCover={month === current && !readOnly ? setCovering : undefined} />
+      )}
       {outside.length > 0 && <OutsideRow outside={outside} label={cats.label} />}
+      {covering && <CoverDialog month={month} to={covering} rows={fleet.envelopes} onClose={() => setCovering(null)} />}
     </Panel>
+  )
+}
+
+/**
+ * „Pokryj z koperty…” (F28): the overrun of a planned envelope covered from one with a reserve – its limit moved (two
+ * changes of the plan, „Cofnij”); the game rates the day by the limits before it (D73).
+ */
+function CoverDialog({ month, to, rows, onClose }: { month: string; to: string; rows: FleetState['envelopes']; onClose: () => void }) {
+  const cats = useCategories()
+  const target = rows.find((e) => e.categoryId === to)
+  const sources = rows.filter((e) => e.categoryId !== to && e.left > 0).sort((a, b) => b.left - a.left)
+  const [from, setFrom] = useState(sources[0]?.categoryId ?? '')
+  const source = sources.find((e) => e.categoryId === from)
+  const over = target ? Math.max(0, target.spent - target.limit) : 0
+  const [amount, setAmount] = useState<number | null>(Math.min(over, source?.left ?? 0) || null)
+  const max = source?.left ?? 0
+  const ok = !!source && amount != null && amount > 0 && amount <= max
+  return (
+    <Modal
+      title={`Pokryj przekroczenie: ${cats.label(to)}`}
+      width={420}
+      onClose={onClose}
+      testId="cover-dialog"
+      footer={
+        <>
+          <span className="flex-1" />
+          <button className="btn h-[26px]" onClick={onClose}>
+            Anuluj
+          </button>
+          <button
+            className="btn btn-accent h-[26px]"
+            disabled={!ok}
+            onClick={() => {
+              coverEnvelope(month, from, to, amount!, { from: cats.label(from), to: cats.label(to) })
+              onClose()
+            }}
+            data-testid="cover-confirm"
+          >
+            Pokryj
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 text-[12px]">
+        <p className="text-muted">
+          Ponad limit: <span className="num text-fg-strong">{zl(over)}</span>. Limit tej koperty rośnie, wybranej maleje – razem z planem miesiąca; ocena dnia w grze liczy stan sprzed przesunięcia.
+        </p>
+        {!sources.length ? (
+          <p className="text-accent">Żadna koperta nie ma zapasu w tym miesiącu.</p>
+        ) : (
+          <>
+            <label className="flex items-center gap-2">
+              <span className="w-[90px] text-muted">z koperty</span>
+              <select className="input h-[24px] flex-1" value={from} onChange={(e) => setFrom(e.currentTarget.value)} data-testid="cover-from">
+                {sources.map((e) => (
+                  <option key={e.categoryId} value={e.categoryId}>
+                    {cats.label(e.categoryId)} – zapas {zl(e.left)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="w-[90px] text-muted">kwota</span>
+              <AmountField className="h-[24px] w-[120px]" value={amount} allowEmpty onChange={setAmount} aria-label="Kwota pokrycia" data-testid="cover-amount" />
+              <span className="text-[11px] text-dim">najwyżej {zl(max)}</span>
+            </label>
+          </>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -340,10 +460,12 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
   // The split typed is kept while another screen is looked at (N36) – until a decision of the month (here or from the
   // other computer).
   const lootKey = `month:loot:${brief.month}`
-  const [loot, setLoot] = useDraft<{ next: number; goals: Record<string, number> }>(lootKey, () => ({ next: 0, goals: {} }))
+  const [loot, setLoot] = useDraft<{ next: number; goals: Record<string, number>; envelopes?: Record<string, number> }>(lootKey, () => ({ next: 0, goals: {}, envelopes: {} }))
   const { next, goals } = loot
+  const kept = loot.envelopes ?? {}
   const setNext = (v: number) => setLoot((x) => ({ ...x, next: v }))
   const setGoals = (v: Record<string, number>) => setLoot((x) => ({ ...x, goals: v }))
+  const setKept = (v: Record<string, number>) => setLoot((x) => ({ ...x, envelopes: v }))
   useEffect(() => {
     if (decision) clearDraft(lootKey)
   }, [decision, lootKey])
@@ -351,7 +473,11 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
   const offered = useMemo(() => fleet.goals.filter((g) => g.takes).sort((a, b) => a.priority - b.priority), [fleet.goals])
   const chosen = Object.fromEntries(offered.filter((g) => (goals[g.id] ?? 0) > 0).map((g) => [g.id, goals[g.id]!]))
   const goalsTotal = Object.values(chosen).reduce((a, b) => a + b, 0)
-  const toShields = Math.max(0, fleet.loot.amount - next - goalsTotal)
+  // The planned envelopes with a reserve left (F28): kept in them for the next month – at most what each did not spend.
+  const spare = brief.envelopes.filter((e) => e.kind === 'planned' && e.gap > 0)
+  const keptChosen = Object.fromEntries(spare.filter((e) => (kept[e.categoryId] ?? 0) > 0).map((e) => [e.categoryId, Math.min(e.gap, kept[e.categoryId]!)]))
+  const keptTotal = Object.values(keptChosen).reduce((a, b) => a + b, 0)
+  const toShields = Math.max(0, fleet.loot.amount - next - goalsTotal - keptTotal)
   usePlusFanfare(brief)
   return (
     <Panel title={`Debriefing – ${monthLabel(brief.month)}`} testId="month-debrief">
@@ -379,7 +505,7 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
           <div className="flex flex-col" data-testid="debrief-energy">
             <Row
               label="Energia miesiąca"
-              sub={`pensja ${zl(brief.energy.salary)}${brief.energy.sinking ? ` − odkładki ${zl(brief.energy.sinking)}` : ''}${brief.energy.loot ? ` + łupy ${zl(brief.energy.loot)}` : ''}`}
+              sub={`pensja ${zl(brief.energy.salary)}${brief.energy.sinking ? ` − odkładki ${zl(brief.energy.sinking)}` : ''}${brief.energy.rates ? ` − raty celów ${zl(brief.energy.rates)}` : ''}${brief.energy.loot ? ` + łupy ${zl(brief.energy.loot)}` : ''}`}
               value={zl(brief.energy.budget)}
             />
             <Row label="Wydane z energii (i ponad nią z osłon)" value={zl(brief.energy.used)} />
@@ -400,7 +526,13 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
             <Row label="Pula codzienna (koperty codzienne, łupy i bez kategorii)" sub={`${zl(brief.daily.spent)} z ${zl(brief.daily.limit)}`} value={<Gap value={brief.daily.gap} />} testId="debrief-daily" />
           )}
           {brief.envelopes.map((e) => (
-            <Row key={e.categoryId} label={cats.label(e.categoryId)} sub={`${zl(e.spent)} z ${zl(e.limit)}`} value={<Gap value={e.gap} />} testId="debrief-envelope" />
+            <Row
+              key={e.categoryId}
+              label={cats.label(e.categoryId)}
+              sub={`${zl(e.spent)} z ${zl(e.limit)}${e.extra ? ` (w tym ${e.extra > 0 ? '+' : '−'}${zl(Math.abs(e.extra))} zapasu i pokryć)` : ''}`}
+              value={<Gap value={e.gap} />}
+              testId="debrief-envelope"
+            />
           ))}
           {brief.outside.length > 0 && <OutsideRow outside={brief.outside} label={cats.label} />}
           <p className="text-[11px] text-dim">FVG kopert: luka między planem a faktem (+ zostało, − ponad plan).</p>
@@ -426,8 +558,22 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
                   <AmountField className="h-[22px] w-[110px]" value={goals[g.id] ?? 0} onChange={(v) => setGoals({ ...goals, [g.id]: v ?? 0 })} aria-label={`Cel ${g.name}`} />
                 </div>
               ))}
+              {spare.map((e) => (
+                <div key={e.categoryId} className="flex items-center gap-2" data-testid="loot-envelope" data-name={cats.label(e.categoryId)}>
+                  <span className="w-[150px] truncate text-muted" title={`Zostaje w kopercie na ${monthLabel(addMonths(brief.month, 1))} – jej limit wzrośnie (zapas ${zl(e.gap)})`}>
+                    zapas: {cats.label(e.categoryId)}
+                  </span>
+                  <AmountField className="h-[22px] w-[110px]" value={kept[e.categoryId] ?? 0} onChange={(v) => setKept({ ...kept, [e.categoryId]: Math.min(e.gap, v ?? 0) })} aria-label={`Zapas koperty ${cats.label(e.categoryId)}`} data-testid="loot-envelope-input" />
+                  <span className="text-[11px] text-dim">do {zl(e.gap)}</span>
+                </div>
+              ))}
               <Row label="do osłon (reszta)" value={zl(toShields)} />
-              <button className="btn btn-accent h-[24px] self-start" disabled={readOnly || next + goalsTotal > fleet.loot.amount} onClick={() => decideLoot(brief.month, fleet.loot.amount, { nextMonth: next, goals: chosen })} data-testid="loot-confirm">
+              <button
+                className="btn btn-accent h-[24px] self-start"
+                disabled={readOnly || next + goalsTotal + keptTotal > fleet.loot.amount}
+                onClick={() => decideLoot(brief.month, fleet.loot.amount, { nextMonth: next, goals: chosen, envelopes: keptChosen })}
+                data-testid="loot-confirm"
+              >
                 Zatwierdź podział łupów
               </button>
             </div>
@@ -451,13 +597,15 @@ function LootDecided({ month, decision, fleet }: { month: string; decision: NonN
   const applied = lootApplied(fleet.log, month)
   const decidedOn = warsawNow(decision.decidedAt).date
   const goals = Object.values(decision.goals).reduce((a, b) => a + b, 0)
-  const decided = decision.shields + decision.nextMonth + goals
-  const shown = applied ?? { amount: decided, shields: decision.shields, nextMonth: decision.nextMonth, goals }
+  const envelopes = Object.values(decision.envelopes ?? {}).reduce((a, b) => a + b, 0)
+  const decided = decision.shields + decision.nextMonth + goals + envelopes
+  const shown = applied ?? { amount: decided, shields: decision.shields, nextMonth: decision.nextMonth, goals, envelopes }
   const late = decidedOn > lootDeadline(month)
   return (
     <p className="text-[11.5px] text-muted" data-testid="loot-decided">
       Decyzja z {plDate(decidedOn)}: osłony {zl(shown.shields)}, następny miesiąc {zl(shown.nextMonth)}
-      {shown.goals ? `, cele ${zl(shown.goals)}` : ''}.
+      {shown.goals ? `, cele ${zl(shown.goals)}` : ''}
+      {shown.envelopes ? `, zapas kopert ${zl(shown.envelopes)}` : ''}.
       {late && applied ? (
         <span className="block text-accent">Decyzja po terminie (do {dayLabel(lootDeadline(month))}) – łupy trafiły do osłon.</span>
       ) : applied && applied.amount !== decided ? (

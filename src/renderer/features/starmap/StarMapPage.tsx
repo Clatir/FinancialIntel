@@ -4,6 +4,8 @@
  * against its target, its month and the ETA at the pace of the last months.
  */
 import { useMemo, useState } from 'react'
+import { addMonths, monthsBetween } from '@shared/calc/dates'
+import { goalInstallment, ratedIn } from '@shared/calc/fleet'
 import { byPriority, goalEtas, goalLate, goalPace } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
@@ -17,10 +19,10 @@ import { navigate, toast } from '../../store/ui'
 import { AmountField, MonthField, plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
-import { Badge, Empty, NameInput, Panel, cx } from '../../components/ui'
+import { Badge, Empty, NameInput, Panel, Toggle, cx } from '../../components/ui'
 import { Modal } from '../../components/Modal'
-import { countLabel, monthLabel } from '../../lib/format'
-import { addGoal, archiveGoal, moveGoal, moveGoalMoney, patchGoal, type GoalMoneyTarget } from './actions'
+import { countLabel, monthGenLabel, monthLabel } from '../../lib/format'
+import { addGoal, archiveGoal, moveGoal, moveGoalMoney, patchGoal, setGoalRate, type GoalMoneyTarget } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 import { useFocusRecord } from '../../components/focus'
 
@@ -417,8 +419,47 @@ function GoalRow({
       </div>
       <div className="pl-[26px]">
         <Meter value={amount} max={noTarget ? null : g.target} />
+        {g.deadline && !noTarget && !reached && <GoalCourse goal={g} amount={amount} pace={pace} month={month} readOnly={readOnly} />}
         <NewerNote show={newer} />
       </div>
+    </div>
+  )
+}
+
+/**
+ * The rate a goal with a deadline needs (F15, D87): what it lacks over the months to its deadline from next month's
+ * salary on, beside its pace; „rata z pensji” takes it from each salary after the tanks – only while the shields and the
+ * hull are full at the month's turn (D13: they first).
+ */
+function GoalCourse({ goal: g, amount, pace, month, readOnly }: { goal: Goal; amount: number; pace: number | null; month: string; readOnly: boolean }) {
+  const next = addMonths(month, 1)
+  const deadline = g.deadline!
+  const need = g.target - amount
+  const rated = ratedIn(g.rates, next)
+  const months = monthsBetween(next, deadline) + 1
+  const rate = goalInstallment(need, next, deadline)
+  const short = pace != null && rate > pace
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-0.5 text-[11.5px]" data-testid="starmap-need">
+      {deadline < next ? (
+        <span className="text-muted">
+          {deadline < month ? 'termin minął' : 'termin w tym miesiącu'} – brakuje {zl(need)}
+        </span>
+      ) : (
+        <span className={cx(short ? 'text-accent' : 'text-muted')} title={`${zl(need)} do ${monthGenLabel(deadline)} – ${countLabel(months, 'pensja', 'pensje', 'pensji')} od ${monthGenLabel(next)}`}>
+          kurs przechwycenia: {zl(rate)}/mies. do {deadline.slice(5, 7)}.{deadline.slice(0, 4)}
+          {pace != null ? ` · tempo ${zl(pace)}/mies.` : ''}
+        </span>
+      )}
+      {deadline >= next && (
+        <Toggle
+          checked={rated}
+          disabled={readOnly}
+          onChange={(on) => setGoalRate(g.id, on)}
+          label={<span title="Rata z każdej pensji po zbiornikach – tylko gdy osłony i kadłub są pełne na przełomie miesiąca">rata z pensji</span>}
+          data-testid="starmap-rate"
+        />
+      )}
     </div>
   )
 }

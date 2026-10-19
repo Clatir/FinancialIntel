@@ -183,7 +183,7 @@ describe('pensja 1. dnia (spec: 4 000 zł przy osłonach 2 500 zł)', () => {
     expect(s.energy).toBe(zl(4900))
     // The next month's daily envelopes grow by the loot: (3 000 + 900) / 30 days left of November on the 1st…
     expect(s.daily?.limit).toBe(zl(3900))
-    expect(lootApplied(s.log, '2026-10')).toEqual({ date: '2026-11-02', amount: zl(3900), goals: zl(2000), nextMonth: zl(900), shields: zl(1000) })
+    expect(lootApplied(s.log, '2026-10')).toEqual({ date: '2026-11-02', amount: zl(3900), goals: zl(2000), envelopes: 0, nextMonth: zl(900), shields: zl(1000) })
   })
 
   it('łupy zmienione po decyzji (późny import): silnik dzieli to, co jest – cele, następny miesiąc, reszta do osłon (B10)', () => {
@@ -197,10 +197,10 @@ describe('pensja 1. dnia (spec: 4 000 zł przy osłonach 2 500 zł)', () => {
       transactions: [tx('2026-10-05', zl(-100), { categoryId: FOOD }), late],
       now: '2026-11-06T12:00:00+01:00'
     })
-    expect(lootApplied(s.log, '2026-10')).toEqual({ date: '2026-11-02', amount: zl(2100), goals: zl(2000), nextMonth: zl(100), shields: 0 })
+    expect(lootApplied(s.log, '2026-10')).toEqual({ date: '2026-11-02', amount: zl(2100), goals: zl(2000), envelopes: 0, nextMonth: zl(100), shields: 0 })
     // Without a decision by the 7th: all of it to the shields on the 8th.
     const none = fleet({ settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(20000))], months: [plan('2026-10', zl(4000))], now: '2026-11-09T12:00:00+01:00' })
-    expect(lootApplied(none.log, '2026-10')).toEqual({ date: '2026-11-08', amount: zl(4000), goals: 0, nextMonth: 0, shields: zl(4000) })
+    expect(lootApplied(none.log, '2026-10')).toEqual({ date: '2026-11-08', amount: zl(4000), goals: 0, envelopes: 0, nextMonth: 0, shields: zl(4000) })
     expect(lootApplied(none.log, '2026-11')).toBeNull()
   })
 })

@@ -4,7 +4,8 @@
  * spending over time with the cargo as the Order Block, the range forecast without any payout, the captain's log.
  */
 import { useMemo, useState } from 'react'
-import { addMonths, monthRange } from '@shared/calc/dates'
+import { addDays, addMonths, monthOf, monthRange } from '@shared/calc/dates'
+import { openDays, scheduledDays } from '@shared/calc/scheduled'
 import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth } from '@shared/calc/intel'
 import { debriefing } from '@shared/calc/plan'
 import { sum } from '@shared/calc/operations'
@@ -16,9 +17,10 @@ import { plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Empty, Panel, Segmented, cx } from '../../components/ui'
-import { monthLabel, plDate } from '../../lib/format'
+import { monthGenLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { KillzoneMap, WealthChart } from './charts'
+import { CoursePanel, ManeuverPanel, useCourseInput } from './Course'
 import { useWealth } from './wealth'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -46,10 +48,20 @@ export function IntelPage() {
   const spending = useMemo(() => spendingByMonth(transactions, settings?.categories ?? [], months), [transactions, settings, months])
   const log = useMemo(() => (settings ? logAccuracy(transactions, settings.orders, months) : []), [transactions, settings, months])
   const [fvgMonth, setFvgMonth] = useState<string | null>(null)
+  // The buoys' money by month for the range's variant (F16): their open days of two years, a late one this month.
+  const scheduled = useRecordList('scheduled')
+  const buoys = useMemo(() => {
+    if (!today || !month) return undefined
+    const out = new Map<string, number>()
+    for (const d of openDays(scheduledDays(scheduled, transactions, today, addDays(today, -33), addDays(today, 760))))
+      if (d.scheduled.amount != null) out.set(d.date < today ? month : monthOf(d.date), (out.get(d.date < today ? month : monthOf(d.date)) ?? 0) + d.scheduled.amount)
+    return out
+  }, [scheduled, transactions, today, month])
+  const courseInput = useCourseInput(fleet)
   if (!fleet || !settings) return <Empty>Wczytywanie…</Empty>
   const fvgOf = fvgMonth ?? (fleet.start && addMonths(fleet.month, -1) >= fleet.start.slice(0, 7) ? addMonths(fleet.month, -1) : fleet.month)
   const brief = debriefing(fvgOf, { transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today })
-  const forecast = rangeForecast({ shields: fleet.shields.amount, hull: fleet.hull.amount, debt: fleet.debt, costs: fleet.costs.average, month: fleet.month })
+  const forecast = rangeForecast({ shields: fleet.shields.amount, hull: fleet.hull.amount, debt: fleet.debt, costs: fleet.costs.average, month: fleet.month, plans: buoys })
   const last = wealth.at(-1)
   const peak = wealth.length ? Math.max(...wealth.map((p) => p.value)) : 0
   const maxDd = wealth.reduce((m, p) => Math.min(m, p.drawdown), 0)
@@ -179,11 +191,23 @@ export function IntelPage() {
                     ? 'Brak średnich kosztów – prognoza po pierwszym pełnym miesiącu.'
                     : `Bez żadnej wypłaty paliwa starczy na ${rangeText(forecast.emptyIn)} (${monthLabel(addMonths(fleet.month, Math.floor(forecast.emptyIn)))}).`}
                 </span>
+                {forecast.plansEmpty !== undefined && (
+                  <span className="text-[11.5px] text-muted" data-testid="intel-range-plans">
+                    Z bojami (zaplanowane wydatki i wpływy): {forecast.plansEmpty ? `do ${monthGenLabel(forecast.plansEmpty)}` : 'starczy dłużej niż prognoza'} – druga kreska w każdym miesiącu.
+                  </span>
+                )}
                 {forecast.points.map((p) => (
                   <div key={p.month} className="flex items-center gap-2 text-[11.5px]">
                     <span className="w-[70px] text-dim">{monthLabel(p.month).slice(0, 3)} {p.month.slice(2, 4)}</span>
-                    <div className="h-[5px] flex-1 bg-line">
-                      <div className="h-full bg-accent" style={{ width: `${forecast.points[0]!.fuel ? (p.fuel / forecast.points[0]!.fuel) * 100 : 0}%` }} />
+                    <div className="flex flex-1 flex-col gap-[2px]">
+                      <div className="h-[5px] bg-line">
+                        <div className="h-full bg-accent" style={{ width: `${forecast.points[0]!.fuel ? (p.fuel / forecast.points[0]!.fuel) * 100 : 0}%` }} />
+                      </div>
+                      {p.withPlans != null && (
+                        <div className="h-[3px] bg-line" title={`Z bojami: ${zl(p.withPlans)}`}>
+                          <div className="h-full bg-fg-strong" style={{ width: `${forecast.points[0]!.fuel ? Math.min(100, (p.withPlans / forecast.points[0]!.fuel) * 100) : 0}%` }} />
+                        </div>
+                      )}
                     </div>
                     <span className="num w-[90px] text-right">{plnText(p.fuel)}</span>
                   </div>
@@ -191,6 +215,8 @@ export function IntelPage() {
                 <span className="text-[11px] text-dim">Osłony (bufor na pensje) i kadłub (fundusz awaryjny) pomniejszone o dług, wydawane po średnich kosztach netto.</span>
               </div>
             </Panel>
+            <CoursePanel fleet={fleet} input={courseInput} />
+            <ManeuverPanel fleet={fleet} input={courseInput} />
             <Panel title="Dziennik kapitański" testId="intel-log">
               <table className="w-full text-[11.5px]">
                 <thead>

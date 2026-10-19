@@ -11,12 +11,20 @@ import type { FleetEvent } from './fleet'
 
 // ------------------------------------------------------------------ changes from their moment on (1.4.2, D84 C1)
 
-type Dated = Pick<Goal, 'priority' | 'target' | 'archived'> & { past?: Goal['past']; activeFrom?: string | null }
+type Dated = Pick<Goal, 'priority' | 'target' | 'archived'> & { past?: Goal['past']; activeFrom?: string | null; deadline?: string | null }
 
-/** The goal's priority, target and archiving at a moment (ms): the state before the first change after it, else the current one. */
-export function goalAt(g: Dated, at: number): { priority: number; target: number; archived: boolean } {
-  for (const p of g.past ?? []) if (at < Date.parse(p.until)) return { priority: p.priority, target: p.target, archived: p.archived }
-  return { priority: g.priority, target: g.target, archived: g.archived }
+/**
+ * The goal's priority, target, archiving and deadline at a moment (ms): the state before the first change after it, else
+ * the current one. A state from before 1.8.0 has no deadline – the next one known (a later state's, else the current).
+ */
+export function goalAt(g: Dated, at: number): { priority: number; target: number; archived: boolean; deadline: string | null } {
+  const past = g.past ?? []
+  for (const [i, p] of past.entries())
+    if (at < Date.parse(p.until)) {
+      const known = past.slice(i).find((x) => x.deadline !== undefined)
+      return { priority: p.priority, target: p.target, archived: p.archived, deadline: known ? (known.deadline ?? null) : (g.deadline ?? null) }
+    }
+  return { priority: g.priority, target: g.target, archived: g.archived, deadline: g.deadline ?? null }
 }
 
 /** The goal takes money that came in at a moment (ms): it was there by then (from 1.4.2 – before, always) and not archived. */
@@ -36,9 +44,10 @@ export const goalDecided = (g: Dated, at: number): boolean => goalTakes(g, at) |
  */
 export function changeGoal(g: Goal, patch: Partial<Omit<Goal, 'past' | 'id'>>, now: string): Goal {
   const next: Goal = { ...g, ...patch, updatedAt: now }
-  if (next.priority === g.priority && next.target === g.target && next.archived === g.archived) return next
+  // The deadline too (1.8.0): the installments from the salary of the months before keep theirs (F15).
+  if (next.priority === g.priority && next.target === g.target && next.archived === g.archived && next.deadline === g.deadline) return next
   if (g.activeFrom != null && Date.parse(g.activeFrom) >= Date.parse(now)) return next
-  return { ...next, past: [...(g.past ?? []), { until: now, priority: g.priority, target: g.target, archived: g.archived }] }
+  return { ...next, past: [...(g.past ?? []), { until: now, priority: g.priority, target: g.target, archived: g.archived, deadline: g.deadline }] }
 }
 
 /** The goal's money moved out now (C2, B30): `amount` (what it holds now) to the shields or another goal. */
@@ -93,7 +102,8 @@ export function syncIctjGoals(forecast: IctjForecast | null, goals: readonly Goa
         // It takes money from the moment it comes (C1): what came in before belonged elsewhere.
         activeFrom: now,
         past: [],
-        transfers: []
+        transfers: [],
+        rates: []
       })
       continue
     }

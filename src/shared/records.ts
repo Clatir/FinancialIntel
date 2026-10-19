@@ -12,6 +12,7 @@ import {
   importBatchSchema,
   loanSchema,
   monthPlanSchema,
+  scheduledSchema,
   transactionSchema,
   type Balance,
   type Container,
@@ -21,6 +22,7 @@ import {
   type ImportBatch,
   type Loan,
   type MonthPlan,
+  type Scheduled,
   type Transaction
 } from './schema/records'
 
@@ -35,6 +37,7 @@ export interface RecordTypes {
   balances: Balance
   game: GameMonth
   imports: ImportBatch
+  scheduled: Scheduled
 }
 
 export type AnyRecord = RecordTypes[Collection]
@@ -49,7 +52,8 @@ export const SCHEMAS: { [K in FileKind]: z.ZodType<RecordTypes[K]> } = {
   loans: loanSchema as z.ZodType<Loan>,
   balances: balanceSchema as z.ZodType<Balance>,
   game: gameMonthSchema as z.ZodType<GameMonth>,
-  imports: importBatchSchema as z.ZodType<ImportBatch>
+  imports: importBatchSchema as z.ZodType<ImportBatch>,
+  scheduled: scheduledSchema as z.ZodType<Scheduled>
 }
 
 export type ParseOutcome<K extends FileKind> =

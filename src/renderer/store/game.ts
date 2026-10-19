@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
-import { advanceGame, gameStartFor, gameView, rateDay, type DayRating, type GameInput, type GameView } from '@shared/calc/game'
+import { advanceGame, coversOf, gameStartFor, gameView, rateDay, type DayRating, type GameInput, type GameView } from '@shared/calc/game'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
 import { pendingPairDays } from '@shared/calc/dock'
 import { useDeliveries } from '../features/dock/state'
@@ -118,7 +118,8 @@ export function useGameView(): { view: GameView; input: GameInput } | null {
     const { fi, records } = useData.getState()
     if (!fi) return null
     const input = gameInputOf(fi, records)
-    return { view: timed('gra: widok', () => gameView(input.game, fi.settings.game, today)), input }
+    // The covers of an overrun (F28) in the watch's log: the month plans are among what the game reads.
+    return { view: timed('gra: widok', () => gameView(input.game, fi.settings.game, today, coversOf(input.months))), input }
     // `parts` and `today` are the key (read inside from the store's state of now).
   }, [parts, today])
 }

@@ -1,4 +1,5 @@
 /** The goals' records (E5, D72): an own goal added at the end of the list, edited, archived; the list's order. */
+import { addMonths, warsawNow } from '@shared/calc/dates'
 import { byPriority, changeGoal, renumber, transferGoal } from '@shared/calc/goals'
 import { newId } from '@shared/ids'
 import { goalSchema, SCHEMA_VERSION, type Goal } from '@shared/schema'
@@ -31,6 +32,32 @@ export function addGoal(o: { name: string; target: number; deadline: string | nu
 export function patchGoal(id: string, patch: Partial<Pick<Goal, 'name' | 'target' | 'deadline' | 'note'>>): void {
   const now = new Date().toISOString()
   updateRecord('goals', id, (g) => (g.source === 'own' ? changeGoal(g, patch, now) : g))
+}
+
+/**
+ * The goal's installment from the salary on or off (F15, D87 – „Kurs przechwycenia”): from next month's salary on (this
+ * month's is paid already), off from next month too – the months it took one keep it. Any goal, an ICTTJ one too (the
+ * option is FI's own).
+ */
+export function setGoalRate(id: string, on: boolean): void {
+  if (!canWrite()) return
+  const month = warsawNow().month
+  const next = addMonths(month, 1)
+  updateRecord('goals', id, (g) => {
+    const rates = [...(g.rates ?? [])]
+    const open = rates.findIndex((r) => r.until == null || r.until >= next)
+    if (on) {
+      if (open >= 0) return g
+      rates.push({ from: next, until: null })
+    } else {
+      if (open < 0) return g
+      const r = rates[open]!
+      // A period that never took one (it starts later) goes; else it ends with this month.
+      if (r.from >= next) rates.splice(open, 1)
+      else rates[open] = { ...r, until: month }
+    }
+    return { ...g, rates, updatedAt: new Date().toISOString() }
+  })
 }
 
 /** Where a goal's money may go: the shields or another goal (by id). */

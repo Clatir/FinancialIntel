@@ -8,8 +8,8 @@
 import type { GameSettings } from '../schema/budget'
 import { SCHEMA_VERSION } from '../schema/common'
 import type { Settings } from '../schema/settings'
-import type { GameDay, GameMission, GameMonth, Transaction } from '../schema/records'
-import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, weekdayOf } from './dates'
+import type { GameDay, GameMission, GameMonth, MonthPlan, Transaction } from '../schema/records'
+import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, warsawStartOf, weekdayOf } from './dates'
 import { activeIn, cargoMass, computeFleet, envelopeOverrun, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
 import { categoryIndex, costOf, isCargoPayment, isConfirmedNight, ownSpent, partsOf, sum } from './operations'
 import { debriefing } from './plan'
@@ -217,7 +217,8 @@ export function namesNote(names: readonly string[]): string {
 }
 
 export function rateDay(input: GameInput, date: string, prev: GameDay | null = null): DayRating {
-  const f = computeFleet({ ...input, now: warsawEndOf(date) })
+  // The limits before the covers made that day (F28, D73): an overrun covered the same day is still the day's.
+  const f = computeFleet({ ...input, now: warsawEndOf(date), coversBefore: warsawStartOf(date).toISOString() })
   const { settings } = input
   const violations: GameDay['violations'] = []
   const add = (order: ViolationKind, amount: number | null, ref: string | null = null, note = '') => violations.push({ order, serious: SERIOUS.has(order), note: note.slice(0, 500), ref, amount })
@@ -710,6 +711,7 @@ export type WatchEntry =
   | { kind: 'rank'; date: string; rank: Rank; change: 'up' | 'down' }
   | { kind: 'mission'; date: string; template: string; week: string; done: boolean | null; params: GameMission['params'] }
   | { kind: 'achievement'; date: string; id: AchievementId }
+  | { kind: 'cover'; date: string; from: string; to: string; amount: number }
 
 export interface GameView {
   start: string | null
@@ -743,7 +745,12 @@ const SHIP_ORDER = (c: string) => (SHIP_CLASSES as readonly string[]).indexOf(c)
 /** Days a class must stay above to be celebrated again (N64): a return to a class held lately is no news. */
 export const CLASS_PEAK_DAYS = 30
 
-export function gameView(game: readonly GameMonth[], gs: GameSettings, today: string): GameView {
+/** The covers of an overrun (F28) as the watch log shows them: each on its Warsaw day. */
+export function coversOf(months: readonly Pick<MonthPlan, 'envelopeCovers'>[] | undefined): Array<Extract<WatchEntry, { kind: 'cover' }>> {
+  return (months ?? []).flatMap((p) => (p.envelopeCovers ?? []).map((c) => ({ kind: 'cover' as const, date: warsawNow(c.at).date, from: c.from, to: c.to, amount: c.amount })))
+}
+
+export function gameView(game: readonly GameMonth[], gs: GameSettings, today: string, covers: ReadonlyArray<Extract<WatchEntry, { kind: 'cover' }>> = []): GameView {
   const start = gs.start
   const days = allDays(game)
   const dates = [...days.keys()].sort()
@@ -794,7 +801,9 @@ export function gameView(game: readonly GameMonth[], gs: GameSettings, today: st
     if (m.evaluatedAt) log.push({ kind: 'mission', date: sundayOf(m.week), template: m.template, week: m.week, done: m.done, params: m.params })
   }
   for (const a of earned) log.push({ kind: 'achievement', date: a.day ?? warsawStamp(a.at).slice(0, 10), id: a.id })
-  const rankOrder: Record<WatchEntry['kind'], number> = { rank: 0, achievement: 1, mission: 2, class: 3, violation: 4, tag: 5 }
+  // A cover of an overrun from another envelope (F28): two changes of the plan, in the log of the watch.
+  for (const c of covers) if (c.date <= today) log.push(c)
+  const rankOrder: Record<WatchEntry['kind'], number> = { rank: 0, achievement: 1, mission: 2, class: 3, violation: 4, cover: 5, tag: 6 }
   log.sort((a, b) => b.date.localeCompare(a.date) || rankOrder[a.kind] - rankOrder[b.kind])
   const month = monthOf(today)
   const from = later(firstDayOf(month), since ? addDays(since, 1) : (start ?? firstDayOf(month)))

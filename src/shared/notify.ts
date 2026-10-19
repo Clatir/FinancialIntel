@@ -146,6 +146,10 @@ export function dueNotices(o: NotifyInput): Notice[] {
     if (i.kind === 'pit38' && p.pit38) out.push({ key: i.key, tag: 'radar', title: 'PIT-38 na radarze', body: i.text })
     // A household member's purchases still owed after 30 days (D80 e), once per member and oldest purchase.
     if (i.kind === 'house' && p.house) out.push({ key: i.key, tag: 'radar', title: 'Rozliczenie z domownikiem', body: i.text })
+    // A planned operation's reminders and a late one, a container's end (F16); an account short before a payment (F26).
+    if (i.kind === 'plan' && p.plans) out.push({ key: i.key, tag: 'radar', title: i.text.startsWith('Termin') ? 'Termin na radarze' : 'Boja na kursie', body: i.text })
+    if (i.kind === 'end' && p.plans) out.push({ key: i.key, tag: 'radar', title: 'Koniec kontenera', body: i.text })
+    if (i.kind === 'account' && p.accounts) out.push({ key: i.key, tag: 'radar', alarm: true, title: 'Za mało na koncie przed płatnością', body: i.text })
   }
   // Sunday: this week's balances, unless confirmed since Monday already – each account on its own (B28).
   if (p.balances && weekdayOf(today) === 7) {

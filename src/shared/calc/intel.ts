@@ -196,18 +196,38 @@ export function spendingByMonth(transactions: readonly Transaction[], categories
 
 // ------------------------------------------------------------------ the range forecast
 
-/** The fuel without any payout (spec): the shields and the hull less the debt, spent at the average costs month by month. */
-export function rangeForecast(o: { shields: number; hull: number; debt: number; costs: number | null; month: string; horizon?: number }): { points: Array<{ month: string; fuel: number }>; emptyIn: number | null } {
+/**
+ * The fuel without any payout (spec): the shields and the hull less the debt, spent at the average costs month by month.
+ * With the buoys (F16 – `plans`: month → their money, signed): the variant „z bojami” beside – the planned expenses
+ * out of it, the planned income into it, each in its month (`withPlans`; `plansEmpty` – its month of no fuel).
+ */
+export function rangeForecast(o: { shields: number; hull: number; debt: number; costs: number | null; month: string; horizon?: number; plans?: ReadonlyMap<string, number> }): {
+  points: Array<{ month: string; fuel: number; withPlans?: number }>
+  emptyIn: number | null
+  plansEmpty?: string | null
+} {
   const start = Math.max(0, o.shields + o.hull - o.debt)
   if (!o.costs || o.costs <= 0) return { points: [{ month: o.month, fuel: start }], emptyIn: null }
   const horizon = o.horizon ?? 24
-  const points: Array<{ month: string; fuel: number }> = []
+  const withPlans = !!o.plans?.size
+  const points: Array<{ month: string; fuel: number; withPlans?: number }> = []
+  let planned = 0
+  let plansEmpty: string | null = null
   for (let i = 0; i <= horizon; i++) {
+    const month = addMonths(o.month, i)
     const fuel = Math.max(0, start - i * o.costs)
-    points.push({ month: addMonths(o.month, i), fuel })
-    if (!fuel) break
+    if (withPlans) {
+      planned += o.plans!.get(month) ?? 0
+      const v = Math.max(0, start - i * o.costs + planned)
+      if (!v && !plansEmpty) plansEmpty = month
+      points.push({ month, fuel, withPlans: v })
+      if (!fuel && !v) break
+    } else {
+      points.push({ month, fuel })
+      if (!fuel) break
+    }
   }
-  return { points, emptyIn: start / o.costs }
+  return withPlans ? { points, emptyIn: start / o.costs, plansEmpty } : { points, emptyIn: start / o.costs }
 }
 
 // ------------------------------------------------------------------ the captain's log

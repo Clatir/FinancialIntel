@@ -345,6 +345,10 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
       text = `Osiągnięcie: ${ACHIEVEMENT_INFO[e.id].name} – ${ACHIEVEMENT_INFO[e.id].text}`
       mark = 'bg-fg-strong'
       break
+    case 'cover':
+      // F28, D73: the day is rated by the limits before the cover – the log says where the limit came from.
+      text = `Pokrycie przekroczenia: ${label(e.to)} z koperty ${label(e.from)} – ${plnText(e.amount)} zł limitu`
+      break
   }
   return (
     <div className="flex items-start gap-2 py-0.5" data-testid="command-log-entry" data-kind={e.kind}>

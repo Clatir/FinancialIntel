@@ -152,6 +152,9 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     await quick.getByTestId('quick-amount').fill('70')
     await quick.getByTestId('quick-counterparty').fill('Biedronka')
     await expect(quick.getByTestId('quick-category')).toHaveValue(GROCERIES)
+    // A daytime hour: the default one (now) falls in the quiet hours when the suite runs at night.
+    await quick.getByTestId('quick-time').fill('12:00')
+    await quick.getByTestId('quick-time').press('Tab')
     await quick.getByTestId('quick-save').click()
     await expect.poll(async () => (await operations(dir)).some((t) => t.amount === -7000)).toBe(true)
     await expect(win.getByTestId('state-energy')).not.toHaveText(energy ?? '')

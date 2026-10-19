@@ -160,6 +160,11 @@ export function monthLabel(month: string): string {
   return `${MONTH_PL[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`
 }
 
+/** '2026-10' → „października 2026” (after „od”, „do”). */
+export function monthGenLabel(month: string): string {
+  return `${MONTH_PL_GEN[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`
+}
+
 /** '2026-10-17' → „17 października”. */
 export function dayLabel(date: string): string {
   return `${Number(date.slice(8, 10))} ${MONTH_PL_GEN[Number(date.slice(5, 7)) - 1] ?? ''}`.trim()

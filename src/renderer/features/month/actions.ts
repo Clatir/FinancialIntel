@@ -1,9 +1,13 @@
 import { useMemo } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
+import { copyOnMonths } from '@shared/calc/yearPlan'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
 import { addRecord, canWrite, monthTooNew, tooNewMonths, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
+import { newId } from '@shared/ids'
+import { plnText } from '../../components/fields'
+import { monthGenLabel } from '../../lib/format'
 
 const NO_PLANS = {}
 
@@ -91,7 +95,45 @@ export function restoreEnvelope(categoryId: string, taken: ReadonlyMap<string, n
 }
 
 /** The loot split of `month` (D18): next month's daily envelopes and goals; the rest to the shields. */
-export function decideLoot(month: string, loot: number, choice: { nextMonth: number; goals: Record<string, number> }): void {
+export function decideLoot(month: string, loot: number, choice: { nextMonth: number; goals: Record<string, number>; envelopes?: Record<string, number> }): void {
   const decision = lootDecision(loot, choice, new Date().toISOString())
   editPlan(month, (p) => ({ ...p, loot: decision }))
+}
+
+/**
+ * „Pokryj z koperty…” (F28, D73): `amount` of this month's limit moved from the envelope `from` to the overrun `to` –
+ * two changes of the plan at once, in the watch's log; the game rates the day by the limits before it. „Cofnij” takes
+ * the cover back.
+ */
+export function coverEnvelope(month: string, from: string, to: string, amount: number, names: { from: string; to: string }): void {
+  if (!canWrite() || amount <= 0 || from === to) return
+  const id = newId()
+  editPlan(month, (p) => ({ ...p, envelopeCovers: [...(p.envelopeCovers ?? []), { id, from, to, amount, at: new Date().toISOString() }] }))
+  toast(`Koperta ${names.to} pokryta z ${names.from}: ${plnText(amount)} zł limitu.`, 'success', 6000, {
+    label: 'Cofnij',
+    run: () => editPlan(month, (p) => ({ ...p, envelopeCovers: (p.envelopeCovers ?? []).filter((c) => c.id !== id) }))
+  })
+}
+
+/**
+ * „Kopiuj dalej” in the year's plan (F37): the row's value of `month` set in it and in each later month of the year with
+ * its own plan – the months without one take it from the last earlier plan anyway. „Cofnij” sets back each month's value
+ * from before (a month that got its own plan keeps it, with the old value).
+ */
+export function copyOnward(month: string, rowId: string, value: number | null, label: string): void {
+  if (!canWrite()) return
+  const plans = allPlans()
+  const months = copyOnMonths(month.slice(0, 4), month, plans).filter((m) => m >= warsawNow().month && !monthTooNew('months', m))
+  const valueOf = (p: MonthPlan | null) => (rowId === 'salary' ? (p?.salary ?? 0) : (p?.envelopes[rowId] ?? null))
+  const before = new Map(months.map((m) => [m, valueOf(planFor(plans, m))]))
+  const set = (m: string, v: number | null) => (rowId === 'salary' ? setSalary(m, v ?? 0) : setEnvelope(m, rowId, v))
+  for (const m of months) if (before.get(m) !== value) set(m, value)
+  const changed = months.filter((m) => before.get(m) !== value)
+  if (!changed.length) return
+  toast(`${label}: ${value == null ? 'bez koperty' : `${plnText(value)} zł`} od ${monthGenLabel(month)} do końca roku.`, 'success', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      for (const m of changed) set(m, before.get(m) ?? null)
+    }
+  })
 }

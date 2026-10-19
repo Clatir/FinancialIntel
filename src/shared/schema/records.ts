@@ -217,7 +217,9 @@ export const goalPastSchema = z.looseObject({
   until: isoDateTime,
   priority: z.number().int().min(1).max(999),
   target: grosze.min(0),
-  archived: z.boolean()
+  archived: z.boolean(),
+  /** Its deadline then (1.8.0, F15 – the installments from the salary count to it); absent = the deadline did not change. */
+  deadline: isoMonth.nullable().optional().catch(undefined)
 })
 export type GoalPast = z.infer<typeof goalPastSchema>
 
@@ -233,6 +235,13 @@ export type GoalTransfer = z.infer<typeof goalTransferSchema>
 
 /** A malformed item (a hand-edited file) dropped, not the whole list. */
 const lenientList = <T extends z.ZodType>(item: T) => z.array(item.nullable().catch(null)).transform((xs) => xs.filter((x): x is NonNullable<z.output<T>> => x != null))
+
+/** A period of a goal's installments from the salary (1.8.0, F15): from–until months, until null = open. */
+export const goalRateSchema = z.looseObject({
+  from: isoMonth,
+  until: isoMonth.nullable().catch(null).default(null)
+})
+export type GoalRate = z.infer<typeof goalRateSchema>
 
 export const goalSchema = z.looseObject({
   ...recordBase,
@@ -272,7 +281,13 @@ export const goalSchema = z.looseObject({
     .catch([])
     .default([]),
   /** Its money moved out (1.4.2): at archiving or later, to the shields or another goal. */
-  transfers: lenientList(goalTransferSchema).catch([]).default([])
+  transfers: lenientList(goalTransferSchema).catch([]).default([]),
+  /**
+   * The months it takes an installment from the salary (1.8.0, F15, D87 – „Kurs przechwycenia”): with a deadline, on the
+   * 1st after the tanks, only when the shields and the hull are full; each period from–until (null = open). An older
+   * version ignores it.
+   */
+  rates: lenientList(goalRateSchema).catch([]).default([])
 })
 export type Goal = z.infer<typeof goalSchema>
 
@@ -284,9 +299,27 @@ export const lootSchema = z.looseObject({
   shields: grosze.min(0).default(0),
   /** Added to the next month's daily envelopes. */
   nextMonth: grosze.min(0).default(0),
-  goals: z.record(ulidSchema, grosze.min(0)).default({})
+  goals: z.record(ulidSchema, grosze.min(0)).default({}),
+  /**
+   * What a planned envelope did not spend kept in it for the next month (1.8.0, F28 – rollover): its limit there grows by
+   * it. An older version gives it to the shields.
+   */
+  envelopes: z.record(ulidSchema, grosze.min(0)).catch({}).default({})
 })
 export type Loot = z.infer<typeof lootSchema>
+
+/**
+ * An overrun covered from another envelope (1.8.0, F28): `amount` of the month's limit moved from the envelope `from`
+ * to `to` at `at`. The game rates a day by the limits before the covers made that day (D73).
+ */
+export const envelopeCoverSchema = z.looseObject({
+  id: ulidSchema,
+  from: ulidSchema,
+  to: ulidSchema,
+  amount: grosze.min(1),
+  at: isoDateTime
+})
+export type EnvelopeCover = z.infer<typeof envelopeCoverSchema>
 
 export const monthPlanSchema = z.looseObject({
   ...recordBase,
@@ -296,9 +329,42 @@ export const monthPlanSchema = z.looseObject({
   /** Monthly limit per main category; daily or planned by the category's setting (D16). */
   envelopes: z.record(ulidSchema, grosze.min(0)).default({}),
   loot: lootSchema.nullable().default(null),
+  /** The month's overruns covered from other envelopes (1.8.0, F28); an older version ignores them. */
+  envelopeCovers: lenientList(envelopeCoverSchema).catch([]).default([]),
   note: text
 })
 export type MonthPlan = z.infer<typeof monthPlanSchema>
+
+// ------------------------------------------------------------------ scheduled (1.8.0)
+
+/**
+ * A planned operation or a term ahead (1.8.0, F16 – „Boje nawigacyjne”): a one-off expense or income (a wedding, a
+ * bonus, a PIT-37 refund) or a term without an amount (an ID card to renew, a promotion's end), once or every year. On
+ * the radar, in the briefing and in the notifications before its day; an operation of the bank matched to it (or made
+ * from it – „Wykonaj teraz”) closes it. Never money on the accounts: an older version ignores the collection.
+ */
+export const scheduledSchema = z.looseObject({
+  ...recordBase,
+  name: z.string().trim().min(1).max(80),
+  /** The day (of a yearly one: its first year's). */
+  date: isoDate,
+  /** Grosze, signed: money out < 0, in > 0; null = a term only. */
+  amount: grosze.nullable().catch(null).default(null),
+  /** Every year on its day (29 February – the 28th in the other years). */
+  yearly: z.boolean().catch(false).default(false),
+  categoryId: ulidSchema.nullable().catch(null).default(null),
+  accountId: ulidSchema.nullable().catch(null).default(null),
+  /** The counterparty as the bank writes it: the match of an operation prefers it. */
+  counterparty: z.string().max(300).catch('').default(''),
+  /** Days before its day it is recalled (the briefing, the notifications). */
+  remind: z.array(z.number().int().min(0).max(365)).max(5).catch([14, 3]).default([14, 3]),
+  /** Its days done: the day → the operation that did it, '' = ticked off by hand. */
+  done: z.record(isoDate, z.string().max(40)).catch({}).default({}),
+  /** Operations said not to be it (a match of the bank's operation rejected). */
+  notMatched: z.array(ulidSchema).max(200).catch([]).default([]),
+  note: text
+})
+export type Scheduled = z.infer<typeof scheduledSchema>
 
 // ------------------------------------------------------------------ docking
 
