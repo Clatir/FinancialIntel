@@ -1,18 +1,18 @@
 # Financial Intel – postęp
 
-**Stan:** grupa H (1.5.1 – import z mBanku) zrobiona na gałęzi `claude/grupa-h-1.5.1` – PR, CI, scalenie (D71) i
-wydanie w toku; po H **pauza** (D67) – grupy E–H z D84 (A1) są zamknięte. **1.5.0 wydane** (PR #17), **1.4.3 wydane**
-(PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia okna), **1.4.2 wydane**
-(PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
+**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa I** (1.5.2 – liczby się zgadzają) zrobiona na gałęzi
+`claude/grupa-i-1.5.2`, PR #19 do `main` (scalenie po zielonym CI – D71); po I bez pauzy J (1.5.3 – system, folder, dwa
+komputery), K (1.5.4 – wydajność, reszta) i L (1.6.0 – funkcje), każda z własnym PR i wydaniem; po L **pauza** (D67).
+**1.5.1 wydane** (PR #18), **1.5.0 wydane**
+(PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
+okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
 **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – czekam na komendę użytkownika (D67). Dwa pytania z „Przed grupą H” nadal bez odpowiedzi
-(wdrożona propozycja albo nic do czasu odpowiedzi): reszta prezentu bez zaliczki i słowo kluczowe z tytułu wobec wpłaty
-domownika (B41 część 1). Do sprawdzenia w aplikacji: 1.5.0 (domownicy, „Gotówka”, wspólne wydatki, dokowanie) i 1.5.1
-(„Cofnij import”, telemetria z banku, oficer, audyt reguł) – listy w sekcjach niżej. Dalsze pozycje przeglądu po 1.4.1
-(`docs/przeglad/README.md`: grupy I i dalej – nakład i model w tabeli) po wyborze użytkownika.
+**Następny krok:** po scaleniu PR #19 i wydaniu 1.5.2 – grupa J („Przed grupą J”), potem K i L bez czekania na komendę
+(D86); pytania z grupy G rozstrzygnięte (D85 – zostaje jak jest). Do sprawdzenia w aplikacji: 1.5.0, 1.5.1 i 1.5.2 –
+listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -43,9 +43,13 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **E** | 1.4.2 Pieniądze i dane się zgadzają: B1–B5, B6, B9–B11, B13, B24, B30, B32, B42–B51, B55, B56, N1 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z przeglądem i E2E; plan był 4–5 h) | 1.4.2 | ✅ D84 (C1–C3) | ✅ wydane (PR #14) |
 | **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, W26, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z pomiarami 30 / 150 tys., przeglądem i E2E; plan był 3–5 h) | 1.4.3 | ✅ D84 (C4) | ✅ wydane (PR #15, poprawka PR #16) |
 | **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 3–4 h) | 1.5.0 | ✅ D83 | ✅ wydane (PR #17) |
-| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.1 | ✅ D84 (C11) | ✅ zrobione – PR, CI, scalenie |
+| **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.1 | ✅ D84 (C11) | ✅ wydane (PR #18) |
+| **I** | 1.5.2 Liczby się zgadzają: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.2 | ✅ D86 | ✅ zrobione – PR #19, CI, scalenie |
+| **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | ok. 2–3 h | 1.5.3 | ✅ D86 | czeka na I |
+| **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | ok. 2 h | 1.5.4 | ✅ D86 | czeka na J |
+| **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | ok. 3–4 h | 1.6.0 | ✅ D86 | czeka na K |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H** | | | **ok. 31,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I** | | | **ok. 32,5 h** (J–L: plan ok. 7–9 h) | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -334,6 +338,52 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.5.1, Windows):
 2. Historia rachunku (CSV z saldami) – panel „Telemetria z banku”: zgodne saldo potwierdzone samo albo dzień rozbieżności.
 3. Szybki wpis: kontrahent wpisany jak w życiu („Biedronka”, „Orlen”) – podpowiedź oficera.
 4. Ustawienia → Import z banku: reguły z liczbą trafień, „niespójne”, „zmień”, marki z kilkoma kategoriami.
+
+## Przed grupą I – liczby się zgadzają (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupy E–H wydane (1.5.1 – PR #18). Ciąg I–L na komendę „Start I–L” (D86). Grupa I (1.5.2):
+   średnie pozycje przeglądu, w których ekran, silnik i kreator liczą inaczej:
+   - silnik i plan: propozycje i średnie z pełnych miesięcy bez bieżącego (B23) i od początku historii z banku (B25),
+     „Pożyczka” bez rekordu z Radaru nie dokuje jak przychód (B57), płatności usuniętego kontenera (B58), podział
+     dokowania po zmianie kwoty (B59), konto otwarte 1. dnia miesiąca przed pensją (B60), „miesiąc na plus” jak silnik
+     (N6), koperta zarchiwizowanej kategorii (N8), łupy „na następny miesiąc” i wydatki bez kategorii w podziale pensji
+     i debriefingu (N11), „wolne do decyzji” tylko przy pełnym kadłubie (N21);
+   - ekrany: kwoty w historii, oknie zmian i Synchronizacji w złotych i z ukryciem Ctrl+$ (B7), kreator – konta z saldem
+     otwarcia (B8), odkładki i pierwsza pensja jak silnik (N9), krok folderu ICTTJ i celów (N7, D84 C8); data „dd.mm”
+     operacji nie w przyszłości (B12), pola liczb całkowitych (B26), przypomnienie o saldzie każdego konta (B28),
+     podgląd energii w szybkim wpisie jak silnik (N3), mediana przychodów (N4), cisza nocna w edytorze operacji (N10).
+2. **Co użytkownik musi powiedzieć** – ✅ D85 (pytania z grupy G – zostaje jak jest), ✅ D86 (komenda i propozycje J, L).
+3. **Co przygotować** – nic przed startem; po wydaniu 1.5.2: Plan miesiąca (propozycje, podział pensji, debriefing),
+   kreator nie jest potrzebny na działającym budżecie.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2–3 h (cały ciąg I–L ok. 9–12 h).
+
+## 1.5.2 – liczby się zgadzają (grupa I, 19.10.2026)
+
+Zakres: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 („Przed grupą I” wyżej). Zrobione:
+- Silnik i plan (T173–T181): jedna historia średnich od początku historii z banku (silnik, kreator, Plan miesiąca,
+  Ładownia; bez bieżącego miesiąca i bez miesięcy bez operacji), „Pożyczka” bez Radaru tylko w osłonach, płatności
+  usuniętego kontenera znów wydatkami (z „Cofnij”), podział dokowania dopasowany do kwoty operacji i liczony od kwoty z
+  banku, saldo otwarcia przed pensją tego dnia, „miesiąc na plus” z wyniku energii (debriefing z rachunkiem energii i
+  pulą dzienną), koperta zarchiwizowanej kategorii zdjęta z planu (z „Cofnij”), łupy w dziennym przydziale, „wolne do
+  decyzji” tylko przy pełnym kadłubie.
+- Ekrany (T182–T187): kwoty w historii, oknie zmian i Synchronizacji w złotych; kreator (konto z saldem otwarcia, krok
+  „ICTTJ i cele”, cele w podziale środków, odkładki jak silnik); data bez roku (dzień najbliższy dacie pola, najwyżej
+  tydzień naprzód) i znaczek „w przyszłości”; pola liczb całkowitych; przypomnienie o saldzie każdego konta; podgląd
+  szybkiego wpisu jak silnik; „Razem” przychodów; cisza nocna potwierdzona wpisem w dzienniku.
+- Przegląd `/code-review` high: 10 kandydatów – 8 poprawionych, 2 bez zmian z uzasadnieniem (T188).
+- CI Windows PR #19: „Cofnij import” (20–40 operacji) nie mieściło się w 10 s – każdy plik szedł osobno do Kosza
+  Windows; plik wpisu z wersją w historii usuwany teraz od razu, do Kosza tylko bez niej (T189).
+- Testy: 519 unit + fs (nowy `numbers-agree.test.ts`, poszerzone `income`, `plan`, `game`), E2E 30 (nowy
+  `tests/e2e/numbers.spec.ts`, kreator z celami w `month.spec.ts`). Poprawki z testem sprawdzonym bez nich (padają).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.5.2, Windows):
+1. Plan miesiąca: propozycja pensji i „Koperty ze średnich” (z ilu miesięcy), „Podział pensji” z łupami, debriefing
+   minionego miesiąca – rachunek energii i „na plus”.
+2. Ustawienia → Kategorie: archiwizacja kategorii z kopertą i „Cofnij”.
+3. Ładownia: usunięcie kontenera z płatnościami i „Cofnij”.
+4. Edytor operacji: data „dd.mm” bez roku, godzina w nocy – potwierdzenie albo „usuń godzinę”.
+5. Szybki wpis: kategoria bez koperty i koperta planowana – podgląd.
+6. Mostek: przypomnienie o saldzie każdego konta, „wolne do decyzji”.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
@@ -1095,3 +1145,12 @@ Do sprawdzenia przez użytkownika (Windows 11):
   na start, zwroty domowników z importu, gra bez naruszeń za cudze zakupy, dokowanie (osierocone i podwójne dokowania,
   pula, wpis usunięty, zasięg pliku, start po dacie pieniędzy, inna kwota), polskie święta; przegląd `/code-review` high –
   10 poprawek; nowy E2E wspólnego finansowania; PR do `main`. Dwa pytania do użytkownika w „Przed grupą H”.
+- 19.10.2026 – PR #17 scalony, wydanie 1.5.0 opublikowane. Grupa H (1.5.1): import z mBanku (B34–B39, N12–N16), „Cofnij
+  import” (F4), telemetria z historii rachunku (F5), oficer zna marki (F8), audyt reguł (F22); przegląd `/code-review`
+  high – 10 poprawek; nowy E2E `import-tools.spec.ts`; PR #18 do `main`.
+- 19.10.2026 – PR #18 scalony, wydanie 1.5.1 opublikowane (job Windows na `main`). Odpowiedzi na pytania z grupy G (D85 –
+  zostaje jak jest) i komenda „Start I–L” ze zgodą na propozycje (D86); grupa I (1.5.2) – „Przed grupą I”.
+- 19.10.2026 – Grupa I (1.5.2): historia średnich od banku, pożyczka bez Radaru, usunięty kontener, podział dokowania po
+  zmianie kwoty, saldo otwarcia przed pensją, miesiąc na plus z energii, koperta zarchiwizowanej kategorii, łupy w
+  przydziale, „wolne do decyzji”, kreator z ICTTJ i celami, daty bez roku, liczby całkowite, salda każdego konta, podgląd
+  szybkiego wpisu, cisza nocna; przegląd `/code-review` high – 8 poprawek; nowy E2E `numbers.spec.ts`; PR #19 do `main`.

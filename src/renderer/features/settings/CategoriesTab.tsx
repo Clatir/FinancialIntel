@@ -1,12 +1,31 @@
 import { newId } from '@shared/ids'
 import { envelopeKind, type Category, type EnvelopeKind } from '@shared/schema'
 import { updateSettings } from '../../store/data'
+import { toast } from '../../store/ui'
+import { dropEnvelope, restoreEnvelope } from '../month/actions'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Segmented, cx } from '../../components/ui'
 import { useCategories } from '../operations/pickers'
 
 function patchCategory(id: string, p: Partial<Category>): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, categories: f.settings.categories.map((c) => (c.id === id ? { ...c, ...p } : c)) } }))
+}
+
+/**
+ * A main category archived takes its envelope off this month's plan and the later ones (N8) – it would still count in
+ * the sums and today's energy; „Cofnij” brings the category and its envelopes back.
+ */
+function archiveMain(c: Category): void {
+  patchCategory(c.id, { archived: true })
+  const taken = dropEnvelope(c.id)
+  if (taken.size)
+    toast(`Zarchiwizowano „${c.name}” – jej koperta zniknęła z planu tego miesiąca i kolejnych.`, 'info', 8000, {
+      label: 'Cofnij',
+      run: () => {
+        patchCategory(c.id, { archived: false })
+        restoreEnvelope(c.id, taken)
+      }
+    })
 }
 
 function addCategory(parentId: string | null, name: string): void {
@@ -84,7 +103,7 @@ export function CategoriesTab() {
                   </button>
                 )}
                 {main.system == null && (
-                  <button type="button" className="btn h-[22px]" onClick={() => patchCategory(main.id, { archived: !main.archived })} data-testid="category-archive">
+                  <button type="button" className="btn h-[22px]" onClick={() => (main.archived ? patchCategory(main.id, { archived: false }) : archiveMain(main))} data-testid="category-archive">
                     {main.archived ? 'przywróć' : 'archiwizuj'}
                   </button>
                 )}

@@ -31,10 +31,14 @@ export function startTargets(salary: number | null, costs: number | null, layers
 
 /**
  * The money at the start split as a delivery would dock (D13, D70): the shields to their target, the hull to its, the
- * rest stays in the shields as „wolne do decyzji”. Goals come with Mapa gwiezdna (E5).
+ * goals by priority (`goals` in that order, N7), the rest stays in the shields as „wolne do decyzji”.
  */
-export function startSplit(total: number, targets: StartTargets): { shields: number; hull: number; free: number } {
-  if (total <= 0) return { shields: total, hull: 0, free: 0 }
-  const split = dockAmount(total, { shields: 0, hull: 0, goals: [] }, targets)
-  return { shields: split.shields, hull: split.hull, free: split.free }
+export function startSplit(
+  total: number,
+  targets: StartTargets,
+  goals: ReadonlyArray<{ id: string; target: number }> = []
+): { shields: number; hull: number; goals: Record<string, number>; free: number } {
+  if (total <= 0) return { shields: total, hull: 0, goals: {}, free: 0 }
+  const split = dockAmount(total, { shields: 0, hull: 0, goals: goals.map((g) => ({ id: g.id, amount: 0, target: g.target })) }, targets)
+  return { shields: split.shields, hull: split.hull, goals: split.goals, free: split.free }
 }

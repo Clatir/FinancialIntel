@@ -517,6 +517,41 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/import-batch.test.ts`, `import-statement.test.ts`, `officer.test.ts`, `rules-audit.test.ts`,
   grupa H w `import.test.ts`, `tests/fs/history.test.ts` (powód `undo`), E2E `tests/e2e/import-tools.spec.ts`.
 
+## Kod (1.5.2 – liczby się zgadzają, grupa I, D85 / D86)
+- Historia średnich (B23, B25, T173): `shared/calc/history.ts` – `historyStart` (najstarsza operacja z banku; bez niej
+  najwcześniejsze z sald otwarcia i wydatków / wpływów ręcznych), `firstFullOf`, `coveredMonths` (pełne miesiące do
+  bieżącego − 1, bez miesięcy bez operacji), `monthsBefore`; silnik `FleetState.historyMonths` (średnie kosztów,
+  `incomeStats(byMonth, covered)`), plan `fullMonthsBefore(…, covered)`, `proposeSalary` / `proposeEnvelopes` /
+  `recurringPayments(…, covered)` – kreator, Plan miesiąca i Ładownia podają `fleet.historyMonths`.
+- Silnik (`calc/fleet.ts`): pożyczka bez rekordu – tylko osłony, `borrowedNoRecord` / `loanOpen` po kontrahencie (B57,
+  T174); `isCargoPayment(t, containerIds)` (`calc/operations.ts`) – płatność usuniętego kontenera to wydatek (B58, T175);
+  `fitSplit(amount, {hull, goals, taxHold})` – zapisany podział dokowania dopasowany do kwoty (B59, T176); saldo otwarcia
+  przed pensją (klucz `0 0a`, B60); `shields.free` tylko przy pełnym kadłubie, `shields.over` (N21, T181);
+  `energyAfter(daily, date, amount)` (podgląd szybkiego wpisu, N3).
+- Plan (`calc/plan.ts`): `lootExtraOf(log, month)`, `salarySplit(…, lootExtra)` (`dailyBase` z łupami – N11);
+  `debriefing(…, {alarms, containers})` → `energy` {salary, sinking, loot, budget, used, exhausted, result}, `daily`
+  {limit, extra, spent, gap}, `plus` z wyniku energii po końcu miesiąca (N6, T178); `unlinkedPayments(…, containerIds)`.
+  `calc/start.ts` `startSplit(total, targets, goals)` (N7). `calc/briefing.ts` `confirmationsOf(accounts, balances)` –
+  przypomnienie per konto, bez gotówki (B28, T185); `notify.ts` wymienia konta. `calc/game.ts` – `isConfirmedNight`
+  (godzina w ciszy nocnej + wpis w dzienniku – N10, T187), `envelopesSpent` (jedna pętla), misje i hattrick z
+  kontenerami i logiem. `calc/income.ts` – miesiąc z tradingiem ≥ 0 (N4). `merge.ts` `AMOUNT_FIELDS`, `isAmountPath`,
+  `isAmountKey` (B7, T182).
+- Renderer: Plan miesiąca – `split-loot-extra`, `month-envelope-archived`, `debrief-energy`, `debrief-daily`,
+  `month-plus` / `month-minus`; `month/actions.ts` `dropEnvelope` / `restoreEnvelope` (N8 – archiwizacja w
+  `settings/CategoriesTab.tsx` z „Cofnij”, T179); `cargo/actions.ts` `deleteContainer` (odłącza płatności, „Cofnij” łączy),
+  `paymentsToLink(…, containerIds)`; dokowanie – `docking-split-fitted`, osłony od kwoty operacji (`dockingOf`); Mostek
+  `state-shields-over`; edytor operacji – `operation-loan-hint`, `operation-loan-likely`, `operation-future`,
+  `operation-night-confirm`, `operation-night-clear`; szybki wpis – `quick-preview-outside`, `quick-future`
+  (`QuickData.daily`); kreator – 7 kroków (krok „ICTTJ i cele”: `wizard-ictj`, `wizard-ictj-suggested`,
+  `wizard-ictj-pick`, `wizard-goal*`; podział `wizard-split-goal`, `wizard-split-goal-input`, `wizard-total`,
+  `wizard-split-over`), `finishWizard({salary, hull, goals, envelopes})`; pola – `DateField notAfter`
+  (`parseDateInput(text, rok, notAfter, near)` – dzień najbliższy dacie pola, najwyżej tydzień po dziś – B12, T184),
+  `NumberField` całkowite (B26); historia, zmiany z drugiego komputera i Synchronizacja – kwoty przez `plnText`.
+- Folder danych (T189): plik usuwanego wpisu z wersją w historii usuwany od razu (`DataStoreOptions.remove`), do Kosza
+  tylko bez wersji w historii – „Cofnij import” setek operacji na Windows w sekundach.
+- Testy: `tests/unit/numbers-agree.test.ts`, poszerzone `income`, `plan`, `game`; E2E `tests/e2e/numbers.spec.ts` (cisza
+  nocna, archiwizacja kategorii, usunięty kontener, dokowanie innej kwoty), `month.spec.ts` (kreator z celami).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -591,4 +626,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   odporne na usunięcia, zmiany puli, dwa komputery, zasięg pliku, inne kwoty i święta
 - [x] 1.5.1 Import z mBanku (grupa H, D84): „Cofnij import”, saldo z pliku banku (telemetria), oficer zna marki, audyt
   reguł (próg kwoty, „Zastosuj do historii”), pożyczka z Radaru, operacje z pliku złego konta, sesja importu z „Cofnij”
+- [x] 1.5.2 Liczby się zgadzają (grupa I, D85 / D86): średnie od historii z banku, miesiąc na plus z energii, łupy w
+  dziennym przydziale, koperta zarchiwizowanej kategorii, usunięty kontener, pożyczka bez Radaru, podział dokowania po
+  zmianie kwoty, kreator z celami i ICTTJ, daty bez roku, cisza nocna potwierdzona, potwierdzenia sald per konto
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

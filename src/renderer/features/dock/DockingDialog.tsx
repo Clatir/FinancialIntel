@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addWorkingDays, PAIR_WORKING_DAYS, withDocking, type Delivery } from '@shared/calc/dock'
 import { byPriority } from '@shared/calc/goals'
+import { fitSplit } from '@shared/calc/fleet'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData } from '../../store/data'
@@ -75,14 +76,20 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const moves = preview?.log.find((e) => e.txId === tx.id)?.moves ?? {}
   const proposal: SplitDraft = { hull: Math.max(0, moves.hull ?? 0), goals: Object.fromEntries(Object.entries(moves.goals ?? {}).filter(([, v]) => v > 0)), taxHold: Math.max(0, moves.taxHold ?? 0) }
   // A docked delivery opens with the split it was docked with (null = the docking order); a goal archived since is
-  // left out – its part goes back to the shields.
+  // left out – its part goes back to the shields. An amount changed since (B59): the split fitted to it, as the engine.
   const stored = d.state === 'docked' ? d.docking?.split : null
-  const [draft, setDraft] = useState<SplitDraft | null>(() =>
-    stored ? { hull: stored.hull, goals: Object.fromEntries(Object.entries(stored.goals).filter(([id]) => goals.some((g) => g.id === id))), taxHold: stored.taxHold } : null
-  )
+  const storedTotal = stored ? stored.shields + stored.hull + stored.taxHold + Object.values(stored.goals).reduce((a, b) => a + b, 0) : 0
+  // The engine splits the operation's amount (the bank's, when it differs from the entry's) – so do the window and the
+  // docking it saves (`dockingOf`).
+  const docked = Math.abs(tx.amount)
+  const [draft, setDraft] = useState<SplitDraft | null>(() => {
+    if (!stored) return null
+    const fit = fitSplit(docked, { hull: stored.hull, taxHold: stored.taxHold, goals: Object.fromEntries(Object.entries(stored.goals).filter(([id]) => goals.some((g) => g.id === id))) })
+    return { hull: fit.hull, goals: fit.goals, taxHold: fit.taxHold }
+  })
   const split = draft ?? proposal
   const others = split.hull + split.taxHold + Object.values(split.goals).reduce((a, b) => a + b, 0)
-  const shields = d.amount - others
+  const shields = docked - others
   const over = shields < 0
   const firewall = d.direction === 'out' && !!preview?.alarms.some((a) => a.kind === 'firewall' && a.txId === tx.id)
   const e = d.entry
@@ -188,6 +195,11 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
           )}
         </section>
 
+        {stored && storedTotal !== docked && (
+          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-split-fitted">
+            Kwota operacji zmieniła się po dokowaniu (było {zl(storedTotal)}, jest {zl(docked)}) – podział dopasowany do niej: podatek, kadłub, cele, reszta do osłon. „Zapisz podział” go utrwali.
+          </p>
+        )}
         {d.direction === 'in' ? (
           <section className="flex flex-col gap-1" data-testid="docking-split">
             <div className="flex items-baseline">

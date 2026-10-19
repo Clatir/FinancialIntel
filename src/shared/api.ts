@@ -336,6 +336,11 @@ export interface QuickData {
   /** Today's energy left (null = no plan this month) and the envelopes left. */
   energyLeft: number | null
   envelopesLeft: Record<string, number>
+  /**
+   * Today's energy as the engine counts it (N3): the daily envelopes' limit, what they spent before today and today,
+   * the day of the month – a purchase of an earlier day of the month lowers today's energy by its share of the days left.
+   */
+  daily?: { today: string; limit: number; spentBefore: number; spentToday: number; days: number } | null
   quietHours: { from: string; to: string }
   impulseThreshold: number
   /**

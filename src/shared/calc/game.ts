@@ -11,7 +11,7 @@ import type { Settings } from '../schema/settings'
 import type { GameDay, GameMission, GameMonth, Transaction } from '../schema/records'
 import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, weekdayOf } from './dates'
 import { activeIn, cargoMass, computeFleet, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
-import { categoryIndex, costOf, isNight, ownSpent, partsOf, sum } from './operations'
+import { categoryIndex, costOf, isCargoPayment, isConfirmedNight, ownSpent, partsOf, sum } from './operations'
 import { debriefing } from './plan'
 
 // ------------------------------------------------------------------ names
@@ -243,7 +243,8 @@ export function rateDay(input: GameInput, date: string, prev: GameDay | null = n
     }
     for (const a of f.alarms) if (a.kind === 'firewall' && a.date === date) add('firewall', a.amount, a.txId ?? null)
     // A purchase in the quiet hours: my own part of it (a household member's part is theirs – N5).
-    for (const t of txs) if (isNight(t, settings.orders) && ownSpent(t) > 0) add('quiet', ownSpent(t), t.id, t.counterparty)
+    // A confirmed purchase in the quiet hours (D40, N10): its time in the window and its entry in the log.
+    for (const t of txs) if (isConfirmedNight(t, settings.orders) && ownSpent(t) > 0) add('quiet', ownSpent(t), t.id, t.counterparty)
     if (txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0)) tags.push('judas')
     if (txs.some((t) => t.kind === 'expense' && t.amount > 0 && !t.refundable && !t.goalId && !t.splits.length)) tags.push('turtle')
     if (f.daily && f.daily.left === 0 && f.daily.spentToday > 0) tags.push('sweep')
@@ -260,13 +261,17 @@ export interface MissionPick {
 
 const dayCost = (txs: readonly Transaction[]) => sum(txs.map(costOf))
 
-/** Costs of an envelope's category in [from, to] as the envelopes count them (no cargo, goals, house). */
-function envelopeSpent(input: GameInput, categoryId: string, from: string, to: string): number {
+/** Costs of the envelopes' main categories in [from, to] as the envelopes count them (no cargo, goals, house), in one pass. */
+function envelopesSpent(input: GameInput, from: string, to: string): Map<string, number> {
   const cats = categoryIndex(input.settings.categories)
-  let out = 0
+  const ids = new Set((input.containers ?? []).map((c) => c.id))
+  const out = new Map<string, number>()
   for (const t of input.transactions) {
-    if (t.date < from || t.date > to || t.kind !== 'expense' || t.goalId || t.containerId) continue
-    for (const p of partsOf(t)) if (!p.refundable && cats.mainOf(p.categoryId)?.id === categoryId) out -= p.amount
+    if (t.date < from || t.date > to || t.kind !== 'expense' || t.goalId || isCargoPayment(t, ids)) continue
+    for (const p of partsOf(t)) {
+      const main = p.refundable ? null : cats.mainOf(p.categoryId)?.id
+      if (main) out.set(main, (out.get(main) ?? 0) - p.amount)
+    }
   }
   return out
 }
@@ -311,17 +316,18 @@ export function chooseMission(input: GameInput, monday: string, lastTemplate: st
   const days = allDays(game)
   const month = monthOf(monday)
   const weak: Partial<Record<MissionTemplate, () => MissionPick | null>> = {
-    quiet: () => (txs.some((t) => isNight(t, input.settings.orders) && ownSpent(t) > 0) ? { template: 'quiet', params: {} } : null),
+    quiet: () => (txs.some((t) => isConfirmedNight(t, input.settings.orders) && ownSpent(t) > 0) ? { template: 'quiet', params: {} } : null),
     envelope: () => {
       // The planned envelope most over its limit: last month and this month's pace so far.
       const cats = categoryIndex(input.settings.categories)
       let best: { id: string; ratio: number } | null = null
+      const thisMonth = envelopesSpent(input, firstDayOf(monthOf(to)), to)
       for (const m of [monthOf(to), addMonths(monthOf(to), -1)]) {
-        const d = debriefing(m, { transactions: input.transactions, categories: input.settings.categories, plans: input.months ?? [], today: to })
+        const d = debriefing(m, { transactions: input.transactions, categories: input.settings.categories, plans: input.months ?? [], containers: input.containers ?? [], today: to })
         const elapsed = m === monthOf(to) ? Number(to.slice(8, 10)) / daysInMonth(m) : 1
         for (const e of d.envelopes) {
           if (e.kind !== 'planned' || e.limit <= 0) continue
-          const spent = m === monthOf(to) ? envelopeSpent(input, e.categoryId, firstDayOf(m), to) : e.spent
+          const spent = m === monthOf(to) ? (thisMonth.get(e.categoryId) ?? 0) : e.spent
           const ratio = spent / (e.limit * elapsed)
           if (ratio > 1 && (!best || ratio > best.ratio) && cats.byId.has(e.categoryId)) best = { id: e.categoryId, ratio }
         }
@@ -388,7 +394,7 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
   const num = (k: string) => Number(mission.params[k] ?? 0)
   switch (mission.template) {
     case 'quiet':
-      return { ok: !txs.some((t) => isNight(t, input.settings.orders) && ownSpent(t) > 0) }
+      return { ok: !txs.some((t) => isConfirmedNight(t, input.settings.orders) && ownSpent(t) > 0) }
     case 'impulse':
       return { ok: !txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0) }
     case 'energy': {
@@ -398,7 +404,7 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
       return { ok: over === 0 }
     }
     case 'envelope': {
-      const spent = envelopeSpent(input, String(mission.params.categoryId ?? ''), monday, to)
+      const spent = envelopesSpent(input, monday, to).get(String(mission.params.categoryId ?? '')) ?? 0
       return { ok: spent <= num('target'), amount: spent }
     }
     case 'killzone': {
@@ -487,7 +493,8 @@ function newAchievements(input: GameInput, game: readonly GameMonth[], date: str
   if (date.endsWith('-01')) {
     // The month just closed – during the game (a partial first month counts).
     const prev = addMonths(monthOf(date), -1)
-    const brief = (m: string) => debriefing(m, { transactions: input.transactions, categories: input.settings.categories, plans: input.months ?? [], today: date })
+    // As the debriefing on the screen: the engine's month (N6) – the fleet at this day's end knows every month before.
+    const brief = (m: string) => debriefing(m, { transactions: input.transactions, categories: input.settings.categories, plans: input.months ?? [], log: f.log, alarms: f.alarms, containers: input.containers ?? [], today: date })
     want('hattrick', () => [0, 1, 2].every((i) => addMonths(prev, -i) >= monthOf(start) && brief(addMonths(prev, -i)).plus === true))
     want('sniper', () => {
       if (prev < monthOf(start)) return false

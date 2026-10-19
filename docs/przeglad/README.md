@@ -130,8 +130,9 @@ Razem ok. 21–28 h.
 
 Wykonane według D84 (grupy E–H jednym ciągiem, `docs/postep.md`): **1.4.2** = E, **1.4.3** = F, **1.5.0** = G (domownicy
 oraz ICTTJ i dokowanie – B14–B22, B40, B41, N5, F0, F42), **1.5.1** = H (import – B34–B39, N12–N16 i z listy funkcji F4,
-F5, F8, F22). Zostają m.in.: porządki w ekranach (wiersz 1.5.3 propozycji), funkcje F1–F3, F6, F7 i dalsze, niskie
-pozycje – niezaznaczone niżej.
+F5, F8, F22). Według D86 (grupy I–L jednym ciągiem): **1.5.2** = I (liczby się zgadzają – B7, B8, B12, B23, B25, B26,
+B28, B57–B60, N3, N4, N6–N11, N21; B41 zamknięte według D85). Zostają m.in.: J, K, L (system i dwa komputery, wydajność –
+reszta, funkcje F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone niżej.
 
 ## Lista do odhaczania
 
@@ -148,12 +149,12 @@ pozycje – niezaznaczone niżej.
 ### Priorytet średni
 
 - [x] **B6** Ładownia po zapłacie opłaty okresowej pokazuje fałszywe „Za plan o … – kolejne raty będą większe” i termin „w tym miesiącu” – `renderer/features/cargo/CargoPage.tsx:342-361`, `shared/calc/fleet.ts:923` (+6)
-- [ ] **B7** Historia zmian, „Zmiany z drugiego komputera” i Synchronizacja pokazują kwoty w groszach jako surowe liczby (100× za duże) i bez maskowania Ctrl+$ – `shared/merge.ts:236-244`, `renderer/features/history/HistoryDialog.tsx:42-46` (+18)
-- [ ] **B8** Kreator startu: „Obecne środki” i podział na start pomijają konta, które mają już saldo otwarcia, a pole zostało puste – `renderer/features/wizard/WizardPage.tsx:68-71`, `renderer/features/wizard/WizardPage.tsx:90` (+11)
+- [x] **B7** Historia zmian, „Zmiany z drugiego komputera” i Synchronizacja pokazują kwoty w groszach jako surowe liczby (100× za duże) i bez maskowania Ctrl+$ – `shared/merge.ts:236-244`, `renderer/features/history/HistoryDialog.tsx:42-46` (+18)
+- [x] **B8** Kreator startu: „Obecne środki” i podział na start pomijają konta, które mają już saldo otwarcia, a pole zostało puste – `renderer/features/wizard/WizardPage.tsx:68-71`, `renderer/features/wizard/WizardPage.tsx:90` (+11)
 - [x] **B9** Nieudane usunięcie operacji (plik zablokowany) jest ciche – wpis znika z ekranu, ale zostaje na dysku i wraca po restarcie – `renderer/store/data.ts:559-574`, `renderer/features/history/actions.ts:23-36` (+16)
 - [x] **B10** Debriefing i raport pokazują zapisane kwoty decyzji o łupach, a silnik dzieli łupy, które są teraz – po późnym imporcie liczby się rozjeżdżają – `renderer/features/month/MonthPage.tsx:327-330`, `renderer/features/reports/ReportsPage.tsx:240` (+13)
 - [x] **B11** Zmiana planu minionego miesiąca zmienia też bieżący i kolejne miesiące, które z niego „korzystały” – wbrew T46 – `renderer/features/month/actions.ts:24-38`, `shared/calc/plan.ts:270-274` (+10)
-- [ ] **B12** Data wpisana jako „dd.mm” bierze rok z bieżącej wartości pola – na początku stycznia grudniowy zakup trafia w przyszły grudzień, a silnik go pomija bez ostrzeżenia – `renderer/components/fields.tsx:118`, `renderer/lib/format.ts:130-148` (+4)
+- [x] **B12** Data wpisana jako „dd.mm” bierze rok z bieżącej wartości pola – na początku stycznia grudniowy zakup trafia w przyszły grudzień, a silnik go pomija bez ostrzeżenia – `renderer/components/fields.tsx:118`, `renderer/lib/format.ts:130-148` (+4)
 - [x] **B13** Podział łupów proponuje zarchiwizowane cele, a silnik wpłaca do nich pieniądze – `renderer/features/month/MonthPage.tsx:340-345`, `shared/calc/fleet.ts:507` (+9)
 - [x] **B14** Rozliczenia „od dziś” (seed 1.4.0) gubią operacje domowników datowane przed dniem rozliczeń i dodane później (opóźniony import mBanku) – `renderer/features/household/actions.ts:104`, `shared/calc/household.ts:221` (+2)
 - [x] **B15** Usunięta operacja zadokowanej dostawy zostawia osierocone dokowanie: wpis ICTTJ na zawsze „zadokowany”, pieniądze bez puli – `shared/calc/dock.ts:85`, `shared/calc/dock.ts:101` (+2)
@@ -164,12 +165,12 @@ pozycje – niezaznaczone niżej.
 - [x] **B20** Para wypłaty ICTTJ jeszcze niezadokowana: silnik ignoruje pulę (Podatek w osłonach, zwrot z puli Podatek = czerwony firewall), na komputerze bez ICTTJ zawsze – `shared/calc/fleet.ts:657`, `shared/calc/fleet.ts:670` (+4)
 - [x] **B21** Wpis ICTTJ usunięty i wpisany od nowa: operacja banku zostaje zablokowana przez dokowanie nieistniejącego wpisu, a nowy wpis dostaje „Portfel XTB?” – `shared/calc/dock.ts:85`, `shared/calc/dock.ts:88` (+3)
 - [x] **B22** Kwota w banku inna niż w ICTTJ albo przelew po świętach: wpis dostaje „Portfel XTB?”, a wpływ „bez wpisu” – po potwierdzeniu pieniądze liczą się dwa razy – `shared/calc/dock.ts:114`, `shared/calc/dock.ts:120` (+4)
-- [ ] **B23** Propozycje pensji i „Koperty ze średnich” dla przyszłego miesiąca liczą niepełny bieżący miesiąc (i miesiące bez danych) jako pełne (wbrew T47) – `shared/calc/plan.ts:33`, `shared/calc/plan.ts:35` (+3)
+- [x] **B23** Propozycje pensji i „Koperty ze średnich” dla przyszłego miesiąca liczą niepełny bieżący miesiąc (i miesiące bez danych) jako pełne (wbrew T47) – `shared/calc/plan.ts:33`, `shared/calc/plan.ts:35` (+3)
 - [x] **B24** Esc w polach kwoty, daty i godziny nie anuluje szkicu – wpisana wartość i tak się zapisuje – `renderer/components/fields.tsx:82-89`, `renderer/components/fields.tsx:90-96` (+8)
-- [ ] **B25** Średnie i propozycje liczą od najstarszej operacji dowolnego rodzaju – jedna stara pożyczka z Radaru dokłada puste miesiące i zaniża pensję, koperty i cel kadłuba – `shared/calc/plan.ts:25-30`, `shared/calc/plan.ts:33-38` (+5)
-- [ ] **B26** Pola liczb całkowitych (NumberField z decimals=0) przyjmują ułamki: harmonogram pożyczki gubi część kwoty, cel osłon i kadłuba wraca po cichu do 3 / 6 – `renderer/features/radar/RadarPage.tsx:307`, `renderer/components/ui.tsx:77` (+9)
+- [x] **B25** Średnie i propozycje liczą od najstarszej operacji dowolnego rodzaju – jedna stara pożyczka z Radaru dokłada puste miesiące i zaniża pensję, koperty i cel kadłuba – `shared/calc/plan.ts:25-30`, `shared/calc/plan.ts:33-38` (+5)
+- [x] **B26** Pola liczb całkowitych (NumberField z decimals=0) przyjmują ułamki: harmonogram pożyczki gubi część kwoty, cel osłon i kadłuba wraca po cichu do 3 / 6 – `renderer/features/radar/RadarPage.tsx:307`, `renderer/components/ui.tsx:77` (+9)
 - [ ] **B27** Odłączone panele Mostka zamierają po wyjściu z Mostka: dane się nie odświeżają, a kliknięcia nic nie robią – `renderer/store/detach.ts:58`, `renderer/store/detach.ts:66` (+7)
-- [ ] **B28** Przypomnienie o potwierdzeniu sald bierze najnowsze potwierdzenie dowolnego konta – Portfel XTB może nie być potwierdzany nigdy – `renderer/features/bridge/BridgePage.tsx:307`, `shared/calc/briefing.ts:181` (+5)
+- [x] **B28** Przypomnienie o potwierdzeniu sald bierze najnowsze potwierdzenie dowolnego konta – Portfel XTB może nie być potwierdzany nigdy – `renderer/features/bridge/BridgePage.tsx:307`, `shared/calc/briefing.ts:181` (+5)
 - [ ] **B29** Skrót szybkiego wpisu Ctrl+Alt+litera polskiego znaku (A, C, E, L, N, O, S, X, Z) przejmuje AltGr w całym systemie – nie da się pisać „ś”, „ą”, „ę”… – `renderer/components/ShortcutField.tsx:6`, `renderer/components/ShortcutField.tsx:15` (+4)
 - [x] **B30** Pieniędzy zarchiwizowanego celu nie da się odzyskać – po zmianie scenariusza ICTTJ zostają zamrożone poza zasięgiem i poza innymi celami (T66) – `renderer/features/starmap/StarMapPage.tsx:96`, `renderer/features/starmap/StarMapPage.tsx:104` (+5)
 - [ ] **B31** Przełączanie folderu z Ustawień bez blokady i postępu: zapisy w trakcie trafiają do nowego folderu albo przepadają, brak „Przerwij”, drugie kliknięcie wypiera otwarcie – `renderer/features/settings/SettingsPage.tsx:175`, `renderer/features/settings/SettingsPage.tsx:195` (+15)
@@ -182,7 +183,7 @@ pozycje – niezaznaczone niżej.
 - [x] **B38** Plan na ekranie nie jest liczony od nowa po zmianie nazwisk właściciela, kontenerów, kategorii ani operacji – import liczy go od nowa i decyzje o zmienionych kluczach przepadają po cichu – `renderer/features/import/ImportPage.tsx:791`, `renderer/features/import/state.ts:40` (+7)
 - [x] **B39** Po przeliczeniu planu (słowo kluczowe, połączenie nazw, „+ domownik”) temat traci swoją decyzję, a jej późniejsza zmiana nie obejmuje żadnej grupy – `renderer/features/import/state.ts:192`, `renderer/features/import/state.ts:243` (+4)
 - [x] **B40** Zwrot towaru z zakupu, który finansuje domownik, trafia do mnie: import nigdy nie tworzy zwrotu „finansuje: X” – `shared/import/classify.ts:340-347`, `shared/import/reconcile.ts:562-564` (+3)
-- [ ] **B41** Wpłata domownika traci rozpoznanie przez regułę bez osoby: słowo kluczowe z tytułu albo reguła połączonej nazwy – `shared/import/classify.ts:298-302`, `shared/import/classify.ts:327-336` (+3) · 1.5.0: część 2 (połączone nazwy) zrobiona; część 1 (słowo z tytułu) czeka na decyzję użytkownika – „Przed grupą H”
+- [x] **B41** Wpłata domownika traci rozpoznanie przez regułę bez osoby: słowo kluczowe z tytułu albo reguła połączonej nazwy – `shared/import/classify.ts:298-302`, `shared/import/classify.ts:327-336` (+3) · 1.5.0: część 2 (połączone nazwy) zrobiona; część 1 (słowo z tytułu) – zostaje jak jest (D85)
 - [x] **B42** Jednorazowy błąd odczytu pliku zostaje „uszkodzonym plikiem” aż do restartu, a zapis w to miejsce odsuwa poprawny plik – `main/datastore/store.ts:314`, `main/datastore/store.ts:315` (+6)
 - [x] **B43** Zamknięcie aplikacji czeka na zapis tylko 4 s – przy 150 tys. zapisy i rescan trwają dłużej, okno zamyka się jak po udanym zapisie – `main/index.ts:900`, `main/index.ts:904` (+6)
 - [x] **B44** „Zachowaj tę wersję” / „Zachowaj nowsze” nie odkłada odrzuconej wersji do historii: oryginał nadpisany w miejscu bez śladu, kopia tylko do Kosza tego komputera (albo usunięta bez Kosza) – `main/datastore/store.ts:952`, `main/datastore/store.ts:957` (+10)
@@ -198,10 +199,10 @@ pozycje – niezaznaczone niżej.
 - [ ] **B54** Okno zapamiętane na odłączonym monitorze otwiera się poza ekranem – `main/index.ts:811`, `main/index.ts:859` (+1)
 - [x] **B55** Opłata okresowa zapłacona przed terminem (miesiąc wcześniej albo przed dniem płatności): silnik zbiera ją z energii drugi raz, a odprawa, radar i Odkładki dalej ostrzegają – `shared/calc/fleet.ts:108`, `shared/calc/fleet.ts:591` (+7)
 - [x] **B56** Życie kontenera nie ma dat: nowy kontener okresowy zbiera raty wstecz z minionych miesięcy, archiwizacja przelicza całą historię, a resztka zbiornika po `until` zostaje na zawsze – `shared/calc/fleet.ts:177`, `shared/calc/fleet.ts:591` (+4)
-- [ ] **B57** Operacja „Pożyczka” bez rekordu pożyczki traktowana jak pożyczka udzielona: pożyczone pieniądze dokują jak przychód, ich zwrot tworzy fikcyjną należność – `shared/calc/fleet.ts:695`, `shared/calc/fleet.ts:710` (+4)
-- [ ] **B58** Płatności powiązane z usuniętym kontenerem znikają z kopert i dziennego przydziału, choć silnik dalej pobiera je z energii – `shared/calc/fleet.ts:608`, `shared/calc/fleet.ts:878` (+3)
-- [ ] **B59** Zapisany podział dokowania (split) stosowany w kwotach bezwzględnych także po zmianie kwoty operacji – osłony spadają o różnicę – `shared/calc/fleet.ts:508`, `shared/calc/fleet.ts:653` (+2)
-- [ ] **B60** Konto z saldem otwarcia na 1. dzień miesiąca (dodane po starcie): pensja płacona przed jego pieniędzmi – pensja częściowa i za mało energii na cały miesiąc – `shared/calc/fleet.ts:757`, `shared/calc/fleet.ts:760` (+3)
+- [x] **B57** Operacja „Pożyczka” bez rekordu pożyczki traktowana jak pożyczka udzielona: pożyczone pieniądze dokują jak przychód, ich zwrot tworzy fikcyjną należność – `shared/calc/fleet.ts:695`, `shared/calc/fleet.ts:710` (+4)
+- [x] **B58** Płatności powiązane z usuniętym kontenerem znikają z kopert i dziennego przydziału, choć silnik dalej pobiera je z energii – `shared/calc/fleet.ts:608`, `shared/calc/fleet.ts:878` (+3)
+- [x] **B59** Zapisany podział dokowania (split) stosowany w kwotach bezwzględnych także po zmianie kwoty operacji – osłony spadają o różnicę – `shared/calc/fleet.ts:508`, `shared/calc/fleet.ts:653` (+2)
+- [x] **B60** Konto z saldem otwarcia na 1. dzień miesiąca (dodane po starcie): pensja płacona przed jego pieniędzmi – pensja częściowa i za mało energii na cały miesiąc – `shared/calc/fleet.ts:757`, `shared/calc/fleet.ts:760` (+3)
 
 ### Priorytet niski
 
@@ -333,15 +334,15 @@ pozycje – niezaznaczone niżej.
 ### Priorytet średni
 
 - [ ] **N2** Tryb tylko do odczytu: część ekranów pokazuje sukces, choć nic się nie zapisało – `renderer/features/settings/AccountsTab.tsx:126`, `renderer/features/balances/actions.ts:39` (+53)
-- [ ] **N3** Szybki wpis: podgląd „Energia dziś → …” liczy inaczej niż silnik (kategoria bez koperty, data inna niż dziś) – `renderer/features/quick/QuickApp.tsx:142-144`, `renderer/features/quick/QuickApp.tsx:150` (+10)
-- [ ] **N4** Panel „Przychody”: mediana „Razem” liczona z miesięcy z ujemnym tradingiem – niezgodna z resztą panelu i z raportami – `shared/calc/income.ts:129`, `shared/calc/income.ts:145` (+4)
+- [x] **N3** Szybki wpis: podgląd „Energia dziś → …” liczy inaczej niż silnik (kategoria bez koperty, data inna niż dziś) – `renderer/features/quick/QuickApp.tsx:142-144`, `renderer/features/quick/QuickApp.tsx:150` (+10)
+- [x] **N4** Panel „Przychody”: mediana „Razem” liczona z miesięcy z ujemnym tradingiem – niezgodna z resztą panelu i z raportami – `shared/calc/income.ts:129`, `shared/calc/income.ts:145` (+4)
 - [x] **N5** Zakup sfinansowany przez domownika nadal daje poważne naruszenie (cisza nocna, osłony poniżej minimum) – wbrew D80 f / T107 – `shared/calc/game.ts:237`, `shared/calc/game.ts:187` (+12)
-- [ ] **N6** „Miesiąc zamknięty na plus” (T52) przeczy silnikowi: fanfara przy alarmie „energia wyczerpana”, a miesiąc opłaty ze zbiornika nigdy nie jest na plus – `shared/calc/plan.ts:290`, `shared/calc/plan.ts:326` (+12)
-- [ ] **N7** Kreator startu: nieaktualne teksty o „wersji 1.1”, brak kroku folderu ICTTJ i celów w podziale środków (spec, kroki 5–6) – `renderer/features/wizard/WizardPage.tsx:230`, `renderer/features/wizard/WizardPage.tsx:280` (+7)
-- [ ] **N8** Koperta zarchiwizowanej kategorii znika z formularza planu, ale dalej liczy się do sum, energii dnia i kolejnych miesięcy – `renderer/features/month/MonthPage.tsx:172`, `renderer/features/month/MonthPage.tsx:203` (+3)
-- [ ] **N9** Kreator pokazuje inne odkładki i inną pierwszą pensję niż potem silnik i Plan miesiąca – `renderer/features/wizard/WizardPage.tsx:75`, `renderer/features/wizard/WizardPage.tsx:77` (+6)
-- [ ] **N10** Edytor operacji: zakup w ciszy nocnej bez potwierdzenia (D40), a godzina domyślnie „teraz” – gra liczy to jako poważne naruszenie – `renderer/features/operations/state.ts:179`, `renderer/features/operations/OperationEditor.tsx:186` (+4)
-- [ ] **N11** Dzienny przydział: silnik dolicza łupy „na następny miesiąc” i wydatki bez kategorii, a „Podział pensji” i debriefing nie – `shared/calc/fleet.ts:835`, `shared/calc/fleet.ts:897` (+7)
+- [x] **N6** „Miesiąc zamknięty na plus” (T52) przeczy silnikowi: fanfara przy alarmie „energia wyczerpana”, a miesiąc opłaty ze zbiornika nigdy nie jest na plus – `shared/calc/plan.ts:290`, `shared/calc/plan.ts:326` (+12)
+- [x] **N7** Kreator startu: nieaktualne teksty o „wersji 1.1”, brak kroku folderu ICTTJ i celów w podziale środków (spec, kroki 5–6) – `renderer/features/wizard/WizardPage.tsx:230`, `renderer/features/wizard/WizardPage.tsx:280` (+7)
+- [x] **N8** Koperta zarchiwizowanej kategorii znika z formularza planu, ale dalej liczy się do sum, energii dnia i kolejnych miesięcy – `renderer/features/month/MonthPage.tsx:172`, `renderer/features/month/MonthPage.tsx:203` (+3)
+- [x] **N9** Kreator pokazuje inne odkładki i inną pierwszą pensję niż potem silnik i Plan miesiąca – `renderer/features/wizard/WizardPage.tsx:75`, `renderer/features/wizard/WizardPage.tsx:77` (+6)
+- [x] **N10** Edytor operacji: zakup w ciszy nocnej bez potwierdzenia (D40), a godzina domyślnie „teraz” – gra liczy to jako poważne naruszenie – `renderer/features/operations/state.ts:179`, `renderer/features/operations/OperationEditor.tsx:186` (+4)
+- [x] **N11** Dzienny przydział: silnik dolicza łupy „na następny miesiąc” i wydatki bez kategorii, a „Podział pensji” i debriefing nie – `shared/calc/fleet.ts:835`, `shared/calc/fleet.ts:897` (+7)
 - [x] **N12** Nowy plik, błędny plik albo „Zamknij plik” kasują wszystkie decyzje otwartej sesji bez pytania; sesja nie przeżywa też przeładowania okna – `renderer/features/import/state.ts:120`, `renderer/features/import/state.ts:126` (+6)
 - [x] **N13** Import pliku bez nowych operacji nie da się zapisać – „ostatni import” stoi, alarm „Zaległy import” zostaje, a Portfel XTB czeka – `renderer/features/import/ImportPage.tsx:156`, `renderer/features/import/ImportPage.tsx:200` (+4)
 - [x] **N14** Decyzja grupy „Pożyczka” / „Podatek PIT-38” zostaje regułą: kolejne przelewy do tej osoby albo urzędu są pożyczką / podatkiem bez pytania – `shared/import/reconcile.ts:597-626`, `shared/import/learn.ts:135-137` (+5)
@@ -351,7 +352,7 @@ pozycje – niezaznaczone niżej.
 - [ ] **N18** Historia zapisywana dla wszystkich wpisów, ale do obejrzenia tylko dla operacji, kontenerów i ustawień, mimo tekstów „jest w historii wpisu” – `renderer/features/operations/OperationEditor.tsx:114`, `renderer/features/cargo/CargoPage.tsx:270` (+4)
 - [x] **N19** Kopia dzienna (D31 „codziennie”) robi się tylko przy otwarciu folderu, a aplikacja z założenia żyje tygodniami w zasobniku (D64) – `main/index.ts:411`, `main/datastore/backup.ts:52` (+3)
 - [ ] **N20** Baner „Ten folder jest też otwarty na: …” stale widoczny, bo aplikacja zgodnie z D46/D64 działa w tle na każdym komputerze (heartbeat w OneDrive co minutę całą dobę) – `renderer/app/Banners.tsx:84`, `main/index.ts:268` (+2)
-- [ ] **N21** Mostek pokazuje „wolne do decyzji” przy niepełnym kadłubie, a dopłata do XTB z tej kwoty łamie firewall – `shared/calc/fleet.ts:931`, `shared/calc/fleet.ts:680` (+2)
+- [x] **N21** Mostek pokazuje „wolne do decyzji” przy niepełnym kadłubie, a dopłata do XTB z tej kwoty łamie firewall – `shared/calc/fleet.ts:931`, `shared/calc/fleet.ts:680` (+2)
 
 ### Priorytet niski
 

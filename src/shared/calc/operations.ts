@@ -47,7 +47,9 @@ export function financedOf(t: Transaction): Map<string, number> {
 }
 
 /** Split `amount` grosze into `n` parts: equal parts rounded down, the rest in the last one (T3). */
-export function splitEvenly(amount: number, n: number): number[] {
+export function splitEvenly(amount: number, parts: number): number[] {
+  // Whole parts only (B26): 2,5 parts would lose a half of the amount.
+  const n = Math.floor(parts)
   if (n <= 0) return []
   const base = Math.trunc(amount / n)
   return Array.from({ length: n }, (_, i) => (i < n - 1 ? base : amount - base * (n - 1)))
@@ -112,11 +114,26 @@ export function ownSpent(t: Transaction): number {
   return Math.max(0, -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)))
 }
 
+/**
+ * A payment of the cargo (B58): linked to a container that exists. A payment of a container deleted (on another
+ * computer, or before 1.5.2) is an ordinary expense – the engine takes it from the energy, so the envelopes count it.
+ */
+export const isCargoPayment = (t: Pick<Transaction, 'containerId'>, containerIds: ReadonlySet<string>): boolean => t.containerId != null && containerIds.has(t.containerId)
+
 // ------------------------------------------------------------------ the captain's log marks
 
 /** A purchase in the quiet hours (D40): only operations with a known time (an import has none). */
 export function isNight(t: Pick<Transaction, 'time' | 'kind' | 'amount'>, orders: Pick<Orders, 'quietHours'>): boolean {
   return t.kind === 'expense' && t.amount < 0 && t.time != null && inClockWindow(t.time, orders.quietHours.from, orders.quietHours.to)
+}
+
+/**
+ * A purchase in the quiet hours confirmed (D40, spec: „potwierdzony zakup w ciszy nocnej” – N10): its time in the
+ * window and its short entry in the captain's log. The quick entry asks for both; an operation typed later in Operacje
+ * with a night time and no entry is a purchase of the day written down at night – not the game's serious violation.
+ */
+export function isConfirmedNight(t: Pick<Transaction, 'time' | 'kind' | 'amount' | 'logNote'>, orders: Pick<Orders, 'quietHours'>): boolean {
+  return isNight(t, orders) && t.logNote.trim() !== ''
 }
 
 /** From the threshold the captain's log asks „plan czy impuls?” (D41). */

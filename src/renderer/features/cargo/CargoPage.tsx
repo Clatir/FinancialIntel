@@ -64,7 +64,9 @@ export function CargoPage() {
     .filter((c) => !c.archived)
     .map((c) => c.counterparty)
     .join('\u0001')
-  const proposals = useMemo(() => (month ? recurringPayments(transactions, month, containers) : []), [transactions, month, payees])
+  // The months the engine's averages read (B23, B25): the same proposals as the wizard's and the month plan's.
+  const history = fleet?.historyMonths
+  const proposals = useMemo(() => (month ? recurringPayments(transactions, month, containers, history) : []), [transactions, month, payees, history])
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const sim = (change: { add?: ContainerDraft; drop?: string }) =>
     simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)
@@ -339,7 +341,11 @@ function LinkPayments({ c }: { c: Container }) {
   // Counted when the operations, the payee or the budget's start change – never at every render (W6).
   const transactions = useRecordList('transactions')
   const start = useData((s) => s.fi?.settings.budget.start ?? null)
-  const n = useMemo(() => paymentsToLink(c.counterparty, transactions, start), [c.counterparty, transactions, start])
+  // The containers' ids only (B58: a payment of a deleted one is free to link) – not their every edit.
+  const ids = useRecordList('containers')
+    .map((x) => x.id)
+    .join('\u0001')
+  const n = useMemo(() => paymentsToLink(c.counterparty, transactions, start, new Set(ids.split('\u0001'))), [c.counterparty, transactions, start, ids])
   if (!n) return null
   return (
     <button type="button" className="self-start text-[11.5px] text-accent hover:underline" onClick={() => linkPayments(c.id, c.counterparty)} data-testid="container-link">

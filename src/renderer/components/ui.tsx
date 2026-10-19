@@ -74,9 +74,11 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
   const [draft, setDraft] = useState<string | null>(null)
   const formatted = value == null ? '' : decimals != null ? value.toFixed(decimals) : String(value)
   const shown = draft ?? (typographicMinus ? formatted.replace('-', '\u2212') : formatted)
+  // A field of whole numbers (decimals 0 – B26) never takes a fraction: 2,5 raty would save as a schedule losing a part.
+  const fits = (v: number | null) => v == null || decimals !== 0 || Number.isInteger(v)
   const accepts = (t: string) => {
     const parsed = parseNumberInput(t)
-    return parsed !== undefined && (!isValid || isValid(parsed))
+    return parsed !== undefined && fits(parsed) && (!isValid || isValid(parsed))
   }
   const invalid = draft != null && !accepts(draft)
   return (
@@ -99,12 +101,12 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
         setDraft(t)
         if (commitOnBlur) return
         const parsed = parseNumberInput(t)
-        if (parsed !== undefined && (!isValid || isValid(parsed))) onChange(parsed)
+        if (parsed !== undefined && fits(parsed) && (!isValid || isValid(parsed))) onChange(parsed)
       }}
       onBlur={() => {
         if (commitOnBlur && draft != null && !readOnly) {
           const parsed = parseNumberInput(draft)
-          if (parsed !== undefined && (!isValid || isValid(parsed))) {
+          if (parsed !== undefined && fits(parsed) && (!isValid || isValid(parsed))) {
             if (parsed !== value) onChange(parsed)
           } else onReject?.(parsed ?? null)
         }

@@ -1,12 +1,13 @@
 // adapted from ICTTJ src/renderer/features/history/HistoryDialog.tsx @ 84a8339
 import { useEffect, useMemo, useState } from 'react'
 import type { HistoryEntry, HistoryKind } from '@shared/api'
-import { diffRecords, fieldLabel, formatValue, type FieldChange } from '@shared/merge'
+import { diffRecords, fieldLabel, formatValue, isAmountPath, type FieldChange, type Path } from '@shared/merge'
 import type { SettingsFile } from '@shared/schema'
 import { api } from '../../lib/api'
 import { recordTitle } from '../../lib/recordTitle'
 import { useData } from '../../store/data'
 import { IconHistory } from '../../components/icons'
+import { plnText } from '../../components/fields'
 import { Modal } from '../../components/Modal'
 import { Badge, cx } from '../../components/ui'
 import { restoreVersion } from './actions'
@@ -40,7 +41,9 @@ export function dictNames(fi: SettingsFile | null): Map<string, string> {
   return out
 }
 
-export function displayValue(v: unknown, names: Map<string, string>): string {
+export function displayValue(v: unknown, names: Map<string, string>, path?: Path): string {
+  // An amount in grosze (B7): in złoty, hidden with the amounts (Ctrl+$).
+  if (path && typeof v === 'number' && isAmountPath(path)) return `${plnText(v)} zł`
   if (typeof v === 'string' && names.has(v)) return names.get(v)!
   if (Array.isArray(v) && v.length && v.every((x) => typeof x === 'string' && names.has(x))) return v.map((x) => names.get(x as string)).join(', ')
   return formatValue(v)
@@ -62,11 +65,11 @@ export function ChangeList({ changes, beforeLabel, afterLabel, testId }: { chang
           <span className="truncate text-muted" title={c.path.join('.')}>
             {fieldLabel(c.path)}
           </span>
-          <span className="truncate" title={displayValue(c.before, names)}>
-            {displayValue(c.before, names)}
+          <span className="truncate" title={displayValue(c.before, names, c.path)}>
+            {displayValue(c.before, names, c.path)}
           </span>
-          <span className="truncate text-fg-strong" title={displayValue(c.after, names)}>
-            {displayValue(c.after, names)}
+          <span className="truncate text-fg-strong" title={displayValue(c.after, names, c.path)}>
+            {displayValue(c.after, names, c.path)}
           </span>
         </div>
       ))}

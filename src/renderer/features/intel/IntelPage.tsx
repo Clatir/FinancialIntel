@@ -33,6 +33,7 @@ export function IntelPage() {
   const transactions = useRecordList('transactions')
   const balances = useRecordList('balances')
   const plans = useRecordList('months')
+  const containers = useRecordList('containers')
   const cats = useCategories()
   const [period, setPeriod] = useState<Period>('6')
   // The day and the month only: the fleet is a new object every minute, the analyses change with the day.
@@ -47,7 +48,7 @@ export function IntelPage() {
   const [fvgMonth, setFvgMonth] = useState<string | null>(null)
   if (!fleet || !settings) return <Empty>Wczytywanie…</Empty>
   const fvgOf = fvgMonth ?? (fleet.start && addMonths(fleet.month, -1) >= fleet.start.slice(0, 7) ? addMonths(fleet.month, -1) : fleet.month)
-  const brief = debriefing(fvgOf, { transactions, categories: settings.categories, plans, log: fleet.log, today: fleet.today })
+  const brief = debriefing(fvgOf, { transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today })
   const forecast = rangeForecast({ shields: fleet.shields.amount, hull: fleet.hull.amount, debt: fleet.debt, costs: fleet.costs.average, month: fleet.month })
   const last = wealth.at(-1)
   const peak = wealth.length ? Math.max(...wealth.map((p) => p.value)) : 0

@@ -79,10 +79,16 @@ export function dueNotices(o: NotifyInput): Notice[] {
     // A household member's purchases still owed after 30 days (D80 e), once per member and oldest purchase.
     if (i.kind === 'house' && p.house) out.push({ key: i.key, tag: 'radar', title: 'Rozliczenie z domownikiem', body: i.text })
   }
-  // Sunday: this week's balances, unless confirmed since Monday already.
-  const confirmed = o.lastConfirmation ? daysBetween(o.lastConfirmation, today) : null
-  if (p.balances && weekdayOf(today) === 7 && (confirmed == null || confirmed >= 7))
-    out.push({ key: `balances:${today}`, tag: 'balances', title: 'Potwierdzenie sald', body: 'Niedziela: porównaj salda kont z bankiem (Ustawienia → Konta).' })
+  // Sunday: this week's balances, unless confirmed since Monday already – each account on its own (B28).
+  if (p.balances && weekdayOf(today) === 7) {
+    if (o.confirmations) {
+      const due = o.confirmations.filter((a) => !a.last || daysBetween(a.last, today) >= 7)
+      if (due.length) out.push({ key: `balances:${today}`, tag: 'balances', title: 'Potwierdzenie sald', body: `Niedziela: porównaj z bankiem saldo – ${due.map((a) => a.name).join(', ')} (Ustawienia → Konta).` })
+    } else {
+      const confirmed = o.lastConfirmation ? daysBetween(o.lastConfirmation, today) : null
+      if (confirmed == null || confirmed >= 7) out.push({ key: `balances:${today}`, tag: 'balances', title: 'Potwierdzenie sald', body: 'Niedziela: porównaj salda kont z bankiem (Ustawienia → Konta).' })
+    }
+  }
   // The debriefing of the month just closed: from the 1st, at the first look until the loot's deadline (the 7th).
   if (p.debriefing && dayOfMonth(today) <= 7 && f.start && monthOf(f.start) < f.month)
     out.push({ key: `debriefing:${f.month}`, tag: 'debriefing', title: 'Debriefing miesiąca', body: 'Miesiąc zamknięty – wynik wobec planu i podział łupów (Plan miesiąca).' })

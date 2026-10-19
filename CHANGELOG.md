@@ -1,5 +1,62 @@
 # Financial Intel – zmiany
 
+## 1.5.2
+
+Liczby się zgadzają: średnie, plan miesiąca, ładownia, kreator, pola i podglądy liczą tak samo jak silnik budżetu –
+poprawki z przeglądu aplikacji po 1.4.1 (D84).
+
+Silnik i plan miesiąca:
+- Średnie kosztów i przychodów, cel kadłuba i propozycje (pensja, koperty, stałe opłaty) liczą się od początku historii
+  z banku: stara pożyczka z Radaru ani wpis ręczny sprzed importu nie dokładają pustych miesięcy, bieżący miesiąc nigdy
+  nie jest „pełny”, a miesiąc bez żadnej operacji (luka w importach) nie liczy się jak miesiąc bez kosztów. Bez historii
+  z banku – od salda otwarcia albo najstarszego wpisanego wydatku lub wpływu. Kreator, Plan miesiąca i Ładownia
+  proponują z tych samych miesięcy co silnik; gdy nie ma czego zaproponować – komunikat.
+- „Miesiąc zamknięty na plus” = energia miesiąca wystarczyła: pensja po ratach odkładek i łupy z poprzedniego miesiąca
+  pokryły wydatki, osłony nic nie dopłaciły. Opłata zapłacona ze zbiornika nie psuje miesiąca, a miesiąc z alarmem
+  „energia wyczerpana” nie jest na plus. Debriefing pokazuje rachunek energii i pulę dzienną (koperty dzienne, łupy,
+  wydatki bez kategorii) – także w Raportach.
+- Łupy „na następny miesiąc” podnoszą dzienny przydział także w „Podziale pensji” („w tym łupy”) i w debriefingu – jak w
+  silniku.
+- Zarchiwizowana kategoria zdejmuje swoją kopertę z planu tego miesiąca i kolejnych (minione miesiące ją zachowują) – z
+  „Cofnij”. Koperta zarchiwizowanej kategorii, która została w planie, jest oznaczona.
+- Usunięty kontener: jego płatności liczą się znów jak zwykłe wydatki – w energii, kopertach i debriefingu; „Cofnij”
+  łączy je z nim ponownie, a nowy kontener tego odbiorcy może je przejąć.
+- Operacja „Pożyczka” bez pożyczki z Radaru zmienia tylko osłony: pożyczone pieniądze nie są przychodem, a ich oddanie
+  nie tworzy należności. Edytor to mówi, a wpływ przy jednej otwartej pożyczce udzielonej podpowiada „zwrot pożyczki …?
+  przypisz”.
+- Konto z saldem otwarcia na 1. dzień miesiąca zasila osłony przed pensją tego dnia – pensja jest cała.
+- „Wolne do decyzji” na Mostku tylko przy pełnym kadłubie (jak firewall); inaczej „ponad cel osłon … nie do dopłaty XTB”.
+- Dokowanie: zapisany podział po zmianie kwoty operacji jest dopasowany do nowej kwoty (podatek, kadłub, cele, reszta do
+  osłon) z notką w oknie; wypłata z ICTTJ z inną kwotą w banku dzieli kwotę z banku.
+
+Kreator startu:
+- Konto z saldem otwarcia i pustym polem liczy się w „Obecnych środkach” kwotą, którą przyjmie silnik.
+- Nowy krok „ICTTJ i cele”: folder ICTTJ (cele prognozy stają się celami okrętu) i cele własne; w podziale środków kwoty
+  na cele (kadłub i cele razem najwyżej tyle, ile środków).
+- Odkładki pierwszego miesiąca jak w silniku (zbiornik opłaty, która jest blisko, nadrabia), potem miesięczna rata;
+  płatności opłat okresowych nie zjadają pierwszej pensji. Bez napisów o „wersji 1.1”.
+
+Pola, edytor i szybki wpis:
+- Data „dd.mm” bez roku w edytorze operacji i w szybkim wpisie: dzień najbliższy dacie pola, najwyżej tydzień po dziś –
+  28.12 wpisane 3 stycznia to miniony grudzień. Operacja z datą w przyszłości ma znaczek „w przyszłości” (do sald liczy
+  się od tego dnia).
+- Pola liczb całkowitych (raty pożyczki, cele osłon i kadłuba) nie przyjmują ułamków; harmonogram pożyczki nie gubi
+  części kwoty.
+- Edytor operacji: godzina w ciszy nocnej prosi o potwierdzenie krótkim wpisem w dzienniku (albo „usuń godzinę” dla
+  zakupu dopisanego później); gra liczy nocny zakup tylko potwierdzony. Nowa operacja wpisana w ciszy nocnej jest bez
+  godziny.
+- Szybki wpis: podgląd jak silnik – kategoria bez koperty „poza kopertami” (energia dziś bez zmian), koperta planowana –
+  jej stan, wydatek z wcześniejszego dnia miesiąca – rozłożony na pozostałe dni, inny miesiąc albo data w przyszłości –
+  energia dziś bez zmian.
+- Historia zmian, „Zmiany z drugiego komputera” i Synchronizacja pokazują kwoty w złotych (z ukryciem Ctrl+$).
+- Przypomnienie o potwierdzeniu sald – osobno dla każdego konta (gotówka bez przypomnień); niedzielne powiadomienie
+  wymienia konta.
+- Panel „Przychody”: „Razem” w miesiącu liczy trading jak raporty – nigdy poniżej zera.
+
+Folder danych:
+- Usuwanie wielu wpisów naraz („Cofnij import”, duplikaty) szybsze na Windows: plik wpisu, którego wersja jest w
+  historii (Synchronizacja → „Usunięte wpisy”), usuwa się od razu, do Kosza Windows trafia tylko bez wersji w historii.
+
 ## 1.5.1
 
 Import z mBanku: cofnięcie całego importu, saldo z pliku banku, oficer zna marki, audyt reguł i poprawki z przeglądu

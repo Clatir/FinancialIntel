@@ -243,6 +243,47 @@ export function fieldLabel(path: Path): string {
   return key || '(cały wpis)'
 }
 
+/**
+ * The fields holding an amount in grosze (B7): the history, the window of changes from the other computer and the
+ * conflicts show them in złoty – hidden with the amounts (Ctrl+$) – never as raw grosze. A `*` is any key (an envelope's
+ * category, a goal's id).
+ */
+const AMOUNT_FIELDS = [
+  'amount',
+  'splits.amount',
+  'salary',
+  'target',
+  'maxAmount',
+  'envelopes.*',
+  'loot.shields',
+  'loot.nextMonth',
+  'loot.goals.*',
+  'split.shields',
+  'split.hull',
+  'split.taxHold',
+  'split.goals.*',
+  'schedule.amount',
+  'transfers.amount',
+  'past.target',
+  'settings.layers.assumedCosts',
+  'settings.orders.impulseThreshold',
+  'settings.budget.initial.shields',
+  'settings.budget.initial.hull',
+  'settings.budget.initial.goals.*',
+  'settings.household.members.opening.owed',
+  'settings.household.members.opening.deposit',
+  'settings.import.rules.maxAmount'
+].map((f) => f.split('.'))
+
+/** Is the field at `path` an amount in grosze (B7)? Items of lists (`#id`, `[n]`) do not count as keys. */
+export function isAmountPath(path: Path): boolean {
+  const named = path.filter((p) => !p.startsWith('#') && !/^\[\d+\]$/.test(p))
+  return AMOUNT_FIELDS.some((f) => f.length === named.length && f.every((k, i) => k === '*' || k === named[i]))
+}
+
+/** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */
+export const isAmountKey = (key: string): boolean => isAmountPath(key.replace(/\[\d+\]/g, '').split('.').filter(Boolean))
+
 /** Short text of a value for the diff lists. */
 export function formatValue(v: unknown, max = 80): string {
   if (v === undefined) return '—'

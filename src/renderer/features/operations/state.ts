@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { warsawNow } from '@shared/calc/dates'
+import { inClockWindow, warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
 import { emptyFilter, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
 import { shareOf, withShare } from '@shared/calc/share'
@@ -194,7 +194,11 @@ export function newOperation(over: Partial<Transaction> = {}): string {
   const accounts = fi?.settings.accounts.filter((a) => !a.archived) ?? []
   const account = accounts.find((a) => a.id === lastAccount())?.id ?? accounts[0]?.id ?? MBANK_ACCOUNT_ID
   const now = new Date().toISOString()
-  const { date, time } = warsawNow()
+  const { date, time: clock } = warsawNow()
+  // Written in the quiet hours, it is most likely a purchase of the day written down at night (N10): no time – a night
+  // time is typed (and confirmed in the log) only for a purchase made then.
+  const quiet = fi?.settings.orders.quietHours
+  const time = quiet && inClockWindow(clock, quiet.from, quiet.to) ? null : clock
   const record = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, date, time, accountId: account, amount: 0, ...over })
   addRecord('transactions', record, { draft: true })
   navigate({ page: 'operations' })
