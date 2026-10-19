@@ -546,3 +546,62 @@ describe('koszty netto, średnie i masa ładunku', () => {
     expect(cargoMass([rent], '2026-10', null, 40).pct).toBeNull()
   })
 })
+
+describe('kolejność zdarzeń silnika (W27: bez kluczy tekstowych, sortowanie raz na listę)', () => {
+  it('operacje dnia: bez godziny, po godzinie, utworzeniu i id; decyzja o łupach w swojej minucie przed operacją z tą samą godziną', () => {
+    // The loot decision at 10:15 Warsaw (2 November = UTC+1).
+    const at = (time: string | null, createdAt: string) => tx('2026-11-02', zl(-10), { categoryId: FOOD, time, createdAt })
+    const none = at(null, '2026-11-02T20:00:00.000Z')
+    const early = at('10:14', AT)
+    const sameLate = at('10:15', '2026-11-02T12:00:00.000Z')
+    const sameEarly = at('10:15', '2026-11-02T08:00:00.000Z')
+    const after = at('10:16', AT)
+    const input = {
+      settings: settingsWith({ budget: { start: '2026-10-01' } }),
+      balances: [opening('2026-10-01', zl(20000))],
+      months: [plan('2026-10', zl(4000), {}, { loot: { decidedAt: '2026-11-02T09:15:00.000Z', shields: zl(4000), nextMonth: 0, goals: {} } })],
+      now: '2026-11-03T12:00:00+01:00'
+    }
+    const order = (s: FleetState) => s.log.filter((e) => e.date === '2026-11-02').map((e) => e.txId ?? e.kind)
+    const expected = [none.id, early.id, 'loot', sameEarly.id, sameLate.id, after.id]
+    // Any order of the list: the same order of the events, the same state.
+    const a = fleet({ ...input, transactions: [after, sameLate, none, sameEarly, early] })
+    const b = fleet({ ...input, transactions: [early, sameEarly, after, none, sameLate] })
+    expect(order(a)).toEqual(expected)
+    expect(order(b)).toEqual(expected)
+    expect(b).toEqual(a)
+    // Two operations of one minute and one creation: by id.
+    const x = tx('2026-11-02', zl(-1), { time: '10:20', createdAt: AT, id: '01K0000000000000000000ZZZ2' })
+    const y = tx('2026-11-02', zl(-1), { time: '10:20', createdAt: AT, id: '01K0000000000000000000ZZZ1' })
+    expect(order(fleet({ ...input, transactions: [x, y] })).filter((k) => k !== 'loot')).toEqual([y.id, x.id])
+  })
+
+  it('ta sama lista oceniana dla wielu dni (gra) daje to samo co lista świeża; salda kont jednym przebiegiem', () => {
+    const txs = [
+      tx('2026-10-03', zl(-120), { categoryId: FOOD }),
+      tx('2026-10-04', zl(-80), { categoryId: FOOD, accountId: XTB_WALLET_ACCOUNT_ID }),
+      tx('2026-09-28', zl(-50), { categoryId: FOOD }),
+      tx('2026-10-05', zl(500), { kind: 'income' })
+    ]
+    const input = { settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(10000)), opening('2026-10-02', zl(300), XTB_WALLET_ACCOUNT_ID)], months: [plan('2026-10', zl(2000))], transactions: txs }
+    for (const day of ['2026-10-02', '2026-10-04', '2026-10-06']) {
+      const now = `${day}T21:00:00+02:00`
+      expect(fleet({ ...input, now })).toEqual(fleet({ ...input, transactions: [...txs], now }))
+    }
+    const s = fleet({ ...input, now: '2026-10-06T21:00:00+02:00' })
+    // The operation before the opening balance of mBank is inside it; the wallet joins on the 2nd.
+    expect(s.accounts.find((x) => x.id === MBANK_ACCOUNT_ID)?.balance).toBe(zl(10000 - 120 + 500))
+    expect(s.accounts.find((x) => x.id === XTB_WALLET_ACCOUNT_ID)?.balance).toBe(zl(300 - 80))
+  })
+
+  it('części operacji z pamięci: te same dla tego samego wpisu, nowe dla zmienionej kopii', () => {
+    const t = tx('2026-10-03', zl(-100), { categoryId: FOOD, splits: [{ id: nextId(), amount: zl(-60), categoryId: GROCERIES, refundable: true, memberId: null }] })
+    expect(partsOf(t)).toBe(partsOf(t))
+    expect(partsOf(t).map((p) => [p.amount, p.refundable])).toEqual([[zl(-60), true], [zl(-40), false]])
+    const changed = { ...t, amount: zl(-150) }
+    expect(partsOf(changed).map((p) => p.amount)).toEqual([zl(-60), zl(-90)])
+    expect(costOf(changed)).toBe(zl(90))
+    expect(costOf({ ...t, splits: [], refundable: false })).toBe(zl(100))
+    expect(costOf({ ...t, splits: [], refundable: true })).toBe(0)
+  })
+})

@@ -122,8 +122,12 @@ export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId'
   return out
 }
 
-/** Does the operation touch a member's balance (a financed part, a member's income)? */
-export const settlesHousehold = (t: Transaction): boolean => (t.kind === 'expense' ? partsOf(t).some((p) => p.refundable) : incomeShares(t).some((s) => s.memberId != null))
+/**
+ * Does the operation touch a member's balance (a financed part, a member's income)? Without a split or a mark – most
+ * operations – no line to read (W27).
+ */
+export const settlesHousehold = (t: Transaction): boolean =>
+  t.kind === 'expense' ? (t.refundable || t.splits.length > 0) && partsOf(t).some((p) => p.refundable) : t.kind === 'income' && t.amount > 0 && incomeShares(t).some((s) => s.memberId != null)
 
 /** The open item of a member's opening balance (it has no operation): `OpenPurchase.txId`. */
 export const OPENING_TX = 'opening:'

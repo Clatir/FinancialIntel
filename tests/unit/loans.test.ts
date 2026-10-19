@@ -184,3 +184,31 @@ describe('radar 90 dni i PIT-38 (D58, D72)', () => {
     expect(off.filter((n) => n.tag === 'radar')).toEqual([])
   })
 })
+
+describe('pożyczki jednym przebiegiem (W27)', () => {
+  it('loanStates = loanState każdej pożyczki: operacje pożyczki, raty kontenera, inne pożyczki i przyszłe pominięte', () => {
+    const given = loan({ direction: 'given', amount: zl(900), schedule: [{ id: nextId(), date: '2026-10-01', amount: zl(450) }, { id: nextId(), date: '2026-11-01', amount: zl(450) }] })
+    const taken = loan({ direction: 'taken', amount: zl(1200), schedule: [{ id: nextId(), date: '2026-10-10', amount: zl(600) }, { id: nextId(), date: '2026-11-10', amount: zl(600) }] })
+    const closed = loan({ direction: 'given', amount: zl(100), closedAt: '2026-10-01T10:00:00.000Z' })
+    const c: Container = containerSchema.parse({ ...base(), name: 'Rata', type: 'installment', amount: zl(600), dueMonth: '2026-10', dueDay: 10, from: '2026-10', until: '2026-11', loanId: taken.id })
+    const other: Container = containerSchema.parse({ ...base(), name: 'Czynsz', amount: zl(1000), dueMonth: '2026-10' })
+    const txs = [
+      tx('2026-09-01', -zl(900), { kind: 'loan', loanId: given.id }),
+      tx('2026-10-02', zl(300), { kind: 'loan', loanId: given.id }),
+      tx('2026-09-01', zl(1200), { kind: 'loan', loanId: taken.id }),
+      tx('2026-10-10', -zl(600), { containerId: c.id }),
+      tx('2026-10-10', -zl(1000), { containerId: other.id }),
+      tx('2026-10-15', zl(40), { kind: 'loan', loanId: closed.id }),
+      tx('2026-12-01', zl(600), { kind: 'loan', loanId: given.id })
+    ]
+    const loans = [given, taken, closed]
+    const one = loans.map((l) => loanState(l, txs, [c, other], '2026-10-20'))
+    expect(loanStates(loans, txs, [c, other], '2026-10-20')).toEqual(one)
+    expect(one.map((s) => [s.paid, s.open])).toEqual([
+      [zl(300), zl(600)],
+      [zl(600), zl(600)],
+      [zl(40), 0]
+    ])
+    expect(loanStates([], txs, [c], '2026-10-20')).toEqual([])
+  })
+})
