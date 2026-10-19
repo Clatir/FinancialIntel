@@ -49,7 +49,7 @@ if (!isPrimaryInstance) app.quit()
 if (process.platform === 'win32') app.setAppUserModelId(process.env.PORTABLE_EXECUTABLE_FILE ? process.execPath : 'app.financialintel.desktop')
 
 const machineName = process.env.FI_MACHINE_NAME || hostname() || 'KOMPUTER'
-const config = new ConfigStore(app.getPath('userData'))
+const config = new ConfigStore(app.getPath('userData'), Number(process.env.FI_CONFIG_WRITE_DELAY_MS) || 0)
 /** Name of the folder created for new data inside a chosen folder that holds other files. */
 const DATA_FOLDER_NAME = 'FinancialIntel'
 
@@ -1161,16 +1161,17 @@ function broadcastPrefs(prefs: MachinePrefs): void {
 async function changePrefs(patch: unknown): Promise<MachinePrefs> {
   const before = config.get().prefs
   const prefs = patchMachinePrefs(before, patch)
-  await config.update({ prefs })
   const p = patch && typeof patch === 'object' ? (patch as Partial<MachinePrefs>) : {}
+  // Hidden by hand (or by the end of a showing): the idleness hides them again from the next showing on (F40) – at the
+  // change, not after its write: a showing asked meanwhile (a slow disk) is newer and stays.
+  if (p.hideAmounts === true) clearReveal()
+  await config.update({ prefs })
   // The shortcut registered again only when it was set (also the same one: a retry after another program let it go).
   if ('quickShortcut' in p) {
     quick?.applyShortcut(prefs.quickShortcut)
     if (quick) quick.replaced = null
   }
   if (prefs.zoom !== before.zoom) applyZoom()
-  // Hidden by hand (or by the end of a showing): the idleness hides them again from the next showing on (F40).
-  if (p.hideAmounts === true) clearReveal()
   broadcastPrefs(prefs)
   return prefs
 }

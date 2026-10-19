@@ -1784,3 +1784,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   konta (T267), podgląd zmiany zbiorczej bez drugiego liczenia stanu sprzed zmiany (T265), „nowy” w dzienniku zmian
   (T269). Mutacje: 64, 63 wykryte przez testy, 1 równoważna (zdarzenie drugiej strony przelewu, gdy obie są w biegu –
   ruch 0 zł, bez wpisu w dzienniku silnika).
+- **T271** Ukrycie kwot w chwili zmiany (F40, CI na `main` po scaleniu 1.6.6): ukrycie (ręczne albo koniec pokazania)
+  kończy pokazanie „na chwilę” i „do końca sesji” w chwili zmiany, nie po zapisie config.json – inaczej przy wolnym
+  dysku ukrycie zapisywane dłużej kasowało nowsze „Pokaż na …” zamówione w międzyczasie, a bezczynność chowała kwoty od
+  razu (job Windows na `main` – 1.6.6 bez wydania, wchodzi w 1.7.0). Zmienna testowa `FI_CONFIG_WRITE_DELAY_MS` (wolny
+  zapis config.json) odtwarza to w E2E na każdym komputerze.

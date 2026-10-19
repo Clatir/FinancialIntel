@@ -3,7 +3,7 @@
 **Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa S** (1.7.0 – operacje, funkcje)
 na gałęzi `claude/grupa-s-1.7.0`, PR do `main`; po niej od razu funkcje T, U, V – każda grupa z własnym PR i wydaniem
 (D71).
-**1.6.6 scalone** (PR #28, z 1.6.5), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -55,7 +55,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.3 | ✅ D87 | ✅ wydane (PR #25) |
 | **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ scalone (PR #26) |
 | **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 (w 1.6.6) | ✅ D87 | ✅ scalone (PR #27), wydanie przepadło – wchodzi w 1.6.6 |
-| **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1,5 h (zegar sesji, z przeglądem, 47 mutacjami, pełnym E2E i dwiema poprawkami CI; plan był ok. 1,5 h) | 1.6.6 (z 1.6.5) | ✅ D87 | ✅ scalone (PR #28) |
+| **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1,5 h (zegar sesji, z przeglądem, 47 mutacjami, pełnym E2E i dwiema poprawkami CI; plan był ok. 1,5 h) | 1.6.6 (w 1.7.0) | ✅ D87 | ✅ scalone (PR #28), wydanie przepadło – wchodzi w 1.7.0 |
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar gałęzi, z przeglądem, 64 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy R; plan był ok. 3 h) | 1.7.0 | ✅ D87 | ✅ PR do `main` |
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | czeka |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
@@ -817,7 +817,12 @@ Zakres: „Przed grupą S” wyżej. Zrobione:
 - Przegląd `/code-review` high: 10 kandydatów – 9 poprawionych z testem, 1 wydajnościowy bez testu (T270); najważniejszy –
   strony przelewu po dwóch stronach startu budżetu albo dzisiejszego dnia rozjeżdżały sumę warstw z saldami.
 - Testy: 707 unit + fs (nowe `transfers`, `operations-list`, `search`, `change-log`; poszerzone `operations-state`,
-  `inbox`, `duplicates`), E2E 58 (nowy `operations-s.spec.ts`); 64 mutacje – 63 wykryte, 1 równoważna (T270).
+  `inbox`, `duplicates`), E2E 58 (nowy `operations-s.spec.ts`); 65 mutacji – 64 wykryte, 1 równoważna (T270).
+- 1.6.6 nie wyszło: job Windows na `main` po scaleniu PR #28 padł na E2E ukrywania kwot (dwa ukrycia „bez ruchu”, bez
+  „koniec pokazania”). Przyczyna – wyścig: ukrycie ręczne kończyło pokazanie dopiero po zapisie config.json, więc przy
+  wolnym dysku kasowało „Pokaż na …” zamówione tuż po nim (T271). Odtworzone lokalnie wolnym zapisem
+  (`FI_CONFIG_WRITE_DELAY_MS`), poprawione, test ukrywania kwot biegnie teraz z wolnym zapisem. 1.6.5 i 1.6.6 wchodzą w
+  1.7.0 (notatki wydania z sekcjami wersji niewydanych).
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 1. Meldunki → „Przelewy między kontami” → „Połącz…”: lista par, odznaczenie pary do sprawdzenia, „Połącz zaznaczone”;

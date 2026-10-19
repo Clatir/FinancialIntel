@@ -98,7 +98,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `tests/update/*` (tylko Windows CI). Zmienne testowe: `FI_USER_DATA`, `FI_DATA_DIR`, `FI_MACHINE_NAME`,
   `FI_DEFAULT_DATA_DIR` (propozycja folderu), `FI_UPDATE_URL`, `FI_UPDATE_CHECK_DELAY_MS`, `FI_UPDATE_TOKEN`,
   `FI_E2E_EXECUTABLE`, od E5 `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` / `FI_ICTJ_LAUNCH`, od 1.6.6 `FI_SYSTEM_IDLE` (stała
-  bezczynność systemu w s), `FI_IDLE_CHECK_MS`, `FI_CONFIG_RETRY_MS`; Windows CI: `FI_UPDATE_FROM` /
+  bezczynność systemu w s), `FI_IDLE_CHECK_MS`, `FI_CONFIG_RETRY_MS`, od 1.7.0 `FI_CONFIG_WRITE_DELAY_MS` (wolny zapis
+  config.json – T271); Windows CI: `FI_UPDATE_FROM` /
   `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E
   `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Ikona: `node scripts/make-icon.mjs` (`CHROMIUM_PATH=…` jeśli trzeba) → `resources/icon.png`.
@@ -829,8 +830,10 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Dziennik zmian (F33, T269): `shared/changeLog.ts` `changeLog`, `changeLogMachines`, `CHANGELOG_KINDS`;
   `sync/ChangeLog.tsx` (`sync-changelog`, `changelog-period-*`, `-machine`, `-kind`, `-row`, `-changes`, `-diff`,
   `-take-back`, `-open`, `-no-version`).
+- Ukrycie kwot w chwili zmiany (T271): `main/index.ts` `changePrefs` kończy pokazanie przed zapisem config.json;
+  `ConfigStore(dir, writeDelayMs)`.
 - Testy: `tests/unit/transfers.test.ts`, `operations-list.test.ts`, `search.test.ts`, `change-log.test.ts`, poszerzone
-  `operations-state`, `inbox`, `duplicates`; E2E `tests/e2e/operations-s.spec.ts`.
+  `operations-state`, `inbox`, `duplicates`; E2E `tests/e2e/operations-s.spec.ts`, `look.spec.ts` (wolny zapis).
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```

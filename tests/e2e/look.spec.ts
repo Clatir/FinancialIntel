@@ -109,8 +109,8 @@ test('rozmiar interfejsu i wyższy kontrast (1.6.6, F30): Ctrl+Plus / Ctrl+Minus
 
 test('kwoty ukryte po bezczynności (1.6.6, F40): „Pokaż na 5 min”, „do końca sesji”, Ctrl+$ wraca do ukrywania', async () => {
   const userData = machine({ hideIdleMin: 1 })
-  // The system idle for 2 minutes, looked at often.
-  const { app, page, errors } = await launch({ dataDir: budget(), userData, env: { FI_SYSTEM_IDLE: '120', FI_IDLE_CHECK_MS: '200' } })
+  // The system idle for 2 minutes, looked at often; a slow disk (a change saved while the next one is asked – Windows CI).
+  const { app, page, errors } = await launch({ dataDir: budget(), userData, env: { FI_SYSTEM_IDLE: '120', FI_IDLE_CHECK_MS: '200', FI_CONFIG_WRITE_DELAY_MS: '300' } })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await expect(page.getByTestId('amounts-hidden')).toBeVisible()

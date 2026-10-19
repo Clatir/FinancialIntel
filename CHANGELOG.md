@@ -30,6 +30,9 @@ Paleta i Synchronizacja:
 - Dziennik zmian w Synchronizacji: co zmieniło się dziś, w 7 albo 30 dni – na którym komputerze, które pola; „Weź
   poprzednią wersję” jednym kliknięciem.
 
+Poprawka: „Pokaż na 5 min” zaraz po ukryciu kwot nie przepada przy wolnym dysku (kwoty nie chowają się od razu przez
+bezczynność).
+
 ## 1.6.6
 
 Poprawki z przeglądu aplikacji (grupa R, D87): teksty, wygląd i wygoda.
