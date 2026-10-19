@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useShallow } from 'zustand/shallow'
 import { BIAS_LABEL, briefing, confirmationsOf, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
 import { daysBetween, isoWeekOf } from '@shared/calc/dates'
 import { financersText, memberName, payerOf } from '@shared/calc/household'
@@ -11,7 +12,7 @@ import type { DetachEvent } from '@shared/api'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useMachine } from '../../store/machine'
-import type { DetachSpec } from '../../store/detach'
+import { useHostedDetach, useDetach, type DetachSpec } from '../../store/detach'
 import { useRecordList } from '../../store/records'
 import { navigate } from '../../store/ui'
 import { api } from '../../lib/api'
@@ -91,6 +92,57 @@ const onBridgeEvent = (e: DetachEvent) => {
 }
 const emitTarget = (target: BridgeTarget, key?: string) => void api.detachEmit({ type: 'open', target, ...(key ? { key } : {}) })
 
+type BridgePanel = BridgeDetachProps['panel']
+/** The bridge's panels that open in their own window, by their name (the panel's key is `bridge:<name>`). */
+const DETACHED_PANELS: Record<string, BridgePanel> = { Odprawa: 'briefing', 'Stan okrętu': 'state', Koperty: 'envelopes' }
+
+/**
+ * The detached panels' specs, one for the page and the host (B27): their data and clicks are served by
+ * `BridgeDetachHost` – the panels on the bridge only open and close the windows.
+ */
+function useBridgeSpecs(fleet: FleetState | null, items: BriefingItem[]): Record<BridgePanel, DetachSpec> | null {
+  const cats = useCategories()
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
+  const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
+  return useMemo(() => {
+    if (!view) return null
+    const spec = (title: string, props: BridgeDetachProps): DetachSpec => ({ kind: 'bridge', title, props, onEvent: onBridgeEvent, hosted: true })
+    return {
+      briefing: spec(`Odprawa – ${dayLabel(view.today)}`, { panel: 'briefing', fleet: view, items }),
+      state: spec('Stan okrętu', { panel: 'state', fleet: view }),
+      envelopes: spec('Koperty', { panel: 'envelopes', rows: view.envelopes, labels, elapsed: monthElapsed(view.today) })
+    }
+  }, [view, items, labels])
+}
+
+/**
+ * The bridge's detached windows (D45, B27), in the main window whatever page it shows: their data follows every
+ * change (also after midnight) and every click leads the main window – the bridge may be long left.
+ */
+export function BridgeDetachHost() {
+  const keys = useDetach(useShallow((s) => Object.keys(s.open).filter((k) => k.startsWith('bridge:'))))
+  return keys.length ? <BridgeDetachSender keys={keys} /> : null
+}
+
+function BridgeDetachSender({ keys }: { keys: string[] }) {
+  const fleet = useFleet()
+  const items = useBriefingItems(fleet)
+  const specs = useBridgeSpecs(fleet, items)
+  return (
+    <>
+      {keys.map((k) => {
+        const panel = DETACHED_PANELS[k.slice('bridge:'.length)]
+        return panel ? <HostedPanel key={k} panelKey={k} spec={specs?.[panel] ?? null} /> : null
+      })}
+    </>
+  )
+}
+
+function HostedPanel({ panelKey, spec }: { panelKey: string; spec: DetachSpec | null }) {
+  useHostedDetach(panelKey, spec ? { kind: spec.kind, title: spec.title ?? '', props: spec.props } : null, onBridgeEvent)
+  return null
+}
+
 /** The briefing read aloud with a Polish voice of the system (D49), when the system has one. */
 function speak(text: string): boolean {
   const synth = window.speechSynthesis
@@ -118,16 +170,7 @@ export function BridgePage() {
   const members = useMembers()
   const items = useBriefingItems(fleet)
   const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
-  const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
-  const specs = useMemo(() => {
-    if (!view) return null
-    const spec = (props: BridgeDetachProps): DetachSpec => ({ kind: 'bridge', props, onEvent: onBridgeEvent })
-    return {
-      briefing: spec({ panel: 'briefing', fleet: view, items }),
-      state: spec({ panel: 'state', fleet: view }),
-      envelopes: spec({ panel: 'envelopes', rows: view.envelopes, labels, elapsed: monthElapsed(view.today) })
-    }
-  }, [view, items, labels])
+  const specs = useBridgeSpecs(fleet, items)
   if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
   const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 10)
   // A household member's purchase or money (D80) says whose it is instead of the category.

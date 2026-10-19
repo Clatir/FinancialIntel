@@ -1,5 +1,5 @@
 // adapted from ICTTJ src/renderer/features/sync/SyncPage.tsx @ 84a8339
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSelection, type Selection } from '../../lib/selection'
 import type { ConflictEntry, HistoryEntry, HistoryKind } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
@@ -43,6 +43,28 @@ function flatten(value: unknown, prefix = '', out: Record<string, string> = {}):
     out[prefix] = typeof value === 'string' ? value : JSON.stringify(value)
   }
   return out
+}
+
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+
+/** The newest record another computer wrote (F21): which computer and when – none = only this one writes here. */
+function useLastRemoteChange(): { machine: string; at: string } | null {
+  const records = useData((s) => s.records)
+  const fi = useData((s) => s.fi)
+  const me = useData((s) => s.appInfo?.machineName ?? '')
+  return useMemo(() => {
+    let machine = ''
+    let at = ''
+    const take = (r: { updatedAt?: string; updatedBy?: string }) => {
+      if (r.updatedBy && r.updatedBy !== me && r.updatedAt && r.updatedAt > at) {
+        machine = r.updatedBy
+        at = r.updatedAt
+      }
+    }
+    if (fi) take(fi as { updatedAt?: string; updatedBy?: string })
+    for (const map of Object.values(records)) for (const e of Object.values(map)) take(e.record as { updatedAt?: string; updatedBy?: string })
+    return at ? { machine, at } : null
+  }, [records, fi, me])
 }
 
 /**
@@ -377,6 +399,7 @@ export function SyncPage() {
   const problems = useData((s) => s.problems)
   const status = useData((s) => s.status)
   const locked = useFolderLocked()
+  const lastRemote = useLastRemoteChange()
   const fi = useData((s) => s.fi)
   return (
     <div className="h-full overflow-y-auto p-3">
@@ -391,13 +414,19 @@ export function SyncPage() {
           Gdy ten sam plik zmieni się na dwóch komputerach, usługa synchronizacji (OneDrive, Dropbox, Google Drive) tworzy jego kopię zamiast
           nadpisywać. Aplikacja pokazuje takie kopie tutaj – wybierz, którą wersję zachować; druga trafia do historii wpisu (widać ją na każdym komputerze) i do Kosza.
         </p>
-        {status && status.otherMachines.length > 0 && (
+        {((status && status.otherMachines.length > 0) || lastRemote) && (
           <Panel title="Inne komputery">
-            {status.otherMachines.map((m) => (
-              <div key={m.machine} className="num text-[12px]">
-                {m.machine} – ostatnia aktywność {new Date(m.lastSeen).toLocaleTimeString('pl-PL')}
+            {status?.otherMachines.map((m) => (
+              <div key={m.machine} className="num text-[12px]" data-testid="sync-machine" data-in-use={m.inUse !== false ? 'yes' : 'no'}>
+                {m.machine} – {m.inUse !== false ? 'w użyciu' : 'w zasobniku'}, sygnał {clock(m.lastSeen)}
+                {m.activeAt ? `, ostatni ruch w oknie ${clock(m.activeAt)}` : ''}
               </div>
             ))}
+            {lastRemote && (
+              <div className="text-[12px] text-muted" data-testid="sync-last-remote">
+                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {new Date(lastRemote.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+              </div>
+            )}
           </Panel>
         )}
         <DeletedRecords />

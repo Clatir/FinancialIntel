@@ -28,6 +28,10 @@ interface DataState {
   setupProblem: SetupProblem | null
   /** Another folder opening from Settings (B31): nothing is edited or written until it opens or fails. */
   switching: boolean
+  /** When the folder opened in this window, and when a change from another computer came last (B33: the first
+   * freeze of the game's days waits for them). */
+  openedAt: number
+  externalAt: number
   appInfo: AppInfo | null
   /** fi.json: the folder's settings. */
   fi: SettingsFile | null
@@ -126,6 +130,8 @@ export const useData = create<DataState>(() => ({
   setupDir: null,
   setupProblem: null,
   switching: false,
+  openedAt: 0,
+  externalAt: 0,
   appInfo: null,
   fi: null,
   records: emptyMaps(),
@@ -207,6 +213,8 @@ export function applySnapshot(snapshot: Snapshot): void {
     setupMessage: null,
     setupDir: null,
     setupProblem: null,
+    openedAt: Date.now(),
+    externalAt: 0,
     fi: snapshot.fi,
     records: Object.fromEntries(COLLECTIONS.map((c) => [c, toMap(snapshot.records[c] ?? [])])) as unknown as RecordMaps,
     problems: snapshot.problems,
@@ -248,6 +256,9 @@ export function applyChange(change: ChangeSet): void {
       conflicts: change.conflicts,
       status: change.status
     }
+    // Another computer's records arriving (B33): the game's first freeze waits until they stop for a while. A change
+    // of the presence alone is none.
+    if (external && (change.upserts.length || change.removals.length || change.fi)) next.externalAt = Date.now()
     const maps: Partial<Record<Collection, AnyMap>> = {}
     const mapFor = (c: Collection) => (maps[c] ??= { ...mapOf(s, c) })
     for (const { collection, entry } of change.upserts) {

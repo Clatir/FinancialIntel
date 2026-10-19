@@ -51,7 +51,8 @@ export interface FolderStatus {
   folderSchemaVersion: number
   appSchemaVersion: number
   /** Other machines that used this folder within the last few minutes. */
-  otherMachines: Array<{ machine: string; lastSeen: string }>
+  /** Other computers with the folder open; `inUse` = a move in a window within 10 min (D86), else only in the tray. */
+  otherMachines: Array<{ machine: string; lastSeen: string; activeAt?: string | null; inUse?: boolean }>
   migratedFrom: number | null
   backupPath: string | null
 }
@@ -155,6 +156,11 @@ export interface AppInfo {
   platform: string
   userDataDir: string
   isPortable: boolean
+  /**
+   * The first freeze of the game's days after a folder opened waits this long, and for this long without a change
+   * from another computer (B33); test runs shorten them.
+   */
+  freeze: { afterOpenMs: number; quietMs: number }
 }
 
 /**
@@ -313,6 +319,11 @@ export interface FiApi {
   /** Preferences of this computer (shortcut, notifications, sounds, hidden amounts): a patch, the result for all windows. */
   setMachinePrefs(patch: Partial<MachinePrefs>): Promise<MachinePrefs>
   onMachinePrefs(cb: (prefs: MachinePrefs) => void): () => void
+  /** A move in a window (D86): sent at most twice a minute by every window. */
+  reportActivity(): Promise<void>
+  /** This computer in use – a move in one of its windows within 10 min (D86); the change comes as `onInUse`. */
+  inUseNow(): Promise<boolean>
+  onInUse(cb: (inUse: boolean) => void): () => void
   /** The quick entry's global shortcut: registered, or taken by another program. */
   /** `replaced` = the shortcut the start replaced with the default (it took a Polish letter – B29); null = none. */
   quickShortcutState(): Promise<{ accelerator: string; registered: boolean; replaced: string | null }>

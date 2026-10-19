@@ -16,6 +16,11 @@ export interface DetachSpec {
   title?: string
   /** Events from the window. */
   onEvent?: (e: DetachEvent) => void
+  /**
+   * Its data and events served by a host of the main window whatever page is shown (`useHostedDetach` – B27): the
+   * panel only opens, focuses and closes its window.
+   */
+  hosted?: boolean
 }
 
 /** Panels of the main window open in their own window, by key (page + panel name). */
@@ -62,19 +67,20 @@ export function useDetachedPanel(key: string | null, spec: DetachSpec | undefine
     () => (spec ? { kind: spec.kind, title: spec.title ?? title, props } : null),
     [spec?.kind, spec?.title, props, title]
   )
+  const hosted = !!spec?.hosted
   useEffect(() => {
-    if (detached && key && payload) void api.detachSend(key, payload).catch(() => undefined)
-  }, [detached, key, payload])
+    if (detached && key && payload && !hosted) void api.detachSend(key, payload).catch(() => undefined)
+  }, [detached, key, payload, hosted])
   const onEvent = useRef(spec?.onEvent)
   onEvent.current = spec?.onEvent
   useEffect(() => {
-    if (!detached || !key) return
+    if (!detached || !key || hosted) return
     const handler = (e: DetachEvent) => onEvent.current?.(e)
     handlers.set(key, handler)
     return () => {
       if (handlers.get(key) === handler) handlers.delete(key)
     }
-  }, [detached, key])
+  }, [detached, key, hosted])
   return {
     available: !!key && !!payload,
     detached,
@@ -82,6 +88,30 @@ export function useDetachedPanel(key: string | null, spec: DetachSpec | undefine
     close: () => key && closeDetached(key),
     focus: () => key && focusDetached(key)
   }
+}
+
+/**
+ * A detached window served from outside its page (B27): its data sent on every change and its events handled while
+ * the window is open – the page it came from may be long left.
+ */
+export function useHostedDetach(key: string, payload: DetachPayload | null, onEvent: (e: DetachEvent) => void): void {
+  const props = useShallowStable(payload?.props)
+  // By the payload's parts: a new object of the same values is not sent again.
+  const kind = payload?.kind
+  const title = payload?.title
+  useEffect(() => {
+    if (kind) void api.detachSend(key, { kind, title: title ?? '', props }).catch(() => undefined)
+  }, [key, kind, title, props])
+  const handler = useRef(onEvent)
+  handler.current = onEvent
+  useEffect(() => {
+    wire()
+    const h = (e: DetachEvent) => handler.current(e)
+    handlers.set(key, h)
+    return () => {
+      if (handlers.get(key) === h) handlers.delete(key)
+    }
+  }, [key])
 }
 
 /** The same object while its own values stay the same (props built inline on every render are sent once). */

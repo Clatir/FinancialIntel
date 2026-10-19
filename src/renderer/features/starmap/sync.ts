@@ -8,12 +8,15 @@ import { syncIctjGoals } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import { addRecords, replaceRecords, updateSettings, useData } from '../../store/data'
 import { useIctj } from '../../store/ictj'
+import { usePresence } from '../../store/presence'
 
 export function useIctjGoalSync(): void {
   const snap = useIctj((s) => s.snap)
   const forecastId = useData((s) => s.fi?.settings.ictj.forecastId ?? null)
   const goals = useData((s) => s.records.goals)
-  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching)
+  // A computer only in the tray writes nothing in the background (D86).
+  const inUse = usePresence((s) => s.inUse)
+  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching) && inUse
   useEffect(() => {
     if (!ready || snap.status !== 'ok') return
     const chosen = chosenForecast(snap.forecasts, forecastId)

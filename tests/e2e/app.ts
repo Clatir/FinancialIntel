@@ -19,7 +19,7 @@ export interface Launched {
  * user-data folder and a preselected data folder (`usePreset: false` = the first-run screen).
  */
 export async function launch(
-  opts: { dataDir?: string; userData?: string; machine?: string; usePreset?: boolean; env?: Record<string, string>; args?: string[] } = {}
+  opts: { dataDir?: string; userData?: string; machine?: string; usePreset?: boolean; env?: Record<string, string>; args?: string[]; hidden?: boolean } = {}
 ): Promise<Launched> {
   const base = mkdtempSync(join(tmpdir(), 'fi-e2e-'))
   const dataDir = opts.dataDir ?? join(base, 'FinancialIntel')
@@ -34,6 +34,9 @@ export async function launch(
     // No test talks to the real api.github.com; the update test passes a local server.
     FI_UPDATE_URL: 'http://127.0.0.1:9',
     FI_UPDATE_CHECK_DELAY_MS: '3600000',
+    // The game's first freeze waits after the opening (B33): not in tests that do not test it.
+    FI_FREEZE_AFTER_OPEN_MS: '0',
+    FI_FREEZE_QUIET_MS: '0',
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
     ...opts.env
   } as Record<string, string>
@@ -51,8 +54,9 @@ export async function launch(
   })
   await page.waitForLoadState('domcontentloaded')
   // The window is created hidden and shown on 'ready-to-show': a screenshot or a click before that fails on a cold
-  // start (the first test of a run), so every test starts with the window on screen.
-  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible())), { timeout: 30_000 }).toBe(true)
+  // start (the first test of a run), so every test starts with the window on screen – but one started in the tray.
+  if (!opts.hidden)
+    await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible())), { timeout: 30_000 }).toBe(true)
   // Stable screenshots: no transitions.
   await page.emulateMedia({ reducedMotion: 'reduce' })
   return { app, page, dataDir, userData, errors }

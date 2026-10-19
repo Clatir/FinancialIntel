@@ -12,7 +12,7 @@ import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type Update
 import { ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
-import { clearPresence, readOtherMachines, writePresence } from './datastore/presence'
+import { IN_USE_MS, clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
 import { importBackup, listBackups, manualBackup, runBackups, type DataSource } from './datastore/backup'
 import { sleep, withRetry, writeFileAtomic } from './datastore/atomic'
@@ -57,6 +57,14 @@ let refreshes: RefreshQueue | null = null
 const FOCUS_REFRESH_MS = 60_000
 let lastFocusRefresh = 0
 let presenceTimer: NodeJS.Timeout | null = null
+/** This computer's presence file written last; in the tray (not in use) it is written this seldom (N20). */
+let presenceWrittenAt = 0
+const TRAY_PRESENCE_MS = 5 * 60_000
+/** The last move in one of this computer's windows (D86): in use for 10 min after it. */
+let activeAt = 0
+/** What the main window was told last (`fi:inUse`); the moment it stops being in use is told when it comes. */
+let toldInUse: boolean | null = null
+let idleTimer: NodeJS.Timeout | null = null
 let updater: Updater | null = null
 let tray: AppTray | null = null
 let quick: QuickEntry | null = null
@@ -76,10 +84,41 @@ let pendingMaximize = false
 let sessionEnding = false
 /** How long a session-end query holds the "quit for real" state when no session-end follows (cancelled logoff). */
 const SESSION_QUERY_MS = 30_000
+/** A delay from the environment (test runs), else the default. */
+const envMs = (name: string, fallback: number): number => {
+  const v = Number(process.env[name])
+  return process.env[name] != null && Number.isFinite(v) && v >= 0 ? v : fallback
+}
 /** First automatic update check after start (test runs shorten it). */
 const updateCheckDelayMs = (): number => Number(process.env.FI_UPDATE_CHECK_DELAY_MS) || 15_000
 
+const inUseNow = (): boolean => activeAt > 0 && Date.now() - activeAt < IN_USE_MS
+
+/** The main window learns whether this computer is in use (its background writes and notifications go by it). */
+function tellInUse(): void {
+  const inUse = inUseNow()
+  if (inUse === toldInUse || !mainWindow || mainWindow.isDestroyed()) return
+  toldInUse = inUse
+  mainWindow.webContents.send('fi:inUse', inUse)
+}
+
+/**
+ * A move in one of the windows (D86, N20): the computer is in use – the others see it at once (its presence written
+ * now), the main window resumes its background writes.
+ */
+function noteActivity(): void {
+  const was = inUseNow()
+  activeAt = Date.now()
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = setTimeout(tellInUse, IN_USE_MS + 1000)
+  idleTimer.unref?.()
+  if (was) return
+  tellInUse()
+  void heartbeat(true)
+}
+
 function showMainWindow(): void {
+  noteActivity()
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   if (pendingMaximize) {
@@ -327,11 +366,16 @@ async function closeStore(): Promise<void> {
   await clearPresence(closing.root, machineName).catch(() => undefined)
 }
 
-async function heartbeat(): Promise<void> {
+async function heartbeat(force = false): Promise<void> {
+  tellInUse()
   const s = store
   if (!s) return
   try {
-    if (!s.status().readOnly) await writePresence(s.root, machineName, app.getVersion()).catch(() => undefined)
+    // In use: every minute; only in the tray: every 5 minutes – OneDrive is not woken all night for it (N20).
+    if (!s.status().readOnly && (force || inUseNow() || Date.now() - presenceWrittenAt >= TRAY_PRESENCE_MS)) {
+      presenceWrittenAt = Date.now()
+      await writePresence(s.root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null).catch(() => undefined)
+    }
     const others = await readOtherMachines(s.root, machineName)
     if (JSON.stringify(others) !== JSON.stringify(s.otherMachines)) {
       s.otherMachines = others
@@ -505,7 +549,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       onError: (e) => log('warn', 'watcher error', e)
     })
     watcher.start()
-    void heartbeat()
+    void heartbeat(true)
     presenceTimer = setInterval(() => void heartbeat(), 60_000)
     // Daily backup (decision D31), in the background.
     dailyBackup()
@@ -596,9 +640,12 @@ function registerIpc(): void {
       machineName,
       platform: process.platform,
       userDataDir: app.getPath('userData'),
-      isPortable: !!process.env.PORTABLE_EXECUTABLE_DIR
+      isPortable: !!process.env.PORTABLE_EXECUTABLE_DIR,
+      freeze: { afterOpenMs: envMs('FI_FREEZE_AFTER_OPEN_MS', 3 * 60_000), quietMs: envMs('FI_FREEZE_QUIET_MS', 60_000) }
     })
   )
+  handle('reportActivity', () => noteActivity())
+  handle('inUseNow', () => inUseNow())
   // The renderer needs the recent folders; the GitHub token stays here.
   handle('getConfig', () => publicConfig(config.get()))
   handle('loadCurrent', async () => {
@@ -1081,6 +1128,7 @@ function createWindow(): void {
     win.webContents.send('fi:flush')
   })
   win.on('focus', () => {
+    noteActivity()
     // No full rescan while closing: it would stand before the last writes (B43); at most once a minute (W21).
     if (windowClosing || Date.now() - lastFocusRefresh < FOCUS_REFRESH_MS) return
     lastFocusRefresh = Date.now()

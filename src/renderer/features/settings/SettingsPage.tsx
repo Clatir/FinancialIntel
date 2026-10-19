@@ -146,7 +146,12 @@ function TwoComputersPanel() {
           pytaj”: każdą zmianę z drugiego komputera najpierw widzisz i wybierasz scal / zachowaj moją / weź z drugiego. Odrzucona wersja zostaje w
           historii wpisu.
         </p>
-        {others.length > 0 && <div className="text-[11.5px] text-accent">Teraz pracuje też: {others.map((m) => m.machine).join(', ')}.</div>}
+        {others.length > 0 && (
+          <div className="text-[11.5px] text-accent" data-testid="settings-other-machines">
+            Folder otwarty też na: {others.map((m) => `${m.machine} (${m.inUse !== false ? 'w użyciu' : 'w zasobniku'})`).join(', ')}. Komputer w zasobniku nie zapisuje
+            nic w tle (dni gry, cele z ICTTJ) i zostawia powiadomienia komputerowi w użyciu.
+          </div>
+        )}
       </div>
     </Panel>
   )

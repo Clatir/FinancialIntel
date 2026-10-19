@@ -80,11 +80,12 @@ export function Banners() {
   const page = useUi((s) => s.route.page)
   const items: BannerItem[] = []
   if (status?.readOnlyReason) items.push({ key: 'ro', text: status.readOnlyReason })
-  const others = status?.otherMachines ?? []
+  // Only a computer in use (a move in its window within 10 min – D86): one in the tray writes nothing in the background.
+  const others = (status?.otherMachines ?? []).filter((m) => m.inUse !== false)
   if (others.length)
     items.push({
       key: 'other',
-      text: `Ten folder jest też otwarty na: ${others.map((m) => m.machine).join(', ')} (aktywność w ostatnich minutach). Zamknij tam aplikację, żeby uniknąć konfliktów.`
+      text: `Ten folder jest też w użyciu na: ${others.map((m) => m.machine).join(', ')} (ruch w oknie w ostatnich 10 min). Skończ tam pracę albo zakończ tam aplikację (ikona w zasobniku → „Zakończ”), żeby uniknąć konfliktów.`
     })
   if (status?.migratedFrom != null)
     items.push({ key: 'mig', text: `Dane zaktualizowano z formatu v${status.migratedFrom} do v${status.appSchemaVersion}. Kopia sprzed migracji: ${status.backupPath}` })

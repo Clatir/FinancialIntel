@@ -17,7 +17,7 @@ import { ImportPage } from '../features/import/ImportPage'
 import { MonthPage } from '../features/month/MonthPage'
 import { CargoPage } from '../features/cargo/CargoPage'
 import { WizardPage } from '../features/wizard/WizardPage'
-import { BridgePage } from '../features/bridge/BridgePage'
+import { BridgeDetachHost, BridgePage } from '../features/bridge/BridgePage'
 import { StarMapPage } from '../features/starmap/StarMapPage'
 import { RadarPage } from '../features/radar/RadarPage'
 import { useIctjGoalSync } from '../features/starmap/sync'
@@ -42,6 +42,7 @@ import { PageBar } from './PageBar'
 import { Banners } from './Banners'
 import { ErrorBoundary } from './ErrorBoundary'
 import { ShortcutsHelp } from './ShortcutsHelp'
+import { initPresence } from '../store/presence'
 
 /**
  * "Back": the mouse's back button on every page; Esc on the side trips (Ustawienia, Synchronizacja). Not while a
@@ -269,6 +270,7 @@ export function App() {
     void loadMachinePrefs()
     initIctj()
     initQuickHost()
+    initPresence()
     initNotifier()
     initUpdates()
   }, [])
@@ -311,6 +313,7 @@ function Window({ route, hideAmounts }: { route: Route; hideAmounts: boolean }) 
       <DockingDialog />
       <GameCelebrations />
       <TrayStatus />
+      <BridgeDetachHost />
       <ShortcutsHelp />
       <RemoteChangesDialog />
       <Toasts />

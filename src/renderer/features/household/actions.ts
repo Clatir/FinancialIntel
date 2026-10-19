@@ -13,6 +13,7 @@ import { canWrite, updateSettings, useData } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
 import { toast } from '../../store/ui'
+import { usePresence } from '../../store/presence'
 
 const NO_MEMBERS: HouseholdMember[] = []
 
@@ -135,10 +136,13 @@ export function seedSince(transactions: readonly Pick<Transaction, 'date' | 'ban
  * start and added later counts after them).
  */
 export function useHouseholdSinceSeed(): void {
-  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since === undefined)
-  const unstamped = useData(
-    (s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined
-  )
+  // A computer only in the tray writes nothing in the background (D86).
+  const inUse = usePresence((s) => s.inUse)
+  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since === undefined) && inUse
+  const unstamped =
+    useData(
+      (s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined
+    ) && inUse
   useEffect(() => {
     if (!unset) return
     const input = fleetInputNow()
