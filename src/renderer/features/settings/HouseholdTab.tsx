@@ -88,6 +88,12 @@ function SinceRow() {
           </button>
         </>
       )}
+      {/* The engine never settles before the budget's start (N47): a date before it said with the day that counts. */}
+      {since && budgetStart && since < budgetStart && (
+        <span className="basis-full text-accent" data-testid="household-since-before-start">
+          Data sprzed startu budżetu – rozliczenia liczą się od startu ({plDate(budgetStart)}).
+        </span>
+      )}
       <span className="basis-full text-muted">
         Wcześniejsze przelewy domowników nie są Twoim przychodem. To, co ktoś był winien albo wpłacił z góry przed tą datą, wpisz niżej jako jego saldo na start.
       </span>
@@ -108,7 +114,8 @@ function OpeningField({ m }: { m: HouseholdMember }) {
   const [chosen, setKind] = useState<'owed' | 'deposit'>('owed')
   const kind = m.opening.deposit > 0 ? 'deposit' : m.opening.owed > 0 ? 'owed' : chosen
   const value = kind === 'deposit' ? m.opening.deposit : m.opening.owed
-  const set = (k: 'owed' | 'deposit', v: number) => patchMember(m.id, { opening: k === 'deposit' ? { owed: 0, deposit: v } : { owed: v, deposit: 0 } })
+  // Typed by hand: the day of its oldest purchase is not known any more (N41) – the settlements' start dates it.
+  const set = (k: 'owed' | 'deposit', v: number) => patchMember(m.id, { opening: k === 'deposit' ? { owed: 0, deposit: v, since: null } : { owed: v, deposit: 0, since: null } })
   return (
     <span className="flex items-center gap-1.5">
       <span className="text-muted">Na start rozliczeń:</span>

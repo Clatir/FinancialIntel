@@ -4,6 +4,7 @@
  * „rozbieżność w ładowni” (spec, „Potwierdzanie sald”).
  */
 import type { Balance, Transaction } from '../schema/records'
+import { daysBetween } from './dates'
 import { sum } from './operations'
 
 /** Is `b` an account's opening balance in force rather than `prev`: the later one, of one day the last edited. */
@@ -28,6 +29,34 @@ export function balanceAt(accountId: string, date: string, transactions: readonl
   const opening = openingOf(accountId, balances)
   const from = opening?.date ?? ''
   return (opening?.amount ?? 0) + sum(transactions.filter((t) => t.accountId === accountId && t.date >= from && t.date <= date).map((t) => t.amount))
+}
+
+/** Days apart two equal corrections of one account may be one confirmation made twice (B129). */
+export const DOUBLE_CORRECTION_DAYS = 7
+
+/**
+ * The corrections of a balance confirmed twice (B129): two computers confirmed the same balance before OneDrive brought
+ * the first one's correction – the same account, the same amount, within 7 days, saved by different computers. The later
+ * one of each pair, with the earlier; to check (and delete with „Cofnij”).
+ */
+export function doubleCorrections(transactions: readonly Transaction[]): Array<{ later: Transaction; earlier: Transaction }> {
+  const byAccount = new Map<string, Transaction[]>()
+  for (const t of transactions) {
+    if (t.kind !== 'correction' || t.amount === 0) continue
+    const list = byAccount.get(t.accountId)
+    if (list) list.push(t)
+    else byAccount.set(t.accountId, [t])
+  }
+  const out: Array<{ later: Transaction; earlier: Transaction }> = []
+  for (const list of byAccount.values()) {
+    list.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+    for (let i = 1; i < list.length; i++) {
+      const later = list[i]!
+      const earlier = list.slice(0, i).find((e) => e.amount === later.amount && daysBetween(e.date, later.date) <= DOUBLE_CORRECTION_DAYS && !!e.updatedBy && !!later.updatedBy && e.updatedBy !== later.updatedBy)
+      if (earlier) out.push({ later, earlier })
+    }
+  }
+  return out
 }
 
 /** The last confirmed balance of an account (for „potwierdzone N dni temu”). */

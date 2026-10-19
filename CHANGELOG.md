@@ -1,5 +1,48 @@
 # Financial Intel – zmiany
 
+## 1.6.2
+
+Poprawki z przeglądu aplikacji (grupa N, D87): Dowództwo, ICTTJ i dokowanie, domownicy, cele i kreator.
+
+ICTTJ i dokowanie:
+- Wpływ wpisany szybkim wpisem na Portfelu XTB jest parą wypłaty z ICTTJ tej samej kwoty – „Zadokuj” zmienia go w
+  wypłatę, bez drugiej operacji (operacja z banku ma pierwszeństwo).
+- Pula Podatek z podziałem zmienionym w oknie: podatkiem jest tylko część z podziału; wypłaty z puli Podatek sprzed startu
+  budżetu nie są przychodem z tradingu w panelu „Przychody”.
+- Pominięty wpis ICTTJ trzyma swoją operację z banku – wpływ nie wraca jako „bez wpisu w ICTTJ” i nie zabiera pary innej
+  wypłacie.
+- Teksty okna dokowania wg kierunku (zwrot do masy), „wraca z rezerwy na PIT-38” w odprawie i powiadomieniu, przy
+  wyłączonym rozkazie firewall – że dopłata nie jest sprawdzana.
+- Odczyt folderu ICTTJ: wpis w dwóch plikach liczony raz (nowszy, z ostrzeżeniem), błąd odczytu folderu widoczny jako
+  błąd, a jednorazowo nieudany odczyt zostawia poprzedni stan z ostrzeżeniem; szybka zmiana folderu nie pokazuje danych
+  starego.
+
+Cele (Mapa gwiezdna):
+- ETA i tempo w dwóch częściach: wypłaty z puli Cele najpierw do celów ICTTJ, reszta w kolejności listy; znaczek „DOL ·
+  pula Cele”.
+- Cel ICTTJ bez kwoty bierze w swoim miesiącu (miesiąc wpisu w ICTTJ) całą wypłatę z puli Cele – jak w ICTTJ.
+- „Po terminie” w kolorze akcentu: nigdy przy celu osiągniętym, także gdy przy obecnym tempie cel nie dojdzie wcale albo
+  termin minął bez tempa. Kwota istniejącego celu nie może spaść do 0.
+
+Dowództwo:
+- Masa ładunku: podniesienie kontenera ocenia dzień zmiany, nie dzień zamrożony po niej; zmiana nazwy kontenera 1. dnia
+  miesiąca nie jest naruszeniem.
+- „Pełna energia” widzi dni jeszcze niezamrożone (wybór misji w poniedziałek widzi niedzielę, status w tygodniu – dziś);
+  „Dzień bez wydatków” liczy dzisiejszy dzień osobno („+1, jeśli dziś bez wydatków”).
+- Misja i stopień nadane przez nowszą wersję nie są oceniane przez starszą; klasa okrętu świętowana tylko ponad najwyższą
+  z ostatnich 30 dni.
+- „Poważne naruszenia od DD.MM”, gdy stopień zmienił się w tym miesiącu; rozkaz dzienny opisany tak, jak ocenia go gra;
+  rozkazy można zmienić także w Dowództwie.
+
+Domownicy, salda, kreator, raporty:
+- „Pokrywa” w edytorze wpłaty pokazuje zakupy otwarte tuż przed tą wpłatą.
+- Saldo na start domownika ma datę najstarszego zakupu – przypomnienie liczy od niej (także saldo przeniesione z 1.3.0).
+- Data rozliczeń sprzed startu budżetu z dopiskiem, od kiedy liczą się rozliczenia.
+- Saldo potwierdzone na dwóch komputerach przed synchronizacją to jedna korekta; dwie takie same korekty z dwóch komputerów
+  – meldunek „Podwójne korekty” z „to nie powtórzenie”.
+- Kreator: zmiana ładowni nie kasuje kopert wpisanych ręcznie.
+- Raport wachty po tygodniu wraca do bieżącego tygodnia; przycisk „bieżący”.
+
 ## 1.6.1
 
 Poprawki z przeglądu aplikacji (grupa M, D87): liczby planu i raportów, Mostek, Radar i Ładownia.

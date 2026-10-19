@@ -1,10 +1,13 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { warsawNow } from '@shared/calc/dates'
-import { computeFleet, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { preStartTaxOf } from '@shared/calc/dock'
+import { budgetStartOf, computeFleet, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import type { HouseholdLedger } from '@shared/calc/household'
+import type { IctjEntry } from '@shared/ictj'
 import { listOf, useData } from './data'
+import { useIctj } from './ictj'
 import { timed } from '../lib/timing'
 
 /** A clock shared by the screens: the day changes the budget's engine, the minute what shows the time. */
@@ -51,6 +54,7 @@ type Fi = NonNullable<DataState['fi']>
 const KEY_SETTINGS = ['accounts', 'budget', 'categories', 'household', 'layers', 'orders'] as const
 const KEY_COLLECTIONS = ['transactions', 'containers', 'goals', 'months', 'dockings', 'loans', 'balances'] as const
 type FleetKey = { date: string; parts: readonly unknown[] }
+type Entries = readonly IctjEntry[]
 
 // Of the game's settings only the serious overrun's threshold (N102: it colours the envelopes' alarms) – the day without
 // spending and the game's start written in the background never run the engine again.
@@ -59,17 +63,36 @@ const partsOf = (fi: Fi, records: Records): unknown[] => [
   fi.settings.game.seriousEnvelopePct,
   ...KEY_COLLECTIONS.map((c) => records[c])
 ]
-const keyOf = (fi: Fi, records: Records, date: string): FleetKey => ({ date, parts: partsOf(fi, records) })
+// The pool „Podatek” paired before the start too (N38) – its map, the same object while its content is the same (a new
+// snapshot of ICTTJ with the same payouts runs nothing again).
+const keyOf = (fi: Fi, records: Records, date: string, entries: Entries): FleetKey => ({ date, parts: [...partsOf(fi, records), preStartTaxFor(fi, records, entries, date)] })
 const NO_PARTS: unknown[] = []
 const sameKey = (a: FleetKey, b: FleetKey) => a.date === b.date && a.parts.every((p, i) => p === b.parts[i])
 
 /** One computation for every screen that asks (the list, the editor…) until what it reads or the day changes. */
 let memo: { key: FleetKey; state: FleetState } | null = null
 
+/** The payouts of the pool „Podatek” paired before the start (N38), once per what they read. */
+let taxMemo: { parts: readonly unknown[]; map: ReadonlyMap<string, number> } | null = null
+
+function preStartTaxFor(fi: Fi, records: Records, entries: Entries, today: string): ReadonlyMap<string, number> {
+  const transactions = listOf(records.transactions)
+  const dockings = listOf(records.dockings)
+  const start = budgetStartOf(fi.settings, listOf(records.balances), today)
+  const parts = [entries, transactions, dockings, start, fi.settings.ictj.skipped]
+  if (taxMemo && taxMemo.parts.every((p, i) => p === parts[i])) return taxMemo.map
+  const fresh = preStartTaxOf({ entries, transactions, dockings, start, skipped: fi.settings.ictj.skipped })
+  const same = !!taxMemo && taxMemo.map.size === fresh.size && [...fresh].every(([id, v]) => taxMemo!.map.get(id) === v)
+  const map = same ? taxMemo!.map : fresh
+  taxMemo = { parts, map }
+  return map
+}
+
 /** The engine's input; `now` – the moment (its date is what counts; the goals' moments take the time too). */
-const inputOf = (fi: Fi, records: Records, now: number): FleetInput => ({
+const inputOf = (fi: Fi, records: Records, now: number, entries: Entries = useIctj.getState().snap.entries): FleetInput => ({
   settings: fi.settings,
   transactions: listOf(records.transactions),
+  preStartTax: preStartTaxFor(fi, records, entries, warsawNow(new Date(now)).date),
   containers: listOf(records.containers),
   goals: listOf(records.goals),
   months: listOf(records.months),
@@ -80,9 +103,10 @@ const inputOf = (fi: Fi, records: Records, now: number): FleetInput => ({
 })
 
 function fleetOf(fi: Fi, records: Records, now: number): FleetState {
-  const key = keyOf(fi, records, warsawNow(new Date(now)).date)
+  const entries = useIctj.getState().snap.entries
+  const key = keyOf(fi, records, warsawNow(new Date(now)).date, entries)
   if (memo && sameKey(memo.key, key)) return memo.state
-  const state = timed('silnik budżetu', () => computeFleet(inputOf(fi, records, now)))
+  const state = timed('silnik budżetu', () => computeFleet(inputOf(fi, records, now, entries)))
   memo = { key, state }
   return state
 }
@@ -94,9 +118,21 @@ export function fleetInputNow(): FleetInput | null {
 }
 
 /** The ship's state now (shared/calc/fleet.ts) from the records in memory; recomputed when what it reads or the day changes. */
-/** What the engine reads, as one value that changes with it (a memo's key – W10). */
+/**
+ * What the engine reads, as one value that changes with it (a memo's key – W10): the records and the map of the pool
+ * „Podatek” before the start (ICTTJ's payouts – the same array while nothing of it changed).
+ */
 export function useEngineParts(): readonly unknown[] {
-  return useData(useShallow((s) => (s.fi ? partsOf(s.fi, s.records) : NO_PARTS)))
+  const parts = useData(useShallow((s) => (s.fi ? partsOf(s.fi, s.records) : NO_PARTS)))
+  const entries = useIctj((s) => s.snap.entries)
+  const today = useToday()
+  const last = useRef<readonly unknown[]>(NO_PARTS)
+  const next = useMemo(() => {
+    const s = useData.getState()
+    return s.fi ? [...parts, preStartTaxFor(s.fi, s.records, entries, today)] : NO_PARTS
+  }, [parts, entries, today])
+  if (next.length !== last.current.length || next.some((p, i) => p !== last.current[i])) last.current = next
+  return last.current
 }
 
 export function useFleet(): FleetState | null {

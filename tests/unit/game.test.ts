@@ -253,7 +253,12 @@ describe('misje tygodniowe (D73)', () => {
       settings: (s) => ({ ...s, import: { ...s.import, log: { '2026-10-19T09:00:00Z': MBANK_ACCOUNT_ID, '2026-10-23T18:00:00Z': MBANK_ACCOUNT_ID } } })
     })
     expect(missionStatus(w, { template: 'import', week, params: {} }, '2026-10-25')).toEqual({ ok: true, have: 2, need: 2 })
-    expect(missionStatus(w, { template: 'nospend', week, params: {} }, '2026-10-25')).toEqual({ ok: true, have: 4, need: 2 })
+    // Sunday still running (N69): apart until it is over; judged with it frozen – counted.
+    expect(missionStatus(w, { template: 'nospend', week, params: {} }, '2026-10-25')).toEqual({ ok: true, have: 3, need: 2, pending: 1 })
+    const sunday = { ...newGameMonth('2026-10', AT), days: { '2026-10-25': { status: 'ok' as const, frozenAt: AT, violations: [], cls: null, cargo: null, tags: [] } } }
+    expect(missionStatus(w, { template: 'nospend', week, params: {} }, '2026-10-25', [sunday])).toEqual({ ok: true, have: 4, need: 2 })
+    // Mid-week: today apart, the days before counted.
+    expect(missionStatus(w, { template: 'nospend', week, params: {} }, '2026-10-20')).toEqual({ ok: false, have: 0, need: 2, pending: 1 })
     expect(missionStatus(w, { template: 'envelope', week, params: { categoryId: AUTO, target: zl(70) } }, '2026-10-25')).toEqual({ ok: false, amount: zl(80) })
     expect(missionStatus(w, { template: 'balances', week, params: {} }, '2026-10-25')).toMatchObject({ ok: false, have: 0 })
   })

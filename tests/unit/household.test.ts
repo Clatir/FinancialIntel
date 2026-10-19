@@ -219,16 +219,17 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     expect(mama(seeded)).toMatchObject({ owed: 0, deposit: zl(380) })
     // „Od startu budżetu”: as 1.3.0 – no opening, the operations count (not 760 zł).
     const fromStart = moved(seeded, null)
-    expect(fromStart.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: 0, deposit: 0 })
+    expect(fromStart.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: 0, deposit: 0, since: null })
     expect(mama(fromStart)).toMatchObject({ owed: 0, deposit: zl(380) })
     expect(fleet(ops, fromStart).deposit).toBe(zl(380))
     // Earlier: what she owed then (the purchase of 3.10), her advance after it counts once.
     const early = moved(seeded, '2026-10-04')
-    expect(early.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: zl(120), deposit: 0 })
+    // The debt dated by its purchase (N41): the reminder counts from 3.10, not from the settlements' start.
+    expect(early.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: zl(120), deposit: 0, since: '2026-10-03' })
     expect(mama(early)).toMatchObject({ owed: 0, deposit: zl(380) })
     // Later: the operations between the two starts go into the opening, none lost.
     const later = moved(early, '2026-10-10')
-    expect(later.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: 0, deposit: zl(380) })
+    expect(later.settings.household.members.find((m) => m.id === MAMA)!.opening).toEqual({ owed: 0, deposit: zl(380), since: null })
     expect(mama(later)).toMatchObject({ owed: 0, deposit: zl(380) })
     // A hand-typed part (100 zł more than the operations) stays when the start moves back.
     const typed = moved(at('2026-10-20', { owed: 0, deposit: zl(480) }), '2026-10-04')

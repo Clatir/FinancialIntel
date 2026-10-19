@@ -41,7 +41,9 @@ export function taxOfDockings(byTx: ReadonlyMap<string, Pick<Docking, 'pool' | '
   for (const t of transactions) {
     const d = byTx.get(t.id)
     if (!d) continue
-    const v = d.pool === 'tax' ? Math.abs(t.amount) : (d.split?.taxHold ?? 0)
+    // The engine's order (B70): a split decides (the window may move part of a tax payout to the shields – that part is
+    // income); without one the pool Podatek is the reserve whole.
+    const v = d.split ? Math.min(Math.abs(t.amount), d.split.taxHold) : d.pool === 'tax' ? Math.abs(t.amount) : 0
     if (v > 0) out.set(t.id, v)
   }
   return out

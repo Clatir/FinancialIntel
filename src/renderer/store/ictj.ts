@@ -22,14 +22,21 @@ export function initIctj(): void {
   )
 }
 
+/** The choices of a folder in order (B72): only the last one's answer counts. */
+let choice = 0
+
 /** Use a folder on this computer (null = none); false = refused (not ICTTJ's data) with the reason shown. */
 export async function setIctjDir(dir: string | null): Promise<boolean> {
+  const my = ++choice
   try {
     const snap = await api.ictjSetDir(dir)
+    // Another folder chosen meanwhile: its snapshot comes with its own answer (and the main process's event).
+    if (my !== choice) return true
     useIctj.setState({ snap })
     if (dir && snap.status === 'ok') toast(`ICTTJ: ${countLabel(snap.entries.length, 'wpis', 'wpisy', 'wpisów')} wypłat i zwrotów, ${countLabel(snap.forecasts.length, 'scenariusz', 'scenariusze', 'scenariuszy')} prognozy.`, 'success')
     return true
   } catch (e) {
+    if (my !== choice) return true
     toast(errorMessage(e), 'error', 6000)
     return false
   }

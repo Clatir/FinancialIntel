@@ -198,7 +198,8 @@ test('Domownicy bez bankowości (D81): rozliczenia od dziś z saldem na start, �
     // money then is not income.
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.household.since).toBe(today)
-    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(90), deposit: 0 })
+    // Dated by the purchase it comes from (N41): the reminder after 30 days counts from it.
+    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(90), deposit: 0, since: `${prev}-05` })
     await expect(page.getByTestId('bridge-house')).toHaveText('90,00 zł')
     const income = page.getByTestId('bridge-income')
     await expect(income.getByTestId('income-work-6')).toHaveText('4 000,00 zł')
@@ -265,13 +266,15 @@ test('Domownicy bez bankowości (D81): rozliczenia od dziś z saldem na start, �
     await page.getByTestId('household-since-budget').click()
     await expect(page.getByTestId('household-since-none')).toBeVisible()
     await expect(page.getByRole('status').filter({ hasText: 'Saldo na start rozliczeń przeliczone' })).toContainText('Mama: ma oddać 60,00 zł (było ma oddać 150,00 zł)')
-    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(60), deposit: 0 })
+    // The typed part beyond the purchase has no day of its own (N41).
+    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(60), deposit: 0, since: null })
     await page.keyboard.press('Control+1')
     await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')
     await page.keyboard.press('Control+,')
     await page.getByTestId('settings-tab-household').click()
     await page.getByTestId('household-since-today').click()
-    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(150), deposit: 0 })
+    // Dated by its oldest part: the typed 60 zł counted from the budget's start.
+    await expect.poll(async () => ((await members(dir)).find((m) => m.id === MAMA) as unknown as { opening: unknown }).opening).toEqual({ owed: zl(150), deposit: 0, since: start })
     expect(errors).toEqual([])
   } finally {
     await app.close()

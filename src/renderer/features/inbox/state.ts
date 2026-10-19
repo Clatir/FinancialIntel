@@ -3,16 +3,16 @@
  * inbox screen see the same list; where each report's button leads.
  */
 import { useMemo } from 'react'
-import { openingOf } from '@shared/calc/balances'
+import { doubleCorrections, openingOf } from '@shared/calc/balances'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { memberName } from '@shared/calc/household'
 import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
-import { listOf, useData } from '../../store/data'
+import { listOf, updateSettings, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { navigate } from '../../store/ui'
 import { openDocking, useDeliveries } from '../dock/state'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
-import { openRefundables, setFilter } from '../operations/state'
+import { openOperation, openRefundables, setFilter } from '../operations/state'
 
 /** The inbox counts the duplicates a while after the last change (0,6 s at 150 tys. operacji – never while typing). */
 export const DUPLICATES_AFTER_MS = 3000
@@ -35,6 +35,9 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const members = useData((s) => s.fi?.settings.household.members)
   const from = fleet?.started ? fleet.start : null
   const uncategorized = useMemo(() => uncategorizedOf(listOf(transactions), from, drafts), [transactions, from, drafts])
+  // A balance confirmed twice on two computers before the sync (B129) – not the pairs said to be two corrections.
+  const dismissed = useData((s) => s.fi?.settings.import.notDuplicates)
+  const corrections = useMemo(() => doubleCorrections(listOf(transactions)).filter((c) => !dismissed?.[correctionKey(c.later.id)]), [transactions, dismissed])
   const confirmations = useMemo(() => {
     const list = listOf(balances)
     return accounts ? confirmationsOf(accounts, list).map((c) => ({ ...c, opened: openingOf(c.accountId, list)?.date ?? null })) : []
@@ -52,8 +55,18 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     memberName: (id) => memberName(id, members),
     confirmations,
     loot: fleet.loot,
+    corrections,
+    accountName: (id) => accounts?.find((a) => a.id === id)?.name ?? 'Konto',
     money
   })
+}
+
+/** The key of a correction said to be no repeat (B129) – in the list of the import's „no duplicates”. */
+const correctionKey = (id: string) => `correction:${id}`
+
+/** „To nie powtórzenie”: the two corrections are both real – the report goes for good. */
+export function dismissCorrection(id: string): void {
+  updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates: { ...f.settings.import.notDuplicates, [correctionKey(id)]: new Date().toISOString() } } } }))
 }
 
 /** How many reports wait (the side menu: the duplicates as last counted). */
@@ -73,4 +86,9 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
   } else if (item.kind === 'duplicates') navigate({ page: 'import' })
   else if (item.kind === 'refunds') openRefundables()
   else if (item.kind === 'balances') navigate({ page: 'settings', tab: 'accounts' })
+  else if (item.kind === 'corrections' && item.ref) {
+    const t = useData.getState().records.transactions[item.ref]?.record
+    if (t) openOperation(t)
+    else navigate({ page: 'operations' })
+  }
 }

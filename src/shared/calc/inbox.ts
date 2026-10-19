@@ -12,10 +12,10 @@ import { deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
 import { isOpeningItem, type MemberBalance } from './household'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'refunds' | 'balances'
+export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'corrections' | 'refunds' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'refunds', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'corrections', 'refunds', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
@@ -23,6 +23,7 @@ export const INBOX_TITLE: Record<InboxKind, string> = {
   folder: 'Folder danych',
   uncategorized: 'Bez kategorii',
   duplicates: 'Możliwe duplikaty',
+  corrections: 'Podwójne korekty',
   refunds: 'Do zwrotu',
   balances: 'Salda kont'
 }
@@ -35,7 +36,7 @@ export interface InboxItem {
   text: string
   /** Its button. */
   action: string
-  /** The delivery's key ('dock'), the member's id ('refunds'), the account's id ('balances'). */
+  /** The delivery's key ('dock'), the member's id ('refunds'), the account's id ('balances'), the operation's ('corrections'). */
   ref?: string
 }
 
@@ -75,6 +76,9 @@ export interface InboxInput {
   /** Each account's last confirmed balance, and its opening balance's day (an account without either keeps no balance). */
   confirmations: ReadonlyArray<AccountConfirmation & { opened: string | null }>
   loot: { month: string | null; amount: number }
+  /** A balance confirmed twice on two computers (B129 – `doubleCorrections`): the later correction of each pair. */
+  corrections?: ReadonlyArray<{ later: Pick<Transaction, 'id' | 'date' | 'amount' | 'accountId'>; earlier: Pick<Transaction, 'date' | 'updatedBy'> }>
+  accountName?: (id: string) => string
   money?: (grosze: number) => string
 }
 
@@ -110,6 +114,14 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     })
   if (o.duplicates)
     out.push({ kind: 'duplicates', key: 'duplicates', text: `${o.duplicates} ${plural(o.duplicates, 'możliwy duplikat', 'możliwe duplikaty', 'możliwych duplikatów')} – ta sama operacja dwa razy.`, action: 'Scal na ekranie Import' })
+  for (const c of o.corrections ?? [])
+    out.push({
+      kind: 'corrections',
+      key: `corrections:${c.later.id}`,
+      ref: c.later.id,
+      text: `${o.accountName?.(c.later.accountId) ?? 'Konto'}: korekta salda ${zl(c.later.amount)} z ${dm(c.later.date)} wygląda na powtórzoną – taka sama z ${dm(c.earlier.date)}${c.earlier.updatedBy ? ` (${c.earlier.updatedBy})` : ''}; saldo potwierdzone dwa razy, zanim OneDrive przyniósł pierwszą.`,
+      action: 'Pokaż korektę'
+    })
   for (const m of o.members) {
     if (m.owed <= 0) continue
     const days = m.since ? Math.max(0, daysBetween(m.since, o.today)) : null

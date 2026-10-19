@@ -160,7 +160,14 @@ export function dueNotices(o: NotifyInput): Notice[] {
       out.push(
         e.kind === 'withdrawal'
           ? { key: `ictj:${e.id}`, tag: 'dock', target: `dock:${d.key}`, title: 'Nowa wypłata w ICTTJ do zadokowania', body: `${o.money(e.amount)} · pula ${ICTJ_POOL_LABEL[e.pool]} · ${dm(e.date)}` }
-          : { key: `ictj:${e.id}`, tag: 'dock', target: `dock:${d.key}`, title: 'Zwrot do masy w ICTTJ', body: `${o.money(e.amount)} – potwierdź w Financial Intel (firewall).` }
+          : {
+              key: `ictj:${e.id}`,
+              tag: 'dock',
+              target: `dock:${d.key}`,
+              title: 'Zwrot do masy w ICTTJ',
+              // The pool „Podatek” comes back from the reserve – no firewall there (T65, N43).
+              body: e.pool === 'tax' ? `${o.money(e.amount)} z puli Podatek – wraca z rezerwy na PIT-38; potwierdź w Financial Intel.` : `${o.money(e.amount)} – potwierdź w Financial Intel (firewall).`
+            }
       )
     }
   return out

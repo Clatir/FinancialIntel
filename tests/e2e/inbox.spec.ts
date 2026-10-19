@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
-import { records } from './files'
+import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
@@ -62,6 +62,43 @@ test('meldunki do rozpatrzenia (1.6.0, F6): licznik w menu, wydatek bez kategori
     // Esc: back from Ustawienia to the inbox, now without reports.
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('page-inbox')).toContainText('Brak meldunków')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('podwójna korekta salda z dwóch komputerów (1.6.2, B129): meldunek, „Pokaż korektę”, „to nie powtórzenie” na stałe', async () => {
+  const { date: today, month } = warsawNow()
+  const start = `${addMonths(month, -1)}-01`
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-corrections-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start } }),
+    records: {
+      balances: [{ date: start, accountId: MBANK, kind: 'opening', amount: zl(5000) }],
+      transactions: [
+        { date: addDays(today, -3), accountId: MBANK, amount: zl(50), kind: 'correction', updatedBy: 'LAPTOP' },
+        { date: addDays(today, -2), accountId: MBANK, amount: zl(50), kind: 'correction', updatedBy: 'PC' }
+      ]
+    }
+  })
+  const { app, page, dataDir: dir, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+Shift+M')
+    const item = page.locator('[data-testid="inbox-item"][data-kind="corrections"]')
+    await expect(item).toContainText('mBank: korekta salda 50,00 zł')
+    await expect(item).toContainText('wygląda na powtórzoną')
+    await expect(item).toContainText('(LAPTOP)')
+    // „Pokaż korektę”: the later one in Operacje, open in the editor.
+    await item.getByTestId('inbox-open').click()
+    await expect(page.getByTestId('page-operations')).toBeVisible()
+    await expect(page.getByTestId('operation-editor')).toBeVisible()
+    // Both real: said once, the report goes for good.
+    await page.getByTestId('nav-inbox').click()
+    await item.getByTestId('inbox-dismiss').click()
+    await expect(item).toHaveCount(0)
+    await expect.poll(async () => Object.keys((await json(join(dir, 'fi.json'))).settings.import.notDuplicates ?? {}).filter((k) => k.startsWith('correction:')).length).toBe(1)
     expect(errors).toEqual([])
   } finally {
     await app.close()

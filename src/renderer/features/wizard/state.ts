@@ -29,8 +29,11 @@ export interface WizardState {
   hullMonths: number
   /** Average costs assumed while the history is shorter than 3 full months. */
   assumedCosts: number | null
-  /** The first month's envelopes (null = the proposals not taken yet). */
-  envelopes: Record<string, number> | null
+  /**
+   * The first month's envelopes typed by hand, over the proposals (B75: a change of the cargo proposes the rest again, never
+   * these); null = cleared by hand.
+   */
+  envelopes: Record<string, number | null>
   /** Recurring payments chosen for the cargo (by key). */
   cargo: Record<string, RecurringPayment>
   /** The hull at the start (null = the docking order's proposal). */
@@ -51,7 +54,7 @@ const initial = (): WizardState => ({
   shieldSalaries: 3,
   hullMonths: 6,
   assumedCosts: null,
-  envelopes: null,
+  envelopes: {},
   cargo: {},
   hull: null,
   goals: null,

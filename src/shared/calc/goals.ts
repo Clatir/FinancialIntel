@@ -132,26 +132,59 @@ export function renumber(goals: readonly Goal[], now: string): Goal[] {
 /** Events moving money into the goals that are no monthly pace (B128). */
 const NOT_PACE: ReadonlySet<FleetEvent['kind']> = new Set(['start', 'account', 'household'])
 
-/**
- * The money that went into the goals a month, on average over the last full months of the budget (at most `count`):
- * the deliveries and the loot – what a goal paid out does not count, nor money moved between goals. null = no full
- * month yet.
- */
-export function goalInflow(log: readonly FleetEvent[], start: string | null, month: string, count = 6): number | null {
+/** What came into the goals over the last full months (at most `count`): the pool Cele's part apart (N42). */
+function inflowSums(log: readonly FleetEvent[], start: string | null, month: string, poolTx: ReadonlySet<string>, count: number): { pool: number; rest: number; months: number } | null {
   if (!start) return null
   const first = start.endsWith('-01') ? monthOf(start) : addMonths(monthOf(start), 1)
   const months: string[] = []
   for (let m = addMonths(month, -1); m >= first && months.length < count; m = addMonths(m, -1)) months.push(m)
   if (!months.length) return null
   const inMonths = new Set(months)
-  let total = 0
+  let pool = 0
+  let rest = 0
   for (const e of log) {
     // The pace is what came in month by month (B128): the money given out at the start, an account joining it later and
     // the household's advances at the start are no pace – only deliveries, the loot and what else flows month by month.
     if (!inMonths.has(monthOf(e.date)) || !e.moves.goals || e.kind === 'goal' || NOT_PACE.has(e.kind)) continue
-    for (const v of Object.values(e.moves.goals)) if (v > 0) total += v
+    for (const v of Object.values(e.moves.goals))
+      if (v > 0) {
+        if (e.txId && poolTx.has(e.txId)) pool += v
+        else rest += v
+      }
   }
-  return Math.round(total / months.length)
+  return { pool, rest, months: months.length }
+}
+
+/**
+ * The money that went into the goals a month, on average over the last full months of the budget (at most `count`):
+ * the deliveries and the loot – what a goal paid out does not count, nor money moved between goals. null = no full
+ * month yet.
+ */
+export function goalInflow(log: readonly FleetEvent[], start: string | null, month: string, count = 6): number | null {
+  const s = inflowSums(log, start, month, new Set(), count)
+  return s ? Math.round((s.pool + s.rest) / s.months) : null
+}
+
+/** The goals' pace a month in two parts (N42): payouts of the ICTTJ pool Cele (`poolTx` – their operations) and the rest. */
+export interface GoalPace {
+  pool: number
+  rest: number
+  /** Both together, rounded once – what `goalInflow` says (the screen's „Tempo”). */
+  total: number
+}
+
+export function goalPace(log: readonly FleetEvent[], start: string | null, month: string, poolTx: ReadonlySet<string>, count = 6): GoalPace | null {
+  const s = inflowSums(log, start, month, poolTx, count)
+  return s ? { pool: Math.round(s.pool / s.months), rest: Math.round(s.rest / s.months), total: Math.round((s.pool + s.rest) / s.months) } : null
+}
+
+/**
+ * A goal past its deadline (B87): not reached, with a target and a deadline – at this pace later than the deadline (never
+ * at this pace too), or without a pace with the deadline gone already.
+ */
+export function goalLate(g: { amount: number; target: number; deadline: string | null }, eta: string | null, pace: number | null, month: string): boolean {
+  if (g.target <= 0 || g.amount >= g.target || !g.deadline) return false
+  return eta ? eta > g.deadline : (pace ?? 0) > 0 || g.deadline < month
 }
 
 /** Months simulated at most (50 years): a goal further away has no date. */
@@ -159,22 +192,34 @@ const ETA_HORIZON = 600
 
 /**
  * The month each goal is full at `monthly` a month, the goals in the list's order filling one after another (what the
- * first does not need goes on to the next). Full already = this month; null = never at this pace (or no pace known).
+ * first does not need goes on to the next). A pace in two parts (N42): the pool Cele fills the goals of the ICTTJ forecast
+ * first (as the engine's `fillGoals` – D72, T65), then the own ones; the rest goes in the list's order. Full already =
+ * this month; null = never at this pace (or no pace known).
  */
-export function goalEtas(goals: ReadonlyArray<{ id: string; amount: number; target: number }>, monthly: number | null, month: string): Record<string, string | null> {
+export function goalEtas(
+  goals: ReadonlyArray<{ id: string; amount: number; target: number; ictj?: boolean }>,
+  monthly: number | Pick<GoalPace, 'pool' | 'rest'> | null,
+  month: string
+): Record<string, string | null> {
   const out: Record<string, string | null> = {}
-  const left = goals.map((g) => ({ id: g.id, need: Math.max(0, g.target - g.amount) }))
+  const left = goals.map((g) => ({ id: g.id, need: Math.max(0, g.target - g.amount), ictj: !!g.ictj }))
   for (const g of left) out[g.id] = g.need === 0 ? month : null
-  if (!monthly || monthly <= 0) return out
-  for (let i = 1; i <= ETA_HORIZON && left.some((g) => g.need > 0); i++) {
-    let rest = monthly
-    for (const g of left) {
-      if (!g.need || !rest) continue
+  const pace = typeof monthly === 'number' ? { pool: 0, rest: monthly } : monthly
+  if (!pace || pace.pool + pace.rest <= 0) return out
+  const poolOrder = [...left.filter((g) => g.ictj), ...left.filter((g) => !g.ictj)]
+  const fill = (order: typeof left, amount: number, i: number) => {
+    let rest = amount
+    for (const g of order) {
+      if (!g.need || rest <= 0) continue
       const take = Math.min(rest, g.need)
       g.need -= take
       rest -= take
       if (!g.need) out[g.id] = addMonths(month, i)
     }
+  }
+  for (let i = 1; i <= ETA_HORIZON && left.some((g) => g.need > 0); i++) {
+    fill(poolOrder, pace.pool, i)
+    fill(left, pace.rest, i)
   }
   return out
 }

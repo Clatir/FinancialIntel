@@ -191,6 +191,11 @@ export const containerSchema = z.looseObject({
   archived: z.boolean().default(false),
   /** When it was archived (1.4.2, B56): it counts until that month's end; none = archived before 1.4.2 – never counts. */
   archivedAt: isoDateTime.nullable().catch(null).default(null),
+  /**
+   * When its monthly mass last changed (1.6.2, B89 – the amount, the cycle, the months in the hold): the game's day of the
+   * change; none = not known (before 1.6.2 – its last change of any kind counts).
+   */
+  amountAt: isoDateTime.optional().catch(undefined),
   note: text
 })
 export type Container = z.infer<typeof containerSchema>
@@ -299,6 +304,8 @@ export const dockingSchema = z.looseObject({
   transactionId: ulidSchema,
   /** The ICTTJ entry docked (each at most once, T15). */
   ictjEntryId: z.string().max(100).nullable().default(null),
+  /** The ICTTJ entry's own day (1.6.2, N46 – the month of an ICTTJ goal without a price); none = the operation's day. */
+  entryDate: isoDate.nullable().optional().catch(undefined),
   pool: z.enum(ICTJ_POOLS).nullable().default(null),
   /** A split chosen in the docking window; the rest of the amount goes to the shields. */
   split: z

@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa M** (1.6.1 – liczby, plan,
-raporty, Mostek) w toku na gałęzi `claude/grupa-m-1.6.1`; po niej od razu N, O, P, Q, R (niskie pozycje przeglądu) i
-funkcje S, T, U, V – każda grupa z własnym PR i wydaniem (D71).
-**1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa N** (1.6.2 – gra, ICTTJ,
+domownicy, cele, kreator) na gałęzi `claude/grupa-n-1.6.2`, PR do `main`; po niej od razu O, P, Q, R (niskie pozycje
+przeglądu) i funkcje S, T, U, V – każda grupa z własnym PR i wydaniem (D71).
+**1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,9 +12,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa M → PR → scalenie po zielonym CI → wydanie 1.6.1 → od razu grupa N (D87). Po wznowieniu
+**Następny krok:** grupa N → scalenie po zielonym CI → wydanie 1.6.2 → od razu grupa O (D87). Po wznowieniu
 pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.6.0 – listy w sekcjach niżej.
+aplikacji: 1.5.0–1.6.2 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -50,8 +50,8 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 2–3 h) | 1.5.3 | ✅ D86 | ✅ wydane (PR #20) |
 | **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z pomiarami 30 / 150 tys., wzorcami wyników, przeglądem i E2E; część W27 w czasie CI grupy J; plan był ok. 2 h) | 1.5.4 | ✅ D86 | ✅ wydane (PR #21) |
 | **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar commitów, z przeglądem i E2E; część w czasie CI grupy K; plan był 3–4 h) | 1.6.0 | ✅ D86 | ✅ wydane (PR #22) |
-| **M** | 1.6.1 Liczby, plan, raporty, Mostek: B61–B63, B65, B84, B85, B92, B126–B128, N22–N28, N30, N52, N54, N56, N59, N63, N65, N66, N101–N103, W28–W30, W38 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.1 | ✅ D87 | ✅ PR do `main` |
-| **N** | 1.6.2 Gra, ICTTJ, domownicy, cele, kreator: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.2 | ✅ D87 | czeka |
+| **M** | 1.6.1 Liczby, plan, raporty, Mostek: B61–B63, B65, B84, B85, B92, B126–B128, N22–N28, N30, N52, N54, N56, N59, N63, N65, N66, N101–N103, W28–W30, W38 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.1 | ✅ D87 | ✅ wydane (PR #23) |
+| **N** | 1.6.2 Gra, ICTTJ, domownicy, cele, kreator: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.2 | ✅ D87 | ✅ PR do `main` |
 | **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.3 | ✅ D87 | czeka |
 | **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | plan ok. 1,5 h | 1.6.4 | ✅ D87 | czeka |
 | **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.5 | ✅ D87 | czeka |
@@ -61,7 +61,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L** | | | **ok. 37,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N** | | | **ok. 40,5 h** | | | |
 | | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -574,6 +574,43 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.6.1, Windows):
    bieżącego miesiąca: „miesiąc trwa”.
 2. Mostek: kliknięcie alarmu masy ładunku / korekty prowadzi do Ładowni / operacji; „Odsłuchaj” (polski głos).
 3. Ustawienia → Warstwy i rozkazy: minimum osłon wyższe od celu – komunikat.
+
+## Przed grupą N – gra, ICTTJ, domownicy, cele, kreator (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa M wydana (1.6.1 – PR #23). Grupa N (1.6.2): niskie pozycje przeglądu dotyczące gry,
+   ICTTJ i dokowania, domowników, celów i kreatora – B69–B73, B75, B87, B89–B91, B129; N29, N38, N40–N49, N64, N67–N71,
+   N73. Format folderu bez zmian (pola addytywne: `container.amountAt`, `docking.entryDate`, `opening.since`).
+2. **Co użytkownik musi powiedzieć** – ✅ D87. Wybory z przeglądu: N46 – wariant a (cel ICTTJ bez kwoty bierze w swoim
+   miesiącu całą pulę Cele – reguła ICTTJ), N73 – rozkazy edytowalne w Dowództwie (jak w specyfikacji), N38 – pełna
+   poprawka (mapa puli Podatek sprzed startu z okna), B129 – stałe id + meldunek z „to nie powtórzenie”; zapisane jako
+   T-decyzje do zmiany na życzenie.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2 h.
+
+## 1.6.2 – gra, ICTTJ, domownicy, cele, kreator (grupa N, 19.10.2026)
+
+Zakres: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 („Przed grupą N” wyżej; N67 poprawione już
+w 1.6.1 – T216, odhaczone). Zrobione:
+- ICTTJ i dokowanie (T224): wpływ wpisany na Portfelu XTB jako para wypłaty, pula Podatek z podziałem i sprzed startu
+  budżetu, pominięty wpis trzyma swoją operację z banku, teksty okna wg kierunku i przy wyłączonym firewallu.
+- Odczyt ICTTJ (T225): wpis w dwóch plikach raz, błędy listowania widoczne, dobra migawka po jednym nieudanym odczycie,
+  szybka zmiana folderu bez danych starego.
+- Cele (T226): tempo i ETA z pulą Cele najpierw do celów ICTTJ, cel ICTTJ bez kwoty w swoim miesiącu (dzień wpisu ICTTJ),
+  „po terminie” w akcencie, kwota celu nie spada do 0.
+- Gra (T227): masa ładunku w dniu zmiany (`amountAt`, masa nieznana bez dnia do porównania), misja i stopień nowszej
+  wersji, „Pełna energia” z dniami niezamrożonymi, „Dzień bez wydatków” z dzisiejszym osobno, klasa ponad szczyt 30 dni,
+  „Poważne naruszenia od DD.MM”, opis rozkazu dziennego, rozkazy w Dowództwie.
+- Domownicy, salda, kreator, raporty (T228, T229): „Pokrywa” sprzed wpłaty, saldo na start z datą najstarszego zakupu,
+  data rozliczeń sprzed startu z dopiskiem, podwójna korekta (stałe id i meldunek), kreator bez utraty kopert, raport
+  wachty bieżącego tygodnia.
+- Przegląd `/code-review` high: 10 kandydatów – wszystkie poprawione (T230).
+- Testy: 594 unit + fs (nowy `ictj-game-goals.test.ts` – 17 testów; każda poprawka i każde znalezisko przeglądu
+  sprawdzone mutacją: test pada bez niej), E2E 47 (nowy test podwójnej korekty w `inbox.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.6.2, Windows):
+1. Mapa gwiezdna: tempo, ETA, znaczek „DOL · pula Cele”, cel z terminem „po terminie” w kolorze akcentu.
+2. Dowództwo: rozkazy do zmiany w panelu „Rozkazy i progi”; misja „Dzień bez wydatków” – „+1, jeśli dziś bez wydatków”.
+3. Ustawienia → Domownicy: saldo na start z 1.4.0 – przypomnienie od daty zakupu.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
@@ -1359,3 +1396,12 @@ Do sprawdzenia przez użytkownika (Windows 11):
   wieczorny raport wachty z „Dziś bez wydatków”, meldunki do rozpatrzenia, odzyskanie z kopii; przegląd `/code-review`
   high – 9 poprawek; nowe E2E `fees.spec.ts`, `series.spec.ts`, `inbox.spec.ts`, `recover.spec.ts`; PR #22 do `main`;
   koniec ciągu I–L – pauza (D67).
+- 19.10.2026 – PR #22 scalony, wydanie 1.6.0 opublikowane; propozycja grup M–V i komenda ciągu całości bez przerw (D87:
+  wszystkie propozycje poza F32, F38, F39, F41, F43). Grupa M (1.6.1): debriefing z kopertami tylko z planu, jedna reguła
+  przekroczenia koperty, „Przychody” i „Pieniądze na kontach”, zasięg bez fałszywej klasy, alarmy odprawy do przyczyny,
+  minimum osłon ≤ cel, gra po kreatorze; przegląd `/code-review` high – 8 poprawek; PR #23 scalony, wydanie 1.6.1
+  opublikowane (job Windows na `main`).
+- 19.10.2026 – Grupa N (1.6.2): wpływ na Portfelu XTB jako para wypłaty, pula Podatek z podziałem i sprzed startu, odczyt
+  ICTTJ odporny na błędy, ETA z pulą Cele, cel ICTTJ bez kwoty, masa ładunku w dniu zmiany, misje z dniami niezamrożonymi,
+  klasa ponad szczyt 30 dni, rozkazy w Dowództwie, saldo na start z datą, podwójna korekta, kreator bez utraty kopert;
+  przegląd `/code-review` high – 10 poprawek; nowy test podwójnej korekty w `inbox.spec.ts`; PR do `main`.

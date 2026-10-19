@@ -86,10 +86,15 @@ export function linkPayments(containerId: string, counterparty: string, quiet = 
   return found.length
 }
 
+/** What makes a container's monthly mass (B89): its change is the game's day of a raise. */
+const MASS_FIELDS = ['amount', 'cycleMonths', 'from', 'until', 'archived', 'archivedAt'] as const
+
 export const patchContainer = (id: string, p: Partial<Container>) =>
   updateRecord('containers', id, (c) => {
     const next = { ...c, ...p }
-    return c.cycleMonths <= 1 && next.cycleMonths > 1 ? fromNow(next) : next
+    const massChanged = MASS_FIELDS.some((k) => k in p && p[k] !== c[k])
+    const stamped = massChanged ? { ...next, amountAt: new Date().toISOString() } : next
+    return c.cycleMonths <= 1 && stamped.cycleMonths > 1 ? fromNow(stamped) : stamped
   })
 
 /** Dropped from the hold (or brought back): it still counts until this month's end – the months before stay as they were (B56). */

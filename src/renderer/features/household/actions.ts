@@ -162,7 +162,8 @@ export function useHouseholdSinceSeed(): void {
             openingIds,
             members: f.settings.household.members.map((m) => {
               const b = balanceOf(before, m.id)
-              return b.owed || b.deposit ? { ...m, opening: { owed: b.owed, deposit: b.deposit } } : m
+              // The day of the oldest purchase still owed (N41): the reminder counts from it, not from the start.
+              return b.owed || b.deposit ? { ...m, opening: { owed: b.owed, deposit: b.deposit, since: b.owed ? b.since : null } } : m
             })
           }
         }
@@ -170,6 +171,45 @@ export function useHouseholdSinceSeed(): void {
       { background: true }
     )
   }, [unset])
+  // Seeded before 1.6.2 (N41): the oldest purchase of each debt on the start, from the ledger as 1.3.0 counted it – only
+  // when its debt is the one kept (else typed by hand: no day known). Once – then every opening has its `since`.
+  const undated =
+    useData(
+      (s) =>
+        s.phase === 'ready' &&
+        !s.status?.readOnly &&
+        !s.switching &&
+        s.fi != null &&
+        !!s.fi.settings.household.since &&
+        s.fi.settings.household.members.some((m) => m.opening.owed > 0 && m.opening.since === undefined)
+    ) && inUse
+  useEffect(() => {
+    if (!undated) return
+    const input = fleetInputNow()
+    const household = useData.getState().fi?.settings.household
+    if (!input || !household?.since) return
+    const today = warsawNow().date
+    const members = household.members.map((m) => ({ ...m, opening: { owed: 0, deposit: 0 } }))
+    const plain = { ...input, settings: { ...input.settings, household: { ...input.settings.household, since: null, members } } }
+    const before = timed('rozliczenia: daty sald na start', () => householdOf(plain, today, addDays(household.since!, -1)))
+    updateSettings(
+      (f) => ({
+        ...f,
+        settings: {
+          ...f.settings,
+          household: {
+            ...f.settings.household,
+            members: f.settings.household.members.map((m) => {
+              if (!(m.opening.owed > 0) || m.opening.since !== undefined) return m
+              const b = balanceOf(before, m.id)
+              return { ...m, opening: { ...m.opening, since: b.owed === m.opening.owed ? b.since : null } }
+            })
+          }
+        }
+      }),
+      { background: true }
+    )
+  }, [undated])
   useEffect(() => {
     if (!unstamped) return
     const input = fleetInputNow()

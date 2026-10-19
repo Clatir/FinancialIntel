@@ -654,6 +654,32 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   (`orders-min-shields`); Radar – pożyczka z „Do spłaty razem” < kwoty odrzucona.
 - Testy: `tests/unit/plan-reports.test.ts`, `export.test.ts` (miesiąc w toku).
 
+## Kod (1.6.2 – gra, ICTTJ, domownicy, cele, kreator, grupa N, D87)
+- ICTTJ i dokowanie (T224, T225): `calc/dock.ts` – `asPayout` (wpływ wpisany na Portfelu XTB → wypłata), `Delivery.walletTyped`,
+  pominięte wpisy parowane po pozostałych (trzymają swoją operację z banku), `preStartTaxOf` (pula Podatek sprzed startu →
+  `FleetInput.preStartTax`, mapa liczona w `store/fleet.ts` `preStartTaxFor` – w kluczu silnika treść mapy); `income.ts`
+  `taxOfDockings` – część `split.taxHold`; `dock/actions.ts` – `dockDelivery` zmienia rodzaj bieżącego rekordu, `dockingOf`
+  zapisuje `entryDate`; okno i odprawa – teksty wg kierunku, „wraca z rezerwy na PIT-38”, firewall wyłączony
+  (`DockingDialog`); `main/ictj/reader.ts` – `ListingError` (tylko ENOENT = pusto), `oneEntryPerId` (ostrzeżenie o dwóch
+  plikach), `source.ts` – `LAST_READ_FAILED` (dobra migawka zostaje), odczyt folderu niewybranego oddaje stan wybranego;
+  `store/ictj.ts` – odpowiedź tylko ostatniego `setIctjDir`.
+- Cele (T226): `calc/goals.ts` `goalPace` {pool, rest, total}, `goalEtas(…, pace)` (pula Cele najpierw do celów ICTTJ),
+  `goalLate`; silnik – cel ICTTJ bez kwoty (`allIn` = jego miesiąc) bierze resztę puli Cele w miesiącu `docking.entryDate`
+  (schemat addytywny); Mapa gwiezdna – `starmap-dol-pool`, `starmap-no-target`, `data-late`, kwota 0 odrzucona.
+- Gra (T227): `container.amountAt` (`cargo/actions.ts` `MASS_FIELDS`), ocena ładunku z masą nieznaną (`cargo` null),
+  `rankOf` → `newer` (`GameView.rankNewer`, `rankStep` bez kroku), misja spoza `MISSIONS` nieoceniana, `dailyOver` (dni
+  niezamrożone z silnika, pamięć `overMemo` po danych silnika), `MissionStatus.pending`, `CLASS_PEAK_DAYS` / `peak`,
+  `GameView.serious.from`; Dowództwo – `OrdersFields` (`settings/MachineTabs.tsx`, `command-orders-fields`), opis rozkazu
+  dziennego; `store/game.ts` `celebrationsOf` – klasa tylko z `peak`.
+- Domownicy, salda, kreator, raporty (T228, T229): `memberOpeningSchema.since`, `household.ts` (pozycja salda na start z
+  datą `since`), `rebaseOpenings` → `since`, `household/actions.ts` – jednorazowe uzupełnienie daty; `MemberIncome` z
+  rejestru przed wpłatą; `household-since-before-start`; `balances/actions.ts` – id korekty i potwierdzenia z
+  `derivedId`; `balances.ts` `doubleCorrections`, `inbox.ts` rodzaj `corrections`, `inbox/state.ts` `dismissCorrection`
+  (`inbox-dismiss`); kreator – `envelopes` = zmiany ręczne; Raporty – `WatchChoice` / `watchMondayOf`
+  (`reports-watch-current`).
+- Testy: `tests/unit/ictj-game-goals.test.ts`, poszerzone `game`, `household`, `inbox`, `share`, `tests/fs/ictj.test.ts`
+  (B71–B73), E2E `inbox.spec.ts` (podwójna korekta), `household.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -744,4 +770,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.6.1 Liczby, plan, raporty, Mostek (grupa M, D87): debriefing z kopertami tylko z planu i „na plus” po końcu
   miesiąca, jedna reguła przekroczenia koperty, „Przychody” i „Pieniądze na kontach”, zasięg bez fałszywej klasy, alarmy
   odprawy do przyczyny, minimum osłon ≤ cel, gra po kreatorze, szybszy plan i raporty
+- [x] 1.6.2 Gra, ICTTJ, domownicy, cele, kreator (grupa N, D87): wpływ na Portfelu XTB jako para wypłaty, pula Podatek
+  z podziałem i sprzed startu, pominięty wpis z parą, odczyt ICTTJ odporny na błędy, ETA z pulą Cele, cel ICTTJ bez kwoty,
+  „po terminie”, masa ładunku w dniu zmiany, misje widzą dni niezamrożone, klasa ponad szczyt 30 dni, rozkazy w
+  Dowództwie, saldo na start z datą, podwójna korekta, kreator bez utraty kopert, raport wachty bieżącego tygodnia
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

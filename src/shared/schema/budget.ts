@@ -276,7 +276,12 @@ export type MemberInflow = (typeof MEMBER_INFLOWS)[number]
 /** A member's balance when the settlements start (D81): what they owed then and what they had paid ahead (grosze). */
 export const memberOpeningSchema = z.looseObject({
   owed: z.number().int().min(0).catch(0).default(0),
-  deposit: z.number().int().min(0).catch(0).default(0)
+  deposit: z.number().int().min(0).catch(0).default(0),
+  /**
+   * The day of the oldest purchase the owed part comes from (N41): the reminder after 30 days and the lists count from
+   * it. null = not known (typed by hand); absent = set before 1.6.2 (stamped once from the ledger as 1.3.0 counted it).
+   */
+  since: isoDate.nullable().optional().catch(undefined)
 })
 export type MemberOpening = z.infer<typeof memberOpeningSchema>
 

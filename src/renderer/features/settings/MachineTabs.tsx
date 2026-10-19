@@ -17,7 +17,6 @@ export function LayersTab() {
   if (!fi) return null
   const { layers, orders } = fi.settings
   const setLayers = (p: Partial<typeof layers>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, layers: { ...f.settings.layers, ...p } } }))
-  const setOrders = (p: Partial<Orders>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, orders: { ...f.settings.orders, ...p } } }))
   return (
     <fieldset disabled={readOnly} className="flex flex-col gap-3">
       <Panel title="Warstwy okrętu">
@@ -45,42 +44,56 @@ export function LayersTab() {
         </div>
       </Panel>
       <Panel title="Rozkazy">
-        <div className="flex flex-col gap-2 text-[12px]">
-          <Field
-            label="Minimalne osłony (pensje)"
-            labelWidth={200}
-            hint={orders.minShieldSalaries > layers.shieldSalaries - 1 ? 'Minimum blisko celu osłon – po każdej pensji osłony mogą spaść poniżej minimum (alarm, Bearish).' : undefined}
-          >
-            <NumberField
-              className="w-[80px]"
-              value={orders.minShieldSalaries}
-              decimals={1}
-              step={0.5}
-              commitOnBlur
-              isValid={(v) => v != null && v >= 0 && v <= 24 && v <= layers.shieldSalaries}
-              onChange={(v) => v != null && setOrders({ minShieldSalaries: v })}
-              onReject={(v) => toast(v != null && v > layers.shieldSalaries ? `Minimalne osłony nie mogą przekraczać celu osłon (${layers.shieldSalaries} pensji) – zostaje poprzednie.` : 'Minimalne osłony to od 0 do 24 pensji – zostaje poprzednie.', 'error', 6000)}
-              aria-label="Minimalne osłony"
-              data-testid="orders-min-shields"
-            />
-          </Field>
-          <Field label="Linia zanurzenia (% pensji)" labelWidth={200}>
-            <NumberField className="w-[80px]" value={orders.cargoLimitPct} decimals={0} step={5} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} aria-label="Linia zanurzenia" data-testid="orders-cargo" />
-          </Field>
-          <Field label="Cisza nocna" labelWidth={200} hint="Zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu (D40).">
-            <div className="flex items-center gap-2">
-              <TimeField className="w-[70px]" value={orders.quietHours.from} onChange={(from) => from && setOrders({ quietHours: { ...orders.quietHours, from } })} aria-label="Cisza od" />
-              –
-              <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" />
-            </div>
-          </Field>
-          <Field label="Dziennik kapitański od kwoty" labelWidth={200} hint="„Plan czy impuls?” od tej kwoty (D41).">
-            <AmountField className="w-[120px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
-          </Field>
-          <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (D23)" />
-        </div>
+        <OrdersFields labelWidth={200} />
       </Panel>
     </fieldset>
+  )
+}
+
+/**
+ * The orders' fields (fi.json): in Ustawienia → Warstwy i rozkazy and in Dowództwo (spec: „do zmiany w Dowództwie” – N73).
+ * Disabled by the fieldset around them in a folder only to read.
+ */
+export function OrdersFields({ labelWidth }: { labelWidth: number }) {
+  const settings = useData((s) => s.fi?.settings ?? null)
+  if (!settings) return null
+  const { layers, orders } = settings
+  const setOrders = (p: Partial<Orders>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, orders: { ...f.settings.orders, ...p } } }))
+  return (
+    <div className="flex flex-col gap-2 text-[12px]">
+      <Field
+        label="Minimalne osłony (pensje)"
+        labelWidth={labelWidth}
+        hint={orders.minShieldSalaries > layers.shieldSalaries - 1 ? 'Minimum blisko celu osłon – po każdej pensji osłony mogą spaść poniżej minimum (alarm, Bearish).' : undefined}
+      >
+        <NumberField
+          className="w-[80px]"
+          value={orders.minShieldSalaries}
+          decimals={1}
+          step={0.5}
+          commitOnBlur
+          isValid={(v) => v != null && v >= 0 && v <= 24 && v <= layers.shieldSalaries}
+          onChange={(v) => v != null && setOrders({ minShieldSalaries: v })}
+          onReject={(v) => toast(v != null && v > layers.shieldSalaries ? `Minimalne osłony nie mogą przekraczać celu osłon (${layers.shieldSalaries} pensji) – zostaje poprzednie.` : 'Minimalne osłony to od 0 do 24 pensji – zostaje poprzednie.', 'error', 6000)}
+          aria-label="Minimalne osłony"
+          data-testid="orders-min-shields"
+        />
+      </Field>
+      <Field label="Linia zanurzenia (% pensji)" labelWidth={labelWidth}>
+        <NumberField className="w-[80px]" value={orders.cargoLimitPct} decimals={0} step={5} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} aria-label="Linia zanurzenia" data-testid="orders-cargo" />
+      </Field>
+      <Field label="Cisza nocna" labelWidth={labelWidth} hint="Zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu (D40).">
+        <div className="flex items-center gap-2">
+          <TimeField className="w-[70px]" value={orders.quietHours.from} onChange={(from) => from && setOrders({ quietHours: { ...orders.quietHours, from } })} aria-label="Cisza od" />
+          –
+          <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" />
+        </div>
+      </Field>
+      <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty (D41).">
+        <AmountField className="w-[120px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
+      </Field>
+      <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (D23)" />
+    </div>
   )
 }
 

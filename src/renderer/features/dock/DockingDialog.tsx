@@ -4,12 +4,12 @@
  * proposes – changeable before saving – and, for a return to the trading capital, the firewall.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { addWorkingDays, PAIR_WORKING_DAYS, withDocking, type Delivery } from '@shared/calc/dock'
+import { addWorkingDays, asPayout, PAIR_WORKING_DAYS, withDocking, type Delivery } from '@shared/calc/dock'
 import { byPriority } from '@shared/calc/goals'
 import { fitSplit } from '@shared/calc/fleet'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
-import { useFolderLocked } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { fleetInputNow, useEngineParts, useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { Modal } from '../../components/Modal'
@@ -68,7 +68,9 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const goalsAll = useRecordList('goals')
   const goals = useMemo(() => byPriority(goalsAll.filter((g) => !g.archived)), [goalsAll])
   // The operation the docking is about: the paired one, or the one it would create on Portfel XTB.
-  const tx = useMemo(() => d.transaction ?? walletOperation(d, new Date().toISOString()), [d])
+  // An inflow typed on Portfel XTB is the payout it docks as (B69).
+  const tx = useMemo(() => (d.transaction ? asPayout(d.transaction) : walletOperation(d, new Date().toISOString())), [d])
+  const firewallOn = useData((s) => s.fi?.settings.orders.firewall ?? true)
   const preview = useMemo(() => {
     const input = fleetInputNow()
     return input ? withDocking(input, tx, dockingOf(d, tx, null, new Date().toISOString())) : null
@@ -120,7 +122,11 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
                 skipEntry(e.id, true)
                 closeDocking()
               }}
-              title="Te pieniądze nie trafiły do budżetu (np. wypłata na inne konto) – FI nie będzie ich dokować"
+              title={
+                d.transaction
+                  ? 'Wpis bez puli: wpływ w banku zostaje w budżecie zwykłą kolejnością dokowania (bez przypominania o wpisie w ICTTJ)'
+                  : 'Te pieniądze nie trafiły do budżetu (np. wypłata na inne konto) – FI nie będzie ich dokować'
+              }
               data-testid="docking-skip"
             >
               Pomiń wpis
@@ -158,6 +164,11 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
             Wpis tej wypłaty usunięto w ICTTJ – pula, z którą ją zadokowano, już nie obowiązuje. Zadokuj ponownie (zwykłą kolejnością) albo dopisz wpis w ICTTJ: FI połączy go sama.
           </p>
         )}
+        {d.walletTyped && d.transaction && (
+          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-wallet-typed">
+            Na Portfelu XTB jest już wpływ {zl(d.transaction.amount)} z {plDate(d.transaction.date)} – „Zadokuj” zrobi z niego tę wypłatę (bez drugiej operacji).
+          </p>
+        )}
         {!e && d.missingEntry && !d.entryGone && <p className="border-l-2 border-accent pl-2 text-muted">Bez wpisu w ICTTJ – dokuje zwykłą kolejnością. Dopisz tę wypłatę w ICTTJ (z pulą): FI połączy ją sama.</p>}
         {e && d.near && d.transaction && (
           <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-near">
@@ -189,9 +200,14 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
             <span className="flex flex-col">
               <span className="text-fg-strong">Portfel XTB – nowa operacja z dnia {plDate(d.date)}</span>
               <span className="text-[11.5px] text-muted">
-                {waiting
-                  ? `Wpływ z XTB w mBanku jeszcze nie przyszedł – FI czeka na import do ${until ? plDate(until) : '…'}. Jeśli pieniądze poszły na Portfel XTB, zadokuj teraz.`
-                  : `W mBanku nie ma tej kwoty od XTB po ${PAIR_WORKING_DAYS} dniach roboczych – najpewniej Portfel XTB. Potwierdź albo poczekaj na import.`}
+                {/* The direction's own words (N43): a return goes out to XTB. */}
+                {d.direction === 'out'
+                  ? waiting
+                    ? `Wypływu do XTB w mBanku jeszcze nie ma – FI czeka na import do ${until ? plDate(until) : '…'}. Jeśli pieniądze poszły z Portfela XTB, zadokuj teraz.`
+                    : `W mBanku nie ma tego wypływu do XTB po ${PAIR_WORKING_DAYS} dniach roboczych – najpewniej z Portfela XTB. Potwierdź albo poczekaj na import.`
+                  : waiting
+                    ? `Wpływ z XTB w mBanku jeszcze nie przyszedł – FI czeka na import do ${until ? plDate(until) : '…'}. Jeśli pieniądze poszły na Portfel XTB, zadokuj teraz.`
+                    : `W mBanku nie ma tej kwoty od XTB po ${PAIR_WORKING_DAYS} dniach roboczych – najpewniej Portfel XTB. Potwierdź albo poczekaj na import.`}
               </span>
             </span>
           )}
@@ -235,7 +251,9 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
           <section className={cx('border-l-2 pl-2', firewall ? 'border-down text-down' : 'border-up text-muted')} data-testid="docking-firewall">
             {e?.pool === 'tax'
               ? 'Zwrot z puli Podatek: wraca z rezerwy na PIT-38, nie z budżetu.'
-              : firewall
+              : !firewallOn
+                ? 'Rozkaz firewall wyłączony – dopłata bez sprawdzania osłon i kadłuba.'
+                : firewall
                 ? 'Firewall: dopłata do konta tradingowego, gdy osłony albo kadłub nie są pełne – wbrew rozkazowi (czerwony alarm).'
                 : 'Dopłata z „wolnego do decyzji” przy pełnych osłonach i kadłubie – zgodnie z rozkazem.'}
           </section>

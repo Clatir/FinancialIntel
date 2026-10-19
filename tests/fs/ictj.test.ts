@@ -144,4 +144,49 @@ describe('odczyt folderu ICTTJ (tylko payouts/ i forecasts/, nigdy zapis)', () =
       src.stop()
     }
   })
+
+  it('wpis przeniesiony zmianą daty w dwóch plikach: jeden – nowszy, z ostrzeżeniem (B71)', async () => {
+    const root = await ictjFolder()
+    // ICTTJ moved W1 to another day; OneDrive brought the new file before deleting the old one.
+    await write(root, `payouts/2026/2026-10-18_${W1}.json`, payout(W1, 'withdrawal', '2026-10-18', 1200, 'current', { updatedAt: '2026-10-18T09:00:00.000Z' }))
+    const snap = await readIctjFolder(root)
+    expect(snap.entries.filter((e) => e.id === W1)).toEqual([expect.objectContaining({ date: '2026-10-18' })])
+    expect(snap.warnings.some((w) => w.startsWith('Wpis ICTTJ w dwóch plikach') && w.includes(`payouts/2026/2026-10-16_${W1}.json`))).toBe(true)
+  })
+
+  it('folder wypłat, którego nie da się odczytać: błąd, nie „czytany” bez wpisów; po dobrym odczycie zostaje dobry z ostrzeżeniem (B73)', async () => {
+    const root = await ictjFolder()
+    const src = new IctjSource({ onSnapshot: () => undefined, log: () => undefined })
+    try {
+      expect((await src.setDir(root)).status).toBe('ok')
+      // A year's folder that is not a folder (any error but „not there” – EPERM, EBUSY…).
+      await write(root, 'payouts/2025', 'nie folder')
+      const read = await readIctjFolder(root)
+      expect(read.status).toBe('error')
+      expect(read.message).toContain('payouts/2025')
+      const kept = await src.refresh()
+      expect(kept.status).toBe('ok')
+      expect(kept.entries).toHaveLength(3)
+      expect(kept.warnings.some((w) => w.startsWith('Ostatni odczyt folderu ICTTJ nieudany') && w.includes('payouts/2025'))).toBe(true)
+    } finally {
+      src.stop()
+    }
+  })
+
+  it('szybka zmiana folderu: odpowiedź odczytu folderu już niewybranego to migawka wybranego (B72)', async () => {
+    const a = await ictjFolder()
+    const b = await ictjFolder()
+    await write(b, `payouts/2026/2026-10-20_01KPAY00000000000000000008.json`, payout('01KPAY00000000000000000008', 'withdrawal', '2026-10-20', 70, 'current'))
+    const src = new IctjSource({ onSnapshot: () => undefined, log: () => undefined })
+    try {
+      const first = src.setDir(a)
+      const second = await src.setDir(b)
+      expect(second.dir).toBe(b)
+      // The read of A ended after B was chosen: its caller gets B's snapshot, never A's.
+      expect((await first).dir).toBe(b)
+      expect(src.snapshot.entries).toHaveLength(4)
+    } finally {
+      src.stop()
+    }
+  })
 })

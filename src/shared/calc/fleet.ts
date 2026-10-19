@@ -339,9 +339,15 @@ export function rebaseOpenings(input: Pick<FleetInput, 'settings' | 'balances' |
   if (!from || !next || from === next) return null
   const net = (b: { owed: number; deposit: number }) => b.deposit - b.owed
   const value = new Map<string, number>()
+  // The oldest purchase a debt comes from (N41), when the balance on the new day is the ledger's own.
+  const oldest = new Map<string, string | null>()
   if (next > from) {
     const then = householdOf(input, today, addDays(next, -1))
-    for (const m of settings.household.members) value.set(m.id, net(balanceOf(then, m.id)))
+    for (const m of settings.household.members) {
+      const b = balanceOf(then, m.id)
+      value.set(m.id, net(b))
+      oldest.set(m.id, b.since)
+    }
   } else {
     // The balances as 1.3.0 counted them (from the budget's start, no openings) – the old opening's typed part on top.
     // The operations the old openings never took in (B14) are not given back: they count after the new start as before.
@@ -354,9 +360,12 @@ export function rebaseOpenings(input: Pick<FleetInput, 'settings' | 'balances' |
     }
     const atNext = householdOf(plain, today, addDays(next, -1))
     const atFrom = householdOf(plain, today, addDays(from, -1))
-    for (const m of settings.household.members) value.set(m.id, net(balanceOf(atNext, m.id)) + net(m.opening) - net(balanceOf(atFrom, m.id)))
+    for (const m of settings.household.members) {
+      value.set(m.id, net(balanceOf(atNext, m.id)) + net(m.opening) - net(balanceOf(atFrom, m.id)))
+      oldest.set(m.id, balanceOf(atNext, m.id).since)
+    }
   }
-  return new Map([...value].map(([id, v]) => [id, v >= 0 ? { owed: 0, deposit: v } : { owed: -v, deposit: 0 }]))
+  return new Map([...value].map(([id, v]) => [id, v >= 0 ? { owed: 0, deposit: v, since: null } : { owed: -v, deposit: 0, since: oldest.get(id) ?? null }]))
 }
 
 /**
@@ -379,6 +388,11 @@ export interface FleetInput {
   /** `game`: the serious overrun's threshold of Dowództwo (N102) – without it the default 20%. */
   settings: Pick<Settings, 'accounts' | 'categories' | 'layers' | 'orders' | 'budget' | 'household'> & { game?: Pick<Settings['game'], 'seriousEnvelopePct'> }
   transactions: readonly Transaction[]
+  /**
+   * Payouts of the ICTTJ pool „Podatek” paired with operations before the budget's start (N38 – `preStartTaxOf`, the
+   * renderer's: the engine never reads ICTTJ): no income. Operation id → amount.
+   */
+  preStartTax?: ReadonlyMap<string, number>
   containers?: readonly Container[]
   goals?: readonly Goal[]
   months?: readonly MonthPlan[]
@@ -603,7 +617,10 @@ export function computeFleet(input: FleetInput): FleetState {
     if (c) costsByMonth.set(m, (costsByMonth.get(m) ?? 0) + c)
   }
   // Income (D81): work and trading net, without the members' money and the pool „Podatek”.
-  const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax: taxOfDockings(dockingByTx, txs) }
+  const tax = taxOfDockings(dockingByTx, txs)
+  // The pool „Podatek” before the start (N38): paired, never docked – no income either.
+  for (const [id, v] of input.preStartTax ?? []) if (!tax.has(id)) tax.set(id, v)
+  const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax }
   const incomeMonths = incomeByMonth(txs, incomeContext)
   const costsFor = (m: string): FleetState['costs'] => {
     const window = monthsBefore(covered, m, 12)
@@ -661,7 +678,14 @@ export function computeFleet(input: FleetInput): FleetState {
       .filter((g) => goalTakes(g, at))
       .map((g) => ({ g, at: goalAt(g, at) }))
       .sort((a, b) => a.at.priority - b.at.priority || a.g.createdAt.localeCompare(b.g.createdAt) || a.g.id.localeCompare(b.g.id))
-      .map(({ g, at }) => ({ id: g.id, amount: goalAmount.get(g.id) ?? 0, target: at.target, ictj: g.source === 'ictj' }))
+      .map(({ g, at }) => ({
+        id: g.id,
+        amount: goalAmount.get(g.id) ?? 0,
+        target: at.target,
+        ictj: g.source === 'ictj',
+        // An ICTTJ goal without a price (N46): it takes everything set aside in its month (ICTTJ's own rule).
+        allIn: g.source === 'ictj' && g.ictj != null && g.ictj.amount == null ? g.deadline : null
+      }))
   const addGoal = (id: string, v: number, moves: Moves) => {
     goalAmount.set(id, (goalAmount.get(id) ?? 0) + v)
     moves.goals = { ...moves.goals, [id]: (moves.goals?.[id] ?? 0) + v }
@@ -690,11 +714,12 @@ export function computeFleet(input: FleetInput): FleetState {
    * Straight into the goals (the ICTTJ pool „Cele”): the goals of the ICTTJ forecast first – the money was set aside
    * for them – then the own ones, each by the common priority list (D72); what they do not need stays in the shields.
    */
-  const fillGoals = (v: number, at: number, moves: Moves) => {
+  const fillGoals = (v: number, at: number, moves: Moves, date: string) => {
     let rest = v
     const goals = activeGoals(at)
     for (const g of [...goals.filter((x) => x.ictj), ...goals.filter((x) => !x.ictj)]) {
-      const take = Math.min(rest, Math.max(0, g.target - g.amount))
+      // A goal without a price in its month takes all the pool's rest (N46); else up to its target.
+      const take = g.allIn && g.allIn === monthOf(date) ? rest : Math.min(rest, Math.max(0, g.target - g.amount))
       if (take > 0) addGoal(g.id, take, moves)
       rest -= take
     }
@@ -880,7 +905,8 @@ export function computeFleet(input: FleetInput): FleetState {
           // A withdrawal from the trading account (D55): the pool decides – Cele → goals, Podatek → outside the budget.
           const d = dockingByTx.get(t.id)
           if (d?.split) applySplit(amt, d.split, moves)
-          else if (d?.pool === 'goals') fillGoals(amt, cameIn(t, d), moves)
+          // The ICTTJ payout's day decides a goal's month (N46: entered on the 31st, in the bank on the 2nd).
+          else if (d?.pool === 'goals') fillGoals(amt, cameIn(t, d), moves, d.entryDate ?? t.date)
           else if (d?.pool === 'tax') {
             taxHold += amt
             moves.taxHold = amt

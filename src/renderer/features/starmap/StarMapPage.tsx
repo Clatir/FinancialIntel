@@ -4,7 +4,7 @@
  * against its target, its month and the ETA at the pace of the last months.
  */
 import { useMemo, useState } from 'react'
-import { byPriority, goalEtas, goalInflow } from '@shared/calc/goals'
+import { byPriority, goalEtas, goalLate, goalPace } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
@@ -32,15 +32,25 @@ export function StarMapPage() {
   const active = useMemo(() => byPriority(goalsAll.filter((g) => !g.archived)), [goalsAll])
   const archived = useMemo(() => byPriority(goalsAll.filter((g) => g.archived)), [goalsAll])
   const amounts = useMemo(() => new Map((fleet?.goals ?? []).map((g) => [g.id, g.amount])), [fleet])
-  // Once per fleet (W38): the pace walks the engine's log.
-  const monthly = useMemo(() => (fleet ? goalInflow(fleet.log, fleet.started ? fleet.start : null, fleet.month) : null), [fleet])
-  const etas = useMemo(() => (fleet ? goalEtas(active.map((g) => ({ id: g.id, amount: amounts.get(g.id) ?? 0, target: g.target })), monthly, fleet.month) : {}), [fleet, active, amounts, monthly])
+  // The payouts of the pool Cele apart (N42): they fill the ICTTJ goals first, whatever the list's order. Once per fleet
+  // (W38): the pace walks the engine's log – the month's total from the same walk.
+  const dockings = useRecordList('dockings')
+  const poolTx = useMemo(() => new Set(dockings.filter((d) => d.pool === 'goals').map((d) => d.transactionId)), [dockings])
+  const pace = useMemo(() => (fleet ? goalPace(fleet.log, fleet.started ? fleet.start : null, fleet.month, poolTx) : null), [fleet, poolTx])
+  const monthly = pace?.total ?? null
+  const etas = useMemo(
+    () => (fleet ? goalEtas(active.map((g) => ({ id: g.id, amount: amounts.get(g.id) ?? 0, target: g.target, ictj: g.source === 'ictj' })), pace, fleet.month) : {}),
+    [fleet, active, amounts, pace]
+  )
   const [dragged, setDragged] = useState<string | null>(null)
   // The goal whose money is being moved (C2, B30): archiving it, or an archived one.
   const [moving, setMoving] = useState<{ goal: Goal; archive: boolean } | null>(null)
   const archiveOrAsk = (g: Goal) => ((amounts.get(g.id) ?? 0) > 0 ? setMoving({ goal: g, archive: true }) : archiveGoal(g, true))
   // Draw on Liquidity (D73, ICT): the first goal not reached yet – where the next delivery for the goals flows.
-  const dol = active.find((g) => g.target > 0 && (amounts.get(g.id) ?? 0) < g.target)?.id ?? null
+  const open = (g: Goal) => g.target > 0 && (amounts.get(g.id) ?? 0) < g.target
+  const dol = active.find(open)?.id ?? null
+  // A payout of the pool Cele fills the ICTTJ goals first (N42, D72): its own mark when it goes elsewhere.
+  const dolPool = (active.find((g) => g.source === 'ictj' && open(g)) ?? active.find(open))?.id ?? null
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const forecast = snap.status === 'ok' ? chosenForecast(snap.forecasts, forecastId) : null
   // All the money in goals, the archived ones' too (it is still there – C1).
@@ -86,6 +96,8 @@ export function StarMapPage() {
                       }}
                       scenario={g.source === 'ictj' && forecast && forecast.id === g.ictj?.forecastId ? forecast.name : null}
                       dol={g.id === dol}
+                      dolPool={g.id === dolPool && dolPool !== dol}
+                      month={fleet.month}
                       onArchive={() => archiveOrAsk(g)}
                     />
                   ))}
@@ -258,6 +270,8 @@ function GoalRow({
   onDrop,
   scenario,
   dol,
+  dolPool,
+  month,
   onArchive
 }: {
   goal: Goal
@@ -273,11 +287,17 @@ function GoalRow({
   onDrop: () => void
   scenario: string | null
   dol: boolean
+  dolPool: boolean
+  month: string
   onArchive: () => void
 }) {
   const ictj = g.source === 'ictj'
   const noTarget = g.target <= 0
-  const late = !!eta && !!g.deadline && eta > g.deadline
+  const reached = !noTarget && amount >= g.target
+  // Past its deadline only while not reached (B87); the accent, never the red of money (T74).
+  const late = goalLate({ amount, target: g.target, deadline: g.deadline }, eta, pace, month)
+  // An ICTTJ goal without a price (N46): ICTTJ's rule – everything of the pool Cele in its month.
+  const allIn = ictj && g.ictj != null && g.ictj.amount == null
   return (
     <div
       className={cx('flex flex-col gap-1 border-b border-line/60 px-1 py-1.5 last:border-b-0', dragging && 'opacity-40')}
@@ -314,6 +334,11 @@ function GoalRow({
             DOL
           </Badge>
         )}
+        {dolPool && (
+          <Badge title="Następna wypłata z puli Cele w ICTTJ trafi najpierw tutaj – do pierwszego niepełnego celu z prognozy ICTTJ" data-testid="starmap-dol-pool">
+            DOL · pula Cele
+          </Badge>
+        )}
         <span className="flex gap-0.5">
           <button className="btn btn-ghost h-[20px] px-1 text-[11px]" disabled={readOnly || index === 0} onClick={() => moveUp(g.id)} title="Wyżej" data-testid="starmap-up">
             ▲
@@ -329,13 +354,43 @@ function GoalRow({
         </span>
         <span className="text-dim">/</span>
         {ictj || readOnly ? (
-          <span className="num text-muted">{noTarget ? (g.ictj?.currency && g.ictj.currency !== 'PLN' ? `${plnText(g.ictj.amount ?? 0)} ${g.ictj.currency} – bez kwoty w PLN` : 'bez kwoty') : zl(g.target)}</span>
+          <span className="num text-muted" title={allIn ? 'Cel bez kwoty w ICTTJ: bierze wszystkie wypłaty z puli Cele w swoim miesiącu' : undefined} data-testid="starmap-no-target">
+            {noTarget
+              ? allIn
+                ? `bez kwoty – pula Cele${g.deadline ? ` w ${monthLabel(g.deadline)}` : ''}`
+                : g.ictj?.currency && g.ictj.currency !== 'PLN'
+                  ? `${plnText(g.ictj.amount ?? 0)} ${g.ictj.currency} – bez kwoty w PLN`
+                  : 'bez kwoty'
+              : zl(g.target)}
+          </span>
         ) : (
-          <AmountField className="h-[22px] w-[110px]" value={g.target} onChange={(v) => v != null && patchGoal(g.id, { target: v })} aria-label="Kwota celu" data-testid="starmap-target" />
+          <AmountField
+            className="h-[22px] w-[110px]"
+            value={g.target}
+            // A goal needs its amount (N48): 0 would drop it from the docking without a word – archive it instead.
+            onChange={(v) => (v != null && v > 0 ? patchGoal(g.id, { target: v }) : toast('Podaj kwotę celu – cel bez kwoty nie dostaje dostaw (zarchiwizuj go, jeśli już niepotrzebny).', 'error'))}
+            aria-label="Kwota celu"
+            data-testid="starmap-target"
+          />
         )}
         <span className="flex-1" />
-        <span className={cx('text-[11.5px]', late ? 'text-down' : 'text-muted')} data-testid="starmap-eta" title={late ? 'Przy obecnym tempie cel będzie po terminie' : undefined}>
-          {noTarget ? '' : amount >= g.target ? 'osiągnięty' : eta ? `ETA ${monthLabel(eta)}` : pace ? 'ponad 50 lat' : 'ETA —'}
+        <span
+          className={cx('text-[11.5px]', late ? 'text-accent' : 'text-muted')}
+          data-testid="starmap-eta"
+          data-late={late || undefined}
+          title={late ? (eta || pace ? 'Przy obecnym tempie cel będzie po terminie' : 'Termin minął, a cel nie jest pełny') : undefined}
+        >
+          {noTarget
+            ? ''
+            : reached
+              ? 'osiągnięty'
+              : eta
+                ? `ETA ${monthLabel(eta)}${late ? ' – po terminie' : ''}`
+                : pace
+                  ? `ponad 50 lat${late ? ' – po terminie' : ''}`
+                  : late
+                    ? 'po terminie'
+                    : 'ETA —'}
         </span>
         {!ictj && !readOnly ? (
           // A month typed whole, saved on leaving the field (W2): never a save per key.

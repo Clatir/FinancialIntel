@@ -101,7 +101,12 @@ export function WizardPage() {
   const goalsSplit = Object.fromEntries(goals.map((g) => [g.id, Math.max(0, w.goals?.[g.id] ?? proposedSplit.goals[g.id] ?? 0)]))
   const goalsTotal = sum(Object.values(goalsSplit))
   const overSplit = hull + goalsTotal > Math.max(0, total)
-  const envelopes = w.envelopes ?? Object.fromEntries(envelopeProposals.envelopes.filter((e) => e.limit > 0).map((e) => [e.categoryId, e.limit]))
+  // The proposals with what was typed over them (B75): choosing the cargo again never drops a typed envelope.
+  const envelopes: Record<string, number> = Object.fromEntries(envelopeProposals.envelopes.filter((e) => e.limit > 0).map((e) => [e.categoryId, e.limit]))
+  for (const [id, v] of Object.entries(w.envelopes)) {
+    if (v == null) delete envelopes[id]
+    else envelopes[id] = v
+  }
   const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => c.amount)) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
   // The tanks of the first month as the engine fills them (N9, T29): a fee due soon catches up – more than its share.
   const tanksMonthly =
@@ -225,7 +230,7 @@ export function WizardPage() {
                   const cargo = { ...w.cargo }
                   if (e.currentTarget.checked) cargo[p.key] = p
                   else delete cargo[p.key]
-                  patchWizard({ cargo, envelopes: null })
+                  patchWizard({ cargo })
                 }}
               />
               <span className="min-w-0 flex-1 truncate">{p.label}</span>
@@ -248,12 +253,7 @@ export function WizardPage() {
                 value={envelopes[c.id] ?? null}
                 allowEmpty
                 placeholder="—"
-                onChange={(v) => {
-                  const next = { ...envelopes }
-                  if (v == null) delete next[c.id]
-                  else next[c.id] = v
-                  patchWizard({ envelopes: next })
-                }}
+                onChange={(v) => patchWizard({ envelopes: { ...w.envelopes, [c.id]: v } })}
                 aria-label={`Koperta ${c.name}`}
               />
             </div>
