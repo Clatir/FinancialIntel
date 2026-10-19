@@ -123,6 +123,9 @@ describe('formatowanie i parsowanie pól', () => {
     expect(parseDateInput('Wcz', 2026, today, today, today)).toBe('2026-10-18')
     expect(parseDateInput('dziś', 2026, today, today, today)).toBe(today)
     expect(parseDateInput('przedwczoraj', 2026, today, today, today)).toBe('2026-10-17')
+    // Never a name of Object's prototype.
+    expect(parseDateInput('constructor', 2026, today, today, today)).toBeNull()
+    expect(parseDateInput('__proto__', 2026, today, today, today)).toBeNull()
     expect(parseDateInput('-3', 2026, today, today, today)).toBe('2026-10-16')
     expect(parseDateInput('jutro', 2026, today, today, today)).toBeNull()
   })

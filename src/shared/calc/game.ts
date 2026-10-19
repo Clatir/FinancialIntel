@@ -249,7 +249,7 @@ export function rateDay(input: GameInput, date: string, prev: GameDay | null = n
     if (txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0)) tags.push('judas')
     if (txs.some((t) => t.kind === 'expense' && t.amount > 0 && !t.refundable && !t.goalId && !t.splits.length)) tags.push('turtle')
     if (f.daily && f.daily.left === 0 && f.daily.spentToday > 0) tags.push('sweep')
-    // Confirmed in the evening report (F13), and nothing of my own spent indeed.
+    // Confirmed in the evening report (F13), and a day without expenses as the „nospend” mission counts it.
     if (settings.game.noSpend[date] && dayCost(txs) <= 0) tags.push('nospend')
   }
   return { date, status: violations.length ? 'broken' : 'ok', violations, cls: f.shipClass, cargo, tags, fleet: f }

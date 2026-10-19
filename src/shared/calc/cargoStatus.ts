@@ -34,6 +34,8 @@ export interface CargoStatus {
   dayFrom: 'history' | 'set'
   /** This cycle's due date (this month). */
   due: string
+  /** Its payments count from this day (`EARLY_DAYS` before the due): an earlier one belongs to the cycle before. */
+  from: string
   state: CargoState
   /** Waiting for the bank: its account's files do not reach the days after the due yet – never overdue then. */
   importPending: boolean
@@ -125,7 +127,7 @@ export function cargoStatuses(o: CargoInput): CargoStatus[] {
       importPending = covered !== '' && covered < graceEnd
       state = importPending ? 'waiting' : 'overdue'
     }
-    out.push({ containerId: c.id, name: c.name, amount: c.amount, cycleMonths: c.cycleMonths, day, dayFrom, due, state, importPending, payments, paid })
+    out.push({ containerId: c.id, name: c.name, amount: c.amount, cycleMonths: c.cycleMonths, day, dayFrom, due, from, state, importPending, payments, paid })
   }
   return out.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.localeCompare(b.name)))
 }

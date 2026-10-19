@@ -26,7 +26,8 @@ describe('opłaty stałe w miesiącu (F1, D86)', () => {
     const c = container({ dueDay: 1 })
     const history = rentHistory(c)
     const at = (today: string, transactions = history) => cargoStatuses(input({ containers: [c], transactions, today }))[0]!
-    expect(at('2026-10-05')).toMatchObject({ day: 10, dayFrom: 'history', due: '2026-10-10', state: 'waiting', importPending: false, paid: 0 })
+    // Its payments count from 14 days before the due („Zapłacone” too – an earlier one is the due before's).
+    expect(at('2026-10-05')).toMatchObject({ day: 10, dayFrom: 'history', due: '2026-10-10', from: '2026-09-26', state: 'waiting', importPending: false, paid: 0 })
     expect(at('2026-10-12').state).toBe('waiting')
     expect(at('2026-10-13').state).toBe('overdue')
     const paid = at('2026-10-13', [...history, pay(c, '2026-10-11')])
@@ -107,5 +108,16 @@ describe('opłaty stałe w miesiącu (F1, D86)', () => {
     // Paid this month: only the months ahead.
     const paid = cargoStatuses(input({ containers: [rent], transactions: [...transactions, pay(rent, '2026-10-10')], today }))
     expect(radar({ today, plans: [], containers: [rent], tanks: [], loans: [], money, cargo: paid, days: 50 }).map((i) => i.date)).toEqual(['2026-11-10'])
+  })
+
+  it('Radar: opłata okresowa tego miesiąca raz – w dniu płatności z historii, nie drugi raz w dniu kontenera', () => {
+    // A quarterly fee of the 15th the bank takes on the 10th; the 12th, not paid yet.
+    const q = container({ name: 'Woda', amount: zl(300), cycleMonths: 3, dueMonth: '2026-01', dueDay: 15 })
+    const history = ['2026-01-10', '2026-04-10', '2026-07-10'].map((d) => pay(q, d))
+    const today = '2026-10-12'
+    const cargo = cargoStatuses(input({ containers: [q], transactions: history, today }))
+    expect(cargo.map((s) => [s.due, s.state])).toEqual([['2026-10-10', 'waiting']])
+    const items = radar({ today, plans: [], containers: [q], tanks: [], loans: [], money, cargo, days: 120 }).filter((i) => i.kind === 'asteroid')
+    expect(items.map((i) => i.date)).toEqual(['2026-10-10', '2027-01-15'])
   })
 })

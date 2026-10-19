@@ -167,8 +167,8 @@ const DAY_WORDS: Record<string, number> = { dziś: 0, dzis: 0, dzisiaj: 0, wczor
  */
 export function parseDateInput(text: string, fallbackYear = new Date().getFullYear(), notAfter?: string, near?: string, today = warsawNow().date): string | null {
   const t = text.trim()
-  const word = DAY_WORDS[t.toLowerCase()]
-  if (word !== undefined) return addDays(today, word)
+  const key = t.toLowerCase()
+  if (Object.hasOwn(DAY_WORDS, key)) return addDays(today, DAY_WORDS[key]!)
   const back = /^-(\d{1,3})$/.exec(t)
   if (back) return addDays(today, -Number(back[1]))
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)

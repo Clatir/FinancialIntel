@@ -3,7 +3,8 @@ import { plnText } from '../../components/fields'
 import { Empty, Panel } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { useFleet } from '../../store/fleet'
-import { openInboxItem, useInbox } from './state'
+import { useDuplicateCount } from '../import/DuplicatesPanel'
+import { DUPLICATES_AFTER_MS, openInboxItem, useInbox } from './state'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -21,7 +22,8 @@ const HINT: Partial<Record<InboxKind, string>> = {
  */
 export function InboxPage() {
   const fleet = useFleet()
-  const items = useInbox(zl)
+  const duplicates = useDuplicateCount(DUPLICATES_AFTER_MS)
+  const items = useInbox(duplicates, zl)
   const from = fleet?.started ? fleet.start : null
   const sections = INBOX_KINDS.map((kind) => [kind, items.filter((i) => i.kind === kind)] as const).filter(([, list]) => list.length > 0)
   return (

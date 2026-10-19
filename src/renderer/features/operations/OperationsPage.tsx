@@ -194,7 +194,7 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
         <span className="ml-2 text-[11px] text-dim">{account}</span>
       </span>
       <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')} title={category || undefined}>
-        {t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : 'bez kategorii') : category}
+        {t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : t.containerId ? 'ładownia' : t.goalId ? 'z celu' : 'bez kategorii') : category}
       </span>
       <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
         {shownMarks.map((m) => (

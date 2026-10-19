@@ -119,6 +119,9 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
       tx('2026-10-04', { refundable: true, memberId: 'M1' }),
       tx('2026-10-05', { splits: [{ id: nextId(), amount: -zl(10), categoryId: food, refundable: false, memberId: null, advance: false, note: '' }] }),
       tx('2026-10-06', { kind: 'income', amount: zl(100) }),
+      // A container's payment and one from a goal have their place in the budget.
+      tx('2026-10-07', { containerId: nextId() }),
+      tx('2026-10-08', { goalId: nextId() }),
       draft
     ]
     expect(uncategorizedOf(list, '2026-09-01', { [draft.id]: true })).toEqual({ count: 2, amount: zl(15), from: '2026-09-01' })

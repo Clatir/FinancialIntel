@@ -55,6 +55,9 @@ describe('lista operacji', () => {
   it('oznaczenia: noc tylko z godziną w ciszy nocnej, impuls od progu 200 zł', () => {
     expect(marksOf(zabka, settings.orders)).toEqual(['night', 'manual'])
     expect(marksOf(bolt, settings.orders)).toEqual(['uncategorized', 'pending'])
+    // A container's payment and one from a goal have their place in the budget – no „bez kategorii” (F6).
+    expect(marksOf({ ...bolt, containerId: '01K30000000000000000000C01' }, settings.orders)).toEqual(['pending'])
+    expect(marksOf({ ...bolt, goalId: '01K30000000000000000000G01' }, settings.orders)).toEqual(['pending'])
     expect(isNight({ kind: 'expense', amount: -100, time: '04:59' }, settings.orders)).toBe(true)
     expect(isNight({ kind: 'expense', amount: -100, time: '05:00' }, settings.orders)).toBe(false)
     expect(isNight({ kind: 'expense', amount: -100, time: null }, settings.orders)).toBe(false)

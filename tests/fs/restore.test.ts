@@ -92,6 +92,20 @@ describe('odzyskanie z kopii (1.6.0, F3)', () => {
     expect(res.fi).toBeNull()
   })
 
+  it('ustawienia, których nie da się zapisać, mówią dlaczego – odzyskane wpisy zostają i idą do okna', async () => {
+    const store = await freshStore()
+    const t = sampleTransaction()
+    await store.saveRecord('transactions', t)
+    const data = await readBackupZip(await manualBackup(store, store.backupsDir))
+    await store.deleteRecord('transactions', t.id)
+    const broken = { ...data.fi!, settings: 'zepsute' } as unknown as typeof data.fi
+    const res = await store.restoreVersions([{ kind: 'transactions', record: data.records.transactions[0]! }], broken)
+    expect(res.done).toEqual([t.id])
+    expect(res.fi).toBeNull()
+    expect(res.failed).toEqual([{ id: 'fi.json', error: expect.any(String) }])
+    expect(res.change?.upserts.map((u) => u.entry.record.id)).toEqual([t.id])
+  })
+
   it('rozpakowanie bezpieczne: tylko pliki danych, ścieżka z ../ odrzuca całą kopię', async () => {
     const dir = tempDir()
     const fiText = JSON.stringify({ x: 1 })

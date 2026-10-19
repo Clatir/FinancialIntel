@@ -1706,8 +1706,15 @@ export class DataStore {
           failed.push({ id: record.id, error: (e as Error).message })
         }
       }
-      // The settings go back to the caller (as `historyRestore`'s – adopted there, not a change set's).
-      const written = fi ? await this.putSettings(fi) : null
+      // The settings go back to the caller (as `historyRestore`'s – adopted there, not a change set's); ones that cannot
+      // be written say why, the records written stay in the change set.
+      let written: SettingsFile | null = null
+      if (fi)
+        try {
+          written = await this.putSettings(fi)
+        } catch (e) {
+          failed.push({ id: SETTINGS_FILE, error: (e as Error).message })
+        }
       return { change: this.diff(this.buildViews(), false), fi: written, done, failed }
     })
   }

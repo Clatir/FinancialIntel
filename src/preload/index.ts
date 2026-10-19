@@ -55,6 +55,7 @@ const api: FiApi = {
   backupPreview: (path) => invoke('backupPreview', path),
   backupRecover: (path, picks, settings) => invoke('backupRecover', path, picks, settings),
   backupToFolder: (path) => invoke('backupToFolder', path),
+  putVersions: (items, fi) => invoke('putVersions', items, fi),
   pickImportFile: () => invoke('pickImportFile'),
   setBackupDir: (mode) => invoke('setBackupDir', mode),
   showPath: (abs) => invoke('showPath', abs),

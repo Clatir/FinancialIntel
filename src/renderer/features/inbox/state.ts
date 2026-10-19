@@ -11,16 +11,19 @@ import { listOf, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { navigate } from '../../store/ui'
 import { openDocking, useDeliveries } from '../dock/state'
-import { useDuplicateCount } from '../import/DuplicatesPanel'
+import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
 import { openRefundables, setFilter } from '../operations/state'
 
-/** The duplicates are counted a while after the last change (0,6 s at 150 tys. operacji – never while typing). */
-const DUPLICATES_AFTER_MS = 3000
+/** The inbox counts the duplicates a while after the last change (0,6 s at 150 tys. operacji – never while typing). */
+export const DUPLICATES_AFTER_MS = 3000
 
 const NO_MONEY = () => ''
 
-/** The reports now; `money` formats their amounts (the hidden amounts mask them – formatted at each render, T55). */
-export function useInbox(money: (grosze: number) => string = NO_MONEY): InboxItem[] {
+/**
+ * The reports now; `duplicates` – counted by the caller (the inbox counts them, the side menu takes the last count – W4);
+ * `money` formats their amounts (the hidden amounts mask them – formatted at each render, T55).
+ */
+export function useInbox(duplicates: number, money: (grosze: number) => string = NO_MONEY): InboxItem[] {
   const fleet = useFleet()
   const deliveries = useDeliveries()
   const conflicts = useData((s) => s.conflicts.length)
@@ -30,7 +33,6 @@ export function useInbox(money: (grosze: number) => string = NO_MONEY): InboxIte
   const drafts = useData((s) => s.drafts)
   const accounts = useData((s) => s.fi?.settings.accounts)
   const members = useData((s) => s.fi?.settings.household.members)
-  const duplicates = useDuplicateCount(DUPLICATES_AFTER_MS)
   const from = fleet?.started ? fleet.start : null
   const uncategorized = useMemo(() => uncategorizedOf(listOf(transactions), from, drafts), [transactions, from, drafts])
   const confirmations = useMemo(() => {
@@ -54,8 +56,11 @@ export function useInbox(money: (grosze: number) => string = NO_MONEY): InboxIte
   })
 }
 
-/** How many reports wait (the side menu). */
-export const useInboxCount = (): number => useInbox().length
+/** How many reports wait (the side menu: the duplicates as last counted). */
+export function useInboxCount(): number {
+  const duplicates = useKnownDuplicateCount()
+  return useInbox(duplicates).length
+}
 
 /** A report's button: the docking window, Operacje with the filter set, or the screen deciding it. */
 export function openInboxItem(item: InboxItem, from: string | null): void {

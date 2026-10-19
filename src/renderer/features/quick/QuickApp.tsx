@@ -45,10 +45,11 @@ function fromTemplate(t: QuickTemplate, data: QuickData, base: QuickDraft): Quic
     counterparty: t.counterparty,
     categoryId: t.kind === 'income' ? null : t.categoryId,
     accountId: data.accounts.some((a) => a.id === t.accountId) ? t.accountId : base.accountId,
-    memberId: t.kind === 'refundable' ? (t.memberId ?? data.members[0]?.id ?? null) : null,
-    household: false,
-    advance: false,
-    gift: false
+    // Whose money it was (D80): a member's purchase or gift, a member's income – the member still on the list.
+    memberId: t.kind === 'refundable' ? (t.memberId ?? data.members[0]?.id ?? null) : t.kind === 'income' && data.members.some((m) => m.id === t.memberId) ? t.memberId : null,
+    household: t.kind === 'income' && data.members.some((m) => m.id === t.memberId),
+    advance: t.kind === 'income' && t.advance && data.members.some((m) => m.id === t.memberId),
+    gift: t.kind === 'refundable' && t.gift
   }
 }
 

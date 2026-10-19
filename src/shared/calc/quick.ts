@@ -18,7 +18,10 @@ const templateOf = (t: Transaction): QuickTemplate => ({
   counterparty: t.counterparty,
   categoryId: t.kind === 'income' ? null : t.categoryId,
   accountId: t.accountId,
-  memberId: t.refundable ? t.memberId : null
+  // Whose money it was, as the quick entry writes it (D80, D83): a member's purchase or gift, a member's income.
+  memberId: t.refundable || t.kind === 'income' ? t.memberId : null,
+  gift: !!t.refundable && !!t.gift,
+  advance: t.kind === 'income' && !!t.memberId && t.advance
 })
 
 /**

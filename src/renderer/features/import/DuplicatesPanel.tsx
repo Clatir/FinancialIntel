@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { findDuplicates, mergeDuplicate, type DuplicateGroup } from '@shared/import/duplicates'
 import type { Transaction } from '@shared/schema'
@@ -20,6 +21,9 @@ type Duplicates = { groups: DuplicateGroup[]; byId: Record<string, Transaction> 
 /** One computation for every screen showing it (the Operations link, the import panel): the last inputs and result. */
 let last: { inputs: readonly unknown[]; out: Duplicates } | null = null
 
+/** How many duplicates a screen showing them counted last, and in which folder (the side menu reads it – F6, W4). */
+export const useDuplicatesKnown = create<{ count: number; dir: string | null } | null>(() => null)
+
 type DataState = ReturnType<typeof useData.getState>
 const duplicateInputs = (s: DataState) => [s.records.transactions, s.records.dockings, s.fi?.settings.import.notDuplicates ?? NO_DISMISSED, s.drafts, s.fi?.settings.import.accountNumbers] as const
 
@@ -32,6 +36,9 @@ function duplicatesNow(): Duplicates {
   const txs = Object.keys(drafts).length ? all.filter((t) => !drafts[t.id]) : all
   const out = { groups: findDuplicates(txs, listOf(dockings), dismissed, numbers), byId: Object.fromEntries(txs.map((t) => [t.id, t])) }
   last = { inputs, out }
+  // Told after the render that counted it (a screen's render must not update another one's).
+  const known = { count: out.groups.length, dir: useData.getState().status?.dataDir ?? null }
+  queueMicrotask(() => useDuplicatesKnown.setState(known, true))
   return out
 }
 
@@ -51,6 +58,22 @@ export function useDuplicateCount(delayMs = 1500): number {
     return () => clearTimeout(t)
   }, [inputs, delayMs])
   return n
+}
+
+/**
+ * The duplicates as a screen showing them counted them last (the side menu's counter – W4: the 0,6 s count at 150 tys.
+ * operacji not after every change on every screen); counted here once, a while after a folder opens, when none has.
+ */
+export function useKnownDuplicateCount(firstAfterMs = 10_000): number {
+  const known = useDuplicatesKnown()
+  const dir = useData((s) => s.status?.dataDir ?? null)
+  const fresh = !!known && known.dir === dir
+  useEffect(() => {
+    if (fresh || !dir) return
+    const t = setTimeout(() => void duplicatesNow(), firstAfterMs)
+    return () => clearTimeout(t)
+  }, [fresh, dir, firstAfterMs])
+  return fresh ? known.count : 0
 }
 
 const DIFFERS = { '': '', name: 'inna nazwa', amount: 'inna kwota', both: 'inna nazwa i kwota' } as const

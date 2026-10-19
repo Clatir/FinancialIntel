@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { daysInMonth, monthsBetween } from '@shared/calc/dates'
+import { daysInMonth, monthsBetween, warsawNow } from '@shared/calc/dates'
 import { cyclePosition, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
 import { monthlyShare, recurringPayments, simulateCargo, type CargoSimulation } from '@shared/calc/plan'
@@ -381,11 +381,17 @@ function ThisMonth({ c, s }: { c: Container; s: CargoStatus }) {
       <span className="text-[11px] text-dim">
         {day} Płatność z importu łączy się sama (po odbiorcy); zapłaconą gotówką albo z konta bez importu zapisz tutaj.
       </span>
-      {s.state !== 'paid' && (
-        <button type="button" className="btn h-[22px] self-start" onClick={() => payContainer(c)} data-testid="container-paid">
-          Zapłacone ({zl(c.amount)}, dziś)
-        </button>
-      )}
+      {s.state !== 'paid' &&
+        // Paid today counts for this due only from its window on – earlier it would be the previous due's payment.
+        (warsawNow().date >= s.from ? (
+          <button type="button" className="btn h-[22px] self-start" onClick={() => payContainer(c)} data-testid="container-paid">
+            Zapłacone ({zl(c.amount)}, dziś)
+          </button>
+        ) : (
+          <span className="text-[11px] text-dim" data-testid="container-paid-from">
+            „Zapłacone” od {dm(s.from)} – płatność wcześniejsza należy do poprzedniego terminu.
+          </span>
+        ))}
     </div>
   )
 }

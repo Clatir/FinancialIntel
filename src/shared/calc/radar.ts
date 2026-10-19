@@ -66,13 +66,16 @@ export function radar(o: RadarInput): RadarItem[] {
     const salary = salaryOf(m)
     if (salary) out.push({ key: `salary:${m}`, date: firstDayOf(m), kind: 'salary', name: 'Pensja od siebie', amount: salary, direction: 'inside', note: 'z osłon do energii miesiąca' })
   }
+  // A periodic fee due this month (F1): its cycle on the payment day of its history – once, below.
+  const cycleNow = new Map((o.cargo ?? []).filter((s) => s.cycleMonths > 1).map((s) => [s.containerId, s]))
   // The asteroids: every payment of a periodic fee in the window, during the container's life.
   for (const c of o.containers) {
     if (c.cycleMonths <= 1 || c.archived) continue
     const tankOf = o.tanks.find((t) => t.containerId === c.id)
+    const now = cycleNow.get(c.id)
     // A cycle paid already (early – B55) has no asteroid left: the next one.
     for (let date = nextUnpaidOf(c, o.today, tankOf?.paidDue), first = true; date <= end; date = nextPaymentOf(c, addDays(date, 1)), first = false) {
-      if (!activeIn(c, date.slice(0, 7))) continue
+      if (!activeIn(c, date.slice(0, 7)) || (now && date.slice(0, 7) === now.due.slice(0, 7))) continue
       const tank = tankOf?.amount ?? 0
       out.push({ key: `asteroid:${c.id}:${date}`, date, kind: 'asteroid', name: c.name, amount: c.amount, direction: 'out', note: first ? `w zbiorniku ${o.money(tank)}` : '', ref: c.id })
     }
@@ -92,10 +95,12 @@ export function radar(o: RadarInput): RadarItem[] {
       out.push({ key: `fixed:${c.id}:${date}`, date, kind: 'fixed', name: c.name, amount: c.amount, direction: 'out', note: late && s.importPending ? 'czeka na import' : '', ref: c.id, ...(s && m === thisMonth && s.state === 'overdue' ? { overdue: true } : {}) })
     }
   }
-  // A periodic fee of this month still unpaid after its due (the asteroids above start from the next one to pay).
-  for (const s of o.cargo ?? []) {
-    if (s.cycleMonths <= 1 || s.state === 'paid' || s.due >= o.today) continue
-    out.push({ key: `asteroid:${s.containerId}:${s.due}`, date: s.due, kind: 'asteroid', name: s.name, amount: s.amount, direction: 'out', note: s.importPending ? 'czeka na import' : '', ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
+  // The periodic fees due this month, not paid yet – a late one too.
+  for (const s of cycleNow.values()) {
+    if (s.state === 'paid' || s.due > end) continue
+    const tank = o.tanks.find((t) => t.containerId === s.containerId)?.amount ?? 0
+    const note = s.due < o.today ? (s.importPending ? 'czeka na import' : '') : `w zbiorniku ${o.money(tank)}`
+    out.push({ key: `asteroid:${s.containerId}:${s.due}`, date: s.due, kind: 'asteroid', name: s.name, amount: s.amount, direction: 'out', note, ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
   }
   // The loans' installments not paid yet: own ones out, the expected repayments in (late ones too).
   for (const s of o.loans) {

@@ -319,6 +319,11 @@ export interface FiApi {
   backupRecover(path: string, picks: ReadonlyArray<{ collection: Collection; id: string }>, settings: boolean): Promise<{ fi: SettingsFile | null; done: string[]; failed: Array<{ id: string; error: string }> }>
   /** The whole backup unpacked into a new folder beside the data folder and opened (F3) – the current one untouched. */
   backupToFolder(path: string): Promise<OpenFolderResult>
+  /**
+   * Versions of records (and settings) written back in one call, each current one kept in the history first – the
+   * recovery's „Cofnij” (F3). The change comes as a folder change; the settings written return.
+   */
+  putVersions(items: ReadonlyArray<{ collection: Collection; record: unknown }>, fi: SettingsFile | null): Promise<{ fi: SettingsFile | null; done: string[]; failed: Array<{ id: string; error: string }> }>
   /** Choose a bank's export file (CSV): its name and bytes (decoded by the renderer); null = cancelled. */
   pickImportFile(): Promise<{ name: string; bytes: Uint8Array } | null>
   /** Change the backups folder on this machine: 'pick' shows a dialog, 'default' = backups/ in the data folder. */
@@ -444,8 +449,11 @@ export interface QuickTemplate {
   counterparty: string
   categoryId: string | null
   accountId: string
-  /** Who financed it ('refundable'). */
+  /** Who financed it ('refundable'), whose money came ('income'). */
   memberId: string | null
+  /** A member's gift ('refundable'); a member's money kept as their advance ('income'). */
+  gift: boolean
+  advance: boolean
 }
 
 export interface QuickResult {

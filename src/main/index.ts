@@ -9,6 +9,7 @@ import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortc
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
+import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/store'
@@ -859,9 +860,12 @@ function registerIpc(): void {
     const s = writableStore()
     const data = await backupData(s, path)
     const items: Array<{ kind: Collection; record: AnyRecord }> = []
+    const byId = new Map<Collection, Map<string, AnyRecord>>()
     for (const p of Array.isArray(picks) ? picks : []) {
       if (!COLLECTIONS.includes(p.collection) || p.collection === 'imports') continue
-      const record = data.records[p.collection].find((r) => r.id === p.id)
+      let ids = byId.get(p.collection)
+      if (!ids) byId.set(p.collection, (ids = new Map(data.records[p.collection].map((r) => [r.id, r]))))
+      const record = ids.get(p.id)
       if (record) items.push({ kind: p.collection, record })
     }
     const { change, fi, done, failed } = await s.restoreVersions(items, settings === true ? data.fi : null)
@@ -869,6 +873,16 @@ function registerIpc(): void {
     sendFrom(s, change)
     log('info', `backup recover ${basename(path)}: ${done.length} records${fi ? ' + settings' : ''}${failed.length ? `, ${failed.length} failed` : ''}`)
     return { fi, done, failed }
+  })
+  handle('putVersions', async (items: Array<{ collection: Collection; record: AnyRecord }>, fi: unknown) => {
+    const s = writableStore()
+    const list = (Array.isArray(items) ? items : []).filter((i) => COLLECTIONS.includes(i.collection) && i.collection !== 'imports' && !!i.record)
+    const { change, fi: written, done, failed } = await s.restoreVersions(
+      list.map((i) => ({ kind: i.collection, record: i.record })),
+      fi ? (fi as SettingsFile) : null
+    )
+    sendFrom(s, change)
+    return { fi: written, done, failed }
   })
   handle('backupToFolder', async (path: string) => {
     const s = requireStore()

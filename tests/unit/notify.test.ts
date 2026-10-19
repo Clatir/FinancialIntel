@@ -155,5 +155,12 @@ describe('szablony szybkiego wpisu (1.6.0, F7)', () => {
     const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((n, i) => op(`2026-10-0${i + 1}T10:00:00.000Z`, `Sklep ${n}`, FOOD)).reverse()
     expect(quickTemplates(many).templates.map((t) => t.counterparty)).toEqual(['Sklep G', 'Sklep F', 'Sklep E', 'Sklep D', 'Sklep C'])
     expect(quickTemplates(many).last?.counterparty).toBe('Sklep G')
+    // Whose money it was goes with „Powtórz ostatni”: a member's gift, a member's income kept as their advance.
+    const member = '01K3000000000000000000MEM1'
+    const gift = op('2026-10-15T10:00:00.000Z', 'Prezent', FOOD, { refundable: true, memberId: member, gift: true })
+    expect(quickTemplates([gift]).last).toMatchObject({ kind: 'refundable', memberId: member, gift: true, advance: false })
+    const money = op('2026-10-15T10:00:00.000Z', 'Babcia', null, { kind: 'income', amount: zl(200), memberId: member, advance: true })
+    expect(quickTemplates([money]).last).toMatchObject({ kind: 'income', memberId: member, advance: true, gift: false })
+    expect(quickTemplates([op('2026-10-15T10:00:00.000Z', 'Pensja', null, { kind: 'income', amount: zl(5000) })]).last).toMatchObject({ memberId: null, advance: false })
   })
 })
