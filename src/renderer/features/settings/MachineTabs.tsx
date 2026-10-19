@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SOUND_KINDS, SOUND_LABEL, shortcutLabel, type NotifyPrefs } from '@shared/machine'
+import { eveningAt } from '@shared/notify'
 import type { Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { playSound } from '../../lib/sounds'
@@ -89,7 +90,7 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
           <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" />
         </div>
       </Field>
-      <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty (D41).">
+      <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty (D41); 0 albo puste – dziennik nie pyta.">
         <AmountField className="w-[120px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
       </Field>
       <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (D23)" />
@@ -157,6 +158,9 @@ export function NotifyTab() {
   }, [prefs.quickShortcut])
   const n = prefs.notify
   const s = prefs.sounds
+  const quiet = useData((st) => st.fi?.settings.orders.quietHours)
+  // The evening reminder's hour in the quiet hours (N104): it comes before them – said where it is set.
+  const eveningShift = quiet && eveningAt(n.eveningTime, quiet) !== n.eveningTime ? eveningAt(n.eveningTime, quiet) : null
   return (
     <>
       <Panel title="Szybki wpis">
@@ -189,6 +193,11 @@ export function NotifyTab() {
               <Toggle checked={n[key] as boolean} onChange={(on) => void setMachinePrefs({ notify: { ...n, [key]: on } })} label={label} data-testid={`notify-${key}`} />
               {key === 'evening' && (
                 <TimeField className="w-[70px]" value={n.eveningTime} onChange={(eveningTime) => eveningTime && void setMachinePrefs({ notify: { ...n, eveningTime } })} aria-label="Godzina wieczornego dopisania" data-testid="notify-evening-time" />
+              )}
+              {key === 'evening' && eveningShift && quiet && (
+                <span className="text-[11px] text-accent" data-testid="notify-evening-quiet">
+                  w ciszy nocnej ({quiet.from}–{quiet.to}) – przyjdzie o {eveningShift}
+                </span>
               )}
             </div>
           ))}

@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa O** (1.6.3 – import z mBanku) na
-gałęzi `claude/grupa-o-1.6.3`, PR do `main`; po niej od razu P, Q, R (niskie pozycje przeglądu) i funkcje S, T, U, V –
-każda grupa z własnym PR i wydaniem (D71).
-**1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa P** (1.6.4 – operacje, edytor,
+szybki wpis) na gałęzi `claude/grupa-p-1.6.4`, PR do `main`; po niej od razu Q, R (niskie pozycje przeglądu) i funkcje
+S, T, U, V – każda grupa z własnym PR i wydaniem (D71).
+**1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,9 +12,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa O → scalenie po zielonym CI → wydanie 1.6.3 → od razu grupa P (D87). Po wznowieniu
+**Następny krok:** grupa P → scalenie po zielonym CI → wydanie 1.6.4 → od razu grupa Q (D87). Po wznowieniu
 pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.6.3 – listy w sekcjach niżej.
+aplikacji: 1.5.0–1.6.4 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -52,8 +52,8 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar commitów, z przeglądem i E2E; część w czasie CI grupy K; plan był 3–4 h) | 1.6.0 | ✅ D86 | ✅ wydane (PR #22) |
 | **M** | 1.6.1 Liczby, plan, raporty, Mostek: B61–B63, B65, B84, B85, B92, B126–B128, N22–N28, N30, N52, N54, N56, N59, N63, N65, N66, N101–N103, W28–W30, W38 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.1 | ✅ D87 | ✅ wydane (PR #23) |
 | **N** | 1.6.2 Gra, ICTTJ, domownicy, cele, kreator: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.2 | ✅ D87 | ✅ wydane (PR #24) |
-| **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.3 | ✅ D87 | ✅ PR do `main` |
-| **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | plan ok. 1,5 h | 1.6.4 | ✅ D87 | czeka |
+| **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.3 | ✅ D87 | ✅ wydane (PR #25) |
+| **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ PR do `main` |
 | **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.5 | ✅ D87 | czeka |
 | **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **xhigh** (w ciągu na max) | plan ok. 1,5 h | 1.6.6 | ✅ D87 | czeka |
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | plan ok. 3 h | 1.7.0 | ✅ D87 | czeka |
@@ -61,7 +61,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O** | | | **ok. 41,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P** | | | **ok. 42,5 h** | | | |
 | | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -649,6 +649,47 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.6.3, Windows):
 1. Import z mBanku: przelew z tytułem w kilku częściach (tytuł w całości), „PŁATNOŚĆ WEB” jako rodzaj operacji.
 2. „+ domownik” przy wpłacie: grupa pyta „zaliczka czy przychód?”, odpowiedź zapamiętana dla osoby.
 3. Ustawienia → Import z banku: reguły z kategorią zarchiwizowaną oznaczone, „pokazuj znowu” dla par „to nie duplikat”.
+
+## Przed grupą P – operacje, edytor, szybki wpis (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa O wydana (1.6.3 – PR #25). Grupa P (1.6.4): niskie pozycje przeglądu dotyczące
+   Operacji, edytora i szybkiego wpisu – B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50,
+   N51, N55, N104 (Ctrl+N, filtr i widoki listy, „bez kategorii”, podział paragonu, „Cofnij” zbiorczych zmian, saldo dziś,
+   świeże listy szybkiego wpisu, szkice formularzy). Format folderu bez zmian. B86 i N55 poprawione już wcześniej (B24 w
+   1.4.2 – Esc w polu nie zmienia ekranu; N18 w 1.5.3 – „Historia” poza wyłączanym polem) – tylko odhaczone.
+2. **Co użytkownik musi powiedzieć** – ✅ D87. Wybory z przeglądu: B83 – pytanie „Dzisiejsze operacje są już dopisane?”
+   przy różnicy (bez wyboru dnia salda – T25 zostaje), N104 – wieczór w ciszy nocnej minutę przed nią (i dopisek w
+   Ustawieniach), B88 – widok z innego ekranu z „mój filtr”; zapisane jako T-decyzje do zmiany na życzenie.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1,5 h.
+
+## 1.6.4 – operacje, edytor, szybki wpis (grupa P, 19.10.2026)
+
+Zakres: „Przed grupą P” wyżej. Zrobione:
+- „Bez kategorii” i filtr (T238): jedno znaczenie w oznaczeniu, filtrze i meldunkach (części paragonu, bez wpływów,
+  przelewów i zakupów domowników), filtr kategorii po częściach, oznaczenia „lub” w grupie i „i” między grupami,
+  kategoria zarchiwizowana w filtrze do odznaczenia.
+- Lista (T239, T240): Ctrl+N z każdego ekranu, nowa operacja zawsze widoczna, miesiąc z kalendarzem, widok z innego
+  ekranu nie zmienia zapisanego filtra („mój filtr”), „Cofnij” zbiorczych zmian tylko swoich pól z komunikatem.
+- Edytor (T241): limity notatki i dziennika, „Podziel paragon” z kategorią w pierwszej części i opisem reszty, „Ładownia”
+  przy podziale, podkategoria zarchiwizowanej kategorii w wyborze, kwota do grosza, próg dziennika 0.
+- Saldo dziś (T242): pytanie przy różnicy, wpisane saldo zostaje do zapisu.
+- Szybki wpis (T243): świeże listy w otwartym oknie, zapis odrzuca konto / kategorię / domownika spoza folderu, wpływ bez
+  części paragonu, „zaliczka czy przychód” tylko po wyborze.
+- Formularze i drobne (T244): szkice „Nowa pożyczka”, „Nowy kontener”, „Nowy cel” i łupów po zmianie ekranu (pusty
+  formularz z dzisiejszą datą także po dniach w zasobniku), ściągawka ze skrótem z ustawień, wieczór w ciszy nocnej.
+- Przegląd `/code-review` high: 10 kandydatów – 9 poprawionych, 1 bez zmian (T245).
+- Testy: 628 unit + fs (nowe `operations-fixes.test.ts` i `operations-state.test.ts` – sklepy okna z atrapą
+  `window.fi`; każda poprawka i każde znalezisko przeglądu sprawdzone mutacją: test pada bez niej – 28 mutacji, w tym 6
+  na E2E, jedna z nich na teście zegara Playwrighta spoza CI), E2E 48 (nowy `operations-fixes.spec.ts`; `series.spec.ts` z
+  ciszą nocną bez północy).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.6.4, Windows):
+1. Ctrl+N na Mostku albo Radarze – nowa operacja w Operacjach; lista na „od–do” bez dziś przechodzi na bieżący miesiąc.
+2. Kliknięcie powiadomienia wieczornego albo pozycji „Do zwrotu” na Mostku: filtr zapamiętany zostaje, „mój filtr” go
+   pokazuje.
+3. Ustawienia → Konta → „Potwierdź saldo” z różnicą: pytanie, „Dopiszę i potwierdzę później” zostawia wpisaną kwotę.
+4. Szybki wpis otwarty, w głównym oknie archiwizacja kategorii albo domownika – okno mówi, że lista się zmieniła.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 

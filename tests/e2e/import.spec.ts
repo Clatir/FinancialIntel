@@ -180,6 +180,8 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await row.getByTestId('balance-input').fill('900')
     await row.getByTestId('balance-input').press('Enter')
     await row.getByTestId('balance-confirm').click()
+    // Asked first whether today's operations are written (B83).
+    await row.getByTestId('confirm-ask-yes').click()
     await expect.poll(async () => (await operations(dataDir)).filter((t) => t.kind === 'correction').map((t) => t.amount)).toEqual([-10000])
 
     // The operations list shows them; a category changed there teaches the import too.

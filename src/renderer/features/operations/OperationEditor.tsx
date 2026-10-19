@@ -250,11 +250,16 @@ export function OperationEditor({ id }: { id: string }) {
                       type="button"
                       className="btn h-[24px] shrink-0"
                       onClick={() =>
+                        // The operation's category and financing go to the first line (B76, B78): what the lines leave is
+                        // a line of no category, financed by nobody – the editor says it, the marks and filters see it.
                         patch({
                           splits: [
                             { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, ...(t.refundable && t.gift ? { gift: true } : {}), note: '' },
                             { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
                           ],
+                          categoryId: null,
+                          refundable: false,
+                          memberId: null,
                           gift: undefined
                         })
                       }
@@ -314,7 +319,16 @@ export function OperationEditor({ id }: { id: string }) {
                 <FinancedNote t={t} />
               </>
             ) : (
-              <SplitEditor t={t} sign={sign} update={update} />
+              <>
+                {/* A container's payment split into lines (B79): the whole operation is the cargo's – the lines' categories do not count. */}
+                {(outgoing || t.containerId) && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId, goalId: containerId ? null : t.goalId })} />}
+                {t.containerId && (
+                  <span className="text-[11px] text-dim" data-testid="operation-split-cargo">
+                    Cała operacja liczy się do ładowni – kategorie części nie mają znaczenia.
+                  </span>
+                )}
+                <SplitEditor t={t} sign={sign} update={update} />
+              </>
             )}
             <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
           </Section>
@@ -380,6 +394,7 @@ export function OperationEditor({ id }: { id: string }) {
               value={t.logNote}
               onChange={(logNote) => patch({ logNote })}
               rows={2}
+              maxLength={2000}
               placeholder={night ? 'Zakup w ciszy nocnej – krótko: dlaczego teraz?' : 'Krótko: skąd ten zakup?'}
               data-testid="operation-log"
             />
@@ -395,7 +410,7 @@ export function OperationEditor({ id }: { id: string }) {
         )}
 
         <Field label="Notatka">
-          <TextArea commit value={t.note} onChange={(note) => patch({ note })} rows={2} data-testid="operation-note" />
+          <TextArea commit value={t.note} onChange={(note) => patch({ note })} rows={2} maxLength={5000} data-testid="operation-note" />
         </Field>
 
         {t.bank && (
@@ -475,7 +490,9 @@ function GoalSelect({ value, outgoing, goals, onChange }: { value: string | null
 
 /** A split receipt: lines with their own category, a household member's part (D80); the lines sum to the amount. */
 function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update: (fn: (r: Transaction) => Transaction) => void }) {
+  const cats = useCategories()
   const rest = useMemo(() => t.amount - sum(t.splits.map((s) => s.amount)), [t])
+  const lastAmount = t.splits.at(-1)?.amount ?? 0
   // Lines changed by hand are a receipt of their own: no shared purchase's split is kept for them (D83).
   const setLine = (id: string, p: Partial<Split>) => update((r) => ({ ...r, share: null, splits: r.splits.map((s) => (s.id === id ? { ...s, ...p } : s)) }))
   return (
@@ -511,25 +528,34 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
           </button>
         </div>
       ))}
-      <div className="flex items-center gap-2 text-[11.5px]">
+      <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
         <button type="button" className="btn h-[22px]" onClick={() => update((r) => ({ ...r, splits: [...r.splits, { id: newId(), amount: Math.sign(rest) === sign ? rest : 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }] }))} data-testid="split-add">
           <IconPlus size={12} /> część
         </button>
-        {rest !== 0 ? (
+        {rest === 0 ? (
+          <span className="text-dim">części sumują się do kwoty</span>
+        ) : Math.sign(rest) === sign ? (
           <>
+            {/* Where the rest goes (B76): the operation's own line – its category (a receipt split before 1.6.4) or none. */}
             <span className="text-accent" data-testid="split-rest">
-              nierozdzielone: {plnText(Math.abs(rest))} zł
+              nierozdzielone: {plnText(Math.abs(rest))} zł – {t.categoryId ? cats.label(t.categoryId) : 'bez kategorii'}
             </span>
-            <button
-              type="button"
-              className="text-accent hover:underline"
-              onClick={() => update((r) => ({ ...r, splits: r.splits.map((s, i) => (i === r.splits.length - 1 ? { ...s, amount: s.amount + rest } : s)) }))}
-            >
+            <button type="button" className="text-accent hover:underline" onClick={() => update((r) => ({ ...r, splits: r.splits.map((s, i) => (i === r.splits.length - 1 ? { ...s, amount: s.amount + rest } : s)) }))} data-testid="split-rest-last">
               do ostatniej części
             </button>
           </>
         ) : (
-          <span className="text-dim">części sumują się do kwoty</span>
+          <>
+            <span className="text-down" data-testid="split-over">
+              części przekraczają kwotę o {plnText(Math.abs(rest))} zł
+            </span>
+            {/* Taken from the last line only while it keeps the operation's direction (B76). */}
+            {Math.sign(lastAmount + rest) !== -sign && (
+              <button type="button" className="text-accent hover:underline" onClick={() => update((r) => ({ ...r, splits: r.splits.map((s, i) => (i === r.splits.length - 1 ? { ...s, amount: s.amount + rest } : s)) }))} data-testid="split-rest-last">
+                odejmij od ostatniej części
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -211,6 +211,8 @@ export function TextArea({
   className?: string
   /** Applied on leaving the field or Ctrl+Enter (a record's field – W2). */
   commit?: boolean
+  /** The record's limit (B74): a longer text pasted is cut – never a record that cannot be written. */
+  maxLength?: number
   'aria-label'?: string
   'data-testid'?: string
 }) {

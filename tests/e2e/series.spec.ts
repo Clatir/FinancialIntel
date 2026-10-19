@@ -1,8 +1,11 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
+import { seedFolder } from './seed'
 
 const GROCERIES = '01KDEFCAT00000000000000101'
 
@@ -67,7 +70,10 @@ test('szybki wpis seriami (1.6.0, F7): Ctrl+Enter – zapisz i następny, dział
 })
 
 test('wieczorny raport wachty (1.6.0, F13): w Operacjach od godziny przypomnienia, „Dziś bez wydatków” z „Cofnij”, z menu zasobnika, „Przypomnij za 30 min”', async () => {
-  const { app, page, dataDir, errors } = await launch()
+  // The quiet hours of one minute before midnight: the evening's hour from midnight is not moved before them (N104).
+  const folder = join(mkdtempSync(join(tmpdir(), 'fi-evening-')), 'FinancialIntel')
+  seedFolder(folder, { settings: (s) => ({ ...s, orders: { ...s.orders, quietHours: { from: '23:59', to: '00:00' } } }) })
+  const { app, page, dataDir, errors } = await launch({ dataDir: folder })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     // The evening's hour from midnight on this computer: the report is due now.

@@ -6,6 +6,7 @@ import { monthlyShare, recurringPayments, simulateCargo, type CargoSimulation } 
 import { rangeText } from '@shared/format'
 import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
+import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { AmountField, DateField, MonthField, plnText } from '../../components/fields'
@@ -55,13 +56,13 @@ export function CargoPage() {
   const cargo = useCargoStatuses()
   const readOnly = useFolderLocked()
   const [selected, setSelected] = useState<string | null>(null)
-  const [draft, setDraft] = useState<ContainerDraft | null>(null)
-  // Each new draft is a new form (its own „inny…” mode).
-  const [draftKey, setDraftKey] = useState(0)
-  const openDraft = (d: ContainerDraft) => {
-    setDraft(d)
-    setDraftKey((k) => k + 1)
-  }
+  // A new container's form kept while another screen is looked at (N36); each new draft is a new form (its own „inny…”
+  // mode).
+  const [form, setForm, clearForm] = useDraft<{ draft: ContainerDraft | null; key: number }>('cargo:container', () => ({ draft: null, key: 0 }))
+  const draft = form.draft
+  const draftKey = form.key
+  const setDraft = (d: ContainerDraft | null) => (d ? setForm((f) => ({ ...f, draft: d })) : clearForm())
+  const openDraft = (d: ContainerDraft) => setForm((f) => ({ draft: d, key: f.key + 1 }))
   const [showArchived, setShowArchived] = useState(false)
   const month = fleet?.month ?? ''
   const sorted = useMemo(() => [...containers].sort((a, b) => Number(a.archived) - Number(b.archived) || monthlyShare(b) - monthlyShare(a) || a.name.localeCompare(b.name)), [containers])

@@ -23,7 +23,7 @@ import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { dayLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
-import { newOperation, openOperation, openRefundables, selectOperation, setFilter } from '../operations/state'
+import { newOperation, openOperation, openRefundables, selectOperation, showFilter } from '../operations/state'
 import { EnvelopeBars, monthElapsed } from '../month/EnvelopeBars'
 import { IncomePanel } from '../month/IncomePanel'
 import { startWizard } from '../wizard/state'
@@ -291,7 +291,7 @@ export function BridgePage() {
                         key={t.id}
                         className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 text-left last:border-b-0 hover:bg-hover"
                         onClick={() => {
-                          setFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+                          showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
                           navigate({ page: 'operations' })
                           selectOperation(t.id)
                         }}

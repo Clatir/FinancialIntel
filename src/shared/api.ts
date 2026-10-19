@@ -372,11 +372,17 @@ export interface FiApi {
   /** Main window: the quick window wants its data (categories, today's energy…) – answer with `quickData`. */
   onQuickRequest(cb: () => void): () => void
   quickData(data: QuickData | null): Promise<void>
+  /** Main window: the quick window shown or hidden (B125) – its data follows the folder only while shown. */
+  onQuickVisible(cb: (visible: boolean) => void): () => void
+  /** Main window: the quick window's data again while it is open (B125) – lists and energy, the draft stays. */
+  quickUpdate(data: QuickData | null): Promise<void>
   /** Main window: an operation typed in the quick window to add – answer with `quickResult`. */
   onQuickAdd(cb: (draft: unknown) => void): () => void
   quickResult(result: QuickResult): Promise<void>
   /** Quick window: its data, adding an operation (the main window saves it), closing. */
   onQuickData(cb: (data: QuickData | null) => void): () => void
+  /** Quick window: the data changed in the main window while open (B125) – the draft stays. */
+  onQuickUpdate(cb: (data: QuickData | null) => void): () => void
   quickAdd(draft: unknown): Promise<void>
   /** Quick window: its renderer is ready – the data again (the first answer may have come before it listened). */
   quickRefresh(): Promise<void>

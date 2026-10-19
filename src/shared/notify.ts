@@ -38,6 +38,17 @@ export interface EveningState {
 /** Expenses written from this hour on are the evening's report (F13). */
 export const EVENING_FROM = '18:00'
 
+/**
+ * When the evening reminder comes (N104): its hour – or, when that falls in the quiet hours (nothing is shown then, and
+ * after them it is another day), the minute before they start.
+ */
+export function eveningAt(eveningTime: string, quietHours: { from: string; to: string }): string {
+  if (!inClockWindow(eveningTime, quietHours.from, quietHours.to)) return eveningTime
+  const [h, m] = quietHours.from.split(':').map(Number) as [number, number]
+  const before = (h * 60 + m + 24 * 60 - 1) % (24 * 60)
+  return `${String(Math.floor(before / 60)).padStart(2, '0')}:${String(before % 60).padStart(2, '0')}`
+}
+
 /** Today's evening report (F13): the operations typed with a time, and whether the evening's writing is done. */
 export function eveningState(transactions: readonly Transaction[], today: string, noSpend: Readonly<Record<string, string>>, snooze: EveningState['snooze'] = null): EveningState {
   let written = 0
@@ -94,7 +105,7 @@ export function dueNotices(o: NotifyInput): Notice[] {
   }
   // The evening report (F13): not when the day is done; put off – again from its time, under a new key.
   const ev = o.evening
-  if (p.evening && o.time >= o.prefs.eveningTime && !ev?.done && (!ev?.snooze || o.time >= ev.snooze.until))
+  if (p.evening && o.time >= eveningAt(o.prefs.eveningTime, o.quietHours) && !ev?.done && (!ev?.snooze || o.time >= ev.snooze.until))
     out.push({ key: `evening:${today}${ev?.snooze ? `:${ev.snooze.n}` : ''}`, tag: 'evening', title: 'Raport wachty dnia', body: eveningText(ev ? ev.written : null) })
   // An overrun is an overrun (its own switch), never „little left”.
   if (d) {

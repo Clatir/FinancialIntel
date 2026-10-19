@@ -119,9 +119,19 @@ test('Ustawienia: konta z saldem otwarcia i potwierdzeniem (korekta), kategorie'
     await expect(mbank.getByTestId('account-balance')).toHaveText('1 250,50 zł')
     await expect(mbank.getByTestId('account-opening')).toHaveValue('1\u00a0250,50')
 
-    // A different balance later: a correction to explain (the discrepancy in the hold).
+    // A different balance later: asked first whether today's operations are written (B83), then a correction to
+    // explain (the discrepancy in the hold).
     await typeAmount(page, mbank.getByTestId('account-confirm-amount'), '1200')
     await mbank.getByTestId('account-confirm').click()
+    await expect(mbank.getByTestId('confirm-ask')).toContainText('−50,50 zł')
+    await mbank.getByTestId('confirm-ask-later').click()
+    await expect(mbank.getByTestId('confirm-ask')).toHaveCount(0)
+    expect(await operations(dataDir)).toEqual([])
+    // The typed balance stays for the next „Potwierdź saldo” – never typed again from the bank's app.
+    await expect(mbank.getByTestId('account-confirm-amount')).toHaveValue('1\u00a0200,00')
+    await mbank.getByTestId('account-confirm').click()
+    await mbank.getByTestId('confirm-ask-yes').click()
+    await expect(mbank.getByTestId('account-confirm-amount')).toHaveValue('')
     await expect(mbank.getByTestId('account-balance')).toHaveText('1 200,00 zł')
     await page.screenshot({ path: join('test-results', 'screens', '05-konta.png') })
     await expect

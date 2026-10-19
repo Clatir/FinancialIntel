@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { inClockWindow, warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
-import { emptyFilter, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
+import { emptyFilter, inPeriod, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
 import { shareOf, withShare } from '@shared/calc/share'
-import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type Share, type Transaction } from '@shared/schema'
+import { deepEqual } from '@shared/merge'
+import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type ImportRule, type Share, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteRecords, discardDraft, replaceRecords, updateSettings, useData } from '../../store/data'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
@@ -42,26 +43,73 @@ interface OperationsUi {
   selectedId: string | null
   /** Operations ticked for a bulk change (D76); another filter clears them – nothing hidden is changed. */
   ticked: Record<string, true>
+  /**
+   * A view asked from elsewhere (B88: a notification, the bridge, the inbox, a jump to an operation, a new entry) that
+   * hides the filter stored on this computer: changes made in it stay the view's – the stored filter is one click away
+   * (`showStoredFilter`), and changes after it are stored again.
+   */
+  shown: boolean
 }
 
+/** The month the list's default period was last set to (B81): the app lives in the tray for weeks. */
+let currentMonth = warsawNow().month
+
 export const useOperationsUi = create<OperationsUi>(() => ({
-  filter: { ...emptyFilter(warsawNow().month), ...readStored() },
+  filter: { ...emptyFilter(currentMonth), ...readStored() },
   selectedId: null,
-  ticked: {}
+  ticked: {},
+  shown: false
 }))
+
+/** The parts of the filter remembered on this computer (the period and the search start fresh). */
+const STORED_KEYS: ReadonlyArray<keyof OperationsFilter> = ['accounts', 'kinds', 'categories', 'marks']
 
 export function setFilter(patch: Partial<OperationsFilter>): void {
   useOperationsUi.setState((s) => {
     const filter = { ...s.filter, ...patch }
-    store(filter)
+    // In a view asked from elsewhere the change is the view's (B88): the stored filter stays as it was.
+    if (!s.shown) store(filter)
     return { filter, ticked: {} }
   })
 }
 
+const sameValue = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * A view of the list asked from elsewhere (B88): set now, never stored over the user's own filter. Only a view that
+ * hides a part of the stored filter is one (`shown`) – a period moved or a search cleared is not.
+ */
+export function showFilter(patch: Partial<OperationsFilter>): void {
+  useOperationsUi.setState((s) => ({
+    filter: { ...s.filter, ...patch },
+    ticked: {},
+    shown: s.shown || STORED_KEYS.some((k) => k in patch && !sameValue(patch[k], s.filter[k]))
+  }))
+}
+
+/** The filter stored on this computer again (after a view asked from elsewhere): changes are stored from now on. */
+export function showStoredFilter(): void {
+  useOperationsUi.setState((s) => ({ filter: { ...s.filter, accounts: [], kinds: [], categories: [], marks: [], ...readStored() }, ticked: {}, shown: false }))
+}
+
+/** „Wyczyść filtry”: the stored filter too – but in a view asked from elsewhere only the view (B88). */
 export function resetFilter(): void {
   const filter = emptyFilter(warsawNow().month)
-  store(filter)
+  const { shown } = useOperationsUi.getState()
+  if (!shown) store(filter)
   useOperationsUi.setState({ filter, ticked: {} })
+}
+
+/**
+ * A new month in Warsaw (B81): the list showing the month that was the current one moves on to the new one; a month
+ * the user chose stays. Called by the page every minute.
+ */
+export function followCurrentMonth(now: string = warsawNow().month): void {
+  if (now === currentMonth) return
+  const was = currentMonth
+  currentMonth = now
+  const p = useOperationsUi.getState().filter.period
+  if (p.kind === 'month' && p.month === was) useOperationsUi.setState((s) => ({ filter: { ...s.filter, period: { kind: 'month', month: now } }, ticked: {} }))
 }
 
 export function tickOperations(ids: readonly string[], on: boolean): void {
@@ -109,10 +157,21 @@ export function categorizeTicked(visibleIds: readonly string[], categoryId: stri
     note = err ? ` · słowo kluczowe: ${err}` : ` · słowo kluczowe „${filter.query.trim()}”`
   }
   const skipped = ops.length - fit.length
+  const rulesAfter = useData.getState().fi?.settings.import.rules ?? null
   clearTicked()
+  // „Cofnij” takes back what the action set and nothing else (B66): a category still the one set (a change made since –
+  // here or on the other computer – stays), the rules the action wrote.
   const undo = () => {
-    replaceRecords('transactions', before)
-    if (remember !== 'none' && rulesBefore) updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: rulesBefore } } }))
+    const now = useData.getState().records.transactions
+    const back = before.flatMap((t) => {
+      const cur = now[t.id]?.record
+      if (!cur || cur.categoryId !== categoryId) return []
+      const share = shareOf(cur)
+      return [share ? withShare({ ...cur, categoryId: t.categoryId }, share) : { ...cur, categoryId: t.categoryId }]
+    })
+    replaceRecords('transactions', back)
+    if (remember !== 'none' && rulesBefore && rulesAfter) undoRules(rulesBefore, rulesAfter)
+    undoneNote(back.length, before.length)
   }
   toast(
     `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział): ${skipped}` : ''}${note}.`,
@@ -127,6 +186,17 @@ export type FinanceChoice = { memberId: string | null; gift?: boolean } | { shar
 
 /** What of an operation the financing is: compared before a bulk change (an unchanged one is not written). */
 const financing = (t: Transaction) => JSON.stringify([t.refundable, t.refundable ? t.memberId : null, !!t.gift, t.share ?? null, t.splits.map((s) => [s.amount, s.refundable, s.memberId, !!s.gift])])
+
+/**
+ * Who finances an operation, without its amounts (B66): a shared purchase is its description – its lines follow the
+ * amount, so an amount changed after a bulk change leaves the financing the one set.
+ */
+const financers = (t: Transaction): unknown => [t.refundable, t.refundable ? t.memberId : null, !!t.gift, t.share ?? null, t.share ? null : t.splits.map((s) => [s.refundable, s.memberId, !!s.gift])]
+
+/** „Cofnij” of a bulk change that left out operations changed since (B66): said, never a silent half. */
+function undoneNote(done: number, of: number): void {
+  if (done < of) toast(`Cofnięto ${done} z ${of} – ${of - done === 1 ? 'jedna zmieniła' : 'pozostałe zmieniły'} się w międzyczasie i ${of - done === 1 ? 'zostaje' : 'zostają'} bez zmian.`, 'info', 6000)
+}
 
 /**
  * Who finances the ticked expenses (D80 g, D83): a household member (not my cost, not the energy's), their gift, several
@@ -155,12 +225,46 @@ export function financeTicked(visibleIds: readonly string[], choice: FinanceChoi
   )
   const skipped = ops.length - fit.length
   clearTicked()
+  // Only the financing, and only while it is still the one set (B66): an amount or a note changed since stays.
+  const undo = () => {
+    const now = useData.getState().records.transactions
+    const back = pairs.flatMap(([b, a]) => {
+      const cur = now[b.id]?.record
+      if (!cur || !deepEqual(financers(cur), financers(a))) return []
+      const base = { ...cur, refundable: b.refundable, memberId: b.memberId, gift: b.gift }
+      const share = shareOf(b)
+      // A shared purchase's lines made again for the amount it has now.
+      return [share ? withShare(base, share) : { ...base, share: null, splits: [] }]
+    })
+    replaceRecords('transactions', back)
+    undoneNote(back.length, pairs.length)
+  }
   toast(
     `${label}: ${before.length} ${plural(before.length, 'operacja', 'operacje', 'operacji')}${skipped ? `, pominięte (nie wydatek albo podział paragonu): ${skipped}` : ''}.`,
     'success',
     7000,
-    before.length ? { label: 'Cofnij', run: () => replaceRecords('transactions', before) } : undefined
+    before.length ? { label: 'Cofnij', run: undo } : undefined
   )
+}
+
+/**
+ * The rules an action wrote taken back (B66): each rule it added or changed – while it is still that one (by content:
+ * the settings read again after a save are other objects) – goes or is the one before again; the rules written
+ * meanwhile stay.
+ */
+function undoRules(before: readonly ImportRule[], after: readonly ImportRule[]): void {
+  const was = new Map(before.map((r) => [r.id, r]))
+  const set = new Map(after.filter((r) => !deepEqual(was.get(r.id), r)).map((r) => [r.id, r]))
+  if (!set.size) return
+  updateSettings((f) => {
+    const rules = f.settings.import.rules.flatMap((r) => {
+      const wrote = set.get(r.id)
+      if (!wrote || !deepEqual(wrote, r)) return [r]
+      const old = was.get(r.id)
+      return old ? [old] : []
+    })
+    return { ...f, settings: { ...f.settings, import: { ...f.settings.import, rules } } }
+  })
 }
 
 /** Select an operation; an untouched new entry left behind is dropped (it was never written). */
@@ -205,10 +309,11 @@ export function newOperation(over: Partial<Transaction> = {}): string {
   const record = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, date, time, accountId: account, amount: 0, ...over })
   addRecord('transactions', record, { draft: true })
   navigate({ page: 'operations' })
-  // A new entry is always visible: its month, without filters that could hide it.
+  // A new entry is always visible: its month when the period does not hold its day (B77 – a range too), without filters
+  // that could hide it – a view, the stored filters stay (B88).
   const f = useOperationsUi.getState().filter
-  if (f.period.kind === 'month' && f.period.month !== record.date.slice(0, 7)) setFilter({ period: { kind: 'month', month: record.date.slice(0, 7) } })
-  if (f.accounts.length || f.kinds.length || f.categories.length || f.marks.length || f.query) setFilter({ accounts: [], kinds: [], categories: [], marks: [], query: '' })
+  if (!inPeriod(record.date, f.period)) showFilter({ period: { kind: 'month', month: record.date.slice(0, 7) } })
+  if (f.accounts.length || f.kinds.length || f.categories.length || f.marks.length || f.query) showFilter({ accounts: [], kinds: [], categories: [], marks: [], query: '' })
   selectOperation(record.id)
   return record.id
 }
@@ -227,13 +332,13 @@ export async function deleteOperation(t: Transaction, label: string): Promise<vo
 
 /** One operation open in Operacje: its month, no filters hiding it (the bank's balances – F5, the rules – F22). */
 export function openOperation(t: Pick<Transaction, 'id' | 'date'>): void {
-  setFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+  showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
   navigate({ page: 'operations' })
   selectOperation(t.id)
 }
 
 /** Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80). */
 export function openRefundables(): void {
-  setFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })
+  showFilter({ period: { kind: 'all' }, marks: ['refundable'], accounts: [], kinds: [], categories: [], query: '' })
   navigate({ page: 'operations' })
 }

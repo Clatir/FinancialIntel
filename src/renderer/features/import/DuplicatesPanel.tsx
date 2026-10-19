@@ -11,7 +11,7 @@ import { navigate, toast } from '../../store/ui'
 import { signedPln } from '../../components/fields'
 import { Badge, Panel } from '../../components/ui'
 import { deleteManyWithUndo } from '../history/actions'
-import { selectOperation, setFilter } from '../operations/state'
+import { selectOperation, showFilter } from '../operations/state'
 import { useAccounts, useCategories } from '../operations/pickers'
 
 const NO_DISMISSED: Record<string, string> = {}
@@ -194,7 +194,7 @@ export function DuplicatesPanel() {
         type="button"
         className="grid w-full grid-cols-[76px_minmax(0,1fr)_88px] items-center gap-2 text-left hover:text-fg-strong"
         onClick={() => {
-          setFilter({ period: { kind: 'all' }, query: '' })
+          showFilter({ period: { kind: 'all' }, query: '' })
           selectOperation(t.id)
           navigate({ page: 'operations' })
         }}

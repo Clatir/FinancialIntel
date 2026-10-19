@@ -1,8 +1,14 @@
 // adapted from ICTTJ src/renderer/app/ShortcutsHelp.tsx @ 84a8339
 import { useEffect, useState } from 'react'
+import { shortcutLabel } from '@shared/machine'
 import { IconClose } from '../components/icons'
 import { Kbd } from '../components/ui'
 import { PAGES } from '../features/screens/pages'
+import { api } from '../lib/api'
+import { useMachine } from '../store/machine'
+
+/** The quick entry's row: its shortcut of this computer (N37), not a fixed one. */
+const QUICK_ROW = '\u0000quick'
 
 const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
   {
@@ -11,7 +17,7 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
       ['Ctrl K', 'paleta komend'],
       ['Ctrl S', 'zapisz teraz (zapis i tak jest automatyczny)'],
       ['Ctrl N', 'nowa operacja'],
-      ['Ctrl Alt B', 'szybki wpis – w całym systemie (zmiana: Ustawienia → Powiadomienia i dźwięki)'],
+      [QUICK_ROW, 'szybki wpis – w całym systemie (zmiana: Ustawienia → Powiadomienia i dźwięki)'],
       ['Ctrl $', 'ukryj / pokaż kwoty'],
       ['Esc / mysz „wstecz”', 'poprzednia strona (Ustawienia, Synchronizacja, Meldunki)'],
       ['? lub F1', 'ta ściąga']
@@ -40,6 +46,18 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
 
 export function ShortcutsHelp() {
   const [open, setOpen] = useState(false)
+  const quickShortcut = useMachine((s) => s.prefs.quickShortcut)
+  // Taken by another program: the shortcut shown does nothing – said here too.
+  const [registered, setRegistered] = useState(true)
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    void api.quickShortcutState().then((st) => alive && setRegistered(st.registered || !st.accelerator), () => undefined)
+    return () => {
+      alive = false
+    }
+  }, [open, quickShortcut])
+  const quickKeys = quickShortcut ? shortcutLabel(quickShortcut).replaceAll('+', ' ') : 'brak skrótu'
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement
@@ -77,8 +95,11 @@ export function ShortcutsHelp() {
               <span className="label mb-1 text-accent">{g.title}</span>
               {g.items.map(([keys, what]) => (
                 <div key={keys} className="flex items-baseline justify-between gap-3 text-[12px]">
-                  <span className="text-fg">{what}</span>
-                  <Kbd>{keys}</Kbd>
+                  <span className="text-fg">
+                    {what}
+                    {keys === QUICK_ROW && !registered && quickShortcut && <span className="block text-[11px] text-accent">zajęty przez inny program – zmień go w Ustawieniach</span>}
+                  </span>
+                  <Kbd>{keys === QUICK_ROW ? quickKeys : keys}</Kbd>
                 </div>
               ))}
             </div>

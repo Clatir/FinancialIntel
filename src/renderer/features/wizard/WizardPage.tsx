@@ -353,7 +353,7 @@ export function WizardPage() {
           {orders.quietHours.from}–{orders.quietHours.to}
         </span>
       </Field>
-      <Field label="Dziennik od kwoty" labelWidth={170}>
+      <Field label="Dziennik od kwoty" labelWidth={170} hint="0 albo puste – dziennik nie pyta.">
         <AmountField className="w-[110px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
       </Field>
       <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłaty do XTB tylko z „wolnego do decyzji”" />

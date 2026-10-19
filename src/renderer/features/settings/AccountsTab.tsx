@@ -8,7 +8,8 @@ import { useFleet } from '../../store/fleet'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Toggle, cx } from '../../components/ui'
-import { confirmBalance, setOpening } from '../balances/actions'
+import { setOpening } from '../balances/actions'
+import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { toast } from '../../store/ui'
 import { useAccounts } from '../operations/pickers'
 import { HistoryButton } from '../history/HistoryDialog'
@@ -64,6 +65,8 @@ export function AccountsTab() {
 function AccountRow({ account: a, opening, confirmed, balance, taken }: { account: Account; opening: Balance | null; confirmed: Balance | null; balance: number; taken: Set<string> }) {
   const [bank, setBank] = useState<number | null>(null)
   const today = warsawNow().date
+  // A difference asks whether today's operations are written first (B83).
+  const check = useConfirmToday(a.id, a.name, () => setBank(null))
   return (
     <div className={cx('flex flex-col gap-1.5 border-b border-line/70 py-2 last:border-b-0', a.archived && 'opacity-60')} data-testid="account-row" data-name={a.name}>
       <div className="flex flex-wrap items-center gap-2">
@@ -126,16 +129,25 @@ function AccountRow({ account: a, opening, confirmed, balance, taken }: { accoun
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
         <span>Saldo w banku teraz</span>
-        <AmountField className="w-[120px]" value={bank} allowNegative allowEmpty placeholder="z banku" onChange={setBank} aria-label="Saldo w banku" data-testid="account-confirm-amount" />
+        <AmountField
+          className="w-[120px]"
+          value={bank}
+          allowNegative
+          allowEmpty
+          placeholder="z banku"
+          onChange={(v) => {
+            setBank(v)
+            // The question was about the balance typed before.
+            check.later()
+          }}
+          aria-label="Saldo w banku"
+          data-testid="account-confirm-amount"
+        />
         <button
           type="button"
           className="btn h-[22px]"
           disabled={bank == null}
-          onClick={() => {
-            if (bank == null) return
-            confirmBalance(a.id, bank, today, a.name)
-            setBank(null)
-          }}
+          onClick={() => bank != null && check.confirm(bank)}
           data-testid="account-confirm"
           title={opening ? 'Porównaj z operacjami: różnica = korekta do wyjaśnienia' : 'Brak salda otwarcia: zostanie wyliczone z tego salda i operacji'}
         >
@@ -146,6 +158,7 @@ function AccountRow({ account: a, opening, confirmed, balance, taken }: { accoun
             ostatnio potwierdzone {confirmed.date} ({plnText(confirmed.amount)} zł)
           </span>
         )}
+        <ConfirmTodayAsk c={check} />
       </div>
     </div>
   )

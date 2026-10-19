@@ -1,9 +1,8 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useShallow } from 'zustand/shallow'
-import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
 import { choiceOf, importThemes, joins, learnable, movesHere, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
-import { TX_KIND_LABEL, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
+import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
 import { opKindOf } from '@shared/import/reconcile'
@@ -17,7 +16,7 @@ import { AmountField, plnText, signedPln } from '../../components/fields'
 import { IconChevronDown, IconChevronRight, IconImport, IconSearch } from '../../components/icons'
 import { Columns } from '../../components/layout'
 import { Badge, Panel, ShowMore, cx } from '../../components/ui'
-import { confirmBalance } from '../balances/actions'
+import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
 import { DecisionFields, IMPORT_SHARE_MODES } from './DecisionFields'
@@ -956,41 +955,54 @@ export function BalanceCheck() {
   const accounts = useAccounts()
   const fleet = useFleet()
   const [values, setValues] = useState<Record<string, number | null>>({})
-  const today = warsawNow().date
   return (
     <Panel title="Potwierdzenie sald">
       <div className="flex flex-col gap-1.5 text-[12px]" data-testid="balance-check">
         <p className="text-[11.5px] text-muted">Wpisz saldo z aplikacji banku (raz w tygodniu). Różnica = korekta „rozbieżność w ładowni” do wyjaśnienia w Operacjach.</p>
         {accounts
           .filter((a) => !a.archived)
-          .map((a) => {
-            const balance = fleet?.accounts.find((x) => x.id === a.id)?.balance ?? 0
-            const v = values[a.id] ?? null
-            return (
-              <div key={a.id} className="flex flex-wrap items-center gap-2" data-testid="balance-row" data-name={a.name}>
-                <span className="w-[110px] truncate text-fg-strong">{a.name}</span>
-                <span className="w-[150px] text-muted">
-                  operacje: <span className="num text-fg">{plnText(balance)} zł</span>
-                </span>
-                <AmountField className="w-[120px]" value={v} allowNegative allowEmpty placeholder="w banku" onChange={(x) => setValues({ ...values, [a.id]: x })} aria-label={`Saldo ${a.name} w banku`} data-testid="balance-input" />
-                <button
-                  type="button"
-                  className="btn h-[22px]"
-                  disabled={v == null}
-                  onClick={() => {
-                    if (v == null) return
-                    confirmBalance(a.id, v, today, a.name)
-                    setValues({ ...values, [a.id]: null })
-                  }}
-                  data-testid="balance-confirm"
-                >
-                  Potwierdź
-                </button>
-              </div>
-            )
-          })}
+          .map((a) => (
+            <BalanceCheckRow key={a.id} account={a} balance={fleet?.accounts.find((x) => x.id === a.id)?.balance ?? 0} value={values[a.id] ?? null} onValue={(x) => setValues((vs) => ({ ...vs, [a.id]: x }))} />
+          ))}
       </div>
     </Panel>
+  )
+}
+
+/** One account's balance from the bank – a difference asks whether today's operations are written first (B83). */
+function BalanceCheckRow({ account: a, balance, value: v, onValue }: { account: Account; balance: number; value: number | null; onValue: (v: number | null) => void }) {
+  const check = useConfirmToday(a.id, a.name, () => onValue(null))
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="balance-row" data-name={a.name}>
+      <span className="w-[110px] truncate text-fg-strong">{a.name}</span>
+      <span className="w-[150px] text-muted">
+        operacje: <span className="num text-fg">{plnText(balance)} zł</span>
+      </span>
+      <AmountField
+        className="w-[120px]"
+        value={v}
+        allowNegative
+        allowEmpty
+        placeholder="w banku"
+        onChange={(x) => {
+          onValue(x)
+          // The question was about the balance typed before.
+          check.later()
+        }}
+        aria-label={`Saldo ${a.name} w banku`}
+        data-testid="balance-input"
+      />
+      <button
+        type="button"
+        className="btn h-[22px]"
+        disabled={v == null}
+        onClick={() => v != null && check.confirm(v)}
+        data-testid="balance-confirm"
+      >
+        Potwierdź
+      </button>
+      <ConfirmTodayAsk c={check} />
+    </div>
   )
 }
 

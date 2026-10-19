@@ -6,7 +6,7 @@ import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
-import { useFleet } from '../../store/fleet'
+import { useFleet, useMinute } from '../../store/fleet'
 import { navigate, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
 import { usePanels } from '../../store/panels'
@@ -18,7 +18,7 @@ import { Badge, Kbd, cx } from '../../components/ui'
 import { WEEKDAY_PL, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
-import { categorizeTicked, clearTicked, financeTicked, newOperation, resetFilter, selectOperation, setFilter, tickOperations, useOperationsUi } from './state'
+import { categorizeTicked, clearTicked, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickOperations, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
 import { incomeShares, memberName } from '@shared/calc/household'
 import { SHARE_MODES } from '@shared/schema'
@@ -100,7 +100,21 @@ function PeriodBar({ period }: { period: PeriodFilter }) {
   )
 }
 
-function CheckMenu<T extends string>({ label, options, value, onChange, testId }: { label: string; options: Array<{ value: T; label: string }>; value: T[]; onChange: (v: T[]) => void; testId: string }) {
+function CheckMenu<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  testId,
+  note
+}: {
+  label: string
+  options: Array<{ value: T; label: string }>
+  value: T[]
+  onChange: (v: T[]) => void
+  testId: string
+  note?: string
+}) {
   const summary = value.length === 0 ? 'wszystkie' : value.length <= 2 ? value.map((v) => options.find((o) => o.value === v)?.label ?? v).join(', ') : `${value.length} z ${options.length}`
   return (
     <Popover
@@ -134,6 +148,7 @@ function CheckMenu<T extends string>({ label, options, value, onChange, testId }
           <button type="button" className="mt-1 self-start text-dim hover:text-fg-strong" onClick={() => onChange([])}>
             wszystkie
           </button>
+          {note && <span className="text-[11px] text-dim">{note}</span>}
         </div>
       )}
     </Popover>
@@ -353,6 +368,10 @@ export function OperationsPage() {
   const fi = useData((s) => s.fi)
   const filter = useOperationsUi((s) => s.filter)
   const selectedId = useOperationsUi((s) => s.selectedId)
+  const shown = useOperationsUi((s) => s.shown)
+  // A new month in Warsaw moves the list's current month on (B81 – the app lives in the tray for weeks).
+  const minute = useMinute()
+  useEffect(() => followCurrentMonth(warsawNow(new Date(minute)).month), [minute])
   const cats = useCategories()
   const accounts = useAccounts()
   const fleet = useFleet()
@@ -384,12 +403,8 @@ export function OperationsPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl+N is the app's (App.tsx – every screen, B64).
       if (useUi.getState().paletteOpen || document.querySelector('[role="dialog"]')) return
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault()
-        newOperation()
-        return
-      }
       const el = document.activeElement as HTMLElement | null
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')
       if (e.key === '/' && !typing) {
@@ -437,12 +452,31 @@ export function OperationsPage() {
           <CheckMenu<TxKind> label="Rodzaj" options={TX_KINDS.map((k) => ({ value: k, label: TX_KIND_LABEL[k] }))} value={filter.kinds} onChange={(v) => setFilter({ kinds: v })} testId="operations-kinds" />
           <CheckMenu
             label="Kategoria"
-            options={[...cats.mains.filter((c) => !c.archived).map((c) => ({ value: c.id, label: c.name })), { value: '', label: 'bez kategorii' }]}
+            options={[
+              ...cats.mains.filter((c) => !c.archived).map((c) => ({ value: c.id, label: c.name })),
+              // A category of the filter archived or unknown since (B82): shown, so it can be unticked.
+              ...filter.categories
+                .filter((id) => id && !cats.mains.some((c) => c.id === id && !c.archived))
+                .map((id) => ({ value: id, label: cats.byId.has(id) ? `${cats.label(id)} (archiwum)` : 'nieznana kategoria' })),
+              { value: '', label: 'bez kategorii' }
+            ]}
             value={filter.categories}
             onChange={(v) => setFilter({ categories: v })}
             testId="operations-categories"
           />
-          <CheckMenu<OperationMark> label="Oznaczenia" options={OPERATION_MARKS.map((m) => ({ value: m, label: MARK_LABEL[m] }))} value={filter.marks} onChange={(v) => setFilter({ marks: v })} testId="operations-marks" />
+          <CheckMenu<OperationMark>
+            label="Oznaczenia"
+            options={OPERATION_MARKS.map((m) => ({ value: m, label: MARK_LABEL[m] }))}
+            value={filter.marks}
+            onChange={(v) => setFilter({ marks: v })}
+            testId="operations-marks"
+            note="Z banku / nierozliczona / wpisana ręcznie oraz plan / impuls – dowolne z zaznaczonych; między grupami – wszystkie naraz."
+          />
+          {shown && (
+            <button type="button" className="shrink-0 text-[11px] text-accent hover:underline" onClick={showStoredFilter} title="Filtry zapamiętane na tym komputerze. Ten widok otworzył inny ekran – zmiany w nim nie zapisują się jako Twój filtr." data-testid="operations-stored-filter">
+              mój filtr
+            </button>
+          )}
           {active && (
             <button type="button" className="shrink-0 text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={resetFilter} data-testid="operations-clear">
               wyczyść filtry

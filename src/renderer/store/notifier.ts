@@ -16,7 +16,7 @@ import { useMachine } from './machine'
 import { navigate } from './ui'
 import { useIctj } from './ictj'
 import { usePresence } from './presence'
-import { setFilter } from '../features/operations/state'
+import { showFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
 import { cargoStatusesNow } from '../features/cargo/status'
 import { confirmNoSpend, eveningNow, snoozeEvening } from '../features/evening/state'
@@ -61,7 +61,7 @@ export function openTag(tag: string): void {
   clickedAt = Date.now()
   const today = warsawNow().date
   if (tag === 'today' || tag === 'evening') {
-    setFilter({ period: { kind: 'range', from: today, to: today }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
+    showFilter({ period: { kind: 'range', from: today, to: today }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
     navigate({ page: 'operations' })
   } else if (tag === 'asteroid' || tag === 'cargo') navigate({ page: 'cargo' })
   else if (tag === 'import') navigate({ page: 'import' })

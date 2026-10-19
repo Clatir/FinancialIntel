@@ -1,5 +1,46 @@
 # Financial Intel – zmiany
 
+## 1.6.4
+
+Poprawki z przeglądu aplikacji (grupa P, D87): operacje, edytor i szybki wpis.
+
+Lista operacji:
+- Ctrl+N dodaje operację z każdego ekranu (jak mówią ściągawka i paleta); nowa operacja jest zawsze widoczna – lista
+  przechodzi na jej miesiąc, gdy okres jej nie obejmuje (także „od–do”), a filtry, które by ją ukryły, zdejmuje tylko w
+  tym widoku.
+- Bieżący miesiąc listy przechodzi na nowy z kalendarzem (aplikacja w zasobniku tygodniami); wybrany miesiąc zostaje.
+- Lista otwarta z Mostka, powiadomienia, zasobnika, meldunków albo duplikatów nie zmienia filtra zapamiętanego na tym
+  komputerze: zmiany w takim widoku zostają widoku, „mój filtr” pokazuje zapamiętany.
+- „Bez kategorii” znaczy wszędzie to samo (oznaczenie, filtr, meldunki): wydatek albo część paragonu bez kategorii – nie
+  wpływy, przelewy ani zakupy domowników; meldunki liczą kwotę tylko takich części, pusta część 0 zł się nie liczy.
+- Filtr kategorii widzi części paragonu, znak „domownik” – części domowników; oznaczenia z jednej grupy łączą się „lub”
+  („z banku” + „nierozliczona”), z różnych – „i”; kategoria zarchiwizowana w filtrze ma nazwę i da się ją odznaczyć.
+- „Cofnij” zbiorczej kategorii i finansującego cofa tylko swoje zmiany – to, co zmieniło się w międzyczasie (także reguły
+  importu dodane potem), zostaje, a komunikat mówi, ile cofnięto.
+
+Edytor:
+- Notatka do 5000 znaków, dziennik kapitański do 2000 – długi wklejony tekst nie blokuje już zapisu.
+- „Podziel paragon” przenosi kategorię i finansującego na pierwszą część; edytor mówi, dokąd idzie nierozdzielona reszta,
+  a „odejmij od ostatniej części” nie zmienia jej kierunku; „Ładownia” widoczna także przy podziale.
+- Wybór kategorii pokazuje podkategorię zarchiwizowanej kategorii głównej; kwota z więcej niż dwiema cyframi po przecinku
+  jest odrzucana („1.200” to nie 1,20 zł); próg „Plan czy impuls?” 0 – dziennik nie pyta.
+
+Saldo z banku:
+- „Potwierdź saldo” z różnicą pyta najpierw, czy dzisiejsze operacje są dopisane – korekta albo „Dopiszę i potwierdzę
+  później”; wpisane saldo zostaje w polu do zapisu (Ustawienia → Konta i ekran importu).
+
+Szybki wpis:
+- Otwarte okno dostaje świeże listy kont, kategorii i domowników, energię i stan folderu bez utraty wpisu; wybór, którego
+  już nie ma, czyści z komunikatem, a zapis odrzuca konto, kategorię albo domownika spoza folderu.
+- Podział paragonu, potem „Wpływ” – zapis bez błędu o częściach; „zaliczka czy przychód” domownika zapamiętane tylko po
+  Twoim wyborze.
+
+Formularze i drobne:
+- „Nowa pożyczka”, „Nowy kontener”, „Nowy cel” i podział łupów zachowują wpisany tekst po przejściu na inny ekran; pusty
+  formularz ma dzisiejszą datę także po dniach w zasobniku.
+- Ściągawka skrótów pokazuje ustawiony skrót szybkiego wpisu (albo „brak skrótu”) i ostrzega, gdy się nie zarejestrował.
+- Wieczorne przypomnienie ustawione w godzinach ciszy nocnej przychodzi minutę przed nią – Ustawienia to mówią.
+
 ## 1.6.3
 
 Poprawki z przeglądu aplikacji (grupa O, D87): import z mBanku.

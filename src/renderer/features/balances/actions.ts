@@ -23,13 +23,14 @@ export function setOpening(accountId: string, amount: number, date: string): voi
 
 /**
  * Confirm the bank's balance at the end of `date`: without an opening it sets one; a difference adds a correction
- * (kind 'correction', to explain) and both are kept as a confirmation record.
+ * (kind 'correction', to explain) and both are kept as a confirmation record. `planned` – the plan just made for the
+ * same records (one pass over the history, not two).
  */
-export function confirmBalance(accountId: string, amount: number, date: string, accountName: string): ConfirmationPlan | null {
+export function confirmBalance(accountId: string, amount: number, date: string, accountName: string, planned?: ConfirmationPlan): ConfirmationPlan | null {
   // A read-only folder writes no correction and no confirmation: no „saldo zgodne” either (N2).
   if (!canWrite()) return null
   const s = useData.getState()
-  const plan = planConfirmation(accountId, amount, date, records(s.records.transactions), records(s.records.balances))
+  const plan = planned ?? planConfirmation(accountId, amount, date, records(s.records.transactions), records(s.records.balances))
   const now = new Date().toISOString()
   const base = { schemaVersion: SCHEMA_VERSION, createdAt: now, updatedAt: now }
   if (plan.kind === 'before-opening') {
