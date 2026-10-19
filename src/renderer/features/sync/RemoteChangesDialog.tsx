@@ -1,19 +1,23 @@
 // adapted from ICTTJ src/renderer/features/sync/RemoteChangesDialog.tsx @ 84a8339
-import { useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useSelection } from '../../lib/selection'
 import type { RecordEntry } from '@shared/api'
 import { diffRecords, fieldLabel, merge3, pathKey, type Side } from '@shared/merge'
 import type { Collection } from '@shared/paths'
 import type { RecordTypes } from '@shared/records'
 import { recordTitle } from '../../lib/recordTitle'
-import { acceptNewer, newerOf, resolveRemote, useData } from '../../store/data'
+import { acceptNewer, newerOf, resolveRemoteMany, useData } from '../../store/data'
 import { setRemoteDialog, useRemote, type PendingRemote } from '../../store/remote'
 import { toast } from '../../store/ui'
 import { Modal } from '../../components/Modal'
-import { Badge, Segmented, cx } from '../../components/ui'
+import { Badge, Segmented, ShowMore, cx } from '../../components/ui'
 import { ChangeList, HistoryButton, displayValue, useDictNames } from '../history/HistoryDialog'
 
 type Choice = 'merge' | Side
+
+/** Cards shown at once (W25): a large batch from the other computer is decided without drawing all of it. */
+const PAGE = 50
+const NO_FIELDS: Record<string, Side> = {}
 
 function theirsRecord(item: PendingRemote): unknown {
   if (!item.theirs) return null
@@ -35,8 +39,9 @@ const UNDECIDED: Record<'removal' | 'time', string> = {
   time: 'Brak czasu zmiany po jednej ze stron – wybierz ręcznie.'
 }
 
-function NewerBadge({ item, machine }: { item: PendingRemote; machine: string }) {
-  const n = newerOf(item)
+const NewerBadge = memo(function NewerBadge({ item, mine, machine }: { item: PendingRemote; mine: unknown; machine: string }) {
+  // Decided again when this computer's version changes (an edit made while the dialog waits), not at every render (W25).
+  const n = useMemo(() => newerOf(item), [item, mine])
   if (n.choice == null)
     return (
       <Badge title={UNDECIDED[n.reason]} data-testid="remote-newer">
@@ -58,13 +63,14 @@ function NewerBadge({ item, machine }: { item: PendingRemote; machine: string })
       {text}
     </Badge>
   )
-}
+})
 
 function SelectBox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return <input type="checkbox" checked={checked} onChange={(e) => onChange(e.currentTarget.checked)} aria-label={label} data-testid="remote-select" />
 }
 
-function ItemCard({
+/** One waiting change; drawn again only when its own props change (W25: callbacks take the change's key). */
+const ItemCard = memo(function ItemCard({
   item,
   choice,
   onChoice,
@@ -75,11 +81,11 @@ function ItemCard({
 }: {
   item: PendingRemote
   choice: Choice
-  onChoice: (c: Choice) => void
+  onChoice: (key: string, c: Choice) => void
   fields: Record<string, Side>
-  onField: (k: string, s: Side) => void
+  onField: (key: string, field: string, s: Side) => void
   selected: boolean
-  onSelect: (v: boolean) => void
+  onSelect: (key: string, v: boolean) => void
 }) {
   const mine = useMine(item)
   const theirs = theirsRecord(item)
@@ -94,18 +100,18 @@ function ItemCard({
     return (
       <div className="flex flex-col gap-2 border border-line p-2.5" data-testid="remote-item" data-type="removal">
         <div className="flex items-center gap-2">
-          <SelectBox checked={selected} onChange={onSelect} label={`Zaznacz: ${title}`} />
+          <SelectBox checked={selected} onChange={(v) => onSelect(item.key, v)} label={`Zaznacz: ${title}`} />
           <span className="text-[12.5px] text-fg-strong">{title}</span>
           <Badge tone="warn">usunięty na innym komputerze</Badge>
           {item.hadLocalEdits && <Badge tone="accent">masz niezapisane zmiany</Badge>}
-          <NewerBadge item={item} machine={machine} />
+          <NewerBadge item={item} mine={mine} machine={machine} />
           <span className="flex-1" />
           <HistoryButton kind={item.collection} id={item.id} current={mine ?? theirs} variant="link" />
         </div>
         <Segmented
           size="sm"
           value={choice === 'merge' ? 'mine' : choice}
-          onChange={(v) => onChoice(v)}
+          onChange={(v) => onChoice(item.key, v)}
           options={[
             { value: 'theirs', label: 'Usuń też tutaj' },
             { value: 'mine', label: 'Zachowaj (przywróć plik)' }
@@ -118,12 +124,12 @@ function ItemCard({
   return (
     <div className="flex flex-col gap-2 border border-line p-2.5" data-testid="remote-item" data-type="update">
       <div className="flex flex-wrap items-center gap-2">
-        <SelectBox checked={selected} onChange={onSelect} label={`Zaznacz: ${title}`} />
+        <SelectBox checked={selected} onChange={(v) => onSelect(item.key, v)} label={`Zaznacz: ${title}`} />
         <span className="text-[12.5px] text-fg-strong">{title}</span>
         <Badge>z komputera {machine}</Badge>
         {item.hadLocalEdits ? <Badge tone="accent">masz niezapisane zmiany ({localChanges.length})</Badge> : <Badge>bez Twoich zmian</Badge>}
         {conflicts.length > 0 && <Badge tone="warn">to samo pole zmienione po obu stronach: {conflicts.length}</Badge>}
-        <NewerBadge item={item} machine={machine} />
+        <NewerBadge item={item} mine={mine} machine={machine} />
         {/* The versions set aside so far – the one dropped here goes there too (N18). */}
         <span className="flex-1" />
         <HistoryButton kind={item.collection} id={item.id} current={mine ?? theirs} variant="link" />
@@ -131,7 +137,7 @@ function ItemCard({
       <Segmented
         size="sm"
         value={choice}
-        onChange={onChoice}
+        onChange={(v) => onChoice(item.key, v)}
         options={
           item.hadLocalEdits
             ? [
@@ -162,7 +168,7 @@ function ItemCard({
                   <button
                     key={s}
                     className={cx('truncate border px-1.5 py-0.5 text-left', side === s ? 'border-accent bg-accent-soft text-fg-strong' : 'border-line hover:bg-hover')}
-                    onClick={() => onField(k, s)}
+                    onClick={() => onField(item.key, k, s)}
                     data-testid={`remote-pick-${s}`}
                   >
                     {displayValue(s === 'mine' ? c.mine : c.theirs, names, c.path)}
@@ -181,7 +187,7 @@ function ItemCard({
       </details>
     </div>
   )
-}
+})
 
 /** Changes from another computer waiting for a decision (store/remote.ts); mounted once in the app shell. */
 export function RemoteChangesDialog() {
@@ -189,7 +195,11 @@ export function RemoteChangesDialog() {
   const open = useRemote((s) => s.open)
   const [choices, setChoices] = useState<Record<string, Choice>>({})
   const [fields, setFields] = useState<Record<string, Record<string, Side>>>({})
-  const sel = useSelection(pending.map((p) => p.key))
+  const [limit, setLimit] = useState(PAGE)
+  const keys = useMemo(() => pending.map((p) => p.key), [pending])
+  const sel = useSelection(keys)
+  const onChoice = useCallback((key: string, c: Choice) => setChoices((x) => ({ ...x, [key]: c })), [])
+  const onField = useCallback((key: string, k: string, s: Side) => setFields((x) => ({ ...x, [key]: { ...(x[key] ?? {}), [k]: s } })), [])
   if (!open || pending.length === 0) return null
   const chosen = pending.filter((p) => sel.selected.has(p.key))
   const allSelected = chosen.length === pending.length
@@ -198,7 +208,8 @@ export function RemoteChangesDialog() {
     const keys = items.map((p) => p.key)
     const { decided, left } = acceptNewer(keys)
     // Decided items forget their manual choices too (a later change of the same record starts fresh).
-    const done = new Set(keys.filter((k) => !useRemote.getState().pending.some((p) => p.key === k)))
+    const waiting = new Set(useRemote.getState().pending.map((p) => p.key))
+    const done = new Set(keys.filter((k) => !waiting.has(k)))
     sel.drop(done)
     setChoices((x) => Object.fromEntries(Object.entries(x).filter(([k]) => !done.has(k))))
     setFields((x) => Object.fromEntries(Object.entries(x).filter(([k]) => !done.has(k))))
@@ -210,7 +221,8 @@ export function RemoteChangesDialog() {
   }
   const choiceOf = (p: PendingRemote): Choice => choices[p.key] ?? (p.hadLocalEdits ? 'merge' : p.type === 'removal' ? 'theirs' : 'theirs')
   const apply = () => {
-    for (const p of pending) resolveRemote(p.key, choiceOf(p), fields[p.key] ?? {})
+    // All at once (W25), also the ones not shown yet – with their default choice.
+    resolveRemoteMany(pending.map((p) => ({ key: p.key, choice: choiceOf(p), fields: fields[p.key] })))
     setChoices({})
     setFields({})
     sel.drop()
@@ -261,18 +273,24 @@ export function RemoteChangesDialog() {
             Zaakceptuj nowsze: wszystkie ({pending.length})
           </button>
         </div>
-        {pending.map((p) => (
+        {pending.slice(0, limit).map((p) => (
           <ItemCard
             key={p.key}
             item={p}
             selected={sel.selected.has(p.key)}
-            onSelect={(v) => sel.toggle(p.key, v)}
+            onSelect={sel.toggle}
             choice={choiceOf(p)}
-            onChoice={(c) => setChoices((x) => ({ ...x, [p.key]: c }))}
-            fields={fields[p.key] ?? {}}
-            onField={(k, s) => setFields((x) => ({ ...x, [p.key]: { ...(x[p.key] ?? {}), [k]: s } }))}
+            onChoice={onChoice}
+            fields={fields[p.key] ?? NO_FIELDS}
+            onField={onField}
           />
         ))}
+        {pending.length > limit && (
+          <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted" data-testid="remote-hidden">
+            <ShowMore shown={limit} total={pending.length} page={PAGE} onMore={() => setLimit((l) => l + PAGE)} testId="remote-more" />
+            <span>„Zastosuj” rozstrzyga wszystkie {pending.length} – te jeszcze niepokazane z wyborem domyślnym.</span>
+          </div>
+        )}
       </div>
     </Modal>
   )

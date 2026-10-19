@@ -311,6 +311,16 @@ export function Badge({ children, tone = 'default', title, ...rest }: { children
   )
 }
 
+/** A long list shown a page at a time (W17, W25): „pokaż kolejne” while some are left. */
+export function ShowMore({ shown, total, page, onMore, testId }: { shown: number; total: number; page: number; onMore: () => void; testId: string }) {
+  if (shown >= total) return null
+  return (
+    <button type="button" className="self-start text-[11px] text-accent hover:underline" onClick={onMore} data-testid={testId}>
+      pokaż kolejne ({Math.min(page, total - shown)} z {total - shown})
+    </button>
+  )
+}
+
 export function Stat({ label, value, className, valueClassName }: { label: ReactNode; value: ReactNode; className?: string; valueClassName?: string }) {
   return (
     <div className={cx('flex min-w-0 flex-col gap-0.5', className)}>

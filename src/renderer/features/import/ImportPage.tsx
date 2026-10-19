@@ -15,7 +15,7 @@ import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { IconChevronDown, IconChevronRight, IconImport, IconSearch } from '../../components/icons'
 import { Columns } from '../../components/layout'
-import { Badge, Panel, cx } from '../../components/ui'
+import { Badge, Panel, ShowMore, cx } from '../../components/ui'
 import { confirmBalance } from '../balances/actions'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
@@ -282,15 +282,6 @@ function Summary() {
 /** Rows of a long list shown at once (W17): the rest by „pokaż kolejne”. */
 const PAGE = 100
 
-function More({ shown, total, onMore, testId }: { shown: number; total: number; onMore: () => void; testId: string }) {
-  if (shown >= total) return null
-  return (
-    <button type="button" className="self-start text-[11px] text-accent hover:underline" onClick={onMore} data-testid={testId}>
-      pokaż kolejne ({Math.min(PAGE, total - shown)} z {total - shown})
-    </button>
-  )
-}
-
 function MatchesPanel() {
   const { plan, choices } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices })))
   const [limit, setLimit] = useState(PAGE)
@@ -347,7 +338,7 @@ function MatchesPanel() {
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
             ))}
-            <More shown={limit} total={merges.length} onMore={() => setLimit(limit + PAGE)} testId="import-merge-more" />
+            <ShowMore page={PAGE} shown={limit} total={merges.length} onMore={() => setLimit(limit + PAGE)} testId="import-merge-more" />
           </div>
         )}
         {elsewhere.length > 0 && (
@@ -396,7 +387,7 @@ function MatchesPanel() {
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
             ))}
-            <More shown={limit} total={deleted.length} onMore={() => setLimit(limit + PAGE)} testId="import-deleted-more" />
+            <ShowMore page={PAGE} shown={limit} total={deleted.length} onMore={() => setLimit(limit + PAGE)} testId="import-deleted-more" />
           </div>
         )}
         {plan.vanished.length > 0 && (
@@ -587,7 +578,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
           {shown.slice(0, limit).map((p) => (
             <ImportRowLine key={p.key} p={p} choice={choice} />
           ))}
-          <More shown={limit} total={shown.length} onMore={() => setLimit(limit + PAGE)} testId="import-rows-more" />
+          <ShowMore page={PAGE} shown={limit} total={shown.length} onMore={() => setLimit(limit + PAGE)} testId="import-rows-more" />
         </div>
       )}
     </div>
@@ -659,7 +650,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
           {shown.slice(0, limit).map((g) => (
             <GroupRow key={g.group} g={g} inherited={decided ?? g.proposed} themeDecided={!!decided} found={found.get(g.group)} />
           ))}
-          <More shown={limit} total={shown.length} onMore={() => setLimit(limit + PAGE)} testId="import-groups-more" />
+          <ShowMore page={PAGE} shown={limit} total={shown.length} onMore={() => setLimit(limit + PAGE)} testId="import-groups-more" />
         </div>
       )}
     </div>

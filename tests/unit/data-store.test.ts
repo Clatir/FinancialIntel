@@ -17,6 +17,8 @@ const api = {
 vi.stubGlobal('window', { fi: api })
 const store = await import('../../src/renderer/store/data')
 const { useRemote } = await import('../../src/renderer/store/remote')
+type PendingRemote = import('../../src/renderer/store/remote').PendingRemote
+type RemoteDecision = import('../../src/renderer/store/data').RemoteDecision
 
 const ID = '01K6H3Z0W8Q4M2N5P7R9S1T3V5'
 const ID2 = '01K6H3Z0W8Q4M2N5P7R9S1T3V6'
@@ -392,5 +394,123 @@ describe('zapis i usuwanie paczkami (1.4.3, przegląd grupy F)', () => {
     await vi.advanceTimersByTimeAsync(2100)
     expect(api.saveRecord.mock.calls.at(-1)?.[1].note).toBe('druga zmiana')
     expect(store.hasUnsaved()).toBe(false)
+  })
+})
+
+describe('wiele zmian z drugiego komputera naraz (1.5.4, W25)', () => {
+  const N = 200
+  const idOf = (i: number) => `01K6H3Z0W8Q4M2N5P7R9S1${String(i).padStart(4, '0')}`
+  const savesAnswered = () => {
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    api.saveRecords.mockImplementation(async (_c: string, rs: Transaction[]) => rs.map((r) => ({ id: r.id, entry: saved(r) })))
+  }
+  const clearCalls = () => {
+    for (const m of Object.values(api)) m.mockClear()
+  }
+  /** 200 records in „ask” mode, some edited here, then one change from the other computer: 180 updates, 20 deletions. */
+  function arrive(): readonly PendingRemote[] {
+    const txs = Array.from({ length: N }, (_, i) => transaction(idOf(i)))
+    const records = Object.fromEntries(COLLECTIONS.map((c) => [c, []])) as unknown as Snapshot['records']
+    records.transactions = txs.map((t) => ({ record: t, relPath: `transactions/2026/2026-03-16_${t.id}.json`, readOnly: false }))
+    store.applySnapshot({ fi: settings('ask'), records, problems: [], conflicts: [], status: status(), loadMs: 0 })
+    for (const i of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 180, 181, 182]) store.updateRecord('transactions', idOf(i), (r) => ({ ...r, note: `moja ${i}` }))
+    vi.advanceTimersByTime(10)
+    change({
+      upserts: txs.slice(0, 180).map((t, i) => incoming({ ...t, amount: -5000 - i, note: i < 5 ? `z B ${i}` : t.note, updatedAt: '2026-03-16T09:00:00.000Z', updatedBy: 'PC-B' })),
+      removals: txs.slice(180).map((t) => ({ collection: 'transactions' as const, id: t.id }))
+    })
+    return useRemote.getState().pending
+  }
+  const decide = (p: PendingRemote, i: number): RemoteDecision => ({ key: p.key, choice: (['theirs', 'mine', 'merge'] as const)[i % 3]!, fields: i % 2 ? { note: 'theirs' } : {} })
+  /** What the decisions left: records in memory, what was written, what went to the history. */
+  async function outcome() {
+    await vi.advanceTimersByTimeAsync(3000)
+    const written = new Map<string, Transaction>()
+    for (const [, r] of api.saveRecord.mock.calls as Array<[string, Transaction]>) written.set(r.id, r)
+    for (const [, rs] of api.saveRecords.mock.calls as Array<[string, Transaction[]]>) for (const r of rs) written.set(r.id, r)
+    return {
+      records: Object.fromEntries(Object.entries(store.useData.getState().records.transactions).map(([id, e]) => [id, e!.record])),
+      written: Object.fromEntries([...written].sort(([a], [b]) => (a < b ? -1 : 1))),
+      kept: (api.historyKeep.mock.calls as Array<[string, Transaction, string]>).map(([c, r, why]) => `${c} ${r.id} ${r.note} ${why}`).sort(),
+      waiting: useRemote.getState().pending.length,
+      unsaved: store.hasUnsaved()
+    }
+  }
+
+  it('„Zastosuj” dla wszystkich: to samo co po kolei – jedna zmiana stanu i jeden zapis paczką', async () => {
+    savesAnswered()
+    const first = arrive()
+    expect(first).toHaveLength(N)
+    first.forEach((p, i) => {
+      const d = decide(p, i)
+      store.resolveRemote(d.key, d.choice, d.fields)
+    })
+    const oneByOne = await outcome()
+
+    clearCalls()
+    const again = arrive()
+    let updates = 0
+    let waitingUpdates = 0
+    const stop = store.useData.subscribe((s, prev) => {
+      if (s.records !== prev.records) updates++
+    })
+    const stopWaiting = useRemote.subscribe(() => waitingUpdates++)
+    store.resolveRemoteMany(again.map(decide))
+    stop()
+    stopWaiting()
+    expect([updates, waitingUpdates]).toEqual([1, 1])
+    const together = await outcome()
+    expect(together).toEqual(oneByOne)
+    expect(api.saveRecord).not.toHaveBeenCalled()
+    expect(api.saveRecords).toHaveBeenCalledTimes(1)
+    // Theirs over an edit here (the edit in the history), mine kept, merged; deletions taken and kept.
+    expect(together.records[idOf(0)]).toMatchObject({ note: 'z B 0', amount: -5000 })
+    expect(together.records[idOf(1)]).toMatchObject({ note: 'moja 1', amount: -4599 })
+    expect(together.records[idOf(2)]).toMatchObject({ note: 'moja 2', amount: -5002 })
+    expect(together.records[idOf(180)]).toBeUndefined()
+    expect(together.records[idOf(181)]?.note).toBe('moja 181')
+    expect(together.records[idOf(183)]).toBeUndefined()
+    expect(together.kept).toContain(`transactions ${idOf(0)} moja 0 discarded`)
+    expect(together.kept).toContain(`transactions ${idOf(180)} moja 180 discarded`)
+    expect([together.waiting, together.unsaved]).toEqual([0, false])
+  })
+
+  it('„Zaakceptuj nowsze: wszystkie”: to samo co po kolei, jedna zmiana stanu; usunięcia po edycji sprzed ich przyjścia czekają', async () => {
+    savesAnswered()
+    const first = arrive()
+    let decided = 0
+    let left = 0
+    for (const p of first) {
+      const n = store.newerOf(useRemote.getState().pending.find((x) => x.key === p.key)!)
+      if (n.choice == null) left++
+      else {
+        store.resolveRemote(p.key, n.choice, n.fields)
+        decided++
+      }
+    }
+    const oneByOne = await outcome()
+
+    clearCalls()
+    const again = arrive()
+    let updates = 0
+    const stop = store.useData.subscribe((s, prev) => {
+      if (s.records !== prev.records) updates++
+    })
+    expect(store.acceptNewer(again.map((p) => p.key))).toEqual({ decided, left })
+    stop()
+    expect(updates).toBe(1)
+    expect(await outcome()).toEqual(oneByOne)
+    expect(left).toBe(3)
+    expect(useRemote.getState().pending.map((p) => p.id)).toEqual([idOf(180), idOf(181), idOf(182)])
+  })
+
+  it('ta sama zmiana dwa razy w jednej paczce: rozstrzygnięta raz', () => {
+    const [p] = arrive()
+    store.resolveRemoteMany([
+      { key: p!.key, choice: 'theirs' },
+      { key: p!.key, choice: 'mine' }
+    ])
+    expect(current(idOf(0))?.note).toBe('z B 0')
+    expect(api.historyKeep).toHaveBeenCalledTimes(1)
   })
 })

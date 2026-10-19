@@ -266,8 +266,10 @@ export function applyChange(change: ChangeSet): void {
   const returned: string[] = []
   const toSave: Array<{ collection: Collection | 'fi'; id: string; from: string | null }> = []
   const now = new Date().toISOString()
+  // The waiting changes looked up by key (W25: a large batch arriving while many wait).
+  const waiting = new Map(useRemote.getState().pending.map((p) => [p.key, p]))
   const queue = (item: Omit<PendingRemote, 'receivedAt' | 'hadLocalEdits'>, localEdits: boolean) => {
-    const prev = pendingFor(item.key)
+    const prev = waiting.get(item.key)
     queued.push({ ...item, base: prev ? prev.base : item.base, hadLocalEdits: localEdits || !!prev?.hadLocalEdits, receivedAt: now })
   }
   set((s) => {
@@ -292,7 +294,7 @@ export function applyChange(change: ChangeSet): void {
         if (!dirty.has(key) && !stampInPlace(maps[collection] ?? mapOf(s, collection), id, entry)) mapFor(collection)[id] = entry
         continue
       }
-      const pending = pendingFor(key)
+      const pending = waiting.get(key)
       const localEdits = dirty.has(key)
       const busy = localEdits || !!pending
       const base = pending ? pending.base : (bases.get(key) ?? (busy ? undefined : local?.record))
@@ -317,7 +319,7 @@ export function applyChange(change: ChangeSet): void {
       }
       if (!local) continue
       const localEdits = dirty.has(key)
-      if (decideRemoteRemoval({ mode, dirty: localEdits || !!pendingFor(key) }) === 'remove') delete mapFor(collection)[id]
+      if (decideRemoteRemoval({ mode, dirty: localEdits || waiting.has(key) }) === 'remove') delete mapFor(collection)[id]
       else queue({ key, collection, id, type: 'removal', base: bases.get(key) ?? local.record, theirs: null }, localEdits)
     }
     if (Object.keys(maps).length) next.records = { ...s.records, ...maps } as RecordMaps
@@ -329,7 +331,7 @@ export function applyChange(change: ChangeSet): void {
           if (fi) next.fi = fi
         }
       } else if (s.fi) {
-        const pending = pendingFor(key)
+        const pending = waiting.get(key)
         const localEdits = dirty.has(key)
         const busy = localEdits || !!pending
         const base = pending ? pending.base : (bases.get(key) ?? (busy ? undefined : s.fi))
@@ -352,11 +354,20 @@ export function applyChange(change: ChangeSet): void {
     toast(`Scalono zmiany${from ? ` z komputera ${from}` : ' z dysku'} z Twoimi niezapisanymi (${toSave.length}).`, 'success', 4500)
   }
   if (queued.length || returned.length) {
+    const replaced = new Set([...queued.map((q) => q.key), ...returned])
     useRemote.setState((r) => {
-      const pending = [...r.pending.filter((p) => !queued.some((q) => q.key === p.key) && !returned.includes(p.key)), ...queued]
+      const pending = [...r.pending.filter((p) => !replaced.has(p.key)), ...queued]
       return { pending, open: queued.length > 0 || (r.open && pending.length > 0) }
     })
   }
+}
+
+/** A decision about a change from another computer (`resolveRemoteMany`). */
+export interface RemoteDecision {
+  key: string
+  choice: 'merge' | Side
+  /** Fields changed on both sides: which side each takes (default mine). */
+  fields?: Record<string, Side>
 }
 
 /**
@@ -365,62 +376,111 @@ export function applyChange(change: ChangeSet): void {
  * unsaved edits go to the history).
  */
 export function resolveRemote(key: string, choice: 'merge' | Side, fieldChoices: Record<string, Side> = {}): void {
-  const item = pendingFor(key)
-  if (!item) return
+  resolveRemoteMany([{ key, choice, fields: fieldChoices }])
+}
+
+/**
+ * Several decisions at once (W25: „Zastosuj” and „Zaakceptuj nowsze” over a large batch from the other computer): the
+ * waiting list changed once, one new map per collection, the saves scheduled after it.
+ */
+export function resolveRemoteMany(decisions: readonly RemoteDecision[]): void {
+  const waiting = new Map(useRemote.getState().pending.map((p) => [p.key, p]))
+  const items: Array<{ item: PendingRemote; choice: 'merge' | Side; fields: Record<string, Side> }> = []
+  for (const d of decisions) {
+    const item = waiting.get(d.key)
+    if (!item) continue
+    // Once per change: a second decision about it finds nothing waiting (as one by one).
+    waiting.delete(d.key)
+    items.push({ item, choice: d.choice, fields: d.fields ?? {} })
+  }
+  if (!items.length) return
+  const done = new Set(items.map((x) => x.item.key))
   useRemote.setState((r) => {
-    const pending = r.pending.filter((p) => p.key !== key)
+    const pending = r.pending.filter((p) => !done.has(p.key))
     return { pending, open: r.open && pending.length > 0 }
   })
-  if (item.collection === 'fi') {
-    const mine = get().fi
-    const theirs = item.theirs as SettingsFile
-    if (!mine) return
-    if (choice === 'theirs') {
-      if (dirty.has(key)) void api.historyKeep('fi', mine, 'discarded').catch(() => undefined)
-      forget(key)
-      set({ fi: theirs })
-      // Mine was written after theirs came (B48): theirs written back.
-      if (item.savedAfter) scheduleSave('fi', 'fi', 0)
-      return
-    }
-    const fi = choice === 'mine' ? mine : merge3(item.base, mine, theirs, chooser(fieldChoices)).merged
-    bases.set(key, theirs)
-    set({ fi })
-    scheduleSave('fi', 'fi', 0)
-    return
+  const entries = new Map<Collection, Map<string, RecordEntry<RecordTypes[Collection]> | null>>()
+  const setEntry = (c: Collection, id: string, entry: RecordEntry<RecordTypes[Collection]> | null) => {
+    let changes = entries.get(c)
+    if (!changes) entries.set(c, (changes = new Map()))
+    changes.set(id, entry)
   }
-  const c = item.collection
-  const local = mapOf(get(), c)[item.id]
-  const setEntry = (entry: RecordEntry<RecordTypes[Collection]> | null) =>
-    set((s) => {
-      const map = { ...mapOf(s, c) }
-      if (entry) map[item.id] = entry
-      else delete map[item.id]
-      return withMap(s, c, map)
-    })
-  if (item.type === 'removal') {
-    if (choice === 'theirs') {
+  const saves = new Map<Collection, string[]>()
+  const save = (c: Collection, id: string) => {
+    const ids = saves.get(c)
+    if (ids) ids.push(id)
+    else saves.set(c, [id])
+  }
+  for (const { item, choice, fields } of items) {
+    const key = item.key
+    if (item.collection === 'fi') {
+      resolveSettings(item, choice, fields)
+      continue
+    }
+    const c = item.collection
+    const local = mapOf(get(), c)[item.id]
+    if (item.type === 'removal') {
+      if (choice === 'theirs') {
+        if (dirty.has(key) && local) void api.historyKeep(c, local.record, 'discarded').catch(() => undefined)
+        forget(key)
+        setEntry(c, item.id, null)
+        // Mine was written after the deletion came (B48): the file is back on the disk – deleted again.
+        if (item.savedAfter) void api.deleteRecord(c, item.id).catch((e) => toast(errorMessage(e), 'error', 8000))
+      } else if (local) save(c, item.id)
+      continue
+    }
+    const theirs = item.theirs as RecordEntry<RecordTypes[Collection]>
+    if (choice === 'theirs' || !local) {
       if (dirty.has(key) && local) void api.historyKeep(c, local.record, 'discarded').catch(() => undefined)
       forget(key)
-      setEntry(null)
-      // Mine was written after the deletion came (B48): the file is back on the disk – deleted again.
-      if (item.savedAfter) void api.deleteRecord(c, item.id).catch((e) => toast(errorMessage(e), 'error', 8000))
-    } else if (local) scheduleSave(c, item.id, 0)
-    return
+      setEntry(c, item.id, theirs)
+      // Mine was written after theirs came (B48): theirs written back.
+      if (item.savedAfter) save(c, item.id)
+      continue
+    }
+    bases.set(key, theirs.record)
+    const record = choice === 'mine' ? local.record : merge3(item.base, local.record, theirs.record, chooser(fields)).merged
+    setEntry(c, item.id, { ...theirs, record })
+    save(c, item.id)
   }
-  const theirs = item.theirs as RecordEntry<RecordTypes[Collection]>
-  if (choice === 'theirs' || !local) {
-    if (dirty.has(key) && local) void api.historyKeep(c, local.record, 'discarded').catch(() => undefined)
+  if (entries.size)
+    set((s) => {
+      let records = s.records
+      for (const [c, changes] of entries) {
+        const map = { ...mapOf(s, c) }
+        for (const [id, entry] of changes) {
+          if (entry) map[id] = entry
+          else delete map[id]
+        }
+        records = { ...records, [c]: map } as RecordMaps
+      }
+      return { records }
+    })
+  // Many of one collection with one call (W1), one as before.
+  for (const [c, ids] of saves) {
+    if (ids.length > 1) saveBatch(c, ids)
+    else scheduleSave(c, ids[0]!, 0)
+  }
+}
+
+/** A decision about the settings (`fi.json`) from another computer. */
+function resolveSettings(item: PendingRemote, choice: 'merge' | Side, fieldChoices: Record<string, Side>): void {
+  const key = item.key
+  const mine = get().fi
+  const theirs = item.theirs as SettingsFile
+  if (!mine) return
+  if (choice === 'theirs') {
+    if (dirty.has(key)) void api.historyKeep('fi', mine, 'discarded').catch(() => undefined)
     forget(key)
-    setEntry(theirs)
+    set({ fi: theirs })
     // Mine was written after theirs came (B48): theirs written back.
-    if (item.savedAfter) scheduleSave(c, item.id, 0)
+    if (item.savedAfter) scheduleSave('fi', 'fi', 0)
     return
   }
-  bases.set(key, theirs.record)
-  const record = choice === 'mine' ? local.record : merge3(item.base, local.record, theirs.record, chooser(fieldChoices)).merged
-  setEntry({ ...theirs, record })
-  scheduleSave(c, item.id, 0)
+  const fi = choice === 'mine' ? mine : merge3(item.base, mine, theirs, chooser(fieldChoices)).merged
+  bases.set(key, theirs)
+  set({ fi })
+  scheduleSave('fi', 'fi', 0)
 }
 
 /**
@@ -458,20 +518,19 @@ export function newerOf(item: PendingRemote): NewerPlan {
 
 /** "Zaakceptuj nowszą" for the given waiting changes (`newerOf`). Returns how many were decided and how many stayed. */
 export function acceptNewer(keys: readonly string[]): { decided: number; left: number } {
-  let decided = 0
+  const waiting = new Map(useRemote.getState().pending.map((p) => [p.key, p]))
+  const decisions: RemoteDecision[] = []
   let left = 0
   for (const key of keys) {
-    const item = pendingFor(key)
+    const item = waiting.get(key)
     if (!item) continue
     const n = newerOf(item)
-    if (n.choice == null) {
-      left++
-      continue
-    }
-    resolveRemote(key, n.choice, n.fields)
-    decided++
+    if (n.choice == null) left++
+    else decisions.push({ key, choice: n.choice, fields: n.fields })
   }
-  return { decided, left }
+  // All at once (W25).
+  resolveRemoteMany(decisions)
+  return { decided: decisions.length, left }
 }
 
 type Saved = { id: string; key: string; version: number; entry: RecordEntry<RecordTypes[Collection]> }
