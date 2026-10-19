@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { FolderStatus, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
@@ -27,8 +25,23 @@ vi.mock('@shared/import/reconcile', async (original) => {
 const data = await import('../../src/renderer/store/data')
 const state = await import('../../src/renderer/features/import/state')
 
-const FIXTURE = join(__dirname, '..', 'fixtures', 'mbank', 'lista_operacji.csv')
 const NOW = '2026-10-17T09:00:00.000Z'
+/** A list of operations of two purchases (the format of `tests/fixtures/mbank`). */
+const CSV = [
+  'mBank S.A. Bankowość Detaliczna;;;',
+  ';;;',
+  '#Klient;;;',
+  'JAN KAPITAN;;;',
+  ';;;',
+  'Lista operacji;;;',
+  ';;;',
+  '#Za okres:;;;',
+  '01.10.2025;31.10.2025;;',
+  ';;;',
+  '#Data operacji;#Opis operacji;#Kategoria;#Kwota',
+  `03.10.2025;LIDL  ZAKUP PRZY UŻYCIU KARTY W KRAJU${' '.repeat(50)};Żywność i chemia domowa;-16,16 PLN`,
+  `05.10.2025;KAWIARNIA MOKKA  ZAKUP PRZY UŻYCIU KARTY W KRAJU${' '.repeat(50)};Jedzenie poza domem;-20,00 PLN`
+].join('\r\n')
 
 const status = (): FolderStatus => ({ dataDir: '/dane', available: true, readOnly: false, readOnlyReason: null, folderSchemaVersion: 1, appSchemaVersion: 1, otherMachines: [], migratedFrom: null, backupPath: null })
 
@@ -46,11 +59,11 @@ function setImport(patch: (i: SettingsFile['settings']['import']) => SettingsFil
 describe('ekran importu: plan znowu tylko przy zmianie treści (W18)', () => {
   it('te same reguły, nazwy i domownicy w nowych obiektach – bez nowego planu; słowo kluczowe – nowy plan', async () => {
     open()
-    await state.loadImportFile('lista.csv', new Uint8Array(readFileSync(FIXTURE)))
+    await state.loadImportFile('lista.csv', new TextEncoder().encode(CSV))
     expect(state.useImport.getState().plan).not.toBeNull()
     expect(planned).toHaveBeenCalledTimes(1)
     // Another part of the import's settings changed („to nie to samo”), its rules copied as a save or a sync makes them.
-    setImport((i) => ({ ...i, notSimilar: ['a|b'], rules: i.rules.map((r) => ({ ...r })), aliases: { ...i.aliases }, ownNames: [...i.ownNames] }))
+    setImport((i) => ({ ...i, notSimilar: { 'a|b': NOW }, rules: i.rules.map((r) => ({ ...r })), aliases: { ...i.aliases }, ownNames: [...i.ownNames] }))
     data.useData.setState((s) => ({ fi: { ...s.fi!, settings: { ...s.fi!.settings, household: { ...s.fi!.settings.household, members: s.fi!.settings.household.members.map((m) => ({ ...m })) } } } }))
     state.replanIfChanged(state.planInputsNow())
     expect(planned).toHaveBeenCalledTimes(1)

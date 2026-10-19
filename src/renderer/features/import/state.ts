@@ -450,8 +450,9 @@ export const setImportQuery = (query: string) => useImport.setState({ query })
 /** Tick or untick groups and rows (a theme's tick = its groups). */
 export function selectImport(target: { groups?: readonly string[]; rows?: readonly string[] }, on: boolean): void {
   useImport.setState((s) => {
-    const groups = { ...s.selected.groups }
-    const rows = { ...s.selected.rows }
+    // A map not touched stays the same object (W17).
+    const groups = target.groups?.length ? { ...s.selected.groups } : s.selected.groups
+    const rows = target.rows?.length ? { ...s.selected.rows } : s.selected.rows
     for (const g of target.groups ?? []) if (on) groups[g] = true
     else delete groups[g]
     for (const r of target.rows ?? []) if (on) rows[r] = true

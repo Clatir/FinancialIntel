@@ -1,4 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
+import { memo, useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useShallow } from 'zustand/shallow'
 import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
 import { choiceOf, importThemes, joins, learnable, movesHere, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
@@ -101,7 +102,7 @@ function AccountWarning({ account, accountId }: { account: string | null; accoun
 }
 
 function FilePanel() {
-  const { fileName, file, error, errorName, accountId, busy } = useImport()
+  const { fileName, file, error, errorName, accountId, busy } = useImport(useShallow((s) => ({ fileName: s.fileName, file: s.file, error: s.error, errorName: s.errorName, accountId: s.accountId, busy: s.busy })))
   const accounts = useAccounts()
   const [over, setOver] = useState(false)
   const onDrop = (e: DragEvent) => {
@@ -173,7 +174,8 @@ function FilePanel() {
 }
 
 function Summary() {
-  const { plan, choices, busy } = useImport()
+  // What it counts (W17): not the ticks, the search or the proposals.
+  const { plan, choices, busy } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices, busy: s.busy })))
   const readOnly = useFolderLocked()
   if (!plan) return null
   const n = (status: RowPlan['status']) => plan.rows.filter((p) => p.status === status).length
@@ -277,8 +279,21 @@ function Summary() {
   )
 }
 
+/** Rows of a long list shown at once (W17): the rest by „pokaż kolejne”. */
+const PAGE = 100
+
+function More({ shown, total, onMore, testId }: { shown: number; total: number; onMore: () => void; testId: string }) {
+  if (shown >= total) return null
+  return (
+    <button type="button" className="self-start text-[11px] text-accent hover:underline" onClick={onMore} data-testid={testId}>
+      pokaż kolejne ({Math.min(PAGE, total - shown)} z {total - shown})
+    </button>
+  )
+}
+
 function MatchesPanel() {
-  const { plan, choices } = useImport()
+  const { plan, choices } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices })))
+  const [limit, setLimit] = useState(PAGE)
   const cats = useCategories()
   const accounts = useAccounts()
   const members = useMembers()
@@ -306,7 +321,7 @@ function MatchesPanel() {
               inną nazwą (łączony przy zakupie kartą do dnia różnicy, inaczej zaznacz sam). Wpis zachowuje Twoją kategorię i godzinę, bierze dane z banku. Nie
               połączony możliwy duplikat znajdziesz potem w „Duplikatach operacji”.
             </p>
-            {merges.map((p) => (
+            {merges.slice(0, limit).map((p) => (
               <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-merge">
                 <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-merge-join" />
                 <span className="min-w-0 truncate">
@@ -332,6 +347,7 @@ function MatchesPanel() {
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
             ))}
+            <More shown={limit} total={merges.length} onMore={() => setLimit(limit + PAGE)} testId="import-merge-more" />
           </div>
         )}
         {elsewhere.length > 0 && (
@@ -371,7 +387,7 @@ function MatchesPanel() {
           <div className="flex flex-col gap-1">
             <span className="label">Usunięte przez Ciebie wcześniej ({deleted.length})</span>
             <p className="text-[11px] text-dim">Te operacje z banku były już zaimportowane i je usunąłeś – nie wracają same. Zaznacz, żeby zaimportować mimo to.</p>
-            {deleted.map((p) => (
+            {deleted.slice(0, limit).map((p) => (
               <label key={p.key} className="flex items-center gap-2" data-testid="import-deleted">
                 <input type="checkbox" checked={!!choices.restoreDeleted[p.key]} onChange={(e) => setRestoreDeleted(p.key, e.currentTarget.checked)} />
                 <span className="min-w-0 flex-1 truncate">
@@ -380,6 +396,7 @@ function MatchesPanel() {
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
             ))}
+            <More shown={limit} total={deleted.length} onMore={() => setLimit(limit + PAGE)} testId="import-deleted-more" />
           </div>
         )}
         {plan.vanished.length > 0 && (
@@ -464,20 +481,58 @@ function NewMember({ g }: { g: ImportGroup }) {
   )
 }
 
-function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inherited: Choice; themeDecided: boolean; found: NewRow[] | 'all' | undefined }) {
+/**
+ * One operation of a group: its own choice, its skip and its tick read by its key (W17) – a decision, a skip or a tick of
+ * another operation never renders it.
+ */
+const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; choice: Choice }) {
+  const mine = useImport((s) => s.choices.rows[p.key])
+  const out = useImport((s) => !!s.choices.skip[p.key])
+  const ticked = useImport((s) => !!s.selected.rows[p.key])
+  const c = mine ?? choice
+  return (
+    <div className={cx('grid grid-cols-[18px_48px_minmax(0,1fr)_96px_200px_64px] items-center gap-2 py-[1px] text-[11.5px]', out && 'opacity-50')} data-testid="import-row">
+      <input type="checkbox" checked={ticked} onChange={(e) => selectImport({ rows: [p.key] }, e.currentTarget.checked)} aria-label="Zaznacz operację" data-testid="import-row-select" />
+      <span className="num text-muted">{day(p.row.date)}</span>
+      <span className={cx('min-w-0 truncate text-muted', out && 'line-through')} title={p.row.description}>
+        {p.row.title || p.row.description}
+        {p.row.pending && <span className="ml-1 text-accent">nierozliczona</span>}
+      </span>
+      <span className={cx('num text-right', p.row.amount > 0 ? 'text-up' : 'text-fg')}>{signedPln(p.row.amount)}</span>
+      {c.kind === 'expense' ? (
+        <CategorySelect
+          className={cx('h-[22px] py-0 text-[11px]', mine && 'border-accent/60')}
+          value={c.categoryId}
+          emptyLabel={mine ? '— bez kategorii —' : '(jak grupa)'}
+          onChange={(categoryId) => chooseRow(p.key, categoryId === choice.categoryId ? null : { ...c, categoryId })}
+        />
+      ) : (
+        <span />
+      )}
+      <button type="button" className="text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => setSkip([p.key], !out)} data-testid="import-row-skip">
+        {out ? 'importuj' : 'pomiń'}
+      </button>
+    </div>
+  )
+})
+
+/** A group (brand, direction, proposal): its decision and ticks read by its key (W17) – rendered again only when they change. */
+const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inherited: Choice; themeDecided: boolean; found: NewRow[] | 'all' | undefined }) {
   const own = useImport((s) => s.choices.groups[g.group])
   const remember = useImport((s) => s.choices.remember[g.group] ?? false)
-  const rowChoices = useImport((s) => s.choices.rows)
-  const skip = useImport((s) => s.choices.skip)
   const checked = useImport((s) => !!s.selected.groups[g.group])
-  const selectedRows = useImport((s) => s.selected.rows)
   const proposing = useImport((s) => s.lastDecided === g.group && !s.noProposal[g.group])
+  const skipped = useImport((s) => {
+    let n = 0
+    for (const p of g.rows) if (s.choices.skip[p.key]) n++
+    return n
+  })
   const cats = useCategories()
   const [open, setOpen] = useState(false)
+  const [limit, setLimit] = useState(PAGE)
   const partial = Array.isArray(found)
   const shown = partial ? found : g.rows
   const choice = own ?? inherited
-  const skipped = g.rows.filter((p) => skip[p.key]).length
   const badge = own ? 'Twoja decyzja' : themeDecided ? 'jak temat' : SOURCE_LABEL[g.source]
   return (
     <div className="border-t border-line/50 py-1 pl-6" data-testid="import-group" data-group={g.group} data-label={g.label}>
@@ -529,49 +584,28 @@ function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inher
       )}
       {(open || partial) && (
         <div className="mt-1 flex flex-col pl-12" data-testid="import-group-rows">
-          {shown.map((p) => {
-            const mine = rowChoices[p.key]
-            const c = mine ?? choice
-            const out = skip[p.key]
-            return (
-              <div key={p.key} className={cx('grid grid-cols-[18px_48px_minmax(0,1fr)_96px_200px_64px] items-center gap-2 py-[1px] text-[11.5px]', out && 'opacity-50')} data-testid="import-row">
-                <input type="checkbox" checked={!!selectedRows[p.key]} onChange={(e) => selectImport({ rows: [p.key] }, e.currentTarget.checked)} aria-label="Zaznacz operację" data-testid="import-row-select" />
-                <span className="num text-muted">{day(p.row.date)}</span>
-                <span className={cx('min-w-0 truncate text-muted', out && 'line-through')} title={p.row.description}>
-                  {p.row.title || p.row.description}
-                  {p.row.pending && <span className="ml-1 text-accent">nierozliczona</span>}
-                </span>
-                <span className={cx('num text-right', p.row.amount > 0 ? 'text-up' : 'text-fg')}>{signedPln(p.row.amount)}</span>
-                {c.kind === 'expense' ? (
-                  <CategorySelect
-                    className={cx('h-[22px] py-0 text-[11px]', mine && 'border-accent/60')}
-                    value={c.categoryId}
-                    emptyLabel={mine ? '— bez kategorii —' : '(jak grupa)'}
-                    onChange={(categoryId) => chooseRow(p.key, categoryId === choice.categoryId ? null : { ...c, categoryId })}
-                  />
-                ) : (
-                  <span />
-                )}
-                <button type="button" className="text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => setSkip([p.key], !out)} data-testid="import-row-skip">
-                  {out ? 'importuj' : 'pomiń'}
-                </button>
-              </div>
-            )
-          })}
+          {shown.slice(0, limit).map((p) => (
+            <ImportRowLine key={p.key} p={p} choice={choice} />
+          ))}
+          <More shown={limit} total={shown.length} onMore={() => setLimit(limit + PAGE)} testId="import-rows-more" />
         </div>
       )}
     </div>
   )
-}
+})
 
-function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; label: string; status: ThemeStatus; found: Map<string, NewRow[] | 'all'>; searching: boolean }) {
+/** A theme with more groups than this starts closed (W17: a year's first import – hundreds of brands of one theme). */
+const BIG_THEME = 30
+
+const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; label: string; status: ThemeStatus; found: Map<string, NewRow[] | 'all'>; searching: boolean }) {
   const decided = useImport((s) => s.choices.themes[t.theme])
   const remember = useImport((s) => s.choices.rememberThemes[t.theme] ?? false)
   const shown = t.groups.filter((g) => found.has(g.group))
   // The groups shown (in a search: the ones found) – the tick of the theme is theirs.
   const allChecked = useImport((s) => shown.every((g) => s.selected.groups[g.group]))
   const cats = useCategories()
-  const [open, setOpen] = useState(status === 'todo')
+  const [open, setOpen] = useState(status === 'todo' && t.groups.length <= BIG_THEME)
+  const [limit, setLimit] = useState(PAGE)
   const expanded = open || searching
   const proposed = t.basis.kind === 'proposal' ? t.basis.choice : nothing(t.direction)
   const choice = decided ?? proposed
@@ -622,14 +656,15 @@ function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; labe
       </div>
       {expanded && (
         <div className="mt-1 flex flex-col" data-testid="import-theme-groups">
-          {shown.map((g) => (
+          {shown.slice(0, limit).map((g) => (
             <GroupRow key={g.group} g={g} inherited={decided ?? g.proposed} themeDecided={!!decided} found={found.get(g.group)} />
           ))}
+          <More shown={limit} total={shown.length} onMore={() => setLimit(limit + PAGE)} testId="import-groups-more" />
         </div>
       )}
     </div>
   )
-}
+})
 
 /** One decision, or „nie importuj”, for everything ticked (1.2.1). */
 /** The decisions a keyword rule can hold (`KeywordRules`): the search kept as a key for the next imports. */
