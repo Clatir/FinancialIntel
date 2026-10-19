@@ -41,7 +41,10 @@ export function SettingsPage() {
   const route = useUi((s) => s.route)
   const tab = (route.page === 'settings' && route.tab) || 'general'
   const fi = useData((s) => s.fi)
+  const readOnly = useData((s) => !!s.status?.readOnly)
   if (!fi) return null
+  // The budget's settings (fi.json) in a read-only folder: to look at only (N2); this computer's ones stay at hand.
+  const locked = readOnly && (tab === 'general' || tab === 'accounts' || tab === 'categories' || tab === 'layers' || tab === 'household')
   return (
     <div className="flex h-full min-h-0">
       <nav className="flex shrink-0 flex-col border-r border-line bg-panel py-1" style={{ width: nav.width }}>
@@ -63,17 +66,24 @@ export function SettingsPage() {
       <PaneEdge pane={nav} side="left" />
       <div className="min-w-0 flex-1 overflow-y-auto p-3">
         <div className="mx-auto flex max-w-[980px] flex-col gap-3">
-          {tab === 'general' && <GeneralTab />}
-          {tab === 'accounts' && <AccountsTab />}
-          {tab === 'categories' && <CategoriesTab />}
-          {tab === 'layers' && <LayersTab />}
-          {tab === 'household' && <HouseholdTab />}
-          {tab === 'import' && <ImportTab />}
-          {tab === 'ictj' && <IctjTab />}
-          {tab === 'notify' && <NotifyTab />}
-          {tab === 'folder' && <FolderTab />}
-          {tab === 'system' && <SystemTab />}
-          {tab === 'updates' && <UpdatesTab />}
+          {locked && (
+            <p className="text-[11.5px] text-accent" data-testid="settings-read-only">
+              Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.
+            </p>
+          )}
+          <fieldset disabled={locked} className="contents">
+            {tab === 'general' && <GeneralTab />}
+            {tab === 'accounts' && <AccountsTab />}
+            {tab === 'categories' && <CategoriesTab />}
+            {tab === 'layers' && <LayersTab />}
+            {tab === 'household' && <HouseholdTab />}
+            {tab === 'import' && <ImportTab />}
+            {tab === 'ictj' && <IctjTab />}
+            {tab === 'notify' && <NotifyTab />}
+            {tab === 'folder' && <FolderTab />}
+            {tab === 'system' && <SystemTab />}
+            {tab === 'updates' && <UpdatesTab />}
+          </fieldset>
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { newId } from '@shared/ids'
 import { emptyFilter, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
 import { shareOf, withShare } from '@shared/calc/share'
 import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type Share, type Transaction } from '@shared/schema'
-import { addRecord, deleteRecords, discardDraft, replaceRecords, updateSettings, useData } from '../../store/data'
+import { addRecord, canWrite, deleteRecords, discardDraft, replaceRecords, updateSettings, useData } from '../../store/data'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteWithUndo, restoreDeleted } from '../history/actions'
@@ -81,6 +81,8 @@ export const clearTicked = () => useOperationsUi.setState({ ticked: {} })
  * of each brand for the import, 'keyword' = the search as a keyword rule.
  */
 export function categorizeTicked(visibleIds: readonly string[], categoryId: string, remember: 'none' | 'brands' | 'keyword', label: string): void {
+  // A read-only folder: one message, never a success with „Cofnij” for nothing (N2).
+  if (!canWrite()) return
   const { ticked, filter } = useOperationsUi.getState()
   const data = useData.getState()
   const ops = visibleIds
@@ -132,6 +134,7 @@ const financing = (t: Transaction) => JSON.stringify([t.refundable, t.refundable
  * other kinds of operations; a shared purchase takes the new financing.
  */
 export function financeTicked(visibleIds: readonly string[], choice: FinanceChoice, label: string): void {
+  if (!canWrite()) return
   const { ticked } = useOperationsUi.getState()
   const data = useData.getState()
   const ops = visibleIds

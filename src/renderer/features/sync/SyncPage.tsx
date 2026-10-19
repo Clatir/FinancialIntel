@@ -1,10 +1,10 @@
 // adapted from ICTTJ src/renderer/features/sync/SyncPage.tsx @ 84a8339
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSelection, type Selection } from '../../lib/selection'
-import type { ConflictEntry, HistoryEntry } from '@shared/api'
+import type { ConflictEntry, HistoryEntry, HistoryKind } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import { newerSide, newestResolutions } from '@shared/conflicts'
-import { isAmountKey } from '@shared/merge'
+import { chooser, fieldLabel, formatValue, isAmountKey, isAmountPath, merge3, pathKey, type MergeConflict, type Side } from '@shared/merge'
 import { plnText } from '../../components/fields'
 import { recordTitle } from '../../lib/recordTitle'
 import { HistoryButton } from '../history/HistoryDialog'
@@ -45,8 +45,101 @@ function flatten(value: unknown, prefix = '', out: Record<string, string> = {}):
   return out
 }
 
+/**
+ * The base of a conflict's merge (N17): the newest version in the history saved before either side's change (its
+ * `updatedAt` not later than both); none = every difference is a question.
+ */
+async function mergeBase(c: ConflictEntry): Promise<unknown> {
+  const id = (c.canonical.record as { id?: string } | null)?.id
+  const limit = [c.canonical.updatedAt, c.copy.updatedAt]
+  if (!id || limit.some((t) => !t)) return undefined
+  const until = limit.sort()[0]!
+  try {
+    const entry = (await api.historyList(c.kind as HistoryKind, id)).filter((e) => e.updatedAt && e.updatedAt <= until).sort((a, b) => b.updatedAt!.localeCompare(a.updatedAt!))[0]
+    return entry ? await api.historyRead(c.kind as HistoryKind, id, entry.file) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const shownValue = (path: readonly string[], v: unknown) => (typeof v === 'number' && isAmountPath([...path]) ? `${plnText(v)} zł` : formatValue(v))
+
+/**
+ * „Scal” (N17): the two versions joined field by field, as the window of a change from another computer does – what
+ * changed on one side only is taken, a field changed on both is a choice (the newer side proposed).
+ */
+function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClose: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
+  const [state, setState] = useState<{ base: unknown; conflicts: MergeConflict[]; choices: Record<string, Side> } | null>(null)
+  const readOnly = useData((s) => !!s.status?.readOnly)
+  useEffect(() => {
+    let alive = true
+    void mergeBase(c).then((base) => {
+      if (!alive) return
+      const { conflicts } = merge3(base, c.canonical.record, c.copy.record)
+      const proposed: Side = newerSide(c) === 'copy' ? 'theirs' : 'mine'
+      setState({ base, conflicts, choices: Object.fromEntries(conflicts.map((x) => [pathKey(x.path), proposed])) })
+    })
+    return () => {
+      alive = false
+    }
+  }, [c])
+  if (!state) return <div className="mt-2 text-[11.5px] text-muted">Szukam wspólnej wersji w historii…</div>
+  const save = async () => {
+    setBusy(true)
+    try {
+      if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.')
+      const { merged } = merge3(state.base, c.canonical.record, c.copy.record, chooser(state.choices))
+      await api.mergeConflict(c.id, merged)
+      toast('Scalono obie wersje – każda z nich jest w historii wpisu.', 'success')
+      onClose()
+    } catch (e) {
+      toast(errorMessage(e), 'error', 6000)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1.5 border border-accent/40 p-2" data-testid="conflict-merge">
+      <div className="text-[11.5px] text-muted">
+        {state.base === undefined ? 'Bez wspólnej wersji w historii – każda różnica to wybór.' : 'Zmiany tylko po jednej stronie łączą się same; wybierz przy polach zmienionych po obu.'}
+      </div>
+      {state.conflicts.length === 0 && <div className="text-[12px] text-fg" data-testid="conflict-merge-clean">Wszystko łączy się bez pytań.</div>}
+      {state.conflicts.map((x) => {
+        const key = pathKey(x.path)
+        const pick = (side: Side) => setState((s) => (s ? { ...s, choices: { ...s.choices, [key]: side } } : s))
+        return (
+          <div key={key} className="grid grid-cols-[180px_1fr_1fr] items-baseline gap-2 text-[11.5px]" data-testid="conflict-merge-field" data-path={key}>
+            <span className="truncate text-muted" title={key}>
+              {fieldLabel(x.path)}
+            </span>
+            {(['mine', 'theirs'] as const).map((side) => (
+              <label key={side} className="flex min-w-0 items-baseline gap-1.5">
+                <input type="radio" checked={state.choices[key] === side} onChange={() => pick(side)} data-testid={`conflict-merge-${side === 'mine' ? 'canonical' : 'copy'}`} />
+                <span className="truncate">
+                  <span className="text-dim">{side === 'mine' ? 'oryginał: ' : 'kopia: '}</span>
+                  {shownValue(x.path, side === 'mine' ? x.mine : x.theirs)}
+                </span>
+              </label>
+            ))}
+          </div>
+        )
+      })}
+      <div className="flex gap-2">
+        <button className="btn btn-accent h-[24px]" disabled={busy || readOnly} onClick={() => void save()} data-testid="conflict-merge-save">
+          Zapisz scalone
+        </button>
+        <button className="btn h-[24px]" onClick={onClose}>
+          Anuluj
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEntry; selected: boolean; onSelect: (v: boolean) => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const newer = newerSide(c)
+  const readOnly = useData((s) => !!s.status?.readOnly)
+  const [merging, setMerging] = useState(false)
   const a = flatten(c.canonical.record ?? {})
   const b = flatten(c.copy.record ?? {})
   // An amount in grosze (B7): in złoty, hidden with the amounts (Ctrl+$).
@@ -83,7 +176,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         {s.mtimeMs ? ` · plik: ${new Date(s.mtimeMs).toLocaleString('pl-PL')}` : ''}
       </div>
       {s.error && <div className="text-[11.5px] text-down">{s.error}</div>}
-      <button className="btn self-start" disabled={busy || !s.record} title={!s.record ? 'Tej wersji nie da się odczytać – zachowaj drugą.' : undefined} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
+      <button className="btn self-start" disabled={busy || readOnly || !s.record} title={!s.record ? 'Tej wersji nie da się odczytać – zachowaj drugą.' : undefined} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
         Zachowaj tę wersję
       </button>
     </div>
@@ -99,11 +192,19 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         </span>
       }
       actions={
-        <button className="btn btn-ghost h-[22px] px-1.5" title="Pokaż w folderze" onClick={() => api.showInFolder(c.copy.relPath)}>
-          <IconFolder size={13} />
-        </button>
+        <>
+          {c.canonical.record != null && c.copy.record != null && (
+            <button className="btn h-[22px]" disabled={busy || readOnly} onClick={() => setMerging((m) => !m)} title="Połącz obie wersje pole po polu" data-testid="conflict-merge-open">
+              Scal…
+            </button>
+          )}
+          <button className="btn btn-ghost h-[22px] px-1.5" title="Pokaż w folderze" onClick={() => api.showInFolder(c.copy.relPath)}>
+            <IconFolder size={13} />
+          </button>
+        </>
       }
     >
+      {merging && <ConflictMerge c={c} onClose={() => setMerging(false)} busy={busy} setBusy={setBusy} />}
       <div className="grid grid-cols-2 gap-4">
         {side('Oryginał', c.canonical, 'canonical')}
         {side('Kopia', c.copy, 'copy')}
@@ -216,6 +317,7 @@ function DeletedRecords() {
  */
 function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictEntry[]; sel: Selection; busy: boolean; setBusy: (b: boolean) => void }) {
   const chosen = conflicts.filter((c) => sel.selected.has(c.id))
+  const readOnly = useData((s) => !!s.status?.readOnly)
   const run = async (ids: string[]) => {
     setBusy(true)
     const plan = newestResolutions(conflicts, ids)
@@ -257,10 +359,10 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
       </label>
       <span className="text-[11.5px] text-dim">„Zachowaj nowsze” bierze wersję zmienioną później (czas zapisu w pliku, inaczej czas pliku).</span>
       <div className="flex-1" />
-      <button className="btn" disabled={busy || chosen.length === 0} onClick={() => void run(chosen.map((c) => c.id))} data-testid="conflicts-newer-selected">
+      <button className="btn" disabled={busy || readOnly || chosen.length === 0} onClick={() => void run(chosen.map((c) => c.id))} data-testid="conflicts-newer-selected">
         Zachowaj nowsze: zaznaczone ({chosen.length})
       </button>
-      <button className="btn" disabled={busy} onClick={() => void run(conflicts.map((c) => c.id))} data-testid="conflicts-newer-all">
+      <button className="btn" disabled={busy || readOnly} onClick={() => void run(conflicts.map((c) => c.id))} data-testid="conflicts-newer-all">
         Zachowaj nowsze: wszystkie ({conflicts.length})
       </button>
     </div>
@@ -336,6 +438,7 @@ export function SyncPage() {
                   </button>
                   <button
                     className="btn h-[22px] hover:text-down"
+                    disabled={!!status?.readOnly}
                     onClick={() => api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))}
                   >
                     <IconTrash size={12} /> Do Kosza

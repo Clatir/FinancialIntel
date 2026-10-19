@@ -8,7 +8,7 @@ import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates
 import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
 import { pit38Deadline, radar, type RadarItem } from '@shared/calc/radar'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
-import { useData } from '../../store/data'
+import { canWrite, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
@@ -267,6 +267,7 @@ function NewLoanPanel({ today }: { today: string }) {
     if (!o.name.trim()) return toast('Nazwij pożyczkę (np. „Pożyczka dla Ani”).', 'error')
     if (o.amount <= 0) return toast('Podaj kwotę pożyczki.', 'error')
     if (o.firstDue < o.date) return toast('Pierwsza rata nie może być przed datą pożyczki.', 'error')
+    if (!canWrite()) return
     addLoan({ ...o, total: taken && o.total > 0 ? o.total : o.amount })
     setO(blank())
   }

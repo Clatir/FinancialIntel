@@ -257,13 +257,15 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const firstMember = members.find((m) => !m.archived)
   // Only what the list shows: an operation that left it (edited, deleted, changed elsewhere) is not changed.
   const shown = visible.filter((t) => ticked[t.id])
+  const readOnly = useData((s) => !!s.status?.readOnly)
   const n = shown.length
   if (!n) return null
   const sum = shown.reduce((s, t) => s + t.amount, 0)
   const keyword = keywordOfSearch(query)
   const mode = remember === 'keyword' && !keyword ? 'none' : remember
+  // A read-only folder: the bulk changes off (N2) – ticking and the sum stay.
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/50 bg-raised px-3 py-1.5 text-[12px]" data-testid="operations-bulk">
+    <fieldset disabled={readOnly} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/50 bg-raised px-3 py-1.5 text-[12px]" data-testid="operations-bulk">
       <span className="text-fg-strong" data-testid="operations-bulk-count">
         Zaznaczone: {n} {plural(n, 'operacja', 'operacje', 'operacji')} · <span className="num">{signedPln(sum)} zł</span>
       </span>
@@ -338,7 +340,7 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
         Odznacz
       </button>
-    </div>
+    </fieldset>
   )
 }
 

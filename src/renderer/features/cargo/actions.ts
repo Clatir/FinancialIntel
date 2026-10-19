@@ -2,7 +2,7 @@ import { firstDayOf, monthOf, warsawNow } from '@shared/calc/dates'
 import { unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
 import { newId } from '@shared/ids'
 import { containerSchema, SCHEMA_VERSION, type Container, type Transaction } from '@shared/schema'
-import { addRecord, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { deleteWithUndo } from '../history/actions'
 
@@ -51,10 +51,7 @@ function runningMonth(): string | null {
 const fromNow = <T extends Pick<Container, 'cycleMonths' | 'from'>>(c: T): T => (c.cycleMonths > 1 && c.from == null ? { ...c, from: runningMonth() } : c)
 
 export function addContainer(draft: ContainerDraft): string | null {
-  if (useData.getState().status?.readOnly) {
-    toast('Folder jest tylko do odczytu.', 'error')
-    return null
-  }
+  if (!canWrite()) return null
   const now = new Date().toISOString()
   const record = containerSchema.parse({ ...fromNow(draft), schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now })
   addRecord('containers', record)
@@ -79,7 +76,7 @@ export function paymentsToLink(counterparty: string, txs: readonly Transaction[]
  */
 export function linkPayments(containerId: string, counterparty: string, quiet = false): number {
   const from = linkFrom()
-  if (!from || useData.getState().status?.readOnly) return 0
+  if (!from || !canWrite()) return 0
   const records = useData.getState().records
   // A payment of a container deleted (B58) is not linked: it may join this one.
   const found = unlinkedPayments(listOf(records.transactions), counterparty, from, new Set(Object.keys(records.containers)))

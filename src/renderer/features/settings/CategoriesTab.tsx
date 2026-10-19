@@ -1,6 +1,6 @@
 import { newId } from '@shared/ids'
 import { envelopeKind, type Category, type EnvelopeKind } from '@shared/schema'
-import { updateSettings } from '../../store/data'
+import { canWrite, updateSettings } from '../../store/data'
 import { toast } from '../../store/ui'
 import { dropEnvelope, restoreEnvelope } from '../month/actions'
 import { IconPlus } from '../../components/icons'
@@ -16,6 +16,7 @@ function patchCategory(id: string, p: Partial<Category>): void {
  * the sums and today's energy; „Cofnij” brings the category and its envelopes back.
  */
 function archiveMain(c: Category): void {
+  if (!canWrite()) return
   patchCategory(c.id, { archived: true })
   const taken = dropEnvelope(c.id)
   if (taken.size)

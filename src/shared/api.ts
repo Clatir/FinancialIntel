@@ -246,6 +246,8 @@ export interface FiApi {
   historyKeep(kind: HistoryKind, record: unknown, reason: HistoryReason): Promise<void>
   saveSettings(fi: SettingsFile): Promise<SettingsFile>
   resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<void>
+  /** The conflict merged field by field (N17): both versions to the history, the merged one at the original's path. */
+  mergeConflict(conflictId: string, merged: unknown): Promise<void>
   /**
    * Many conflicts in the order given, one change for the window (W23); a group whose copy could not be kept leaves
    * its other conflicts as they are (`skipped`).

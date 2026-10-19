@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
-import { addRecord, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
 const NO_PLANS = {}
@@ -29,10 +29,7 @@ const sameEnvelopes = (a: Record<string, number>, b: Record<string, number>) => 
  * on the plan in force keeps it as its own first (B11): the current month and those after never change with it.
  */
 export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): void {
-  if (useData.getState().status?.readOnly) {
-    toast('Folder jest tylko do odczytu – planu nie można zmienić.', 'error')
-    return
-  }
+  if (!canWrite()) return
   const plans = allPlans()
   const now = new Date().toISOString()
   const own = plans.find((p) => p.month === month)

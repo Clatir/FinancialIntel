@@ -646,11 +646,35 @@ function scheduleSave(collection: Collection | 'fi', id: string, delay = saveDel
 
 const folderReadOnly = () => !!get().status?.readOnly
 
-/** Update a record in memory immediately and save it to disk shortly after (autosave). `background` = a fill by the app, not the user. */
-export function updateRecord<C extends Collection>(collection: C, id: string, updater: (r: RecordTypes[C]) => RecordTypes[C], opts: { background?: boolean } = {}): void {
+export const READ_ONLY_MESSAGE = 'Folder jest tylko do odczytu – zmiany nie są zapisywane.'
+let readOnlyNoticedAt = 0
+
+/** A change the read-only folder does not take (N2): said once in a few seconds – never silently, never as a success. */
+function readOnlyNotice(): void {
+  if (Date.now() - readOnlyNoticedAt < 4000) return
+  readOnlyNoticedAt = Date.now()
+  toast(READ_ONLY_MESSAGE, 'error', 5000)
+}
+
+/** A user's action may write: false – with the one message – in a read-only folder (N2); its success is never shown. */
+export function canWrite(): boolean {
+  if (!folderReadOnly()) return true
+  readOnlyNotice()
+  return false
+}
+
+/**
+ * Update a record in memory immediately and save it to disk shortly after (autosave). `background` = a fill by the app,
+ * not the user. false = nothing changed (no such record, a read-only file or folder – N2).
+ */
+export function updateRecord<C extends Collection>(collection: C, id: string, updater: (r: RecordTypes[C]) => RecordTypes[C], opts: { background?: boolean } = {}): boolean {
   const current = (get().records[collection] as EntryMap<C>)[id]
   // Read-only folder (newer format, unavailable drive) or file: no edits that could never be saved.
-  if (!current || current.readOnly || folderReadOnly()) return
+  if (folderReadOnly()) {
+    if (!opts.background) readOnlyNotice()
+    return false
+  }
+  if (!current || current.readOnly) return false
   const key = keyOf(collection, id)
   if (!dirty.has(key) && !bases.has(key) && !get().drafts[id]) bases.set(key, current.record)
   const record = updater(current.record)
@@ -665,32 +689,46 @@ export function updateRecord<C extends Collection>(collection: C, id: string, up
     return { ...withMap(s, collection, { ...mapOf(s, collection), [id]: { ...current, record } as RecordEntry<RecordTypes[Collection]> }), drafts }
   })
   scheduleSave(collection, id)
+  return true
 }
 
-/** Add a record. Drafts live only in memory until the first edit. */
-export function addRecord<C extends Collection>(collection: C, record: RecordTypes[C], opts: { draft?: boolean } = {}): void {
-  if (folderReadOnly()) return
+/** Add a record. Drafts live only in memory until the first edit. false = a read-only folder (N2). */
+export function addRecord<C extends Collection>(collection: C, record: RecordTypes[C], opts: { draft?: boolean; background?: boolean } = {}): boolean {
+  if (folderReadOnly()) {
+    if (!opts.background) readOnlyNotice()
+    return false
+  }
   set((s) => ({
     ...withMap(s, collection, { ...mapOf(s, collection), [record.id]: { record, relPath: '', readOnly: false } as RecordEntry<RecordTypes[Collection]> }),
     drafts: opts.draft ? { ...s.drafts, [record.id]: true as const } : s.drafts
   }))
   if (!opts.draft) scheduleSave(collection, record.id, 0)
+  return true
 }
 
 /** Many new records at once (an import): one change of the state, all saved with one call right after (W1). */
-export function addRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): void {
-  if (folderReadOnly() || !records.length) return
+export function addRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): boolean {
+  if (!records.length) return true
+  if (folderReadOnly()) {
+    readOnlyNotice()
+    return false
+  }
   set((s) => {
     const map = { ...mapOf(s, collection) }
     for (const r of records) map[r.id] = { record: r, relPath: '', readOnly: false } as RecordEntry<RecordTypes[Collection]>
     return withMap(s, collection, map)
   })
   saveBatch(collection, records.map((r) => r.id))
+  return true
 }
 
 /** Many changed records at once (an import's merges and settled rows): each like `updateRecord`, one change of the state. */
-export function replaceRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): void {
-  if (folderReadOnly() || !records.length) return
+export function replaceRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): boolean {
+  if (!records.length) return true
+  if (folderReadOnly()) {
+    readOnlyNotice()
+    return false
+  }
   const current = get().records[collection] as EntryMap<C>
   const changed = records.filter((r) => current[r.id] && !current[r.id]!.readOnly)
   for (const r of changed) {
@@ -706,6 +744,7 @@ export function replaceRecords<C extends Collection>(collection: C, records: rea
     return { ...withMap(s, collection, map), drafts }
   })
   saveBatch(collection, changed.map((r) => r.id))
+  return true
 }
 
 /** Drop an untouched draft (never written to disk). */
@@ -811,14 +850,19 @@ export function adoptSettings(fi: SettingsFile): void {
 }
 
 /** Change fi.json in memory now and save it shortly after (autosave). */
-export function updateSettings(updater: (f: SettingsFile) => SettingsFile, opts: { background?: boolean } = {}): void {
+export function updateSettings(updater: (f: SettingsFile) => SettingsFile, opts: { background?: boolean } = {}): boolean {
   const f = get().fi
-  if (!f || folderReadOnly()) return
+  if (!f) return false
+  if (folderReadOnly()) {
+    if (!opts.background) readOnlyNotice()
+    return false
+  }
   if (!dirty.has(FI_KEY) && !bases.has(FI_KEY)) bases.set(FI_KEY, f)
   const next = updater(f)
   stampEdits(FI_KEY, f, next, !!opts.background)
   set({ fi: next })
   scheduleSave('fi', 'fi')
+  return true
 }
 
 /**

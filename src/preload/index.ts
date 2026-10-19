@@ -35,6 +35,7 @@ const api: FiApi = {
   saveSettings: (fi) => invoke('saveSettings', fi),
   resolveConflict: (id, keep) => invoke('resolveConflict', id, keep),
   resolveConflicts: (items) => invoke('resolveConflicts', items),
+  mergeConflict: (id, merged) => invoke('mergeConflict', id, merged),
   trashProblemFile: (rel) => invoke('trashProblemFile', rel),
   showInFolder: (rel) => invoke('showInFolder', rel),
   openExternal: (url) => invoke('openExternal', url),

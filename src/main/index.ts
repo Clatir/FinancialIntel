@@ -632,6 +632,9 @@ function registerIpc(): void {
   handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy') => {
     send(await requireStore().resolveConflict(id, keep))
   })
+  handle('mergeConflict', async (id: string, merged: unknown) => {
+    send(await requireStore().mergeConflict(id, merged))
+  })
   handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
     const { results, change } = await requireStore().resolveConflicts(items)
     send(change)

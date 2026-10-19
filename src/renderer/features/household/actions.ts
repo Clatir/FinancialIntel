@@ -9,7 +9,7 @@ import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
-import { updateSettings, useData } from '../../store/data'
+import { canWrite, updateSettings, useData } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
 import { toast } from '../../store/ui'
@@ -40,7 +40,7 @@ function freeName(name: string): string {
 
 /** A member from a counterparty of the import (D80 a): the bank's name is theirs; the id, or null (read-only folder). */
 export function addMemberFromBank(bankName: string): string | null {
-  if (useData.getState().status?.readOnly) return null
+  if (!canWrite()) return null
   const id = newId()
   const name = freeName(nameOf(bankName))
   patchMembers((ms) => [...ms, { id, name, bankNames: [bankName.trim().slice(0, 120)], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
@@ -49,7 +49,7 @@ export function addMemberFromBank(bankName: string): string | null {
 }
 
 export function addMember(name: string): string | null {
-  if (useData.getState().status?.readOnly || !name.trim()) return null
+  if (!name.trim() || !canWrite()) return null
   const id = newId()
   patchMembers((ms) => [...ms, { id, name: freeName(name.trim().slice(0, 40)), bankNames: [], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
   return id
