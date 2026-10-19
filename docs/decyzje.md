@@ -1504,3 +1504,59 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`amountAt`); dokowanie wpływu z Portfela na bieżącym rekordzie; miesiąc celu bez kwoty z dnia wpisu ICTTJ; „to nie
   powtórzenie”; klucz silnika z treści mapy podatku, nie z tablicy wpisów; pamięć ocen dni niezamrożonych; „po terminie”
   bez ETA przy tempie; „Tempo” z tego samego przejścia dziennika; dokumentacja `chooseMission`.
+- **T231** Opis operacji mBanku (B103, B105): rodzaj operacji kończy się tam, gdzie nie idzie dalej litera ani cyfra (także
+  po polskiej literze – „PŁATNOŚĆ WEB…”, „SPRZEDAŻ WALUTY”). Przelew z listy operacji: części po pierwszej (do adresu albo
+  numeru rachunku) są nazwą tylko wtedy, gdy przed nimi nie ma „nazwa, tytuł” (mTransfer: „Doładowanie telefonu | BLUE
+  MEDIA SPÓŁKA AKCYJNA”), gdy powtarzają nazwę sprzed przecinka (XTB) albo gdy są firmą – forma prawna, operator płatności
+  („Zamówienie 12, sklep X | PAYU SPÓŁKA AKCYJNA”); inaczej to dalszy ciąg tytułu z podwójną spacją („ZA  OBIAD”).
+- **T232** Rozpoznanie (B104, B106, N86, doprecyzowuje T37): klucze marek, połączonych nazw i podpowiedzi mBanku tylko jako
+  własne pola (`Object.hasOwn` – marka „constructor”). XTB po kontrahencie (bez operatora płatności przed sklepem –
+  „PAYU*XTB”), po opisie tylko bez własnego kontrahenta (brak albo sam operator płatności); przelew własny, zwrot pożyczki i
+  pieniądze domownika rozpoznawane przed XTB („na portfel XTB”, „zwrot za kurs XTB”). Reguła wydatku – także reguła zakupu
+  dla zwrotu towaru – z kategorią zarchiwizowaną: bez kategorii, źródło „do decyzji”, powód „kategoria reguły
+  zarchiwizowana – wybierz nową” (wybór użytkownika zmienia regułę); w Ustawieniach reguła z dopiskiem „(zarchiwizowana)”.
+- **T233** Łączenie z wpisami ręcznymi i duplikaty (B95, B99, B100, B102, N88, N89; zmienia T36 i T92): podobieństwo nazw
+  (`counterpartySimilarity`) – pewne: ten sam klucz, ta sama marka (`brandOf`: „KFC” i „KFC 1234 WARSZAWA”), klucz w
+  drugim, gdy ma co najmniej 5 liter i mówi kto, albo dwa wspólne słowa mówiące kto (4 litery i więcej; nie słowo ogólne –
+  „polska”, „sklep”, „spółka” –, rodzaj miejsca, słowo kluczowe ani miasto); „może” – jedno takie słowo albo krótki klucz /
+  słowo „co” w drugim („bar” – „BARBERSHOP”, „Sklep” – „SKLEP OLA”): pytane, nigdy łączone samo. Jedna reguła importu i
+  panelu duplikatów (`looseSure`): pewne = podobna nazwa ponad „może” albo zakup kartą najwyżej dzień obok, inaczej
+  pytane (w panelu niezaznaczone); nazwa banku = kontrahent, inaczej opis (nigdy pusta). Wpis zapisany przez nowszą
+  wersję (tylko do odczytu) nie jest łączony, rozliczany ani proponowany do usunięcia jako zniknięty – wiersz banku wchodzi
+  jako nowy, panel duplikatów blokuje scalenie z nim. Kwota z banku (rozliczenie nierozliczonej, scalenie z wpisem
+  ręcznym) przeskalowuje linie paragonu proporcjonalnie (grosze zaokrągleń do największej linii; udział domownika zostaje
+  jego), części wpłaty zostają (różnica – reszta nadawcy), wspólny zakup od nowa. Scalenie duplikatów przenosi `covers`
+  wpłat domowników na zachowaną operację.
+- **T234** Usunięte nierozliczone (B96, doprecyzowuje T39): wiersz banku rozliczający nierozliczoną usuniętą przez
+  użytkownika (inna kwota do max(5 zł, 10 %), ±3 dni, podobna nazwa banku – jak przy rozliczeniu) nie wchodzi sam: status
+  „usunięta” z „importuj mimo to”. Pary od najbliższej, każda usunięta i każdy wiersz raz; wiersz już w budżecie, który
+  wszedł po usunięciu (wpuszczony wcześniej przez „importuj mimo to”), zabiera swoją usuniętą – nie ukrywa wtedy innego
+  zakupu tego sklepu. Nierozliczone usunięte przez sam import jako „bank już ich nie pokazuje” (zapisane w paczce importu –
+  F4, ostatnie 10) nie są usunięciem użytkownika – ich rozliczenie po końcu okresu pliku wchodzi.
+- **T235** Ekran importu (B93, B94, B97, B98, B101, N74–N85, N87, N90): w trakcie zapisu importu ekran jest wyłączony,
+  „Zamknij plik” i upuszczony plik czekają; upuszczony plik jak wybrany (limit 20 MB – `IMPORT_MAX_BYTES`, błąd odczytu z
+  komunikatem); błąd zapisu kończy import wynikiem i komunikatem (zapis ponawiany), nigdy plikiem z nieaktualnym podglądem;
+  zmiana folderu zamyka sesję. Własna decyzja po przyjętej podpowiedzi zapamiętywana domyślnie; plakietki „podpowiedź
+  mBanku” / „przyjęte” / „Twoja decyzja”. „(jak grupa)” w kategorii operacji = decyzja grupy. „+ domownik”: pieniądze osoby
+  to decyzja użytkownika (reguła nadawcy jak każda), reszta ponad należność – pytanie „zaliczka czy przychód?” (temat „do
+  decyzji”, także po nowym planie z innym kluczem grupy); odpowiedź zapamiętana dla osoby tylko z decyzji użytkownika,
+  głosami operacji bez pominiętych. Temat: „różne – patrz marki”, gdy marki zdecydowano różnie; jednakowe decyzje marek
+  pokazane jako decyzja tematu – jej zmiana je zastępuje. Słowo kluczowe z paska zbiorczego dla każdej decyzji ze słowem
+  (wydatek, wpływ, przelew, domownik), kierunek z zaznaczonych, do których decyzja pasuje; żaden nie pasuje – słowo
+  niezapisane. Wyszukiwarka po kategorii, którą grupa dostaje (nie propozycji), bez powodu propozycji; „Przyjmij pewne” i
+  „Przyjmij podpowiedzi” w wyszukiwaniu tylko na znalezionych. Własna decyzja operacji inna niż wydatek widoczna z „jak
+  grupa”; wiersz usuniętej „importuj mimo to” w grupach i tematach jak nowy. Panel duplikatów: polskie nazwy rodzajów,
+  daty dd.mm.rrrr, „to nie duplikat” z „Cofnij” i „pokazuj znowu” w Ustawieniach; przy otwartym pliku notka „Możliwe
+  duplikaty: n”. Jeden opis decyzji reguły (Reguły importu, Słowa kluczowe, propozycja słowa – `ruleDecisionText`) i
+  kierunku (`directionText`).
+- **T236** Wydajność importu (W31–W36): reguła wiersza raz na propozycje słów, wzorzec słowa raz na kandydata; marki reguł i
+  indeks reguł dokładnych raz na listę reguł; pary podobnych nazw liczone raz, „To nie to samo” je tylko filtruje; decyzje
+  zbiorcze jedną zmianą stanu; nauka reguł importu w jednej kopii listy (`upsertRules`); lista reguł w Ustawieniach po 100;
+  różnice i scalanie tablic z id przez mapę (ten sam element – bez zaglądania); plakietka „nowsza” w oknie zmian liczona
+  raz na wersję i zapis. Starych reguł nic samo nie usuwa (zmiana widoczna dla użytkownika – osobna decyzja).
+- **T237** Przegląd grupy O (`/code-review` high, 10 kandydatów – wszystkie poprawione, każdy z testem albo E2E): pytanie
+  „zaliczka czy przychód?” zostaje przy nowym planie, „zapamiętaj” domyślne po odpowiedzi; usunięte nierozliczone od
+  najbliższej pary i zabierane przez wiersz wpuszczony wcześniej; zniknięte usunięte przez import nie ukrywają swojego
+  rozliczenia; słowo kluczowe bez pasujących niezapisane; temat z jednakowymi decyzjami marek; nierozliczona tylko do
+  odczytu nie jest „zniknięta”; ta sama marka i krótkie nazwy (pytane); mTransfer z przecinkiem w tytule; plakietka
+  „nowsza” po zapisie ustawień.

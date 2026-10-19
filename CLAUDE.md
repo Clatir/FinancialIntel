@@ -680,6 +680,28 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/ictj-game-goals.test.ts`, poszerzone `game`, `household`, `inbox`, `share`, `tests/fs/ictj.test.ts`
   (B71–B73), E2E `inbox.spec.ts` (podwójna korekta), `household.spec.ts`.
 
+## Kod (1.6.3 – import, grupa O, D87)
+- Opis i rozpoznanie (T231, T232): `mbank.ts` – `OPERATION_START` z końcem słowa Unicode, `sameName` / `isCompany` (nazwa w
+  drugiej części opisu przelewu); `aliases.ts` / `classify.ts` – `Object.hasOwn`; `classify.ts` – `isXtb` po kontrahencie
+  (`PROCESSOR_ONLY`), kolejność przelew własny → domownik → XTB, kategoria reguły przez `usable` (zarchiwizowana → źródło
+  'none'), `ClassifyContext.locked` (operacje tylko do odczytu), `upsertRules` / `LearnedRule` (nauka jedną kopią listy).
+- Łączenie i duplikaty (T233, T234): `reconcile.ts` – `counterpartySimilarity` ('key' / 'words' / 'word' / 'empty',
+  `brandOf`, `telling`), `LooseMatch.strong`, `looseSure`, `settleScore`, `DeletedPending` {…, `deletedAt`} i pary od
+  najbliższej (wiersz w budżecie po usunięciu zabiera swoją), `importGroups(plan, restored)`, `ImportChoices.implicit`
+  (pytanie „zaliczka czy przychód?” po „+ domownik”), liczniki `settled`; `share.ts` `withBankAmount` / `scaledSplits`;
+  `duplicates.ts` – nazwa banku z opisu, `DuplicateGroup.ask`, `mergeDuplicate` przez `withBankAmount`; `merge.ts` `byIds`;
+  `text.ts` `IMPORT_MAX_BYTES`; `learn.ts` – reguła wiersza raz, `keywordMatcher`; `similar.ts` – `ruleBrand`, `exactRules`.
+- Ekran (T235–T237): `features/import/state.ts` – `dropImportFile`, blokada w trakcie zapisu (`busy`, `fieldset disabled`),
+  `deletedBankRows` (bez zniknięć z paczek importu), `lockedOf`, `decideNewMember` / `implicit` (przenoszone przez
+  `replanImport`), `chooseThemeOverGroups`, `inflowVotes`, sesja zamykana przy zmianie folderu; `ImportPage.tsx` – plakietki
+  podpowiedzi, `import-row-own` / `import-row-reset`, `import-theme-mixed`, `keywordKindOf`, `import-bulk-keyword-caught`,
+  `DuplicatesNote` (`import-duplicates-note`); `DuplicatesPanel.tsx` – nazwy rodzajów, daty, `undismiss`, `covers`;
+  `rules.ts` – `ruleDecisionText`, `directionText`, `clearNotDuplicates` (`duplicates-undismiss` w Ustawieniach);
+  `RulesAudit.tsx` – lista reguł po 100 (`import-rules-more`); `RemoteChangesDialog.tsx` – `NewerBadge` z pamięcią na wersję
+  i zapis.
+- Testy: `tests/unit/import-fixes.test.ts` (mutacje: każda poprawka i znalezisko przeglądu), poszerzone `share`, E2E
+  `import.spec.ts` (odpowiedź „zaliczka czy przychód?” po „+ domownik”).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -774,4 +796,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   z podziałem i sprzed startu, pominięty wpis z parą, odczyt ICTTJ odporny na błędy, ETA z pulą Cele, cel ICTTJ bez kwoty,
   „po terminie”, masa ładunku w dniu zmiany, misje widzą dni niezamrożone, klasa ponad szczyt 30 dni, rozkazy w
   Dowództwie, saldo na start z datą, podwójna korekta, kreator bez utraty kopert, raport wachty bieżącego tygodnia
+- [x] 1.6.3 Import (grupa O, D87): rodzaje operacji z polskimi literami, tytuły z podwójną spacją, XTB po kontrahencie,
+  reguły z kategorią zarchiwizowaną, podobne nazwy bez słów ogólnych (ta sama marka – podobna), usunięte nierozliczone nie
+  wracają, paragon przeskalowany z kwotą banku, „+ domownik” z pytaniem, ekran czeka na zapis, panel duplikatów jak import,
+  szybsze propozycje, podobne nazwy i reguły
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

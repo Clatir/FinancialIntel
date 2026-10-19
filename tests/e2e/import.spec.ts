@@ -69,7 +69,8 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await expect(brandGroup(page, 'koleo', 'out').getByTestId('import-group-category')).toHaveValue('01KDEFCAT00000000000000305')
 
     // Decisions by group: the user narrows Bolt to „wyjścia” (the starter rule learns it); Tomasz is a household member –
-    // „+ domownik” adds him by his name in the bank (D80) and makes his transfers his money.
+    // „+ domownik” adds him by his name in the bank (D80) and makes his transfers his money; the rest beyond his debt is
+    // the user's answer (N85).
     await search.fill('bolt')
     await group(page, 'Bolt').getByTestId('import-group-category').selectOption({ label: 'Rozrywka i hobby · wyjścia' })
     await expect(group(page, 'Bolt').getByTestId('import-group-remember')).toBeChecked()
@@ -77,6 +78,11 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-new-member').click()
     await expect(brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-kind')).toHaveValue(/^household:[0-9A-Z]{26}:income$/)
     await expect(brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-new-member')).toHaveCount(0)
+    // The rest beyond his debt is still a question (N85) – answered by the user: „przychód”.
+    await expect(brandGroup(page, 'tomaszxxx', 'in').getByText('zaliczka czy przychód?')).toBeVisible()
+    const tomaszKind = brandGroup(page, 'tomaszxxx', 'in').getByTestId('import-group-kind')
+    await tomaszKind.selectOption(await tomaszKind.inputValue())
+    await expect(brandGroup(page, 'tomaszxxx', 'in').getByText('zaliczka czy przychód?')).toHaveCount(0)
     await search.fill('')
 
     // The bank's hints for whole themes – no decision of the user, not remembered (D68); then the sure ones in one click.

@@ -1,5 +1,47 @@
 # Financial Intel – zmiany
 
+## 1.6.3
+
+Poprawki z przeglądu aplikacji (grupa O, D87): import z mBanku.
+
+Rozpoznanie operacji:
+- „PŁATNOŚĆ WEB…” i „SPRZEDAŻ WALUTY” rozpoznawane jako rodzaj operacji; tytuł przelewu z podwójną spacją zostaje tytułem
+  (część tytułu nie staje się kontrahentem), a mTransfer z przecinkiem w tytule ma za kontrahenta firmę (np. PayU).
+- XTB tylko po kontrahencie (albo po opisie, gdy kontrahenta nie ma): przelew własny „na portfel XTB” i wpłata domownika
+  „zwrot za kurs XTB” nie są już tradingiem.
+- Reguła z kategorią zarchiwizowaną nie nadaje jej nowym operacjom – grupa czeka na nową kategorię; w Ustawieniach reguła
+  z dopiskiem „(zarchiwizowana)”. Marka o nazwie „constructor” nie psuje już importu.
+
+Łączenie z wpisami ręcznymi i duplikaty:
+- Podobna nazwa nie liczy słów ogólnych („polska”, „sklep”, „spółka”), rodzajów miejsc ani miast; ta sama marka jest
+  podobna mimo krótkiej nazwy („KFC” i „KFC 1234 WARSZAWA”). Jedno wspólne słowo albo krótka nazwa w innej przy innej
+  kwocie – import pyta, a panel duplikatów nie zaznacza pary sam.
+- Panel duplikatów porównuje jak import (operacja banku bez nazwy – po opisie), pokazuje polskie nazwy rodzajów i daty,
+  „to nie duplikat” ma „Cofnij”, a w Ustawieniach → Import z banku „pokazuj znowu”; przy otwartym pliku – notka o liczbie
+  możliwych duplikatów. Scalenie przenosi wpłaty domowników, które pokrywały kopię.
+- Rozliczenie nierozliczonej i scalenie z inną kwotą przeskalowują podział paragonu – udział domownika zostaje jego.
+- Usunięta nierozliczona nie wraca, gdy bank rozliczy ją inną kwotą lub dniem (z „importuj mimo to”); nie ukrywa przy tym
+  innego zakupu tego sklepu, a nierozliczone usunięte przez sam import (bank ich już nie pokazywał) nie blokują swojego
+  rozliczenia.
+- Operacje zapisane przez nowszą wersję aplikacji nie są łączone ani rozliczane (wiersz banku wchodzi osobno).
+
+Ekran importu:
+- W trakcie zapisu importu ekran czeka (decyzje, „Zamknij plik”, upuszczony plik); upuszczony plik ma ten sam limit
+  20 MB i komunikat błędu co wybrany; błąd zapisu nie zostawia pliku z nieaktualnym podglądem; zmiana folderu zamyka plik.
+- „+ domownik” nie zapisuje osobie „reszta jako przychód” bez pytania – „zaliczka czy przychód?” czeka na odpowiedź;
+  odpowiedź liczona z operacji, bez pominiętych.
+- Twoja decyzja po przyjętej podpowiedzi mBanku jest zapamiętywana domyślnie; „(jak grupa)” w operacji daje kategorię
+  grupy; własna decyzja operacji widoczna i do cofnięcia; wiersz „importuj mimo to” należy do swojej grupy i tematu.
+- Temat z markami zdecydowanymi osobno: „różne – patrz marki” albo wspólna decyzja do zmiany jednym wyborem; „zapamiętaj”
+  znika przy słowie z tytułu przelewu; liczniki podglądu i wyniku zgodne („rozliczone”).
+- Słowo kluczowe z paska zbiorczego także dla wpływów, przelewów i domowników (kierunek z zaznaczonych); wyszukiwarka po
+  kategorii, którą grupa dostaje; „Przyjmij pewne” i „Przyjmij podpowiedzi” w wyszukiwaniu tylko na znalezionych.
+- Jeden opis decyzji reguły w Regułach importu, Słowach kluczowych i propozycji słowa.
+
+Szybkość:
+- Propozycje słów kluczowych, podobne nazwy, decyzje zbiorcze, nauka reguł i scalanie ustawień z tysiącami reguł bez
+  przeglądania wszystkiego za każdym razem; lista reguł w Ustawieniach po 100.
+
 ## 1.6.2
 
 Poprawki z przeglądu aplikacji (grupa N, D87): Dowództwo, ICTTJ i dokowanie, domownicy, cele i kreator.

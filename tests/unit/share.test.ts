@@ -96,10 +96,16 @@ describe('wspólne finansowanie (D83): podział kwoty na osoby', () => {
     const edited = { ...t, splits: t.splits.map((s, i) => (i === 0 ? { ...s, amount: -zl(50) } : s)) }
     expect(shareOf(edited)).toBeNull()
     expect(withAmount(edited, -zl(100)).splits.map((s) => s.amount)).toEqual([-zl(50), -zl(30), -zl(30)])
-    // The bank's new amount: a shared purchase's lines made again, a receipt's never touched (a line of a deposit back stays +).
+    // The bank's new amount: a shared purchase's lines made again; a receipt's in proportion (B99 – a purchase abroad
+    // settled at another rate; a line of a deposit back stays +); an income's parts are what each person gave – kept.
     expect(withBankAmount(t, -zl(93)).splits.map((s) => s.amount)).toEqual([-zl(31), -zl(31), -zl(31)])
-    const receipt = { ...edited, splits: [{ ...edited.splits[0]!, amount: -zl(120) }, { ...edited.splits[1]!, amount: zl(20) }] }
-    expect(withBankAmount(receipt, -zl(100))).toMatchObject({ amount: -zl(100), splits: receipt.splits })
+    const receipt = { ...edited, amount: -zl(100), splits: [{ ...edited.splits[0]!, amount: -zl(120) }, { ...edited.splits[1]!, amount: zl(20) }] }
+    expect(withBankAmount(receipt, -zl(110))).toMatchObject({ amount: -zl(110), splits: [{ amount: -zl(132) }, { amount: zl(22) }] })
+    // Rounding: what is left goes to the largest line, the lines' sum the new amount.
+    const thirds = { ...receipt, splits: [{ ...receipt.splits[0]!, amount: -3333 }, { ...receipt.splits[1]!, amount: -6667 }] }
+    expect(withBankAmount(thirds, -10001).splits.map((s) => s.amount)).toEqual([-3333, -6668])
+    const income = { ...receipt, kind: 'income' as const, amount: zl(100), splits: [{ ...receipt.splits[1]!, amount: zl(40) }] }
+    expect(withBankAmount(income, zl(110))).toMatchObject({ amount: zl(110), splits: income.splits })
     // „bez podziału”: one line, mine.
     expect(withShare(t, null)).toMatchObject({ share: null, splits: [], refundable: false, memberId: null })
     expect(shareSplits({ amount: zl(20), categoryId: null }, equal(null, MAMA)).map((s) => s.amount)).toEqual([zl(10), zl(10)])

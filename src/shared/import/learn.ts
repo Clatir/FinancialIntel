@@ -5,7 +5,7 @@
  * (as in the settings), for this file and the next imports.
  */
 import { fold } from '../fold'
-import { isCityWord, isGenericWord, isKeywordWord, keywordMatches, sameWord, tokens, withoutProcessor, words } from './brands'
+import { isCityWord, isGenericWord, isKeywordWord, keywordMatcher, sameWord, tokens, withoutProcessor, words } from './brands'
 import { withoutLegalForms } from './names'
 import { findRule, isFeeOperation } from './classify'
 import { choiceOf, opKindOf, sameChoice, type Choice, type ImportChoices, type ImportGroup } from './reconcile'
@@ -106,6 +106,8 @@ function candidates(groups: readonly ImportGroup[], g: ImportGroup, rules: reado
   const person = g.rows.some((p) => isTransfer(p.row.operation))
   const { places, people } = notWhat(groups)
   const who = [...people, ...ownNames.flatMap((n) => words(n))]
+  // The user's keywords for this money, once (W34: not a pass over the rules per word).
+  const known = new Set(rules.filter((r) => r.mode === 'keyword' && (r.direction == null || r.direction === g.direction)).map((r) => r.match))
   const out = new Map<string, string>()
   for (const p of g.rows)
     // The shop's name without the processor before it („SumUp *PRACOWNIA”: „sumup” names hundreds of shops).
@@ -114,7 +116,7 @@ function candidates(groups: readonly ImportGroup[], g: ImportGroup, rules: reado
         const w = t.word
         if (out.has(w) || w.length < 4 || !/^[a-z]+$/.test(w) || isGenericWord(w) || isCityWord(w) || places.has(w) || who.some((x) => formOf(w, x))) continue
         // Already a keyword of the user's for this money.
-        if (rules.some((r) => r.mode === 'keyword' && r.match === w && (r.direction == null || r.direction === g.direction))) continue
+        if (known.has(w)) continue
         out.set(w, t.text)
       }
   return out
@@ -148,30 +150,23 @@ export function keywordProposals(
     .filter((p) => !choices.rows[p.key] && !choices.skip[p.key])
   if (!others.length) return []
   const out: KeywordProposal[] = []
+  // Each row's own rule once (W31, W34): a proposed keyword decides a row no rule decides before a keyword (`findRule`:
+  // a rule up to an amount, an exact one, „contains”) and no keyword as long or longer – as a rule of it added would.
+  const current = new Map<string, ImportRule | null>()
+  const ruleOf = (p: (typeof others)[number]) => {
+    let r = current.get(p.key)
+    if (r === undefined) current.set(p.key, (r = findRule(ctx.rules, p.target, p.direction, p.row.amount)))
+    return r
+  }
   for (const [word, text] of candidates(groups, group, ctx.rules, ctx.ownNames ?? [])) {
-    const proposal: ImportRule = {
-      id: '~proposal',
-      match: word,
-      mode: 'keyword',
-      direction: group.direction,
-      label: text,
-      kind: choice.kind,
-      categoryId: choice.kind === 'expense' ? choice.categoryId : null,
-      refundable: choice.kind === 'expense' && group.direction === 'out' && choice.refundable,
-      household: choice.kind === 'income' && choice.household,
-      memberId: (choice.kind === 'expense' && group.direction === 'out' && choice.refundable) || (choice.kind === 'income' && choice.household) ? choice.memberId : null,
-      counterAccountId: choice.kind === 'transfer' ? choice.counterAccountId : null,
-      learned: false,
-      hits: 0,
-      updatedAt: ''
-    }
-    const rules = [...ctx.rules, proposal]
+    const matches = keywordMatcher(word)
     const rows: string[] = []
     const touched = new Set<string>()
     let overreach = false
     for (const p of others) {
-      if (!keywordMatches(p.target.name, word) && !keywordMatches(p.target.title, word)) continue
-      if (findRule(rules, p.target, p.direction, p.row.amount) !== proposal || sameChoice(choiceOf(p.decision), choice)) continue
+      if (!matches(p.target.name) && !matches(p.target.title)) continue
+      const r = ruleOf(p)
+      if ((r && !(r.mode === 'keyword' && word.length > r.match.length)) || sameChoice(choiceOf(p.decision), choice)) continue
       // A word that would decide another word's operations („auto” → „AUTOMATSPEC”) is not offered: the count would
       // say one thing, the rule do another.
       if (catchOf(p.target.name, word) !== 'near' && catchOf(p.target.title, word) !== 'near') {

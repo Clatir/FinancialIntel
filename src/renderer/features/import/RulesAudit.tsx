@@ -12,19 +12,21 @@ import type { BrandAliases } from '@shared/import/aliases'
 import type { ImportRule } from '@shared/schema'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { AmountField, plnText, signedPln } from '../../components/fields'
-import { Panel, TextField, cx } from '../../components/ui'
+import { Panel, ShowMore, TextField, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { openOperation } from '../operations/state'
 import { useAccounts, useCategories } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, editRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, directionText, editRule, ruleDecisionText } from './rules'
 
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
 /** Operations audited per step: a large folder never stops the screen. */
 const STEP = 2000
 const SHOWN = 20
+/** The rules list's page (W35). */
+const RULES_PAGE = 100
 
 /** The audit of the rules against the operations from the bank – counted in steps, the last one shown meanwhile. */
 export function useRuleAudit(): { audit: RuleAudit | null; progress: number } {
@@ -72,7 +74,7 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
         <select className="input h-[24px] w-[110px] py-0" value={direction ?? ''} onChange={(e) => setDirection((e.currentTarget.value || null) as 'in' | 'out' | null)} aria-label="Kierunek" data-testid="import-rule-direction">
           <option value="out">wydatki</option>
           <option value="in">wpływy</option>
-          <option value="">oba</option>
+          <option value="">oba kierunki</option>
         </select>
         <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={forRule} testId="import-rule-edit" />
         {rule.mode === 'amount' && (
@@ -152,7 +154,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
   const hitsOf = (r: ImportRule) => audit?.hits.get(r.id)?.length ?? 0
   const differOf = (r: ImportRule) => audit?.differ.get(r.id)?.length ?? 0
   const accounts = useAccounts()
-  const decision = (r: ImportRule) => `${ruleDecisionText(r, cats.label, members)}${r.kind === 'transfer' && r.counterAccountId ? ` · ${accounts.find((a) => a.id === r.counterAccountId)?.name ?? '?'}` : ''}`
+  const decision = (r: ImportRule) => ruleDecisionText(r, cats.label, members)
   const listed = useMemo(() => {
     const q = fold(query.trim())
     return rules
@@ -161,6 +163,9 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
       .filter((r) => (show === 'idle' ? audit && !audit.hits.has(r.id) : show === 'differ' ? differOf(r) > 0 || (audit?.otherKind.get(r.id)?.length ?? 0) > 0 : true))
       .sort((a, b) => hitsOf(b) - hitsOf(a) || (a.label || a.match).localeCompare(b.label || b.match))
   }, [rules, query, show, audit, cats, members, accounts])
+  // Thousands of rules after years of imports (W35): a page at a time, the first again for another search.
+  const [limit, setLimit] = useState(RULES_PAGE)
+  useEffect(() => setLimit(RULES_PAGE), [query, show])
   const differCount = audit ? [...audit.differ.values()].reduce((s, xs) => s + xs.length, 0) : 0
   return (
     <Panel title="Reguły importu">
@@ -179,14 +184,14 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
       </div>
       {listed.length === 0 && <span className="text-[11.5px] text-dim">{rules.length ? 'Brak reguł dla tego wyboru.' : 'Brak reguł – pojawią się po pierwszym imporcie.'}</span>}
       <div className="flex flex-col" data-testid="import-rules">
-        {listed.map((r) => (
+        {listed.slice(0, limit).map((r) => (
           <div key={r.id} className="flex flex-col border-b border-line/60 py-[3px] last:border-b-0" data-testid="import-rule" data-match={r.match}>
             <div className="grid grid-cols-[minmax(0,1.2fr)_70px_minmax(0,1.5fr)_64px_auto] items-center gap-2 text-[12px]">
               <span className="truncate text-fg-strong" title={`klucz: ${r.match}${r.mode === 'contains' ? ' (zawiera)' : ''} · nauczona na ${r.hits} operacjach`}>
                 {r.label || r.match}
                 {r.mode === 'amount' && r.maxAmount ? <span className="ml-1 text-[11px] text-accent">do {plnText(r.maxAmount)} zł</span> : null}
               </span>
-              <span className="text-muted">{r.direction === 'in' ? 'wpływy' : r.direction === 'out' ? 'wydatki' : 'oba'}</span>
+              <span className="text-muted">{directionText(r.direction)}</span>
               <span className="truncate text-muted">{decision(r)}</span>
               <span className={cx('num text-right', audit && !hitsOf(r) ? 'text-dim' : 'text-fg')} data-testid="import-rule-hits">
                 {audit ? `${hitsOf(r)} op.` : '…'}
@@ -215,6 +220,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
           </div>
         ))}
       </div>
+      <ShowMore page={RULES_PAGE} shown={limit} total={listed.length} onMore={() => setLimit(limit + RULES_PAGE)} testId="import-rules-more" />
     </Panel>
   )
 }

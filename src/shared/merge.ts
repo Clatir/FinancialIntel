@@ -70,15 +70,26 @@ export function diffRecords(a: unknown, b: unknown, path: Path = []): FieldChang
   if (isIdArray(a) && isIdArray(b) && (a.length || b.length)) {
     const out: FieldChange[] = []
     const ids = [...new Set([...a.map((x) => x.id), ...b.map((x) => x.id)])]
+    const ma = byIds(a)
+    const mb = byIds(b)
     for (const id of ids) {
-      const x = a.find((i) => i.id === id)
-      const y = b.find((i) => i.id === id)
-      if (x && y) out.push(...diffRecords(x, y, [...path, `#${id}`]))
-      else out.push({ path: [...path, `#${id}`], before: x, after: y })
+      const x = ma.get(id)
+      const y = mb.get(id)
+      // The same item (an array of thousands – the import's rules – changed in one place): nothing to look into (W36).
+      if (x && y) {
+        if (x !== y) out.push(...diffRecords(x, y, [...path, `#${id}`]))
+      } else out.push({ path: [...path, `#${id}`], before: x, after: y })
     }
     return out
   }
   return [{ path, before: a, after: b }]
+}
+
+/** An array's items by id – the first of an id, as `find` would (W36: one map, not a pass over the array per id). */
+function byIds<T extends { id: string }>(arr: readonly T[]): Map<string, T> {
+  const out = new Map<string, T>()
+  for (const x of arr) if (!out.has(x.id)) out.set(x.id, x)
+  return out
 }
 
 interface MergeResult<T> {
@@ -122,14 +133,16 @@ function mergeAt(rawBase: unknown, mine: unknown, theirs: unknown, path: Path, c
   }
   if (isIdArray(mine) && isIdArray(theirs)) {
     const b = isIdArray(base) ? base : !known ? undefined : []
-    const byId = (arr: Array<{ id: string }> | undefined, id: string) => arr?.find((x) => x.id === id)
+    const mm = byIds(mine)
+    const tm = byIds(theirs)
+    const bm = b ? byIds(b) : undefined
     // Order: theirs, then items only I added (in my order).
-    const ids = [...theirs.map((x) => x.id), ...mine.map((x) => x.id).filter((id) => !byId(theirs, id))]
+    const ids = [...theirs.map((x) => x.id), ...mine.map((x) => x.id).filter((id) => !tm.has(id))]
     const out: unknown[] = []
     for (const id of ids) {
-      const m = byId(mine, id)
-      const t = byId(theirs, id)
-      const bi = byId(b, id)
+      const m = mm.get(id)
+      const t = tm.get(id)
+      const bi = bm?.get(id)
       const p = [...path, `#${id}`]
       if (m && t) {
         out.push(mergeAt(bi, m, t, p, conflicts, choose))

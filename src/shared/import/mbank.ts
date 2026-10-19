@@ -6,7 +6,8 @@
  * number, „transakcja nierozliczona”); runs of two or more spaces separate them. The bank's category is kept as a
  * weak hint only (D68). No hours: an import never says when in the day (spec).
  */
-import { cleanBankName } from './names'
+import { fold } from '../fold'
+import { cleanBankName, withoutLegalForms } from './names'
 import { parseCsv } from './text'
 
 export interface MbankRow {
@@ -86,9 +87,12 @@ export function parseBankAmount(s: string): { grosze: number; currency: string |
 
 const PENDING = /\s*transakcja nierozliczona\s*/i
 
-/** Words a type of operation starts with (always in capitals in mBank's descriptions). */
+/**
+ * Words a type of operation starts with (always in capitals in mBank's descriptions). The word ends where no letter or
+ * digit goes on – also after a Polish letter („PŁATNOŚĆ”, „SPRZEDAŻ” – B105: `\b` knows ASCII letters only).
+ */
 const OPERATION_START =
-  /^(ZAKUP|PRZELEW|BLIK|ZWROT|PROWIZJA|OPŁATA|OPLATA|WYPŁATA|WYPLATA|WPŁATA|WPLATA|KAPITALIZACJA|PODATEK|SPŁATA|SPLATA|ZLECENIE|POLECENIE|OBCIĄŻENIE|OBCIAZENIE|UZNANIE|PŁATNOŚĆ|PLATNOSC|STORNO|KOREKTA|ODSETKI|TRANSAKCJA|PRZEKAZ|WYMIANA|ZASILENIE|SPRZEDAŻ|KUPNO)\b/
+  /^(ZAKUP|PRZELEW|BLIK|ZWROT|PROWIZJA|OPŁATA|OPLATA|WYPŁATA|WYPLATA|WPŁATA|WPLATA|KAPITALIZACJA|PODATEK|SPŁATA|SPLATA|ZLECENIE|POLECENIE|OBCIĄŻENIE|OBCIAZENIE|UZNANIE|PŁATNOŚĆ|PLATNOSC|STORNO|KOREKTA|ODSETKI|TRANSAKCJA|PRZEKAZ|WYMIANA|ZASILENIE|SPRZEDAŻ|KUPNO)(?=$|[^\p{L}\p{N}])/u
 
 const isOperation = (part: string) => OPERATION_START.test(part) && part === part.toUpperCase()
 const isAddress = (part: string) => /^(UL\.|AL\.|OS\.|PL\.)/i.test(part) || /^\d{2}[-*]\d{3}\b/.test(part)
@@ -142,11 +146,34 @@ export function splitDescription(raw: string): { description: string; operation:
   const first = head[0]!
   const comma = first.indexOf(', ')
   const second = head[1]
-  // „Doładowanie telefonu | BLUE MEDIA SPÓŁKA AKCYJNA” (mTransfer), „XTB … , Withdrawal | XTB SPÓŁKA AKCYJNA”: the name next.
-  if (second && !isAddress(second) && !isAccountNo(second))
-    return { description, operation, ...named(second), title: comma >= 0 ? first.slice(comma + 2).trim() : first, accountNo, pending }
-  if (comma >= 0) return { description, operation, ...named(first.slice(0, comma)), title: first.slice(comma + 2).trim(), accountNo, pending }
+  // The parts after the first up to the address or the account number.
+  const rest: string[] = []
+  for (const part of head.slice(1)) {
+    if (isAddress(part) || isAccountNo(part)) break
+    rest.push(part)
+  }
+  // The name next (B103) only as the bank writes it so: „Doładowanie telefonu | BLUE MEDIA SPÓŁKA AKCYJNA” (mTransfer – no
+  // „name, title” before it, or a company: „Zamówienie 12, sklep X | PAYU SPÓŁKA AKCYJNA”), „XTB …, Withdrawal | XTB
+  // SPÓŁKA AKCYJNA” (the name again). Else a title of two spaces („ZA  OBIAD”) goes on in the next part – the title's.
+  const again = comma >= 0 && !!second && sameName(first.slice(0, comma), second)
+  if (second && rest.length && (comma < 0 || again || isCompany(second)))
+    return { description, operation, ...named(second), title: again ? first.slice(comma + 2).trim() : first, accountNo, pending }
+  if (comma >= 0) return { description, operation, ...named(first.slice(0, comma)), title: [first.slice(comma + 2).trim(), ...rest].join(' ').trim(), accountNo, pending }
   return { description, operation, ...named(first), title: '', accountNo, pending }
+}
+
+/** A company's name – a legal form, a payment operator: the bank's way of writing the other side, no title's words. */
+function isCompany(part: string): boolean {
+  const f = fold(part)
+  return withoutLegalForms(f) !== f || /^(payu|paypro|przelewy24|dotpay|tpay|blue ?media|paypal|stripe|sumup)\b/.test(f)
+}
+
+/** The part after „name, title” is the name again: in the name before the comma, or its first word starts it. */
+function sameName(before: string, part: string): boolean {
+  const a = before.trim().toUpperCase()
+  const b = part.trim().toUpperCase()
+  const word = b.split(/\s+/)[0] ?? ''
+  return !!b && (a.includes(b) || (word.length >= 2 && a.split(/\s+/)[0] === word))
 }
 
 const headerName = (cell: string) => cell.trim().replace(/^#/, '').trim().toLowerCase()

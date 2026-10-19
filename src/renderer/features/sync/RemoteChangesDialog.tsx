@@ -41,7 +41,12 @@ const UNDECIDED: Record<'removal' | 'time', string> = {
 
 /** Decided now, at every render of its card (edits made while the dialog waits count) – a card is drawn again only for itself (W25). */
 function NewerBadge({ item, machine }: { item: PendingRemote; machine: string }) {
-  const n = newerOf(item)
+  // A three-way merge of the whole record (W36: fi.json with its rules) – once per item, local version and write: the
+  // times of local edits change with the record, a finished write (the settings' stamps taken in place, no local edits
+  // left) with the count of writes on the way.
+  const mine = useMine(item)
+  const writes = useData((s) => s.save.pending)
+  const n = useMemo(() => newerOf(item), [item, mine, writes])
   if (n.choice == null)
     return (
       <Badge title={UNDECIDED[n.reason]} data-testid="remote-newer">

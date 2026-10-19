@@ -6,6 +6,7 @@ import { hostname } from 'node:os'
 import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
+import { IMPORT_MAX_BYTES } from '@shared/import/text'
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
@@ -650,7 +651,6 @@ function requireUpdater(): Updater {
 }
 
 /** A bank's export is small (a year of operations ≈ 100 KB); anything far bigger is not one. */
-const IMPORT_MAX_BYTES = 20 * 1024 * 1024
 
 function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Promise<R> | R): void {
   ipcMain.handle(`fi:${channel}`, async (_e: IpcMainInvokeEvent, ...args: unknown[]) => {

@@ -18,8 +18,9 @@ import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, isFeeOperation, PER_OPERATION_KINDS, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
+import { classifyRow, counterpartyKey, isFeeOperation, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
+import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
 /** Days around the bank's date a manual entry may be (spec: ±3). */
 export const MATCH_DAYS = 3
@@ -30,20 +31,35 @@ export const closeAmount = (a: number, b: number): boolean => Math.sign(a) === M
 /** A hand-typed operation that may be joined with the bank's (a correction of a balance never is). */
 export const joinable = (t: Pick<Transaction, 'bank' | 'kind' | 'amount'>): boolean => !t.bank && t.kind !== 'correction' && t.amount !== 0
 
+/** How a hand-typed operation and the bank's may be one (`looseMatch`): `strong` = a similar name beyond one common word. */
+export interface LooseMatch {
+  days: number
+  exact: boolean
+  similar: boolean
+  strong: boolean
+}
+
 /**
  * One rule for the import and the duplicates panel (D77): a hand-typed operation and the bank's are the same one when
  * on the same side, ±3 days apart, of the same amount (`exact`) or a close one under a similar name. Null = not.
  */
-export function looseMatch(own: { amount: number; date: string; counterparty: string }, bank: { amount: number; date: string; name: string }): { days: number; exact: boolean; similar: boolean } | null {
+export function looseMatch(own: { amount: number; date: string; counterparty: string }, bank: { amount: number; date: string; name: string }): LooseMatch | null {
   if (Math.sign(own.amount) !== Math.sign(bank.amount)) return null
   // The cheap checks first: the names are compared only for an amount that may match (W4).
   const exact = own.amount === bank.amount
   if (!exact && !closeAmount(own.amount, bank.amount)) return null
   const days = Math.abs(daysBetween(own.date, bank.date))
   if (days > MATCH_DAYS) return null
-  const similar = similarCounterparty(own.counterparty, bank.name)
-  return exact || similar ? { days, exact, similar } : null
+  const how = counterpartySimilarity(own.counterparty, bank.name)
+  return exact || how ? { days, exact, similar: !!how, strong: !!how && how !== 'word' } : null
 }
+
+/**
+ * A possible duplicate surely the same – joined by default by the import, ticked by default in the duplicates panel (T92,
+ * N88, B102): a similar name beyond one common word, or a card purchase a day apart at most. Else asked.
+ */
+export const looseSure = (m: Pick<LooseMatch, 'similar' | 'strong' | 'days'>, operation: string): boolean =>
+  (m.similar && m.strong) || (m.days <= 1 && /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC)/.test(operation))
 
 /**
  * The file format of each bank's operation (B5): its own (`bank.source`, 1.4.2), else the format of the import it came
@@ -72,22 +88,58 @@ export function coverageOf(file: Pick<MbankFile, 'period' | 'rows'>): (date: str
   return (date) => date >= from && date <= to
 }
 
-/** The same counterparty in other words: an empty one (a quick entry without it), one key in the other, a common word. */
-export function similarCounterparty(a: string, b: string): boolean {
-  const ka = counterpartyKey(a)
-  const kb = counterpartyKey(b)
-  if (!ka || !kb) return true
-  if ((ka.length >= 3 && kb.includes(ka)) || (kb.length >= 3 && ka.includes(kb))) return true
-  const wa = nameWords(a)
-  for (const w of nameWords(b)) if (wa.has(w)) return true
-  return false
+/**
+ * How close a row of the bank is to a pending operation it may settle (another amount after a currency conversion,
+ * another day): the same side, ±3 days, ±max(5 zł, 10%), the bank's names alike; lower = closer, null = not it.
+ */
+function settleScore(name: string, tx: { date: string; amount: number }, row: MbankRow): number | null {
+  if (Math.sign(tx.amount) !== Math.sign(row.amount)) return null
+  const days = Math.abs(daysBetween(tx.date, row.date))
+  const diff = Math.abs(tx.amount - row.amount)
+  if (days > MATCH_DAYS || diff > Math.max(500, Math.round(Math.abs(tx.amount) * 0.1))) return null
+  // The bank's own name of the operation: the user may have renamed it.
+  if (!similarCounterparty(name, row.counterparty || row.description)) return null
+  return diff * 10 + days
 }
 
-/** A name's words of 4 letters and more, once per name (W4). */
+/** The same counterparty in other words: an empty one (a quick entry without it), one key in the other, a common word. */
+export const similarCounterparty = (a: string, b: string): boolean => counterpartySimilarity(a, b) != null
+
+/**
+ * How two counterparties are one (T36, B102): 'empty' – one without a name (a quick entry); 'key' – the same key or
+ * brand („KFC” – „KFC 1234 WARSZAWA”), or one key in the other when it tells who (5 letters at least, no word of what a
+ * place is); 'words' / 'word' – common words of 4 letters and more that tell who (not a word every other name has –
+ * „polska”, „sklep”, „spółka” –, a kind of place or a town). 'word' is a maybe – asked, never joined by itself: also a
+ * short key or one of what in the other („bar” – „BARBERSHOP”, „Sklep” – „SKLEP OLA”). Null – not one.
+ */
+export function counterpartySimilarity(a: string, b: string): 'empty' | 'key' | 'words' | 'word' | null {
+  const ka = counterpartyKey(a)
+  const kb = counterpartyKey(b)
+  if (!ka || !kb) return 'empty'
+  if (ka === kb) return 'key'
+  const ba = brandOf(a).key
+  if (ba && ba === brandOf(b).key) return 'key'
+  const [short, long] = ka.length <= kb.length ? [ka, kb] : [kb, ka]
+  const inOther = short.length >= 3 && long.includes(short)
+  if (inOther && short.length >= 5 && telling(short)) return 'key'
+  const wa = nameWords(a)
+  let common = 0
+  for (const w of nameWords(b)) if (wa.has(w)) common++
+  return common > 1 ? 'words' : common || inOther ? 'word' : null
+}
+
+/** A word of a name that tells who (B102): no generic word, kind of place, keyword's word or town. */
+const telling = (w: string) => !isGenericWord(w) && !isKindWord(w) && !isKeywordWord(w) && !isCityWord(w)
+
+/** A name's telling words of 4 letters and more, once per name (W4). */
 function nameWords(s: string): ReadonlySet<string> {
   let words = wordSets.get(s)
   if (!words) {
-    words = new Set(fold(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 4))
+    words = new Set(
+      fold(s)
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length >= 4 && telling(w))
+    )
     if (wordSets.size >= 50_000) wordSets.clear()
     wordSets.set(s, words)
   }
@@ -236,12 +288,35 @@ function keysOf(rows: readonly MbankRow[], accountId: string): string[] {
   return keys
 }
 
-/** `deletedKeys` = `bank.key` of the operations the user deleted (`.history/`): their rows do not come back by themselves. */
-export function planImport(file: MbankFile, accountId: string, existing: readonly Transaction[], ctx: ClassifyContext, deletedKeys: ReadonlySet<string> = new Set()): ImportPlan {
+/** A pending operation the user deleted (B96): the bank's name of it ('' none) – its row settled later stays out too. */
+export interface DeletedPending {
+  accountId: string
+  date: string
+  amount: number
+  name: string
+  /** When it was deleted (the history's time): an operation of the budget imported later may be its row brought back. */
+  deletedAt: string
+}
+
+/**
+ * `deletedKeys` = `bank.key` of the operations the user deleted (`.history/`): their rows do not come back by themselves;
+ * `deletedPending` = the pending ones of them – the bank settles them with another amount or day (another key).
+ */
+export function planImport(
+  file: MbankFile,
+  accountId: string,
+  existing: readonly Transaction[],
+  ctx: ClassifyContext,
+  deletedKeys: ReadonlySet<string> = new Set(),
+  deletedPending: readonly DeletedPending[] = []
+): ImportPlan {
   const keys = keysOf(file.rows, accountId)
   const budget = budgetedOf(existing, accountId)
   const { byKey, formatOf } = budget
   const used = new Set<string>()
+  // Operations a newer version wrote (B95: read only here) are never joined with a row nor settled by it: the row comes
+  // in as the bank's own.
+  const locked = (t: Transaction) => !!ctx.locked?.has(t.id)
   const plans: Array<Draft | null> = file.rows.map((row, i) => {
     const tx = byKey.get(keys[i]!)
     if (!tx) return null
@@ -283,19 +358,14 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     })
 
   // Pending operations that changed when settled: same counterparty, close date, close amount (a currency conversion).
-  const pending = budget.pending.filter((t) => !used.has(t.id))
+  const pending = budget.pending.filter((t) => !used.has(t.id) && !locked(t))
   file.rows.forEach((row, i) => {
     if (plans[i]) return
     let best: { tx: Transaction; score: number } | null = null
     for (const tx of pending) {
-      if (used.has(tx.id) || Math.sign(tx.amount) !== Math.sign(row.amount)) continue
-      const days = Math.abs(daysBetween(tx.date, row.date))
-      const diff = Math.abs(tx.amount - row.amount)
-      if (days > MATCH_DAYS || diff > Math.max(500, Math.round(Math.abs(tx.amount) * 0.1))) continue
-      // The bank's own name of the operation: the user may have renamed it.
-      if (!similarCounterparty(tx.bank!.counterparty || tx.bank!.description, row.counterparty || row.description)) continue
-      const score = diff * 10 + days
-      if (!best || score < best.score) best = { tx, score }
+      if (used.has(tx.id)) continue
+      const score = settleScore(tx.bank!.counterparty || tx.bank!.description, tx, row)
+      if (score != null && (!best || score < best.score)) best = { tx, score }
     }
     if (best) {
       used.add(best.tx.id)
@@ -329,6 +399,39 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     }
   }
 
+  // A pending operation the user deleted, settled by the bank with another amount or day (B96, T39): its row stays out
+  // too – by the same measure, the closest pairs first, each deleted one and each row once; only the bank's booked rows
+  // (a later purchase of the same shop comes in). A row of the budget imported after the deletion – the row brought back
+  // („importuj mimo to”) – takes its deleted one as well: it hides no other purchase then.
+  const deletedRows = new Set<number>()
+  const gone = deletedPending.filter((d) => d.accountId === accountId)
+  if (gone.length) {
+    const goneOn = new Map<string, number[]>()
+    gone.forEach((d, at) => goneOn.set(d.date, [...(goneOn.get(d.date) ?? []), at]))
+    const pairs: Array<{ i: number; at: number; score: number }> = []
+    file.rows.forEach((row, i) => {
+      const p = plans[i]
+      if (row.pending || deletedKeys.has(keys[i]!) || (p && p.status !== 'known')) return
+      const since = p ? (p.tx.bank?.importedAt ?? p.tx.createdAt) : null
+      for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
+        for (const at of goneOn.get(addDays(row.date, d)) ?? []) {
+          const del = gone[at]!
+          if (since != null && since <= del.deletedAt) continue
+          const score = settleScore(del.name, del, row)
+          if (score != null) pairs.push({ i, at, score })
+        }
+    })
+    pairs.sort((a, b) => a.score - b.score || a.i - b.i || a.at - b.at)
+    const rowTaken = new Set<number>()
+    const goneTaken = new Set<number>()
+    for (const c of pairs) {
+      if (rowTaken.has(c.i) || goneTaken.has(c.at)) continue
+      rowTaken.add(c.i)
+      goneTaken.add(c.at)
+      if (!plans[c.i]) deletedRows.add(c.i)
+    }
+  }
+
   // Operations typed by hand (the evening entries, D26): the same amount within ±3 days, a similar counterparty. A row
   // looks at the hand-typed ones of ±3 days (W18), in their order still.
   const nearOf = new Map<string, Transaction[]>()
@@ -344,9 +447,9 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   }
   const candidates: Array<{ i: number; tx: Transaction; days: number; named: boolean }> = []
   file.rows.forEach((row, i) => {
-    if (plans[i]) return
+    if (plans[i] || deletedRows.has(i)) return
     for (const tx of manualNear(row.date)) {
-      if (tx.amount !== row.amount) continue
+      if (tx.amount !== row.amount || locked(tx)) continue
       const days = Math.abs(daysBetween(tx.date, row.date))
       if (days > MATCH_DAYS || !similarCounterparty(tx.counterparty, row.counterparty || row.description)) continue
       candidates.push({ i, tx, days, named: !!counterpartyKey(tx.counterparty) })
@@ -364,23 +467,22 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
   // under a similar name – the same amount first, then the closest date; each side once. Joined by default when
   // surely the same (a similar name; or a card purchase a day apart at most), else only when ticked (ICTTJ: a possible
   // duplicate is never taken by itself) – one not joined is still found later by the duplicates panel.
-  const loose: Array<{ i: number; tx: Transaction; days: number; exact: boolean; similar: boolean }> = []
+  const loose: Array<{ i: number; tx: Transaction } & LooseMatch> = []
   file.rows.forEach((row, i) => {
-    if (plans[i]) return
+    if (plans[i] || deletedRows.has(i)) return
     const bank = { amount: row.amount, date: row.date, name: row.counterparty || row.description }
     for (const tx of manualNear(row.date)) {
-      if (used.has(tx.id)) continue
+      if (used.has(tx.id) || locked(tx)) continue
       const m = looseMatch(tx, bank)
       if (m) loose.push({ i, tx, ...m })
     }
   })
-  loose.sort((a, b) => Number(b.exact) - Number(a.exact) || Number(b.similar) - Number(a.similar) || a.days - b.days || a.i - b.i)
+  loose.sort((a, b) => Number(b.exact) - Number(a.exact) || Number(b.strong) - Number(a.strong) || Number(b.similar) - Number(a.similar) || a.days - b.days || a.i - b.i)
   for (const c of loose) {
     if (plans[c.i] || used.has(c.tx.id)) continue
     used.add(c.tx.id)
     const row = file.rows[c.i]!
-    const sure = c.similar || (c.days <= 1 && /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC)/.test(row.operation))
-    plans[c.i] = { status: 'merge', row, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount', ask: !sure }
+    plans[c.i] = { status: 'merge', row, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount', ask: !looseSure(c, row.operation) }
   }
 
   // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is).
@@ -394,12 +496,13 @@ export function planImport(file: MbankFile, accountId: string, existing: readonl
     const p = plans[i]
     if (p?.status === 'merge') return { ...p, planned: plannedOf(i) }
     if (p) return p
-    return { status: deletedKeys.has(keys[i]!) ? 'deleted' : 'new', row, key: keys[i]!, ...plannedOf(i) }
+    return { status: deletedKeys.has(keys[i]!) || deletedRows.has(i) ? 'deleted' : 'new', row, key: keys[i]!, ...plannedOf(i) }
   })
 
   const period = file.period ?? (days.length ? { from: days[0]!, to: days.at(-1)! } : null)
   // Only a list of operations shows pending rows (the account history has the booked ones only).
-  const vanished = period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && t.date >= period.from && t.date <= period.to) : []
+  // A pending operation of a newer version (B95) is read only here: never offered for removal.
+  const vanished = period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && !locked(t) && t.date >= period.from && t.date <= period.to) : []
   return { accountId, format: file.format, rows, vanished, period }
 }
 
@@ -512,15 +615,19 @@ export interface ImportTheme {
   source: DecisionSource
 }
 
-/** Groups of the new rows, the biggest first; each knows its theme. */
-export function importGroups(plan: ImportPlan | null): ImportGroup[] {
+/**
+ * Groups of the new rows, the biggest first; each knows its theme. `restored` = rows of deleted operations brought back
+ * (`ImportChoices.restoreDeleted`, N90): decided as new ones – in their groups and themes.
+ */
+export function importGroups(plan: ImportPlan | null, restored: Readonly<Record<string, boolean>> = {}): ImportGroup[] {
   if (!plan) return []
   const byGroup = new Map<string, NewRow[]>()
   for (const p of plan.rows) {
-    if (p.status !== 'new') continue
-    const list = byGroup.get(p.group)
-    if (list) list.push(p)
-    else byGroup.set(p.group, [p])
+    const row: NewRow | null = p.status === 'new' ? p : p.status === 'deleted' && restored[p.key] ? { ...p, status: 'new' } : null
+    if (!row) continue
+    const list = byGroup.get(row.group)
+    if (list) list.push(row)
+    else byGroup.set(row.group, [row])
   }
   const out: ImportGroup[] = []
   for (const [group, rows] of byGroup) {
@@ -586,11 +693,11 @@ export function importThemes(groups: readonly ImportGroup[]): ImportTheme[] {
 }
 
 /**
- * The import's search (1.2.1): every word in the group's names and categories – the whole group – or in a row's
+ * The import's search (1.2.1): every word in the group's names, the bank's category and the category it gets – the whole group – or in a row's
  * description, title and date (dd.mm.rrrr) – only those rows; an amount („12,49”) also finds the rows of that amount.
  * Groups not found are left out of the map.
  */
-export function searchGroups(groups: readonly ImportGroup[], query: string, labelOf: (categoryId: string | null) => string = () => ''): Map<string, NewRow[] | 'all'> {
+export function searchGroups(groups: readonly ImportGroup[], query: string, labelOf: (group: ImportGroup) => string = () => ''): Map<string, NewRow[] | 'all'> {
   const out = new Map<string, NewRow[] | 'all'>()
   const q = query.trim()
   if (!q) {
@@ -601,7 +708,8 @@ export function searchGroups(groups: readonly ImportGroup[], query: string, labe
   const ws = fold(q).split(/\s+/).filter(Boolean)
   const has = (text: string) => ws.every((w) => text.includes(w))
   for (const g of groups) {
-    const groupText = fold([g.label, ...g.names, g.bankCategory, g.reason, labelOf(g.proposed.categoryId)].join(' \u0001 '))
+    // The category the group gets (`labelOf` – its decision, N82); the reason of a proposal is no name nor category.
+    const groupText = fold([g.label, ...g.names, g.bankCategory, labelOf(g)].join(' \u0001 '))
     if (has(groupText)) {
       out.set(g.group, 'all')
       continue
@@ -667,6 +775,11 @@ export interface ImportChoices {
   skip: Record<string, boolean>
   /** Rows imported before onto another account (`RowPlan.key`, B35): moved here (true) or left there (false); missing = as proposed. */
   moveHere: Record<string, boolean>
+  /**
+   * Groups decided by the app for the user (N85: „+ domownik” – the new member's money, the rest as income for now): no
+   * answer of the user – the theme still asks, the person's „zaliczka / przychód” is not remembered from it.
+   */
+  implicit?: Record<string, true>
 }
 
 /** Is an operation imported onto another account moved here (B35)? */
@@ -734,7 +847,7 @@ export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId
 }
 
 export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { now: string; makeId: () => string; rules: readonly ImportRule[] }): ImportResult {
-  const groups = importGroups(plan)
+  const groups = importGroups(plan, choices.restoreDeleted)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
   const bankOf = (p: RowPlan): BankRow => ({
     format: 'mbank',
@@ -758,7 +871,9 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
   const fresh = [...plan.rows].sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
   for (const p of fresh) {
     if (p.status === 'known') {
-      counts.known++
+      // A pending one settled with the same content (N77): „rozliczone”, as the preview counts it.
+      if (p.settled) counts.settled++
+      else counts.known++
       // The row of the other format: its key remembered, so the next file of it is known at once.
       if (p.other) update.push({ ...p.tx, bank: { ...p.tx.bank!, altKeys: [...(p.tx.bank!.altKeys ?? []), p.key].slice(-20) } })
       // Moved here from the account it was imported to (B35): this account's key, the old one kept.
@@ -873,13 +988,20 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
     const total = (prev?.total ?? 0) + imported
     learned.set(key, !prev || imported > prev.rows ? { g, c, rows: imported, total, rule } : { ...prev, total })
   }
-  // The same list when nothing is learned (N13: an import of nothing new changes nothing).
-  let rules = opts.rules as ImportRule[]
+  // The same list when nothing is learned (N13: an import of nothing new changes nothing); one copy for all (W35).
+  const amounts = new Map<string, { decided: ReturnType<typeof ruleDecisionOf>; total: number }>()
+  const brands: Array<{ rule: LearnedRule; hits: number }> = []
   for (const { g, c, total, rule } of learned.values()) {
     const decided = ruleDecisionOf(c)
-    rules = rule
-      ? rules.map((r) => (r.id === rule.id ? { ...r, ...decided, hits: r.hits + total, updatedAt: opts.now } : r))
-      : upsertRule(rules, { match: g.brand, direction: g.direction, label: g.label, ...decided }, { now: opts.now, makeId: opts.makeId, hits: total })
+    if (rule) amounts.set(rule.id, { decided, total })
+    else brands.push({ rule: { match: g.brand, direction: g.direction, label: g.label, ...decided }, hits: total })
   }
+  let rules = opts.rules as ImportRule[]
+  if (amounts.size)
+    rules = rules.map((r) => {
+      const a = amounts.get(r.id)
+      return a ? { ...r, ...a.decided, hits: r.hits + a.total, updatedAt: opts.now } : r
+    })
+  if (brands.length) rules = upsertRules(rules, brands, { now: opts.now, makeId: opts.makeId })
   return { create, update, remove, rules, counts }
 }
