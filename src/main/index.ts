@@ -145,6 +145,8 @@ function appTray(): AppTray {
       showMainWindow()
       mainWindow?.webContents.send('fi:notificationClick', 'today')
     },
+    // Answered without showing the window (F13).
+    evening: (answer) => mainWindow?.webContents.send('fi:notificationClick', `evening:${answer}`),
     quit: quitApp,
     updateReady: () => !!updater?.isReady,
     restartForUpdate: () => {

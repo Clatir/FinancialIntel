@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { computeFleet } from '@shared/calc/fleet'
 import { createDefaultSettings } from '@shared/defaults'
 import { DEFAULT_MACHINE_PREFS, machinePrefsFrom, patchMachinePrefs, shortcutLabel } from '@shared/machine'
-import { dueNotices } from '@shared/notify'
+import { dueNotices, eveningState, eveningText } from '@shared/notify'
+import { quickTemplates } from '@shared/calc/quick'
 import { balanceSchema, defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Settings } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
@@ -99,5 +100,60 @@ describe('ustawienia komputera (config.json)', () => {
     expect(p.sounds.events).toMatchObject({ alarm: false, entry: true })
     expect(machinePrefsFrom({ quickShortcut: 5, notify: { eveningTime: '25:00' }, sounds: { volume: 7 } })).toMatchObject({ quickShortcut: 'Control+Alt+B', notify: { eveningTime: '21:00' }, sounds: { volume: 1 } })
     expect(shortcutLabel('Control+Alt+B')).toBe('Ctrl+Alt+B')
+  })
+})
+
+describe('wieczorny raport wachty (1.6.0, F13)', () => {
+  const typed = (date: string, time: string | null, createdAt: string, v = -zl(12)) => transactionSchema.parse({ ...base(), date, time, createdAt, accountId: MBANK_ACCOUNT_ID, amount: v })
+  it('ile dziś wpisano z godziną; dzień zamknięty – potwierdzony albo wydatek dopisany od 18:00', () => {
+    const today = '2026-10-14'
+    const morning = typed(today, '08:10', '2026-10-14T06:15:00.000Z')
+    expect(eveningState([morning], today, {})).toEqual({ written: 1, done: false, snooze: null })
+    // Written at 19:30 Warsaw time without an hour (a purchase of the day written in the evening).
+    expect(eveningState([morning, typed(today, null, '2026-10-14T17:30:00.000Z')], today, {}).done).toBe(true)
+    expect(eveningState([typed(today, '18:40', '2026-10-14T06:00:00.000Z')], today, {}).done).toBe(true)
+    expect(eveningState([], today, { [today]: '2026-10-14T19:00:00.000Z' })).toMatchObject({ written: 0, done: true })
+    expect(eveningText(0)).toContain('Dziś nic jeszcze nie dopisano')
+    expect(eveningText(1)).toContain('1 operację')
+    expect(eveningText(3)).toContain('3 operacje')
+    expect(eveningText(12)).toContain('12 operacji')
+    expect(eveningText(22)).toContain('22 operacje')
+  })
+
+  it('powiadomienie: tekst z liczbą, nie po zamknięciu dnia, odłożone – znowu od swojej godziny, pod nowym kluczem', () => {
+    const f = fleetAt('2026-10-14T08:00:00.000Z')
+    const at = (time: string, evening: Parameters<typeof dueNotices>[0]['evening']) => dueNotices(input(f, time, { evening })).filter((n) => n.tag === 'evening')
+    expect(at('21:05', { written: 2, done: false, snooze: null }).map((n) => [n.key, n.body])).toEqual([['evening:2026-10-14', eveningText(2)]])
+    expect(at('21:05', { written: 2, done: true, snooze: null })).toEqual([])
+    expect(at('21:20', { written: 0, done: false, snooze: { until: '21:35', n: 1 } })).toEqual([])
+    expect(at('21:35', { written: 0, done: false, snooze: { until: '21:35', n: 1 } }).map((n) => n.key)).toEqual(['evening:2026-10-14:1'])
+  })
+})
+
+describe('szablony szybkiego wpisu (1.6.0, F7)', () => {
+  it('ostatni wpis ręczny i 5 ostatnich par kontrahent + kategoria – bez importu, paragonów i powtórzeń pary', () => {
+    const op = (createdAt: string, counterparty: string, categoryId: string | null, over: Record<string, unknown> = {}) =>
+      transactionSchema.parse({ ...base(), date: '2026-10-14', createdAt, accountId: MBANK_ACCOUNT_ID, amount: -zl(10), counterparty, categoryId, ...over })
+    const list = [
+      op('2026-10-10T10:00:00.000Z', 'Kawiarnia', FOOD),
+      op('2026-10-11T10:00:00.000Z', 'KAWIARNIA', FOOD),
+      op('2026-10-12T10:00:00.000Z', 'Stacja', AUTO),
+      op('2026-10-13T10:00:00.000Z', 'Bank', FOOD, { bank: { format: 'mbank', key: 'k', description: '', counterparty: 'Bank', operation: '', category: '', pending: false, importedAt: AT } }),
+      op('2026-10-14T10:00:00.000Z', 'Paragon', FOOD, { splits: [{ id: base().id, amount: -zl(10), categoryId: FOOD, refundable: false, memberId: null, advance: false, note: '' }] }),
+      op('2026-10-14T11:00:00.000Z', 'Bez kategorii', null),
+      op('2026-10-14T12:00:00.000Z', 'Pensja', null, { kind: 'income', amount: zl(5000) })
+    ]
+    const { last, templates } = quickTemplates(list)
+    expect(last).toMatchObject({ kind: 'income', counterparty: 'Pensja', amount: zl(5000), categoryId: null })
+    expect(templates.map((t) => [t.counterparty, t.categoryId])).toEqual([
+      ['Stacja', AUTO],
+      ['KAWIARNIA', FOOD]
+    ])
+    // The same list: the same answer (once per list of the store).
+    expect(quickTemplates(list).templates).toBe(templates)
+    // At most 5 pairs, the newest; the order of the list does not matter.
+    const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((n, i) => op(`2026-10-0${i + 1}T10:00:00.000Z`, `Sklep ${n}`, FOOD)).reverse()
+    expect(quickTemplates(many).templates.map((t) => t.counterparty)).toEqual(['Sklep G', 'Sklep F', 'Sklep E', 'Sklep D', 'Sklep C'])
+    expect(quickTemplates(many).last?.counterparty).toBe('Sklep G')
   })
 })

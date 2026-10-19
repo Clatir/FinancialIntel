@@ -5,10 +5,11 @@
  */
 import { briefing, dm, type BriefingInput } from './calc/briefing'
 import { WATCH_TIME } from './calc/intel'
-import { dayOfMonth, daysBetween, inClockWindow, monthOf, weekdayOf } from './calc/dates'
+import { dayOfMonth, daysBetween, inClockWindow, monthOf, warsawNow, weekdayOf } from './calc/dates'
 import type { FleetState } from './calc/fleet'
 import { ICTJ_POOL_LABEL } from './ictj'
 import type { NotifyPrefs } from './machine'
+import type { Transaction } from './schema/records'
 
 export interface Notice {
   /** Shown once per key on this computer. */
@@ -23,6 +24,42 @@ export interface Notice {
   target?: string
 }
 
+/** The evening report (F13): what was written today, whether the day is done, a reminder put off on this computer. */
+export interface EveningState {
+  /** Today's operations typed with their time (the bank's have none). */
+  written: number
+  /** Confirmed without expenses, or an expense written from 18:00: no reminder. */
+  done: boolean
+  /** „Przypomnij za 30 min”: not before `until` (Warsaw 'HH:MM'), the n-th time today. */
+  snooze: { until: string; n: number } | null
+}
+
+/** Expenses written from this hour on are the evening's report (F13). */
+export const EVENING_FROM = '18:00'
+
+/** Today's evening report (F13): the operations typed with a time, and whether the evening's writing is done. */
+export function eveningState(transactions: readonly Transaction[], today: string, noSpend: Readonly<Record<string, string>>, snooze: EveningState['snooze'] = null): EveningState {
+  let written = 0
+  let late = false
+  for (const t of transactions) {
+    if (t.date !== today || t.bank) continue
+    if (t.time != null) written++
+    if (late || t.kind !== 'expense' || t.amount >= 0) continue
+    const at = warsawNow(t.createdAt)
+    late = (t.time != null && t.time >= EVENING_FROM) || (at.date === today && at.time >= EVENING_FROM)
+  }
+  return { written, done: !!noSpend[today] || late, snooze }
+}
+
+const operations = (n: number) => (n === 1 ? 'operację' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'operacje' : 'operacji')
+
+/** The evening reminder's text (F13). */
+export function eveningText(written: number | null): string {
+  if (written == null) return 'Dopisz dzisiejsze wydatki – szybki wpis albo Operacje.'
+  if (written === 0) return 'Dziś nic jeszcze nie dopisano – szybki wpis albo „Dziś bez wydatków”, gdy nic nie wydano.'
+  return `Dziś dopisano ${written} ${operations(written)} z godziną – dopisz resztę albo potwierdź „Dziś bez wydatków”.`
+}
+
 export interface NotifyInput extends Omit<BriefingInput, 'fleet'> {
   fleet: FleetState
   prefs: NotifyPrefs
@@ -33,6 +70,8 @@ export interface NotifyInput extends Omit<BriefingInput, 'fleet'> {
   opened: boolean
   /** Formats an amount (the hidden amounts mask them in notifications too). */
   money: (grosze: number) => string
+  /** The evening report (F13): none – the plain reminder. */
+  evening?: EveningState
 }
 
 export function dueNotices(o: NotifyInput): Notice[] {
@@ -52,8 +91,10 @@ export function dueNotices(o: NotifyInput): Notice[] {
       body: [d ? `Energia dziś: ${o.money(d.left)}.` : 'Bez planu tego miesiąca.', alarms ? `Alarmy: ${alarms}.` : 'Bez alarmów.'].join(' ')
     })
   }
-  if (p.evening && o.time >= o.prefs.eveningTime)
-    out.push({ key: `evening:${today}`, tag: 'evening', title: 'Raport wachty dnia', body: 'Dopisz dzisiejsze wydatki – szybki wpis albo Operacje.' })
+  // The evening report (F13): not when the day is done; put off – again from its time, under a new key.
+  const ev = o.evening
+  if (p.evening && o.time >= o.prefs.eveningTime && !ev?.done && (!ev?.snooze || o.time >= ev.snooze.until))
+    out.push({ key: `evening:${today}${ev?.snooze ? `:${ev.snooze.n}` : ''}`, tag: 'evening', title: 'Raport wachty dnia', body: eveningText(ev ? ev.written : null) })
   // An overrun is an overrun (its own switch), never „little left”.
   if (d) {
     if (d.left < 0) {

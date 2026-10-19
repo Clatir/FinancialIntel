@@ -24,6 +24,7 @@ import { incomeShares, memberName } from '@shared/calc/household'
 import { SHARE_MODES } from '@shared/schema'
 import { shareComplete, shareOf, startShare } from '@shared/calc/share'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
+import { EveningReport } from '../evening/EveningReport'
 
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
@@ -418,6 +419,7 @@ export function OperationsPage() {
   return (
     <div className="flex h-full min-h-0" data-testid="page-operations">
       <div className="flex min-w-0 flex-1 flex-col">
+        <EveningReport />
         <div className="flex min-h-[38px] shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-panel px-2 py-[6px]">
           <PeriodBar period={filter.period} />
           <div className="relative w-[210px] shrink-0">

@@ -45,7 +45,8 @@ const SERIOUS: ReadonlySet<string> = new Set<ViolationKind>(['envelope-serious',
 export const TAG_LABEL: Record<string, string> = {
   judas: 'Judas Swing – zakup oznaczony jako impuls',
   turtle: 'Turtle Soup – zwrot towaru',
-  sweep: 'Liquidity sweep – energia dnia zebrana co do grosza'
+  sweep: 'Liquidity sweep – energia dnia zebrana co do grosza',
+  nospend: 'Dzień bez wydatków – potwierdzony w raporcie wachty'
 }
 
 export const MISSIONS = ['quiet', 'envelope', 'energy', 'impulse', 'killzone', 'house', 'import', 'balances', 'nospend'] as const
@@ -248,6 +249,8 @@ export function rateDay(input: GameInput, date: string, prev: GameDay | null = n
     if (txs.some((t) => t.kind === 'expense' && t.impulse === 'impulse' && ownSpent(t) > 0)) tags.push('judas')
     if (txs.some((t) => t.kind === 'expense' && t.amount > 0 && !t.refundable && !t.goalId && !t.splits.length)) tags.push('turtle')
     if (f.daily && f.daily.left === 0 && f.daily.spentToday > 0) tags.push('sweep')
+    // Confirmed in the evening report (F13), and nothing of my own spent indeed.
+    if (settings.game.noSpend[date] && dayCost(txs) <= 0) tags.push('nospend')
   }
   return { date, status: violations.length ? 'broken' : 'ok', violations, cls: f.shipClass, cargo, tags, fleet: f }
 }

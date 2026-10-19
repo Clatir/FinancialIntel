@@ -396,11 +396,29 @@ export interface QuickData {
   members: Array<{ id: string; name: string; owed: number; deposit: number; inflow: 'ask' | 'advance' | 'income'; via: string | null }>
   hideAmounts: boolean
   readOnly: boolean
+  /** „Powtórz ostatni” (F7): the last operation typed by hand (one line). */
+  last?: QuickTemplate | null
+  /** The templates (F7): the latest counterparty + category pairs typed by hand, at most 5, newest first. */
+  templates?: QuickTemplate[]
+}
+
+/** What a template or „Powtórz ostatni” fills in the quick entry (F7). */
+export interface QuickTemplate {
+  kind: 'expense' | 'income' | 'refundable'
+  /** Grosze (a template of a pair: the last amount with it). */
+  amount: number
+  counterparty: string
+  categoryId: string | null
+  accountId: string
+  /** Who financed it ('refundable'). */
+  memberId: string | null
 }
 
 export interface QuickResult {
   ok: boolean
   message: string
+  /** The data after the save (F7): a series („Zapisz i następny”) shows the energy as it is now. */
+  data?: QuickData | null
 }
 
 /** A panel shown in its own window: what to draw (a known kind) and its data (plain JSON, sent again on change). */

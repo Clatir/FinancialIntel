@@ -67,6 +67,13 @@ function world(o: { transactions?: Transaction[]; containers?: Container[]; game
 const orders = (r: ReturnType<typeof rateDay>) => r.violations.map((v) => [v.order, v.serious, v.amount])
 
 describe('ocena dnia (D73): naruszenia zwykłe i poważne', () => {
+  it('dzień potwierdzony „Dziś bez wydatków” (F13) – znak w dzienniku wachty, tylko gdy naprawdę bez wydatków', () => {
+    const confirmed = (s: Settings): Settings => ({ ...s, game: { ...s.game, noSpend: { '2026-10-06': '2026-10-06T19:30:00.000Z', '2026-10-07': '2026-10-07T19:30:00.000Z' } } })
+    expect(rateDay(world({ settings: confirmed }), '2026-10-06').tags).toEqual(['nospend'])
+    expect(rateDay(world({ settings: confirmed, transactions: [tx('2026-10-07', -zl(20))] }), '2026-10-07').tags).toEqual([])
+    expect(rateDay(world(), '2026-10-06').tags).toEqual([])
+  })
+
   it('dzień bez wpisów jest zgodny; przydział dnia przekroczony – zwykłe', () => {
     expect(rateDay(world(), '2026-10-06')).toMatchObject({ status: 'ok', violations: [], tags: [] })
     // The 7th: 3 100 zł over 25 days = 124 zł; 200 zł spent – 76 zł over.

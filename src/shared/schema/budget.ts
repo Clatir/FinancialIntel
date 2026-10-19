@@ -356,7 +356,9 @@ export const gameSettingsSchema = z.looseObject({
   /** This many serious violations in a calendar month demote. */
   demoteSerious: z.number().int().min(1).max(31).catch(3).default(3),
   /** A mission done counts as this many compliant days. */
-  missionDays: z.number().int().min(0).max(30).catch(3).default(3)
+  missionDays: z.number().int().min(0).max(30).catch(3).default(3),
+  /** Days confirmed without expenses in the evening report (F13): day → when; the watch log marks them. */
+  noSpend: z.record(isoDate, isoDateTime).catch({}).default({})
 })
 export type GameSettings = z.infer<typeof gameSettingsSchema>
 
