@@ -92,9 +92,23 @@ describe('obecność innych komputerów', () => {
     await writePresence(root, 'DESKTOP', '0.1.0')
     const others = await readOtherMachines(root, 'DESKTOP')
     expect(others.map((o) => o.machine)).toEqual(['LAPTOP'])
-    expect(await readOtherMachines(root, 'DESKTOP', Date.now() + 10 * 60_000)).toEqual([])
+    // In the tray the heartbeat comes every 5 minutes (N20): seen for 11 minutes after it.
+    expect((await readOtherMachines(root, 'DESKTOP', Date.now() + 10 * 60_000)).map((o) => o.machine)).toEqual(['LAPTOP'])
+    expect(await readOtherMachines(root, 'DESKTOP', Date.now() + 12 * 60_000)).toEqual([])
     await clearPresence(root, 'LAPTOP')
     expect(await readOtherMachines(root, 'DESKTOP')).toEqual([])
+  })
+
+  it('w użyciu = ruch w oknie w ostatnich 10 min (D86); plik wersji sprzed 1.5.3 – w użyciu, póki bije co minutę', async () => {
+    const root = tempDir()
+    const now = Date.now()
+    await writePresence(root, 'LAPTOP', '1.5.3', new Date(now - 60_000).toISOString())
+    await writePresence(root, 'TRAY', '1.5.3', new Date(now - 20 * 60_000).toISOString())
+    await fs.writeFile(join(root, '.presence', 'OLD.json'), JSON.stringify({ machine: 'OLD', lastSeen: new Date(now).toISOString(), appVersion: '1.5.2' }))
+    const seen = async (at: number) => Object.fromEntries((await readOtherMachines(root, 'DESKTOP', at)).map((o) => [o.machine, o.inUse]))
+    expect(await seen(now)).toEqual({ LAPTOP: true, TRAY: false, OLD: true })
+    // Ten minutes after the laptop's last move: in the tray now; the old version's heartbeat older than 3 min – too.
+    expect(await seen(now + 10 * 60_000)).toEqual({ LAPTOP: false, TRAY: false, OLD: false })
   })
 
   it('nazwa komputera bezpieczna jako nazwa pliku', () => {

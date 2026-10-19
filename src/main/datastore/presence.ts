@@ -8,6 +8,8 @@ import { writeFileAtomic } from './atomic'
 export const PRESENCE_WINDOW_MS = 11 * 60 * 1000
 /** In use (D86): a move in one of the machine's windows within the last 10 minutes. */
 export const IN_USE_MS = 10 * 60 * 1000
+/** Another computer's clock a little ahead: its heartbeat „from the future” still counts. */
+const CLOCK_AHEAD_MS = 5 * 60 * 1000
 
 /** Another computer with the folder open: in use, or only running (in the tray). */
 export interface MachinePresence {
@@ -47,7 +49,7 @@ export async function readOtherMachines(root: string, machine: string, now = Dat
       const data = JSON.parse(await fs.readFile(join(dir, name), 'utf8')) as { machine?: string; lastSeen?: string; activeAt?: string | null }
       if (!data.lastSeen) continue
       const age = now - Date.parse(data.lastSeen)
-      if (!(age >= 0 && age < PRESENCE_WINDOW_MS)) continue
+      if (!(age > -CLOCK_AHEAD_MS && age < PRESENCE_WINDOW_MS)) continue
       // A version before 1.5.3 writes no `activeAt` and its heartbeat every minute: in use while it beats (as before).
       const old = !('activeAt' in data)
       const inUse = old ? age < 3 * 60 * 1000 : !!data.activeAt && now - Date.parse(data.activeAt) < IN_USE_MS

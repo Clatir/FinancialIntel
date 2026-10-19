@@ -131,8 +131,9 @@ Razem ok. 21–28 h.
 Wykonane według D84 (grupy E–H jednym ciągiem, `docs/postep.md`): **1.4.2** = E, **1.4.3** = F, **1.5.0** = G (domownicy
 oraz ICTTJ i dokowanie – B14–B22, B40, B41, N5, F0, F42), **1.5.1** = H (import – B34–B39, N12–N16 i z listy funkcji F4,
 F5, F8, F22). Według D86 (grupy I–L jednym ciągiem): **1.5.2** = I (liczby się zgadzają – B7, B8, B12, B23, B25, B26,
-B28, B57–B60, N3, N4, N6–N11, N21; B41 zamknięte według D85). Zostają m.in.: J, K, L (system i dwa komputery, wydajność –
-reszta, funkcje F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone niżej.
+B28, B57–B60, N3, N4, N6–N11, N21; B41 zamknięte według D85), **1.5.3** = J (system, folder i dwa komputery – B27, B29,
+B31, B33, B52–B54, N2, N17, N18, N20, F21). Zostają m.in.: K, L (wydajność – reszta, funkcje F1, F3, F6, F7, F13) i
+dalsze, niskie pozycje – niezaznaczone niżej.
 
 ## Lista do odhaczania
 
@@ -169,13 +170,13 @@ reszta, funkcje F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone 
 - [x] **B24** Esc w polach kwoty, daty i godziny nie anuluje szkicu – wpisana wartość i tak się zapisuje – `renderer/components/fields.tsx:82-89`, `renderer/components/fields.tsx:90-96` (+8)
 - [x] **B25** Średnie i propozycje liczą od najstarszej operacji dowolnego rodzaju – jedna stara pożyczka z Radaru dokłada puste miesiące i zaniża pensję, koperty i cel kadłuba – `shared/calc/plan.ts:25-30`, `shared/calc/plan.ts:33-38` (+5)
 - [x] **B26** Pola liczb całkowitych (NumberField z decimals=0) przyjmują ułamki: harmonogram pożyczki gubi część kwoty, cel osłon i kadłuba wraca po cichu do 3 / 6 – `renderer/features/radar/RadarPage.tsx:307`, `renderer/components/ui.tsx:77` (+9)
-- [ ] **B27** Odłączone panele Mostka zamierają po wyjściu z Mostka: dane się nie odświeżają, a kliknięcia nic nie robią – `renderer/store/detach.ts:58`, `renderer/store/detach.ts:66` (+7)
+- [x] **B27** Odłączone panele Mostka zamierają po wyjściu z Mostka: dane się nie odświeżają, a kliknięcia nic nie robią – `renderer/store/detach.ts:58`, `renderer/store/detach.ts:66` (+7)
 - [x] **B28** Przypomnienie o potwierdzeniu sald bierze najnowsze potwierdzenie dowolnego konta – Portfel XTB może nie być potwierdzany nigdy – `renderer/features/bridge/BridgePage.tsx:307`, `shared/calc/briefing.ts:181` (+5)
-- [ ] **B29** Skrót szybkiego wpisu Ctrl+Alt+litera polskiego znaku (A, C, E, L, N, O, S, X, Z) przejmuje AltGr w całym systemie – nie da się pisać „ś”, „ą”, „ę”… – `renderer/components/ShortcutField.tsx:6`, `renderer/components/ShortcutField.tsx:15` (+4)
+- [x] **B29** Skrót szybkiego wpisu Ctrl+Alt+litera polskiego znaku (A, C, E, L, N, O, S, X, Z) przejmuje AltGr w całym systemie – nie da się pisać „ś”, „ą”, „ę”… – `renderer/components/ShortcutField.tsx:6`, `renderer/components/ShortcutField.tsx:15` (+4)
 - [x] **B30** Pieniędzy zarchiwizowanego celu nie da się odzyskać – po zmianie scenariusza ICTTJ zostają zamrożone poza zasięgiem i poza innymi celami (T66) – `renderer/features/starmap/StarMapPage.tsx:96`, `renderer/features/starmap/StarMapPage.tsx:104` (+5)
-- [ ] **B31** Przełączanie folderu z Ustawień bez blokady i postępu: zapisy w trakcie trafiają do nowego folderu albo przepadają, brak „Przerwij”, drugie kliknięcie wypiera otwarcie – `renderer/features/settings/SettingsPage.tsx:175`, `renderer/features/settings/SettingsPage.tsx:195` (+15)
+- [x] **B31** Przełączanie folderu z Ustawień bez blokady i postępu: zapisy w trakcie trafiają do nowego folderu albo przepadają, brak „Przerwij”, drugie kliknięcie wypiera otwarcie – `renderer/features/settings/SettingsPage.tsx:175`, `renderer/features/settings/SettingsPage.tsx:195` (+15)
 - [x] **B32** Notatka naruszenia „cargo” bez limitu długości – miesiąc gry nie przechodzi schematu i nie zapisuje się – `shared/calc/game.ts:220`, `shared/calc/game.ts:222` (+6)
-- [ ] **B33** Zamrażanie dni od razu po otwarciu folderu – przed synchronizacją OneDrive oceny zapadają na nieaktualnych danych – `renderer/store/game.ts:37`, `renderer/store/game.ts:43` (+4)
+- [x] **B33** Zamrażanie dni od razu po otwarciu folderu – przed synchronizacją OneDrive oceny zapadają na nieaktualnych danych – `renderer/store/game.ts:37`, `renderer/store/game.ts:43` (+4)
 - [x] **B34** „Zwrot pożyczki” / „Pożyczka udzielona” z importu bez powiązania z pożyczką z Radaru – pożyczka zostaje otwarta i zaległa, a zapamiętana reguła powtarza błąd – `renderer/features/import/options.ts:17`, `renderer/features/import/options.ts:25` (+9)
 - [x] **B35** Operacja z banku przeniesiona na inne konto wraca przy kolejnym imporcie jako druga – panel duplikatów jej nie widzi – `shared/import/reconcile.ts:115`, `shared/import/reconcile.ts:116` (+9)
 - [x] **B36** Niepołączony możliwy duplikat (domyślnie przy `ask`) importuje się bez rozpoznania – przelew własny jako wydatek, wypłata XTB jako zwykły wpływ – `shared/import/reconcile.ts:188`, `shared/import/reconcile.ts:556` (+9)
@@ -194,9 +195,9 @@ reszta, funkcje F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone 
 - [x] **B49** Zapis rekordu usuniętego właśnie na drugim komputerze po cichu go przywraca – bez kopii, bez pytania – `main/datastore/store.ts:780`, `main/datastore/store.ts:784` (+3)
 - [x] **B50** Folder z ponad ok. 125 tys. plików w jednej kolekcji w ogóle się nie otwiera – „Maximum call stack size exceeded” – `main/datastore/store.ts:271`, `main/datastore/store.ts:451`
 - [x] **B51** Szybki wpis: podwójne kliknięcie „Zapisz” (albo dwa razy Enter) dodaje tę samą operację dwa razy; zapisany szkic zostaje w oknie do następnego otwarcia – `renderer/features/quick/QuickApp.tsx:85`, `renderer/features/quick/QuickApp.tsx:178` (+4)
-- [ ] **B52** Wersja portable: AUMID = ścieżka tymczasowa zmieniająca się co wersję – wpisy autostartu się mnożą, wyłączenie nie działa, okno wyskakuje przy logowaniu, ustawienia powiadomień Windows się zerują – `main/index.ts:43`, `main/tray.ts:106` (+3)
-- [ ] **B53** Ekran wyboru folderu dobiera przyciski po tekście komunikatu: „Utwórz w OneDrive (zalecane)” zakłada nowe dane w niedostępnym zapamiętanym folderze, „Utwórz dane tutaj” kręci się w kółko, brak przycisku podfolderu – `renderer/features/setup/FolderSetup.tsx:35`, `renderer/features/setup/FolderSetup.tsx:57` (+8)
-- [ ] **B54** Okno zapamiętane na odłączonym monitorze otwiera się poza ekranem – `main/index.ts:811`, `main/index.ts:859` (+1)
+- [x] **B52** Wersja portable: AUMID = ścieżka tymczasowa zmieniająca się co wersję – wpisy autostartu się mnożą, wyłączenie nie działa, okno wyskakuje przy logowaniu, ustawienia powiadomień Windows się zerują – `main/index.ts:43`, `main/tray.ts:106` (+3)
+- [x] **B53** Ekran wyboru folderu dobiera przyciski po tekście komunikatu: „Utwórz w OneDrive (zalecane)” zakłada nowe dane w niedostępnym zapamiętanym folderze, „Utwórz dane tutaj” kręci się w kółko, brak przycisku podfolderu – `renderer/features/setup/FolderSetup.tsx:35`, `renderer/features/setup/FolderSetup.tsx:57` (+8)
+- [x] **B54** Okno zapamiętane na odłączonym monitorze otwiera się poza ekranem – `main/index.ts:811`, `main/index.ts:859` (+1)
 - [x] **B55** Opłata okresowa zapłacona przed terminem (miesiąc wcześniej albo przed dniem płatności): silnik zbiera ją z energii drugi raz, a odprawa, radar i Odkładki dalej ostrzegają – `shared/calc/fleet.ts:108`, `shared/calc/fleet.ts:591` (+7)
 - [x] **B56** Życie kontenera nie ma dat: nowy kontener okresowy zbiera raty wstecz z minionych miesięcy, archiwizacja przelicza całą historię, a resztka zbiornika po `until` zostaje na zawsze – `shared/calc/fleet.ts:177`, `shared/calc/fleet.ts:591` (+4)
 - [x] **B57** Operacja „Pożyczka” bez rekordu pożyczki traktowana jak pożyczka udzielona: pożyczone pieniądze dokują jak przychód, ich zwrot tworzy fikcyjną należność – `shared/calc/fleet.ts:695`, `shared/calc/fleet.ts:710` (+4)
@@ -333,7 +334,7 @@ reszta, funkcje F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone 
 
 ### Priorytet średni
 
-- [ ] **N2** Tryb tylko do odczytu: część ekranów pokazuje sukces, choć nic się nie zapisało – `renderer/features/settings/AccountsTab.tsx:126`, `renderer/features/balances/actions.ts:39` (+53)
+- [x] **N2** Tryb tylko do odczytu: część ekranów pokazuje sukces, choć nic się nie zapisało – `renderer/features/settings/AccountsTab.tsx:126`, `renderer/features/balances/actions.ts:39` (+53)
 - [x] **N3** Szybki wpis: podgląd „Energia dziś → …” liczy inaczej niż silnik (kategoria bez koperty, data inna niż dziś) – `renderer/features/quick/QuickApp.tsx:142-144`, `renderer/features/quick/QuickApp.tsx:150` (+10)
 - [x] **N4** Panel „Przychody”: mediana „Razem” liczona z miesięcy z ujemnym tradingiem – niezgodna z resztą panelu i z raportami – `shared/calc/income.ts:129`, `shared/calc/income.ts:145` (+4)
 - [x] **N5** Zakup sfinansowany przez domownika nadal daje poważne naruszenie (cisza nocna, osłony poniżej minimum) – wbrew D80 f / T107 – `shared/calc/game.ts:237`, `shared/calc/game.ts:187` (+12)
@@ -348,10 +349,10 @@ reszta, funkcje F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone 
 - [x] **N14** Decyzja grupy „Pożyczka” / „Podatek PIT-38” zostaje regułą: kolejne przelewy do tej osoby albo urzędu są pożyczką / podatkiem bez pytania – `shared/import/reconcile.ts:597-626`, `shared/import/learn.ts:135-137` (+5)
 - [x] **N15** „Zapamiętaj” i decyzja zbiorcza w Operacjach uczą regułę z nazwy poprawionej przez użytkownika, a import szuka jej po nazwie z banku – `renderer/features/import/rules.ts:15`, `renderer/features/import/rules.ts:25-36` (+6)
 - [x] **N16** Propozycja reguły na słowo pokazuje inną decyzję niż ta, którą zapisuje – `renderer/features/import/Learning.tsx:133`, `renderer/features/import/Learning.tsx:141` (+2)
-- [ ] **N17** Kopie konfliktu chmury nie mają „Scal” – jedna strona przepada w całości, choć okno zmian z drugiego komputera umie scalać tę samą sytuację – `renderer/features/sync/SyncPage.tsx:63`, `renderer/features/sync/SyncPage.tsx:81` (+4)
-- [ ] **N18** Historia zapisywana dla wszystkich wpisów, ale do obejrzenia tylko dla operacji, kontenerów i ustawień, mimo tekstów „jest w historii wpisu” – `renderer/features/operations/OperationEditor.tsx:114`, `renderer/features/cargo/CargoPage.tsx:270` (+4)
+- [x] **N17** Kopie konfliktu chmury nie mają „Scal” – jedna strona przepada w całości, choć okno zmian z drugiego komputera umie scalać tę samą sytuację – `renderer/features/sync/SyncPage.tsx:63`, `renderer/features/sync/SyncPage.tsx:81` (+4)
+- [x] **N18** Historia zapisywana dla wszystkich wpisów, ale do obejrzenia tylko dla operacji, kontenerów i ustawień, mimo tekstów „jest w historii wpisu” – `renderer/features/operations/OperationEditor.tsx:114`, `renderer/features/cargo/CargoPage.tsx:270` (+4)
 - [x] **N19** Kopia dzienna (D31 „codziennie”) robi się tylko przy otwarciu folderu, a aplikacja z założenia żyje tygodniami w zasobniku (D64) – `main/index.ts:411`, `main/datastore/backup.ts:52` (+3)
-- [ ] **N20** Baner „Ten folder jest też otwarty na: …” stale widoczny, bo aplikacja zgodnie z D46/D64 działa w tle na każdym komputerze (heartbeat w OneDrive co minutę całą dobę) – `renderer/app/Banners.tsx:84`, `main/index.ts:268` (+2)
+- [x] **N20** Baner „Ten folder jest też otwarty na: …” stale widoczny, bo aplikacja zgodnie z D46/D64 działa w tle na każdym komputerze (heartbeat w OneDrive co minutę całą dobę) – `renderer/app/Banners.tsx:84`, `main/index.ts:268` (+2)
 - [x] **N21** Mostek pokazuje „wolne do decyzji” przy niepełnym kadłubie, a dopłata do XTB z tej kwoty łamie firewall – `shared/calc/fleet.ts:931`, `shared/calc/fleet.ts:680` (+2)
 
 ### Priorytet niski
@@ -467,7 +468,7 @@ reszta, funkcje F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone 
 - [ ] **F18** Operacje: filtry zaawansowane, sortowanie, zapisane widoki, eksport widocznej listy *(nakład M)*
 - [ ] **F19** Paleta (Ctrl+K) szuka też wpisów: operacji, kontenerów, celów, pożyczek, domowników i ustawień *(nakład M)*
 - [ ] **F20** Wywiad z drążeniem: podkategorie, kontrahenci, porównania okresów *(nakład M)*
-- [ ] **F21** Dwa komputery: „w użyciu” zamiast „otwarty” – komputer w zasobniku nie pisze w tle i nie powiela powiadomień *(nakład M)*
+- [x] **F21** Dwa komputery: „w użyciu” zamiast „otwarty” – komputer w zasobniku nie pisze w tle i nie powiela powiadomień *(nakład M)*
 - [x] **F22** Audyt reguł importu: edycja, niespójności, „Zastosuj do historii”, warunek kwoty *(nakład M)*
 - [ ] **F23** Wykrywanie opłat cyklicznych: kwartalne, półroczne, zmienne kwoty i harmonogram dat *(nakład M)* · ⚠ T48 (zasady wykrywania stałych opłat: cykl miesięczny ±15% albo roczny) – do rozszerzenia.
 - [ ] **F24** Majątek netto: krzywa z długiem i należnościami *(nakład M)* · ⚠ D73 i T81 (krzywa majątku = suma sald kont na koniec tygodnia) – propozycja dodaje drugą linię zamiast zmieniać definicję; do decyzji użytkownika.
