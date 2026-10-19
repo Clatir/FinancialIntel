@@ -1221,3 +1221,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   harmonogram pożyczki bez podwójnego obcięcia. Bez zmian: data bez roku dalej niż tydzień naprzód – rok wcześniej (B12 w
   D84: operacja to zapis tego, co było; późniejsza data z rokiem); okno „Przychody” netto (T186). Poprawki z testami
   sprawdzonymi bez nich (padają).
+- **T189** Usuwanie plików wpisów (CI Windows PR #19): plik usuwanego wpisu, którego wersję zapisała historia (`.history/`
+  – na każdym komputerze, B44), usuwa się od razu (`DataStoreOptions.remove`, domyślnie `removeFile`); do Kosza
+  (`shell.trashItem`) tylko wtedy, gdy historia go nie przyjęła. Paczka importu odrzucana bez historii (`drop`) – od razu.
+  Kosz Windows to ułamek sekundy na plik: „Cofnij import” setek operacji trwało minuty, a test E2E na Windows przekraczał
+  limit. Kopie konfliktów i pliki z problemami – nadal do Kosza.

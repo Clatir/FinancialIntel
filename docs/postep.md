@@ -371,6 +371,8 @@ Zakres: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 („Pr
   tydzień naprzód) i znaczek „w przyszłości”; pola liczb całkowitych; przypomnienie o saldzie każdego konta; podgląd
   szybkiego wpisu jak silnik; „Razem” przychodów; cisza nocna potwierdzona wpisem w dzienniku.
 - Przegląd `/code-review` high: 10 kandydatów – 8 poprawionych, 2 bez zmian z uzasadnieniem (T188).
+- CI Windows PR #19: „Cofnij import” (20–40 operacji) nie mieściło się w 10 s – każdy plik szedł osobno do Kosza
+  Windows; plik wpisu z wersją w historii usuwany teraz od razu, do Kosza tylko bez niej (T189).
 - Testy: 519 unit + fs (nowy `numbers-agree.test.ts`, poszerzone `income`, `plan`, `game`), E2E 30 (nowy
   `tests/e2e/numbers.spec.ts`, kreator z celami w `month.spec.ts`). Poprawki z testem sprawdzonym bez nich (padają).
 

@@ -547,6 +547,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `wizard-split-over`), `finishWizard({salary, hull, goals, envelopes})`; pola – `DateField notAfter`
   (`parseDateInput(text, rok, notAfter, near)` – dzień najbliższy dacie pola, najwyżej tydzień po dziś – B12, T184),
   `NumberField` całkowite (B26); historia, zmiany z drugiego komputera i Synchronizacja – kwoty przez `plnText`.
+- Folder danych (T189): plik usuwanego wpisu z wersją w historii usuwany od razu (`DataStoreOptions.remove`), do Kosza
+  tylko bez wersji w historii – „Cofnij import” setek operacji na Windows w sekundach.
 - Testy: `tests/unit/numbers-agree.test.ts`, poszerzone `income`, `plan`, `game`; E2E `tests/e2e/numbers.spec.ts` (cisza
   nocna, archiwizacja kategorii, usunięty kontener, dokowanie innej kwoty), `month.spec.ts` (kreator z celami).
 

@@ -98,6 +98,11 @@ export interface DataStoreOptions {
   machineName: string
   /** Move a file to the recycle bin (Electron shell.trashItem); defaults to deleting it. */
   trash?: (absPath: string) => Promise<void>
+  /**
+   * Delete a record's file whose version the history keeps (deleting, „Cofnij import”, duplicates): defaults to removing
+   * it – the bin of Windows takes a fraction of a second a file, hundreds of files took minutes (1.5.2).
+   */
+  remove?: (absPath: string) => Promise<void>
   now?: () => string
   /** Per-machine override of the backups folder (absolute). */
   backupDir?: string | null
@@ -334,6 +339,7 @@ export class DataStore {
     this.opts = {
       machineName: opts.machineName,
       trash: opts.trash ?? ((p) => fs.rm(p, { force: true })),
+      remove: opts.remove ?? removeFile,
       now: opts.now ?? (() => new Date().toISOString()),
       backupDir: opts.backupDir ?? null
     }
@@ -1368,7 +1374,10 @@ export class DataStore {
     if (state.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
     const kept = reason === 'drop' ? null : await this.history.snapshot(collection, state.record as AnyRecord, reason)
     try {
-      await this.opts.trash(this.abs(state.relPath))
+      // The history keeps the version (on every computer – B44), or it is an import's batch dropped on purpose: the
+      // file goes at once. Only a version the history could not keep goes to the bin.
+      if (kept || reason === 'drop') await this.opts.remove(this.abs(state.relPath))
+      else await this.opts.trash(this.abs(state.relPath))
     } catch (e) {
       // The file stays (held by OneDrive, an antivirus): no „deleted” version in the history either (B9).
       await this.history.drop(kept)

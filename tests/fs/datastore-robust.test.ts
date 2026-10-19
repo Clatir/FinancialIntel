@@ -33,7 +33,7 @@ describe('folder danych: odporność (1.4.2)', () => {
     let busy = true
     const store = new DataStore(root, {
       machineName: 'TEST-PC',
-      trash: async (p) => {
+      remove: async (p) => {
         if (busy) throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' })
         await fs.rm(p)
       }

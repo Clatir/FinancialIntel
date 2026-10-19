@@ -53,6 +53,10 @@ Pola, edytor i szybki wpis:
   wymienia konta.
 - Panel „Przychody”: „Razem” w miesiącu liczy trading jak raporty – nigdy poniżej zera.
 
+Folder danych:
+- Usuwanie wielu wpisów naraz („Cofnij import”, duplikaty) szybsze na Windows: plik wpisu, którego wersja jest w
+  historii (Synchronizacja → „Usunięte wpisy”), usuwa się od razu, do Kosza Windows trafia tylko bez wersji w historii.
+
 ## 1.5.1
 
 Import z mBanku: cofnięcie całego importu, saldo z pliku banku, oficer zna marki, audyt reguł i poprawki z przeglądu

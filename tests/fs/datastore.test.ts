@@ -120,7 +120,7 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     expect((await store.snapshot()).records.transactions).toEqual([])
   })
 
-  it('usunięcie wpisu przenosi plik do kosza (shell.trashItem)', async () => {
+  it('usunięcie wpisu: wersja w historii, plik usunięty od razu; do kosza (shell.trashItem) tylko bez wersji w historii (1.5.2)', async () => {
     const root = join(tempDir(), 'dane')
     await DataStore.initialize(root)
     const trashed: string[] = []
@@ -136,9 +136,18 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     const { entry } = await store.saveRecord('transactions', t)
     const change = await store.deleteRecord('transactions', t.id)
     expect(change?.removals).toEqual([{ collection: 'transactions', id: t.id }])
-    expect(trashed).toEqual([store.abs(entry.relPath)])
+    // The bin of Windows takes a fraction of a second a file – „Cofnij import” of hundreds took minutes.
+    expect(trashed).toEqual([])
     expect(await exists(join(store.root, entry.relPath))).toBe(false)
+    expect((await store.historyList('transactions', t.id)).map((e) => e.reason)).toEqual(['delete'])
     expect(await store.deleteRecord('transactions', t.id)).toBeNull()
+    // The history cannot keep it (its folder is a file here): the file goes to the bin, never lost.
+    const u = sampleTransaction({ date: '2026-03-18' })
+    const saved = await store.saveRecord('transactions', u)
+    await fs.rm(join(root, '.history', 'transactions'), { recursive: true, force: true })
+    await fs.writeFile(join(root, '.history', 'transactions'), 'x')
+    await store.deleteRecord('transactions', u.id)
+    expect(trashed).toEqual([store.abs(saved.entry.relPath)])
   })
 
   it('ścieżki poza folderem danych są odrzucane', async () => {
