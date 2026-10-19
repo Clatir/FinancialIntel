@@ -1,8 +1,9 @@
 /**
- * The radar (spec, „Ekrany”: 90 days – the salaries, the asteroids, the expected payments, PIT-38; E6, D72): what comes
- * in the next 90 days, in order. Pure.
+ * The radar (spec, „Ekrany”: 90 days – the salaries, the asteroids, the fixed fees, the expected payments, PIT-38; E6,
+ * D72, F1): what comes in the next 90 days, in order. Pure.
  */
 import type { Container, MonthPlan } from '../schema/records'
+import { dueIn, type CargoStatus } from './cargoStatus'
 import { addDays, addMonths, daysBetween, firstDayOf, monthOf } from './dates'
 import { activeIn, nextPaymentOf, nextUnpaidOf, type FleetState } from './fleet'
 import { OVERDUE_DAYS, type LoanState } from './loans'
@@ -12,7 +13,7 @@ export const RADAR_DAYS = 90
 export const PIT38_DAY = '04-30'
 export const PIT38_FROM = '02-01'
 
-export type RadarKind = 'salary' | 'asteroid' | 'installment' | 'repayment' | 'pit38'
+export type RadarKind = 'salary' | 'asteroid' | 'fixed' | 'installment' | 'repayment' | 'pit38'
 
 export interface RadarItem {
   key: string
@@ -26,7 +27,7 @@ export interface RadarItem {
   note: string
   /** A container or a loan. */
   ref?: string
-  /** An installment already late (3 days and more). */
+  /** An installment or a fee already late (3 days and more). */
   overdue?: boolean
 }
 
@@ -36,7 +37,7 @@ export function pit38Deadline(today: string): string | null {
   return md >= PIT38_FROM && md <= PIT38_DAY ? `${today.slice(0, 4)}-${PIT38_DAY}` : null
 }
 
-const ORDER: Record<RadarKind, number> = { pit38: 0, salary: 1, installment: 2, repayment: 3, asteroid: 4 }
+const ORDER: Record<RadarKind, number> = { pit38: 0, salary: 1, installment: 2, repayment: 3, asteroid: 4, fixed: 5 }
 
 export interface RadarInput {
   today: string
@@ -47,6 +48,8 @@ export interface RadarInput {
   days?: number
   /** Formats an amount (the hidden amounts mask the notes). */
   money: (grosze: number) => string
+  /** The fixed fees of this month (F1, `cargoStatuses`): their state and payment day. */
+  cargo?: readonly CargoStatus[]
 }
 
 export function radar(o: RadarInput): RadarItem[] {
@@ -73,6 +76,26 @@ export function radar(o: RadarInput): RadarItem[] {
       const tank = tankOf?.amount ?? 0
       out.push({ key: `asteroid:${c.id}:${date}`, date, kind: 'asteroid', name: c.name, amount: c.amount, direction: 'out', note: first ? `w zbiorniku ${o.money(tank)}` : '', ref: c.id })
     }
+  }
+  // The fixed fees (F1): this month's still to pay – a late one too – and each month's ahead, on its payment day.
+  const status = new Map((o.cargo ?? []).map((s) => [s.containerId, s]))
+  const thisMonth = monthOf(o.today)
+  for (const c of o.containers) {
+    if (c.cycleMonths > 1 || c.archived || c.loanId) continue
+    const s = status.get(c.id)
+    const day = s?.day ?? c.dueDay
+    for (let m = thisMonth; firstDayOf(m) <= end; m = addMonths(m, 1)) {
+      const date = m === thisMonth && s ? s.due : dueIn(m, day)
+      if (date > end || !activeIn(c, m)) continue
+      if (m === thisMonth && (!s || s.state === 'paid')) continue
+      const late = m === thisMonth && s && date < o.today
+      out.push({ key: `fixed:${c.id}:${date}`, date, kind: 'fixed', name: c.name, amount: c.amount, direction: 'out', note: late && s.importPending ? 'czeka na import' : '', ref: c.id, ...(s && m === thisMonth && s.state === 'overdue' ? { overdue: true } : {}) })
+    }
+  }
+  // A periodic fee of this month still unpaid after its due (the asteroids above start from the next one to pay).
+  for (const s of o.cargo ?? []) {
+    if (s.cycleMonths <= 1 || s.state === 'paid' || s.due >= o.today) continue
+    out.push({ key: `asteroid:${s.containerId}:${s.due}`, date: s.due, kind: 'asteroid', name: s.name, amount: s.amount, direction: 'out', note: s.importPending ? 'czeka na import' : '', ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
   }
   // The loans' installments not paid yet: own ones out, the expected repayments in (late ones too).
   for (const s of o.loans) {

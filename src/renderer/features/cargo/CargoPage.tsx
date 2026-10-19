@@ -17,7 +17,9 @@ import { DeleteButton } from '../history/DeleteButton'
 import { HistoryButton } from '../history/HistoryDialog'
 import { AccountSelect, CategorySelect } from '../operations/pickers'
 import { monthLabel } from '../../lib/format'
-import { addContainer, archiveContainer, deleteContainer, draftFromPayment, emptyDraft, linkPayments, patchContainer, paymentsToLink, type ContainerDraft } from './actions'
+import { addContainer, archiveContainer, deleteContainer, draftFromPayment, emptyDraft, linkPayments, patchContainer, payContainer, paymentsToLink, type ContainerDraft } from './actions'
+import { useCargoStatuses } from './status'
+import type { CargoStatus } from '@shared/calc/cargoStatus'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const TYPE_LABEL: Record<ContainerType, string> = { fixed: 'stały', subscription: 'abonament', installment: 'rata' }
@@ -47,6 +49,7 @@ export function CargoPage() {
   const fleet = useFleet()
   const containers = useRecordList('containers')
   const transactions = useRecordList('transactions')
+  const cargo = useCargoStatuses()
   const readOnly = useFolderLocked()
   const [selected, setSelected] = useState<string | null>(null)
   const [draft, setDraft] = useState<ContainerDraft | null>(null)
@@ -72,6 +75,7 @@ export function CargoPage() {
     simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)
   const current = selected ? containers.find((c) => c.id === selected) : undefined
   const visible = sorted.filter((c) => showArchived || !c.archived)
+  const status = new Map(cargo.map((x) => [x.containerId, x]))
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-cargo">
@@ -111,6 +115,7 @@ export function CargoPage() {
                       <span className="min-w-0 flex-1 truncate text-fg-strong">{c.name}</span>
                       <span className="text-[11px] text-dim">{TYPE_LABEL[c.type as ContainerType] ?? c.type}</span>
                       <span className="w-[96px] text-right text-[11px] text-muted">{cycleLabel(c.cycleMonths)}</span>
+                      <StateBadge s={status.get(c.id)} />
                       <span className="num w-[96px] text-right">{zl(c.amount)}</span>
                       <span className="num w-[86px] text-right text-[11px] text-muted" title="Miesięcznie">
                         {zl(monthlyShare(c))}/m
@@ -121,7 +126,7 @@ export function CargoPage() {
               )}
             </Panel>
             {draft && <NewContainer key={draftKey} draft={draft} setDraft={setDraft} sim={sim(draft.amount > 0 ? { add: draft } : {})} limitPct={fleet.cargo.limitPct} onAdded={(id) => setSelected(id)} />}
-            {current && <ContainerEditor key={current.id} c={current} readOnly={readOnly} onDeleted={() => setSelected(null)} sim={sim({ drop: current.id })} />}
+            {current && <ContainerEditor key={current.id} c={current} status={status.get(current.id)} readOnly={readOnly} onDeleted={() => setSelected(null)} sim={sim({ drop: current.id })} />}
           </div>
           <div className="flex min-w-0 flex-col">
             <LoadLine fleet={fleet} />
@@ -299,7 +304,7 @@ function NewContainer({ draft, setDraft, sim, limitPct, onAdded }: { draft: Cont
   )
 }
 
-function ContainerEditor({ c, readOnly, onDeleted, sim }: { c: Container; readOnly: boolean; onDeleted: () => void; sim: CargoSimulation }) {
+function ContainerEditor({ c, status, readOnly, onDeleted, sim }: { c: Container; status: CargoStatus | undefined; readOnly: boolean; onDeleted: () => void; sim: CargoSimulation }) {
   return (
     <Panel
       title={`Kontener: ${c.name}`}
@@ -322,6 +327,7 @@ function ContainerEditor({ c, readOnly, onDeleted, sim }: { c: Container; readOn
       }
     >
       <fieldset disabled={readOnly} className="flex flex-col gap-2">
+        {status && <ThisMonth c={c} s={status} />}
         <ContainerFields c={c} set={(p) => patchContainer(c.id, p)} saved />
         {c.counterparty.trim() && <LinkPayments c={c} />}
         <Toggle checked={c.archived} onChange={(archived) => archiveContainer(c, archived)} label="Zarchiwizowany (zrzucony z ładowni)" data-testid="container-archived" />
@@ -333,6 +339,54 @@ function ContainerEditor({ c, readOnly, onDeleted, sim }: { c: Container; readOn
         )}
       </fieldset>
     </Panel>
+  )
+}
+
+const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
+
+/** This month's state of a fixed fee (F1): paid on its day, its due ahead, waiting for the bank's file, or overdue. */
+function stateText(s: CargoStatus): string {
+  if (s.state === 'paid') return `zapłacone ${dm(s.payments.at(-1)?.date ?? s.due)}`
+  if (s.state === 'overdue') return `po terminie · ${dm(s.due)}`
+  return s.importPending ? `czeka na import · ${dm(s.due)}` : `termin ${dm(s.due)}`
+}
+
+function StateBadge({ s }: { s: CargoStatus | undefined }) {
+  return (
+    <span className={cx('w-[132px] truncate text-right text-[11px]', s?.state === 'overdue' ? 'text-accent' : 'text-muted')} data-testid="cargo-state" data-state={s?.state}>
+      {s ? stateText(s) : ''}
+    </span>
+  )
+}
+
+/** The fee in this month (F1): its payments, its due and where it comes from; „Zapłacone” for a payment no file shows. */
+function ThisMonth({ c, s }: { c: Container; s: CargoStatus }) {
+  const day = s.dayFrom === 'history' ? `dzień płatności z historii: ${s.day}.` : `dzień płatności kontenera: ${s.day}.`
+  return (
+    <div className={cx('flex flex-col gap-1 border-l-2 pl-2 text-[12px]', s.state === 'overdue' ? 'border-accent' : 'border-line-strong')} data-testid="container-month" data-state={s.state}>
+      <span className="label">W tym miesiącu</span>
+      {s.state === 'paid' ? (
+        <span className="text-fg-strong">
+          Zapłacone: {s.payments.map((p) => `${zl(p.amount)} (${dm(p.date)})`).join(', ')}
+        </span>
+      ) : (
+        <span className={s.state === 'overdue' ? 'text-accent' : 'text-fg-strong'}>
+          {s.state === 'overdue'
+            ? `Po terminie – termin ${dm(s.due)} minął, płatności brak.`
+            : s.importPending
+              ? `Termin ${dm(s.due)} minął – czeka na plik z banku, który obejmie te dni.`
+              : `Termin: ${dm(s.due)} – ${zl(c.amount)}.`}
+        </span>
+      )}
+      <span className="text-[11px] text-dim">
+        {day} Płatność z importu łączy się sama (po odbiorcy); zapłaconą gotówką albo z konta bez importu zapisz tutaj.
+      </span>
+      {s.state !== 'paid' && (
+        <button type="button" className="btn h-[22px] self-start" onClick={() => payContainer(c)} data-testid="container-paid">
+          Zapłacone ({zl(c.amount)}, dziś)
+        </button>
+      )}
+    </div>
   )
 }
 

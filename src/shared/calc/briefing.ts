@@ -1,7 +1,8 @@
 /**
  * The morning briefing (spec, „Rytuały” – odprawa; „Mostek”): the Daily Bias, today's energy and the alerts – the
- * engine's alarms of this month, the asteroids (periodic fees) within 14 days, an overdue import, the balances to
- * confirm, the loot waiting for a decision. Pure; the bridge, the notifications and the spoken briefing use it.
+ * engine's alarms of this month, the asteroids (periodic fees) within 14 days, a fixed fee overdue (F1), an overdue
+ * import, the balances to confirm, the loot waiting for a decision. Pure; the bridge, the notifications and the spoken
+ * briefing use it.
  */
 import { DateTime } from 'luxon'
 import { formatPln } from '../format'
@@ -9,6 +10,7 @@ import { ICTJ_POOL_LABEL } from '../ictj'
 import type { Account, HouseholdMember } from '../schema/budget'
 import type { Balance, Container } from '../schema/records'
 import { lastConfirmation } from './balances'
+import type { CargoStatus } from './cargoStatus'
 import { daysBetween, firstDayOf, warsawNow } from './dates'
 import type { Delivery } from './dock'
 import { isOpeningItem, memberName } from './household'
@@ -34,7 +36,7 @@ export const BIAS_LABEL: Record<DailyBias, string> = { bullish: 'Bullish', beari
 export interface BriefingItem {
   level: 'red' | 'yellow' | 'info'
   /** What the item is about (the screen it leads to; 'dock' – the docking window of the delivery in `key`). */
-  kind: 'alarm' | 'asteroid' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house' | 'mission'
+  kind: 'alarm' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house' | 'mission'
   text: string
   /** Stable key (the notifications send each once). */
   key: string
@@ -95,6 +97,8 @@ export interface BriefingInput {
   mission?: { week: string; title: string; text: string } | null
   /** The household (D80): the members' names, whom their money comes through (D81). */
   members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'> & { via?: string | null }>
+  /** The fixed fees of this month (F1, `cargoStatuses`): an overdue one is an alert. */
+  cargo?: readonly CargoStatus[]
 }
 
 export interface AccountConfirmation {
@@ -190,6 +194,11 @@ export function briefing(o: BriefingInput): BriefingItem[] {
       key: `asteroid:${c.id}:${date}:${days <= 3 ? 3 : 14}`,
       text: `Asteroida: ${c.name} ${days === 0 ? 'dziś' : `za ${days} ${days === 1 ? 'dzień' : 'dni'}`} – ${zl(c.amount)}, w zbiorniku ${zl(tank)}.`
     })
+  }
+  // A fixed fee 3 days after its due without a payment (F1, D86) – once per due.
+  for (const s of o.cargo ?? []) {
+    if (s.state !== 'overdue') continue
+    items.push({ level: 'yellow', kind: 'cargo', key: `cargo:${s.containerId}:${s.due}`, text: `Kontener niezaładowany: ${s.name} ${zl(s.amount)} – termin ${dm(s.due)} minął, brak płatności.` })
   }
   for (const imp of o.imports) {
     // The import's Warsaw date (stored as an ISO time in UTC).

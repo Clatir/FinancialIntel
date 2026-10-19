@@ -16,7 +16,7 @@ export interface Notice {
   title: string
   body: string
   /** Where clicking it leads (App routes it). */
-  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar' | 'reports'
+  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar' | 'reports'
   /** An alarm: its sound. */
   alarm?: boolean
   /** What exactly a click opens (a delivery: `dock:<key>`); else the tag's screen. */
@@ -72,6 +72,8 @@ export function dueNotices(o: NotifyInput): Notice[] {
   // The briefing's asteroid keys: one within 14 days, one within 3 days of the payment.
   for (const i of items) {
     if (i.kind === 'asteroid' && p.asteroid) out.push({ key: i.key, tag: 'asteroid', title: 'Asteroida na kursie', body: i.text })
+    // A fixed fee overdue (F1): once per due, its own switch.
+    if (i.kind === 'cargo' && p.cargo) out.push({ key: i.key, tag: 'cargo', title: 'Kontener niezaładowany', body: i.text })
     if (i.kind === 'import' && p.importOverdue) out.push({ key: i.key, tag: 'import', title: 'Zaległy import z mBanku', body: i.text })
     // An overdue installment (once per installment), PIT-38 14 and 3 days before 30 April (D72).
     if (i.kind === 'loan' && p.loans) out.push({ key: i.key, tag: 'radar', title: 'Rata pożyczki po terminie', body: i.text })

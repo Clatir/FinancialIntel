@@ -18,6 +18,7 @@ import { useIctj } from './ictj'
 import { usePresence } from './presence'
 import { setFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
+import { cargoStatusesNow } from '../features/cargo/status'
 
 const SENT_KEY = 'fi.notify.sent'
 
@@ -53,7 +54,7 @@ export function openTag(tag: string): void {
   if (tag === 'today' || tag === 'evening') {
     setFilter({ period: { kind: 'range', from: today, to: today }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
     navigate({ page: 'operations' })
-  } else if (tag === 'asteroid') navigate({ page: 'cargo' })
+  } else if (tag === 'asteroid' || tag === 'cargo') navigate({ page: 'cargo' })
   else if (tag === 'import') navigate({ page: 'import' })
   else if (tag === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (tag === 'debriefing' || tag === 'low' || tag === 'overrun') navigate({ page: 'month' })
@@ -92,7 +93,8 @@ function check(opened: boolean, shown = false): void {
     money: (g) => `${plnText(g)} zł`,
     deliveries: deliveriesNow(),
     ictjProblem: null,
-    members: fi.settings.household.members
+    members: fi.settings.household.members,
+    cargo: cargoStatusesNow()
   })
   const already = sent()
   const fresh: Notice[] = notices.filter((n) => !already[n.key])

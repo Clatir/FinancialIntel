@@ -93,6 +93,7 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['low', 'Energia dziś poniżej 20% albo koperta powyżej 80%'],
   ['overrun', 'Przekroczenie przydziału albo koperty'],
   ['asteroid', 'Asteroida (opłata okresowa) – 14 i 3 dni przed terminem'],
+  ['cargo', 'Kontener niezaładowany – opłata stała 3 dni po terminie bez płatności'],
   ['importOverdue', 'Zaległy import z mBanku – po 3 dniach'],
   ['balances', 'Potwierdzenie sald – w niedzielę'],
   ['debriefing', 'Debriefing – 1. dnia miesiąca'],
