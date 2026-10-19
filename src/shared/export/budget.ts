@@ -8,7 +8,7 @@ import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
 import { financersText, incomeShares, memberName } from '../calc/household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
-import { categoryIndex, sum } from '../calc/operations'
+import { amountOn, categoryIndex, isTwoSided, sum, touchesAccount } from '../calc/operations'
 import { debriefing, transactionsOfMonth } from '../calc/plan'
 import type { Alarm, FleetEvent } from '../calc/fleet'
 import type { XlsxSheet } from './xlsx'
@@ -54,25 +54,48 @@ export function operationRows(
   to: string,
   members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = []
 ): OperationRow[] {
+  return operationRowsOf(
+    transactions
+      .filter((t) => t.date >= from && t.date <= to)
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? '') || a.createdAt.localeCompare(b.createdAt)),
+    categories,
+    accounts,
+    members
+  )
+}
+
+/**
+ * The rows of these operations in their order (F18: the list of Operacje as it shows them – the list of one account
+ * shows a transfer's money on it, `view`).
+ */
+export function operationRowsOf(
+  transactions: readonly Transaction[],
+  categories: readonly Category[],
+  accounts: readonly Account[],
+  members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = [],
+  view: string | null = null
+): OperationRow[] {
   const cats = categoryIndex(categories)
   const accountName = new Map(accounts.map((a) => [a.id, a.name]))
-  return transactions
-    .filter((t) => t.date >= from && t.date <= to)
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? '') || a.createdAt.localeCompare(b.createdAt))
-    .map((t) => ({
-      date: t.date,
-      time: t.time ?? '',
-      account: accountName.get(t.accountId) ?? '',
-      kind: TX_KIND_LABEL[t.kind],
-      amount: t.amount,
-      // An income's parts are its members' money (D81), not categories.
-      category: t.kind === 'income' ? '' : t.splits.length ? t.splits.map((s) => cats.label(s.categoryId)).join(' + ') : cats.label(t.categoryId),
-      counterparty: t.counterparty,
-      title: t.title,
-      financed: whose(t, members),
-      log: t.impulse ? IMPULSE_LABEL[t.impulse] : '',
-      note: t.note
-    }))
+  return transactions.map((t) => ({
+    date: t.date,
+    time: t.time ?? '',
+    // A transfer in one operation (F10): from the account the money left to the one it came to; the amount – its side.
+    account: isTwoSided(t)
+      ? t.amount < 0
+        ? `${accountName.get(t.accountId) ?? ''} → ${accountName.get(t.counterAccountId!) ?? ''}`
+        : `${accountName.get(t.counterAccountId!) ?? ''} → ${accountName.get(t.accountId) ?? ''}`
+      : (accountName.get(t.accountId) ?? ''),
+    kind: TX_KIND_LABEL[t.kind],
+    amount: view && touchesAccount(t, view) ? amountOn(t, view) : t.amount,
+    // An income's parts are its members' money (D81), not categories.
+    category: t.kind === 'income' ? '' : t.splits.length ? t.splits.map((s) => cats.label(s.categoryId)).join(' + ') : cats.label(t.categoryId),
+    counterparty: t.counterparty,
+    title: t.title,
+    financed: whose(t, members),
+    log: t.impulse ? IMPULSE_LABEL[t.impulse] : '',
+    note: t.note
+  }))
 }
 
 /** Whose an operation is (D80, D81): who finances a purchase, whose money an income is (its parts' members too). */

@@ -7,12 +7,14 @@ import { doubleCorrections, openingOf } from '@shared/calc/balances'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { memberName } from '@shared/calc/household'
 import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
+import { noNarrowing } from '@shared/operationsView'
 import { listOf, updateSettings, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { navigate } from '../../store/ui'
 import { openDocking, useDeliveries } from '../dock/state'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
 import { openOperation, openRefundables, showFilter } from '../operations/state'
+import { addOtherSide, joinTransfers, transferIssuesNow, transferIssuesOf, transferKey } from '../operations/transfers'
 
 /** The inbox counts the duplicates a while after the last change (0,6 s at 150 tys. operacji – never while typing). */
 export const DUPLICATES_AFTER_MS = 3000
@@ -38,6 +40,15 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   // A balance confirmed twice on two computers before the sync (B129) – not the pairs said to be two corrections.
   const dismissed = useData((s) => s.fi?.settings.import.notDuplicates)
   const corrections = useMemo(() => doubleCorrections(listOf(transactions)).filter((c) => !dismissed?.[correctionKey(c.later.id)]), [transactions, dismissed])
+  // Transfers of before 1.7.0 (F10): two sides of one move, a side twice, a side missing – not a side twice a
+  // confirmation's correction made up for (the operation's editor still offers joining it, asking first – F12).
+  const transfers = useMemo(
+    () =>
+      transferIssuesOf(listOf(transactions), useData.getState())
+        .filter((issue) => !(issue.kind === 'double' && issue.settled))
+        .map((issue) => ({ issue, key: transferKey(issue) })),
+    [transactions, balances, accounts, dismissed]
+  )
   const confirmations = useMemo(() => {
     const list = listOf(balances)
     return accounts ? confirmationsOf(accounts, list).map((c) => ({ ...c, opened: openingOf(c.accountId, list)?.date ?? null })) : []
@@ -56,9 +67,15 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     confirmations,
     loot: fleet.loot,
     corrections,
+    transfers,
     accountName: (id) => accounts?.find((a) => a.id === id)?.name ?? 'Konto',
     money
   })
+}
+
+/** A transfer's report (F10) as it is now – the list may have changed since it was shown. */
+export function transferIssueOf(item: InboxItem): ReturnType<typeof transferIssuesNow>[number] | null {
+  return item.ref ? (transferIssuesNow().find((i) => transferKey(i) === item.ref) ?? null) : null
 }
 
 /** The key of a correction said to be no repeat (B129) – in the list of the import's „no duplicates”. */
@@ -81,12 +98,17 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
   else if (item.kind === 'loot') navigate({ page: 'month' })
   else if (item.kind === 'folder') navigate({ page: 'sync' })
   else if (item.kind === 'uncategorized') {
-    showFilter({ period: from ? { kind: 'range', from, to: null } : { kind: 'all' }, marks: ['uncategorized'], accounts: [], kinds: [], categories: [], query: '' })
+    showFilter({ period: from ? { kind: 'range', from, to: null } : { kind: 'all' }, ...noNarrowing(), marks: ['uncategorized'] })
     navigate({ page: 'operations' })
   } else if (item.kind === 'duplicates') navigate({ page: 'import' })
   else if (item.kind === 'refunds') openRefundables()
   else if (item.kind === 'balances') navigate({ page: 'settings', tab: 'accounts' })
-  else if (item.kind === 'corrections' && item.ref) {
+  else if (item.kind === 'transfers') {
+    // One report (the pairs together – the inbox's list of them first).
+    const issue = transferIssueOf(item)
+    if (issue?.kind === 'lone') addOtherSide(issue.tx)
+    else if (issue) void joinTransfers([issue])
+  } else if (item.kind === 'corrections' && item.ref) {
     const t = useData.getState().records.transactions[item.ref]?.record
     if (t) openOperation(t)
     else navigate({ page: 'operations' })

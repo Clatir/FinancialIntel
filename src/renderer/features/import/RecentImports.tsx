@@ -96,7 +96,7 @@ export function UndoImportButton({ batch, testId = 'import-undo' }: { batch: Imp
 /** The counts of an import, as one line. */
 function countsText(b: ImportBatch): string {
   const c = b.counts
-  const parts = [`nowe ${c.created ?? 0}`, ...(c.merged ? [`połączone ${c.merged}`] : []), ...(c.settled ? [`rozliczone ${c.settled}`] : []), ...(c.removed ? [`usunięte ${c.removed}`] : []), ...(c.moved ? [`przeniesione ${c.moved}`] : [])]
+  const parts = [`nowe ${c.created ?? 0}`, ...(c.merged ? [`połączone ${c.merged}`] : []), ...(c.sides ? [`drugie strony przelewów ${c.sides}`] : []), ...(c.settled ? [`rozliczone ${c.settled}`] : []), ...(c.removed ? [`usunięte ${c.removed}`] : []), ...(c.moved ? [`przeniesione ${c.moved}`] : [])]
   return parts.join(' · ')
 }
 

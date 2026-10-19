@@ -197,6 +197,15 @@
     border-color: rgb(232 163 61 / 0.6);
     background: var(--color-accent-soft);
   }
+  /* A record the palette opened (F19): marked on its screen for a moment. */
+  .focus-mark {
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+    background-color: var(--color-accent-soft);
+    transition:
+      outline-color 160ms,
+      background-color 160ms;
+  }
   .kbd {
     white-space: nowrap;
     flex-shrink: 0;

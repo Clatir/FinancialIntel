@@ -1,20 +1,25 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
-import { asksImpulse, isNight, sum } from '@shared/calc/operations'
+import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
+import { DEFAULT_SIGN, withKind } from '@shared/calc/kinds'
+import { confirmedChanges, confirmedPeriodOf, type ConfirmedChange, type OperationEdit } from '@shared/calc/balances'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
 import { HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
-import { updateRecord, useData, useFolderLocked } from '../../store/data'
+import { listOf, updateRecord, useData, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
-import { AmountField, DateField, plnText, TimeField } from '../../components/fields'
+import { AmountField, DateField, plnText, signedPln, TimeField } from '../../components/fields'
 import { Badge, Empty, Field, Segmented, TextArea, TextField, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
+import { Modal } from '../../components/Modal'
+import { plDate } from '../../lib/format'
 import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
 import { AccountSelect, CategorySelect, useAccounts } from './pickers'
-import { deleteOperation, rememberAccount } from './state'
+import { deleteOperation, openOperation, rememberAccount, showBrand } from './state'
+import { addOtherSide, joinTransfers, transferEdits, transferIssuesOf, type JoinIssue } from './transfers'
 import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
 import { OFFICER_SOURCE_LABEL, officerHint } from '@shared/import/officer'
 import { officerNow } from '../../store/officer'
@@ -37,38 +42,8 @@ const DIRECTIONS: Partial<Record<TxKind, [string, string]>> = {
   correction: ['minus', 'plus']
 }
 
-const DEFAULT_SIGN: Record<TxKind, 1 | -1> = { expense: -1, income: 1, transfer: -1, trading: -1, tax: -1, loan: -1, correction: -1 }
-
 export function operationLabel(t: Pick<Transaction, 'counterparty' | 'kind' | 'amount' | 'date'>): string {
   return `${t.counterparty.trim() || TX_KIND_LABEL[t.kind]} ${plnText(t.amount)} zł (${t.date.slice(8, 10)}.${t.date.slice(5, 7)}.${t.date.slice(0, 4)})`
-}
-
-/** A kind change keeps the amount and the fields that still mean something; the sign follows the new kind. */
-export function withKind(t: Transaction, kind: TxKind): Transaction {
-  const abs = Math.abs(t.amount)
-  const sign = kind === 'income' ? 1 : t.kind === kind || kind === 'correction' ? Math.sign(t.amount) || DEFAULT_SIGN[kind] : DEFAULT_SIGN[kind]
-  return {
-    ...t,
-    kind,
-    amount: sign * abs,
-    refundable: kind === 'expense' ? t.refundable : false,
-    // Who finances a purchase and whose money an income is are other things (D80): the member stays with the same kind.
-    memberId: kind === t.kind ? t.memberId : null,
-    // A gift and a shared purchase (D83): an expense's only.
-    gift: kind === 'expense' ? t.gift : undefined,
-    share: kind === 'expense' ? t.share : null,
-    advance: kind === 'income' ? t.advance : false,
-    covers: kind === 'income' ? t.covers : [],
-    // A receipt's lines and an income's parts (D81) are other things too: they stay with the same kind.
-    splits: kind === t.kind && (kind === 'expense' || kind === 'income') ? t.splits : [],
-    repaid: kind === 'income' ? t.repaid : 0,
-    counterAccountId: kind === 'transfer' ? t.counterAccountId : null,
-    impulse: kind === 'expense' ? t.impulse : null,
-    // The loan's link only on a loan's operation (an installment of a taken loan is its container's payment).
-    loanId: kind === 'loan' ? t.loanId : null,
-    // Paid from a goal's money (T24, N1): an expense only.
-    goalId: kind === 'expense' ? t.goalId : null
-  }
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -91,13 +66,36 @@ export function OperationEditor({ id }: { id: string }) {
   const rules = useData((s) => s.fi?.settings.import.rules)
   const aliases = useData((s) => s.fi?.settings.import.aliases)
   const loans = useRecordList('loans')
+  const balances = useRecordList('balances')
   const members = useMembers()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
+  // An edit that changes a confirmed balance or a bank's amount (F12): asked before it is made.
+  const [ask, setAsk] = useState<{ run: () => void; changes: ConfirmedChange[]; bank: boolean } | null>(null)
+  // A new entry being written (the editor opened on it as a draft – keyed by the operation): its whole first writing is
+  // the user's own, a purchase typed in with a past day too – nothing to ask.
+  const [fresh] = useState(isDraft)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
   const t = entry.record
   const readOnly = folderReadOnly || entry.readOnly
-  const update = (fn: (r: Transaction) => Transaction) => updateRecord('transactions', id, fn)
+  /** Runs `run` – or asks first when `edits` change a confirmed balance (F12). */
+  const guarded = (edits: readonly OperationEdit[], run: () => void) => {
+    const changes = confirmedChanges(edits, balances)
+    if (changes.length) setAsk({ run, changes, bank: false })
+    else run()
+  }
+  const update = (fn: (r: Transaction) => Transaction): boolean => {
+    // A new entry is the user's own first writing (no confirmed balance knows it yet as it is).
+    if (isDraft || fresh) return updateRecord('transactions', id, fn)
+    const next = fn(t)
+    const changes = confirmedChanges([[t, next]], balances)
+    // The bank's amount of either side.
+    const bank = (!!t.bank || !!t.counterBank) && next.amount !== t.amount
+    if (!changes.length && !bank) return updateRecord('transactions', id, fn)
+    setAsk({ run: () => void updateRecord('transactions', id, fn), changes, bank })
+    return false
+  }
+  const confirmed = confirmedPeriodOf(t, balances)
   const patch = (p: Partial<Transaction>) => update((r) => ({ ...r, ...p }))
   // F8: an expense without a category – what the officer knows of its brand (history, the import's rule, the chain).
   const officer =
@@ -132,6 +130,14 @@ export function OperationEditor({ id }: { id: string }) {
           {isDraft ? 'Nowa operacja' : TX_KIND_LABEL[t.kind]}
         </span>
         {t.bank && <Badge tone={t.bank.pending ? 'warn' : 'default'}>{t.bank.pending ? 'nierozliczona' : 'z banku'}</Badge>}
+        {confirmed && !isDraft && (
+          <Badge
+            title={`Saldo konta ${accounts.find((a) => a.id === confirmed.accountId)?.name ?? ''} potwierdzone ${plDate(confirmed.date)} – zmiana kwoty, daty albo konta zmieni potwierdzone saldo`}
+            data-testid="operation-confirmed"
+          >
+            okres potwierdzony
+          </Badge>
+        )}
         <span className="flex-1" />
         {/* The history stays at hand in a read-only folder too – to look at (N18). */}
         {!isDraft && <HistoryButton kind="transactions" id={t.id} current={t} small />}
@@ -221,13 +227,28 @@ export function OperationEditor({ id }: { id: string }) {
             onChange={(accountId) => {
               if (!accountId) return
               rememberAccount(accountId)
-              patch({ accountId, counterAccountId: t.counterAccountId === accountId ? null : t.counterAccountId })
+              // The other side's account made this one: a transfer outside the budget (its other side's bank row goes).
+              patch(t.counterAccountId === accountId ? { accountId, counterAccountId: null, counterBank: undefined, counterDate: undefined } : { accountId })
             }}
             data-testid="operation-account"
           />
         </Field>
         <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'}>
-          <TextField commit value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
+          <div className="flex min-w-0 items-center gap-2">
+            <TextField commit className="min-w-0 flex-1" value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
+            {/* F18: every operation of this counterparty – the brand the import knows it by, the whole history. */}
+            {!isDraft && (t.counterparty || t.title) && (
+              <button
+                type="button"
+                className="shrink-0 text-[11px] text-accent hover:underline"
+                onClick={() => showBrand(t, aliases)}
+                title="Wszystkie operacje tego kontrahenta (cała historia) – filtr „Kontrahent” w „Więcej filtrów”"
+                data-testid="operation-same-brand"
+              >
+                wszystkie
+              </button>
+            )}
+          </div>
         </Field>
         {(t.title || t.kind === 'transfer' || t.kind === 'income') && (
           <Field label="Tytuł">
@@ -339,16 +360,21 @@ export function OperationEditor({ id }: { id: string }) {
         {t.kind === 'income' && t.amount >= 0 && <MemberIncome t={t} patch={patch} />}
 
         {t.kind === 'transfer' && (
-          <Field label={outgoing ? 'Na konto' : 'Z konta'}>
-            <AccountSelect
-              className="w-[200px]"
-              value={t.counterAccountId}
-              onChange={(counterAccountId) => patch({ counterAccountId })}
-              none="konto spoza budżetu"
-              exclude={t.accountId}
-              data-testid="operation-counter-account"
-            />
-          </Field>
+          <>
+            <Field label={outgoing ? 'Na konto' : 'Z konta'}>
+              <AccountSelect
+                className="w-[200px]"
+                value={t.counterAccountId}
+                // Another account: its bank row and day go. A transfer of before 1.7.0 (one side) stays one side – its
+                // other side may be an operation of its own; joining it or adding the side is the box below (F10, F12).
+                onChange={(counterAccountId) => patch({ counterAccountId, ...(counterAccountId !== t.counterAccountId ? { counterBank: undefined, counterDate: undefined } : {}) })}
+                none="konto spoza budżetu"
+                exclude={t.accountId}
+                data-testid="operation-counter-account"
+              />
+            </Field>
+            <TransferSides t={t} readOnly={readOnly} guarded={guarded} />
+          </>
         )}
         {t.kind === 'trading' && (
           <p className="text-[11.5px] text-muted">
@@ -433,6 +459,43 @@ export function OperationEditor({ id }: { id: string }) {
           </div>
         )}
       </fieldset>
+      {ask && (
+        <Modal
+          title="Zmienić operację?"
+          width={500}
+          onClose={() => setAsk(null)}
+          testId="operation-guard"
+          footer={
+            <>
+              <button type="button" className="btn" onClick={() => setAsk(null)} data-testid="operation-guard-cancel">
+                Anuluj
+              </button>
+              <button
+                type="button"
+                className="btn btn-accent"
+                onClick={() => {
+                  setAsk(null)
+                  ask.run()
+                }}
+                data-testid="operation-guard-confirm"
+              >
+                Zmień mimo to
+              </button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-1.5 text-[12px]" data-testid="operation-guard-text">
+            {ask.changes.map((c) => (
+              <p key={c.accountId}>
+                To zmieni potwierdzone saldo konta {accounts.find((a) => a.id === c.accountId)?.name ?? '?'} z {plDate(c.date)} o{' '}
+                <span className="num">{signedPln(c.delta)} zł</span> i stan osłon.
+              </p>
+            ))}
+            {ask.bank && <p>Kwota pochodzi z banku ({plnText(t.amount)} zł) – po zmianie operacja nie zgodzi się z wyciągiem.</p>}
+            <p className="text-dim">Zamrożone dni gry zostają bez zmian.</p>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -580,5 +643,63 @@ function LoanHint({ t, fleet, loans, readOnly, onPick }: { t: Transaction; fleet
         </button>
       )}
     </span>
+  )
+}
+
+/**
+ * A transfer between two accounts of the budget (F10, D87): one operation for both sides – what each account gets; one
+ * of before 1.7.0 counts on its account only – joined with its other side's operation, or given the other side.
+ */
+function TransferSides({ t, readOnly, guarded }: { t: Transaction; readOnly: boolean; guarded: (edits: readonly OperationEdit[], run: () => void) => void }) {
+  const accounts = useAccounts()
+  const transactions = useData((s) => s.records.transactions)
+  const legacy = t.kind === 'transfer' && !!t.counterAccountId && !isTwoSided(t)
+  // The report of this transfer, if any – only for one of before 1.7.0 (the whole list read once per change of it).
+  const issue = useMemo(
+    () => (legacy ? (transferIssuesOf(listOf(transactions), useData.getState()).find((i): i is JoinIssue => i.kind !== 'lone' && (i.keep.id === t.id || i.drop.id === t.id)) ?? null) : null),
+    [legacy, transactions, t.id]
+  )
+  const name = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? 'konto spoza listy'
+  if (!t.counterAccountId) return null
+  if (isTwoSided(t))
+    return (
+      <p className="text-[11.5px] text-muted" data-testid="operation-transfer-both">
+        Jedna operacja dla obu kont: {signedPln(t.amount)} zł na {name(t.accountId)}, {signedPln(-t.amount)} zł na {name(t.counterAccountId)}
+        {t.counterBank ? ` · druga strona z banku${t.counterDate && t.counterDate !== t.date ? ` (${t.counterDate.slice(8, 10)}.${t.counterDate.slice(5, 7)})` : ''}` : ''}.
+      </p>
+    )
+  const other = issue ? (issue.keep.id === t.id ? issue.drop : issue.keep) : null
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="operation-transfer-legacy">
+      <span className="text-accent">Zapisany przed 1.7.0 jako jedna strona – liczy się tylko na koncie {name(t.accountId)}.</span>
+      {!readOnly &&
+        (other ? (
+          <button
+            type="button"
+            className="btn h-[22px]"
+            onClick={() =>
+              guarded(transferEdits(issue!), () => {
+                void joinTransfers([issue!])
+                // The operation shown goes when it is the other side of the kept one.
+                if (issue!.drop.id === t.id) openOperation(issue!.keep)
+              })
+            }
+            title="Druga strona tego przelewu jest osobną operacją – po połączeniu jedna operacja obejmie oba konta (salda bez zmian)"
+            data-testid="operation-transfer-join"
+          >
+            Połącz z drugą stroną ({other.date.slice(8, 10)}.{other.date.slice(5, 7)}, {name(other.accountId)})
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn h-[22px]"
+            onClick={() => guarded(transferEdits({ kind: 'lone', tx: t }), () => addOtherSide(t))}
+            title={`Konto ${name(t.counterAccountId)} dostanie kwotę tego przelewu – jego saldo się zmieni`}
+            data-testid="operation-transfer-add"
+          >
+            Dopisz drugą stronę na {name(t.counterAccountId)}
+          </button>
+        ))}
+    </div>
   )
 }

@@ -70,10 +70,25 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         ],
         loot: { month: '2026-09', amount: zl(340) },
         corrections: [{ later: { id: 'C2', date: '2026-10-12', amount: zl(50), accountId: MBANK_ACCOUNT_ID }, earlier: { date: '2026-10-11', updatedBy: 'LAPTOP' } }],
-        accountName: () => 'mBank'
+        // Transfers of before 1.7.0 (F10): the pairs together, a side twice and a missing side apart.
+        transfers: [
+          { issue: { kind: 'pair', keep: tx('2026-10-02', { kind: 'transfer' }), drop: tx('2026-10-02', { kind: 'transfer', accountId: XTB_WALLET_ACCOUNT_ID, amount: zl(10) }) }, key: 'P' },
+          {
+            issue: {
+              kind: 'double',
+              keep: tx('2026-10-05', { kind: 'transfer', amount: -zl(500), counterAccountId: XTB_WALLET_ACCOUNT_ID, bothSides: true }),
+              drop: tx('2026-10-06', { kind: 'transfer', accountId: XTB_WALLET_ACCOUNT_ID, amount: zl(500) }),
+              date: '2026-10-06',
+              settled: false
+            },
+            key: 'D'
+          },
+          { issue: { kind: 'lone', tx: tx('2026-10-07', { kind: 'transfer', amount: -zl(200), counterAccountId: XTB_WALLET_ACCOUNT_ID }) }, key: 'L' }
+        ],
+        accountName: (id) => (id === XTB_WALLET_ACCOUNT_ID ? 'Portfel XTB' : 'mBank')
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'corrections', 'refunds', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'transfers', 'transfers', 'corrections', 'refunds', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
@@ -83,6 +98,17 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(text('folder')).toEqual(['1 konflikt kopii, 2 pliki z błędem – do rozstrzygnięcia w Synchronizacji.'])
     expect(text('uncategorized')).toEqual(['3 wydatki bez kategorii od 01.09.2026 – razem 54.20 zł.'])
     expect(text('duplicates')).toEqual(['2 możliwe duplikaty – ta sama operacja dwa razy.'])
+    expect(text('transfers')).toEqual([
+      '1 przelew między kontami zapisany jako dwie osobne operacje (sprzed 1.7.0) – połączenie w jedną operację nie zmienia żadnego salda.',
+      'mBank → Portfel XTB 05.10, 500.00 zł: strona konta Portfel XTB zapisana też osobno (06.10) – liczy się dwa razy.',
+      'mBank → Portfel XTB 07.10, 200.00 zł: zapisany tylko na koncie mBank – saldo konta Portfel XTB go nie ma.'
+    ])
+    // The pairs together (no key – the action takes them all), each other one by its key.
+    expect(items.filter((i) => i.kind === 'transfers').map((i) => [i.ref, i.action])).toEqual([
+      [undefined, 'Połącz…'],
+      ['D', 'Połącz'],
+      ['L', 'Dopisz drugą stronę']
+    ])
     // A balance confirmed twice on two computers (B129).
     expect(text('corrections')).toEqual(['mBank: korekta salda 50.00 zł z 12.10 wygląda na powtórzoną – taka sama z 11.10 (LAPTOP); saldo potwierdzone dwa razy, zanim OneDrive przyniósł pierwszą.'])
     expect(text('refunds')).toEqual(['Babcia: do oddania 120.00 zł – najstarszy zakup z 03.10 (16 dni).'])

@@ -61,9 +61,10 @@ export async function restoreDeleted(collection: Collection, ids: readonly strin
 /**
  * Delete several records with one "Cofnij" (e.g. duplicates after an import): the undo restores each from the
  * version its deletion kept (after `onUndo` – what the caller changed with them, 1.2.1). Deleted with one call (W1); a
- * record whose file the disk refused stays (the error said after), those deleted still get the undo.
+ * record whose file the disk refused stays (the error said after), those deleted still get the undo. The ids deleted:
+ * the caller takes back what it changed for the others (1.7.0).
  */
-export async function deleteManyWithUndo(collection: Collection, ids: readonly string[], label: string, text: (n: number) => string, onUndo?: () => void): Promise<void> {
+export async function deleteManyWithUndo(collection: Collection, ids: readonly string[], label: string, text: (n: number) => string, onUndo?: () => void): Promise<string[]> {
   const { deleted, error } = await deleteRecords(collection, ids)
   if (deleted.length)
     toast(text(deleted.length), 'success', 10000, {
@@ -95,5 +96,6 @@ export async function deleteManyWithUndo(collection: Collection, ids: readonly s
           toast(missing ? `Przywrócono ${deleted.length - missing} z ${deleted.length}: ${label}.` : `Przywrócono: ${label}.`, missing ? 'error' : 'success', 5000)
         })()
     })
-  if (error) throw new Error(error)
+  if (error) toast(error, 'error', 8000)
+  return deleted
 }

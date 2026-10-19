@@ -12,6 +12,7 @@
  * kept one's is a conflict – shown, not ticked by default; both docked = blocked (one docking to undo by hand).
  */
 import { addDays } from '../calc/dates'
+import { isTwoSided } from '../calc/operations'
 import { withBankAmount } from '../calc/share'
 import type { Docking, Transaction } from '../schema/records'
 import { keyOccurrence, keyOnAccount, rowIdentity } from './mbank'
@@ -72,7 +73,8 @@ function decision(t: Transaction): string | null {
     t.refundable,
     member(t.refundable || t.kind === 'income', t.memberId),
     t.counterAccountId ?? '',
-    t.containerId ?? '',
+    // A transfer in one operation is another decision than one side of it (F10).
+    isTwoSided(t) ? 'both' : '',
     t.loanId ?? '',
     t.goalId ?? ''
   ].join('|')
@@ -279,6 +281,10 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
         covers: c.covers,
         repaid: c.repaid,
         counterAccountId: c.counterAccountId,
+        // A transfer in one operation stays one (F10): its other side's row and day with it.
+        bothSides: c.bothSides,
+        counterBank: c.counterBank,
+        counterDate: c.counterDate,
         containerId: c.containerId,
         goalId: c.goalId,
         loanId: c.loanId

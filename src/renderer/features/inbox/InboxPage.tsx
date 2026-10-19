@@ -1,10 +1,14 @@
+import { useState } from 'react'
 import { INBOX_KINDS, INBOX_TITLE, type InboxItem, type InboxKind } from '@shared/calc/inbox'
 import { plnText } from '../../components/fields'
 import { Empty, Panel } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { useFleet } from '../../store/fleet'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
-import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, useInbox } from './state'
+import { openOperation } from '../operations/state'
+import { dismissTransfer } from '../operations/transfers'
+import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, transferIssueOf, useInbox } from './state'
+import { TransferPairs } from './TransferPairs'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -12,6 +16,8 @@ const zl = (g: number) => `${plnText(g)} zł`
 const HINT: Partial<Record<InboxKind, string>> = {
   uncategorized: 'Wydatek bez kategorii liczy się do energii dnia jako codzienny i nie trafia do żadnej koperty.',
   duplicates: 'Ta sama operacja wpisana ręcznie i z banku albo z dwóch komputerów – scalanie z jednym „Cofnij”.',
+  transfers:
+    'Od 1.7.0 przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane wcześniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
   refunds: 'Zakupy finansowane pieniędzmi osłon, których domownik jeszcze nie oddał (Ustawienia → Domownicy).',
   balances: 'Salda potwierdzone z bankiem ponad 30 dni temu – potwierdzenie pokazuje, czy operacje zgadzają się z kontem.'
 }
@@ -26,6 +32,9 @@ export function InboxPage() {
   const items = useInbox(duplicates, zl)
   const from = fleet?.started ? fleet.start : null
   const sections = INBOX_KINDS.map((kind) => [kind, items.filter((i) => i.kind === kind)] as const).filter(([, list]) => list.length > 0)
+  // The pairs of transfers together (F10): shown before they are joined.
+  const [pairs, setPairs] = useState(false)
+  const open = (item: InboxItem) => (item.kind === 'transfers' && !item.ref ? setPairs(true) : openInboxItem(item, from))
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-inbox">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
@@ -43,7 +52,7 @@ export function InboxPage() {
               <Panel key={kind} title={INBOX_TITLE[kind]} name={INBOX_TITLE[kind]} testId={`inbox-${kind}`}>
                 <div className="flex flex-col gap-1 text-[12px]">
                   {list.map((item) => (
-                    <Report key={item.key} item={item} onOpen={() => openInboxItem(item, from)} />
+                    <Report key={item.key} item={item} onOpen={() => open(item)} />
                   ))}
                   {HINT[kind] && <p className="text-[11px] text-dim">{HINT[kind]}</p>}
                 </div>
@@ -52,6 +61,7 @@ export function InboxPage() {
           </div>
         )}
       </div>
+      {pairs && <TransferPairs onClose={() => setPairs(false)} />}
     </div>
   )
 }
@@ -66,9 +76,32 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
           to nie powtórzenie
         </button>
       )}
+      {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}
+      {item.kind === 'transfers' && item.ref && <TransferButtons item={item} />}
       <button type="button" className="btn h-[22px] shrink-0" onClick={onOpen} data-testid="inbox-open">
         {item.action}
       </button>
     </div>
+  )
+}
+
+function TransferButtons({ item }: { item: InboxItem }) {
+  const show = () => {
+    const issue = transferIssueOf(item)
+    if (issue) openOperation(issue.kind === 'lone' ? issue.tx : issue.keep)
+  }
+  const dismiss = () => {
+    const issue = transferIssueOf(item)
+    if (issue) dismissTransfer(issue)
+  }
+  return (
+    <>
+      <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={show} data-testid="inbox-transfer-show">
+        Pokaż
+      </button>
+      <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={dismiss} data-testid="inbox-dismiss">
+        zostaw tak
+      </button>
+    </>
   )
 }

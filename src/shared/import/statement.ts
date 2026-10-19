@@ -11,6 +11,7 @@
  */
 import { addDays } from '../calc/dates'
 import { balanceAt, openingOf } from '../calc/balances'
+import { amountOn, dateOn, touchesAccount } from '../calc/operations'
 import type { Balance, Transaction } from '../schema'
 import type { MbankRow } from './mbank'
 
@@ -153,16 +154,18 @@ export function statementCheck(st: Statement, input: { transactions: readonly Tr
   for (const r of st.rows) {
     if (r.date < from) continue
     const t = r.txId ? input.tx(r.txId) : undefined
-    if (!t || t.accountId !== acc || t.date < from || t.date > last) {
+    // A transfer in one operation (F10): its side on this account – the other account's row joined to it.
+    if (!t || !touchesAccount(t, acc) || dateOn(t, acc) < from || dateOn(t, acc) > last) {
       missing.push({ date: r.date, name: r.name, amount: r.amount, key: r.key })
       continue
     }
     matched.add(t.id)
-    if (t.amount !== r.amount) amounts.push({ date: r.date, name: r.name, bank: r.amount, fi: t.amount, id: t.id })
+    const own = amountOn(t, acc)
+    if (own !== r.amount) amounts.push({ date: r.date, name: r.name, bank: r.amount, fi: own, id: t.id })
   }
   const extra = input.transactions
-    .filter((t) => t.accountId === acc && t.date >= from && t.date <= last && !matched.has(t.id))
-    .map((t) => ({ date: t.date, name: t.counterparty || t.note || '', amount: t.amount, id: t.id }))
+    .filter((t) => touchesAccount(t, acc) && !matched.has(t.id) && dateOn(t, acc) >= from && dateOn(t, acc) <= last)
+    .map((t) => ({ date: dateOn(t, acc), name: t.counterparty || t.note || '', amount: amountOn(t, acc), id: t.id }))
     .sort((a, b) => a.date.localeCompare(b.date))
   const gaps = st.gaps.filter((g) => g.to >= from)
   const sum = <T>(xs: readonly T[], f: (x: T) => number) => xs.reduce((s, x) => s + f(x), 0)

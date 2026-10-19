@@ -4,7 +4,7 @@ import { warsawNow } from '@shared/calc/dates'
 import { withAmount } from '@shared/calc/share'
 import { createDefaultSettings } from '@shared/defaults'
 import { COLLECTIONS } from '@shared/paths'
-import { defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type ImportRule, type Transaction } from '@shared/schema'
+import { defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type ImportRule, type Transaction } from '@shared/schema'
 
 // The renderer's stores talk to the main process through window.fi (preload); here a mock that takes every write.
 const saved = <T,>(r: T): RecordEntry<T> => ({ record: r, relPath: 'x.json', readOnly: false })
@@ -14,7 +14,8 @@ const api = {
   saveSettings: vi.fn(async (f: unknown) => f),
   deleteRecord: vi.fn(),
   deleteRecords: vi.fn(),
-  historyKeep: vi.fn()
+  historyKeep: vi.fn(),
+  historyList: vi.fn(async () => [] as unknown[])
 }
 const storage = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => void storage.set(k, v), removeItem: (k: string) => void storage.delete(k) })
@@ -192,5 +193,150 @@ describe('„Cofnij” zbiorczej zmiany cofa tylko swoje pola (1.6.4, B66)', () 
     data.updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: f.settings.import.rules.map((r) => Object.fromEntries(Object.entries(r).reverse()) as ImportRule) } } }))
     lastUndo()()
     expect(rules()).toEqual([])
+  })
+})
+
+describe('zmiana zaznaczonych operacji naraz (1.7.0, F11)', () => {
+  const WALLET = XTB_WALLET_ACCOUNT_ID
+
+  it('na inne konto: tylko zaznaczone i widoczne; przelew na konto swojej drugiej strony – pominięty; już na nim – bez zmiany', () => {
+    const a = tx({ counterparty: 'A' })
+    const toWallet = tx({ kind: 'transfer', counterAccountId: WALLET, bothSides: true })
+    const there = tx({ accountId: WALLET })
+    const hidden = tx({ counterparty: 'ukryta' })
+    load([a, toWallet, there, hidden])
+    ops.tickOperations([a.id, toWallet.id, there.id, hidden.id], true)
+    const plan = ops.bulkPlan([a.id, toWallet.id, there.id], { kind: 'account', accountId: WALLET })
+    expect(plan.before.map((t) => t.id)).toEqual([a.id])
+    expect(plan.after).toEqual([{ ...a, accountId: WALLET }])
+    expect(plan.skipped).toBe(1)
+  })
+
+  it('na przelew na konto budżetu: jedna operacja dla obu kont; zadokowana zostaje swoim rodzajem; przesunięcie daty – też dzień drugiej strony', () => {
+    const a = tx({ counterparty: 'A', amount: 5000, kind: 'income' })
+    const docked = tx({ kind: 'trading', amount: 30000 })
+    load([a, docked])
+    const dockings = { D1: { record: { id: 'D1', transactionId: docked.id } as never, relPath: 'dockings/x.json', readOnly: false } }
+    data.useData.setState((s) => ({ records: { ...s.records, dockings } }))
+    ops.tickOperations([a.id, docked.id], true)
+    const plan = ops.bulkPlan([a.id, docked.id], { kind: 'kind', to: 'transfer', counterAccountId: WALLET })
+    expect(plan.after).toEqual([expect.objectContaining({ id: a.id, kind: 'transfer', amount: -5000, counterAccountId: WALLET, bothSides: true })])
+    expect(plan.skipped).toBe(1)
+    const t = tx({ kind: 'transfer', counterAccountId: WALLET, bothSides: true, counterDate: '2026-10-15' })
+    load([t])
+    ops.tickOperations([t.id], true)
+    expect(ops.bulkPlan([t.id], { kind: 'shift', days: -2 }).after).toEqual([{ ...t, date: '2026-10-12', counterDate: '2026-10-13' }])
+  })
+
+  it('„Cofnij” zmienia tylko pola zmiany, póki są takie, jak ustawiła (B66); wpis nowszej wersji – bez zmian', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'account', accountId: XTB_WALLET_ACCOUNT_ID }))
+    expect([current(a.id).accountId, current(b.id).accountId]).toEqual([XTB_WALLET_ACCOUNT_ID, XTB_WALLET_ACCOUNT_ID])
+    expect(ops.useOperationsUi.getState().ticked).toEqual({})
+    data.updateRecord('transactions', a.id, (r) => ({ ...r, note: 'później' }))
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, accountId: MBANK_ACCOUNT_ID, note: 'ręcznie' }))
+    lastUndo()()
+    expect(current(a.id)).toMatchObject({ accountId: MBANK_ACCOUNT_ID, note: 'później' })
+    expect(current(b.id)).toMatchObject({ accountId: MBANK_ACCOUNT_ID, note: 'ręcznie' })
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+    const newer = tx({ counterparty: 'N' })
+    load([newer])
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { [newer.id]: { ...s.records.transactions[newer.id]!, readOnly: true } } } }))
+    ops.tickOperations([newer.id], true)
+    expect(ops.bulkPlan([newer.id], { kind: 'shift', days: 1 })).toMatchObject({ before: [], newer: 1 })
+  })
+
+  it('przelew sprzed 1.7.0 (jedna strona) zmieniony na inne konto budżetu zostaje jedną stroną – jego druga strona może być osobną operacją (przegląd S)', () => {
+    const legacy = tx({ kind: 'transfer', amount: -5000 })
+    load([legacy])
+    ops.tickOperations([legacy.id], true)
+    const [after] = ops.bulkPlan([legacy.id], { kind: 'kind', to: 'transfer', counterAccountId: WALLET }).after
+    expect(after).toMatchObject({ counterAccountId: WALLET })
+    expect(after!.bothSides).toBeUndefined()
+  })
+
+  it('usunięcie: dysk odmawia jednej – ona i jej dokowanie zostają, reszta znika (przegląd S)', async () => {
+    const a = tx({ counterparty: 'A' })
+    const docked = tx({ kind: 'trading', amount: 30000 })
+    load([a, docked])
+    const dockings = { D1: { record: { id: 'D1', transactionId: docked.id } as never, relPath: 'dockings/x.json', readOnly: false } }
+    data.useData.setState((s) => ({ records: { ...s.records, dockings } }))
+    api.deleteRecords.mockImplementation(async (_c: string, ids: string[]) => ids.map((id) => (id === docked.id ? { id, error: 'Plik zajęty.' } : { id })))
+    ops.tickOperations([a.id, docked.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, docked.id], { kind: 'delete' }))
+    expect(Object.keys(data.useData.getState().records.transactions)).toEqual([docked.id])
+    expect(api.deleteRecords).not.toHaveBeenCalledWith('dockings', expect.anything(), undefined)
+    expect(ui.useUi.getState().toasts.map((t) => t.text)).toContain('Plik zajęty.')
+    api.deleteRecords.mockReset()
+  })
+
+  it('usunięcie: zaznaczone znikają razem z dokowaniami', async () => {
+    const a = tx({ counterparty: 'A' })
+    const docked = tx({ kind: 'trading', amount: 30000 })
+    load([a, docked])
+    const dockings = { D1: { record: { id: 'D1', transactionId: docked.id } as never, relPath: 'dockings/x.json', readOnly: false } }
+    data.useData.setState((s) => ({ records: { ...s.records, dockings } }))
+    api.deleteRecords.mockImplementation(async (_c: string, ids: string[]) => ids.map((id) => ({ id })))
+    ops.tickOperations([a.id, docked.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, docked.id], { kind: 'delete' }))
+    expect(Object.keys(data.useData.getState().records.transactions)).toEqual([])
+    expect(api.deleteRecords).toHaveBeenCalledWith('dockings', ['D1'], undefined)
+    api.deleteRecords.mockReset()
+  })
+})
+
+describe('przegląd S: przejście do operacji zdejmuje też filtry 1.7.0 (F18), przelewy łączone bez liczenia dwa razy (F10)', () => {
+  it('operacja z palety, meldunków, Mostka: kwota, kontrahent, domownik… nie chowają jej; zapisany filtr zostaje', () => {
+    const t = tx({ counterparty: 'Mała Kawa', amount: -1200 })
+    load([t])
+    ops.setFilter({ amountMin: 10000, brands: ['inna'], members: [HOUSE_MEMBER_ID] })
+    const stored = storage.get('fi.operations.filter')
+    ops.openOperation(t)
+    expect(ops.useOperationsUi.getState()).toMatchObject({ shown: true, selectedId: t.id, filter: { amountMin: null, amountMax: null, brands: [], members: [], containers: [], goals: [], loans: [], transferAccounts: [] } })
+    expect(storage.get('fi.operations.filter')).toBe(stored)
+    // A new entry (Ctrl+N) is shown too.
+    ops.showStoredFilter()
+    ops.newOperation()
+    expect(ops.useOperationsUi.getState().filter).toMatchObject({ amountMin: null, brands: [], members: [] })
+    expect(storage.get('fi.operations.filter')).toBe(stored)
+  })
+
+  it('„wszystkie” w edytorze: cała historia tego kontrahenta jako widok – zapisany filtr zostaje, inne filtry go nie chowają', () => {
+    const t = tx({ counterparty: 'BIEDRONKA 1234' })
+    load([t])
+    ops.setFilter({ kinds: ['income'], accounts: [XTB_WALLET_ACCOUNT_ID] })
+    const stored = storage.get('fi.operations.filter')
+    ops.showBrand(t)
+    expect(ops.useOperationsUi.getState()).toMatchObject({ shown: true, filter: { period: { kind: 'all' }, kinds: [], accounts: [] } })
+    expect(ops.useOperationsUi.getState().filter.brands).toHaveLength(1)
+    expect(storage.get('fi.operations.filter')).toBe(stored)
+  })
+
+  it('połączenie pary: druga strona, której dysk nie usunął – pierwsza wraca do jednej strony (nigdy dwa razy na drugim koncie); „Cofnij” – tylko połączone', async () => {
+    const tr = await import('../../src/renderer/features/operations/transfers')
+    const out1 = tx({ kind: 'transfer', amount: -5000, counterAccountId: XTB_WALLET_ACCOUNT_ID, date: '2026-10-10' })
+    const in1 = tx({ kind: 'transfer', amount: 5000, accountId: XTB_WALLET_ACCOUNT_ID, date: '2026-10-10' })
+    const out2 = tx({ kind: 'transfer', amount: -7000, counterAccountId: XTB_WALLET_ACCOUNT_ID, date: '2026-10-12' })
+    const in2 = tx({ kind: 'transfer', amount: 7000, accountId: XTB_WALLET_ACCOUNT_ID, date: '2026-10-12' })
+    load([out1, in1, out2, in2])
+    const pairs = tr.transferIssuesNow().filter((i): i is Extract<typeof i, { kind: 'pair' }> => i.kind === 'pair')
+    expect(pairs.map((p) => [p.keep.id, p.drop.id])).toEqual([
+      [out1.id, in1.id],
+      [out2.id, in2.id]
+    ])
+    api.deleteRecords.mockImplementation(async (_c: string, ids: string[]) => ids.map((id) => (id === in2.id ? { id, error: 'Zapisany przez nowszą wersję.' } : { id })))
+    await tr.joinTransfers(pairs)
+    expect(current(out1.id)).toMatchObject({ bothSides: true, counterAccountId: XTB_WALLET_ACCOUNT_ID })
+    expect(current(out2.id)).toEqual(out2)
+    expect(Object.keys(data.useData.getState().records.transactions).sort()).toEqual([out1.id, out2.id, in2.id].sort())
+    const undo = ui.useUi.getState().toasts.find((t) => t.text.startsWith('Przelew połączony'))!.action!.run
+    data.updateRecord('transactions', out2.id, (r) => ({ ...r, note: 'później' }))
+    undo()
+    await vi.waitFor(() => expect(current(out1.id)).toEqual(out1))
+    expect(current(out2.id).note).toBe('później')
+    api.deleteRecords.mockReset()
   })
 })

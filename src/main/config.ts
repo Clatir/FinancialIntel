@@ -76,7 +76,11 @@ export class ConfigStore {
   private held: Array<[string[], unknown]> = []
   /** Writes are queued and always write the latest state, so an older snapshot never lands last. */
   private writing: Promise<void> = Promise.resolve()
-  constructor(private readonly userDataDir: string) {}
+  /** `writeDelayMs` – a slow disk in test runs (`FI_CONFIG_WRITE_DELAY_MS`): each write waits this long first. */
+  constructor(
+    private readonly userDataDir: string,
+    private readonly writeDelayMs = 0
+  ) {}
 
   get file(): string {
     return join(this.userDataDir, 'config.json')
@@ -140,6 +144,7 @@ export class ConfigStore {
       return this.config
     }
     const write = this.writing.then(async () => {
+      if (this.writeDelayMs) await new Promise((r) => setTimeout(r, this.writeDelayMs))
       await fs.mkdir(this.userDataDir, { recursive: true })
       await writeFileAtomic(this.file, `${JSON.stringify(this.config, null, 2)}\n`)
     })

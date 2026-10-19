@@ -87,6 +87,18 @@ describe('duplikaty zapisanych operacji (D77)', () => {
     expect(findDuplicates([own, { ...copy, date: '2026-10-20' }], [])).toEqual([])
   })
 
+  it('przelew w jednej operacji (F10) przechodzi na zachowaną kopię w całości – obie strony, wiersz i dzień drugiej; jedna strona to inna decyzja (przegląd S)', () => {
+    const SAVINGS = '01K3SAV0000000000000000001'
+    const both = tx({ kind: 'transfer', amount: -50000, counterparty: 'Na oszczędności', counterAccountId: SAVINGS, bothSides: true, counterDate: '2026-10-12', counterBank: { ...bank('mbank:sv:0', 'JAN KAPITAN'), source: 'lista' } })
+    // The bank's copy left undecided (an expense without a category), kept.
+    const copy = tx({ amount: -50000, counterparty: 'JAN KAPITAN', bank: bank('mbank:tr:0', 'JAN KAPITAN') })
+    const merged = mergeDuplicate(copy, [both], 'manual', NOW)
+    expect(merged).toMatchObject({ kind: 'transfer', counterAccountId: SAVINGS, bothSides: true, counterDate: '2026-10-12', counterBank: { key: 'mbank:sv:0' } })
+    // The same account named by one side only (before 1.7.0): another decision – the panel asks.
+    const oneSide = { ...both, id: id(), bothSides: undefined, counterBank: undefined, counterDate: undefined, bank: bank('mbank:tr:1', 'JAN KAPITAN') }
+    expect(findDuplicates([both, oneSide], [])[0]?.conflict).toBe(true)
+  })
+
   it('ten sam wiersz banku dwa razy (dwa komputery): zostaje nowsza wersja, chyba że druga ma więcej Twoich danych albo dokowanie', () => {
     const older = tx({ bank: bank('mbank:bb:0', 'LIDL', true), updatedAt: '2026-10-11T08:00:00.000Z' })
     const newer = tx({ bank: bank('mbank:bb:0', 'LIDL'), updatedAt: '2026-10-11T09:00:00.000Z' })

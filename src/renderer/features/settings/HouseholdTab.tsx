@@ -9,6 +9,7 @@ import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { addMember, patchMember, setHouseholdSince, useMembers } from '../household/actions'
+import { useFocusRecord } from '../../components/focus'
 
 const INFLOW_OPTIONS: Array<{ value: MemberInflow; label: string }> = [
   { value: 'ask', label: 'pytaj' },
@@ -23,6 +24,8 @@ const INFLOW_OPTIONS: Array<{ value: MemberInflow; label: string }> = [
 export function HouseholdTab() {
   const members = useMembers()
   const readOnly = useFolderLocked()
+  // Opened from the palette (F19): the member marked.
+  useFocusRecord('member')
   const names = new Set(members.map((m) => m.name.toLowerCase()))
   return (
     <Panel
@@ -149,7 +152,7 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
     setBankName('')
   }
   return (
-    <div className={cx('flex flex-col gap-1.5 border-b border-line/70 py-2 last:border-b-0', m.archived && 'opacity-60')} data-testid="member-row" data-name={m.name}>
+    <div className={cx('flex flex-col gap-1.5 border-b border-line/70 py-2 last:border-b-0', m.archived && 'opacity-60')} data-testid="member-row" data-name={m.name} data-focus={`member:${m.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         <NameInput
           className="w-[160px]"

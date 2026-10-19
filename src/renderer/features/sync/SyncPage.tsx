@@ -14,6 +14,7 @@ import { saveFirst, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
 import { Badge, Panel, cx } from '../../components/ui'
+import { ChangeLogPanel } from './ChangeLog'
 
 const KIND_LABEL: Record<string, string> = {
   transactions: 'Operacja',
@@ -444,6 +445,7 @@ export function SyncPage() {
             )}
           </Panel>
         )}
+        <ChangeLogPanel />
         <DeletedRecords />
         {fi && (
           <div className="flex items-center gap-2 text-[12px] text-muted">

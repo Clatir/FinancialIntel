@@ -1,8 +1,11 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
-import { MARK_LABEL, OPERATION_MARKS, amountTone, compareOperations, marksOf, matchesFilter, needsLog, sumOperations, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { amountOn, isTwoSided, touchesAccount } from '@shared/calc/operations'
+import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, sortOperations, sumOperations, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
+import { BulkChangeBar } from './BulkChange'
+import { ExportVisible, extraFilters, MoreFilters, SortHeader, ViewsBar } from './ListTools'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
@@ -29,7 +32,11 @@ import { EveningReport } from '../evening/EveningReport'
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
 const ROW = 28
-const TEMPLATE = '16px 78px 44px minmax(120px, 1.6fr) minmax(90px, 1fr) minmax(0, auto) 110px'
+/**
+ * The list's columns: the counterparty and the category give way in a narrow window (the window's least width with the
+ * details at their width – CI on Windows): the header never reaches under the details' panel.
+ */
+const TEMPLATE = '16px 78px 44px minmax(64px, 1.6fr) minmax(0, 1fr) minmax(0, auto) 110px'
 
 
 const TONE_CLASS = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
@@ -98,6 +105,18 @@ function PeriodBar({ period }: { period: PeriodFilter }) {
   )
 }
 
+/**
+ * The category menu: the main categories with their subcategories under them (F18 – a main one takes its
+ * subcategories, a subcategory alone too); one of the filter archived or unknown since (B82) shown, so it can be unticked.
+ */
+function categoryOptions(cats: ReturnType<typeof useCategories>, picked: readonly string[]): Array<{ value: string; label: string }> {
+  const live = cats.mains
+    .filter((c) => !c.archived)
+    .flatMap((c) => [{ value: c.id, label: c.name }, ...cats.childrenOf(c.id).filter((x) => !x.archived).map((x) => ({ value: x.id, label: `\u00a0\u00a0\u00a0· ${x.name}` }))])
+  const gone = picked.filter((id) => id && !live.some((o) => o.value === id)).map((id) => ({ value: id, label: cats.byId.has(id) ? `${cats.label(id)} (archiwum)` : 'nieznana kategoria' }))
+  return [...live, ...gone, { value: '', label: 'bez kategorii' }]
+}
+
 function CheckMenu<T extends string>({
   label,
   options,
@@ -113,7 +132,8 @@ function CheckMenu<T extends string>({
   testId: string
   note?: string
 }) {
-  const summary = value.length === 0 ? 'wszystkie' : value.length <= 2 ? value.map((v) => options.find((o) => o.value === v)?.label ?? v).join(', ') : `${value.length} z ${options.length}`
+  // A subcategory's label without its indent (F18).
+  const summary = value.length === 0 ? 'wszystkie' : value.length <= 2 ? value.map((v) => (options.find((o) => o.value === v)?.label ?? v).replace(/^[\s\u00a0·]+/, '')).join(', ') : `${value.length} z ${options.length}`
   return (
     <Popover
       buttonClassName="chip"
@@ -153,7 +173,7 @@ function CheckMenu<T extends string>({
   )
 }
 
-function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; index: number; top: number }) {
+function Row({ t, selected, index, top, view }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const orders = useData((s) => s.fi?.settings.orders)
@@ -175,7 +195,11 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
         : t.kind === 'expense'
           ? cats.label(t.categoryId)
           : TX_KIND_LABEL[t.kind]
-  const account = accounts.find((a) => a.id === t.accountId)?.name ?? '?'
+  const nameOf = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '?'
+  // A transfer in one operation (F10): from the account the money left to the one it came to.
+  const account = isTwoSided(t) ? (t.amount < 0 ? `${nameOf(t.accountId)} → ${nameOf(t.counterAccountId)}` : `${nameOf(t.counterAccountId)} → ${nameOf(t.accountId)}`) : nameOf(t.accountId)
+  // The list of one account shows a transfer's money on it.
+  const amount = view && touchesAccount(t, view) ? amountOn(t, view) : t.amount
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split'].includes(m))
   const ticked = useOperationsUi((s) => !!s.ticked[t.id])
   return (
@@ -222,7 +246,7 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
         )}
       </span>
       <span className={cx('num text-right font-medium', TONE_CLASS[tone])} data-testid="operation-amount-cell">
-        {signedPln(t.amount)}
+        {signedPln(amount)}
       </span>
     </div>
   )
@@ -353,6 +377,7 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
           Ustaw finansującego
         </button>
       </fieldset>
+      <BulkChangeBar shown={shown} readOnly={readOnly} />
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
         Odznacz
       </button>
@@ -382,9 +407,12 @@ export function OperationsPage() {
   const all = useMemo(() => listOf(records), [records])
   const rows = useMemo(() => {
     if (!fi) return []
-    const ctx = { categories: cats, accounts, orders: fi.settings.orders }
-    // A new entry being written always shows, whatever the filters.
-    return all.filter((t) => drafts[t.id] || matchesFilter(t, deferred, ctx)).sort(compareOperations)
+    const ctx = { categories: cats, accounts, orders: fi.settings.orders, aliases: fi.settings.import.aliases }
+    // A new entry being written always shows, whatever the filters; the list in the order chosen (F18).
+    return sortOperations(
+      all.filter((t) => drafts[t.id] || matchesFilter(t, deferred, ctx)),
+      deferred.sort
+    )
   }, [all, deferred, cats, accounts, fi, drafts])
   const sums = useMemo(() => sumOperations(rows), [rows])
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW, overscan: 20 })
@@ -426,7 +454,7 @@ export function OperationsPage() {
   }, [rows, selectedIndex, virtualizer])
 
   if (!fi) return null
-  const active = filter.accounts.length + filter.kinds.length + filter.categories.length + filter.marks.length > 0 || !!filter.query || filter.period.kind !== 'month'
+  const active = filter.accounts.length + filter.kinds.length + filter.categories.length + filter.marks.length + extraFilters(filter) > 0 || !!filter.query || filter.period.kind !== 'month' || filter.sort !== 'date'
   const balances = fleet?.accounts.filter((a) => accounts.some((x) => x.id === a.id && !x.archived) || a.balance !== 0) ?? []
 
   return (
@@ -450,14 +478,7 @@ export function OperationsPage() {
           <CheckMenu<TxKind> label="Rodzaj" options={TX_KINDS.map((k) => ({ value: k, label: TX_KIND_LABEL[k] }))} value={filter.kinds} onChange={(v) => setFilter({ kinds: v })} testId="operations-kinds" />
           <CheckMenu
             label="Kategoria"
-            options={[
-              ...cats.mains.filter((c) => !c.archived).map((c) => ({ value: c.id, label: c.name })),
-              // A category of the filter archived or unknown since (B82): shown, so it can be unticked.
-              ...filter.categories
-                .filter((id) => id && !cats.mains.some((c) => c.id === id && !c.archived))
-                .map((id) => ({ value: id, label: cats.byId.has(id) ? `${cats.label(id)} (archiwum)` : 'nieznana kategoria' })),
-              { value: '', label: 'bez kategorii' }
-            ]}
+            options={categoryOptions(cats, filter.categories)}
             value={filter.categories}
             onChange={(v) => setFilter({ categories: v })}
             testId="operations-categories"
@@ -470,6 +491,7 @@ export function OperationsPage() {
             testId="operations-marks"
             note="Z banku / nierozliczona / wpisana ręcznie oraz plan / impuls – dowolne z zaznaczonych; między grupami – wszystkie naraz."
           />
+          <MoreFilters filter={filter} />
           {shown && (
             <button type="button" className="shrink-0 text-[11px] text-accent hover:underline" onClick={showStoredFilter} title="Filtry zapamiętane na tym komputerze. Ten widok otworzył inny ekran – zmiany w nim nie zapisują się jako Twój filtr." data-testid="operations-stored-filter">
               mój filtr
@@ -497,6 +519,7 @@ export function OperationsPage() {
           </div>
         </div>
 
+        <ViewsBar filter={filter} active={active} />
         <div className="flex min-h-[30px] shrink-0 flex-wrap items-center gap-x-5 gap-y-1 border-b border-line px-3 py-1 text-[11.5px]" data-testid="operations-sums">
           <span className="text-muted">
             Operacje <span className="num text-fg-strong">{rows.length === all.length ? all.length : `${rows.length} / ${all.length}`}</span>
@@ -511,6 +534,7 @@ export function OperationsPage() {
             Koszty <span className="num text-fg-strong">{plnText(sums.costs)} zł</span>
           </span>
           <DuplicatesLink />
+          <ExportVisible rows={rows} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
           <span className="flex-1" />
           {balances.map((a) => (
             <span key={a.id} className="text-muted" title={a.opening ? `Saldo otwarcia ${plnText(a.opening.amount)} zł na początek ${plDate(a.opening.date)}` : 'Bez salda otwarcia – suma operacji (Ustawienia → Konta)'}>
@@ -524,14 +548,20 @@ export function OperationsPage() {
         </div>
 
         <BulkBar visible={rows} />
-        <div className="grid h-[24px] shrink-0 items-center gap-x-2 border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: TEMPLATE }}>
+        <div className="grid h-[24px] shrink-0 items-center gap-x-2 overflow-hidden border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: TEMPLATE }}>
           <TickAll rows={rows} />
-          <span>Data</span>
+          <SortHeader sort={filter.sort} by="date">
+            Data
+          </SortHeader>
           <span>Godz.</span>
-          <span>Kontrahent · konto</span>
+          <SortHeader sort={filter.sort} by="counterparty">
+            Kontrahent · konto
+          </SortHeader>
           <span>Kategoria</span>
           <span />
-          <span className="text-right">Kwota</span>
+          <SortHeader sort={filter.sort} by="amount" className="justify-end">
+            Kwota
+          </SortHeader>
         </div>
         <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" data-testid="operations-list">
           {rows.length === 0 ? (
@@ -551,7 +581,7 @@ export function OperationsPage() {
             <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
               {virtualizer.getVirtualItems().map((v) => {
                 const t = rows[v.index] as Transaction
-                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} />
+                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
               })}
             </div>
           )}
