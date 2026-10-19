@@ -1663,3 +1663,52 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   folderu z niezapisywalnymi zmianami pyta („Zmień mimo to”). Bez zmian: komputer sprzed 1.6.5 bez zapisanej odpowiedzi o
   starcie z Windows dostaje pytanie raz (nie wiadomo, na którym komputerze kreator pytał – raz to mniej niż nigdy na
   drugim komputerze, N100).
+- **T254** Teksty i formaty (N31, N33, N53, N57, N72): metafora zawsze z prawdziwą nazwą (D34) – alarmy („Pensja z kadłuba
+  (funduszu awaryjnego)”, „Masa ładunku (stałe koszty X/mies.)”, „Rozbieżność salda: korekta”), Mostek („stałe koszty X/mies.
+  · linia N%”), kreator, plan miesiąca, naruszenia i osiągnięcia gry, Wywiad; daty w oknie przez `plDate` (także podtytuł
+  PDF i podpowiedź salda w Operacjach), nazwa eksportu ZIP z datą warszawską; FVG kopert w raportach i PDF ze znakiem
+  „+” (jak Plan miesiąca i Wywiad), kwoty dni raportu wachty w zł, jedna nazwa „Ładownia (kontenery i opłaty okresowe)”
+  w raporcie wachty, debriefingu i przeglądzie rocznym (warstwa „Order Block · ładownia” w Wywiadzie zostaje); stopień w
+  dopełniaczu po „Do stopnia” (`RANK_GENITIVE`), misja „Rozliczenie z domownikami” (klucz `house` bez zmian); odmiana
+  liczebników (`countLabel` / `plural`) w importie, kreatorze, ładowni, Radarze, Mostku, Dowództwie, powiadomieniu o
+  dostawach i Ustawieniach; „Za planem o”, „Komu pożyczasz”, „bez tego, co wydano przed startem”; maska kwot szybkiego
+  wpisu „••• zł”; Ustawienia → Zasobnik i start bez zapowiedzi funkcji działających od 1.0.0.
+- **T255** Martwy kod (N34): usunięte nieużywane formatery z ICTTJ (`fmtNum`, `fmtPercent`, `fmtAmount`, `fmtPct`,
+  `fmtPctShort`, `fmtPln` – format bez groszy sprzeczny z `formatPln` –, `toneClass`, `tone`), ekran-zaślepka
+  `PlaceholderPage` z polami `stage` / `ready` i rodzajem okna 'placeholder', IPC `copyText`, `AppInfo.isPortable`,
+  `DataStore.importRecords`; plan i Operacje biorą `activeIn` / `monthLabel` / `plDate` ze wspólnych modułów.
+  `GameChange.events` zostaje świadomie (testy czytają z niego decyzje przebiegu; okno bierze świętowania z dziennika
+  wachty – T80); menu „Układ” zna nazwy stron kreatora i meldunków, na kreatorze go nie ma (N61).
+- **T256** Zamknięcie pożyczki z „Cofnij” (N35): raty wziętej pożyczki, które są w ładowni, schodzą z niej jak zrzucony
+  kontener (B56 – masa liczy się do końca miesiąca) z czasem `closedAt` pożyczki; „otwórz” oddaje do ładowni tylko raty
+  zdjęte tym zamknięciem (ten sam czas albo zamknięcie sprzed 1.6.6 – bez czasu), nigdy rat zarchiwizowanych osobno;
+  „Cofnij” (zamknięcia i otwarcia) oddaje pożyczkę i tylko zmienione kontenery w stanie sprzed.
+- **T257** Krzywa majątku na Mostku (N58, wybór z „Przed grupą R”): panel „Krzywa majątku” – ostatnie 26 tygodni, BOS /
+  CHoCH ze struktury całej historii, „Wywiad →”; krzywa liczona raz na stan danych dla Mostka i Wywiadu (`wealthOf`), na
+  Mostku tylko przy widocznym panelu (zwinięty albo ukryty nic nie liczy); radar i reszta wywiadu – przez odprawę i własne
+  ekrany; wiersz Mostka w specyfikacji poprawiony.
+- **T258** Kolory poza kwotami (N60): Daily Bias „Bearish” w kolorze akcentu (jak zaległości – T74), „Bullish” jasnym
+  tekstem; ETA po terminie celu w akcencie już od 1.6.2; plakietka „zaszyfrowany” przy tokenie zostaje jak w ICTTJ.
+- **T259** Rozmiar interfejsu i wyższy kontrast (F30, ustawienia tego komputera w config.json): `prefs.zoom` 0,9–1,5
+  (krok 10 %, wartość spoza siatki dochodzi do niej) – proces główny ustawia `setZoomFactor` we wszystkich oknach (główne,
+  szybki wpis, panele odłączone) przy zmianie i po każdym wczytaniu strony, okno szybkiego wpisu rośnie z nim w granicach
+  ekranu (treść przewija się na małym laptopie), także przy Ctrl+Plus w nim samym; klawisze Ctrl+Plus (też Ctrl+= i plus
+  z klawiatury numerycznej) / Ctrl+Minus / Ctrl+Shift+0 = 100 % (Ctrl+0 to Raporty) obsługuje każde okno w fazie
+  przechwytywania (AltGr nigdy) – jedna droga dla klawiatury i testów; `prefs.highContrast` – atrybut `data-contrast`
+  strony: przygaszone napisy jaśniejsze (AA na panelu), najmniejsze 12 px, style poza warstwami. Ustawienia → „Wygląd i
+  prywatność” (suwak zapisuje po puszczeniu). Zmiany ustawień komputera z okna: odpowiedź (i echo) starszej zmiany nie
+  cofa nowszej w drodze (dwa Ctrl+Plus pod rząd – dwa kroki).
+- **T260** Ukrywanie kwot bez blokady (F40, D30): `prefs.hideIdleMin` (0 = nigdy – domyślnie; lista 1–60 min, inna
+  wartość z pliku pokazana jak jest) – po tylu minutach bez ruchu w systemie (`powerMonitor`) albo po zablokowaniu ekranu
+  proces główny ukrywa kwoty we wszystkich oknach, w dymku zasobnika i powiadomieniach; `prefs.hideOnStart` – przy każdym
+  starcie (także gdy config.json da się odczytać dopiero później); przy ukrytych kwotach pasek u góry „Kwoty ukryte ·
+  Pokaż na 5 min · do końca sesji” (i paleta): pokazanie na chwilę wraca do ukrycia po czasie, „do końca sesji” wyłącza
+  ukrywanie po bezczynności do zamknięcia aplikacji; ukrycie ręczne (Ctrl+$) i zablokowany ekran kończą każde pokazanie;
+  pokazanie na chwilę przy kwotach już widocznych nic nie zmienia. Zmienne testowe `FI_SYSTEM_IDLE`, `FI_IDLE_CHECK_MS`,
+  `FI_CONFIG_RETRY_MS`.
+- **T261** Przegląd grupy R (`/code-review` high, 10 kandydatów – wszystkie poprawione z testem): start z ukrytymi
+  kwotami także po późnym odczycie config.json, „Pokaż …” z palety tylko przy ukrytych kwotach (pokazanie na chwilę nie
+  ukrywa później kwot widocznych), zablokowany ekran chowa też po „do końca sesji”, okno szybkiego wpisu w granicach
+  ekranu, „otwórz” pożyczki tylko dla rat zdjętych zamknięciem, „Cofnij” tylko zmienionych kontenerów, krzywa majątku raz
+  na stan danych i tylko przy widocznym panelu, próg bezczynności spoza listy pokazany jak jest, jedno wczytanie ustawień
+  komputera w oknie (odpowiedź nie cofa zmiany w drodze), przesunięte komentarze i T-decyzje.

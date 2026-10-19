@@ -11,6 +11,7 @@ import { NameInput, Panel, Toggle, cx } from '../../components/ui'
 import { setOpening } from '../balances/actions'
 import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { toast } from '../../store/ui'
+import { plDate } from '../../lib/format'
 import { useAccounts } from '../operations/pickers'
 import { HistoryButton } from '../history/HistoryDialog'
 
@@ -155,7 +156,7 @@ function AccountRow({ account: a, opening, confirmed, balance, taken }: { accoun
         </button>
         {confirmed && (
           <span className="text-dim">
-            ostatnio potwierdzone {confirmed.date} ({plnText(confirmed.amount)} zł)
+            ostatnio potwierdzone {plDate(confirmed.date)} ({plnText(confirmed.amount)} zł)
           </span>
         )}
         <ConfirmTodayAsk c={check} />

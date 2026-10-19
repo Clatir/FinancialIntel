@@ -168,7 +168,7 @@ export function WizardPage() {
       <div className="text-[12.5px]" data-testid="wizard-history">
         {transactions.length ? (
           <>
-            W budżecie: <span className="num text-fg-strong">{transactions.length}</span> operacji
+            W budżecie: <span className="num text-fg-strong">{transactions.length}</span> {plural(transactions.length, 'operacja', 'operacje', 'operacji')}
             {first && <>, pełne miesiące od {first}</>} (do średnich: {Math.min(costs.months, HULL_MONTHS)} mies.).
           </>
         ) : (
@@ -197,12 +197,12 @@ export function WizardPage() {
           następnego miesiąca).
         </Note>
       )}
-      <Field label="Osłony – cel w pensjach" labelWidth={170} hint={targets.shields != null ? `Cel osłon: ${zl(targets.shields)}.` : undefined}>
+      <Field label="Osłony (bufor na pensje) – cel w pensjach" labelWidth={170} hint={targets.shields != null ? `Cel osłon: ${zl(targets.shields)}.` : undefined}>
         {/* Never under the minimum of the orders (B84): the shields would stay below it for good. */}
         <NumberField className="w-[70px]" value={w.shieldSalaries} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries} onChange={(v) => v != null && patchWizard({ shieldSalaries: v })} aria-label="Osłony w pensjach" />
       </Field>
       <Field
-        label="Kadłub – cel w miesiącach"
+        label="Kadłub (fundusz awaryjny) – cel w miesiącach"
         labelWidth={170}
         hint={targets.hull != null ? `Cel kadłuba: ${zl(targets.hull)} (średnie koszty ${zl(usedCosts ?? 0)} × ${w.hullMonths}).` : 'Kadłub potrzebuje średnich kosztów.'}
       >
@@ -217,7 +217,7 @@ export function WizardPage() {
     // 3 – the cargo and the envelopes
     <div key="3" className="flex flex-col gap-2.5">
       <div className="flex flex-col">
-        <span className="label">Ładownia – powtarzające się płatności z historii</span>
+        <span className="label">Ładownia (stałe koszty) – powtarzające się płatności z historii</span>
         {!proposals.length ? (
           <Note>Brak propozycji. Stałe opłaty dodasz w Ładowni.</Note>
         ) : (
@@ -266,7 +266,7 @@ export function WizardPage() {
           <span className="num">{zl(salary ?? 0)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted">Ładownia + odkładki + koperty</span>
+          <span className="text-muted">Ładownia (stałe koszty) + odkładki + koperty</span>
           <span className="num">{zl(cargoMonthly + tanksMonthly + envelopesTotal)}</span>
         </div>
         {tanksMonthly !== tanksLater && (
@@ -291,7 +291,7 @@ export function WizardPage() {
       </Note>
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
-          <span className="w-[110px] text-muted">Osłony</span>
+          <span className="w-[170px] text-muted">Osłony · bufor na pensje</span>
           <span className={cx('num', overSplit ? 'text-down' : 'text-fg-strong')} data-testid="wizard-split-shields">
             {zl(total - hull - goalsTotal)}
           </span>
@@ -299,7 +299,7 @@ export function WizardPage() {
         </div>
         <Meter value={total - hull - goalsTotal} max={targets.shields} />
         <div className="mt-1 flex items-center gap-2">
-          <span className="w-[110px] text-muted">Kadłub</span>
+          <span className="w-[170px] text-muted">Kadłub · fundusz awaryjny</span>
           <AmountField className="w-[130px]" value={hull} onChange={(v) => patchWizard({ hull: v ?? 0 })} aria-label="Kadłub na start" data-testid="wizard-split-hull" />
           {targets.hull != null && <span className="text-[11px] text-dim">cel {zl(targets.hull)}</span>}
           {w.hull != null && (
@@ -311,7 +311,7 @@ export function WizardPage() {
         <Meter value={hull} max={targets.hull} />
         {goals.map((g) => (
           <div key={g.id} className="mt-1 flex items-center gap-2" data-testid="wizard-split-goal" data-name={g.name}>
-            <span className="w-[110px] truncate text-muted" title={g.name}>
+            <span className="w-[170px] truncate text-muted" title={g.name}>
               cel: {g.name}
             </span>
             <AmountField

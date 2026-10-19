@@ -5,7 +5,7 @@ import { existsSync, promises as fs } from 'node:fs'
 import { hostname } from 'node:os'
 import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
-import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, Menu, Notification, app, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
 import { IMPORT_MAX_BYTES } from '@shared/import/text'
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import { SAVED, unsavedQuestion } from '@shared/unsaved'
@@ -32,6 +32,7 @@ import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
 import { QuickEntry } from './quick'
 import { patchMachinePrefs, type MachinePrefs } from '@shared/machine'
 import { windowBounds } from '@shared/bounds'
+import { warsawNow } from '@shared/calc/dates'
 import { IctjSource } from './ictj/source'
 import { findIctjExe, suggestIctjDir } from './ictj/locate'
 
@@ -179,7 +180,7 @@ function trayView(): TrayPrefs & { loginSupported: boolean } {
 }
 
 /**
- * The proposed folder for new data (decision E0-2): `OneDrive\FinancialIntel` when OneDrive is set up on this
+ * The proposed folder for new data (decision D62): `OneDrive\FinancialIntel` when OneDrive is set up on this
  * computer, otherwise `Dokumenty\FinancialIntel`. FI_DEFAULT_DATA_DIR in test runs.
  */
 function defaultDataDir(): { dir: string; oneDrive: boolean } {
@@ -760,7 +761,6 @@ function registerIpc(): void {
       machineName,
       platform: process.platform,
       userDataDir: app.getPath('userData'),
-      isPortable: !!process.env.PORTABLE_EXECUTABLE_DIR,
       freeze: { afterOpenMs: envMs('FI_FREEZE_AFTER_OPEN_MS', 3 * 60_000), quietMs: envMs('FI_FREEZE_QUIET_MS', 60_000) }
     })
   )
@@ -936,7 +936,8 @@ function registerIpc(): void {
   handle('exportZip', async () => {
     const s = requireStore()
     const res = await dialog.showSaveDialog(mainWindow!, {
-      defaultPath: `Financial-Intel-${new Date().toISOString().slice(0, 10)}.zip`,
+      // The Warsaw date, as the daily backups and the rest of the app (N33) – not the UTC one before 2 a.m.
+      defaultPath: `Financial-Intel-${warsawNow().date}.zip`,
       filters: [{ name: 'ZIP', extensions: ['zip'] }]
     })
     if (res.canceled || !res.filePath) return null
@@ -961,9 +962,6 @@ function registerIpc(): void {
     if (res.canceled || !res.filePath) return null
     await writeFileAtomic(res.filePath, await htmlToPdf(html))
     return res.filePath
-  })
-  handle('copyText', async (text: string) => {
-    clipboard.writeText(text)
   })
   handle('listBackups', async () => {
     const s = requireStore()
@@ -1068,16 +1066,19 @@ function registerIpc(): void {
     return requireUpdater().tokenChanged()
   })
   handle('dismissUpdateNotice', () => requireUpdater().dismissNotice())
-  handle('setMachinePrefs', async (patch: unknown) => {
-    const prefs = patchMachinePrefs(config.get().prefs, patch)
-    await config.update({ prefs })
-    // The shortcut registered again only when it was set (also the same one: a retry after another program let it go).
-    if (patch && typeof patch === 'object' && 'quickShortcut' in patch) {
-      quick?.applyShortcut(prefs.quickShortcut)
-      if (quick) quick.replaced = null
-    }
-    broadcastPrefs(prefs)
-    return prefs
+  handle('setMachinePrefs', (patch: unknown) => changePrefs(patch))
+  // „Pokaż na 5 minut” / „Pokaż do końca sesji” (F40): the amounts shown, hidden again then – or not by idleness till the quit.
+  handle('revealAmounts', (minutes: unknown) => {
+    // Shown already: a showing for a while has nothing to hide later – and a running one goes on as it was.
+    if (!config.get().prefs.hideAmounts && typeof minutes === 'number') return config.get().prefs
+    clearReveal()
+    if (typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0) {
+      revealTimer = setTimeout(() => {
+        revealTimer = null
+        hideAmountsNow('koniec pokazania')
+      }, Math.min(minutes, 240) * 60_000)
+    } else revealedForSession = true
+    return changePrefs({ hideAmounts: false })
   })
   handle('setTrayStatus', (text: unknown) => {
     // Kept also without the icon (N99): one made later (closing to the tray turned on) shows today's energy at once.
@@ -1148,10 +1149,96 @@ function systemNotify(title: string, body: string, tag: string, silent = false):
   note.show()
 }
 
+/** Every window of the app: the main one, the quick entry, the detached panels. */
+const appWindows = (): BrowserWindow[] => [mainWindow, ...(quick?.windows() ?? []), ...(detach?.windows() ?? [])].filter((w): w is BrowserWindow => !!w && !w.isDestroyed())
+
 /** The preferences of this computer to every window of the app (the main one, the quick entry, detached panels). */
 function broadcastPrefs(prefs: MachinePrefs): void {
-  const wins = [mainWindow, ...(quick?.windows() ?? []), ...(detach?.windows() ?? [])]
-  for (const w of wins) if (w && !w.isDestroyed()) w.webContents.send('fi:machinePrefs', prefs)
+  for (const w of appWindows()) w.webContents.send('fi:machinePrefs', prefs)
+}
+
+/** This computer's preferences changed (a window, a key of the size, the idleness): saved, applied, told to every window. */
+async function changePrefs(patch: unknown): Promise<MachinePrefs> {
+  const before = config.get().prefs
+  const prefs = patchMachinePrefs(before, patch)
+  await config.update({ prefs })
+  const p = patch && typeof patch === 'object' ? (patch as Partial<MachinePrefs>) : {}
+  // The shortcut registered again only when it was set (also the same one: a retry after another program let it go).
+  if ('quickShortcut' in p) {
+    quick?.applyShortcut(prefs.quickShortcut)
+    if (quick) quick.replaced = null
+  }
+  if (prefs.zoom !== before.zoom) applyZoom()
+  // Hidden by hand (or by the end of a showing): the idleness hides them again from the next showing on (F40).
+  if (p.hideAmounts === true) clearReveal()
+  broadcastPrefs(prefs)
+  return prefs
+}
+
+/** The size of this computer (F30) on every window – the quick entry's grows with it. */
+function applyZoom(): void {
+  const zoom = config.get().prefs.zoom
+  for (const w of appWindows()) w.webContents.setZoomFactor(zoom)
+  quick?.rescale()
+}
+
+/**
+ * Every window of the app (F30): its size after each load (a reload starts at 100 %). The keys of the size are each
+ * window's (`installZoomKeys`) – the preferences bring the size to all of them.
+ */
+function prepareWindow(win: BrowserWindow): void {
+  win.webContents.on('did-finish-load', () => {
+    if (!win.isDestroyed()) win.webContents.setZoomFactor(config.get().prefs.zoom)
+  })
+}
+
+/** „Pokaż na N minut” (F40): the amounts hidden again at this time. */
+let revealTimer: ReturnType<typeof setTimeout> | null = null
+/** „Pokaż do końca sesji” (F40): no hiding by idleness until the app quits. */
+let revealedForSession = false
+
+function clearReveal(): void {
+  if (revealTimer) clearTimeout(revealTimer)
+  revealTimer = null
+  revealedForSession = false
+}
+
+/** „Startuj z ukrytymi kwotami” done this run (F40): once, with this computer's settings read. */
+let startHideDone = false
+
+async function hideOnStart(): Promise<void> {
+  if (startHideDone) return
+  startHideDone = true
+  const p = config.get().prefs
+  if (!p.hideOnStart || p.hideAmounts) return
+  log('info', 'kwoty ukryte: start aplikacji')
+  await changePrefs({ hideAmounts: true }).catch((e) => log('warn', 'ukrycie kwot przy starcie – zapis nie udał się', e))
+}
+
+function hideAmountsNow(why: string): void {
+  if (config.get().prefs.hideAmounts) return
+  log('info', `kwoty ukryte: ${why}`)
+  void changePrefs({ hideAmounts: true }).catch((e) => log('warn', 'ukrycie kwot – zapis ustawień nie udał się', e))
+}
+
+/** How often the idleness is looked at (F40). */
+const IDLE_CHECK_MS = Number(process.env.FI_IDLE_CHECK_MS) || 15_000
+/** The system's idle seconds – fixed in test runs (`FI_SYSTEM_IDLE`). */
+const systemIdleSeconds = (): number => (process.env.FI_SYSTEM_IDLE != null ? Number(process.env.FI_SYSTEM_IDLE) : powerMonitor.getSystemIdleTime())
+
+/**
+ * The amounts hidden by themselves (F40, not a lock – D30): after the minutes of idleness this computer set (never while
+ * they are shown for a while or for the session), or the screen locked.
+ */
+function watchIdleAmounts(): void {
+  setInterval(() => {
+    const p = config.get().prefs
+    if (p.hideIdleMin > 0 && !p.hideAmounts && !revealTimer && !revealedForSession && systemIdleSeconds() >= p.hideIdleMin * 60) hideAmountsNow(`${p.hideIdleMin} min bez ruchu`)
+  }, IDLE_CHECK_MS).unref?.()
+  // A locked screen hides them whatever was shown before – also „do końca sesji” (hiding ends every showing).
+  powerMonitor.on('lock-screen', () => {
+    if (config.get().prefs.hideIdleMin > 0) hideAmountsNow('ekran zablokowany')
+  })
 }
 
 /** The long computation each window started last and has not finished (1.4.1): names a hang in the log. */
@@ -1251,6 +1338,7 @@ function createWindow(): void {
     }
   })
   mainWindow = win
+  prepareWindow(win)
   // Started with the system: stay hidden in the tray (decision D46). A maximized window waits for its first show:
   // maximize() of a hidden window shows it on Windows.
   const startHidden = process.argv.includes(HIDDEN_ARG)
@@ -1370,8 +1458,10 @@ function createWindow(): void {
     main: () => mainWindow,
     preload: join(__dirname, '../preload/index.js'),
     devUrl: devUrl ?? null,
-    load: (child, key) =>
-      devUrl ? child.loadURL(`${devUrl}?detached=${encodeURIComponent(key)}`) : child.loadFile(join(__dirname, '../renderer/index.html'), { query: { detached: key } })
+    load: (child, key) => {
+      prepareWindow(child)
+      return devUrl ? child.loadURL(`${devUrl}?detached=${encodeURIComponent(key)}`) : child.loadFile(join(__dirname, '../renderer/index.html'), { query: { detached: key } })
+    }
   })
 
   if (devUrl) void win.loadURL(devUrl)
@@ -1389,7 +1479,7 @@ app.on('before-quit', () => {
 })
 
 /** config.json read again while it is not readable (B114) – this often. */
-const CONFIG_RETRY_MS = 15_000
+const CONFIG_RETRY_MS = Number(process.env.FI_CONFIG_RETRY_MS) || 15_000
 
 /** Reads config.json again until it is readable; then this computer's settings take effect and the window may open its folder. */
 function retryConfig(): void {
@@ -1406,6 +1496,7 @@ function retryConfig(): void {
       // The checks of updates as this computer set them (the defaults ran meanwhile).
       updater?.startAuto(updateCheckDelayMs())
       broadcastPrefs(config.get().prefs)
+      void hideOnStart()
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:configReady')
     })
   }, CONFIG_RETRY_MS)
@@ -1423,6 +1514,8 @@ app.whenReady().then(async () => {
     log('warn', `config.json nieczytelny: ${config.loadFailed} – nic nie jest nadpisywane, ponowna próba co ${CONFIG_RETRY_MS / 1000} s`)
     retryConfig()
   }
+  // „Startuj z ukrytymi kwotami” (F40): before the first window reads the preferences – or when config.json is read later.
+  if (!config.loadFailed) await hideOnStart()
   updater = createUpdater()
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
@@ -1435,7 +1528,11 @@ app.whenReady().then(async () => {
     main: () => mainWindow,
     preload: join(__dirname, '../preload/index.js'),
     devUrl: process.env.ELECTRON_RENDERER_URL ?? null,
-    load: (w) => (process.env.ELECTRON_RENDERER_URL ? w.loadURL(`${process.env.ELECTRON_RENDERER_URL}?quick=1`) : w.loadFile(join(__dirname, '../renderer/index.html'), { query: { quick: '1' } })),
+    load: (w) => {
+      prepareWindow(w)
+      return process.env.ELECTRON_RENDERER_URL ? w.loadURL(`${process.env.ELECTRON_RENDERER_URL}?quick=1`) : w.loadFile(join(__dirname, '../renderer/index.html'), { query: { quick: '1' } })
+    },
+    zoom: () => config.get().prefs.zoom,
     log
   })
   quick.applyShortcut(config.get().prefs.quickShortcut)
@@ -1453,6 +1550,7 @@ app.whenReady().then(async () => {
   // The daily backup also while the app lives in the tray (F2): every hour and after the computer slept.
   setInterval(dailyBackup, BACKUP_CHECK_MS).unref?.()
   powerMonitor.on('resume', dailyBackup)
+  watchIdleAmounts()
   const u = updater
   void u.init().then(
     () => u.startAuto(updateCheckDelayMs()),

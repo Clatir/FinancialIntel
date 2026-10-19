@@ -9,7 +9,7 @@ import { SHIP_CLASS_LABEL, SHIP_CLASSES, type ShipClass } from '@shared/calc/fle
 import { useCelebrations, type Celebration } from '../../store/game'
 import { navigate, toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
-import { plDate } from '../../lib/format'
+import { countLabel, plDate } from '../../lib/format'
 import { Insignia } from './CommandPage'
 
 const isRank = (x: string): x is Rank => (RANKS as readonly string[]).includes(x)
@@ -39,7 +39,7 @@ export function GameCelebrations() {
     const end = queue.findIndex(isBig)
     const small = end < 0 ? queue : queue.slice(0, end)
     if (small.length <= 2) for (const c of small) toast(smallText(c), c.kind === 'achievement' || (c.kind === 'mission' && c.done) ? 'success' : 'info', 8000)
-    else toast(`Dowództwo: ${small.length} nowych wpisów – szczegóły w dzienniku wachty.`, 'info', 8000, { label: 'Dowództwo', run: () => navigate({ page: 'command' }) })
+    else toast(`Dowództwo: ${countLabel(small.length, 'nowy wpis', 'nowe wpisy', 'nowych wpisów')} – szczegóły w dzienniku wachty.`, 'info', 8000, { label: 'Dowództwo', run: () => navigate({ page: 'command' }) })
     if (small.some((c) => c.kind === 'rank')) playSound('alarm')
     else if (small.some((c) => c.kind === 'achievement' || (c.kind === 'mission' && c.done))) playSound('plus')
     shift(small.length)

@@ -15,7 +15,7 @@ import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../.
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
 import { Badge, Kbd, cx } from '../../components/ui'
-import { WEEKDAY_PL, plural } from '../../lib/format'
+import { WEEKDAY_PL, monthLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
 import { categorizeTicked, clearTicked, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickOperations, useOperationsUi } from './state'
@@ -31,8 +31,6 @@ const DETAILS_KEY = 'operations:Szczegóły'
 const ROW = 28
 const TEMPLATE = '16px 78px 44px minmax(120px, 1.6fr) minmax(90px, 1fr) minmax(0, auto) 110px'
 
-const MONTHS_PL = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
-const monthLabel = (m: string) => `${MONTHS_PL[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
 
 const TONE_CLASS = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
 
@@ -515,7 +513,7 @@ export function OperationsPage() {
           <DuplicatesLink />
           <span className="flex-1" />
           {balances.map((a) => (
-            <span key={a.id} className="text-muted" title={a.opening ? `Saldo otwarcia ${plnText(a.opening.amount)} zł na początek ${a.opening.date}` : 'Bez salda otwarcia – suma operacji (Ustawienia → Konta)'}>
+            <span key={a.id} className="text-muted" title={a.opening ? `Saldo otwarcia ${plnText(a.opening.amount)} zł na początek ${plDate(a.opening.date)}` : 'Bez salda otwarcia – suma operacji (Ustawienia → Konta)'}>
               {a.name}{' '}
               <span className={cx('num', a.balance < 0 ? 'text-down' : 'text-fg-strong')} data-testid={`balance-${a.name}`}>
                 {plnText(a.balance)} zł

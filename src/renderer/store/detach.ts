@@ -6,7 +6,7 @@ import { api, errorMessage } from '../lib/api'
 import { toast } from './ui'
 
 /** What a detached window draws (`features/detach/DetachedApp.tsx`). */
-export type DetachKind = 'placeholder' | 'bridge'
+export type DetachKind = 'bridge'
 
 export interface DetachSpec {
   kind: DetachKind

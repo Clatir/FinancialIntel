@@ -25,7 +25,7 @@ import { api } from '../../lib/api'
 import { DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
 import { Empty, Panel, Segmented, cx } from '../../components/ui'
-import { dayLabel, monthLabel, plDate, WEEKDAY_PL } from '../../lib/format'
+import { countLabel, dayLabel, monthLabel, plDate, WEEKDAY_PL } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { useBriefingItems } from '../bridge/BridgePage'
 
@@ -46,6 +46,15 @@ const saved = (path: string | null) => {
   if (path) toast(`Zapisano: ${path}`, 'success', 6000)
 }
 const failed = (e: unknown) => toast(`Nie udało się zapisać: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+
+/** The costs linked to the cargo's containers (N72): one name in every report – monthly and periodic fees alike. */
+const CARGO_LABEL = 'Ładownia (kontenery i opłaty okresowe)'
+
+/** A gap of the plan (FVG) as on the screens (N33): a plus sign on the plus – unless the amounts are hidden. */
+const signed = (money: (g: number) => string, g: number): string => {
+  const text = money(g)
+  return g > 0 && /\d/.test(text) ? `+${text}` : text
+}
 
 export function ReportsPage() {
   const fleet = useFleet()
@@ -148,14 +157,14 @@ function WatchReport() {
               {w.days.map((d) => {
                 const g = days.get(d.date)
                 return (
-                  <div key={d.date} className="flex items-center gap-2 text-[11.5px]">
+                  <div key={d.date} className="flex items-center gap-2 text-[11.5px]" data-testid="reports-watch-day">
                     <span className="w-[54px] text-dim">
                       {WEEKDAY_PL[weekdayOf(d.date)]} {d.date.slice(8, 10)}.{d.date.slice(5, 7)}
                     </span>
                     <div className="h-[5px] flex-1 bg-line">
                       <div className="h-full bg-accent" style={{ width: `${(d.costs / maxDay) * 100}%` }} />
                     </div>
-                    <span className="num w-[80px] text-right">{plnText(d.costs)}</span>
+                    <span className="num w-[96px] text-right">{zl(d.costs)}</span>
                     <span className={cx('w-[64px] text-right text-[10.5px]', g?.status === 'broken' ? 'text-accent' : 'text-dim')}>{g ? (g.status === 'ok' ? 'zgodny' : 'naruszenie') : '—'}</span>
                   </div>
                 )
@@ -165,7 +174,7 @@ function WatchReport() {
               <div className="flex flex-col border-t border-line pt-1.5">
                 <span className="label pb-0.5">Kategorie tygodnia</span>
                 {w.categories.slice(0, 6).map((c) => (
-                  <Line key={c.id} label={c.id === 'cargo' ? 'Ładownia' : c.id === '-' ? 'bez kategorii' : cats.label(c.id)} value={zl(c.cost)} />
+                  <Line key={c.id} label={c.id === 'cargo' ? CARGO_LABEL : c.id === '-' ? 'bez kategorii' : cats.label(c.id)} value={zl(c.cost)} />
                 ))}
               </div>
             )}
@@ -183,7 +192,7 @@ function WatchReport() {
         <Panel title="Misja tygodnia" testId="reports-watch-mission">
           <span className="text-[12px]">
             {mission
-              ? `${missionTitle(mission.template)}: ${missionText(mission, cats.label, zl)} ${mission.evaluatedAt ? (mission.done ? '– wykonana.' : '– niewykonana.') : status?.ok ? '– na razie na kursie.' : '– na razie chybiona.'}`
+              ? `${missionTitle(mission.template)}: ${missionText(mission, cats.label, zl).replace(/\.$/, '')} ${mission.evaluatedAt ? (mission.done ? '– wykonana.' : '– niewykonana.') : status?.ok ? '– na razie na kursie.' : '– na razie chybiona.'}`
               : 'Bez misji w tym tygodniu.'}
           </span>
         </Panel>
@@ -191,7 +200,7 @@ function WatchReport() {
           <Panel title="Koperty na następny tydzień" testId="reports-watch-envelopes">
             <div className="flex flex-col text-[12px]">
               {next.map((e) => (
-                <Line key={e.categoryId} label={cats.label(e.categoryId)} value={`${zl(e.week)} na ${e.days} dni (zostało ${zl(e.left)})`} />
+                <Line key={e.categoryId} label={cats.label(e.categoryId)} value={`${zl(e.week)} na ${countLabel(e.days, 'dzień', 'dni', 'dni')} (zostało ${zl(e.left)})`} />
               ))}
               <span className="text-[11px] text-dim">To, co zostało w kopercie, rozłożone na dni do końca miesiąca – na najbliższe dni (od 1. koperty startują od nowa).</span>
             </div>
@@ -258,7 +267,7 @@ function DebriefReport() {
       lines: [
         ['Pensja od siebie', b.salary == null ? '—' : money(b.salary)],
         ['Koszty netto', money(b.costs)],
-        ['Ładownia i odkładki', money(b.cargo)],
+        [CARGO_LABEL, money(b.cargo)],
         // The parts of the costs without an envelope (N25): the rows add up to the net costs with the envelopes below.
         ...(b.outside.length ? ([['Bez koperty', `${money(sum(b.outside.map((o) => o.spent)))} (${b.outside.map((o) => label(o.categoryId)).join(', ')})`]] as Array<[string, string]>) : []),
         ...(b.uncategorized > 0 ? ([['Bez kategorii (w puli codziennej)', money(b.uncategorized)]] as Array<[string, string]>) : []),
@@ -281,9 +290,9 @@ function DebriefReport() {
       table: {
         head: ['Koperta', 'Limit', 'Wydane', 'FVG'],
         rows: [
-          ...b.envelopes.map((e) => [label(e.categoryId), money(e.limit), money(e.spent), money(e.gap)]),
+          ...b.envelopes.map((e) => [label(e.categoryId), money(e.limit), money(e.spent), signed(money, e.gap)]),
           // The daily pool as the engine's daily energy (N11): the daily envelopes, the loot, the spending without a category.
-          ...(b.daily ? [['Pula codzienna (z łupami i bez kategorii)', money(b.daily.limit), money(b.daily.spent), money(b.daily.gap)]] : [])
+          ...(b.daily ? [['Pula codzienna (z łupami i bez kategorii)', money(b.daily.limit), money(b.daily.spent), signed(money, b.daily.gap)]] : [])
         ],
         numeric: [1, 2, 3]
       }
@@ -322,7 +331,7 @@ function DebriefReport() {
   ]
   const pdf = () =>
     api
-      .savePdf(`debriefing_${month}.pdf`, reportHtml(`Debriefing – ${monthLabel(month)}`, `Financial Intel · ${fleet.today}`, sections(fileZl, cats.label)))
+      .savePdf(`debriefing_${month}.pdf`, reportHtml(`Debriefing – ${monthLabel(month)}`, `Financial Intel · ${plDate(fleet.today)}`, sections(fileZl, cats.label)))
       .then(saved, failed)
   return (
     <Columns id="reports-debrief" tracks={['minmax(460px,1fr)']} className="grid items-start">
@@ -421,7 +430,7 @@ function YearReport() {
       // Why the months do not add up to the year's income (N66, T119).
       text: 'Trading netto liczony w każdym miesiącu osobno (dopłaty do XTB nie schodzą poniżej zera); przychody roku nettują dopłaty z całego roku. Pieniądze na kontach to suma sald – z pożyczonymi i depozytem domowników.'
     },
-    { title: 'Kategorie', table: { head: ['Kategoria', 'Koszty'], rows: y.categories.slice(0, 12).map((c) => [c.id === 'cargo' ? 'Ładownia' : c.id === '-' ? 'bez kategorii' : cats.label(c.id), money(c.cost)]), numeric: [1] } },
+    { title: 'Kategorie', table: { head: ['Kategoria', 'Koszty'], rows: y.categories.slice(0, 12).map((c) => [c.id === 'cargo' ? CARGO_LABEL : c.id === '-' ? 'bez kategorii' : cats.label(c.id), money(c.cost)]), numeric: [1] } },
     {
       title: 'Cele i osiągnięcia',
       lines: [
@@ -432,7 +441,7 @@ function YearReport() {
     { title: 'PIT-38', text: `Rozliczenie za ${year}: termin 30 kwietnia ${Number(year) + 1}. Kwotę liczy ICT Trade Journal (rezerwa podatkowa).` }
   ]
   const years = [...new Set([...transactions.map((t) => t.date.slice(0, 4)), thisYear])].sort().reverse()
-  const pdf = () => api.savePdf(`przeglad_${year}.pdf`, reportHtml(`Przegląd roczny ${year}`, `Financial Intel · ${fleet.today}`, sections(fileZl))).then(saved, failed)
+  const pdf = () => api.savePdf(`przeglad_${year}.pdf`, reportHtml(`Przegląd roczny ${year}`, `Financial Intel · ${plDate(fleet.today)}`, sections(fileZl))).then(saved, failed)
   return (
     <Columns id="reports-year" tracks={['minmax(460px,1fr)']} className="grid items-start">
       <Panel

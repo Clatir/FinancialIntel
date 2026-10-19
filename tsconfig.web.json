@@ -6,5 +6,5 @@
     "jsx": "react-jsx",
     "types": []
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*", "tests/unit/data-store.test.ts", "tests/unit/import-replan.test.ts", "tests/unit/operations-state.test.ts"]
+  "include": ["src/renderer/**/*", "src/shared/**/*", "tests/unit/data-store.test.ts", "tests/unit/import-replan.test.ts", "tests/unit/operations-state.test.ts", "tests/unit/loan-close.test.ts", "tests/unit/machine-store.test.ts", "tests/unit/wealth-memo.test.ts"]
 }

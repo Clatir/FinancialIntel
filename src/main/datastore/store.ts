@@ -1481,39 +1481,6 @@ export class DataStore {
     return true
   }
 
-  /** Write imported records as-is (keeping their updatedAt), moving files whose canonical path changed. */
-  importRecords(items: Array<{ kind: Collection; record: AnyRecord }>): Promise<ChangeSet | null> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
-      for (const { kind, record } of items) {
-        const parsed = SCHEMAS[kind].parse({ ...record, schemaVersion: SCHEMA_VERSION }) as AnyRecord
-        const existing = this.currentState(kind, parsed.id)
-        if (existing?.readOnly) continue
-        const rel = recordRelPath(kind, parsed as unknown as Record<string, unknown>)
-        const occupant = this.files.get(rel)
-        if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== parsed.id) {
-          if (occupant.readOnly) continue
-          // The same month's file with a different id: the imported one replaces it.
-          await this.opts.trash(this.abs(rel))
-          this.files.delete(rel)
-        }
-        if (occupant?.status === 'problem') {
-          if (occupant.problemKind === 'too-new') continue
-          await this.setAsideProblem(occupant)
-        }
-        if (occupant?.status === 'record' && occupant !== existing && occupant.readOnly) continue
-        await this.keepDuplicate(occupant, existing, kind, parsed.id)
-        if (existing?.record) await this.history.snapshot(kind, existing.record as AnyRecord, 'import')
-        await this.writeState(rel, kind, parsed, serializeRecord(kind, parsed))
-        if (existing && existing.relPath !== rel) {
-          await removeFile(this.abs(existing.relPath))
-          this.files.delete(existing.relPath)
-        }
-      }
-      return this.diff(this.buildViews(), false)
-    })
-  }
-
   saveSettings(input: SettingsFile): Promise<SettingsFile> {
     return this.writeSettings(input).then((r) => r.fi)
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SOUND_KINDS, SOUND_LABEL, shortcutLabel, type NotifyPrefs } from '@shared/machine'
+import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel, type NotifyPrefs } from '@shared/machine'
 import { eveningAt } from '@shared/notify'
 import type { Orders } from '@shared/schema'
 import { api } from '../../lib/api'
@@ -98,6 +98,88 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
   )
 }
 
+/**
+ * Ustawienia → Wygląd i prywatność (F30, F40): the size of the windows and the higher contrast, the hidden amounts by
+ * hand, after idleness and at the start – all of this computer (config.json), never of the folder.
+ */
+export function ViewTab() {
+  const prefs = useMachine((s) => s.prefs)
+  return (
+    <>
+      <Panel title="Rozmiar i kontrast">
+        <div className="flex flex-col gap-2 text-[12px]">
+          <Field label="Rozmiar interfejsu" labelWidth={160} hint="Wszystkie okna aplikacji na tym komputerze – także szybki wpis i panele odłączone. Ctrl+Plus / Ctrl+Minus zmienia rozmiar, Ctrl+Shift+0 wraca do 100 %.">
+            <ZoomSlider />
+          </Field>
+          <Toggle
+            checked={prefs.highContrast}
+            onChange={(highContrast) => void setMachinePrefs({ highContrast })}
+            label="Wyższy kontrast – jaśniejsze przygaszone napisy, najmniejsze napisy 12 px"
+            data-testid="settings-contrast"
+          />
+        </div>
+      </Panel>
+      <Panel title="Prywatność kwot">
+        <div className="flex flex-col gap-2 text-[12px]">
+          <Toggle checked={prefs.hideAmounts} onChange={(hideAmounts) => void setMachinePrefs({ hideAmounts })} label="Ukryj kwoty w oknach i w dymku zasobnika (Ctrl+$)" data-testid="settings-hide-amounts" />
+          <Field label="Ukryj po bezczynności" labelWidth={160} hint="Bez ruchu myszy i klawiatury w systemie przez tyle minut albo po zablokowaniu ekranu kwoty chowają się same.">
+            <select className="input h-[24px] w-[160px]" value={prefs.hideIdleMin} onChange={(e) => void setMachinePrefs({ hideIdleMin: Number(e.currentTarget.value) })} data-testid="settings-hide-idle">
+              {/* A time set elsewhere (a hand-edited file, a later version) shown as it is, not as „nigdy”. */}
+              {[...new Set<number>([...HIDE_IDLE_CHOICES, prefs.hideIdleMin])]
+                .sort((a, b) => a - b)
+                .map((m) => (
+                  <option key={m} value={m}>
+                    {m === 0 ? 'nigdy' : `po ${m} min`}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Toggle checked={prefs.hideOnStart} onChange={(hideOnStart) => void setMachinePrefs({ hideOnStart })} label="Startuj z ukrytymi kwotami (także przy starcie z Windows)" data-testid="settings-hide-start" />
+          <p className="text-[11.5px] text-muted">
+            To nie blokada: Ctrl+$ albo „Pokaż na 5 min” / „do końca sesji” na pasku u góry odsłania kwoty. Ukryte kwoty są też zamaskowane w dymku
+            zasobnika, w powiadomieniach i w szybkim wpisie.
+          </p>
+        </div>
+      </Panel>
+    </>
+  )
+}
+
+/** 90–150 % (F30): set on release – the window changes its size under the pointer. */
+function ZoomSlider() {
+  const zoom = useMachine((s) => Math.round(s.prefs.zoom * 100))
+  const [draft, setDraft] = useState<number | null>(null)
+  const commit = () => {
+    if (draft == null) return
+    setDraft(null)
+    if (draft !== zoom) void setMachinePrefs({ zoom: draft / 100 })
+  }
+  const shown = draft ?? zoom
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="range"
+        min={Math.round(ZOOM_MIN * 100)}
+        max={Math.round(ZOOM_MAX * 100)}
+        step={10}
+        value={shown}
+        onChange={(e) => setDraft(Number(e.currentTarget.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+        aria-label="Rozmiar interfejsu"
+        data-testid="settings-zoom"
+      />
+      <span className="num w-[44px] text-muted" data-testid="settings-zoom-value">
+        {shown}%
+      </span>
+      <button className="btn h-[24px]" disabled={zoom === 100 && draft == null} onClick={() => void setMachinePrefs({ zoom: 1 })} data-testid="settings-zoom-reset">
+        100 %
+      </button>
+    </div>
+  )
+}
+
 /** The volume: moved freely, saved (config.json, every window) and heard once on letting go. */
 function VolumeSlider() {
   const volume = useMachine((s) => Math.round(s.prefs.sounds.volume * 100))
@@ -182,7 +264,6 @@ export function NotifyTab() {
               </button>
             </div>
           </Field>
-          <Toggle checked={prefs.hideAmounts} onChange={(hideAmounts) => void setMachinePrefs({ hideAmounts })} label="Ukryj kwoty w oknie i w dymku zasobnika (Ctrl+$)" data-testid="settings-hide-amounts" />
         </div>
       </Panel>
       <Panel title="Powiadomienia">

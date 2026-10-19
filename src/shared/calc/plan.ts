@@ -8,7 +8,7 @@ import { envelopeKind, type Category, type EnvelopeKind } from '../schema/budget
 import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { counterpartyKey } from '../import/classify'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
-import { cyclePosition, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
+import { activeIn, cyclePosition, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
 import { coveredMonths, firstFullOf, historyStart, monthsBefore } from './history'
 import { financedBy } from './household'
 import { categoryIndex, costOf, isCargoPayment, partsOf, sum } from './operations'
@@ -254,8 +254,6 @@ export function recurringPayments(transactions: readonly Transaction[], month: s
 }
 
 // ------------------------------------------------------------------ the salary's split
-
-const activeIn = (c: Container, month: string) => !c.archived && (c.from == null || c.from <= month) && (c.until == null || month <= c.until)
 
 export interface SalarySplit {
   salary: number

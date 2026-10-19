@@ -4,7 +4,7 @@ import type { BackupInfo, TrayPrefs } from '@shared/api'
 import { DEFAULT_SHIP_NAME } from '@shared/schema'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
 import { api, errorMessage } from '../../lib/api'
-import { fmtBytes } from '../../lib/format'
+import { countLabel, fmtBytes } from '../../lib/format'
 import { saveFirst, switchFolder, unsavedReport, updateSettings, useData, useFolderLocked } from '../../store/data'
 import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
@@ -13,7 +13,7 @@ import { UpdatesTab } from './UpdatesTab'
 import { AccountsTab } from './AccountsTab'
 import { CategoriesTab } from './CategoriesTab'
 import { ImportTab } from './ImportTab'
-import { LayersTab, NotifyTab } from './MachineTabs'
+import { LayersTab, NotifyTab, ViewTab } from './MachineTabs'
 import { IctjTab } from './IctjTab'
 import { HouseholdTab } from './HouseholdTab'
 import { RecoverDialog } from './RecoverDialog'
@@ -34,6 +34,7 @@ export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'import', label: 'Import z banku' },
   { id: 'ictj', label: 'ICTTJ' },
   { id: 'notify', label: 'Powiadomienia i dźwięki' },
+  { id: 'view', label: 'Wygląd i prywatność' },
   { id: 'folder', label: 'Folder i kopie' },
   { id: 'system', label: 'Zasobnik i start' },
   { id: 'updates', label: 'Aktualizacje' }
@@ -84,6 +85,7 @@ export function SettingsPage() {
             {tab === 'import' && <ImportTab />}
             {tab === 'ictj' && <IctjTab />}
             {tab === 'notify' && <NotifyTab />}
+            {tab === 'view' && <ViewTab />}
             {tab === 'folder' && <FolderTab />}
             {tab === 'system' && <SystemTab />}
             {tab === 'updates' && <UpdatesTab />}
@@ -307,7 +309,7 @@ function FolderTab() {
           </Field>
           <Field label="Wczytanie">
             <span className="num">
-              {count} wpisów · {loadMs} ms
+              {countLabel(count, 'wpis', 'wpisy', 'wpisów')} · {loadMs} ms
             </span>
           </Field>
           <Field label="Ustawienia lokalne">
@@ -464,8 +466,8 @@ function SystemTab() {
         />
         {!prefs.loginSupported && <p className="text-[11.5px] text-dim">Start z systemem działa w zainstalowanej albo przenośnej wersji dla Windows.</p>}
         <p className="text-[11.5px] text-muted">
-          Te ustawienia są zapisane na tym komputerze (nie w folderze danych). Start z Windows włączysz też w kreatorze startu; w późniejszych etapach ikona
-          pokaże w dymku „energię dziś”, a jej menu – szybki wpis.
+          Te ustawienia są zapisane na tym komputerze (nie w folderze danych). Start z Windows włączysz też w kreatorze startu. Ikona pokazuje w
+          dymku „energię dziś”, a jej menu – szybki wpis.
         </p>
       </div>
     </Panel>

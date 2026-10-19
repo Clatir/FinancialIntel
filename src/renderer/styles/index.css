@@ -234,3 +234,15 @@
 [data-columns][data-sep] > * {
   box-shadow: -1px 0 0 var(--color-line);
 }
+
+/*
+ * „Wyższy kontrast” (F30, an option of this computer – the look stays as ICTTJ's by default): the dimmed and the muted
+ * texts brighter (WCAG AA on the panel), the smallest texts at 12 px. Outside the layers – it wins over the utilities.
+ */
+:root[data-contrast='high'] {
+  --color-muted: #9aa3ad;
+  --color-dim: #8a939e;
+}
+:root[data-contrast='high'] :is(.text-\[9px\], .text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\], .label) {
+  font-size: 12px;
+}

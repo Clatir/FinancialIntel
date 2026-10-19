@@ -8,7 +8,7 @@ import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
-import { AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
+import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
 import { api } from '../../lib/api'
@@ -233,7 +233,7 @@ export function QuickApp() {
   const night = d.kind !== 'income' && !!d.time && !!data && inClockWindow(d.time, data.quietHours.from, data.quietHours.to)
   const asks = d.kind !== 'income' && !!data && d.amount >= data.impulseThreshold && data.impulseThreshold > 0
   const hide = !!data?.hideAmounts
-  const money = useCallback((g: number) => (hide ? '•••' : `${plnText(g)} zł`), [hide])
+  const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {

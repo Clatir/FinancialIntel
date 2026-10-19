@@ -511,22 +511,6 @@ describe('rekordy zapisywane przez aplikację i import', () => {
     expect((await store.historyList('game', a.id)).length).toBeLessThanOrEqual(1)
   })
 
-  it('importRecords: zachowuje updatedAt, plan tego samego miesiąca o innym id zastąpiony, przeniesienie daty', async () => {
-    const store = await freshStore()
-    const mine = await store.saveRecord('months', sampleMonth('2026-03', { note: 'mój' }))
-    const t = await store.saveRecord('transactions', sampleTransaction())
-    const imported = sampleMonth('2026-03', { note: 'z importu', updatedAt: '2025-12-31T10:00:00.000Z' })
-    const change = await store.importRecords([
-      { kind: 'months', record: imported },
-      { kind: 'transactions', record: { ...t.entry.record, date: '2026-03-20' } }
-    ])
-    expect(change?.removals).toEqual([{ collection: 'months', id: mine.entry.record.id }])
-    const file = await readJson(join(store.root, 'months', '2026-03.json'))
-    expect(file).toMatchObject({ id: imported.id, note: 'z importu', updatedAt: '2025-12-31T10:00:00.000Z' })
-    expect(await exists(join(store.root, t.entry.relPath))).toBe(false)
-    expect((await store.snapshot()).records.transactions[0]?.relPath).toBe(`transactions/2026/2026-03-20_${t.entry.record.id}.json`)
-    expect((await store.historyList('transactions', t.entry.record.id))[0]?.reason).toBe('import')
-  })
 })
 
 describe('wydajność', () => {

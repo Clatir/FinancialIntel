@@ -26,6 +26,15 @@ export const RANK_LABEL: Record<Rank, string> = {
   captain: 'Kapitan',
   admiral: 'Admirał'
 }
+/** The rank after „do stopnia” (N33): the genitive. */
+export const RANK_GENITIVE: Record<Rank, string> = {
+  cadet: 'kadeta',
+  ensign: 'chorążego',
+  lieutenant: 'porucznika',
+  commander: 'komandora',
+  captain: 'kapitana',
+  admiral: 'admirała'
+}
 
 /** The orders a day can break (D73): the ordinary ones break the streak, the serious ones count to a demotion too. */
 export const VIOLATIONS = ['daily', 'envelope', 'cargo', 'envelope-serious', 'shields', 'firewall', 'quiet'] as const
@@ -33,9 +42,9 @@ export type ViolationKind = (typeof VIOLATIONS)[number]
 export const VIOLATION_LABEL: Record<ViolationKind, string> = {
   daily: 'Przydział dnia przekroczony',
   envelope: 'Koperta przekroczona',
-  cargo: 'Ładunek ponad linią zanurzenia',
+  cargo: 'Ładunek (stałe koszty) ponad linią zanurzenia',
   'envelope-serious': 'Koperta przekroczona ponad próg',
-  shields: 'Osłony poniżej minimum',
+  shields: 'Osłony (bufor na pensje) poniżej minimum',
   firewall: 'Dopłata do XTB wbrew firewallowi',
   quiet: 'Zakup w ciszy nocnej'
 }
@@ -57,7 +66,7 @@ export const MISSION_TITLE: Record<MissionTemplate, string> = {
   energy: 'Pełna energia',
   impulse: 'Zero impulsów',
   killzone: 'Killzone',
-  house: 'Rozliczenie z domem',
+  house: 'Rozliczenie z domownikami',
   import: 'Łączność z bazą',
   balances: 'Inwentaryzacja',
   nospend: 'Dzień bez wydatków'
@@ -69,8 +78,8 @@ export const ACHIEVEMENTS = ['quiet30', 'shields', 'hull', 'asteroid', 'dock', '
 export type AchievementId = (typeof ACHIEVEMENTS)[number]
 export const ACHIEVEMENT_INFO: Record<AchievementId, { name: string; text: string }> = {
   quiet30: { name: 'Cisza w eterze', text: '30 dni bez zakupów w ciszy nocnej.' },
-  shields: { name: 'Pełne osłony', text: 'Osłony doszły do swojego celu.' },
-  hull: { name: 'Pancerny kadłub', text: 'Kadłub doszedł do swojego celu.' },
+  shields: { name: 'Pełne osłony', text: 'Osłony (bufor na pensje) doszły do swojego celu.' },
+  hull: { name: 'Pancerny kadłub', text: 'Kadłub (fundusz awaryjny) doszedł do swojego celu.' },
   asteroid: { name: 'Asteroida rozbita', text: 'Opłata okresowa zapłacona w całości ze zbiornika.' },
   dock: { name: 'Pierwsze dokowanie', text: 'Wypłata z ICTTJ zadokowana.' },
   goal: { name: 'Cel osiągnięty', text: 'Cel z Mapy gwiezdnej osiągnięty.' },
@@ -604,6 +613,10 @@ export type GameEvent =
 export interface GameChange {
   /** The month records to write (new or changed), whole. */
   months: GameMonth[]
+  /**
+   * What this pass decided, in order – the tests read it; the window takes its celebrations from the watch log of the
+   * months (T80), which also brings the other computer's.
+   */
   events: GameEvent[]
   /** Days still to freeze after this pass (`maxDays` reached): the next pass goes on. */
   more?: boolean

@@ -19,6 +19,8 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
       ['Ctrl N', 'nowa operacja'],
       [QUICK_ROW, 'szybki wpis – w całym systemie (zmiana: Ustawienia → Powiadomienia i dźwięki)'],
       ['Ctrl $', 'ukryj / pokaż kwoty'],
+      ['Ctrl + / Ctrl −', 'większy / mniejszy interfejs (90–150 %)'],
+      ['Ctrl Shift 0', 'interfejs 100 %'],
       ['Esc / mysz „wstecz”', 'poprzednia strona (Ustawienia, Synchronizacja, Meldunki)'],
       ['? lub F1', 'ta ściąga']
     ]

@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa Q** (1.6.5 – folder, system, dwa
-komputery) na gałęzi `claude/grupa-q-1.6.5`, PR do `main`; po niej od razu R (niskie pozycje przeglądu) i funkcje
-S, T, U, V – każda grupa z własnym PR i wydaniem (D71).
-**1.6.4 scalone** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa R** (1.6.6 – teksty, wygląd,
+wygoda) na gałęzi `claude/grupa-r-1.6.6`, PR do `main`; po niej od razu funkcje S, T, U, V – każda grupa z własnym PR i
+wydaniem (D71).
+**1.6.5 scalone** (PR #27), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,9 +12,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa Q → scalenie po zielonym CI → wydanie 1.6.5 → od razu grupa R (D87). Po wznowieniu
+**Następny krok:** grupa R → scalenie po zielonym CI → wydanie 1.6.6 → od razu grupa S (D87). Po wznowieniu
 pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.6.5 – listy w sekcjach niżej.
+aplikacji: 1.5.0–1.6.6 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -54,14 +54,14 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **N** | 1.6.2 Gra, ICTTJ, domownicy, cele, kreator: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.2 | ✅ D87 | ✅ wydane (PR #24) |
 | **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.3 | ✅ D87 | ✅ wydane (PR #25) |
 | **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ scalone (PR #26) |
-| **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 | ✅ D87 | ✅ PR do `main` |
-| **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **xhigh** (w ciągu na max) | plan ok. 1,5 h | 1.6.6 | ✅ D87 | czeka |
+| **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 | ✅ D87 | ✅ scalone (PR #27) |
+| **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1 h (zegar sesji, z przeglądem, 47 mutacjami i pełnym E2E; plan był ok. 1,5 h) | 1.6.6 | ✅ D87 | ✅ PR do `main` |
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | plan ok. 3 h | 1.7.0 | ✅ D87 | czeka |
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | czeka |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q** | | | **ok. 44,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R** | | | **ok. 45,5 h** | | | |
 | | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -735,6 +735,48 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.6.5, Windows):
    zasobnika – pytanie „Zdecyduj o zmianach z drugiego komputera”, „Anuluj” zostawia okno decyzji.
 2. Ustawienia → Folder i kopie z własnym folderem kopii: nowy podfolder z nazwą folderu danych; stare kopie na miejscu.
 3. Ustawienia → Aktualizacje przy zamykaniu do zasobnika: „zainstaluje się po „Zakończ” w menu ikony…”.
+
+## Przed grupą R – teksty, wygląd, wygoda (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa Q w PR #27 (1.6.5). Grupa R (1.6.6): niskie pozycje przeglądu o tekstach i wyglądzie –
+   N31 (metafora zawsze z nazwą i kwotą), N33 (formaty kwot i dat), N34 (martwy kod), N35 („Cofnij” zamknięcia pożyczki),
+   N53 (odmiana i język), N57 (nieaktualne teksty), N58 (krzywa majątku na Mostku), N60 (czerwień i zieleń tylko dla
+   kwot), N61 (nazwa strony kreatora w „Układ”), N72 (jedna nazwa ładowni, misja domowników) – oraz funkcje F30 (skala
+   interfejsu i wyższy kontrast – ustawienie komputera) i F40 (ukrycie kwot po bezczynności i przy starcie). Format
+   folderu bez zmian (nowe ustawienia tylko w config.json komputera).
+2. **Co użytkownik musi powiedzieć** – ✅ D87 (propozycje przeglądu przyjęte). Wybory: N58 – mała krzywa majątku (26
+   tygodni) na Mostku z przejściem do Wywiadu, radar i wywiad dalej przez odprawę; N60 – plakietka „zaszyfrowany” zostaje
+   jak w ICTTJ; F30 – skala 90–150 % (Ctrl+Plus / Ctrl+Minus, Ctrl+Shift+0 = 100 %), F40 – próg bezczynności 0 = wyłączone;
+   zapisane jako T-decyzje do zmiany na życzenie.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · xhigh (w ciągu na max) · ok. 1,5 h.
+
+## 1.6.6 – teksty, wygląd, wygoda (grupa R, 19.10.2026)
+
+Zakres: „Przed grupą R” wyżej. Zrobione:
+- Teksty i formaty (T254): metafory z prawdziwą nazwą (alarmy, Mostek, kreator, plan, gra, Wywiad), daty `plDate`, eksport
+  ZIP z datą warszawską, FVG ze znakiem i zł w raportach, jedna nazwa ładowni, stopień w dopełniaczu, misja „Rozliczenie z
+  domownikami”, odmiana liczebników, maska „••• zł” w szybkim wpisie, aktualny tekst zasobnika.
+- Martwy kod (T255): formatery z ICTTJ, ekran-zaślepka, `copyText`, `isPortable`, `importRecords`; menu „Układ” zna
+  kreator i meldunki, na kreatorze go nie ma.
+- „zamknij” pożyczkę z „Cofnij” (T256): raty schodzą jak zrzucony kontener, „otwórz” oddaje tylko zdjęte zamknięciem.
+- Krzywa majątku na Mostku – 26 tygodni z przejściem do Wywiadu, liczona raz na stan danych (T257); Bearish w akcencie
+  (T258).
+- Rozmiar interfejsu 90–150 % i wyższy kontrast – ustawienia komputera, wszystkie okna, Ctrl+Plus / Ctrl+Minus /
+  Ctrl+Shift+0 (T259); kwoty ukryte po bezczynności, blokadzie ekranu i przy starcie, „Pokaż na 5 min” / „do końca sesji”
+  (T260); zakładka Ustawienia → „Wygląd i prywatność”.
+- Przegląd `/code-review` high: 10 kandydatów – wszystkie poprawione z testem (T261).
+- Testy: 662 unit + fs (nowe `texts-look`, `machine-store`, `loan-close`, `wealth-memo`), E2E 56 (nowy `look.spec.ts`,
+  poszerzone `radar`, `intel`); 47 mutacji – każda poprawka i każde znalezisko przeglądu (część przez E2E: proces główny,
+  raporty, Radar, Mostek); mutacje i E2E wykryły dwa błędy przed przeglądem – klawisze rozmiaru nie trafiały do
+  `before-input-event` z testów (obsługa przeniesiona do okien) i odpowiedź starszej zmiany ustawień komputera cofała
+  nowszą (dwa Ctrl+Plus = jeden krok).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.6.6, Windows):
+1. Ctrl+Plus / Ctrl+Minus w oknie głównym i w szybkim wpisie, Ctrl+Shift+0 – 100 %; „Wyższy kontrast” w Ustawieniach →
+   Wygląd i prywatność.
+2. „Ukryj po bezczynności: po 1 min” – po minucie bez ruchu kwoty ukryte, „Pokaż na 5 min”; Win+L – kwoty ukryte.
+3. Radar → „zamknij” pożyczkę wziętą, „Cofnij” w komunikacie – rata wraca do Ładowni.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 

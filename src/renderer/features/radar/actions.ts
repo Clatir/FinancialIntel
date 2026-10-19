@@ -11,6 +11,7 @@ import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
 import { countLabel } from '../../lib/format'
 import { errorMessage } from '../../lib/api'
+import { patchContainer } from '../cargo/actions'
 
 export interface NewLoan {
   direction: Loan['direction']
@@ -155,9 +156,29 @@ export async function deleteLoan(loan: Loan): Promise<void> {
   })
 }
 
+/**
+ * Closed (paid off or written off) or open again (N35). The installments of a taken loan still in the cargo hold leave
+ * it with the loan – dropped as a container is (B56: the mass counts to this month's end), at the loan's `closedAt` –
+ * and opening brings back only those (archived at that time, or closed before 1.6.6 – every one then), never one
+ * archived on its own. The toast's „Cofnij” puts back the loan and only the containers this changed, as they were.
+ */
 export function closeLoan(loan: Loan, closed: boolean): void {
-  updateRecord('loans', loan.id, (l) => ({ ...l, closedAt: closed ? new Date().toISOString() : null, updatedAt: new Date().toISOString() }))
-  // The installments of a closed taken loan leave the cargo hold (and come back with it).
-  const containers = Object.values(useData.getState().records.containers).map((e) => e.record)
-  for (const c of containers) if (c.loanId === loan.id) updateRecord('containers', c.id, (r) => ({ ...r, archived: closed, updatedAt: new Date().toISOString() }))
+  if (!canWrite()) return
+  const records = useData.getState().records
+  const before = records.loans[loan.id]?.record ?? loan
+  const now = new Date().toISOString()
+  const changed = Object.values(records.containers)
+    .map((e) => e.record)
+    .filter((c) => c.loanId === loan.id && (closed ? !c.archived : !!c.archived && (c.archivedAt == null || c.archivedAt === before.closedAt)))
+  updateRecord('loans', loan.id, (l) => ({ ...l, closedAt: closed ? now : null, updatedAt: now }))
+  for (const c of changed) patchContainer(c.id, { archived: closed, archivedAt: closed ? now : null })
+  const what = loan.direction === 'given' ? 'należność' : 'dług'
+  toast(closed ? `Pożyczka „${loan.name}” zamknięta – ${what} znika z Radaru i zasięgu.` : `Pożyczka „${loan.name}” otwarta ponownie.`, 'info', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      const at = new Date().toISOString()
+      updateRecord('loans', loan.id, () => ({ ...before, updatedAt: at }))
+      for (const c of changed) updateRecord('containers', c.id, () => ({ ...c, updatedAt: at }))
+    }
+  })
 }

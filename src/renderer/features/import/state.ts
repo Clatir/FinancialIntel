@@ -10,6 +10,7 @@ import { deepEqual } from '@shared/merge'
 import { batchesToDrop, importBatch, type BatchFacts } from '@shared/import/batch'
 import { accountNumberOf } from '@shared/import/mbank'
 import { statementCheck, statementOf, type Statement } from '@shared/import/statement'
+import { countLabel } from '../../lib/format'
 import { openingOf } from '@shared/calc/balances'
 import { balanceSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Balance, type HouseholdMember, type ImportBatchSettings, type ImportSettings, type Share, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
@@ -870,7 +871,7 @@ export async function runImport(): Promise<void> {
       lastDecided: null,
       noProposal: {}
     })
-    toast(`Zaimportowano: ${result.counts.created} nowych, ${result.counts.merged} połączonych z wpisami, ${result.counts.settled} rozliczonych.`, 'success', 6000)
+    toast(`Zaimportowano: ${countLabel(result.counts.created, 'nowa operacja', 'nowe operacje', 'nowych operacji')}; połączone z wpisami: ${result.counts.merged}, rozliczone: ${result.counts.settled}.`, 'success', 6000)
   } catch (e) {
     toast(errorMessage(e), 'error', 8000)
   } finally {

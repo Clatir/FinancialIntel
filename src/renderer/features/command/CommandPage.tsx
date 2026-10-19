@@ -10,6 +10,7 @@ import {
   missionStatus,
   missionText,
   missionTitle,
+  RANK_GENITIVE,
   RANK_LABEL,
   RANKS,
   TAG_LABEL,
@@ -31,7 +32,7 @@ import { plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Field, NumberField, Panel, cx } from '../../components/ui'
-import { plDate } from '../../lib/format'
+import { countLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { OrdersFields } from '../settings/MachineTabs'
 
@@ -108,7 +109,7 @@ export function CommandPage() {
                         {status.amount != null && ` (${zl(status.amount)})`}
                       </span>
                     )}
-                    <span className="text-[11px] text-dim">Rozliczenie po zamrożeniu niedzieli; wykonana skraca drogę do awansu o {settings.game.missionDays} dni.</span>
+                    <span className="text-[11px] text-dim">Rozliczenie po zamrożeniu niedzieli; wykonana skraca drogę do awansu o {countLabel(settings.game.missionDays, 'dzień', 'dni', 'dni')}.</span>
                   </>
                 ) : (
                   <span className="text-muted">
@@ -195,7 +196,7 @@ function RankPanel({ view }: { view: GameView }) {
         {next && p ? (
           <div className="flex flex-col gap-1" data-testid="command-progress">
             <div className="flex items-baseline gap-2">
-              <span className="text-muted">Do stopnia {RANK_LABEL[next]}</span>
+              <span className="text-muted">Do stopnia {RANK_GENITIVE[next]}</span>
               <span className="num ml-auto text-fg-strong">
                 {Math.min(p.need, p.ok + p.bonus)} / {p.need}
               </span>
@@ -338,7 +339,7 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
       mark = e.change === 'up' ? 'bg-fg-strong' : 'bg-accent'
       break
     case 'mission':
-      text = e.done == null ? `Misja tygodnia: ${missionTitle(e.template)}` : e.done ? `Misja wykonana: ${missionTitle(e.template)} (+${missionDays} dni do awansu)` : `Misja niewykonana: ${missionTitle(e.template)}`
+      text = e.done == null ? `Misja tygodnia: ${missionTitle(e.template)}` : e.done ? `Misja wykonana: ${missionTitle(e.template)} (+${countLabel(missionDays, 'dzień', 'dni', 'dni')} do awansu)` : `Misja niewykonana: ${missionTitle(e.template)}`
       break
     case 'achievement':
       text = `Osiągnięcie: ${ACHIEVEMENT_INFO[e.id].name} – ${ACHIEVEMENT_INFO[e.id].text}`
@@ -377,7 +378,7 @@ function OrdersPanel({ game, orders, shieldSalaries, readOnly }: { game: GameSet
     <Panel title="Rozkazy i progi" testId="command-orders">
       <div className="flex flex-col gap-1 text-[12px]">
         {/* What the game judges (N29): the day's spending against today's energy – not the plain base. */}
-        <Order label="Dzienny przydział energii" value="wydatki dnia ≤ energia dziś" />
+        <Order label="Dzienny przydział energii (wydatków dnia)" value="wydatki dnia ≤ energia dziś" />
         <span className="text-[11px] text-dim">
           Energia dziś = koperty codzienne, które zostały, ÷ dni do końca miesiąca (z dziś); podstawa – koperty codzienne ÷ dni miesiąca.
         </span>

@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from 'react'
 import { addMonths, monthRange } from '@shared/calc/dates'
-import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth, structureOf, wealthCurve } from '@shared/calc/intel'
+import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth } from '@shared/calc/intel'
 import { debriefing } from '@shared/calc/plan'
 import { sum } from '@shared/calc/operations'
 import { rangeText } from '@shared/format'
@@ -19,6 +19,7 @@ import { Empty, Panel, Segmented, cx } from '../../components/ui'
 import { monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { KillzoneMap, WealthChart } from './charts'
+import { useWealth } from './wealth'
 
 const zl = (g: number) => `${plnText(g)} zł`
 type Period = '3' | '6' | '12'
@@ -32,7 +33,6 @@ export function IntelPage() {
   const fleet = useFleet()
   const settings = useData((s) => s.fi?.settings ?? null)
   const transactions = useRecordList('transactions')
-  const balances = useRecordList('balances')
   const plans = useRecordList('months')
   const containers = useRecordList('containers')
   const cats = useCategories()
@@ -40,8 +40,7 @@ export function IntelPage() {
   // The day and the month only: the fleet is a new object every minute, the analyses change with the day.
   const today = fleet?.today ?? null
   const month = fleet?.month ?? null
-  const wealth = useMemo(() => (today && settings ? wealthCurve(transactions, balances, settings.accounts.map((a) => a.id), today) : []), [today, settings, transactions, balances])
-  const structure = useMemo(() => structureOf(wealth), [wealth])
+  const { points: wealth, ...structure } = useWealth(today)
   const months = useMemo(() => (month ? monthRange(addMonths(month, -(Number(period) - 1)), month) : []), [month, period])
   const killzones = useMemo(() => (today && months.length ? killzoneGrid(transactions, `${months[0]}-01`, today) : null), [transactions, months, today])
   const spending = useMemo(() => spendingByMonth(transactions, settings?.categories ?? [], months), [transactions, settings, months])
@@ -189,7 +188,7 @@ export function IntelPage() {
                     <span className="num w-[90px] text-right">{plnText(p.fuel)}</span>
                   </div>
                 ))}
-                <span className="text-[11px] text-dim">Osłony i kadłub pomniejszone o dług, wydawane po średnich kosztach netto.</span>
+                <span className="text-[11px] text-dim">Osłony (bufor na pensje) i kadłub (fundusz awaryjny) pomniejszone o dług, wydawane po średnich kosztach netto.</span>
               </div>
             </Panel>
             <Panel title="Dziennik kapitański" testId="intel-log">

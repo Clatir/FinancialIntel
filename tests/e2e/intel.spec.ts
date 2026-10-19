@@ -53,9 +53,13 @@ test('Wywiad i Raporty: krzywa majątku, Killzones, FVG, zasięg, dziennik; rapo
     await page.keyboard.press('Control+0')
     await expect(page.getByTestId('page-reports')).toBeVisible()
     await expect(page.getByTestId('reports-watch-costs')).not.toBeEmpty()
+    // The days of the watch report in złoty as everywhere (1.6.6, N33).
+    await expect(page.getByTestId('reports-watch-day').first()).toContainText('zł')
     await page.getByRole('radio', { name: 'Debriefing' }).click()
     await page.getByTestId('reports-debrief-month').selectOption(last)
     await expect(page.getByTestId('reports-debrief')).toContainText('FVG kopert')
+    // The gap on the plus with its sign, as in Plan miesiąca and Wywiad (1.6.6, N33).
+    await expect(page.locator('[data-testid="report-section"]', { hasText: 'FVG kopert' })).toContainText(/\+\d/)
     const pdf = join(out, 'debriefing.pdf')
     await saveTo(app, pdf)
     await page.getByTestId('reports-debrief-pdf').click()

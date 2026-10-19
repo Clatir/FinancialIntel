@@ -5,6 +5,7 @@ import { containerSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, t
 import { addRecord, canWrite, deleteOrSay, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { plnText } from '../../components/fields'
+import { countLabel, plDate } from '../../lib/format'
 import { deleteWithUndo } from '../history/actions'
 
 /** A new container's fields before it goes into the hold (the load line is checked first – spec). */
@@ -82,7 +83,7 @@ export function linkPayments(containerId: string, counterparty: string, quiet = 
   // A payment of a container deleted (B58) is not linked: it may join this one.
   const found = unlinkedPayments(listOf(records.transactions), counterparty, from, new Set(Object.keys(records.containers)))
   if (found.length) replaceRecords('transactions', found.map((t) => ({ ...t, containerId })))
-  if (found.length || !quiet) toast(found.length ? `Połączono z kontenerem: ${found.length} płatności od ${from.slice(8, 10)}.${from.slice(5, 7)}.${from.slice(0, 4)}.` : 'Brak płatności do połączenia.', 'info', 3500)
+  if (found.length || !quiet) toast(found.length ? `Połączono z kontenerem: ${countLabel(found.length, 'płatność', 'płatności', 'płatności')} od ${plDate(from)}.` : 'Brak płatności do połączenia.', 'info', 3500)
   return found.length
 }
 
