@@ -75,11 +75,14 @@ test('rozmiar interfejsu i wyższy kontrast (1.6.6, F30): Ctrl+Plus / Ctrl+Minus
     for (let i = 0; i < 5; i++) await page.keyboard.press('Control+Equal')
     await expect.poll(async () => (await prefsOf(userData)).zoom).toBe(1.5)
     await page.evaluate(() => (globalThis as unknown as Win).fi.quickOpen())
-    await expect.poll(quickSize).toEqual([[150, 660, 900]])
+    // As big as the screen lets it (the work area – the Windows CI screen is 720 px high).
+    const area = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize)
+    const fitted = (zoom: number, w: number, h: number) => [[zoom, Math.min(w, area.width), Math.min(h, area.height)]]
+    await expect.poll(quickSize).toEqual(fitted(150, 660, 900))
     // Ctrl+Minus in the quick entry itself: the open window gets smaller with its content.
     const quick = app.windows().find((w) => w.url().includes('quick=1'))!
     await quick.keyboard.press('Control+Minus')
-    await expect.poll(quickSize).toEqual([[140, 616, 840]])
+    await expect.poll(quickSize).toEqual(fitted(140, 616, 840))
     await expect.poll(async () => (await prefsOf(userData)).zoom).toBe(1.4)
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.isAlwaysOnTop())?.hide())
 

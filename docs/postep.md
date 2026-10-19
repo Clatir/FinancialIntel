@@ -773,7 +773,9 @@ Zakres: „Przed grupą R” wyżej. Zrobione:
   nowszą (dwa Ctrl+Plus = jeden krok).
 - CI (PR #28): E2E kontrastu czerwone dwa razy – diagnostyka w CI pokazała, że reguła pasuje od razu, ale Chromium oddaje
   wyliczony rozmiar części napisów klatkę później (11,5 px tuż po zmianie, 12 px ok. 20 ms dalej, bez żadnej zmiany w
-  aplikacji); test czeka na rozmiar jak na inne wartości (lokalnie nie do odtworzenia, także na jednym rdzeniu).
+  aplikacji); test czeka na rozmiar jak na inne wartości (lokalnie nie do odtworzenia, także na jednym rdzeniu). Na
+  Windows CI ekran ma 720 px wysokości obszaru roboczego: okno szybkiego wpisu przy 150 % jest – zgodnie z F30 –
+  przycięte do ekranu (720 zamiast 900), test liczy oczekiwany rozmiar z obszaru roboczego.
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.6.6, Windows):
 1. Ctrl+Plus / Ctrl+Minus w oknie głównym i w szybkim wpisie, Ctrl+Shift+0 – 100 %; „Wyższy kontrast” w Ustawieniach →
