@@ -11,7 +11,7 @@ import { ruleTargetOf } from './import/classify'
 import { fold } from './fold'
 
 /** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
-export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual'] as const
+export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
 export type OperationMark = (typeof OPERATION_MARKS)[number]
 
 export const MARK_LABEL: Record<OperationMark, string> = {
@@ -23,7 +23,9 @@ export const MARK_LABEL: Record<OperationMark, string> = {
   uncategorized: 'bez kategorii',
   bank: 'z banku',
   pending: 'nierozliczona',
-  manual: 'wpisana ręcznie'
+  manual: 'wpisana ręcznie',
+  anomaly: 'nietypowa',
+  awaiting: 'czeka na zwrot'
 }
 
 const waitsForCategory = (t: Transaction, p: Part): boolean => !p.categoryId && !p.refundable && (p.amount !== 0 || !t.splits.length)
@@ -57,10 +59,18 @@ const MARK_GROUP: Record<OperationMark, string> = {
   uncategorized: 'uncategorized',
   bank: 'origin',
   pending: 'origin',
-  manual: 'origin'
+  manual: 'origin',
+  anomaly: 'anomaly',
+  awaiting: 'awaiting'
 }
 
-export function marksOf(t: Transaction, orders: Pick<Orders, 'quietHours'>): OperationMark[] {
+/** What the marks read beyond the operation (1.9.0): the radar of anomalies (F31), the returns on the way (F34). */
+export interface MarkFlags {
+  anomalies?: ReadonlySet<string>
+  awaiting?: ReadonlySet<string>
+}
+
+export function marksOf(t: Transaction, orders: Pick<Orders, 'quietHours'>, flags: MarkFlags = {}): OperationMark[] {
   const out: OperationMark[] = []
   // As the money counts it (B78): a line a member finances – a receipt's part, its rest, or the operation itself.
   if (partsOf(t).some((p) => p.refundable)) out.push('refundable')
@@ -70,6 +80,8 @@ export function marksOf(t: Transaction, orders: Pick<Orders, 'quietHours'>): Ope
   if (isUncategorized(t)) out.push('uncategorized')
   if (t.bank) out.push(t.bank.pending ? 'pending' : 'bank')
   else out.push('manual')
+  if (flags.anomalies?.has(t.id)) out.push('anomaly')
+  if (flags.awaiting?.has(t.id)) out.push('awaiting')
   return out
 }
 
@@ -259,6 +271,8 @@ export interface FilterContext {
   orders: Pick<Orders, 'quietHours'>
   /** Names merged in the import (1.2.2): the brands of the filter by them. */
   aliases?: BrandAliases
+  /** The marks „nietypowa” and „czeka na zwrot” (F31, F34). */
+  flags?: MarkFlags
 }
 
 /**
@@ -309,7 +323,7 @@ export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterCo
   if (f.transferAccounts.length && !transferAccountsOf(t).some((a) => f.transferAccounts.includes(a))) return false
   if (f.brands.length && !f.brands.includes(brandKeyOf(t, ctx.aliases))) return false
   if (f.marks.length) {
-    const marks = marksOf(t, ctx.orders)
+    const marks = marksOf(t, ctx.orders, ctx.flags)
     const groups = new Set(f.marks.map((m) => MARK_GROUP[m]))
     for (const g of groups) if (!f.marks.some((m) => MARK_GROUP[m] === g && marks.includes(m))) return false
   }

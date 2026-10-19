@@ -6,16 +6,17 @@
 import type { Container, MonthPlan } from '../schema/records'
 import { dueIn, type CargoStatus } from './cargoStatus'
 import { addDays, addMonths, daysBetween, firstDayOf, monthOf } from './dates'
-import { activeIn, cyclePosition, dockAmount, nextPaymentOf, nextUnpaidOf, type DockTargets, type FleetState } from './fleet'
+import { activeIn, amountIn, cyclePosition, dockAmount, monthlyWeight, nextPaymentOf, nextUnpaidOf, type DockTargets, type FleetState } from './fleet'
 import { OVERDUE_DAYS, type LoanState } from './loans'
 import type { ScheduledDay } from './scheduled'
+import type { AwaitedReturn } from './returns'
 
 export const RADAR_DAYS = 90
 /** PIT-38 (D58, D72): its deadline on the radar from 1 February, without an amount (the amount is ICTTJ's). */
 export const PIT38_DAY = '04-30'
 export const PIT38_FROM = '02-01'
 
-export type RadarKind = 'salary' | 'asteroid' | 'fixed' | 'installment' | 'repayment' | 'pit38' | 'plan' | 'end'
+export type RadarKind = 'salary' | 'asteroid' | 'fixed' | 'installment' | 'repayment' | 'pit38' | 'plan' | 'end' | 'return'
 
 export interface RadarItem {
   key: string
@@ -43,7 +44,7 @@ export function pit38Deadline(today: string): string | null {
   return md >= PIT38_FROM && md <= PIT38_DAY ? `${today.slice(0, 4)}-${PIT38_DAY}` : null
 }
 
-const ORDER: Record<RadarKind, number> = { pit38: 0, salary: 1, installment: 2, repayment: 3, asteroid: 4, fixed: 5, plan: 6, end: 7 }
+const ORDER: Record<RadarKind, number> = { pit38: 0, salary: 1, installment: 2, repayment: 3, asteroid: 4, fixed: 5, plan: 6, end: 7, return: 8 }
 
 export interface RadarInput {
   today: string
@@ -56,6 +57,8 @@ export interface RadarInput {
   money: (grosze: number) => string
   /** The fixed fees of this month (F1, `cargoStatuses`): their state and payment day. */
   cargo?: readonly CargoStatus[]
+  /** The purchases awaiting a return (F34, `awaitedReturns`). */
+  returns?: readonly AwaitedReturn[]
   /** The planned operations' days (F16, `scheduledWindow`): the open ones are on it. */
   scheduled?: readonly ScheduledDay[]
   /**
@@ -66,12 +69,12 @@ export interface RadarInput {
 }
 
 /** A container's last payment in its life (its `until`), on or after `today`; null = none left (or no end). */
-export function lastPaymentOf(c: Pick<Container, 'until' | 'cycleMonths' | 'dueMonth' | 'dueDay'>, today: string): string | null {
+export function lastPaymentOf(c: Pick<Container, 'until' | 'cycleMonths' | 'dueMonth' | 'dueDay'> & { schedule?: readonly number[] | null }, today: string): string | null {
   if (!c.until) return null
   let due = c.until
   if (c.cycleMonths > 1) {
     const pos = cyclePosition(c, c.until)
-    due = pos.dueMonth > c.until ? addMonths(pos.dueMonth, -c.cycleMonths) : pos.dueMonth
+    due = pos.dueMonth > c.until ? addMonths(pos.dueMonth, -pos.length) : pos.dueMonth
   }
   const date = dueIn(due, c.dueDay)
   return date >= today ? date : null
@@ -108,7 +111,7 @@ export function radar(o: RadarInput): RadarItem[] {
     for (let date = nextUnpaidOf(c, o.today, tankOf?.paidDue), first = true; date <= end; date = nextPaymentOf(c, addDays(date, 1)), first = false) {
       if (!activeIn(c, date.slice(0, 7)) || (now && date.slice(0, 7) === now.due.slice(0, 7))) continue
       const tank = tankOf?.amount ?? 0
-      out.push({ key: `asteroid:${c.id}:${date}`, date, kind: 'asteroid', name: c.name, amount: c.amount, direction: 'out', note: first ? `w zbiorniku ${o.money(tank)}` : '', ref: c.id })
+      out.push({ key: `asteroid:${c.id}:${date}`, date, kind: 'asteroid', name: c.name, amount: amountIn(c, date.slice(0, 7)), direction: 'out', note: first ? `w zbiorniku ${o.money(tank)}` : '', ref: c.id })
     }
   }
   // The fixed fees (F1): this month's still to pay – a late one too – and each month's ahead, on its payment day.
@@ -123,7 +126,7 @@ export function radar(o: RadarInput): RadarItem[] {
       if (date > end || !activeIn(c, m)) continue
       if (m === thisMonth && (!s || s.state === 'paid')) continue
       const late = m === thisMonth && s && date < o.today
-      out.push({ key: `fixed:${c.id}:${date}`, date, kind: 'fixed', name: c.name, amount: c.amount, direction: 'out', note: late && s.importPending ? 'czeka na import' : '', ref: c.id, ...(s && m === thisMonth && s.state === 'overdue' ? { overdue: true } : {}) })
+      out.push({ key: `fixed:${c.id}:${date}`, date, kind: 'fixed', name: c.name, amount: amountIn(c, m), direction: 'out', note: late && s.importPending ? 'czeka na import' : '', ref: c.id, ...(s && m === thisMonth && s.state === 'overdue' ? { overdue: true } : {}) })
     }
   }
   // The periodic fees due this month, not paid yet – a late one too.
@@ -180,8 +183,27 @@ export function radar(o: RadarInput): RadarItem[] {
     if (c.archived) continue
     const date = lastPaymentOf(c, o.today)
     if (!date || date > end) continue
-    const monthly = Math.round(c.amount / Math.max(1, c.cycleMonths))
+    const monthly = monthlyWeight(c)
     out.push({ key: `end:${c.id}:${date}`, date, kind: 'end', name: c.name, amount: null, direction: null, note: `ostatnia płatność – potem ładownia lżejsza o ${o.money(monthly)}/mies.`, ref: c.id })
+  }
+  // The returns on the way (F34 – Turtle Soup „w drodze”): expected money, on its day – a late one today. No account:
+  // a return is no certain payment, the balances ahead never count on it.
+  for (const r of o.returns ?? []) {
+    if (r.state !== 'waiting' && r.state !== 'late') continue
+    const date = r.state === 'late' ? o.today : r.until
+    if (date > end) continue
+    const name = r.tx.counterparty || r.tx.title || 'zakup'
+    out.push({
+      key: `return:${r.tx.id}`,
+      date,
+      kind: 'return',
+      name: `Zwrot: ${name}`,
+      amount: r.amount,
+      direction: 'in',
+      note: r.state === 'late' ? `nie dotarł – po terminie ${r.days} ${r.days === 1 ? 'dzień' : 'dni'}` : 'w drodze',
+      ref: r.tx.id,
+      ...(r.state === 'late' ? { overdue: true } : {})
+    })
   }
   // The accounts of the payments (F26): the container's, the loan's.
   const containerAccount = new Map(o.containers.map((c) => [c.id, c.accountId]))

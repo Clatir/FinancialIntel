@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { daysInMonth, monthsBetween, warsawNow } from '@shared/calc/dates'
-import { cyclePosition, nextUnpaidOf, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
+import { addMonths, daysInMonth, monthsBetween, warsawNow } from '@shared/calc/dates'
+import { paymentsIndex } from '@shared/calc/cargoStatus'
+import { cycleText, deadText, priceText, SHORT_MONTHS, type DeadContainer, type PriceChange } from '@shared/calc/cargoWatch'
+import { amountIn, cyclePosition, nextUnpaidOf, scheduleOf, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
-import { monthlyShare, recurringPayments, simulateCargo, type CargoSimulation } from '@shared/calc/plan'
-import { rangeText } from '@shared/format'
+import { monthlyShare, simulateCargo, type CargoSimulation } from '@shared/calc/plan'
+import { dm, rangeText } from '@shared/format'
 import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/schema'
-import { useData, useEntryNewer, useFolderLocked } from '../../store/data'
+import { listOf, useData, useEntryNewer, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
 import { useFocusRecord } from '../../components/focus'
 import { useDraft } from '../../store/drafts'
@@ -20,9 +22,26 @@ import { IconPlus } from '../../components/icons'
 import { DeleteButton } from '../history/DeleteButton'
 import { HistoryButton } from '../history/HistoryDialog'
 import { AccountSelect, CategorySelect } from '../operations/pickers'
-import { monthLabel } from '../../lib/format'
-import { addContainer, archiveContainer, deleteContainer, draftFromPayment, emptyDraft, linkPayments, patchContainer, payContainer, paymentsToLink, type ContainerDraft } from './actions'
-import { useCargoStatuses } from './status'
+import { monthGenLabel, monthLabel } from '../../lib/format'
+import {
+  addContainer,
+  archiveContainer,
+  clearPast,
+  deleteContainer,
+  draftFromPayment,
+  emptyDraft,
+  ignorePrice,
+  ignoreProposal,
+  keepContainer,
+  linkPayments,
+  patchContainer,
+  payContainer,
+  paymentsToLink,
+  unignoreProposals,
+  updatePrice,
+  type ContainerDraft
+} from './actions'
+import { useCargoStatuses, useCargoWatch } from './status'
 import type { CargoStatus } from '@shared/calc/cargoStatus'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
@@ -34,16 +53,20 @@ const CYCLES: Array<[number, string]> = [
   [6, 'co pół roku'],
   [12, 'co rok']
 ]
-const cycleLabel = (n: number) => CYCLES.find(([m]) => m === n)?.[1] ?? `co ${n} mies.`
 const fmtRange = rangeText
 const fmtPct = (p: number | null) => (p == null ? '—' : `${p.toFixed(1).replace('.', ',')}%`)
 
-/** A tank's installment as the engine's schedule takes it (N52, T29): the last one carries the rest of the grosze. */
-function installmentText(amount: number, cycleMonths: number): string {
-  const plan = sinkingSchedule(amount, cycleMonths)
+/**
+ * A tank's installment as the engine's schedule takes it (N52, T29): the last one carries the rest of the grosze. A fee
+ * of a schedule (F23): the cycle up to its next payment – the gaps differ.
+ */
+function installmentText(c: ContainerDraft): string {
+  const pos = cyclePosition(c, warsawNow().month)
+  const plan = sinkingSchedule(c.amount, pos.length)
   const first = plan[0] ?? 0
   const last = plan[plan.length - 1] ?? 0
-  return last === first ? zl(first) : `${zl(first)}, ostatnia ${zl(last)}`
+  const text = last === first ? zl(first) : `${zl(first)}, ostatnia ${zl(last)}`
+  return scheduleOf(c) ? `do najbliższej płatności: ${text}` : text
 }
 
 /**
@@ -73,17 +96,15 @@ export function CargoPage() {
   })
   const month = fleet?.month ?? ''
   const sorted = useMemo(() => [...containers].sort((a, b) => Number(a.archived) - Number(b.archived) || monthlyShare(b) - monthlyShare(a) || a.name.localeCompare(b.name)), [containers])
-  // The proposals change with the payees of the containers only – not with a note or an amount (W6).
-  const payees = containers
-    .filter((c) => !c.archived)
-    .map((c) => c.counterparty)
-    .join('\u0001')
-  // The months the engine's averages read (B23, B25): the same proposals as the wizard's and the month plan's.
-  const history = fleet?.historyMonths
-  const proposals = useMemo(() => (month ? recurringPayments(transactions, month, containers, history) : []), [transactions, month, payees, history])
+  // The history's proposals (D70, F23) and the hold's watch (F9): shared with the bridge and the inbox.
+  const watch = useCargoWatch()
+  const proposals = watch.proposals
+  const ignored = useData((s) => s.fi?.settings.cargo.ignored.length ?? 0)
   if (!fleet) return <Empty>Wczytywanie…</Empty>
-  const sim = (change: { add?: ContainerDraft; drop?: string }) =>
+  const sim = (change: Parameters<typeof simulateCargo>[1]) =>
     simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)
+  const priceOf = new Map(watch.prices.map((p) => [p.containerId, p]))
+  const deadOf = new Map(watch.dead.map((d) => [d.containerId, d]))
   const current = selected ? containers.find((c) => c.id === selected) : undefined
   const visible = sorted.filter((c) => showArchived || !c.archived)
   const status = new Map(cargo.map((x) => [x.containerId, x]))
@@ -125,8 +146,20 @@ export function CargoPage() {
                       data-focus={`container:${c.id}`}
                     >
                       <span className="min-w-0 flex-1 truncate text-fg-strong">{c.name}</span>
+                      {priceOf.has(c.id) && (
+                        <span className="text-[10.5px] text-accent" title={priceText(priceOf.get(c.id)!, c, zl)} data-testid="cargo-row-price">
+                          {priceOf.get(c.id)!.to > c.amount ? 'cięższy' : 'lżejszy'}
+                        </span>
+                      )}
+                      {deadOf.has(c.id) && (
+                        <span className="text-[10.5px] text-accent" title={deadText(deadOf.get(c.id)!)} data-testid="cargo-row-dead">
+                          anulowana?
+                        </span>
+                      )}
                       <span className="text-[11px] text-dim">{TYPE_LABEL[c.type as ContainerType] ?? c.type}</span>
-                      <span className="w-[96px] text-right text-[11px] text-muted">{cycleLabel(c.cycleMonths)}</span>
+                      <span className="w-[96px] truncate text-right text-[11px] text-muted" title={cycleText(c)}>
+                        {cycleText(c)}
+                      </span>
                       <StateBadge s={status.get(c.id)} />
                       <span className="num w-[96px] text-right">{zl(c.amount)}</span>
                       <span className="num w-[86px] text-right text-[11px] text-muted" title="Średnio miesięcznie (opłata okresowa: rata zbiornika, ostatnia z resztą groszy)">
@@ -138,7 +171,19 @@ export function CargoPage() {
               )}
             </Panel>
             {draft && <NewContainer key={draftKey} draft={draft} setDraft={setDraft} sim={sim(draft.amount > 0 ? { add: draft } : {})} limitPct={fleet.cargo.limitPct} onAdded={(id) => setSelected(id)} />}
-            {current && <ContainerEditor key={current.id} c={current} status={status.get(current.id)} readOnly={readOnly} onDeleted={() => setSelected(null)} sim={sim({ drop: current.id })} />}
+            {current && (
+              <ContainerEditor
+                key={current.id}
+                c={current}
+                status={status.get(current.id)}
+                readOnly={readOnly}
+                onDeleted={() => setSelected(null)}
+                sim={sim({ drop: current.id })}
+                price={priceOf.get(current.id)}
+                priceSim={priceOf.has(current.id) ? sim({ amount: { id: current.id, to: priceOf.get(current.id)!.to } }) : undefined}
+                dead={deadOf.get(current.id)}
+              />
+            )}
           </div>
           <div className="flex min-w-0 flex-col">
             <LoadLine fleet={fleet} />
@@ -148,18 +193,40 @@ export function CargoPage() {
                 <Empty>Brak powtarzających się płatności w historii (albo wszystkie są już w ładowni).</Empty>
               ) : (
                 <div className="flex flex-col text-[12px]">
-                  <p className="mb-1 text-[11px] text-dim">Ten sam kontrahent i podobna kwota co miesiąc albo co rok. Każdą propozycję trzeba potwierdzić.</p>
+                  <p className="mb-1 text-[11px] text-dim">
+                    Ten sam kontrahent co miesiąc, co 2, 3 albo 6 miesięcy, co rok albo w stałych miesiącach roku; rachunek o zmiennej kwocie – z kwotą z roku (75. percentyl). Każdą propozycję trzeba potwierdzić.
+                  </p>
                   {proposals.map((p) => (
-                    <div key={p.key} className="flex items-center gap-2 border-b border-line/70 py-1 last:border-b-0" data-testid="cargo-proposal" data-name={p.label}>
-                      <span className="min-w-0 flex-1 truncate">{p.label}</span>
-                      <span className="text-[11px] text-muted">{cycleLabel(p.cycleMonths)}</span>
+                    <div key={p.key} className="flex items-center gap-2 border-b border-line/70 py-1 last:border-b-0" data-testid="cargo-proposal" data-name={p.label} data-cycle={p.cycleMonths}>
+                      <span className="min-w-0 flex-1 truncate">
+                        {p.label}
+                        {p.fresh && <span className="ml-1.5 text-[10.5px] text-accent">nowa</span>}
+                      </span>
+                      <span className="max-w-[170px] truncate text-[11px] text-muted" title={cycleText(p)} data-testid="cargo-proposal-cycle">
+                        {cycleText(p)}
+                        {p.variable ? ' · zmienna' : ''}
+                      </span>
                       <span className="num w-[90px] text-right">{zl(p.amount)}</span>
                       <button className="btn h-[22px]" disabled={readOnly} onClick={() => openDraft(draftFromPayment(p))} data-testid="cargo-proposal-add">
                         Do ładowni
                       </button>
+                      <button className="btn btn-ghost h-[22px] px-1.5 text-[11px]" disabled={readOnly} onClick={() => ignoreProposal(p)} title="Ta płatność nie jest stałą opłatą – nie proponuj jej więcej" data-testid="cargo-proposal-ignore">
+                        Nie proponuj
+                      </button>
                     </div>
                   ))}
                 </div>
+              )}
+              {ignored > 0 && (
+                <button
+                  type="button"
+                  className="mt-1 self-start text-[11px] text-muted hover:text-fg-strong hover:underline"
+                  disabled={readOnly}
+                  onClick={() => unignoreProposals(useData.getState().fi?.settings.cargo.ignored ?? [])}
+                  data-testid="cargo-proposals-unignore"
+                >
+                  Ukryte propozycje: {ignored} – proponuj znowu
+                </button>
               )}
             </Panel>
           </div>
@@ -169,7 +236,7 @@ export function CargoPage() {
   )
 }
 
-function SimulationLine({ sim, verb }: { sim: CargoSimulation; verb: string }) {
+function SimulationLine({ sim, verb, note }: { sim: CargoSimulation; verb: string; note?: string }) {
   return (
     <div className="flex flex-col gap-0.5 text-[11.5px]" data-testid="cargo-sim">
       <div>
@@ -178,16 +245,19 @@ function SimulationLine({ sim, verb }: { sim: CargoSimulation; verb: string }) {
       </div>
       <div className="text-muted">
         Zasięg {verb}: <span className="num">{fmtRange(sim.rangeBefore)}</span> → <span className="num">{fmtRange(sim.rangeAfter)}</span>
-        <span className="text-dim"> (jeśli to {verb === 'po dodaniu' ? 'nowy koszt' : 'koszt, który znika'})</span>
+        <span className="text-dim"> ({note ?? `jeśli to ${verb === 'po dodaniu' ? 'nowy koszt' : 'koszt, który znika'}`})</span>
       </div>
     </div>
   )
 }
 
 function ContainerFields({ c, set, saved, paidDue }: { c: ContainerDraft; set: (p: Partial<ContainerDraft>) => void; saved?: boolean; paidDue?: string | null }) {
-  // „inny…” chosen stays chosen while its number is typed (B1): the mode is the field's, not read from the value.
-  const [otherCycle, setOtherCycle] = useState(() => !CYCLES.some(([m]) => m === c.cycleMonths))
-  const custom = otherCycle || !CYCLES.some(([m]) => m === c.cycleMonths)
+  // „inny…” chosen stays chosen while its number is typed (B1): the mode is the field's, not read from the value; so is
+  // „harmonogram…” while its months are picked (F23).
+  const [mode, setMode] = useState<'cycle' | 'other' | 'schedule'>(() => (c.schedule.length && c.cycleMonths > 1 ? 'schedule' : CYCLES.some(([m]) => m === c.cycleMonths) ? 'cycle' : 'other'))
+  const custom = mode === 'other' || (mode === 'cycle' && !CYCLES.some(([m]) => m === c.cycleMonths))
+  const months = [...c.schedule].sort((a, b) => a - b)
+  const toggleMonth = (m: number) => set({ cycleMonths: 12, schedule: months.includes(m) ? months.filter((x) => x !== m) : [...months, m].sort((a, b) => a - b) })
   // The next payment still to make from today on (B63) – as the Radar and the briefing count it: never a date of a
   // past cycle, nor this cycle's when its tank paid it already.
   const next = nextUnpaidOf(c, warsawNow().date, paidDue)
@@ -209,40 +279,67 @@ function ContainerFields({ c, set, saved, paidDue }: { c: ContainerDraft; set: (
           <span className="text-muted">zł</span>
         </div>
       </Field>
-      <Field label="Cykl" hint={c.cycleMonths > 1 ? `Opłata okresowa: co miesiąc z energii idzie rata do zbiornika (${installmentText(c.amount, c.cycleMonths)} – odkładka).` : undefined}>
-        <div className="flex items-center gap-2">
-          <select
-            className="input w-[150px]"
-            value={custom ? 0 : c.cycleMonths}
-            onChange={(e) => {
-              // „inny…” only opens the field: nothing is saved before its number is typed.
-              const n = Number(e.currentTarget.value)
-              setOtherCycle(!n)
-              if (n) set({ cycleMonths: n })
-            }}
-            aria-label="Cykl"
-            data-testid="container-cycle"
-          >
-            {CYCLES.map(([m, label]) => (
-              <option key={m} value={m}>
-                {label}
-              </option>
-            ))}
-            <option value={0}>inny…</option>
-          </select>
-          {custom && (
-            <NumberField
-              className="w-[60px]"
-              value={c.cycleMonths}
-              commitOnBlur
-              isValid={(v) => v != null && Number.isInteger(v) && v >= 1 && v <= 60}
-              onChange={(v) => v != null && set({ cycleMonths: v })}
-              onReject={() => toast('Cykl to od 1 do 60 miesięcy – zostaje poprzedni.', 'error')}
-              aria-label="Miesięcy"
-              data-testid="container-cycle-months"
-            />
+      <Field label="Cykl" hint={c.cycleMonths > 1 ? `Opłata okresowa: co miesiąc z energii idzie rata do zbiornika (${installmentText(c)} – odkładka).` : undefined}>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <select
+              className="input w-[150px]"
+              value={mode === 'schedule' ? -1 : custom ? 0 : c.cycleMonths}
+              onChange={(e) => {
+                // „inny…” only opens the field: nothing is saved before its number is typed; „harmonogram…” starts with
+                // the month of its payment date (F23).
+                const n = Number(e.currentTarget.value)
+                if (n === -1) {
+                  setMode('schedule')
+                  set({ cycleMonths: 12, schedule: months.length ? months : [Number(c.dueMonth.slice(5, 7))] })
+                } else if (n === 0) setMode('other')
+                else {
+                  setMode('cycle')
+                  set({ cycleMonths: n, schedule: [] })
+                }
+              }}
+              aria-label="Cykl"
+              data-testid="container-cycle"
+            >
+              {CYCLES.map(([m, label]) => (
+                <option key={m} value={m}>
+                  {label}
+                </option>
+              ))}
+              <option value={0}>inny…</option>
+              <option value={-1}>harmonogram…</option>
+            </select>
+            {custom && (
+              <NumberField
+                className="w-[60px]"
+                value={c.cycleMonths}
+                commitOnBlur
+                isValid={(v) => v != null && Number.isInteger(v) && v >= 1 && v <= 60}
+                onChange={(v) => v != null && set({ cycleMonths: v, schedule: [] })}
+                onReject={() => toast('Cykl to od 1 do 60 miesięcy – zostaje poprzedni.', 'error')}
+                aria-label="Miesięcy"
+                data-testid="container-cycle-months"
+              />
+            )}
+          </div>
+          {mode === 'schedule' && (
+            <div className="flex flex-col gap-1" data-testid="container-schedule">
+              <div className="flex flex-wrap gap-1">
+                {SHORT_MONTHS.map((name, i) => (
+                  <button key={name} type="button" className="chip" aria-pressed={months.includes(i + 1)} onClick={() => toggleMonth(i + 1)} data-testid="container-schedule-month" data-month={i + 1}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+              <span className={cx('text-[11px]', scheduleOf(c) ? 'text-dim' : 'text-accent')}>
+                {scheduleOf(c) ? 'Płatność w zaznaczonych miesiącach (dzień z daty płatności), każda w kwocie płatności.' : 'Zaznacz od 2 do 11 miesięcy – inaczej liczy się jak opłata co rok.'}
+              </span>
+            </div>
           )}
         </div>
+      </Field>
+      <Field label="Kwota zmienna" hint={c.variable ? 'Rachunek o zmiennej kwocie (prąd, woda): kwota kontenera = 75. percentyl płatności z roku; Ładownia zaproponuje nową, gdy rok się zmieni o ponad 10%.' : undefined}>
+        <Toggle checked={c.variable} onChange={(variable) => set({ variable })} label="rachunek – kwota z historii płatności" data-testid="container-variable" />
       </Field>
       <Field label="Płatność" hint={c.cycleMonths > 1 ? `Najbliższa: ${next.slice(8, 10)}.${next.slice(5, 7)}.${next.slice(0, 4)}` : `Co miesiąc, ${c.dueDay}. dnia`}>
         <DateField
@@ -318,7 +415,26 @@ function NewContainer({ draft, setDraft, sim, limitPct, onAdded }: { draft: Cont
   )
 }
 
-function ContainerEditor({ c, status, readOnly: folderLocked, onDeleted, sim }: { c: Container; status: CargoStatus | undefined; readOnly: boolean; onDeleted: () => void; sim: CargoSimulation }) {
+function ContainerEditor({
+  c,
+  status,
+  readOnly: folderLocked,
+  onDeleted,
+  sim,
+  price,
+  priceSim,
+  dead
+}: {
+  c: Container
+  status: CargoStatus | undefined
+  readOnly: boolean
+  onDeleted: () => void
+  sim: CargoSimulation
+  /** The hold's watch (F9): its payments at a new price, its payments missing. */
+  price?: PriceChange
+  priceSim?: CargoSimulation
+  dead?: DeadContainer
+}) {
   const paidDue = useFleet()?.tanks.find((t) => t.containerId === c.id)?.paidDue ?? null
   // Written by a newer version of the app (B67): looked at, not changed here.
   const newer = useEntryNewer('containers', c.id)
@@ -346,8 +462,11 @@ function ContainerEditor({ c, status, readOnly: folderLocked, onDeleted, sim }: 
     >
       <fieldset disabled={readOnly} className="flex flex-col gap-2">
         <NewerNote show={newer} />
+        {price && priceSim && <PriceWatch c={c} p={price} sim={priceSim} />}
+        {dead && !c.archived && <DeadWatch c={c} d={dead} sim={sim} />}
         {status && <ThisMonth c={c} s={status} />}
         <ContainerFields c={c} set={(p) => patchContainer(c.id, p)} saved paidDue={paidDue} />
+        <AmountHistory c={c} />
         {c.counterparty.trim() && <LinkPayments c={c} />}
         <Toggle checked={c.archived} onChange={(archived) => archiveContainer(c, archived)} label="Zarchiwizowany (zrzucony z ładowni)" data-testid="container-archived" />
         {!c.archived && (
@@ -361,7 +480,83 @@ function ContainerEditor({ c, status, readOnly: folderLocked, onDeleted, sim }: 
   )
 }
 
-const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
+const mmyyyy = (month: string) => `${month.slice(5, 7)}.${month.slice(0, 4)}`
+
+/**
+ * „Kontener cięższy niż w manifeście” (F9): its latest payments at a new price – the simulation of the new amount
+ * before it is taken (T50), „Zaktualizuj” from this month on or „To nie zmiana ceny”.
+ */
+function PriceWatch({ c, p, sim }: { c: Container; p: PriceChange; sim: CargoSimulation }) {
+  const month = warsawNow().month
+  return (
+    <div className="flex flex-col gap-1 border-l-2 border-accent pl-2 text-[12px]" data-testid="container-price">
+      <span className="label text-accent">Kontener {p.to > p.from ? 'cięższy' : 'lżejszy'} niż w manifeście</span>
+      <span className="text-fg-strong">{priceText(p, c, zl)}</span>
+      <span className="text-[11px] text-dim">
+        {p.basis === 'variable' ? `Rok płatności (${p.payments.length}): 75. percentyl ${zl(p.to)}.` : `Płatności: ${p.payments.map((x) => `${dm(x.date)} ${zl(x.amount)}`).join(' · ')}.`}
+      </span>
+      <SimulationLine sim={sim} verb="po zmianie" note="z nową kwotą od tego miesiąca" />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn btn-accent h-[22px]" onClick={() => updatePrice(c, p.to)} data-testid="container-price-update">
+          Zaktualizuj od {monthGenLabel(month)}
+        </button>
+        <button type="button" className="btn h-[22px]" onClick={() => ignorePrice(c, p.to)} data-testid="container-price-ignore">
+          To nie zmiana ceny
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** „Kontener bez płatności” (F9): its last dues without a payment – drop it (the simulation first) or keep it. */
+function DeadWatch({ c, d, sim }: { c: Container; d: DeadContainer; sim: CargoSimulation }) {
+  return (
+    <div className="flex flex-col gap-1 border-l-2 border-accent pl-2 text-[12px]" data-testid="container-dead">
+      <span className="label text-accent">Kontener bez płatności</span>
+      <span className="text-fg-strong">{deadText(d)}</span>
+      <span className="text-[11px] text-dim">Terminy bez płatności: {d.missed.map(dm).join(', ')}.</span>
+      <SimulationLine sim={sim} verb="po zrzucie" />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn btn-accent h-[22px]" onClick={() => archiveContainer(c, true)} data-testid="container-dead-drop">
+          Zrzuć z ładowni
+        </button>
+        <button type="button" className="btn h-[22px]" onClick={() => keepContainer(c)} data-testid="container-dead-keep">
+          Nadal płacę
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Its amounts through time and its latest payments (F9): a raise counts from its month, the months before as they were. */
+function AmountHistory({ c }: { c: Container }) {
+  const transactions = useData((s) => s.records.transactions)
+  const linked = useMemo(() => (paymentsIndex(listOf(transactions)).byContainer.get(c.id) ?? []).slice(-6), [transactions, c.id])
+  const past = [...c.past].sort((a, b) => a.until.localeCompare(b.until))
+  if (!past.length && !linked.length) return null
+  const since = past.length ? `od ${mmyyyy(addMonths(past[past.length - 1]!.until, 1))}: ` : ''
+  return (
+    <div className="flex flex-col gap-0.5 text-[11.5px]" data-testid="container-history">
+      <span className="label">Historia kwot</span>
+      {past.length > 0 && (
+        <span data-testid="container-history-amounts">
+          {past.map((x) => `do ${mmyyyy(x.until)}: ${zl(x.amount)}`).join(' · ')} · {since}
+          {zl(c.amount)}
+        </span>
+      )}
+      {linked.length > 0 && (
+        <span className="text-muted" data-testid="container-history-payments">
+          Ostatnie płatności: {linked.map((x) => `${dm(x.date)} ${zl(x.amount)}`).join(' · ')}
+        </span>
+      )}
+      {past.length > 0 && (
+        <button type="button" className="self-start text-[11px] text-accent hover:underline" onClick={() => clearPast(c)} title="Poprawka pomyłki, nie podwyżka: obecna kwota także we wcześniejszych miesiącach" data-testid="container-history-clear">
+          Jedna kwota we wszystkich miesiącach
+        </button>
+      )}
+    </div>
+  )
+}
 
 /** This month's state of a fixed fee (F1): paid on its day, its due ahead, waiting for the bank's file, or overdue. */
 function stateText(s: CargoStatus): string {
@@ -467,7 +662,7 @@ function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container
             const c = containers.find((x) => x.id === t.containerId)
             const pos = c ? cyclePosition(c, fleet.month) : null
             // The plan with this month's installment (the engine takes it on the 1st); a cycle paid already has no gap (B6).
-            const expected = c && pos && !t.paidDue ? sum(sinkingSchedule(c.amount, c.cycleMonths).slice(0, pos.index + 1)) : null
+            const expected = c && pos && !t.paidDue ? sum(sinkingSchedule(amountIn(c, fleet.month), pos.length).slice(0, pos.index + 1)) : null
             const short = expected != null ? expected - t.amount : 0
             const months = monthsBetween(fleet.month, t.dueMonth)
             return (

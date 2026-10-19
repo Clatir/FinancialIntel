@@ -32,8 +32,9 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     impulse: kind === 'expense' ? t.impulse : null,
     // The loan's link only on a loan's operation (an installment of a taken loan is its container's payment).
     loanId: kind === 'loan' ? t.loanId : null,
-    // Paid from a goal's money (T24, N1): an expense only.
-    goalId: kind === 'expense' ? t.goalId : null
+    // Paid from a goal's money (T24, N1): an expense only; so is a return awaited (F34).
+    goalId: kind === 'expense' ? t.goalId : null,
+    ...(kind === 'expense' ? {} : { awaitReturn: undefined })
   }
 }
 

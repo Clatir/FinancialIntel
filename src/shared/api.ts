@@ -160,6 +160,26 @@ export interface MachineConfig {
   prefs: MachinePrefs
   /** ICT Trade Journal on this computer (D72): its data folder (read only) and its program chosen by hand (portable). */
   ictj: { dir: string | null; exe: string | null }
+  /** The folder a file of the import was last chosen from (F14): watched for new files of mBank besides Pobrane. */
+  importDir: string | null
+}
+
+/** A CSV of mBank found in the downloads (1.9.0, F14): announced once, imported with one click. */
+export interface BankFile {
+  /** Its id for the window (main keeps the path). */
+  id: string
+  name: string
+  /** Where it is, for the window: 'Pobrane', or the name of the last folder a file was chosen from. */
+  where: string
+  /** Its modification time (ms) and size. */
+  mtime: number
+  size: number
+  format: 'lista' | 'historia'
+  /** The period the file covers (`#Za okres:`). */
+  period: { from: string; to: string } | null
+  /** The bank's account number in the file. */
+  account: string | null
+  rows: number
 }
 
 /** ICTTJ's program on this computer: chosen by hand (a portable copy) or found installed. */
@@ -342,7 +362,15 @@ export interface FiApi {
    */
   putVersions(items: ReadonlyArray<{ collection: Collection; record: unknown }>, fi: SettingsFile | null): Promise<{ fi: SettingsFile | null; done: string[]; failed: Array<{ id: string; error: string }> }>
   /** Choose a bank's export file (CSV): its name and bytes (decoded by the renderer); null = cancelled. */
-  pickImportFile(): Promise<{ name: string; bytes: Uint8Array } | null>
+  /** `ref` – the file's id for „Przenieś plik do Kosza” after the import (F14). */
+  pickImportFile(): Promise<{ name: string; bytes: Uint8Array; ref?: string } | null>
+  /** The CSV files of mBank found in the downloads (1.9.0, F14) – and their changes. */
+  bankFiles(): Promise<BankFile[]>
+  onBankFiles(cb: (files: BankFile[]) => void): () => void
+  /** A file found (or chosen) by its id: its bytes; null – gone. */
+  readBankFile(id: string): Promise<{ name: string; bytes: Uint8Array } | null>
+  /** A file found (or chosen) moved to the Recycle Bin after its import – it holds the account's data. */
+  trashBankFile(id: string): Promise<boolean>
   /** Change the backups folder on this machine: 'pick' shows a dialog, 'default' = backups/ in the data folder. */
   setBackupDir(mode: 'pick' | 'default'): Promise<string | null>
   showPath(absPath: string): Promise<void>

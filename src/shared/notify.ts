@@ -18,7 +18,7 @@ export interface Notice {
   title: string
   body: string
   /** Where clicking it leads (App routes it). */
-  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar' | 'reports'
+  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar' | 'reports' | 'operations'
   /** An alarm: its sound. */
   alarm?: boolean
   /** What exactly a click opens (a delivery: `dock:<key>`); else the tag's screen. */
@@ -140,7 +140,9 @@ export function dueNotices(o: NotifyInput): Notice[] {
     if (i.kind === 'asteroid' && p.asteroid) out.push({ key: i.key, tag: 'asteroid', title: 'Asteroida na kursie', body: i.text })
     // A fixed fee overdue (F1): once per due, its own switch.
     if (i.kind === 'cargo' && p.cargo) out.push({ key: i.key, tag: 'cargo', title: 'Kontener niezaładowany', body: i.text })
-    if (i.kind === 'import' && p.importOverdue) out.push({ key: i.key, tag: 'import', title: 'Zaległy import z mBanku', body: i.text })
+    // A new file of mBank (F14): its click opens it in Import – the watching has its own switch.
+    if (i.kind === 'import' && i.key.startsWith('bankfile:')) out.push({ key: i.key, tag: 'import', title: 'Nowy meldunek z mBanku', body: i.text, target: `bankfile:${i.key.split(':')[1]}` })
+    else if (i.kind === 'import' && p.importOverdue) out.push({ key: i.key, tag: 'import', title: 'Zaległy import z mBanku', body: i.text })
     // An overdue installment (once per installment), PIT-38 14 and 3 days before 30 April (D72).
     if (i.kind === 'loan' && p.loans) out.push({ key: i.key, tag: 'radar', title: 'Rata pożyczki po terminie', body: i.text })
     if (i.kind === 'pit38' && p.pit38) out.push({ key: i.key, tag: 'radar', title: 'PIT-38 na radarze', body: i.text })
@@ -150,6 +152,12 @@ export function dueNotices(o: NotifyInput): Notice[] {
     if (i.kind === 'plan' && p.plans) out.push({ key: i.key, tag: 'radar', title: i.text.startsWith('Termin') ? 'Termin na radarze' : 'Boja na kursie', body: i.text })
     if (i.kind === 'end' && p.plans) out.push({ key: i.key, tag: 'radar', title: 'Koniec kontenera', body: i.text })
     if (i.kind === 'account' && p.accounts) out.push({ key: i.key, tag: 'radar', alarm: true, title: 'Za mało na koncie przed płatnością', body: i.text })
+    // An unknown signal (F31) – its operation; a return late (F34) – once per its day.
+    if (i.kind === 'anomaly' && p.anomalies) out.push({ key: i.key, tag: 'operations', title: 'Nieznany sygnał na radarze', body: i.text, target: i.key })
+    if (i.kind === 'return' && p.returns) out.push({ key: i.key, tag: 'operations', title: 'Zwrot nie dotarł', body: i.text, target: `return:${i.key.split(':')[1]}` })
+    // The cargo hold's watch (F9, F23): a new price, a container gone quiet, a fee new in the history – each once.
+    if (p.cargoWatch && (i.kind === 'price' || i.kind === 'dead' || i.kind === 'recurring'))
+      out.push({ key: i.key, tag: 'cargo', title: i.kind === 'price' ? (i.text.startsWith('Kontener cięższy') ? 'Kontener cięższy niż w manifeście' : 'Kontener lżejszy niż w manifeście') : i.kind === 'dead' ? 'Kontener bez płatności' : 'Nowa opłata w historii', body: i.text })
   }
   // Sunday: this week's balances, unless confirmed since Monday already – each account on its own (B28).
   if (p.balances && weekdayOf(today) === 7) {

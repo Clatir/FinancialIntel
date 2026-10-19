@@ -85,10 +85,25 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
           },
           { issue: { kind: 'lone', tx: tx('2026-10-07', { kind: 'transfer', amount: -zl(200), counterAccountId: XTB_WALLET_ACCOUNT_ID }) }, key: 'L' }
         ],
-        accountName: (id) => (id === XTB_WALLET_ACCOUNT_ID ? 'Portfel XTB' : 'mBank')
+        accountName: (id) => (id === XTB_WALLET_ACCOUNT_ID ? 'Portfel XTB' : 'mBank'),
+        // The sensors (F31, F34): an unknown signal, a return late.
+        anomalies: [{ kind: 'new', key: 'new:T9', txIds: ['T9'], date: '2026-10-12', amount: zl(350), usual: null, name: 'SKLEP ROWEROWY' }],
+        returns: [
+          { tx: tx('2026-10-01', { amount: -zl(249), counterparty: 'ALLEGRO' }), amount: zl(249), until: '2026-10-15', state: 'late', days: 4, refund: null },
+          { tx: tx('2026-10-10', { amount: -zl(99), counterparty: 'ZALANDO' }), amount: zl(99), until: '2026-10-24', state: 'waiting', days: 5, refund: null }
+        ],
+        // The cargo hold's watch (F9): a new price, a container gone quiet.
+        cargo: {
+          prices: [{ containerId: 'K1', name: 'Netflix', from: zl(43), to: zl(49), pct: 14, yearly: zl(72), basis: 'payments', payments: [], key: 'price:K1:4900' }],
+          dead: [{ containerId: 'K2', name: 'Siłownia', last: '2026-07-12', missed: ['2026-08-12', '2026-09-12'], key: 'dead:K2:2026-09-12' }],
+          containers: [
+            { id: 'K1', cycleMonths: 1, schedule: [] },
+            { id: 'K2', cycleMonths: 1, schedule: [] }
+          ]
+        }
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'transfers', 'transfers', 'corrections', 'refunds', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
@@ -112,6 +127,15 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     // A balance confirmed twice on two computers (B129).
     expect(text('corrections')).toEqual(['mBank: korekta salda 50.00 zł z 12.10 wygląda na powtórzoną – taka sama z 11.10 (LAPTOP); saldo potwierdzone dwa razy, zanim OneDrive przyniósł pierwszą.'])
     expect(text('refunds')).toEqual(['Babcia: do oddania 120.00 zł – najstarszy zakup z 03.10 (16 dni).'])
+    expect(text('cargo')).toEqual([
+      'Cięższy niż w manifeście – Netflix: 43.00 zł → 49.00 zł co miesiąc (+14%, +72.00 zł rocznie).',
+      'Siłownia: brak płatności od 12.07 (2 terminy bez płatności) – subskrypcja anulowana?'
+    ])
+    expect(items.filter((i) => i.kind === 'cargo').map((i) => i.ref)).toEqual(['K1', 'K2'])
+    expect(text('anomalies')).toEqual(['Nowy kontrahent: SKLEP ROWEROWY 350.00 zł (12.10).'])
+    expect(items.filter((i) => i.kind === 'anomalies').map((i) => [i.ref, i.action])).toEqual([['new:T9', 'Pokaż operację']])
+    // Only a late return is a report.
+    expect(text('returns')).toEqual(['ALLEGRO: 249.00 zł zwrotu nie dotarło od 4 dni (termin 15.10, zakup 01.10).'])
     expect(text('balances')).toEqual(['mBank: saldo potwierdzone 39 dni temu – sprawdź z bankiem.', 'Portfel XTB: saldo bez potwierdzenia od salda otwarcia z 01.09.2026 (48 dni) – sprawdź z bankiem.'])
   })
 

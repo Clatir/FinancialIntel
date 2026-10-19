@@ -27,6 +27,7 @@ import { useCategories } from './pickers'
 import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberPickers'
 import { ShareEditor } from '../household/ShareEditor'
 import { useMembers } from '../household/actions'
+import { AnomalyNote, AwaitReturnBox } from '../sensors/EditorBoxes'
 
 /** The kinds on the first row of the editor; the rest under „inne”. */
 const MAIN_KINDS: TxKind[] = ['expense', 'income', 'transfer', 'trading']
@@ -111,8 +112,12 @@ export function OperationEditor({ id }: { id: string }) {
   const setDirection = (s: 1 | -1) => {
     setZeroSign(s)
     if (abs === 0 && t.splits.every((x) => x.amount === 0)) return
-    // The lines of a split receipt turn with it; a product return of a member's purchase is theirs (D80).
-    update((r) => withAmount(r, s * Math.abs(r.amount)))
+    // The lines of a split receipt turn with it; a product return of a member's purchase is theirs (D80); money coming
+    // in awaits no return of its own (F34).
+    update((r) => {
+      const next = withAmount(r, s * Math.abs(r.amount))
+      return s > 0 && next.awaitReturn ? { ...next, awaitReturn: undefined } : next
+    })
   }
   // A purchase financed by several people (D83): its lines follow the share.
   const share = shareOf(t)
@@ -354,6 +359,9 @@ export function OperationEditor({ id }: { id: string }) {
               </>
             )}
             <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
+            {/* The sensors (F31, F34): an unknown signal about it, the money of a purchase expected back. */}
+            <AnomalyNote t={t} />
+            {outgoing && <AwaitReturnBox t={t} readOnly={readOnly} />}
           </Section>
         )}
 

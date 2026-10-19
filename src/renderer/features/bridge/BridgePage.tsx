@@ -15,7 +15,8 @@ import { useFleet } from '../../store/fleet'
 import { useMachine } from '../../store/machine'
 import { useHostedDetach, useDetach, type DetachSpec } from '../../store/detach'
 import { useRecordList } from '../../store/records'
-import { navigate } from '../../store/ui'
+import { focusRecord, navigate } from '../../store/ui'
+import { openBankFile, useNewBankFiles } from '../../store/bankFiles'
 import { api } from '../../lib/api'
 import { AMOUNT_MASK, amountsHidden, plnText, signedPln } from '../../components/fields'
 import { Meter } from '../../components/meters'
@@ -29,7 +30,9 @@ import { IncomePanel } from '../month/IncomePanel'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
-import { useCargoStatuses } from '../cargo/status'
+import { useCargoStatuses, useCargoWatch } from '../cargo/status'
+import { openSensor } from '../sensors/open'
+import { useAnomalies, useReturns } from '../sensors/state'
 import { useFuture } from '../radar/future'
 import { useIctj } from '../../store/ictj'
 import { useGameRecords } from '../../store/game'
@@ -79,6 +82,8 @@ type BridgeTarget = BriefingItem['kind'] | 'cargo'
 
 function openTarget(t: BridgeTarget, key?: string): void {
   if (t === 'asteroid' || t === 'cargo') navigate({ page: 'cargo' })
+  // A new file of mBank (F14): opened in Import at once.
+  else if (t === 'import' && key?.startsWith('bankfile:')) void openBankFile(key.split(':')[1]!)
   else if (t === 'import') navigate({ page: 'import' })
   else if (t === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (t === 'start') startWizard()
@@ -87,7 +92,15 @@ function openTarget(t: BridgeTarget, key?: string): void {
     if (key?.startsWith('dock:')) openDocking(key.slice('dock:'.length))
   } else if (t === 'ictj') navigate({ page: 'settings', tab: 'ictj' })
   else if (t === 'loan' || t === 'pit38' || t === 'plan' || t === 'account') navigate({ page: 'radar' })
-  else if (t === 'end') navigate({ page: 'cargo' })
+  else if (t === 'end' || t === 'recurring') navigate({ page: 'cargo' })
+  // An unknown signal, a return late (F31, F34): their operation.
+  else if (t === 'anomaly' || t === 'return') openSensor(key)
+  // A container's new price or its quiet (F9): that container (its id is the key's second part).
+  else if (t === 'price' || t === 'dead') {
+    const id = key?.split(':')[1]
+    if (id) focusRecord('container', id, { page: 'cargo' })
+    else navigate({ page: 'cargo' })
+  }
   else if (t === 'house') openRefundables()
   else if (t === 'mission') navigate({ page: 'command' })
   else if (t === 'alarm') openAlarm(key)
@@ -461,6 +474,12 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
   const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
   const game = useGameRecords()
   const cargo = useCargoStatuses()
+  // The cargo hold's watch (F9, F23); the new files of mBank in the downloads (F14).
+  const watch = useCargoWatch()
+  const bankFiles = useNewBankFiles()
+  // The sensors (F31, F34): unknown signals, returns late.
+  const anomalies = useAnomalies()
+  const returns = useReturns()
   // The buoys' days (F16) and the accounts ahead (F26).
   const future = useFuture()
   return useMemo(() => {
@@ -484,10 +503,14 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
       members: fi.settings.household.members,
       cargo,
       scheduled: future.reminders,
-      accounts: future.accounts
+      accounts: future.accounts,
+      watch,
+      bankFiles,
+      anomalies,
+      returns
     })
     // `hidden`: the amounts of the texts mask on a change.
-  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, future])
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, future, watch, bankFiles, anomalies, returns])
 }
 
 /** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */

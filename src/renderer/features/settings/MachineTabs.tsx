@@ -226,6 +226,9 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['house', 'Domownik nie oddał za zakupy – po 30 dniach od najstarszego'],
   ['plans', 'Boje i terminy (dni przed, ustawione w boi), boja po terminie, koniec kontenera – 14 dni przed'],
   ['accounts', 'Za mało na koncie przed płatnością (salda kont za 90 dni)'],
+  ['cargoWatch', 'Ładownia: kontener w nowej cenie, kontener bez płatności, nowa opłata w historii'],
+  ['anomalies', 'Nieznany sygnał: nietypowa kwota, nowy kontrahent, możliwe podwójne obciążenie'],
+  ['returns', 'Zwrot pieniędzy, który nie dotarł w terminie'],
   ['watch', 'Raport wachty – w niedzielę od 18:00']
 ]
 

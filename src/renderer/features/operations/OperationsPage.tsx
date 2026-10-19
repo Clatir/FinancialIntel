@@ -2,7 +2,8 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { amountOn, isTwoSided, touchesAccount } from '@shared/calc/operations'
-import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, sortOperations, sumOperations, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { useMarkFlags } from '../sensors/state'
+import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { BulkChangeBar } from './BulkChange'
 import { ExportVisible, extraFilters, MoreFilters, SortHeader, ViewsBar } from './ListTools'
@@ -173,12 +174,12 @@ function CheckMenu<T extends string>({
   )
 }
 
-function Row({ t, selected, index, top, view }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null }) {
+function Row({ t, selected, index, top, view, flags }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null; flags: MarkFlags }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const orders = useData((s) => s.fi?.settings.orders)
   const draft = useData((s) => !!s.drafts[t.id])
-  const marks = orders ? marksOf(t, orders) : []
+  const marks = orders ? marksOf(t, orders, flags) : []
   const tone = amountTone(t)
   const members = useMembers()
   // A member's money says whose (D80, D81: the parts of a split income – the sender's rest last).
@@ -235,7 +236,7 @@ function Row({ t, selected, index, top, view }: { t: Transaction; selected: bool
       </span>
       <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
         {shownMarks.map((m) => (
-          <Badge key={m} tone={m === 'impulse' || m === 'night' || m === 'pending' ? 'warn' : 'default'}>
+          <Badge key={m} tone={m === 'impulse' || m === 'night' || m === 'pending' || m === 'anomaly' ? 'warn' : 'default'}>
             {MARK_LABEL[m]}
           </Badge>
         ))}
@@ -405,15 +406,17 @@ export function OperationsPage() {
   const deferred = useDeferredValue(filter)
 
   const all = useMemo(() => listOf(records), [records])
+  // The marks „nietypowa” and „czeka na zwrot” (F31, F34).
+  const flags = useMarkFlags()
   const rows = useMemo(() => {
     if (!fi) return []
-    const ctx = { categories: cats, accounts, orders: fi.settings.orders, aliases: fi.settings.import.aliases }
+    const ctx = { categories: cats, accounts, orders: fi.settings.orders, aliases: fi.settings.import.aliases, flags }
     // A new entry being written always shows, whatever the filters; the list in the order chosen (F18).
     return sortOperations(
       all.filter((t) => drafts[t.id] || matchesFilter(t, deferred, ctx)),
       deferred.sort
     )
-  }, [all, deferred, cats, accounts, fi, drafts])
+  }, [all, deferred, cats, accounts, fi, drafts, flags])
   const sums = useMemo(() => sumOperations(rows), [rows])
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW, overscan: 20 })
   const selectedIndex = rows.findIndex((t) => t.id === selectedId)
@@ -581,7 +584,7 @@ export function OperationsPage() {
             <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
               {virtualizer.getVirtualItems().map((v) => {
                 const t = rows[v.index] as Transaction
-                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
+                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} flags={flags} />
               })}
             </div>
           )}

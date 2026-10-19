@@ -8,6 +8,7 @@ import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { openOperation } from '../operations/state'
 import { dismissTransfer } from '../operations/transfers'
 import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, transferIssueOf, useInbox } from './state'
+import { dismissAnomaly } from '../sensors/state'
 import { TransferPairs } from './TransferPairs'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -74,6 +75,12 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
       {item.kind === 'corrections' && item.ref && (
         <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => dismissCorrection(item.ref!)} data-testid="inbox-dismiss">
           to nie powtórzenie
+        </button>
+      )}
+      {/* An unknown signal (F31): „to w porządku” – never reported again. */}
+      {item.kind === 'anomalies' && item.ref && (
+        <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => dismissAnomaly({ key: item.ref! })} data-testid="inbox-anomaly-ok">
+          to w porządku
         </button>
       )}
       {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}

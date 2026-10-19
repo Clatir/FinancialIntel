@@ -34,6 +34,7 @@ import { patchMachinePrefs, type MachinePrefs } from '@shared/machine'
 import { windowBounds } from '@shared/bounds'
 import { warsawNow } from '@shared/calc/dates'
 import { IctjSource } from './ictj/source'
+import { BankFiles } from './bankFiles'
 import { findIctjExe, suggestIctjDir } from './ictj/locate'
 
 // Test hooks: isolated user data and a preselected data folder (no dialogs in E2E runs).
@@ -75,6 +76,7 @@ let updater: Updater | null = null
 let tray: AppTray | null = null
 let quick: QuickEntry | null = null
 let ictj: IctjSource | null = null
+let bankFiles: BankFiles | null = null
 /** Notifications shown and not closed yet (a dropped reference loses its click). */
 const notifications = new Set<Notification>()
 /** The app really quits (from the tray, an update, the system): closing the window then closes it, not hides it. */
@@ -309,6 +311,26 @@ function ictjSource(): IctjSource {
     log
   })
   return ictj
+}
+
+/** New files of mBank in the downloads (F14): their changes to the main window. */
+function bankFilesWatch(): BankFiles {
+  bankFiles ??= new BankFiles({
+    onChange: (files) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:bankFiles', files)
+    },
+    log: (line) => log('info', line),
+    pollMs: Number(process.env.FI_BANK_FILES_POLL_MS) || undefined
+  })
+  return bankFiles
+}
+
+/** The folders watched for files of mBank (F14): Pobrane (FI_DOWNLOADS_DIR in test runs) and the import's last folder. */
+function watchBankFiles(): void {
+  if (!config.get().prefs.bankFiles) return bankFilesWatch().setDirs([])
+  const downloads = process.env.FI_DOWNLOADS_DIR || app.getPath('downloads')
+  const last = config.get().importDir
+  bankFilesWatch().setDirs([{ dir: downloads, label: 'Pobrane' }, ...(last ? [{ dir: last, label: basename(last) || last }] : [])])
 }
 
 /** The ICTTJ folder chosen on this computer (FI_ICTJ_DIR in test runs). */
@@ -1030,7 +1052,24 @@ function registerIpc(): void {
     if (!path) return null
     const st = await fs.stat(path)
     if (st.size > IMPORT_MAX_BYTES) throw new Error(`Plik ma ${Math.round(st.size / 1024 / 1024)} MB – to nie wygląda na wyciąg z banku (limit ${IMPORT_MAX_BYTES / 1024 / 1024} MB).`)
-    return { name: basename(path), bytes: new Uint8Array(await fs.readFile(path)) }
+    // Its folder is watched for the next files of mBank (F14) – unless it is Pobrane already.
+    const dir = dirname(path)
+    if (dir !== config.get().importDir) {
+      await config.update({ importDir: dir }).catch((e) => log('warn', 'folder importu – zapis nie udał się', e))
+      watchBankFiles()
+    }
+    return { name: basename(path), bytes: new Uint8Array(await fs.readFile(path)), ref: bankFilesWatch().register(path) }
+  })
+  handle('bankFiles', () => bankFilesWatch().files)
+  handle('readBankFile', (id: unknown) => (typeof id === 'string' ? bankFilesWatch().read(id) : null))
+  handle('trashBankFile', async (id: unknown) => {
+    // A file gone already (deleted in Explorer): nothing to move – said so, not an error (F14).
+    const path = typeof id === 'string' ? await bankFilesWatch().pathOf(id) : null
+    if (!path) return false
+    await withRetry(() => shell.trashItem(path), 5)
+    log('info', `plik z banku przeniesiony do Kosza: ${basename(path)}`)
+    bankFilesWatch().refresh()
+    return true
   })
   handle('setBackupDir', async (mode: 'pick' | 'default') => {
     const s = requireStore()
@@ -1172,6 +1211,7 @@ async function changePrefs(patch: unknown): Promise<MachinePrefs> {
     if (quick) quick.replaced = null
   }
   if (prefs.zoom !== before.zoom) applyZoom()
+  if (prefs.bankFiles !== before.bankFiles) watchBankFiles()
   broadcastPrefs(prefs)
   return prefs
 }
@@ -1494,6 +1534,7 @@ function retryConfig(): void {
       else tray?.destroy()
       quick?.applyShortcut(config.get().prefs.quickShortcut)
       void ictjSource().setDir(ictjDirOf())
+      watchBankFiles()
       // The checks of updates as this computer set them (the defaults ran meanwhile).
       updater?.startAuto(updateCheckDelayMs())
       broadcastPrefs(config.get().prefs)
@@ -1520,6 +1561,7 @@ app.whenReady().then(async () => {
   updater = createUpdater()
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
+  watchBankFiles()
   // The autostart only from a config.json read (B114): defaults in its place would remove the entry.
   if (!config.loadFailed) applyLoginItem(trayView(), log)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.

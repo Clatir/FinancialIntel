@@ -34,6 +34,8 @@ export async function launch(
     // No test talks to the real api.github.com; the update test passes a local server.
     FI_UPDATE_URL: 'http://127.0.0.1:9',
     FI_UPDATE_CHECK_DELAY_MS: '3600000',
+    // The new files of mBank (F14): a folder of this test, never the machine's Pobrane.
+    FI_DOWNLOADS_DIR: join(base, 'Pobrane'),
     // The game's first freeze waits after the opening (B33): not in tests that do not test it.
     FI_FREEZE_AFTER_OPEN_MS: '0',
     FI_FREEZE_QUIET_MS: '0',

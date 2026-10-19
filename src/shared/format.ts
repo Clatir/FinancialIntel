@@ -13,6 +13,9 @@ export function formatPln(grosze: number, group = true): string {
  * Polish plural form of the noun after a number: 1 → `one`, 2–4 (except 12–14) → `few`, otherwise `many`;
  * a fractional number takes `fraction` (genitive singular: "2.5 pipsa"), by default the `few` form.
  */
+/** '2026-10-16' → '16.10' (a short date of the briefing, the notifications and the sensors). */
+export const dm = (date: string): string => `${date.slice(8, 10)}.${date.slice(5, 7)}`
+
 export function plural(n: number, one: string, few: string, many: string, fraction = few): string {
   if (!Number.isFinite(n)) return many
   const abs = Math.abs(n)

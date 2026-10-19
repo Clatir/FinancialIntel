@@ -7,7 +7,7 @@
  */
 import type { Container, Transaction } from '../schema/records'
 import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf } from './dates'
-import { activeIn, cyclePosition, type FleetState } from './fleet'
+import { activeIn, amountIn, cyclePosition, type FleetState } from './fleet'
 import { OVERDUE_DAYS } from './loans'
 
 /** A payment this many days before its due is that due's (a rent paid at the month's end for the next one). */
@@ -54,11 +54,11 @@ export interface CargoInput {
   coveredTo: Readonly<Record<string, string>>
 }
 
-interface Linked extends CargoPayment {
+export interface Linked extends CargoPayment {
   accountId: string
 }
 
-interface PaymentsIndex {
+export interface PaymentsIndex {
   /** The payments linked to each container, by date. */
   byContainer: Map<string, Linked[]>
   /** Each account's latest row from the bank (a folder from before 1.5.0 has no `coveredTo`). */
@@ -68,7 +68,7 @@ interface PaymentsIndex {
 const indexes = new WeakMap<readonly Transaction[], PaymentsIndex>()
 
 /** Once per list of the store (its lists stay while the records do). */
-function paymentsIndex(transactions: readonly Transaction[]): PaymentsIndex {
+export function paymentsIndex(transactions: readonly Transaction[]): PaymentsIndex {
   let index = indexes.get(transactions)
   if (index) return index
   index = { byContainer: new Map(), lastBank: new Map() }
@@ -89,7 +89,7 @@ function paymentsIndex(transactions: readonly Transaction[]): PaymentsIndex {
 export const dueIn = (month: string, day: number): string => `${month}-${String(Math.min(day, daysInMonth(month))).padStart(2, '0')}`
 
 /** The payment day: the middle one of its last payments before this month, else the container's own. */
-function paymentDay(c: Container, linked: readonly Linked[], month: string): Pick<CargoStatus, 'day' | 'dayFrom'> {
+export function paymentDay(c: Pick<Container, 'dueDay'>, linked: readonly Linked[], month: string): Pick<CargoStatus, 'day' | 'dayFrom'> {
   const before = firstDayOf(month)
   const days = linked
     .filter((p) => p.date < before)
@@ -112,7 +112,8 @@ export function cargoStatuses(o: CargoInput): CargoStatus[] {
     const due = dueIn(month, day)
     // This cycle's payments: from a little before its due up to a little before the next one's.
     const from = addDays(due, -EARLY_DAYS)
-    const until = addDays(dueIn(addMonths(month, c.cycleMonths), day), -EARLY_DAYS)
+    // Up to a little before the next due (a schedule's – F23 – after its own gap).
+    const until = addDays(dueIn(cyclePosition(c, addMonths(month, 1)).dueMonth, day), -EARLY_DAYS)
     const payments = linked.filter((p) => p.date >= from && p.date < until).map(({ id, date, amount }) => ({ id, date, amount }))
     const paid = payments.reduce((s, p) => s + p.amount, 0)
     const tankPaid = c.cycleMonths > 1 && o.tanks.some((t) => t.containerId === c.id && t.paidDue === month)
@@ -127,7 +128,7 @@ export function cargoStatuses(o: CargoInput): CargoStatus[] {
       importPending = covered !== '' && covered < graceEnd
       state = importPending ? 'waiting' : 'overdue'
     }
-    out.push({ containerId: c.id, name: c.name, amount: c.amount, cycleMonths: c.cycleMonths, day, dayFrom, due, from, state, importPending, payments, paid })
+    out.push({ containerId: c.id, name: c.name, amount: amountIn(c, month), cycleMonths: c.cycleMonths, day, dayFrom, due, from, state, importPending, payments, paid })
   }
   return out.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.localeCompare(b.name)))
 }

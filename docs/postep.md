@@ -1,8 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa T** (1.8.0 – przyszłość, funkcje)
-na gałęzi `claude/grupa-t-1.8.0`, PR do `main`; po niej od razu U i V – każda grupa z własnym PR i wydaniem (D71).
-**1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa U** (1.9.0 – ładownia i czujniki,
+funkcje) na gałęzi `claude/grupa-u-1.9.0`, PR do `main`; po niej od razu V – każda grupa z własnym PR i wydaniem (D71).
+**1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -11,9 +11,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa T → scalenie po zielonym CI → wydanie 1.8.0 → od razu grupa U (D87). Po wznowieniu
+**Następny krok:** grupa U → scalenie po zielonym CI → wydanie 1.9.0 → od razu grupa V (D87). Po wznowieniu
 pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.8.0 – listy w sekcjach niżej.
+aplikacji: 1.5.0–1.9.0 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -56,11 +56,11 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 (w 1.6.6) | ✅ D87 | ✅ scalone (PR #27), wydanie przepadło – wchodzi w 1.6.6 |
 | **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1,5 h (zegar sesji, z przeglądem, 47 mutacjami, pełnym E2E i dwiema poprawkami CI; plan był ok. 1,5 h) | 1.6.6 (w 1.7.0) | ✅ D87 | ✅ scalone (PR #28), wydanie przepadło – wchodzi w 1.7.0 |
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar gałęzi, z przeglądem, 64 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy R; plan był ok. 3 h) | 1.7.0 | ✅ D87 | ✅ wydane (PR #29, z 1.6.5 i 1.6.6) |
-| **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | w toku |
-| **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
+| **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar gałęzi, z przeglądem, 80 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy S; plan był 4–5 h) | 1.8.0 | ✅ D87 | ✅ wydane (PR #30) |
+| **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | w toku |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S** | | | **ok. 48,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T** | | | **ok. 50,5 h** | | | |
 | | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -836,6 +836,51 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 2. Operacje: zaznacz kilka, „Zmień zaznaczone” → podgląd skutku → „Cofnij”; „Więcej filtrów”, widok zapisany na drugim
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
+
+## Przed grupą U – ładownia i czujniki, funkcje (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa T wydana (1.8.0, PR #30). Grupa U (1.9.0): funkcje „ładowni i czujników” z przeglądu
+   po 1.4.1 – F9 (ładownia pilnuje cen: nowa cena kontenera, kontener bez płatności), F23 (opłaty co 2, 3, 6 miesięcy,
+   harmonogram miesięcy, rachunki o zmiennej kwocie – w historii i w kontenerach), F14 (nowy plik z mBanku w Pobranych –
+   import jednym kliknięciem, plik do Kosza po imporcie), F31 (radar anomalii: nietypowa kwota, kategoria, nowy
+   kontrahent, możliwe podwójne obciążenie), F34 (zwroty w drodze). Format folderu addytywny: pola kontenera `past`,
+   `schedule`, `variable`, `priceIgnored`, `aliveAt`, operacji `awaitReturn`, ustawień `cargo.ignored`, `anomalies.ok` –
+   starsza wersja je zachowuje (harmonogram czyta jak opłatę co rok, historię kwot – samą bieżącą kwotę).
+2. **Co użytkownik musi powiedzieć** – ✅ D87: wszystkie propozycje przeglądu; F14 czyta tylko pliki CSV z mBanku w
+   Pobranych i w folderze ostatniego importu (nic nie wysyła), wyłącznik na komputerze.
+3. **Co przygotować** – nic (pliki z mBanku jak zwykle do Pobranych).
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3 h.
+
+## 1.9.0 – ładownia i czujniki, funkcje (grupa U, 19.10.2026)
+
+Zakres: „Przed grupą U” wyżej. Zrobione:
+- Ładownia pilnuje cen (T283–T285): kontener cięższy / lżejszy niż w manifeście (cykle płatności, opłata okresowa –
+  ostatni cykl, rachunek zmienny – 75. percentyl roku) z symulacją i „Zaktualizuj od …” (historia kwot – miesiące
+  wcześniej starą kwotą), „To nie zmiana ceny”; kontener bez płatności (2 terminy w zasięgu plików z banku) – „Zrzuć z
+  ładowni” albo „Nadal płacę”.
+- Opłaty cykliczne (T286): co 2 / 3 / 6 miesięcy, harmonogram miesięcy (zbiornik do najbliższej płatności), rachunek o
+  zmiennej kwocie; propozycje z historii rozpoznają je, nowa opłata ogłaszana w odprawie raz w miesiącu, „Nie proponuj”.
+- Plik z mBanku w Pobranych (T287): obserwacja Pobranych i folderu ostatniego importu, powiadomienie i pozycja odprawy,
+  „Importuj” jednym kliknięciem, po imporcie „Przenieś plik do Kosza”; wyłącznik na komputerze.
+- Radar anomalii (T288): nietypowa kwota u marki, kategoria ponad 2× średniej, nowy kontrahent od progu dziennika,
+  możliwe podwójne obciążenie z banku – odprawa, Meldunki, oznaczenie „nietypowa”, „To w porządku”.
+- Zwroty w drodze (T289): „Czekam na zwrot” przy wydatku, wpływ tej samej marki zamyka go sam, spóźniony w odprawie i
+  powiadomieniu, panel i spodziewany wpływ na Radarze, oznaczenie „czeka na zwrot”.
+- Przegląd `/code-review` high: 10 kandydatów, 9 poprawionych z testem i wersja przed PR (T290) – najważniejsze: czynsz w
+  dwóch przelewach dawał fałszywą „nową cenę” (suma cyklu), zwrot parował się sam ze sobą po zmianie kierunku, czujniki
+  liczyły się po każdej zmianie (na 150 tys. operacji ≈ 0,3 s) – teraz tylko po zmianie pól, które czytają.
+- Testy: 781 unit + fs (nowe `cargo-watch`, `bank-files`, `sensors`, `sensor-inputs`, `cargo-actions`, fs `bank-files`;
+  poszerzone `fleet`, `inbox`, `briefing`), E2E 64 (nowy `sensors.spec.ts`); 63 mutacje – 51 reguł czujników (40 od
+  razu, 10 po nowych testach, 1 równoważna – zbędny warunek usunięty z kodu) i 12 poprawek przeglądu (11 od razu, 1 po
+  nowym teście).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.9.0, Windows):
+1. Ładownia: kontener, którego ostatnie płatności są w innej cenie – „cięższy”, symulacja, „Zaktualizuj od …” i historia
+   kwot; propozycje z historii (co 2 / 3 / 6 miesięcy, rachunki zmienne) i „Nie proponuj”.
+2. Pobrany plik CSV z mBanku (lista operacji albo historia rachunku) – powiadomienie „Nowy meldunek z mBanku”, „Importuj”,
+   po imporcie „Przenieś plik do Kosza”.
+3. Wydatek ze zwrotem (oddany towar): „Czekam na zwrot pieniędzy”, Radar → „Zwroty w drodze”; gdy pieniądze wpłyną na konto – sam się
+   zamyka. Meldunki → „Nieznane sygnały” (czy nie za dużo fałszywych alarmów na prawdziwej historii).
 
 ## Przed grupą T – przyszłość, funkcje (19.10.2026)
 

@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from 'react'
 import { boot, saveNow, useData } from '../store/data'
 import { goBack, navigate, setPalette, useUi, type Route } from '../store/ui'
 import { initUpdates } from '../store/update'
+import { initBankFiles } from '../store/bankFiles'
 import { FolderSetup } from '../features/setup/FolderSetup'
 import { OpenProgressPanel, useOpenProgress } from '../features/setup/OpenProgress'
 import { SettingsPage } from '../features/settings/SettingsPage'
@@ -277,6 +278,7 @@ export function App() {
   useEffect(() => {
     void boot()
     initIctj()
+    initBankFiles()
     initQuickHost()
     initPresence()
     initNotifier()

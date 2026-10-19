@@ -7,8 +7,8 @@
 import { envelopeKind, type Category, type EnvelopeKind } from '../schema/budget'
 import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { counterpartyKey } from '../import/classify'
-import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
-import { activeIn, coverMoves, cyclePosition, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
+import { addMonths, dayOfMonth, daysBetween, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
+import { activeIn, amountIn, coverMoves, cyclePosition, monthlyWeight, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
 import { coveredMonths, firstFullOf, historyStart, monthsBefore } from './history'
 import { financedBy } from './household'
 import { categoryIndex, costOf, isCargoPayment, partsOf, sum } from './operations'
@@ -189,9 +189,14 @@ export interface RecurringPayment {
   key: string
   /** The counterparty as the bank writes it. */
   label: string
-  /** The latest payment (a subscription's price may change). */
+  /** One payment: the latest (a subscription's price may change); a variable bill's – the 75th percentile of a year (F23). */
   amount: number
-  cycleMonths: 1 | 12
+  /** 1, 2, 3, 6 or 12 months (F23); a schedule's: 12. */
+  cycleMonths: number
+  /** The payment months of a fee no single cycle describes (F23 – a property tax 3, 5, 9, 11); empty = its cycle. */
+  schedule: number[]
+  /** A monthly bill of a varying amount (F23 – electricity, water). */
+  variable: boolean
   /** The month of the latest payment: the container's cycle counts from it. */
   dueMonth: string
   dueDay: number
@@ -199,58 +204,159 @@ export interface RecurringPayment {
   accountId: string
   payments: number
   last: string
+  /** Its latest payment, of the month before, made it a fee (F23): new in the history – the briefing announces it this month. */
+  fresh: boolean
+}
+
+/** A month's days (a cycle of N months ≈ N × this). */
+const MONTH_DAYS = 30.44
+/** A payment this many days off its cycle still keeps it (a weekend, a month of 28 days). */
+const CYCLE_SLACK_DAYS = 12
+/** The cycles of the history's fees besides the monthly and the yearly one (F23). */
+const MID_CYCLES = [2, 3, 6] as const
+/** A variable bill's amounts lie within this share of their median (F23): electricity 150–260 zł – a shop's do not. */
+const VARIABLE_SPREAD = 0.6
+/** The payments of a bill (a variable one, a schedule's) come within this many days of their usual day of the month. */
+const BILL_DAY_SLACK = 6
+
+/** Amounts within ±`spread` of their median. */
+function within(amounts: readonly number[], spread: number): boolean {
+  const sorted = [...amounts].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)]!
+  return sorted.every((a) => Math.abs(a - median) <= median * spread)
 }
 
 /** Amounts within ±15% of their median: the same fee, not a shop visited every month. */
-function steady(amounts: readonly number[]): boolean {
-  const sorted = [...amounts].sort((a, b) => a - b)
-  const median = sorted[Math.floor(sorted.length / 2)]!
-  return sorted.every((a) => Math.abs(a - median) <= median * 0.15)
+const steady = (amounts: readonly number[]): boolean => within(amounts, 0.15)
+
+/** The `q` percentile (the nearest rank) of amounts – 0 without any. */
+export function percentile(values: readonly number[], q: number): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.max(0, Math.ceil(sorted.length * q) - 1)] ?? 0
+}
+
+/** The 75th percentile (the nearest rank) of amounts: a variable bill's amount (F23). */
+export const p75 = (values: readonly number[]): number => percentile(values, 0.75)
+
+/** Days of the month within `slack` of their median: a bill's, not a shop's. */
+function onItsDay(dates: readonly string[], slack = BILL_DAY_SLACK): number | null {
+  const days = dates.map(dayOfMonth).sort((a, b) => a - b)
+  const day = days[(days.length - 1) >> 1]
+  return day != null && days.every((d) => Math.abs(d - day) <= slack) ? day : null
+}
+
+type Detected = Pick<RecurringPayment, 'amount' | 'cycleMonths' | 'schedule' | 'variable' | 'dueMonth' | 'dueDay' | 'payments' | 'last'>
+
+/**
+ * The cycle of a payee's payments (sorted, before `month`): monthly – nearly every month of the window (a steady amount,
+ * or a variable bill on its day of the month); every 2, 3 or 6 months – its latest payments a cycle apart (±12 days),
+ * at least 3; yearly – two or three, 11–13 months apart; a schedule – 3 to 11 payments in the last 12 months, each in
+ * its own month on about the same day, with a year of history behind them. Each – recent: its next payment not missed.
+ */
+function detectCycle(sorted: readonly Transaction[], month: string, window: readonly string[], historyFrom: string | null): Detected | null {
+  const last = sorted.at(-1)
+  if (!last) return null
+  const start = firstDayOf(month)
+  const amountsOf = (xs: readonly Transaction[]) => xs.map((t) => -t.amount)
+  const found = (cycleMonths: number, payments: number, amount: number, more: Partial<Detected> = {}): Detected => ({
+    amount,
+    cycleMonths,
+    schedule: [],
+    variable: false,
+    dueMonth: monthOf(last.date),
+    dueDay: dayOfMonth(last.date),
+    payments,
+    last: last.date,
+    ...more
+  })
+  if (window.length >= 3) {
+    const inWindowMonths = new Set(window)
+    const inWindow = sorted.filter((t) => inWindowMonths.has(monthOf(t.date)))
+    const months = new Set(inWindow.map((t) => monthOf(t.date)))
+    if (months.size >= Math.max(3, window.length - 1) && inWindow.length <= window.length + 1) {
+      if (steady(amountsOf(inWindow))) return found(1, inWindow.length, -last.amount)
+      // A bill of a varying amount (F23): its amount the 75th percentile of a year, up to whole złoty.
+      const day = onItsDay(inWindow.map((t) => t.date))
+      if (day != null && within(amountsOf(inWindow), VARIABLE_SPREAD)) {
+        const year = sorted.filter((t) => t.date >= firstDayOf(addMonths(month, -12)))
+        return found(1, inWindow.length, Math.ceil(p75(amountsOf(year)) / 100) * 100, { variable: true, dueDay: day })
+      }
+    }
+  }
+  for (const n of MID_CYCLES) {
+    const want = n * MONTH_DAYS
+    let run = 1
+    for (let i = sorted.length - 1; i > 0 && Math.abs(daysBetween(sorted[i - 1]!.date, sorted[i]!.date) - want) <= CYCLE_SLACK_DAYS; i--) run++
+    if (run < 3 || daysBetween(last.date, start) > want + CYCLE_SLACK_DAYS || !steady(amountsOf(sorted.slice(-run)))) continue
+    return found(n, run, -last.amount)
+  }
+  // Once a year: two or three steady payments, each 11–13 months after the one before (no shop visited monthly).
+  const gaps = sorted.slice(1).map((t, i) => monthsBetween(monthOf(sorted[i]!.date), monthOf(t.date)))
+  if (sorted.length >= 2 && sorted.length <= 3 && gaps.every((g) => g >= 11 && g <= 13) && steady(amountsOf(sorted)) && monthsBetween(monthOf(last.date), month) <= 13)
+    return found(12, sorted.length, -last.amount)
+  // A schedule (F23): the last 12 months seen whole.
+  const yearFrom = firstDayOf(addMonths(month, -12))
+  if (!historyFrom || historyFrom > yearFrom) return null
+  const year = sorted.filter((t) => t.date >= yearFrom)
+  const months = [...new Set(year.map((t) => Number(t.date.slice(5, 7))))].sort((a, b) => a - b)
+  if (year.length < 3 || year.length > 11 || months.length !== year.length || !steady(amountsOf(year))) return null
+  const day = onItsDay(year.map((t) => t.date))
+  if (day == null) return null
+  // Its longest gap between payments: the next one not missed yet.
+  const longest = Math.max(...months.map((m, i) => (i ? m - months[i - 1]! : m + 12 - months[months.length - 1]!)))
+  if (monthsBetween(monthOf(last.date), month) > longest) return null
+  return found(12, year.length, -last.amount, { schedule: months, dueDay: day })
 }
 
 /**
- * Recurring payments of the history – proposals for the cargo (D70), each to be confirmed: the same counterparty about
- * once a month for nearly every one of the last full months (at least 3), or once a year (two payments 11–13 months
- * apart), with a steady amount. Counterparties of existing containers are left out.
+ * Recurring payments of the history – proposals for the cargo (D70), each to be confirmed: a fee every 1, 2, 3, 6 or 12
+ * months, a monthly bill of a varying amount, a fee of a schedule (F23 – `detectCycle`). Counterparties of existing
+ * containers are left out, and those said „nie proponuj” to (`ignored` – payee keys).
  */
-export function recurringPayments(transactions: readonly Transaction[], month: string, containers: readonly CounterpartyOf[] = [], covered?: readonly string[]): RecurringPayment[] {
+export function recurringPayments(
+  transactions: readonly Transaction[],
+  month: string,
+  containers: readonly CounterpartyOf[] = [],
+  covered?: readonly string[],
+  ignored: ReadonlySet<string> = new Set()
+): RecurringPayment[] {
   const known = containerKeys(containers)
   const ids = containerIdsOf(containers)
   const groups = new Map<string, Transaction[]>()
+  let historyFrom: string | null = null
   for (const t of transactions) {
+    if (t.bank && (!historyFrom || t.date < historyFrom)) historyFrom = t.date
     if (t.kind !== 'expense' || t.amount >= 0 || isCargoPayment(t, ids) || t.goalId || t.date >= firstDayOf(month)) continue
     const key = payeeKey(t)
-    if (!key || known.has(key)) continue
+    if (!key || known.has(key) || ignored.has(key)) continue
     // Pushed, never copied (W6: a shop of thousands of payments made this quadratic).
     const list = groups.get(key)
     if (list) list.push(t)
     else groups.set(key, [t])
   }
-  const window = fullMonthsBefore(transactions, month, SALARY_MONTHS, covered)
-  const inWindowMonths = new Set(window)
+  // The history's start (B23): the bank's first row, else the earliest operation.
+  if (!historyFrom) for (const t of transactions) if (!historyFrom || t.date < historyFrom) historyFrom = t.date
+  const windows = new Map<string, string[]>()
+  const windowAt = (m: string) => {
+    let w = windows.get(m)
+    if (!w) windows.set(m, (w = fullMonthsBefore(transactions, m, SALARY_MONTHS, covered)))
+    return w
+  }
   const out: RecurringPayment[] = []
   for (const [key, list] of groups) {
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
+    const found = detectCycle(sorted, month, windowAt(month), historyFrom)
+    if (!found) continue
     const last = sorted.at(-1)!
-    const candidate = (cycleMonths: 1 | 12, payments: number): RecurringPayment => {
-      const counts = new Map<string | null, number>()
-      for (const t of sorted) counts.set(t.categoryId, (counts.get(t.categoryId) ?? 0) + 1)
-      const categoryId = [...counts.entries()].filter(([id]) => id).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
-      return { key, label: last.counterparty || last.title, amount: -last.amount, cycleMonths, dueMonth: monthOf(last.date), dueDay: dayOfMonth(last.date), categoryId, accountId: last.accountId, payments, last: last.date }
-    }
-    if (window.length >= 3) {
-      const inWindow = sorted.filter((t) => inWindowMonths.has(monthOf(t.date)))
-      const months = new Set(inWindow.map((t) => monthOf(t.date)))
-      if (months.size >= Math.max(3, window.length - 1) && inWindow.length <= window.length + 1 && steady(inWindow.map((t) => -t.amount))) {
-        out.push(candidate(1, inWindow.length))
-        continue
-      }
-    }
-    // Once a year: two or three steady payments, each 11–13 months after the one before (no shop visited monthly).
-    const gaps = sorted.slice(1).map((t, i) => monthsBetween(monthOf(sorted[i]!.date), monthOf(t.date)))
-    if (sorted.length >= 2 && sorted.length <= 3 && gaps.every((g) => g >= 11 && g <= 13) && steady(sorted.map((t) => -t.amount))) out.push(candidate(12, sorted.length))
+    const counts = new Map<string | null, number>()
+    for (const t of sorted) counts.set(t.categoryId, (counts.get(t.categoryId) ?? 0) + 1)
+    const categoryId = [...counts.entries()].filter(([id]) => id).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+    // New (F23): its latest payment of the month before made it a fee – not one yet in that month, before it came.
+    const at = monthOf(last.date)
+    const fresh = at === addMonths(month, -1) && !detectCycle(sorted.slice(0, -1), at, windowAt(at), historyFrom)
+    out.push({ key, label: last.counterparty || last.title, ...found, categoryId, accountId: last.accountId, fresh })
   }
-  return out.sort((a, b) => b.amount / b.cycleMonths - a.amount / a.cycleMonths || a.label.localeCompare(b.label))
+  return out.sort((a, b) => monthlyWeight(b) - monthlyWeight(a) || a.label.localeCompare(b.label))
 }
 
 // ------------------------------------------------------------------ the salary's split
@@ -300,13 +406,14 @@ export function salarySplit(
   } = {}
 ): SalarySplit {
   const active = containers.filter((c) => activeIn(c, month))
-  const cargoItems = active.filter((c) => c.cycleMonths <= 1).map((c) => ({ containerId: c.id, name: c.name, amount: c.amount }))
+  // Each at its amount in the month (F9: a raise counts from its month on).
+  const cargoItems = active.filter((c) => c.cycleMonths <= 1).map((c) => ({ containerId: c.id, name: c.name, amount: amountIn(c, month) }))
   const tankItems = active
     .filter((c) => c.cycleMonths > 1)
     .map((c) => {
       const pos = cyclePosition(c, month)
-      const planned = sinkingSchedule(c.amount, c.cycleMonths)[pos.index] ?? 0
-      return { containerId: c.id, name: c.name, amount: sinking ? (sinking.get(c.id) ?? 0) : planned, dueMonth: pos.dueMonth, due: c.amount }
+      const planned = sinkingSchedule(amountIn(c, month), pos.length)[pos.index] ?? 0
+      return { containerId: c.id, name: c.name, amount: sinking ? (sinking.get(c.id) ?? 0) : planned, dueMonth: pos.dueMonth, due: amountIn(c, pos.dueMonth) }
     })
   const cats = categoryIndex(categories)
   const envelopes: SalarySplit['envelopes'] = { planned: { items: [], total: 0, extra: 0 }, daily: { items: [], total: 0, extra: 0 } }
@@ -589,8 +696,8 @@ export const lootDeadline = (month: string): string => `${addMonths(month, 1)}-0
 
 // ------------------------------------------------------------------ the cargo's simulation
 
-/** A container's monthly weight: a periodic fee by its monthly share (as the load line counts it). */
-export const monthlyShare = (c: Pick<Container, 'amount' | 'cycleMonths'>): number => Math.round(c.amount / Math.max(1, c.cycleMonths))
+/** A container's monthly weight now: a periodic fee by its monthly share (as the load line counts it – `monthlyWeight`). */
+export const monthlyShare = (c: Pick<Container, 'amount' | 'cycleMonths'> & { schedule?: readonly number[] | null }): number => monthlyWeight(c)
 
 export interface CargoSimulation {
   /** The cargo a month and its % of the salary, against the load line. */
@@ -602,21 +709,26 @@ export interface CargoSimulation {
 }
 
 /**
- * The spec's simulation of adding a container (before it is saved) or dropping one: the load line and the range – the
- * shields and the hull over the average costs plus (or minus) the container's monthly weight.
+ * The spec's simulation of adding a container (before it is saved), dropping one or giving one a new price (F9): the
+ * load line and the range – the shields and the hull over the average costs plus (or minus) the change of the monthly
+ * weight.
  */
 export function simulateCargo(
   o: { shields: number; hull: number; costs: number | null; salary: number | null; limitPct: number; month: string; containers: readonly Container[]; debt?: number },
-  change: { add?: Pick<Container, 'amount' | 'cycleMonths'>; drop?: string }
+  change: { add?: Pick<Container, 'amount' | 'cycleMonths'> & { schedule?: readonly number[] | null }; drop?: string; amount?: { id: string; to: number } }
 ): CargoSimulation {
   const live = o.containers.filter((c) => activeIn(c, o.month))
   const mass = (monthly: number) => {
     const pct = o.salary && o.salary > 0 ? (monthly / o.salary) * 100 : null
     return { monthly, pct, over: pct != null && pct > o.limitPct }
   }
-  const before = sum(live.map(monthlyShare))
+  const weight = (c: Container) => monthlyWeight(c, o.month)
+  const before = sum(live.map(weight))
   const dropped = change.drop ? live.find((c) => c.id === change.drop) : undefined
-  const delta = (change.add ? monthlyShare(change.add) : 0) - (dropped ? monthlyShare(dropped) : 0)
+  // A new price (F9): the container's weight at its new amount instead of its own.
+  const priced = change.amount ? live.find((c) => c.id === change.amount!.id) : undefined
+  const repriced = priced ? monthlyWeight({ ...priced, amount: change.amount!.to, past: [] }) - weight(priced) : 0
+  const delta = (change.add ? monthlyShare(change.add) : 0) - (dropped ? weight(dropped) : 0) + repriced
   // The range as the bridge counts it (a taken loan's debt off – D72).
   const range = (costs: number | null) => rangeMonths(o.shields, o.hull, costs, o.debt ?? 0)
   return {

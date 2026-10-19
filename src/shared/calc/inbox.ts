@@ -6,17 +6,20 @@
  */
 import { formatPln, plural } from '../format'
 import { isUncategorized, uncategorizedAmount } from '../operationsView'
-import type { Transaction } from '../schema/records'
+import type { Container, Transaction } from '../schema/records'
 import { daysBetween } from './dates'
 import { deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
 import { isOpeningItem, type MemberBalance } from './household'
 import type { TransferIssue } from './transfers'
+import { deadText, priceText, type DeadContainer, type PriceChange } from './cargoWatch'
+import { anomalyText, type Anomaly } from './anomalies'
+import { lateReturnText, type AwaitedReturn } from './returns'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'transfers' | 'corrections' | 'refunds' | 'balances'
+export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'transfers' | 'corrections' | 'anomalies' | 'refunds' | 'returns' | 'cargo' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'corrections', 'refunds', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'corrections', 'anomalies', 'refunds', 'returns', 'cargo', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
@@ -26,7 +29,10 @@ export const INBOX_TITLE: Record<InboxKind, string> = {
   duplicates: 'Możliwe duplikaty',
   transfers: 'Przelewy między kontami',
   corrections: 'Podwójne korekty',
+  anomalies: 'Nieznane sygnały',
   refunds: 'Do zwrotu',
+  returns: 'Zwroty w drodze',
+  cargo: 'Ładownia',
   balances: 'Salda kont'
 }
 
@@ -88,6 +94,12 @@ export interface InboxInput {
   money?: (grosze: number) => string
   /** Transfers of before 1.7.0 (F10, `calc/transfers.ts`) with the key each is said „zostaw tak” under. */
   transfers?: ReadonlyArray<{ issue: TransferIssue; key: string }>
+  /** The radar of anomalies (F31): unusual expenses, a possible double charge – until said „w porządku”. */
+  anomalies?: readonly Anomaly[]
+  /** The purchases awaiting a return (F34): a late one is a report. */
+  returns?: readonly AwaitedReturn[]
+  /** The cargo hold's watch (F9): containers at a new price, containers gone quiet. */
+  cargo?: { prices: readonly PriceChange[]; dead: readonly DeadContainer[]; containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths' | 'schedule'>> }
 }
 
 const dmy = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
@@ -164,6 +176,8 @@ export function inboxItems(o: InboxInput): InboxItem[] {
       text: `${o.accountName?.(c.later.accountId) ?? 'Konto'}: korekta salda ${zl(c.later.amount)} z ${dm(c.later.date)} wygląda na powtórzoną – taka sama z ${dm(c.earlier.date)}${c.earlier.updatedBy ? ` (${c.earlier.updatedBy})` : ''}; saldo potwierdzone dwa razy, zanim OneDrive przyniósł pierwszą.`,
       action: 'Pokaż korektę'
     })
+  // The radar of anomalies (F31): each until „w porządku” – its operation to look at (a category: its month in Operacje).
+  for (const a of o.anomalies ?? []) out.push({ kind: 'anomalies', key: `anomalies:${a.key}`, ref: a.key, text: anomalyText(a, zl), action: a.txIds.length ? 'Pokaż operację' : 'Pokaż w Operacjach' })
   for (const m of o.members) {
     if (m.owed <= 0) continue
     const days = m.since ? Math.max(0, daysBetween(m.since, o.today)) : null
@@ -172,6 +186,14 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     const since = m.since && days != null ? ` – ${oldest} z ${dm(m.since)} (${days} ${plural(days, 'dzień', 'dni', 'dni')})` : ''
     out.push({ kind: 'refunds', key: `refunds:${m.memberId}`, ref: m.memberId, text: `${o.memberName(m.memberId)}: do oddania ${zl(m.owed)}${since}.`, action: 'Pokaż zakupy' })
   }
+  // A return not come by its day (F34): its purchase – the money came another way, or it will not.
+  for (const r of o.returns ?? []) if (r.state === 'late') out.push({ kind: 'returns', key: `returns:${r.tx.id}`, ref: r.tx.id, text: lateReturnText(r, zl), action: 'Pokaż zakup' })
+  // The cargo hold's watch (F9): a new price to take or refuse, a container to drop or keep.
+  for (const p of o.cargo?.prices ?? []) {
+    const c = o.cargo!.containers.find((x) => x.id === p.containerId)
+    if (c) out.push({ kind: 'cargo', key: p.key, ref: p.containerId, text: `${p.to > p.from ? 'Cięższy' : 'Lżejszy'} niż w manifeście – ${priceText(p, c, zl)}.`, action: 'Zaktualizuj w Ładowni' })
+  }
+  for (const d of o.cargo?.dead ?? []) out.push({ kind: 'cargo', key: d.key, ref: d.containerId, text: deadText(d), action: 'Pokaż w Ładowni' })
   for (const a of o.confirmations) {
     const since = a.last ?? a.opened
     if (!since) continue

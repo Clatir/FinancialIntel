@@ -215,9 +215,9 @@ describe('odkładki (spec: OC 1 240 zł rocznie)', () => {
   const oc = containerSchema.parse({ ...base(), name: 'OC', amount: zl(1240), cycleMonths: 12, dueMonth: '2027-09', dueDay: 15, categoryId: defaultCategoryId(3, 3) })
 
   it('miejsce w cyklu i rata z nadrabianiem, gdy kontener doszedł późno', () => {
-    expect(cyclePosition(oc, '2026-10')).toEqual({ index: 0, dueMonth: '2027-09' })
-    expect(cyclePosition(oc, '2027-09')).toEqual({ index: 11, dueMonth: '2027-09' })
-    expect(cyclePosition(oc, '2027-10')).toEqual({ index: 0, dueMonth: '2028-09' })
+    expect(cyclePosition(oc, '2026-10')).toEqual({ index: 0, dueMonth: '2027-09', length: 12 })
+    expect(cyclePosition(oc, '2027-09')).toEqual({ index: 11, dueMonth: '2027-09', length: 12 })
+    expect(cyclePosition(oc, '2027-10')).toEqual({ index: 0, dueMonth: '2028-09', length: 12 })
     expect(sinkingInstallment(oc, '2026-10', 0)).toBe(10333)
     expect(sinkingInstallment(oc, '2027-09', 10333 * 11)).toBe(10337)
     // Three months before the payment, an empty tank: the gap spread over the months left, the whole fee in the tank.

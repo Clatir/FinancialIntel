@@ -5,7 +5,7 @@
  * briefing use it.
  */
 import { DateTime } from 'luxon'
-import { formatPln } from '../format'
+import { dm, formatPln } from '../format'
 import { ICTJ_POOL_LABEL } from '../ictj'
 import type { Account, HouseholdMember } from '../schema/budget'
 import type { Balance, Container } from '../schema/records'
@@ -16,9 +16,15 @@ import type { Delivery } from './dock'
 import { isOpeningItem, memberName } from './household'
 import { HOUSE_DAYS } from './loans'
 import { lastPaymentOf, pit38Deadline } from './radar'
-import { activeIn, nextPaymentOf, nextUnpaidOf, type Alarm, type FleetState } from './fleet'
+import { activeIn, amountIn, monthlyWeight, nextPaymentOf, nextUnpaidOf, type Alarm, type FleetState } from './fleet'
 import type { AccountAhead } from './ahead'
 import { remindStep, type ScheduledDay } from './scheduled'
+import { cycleText, deadText, priceText, type DeadContainer, type PriceChange } from './cargoWatch'
+import { anomalyText, type Anomaly } from './anomalies'
+import { lateReturnText, type AwaitedReturn } from './returns'
+import type { RecurringPayment } from './plan'
+import type { BankFile } from '../api'
+import { bankFileText, MBANK_EXPORT_HINT } from '../import/bankFiles'
 
 /** The Daily Bias (spec, „Wywiad”): Bullish – today's energy at least the base allowance and the envelopes on plan;
  * Bearish – the energy under half the base or the shields under their minimum; else Neutral. */
@@ -39,7 +45,28 @@ export const BIAS_LABEL: Record<DailyBias, string> = { bullish: 'Bullish', beari
 export interface BriefingItem {
   level: 'red' | 'yellow' | 'info'
   /** What the item is about (the screen it leads to; 'dock' – the docking window of the delivery in `key`). */
-  kind: 'alarm' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house' | 'mission' | 'plan' | 'end' | 'account'
+  kind:
+    | 'alarm'
+    | 'asteroid'
+    | 'cargo'
+    | 'import'
+    | 'balances'
+    | 'loot'
+    | 'start'
+    | 'dock'
+    | 'ictj'
+    | 'loan'
+    | 'pit38'
+    | 'house'
+    | 'mission'
+    | 'plan'
+    | 'end'
+    | 'account'
+    | 'price'
+    | 'dead'
+    | 'recurring'
+    | 'anomaly'
+    | 'return'
   text: string
   /** Stable key (the notifications send each once). */
   key: string
@@ -106,6 +133,25 @@ export interface BriefingInput {
   scheduled?: readonly ScheduledDay[]
   /** The accounts ahead (F26, `accountsAhead`): a payment taking one below zero. */
   accounts?: readonly AccountAhead[]
+  /** The cargo hold's watch (F9, F23): new prices, containers gone quiet, fees new in the history. */
+  watch?: CargoWatch
+  /** The new files of mBank in the downloads (F14, `newBankFiles`). */
+  bankFiles?: readonly BankFile[]
+  /** The radar of anomalies (F31, `anomalies` – those said „w porządku” to left out). */
+  anomalies?: readonly Anomaly[]
+  /** The purchases awaiting a return (F34, `awaitedReturns`): a late one is said. */
+  returns?: readonly AwaitedReturn[]
+}
+
+/** An anomaly is said in the briefing this many days after its day (it stays in the inbox and Operacje). */
+export const ANOMALY_BRIEFING_DAYS = 14
+
+/** What the cargo hold's watch reports (F9, F23). */
+export interface CargoWatch {
+  prices: readonly PriceChange[]
+  dead: readonly DeadContainer[]
+  /** The history's recurring payments new this month (`RecurringPayment.fresh`). */
+  fresh: readonly RecurringPayment[]
 }
 
 export interface AccountConfirmation {
@@ -135,8 +181,8 @@ export const PIT38_DAYS = 14
 /** An XTB inflow without its ICTTJ entry is recalled this long. */
 export const MISSING_ENTRY_DAYS = 30
 
-/** '2026-10-16' → '16.10' (the briefing's and the notifications' short date). */
-export const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
+/** '2026-10-16' → '16.10' (the briefing's and the notifications' short date – one for the app, `format.ts`). */
+export { dm }
 
 /** The line of a delivery in the briefing (null = nothing to say); the inbox says the same of one to dock (F6). */
 export function deliveryItem(d: Delivery, today: string, zl: (grosze: number) => string): BriefingItem | null {
@@ -223,7 +269,7 @@ export function briefing(o: BriefingInput): BriefingItem[] {
       level: days <= 3 ? 'yellow' : 'info',
       kind: 'asteroid',
       key: `asteroid:${c.id}:${date}:${days <= 3 ? 3 : 14}`,
-      text: `Asteroida: ${c.name} ${days === 0 ? 'dziś' : `za ${days} ${days === 1 ? 'dzień' : 'dni'}`} – ${zl(c.amount)}, w zbiorniku ${zl(tank)}.`
+      text: `Asteroida: ${c.name} ${days === 0 ? 'dziś' : `za ${days} ${days === 1 ? 'dzień' : 'dni'}`} – ${zl(amountIn(c, date.slice(0, 7)))}, w zbiorniku ${zl(tank)}.`
     })
   }
   // A fixed fee 3 days after its due without a payment (F1, D86) – once per due.
@@ -235,8 +281,16 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     // The import's Warsaw date (stored as an ISO time in UTC).
     const days = imp.last ? daysBetween(warsawNow(imp.last).date, f.today) : null
     if (days != null && days <= IMPORT_DUE_DAYS) continue
-    items.push({ level: 'info', kind: 'import', key: `import:${imp.name}:${f.today}`, text: days == null ? `${imp.name}: jeszcze bez importu z banku.` : `${imp.name}: ostatni import ${days} dni temu – zaimportuj nowy plik.` })
+    // How the file is taken in mBank (F14): said with the reminder.
+    items.push({
+      level: 'info',
+      kind: 'import',
+      key: `import:${imp.name}:${f.today}`,
+      text: days == null ? `${imp.name}: jeszcze bez importu z banku (${MBANK_EXPORT_HINT}).` : `${imp.name}: ostatni import ${days} dni temu – zaimportuj nowy plik (${MBANK_EXPORT_HINT}).`
+    })
   }
+  // A new file of mBank in the downloads (F14): imported with one click.
+  for (const file of o.bankFiles ?? []) items.push({ level: 'info', kind: 'import', key: `bankfile:${file.id}:${file.mtime}`, text: `${bankFileText(file)} – importuj.` })
   if (o.confirmations)
     for (const a of o.confirmations) {
       const days = a.last ? daysBetween(a.last, f.today) : null
@@ -305,9 +359,30 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     const date = lastPaymentOf(c, f.today)
     const days = date ? daysBetween(f.today, date) : null
     if (!date || days == null || days > END_DAYS) continue
-    const monthly = Math.round(c.amount / Math.max(1, c.cycleMonths))
+    const monthly = monthlyWeight(c)
     items.push({ level: 'info', kind: 'end', key: `end:${c.id}:${date}`, text: `Koniec kontenera: ${c.name} – ostatnia płatność ${dm(date)}, potem ładownia lżejsza o ${zl(monthly)}/mies.` })
   }
+  // The cargo hold's watch (F9, F23): a new price, a container gone quiet, a fee new in the history.
+  for (const p of o.watch?.prices ?? []) {
+    const c = o.containers.find((x) => x.id === p.containerId)
+    if (!c) continue
+    items.push({ level: 'info', kind: 'price', key: p.key, text: `Kontener ${p.to > p.from ? 'cięższy' : 'lżejszy'} niż w manifeście – ${priceText(p, c, zl)}. Zaktualizować?` })
+  }
+  for (const d of o.watch?.dead ?? []) items.push({ level: 'info', kind: 'dead', key: d.key, text: `Kontener bez płatności – ${deadText(d)} Zrzucić z ładowni?` })
+  for (const r of o.watch?.fresh ?? [])
+    items.push({
+      level: 'info',
+      kind: 'recurring',
+      key: `recurring:${r.key}:${f.month}`,
+      text: `Nowa opłata w historii: ${r.label} ${cycleText(r)} – ${zl(r.amount)}${r.variable ? ' (kwota zmienna – szacunek z roku)' : ''}. Do ładowni?`
+    })
+  // The radar of anomalies (F31): a recent unknown signal – a possible double charge first.
+  for (const a of o.anomalies ?? []) {
+    if (daysBetween(a.date, f.today) > ANOMALY_BRIEFING_DAYS) continue
+    items.push({ level: a.kind === 'double' ? 'yellow' : 'info', kind: 'anomaly', key: `anomaly:${a.key}`, text: `Nieznany sygnał na radarze – ${anomalyText(a, zl)}` })
+  }
+  // A return not come by its day (F34): said every day until it comes or is closed.
+  for (const r of o.returns ?? []) if (r.state === 'late') items.push({ level: 'yellow', kind: 'return', key: `return:${r.tx.id}:${r.until}`, text: lateReturnText(r, zl) })
   // An account short before a payment (F26): the money is on another account.
   for (const a of o.accounts ?? []) {
     if (!a.short) continue

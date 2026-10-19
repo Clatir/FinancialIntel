@@ -456,12 +456,12 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 
 ### Priorytet średni
 
-- [ ] **F9** Ładownia pilnuje cen: podwyżki abonamentów, opłaty o zmiennej kwocie, martwe kontenery *(nakład M)*
+- [x] **F9** Ładownia pilnuje cen: podwyżki abonamentów, opłaty o zmiennej kwocie, martwe kontenery *(nakład M)*
 - [x] **F10** Przelew między kontami budżetu z drugą nogą *(nakład M)*
 - [x] **F11** Zbiorcze naprawy w Operacjach: usuń, zmień konto, rodzaj albo datę zaznaczonych – z „Cofnij” *(nakład M)*
 - [x] **F12** Ostrzeżenie przy edycji operacji z potwierdzonego okresu albo z banku *(nakład S)* · ⚠ D28 (pełna edycja) – zostaje, bo to tylko ostrzeżenie, bez blokady.
 - [x] **F13** Mądrzejsze wieczorne przypomnienie: „Dziś bez wydatków”, „Przypomnij za 30 min”, pominięcie po dopisaniu *(nakład S)*
-- [ ] **F14** Nowy plik z mBanku wykryty sam w folderze Pobrane – import jednym kliknięciem *(nakład S)*
+- [x] **F14** Nowy plik z mBanku wykryty sam w folderze Pobrane – import jednym kliknięciem *(nakład S)*
 - [x] **F15** Cel z terminem: potrzebna rata miesięczna i opcjonalna odkładka z pensji *(nakład M)* · ⚠ Samo pokazanie potrzebnej raty – bez konfliktu. Rata z pensji omija kolejność D13 (osłony → kadłub → cele) i D72 (cele zasilane z dokowania) – do decyzji użytkownika.
 - [x] **F16** Zaplanowane operacje jednorazowe, spodziewane wpływy i przypomnienia własne na Radarze *(nakład M)*
 - [ ] **F17** Tagi i „wyprawy” – koszt wyjazdu albo projektu przez wiele kategorii *(nakład M)*
@@ -470,7 +470,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **F20** Wywiad z drążeniem: podkategorie, kontrahenci, porównania okresów *(nakład M)*
 - [x] **F21** Dwa komputery: „w użyciu” zamiast „otwarty” – komputer w zasobniku nie pisze w tle i nie powiela powiadomień *(nakład M)*
 - [x] **F22** Audyt reguł importu: edycja, niespójności, „Zastosuj do historii”, warunek kwoty *(nakład M)*
-- [ ] **F23** Wykrywanie opłat cyklicznych: kwartalne, półroczne, zmienne kwoty i harmonogram dat *(nakład M)* · ⚠ T48 (zasady wykrywania stałych opłat: cykl miesięczny ±15% albo roczny) – do rozszerzenia.
+- [x] **F23** Wykrywanie opłat cyklicznych: kwartalne, półroczne, zmienne kwoty i harmonogram dat *(nakład M)* · ⚠ T48 (zasady wykrywania stałych opłat: cykl miesięczny ±15% albo roczny) – do rozszerzenia.
 - [ ] **F24** Majątek netto: krzywa z długiem i należnościami *(nakład M)* · ⚠ D73 i T81 (krzywa majątku = suma sald kont na koniec tygodnia) – propozycja dodaje drugą linię zamiast zmieniać definicję; do decyzji użytkownika.
 - [ ] **F25** Stopa oszczędności i bilans paliwa miesiąca *(nakład S)*
 - [x] **F26** Prognoza sald kont fizycznych – czy na mBanku starczy na płatność *(nakład M)*
@@ -478,13 +478,13 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **F28** Reszta koperty planowej na następny miesiąc i „pokryj przekroczenie z innej koperty” *(nakład M)* · ⚠ D18 (łupy: osłony / cel / następny miesiąc) – rozszerzenie trzeciej opcji. „Pokryj przekroczenie” przed końcem dnia może usunąć naruszenie koperty (D73, T75) – trzeba zdecydować, czy gra ocenia stan przed przesunięciem, czy po nim.
 - [ ] **F29** „Skąd ta liczba?” – rozbicie energii dziś, zasięgu i warstw oraz słowniczek metafory *(nakład M)*
 - [x] **F30** Skala interfejsu i tryb wyższego kontrastu (ustawienie komputera) *(nakład S)* · ⚠ D33 (wygląd jak ICTTJ) – tylko jako opcja komputera, domyślnie bez zmian.
-- [ ] **F31** Radar anomalii: nietypowe kwoty i możliwe podwójne obciążenia *(nakład M)*
+- [x] **F31** Radar anomalii: nietypowe kwoty i możliwe podwójne obciążenia *(nakład M)*
 - [ ] **F32** Flota rezerwowa: IKE, IKZE, PPK, obligacje i lokaty poza budżetem *(nakład L)* · ⚠ D10 (jeden zbiór kont, podział wirtualny) i T31 – aktywa wychodzą poza warstwy, więc nie zmieniają osłon ani zasięgu. D73 / T81 – krzywa majątku jako suma sald kont budżetu. D54 – konto tradingowe (maklerskie) XTB nie może tu trafić. Jeśli IKE / IKZE są w XTB, trzeba potwierdzić, że to nie konto tradingowe.
 
 ### Priorytet niski
 
 - [x] **F33** Dziennik zmian folderu i historia przy każdym wpisie *(nakład M)*
-- [ ] **F34** Zwroty w drodze: oczekiwany zwrot pieniędzy *(nakład M)*
+- [x] **F34** Zwroty w drodze: oczekiwany zwrot pieniędzy *(nakład M)*
 - [x] **F35** Symulator manewrów „co jeśli” *(nakład M)*
 - [ ] **F36** Osobista inflacja koszyka *(nakład M)* · ⚠ Automatyczne pobieranie CPI z GUS łamałoby zasadę „sieć tylko do aktualizacji” (D74), stąd wariant z CPI wpisywanym ręcznie.
 - [x] **F37** Plan roczny: siatka kopert i pensji na 12 miesięcy *(nakład M)*

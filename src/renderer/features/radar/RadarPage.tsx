@@ -10,6 +10,7 @@ import { dm } from '@shared/calc/briefing'
 import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates'
 import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
 import { pit38Deadline, type RadarItem } from '@shared/calc/radar'
+import { onTheWay } from '@shared/calc/returns'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
 import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
@@ -23,7 +24,8 @@ import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName } from '@shared/calc/household'
-import { openRefundables } from '../operations/state'
+import { openOperation, openRefundables } from '../operations/state'
+import { closeReturn, useReturns } from '../sensors/state'
 import { addLoan, closeLoan, deleteLoan, planTransfer, recordPayment, type NewLoan } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 import { useFocusRecord } from '../../components/focus'
@@ -32,7 +34,7 @@ import { useFuture } from './future'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
-const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin', plan: 'boja', end: 'koniec' }
+const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin', plan: 'boja', end: 'koniec', return: 'zwrot' }
 
 export function RadarPage() {
   const fleet = useFleet()
@@ -144,6 +146,7 @@ export function RadarPage() {
                 </button>
               </div>
             </Panel>
+            <ReturnsPanel readOnly={readOnly} />
             <Panel title="PIT-38" testId="radar-pit38">
               <div className="flex flex-col gap-1 text-[12px]">
                 <span className="text-fg-strong">{pit ? `Termin: 30 kwietnia ${pit.slice(0, 4)} (za ${Number(pit.slice(0, 4)) - 1})` : `Na radarze od 1 lutego (termin 30 kwietnia).`}</span>
@@ -155,6 +158,40 @@ export function RadarPage() {
         </Columns>
       </div>
     </div>
+  )
+}
+
+/**
+ * „Turtle Soup – zwroty w drodze” (F34): the money of purchases expected back – each until its day, a late one marked;
+ * its purchase, and „zamknij” when it came another way or will not.
+ */
+function ReturnsPanel({ readOnly }: { readOnly: boolean }) {
+  const list = onTheWay(useReturns())
+  return (
+    <Panel title={list.length ? `Zwroty w drodze (${list.length})` : 'Zwroty w drodze'} name="Zwroty w drodze" testId="radar-returns">
+      {!list.length ? (
+        <Empty>Brak zwrotów w drodze – przy wydatku zaznacz „Czekam na zwrot pieniędzy” (oddany towar, reklamacja).</Empty>
+      ) : (
+        <div className="flex flex-col gap-1 text-[12px]">
+          <span className="text-[11px] text-dim">Turtle Soup: pieniądze oczekiwane z zakupów. Wpływ tej samej marki (±10%) zamyka zwrot sam.</span>
+          {list.map((r) => (
+            <div key={r.tx.id} className="flex items-baseline gap-2" data-testid="radar-return" data-state={r.state}>
+              <span className="min-w-0 flex-1 truncate">{r.tx.counterparty || r.tx.title || 'zakup'}</span>
+              <span className={cx('text-[11px]', r.state === 'late' ? 'text-accent' : 'text-dim')}>{r.state === 'late' ? `po terminie ${countLabel(r.days, 'dzień', 'dni', 'dni')}` : `do ${plDate(r.until)}`}</span>
+              <span className="num">{zl(r.amount)}</span>
+              <button className="text-[11px] text-accent hover:underline" onClick={() => openOperation(r.tx)} data-testid="radar-return-open">
+                pokaż
+              </button>
+              {!readOnly && (
+                <button className="text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => closeReturn(r.tx)} data-testid="radar-return-close">
+                  zamknij
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
   )
 }
 

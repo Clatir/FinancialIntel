@@ -17,7 +17,8 @@ const DEFAULTS: MachineConfig = {
   // start wizard (E3) asks.
   tray: { closeToTray: true, launchAtLogin: false, notified: false },
   prefs: DEFAULT_MACHINE_PREFS,
-  ictj: { dir: null, exe: null }
+  ictj: { dir: null, exe: null },
+  importDir: null
 }
 
 /** What the renderer may see: everything but the GitHub token (encrypted, or plain text without safeStorage). */
@@ -118,7 +119,8 @@ export class ConfigStore {
       updates: loadUpdates(raw.updates),
       tray: loadTray(raw.tray),
       prefs: machinePrefsFrom(raw.prefs),
-      ictj: loadIctj(raw.ictj)
+      ictj: loadIctj(raw.ictj),
+      importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null
     }
     if (this.held.length) {
       const held = this.held
