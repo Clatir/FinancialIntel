@@ -126,7 +126,7 @@ export interface OpenOptions {
 /** Files read at once (open, rescan): fewer than the thread pool (`main/threadpool.ts`), so other work still runs. */
 export const READ_CONCURRENCY = 24
 
-export type FolderKind = 'data' | 'partial' | 'ictj' | 'empty' | 'other' | 'missing'
+export type FolderKind = 'data' | 'partial' | 'ictj' | 'empty' | 'other' | 'missing' | 'unavailable'
 
 type ViewKey = string
 
@@ -351,9 +351,11 @@ export class DataStore {
   static async inspect(root: string): Promise<FolderKind> {
     try {
       const st = await fs.stat(root)
-      if (!st.isDirectory()) return 'missing'
-    } catch {
-      return 'missing'
+      if (!st.isDirectory()) return 'other'
+    } catch (e) {
+      // Only „no such folder” is missing; any other error (a drive not ready, no access) is a folder there but unread (B53).
+      const code = (e as NodeJS.ErrnoException).code
+      return code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'unavailable'
     }
     if (await pathExists(join(root, SETTINGS_FILE))) return 'data'
     if (await pathExists(join(root, ICTJ_FILE))) return 'ictj'
@@ -1448,6 +1450,23 @@ export class DataStore {
   }
 
   /**
+   * A conflict merged field by field (N17): both versions go to the history, the merged one is written at the original's
+   * path (the original's id), every other file of the pair to the bin – as keeping the copy, with the merged content.
+   */
+  mergeConflict(conflictId: string, merged: unknown, asOf?: { canonical: number; copy: number }): Promise<ChangeSet | null> {
+    return this.mutex.run(async () => {
+      this.assertWritable()
+      // Merged from the versions the window saw: a side changed since (a save of this record, OneDrive) is never
+      // written over by a merge that does not know it.
+      const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
+      if (asOf && conflict && (conflict.canonical.mtimeMs !== asOf.canonical || conflict.copy.mtimeMs !== asOf.copy))
+        throw new Error('Jedna z wersji zmieniła się w trakcie scalania – otwórz „Scal…” jeszcze raz.')
+      const settingsWritten = await this.resolveOne(conflictId, 'copy', merged)
+      return this.diff(this.buildViews(), settingsWritten)
+    })
+  }
+
+  /**
    * Many conflicts at once („Zachowaj nowsze” – W23), in the order given, one change set at the end. A group whose copy
    * could not be kept leaves its other conflicts as they are (nothing newer goes to the bin).
    */
@@ -1478,7 +1497,7 @@ export class DataStore {
    * One conflict resolved inside the queue. True = fi.json was rewritten with the kept copy (the change set carries the
    * settings: its hash is this store's own).
    */
-  private async resolveOne(conflictId: string, keep: 'canonical' | 'copy'): Promise<boolean> {
+  private async resolveOne(conflictId: string, keep: 'canonical' | 'copy', merged?: unknown): Promise<boolean> {
     let settingsWritten = false
     const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
     if (!conflict) throw new Error('Konflikt już nie istnieje (mógł zostać rozwiązany na innym komputerze).')
@@ -1486,11 +1505,11 @@ export class DataStore {
     const copyState = this.files.get(conflict.copy.relPath)
     // The version let go goes to the history first – it syncs to every computer, the bin does not (B44): a version of
     // the record kept – a month's plan of another id (B46) too, never a „deleted” record to bring back over the month.
-    const keepAside = async (state: FileState | undefined, keptId: string) => {
+    const keepAside = async (state: FileState | undefined, keptId: string, reason: HistoryReason = 'discarded') => {
       if (state?.status === 'problem' || !state?.record) return
       const record = state.record as AnyRecord
       const month = conflict.kind !== 'fi' && LAYOUTS[conflict.kind] === 'month'
-      await this.history.snapshot(conflict.kind, month && record.id !== keptId ? { ...record, id: keptId } : record, 'discarded')
+      await this.history.snapshot(conflict.kind, month && record.id !== keptId ? { ...record, id: keptId } : record, reason)
     }
     if (keep === 'canonical') {
       // No original to keep (missing, unreadable): never the only readable version thrown away (B45).
@@ -1501,17 +1520,21 @@ export class DataStore {
       return false
     }
     if (!copyState?.record) throw new Error('Kopii nie da się odczytać - można zachować tylko oryginał.')
+    if (merged !== undefined && !canonicalState?.record) throw new Error('Oryginału nie da się odczytać – scalić można tylko dwie czytelne wersje.')
     // A newer format is never written over, nor written by this version (B45).
     if (copyState.readOnly) throw new ReadOnlyError('Kopię zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby ją zachować.')
     if (canonicalState?.readOnly || canonicalState?.problemKind === 'too-new') throw new ReadOnlyError('Oryginał zapisała nowsza wersja aplikacji – nie zostanie nadpisany; zaktualizuj aplikację.')
-    await keepAside(canonicalState, (copyState.record as AnyRecord).id)
+    // Merged: the original's id stays (a month's plan of another id – B46); the copy goes to the history too.
+    const source = (merged !== undefined ? { ...(merged as AnyRecord), id: (canonicalState!.record as AnyRecord).id } : copyState.record) as AnyRecord
+    await keepAside(canonicalState, source.id, merged !== undefined ? 'merge' : 'discarded')
+    if (merged !== undefined) await keepAside(copyState, source.id, 'merge')
     // A broken original is moved aside, never overwritten (B45).
     if (canonicalState?.status === 'problem') await this.setAsideProblem(canonicalState)
     // The kept version is rewritten (newest updatedAt) at its canonical path; every other file of the pair goes to the bin.
     let keptPath: string
     let keptId: string
     if (conflict.kind === 'fi') {
-      const fi = SCHEMAS.fi.parse({ ...(copyState.record as SettingsFile), updatedAt: this.opts.now() })
+      const fi = SCHEMAS.fi.parse({ ...(source as unknown as SettingsFile), updatedAt: this.opts.now() })
       await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
       this.fi = fi
       settingsWritten = true
@@ -1519,7 +1542,7 @@ export class DataStore {
       keptId = fi.id
     } else {
       const kind = conflict.kind as Collection
-      const record = { ...(copyState.record as AnyRecord), updatedAt: this.opts.now() } as AnyRecord
+      const record = (merged !== undefined ? SCHEMAS[kind].parse({ ...source, updatedAt: this.opts.now() }) : { ...source, updatedAt: this.opts.now() }) as AnyRecord
       keptPath = recordRelPath(kind, record as unknown as Record<string, unknown>)
       keptId = record.id
       await this.writeState(keptPath, kind, record, serializeRecord(kind, record))

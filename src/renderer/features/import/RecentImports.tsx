@@ -6,7 +6,7 @@ import { useState } from 'react'
 import type { ImportBatch } from '@shared/schema'
 import { Modal } from '../../components/Modal'
 import { Panel } from '../../components/ui'
-import { useData } from '../../store/data'
+import { useFolderLocked } from '../../store/data'
 import { plDate } from '../../lib/format'
 import { useAccounts } from '../operations/pickers'
 import { undoImport, undoPreview, useImportBatches, useLatestImport } from './batches'
@@ -17,7 +17,7 @@ const when = (iso: string) => new Date(iso).toLocaleString('pl-PL', { dateStyle:
 export function UndoImportButton({ batch, testId = 'import-undo' }: { batch: ImportBatch; testId?: string }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   // Counted when the dialog opens (the operations may change while it is closed).
   const plan = open ? undoPreview(batch) : null
   const confirm = async () => {

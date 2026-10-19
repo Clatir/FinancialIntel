@@ -8,7 +8,7 @@ import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates
 import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
 import { pit38Deadline, radar, type RadarItem } from '@shared/calc/radar'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
-import { useData } from '../../store/data'
+import { canWrite, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
@@ -21,6 +21,7 @@ import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName } from '@shared/calc/household'
 import { openRefundables } from '../operations/state'
 import { addLoan, closeLoan, deleteLoan, recordPayment, type NewLoan } from './actions'
+import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -36,7 +37,7 @@ export function RadarPage() {
     return v ? memberName(v, members) : null
   }
   const containers = useRecordList('containers')
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const items = useMemo(
     () => (fleet ? radar({ today: fleet.today, plans, containers, tanks: fleet.tanks, loans: fleet.loans, money: zl }) : []),
     // The notes carry amounts (masked while hidden): computed again with the fleet.
@@ -219,6 +220,7 @@ function LoanRow({ s, today, readOnly }: { s: LoanState; today: string; readOnly
             </button>
           </>
         )}
+        <HistoryButton kind="loans" id={s.loan.id} current={s.loan} variant="link" />
       </div>
       {paying && (
         <div className="flex items-center gap-2">
@@ -267,6 +269,7 @@ function NewLoanPanel({ today }: { today: string }) {
     if (!o.name.trim()) return toast('Nazwij pożyczkę (np. „Pożyczka dla Ani”).', 'error')
     if (o.amount <= 0) return toast('Podaj kwotę pożyczki.', 'error')
     if (o.firstDue < o.date) return toast('Pierwsza rata nie może być przed datą pożyczki.', 'error')
+    if (!canWrite()) return
     addLoan({ ...o, total: taken && o.total > 0 ? o.total : o.amount })
     setO(blank())
   }

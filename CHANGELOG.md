@@ -1,5 +1,51 @@
 # Financial Intel – zmiany
 
+## 1.5.3
+
+System, folder danych i dwa komputery – poprawki z przeglądu aplikacji po 1.4.1 (D84, D86).
+
+Dwa komputery:
+- Komputer „w użyciu” = ruch w którymś z okien aplikacji w ostatnich 10 minutach. Baner „Ten folder jest też w użyciu
+  na …” pokazuje się tylko wtedy, gdy drugi komputer jest w użyciu – aplikacja w zasobniku go nie wywołuje. Ustawienia i
+  Synchronizacja pokazują przy innych komputerach „w użyciu” albo „w zasobniku”, a Synchronizacja także, z którego
+  komputera i kiedy przyszła ostatnia zmiana.
+- Komputer w zasobniku nic nie zapisuje w tle: nie zamraża dni gry, nie przepisuje celów z ICTTJ i nie ustawia sald
+  domowników na start – robi to komputer w użyciu. Powiadomienia pokazuje komputer w użyciu; gdy żaden nie jest w użyciu
+  – każdy (jak dotąd). Kopia dzienna – na każdym (jak dotąd).
+- W zasobniku znak obecności w folderze zapisuje się co 5 minut zamiast co minutę – OneDrive nie synchronizuje go całą
+  noc.
+- Pierwsze zamrożenie dni gry po otwarciu folderu czeka 3 minuty i minutę bez zmian z drugiego komputera – OneDrive
+  najpierw przynosi to, co zapisał drugi komputer; przy kopii konfliktu miesiąca gry dni nie są zamrażane.
+- Odłączone panele Mostka (Odprawa, Stan okrętu, Koperty) na drugim monitorze odświeżają się i reagują na kliknięcia
+  także wtedy, gdy główne okno pokazuje inny ekran – także po północy.
+
+Folder danych:
+- Zmiana folderu w Ustawieniach pokazuje postęp wczytywania z „Przerwij”; w tym czasie nic nie da się zmienić, a
+  przyciski folderu są wyłączone. Zmiana wysłana jeszcze dla poprzedniego folderu nigdy nie trafia do nowego, a
+  przerwane wczytywanie zostawia bieżący folder bez zmian. Zapamiętany folder, który okazał się pusty – nowe dane w nim
+  tylko po „Utwórz tu nowe dane”; folder z innymi plikami – „Utwórz podfolder FinancialIntel”.
+- Folder tylko do odczytu: pola i przyciski zmian są wyłączone (ustawienia budżetu, Plan miesiąca, zbiorcze zmiany w
+  Operacjach, Synchronizacja i inne), a akcja, która nic nie zapisała, mówi „Folder jest tylko do odczytu” zamiast
+  meldować sukces. Historię wpisu da się obejrzeć.
+- Kopia konfliktu z OneDrive ma „Scal…”: przy każdym polu, którym wersje się różnią, wybierasz wersję – zaznaczona jest
+  ta, która pole zmieniła (według historii wpisu), a przy zmianie po obu stronach nowsza. Scalona wersja zostaje pod
+  oryginałem, obie strony trafiają do historii wpisu; gdy któraś wersja zmieni się w trakcie, scalenie trzeba otworzyć
+  jeszcze raz.
+- „Historia” przy planie miesiąca, celu na Mapie gwiezdnej, pożyczce w Radarze, saldzie otwarcia konta, zadokowanej
+  dostawie i przy każdym wpisie w oknie „Zmiany z drugiego komputera”. Okno otwarte z innego okna przykrywa całe okno
+  aplikacji, a Esc zamyka tylko to na wierzchu.
+- Ekran wyboru folderu dobiera przyciski po przyczynie: zapamiętany folder pusty albo niedostępny (np. OneDrive go
+  jeszcze nie pobrał) – „Spróbuj ponownie”, a nowe dane w nim tylko po potwierdzeniu; folder z innymi plikami –
+  „Utwórz podfolder FinancialIntel”; propozycja tego samego folderu się nie powtarza.
+
+System:
+- Skrót szybkiego wpisu Ctrl+Alt+litera polskiego znaku (A, C, E, L, N, O, S, U, X, Z – także z Shift, czyli wielkie
+  litery) zabierał AltGr w całym Windows: nie da się go ustawić, a ustawiony wcześniej zmienia się na domyślny
+  (Ctrl+Alt+B) z komunikatem.
+- Uruchamianie z systemem: jeden wpis na rodzaj aplikacji (instalator / portable) o stałej nazwie; stare wpisy wersji
+  portable z każdej aktualizacji są usuwane, wyłączenie działa, a druga kopia przy logowaniu nie pokazuje okna.
+- Okno zapamiętane na odłączonym monitorze otwiera się na ekranie (wyśrodkowane, nie większe niż ekran).
+
 ## 1.5.2
 
 Liczby się zgadzają: średnie, plan miesiąca, ładownia, kreator, pola i podglądy liczą tak samo jak silnik budżetu –

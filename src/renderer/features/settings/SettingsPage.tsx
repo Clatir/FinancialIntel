@@ -5,7 +5,8 @@ import { DEFAULT_SHIP_NAME } from '@shared/schema'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
 import { api, errorMessage } from '../../lib/api'
 import { fmtBytes } from '../../lib/format'
-import { flushSaves, openResult, updateSettings, useData } from '../../store/data'
+import { flushSaves, switchFolder, updateSettings, useData, useFolderLocked } from '../../store/data'
+import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
 import { UpdatesTab } from './UpdatesTab'
 import { AccountsTab } from './AccountsTab'
@@ -41,7 +42,11 @@ export function SettingsPage() {
   const route = useUi((s) => s.route)
   const tab = (route.page === 'settings' && route.tab) || 'general'
   const fi = useData((s) => s.fi)
+  const readOnly = useFolderLocked()
+  const switching = useData((s) => s.switching)
   if (!fi) return null
+  // The budget's settings (fi.json) in a read-only folder: to look at only (N2); this computer's ones stay at hand.
+  const locked = readOnly && (tab === 'general' || tab === 'accounts' || tab === 'categories' || tab === 'layers' || tab === 'household')
   return (
     <div className="flex h-full min-h-0">
       <nav className="flex shrink-0 flex-col border-r border-line bg-panel py-1" style={{ width: nav.width }}>
@@ -63,17 +68,24 @@ export function SettingsPage() {
       <PaneEdge pane={nav} side="left" />
       <div className="min-w-0 flex-1 overflow-y-auto p-3">
         <div className="mx-auto flex max-w-[980px] flex-col gap-3">
-          {tab === 'general' && <GeneralTab />}
-          {tab === 'accounts' && <AccountsTab />}
-          {tab === 'categories' && <CategoriesTab />}
-          {tab === 'layers' && <LayersTab />}
-          {tab === 'household' && <HouseholdTab />}
-          {tab === 'import' && <ImportTab />}
-          {tab === 'ictj' && <IctjTab />}
-          {tab === 'notify' && <NotifyTab />}
-          {tab === 'folder' && <FolderTab />}
-          {tab === 'system' && <SystemTab />}
-          {tab === 'updates' && <UpdatesTab />}
+          {locked && (
+            <p className="text-[11.5px] text-accent" data-testid="settings-read-only">
+              {switching ? 'Trwa otwieranie innego folderu – ustawień budżetu nie można teraz zmieniać.' : 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.'}
+            </p>
+          )}
+          <fieldset disabled={locked} className="contents">
+            {tab === 'general' && <GeneralTab />}
+            {tab === 'accounts' && <AccountsTab />}
+            {tab === 'categories' && <CategoriesTab />}
+            {tab === 'layers' && <LayersTab />}
+            {tab === 'household' && <HouseholdTab />}
+            {tab === 'import' && <ImportTab />}
+            {tab === 'ictj' && <IctjTab />}
+            {tab === 'notify' && <NotifyTab />}
+            {tab === 'folder' && <FolderTab />}
+            {tab === 'system' && <SystemTab />}
+            {tab === 'updates' && <UpdatesTab />}
+          </fieldset>
         </div>
       </div>
     </div>
@@ -134,7 +146,12 @@ function TwoComputersPanel() {
           pytaj”: każdą zmianę z drugiego komputera najpierw widzisz i wybierasz scal / zachowaj moją / weź z drugiego. Odrzucona wersja zostaje w
           historii wpisu.
         </p>
-        {others.length > 0 && <div className="text-[11.5px] text-accent">Teraz pracuje też: {others.map((m) => m.machine).join(', ')}.</div>}
+        {others.length > 0 && (
+          <div className="text-[11.5px] text-accent" data-testid="settings-other-machines">
+            Folder otwarty też na: {others.map((m) => `${m.machine} (${m.inUse !== false ? 'w użyciu' : 'w zasobniku'})`).join(', ')}. Komputer w zasobniku nie zapisuje
+            nic w tle (dni gry, cele z ICTTJ) i zostawia powiadomienia komputerowi w użyciu.
+          </div>
+        )}
       </div>
     </Panel>
   )
@@ -203,14 +220,26 @@ function FolderTab() {
       setBusy(false)
     }
   }
-  const switchTo = async (fn: () => ReturnType<typeof api.pickDataDir>) => {
-    if (!(await flushSaves())) {
-      toast('Nie udało się zapisać bieżących zmian – folder nie został zmieniony. Spróbuj ponownie za chwilę.', 'error', 7000)
-      return
+  // While another folder opens (B31): its progress and „Przerwij” here, the buttons off, no edits anywhere.
+  const switching = useData((s) => s.switching)
+  const [progress, resetProgress] = useOpenProgress()
+  const switchTo = async (fn: () => ReturnType<typeof api.pickDataDir>): Promise<void> => {
+    resetProgress()
+    const res = await switchFolder(fn)
+    if (res === 'unsaved') toast('Nie udało się zapisać bieżących zmian – folder nie został zmieniony. Spróbuj ponownie za chwilę.', 'error', 7000)
+    else if (res.ok) toast('Otwarto folder danych.', 'success')
+    else if (res.reason !== 'cancelled') {
+      // As on the setup screen (B53): new data in a remembered folder found empty or missing only on purpose; a folder
+      // of other files – its FinancialIntel subfolder.
+      const dir = res.dir
+      const startOver = res.remembered && (res.problem === 'empty' || res.problem === 'missing') && dir
+      const action = startOver
+        ? { label: 'Utwórz tu nowe dane', run: () => void switchTo(() => api.openDataDir(dir, true, true)) }
+        : res.problem === 'other' && res.subfolder
+          ? { label: 'Utwórz podfolder FinancialIntel', run: () => void switchTo(() => api.openDataDir(res.subfolder!, true)) }
+          : undefined
+      toast(res.message, 'error', action ? 12000 : 6000, action)
     }
-    const res = await fn()
-    if (await openResult(res)) toast('Otwarto folder danych.', 'success')
-    else if (!res.ok && res.reason !== 'cancelled') toast(res.message, 'error', 6000)
   }
   return (
     <>
@@ -223,16 +252,17 @@ function FolderTab() {
             <button className="btn" onClick={() => api.showInFolder(null)}>
               <IconFolder size={13} /> Pokaż w Eksploratorze
             </button>
-            <button className="btn" onClick={() => switchTo(() => api.pickDataDir('open'))}>
+            <button className="btn" disabled={switching} onClick={() => switchTo(() => api.pickDataDir('open'))}>
               Otwórz inny folder…
             </button>
-            <button className="btn" onClick={() => switchTo(() => api.pickDataDir('create'))}>
+            <button className="btn" disabled={switching} onClick={() => switchTo(() => api.pickDataDir('create'))}>
               <IconPlus size={13} /> Nowe dane w innym folderze…
             </button>
             <button className="btn" onClick={() => api.rescan().then(() => toast('Przeskanowano folder.', 'success'), (e) => toast(errorMessage(e), 'error'))}>
               <IconSync size={13} /> Przeskanuj
             </button>
           </div>
+          {switching && progress && <OpenProgressPanel progress={progress} />}
           <p className="text-[11.5px] text-muted">
             Żeby przenieść dane, zamknij aplikację, przenieś cały folder w Eksploratorze i wskaż go tutaj. Wszystkie ścieżki w plikach są względne, więc
             folder działa w nowym miejscu bez zmian.
@@ -355,7 +385,7 @@ function FolderTab() {
             .map((d) => (
               <Row key={d} className="grid-cols-[1fr_auto]">
                 <span className="num truncate text-[12px]">{d}</span>
-                <button className="btn h-[22px]" onClick={() => switchTo(() => api.openDataDir(d, false))}>
+                <button className="btn h-[22px]" disabled={switching} onClick={() => switchTo(() => api.openDataDir(d, false))} data-testid="recent-folder-open">
                   Otwórz
                 </button>
               </Row>

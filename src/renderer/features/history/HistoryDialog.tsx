@@ -5,7 +5,7 @@ import { diffRecords, fieldLabel, formatValue, isAmountPath, type FieldChange, t
 import type { SettingsFile } from '@shared/schema'
 import { api } from '../../lib/api'
 import { recordTitle } from '../../lib/recordTitle'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { IconHistory } from '../../components/icons'
 import { plnText } from '../../components/fields'
 import { Modal } from '../../components/Modal'
@@ -84,7 +84,7 @@ export function HistoryDialog({ kind, id, current, onClose }: { kind: HistoryKin
   const [selected, setSelected] = useState<string | null>(null)
   const [version, setVersion] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
 
   useEffect(() => {
     let alive = true
@@ -186,12 +186,36 @@ export function HistoryDialog({ kind, id, current, onClose }: { kind: HistoryKin
 }
 
 /** "Historia" button that opens the dialog. */
-export function HistoryButton({ kind, id, current, disabled, small }: { kind: HistoryKind; id: string; current: unknown; disabled?: boolean; small?: boolean }) {
+export function HistoryButton({
+  kind,
+  id,
+  current,
+  disabled,
+  small,
+  variant = 'button'
+}: {
+  kind: HistoryKind
+  id: string
+  current: unknown
+  disabled?: boolean
+  small?: boolean
+  /** 'icon' – in a narrow row (a goal), 'link' – among a row's text links (a loan, a balance). */
+  variant?: 'button' | 'icon' | 'link'
+}) {
   const [open, setOpen] = useState(false)
+  const className = variant === 'link' ? 'hover:text-fg-strong' : variant === 'icon' ? 'btn btn-ghost h-[20px] px-1' : cx('btn', small && 'h-[22px]')
   return (
     <>
-      <button className={cx('btn', small && 'h-[22px]')} disabled={disabled} onClick={() => setOpen(true)} title="Wcześniejsze wersje tego wpisu" data-testid="history-open">
-        <IconHistory size={13} /> Historia
+      <button type="button" className={className} disabled={disabled} onClick={() => setOpen(true)} title="Wcześniejsze wersje tego wpisu" data-testid="history-open">
+        {variant === 'link' ? (
+          'historia'
+        ) : variant === 'icon' ? (
+          <IconHistory size={12} />
+        ) : (
+          <>
+            <IconHistory size={13} /> Historia
+          </>
+        )}
       </button>
       {open && <HistoryDialog kind={kind} id={id} current={current} onClose={() => setOpen(false)} />}
     </>

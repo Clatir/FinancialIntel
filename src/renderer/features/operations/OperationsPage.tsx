@@ -5,7 +5,7 @@ import { MARK_LABEL, OPERATION_MARKS, amountTone, compareOperations, marksOf, ma
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
-import { discardDraft, listOf, useData } from '../../store/data'
+import { discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { navigate, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
@@ -257,84 +257,88 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const firstMember = members.find((m) => !m.archived)
   // Only what the list shows: an operation that left it (edited, deleted, changed elsewhere) is not changed.
   const shown = visible.filter((t) => ticked[t.id])
+  const readOnly = useFolderLocked()
   const n = shown.length
   if (!n) return null
   const sum = shown.reduce((s, t) => s + t.amount, 0)
   const keyword = keywordOfSearch(query)
   const mode = remember === 'keyword' && !keyword ? 'none' : remember
+  // A read-only folder: the bulk changes off (N2) – ticking, un-ticking and the sum stay.
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/50 bg-raised px-3 py-1.5 text-[12px]" data-testid="operations-bulk">
       <span className="text-fg-strong" data-testid="operations-bulk-count">
         Zaznaczone: {n} {plural(n, 'operacja', 'operacje', 'operacji')} · <span className="num">{signedPln(sum)} zł</span>
       </span>
-      <span className="text-muted">kategoria</span>
-      <CategorySelect className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
-      <select className="input h-[24px] w-[250px] py-0" value={mode} onChange={(e) => setRemember(e.currentTarget.value as typeof remember)} aria-label="Zapamiętaj dla importu" data-testid="operations-bulk-remember">
-        <option value="none">bez zapamiętania</option>
-        <option value="brands">zapamiętaj dla ich marek (import)</option>
-        {keyword && <option value="keyword">zapamiętaj „{keyword}” jako słowo kluczowe</option>}
-      </select>
-      <button
-        type="button"
-        className="btn btn-accent h-[24px]"
-        disabled={!categoryId}
-        onClick={() => categoryId && categorizeTicked(shown.map((t) => t.id), categoryId, mode, cats.label(categoryId))}
-        data-testid="operations-bulk-apply"
-      >
-        Ustaw
-      </button>
-      {/* Who finances them (D80 g): a household member, their gift, several people (D83) or me again. */}
-      <select
-        className="input h-[24px] w-[170px] py-0"
-        value={financer}
-        onChange={(e) => {
-          const v = e.currentTarget.value
-          setFinancer(v)
-          setShare(v === 'share' && firstMember ? (share ?? startShare(firstMember.id)) : null)
-        }}
-        aria-label="Kto finansuje zaznaczone"
-        data-testid="operations-bulk-financer"
-      >
-        <option value="">— finansuje… —</option>
-        <option value="-">ja (mój wydatek)</option>
-        {members
-          .filter((m) => !m.archived)
-          .map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        {members
-          .filter((m) => !m.archived)
-          .map((m) => (
-            <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
-              {m.name} – prezent
-            </option>
-          ))}
-        {firstMember && <option value="share">wspólnie…</option>}
-      </select>
-      {financer === 'share' && share && <ShareEditor share={share} total={null} members={members} onChange={setShare} modes={SHARE_MODES.filter((m) => m !== 'amounts')} testId="operations-bulk-share" />}
-      <button
-        type="button"
-        className="btn h-[24px]"
-        // Percents of the people not summing to 100 % (D83): never applied as typed – the quick entry refuses them too.
-        disabled={!financer || (financer === 'share' && (!share || !shareComplete(share, null)))}
-        onClick={() => {
-          if (financer === 'share') {
-            if (share) financeTicked(shown.map((t) => t.id), { share }, `Wspólnie: ${shareNames(share, members)}`)
-          } else {
-            const gift = financer.startsWith('gift:')
-            const id = financer === '-' ? null : gift ? financer.slice('gift:'.length) : financer
-            const name = members.find((m) => m.id === id)?.name ?? 'domownik'
-            financeTicked(shown.map((t) => t.id), { memberId: id, gift }, id ? (gift ? `Prezent od: ${name}` : `Finansuje ${name}`) : 'Mój wydatek')
-          }
-          setFinancer('')
-          setShare(null)
-        }}
-        data-testid="operations-bulk-finance"
-      >
-        Ustaw finansującego
-      </button>
+      <fieldset disabled={readOnly} className="contents">
+        <span className="text-muted">kategoria</span>
+        <CategorySelect className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
+        <select className="input h-[24px] w-[250px] py-0" value={mode} onChange={(e) => setRemember(e.currentTarget.value as typeof remember)} aria-label="Zapamiętaj dla importu" data-testid="operations-bulk-remember">
+          <option value="none">bez zapamiętania</option>
+          <option value="brands">zapamiętaj dla ich marek (import)</option>
+          {keyword && <option value="keyword">zapamiętaj „{keyword}” jako słowo kluczowe</option>}
+        </select>
+        <button
+          type="button"
+          className="btn btn-accent h-[24px]"
+          disabled={!categoryId}
+          onClick={() => categoryId && categorizeTicked(shown.map((t) => t.id), categoryId, mode, cats.label(categoryId))}
+          data-testid="operations-bulk-apply"
+        >
+          Ustaw
+        </button>
+        {/* Who finances them (D80 g): a household member, their gift, several people (D83) or me again. */}
+        <select
+          className="input h-[24px] w-[170px] py-0"
+          value={financer}
+          onChange={(e) => {
+            const v = e.currentTarget.value
+            setFinancer(v)
+            setShare(v === 'share' && firstMember ? (share ?? startShare(firstMember.id)) : null)
+          }}
+          aria-label="Kto finansuje zaznaczone"
+          data-testid="operations-bulk-financer"
+        >
+          <option value="">— finansuje… —</option>
+          <option value="-">ja (mój wydatek)</option>
+          {members
+            .filter((m) => !m.archived)
+            .map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          {members
+            .filter((m) => !m.archived)
+            .map((m) => (
+              <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
+                {m.name} – prezent
+              </option>
+            ))}
+          {firstMember && <option value="share">wspólnie…</option>}
+        </select>
+        {financer === 'share' && share && <ShareEditor share={share} total={null} members={members} onChange={setShare} modes={SHARE_MODES.filter((m) => m !== 'amounts')} testId="operations-bulk-share" />}
+        <button
+          type="button"
+          className="btn h-[24px]"
+          // Percents of the people not summing to 100 % (D83): never applied as typed – the quick entry refuses them too.
+          disabled={!financer || (financer === 'share' && (!share || !shareComplete(share, null)))}
+          onClick={() => {
+            if (financer === 'share') {
+              if (share) financeTicked(shown.map((t) => t.id), { share }, `Wspólnie: ${shareNames(share, members)}`)
+            } else {
+              const gift = financer.startsWith('gift:')
+              const id = financer === '-' ? null : gift ? financer.slice('gift:'.length) : financer
+              const name = members.find((m) => m.id === id)?.name ?? 'domownik'
+              financeTicked(shown.map((t) => t.id), { memberId: id, gift }, id ? (gift ? `Prezent od: ${name}` : `Finansuje ${name}`) : 'Mój wydatek')
+            }
+            setFinancer('')
+            setShare(null)
+          }}
+          data-testid="operations-bulk-finance"
+        >
+          Ustaw finansującego
+        </button>
+      </fieldset>
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
         Odznacz
       </button>

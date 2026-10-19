@@ -97,7 +97,7 @@ export function cancelWizard(): void {
  */
 export async function finishWizard(o: { salary: number; hull: number; goals: Record<string, number>; envelopes: Record<string, number> }): Promise<boolean> {
   const s = useData.getState()
-  if (!s.fi || s.status?.readOnly) {
+  if (!s.fi || s.status?.readOnly || s.switching) {
     toast('Folder jest tylko do odczytu – budżetu nie można uruchomić.', 'error')
     return false
   }

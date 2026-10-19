@@ -5,7 +5,7 @@ import type { Choice, ImportGroup } from '@shared/import/reconcile'
 import { mergeTarget, similarPairs, type SimilarPair, type SimilarSide, type SimilarWhy } from '@shared/import/similar'
 import type { ImportRule, TxKind } from '@shared/schema'
 import { countLabel } from '../../lib/format'
-import { useData } from '../../store/data'
+import { canWrite, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { Badge, Panel } from '../../components/ui'
 import { useCategories } from '../operations/pickers'
@@ -49,7 +49,7 @@ export function SimilarPanel() {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const aliases = useData((s) => s.fi?.settings.import.aliases ?? NO_ALIASES)
   const dismissed = useData((s) => s.fi?.settings.import.notSimilar ?? NO_DISMISSED)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const cats = useCategories()
   const pairs = useMemo(() => similarPairs(groups, { rules, aliases, dismissed }), [groups, rules, aliases, dismissed])
   if (!pairs.length) return null
@@ -105,7 +105,7 @@ export function namesToMerge(groups: readonly ImportGroup[], selected: Readonly<
 /** The ticked groups' names as one (1.2.2): when the similar names do not see it („MOKKA DWORZEC”, „KAFEJKA MOKKA”). */
 export function mergeSelectedNames(groups: readonly ImportGroup[], selected: Readonly<Record<string, true>>): void {
   const all = namesToMerge(groups, selected)
-  if (!all || useData.getState().status?.readOnly) return
+  if (!all || !canWrite()) return
   const rules = useData.getState().fi?.settings.import.rules ?? []
   for (const b of all) b.rules = rules.filter((r) => r.mode === 'exact' && r.match === b.brand)
   const into = all.find((b) => b.chain) ?? mergeTarget(all)
@@ -124,7 +124,7 @@ export function RuleProposal({ g, choice }: { g: ImportGroup; choice: Choice }) 
   const file = useImport((s) => s.file)
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const own = useData((s) => s.fi?.settings.import.ownNames ?? NO_NAMES)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const cats = useCategories()
   // The holder's names (the settings' and the file's) are no keyword.
   const proposals = useMemo(() => keywordProposals(groups, g, choice, { rules, choices, ownNames: ownNamesWith(own, file) }), [groups, g, choice, rules, choices, file, own])

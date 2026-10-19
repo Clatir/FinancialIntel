@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/renderer/store/journal.ts @ 84a8339
 import { create } from 'zustand'
-import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry, type FolderStatus, type Problem, type RecordEntry, type Snapshot } from '@shared/api'
+import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry, type FolderStatus, type OpenFolderResult, type Problem, type RecordEntry, type Snapshot } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { RecordTypes } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
@@ -24,6 +24,16 @@ interface DataState {
   phase: 'boot' | 'setup' | 'ready'
   setupMessage: string | null
   setupDir: string | null
+  /** Why the folder did not open (B53): the setup screen's buttons by it, never by the message. */
+  setupProblem: SetupProblem | null
+  /** Another folder opening from Settings (B31): nothing is edited or written until it opens or fails. */
+  switching: boolean
+  /** When the folder opened in this window, and when a change from another computer came last (B33: the first
+   * freeze of the game's days waits for them). */
+  openedAt: number
+  externalAt: number
+  /** The newest record another computer wrote (F21): which one and when – kept as changes come, never by a scan. */
+  lastRemote: { machine: string; at: string } | null
   appInfo: AppInfo | null
   /** fi.json: the folder's settings. */
   fi: SettingsFile | null
@@ -120,6 +130,11 @@ export const useData = create<DataState>(() => ({
   phase: 'boot',
   setupMessage: null,
   setupDir: null,
+  setupProblem: null,
+  switching: false,
+  openedAt: 0,
+  externalAt: 0,
+  lastRemote: null,
   appInfo: null,
   fi: null,
   records: emptyMaps(),
@@ -185,6 +200,22 @@ function bumpPending(delta: number, patch: Partial<SaveState> = {}): void {
   set((s) => ({ save: { ...s.save, pending: Math.max(0, s.save.pending + delta), ...patch } }))
 }
 
+type Stamped = { updatedAt?: string; updatedBy?: string }
+
+/** `cur` or a newer record written by another computer of `records` (F21). */
+function laterRemote(cur: DataState['lastRemote'], records: Iterable<Stamped>): DataState['lastRemote'] {
+  const me = get().appInfo?.machineName
+  let out = cur
+  for (const r of records) if (r.updatedBy && r.updatedBy !== me && r.updatedAt && (!out || r.updatedAt > out.at)) out = { machine: r.updatedBy, at: r.updatedAt }
+  return out
+}
+
+function newestRemote(snapshot: Snapshot): DataState['lastRemote'] {
+  let out = laterRemote(null, [snapshot.fi as Stamped])
+  for (const list of Object.values(snapshot.records)) out = laterRemote(out, list.map((e) => e.record as Stamped))
+  return out
+}
+
 export function applySnapshot(snapshot: Snapshot): void {
   for (const t of timers.values()) clearTimeout(t)
   timers.clear()
@@ -200,6 +231,10 @@ export function applySnapshot(snapshot: Snapshot): void {
     phase: 'ready',
     setupMessage: null,
     setupDir: null,
+    setupProblem: null,
+    openedAt: Date.now(),
+    externalAt: 0,
+    lastRemote: newestRemote(snapshot),
     fi: snapshot.fi,
     records: Object.fromEntries(COLLECTIONS.map((c) => [c, toMap(snapshot.records[c] ?? [])])) as unknown as RecordMaps,
     problems: snapshot.problems,
@@ -209,6 +244,8 @@ export function applySnapshot(snapshot: Snapshot): void {
     drafts: {},
     save: { pending: 0, lastSavedAt: null, error: null }
   })
+  // Before any write of this folder leaves the window (B31): main takes writes only for the folder shown.
+  if (snapshot.generation != null) void api.folderShown(snapshot.generation).catch(() => undefined)
 }
 
 const pendingFor = (key: string) => useRemote.getState().pending.find((p) => p.key === key)
@@ -239,6 +276,11 @@ export function applyChange(change: ChangeSet): void {
       conflicts: change.conflicts,
       status: change.status
     }
+    // Another computer's records arriving (B33): the game's first freeze waits until they stop for a while. A change
+    // of the presence alone is none.
+    if (external && (change.upserts.length || change.removals.length || change.fi)) next.externalAt = Date.now()
+    const remote = laterRemote(s.lastRemote, [...change.upserts.map((u) => u.entry.record as Stamped), ...(change.fi ? [change.fi as Stamped] : [])])
+    if (remote !== s.lastRemote) next.lastRemote = remote
     const maps: Partial<Record<Collection, AnyMap>> = {}
     const mapFor = (c: Collection) => (maps[c] ??= { ...mapOf(s, c) })
     for (const { collection, entry } of change.upserts) {
@@ -640,13 +682,58 @@ function scheduleSave(collection: Collection | 'fi', id: string, delay = saveDel
   )
 }
 
-const folderReadOnly = () => !!get().status?.readOnly
+const folderReadOnly = () => !!get().status?.readOnly || get().switching
 
-/** Update a record in memory immediately and save it to disk shortly after (autosave). `background` = a fill by the app, not the user. */
-export function updateRecord<C extends Collection>(collection: C, id: string, updater: (r: RecordTypes[C]) => RecordTypes[C], opts: { background?: boolean } = {}): void {
+/** Fields and buttons that change data off: a read-only folder, or another one opening (B31). */
+export const useFolderLocked = (): boolean => useData((s) => !!s.status?.readOnly || s.switching)
+
+export const READ_ONLY_MESSAGE = 'Folder jest tylko do odczytu – zmiany nie są zapisywane.'
+export const SWITCHING_MESSAGE = 'Trwa otwieranie innego folderu – zmiany w tej chwili nie są przyjmowane.'
+let readOnlyNoticedAt = 0
+
+/** A change the read-only folder does not take (N2): said once in a few seconds – never silently, never as a success. */
+function readOnlyNotice(): void {
+  if (Date.now() - readOnlyNoticedAt < 4000) return
+  readOnlyNoticedAt = Date.now()
+  toast(get().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE, 'error', 5000)
+}
+
+/**
+ * Another folder from Settings (B31): this one's changes are written first, then – while the other one opens – nothing
+ * is edited or written: a change never lands in the other folder, nor gets lost when this one closes. A failed or
+ * stopped open leaves this folder as it was. 'unsaved' = this folder's changes could not be written: no switch.
+ */
+export async function switchFolder(open: () => Promise<OpenFolderResult>): Promise<OpenFolderResult | 'unsaved'> {
+  if (!(await flushSaves())) return 'unsaved'
+  set({ switching: true })
+  try {
+    const res = await open()
+    if (res.ok) applySnapshot(res.snapshot)
+    return res
+  } finally {
+    set({ switching: false })
+  }
+}
+
+/** A user's action may write: false – with the one message – in a read-only folder (N2); its success is never shown. */
+export function canWrite(): boolean {
+  if (!folderReadOnly()) return true
+  readOnlyNotice()
+  return false
+}
+
+/**
+ * Update a record in memory immediately and save it to disk shortly after (autosave). `background` = a fill by the app,
+ * not the user. false = nothing changed (no such record, a read-only file or folder – N2).
+ */
+export function updateRecord<C extends Collection>(collection: C, id: string, updater: (r: RecordTypes[C]) => RecordTypes[C], opts: { background?: boolean } = {}): boolean {
   const current = (get().records[collection] as EntryMap<C>)[id]
   // Read-only folder (newer format, unavailable drive) or file: no edits that could never be saved.
-  if (!current || current.readOnly || folderReadOnly()) return
+  if (folderReadOnly()) {
+    if (!opts.background) readOnlyNotice()
+    return false
+  }
+  if (!current || current.readOnly) return false
   const key = keyOf(collection, id)
   if (!dirty.has(key) && !bases.has(key) && !get().drafts[id]) bases.set(key, current.record)
   const record = updater(current.record)
@@ -661,32 +748,46 @@ export function updateRecord<C extends Collection>(collection: C, id: string, up
     return { ...withMap(s, collection, { ...mapOf(s, collection), [id]: { ...current, record } as RecordEntry<RecordTypes[Collection]> }), drafts }
   })
   scheduleSave(collection, id)
+  return true
 }
 
-/** Add a record. Drafts live only in memory until the first edit. */
-export function addRecord<C extends Collection>(collection: C, record: RecordTypes[C], opts: { draft?: boolean } = {}): void {
-  if (folderReadOnly()) return
+/** Add a record. Drafts live only in memory until the first edit. false = a read-only folder (N2). */
+export function addRecord<C extends Collection>(collection: C, record: RecordTypes[C], opts: { draft?: boolean; background?: boolean } = {}): boolean {
+  if (folderReadOnly()) {
+    if (!opts.background) readOnlyNotice()
+    return false
+  }
   set((s) => ({
     ...withMap(s, collection, { ...mapOf(s, collection), [record.id]: { record, relPath: '', readOnly: false } as RecordEntry<RecordTypes[Collection]> }),
     drafts: opts.draft ? { ...s.drafts, [record.id]: true as const } : s.drafts
   }))
   if (!opts.draft) scheduleSave(collection, record.id, 0)
+  return true
 }
 
 /** Many new records at once (an import): one change of the state, all saved with one call right after (W1). */
-export function addRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): void {
-  if (folderReadOnly() || !records.length) return
+export function addRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): boolean {
+  if (!records.length) return true
+  if (folderReadOnly()) {
+    readOnlyNotice()
+    return false
+  }
   set((s) => {
     const map = { ...mapOf(s, collection) }
     for (const r of records) map[r.id] = { record: r, relPath: '', readOnly: false } as RecordEntry<RecordTypes[Collection]>
     return withMap(s, collection, map)
   })
   saveBatch(collection, records.map((r) => r.id))
+  return true
 }
 
 /** Many changed records at once (an import's merges and settled rows): each like `updateRecord`, one change of the state. */
-export function replaceRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): void {
-  if (folderReadOnly() || !records.length) return
+export function replaceRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): boolean {
+  if (!records.length) return true
+  if (folderReadOnly()) {
+    readOnlyNotice()
+    return false
+  }
   const current = get().records[collection] as EntryMap<C>
   const changed = records.filter((r) => current[r.id] && !current[r.id]!.readOnly)
   for (const r of changed) {
@@ -702,6 +803,7 @@ export function replaceRecords<C extends Collection>(collection: C, records: rea
     return { ...withMap(s, collection, map), drafts }
   })
   saveBatch(collection, changed.map((r) => r.id))
+  return true
 }
 
 /** Drop an untouched draft (never written to disk). */
@@ -807,14 +909,19 @@ export function adoptSettings(fi: SettingsFile): void {
 }
 
 /** Change fi.json in memory now and save it shortly after (autosave). */
-export function updateSettings(updater: (f: SettingsFile) => SettingsFile, opts: { background?: boolean } = {}): void {
+export function updateSettings(updater: (f: SettingsFile) => SettingsFile, opts: { background?: boolean } = {}): boolean {
   const f = get().fi
-  if (!f || folderReadOnly()) return
+  if (!f) return false
+  if (folderReadOnly()) {
+    if (!opts.background) readOnlyNotice()
+    return false
+  }
   if (!dirty.has(FI_KEY) && !bases.has(FI_KEY)) bases.set(FI_KEY, f)
   const next = updater(f)
   stampEdits(FI_KEY, f, next, !!opts.background)
   set({ fi: next })
   scheduleSave('fi', 'fi')
+  return true
 }
 
 /**
@@ -846,7 +953,14 @@ export async function boot(): Promise<void> {
   api.onFlushRequest(flushSaves)
   const res = await api.loadCurrent()
   if (res?.ok) applySnapshot(res.snapshot)
-  else set({ phase: 'setup', setupMessage: res && !res.ok ? res.message : null, setupDir: res && !res.ok ? (res.dir ?? null) : null })
+  else set({ phase: 'setup', ...setupOf(res) })
+}
+
+export type SetupProblem = Pick<Extract<OpenFolderResult, { ok: false }>, 'reason' | 'problem' | 'remembered' | 'subfolder'>
+
+function setupOf(res: OpenFolderResult | null): Pick<DataState, 'setupMessage' | 'setupDir' | 'setupProblem'> {
+  if (!res || res.ok) return { setupMessage: null, setupDir: null, setupProblem: null }
+  return { setupMessage: res.message, setupDir: res.dir ?? null, setupProblem: { reason: res.reason, problem: res.problem, remembered: res.remembered, subfolder: res.subfolder } }
 }
 
 export async function openResult(res: Awaited<ReturnType<typeof api.pickDataDir>>): Promise<boolean> {
@@ -854,6 +968,6 @@ export async function openResult(res: Awaited<ReturnType<typeof api.pickDataDir>
     applySnapshot(res.snapshot)
     return true
   }
-  if (res.reason !== 'cancelled') set({ setupMessage: res.message, setupDir: res.dir ?? null })
+  if (res.reason !== 'cancelled') set(setupOf(res))
   return false
 }

@@ -4,7 +4,7 @@
  * `game/RRRR-MM.json`; what the screens read; the celebrations of this computer (each promotion, higher class,
  * achievement and judged mission once, also when another computer froze it).
  */
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { advanceGame, gameStartFor, gameView, rateDay, type DayRating, type GameInput, type GameView } from '@shared/calc/game'
@@ -15,6 +15,7 @@ import type { RecordEntry } from '@shared/api'
 import type { GameMonth, GameSettings } from '@shared/schema'
 import { addRecords, listOf, updateRecord, updateSettings, useData } from './data'
 import { fleetNow, useToday } from './fleet'
+import { usePresence } from './presence'
 import { timed } from '../lib/timing'
 
 type DataState = ReturnType<typeof useData.getState>
@@ -45,9 +46,38 @@ const DAYS_PER_PASS = 2
 /** A day of a payout still to dock waits this long (B20). */
 const HOLD_DAYS = 7
 
-/** Freeze what is due and give the week its mission; the game starts once the budget runs (main window only). */
+/**
+ * The first freeze after the folder opened waits (B33, T199): a few minutes from the opening and a minute without a
+ * change from another computer – OneDrive brings what the other computer wrote first; never with a copy of a game
+ * month waiting in Synchronizacja.
+ */
+function useFreezeSettled(): boolean {
+  const openedAt = useData((s) => s.openedAt)
+  const externalAt = useData((s) => s.externalAt)
+  const conflict = useData((s) => s.conflicts.some((c) => c.kind === 'game'))
+  const freeze = useData((s) => s.appInfo?.freeze)
+  const due = Math.max(openedAt + (freeze?.afterOpenMs ?? 3 * 60_000), externalAt + (freeze?.quietMs ?? 60_000))
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const left = due - Date.now()
+    if (left <= 0) {
+      setNow(Date.now())
+      return
+    }
+    const t = setTimeout(() => setNow(Date.now()), left + 50)
+    return () => clearTimeout(t)
+  }, [due])
+  return !!openedAt && !conflict && now >= due
+}
+
+/**
+ * Freeze what is due and give the week its mission; the game starts once the budget runs (main window only). Only on a
+ * computer in use (D86): one only in the tray leaves it to the one in use.
+ */
 export function useGameAdvance(): void {
-  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly)
+  const inUse = usePresence((s) => s.inUse)
+  const settled = useFreezeSettled()
+  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching) && inUse && settled
   const parts = useData(useShallow(gameParts))
   const today = useToday()
   // A paired ICTTJ payout not docked yet (B20): its day waits – for a week at most (then it is frozen as it stands). The

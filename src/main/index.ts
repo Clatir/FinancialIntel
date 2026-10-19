@@ -3,16 +3,16 @@
 import './threadpool'
 import { existsSync, promises as fs } from 'node:fs'
 import { hostname } from 'node:os'
-import { basename, dirname, join, parse } from 'node:path'
+import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
-import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, shell, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import type { Collection } from '@shared/paths'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
-import { clearPresence, readOtherMachines, writePresence } from './datastore/presence'
+import { IN_USE_MS, clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
 import { importBackup, listBackups, manualBackup, runBackups, type DataSource } from './datastore/backup'
 import { sleep, withRetry, writeFileAtomic } from './datastore/atomic'
@@ -26,6 +26,7 @@ import { setupDetach } from './detach'
 import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
 import { QuickEntry } from './quick'
 import { patchMachinePrefs, type MachinePrefs } from '@shared/machine'
+import { windowBounds } from '@shared/bounds'
 import { IctjSource } from './ictj/source'
 import { findIctjExe, suggestIctjDir } from './ictj/locate'
 
@@ -56,6 +57,14 @@ let refreshes: RefreshQueue | null = null
 const FOCUS_REFRESH_MS = 60_000
 let lastFocusRefresh = 0
 let presenceTimer: NodeJS.Timeout | null = null
+/** This computer's presence file written last; in the tray (not in use) it is written this seldom (N20). */
+let presenceWrittenAt = 0
+const TRAY_PRESENCE_MS = 5 * 60_000
+/** The last move in one of this computer's windows (D86): in use for 10 min after it. */
+let activeAt = 0
+/** What the main window was told last (`fi:inUse`); the moment it stops being in use is told when it comes. */
+let toldInUse: boolean | null = null
+let idleTimer: NodeJS.Timeout | null = null
 let updater: Updater | null = null
 let tray: AppTray | null = null
 let quick: QuickEntry | null = null
@@ -75,10 +84,41 @@ let pendingMaximize = false
 let sessionEnding = false
 /** How long a session-end query holds the "quit for real" state when no session-end follows (cancelled logoff). */
 const SESSION_QUERY_MS = 30_000
+/** A delay from the environment (test runs), else the default. */
+const envMs = (name: string, fallback: number): number => {
+  const v = Number(process.env[name])
+  return process.env[name] != null && Number.isFinite(v) && v >= 0 ? v : fallback
+}
 /** First automatic update check after start (test runs shorten it). */
 const updateCheckDelayMs = (): number => Number(process.env.FI_UPDATE_CHECK_DELAY_MS) || 15_000
 
+const inUseNow = (): boolean => activeAt > 0 && Date.now() - activeAt < IN_USE_MS
+
+/** The main window learns whether this computer is in use (its background writes and notifications go by it). */
+function tellInUse(): void {
+  const inUse = inUseNow()
+  if (inUse === toldInUse || !mainWindow || mainWindow.isDestroyed()) return
+  toldInUse = inUse
+  mainWindow.webContents.send('fi:inUse', inUse)
+}
+
+/**
+ * A move in one of the windows (D86, N20): the computer is in use – the others see it at once (its presence written
+ * now), the main window resumes its background writes.
+ */
+function noteActivity(): void {
+  const was = inUseNow()
+  activeAt = Date.now()
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = setTimeout(tellInUse, IN_USE_MS + 1000)
+  idleTimer.unref?.()
+  if (was) return
+  tellInUse()
+  void heartbeat(true)
+}
+
 function showMainWindow(): void {
+  noteActivity()
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   if (pendingMaximize) {
@@ -251,7 +291,18 @@ function ictjSource(): IctjSource {
 const ictjDirOf = (): string | null => process.env.FI_ICTJ_DIR || config.get().ictj.dir
 
 function send(change: ChangeSet | null): void {
-  if (change && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:change', change)
+  if (!change) return
+  // The window not showing this folder yet (B31): its snapshot is older than the change – sent once it does.
+  if (shownGeneration !== storeGeneration) {
+    unshown.push(change)
+    return
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:change', change)
+}
+
+/** A write's changes, only while its folder is still the open one: the window never gets the previous folder's records (B31). */
+function sendFrom(s: DataStore, change: ChangeSet | null): void {
+  if (s === store) send(change)
 }
 
 async function trash(absPath: string): Promise<void> {
@@ -315,11 +366,16 @@ async function closeStore(): Promise<void> {
   await clearPresence(closing.root, machineName).catch(() => undefined)
 }
 
-async function heartbeat(): Promise<void> {
+async function heartbeat(force = false): Promise<void> {
+  tellInUse()
   const s = store
   if (!s) return
   try {
-    if (!s.status().readOnly) await writePresence(s.root, machineName, app.getVersion()).catch(() => undefined)
+    // In use: every minute; only in the tray: every 5 minutes – OneDrive is not woken all night for it (N20).
+    if (!s.status().readOnly && (force || inUseNow() || Date.now() - presenceWrittenAt >= TRAY_PRESENCE_MS)) {
+      presenceWrittenAt = Date.now()
+      await writePresence(s.root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null).catch(() => undefined)
+    }
     const others = await readOtherMachines(s.root, machineName)
     if (JSON.stringify(others) !== JSON.stringify(s.otherMachines)) {
       s.otherMachines = others
@@ -343,7 +399,15 @@ const PROGRESS_LOG_MS = 10_000
 /** The other computers' heartbeats are a nicety: an open never waits for them longer than this. */
 const MACHINES_WAIT_MS = 2000
 
-async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFolderResult> {
+const sameDir = (a: string, b: string): boolean => {
+  const n = (p: string) => resolve(p).replace(/[\\/]+$/, '')
+  return process.platform === 'linux' ? n(a) === n(b) : n(a).toLowerCase() === n(b).toLowerCase()
+}
+
+/** This computer's data folder now or before (B53): found empty or missing, it gets no new data unasked. */
+const rememberedDir = (dir: string): boolean => [config.get().dataDir, ...config.get().recentDirs].some((d) => !!d && sameDir(d, dir))
+
+async function openFolder(dir: string, createIfEmpty: boolean, force = false): Promise<OpenFolderResult> {
   opening?.abort()
   const controller = new AbortController()
   opening = controller
@@ -385,7 +449,7 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
     let target = dir
     let kind = await untilAborted(DataStore.inspect(target), signal)
     if (kind === 'ictj' || (await untilAborted(insideIctj(dir), signal))) {
-      return { ok: false, reason: 'not-data', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
+      return { ok: false, reason: 'not-data', problem: 'ictj', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
     }
     // A folder of other files gets a FinancialIntel subfolder – not the proposal itself (already named so) and not a
     // folder of FI data whose fi.json has not arrived yet.
@@ -398,22 +462,42 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
         ok: false,
         reason: 'not-data',
         dir: target,
+        problem: kind,
+        remembered: rememberedDir(target),
         message:
           kind === 'partial'
             ? 'W tym folderze są już dane Financial Intel, ale bez pliku fi.json – OneDrive pewnie jeszcze go pobiera. Poczekaj chwilę i spróbuj ponownie (nowe dane nie są tworzone, żeby nie rozdzielić budżetu).'
             : `Folder ${DATA_FOLDER_NAME} zawiera inne pliki – wybierz pusty folder.`
       }
     }
+    if (kind === 'unavailable') {
+      return {
+        ok: false,
+        reason: 'not-data',
+        dir: target,
+        problem: kind,
+        remembered: rememberedDir(target),
+        message: 'Folder danych jest teraz niedostępny (np. OneDrive jeszcze się nie uruchomił, dysk nie jest gotowy albo brak dostępu). Spróbuj ponownie albo wskaż inny folder.'
+      }
+    }
     if (kind === 'missing' || kind === 'empty') {
-      if (!createIfEmpty) {
+      // The remembered folder found empty or missing is most likely not synced yet: new data there would split the
+      // budget when OneDrive brings the old one – only with the user's confirmation (B53).
+      const remembered = rememberedDir(target)
+      if (!createIfEmpty || (remembered && !force)) {
         return {
           ok: false,
           reason: 'not-data',
-          dir,
-          message:
-            kind === 'empty'
-              ? 'Folder jest pusty – można w nim utworzyć nowe dane.'
+          dir: target,
+          problem: kind,
+          remembered,
+          message: remembered
+            ? kind === 'empty'
+              ? 'Zapamiętany folder danych jest pusty – OneDrive mógł go jeszcze nie pobrać. Spróbuj ponownie za chwilę; nowe dane twórz tu tylko, gdy budżet ma zacząć się od nowa.'
               : 'Zapamiętany folder danych jest niedostępny (np. OneDrive jeszcze się nie uruchomił albo dysk jest odłączony). Spróbuj ponownie albo wskaż inny folder.'
+            : kind === 'empty'
+              ? 'Folder jest pusty – można w nim utworzyć nowe dane.'
+              : 'Tego folderu nie ma. Wskaż inny folder.'
         }
       }
       signal.throwIfAborted()
@@ -423,6 +507,8 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
         ok: false,
         reason: 'not-data',
         dir,
+        problem: kind,
+        subfolder: join(dir, DATA_FOLDER_NAME),
         message: `W tym folderze nie ma danych Financial Intel (fi.json). Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
       }
     }
@@ -444,13 +530,16 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
     if (generation !== openGeneration) return superseded()
     const opened = next
     store = opened
+    snapshot.generation = ++storeGeneration
+    unshown = []
     opened.otherMachines = others
     snapshot.status = opened.status()
     const queue = new RefreshQueue(async (paths) => {
       // Closing: no rescan before the last writes (B43); another folder opened meanwhile: nothing to read here.
       if (store !== opened || windowClosing) return
       try {
-        send(await opened.refresh(paths))
+        // A refresh finishing after another folder opened is that folder's no more (B31).
+        sendFrom(opened, await opened.refresh(paths))
       } catch (e) {
         log('error', 'refresh failed', e)
         throw e
@@ -461,11 +550,13 @@ async function openFolder(dir: string, createIfEmpty: boolean): Promise<OpenFold
       onError: (e) => log('warn', 'watcher error', e)
     })
     watcher.start()
-    void heartbeat()
+    void heartbeat(true)
     presenceTimer = setInterval(() => void heartbeat(), 60_000)
     // Daily backup (decision D31), in the background.
     dailyBackup()
-    await config.rememberDir(target)
+    // The folder is open from here on: remembering it failing must not report the open as failed – the window would
+    // keep the previous folder while main writes to this one (B31).
+    await config.rememberDir(target).catch((e) => log('warn', `remember ${target} failed`, e))
     const count = Object.values(snapshot.records).reduce((n, list) => n + list.length, 0)
     const st = opened.loadStats
     const times = st ? ` (list ${st.listMs} ms, read ${st.readMs} ms of ${st.files} files, ${st.slow} slow, migrate ${st.migrateMs} ms)` : ''
@@ -506,6 +597,22 @@ function requireStore(): DataStore {
   return store
 }
 
+/** Every folder opened counts up; the window says which one it shows (B31). */
+let storeGeneration = 0
+let shownGeneration = 0
+/** The open folder's changes from before the window showed it. */
+let unshown: ChangeSet[] = []
+
+/**
+ * The folder a write from the window may go to (B31): only the one the window shows – a write sent for the previous
+ * folder while another one was opening is refused, never written into the new one.
+ */
+function writableStore(): DataStore {
+  const s = requireStore()
+  if (shownGeneration !== storeGeneration) throw new Error('Trwa otwieranie innego folderu – zmiana nie została zapisana.')
+  return s
+}
+
 function requireUpdater(): Updater {
   if (!updater) throw new Error('Moduł aktualizacji nie jest gotowy.')
   return updater
@@ -534,14 +641,18 @@ function registerIpc(): void {
       machineName,
       platform: process.platform,
       userDataDir: app.getPath('userData'),
-      isPortable: !!process.env.PORTABLE_EXECUTABLE_DIR
+      isPortable: !!process.env.PORTABLE_EXECUTABLE_DIR,
+      freeze: { afterOpenMs: envMs('FI_FREEZE_AFTER_OPEN_MS', 3 * 60_000), quietMs: envMs('FI_FREEZE_QUIET_MS', 60_000) }
     })
   )
+  handle('reportActivity', () => noteActivity())
+  handle('inUseNow', () => inUseNow())
   // The renderer needs the recent folders; the GitHub token stays here.
   handle('getConfig', () => publicConfig(config.get()))
   handle('loadCurrent', async () => {
     const preset = process.env.FI_DATA_DIR
-    if (preset) return openFolder(preset, true)
+    // The tests' folder (FI_DATA_DIR) is meant for new data whatever this computer remembers.
+    if (preset) return openFolder(preset, true, true)
     const dir = config.get().dataDir
     return dir ? openFolder(dir, false) : null
   })
@@ -555,58 +666,79 @@ function registerIpc(): void {
     if (res.canceled || !dir) return { ok: false, reason: 'cancelled', message: '' }
     return openFolder(dir, mode === 'create')
   })
-  handle('openDataDir', (dir: string, createIfEmpty: boolean) => openFolder(dir, createIfEmpty))
+  handle('openDataDir', (dir: string, createIfEmpty: boolean, force?: boolean) => openFolder(dir, createIfEmpty, force === true))
   handle('cancelOpen', () => {
     opening?.abort()
   })
+  // The window shows this folder now (B31): its writes are taken from here on.
+  handle('folderShown', (generation: number) => {
+    if (generation !== storeGeneration || generation === shownGeneration) return
+    shownGeneration = generation
+    const waiting = unshown
+    unshown = []
+    for (const change of waiting) send(change)
+  })
   handle('saveRecord', async (collection: Collection, record: never) => {
-    const s = requireStore()
+    const s = writableStore()
     try {
       const { entry, change } = await s.saveRecord(collection, record)
-      send(change)
+      sendFrom(s, change)
       return entry
     } catch (e) {
       // Removed on another computer a moment ago (B49): the window gets the removal (its question), the write waits.
       // Its month made on another computer (B46): the copy shows in Synchronizacja.
-      if (e instanceof RemovedOutsideError || e instanceof ConflictCopyError) send(e.change)
+      if (e instanceof RemovedOutsideError || e instanceof ConflictCopyError) sendFrom(s, e.change)
       throw e
     }
   })
   handle('saveRecords', async (collection: Collection, records: never[]) => {
-    const { results, changes } = await requireStore().saveRecords(collection, records)
-    for (const change of changes) send(change)
+    const s = writableStore()
+    const { results, changes } = await s.saveRecords(collection, records)
+    for (const change of changes) sendFrom(s, change)
     return results
   })
   handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown) => {
+    const s = writableStore()
     // 'drop' (no version in the history) only for the imports' batches: never the user's records.
-    const { results, change } = await requireStore().deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
-    send(change)
+    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
+    sendFrom(s, change)
     return results
   })
   handle('deleteRecord', async (collection: Collection, id: string) => {
-    send(await requireStore().deleteRecord(collection, id))
+    const s = writableStore()
+    sendFrom(s, await s.deleteRecord(collection, id))
   })
   handle('historyList', (kind: HistoryKind, id: string) => requireStore().historyList(kind, id))
   handle('historyRead', (kind: HistoryKind, id: string, file: string) => requireStore().historyRead(kind, id, file))
   handle('historyDeleted', (collection: Collection) => requireStore().historyDeleted(collection))
-  handle('historyKeep', (kind: HistoryKind, record: unknown, reason: HistoryReason) => requireStore().historyKeep(kind, record, reason))
+  handle('historyKeep', (kind: HistoryKind, record: unknown, reason: HistoryReason) => writableStore().historyKeep(kind, record, reason))
   handle('historyRestore', async (kind: HistoryKind, id: string, file: string) => {
-    const { change, fi } = await requireStore().historyRestore(kind, id, file)
-    send(change)
+    const s = writableStore()
+    const { change, fi } = await s.historyRestore(kind, id, file)
+    sendFrom(s, change)
     // Restored settings go back to the caller (they are not part of a change set's upserts).
     return fi
   })
-  handle('saveSettings', (fi: never) => requireStore().saveSettings(fi))
+  handle('saveSettings', (fi: never) => writableStore().saveSettings(fi))
   handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy') => {
-    send(await requireStore().resolveConflict(id, keep))
+    const s = writableStore()
+    sendFrom(s, await s.resolveConflict(id, keep))
+  })
+  handle('mergeConflict', async (id: string, merged: unknown, seen?: unknown) => {
+    const s = writableStore()
+    const sides = seen && typeof seen === 'object' ? (seen as { canonical?: unknown; copy?: unknown }) : {}
+    const asOf = typeof sides.canonical === 'number' && typeof sides.copy === 'number' ? { canonical: sides.canonical, copy: sides.copy } : undefined
+    sendFrom(s, await s.mergeConflict(id, merged, asOf))
   })
   handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
-    const { results, change } = await requireStore().resolveConflicts(items)
-    send(change)
+    const s = writableStore()
+    const { results, change } = await s.resolveConflicts(items)
+    sendFrom(s, change)
     return results
   })
   handle('trashProblemFile', async (rel: string) => {
-    send(await requireStore().trashFile(rel))
+    const s = writableStore()
+    sendFrom(s, await s.trashFile(rel))
   })
   handle('showInFolder', async (rel: string | null) => {
     const s = requireStore()
@@ -686,7 +818,7 @@ function registerIpc(): void {
     return manualBackup(checkedData(s), s.backupsDir)
   })
   handle('importBackup', async () => {
-    const s = requireStore()
+    const s = writableStore()
     return importBackup(s, s.backupsDir)
   })
   handle('pickImportFile', async () => {
@@ -740,7 +872,10 @@ function registerIpc(): void {
     const prefs = patchMachinePrefs(config.get().prefs, patch)
     await config.update({ prefs })
     // The shortcut registered again only when it was set (also the same one: a retry after another program let it go).
-    if (patch && typeof patch === 'object' && 'quickShortcut' in patch) quick?.applyShortcut(prefs.quickShortcut)
+    if (patch && typeof patch === 'object' && 'quickShortcut' in patch) {
+      quick?.applyShortcut(prefs.quickShortcut)
+      if (quick) quick.replaced = null
+    }
     broadcastPrefs(prefs)
     return prefs
   })
@@ -893,11 +1028,10 @@ function watchHangs(win: BrowserWindow): void {
 
 function createWindow(): void {
   const saved = config.get().window
+  // Closed on a monitor that is not here now: centred on the primary one instead of off every screen (B54).
+  const bounds = windowBounds(saved, screen.getAllDisplays().map((d) => d.workArea), screen.getPrimaryDisplay().workArea)
   const win = new BrowserWindow({
-    width: saved?.width ?? 1440,
-    height: saved?.height ?? 900,
-    x: saved?.x,
-    y: saved?.y,
+    ...bounds,
     minWidth: 1024,
     minHeight: 640,
     show: false,
@@ -997,6 +1131,7 @@ function createWindow(): void {
     win.webContents.send('fi:flush')
   })
   win.on('focus', () => {
+    noteActivity()
     // No full rescan while closing: it would stand before the last writes (B43); at most once a minute (W21).
     if (windowClosing || Date.now() - lastFocusRefresh < FOCUS_REFRESH_MS) return
     lastFocusRefresh = Date.now()
@@ -1041,7 +1176,10 @@ function createWindow(): void {
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
-app.on('second-instance', () => showMainWindow())
+// A second start with the system (an old autostart entry – B52) leaves the window in the tray; any other shows it.
+app.on('second-instance', (_e, argv) => {
+  if (!argv.includes(HIDDEN_ARG)) showMainWindow()
+})
 
 // app.quit() from anywhere (the system, the updater): windows close for real, not to the tray.
 app.on('before-quit', () => {
@@ -1069,6 +1207,12 @@ app.whenReady().then(async () => {
     log
   })
   quick.applyShortcut(config.get().prefs.quickShortcut)
+  // A shortcut that took a Polish letter (AltGr – B29) is the default now: saved, and the window says so once.
+  if (config.replacedShortcut) {
+    quick.replaced = config.replacedShortcut
+    log('warn', `skrót szybkiego wpisu ${config.replacedShortcut} zabierał polską literę (AltGr) – zamieniony na ${config.get().prefs.quickShortcut}`)
+    void config.update({ prefs: config.get().prefs }).catch((e) => log('warn', 'zapis skrótu – nie udało się', e))
+  }
   // Created hidden a moment after the start: the shortcut then shows it at once.
   setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed()) quick?.ensure()

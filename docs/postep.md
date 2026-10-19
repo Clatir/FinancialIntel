@@ -1,18 +1,17 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa I** (1.5.2 – liczby się zgadzają) zrobiona na gałęzi
-`claude/grupa-i-1.5.2`, PR #19 do `main` (scalenie po zielonym CI – D71); po I bez pauzy J (1.5.3 – system, folder, dwa
-komputery), K (1.5.4 – wydajność, reszta) i L (1.6.0 – funkcje), każda z własnym PR i wydaniem; po L **pauza** (D67).
-**1.5.1 wydane** (PR #18), **1.5.0 wydane**
+**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa J** (1.5.3 – system, folder, dwa komputery) zrobiona na
+gałęzi `claude/grupa-j-1.5.3`, PR #20 do `main` (scalenie po zielonym CI – D71); po J bez pauzy K (1.5.4 – wydajność,
+reszta) i L (1.6.0 – funkcje), każda z własnym PR i wydaniem; po L **pauza** (D67).
+**1.5.2 wydane** (PR #19), **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
 okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
 **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu PR #19 i wydaniu 1.5.2 – grupa J („Przed grupą J”), potem K i L bez czekania na komendę
-(D86); pytania z grupy G rozstrzygnięte (D85 – zostaje jak jest). Do sprawdzenia w aplikacji: 1.5.0, 1.5.1 i 1.5.2 –
-listy w sekcjach niżej.
+**Następny krok:** po scaleniu PR #20 i wydaniu 1.5.3 – grupa K („Przed grupą K”), potem L bez czekania na komendę
+(D86). Do sprawdzenia w aplikacji: 1.5.0–1.5.3 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -44,12 +43,12 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **F** | 1.4.3 Szybkość przy dużym folderze: W1–W16, W21–W24, W26, kopie (F2, N19, C4), gra porcjami | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar commitów, z pomiarami 30 / 150 tys., przeglądem i E2E; plan był 3–5 h) | 1.4.3 | ✅ D84 (C4) | ✅ wydane (PR #15, poprawka PR #16) |
 | **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 3–4 h) | 1.5.0 | ✅ D83 | ✅ wydane (PR #17) |
 | **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.1 | ✅ D84 (C11) | ✅ wydane (PR #18) |
-| **I** | 1.5.2 Liczby się zgadzają: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.2 | ✅ D86 | ✅ zrobione – PR #19, CI, scalenie |
-| **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | ok. 2–3 h | 1.5.3 | ✅ D86 | czeka na I |
+| **I** | 1.5.2 Liczby się zgadzają: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.2 | ✅ D86 | ✅ wydane (PR #19) |
+| **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 2–3 h) | 1.5.3 | ✅ D86 | ✅ zrobione – PR #20, CI, scalenie |
 | **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | ok. 2 h | 1.5.4 | ✅ D86 | czeka na J |
 | **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | ok. 3–4 h | 1.6.0 | ✅ D86 | czeka na K |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I** | | | **ok. 32,5 h** (J–L: plan ok. 7–9 h) | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J** | | | **ok. 34 h** (K–L: plan ok. 5–6 h) | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -384,6 +383,50 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.5.2, Windows):
 4. Edytor operacji: data „dd.mm” bez roku, godzina w nocy – potwierdzenie albo „usuń godzinę”.
 5. Szybki wpis: kategoria bez koperty i koperta planowana – podgląd.
 6. Mostek: przypomnienie o saldzie każdego konta, „wolne do decyzji”.
+
+## Przed grupą J – system, folder, dwa komputery (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa I wydana (1.5.2 – PR #19). Grupa J (1.5.3): średnie pozycje przeglądu o systemie,
+   folderze danych i pracy na dwóch komputerach:
+   - system: skrót szybkiego wpisu z literą polskiego znaku zabiera AltGr (B29), wpisy autostartu wersji portable (B52),
+     przyciski ekranu wyboru folderu po tekście komunikatu (B53), okno na odłączonym monitorze (B54);
+   - folder: zmiana folderu z Ustawień bez blokady i postępu (B31), tryb tylko do odczytu melduje sukcesy (N2), kopie
+     konfliktu bez „Scal” (N17), historia bez przycisku przy planie, celu, pożyczce, saldzie i dokowaniu (N18);
+   - dwa komputery: baner przy aplikacji w zasobniku drugiego komputera (N20), komputer „w użyciu” (F21 – zapisy w tle i
+     powiadomienia tylko tam), zamrażanie dni od razu po otwarciu folderu (B33), odłączone panele Mostka (B27).
+2. **Co użytkownik musi powiedzieć** – ✅ D86 (B29 i N20 / F21 – propozycje przyjęte).
+3. **Co przygotować** – nic przed startem; po wydaniu 1.5.3 (Windows): dwa komputery z aplikacją w zasobniku, zmiana
+   folderu w Ustawieniach, skrót szybkiego wpisu, autostart wersji portable.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2–3 h.
+
+## 1.5.3 – system, folder i dwa komputery (grupa J, 19.10.2026)
+
+Zakres: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 („Przed grupą J” wyżej). Zrobione:
+- System (T190–T193): skrót Ctrl+Alt+litera polskiego znaku (także z Shift) nie do ustawienia, ustawiony – zamieniony na
+  domyślny z komunikatem; jeden wpis autostartu o stałej nazwie, stare wpisy portable usuwane, druga kopia przy logowaniu
+  bez okna; okno z odłączonego monitora na ekranie; ekran wyboru folderu po przyczynie (zapamiętany pusty / niedostępny,
+  folder z innymi plikami, nowe dane tylko po potwierdzeniu).
+- Folder (T194–T197): tryb tylko do odczytu bez fałszywych sukcesów i z wyłączonymi polami; „Scal…” kopii konfliktu
+  (każde różniące się pole wyborem, obie strony w historii); „Historia” przy planie miesiąca, celu, pożyczce, saldzie,
+  dokowaniu i w oknie zmian, okna nad oknami; zmiana folderu z Ustawień z postępem i „Przerwij”, w trakcie bez zmian,
+  zapisy tylko do folderu pokazanego w oknie.
+- Dwa komputery (T198–T200): komputer „w użyciu” (ruch w oknie w 10 min) – baner tylko dla niego, zapisy w tle i
+  powiadomienia tylko na nim (żaden w użyciu – każdy), obecność w zasobniku co 5 min; pierwsze zamrożenie dni po
+  otwarciu czeka 3 min i minutę ciszy; odłączone panele Mostka działają poza Mostkiem.
+- Przegląd `/code-review` high: 9 kandydatów – wszystkie poprawione z testami (T201).
+- Testy: 525 unit + fs (nowe `system.test.ts`, scalanie w `datastore-robust.test.ts`, `valueAt` w `merge.test.ts`), E2E
+  39 (nowe `system.spec.ts`, `folder.spec.ts`, `presence.spec.ts`, poszerzone `bridge.spec.ts`, `numbers.spec.ts`).
+  Poprawki z testem sprawdzonym bez nich (padają).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.5.3, Windows):
+1. Dwa komputery: aplikacja w zasobniku na jednym, praca na drugim – bez banera; Synchronizacja → „Inne komputery”
+   (w użyciu / w zasobniku, ostatnia zmiana); powiadomienia tylko na komputerze, przy którym siedzisz.
+2. Ustawienia → Folder: „Otwórz inny folder…” na dużym folderze – postęp, „Przerwij”, bieżący folder zostaje bez zmian.
+3. Synchronizacja: kopia konfliktu (np. `fi-KOMPUTER.json`) – „Scal…”.
+4. „Historia” przy planie miesiąca, celu, pożyczce, saldzie otwarcia i zadokowanej dostawie.
+5. Ustawienia → Powiadomienia: skrót Ctrl+Alt+S – komunikat; wersja portable z autostartem – jeden wpis w Menedżerze
+   zadań → Uruchamianie.
+6. Mostek: Odprawa w osobnym oknie na drugim monitorze, praca w Operacjach – okno się odświeża i prowadzi kliknięciem.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
@@ -1154,3 +1197,8 @@ Do sprawdzenia przez użytkownika (Windows 11):
   zmianie kwoty, saldo otwarcia przed pensją, miesiąc na plus z energii, koperta zarchiwizowanej kategorii, łupy w
   przydziale, „wolne do decyzji”, kreator z ICTTJ i celami, daty bez roku, liczby całkowite, salda każdego konta, podgląd
   szybkiego wpisu, cisza nocna; przegląd `/code-review` high – 8 poprawek; nowy E2E `numbers.spec.ts`; PR #19 do `main`.
+- 19.10.2026 – PR #19 scalony, wydanie 1.5.2 opublikowane (job Windows na `main`); grupa J (1.5.3): skrót AltGr,
+  autostart portable, okno na ekranie, ekran wyboru folderu po przyczynie, zmiana folderu z postępem i blokadą zapisów,
+  tylko do odczytu bez fałszywych sukcesów, „Scal…” kopii konfliktu, historia każdego wpisu, komputer „w użyciu” (baner,
+  zapisy w tle, powiadomienia), pierwsze zamrożenie po otwarciu czeka, odłączone panele Mostka; przegląd `/code-review`
+  high – 9 poprawek; nowe E2E `system.spec.ts`, `folder.spec.ts`, `presence.spec.ts`; PR #20 do `main`.

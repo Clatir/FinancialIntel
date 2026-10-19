@@ -44,10 +44,11 @@ export const AmountField = forwardRef<
     placeholder?: string
     className?: string
     autoFocus?: boolean
+    disabled?: boolean
     'aria-label'?: string
     'data-testid'?: string
   }
->(function AmountField({ value, onChange, allowNegative, allowEmpty, placeholder, className, autoFocus, ...rest }, ref) {
+>(function AmountField({ value, onChange, allowNegative, allowEmpty, placeholder, className, autoFocus, disabled, ...rest }, ref) {
   const [draft, setDraft] = useState<string | null>(null)
   // Escape: the blur it causes runs with this render's draft – it must not save it.
   const cancelled = useRef(false)
@@ -66,6 +67,7 @@ export const AmountField = forwardRef<
       inputMode="decimal"
       spellCheck={false}
       autoFocus={autoFocus}
+      disabled={disabled}
       placeholder={placeholder ?? '0,00'}
       value={draft ?? (value == null ? '' : plnText(value))}
       aria-invalid={invalid}

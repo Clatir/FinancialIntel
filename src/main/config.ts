@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import type { MachineConfig } from '@shared/api'
 import { DEFAULT_UPDATE_PREFS, type PendingUpdate } from '@shared/update'
-import { DEFAULT_MACHINE_PREFS, machinePrefsFrom } from '@shared/machine'
+import { DEFAULT_MACHINE_PREFS, altGrConflict, machinePrefsFrom } from '@shared/machine'
 import { writeFileAtomic } from './datastore/atomic'
 
 /** Per-machine settings (never synced): stored in %APPDATA%/Financial Intel/config.json. */
@@ -59,6 +59,8 @@ function loadUpdates(raw: unknown): MachineConfig['updates'] {
 
 export class ConfigStore {
   private config: MachineConfig = { ...DEFAULTS }
+  /** The quick entry's shortcut config.json had, replaced by the default: it took a Polish letter (B29); null = none. */
+  replacedShortcut: string | null = null
   /** Writes are queued and always write the latest state, so an older snapshot never lands last. */
   private writing: Promise<void> = Promise.resolve()
   constructor(private readonly userDataDir: string) {}
@@ -70,6 +72,8 @@ export class ConfigStore {
   async load(): Promise<MachineConfig> {
     try {
       const raw = JSON.parse(await fs.readFile(this.file, 'utf8')) as Partial<MachineConfig>
+      const shortcut = (raw.prefs as { quickShortcut?: unknown } | undefined)?.quickShortcut
+      this.replacedShortcut = typeof shortcut === 'string' && altGrConflict(shortcut) ? shortcut : null
       this.config = {
         ...DEFAULTS,
         ...raw,

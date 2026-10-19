@@ -45,7 +45,7 @@ export function LayoutMenu() {
   const page = useUi((s) => s.route.page)
   const panels = usePanels((s) => s)
   const columns = useColumns((s) => s)
-  const readOnly = useData((s) => s.status?.readOnly ?? true)
+  const readOnly = useData((s) => (s.status?.readOnly ?? true) || s.switching)
   const presets = useLayoutPresets()
   const hidden = hiddenPanels(page, panels)
   const label = pageDef(page)?.label ?? PAGE_LABELS[page] ?? page

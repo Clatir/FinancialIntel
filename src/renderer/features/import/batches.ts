@@ -61,6 +61,7 @@ async function notArrived(batch: ImportBatch, has: (id: string) => boolean): Pro
 export async function undoImport(batchId: string, force = false): Promise<boolean> {
   try {
     const s0 = useData.getState()
+    if (s0.switching) throw new Error('Trwa otwieranie innego folderu – spróbuj za chwilę.')
     if (s0.status?.readOnly || !s0.fi) throw new Error('Folder jest tylko do odczytu – import nie może być cofnięty.')
     const batch = s0.records.imports[batchId]?.record
     if (!batch || batch.undoneAt) throw new Error('Ten import jest już cofnięty.')
@@ -118,7 +119,7 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
 /** „Cofnij” of taking an import back: the import as it was – the settings only where the undo changed them. */
 async function redoImport(u: Undone): Promise<void> {
   const s = useData.getState()
-  if (s.status?.readOnly || !s.fi) return
+  if (s.status?.readOnly || s.switching || !s.fi) return
   const has = (id: string) => !!s.records.transactions[id]
   addRecords(
     'transactions',

@@ -33,6 +33,12 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     await fs.mkdir(join(dir, 'inny'))
     await fs.writeFile(join(dir, 'inny', 'zakupy.txt'), 'mleko')
     expect(await DataStore.inspect(join(dir, 'inny'))).toBe('other')
+    // A path under a file is missing too; a folder that cannot be read now (a loop of links here, a drive not ready
+    // on Windows) is unavailable – never „missing”, which could get new data (B53).
+    expect(await DataStore.inspect(join(dir, 'inny', 'zakupy.txt', 'pod'))).toBe('missing')
+    await fs.symlink(join(dir, 'petla-b'), join(dir, 'petla-a'))
+    await fs.symlink(join(dir, 'petla-a'), join(dir, 'petla-b'))
+    expect(await DataStore.inspect(join(dir, 'petla-a'))).toBe('unavailable')
     const store = await freshStore()
     await expect(DataStore.initialize(store.root, createDefaultSettings())).rejects.toThrow(/fi\.json/)
     await expect(new DataStore(join(dir, 'inny'), { machineName: 'X' }).open()).rejects.toThrow(/fi\.json/)

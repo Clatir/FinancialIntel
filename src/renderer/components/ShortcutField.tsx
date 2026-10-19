@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { shortcutLabel } from '@shared/machine'
+import { altGrConflict, shortcutLabel } from '@shared/machine'
+import { toast } from '../store/ui'
 import { cx } from './ui'
 
 /** An Electron accelerator from a key press: modifiers + the key ('Control+Alt+B'); null = not a full shortcut. */
@@ -16,7 +17,16 @@ export function acceleratorOf(e: { ctrlKey: boolean; altKey: boolean; shiftKey: 
   return [...mods, key].join('+')
 }
 
-/** Press the new shortcut (Esc keeps the old one, Backspace clears it). */
+/** Why a shortcut is not taken: it is AltGr+letter on the Polish keyboard (B29); null = it can be set. */
+export function shortcutProblem(accelerator: string): string | null {
+  const char = altGrConflict(accelerator)
+  if (!char) return null
+  const key = accelerator.split('+').pop() ?? ''
+  const shift = /(^|\+)shift(\+|$)/i.test(accelerator) ? 'Shift+' : ''
+  return `${shortcutLabel(accelerator)} to w polskim układzie AltGr+${shift}${key} („${char}”) – skrót zabrałby ten znak wszystkim programom. Wybierz inną literę albo cyfrę, np. Ctrl+Alt+B.`
+}
+
+/** Press the new shortcut (Esc keeps the old one, Backspace clears it; AltGr+letter is refused – B29). */
 export function ShortcutField({ value, onChange, className, ...rest }: { value: string; onChange: (accelerator: string) => void; className?: string; 'data-testid'?: string }) {
   const [listening, setListening] = useState(false)
   return (
@@ -35,7 +45,9 @@ export function ShortcutField({ value, onChange, className, ...rest }: { value: 
           return setListening(false)
         }
         const acc = acceleratorOf(e)
-        if (acc) {
+        const problem = acc && shortcutProblem(acc)
+        if (problem) toast(problem, 'error', 8000)
+        else if (acc) {
           onChange(acc)
           setListening(false)
         }

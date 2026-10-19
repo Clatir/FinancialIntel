@@ -63,6 +63,26 @@ export interface MachinePrefs {
 
 export const DEFAULT_QUICK_SHORTCUT = 'Control+Alt+B'
 
+/**
+ * Ctrl+Alt+letter is AltGr+letter on the Polish keyboard (B29, D86): ą ć ę ł ń ó ś ź ż – and € on U; with Shift the
+ * capitals (Ą … Ż). A global shortcut there would take the letter from every program, so it is never set; with the
+ * Windows key it is free.
+ */
+export const ALTGR_CHARS: Readonly<Record<string, string>> = { A: 'ą', C: 'ć', E: 'ę', L: 'ł', N: 'ń', O: 'ó', S: 'ś', U: '€', X: 'ź', Z: 'ż' }
+
+const CTRL_NAMES = new Set(['control', 'ctrl', 'commandorcontrol', 'cmdorctrl'])
+
+/** The AltGr character a global shortcut would take ('ś' for Ctrl+Alt+S, 'Ś' with Shift); null = no conflict. */
+export function altGrConflict(accelerator: string): string | null {
+  const parts = accelerator.split('+').map((p) => p.trim().toLowerCase())
+  const key = (parts.pop() ?? '').toUpperCase()
+  const mods = new Set(parts.map((m) => (CTRL_NAMES.has(m) ? 'control' : m === 'option' ? 'alt' : m)))
+  const altGr = mods.has('altgr') || (mods.has('control') && mods.has('alt'))
+  const free = mods.has('super') || mods.has('meta') || mods.has('command') || mods.has('cmd')
+  const char = altGr && !free ? (ALTGR_CHARS[key] ?? null) : null
+  return char && mods.has('shift') ? char.toUpperCase() : char
+}
+
 export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   quickShortcut: DEFAULT_QUICK_SHORTCUT,
   hideAmounts: false,
@@ -84,7 +104,8 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
   const d = DEFAULT_MACHINE_PREFS
   const volume = typeof s.volume === 'number' && Number.isFinite(s.volume) ? Math.min(1, Math.max(0, s.volume)) : d.sounds.volume
   return {
-    quickShortcut: typeof r.quickShortcut === 'string' && r.quickShortcut.length <= 60 ? r.quickShortcut : d.quickShortcut,
+    // One that takes a Polish letter (set before 1.5.3, a hand-edited file) gives way to the default (B29).
+    quickShortcut: typeof r.quickShortcut === 'string' && r.quickShortcut.length <= 60 && !altGrConflict(r.quickShortcut) ? r.quickShortcut : d.quickShortcut,
     hideAmounts: bool(r.hideAmounts, d.hideAmounts),
     notify: {
       briefing: bool(n.briefing, d.notify.briefing),

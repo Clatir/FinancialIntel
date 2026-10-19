@@ -5,7 +5,7 @@
 import { monthlySchedule, type LoanState } from '@shared/calc/loans'
 import { newId } from '@shared/ids'
 import { containerSchema, loanSchema, SCHEMA_VERSION, transactionSchema, type Loan, type Transaction } from '@shared/schema'
-import { addRecord, deleteRecord, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, deleteRecord, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
@@ -90,6 +90,7 @@ export function addLoan(o: NewLoan): Loan {
 
 /** A repayment from the borrower (given) or an own installment (taken – paid as the cargo's container). */
 export function recordPayment(s: LoanState, amount: number, date: string): Transaction | null {
+  if (!canWrite()) return null
   const fi = useData.getState()
   const loan = s.loan
   const container = Object.values(fi.records.containers)
@@ -119,6 +120,7 @@ export function recordPayment(s: LoanState, amount: number, date: string): Trans
 
 /** A loan without operations (a mistake): deleted with its container, „Cofnij” brings both back. */
 export async function deleteLoan(loan: Loan): Promise<void> {
+  if (!canWrite()) return
   const s = useData.getState()
   const containers = Object.values(s.records.containers)
     .map((e) => e.record)

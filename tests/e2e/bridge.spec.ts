@@ -145,6 +145,20 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     await expect(win.getByTestId('state-shields')).not.toContainText('•••')
     await win.getByText('Masa ładunku').click()
     await expect(page.getByTestId('page-cargo')).toBeVisible()
+    // Off the bridge (B27): the window keeps following the budget – a purchase made now shows in it – and the next
+    // click leads the main window again.
+    const energy = await win.getByTestId('state-energy').textContent()
+    quick = await quickWindow(app, page)
+    await quick.getByTestId('quick-amount').fill('70')
+    await quick.getByTestId('quick-counterparty').fill('Biedronka')
+    await expect(quick.getByTestId('quick-category')).toHaveValue(GROCERIES)
+    await quick.getByTestId('quick-save').click()
+    await expect.poll(async () => (await operations(dir)).some((t) => t.amount === -7000)).toBe(true)
+    await expect(win.getByTestId('state-energy')).not.toHaveText(energy ?? '')
+    await page.keyboard.press('Control+2')
+    await expect(page.getByTestId('page-operations')).toBeVisible()
+    await win.getByText('Masa ładunku').click()
+    await expect(page.getByTestId('page-cargo')).toBeVisible()
     await Promise.all([win.waitForEvent('close'), win.getByTestId('detached-attach').click().catch(() => undefined)])
 
     // Settings: the notifications of this computer, the orders of the folder.

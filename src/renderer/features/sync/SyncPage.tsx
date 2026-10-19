@@ -1,16 +1,16 @@
 // adapted from ICTTJ src/renderer/features/sync/SyncPage.tsx @ 84a8339
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSelection, type Selection } from '../../lib/selection'
-import type { ConflictEntry, HistoryEntry } from '@shared/api'
+import type { ConflictEntry, HistoryEntry, HistoryKind } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import { newerSide, newestResolutions } from '@shared/conflicts'
-import { isAmountKey } from '@shared/merge'
+import { chooser, deepEqual, fieldLabel, formatValue, isAmountKey, isAmountPath, merge3, pathKey, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText } from '../../components/fields'
 import { recordTitle } from '../../lib/recordTitle'
 import { HistoryButton } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
 import { api, errorMessage } from '../../lib/api'
-import { flushSaves, useData } from '../../store/data'
+import { flushSaves, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
 import { Badge, Panel, cx } from '../../components/ui'
@@ -45,8 +45,119 @@ function flatten(value: unknown, prefix = '', out: Record<string, string> = {}):
   return out
 }
 
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+
+/**
+ * The base of a conflict's merge (N17): the newest version in the history saved before either side's change (its
+ * `updatedAt` not later than both); none = every difference is a question.
+ */
+async function mergeBase(c: ConflictEntry): Promise<unknown> {
+  const id = (c.canonical.record as { id?: string } | null)?.id
+  const limit = [c.canonical.updatedAt, c.copy.updatedAt]
+  if (!id || limit.some((t) => !t)) return undefined
+  const until = limit.sort()[0]!
+  try {
+    const entry = (await api.historyList(c.kind as HistoryKind, id)).filter((e) => e.updatedAt && e.updatedAt <= until).sort((a, b) => b.updatedAt!.localeCompare(a.updatedAt!))[0]
+    return entry ? await api.historyRead(c.kind as HistoryKind, id, entry.file) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const shownValue = (path: readonly string[], v: unknown) => (typeof v === 'number' && isAmountPath([...path]) ? `${plnText(v)} zł` : formatValue(v))
+
+/**
+ * „Scal” (N17): the two versions joined field by field – every field that differs is a choice, never taken silently: a
+ * version of the history found as the base may be one side's own earlier edit, not what both started from. The base
+ * only proposes the side that changed the field; changed on both (or no base) – the newer side.
+ */
+function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClose: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
+  const [state, setState] = useState<{ fields: MergeConflict[]; choices: Record<string, Side> } | null>(null)
+  const readOnly = useFolderLocked()
+  // Every change of the folder brings new conflict objects: only other versions of the two files start it again.
+  const seen = useRef(c)
+  seen.current = c
+  const versions = `${c.id}|${c.canonical.mtimeMs}|${c.copy.mtimeMs}`
+  useEffect(() => {
+    let alive = true
+    const now = seen.current
+    void mergeBase(now).then((base) => {
+      if (!alive) return
+      const fields = merge3(undefined, now.canonical.record, now.copy.record).conflicts
+      const newer: Side = newerSide(now) === 'copy' ? 'theirs' : 'mine'
+      const proposed = (f: MergeConflict): Side => {
+        if (base === undefined) return newer
+        const b = valueAt(base, f.path)
+        const mineChanged = !deepEqual(b, f.mine)
+        const theirsChanged = !deepEqual(b, f.theirs)
+        return mineChanged === theirsChanged ? newer : mineChanged ? 'mine' : 'theirs'
+      }
+      setState({ fields, choices: Object.fromEntries(fields.map((f) => [pathKey(f.path), proposed(f)])) })
+    })
+    return () => {
+      alive = false
+    }
+  }, [versions])
+  if (!state) return <div className="mt-2 text-[11.5px] text-muted">Szukam wspólnej wersji w historii…</div>
+  const save = async () => {
+    setBusy(true)
+    try {
+      if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.')
+      const now = seen.current
+      const { merged } = merge3(undefined, now.canonical.record, now.copy.record, chooser(state.choices))
+      // The versions the choices were made on: a side changed meanwhile (a save just now, OneDrive) refuses the merge.
+      await api.mergeConflict(now.id, merged, { canonical: now.canonical.mtimeMs, copy: now.copy.mtimeMs })
+      toast('Scalono obie wersje – każda z nich jest w historii wpisu.', 'success')
+      onClose()
+    } catch (e) {
+      toast(errorMessage(e), 'error', 6000)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1.5 border border-accent/40 p-2" data-testid="conflict-merge">
+      <div className="text-[11.5px] text-muted">
+        Pola, którymi wersje się różnią – przy każdym wybierz wersję. Zaznaczona jest ta, która pole zmieniła (według historii wpisu), a przy zmianie po obu
+        stronach – nowsza.
+      </div>
+      {state.fields.length === 0 && <div className="text-[12px] text-fg" data-testid="conflict-merge-clean">Wersje mają tę samą treść.</div>}
+      {state.fields.map((x) => {
+        const key = pathKey(x.path)
+        const pick = (side: Side) => setState((s) => (s ? { ...s, choices: { ...s.choices, [key]: side } } : s))
+        return (
+          <div key={key} className="grid grid-cols-[180px_1fr_1fr] items-baseline gap-2 text-[11.5px]" data-testid="conflict-merge-field" data-path={key}>
+            <span className="truncate text-muted" title={key}>
+              {fieldLabel(x.path)}
+            </span>
+            {(['mine', 'theirs'] as const).map((side) => (
+              <label key={side} className="flex min-w-0 items-baseline gap-1.5">
+                <input type="radio" checked={state.choices[key] === side} onChange={() => pick(side)} data-testid={`conflict-merge-${side === 'mine' ? 'canonical' : 'copy'}`} />
+                <span className="truncate">
+                  <span className="text-dim">{side === 'mine' ? 'oryginał: ' : 'kopia: '}</span>
+                  {shownValue(x.path, side === 'mine' ? x.mine : x.theirs)}
+                </span>
+              </label>
+            ))}
+          </div>
+        )
+      })}
+      <div className="flex gap-2">
+        <button className="btn btn-accent h-[24px]" disabled={busy || readOnly} onClick={() => void save()} data-testid="conflict-merge-save">
+          Zapisz scalone
+        </button>
+        <button className="btn h-[24px]" onClick={onClose}>
+          Anuluj
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEntry; selected: boolean; onSelect: (v: boolean) => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const newer = newerSide(c)
+  const readOnly = useFolderLocked()
+  const [merging, setMerging] = useState(false)
   const a = flatten(c.canonical.record ?? {})
   const b = flatten(c.copy.record ?? {})
   // An amount in grosze (B7): in złoty, hidden with the amounts (Ctrl+$).
@@ -83,7 +194,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         {s.mtimeMs ? ` · plik: ${new Date(s.mtimeMs).toLocaleString('pl-PL')}` : ''}
       </div>
       {s.error && <div className="text-[11.5px] text-down">{s.error}</div>}
-      <button className="btn self-start" disabled={busy || !s.record} title={!s.record ? 'Tej wersji nie da się odczytać – zachowaj drugą.' : undefined} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
+      <button className="btn self-start" disabled={busy || readOnly || !s.record} title={!s.record ? 'Tej wersji nie da się odczytać – zachowaj drugą.' : undefined} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
         Zachowaj tę wersję
       </button>
     </div>
@@ -99,11 +210,19 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         </span>
       }
       actions={
-        <button className="btn btn-ghost h-[22px] px-1.5" title="Pokaż w folderze" onClick={() => api.showInFolder(c.copy.relPath)}>
-          <IconFolder size={13} />
-        </button>
+        <>
+          {c.canonical.record != null && c.copy.record != null && (
+            <button className="btn h-[22px]" disabled={busy || readOnly} onClick={() => setMerging((m) => !m)} title="Połącz obie wersje pole po polu" data-testid="conflict-merge-open">
+              Scal…
+            </button>
+          )}
+          <button className="btn btn-ghost h-[22px] px-1.5" title="Pokaż w folderze" onClick={() => api.showInFolder(c.copy.relPath)}>
+            <IconFolder size={13} />
+          </button>
+        </>
       }
     >
+      {merging && <ConflictMerge c={c} onClose={() => setMerging(false)} busy={busy} setBusy={setBusy} />}
       <div className="grid grid-cols-2 gap-4">
         {side('Oryginał', c.canonical, 'canonical')}
         {side('Kopia', c.copy, 'copy')}
@@ -146,7 +265,7 @@ function DeletedRecords() {
   const [busy, setBusy] = useState(false)
   // A search over the titles and who deleted them.
   const [query, setQuery] = useState('')
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const parts = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = items?.filter((d) => {
     if (!parts.length) return true
@@ -216,6 +335,7 @@ function DeletedRecords() {
  */
 function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictEntry[]; sel: Selection; busy: boolean; setBusy: (b: boolean) => void }) {
   const chosen = conflicts.filter((c) => sel.selected.has(c.id))
+  const readOnly = useFolderLocked()
   const run = async (ids: string[]) => {
     setBusy(true)
     const plan = newestResolutions(conflicts, ids)
@@ -257,10 +377,10 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
       </label>
       <span className="text-[11.5px] text-dim">„Zachowaj nowsze” bierze wersję zmienioną później (czas zapisu w pliku, inaczej czas pliku).</span>
       <div className="flex-1" />
-      <button className="btn" disabled={busy || chosen.length === 0} onClick={() => void run(chosen.map((c) => c.id))} data-testid="conflicts-newer-selected">
+      <button className="btn" disabled={busy || readOnly || chosen.length === 0} onClick={() => void run(chosen.map((c) => c.id))} data-testid="conflicts-newer-selected">
         Zachowaj nowsze: zaznaczone ({chosen.length})
       </button>
-      <button className="btn" disabled={busy} onClick={() => void run(conflicts.map((c) => c.id))} data-testid="conflicts-newer-all">
+      <button className="btn" disabled={busy || readOnly} onClick={() => void run(conflicts.map((c) => c.id))} data-testid="conflicts-newer-all">
         Zachowaj nowsze: wszystkie ({conflicts.length})
       </button>
     </div>
@@ -274,6 +394,9 @@ export function SyncPage() {
   const [busy, setBusy] = useState(false)
   const problems = useData((s) => s.problems)
   const status = useData((s) => s.status)
+  const locked = useFolderLocked()
+  // The newest record another computer wrote (F21) – none = only this one writes here.
+  const lastRemote = useData((s) => s.lastRemote)
   const fi = useData((s) => s.fi)
   return (
     <div className="h-full overflow-y-auto p-3">
@@ -288,13 +411,19 @@ export function SyncPage() {
           Gdy ten sam plik zmieni się na dwóch komputerach, usługa synchronizacji (OneDrive, Dropbox, Google Drive) tworzy jego kopię zamiast
           nadpisywać. Aplikacja pokazuje takie kopie tutaj – wybierz, którą wersję zachować; druga trafia do historii wpisu (widać ją na każdym komputerze) i do Kosza.
         </p>
-        {status && status.otherMachines.length > 0 && (
+        {((status && status.otherMachines.length > 0) || lastRemote) && (
           <Panel title="Inne komputery">
-            {status.otherMachines.map((m) => (
-              <div key={m.machine} className="num text-[12px]">
-                {m.machine} – ostatnia aktywność {new Date(m.lastSeen).toLocaleTimeString('pl-PL')}
+            {status?.otherMachines.map((m) => (
+              <div key={m.machine} className="num text-[12px]" data-testid="sync-machine" data-in-use={m.inUse !== false ? 'yes' : 'no'}>
+                {m.machine} – {m.inUse !== false ? 'w użyciu' : 'w zasobniku'}, sygnał {clock(m.lastSeen)}
+                {m.activeAt ? `, ostatni ruch w oknie ${clock(m.activeAt)}` : ''}
               </div>
             ))}
+            {lastRemote && (
+              <div className="text-[12px] text-muted" data-testid="sync-last-remote">
+                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {new Date(lastRemote.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+              </div>
+            )}
           </Panel>
         )}
         <DeletedRecords />
@@ -336,6 +465,7 @@ export function SyncPage() {
                   </button>
                   <button
                     className="btn h-[22px] hover:text-down"
+                    disabled={locked}
                     onClick={() => api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))}
                   >
                     <IconTrash size={12} /> Do Kosza

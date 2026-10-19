@@ -3,7 +3,7 @@ import { SOUND_KINDS, SOUND_LABEL, shortcutLabel, type NotifyPrefs } from '@shar
 import type { Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { playSound } from '../../lib/sounds'
-import { updateSettings, useData } from '../../store/data'
+import { updateSettings, useData, useFolderLocked } from '../../store/data'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { AmountField, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
@@ -12,7 +12,7 @@ import { Field, NumberField, Panel, Toggle } from '../../components/ui'
 /** Ustawienia → Warstwy i rozkazy (fi.json – the same on every computer): the layers' targets and the orders. */
 export function LayersTab() {
   const fi = useData((s) => s.fi)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   if (!fi) return null
   const { layers, orders } = fi.settings
   const setLayers = (p: Partial<typeof layers>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, layers: { ...f.settings.layers, ...p } } }))
@@ -106,7 +106,7 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
 /** Ustawienia → Powiadomienia i dźwięki (config.json – this computer only): the quick entry's shortcut too. */
 export function NotifyTab() {
   const prefs = useMachine((s) => s.prefs)
-  const [state, setState] = useState<{ accelerator: string; registered: boolean } | null>(null)
+  const [state, setState] = useState<{ accelerator: string; registered: boolean; replaced: string | null } | null>(null)
   useEffect(() => {
     let alive = true
     void api.quickShortcutState().then((s) => alive && setState(s), () => undefined)

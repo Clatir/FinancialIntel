@@ -11,6 +11,7 @@ import { NameInput, Panel, Toggle, cx } from '../../components/ui'
 import { confirmBalance, setOpening } from '../balances/actions'
 import { toast } from '../../store/ui'
 import { useAccounts } from '../operations/pickers'
+import { HistoryButton } from '../history/HistoryDialog'
 
 const KIND_LABEL: Record<AccountKind, string> = { bank: 'konto bankowe', wallet: 'portfel z kartą', cash: 'gotówka', other: 'inne' }
 
@@ -121,6 +122,7 @@ function AccountRow({ account: a, opening, confirmed, balance, taken }: { accoun
           data-testid="account-opening-date"
         />
         <span className="text-dim">– operacje od tego dnia są doliczane</span>
+        {opening && <HistoryButton kind="balances" id={opening.id} current={opening} variant="link" />}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
         <span>Saldo w banku teraz</span>

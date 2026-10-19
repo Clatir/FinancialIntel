@@ -1226,3 +1226,66 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   (`shell.trashItem`) tylko wtedy, gdy historia go nie przyjęła. Paczka importu odrzucana bez historii (`drop`) – od razu.
   Kosz Windows to ułamek sekundy na plik: „Cofnij import” setek operacji trwało minuty, a test E2E na Windows przekraczał
   limit. Kopie konfliktów i pliki z problemami – nadal do Kosza.
+
+### 1.5.3 – system, folder i dwa komputery (grupa J, 19.10.2026)
+
+- **T190** Skrót szybkiego wpisu a AltGr (B29, D86): `altGrConflict` – Ctrl+Alt (albo AltGr) + A, C, E, L, N, O, S, U,
+  X, Z to w polskim układzie programisty znak (ą ć ę ł ń ó ś € ź ż), z Shift – wielka litera; wolny tylko z klawiszem
+  Windows albo inną literą / cyfrą. U (€) dopisane do listy z D86. `machinePrefsFrom` zamienia taki skrót na domyślny,
+  proces główny zapisuje zamieniony przy starcie i loguje, okno mówi o tym raz (`noticeReplacedShortcut`); pole skrótu
+  go nie przyjmuje (komunikat, słucha dalej).
+- **T191** Uruchamianie z systemem (B52): wpis w kluczu Run o stałej nazwie `loginItemName` („Financial Intel” albo
+  „Financial Intel (portable)”); przy każdym zapisie usuwane są wpisy tego samego pliku exe o innej nazwie (dawne nazwy
+  od tymczasowego folderu portable); `second-instance` z `--hidden` nie pokazuje okna. Stały AUMID wersji portable – nie
+  teraz (wymaga sprawdzenia powiadomień na Windows bez skrótu w Menu Start).
+- **T192** Ekran wyboru folderu (B53): wynik otwarcia niesie przyczynę (`problem`: missing / unavailable / empty / other
+  / partial / ictj), `remembered`, `subfolder`; `inspect` zwraca 'missing' tylko przy ENOENT, inne błędy = 'unavailable';
+  zapamiętany folder (bieżący albo z ostatnich) pusty albo niedostępny dostaje nowe dane tylko z `force` (dwa kroki
+  „Zacznij od nowa” na ekranie wyboru, „Utwórz tu nowe dane” w Ustawieniach); `FI_DATA_DIR` testów zawsze z `force`.
+- **T193** Okno poza ekranem (B54): `windowBounds(saved, workAreas, primary)` – zapamiętane położenie zostaje, gdy pasek
+  tytułu (co najmniej 100 × 32 px) jest na którymś ekranie; inaczej okno wyśrodkowane i nie większe niż ekran główny.
+- **T194** Folder tylko do odczytu (N2): `addRecord` / `addRecords` / `replaceRecords` / `updateRecord` / `updateSettings`
+  zwracają, czy zmiana weszła; akcje z komunikatem sukcesu i „Cofnij” – tylko po wejściu (`canWrite()`, komunikat
+  `READ_ONLY_MESSAGE` najwyżej raz na 4 s, zapisy w tle bez komunikatu); `useFolderLocked` (tylko do odczytu albo zmiana
+  folderu) wyłącza pola i przyciski (fieldset, `AmountField disabled`); historia wpisu do obejrzenia (przycisk poza
+  wyłączanym fieldsetem), odznaczanie w Operacjach dostępne.
+- **T195** Scalanie kopii konfliktu (N17): `DataStore.mergeConflict(id, merged, asOf)` – wynik pod id oryginału (plan
+  miesiąca – id zachowanego), obie strony do historii z powodem 'merge', kopia do Kosza; odmowa, gdy czas pliku którejś
+  strony różni się od tego, z którego zrobiono scalenie (zapis tego wpisu, OneDrive w trakcie). W oknie każde pole, którym
+  wersje się różnią, jest wyborem (`merge3` bez bazy): wersja z historii nie późniejsza niż obie strony (`mergeBase`) może
+  być wcześniejszą edycją jednej strony, więc tylko podpowiada stronę, która pole zmieniła (`valueAt`); przy zmianie po
+  obu stronach albo bez bazy – nowsza strona. Wybory zostają przy odświeżeniach folderu (od nowa tylko przy innych
+  wersjach plików).
+- **T196** Historia każdego wpisu (N18): `HistoryButton` (warianty: przycisk / ikona / link) przy planie miesiąca, celu,
+  pożyczce, saldzie otwarcia, dokowaniu i przy każdym wpisie okna zmian z drugiego komputera. `Modal` przez portal do
+  `document.body` i stos otwartych okien – Esc zamyka tylko wierzchnie, okno z okna przykrywa całe okno aplikacji.
+- **T197** Zmiana folderu z Ustawień (B31, uzupełnia T126): w oknie `switchFolder` – najpierw zapis zmian, potem stan
+  `switching` (zapisy odrzucane jak w folderze tylko do odczytu, szybki wpis odmawia), postęp z „Przerwij”, przyciski
+  folderu wyłączone, na koniec `applySnapshot`. W procesie głównym każde otwarcie ma numer (`snapshot.generation`); okno
+  potwierdza pokazany folder (`folderShown`) i dopiero wtedy zapisy są przyjmowane (`writableStore`); zmiany z folderu,
+  który nie jest już otwarty, nie idą do okna (`sendFrom`, także odświeżenie kończące się po zmianie), zmiany nowego
+  folderu sprzed potwierdzenia czekają (`unshown`) i idą po nim; błąd zapamiętania folderu po otwarciu nie jest porażką
+  otwarcia.
+- **T198** Komputer w użyciu (N20, F21, D86): proces główny liczy ruch w oknach – każde okno zgłasza wskaźnik, klawisz,
+  kółko (najwyżej co 30 s, `reportActivity`), do tego fokus i pokazanie okna; w użyciu 10 min po ostatnim ruchu
+  (`IN_USE_MS`), koniec mówiony oknu dokładnie wtedy (`fi:inUse`). Plik obecności z `activeAt`: w użyciu co minutę, w
+  zasobniku co 5 min, od razu, gdy komputer znowu jest w użyciu; inne komputery widoczne do 11 min po ostatnim sygnale
+  (zegar innego komputera do 5 min do przodu – też), plik bez `activeAt` (wersja sprzed 1.5.3) = w użyciu, gdy sygnał
+  młodszy niż 3 min (jak dotąd). Zapisy w tle (gra, cele z ICTTJ, salda domowników na start) – tylko w użyciu.
+  Powiadomienia: komputer nie w użyciu, gdy inny jest w użyciu, zapisuje je jako pokazane, nie pokazując (okno pokazane
+  albo dotknięte w tej chwili = w użyciu); żaden w użyciu – każdy. Baner tylko dla komputerów w użyciu; Synchronizacja –
+  stan innych i ostatnia zmiana z innego komputera (`lastRemote`: najnowszy `updatedAt` z `updatedBy` innym niż ten
+  komputer, liczony przy otwarciu i z każdej zmiany).
+- **T199** Pierwsze zamrożenie dni gry po otwarciu folderu (B33, uzupełnia T76): czeka 3 min od otwarcia w oknie
+  (`openedAt`) i minutę od ostatniej zmiany rekordów z zewnątrz (`externalAt`, zmiana samej obecności się nie liczy);
+  przy kopii konfliktu w kolekcji `game` – nie zamraża. Testy skracają czasy (`FI_FREEZE_AFTER_OPEN_MS`,
+  `FI_FREEZE_QUIET_MS` → `AppInfo.freeze`).
+- **T200** Odłączone panele Mostka (B27): dane i kliknięcia okien `bridge:*` obsługuje `BridgeDetachHost` w oknie głównym
+  (obok `TrayStatus`, niezależnie od ekranu – `useHostedDetach`); panele na Mostku z `hosted: true` tylko otwierają,
+  zamykają i przywołują okna.
+- **T201** Przegląd grupy J (`/code-review` high, 9 kandydatów – wszystkie poprawione z testami): odświeżenie folderu
+  kończące się po zmianie folderu nie trafia do okna; Shift przy Ctrl+Alt+litera to wielka polska litera – też nie do
+  ustawienia; „Scal…” bez cichego przejmowania pól, wybory nie giną przy odświeżeniu, scalenie nieaktualnych wersji
+  odrzucane; nowe dane w zapamiętanym pustym folderze z Ustawień – na wyraźne „Utwórz tu nowe dane”; słowo kluczowe nie
+  melduje zapisu w trakcie zmiany folderu; „Odznacz” w folderze tylko do odczytu; ostatnia zmiana z innego komputera
+  liczona przyrostowo zamiast przeglądania wszystkich wpisów.

@@ -9,10 +9,11 @@ import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
-import { updateSettings, useData } from '../../store/data'
+import { canWrite, updateSettings, useData } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
 import { toast } from '../../store/ui'
+import { usePresence } from '../../store/presence'
 
 const NO_MEMBERS: HouseholdMember[] = []
 
@@ -40,7 +41,7 @@ function freeName(name: string): string {
 
 /** A member from a counterparty of the import (D80 a): the bank's name is theirs; the id, or null (read-only folder). */
 export function addMemberFromBank(bankName: string): string | null {
-  if (useData.getState().status?.readOnly) return null
+  if (!canWrite()) return null
   const id = newId()
   const name = freeName(nameOf(bankName))
   patchMembers((ms) => [...ms, { id, name, bankNames: [bankName.trim().slice(0, 120)], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
@@ -49,7 +50,7 @@ export function addMemberFromBank(bankName: string): string | null {
 }
 
 export function addMember(name: string): string | null {
-  if (useData.getState().status?.readOnly || !name.trim()) return null
+  if (!name.trim() || !canWrite()) return null
   const id = newId()
   patchMembers((ms) => [...ms, { id, name: freeName(name.trim().slice(0, 40)), bankNames: [], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
   return id
@@ -87,7 +88,7 @@ export function rememberInflows(incomes: ReadonlyArray<Pick<Transaction, 'kind' 
  */
 export function setHouseholdSince(since: string | null): void {
   const state = useData.getState()
-  if (state.status?.readOnly || !state.fi) return
+  if (state.status?.readOnly || state.switching || !state.fi) return
   const today = warsawNow().date
   if (since && since > today) {
     toast('Rozliczenia nie mogą zaczynać się w przyszłości.', 'error')
@@ -135,8 +136,13 @@ export function seedSince(transactions: readonly Pick<Transaction, 'date' | 'ban
  * start and added later counts after them).
  */
 export function useHouseholdSinceSeed(): void {
-  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since === undefined)
-  const unstamped = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined)
+  // A computer only in the tray writes nothing in the background (D86).
+  const inUse = usePresence((s) => s.inUse)
+  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since === undefined) && inUse
+  const unstamped =
+    useData(
+      (s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined
+    ) && inUse
   useEffect(() => {
     if (!unset) return
     const input = fleetInputNow()

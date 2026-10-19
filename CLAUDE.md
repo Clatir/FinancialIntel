@@ -552,6 +552,37 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/numbers-agree.test.ts`, poszerzone `income`, `plan`, `game`; E2E `tests/e2e/numbers.spec.ts` (cisza
   nocna, archiwizacja kategorii, usunięty kontener, dokowanie innej kwoty), `month.spec.ts` (kreator z celami).
 
+## Kod (1.5.3 – system, folder i dwa komputery, grupa J, D86)
+- System (B29, B52–B54, T190–T193): `shared/machine.ts` `ALTGR_CHARS` / `altGrConflict` (Ctrl+Alt+litera polskiego znaku,
+  także z Shift – nie do ustawienia; `machinePrefsFrom` zamienia na domyślny, `config.ts` `replacedShortcut`, `quick.ts`
+  `replaced`, okno `noticeReplacedShortcut`, `ShortcutField` `shortcutProblem`); `main/tray.ts` `loginItemName` (stała
+  nazwa wpisu Run, stare wpisy tego exe usuwane), `second-instance` z `--hidden` bez okna; `shared/bounds.ts`
+  `windowBounds`; ekran wyboru folderu po przyczynie (`OpenFolderResult.problem` / `remembered` / `subfolder`,
+  `openDataDir(dir, create, force)`, `inspect` 'unavailable', `rememberedDir`; przyciski `retry-folder`, `create-here`,
+  `create-subfolder`, `start-over` / `start-over-confirm`), w Ustawieniach akcje w komunikacie („Utwórz tu nowe dane”,
+  „Utwórz podfolder FinancialIntel”).
+- Folder (B31, N2, N17, N18, T194–T197): `store/data.ts` – `canWrite` / `READ_ONLY_MESSAGE` / `SWITCHING_MESSAGE`, zapisy
+  zwracają boolean, `useFolderLocked` (tylko do odczytu albo `switching`), `switchFolder` (zapis zmian → `switching` →
+  otwarcie → `applySnapshot`), Ustawienia → Folder: postęp z „Przerwij” (`OpenProgressPanel`), `recent-folder-open`;
+  main – `snapshot.generation` / `folderShown` / `writableStore` / `sendFrom` / `unshown`; `DataStore.mergeConflict(id,
+  merged, asOf)` (obie strony do historii 'merge', odmowa przy innych czasach plików), Synchronizacja `ConflictMerge`
+  (`conflict-merge-open`, `conflict-merge`, `-field`, `-canonical` / `-copy`, `-save`; każde różniące się pole wyborem,
+  podpowiedź z `mergeBase` + `valueAt`); `HistoryButton` (`variant` button / icon / link) przy planie, celu, pożyczce,
+  saldzie otwarcia, dokowaniu, w oknie zmian; `Modal` przez portal ze stosem (Esc – wierzchnie okno); edytor operacji –
+  historia poza wyłączanym fieldsetem; `AmountField disabled`.
+- Dwa komputery (N20, F21, B33, B27, T198–T200): `main/datastore/presence.ts` (`IN_USE_MS`, `PRESENCE_WINDOW_MS` 11 min,
+  `MachinePresence` z `activeAt` / `inUse`), main `noteActivity` / `inUseNow` / `tellInUse` (`fi:inUse`), heartbeat co
+  minutę w użyciu, co 5 min w zasobniku; okno `store/presence.ts` (`usePresence`, `initPresence`,
+  `installActivityReport` w każdym oknie – `main.tsx`); zapisy w tle (`useGameAdvance`, `useIctjGoalSync`,
+  `useHouseholdSinceSeed`) tylko w użyciu; `store/notifier.ts` – powiadomienia komputera w użyciu; baner `banner-other`
+  tylko dla komputerów w użyciu, Synchronizacja `sync-machine` (`data-in-use`), `sync-last-remote` (`lastRemote` w
+  magazynie okna), Ustawienia `settings-other-machines`; `useFreezeSettled` (`openedAt`, `externalAt`, `AppInfo.freeze` –
+  zmienne testowe `FI_FREEZE_AFTER_OPEN_MS`, `FI_FREEZE_QUIET_MS`, w `launch()` 0); `store/detach.ts` `hosted` /
+  `useHostedDetach`, Mostek `BridgeDetachHost` w `App`.
+- Testy: `tests/unit/system.test.ts`, `merge.test.ts` (`valueAt`), `tests/fs/datastore-robust.test.ts` (scalanie), E2E
+  `tests/e2e/system.spec.ts`, `folder.spec.ts`, `presence.spec.ts` (`launch({hidden})` – start w zasobniku),
+  `bridge.spec.ts` (okno odłączone poza Mostkiem), `numbers.spec.ts` (historia dokowania, Esc).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -629,4 +660,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.5.2 Liczby się zgadzają (grupa I, D85 / D86): średnie od historii z banku, miesiąc na plus z energii, łupy w
   dziennym przydziale, koperta zarchiwizowanej kategorii, usunięty kontener, pożyczka bez Radaru, podział dokowania po
   zmianie kwoty, kreator z celami i ICTTJ, daty bez roku, cisza nocna potwierdzona, potwierdzenia sald per konto
+- [x] 1.5.3 System, folder i dwa komputery (grupa J, D86): komputer „w użyciu” (baner, zapisy w tle i powiadomienia),
+  pierwsze zamrożenie po otwarciu czeka, zmiana folderu z postępem i blokadą zapisów, tylko do odczytu bez fałszywych
+  sukcesów, „Scal…” kopii konfliktu, historia każdego wpisu, odłączone panele Mostka, skrót AltGr, autostart, okno na
+  ekranie, ekran wyboru folderu po przyczynie
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

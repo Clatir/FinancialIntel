@@ -8,7 +8,7 @@ import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey,
 import { startSplit, startTargets } from '@shared/calc/start'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { setIctjDir, useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
@@ -39,7 +39,7 @@ export function WizardPage() {
   const w = useWizard()
   const fi = useData((s) => s.fi)
   const started = useData((s) => s.fi?.settings.budget.start ?? null)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const transactions = useRecordList('transactions')
   const containers = useRecordList('containers')
   const accounts = useAccounts().filter((a) => !a.archived)
@@ -431,7 +431,7 @@ function FinishButton({ disabled, onFinish }: { disabled: boolean; onFinish: () 
  */
 function IctjGoalsStep({ goals }: { goals: Goal[] }) {
   const snap = useIctj((s) => s.snap)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const [suggested, setSuggested] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [target, setTarget] = useState<number | null>(null)

@@ -2,7 +2,7 @@
 import { byPriority, changeGoal, renumber, transferGoal } from '@shared/calc/goals'
 import { newId } from '@shared/ids'
 import { goalSchema, SCHEMA_VERSION, type Goal } from '@shared/schema'
-import { addRecord, replaceRecords, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, replaceRecords, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
 const goalsNow = (): Goal[] => Object.values(useData.getState().records.goals).map((e) => e.record)
@@ -41,6 +41,7 @@ export type GoalMoneyTarget = 'shields' | string
  * the shields or another goal (`to` – `amount`, what it holds now, C2); „Cofnij” brings the record back as it was.
  */
 export function archiveGoal(g: Goal, archived: boolean, to: { to: GoalMoneyTarget; amount: number } | null = null): void {
+  if (!canWrite()) return
   const before = useData.getState().records.goals[g.id]?.record ?? g
   const now = new Date().toISOString()
   updateRecord('goals', g.id, (r) => {
@@ -55,7 +56,7 @@ export function archiveGoal(g: Goal, archived: boolean, to: { to: GoalMoneyTarge
 
 /** The money of a goal (an archived one – B30) moved out now: `amount` (what it holds) to the shields or another goal. */
 export function moveGoalMoney(g: Goal, to: GoalMoneyTarget, amount: number): void {
-  if (amount <= 0) return
+  if (amount <= 0 || !canWrite()) return
   const before = useData.getState().records.goals[g.id]?.record ?? g
   const now = new Date().toISOString()
   updateRecord('goals', g.id, (r) => transferGoal(r, to, amount, now))

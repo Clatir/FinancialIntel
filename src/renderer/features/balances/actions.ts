@@ -1,7 +1,7 @@
 import { openingOf, planConfirmation, type ConfirmationPlan } from '@shared/calc/balances'
 import { newId } from '@shared/ids'
 import { balanceSchema, SCHEMA_VERSION, transactionSchema, type Balance, type Transaction } from '@shared/schema'
-import { addRecord, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, updateRecord, useData } from '../../store/data'
 import { plnText } from '../../components/fields'
 import { toast } from '../../store/ui'
 
@@ -25,7 +25,9 @@ export function setOpening(accountId: string, amount: number, date: string): voi
  * Confirm the bank's balance at the end of `date`: without an opening it sets one; a difference adds a correction
  * (kind 'correction', to explain) and both are kept as a confirmation record.
  */
-export function confirmBalance(accountId: string, amount: number, date: string, accountName: string): ConfirmationPlan {
+export function confirmBalance(accountId: string, amount: number, date: string, accountName: string): ConfirmationPlan | null {
+  // A read-only folder writes no correction and no confirmation: no „saldo zgodne” either (N2).
+  if (!canWrite()) return null
   const s = useData.getState()
   const plan = planConfirmation(accountId, amount, date, records(s.records.transactions), records(s.records.balances))
   const now = new Date().toISOString()

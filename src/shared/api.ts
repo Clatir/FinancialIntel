@@ -51,7 +51,8 @@ export interface FolderStatus {
   folderSchemaVersion: number
   appSchemaVersion: number
   /** Other machines that used this folder within the last few minutes. */
-  otherMachines: Array<{ machine: string; lastSeen: string }>
+  /** Other computers with the folder open; `inUse` = a move in a window within 10 min (D86), else only in the tray. */
+  otherMachines: Array<{ machine: string; lastSeen: string; activeAt?: string | null; inUse?: boolean }>
   migratedFrom: number | null
   backupPath: string | null
 }
@@ -66,6 +67,8 @@ export interface Snapshot {
   conflicts: ConflictEntry[]
   status: FolderStatus
   loadMs: number
+  /** Which folder open this is (B31): the window says it shows it, and only then are its writes taken. */
+  generation?: number
 }
 
 export interface ChangeSet {
@@ -153,11 +156,33 @@ export interface AppInfo {
   platform: string
   userDataDir: string
   isPortable: boolean
+  /**
+   * The first freeze of the game's days after a folder opened waits this long, and for this long without a change
+   * from another computer (B33); test runs shorten them.
+   */
+  freeze: { afterOpenMs: number; quietMs: number }
 }
+
+/**
+ * Why a folder is not data to open (B53) – the setup screen picks its buttons by it, never by the message: missing (no
+ * such folder), unavailable (it cannot be read now), empty, other (other files), partial (FI's folders without fi.json –
+ * OneDrive still fetching), ictj (ICT Trade Journal's).
+ */
+export type FolderProblem = 'missing' | 'unavailable' | 'empty' | 'other' | 'partial' | 'ictj'
 
 export type OpenFolderResult =
   | { ok: true; snapshot: Snapshot }
-  | { ok: false; reason: 'cancelled' | 'aborted' | 'not-data' | 'error'; message: string; dir?: string }
+  | {
+      ok: false
+      reason: 'cancelled' | 'aborted' | 'not-data' | 'error'
+      message: string
+      dir?: string
+      problem?: FolderProblem
+      /** The folder is this computer's data folder (now or before): never new data in it without a confirmation. */
+      remembered?: boolean
+      /** A folder of other files: its `FinancialIntel` subfolder for new data. */
+      subfolder?: string
+    }
 
 /** The steps of reading the folder itself (1.4.1). */
 export type LoadStep = 'list' | 'read' | 'migrate' | 'prepare'
@@ -203,7 +228,8 @@ export interface FiApi {
   defaultDataDir(): Promise<{ dir: string; oneDrive: boolean }>
   /** Show a folder picker. mode=create initializes an empty folder as new data. */
   pickDataDir(mode: 'open' | 'create'): Promise<OpenFolderResult>
-  openDataDir(dir: string, createIfEmpty: boolean): Promise<OpenFolderResult>
+  /** `force`: new data also in the remembered folder found empty or missing – the user confirmed it (B53). */
+  openDataDir(dir: string, createIfEmpty: boolean, force?: boolean): Promise<OpenFolderResult>
   /** Stop opening a folder (1.4.1): the open in progress returns `aborted`, nothing in the folder changes. */
   cancelOpen(): Promise<void>
   onOpenProgress(cb: (p: OpenProgress) => void): () => void
@@ -227,7 +253,12 @@ export interface FiApi {
   /** Keep a version that is about to be dropped without being written (e.g. local edits discarded in a merge). */
   historyKeep(kind: HistoryKind, record: unknown, reason: HistoryReason): Promise<void>
   saveSettings(fi: SettingsFile): Promise<SettingsFile>
+  /** The window shows this folder open (B31): main takes its writes from now on. */
+  folderShown(generation: number): Promise<void>
   resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<void>
+  /** The conflict merged field by field (N17): both versions to the history, the merged one at the original's path. */
+  /** `seen` = the sides' file times the merge was made from (N17): a side changed since refuses it. */
+  mergeConflict(conflictId: string, merged: unknown, seen?: { canonical: number; copy: number }): Promise<void>
   /**
    * Many conflicts in the order given, one change for the window (W23); a group whose copy could not be kept leaves
    * its other conflicts as they are (`skipped`).
@@ -289,8 +320,14 @@ export interface FiApi {
   /** Preferences of this computer (shortcut, notifications, sounds, hidden amounts): a patch, the result for all windows. */
   setMachinePrefs(patch: Partial<MachinePrefs>): Promise<MachinePrefs>
   onMachinePrefs(cb: (prefs: MachinePrefs) => void): () => void
+  /** A move in a window (D86): sent at most twice a minute by every window. */
+  reportActivity(): Promise<void>
+  /** This computer in use – a move in one of its windows within 10 min (D86); the change comes as `onInUse`. */
+  inUseNow(): Promise<boolean>
+  onInUse(cb: (inUse: boolean) => void): () => void
   /** The quick entry's global shortcut: registered, or taken by another program. */
-  quickShortcutState(): Promise<{ accelerator: string; registered: boolean }>
+  /** `replaced` = the shortcut the start replaced with the default (it took a Polish letter – B29); null = none. */
+  quickShortcutState(): Promise<{ accelerator: string; registered: boolean; replaced: string | null }>
   /** Show the quick entry window (the tray, the palette, the bridge). */
   quickOpen(): Promise<void>
   /** Main window: the quick window wants its data (categories, today's energy…) – answer with `quickData`. */

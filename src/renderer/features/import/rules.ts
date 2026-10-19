@@ -10,7 +10,7 @@ import { memberName } from '@shared/calc/household'
 import { shareOf } from '@shared/calc/share'
 import { membersNow } from '../household/actions'
 import { shareNames } from '../household/ShareEditor'
-import { replaceRecords, updateSettings, useData } from '../../store/data'
+import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, canWrite, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { countLabel } from '../../lib/format'
 
@@ -46,6 +46,7 @@ function financingOf(t: Transaction): Pick<ImportRule, 'refundable' | 'memberId'
 
 /** Remember the category of an operation for its brand (a decision in Operacje teaches the import too). */
 export function rememberCategory(t: Transaction, label: string): void {
+  if (!canWrite()) return
   const { brand } = targetOf(t)
   if (!brand.key || t.kind !== 'expense') return
   const direction = t.amount < 0 ? 'out' : 'in'
@@ -124,6 +125,7 @@ export const choiceOfRule = (r: ImportRule): Choice => ({
  * own from now on (`learned` false), with „Cofnij”.
  */
 export function editRule(id: string, patch: { direction: 'in' | 'out' | null; choice: Choice; maxAmount?: number | null }): void {
+  if (!canWrite()) return
   const rule = useData.getState().fi?.settings.import.rules.find((r) => r.id === id)
   if (!rule) return
   const next: ImportRule = {
@@ -143,6 +145,7 @@ export function editRule(id: string, patch: { direction: 'in' | 'out' | null; ch
  * rule („Orlen do 40 zł → kawa”). With „Cofnij”.
  */
 export function addAmountRule(input: { brand: string; label: string; maxAmount: number; categoryId: string }): void {
+  if (!canWrite()) return
   const rule = importRuleSchema.parse({
     id: newId(),
     match: input.brand,
@@ -165,8 +168,8 @@ export function addAmountRule(input: { brand: string; label: string; maxAmount: 
  * not changed since they were counted; „Cofnij” takes back those still as it left them.
  */
 export function applyRuleToHistory(items: ReadonlyArray<{ before: Transaction; after: Transaction }>, label: string): void {
+  if (!canWrite()) return
   const s = useData.getState()
-  if (s.status?.readOnly) return
   // By content: a save stamps a record in place (a new object, the same operation).
   const now = items.filter(({ before }) => sameContentAs(s.records.transactions[before.id]?.record, before))
   if (!now.length) {
@@ -204,12 +207,16 @@ export function saveKeywordRule(input: {
   share?: Share | null
   counterAccountId?: string | null
 }): string | null {
+  // Said by the caller as an error, like the others (N2): never „zapamiętano” in a read-only folder, nor while another
+  // folder opens (B31).
+  const locked = (): string => (useData.getState().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE)
+  if (useData.getState().status?.readOnly || useData.getState().switching) return locked()
   const match = normalizeKeyword(input.keyword)
   if (match.replace(/[^a-z?]/g, '').length < 3) return 'Słowo kluczowe musi mieć co najmniej 3 litery.'
   if (match.split(' ').every(isGenericWord)) return `„${input.keyword.trim()}” jest za ogólne – bank pisze je przy wielu operacjach. Wybierz słowo, które mówi, co to było.`
   if (input.kind === 'expense' && !input.categoryId) return 'Wybierz kategorię.'
   const now = new Date().toISOString()
-  updateSettings((f) => {
+  const saved = updateSettings((f) => {
     const rules = f.settings.import.rules
     const at = rules.findIndex((r) => r.mode === 'keyword' && r.match === match && r.direction === input.direction)
     const rule: ImportRule = {
@@ -236,7 +243,7 @@ export function saveKeywordRule(input: {
     else next.push(rule)
     return { ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next } } }
   })
-  return null
+  return saved ? null : locked()
 }
 
 // ------------------------------------------------------------------ names merged by the user (1.2.2, D78)
@@ -246,6 +253,8 @@ export function saveKeywordRule(input: {
  * changed (merged already – here or on another computer).
  */
 function changeAliases(fn: (a: BrandAliases) => Record<string, BrandAlias>): (() => void) | null {
+  // A read-only folder: nothing merged, no „Połączono” with „Cofnij” (N2).
+  if (!canWrite()) return null
   const before = aliasesNow()
   const after = fn(before)
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => before[k] !== after[k])

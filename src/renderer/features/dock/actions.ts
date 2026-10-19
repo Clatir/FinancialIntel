@@ -6,7 +6,7 @@ import type { Delivery } from '@shared/calc/dock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { derivedId, newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
-import { addRecord, deleteRecord, updateRecord, updateSettings, useData } from '../../store/data'
+import { addRecord, canWrite, deleteRecord, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
@@ -55,10 +55,7 @@ export function dockingOf(d: Delivery, tx: Transaction, split: SplitDraft | null
 }
 
 export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
-  if (useData.getState().status?.readOnly) {
-    toast('Folder tylko do odczytu – dokowanie niemożliwe.', 'error')
-    return false
-  }
+  if (!canWrite()) return false
   // A docked delivery whose operation is not here (not synced yet, deleted): never a second operation for it.
   if (!d.transaction && d.state === 'docked') {
     toast('Operacji tego dokowania nie ma w folderze (może jeszcze się synchronizuje) – podział zostaje bez zmian.', 'error', 6000)
@@ -98,7 +95,7 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
  * one on Portfel XTB made by the docking (a bank's operation stays – an inflow to dock again). „Cofnij” brings them back.
  */
 export function removeExtraDockings(d: Delivery): void {
-  if (useData.getState().status?.readOnly || !d.extra.length) return
+  if (!d.extra.length || !canWrite()) return
   const ops = d.extra.filter((x) => x.transaction.accountId === XTB_WALLET_ACCOUNT_ID && !x.transaction.bank).map((x) => x.transaction)
   for (const x of d.extra) void deleteRecord('dockings', x.docking.id)
   for (const t of ops) void deleteRecord('transactions', t.id)

@@ -6,15 +6,23 @@ import { openResult, useData } from '../../store/data'
 import { IconFolder, IconPlus } from '../../components/icons'
 import { OpenProgressPanel, openLogs, useOpenProgress } from './OpenProgress'
 
+/** The same folder whatever the case and the trailing separator (Windows paths). */
+const samePath = (a: string, b: string) => {
+  const n = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  return n(a) === n(b)
+}
+
 /**
  * First run (or a missing folder): where the data lives. The proposal is `OneDrive\FinancialIntel` (decision E0-2) –
- * one click creates it there; another folder (new or existing) through the system dialog. The full start wizard
- * (accounts, history, salary, layers) comes in stage E3.
+ * one click creates it there; another folder (new or existing) through the system dialog. The buttons follow why the
+ * folder did not open (B53), never the message's words.
  */
 export function FolderSetup() {
   const message = useData((s) => s.setupMessage)
   const dir = useData((s) => s.setupDir)
+  const why = useData((s) => s.setupProblem)
   const [busy, setBusy] = useState(false)
+  const [confirmNew, setConfirmNew] = useState(false)
   const [proposal, setProposal] = useState<{ dir: string; oneDrive: boolean } | null>(null)
   const [progress, resetProgress] = useOpenProgress()
   useEffect(() => {
@@ -22,6 +30,7 @@ export function FolderSetup() {
   }, [])
   const run = async (fn: () => ReturnType<typeof api.pickDataDir>) => {
     resetProgress()
+    setConfirmNew(false)
     setBusy(true)
     try {
       await openResult(await fn())
@@ -31,8 +40,17 @@ export function FolderSetup() {
       setBusy(false)
     }
   }
-  // Unavailable, or FI data without fi.json yet (OneDrive still syncing): only a retry, never new data.
-  const unavailable = !!message && /niedostępny|pobiera/.test(message)
+  const p = why?.problem
+  const remembered = !!why?.remembered
+  // Stopped, failed, unavailable, FI data without fi.json yet (OneDrive still syncing) or the remembered folder found
+  // empty: a retry. New data never goes to the remembered folder unasked – it would split the budget once OneDrive
+  // brings the old one (B53): only „Utwórz tu nowe dane…” with a confirmation.
+  const canRetry = why?.reason === 'aborted' || why?.reason === 'error' || p === 'missing' || p === 'unavailable' || p === 'partial' || (p === 'empty' && remembered)
+  const canCreate = p === 'empty' && !remembered
+  const canStartOver = remembered && (p === 'empty' || p === 'missing')
+  const subfolder = p === 'other' ? why?.subfolder : undefined
+  // The proposal is that very folder: one click must not create data in it.
+  const proposalBlocked = !!proposal && !!dir && samePath(proposal.dir, dir) && (p === 'missing' || p === 'unavailable' || p === 'empty' || p === 'partial')
   return (
     <div className="flex h-full items-center justify-center bg-bg">
       <div className="w-[600px] animate-pop-in border border-line bg-panel" data-testid="folder-setup">
@@ -53,23 +71,37 @@ export function FolderSetup() {
               {message}
               {dir && <div className="num mt-1 truncate text-[11px] text-muted">{dir}</div>}
               {dir && (
-                <div className="mt-2 flex gap-2">
-                  {unavailable && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {canRetry && (
                     <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.openDataDir(dir, false))} data-testid="retry-folder">
                       Spróbuj ponownie
                     </button>
                   )}
-                  {/* An unavailable folder (OneDrive not started yet) never gets new data: it would split the budget. */}
-                  {!unavailable && /pusty/.test(message) && (
+                  {canCreate && (
                     <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.openDataDir(dir, true))} data-testid="create-here">
                       <IconPlus size={13} /> Utwórz dane tutaj
                     </button>
                   )}
+                  {subfolder && (
+                    <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.openDataDir(subfolder, true))} data-testid="create-subfolder">
+                      <IconPlus size={13} /> Utwórz podfolder FinancialIntel
+                    </button>
+                  )}
+                  {canStartOver &&
+                    (confirmNew ? (
+                      <button className="btn border-down/60 text-down" disabled={busy} onClick={() => run(() => api.openDataDir(dir, true, true))} data-testid="start-over-confirm">
+                        Na pewno – nowy budżet w tym folderze
+                      </button>
+                    ) : (
+                      <button className="btn" disabled={busy} onClick={() => setConfirmNew(true)} title="Tylko gdy budżet ma zacząć się od nowa – stare dane, które OneDrive jeszcze pobierze, trafią obok jako konflikt" data-testid="start-over">
+                        Utwórz tu nowe dane…
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
           )}
-          {proposal && (
+          {proposal && !proposalBlocked && (
             <button
               className="btn btn-accent h-[62px] flex-col items-start justify-center gap-0.5 px-3"
               disabled={busy}

@@ -15,6 +15,7 @@ import { fleetNow } from './fleet'
 import { useMachine } from './machine'
 import { navigate } from './ui'
 import { useIctj } from './ictj'
+import { usePresence } from './presence'
 import { setFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
 
@@ -100,6 +101,10 @@ function check(opened: boolean, shown = false): void {
     fresh.map((n) => n.key),
     fleet.today
   )
+  // Another computer in use, this one not (D86): the notices are that one's – kept here as shown, never twice. The
+  // window opened or touched just now is in use whatever main said a moment ago.
+  const elsewhere = (s.status?.otherMachines ?? []).some((m) => m.inUse)
+  if (elsewhere && !opened && !usePresence.getState().inUse) return
   const docks = fresh.filter((n) => n.tag === 'dock')
   const toasts = docks.length >= DOCK_GROUP ? [...fresh.filter((n) => n.tag !== 'dock'), { key: 'dock:group', tag: 'dock' as const, title: 'Nowe wypłaty w ICTTJ do zadokowania', body: `${docks.length} wpisów czeka na dokowanie (Mostek).` }] : fresh
   // Silent toasts: the app's own sounds (switches and volume of this computer) are the only ones – the alarm's here.
