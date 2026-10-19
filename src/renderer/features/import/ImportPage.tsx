@@ -2,11 +2,12 @@ import { memo, useDeferredValue, useEffect, useMemo, useState, type DragEvent } 
 import { useShallow } from 'zustand/shallow'
 import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
-import { choiceOf, importThemes, joins, learnable, movesHere, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { choiceOf, importThemes, joins, learnable, movesHere, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
 import { TX_KIND_LABEL, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
 import { opKindOf } from '@shared/import/reconcile'
+import { keywordMatcher } from '@shared/import/brands'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { useWizard } from '../wizard/state'
@@ -20,14 +21,14 @@ import { confirmBalance } from '../balances/actions'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
 import { DecisionFields, IMPORT_SHARE_MODES } from './DecisionFields'
-import { DuplicatesPanel } from './DuplicatesPanel'
+import { DuplicatesNote, DuplicatesPanel } from './DuplicatesPanel'
 import { useLatestImport } from './batches'
 import { BankTelemetry } from './BankTelemetry'
 import { UndoImportButton } from './RecentImports'
 import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
-import { bulkOptions, hasCategory, type LoanPick, type Option } from './options'
+import { bulkOptions, fits, hasCategory, type LoanPick, type Option } from './options'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
@@ -37,12 +38,14 @@ import {
   chooseRow,
   chooseSelected,
   chooseTheme,
+  chooseThemeOverGroups,
   clearGroup,
   clearImportSelection,
   closeImport,
   decideGroup,
+  decideNewMember,
+  dropImportFile,
   hintable,
-  loadImportFile,
   pickImportFile,
   planInputsNow,
   replanIfChanged,
@@ -109,7 +112,8 @@ function FilePanel() {
     e.preventDefault()
     setOver(false)
     const f = e.dataTransfer.files[0]
-    if (f) void f.arrayBuffer().then((b) => loadImportFile(f.name, new Uint8Array(b)))
+    // Within the limit of a chosen file, never while an import is written (B93, B94).
+    if (f) void dropImportFile(f)
   }
   const importable = accounts.filter((a) => !a.archived)
   return (
@@ -130,7 +134,7 @@ function FilePanel() {
           </button>
           <span className="text-muted">albo upuść go tutaj</span>
           {file && (
-            <button className="btn h-[22px]" onClick={closeImport} data-testid="import-close">
+            <button className="btn h-[22px]" disabled={busy} onClick={closeImport} data-testid="import-close">
               Zamknij plik
             </button>
           )}
@@ -449,8 +453,9 @@ function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | 
 const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out' ? 'expense' : 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null })
 
 /**
- * Money in from a person not of the household (D80 a): „+ domownik” adds them (their name in the bank) and decides the
- * group as their money – the rest beyond their debt as income until the user says „zaliczka”.
+ * Money in from a person not of the household (D80 a): „+ domownik” adds them (their name in the bank) and makes the
+ * group their money – the rest beyond their debt as income for now, the question „zaliczka czy przychód?” still open
+ * (N85: never remembered for the person until the user answers).
  */
 function NewMember({ g }: { g: ImportGroup }) {
   const members = useMembers()
@@ -465,7 +470,7 @@ function NewMember({ g }: { g: ImportGroup }) {
       title="Dopisz nadawcę do domowników (Ustawienia → Domownicy): jego wpłaty najpierw wyrównają to, co ma oddać"
       onClick={() => {
         const id = addMemberFromBank(name)
-        if (id) decideGroup(g.group, { ...nothing('in'), household: true, memberId: id })
+        if (id) decideNewMember(g.group, { ...nothing('in'), household: true, memberId: id })
       }}
       data-testid="import-group-new-member"
     >
@@ -482,7 +487,12 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
   const mine = useImport((s) => s.choices.rows[p.key])
   const out = useImport((s) => !!s.choices.skip[p.key])
   const ticked = useImport((s) => !!s.selected.rows[p.key])
+  const cats = useCategories()
+  const members = useMembers()
+  const loans = useRecordList('loans')
   const c = mine ?? choice
+  // An operation's own decision of another kind than its group's (N87): said, with the way back to the group's.
+  const otherKind = !!mine && (mine.kind !== 'expense' || choice.kind !== 'expense')
   return (
     <div className={cx('grid grid-cols-[18px_48px_minmax(0,1fr)_96px_200px_64px] items-center gap-2 py-[1px] text-[11.5px]', out && 'opacity-50')} data-testid="import-row">
       <input type="checkbox" checked={ticked} onChange={(e) => selectImport({ rows: [p.key] }, e.currentTarget.checked)} aria-label="Zaznacz operację" data-testid="import-row-select" />
@@ -492,11 +502,21 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
         {p.row.pending && <span className="ml-1 text-accent">nierozliczona</span>}
       </span>
       <span className={cx('num text-right', p.row.amount > 0 ? 'text-up' : 'text-fg')}>{signedPln(p.row.amount)}</span>
-      {c.kind === 'expense' ? (
+      {otherKind ? (
+        <span className="flex min-w-0 items-center gap-1" data-testid="import-row-own">
+          <span className="min-w-0 truncate border border-accent/60 px-1 text-[11px]" title="Własna decyzja tej operacji">
+            {choiceText(mine!, p.row.amount < 0 ? 'out' : 'in', (id) => cats.label(id), members, loans)}
+          </span>
+          <button type="button" className="shrink-0 text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => chooseRow(p.key, null)} data-testid="import-row-reset">
+            jak grupa
+          </button>
+        </span>
+      ) : c.kind === 'expense' ? (
         <CategorySelect
           className={cx('h-[22px] py-0 text-[11px]', mine && 'border-accent/60')}
           value={c.categoryId}
-          emptyLabel={mine ? '— bez kategorii —' : '(jak grupa)'}
+          // The empty choice is what it does (B98): „bez kategorii” when the group has one, the group's own otherwise.
+          emptyLabel={mine || choice.categoryId ? '— bez kategorii —' : '(jak grupa)'}
           onChange={(categoryId) => chooseRow(p.key, categoryId === choice.categoryId ? null : { ...c, categoryId })}
         />
       ) : (
@@ -527,6 +547,8 @@ function skippedIn(skip: Record<string, boolean>, rows: ImportGroup['rows']): nu
 const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: { g: ImportGroup; inherited: Choice; themeDecided: boolean; found: NewRow[] | 'all' | undefined }) {
   const own = useImport((s) => s.choices.groups[g.group])
   const remember = useImport((s) => s.choices.remember[g.group] ?? false)
+  const implicit = useImport((s) => !!s.choices.implicit?.[g.group])
+  const hint = useImport((s) => !!s.accepted.groups[g.group])
   const checked = useImport((s) => !!s.selected.groups[g.group])
   const proposing = useImport((s) => s.lastDecided === g.group && !s.noProposal[g.group])
   const skipped = useImport((s) => skippedIn(s.choices.skip, g.rows))
@@ -536,7 +558,8 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
   const partial = Array.isArray(found)
   const shown = partial ? found : g.rows
   const choice = own ?? inherited
-  const badge = own ? 'Twoja decyzja' : themeDecided ? 'jak temat' : SOURCE_LABEL[g.source]
+  // An accepted hint of the bank is no decision of the user (B97, D68); a new member's money still asks (N85).
+  const badge = implicit ? 'zaliczka czy przychód?' : own ? (hint ? 'podpowiedź mBanku' : 'Twoja decyzja') : themeDecided ? 'jak temat' : SOURCE_LABEL[g.source]
   return (
     <div className="border-t border-line/50 py-1 pl-6" data-testid="import-group" data-group={g.group} data-label={g.label}>
       <div className="flex items-center gap-2">
@@ -558,7 +581,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-12">
         <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} testId="import-group" />
-        <Badge tone={g.source === 'none' && !own && !themeDecided ? 'warn' : 'default'} title={g.reason}>
+        <Badge tone={implicit || (g.source === 'none' && !own && !themeDecided) ? 'warn' : 'default'} title={implicit ? 'Wybierz „reszta jako zaliczka” albo „reszta jako przychód” – odpowiedź zostanie zapamiętana dla tej osoby' : g.reason}>
           {badge}
         </Badge>
         {own && !g.byTitle && learnable(own) && (
@@ -603,6 +626,17 @@ const BIG_THEME = 30
 const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: { t: ImportTheme; label: string; status: ThemeStatus; found: Map<string, NewRow[] | 'all'>; searching: boolean }) {
   const decided = useImport((s) => s.choices.themes[t.theme])
   const remember = useImport((s) => s.choices.rememberThemes[t.theme] ?? false)
+  const accepted = useImport((s) => !!s.accepted.themes[t.theme])
+  // Every group decided on its own (N78): their one decision, or „różne” – never the theme's empty proposal.
+  const groupsDecided = useImport((s) => {
+    if (s.choices.themes[t.theme]) return 'theme'
+    const own = t.groups.map((g) => s.choices.groups[g.group])
+    if (!own.every(Boolean)) return 'open'
+    return own.every((c) => sameChoice(c!, own[0]!)) ? 'same' : 'mixed'
+  })
+  const common = useImport((s) => (groupsDecided === 'same' ? s.choices.groups[t.groups[0]!.group] : undefined))
+  // A keyword of a title (N79): about those payments – no rule of the brands, whatever „zapamiętaj” said.
+  const byTitle = t.groups.every((g) => g.byTitle)
   const shown = t.groups.filter((g) => found.has(g.group))
   // The groups shown (in a search: the ones found) – the tick of the theme is theirs.
   const allChecked = useImport((s) => shown.every((g) => s.selected.groups[g.group]))
@@ -635,14 +669,31 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
         <span className={cx('num shrink-0 text-right', t.sum > 0 ? 'text-up' : 'text-fg-strong')}>{signedPln(t.sum)}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-6">
-        <DecisionFields choice={choice} direction={t.direction} onChange={(c) => chooseTheme(t.theme, c)} testId="import-theme" />
-        <Badge tone={status === 'todo' ? 'warn' : status === 'check' ? 'accent' : 'default'}>{decided ? 'Twoja decyzja' : THEME_SOURCE[t.source]}</Badge>
-        {decided && learnable(decided) && (
+        {groupsDecided === 'mixed' ? (
+          <span className="text-[11px] text-muted" data-testid="import-theme-mixed">
+            różne – patrz marki
+          </span>
+        ) : (
+          <DecisionFields choice={common ?? choice} direction={t.direction} onChange={(c) => (common ? chooseThemeOverGroups(t, c) : chooseTheme(t.theme, c))} testId="import-theme" />
+        )}
+        <Badge tone={status === 'todo' ? 'warn' : status === 'check' ? 'accent' : 'default'}>
+          {decided
+            ? accepted
+              ? t.basis.kind === 'hint'
+                ? 'podpowiedź mBanku'
+                : 'przyjęte'
+              : 'Twoja decyzja'
+            : groupsDecided === 'same' || groupsDecided === 'mixed'
+              ? 'Twoje decyzje marek'
+              : THEME_SOURCE[t.source]}
+        </Badge>
+        {decided && !byTitle && learnable(decided) && (
           <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają marki tego tematu same">
             <input type="checkbox" checked={remember} onChange={(e) => setRememberTheme(t.theme, e.currentTarget.checked)} data-testid="import-theme-remember" />
             zapamiętaj
           </label>
         )}
+        {byTitle && <span className="text-[11px] text-dim">z tytułu przelewu – bez reguły</span>}
         {!decided && t.basis.kind === 'hint' && t.direction === 'out' && (
           <span className="text-[11px] text-dim">
             podpowiedź mBanku →{' '}
@@ -669,12 +720,18 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
   )
 })
 
-/** One decision, or „nie importuj”, for everything ticked (1.2.1). */
-/** The decisions a keyword rule can hold (`KeywordRules`): the search kept as a key for the next imports. */
-const KEYWORD_KIND: Partial<Record<Option, { kind: TxKind; direction: 'in' | 'out' | null }>> = {
-  expense: { kind: 'expense', direction: 'out' },
-  income: { kind: 'income', direction: 'in' },
-  transfer: { kind: 'transfer', direction: null }
+/**
+ * The decisions a keyword rule can hold (as `KeywordRules` and the proposal of a word – N76): an expense, money in, an own
+ * transfer, a member's purchase or money (D80). The search kept as a key for the next imports.
+ */
+function keywordKindOf(option: Option): { kind: TxKind; refundable?: boolean; household?: boolean; memberId?: string | null } | null {
+  if (option === 'expense' || option === 'income' || option === 'transfer') return { kind: option }
+  if (option.startsWith('refundable:')) return { kind: 'expense', refundable: true, memberId: option.slice('refundable:'.length) || null }
+  if (option.startsWith('household:')) {
+    const [, memberId] = option.split(':')
+    return { kind: 'income', household: true, memberId: memberId || null }
+  }
+  return null
 }
 
 function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
@@ -693,13 +750,23 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const rows = selectedRowKeys(groups, selected).length
   if (!nGroups && !rows) return null
   const keyword = keywordOfSearch(query)
-  const keywordKind = keyword ? KEYWORD_KIND[option] : undefined
+  const keywordKind = keyword ? keywordKindOf(option) : null
+  // The ticked the decision fits, by the direction of their money (N76, as `categorizeTicked` in Operacje): both = a
+  // keyword of both directions (a purchase and its return).
+  const tickedRows = groups.flatMap((g) => g.rows.filter((p) => selected.groups[g.group] || selected.rows[p.key]))
+  const directions = new Set(tickedRows.map((p) => p.direction).filter((d) => fits(option, d)))
+  // None of the ticked takes the decision: no keyword either (it would be one of both directions for nothing).
+  const keywordDirection: 'in' | 'out' | null = directions.size === 1 ? [...directions][0]! : null
+  // How many of the ticked a rule of the word decides (N82): a keyword is a word of the name or the title.
+  const matches = keyword && keywordKind ? keywordMatcher(keyword) : null
+  const caught = matches ? tickedRows.filter((p) => matches(p.target.name) || matches(p.target.title)).length : 0
   const apply = () => {
     const category = hasCategory(option) ? categoryId : null
     // The search as a key first: the file is planned again with it, the decisions of the ticked stay theirs.
     let note = ''
-    if (asKeyword && keyword && keywordKind) {
-      const err = saveKeywordRule({ keyword, direction: keywordKind.direction, kind: keywordKind.kind, categoryId: category })
+    if (asKeyword && keyword && keywordKind && !directions.size) note = ' Słowo kluczowe niezapisane – decyzja nie pasuje do zaznaczonych.'
+    else if (asKeyword && keyword && keywordKind) {
+      const err = saveKeywordRule({ keyword, direction: keywordDirection, ...keywordKind, categoryId: keywordKind.kind === 'expense' ? category : null })
       note = err ? ` Słowo kluczowe: ${err}` : ` Słowo kluczowe „${keyword}” zapamiętane.`
     }
     setAsKeyword(false)
@@ -732,9 +799,12 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
       {hasCategory(option) && <CategorySelect className="h-[24px] min-w-[170px] py-0" value={categoryId} onChange={setCategoryId} data-testid="import-bulk-category" />}
       {option === 'share' && share && <ShareEditor share={share} total={null} members={members} onChange={setShare} modes={IMPORT_SHARE_MODES} testId="import-bulk-share" />}
       {keywordKind && (
-        <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają operacje z tym słowem w nazwie albo tytule same">
+        <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają operacje z tym słowem w nazwie albo tytule same (słowo zaczynające się od niego)">
           <input type="checkbox" checked={asKeyword} onChange={(e) => setAsKeyword(e.currentTarget.checked)} data-testid="import-bulk-keyword" />
           zapamiętaj „{keyword}” jako słowo kluczowe
+          <span className="text-dim" data-testid="import-bulk-keyword-caught">
+            (obejmie {caught} z {tickedRows.length} zaznaczonych)
+          </span>
         </label>
       )}
       <button
@@ -785,15 +855,22 @@ function ThemesPanel() {
   const groups = useImportGroups()
   const themes = useMemo(() => importThemes(groups), [groups])
   const search = useDeferredValue(query)
-  const found = useMemo(() => searchGroups(groups, search, (id) => cats.label(id)), [groups, search, cats])
+  // A group found by the category it gets on the screen (N82): its own decision, its theme's, else the proposal.
+  const found = useMemo(
+    () => searchGroups(groups, search, (g) => cats.label((choices.groups[g.group] ?? choices.themes[g.theme] ?? g.proposed).categoryId)),
+    // The decisions only matter to a search (W17: a decision never searches again without one).
+    [groups, search, cats, search.trim() ? choices : null]
+  )
   const [closed, setClosed] = useState<Record<ThemeStatus, boolean>>({ todo: false, check: false, done: true })
   if (!plan) return null
   const containerName = (id: string) => containers.find((c) => c.id === id)?.name ?? 'kontener'
   const status = new Map(themes.map((t) => [t.theme, themeStatus(t, choices)]))
-  const sure = themes.filter((t) => t.basis.kind === 'proposal' && status.get(t.theme) === 'check')
-  const hints = hintable(themes, choices)
   const searching = !!search.trim()
   const visible = themes.filter((t) => t.groups.some((g) => found.has(g.group)))
+  // In a search the bulk accepts take what is found only (N83) – as „Zaznacz znalezione”.
+  const scope = searching ? visible : themes
+  const sure = scope.filter((t) => t.basis.kind === 'proposal' && status.get(t.theme) === 'check')
+  const hints = hintable(scope, choices)
   const visibleGroups = visible.flatMap((t) => t.groups.filter((g) => found.get(g.group) === 'all').map((g) => g.group))
   const visibleRows = visible.flatMap((t) => t.groups.flatMap((g) => {
     const f = found.get(g.group)
@@ -807,13 +884,18 @@ function ThemesPanel() {
       actions={
         <div className="flex gap-1.5">
           {sure.length > 0 && (
-            <button className="btn h-[22px]" onClick={() => acceptSure(sure)} title="Sieci ze słownika, słowa kluczowe i rozpoznanie aplikacji jako Twoja decyzja – zapamiętane dla kolejnych importów" data-testid="import-accept-sure">
-              Przyjmij pewne ({sure.length})
+            <button
+              className="btn h-[22px]"
+              onClick={() => acceptSure(sure)}
+              title="Sieci ze słownika, słowa kluczowe i rozpoznanie aplikacji jako Twoja decyzja – zapamiętane dla kolejnych importów (rozpoznane ze słowa w tytule przelewu – bez reguły)"
+              data-testid="import-accept-sure"
+            >
+              Przyjmij pewne ({searching ? `znalezione: ${sure.length}` : sure.length})
             </button>
           )}
           {hints.length > 0 && (
             <button className="btn h-[22px]" onClick={() => acceptHints(hints)} title="Kategoria mBanku jako decyzja tego importu, bez zapamiętania – sprawdź, bywa nietrafiona (np. XTB jako „Ubezpieczenia”)" data-testid="import-accept-hints">
-              Przyjmij podpowiedzi mBanku ({hints.length})
+              Przyjmij podpowiedzi mBanku ({searching ? `znalezione: ${hints.length}` : hints.length})
             </button>
           )}
         </div>
@@ -949,6 +1031,8 @@ function DonePanel() {
 
 export function ImportPage() {
   const plan = useImport((s) => s.plan)
+  // While the import is written (B93): no decision, account or file changes – what was chosen is what goes in.
+  const busy = useImport((s) => s.busy)
   const rules = useData((s) => s.fi?.settings.import.rules)
   const aliases = useData((s) => s.fi?.settings.import.aliases)
   const members = useData((s) => s.fi?.settings.household.members)
@@ -982,7 +1066,7 @@ export function ImportPage() {
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="main" tracks={['minmax(320px, 1fr)', 'minmax(420px, 2fr)']} className="grid min-h-full items-start">
-          <div className="flex min-w-0 flex-col">
+          <fieldset disabled={busy} className="flex min-w-0 flex-col" data-testid="import-left">
             <FilePanel />
             <Summary />
             {plan && (
@@ -993,9 +1077,10 @@ export function ImportPage() {
             <DonePanel />
             {done?.statement && <BankTelemetry statement={done.statement} confirmed={done.confirmed} />}
             {!plan && <DuplicatesPanel />}
+            {plan && <DuplicatesNote />}
             {(done || !plan) && <BalanceCheck />}
-          </div>
-          <div className="flex min-w-0 flex-col">
+          </fieldset>
+          <fieldset disabled={busy} className="flex min-w-0 flex-col" data-testid="import-right">
             <MatchesPanel />
             {plan && <SimilarPanel />}
             <ThemesPanel />
@@ -1004,7 +1089,7 @@ export function ImportPage() {
                 <div className="p-4 text-center text-[12px] text-dim">Wybierz plik CSV z mBanku – operacje pojawią się tu w tematach (kategoriach) i grupach marek.</div>
               </Panel>
             )}
-          </div>
+          </fieldset>
         </Columns>
       </div>
     </div>

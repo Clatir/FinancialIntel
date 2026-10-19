@@ -123,12 +123,33 @@ export function withAmount(t: Transaction, amount: number): Transaction {
 }
 
 /**
- * The operation with the bank's amount (a pending row settled, a manual entry merged with its row): a shared purchase's
- * lines made again; any other's as they were (the bank changes the total, never a receipt's lines).
+ * The operation with the bank's amount (a pending row settled, a manual entry merged with its row, a duplicate merged): a
+ * shared purchase's lines made again; a receipt's lines in proportion (B99: a purchase abroad settled at another rate –
+ * a member's part stays theirs, nothing left over without a category). An income's parts are what each person gave:
+ * the bank's difference is the sender's rest.
  */
 export function withBankAmount(t: Transaction, amount: number): Transaction {
   const share = shareOf(t)
-  return share ? withShare({ ...t, amount }, share) : { ...t, amount }
+  if (share) return withShare({ ...t, amount }, share)
+  return t.kind === 'expense' && t.splits.length && amount !== t.amount ? { ...t, amount, splits: scaledSplits(t.splits, t.amount, amount) } : { ...t, amount }
+}
+
+/**
+ * Lines of `from` for a total of `to`, each in proportion (grosze; what rounding leaves goes to the largest line); lines
+ * that did not take the whole amount take the same part of the new one.
+ */
+export function scaledSplits<T extends { amount: number }>(splits: readonly T[], from: number, to: number): T[] {
+  if (!from || from === to) return [...splits]
+  const sum = splits.reduce((n, s) => n + s.amount, 0)
+  const target = Math.round((sum * to) / from)
+  const out = splits.map((s) => ({ ...s, amount: Math.round((s.amount * to) / from) }))
+  const left = target - out.reduce((n, s) => n + s.amount, 0)
+  if (left && out.length) {
+    let at = 0
+    for (let i = 1; i < out.length; i++) if (Math.abs(out[i]!.amount) > Math.abs(out[at]!.amount)) at = i
+    out[at] = { ...out[at]!, amount: out[at]!.amount + left }
+  }
+  return out
 }
 
 /** Two people – me and the first member – equally: the start of a shared purchase. */

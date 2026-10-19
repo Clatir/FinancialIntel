@@ -7,7 +7,7 @@
 import { fold } from '../fold'
 import { cleanBankName, counterpartyKey } from './names'
 import { resolveBrand, type BrandAliases } from './aliases'
-import { brandById, brandOf, keywordIn, keywordMatcher, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
+import { brandById, brandOf, keywordIn, keywordMatcher, keywordMatches, tokens, withoutProcessor, words, type BrandMatch, type CategoryPlace } from './brands'
 import type { Category, HouseholdMember, ImportRule } from '../schema/budget'
 import type { Container, Loan, Share } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '../schema/budget'
@@ -21,32 +21,50 @@ export { counterpartyKey }
 export type Direction = 'in' | 'out'
 export const directionOf = (row: Pick<MbankRow, 'amount'>): Direction => (row.amount < 0 ? 'out' : 'in')
 
+/** What a decision remembered as a rule says (`upsertRule`). */
+export type LearnedRule = Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'>
+
 /**
  * A decision remembered as a rule (the import's „zapamiętaj”, „Zapamiętaj” in Operacje): the exact rule of that key and
  * direction changes (its id, `learned` and hits carried on), else a new one comes.
  */
-export function upsertRule(
-  rules: readonly ImportRule[],
-  r: Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'>,
-  opts: { now: string; makeId: () => string; hits: number }
-): ImportRule[] {
+export function upsertRule(rules: readonly ImportRule[], r: LearnedRule, opts: { now: string; makeId: () => string; hits: number }): ImportRule[] {
+  return upsertRules(rules, [{ rule: r, hits: opts.hits }], opts)
+}
+
+/**
+ * Decisions remembered at once, each as `upsertRule` would one after another – in one copy of the list, the exact rules
+ * found by their key (W35: an import teaching hundreds of brands among thousands of rules).
+ */
+export function upsertRules(rules: readonly ImportRule[], items: ReadonlyArray<{ rule: LearnedRule; hits: number }>, opts: { now: string; makeId: () => string }): ImportRule[] {
   const out = [...rules]
-  const at = out.findIndex((x) => x.mode === 'exact' && x.match === r.match && x.direction === r.direction)
-  const prev = at >= 0 ? out[at] : undefined
-  const rule: ImportRule = {
-    ...prev,
-    ...r,
-    // The decision is the new one whole: one remembered without a gift or a share has none (a rule's old split never stays).
-    gift: r.gift || undefined,
-    share: r.share ?? undefined,
-    id: prev?.id ?? opts.makeId(),
-    mode: 'exact',
-    learned: prev?.learned ?? true,
-    hits: (prev?.hits ?? 0) + opts.hits,
-    updatedAt: opts.now
+  // The first exact rule of each key and direction, as a search from the start finds it.
+  const at = new Map<string, number>()
+  out.forEach((x, i) => {
+    const k = `${x.direction}|${x.match}`
+    if (x.mode === 'exact' && !at.has(k)) at.set(k, i)
+  })
+  for (const { rule: r, hits } of items) {
+    const k = `${r.direction}|${r.match}`
+    const i = at.get(k)
+    const prev = i == null ? undefined : out[i]
+    const rule: ImportRule = {
+      ...prev,
+      ...r,
+      // The decision is the new one whole: one remembered without a gift or a share has none (a rule's old split never stays).
+      gift: r.gift || undefined,
+      share: r.share ?? undefined,
+      id: prev?.id ?? opts.makeId(),
+      mode: 'exact',
+      learned: prev?.learned ?? true,
+      hits: (prev?.hits ?? 0) + hits,
+      updatedAt: opts.now
+    }
+    if (i == null) {
+      at.set(k, out.length)
+      out.push(rule)
+    } else out[i] = rule
   }
-  if (at >= 0) out[at] = rule
-  else out.push(rule)
   return out
 }
 
@@ -237,7 +255,7 @@ const hintMemo = new WeakMap<CategoryIndex, Map<string, string | null>>()
 function hintOf(bankCategory: string, categories: CategoryIndex): string | null {
   const key = fold(bankCategory.trim())
   if (key === 'wyplata gotowki') return usable(CASH_CATEGORY_ID, categories)
-  const at = MBANK_HINTS[key]
+  const at = Object.hasOwn(MBANK_HINTS, key) ? MBANK_HINTS[key] : undefined
   return at ? usable(defaultCategoryId(at[0], at[1]), categories) : null
 }
 
@@ -301,6 +319,8 @@ export interface ClassifyContext {
   loans?: ReadonlyArray<Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>>
   /** The bank's account numbers of the budget's accounts (`settings.import.accountNumbers`, F4). */
   accountNumbers?: Readonly<Record<string, string>>
+  /** Operations a newer version wrote – read only here (B95): the plan never joins a row with them nor settles them. */
+  locked?: ReadonlySet<string>
 }
 
 /**
@@ -323,7 +343,19 @@ export function loanOf(counterparty: string, loans: ClassifyContext['loans']): N
   return open.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))[0] ?? null
 }
 
-const isXtb = (row: MbankRow) => /\bxtb\b|x-trade brokers/i.test(`${row.counterparty} ${row.description}`)
+const XTB = /\bxtb\b|x-trade brokers/i
+/** A payment operator alone as the counterparty (its shop in the title). */
+const PROCESSOR_ONLY = /^(payu|paypro|paypal|przelewy24|p24|dotpay|tpay|blue ?media|sumup|stripe)\b/i
+
+/**
+ * XTB (T37, B106): by the counterparty – a processor's prefix aside („PAYU*XTB”); by the description only without a
+ * counterparty of its own (none, or a payment operator). An own transfer „na portfel XTB” or a member's „zwrot za kurs
+ * XTB” names another side – and is decided before it anyway.
+ */
+function isXtb(row: MbankRow): boolean {
+  const who = withoutProcessor(row.counterparty)
+  return who && !PROCESSOR_ONLY.test(who) ? XTB.test(who) : XTB.test(row.description)
+}
 
 /** All words of one of the holder's names in the counterparty („JAN KAPITAN” in „KAPITAN JAN”). */
 export function isOwnName(counterparty: string, ownNames: readonly string[]): boolean {
@@ -440,12 +472,16 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     const refundable = kind === 'expense' && rule.refundable
     const household = kind === 'income' && rule.household
     const memberId = refundable || household ? rule.memberId : null
+    // A rule's category archived since (N86): the rule's decision without it – for the user to choose a new one (their
+    // choice remembered changes the rule).
+    const categoryId = kind === 'expense' && rule.categoryId ? usable(rule.categoryId, ctx.categories) : null
+    const archived = kind === 'expense' && !!rule.categoryId && !categoryId
     return out(
-      decision(kind, rule.mode === 'keyword' ? `Twoje słowo „${rule.label || rule.match}”${byTitle ? ' w tytule' : ''}` : 'reguła', {
-        source: 'rule',
+      decision(kind, archived ? 'kategoria reguły zarchiwizowana – wybierz nową' : rule.mode === 'keyword' ? `Twoje słowo „${rule.label || rule.match}”${byTitle ? ' w tytule' : ''}` : 'reguła', {
+        source: archived ? 'none' : 'rule',
         ruleId: rule.id,
         byTitle,
-        categoryId: kind === 'expense' ? rule.categoryId : null,
+        categoryId,
         refundable,
         household,
         memberId,
@@ -457,8 +493,8 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
       })
     )
   }
-  if (isXtb(row)) return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
   if (loan) return out(decision('loan', `zwrot pożyczki: ${loan.name}`, { loanId: loan.id }))
+  // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
   if (/^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(op) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(op) && isOwnName(row.counterparty, ctx.ownNames)))
     return out(decision('transfer', 'przelew własny'))
   // A member's money: asked once what the rest beyond their debt is (D80 b).
@@ -473,6 +509,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
       })
     )
   }
+  if (isXtb(row)) return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
   if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
   if (/^(POS )?ZWROT/.test(op) && direction === 'in') {
@@ -483,14 +520,17 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
       // Of a purchase a member finances – their money (B40); of a shared one – split as the purchase (D83).
       const expense = bought.kind === 'expense'
       const refundable = expense && bought.refundable
+      // The purchase's category archived since (N86): the return waits for the user's category too.
+      const categoryId = expense && bought.categoryId ? usable(bought.categoryId, ctx.categories) : null
+      const archived = expense && !!bought.categoryId && !categoryId
       return out(
-        decision('expense', 'zwrot towaru', {
-          categoryId: expense ? bought.categoryId : null,
+        decision('expense', archived ? 'zwrot towaru – kategoria reguły zarchiwizowana, wybierz nową' : 'zwrot towaru', {
+          categoryId,
           refundable,
           memberId: refundable ? bought.memberId : null,
           gift: refundable && !!bought.gift,
           share: expense && !refundable ? (bought.share ?? null) : null,
-          source: 'rule',
+          source: archived ? 'none' : 'rule',
           ruleId: bought.id
         })
       )

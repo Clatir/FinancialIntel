@@ -1,6 +1,6 @@
 import { withMerged, type BrandAliases, type BrandName } from '@shared/import/aliases'
 import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
-import { findRule, ruleTargetOf, upsertRule } from '@shared/import/classify'
+import { findRule, ruleTargetOf, upsertRule, upsertRules, type LearnedRule } from '@shared/import/classify'
 import { cleanBankName } from '@shared/import/names'
 import { newId } from '@shared/ids'
 import { importRuleSchema, TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
@@ -63,7 +63,7 @@ export function rememberCategory(t: Transaction, label: string): void {
  * import too); returns how many rules. Money in = a product return of that brand.
  */
 export function rememberBrands(ops: readonly Transaction[], categoryId: string): number {
-  const rules = new Map<string, Parameters<typeof upsertRule>[1] & { hits: number }>()
+  const rules = new Map<string, LearnedRule & { hits: number }>()
   for (const t of ops) {
     const { brand } = targetOf(t)
     if (!brand.key || t.kind !== 'expense') continue
@@ -77,11 +77,8 @@ export function rememberBrands(ops: readonly Transaction[], categoryId: string):
   }
   if (!rules.size) return 0
   const now = new Date().toISOString()
-  updateSettings((f) => {
-    let next = f.settings.import.rules
-    for (const { hits, ...r } of rules.values()) next = upsertRule(next, r, { now, makeId: newId, hits })
-    return { ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next } } }
-  })
+  const items = [...rules.values()].map(({ hits, ...rule }) => ({ rule, hits }))
+  updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: upsertRules(f.settings.import.rules, items, { now, makeId: newId }) } } }))
   return rules.size
 }
 
@@ -92,12 +89,30 @@ export const keywordOfSearch = (query: string): string | null => {
 }
 
 /** What a rule decides, in a few words (the user's keywords, a brand of a rule among similar names). */
-export function ruleDecisionText(r: ImportRule, catLabel: (id: string | null) => string, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = membersNow()): string {
-  if (r.kind === 'expense')
-    return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}`
+/**
+ * One text for a rule's decision everywhere (N80: the settings' rules, the keywords, a proposal of a word): who pays, the
+ * category – marked when archived since (N86: such a rule asks for a new one) –, whose money, the own transfer's account.
+ */
+export function ruleDecisionText(
+  r: Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'>,
+  catLabel: (id: string | null) => string,
+  members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = membersNow()
+): string {
+  const settings = useData.getState().fi?.settings
+  if (r.kind === 'expense') {
+    const archived = !!r.categoryId && !!settings?.categories.find((c) => c.id === r.categoryId)?.archived
+    return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}${archived ? ' (zarchiwizowana)' : ''}`
+  }
   if (r.kind === 'income') return r.household ? `od domownika: ${memberName(r.memberId, members)}` : 'wpływ (przychód)'
-  return r.kind === 'transfer' ? 'przelew własny' : (TX_KIND_LABEL[r.kind as TxKind] ?? r.kind)
+  if (r.kind === 'transfer') {
+    const account = r.counterAccountId ? settings?.accounts.find((a) => a.id === r.counterAccountId)?.name : null
+    return account ? `przelew własny · ${account}` : 'przelew własny'
+  }
+  return TX_KIND_LABEL[r.kind as TxKind] ?? r.kind
 }
+
+/** One text for a rule's direction everywhere (N80). */
+export const directionText = (d: string | null | undefined): string => (d === 'in' ? 'wpływy' : d === 'out' ? 'wydatki' : 'oba kierunki')
 
 export function deleteRule(id: string): void {
   setRules((rules) => rules.filter((r) => r.id !== id))
@@ -309,6 +324,20 @@ export function dismissSimilar(key: string): void {
 /** The pairs said to be two offered again. */
 export function clearDismissedSimilar(): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: {} } } }))
+}
+
+/** Is a key of `notDuplicates` a pair of the duplicates panel (not a correction said to be no repeat – B129)? */
+export const isDuplicatePairKey = (key: string): boolean => !key.startsWith('correction:')
+
+/** „to nie duplikat” forgotten (N74): the duplicates panel shows those pairs again – with „Cofnij”. */
+export function clearNotDuplicates(): void {
+  const before = useData.getState().fi?.settings.import.notDuplicates ?? {}
+  const kept = Object.fromEntries(Object.entries(before).filter(([k]) => !isDuplicatePairKey(k)))
+  if (!updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates: kept } } }))) return
+  toast('Pary „to nie duplikat” będą znowu pokazywane.', 'info', 7000, {
+    label: 'Cofnij',
+    run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates: { ...f.settings.import.notDuplicates, ...before } } } }))
+  })
 }
 
 export function setOwnNames(names: string[]): void {

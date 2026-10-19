@@ -8,12 +8,13 @@ export type BrandAliases = Readonly<Record<string, BrandAlias>>
 
 /**
  * The key a brand is one with (through earlier merges). Two computers merging one pair both ways make a loop: every
- * name of it is the loop's first key in order – one key for all, as merged.
+ * name of it is the loop's first key in order – one key for all, as merged. Own keys only (B104: „constructor” is a
+ * brand's key too, never the object's).
  */
 export function resolveBrand(aliases: BrandAliases, key: string): string {
   const path: string[] = []
   let k = key
-  while (aliases[k]) {
+  while (Object.hasOwn(aliases, k)) {
     const at = path.indexOf(k)
     if (at >= 0) return path.slice(at).sort()[0]!
     path.push(k)

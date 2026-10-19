@@ -5,7 +5,7 @@ import { useData } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { TextField } from '../../components/ui'
 import { CategorySelect, useCategories } from '../operations/pickers'
-import { deleteRule, ruleDecisionText, saveKeywordRule } from './rules'
+import { deleteRule, directionText, ruleDecisionText, saveKeywordRule } from './rules'
 import { useMembers } from '../household/actions'
 
 const NO_RULES: ImportRule[] = []
@@ -59,7 +59,7 @@ export function KeywordRules() {
       {mine.map((r) => (
         <div key={r.id} className="flex items-center gap-2 border-b border-line/60 py-[2px] last:border-b-0" data-testid="keyword-rule">
           <span className="text-fg-strong">„{r.label || r.match}”</span>
-          <span className="text-muted">{r.direction === 'in' ? 'wpływy' : r.direction === 'out' ? 'wydatki' : 'oba kierunki'} →</span>
+          <span className="text-muted">{directionText(r.direction)} →</span>
           <span className="min-w-0 flex-1 truncate text-muted">{decision(r)}</span>
           <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => deleteRule(r.id)} data-testid="keyword-rule-delete">
             usuń

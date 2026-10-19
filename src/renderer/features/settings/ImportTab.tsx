@@ -8,7 +8,7 @@ import { Panel, TextField } from '../../components/ui'
 import { KeywordRules } from '../import/KeywordRules'
 import { RecentImports } from '../import/RecentImports'
 import { MixedBrandsPanel, RulesPanel, useRuleAudit } from '../import/RulesAudit'
-import { clearDismissedSimilar, inactiveAlias, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
+import { clearDismissedSimilar, clearNotDuplicates, inactiveAlias, isDuplicatePairKey, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
 
 const NO_NAMES: string[] = []
 const NO_ALIASES: Record<string, BrandAlias> = {}
@@ -18,6 +18,7 @@ const NO_DISMISSED: Record<string, string> = {}
 function MergedNames() {
   const aliases = useData((s) => s.fi?.settings.import.aliases ?? NO_ALIASES)
   const dismissed = useData((s) => Object.keys(s.fi?.settings.import.notSimilar ?? NO_DISMISSED).length)
+  const notDuplicates = useData((s) => Object.keys(s.fi?.settings.import.notDuplicates ?? NO_DISMISSED).filter(isDuplicatePairKey).length)
   const list = Object.entries(aliases).sort((a, b) => b[1].at.localeCompare(a[1].at) || a[0].localeCompare(b[0]))
   const inactive = list.filter(([, a]) => inactiveAlias(a)).length
   return (
@@ -78,6 +79,15 @@ function MergedNames() {
         <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-dim">
           Pary oznaczone „To nie to samo”: {dismissed}
           <button type="button" className="text-muted hover:text-fg-strong hover:underline" onClick={clearDismissedSimilar} data-testid="similar-undismiss">
+            pokazuj znowu
+          </button>
+        </div>
+      )}
+      {/* The duplicates panel's „to nie duplikat” (N74): taken back here, as the similar names' pairs. */}
+      {notDuplicates > 0 && (
+        <div className="mt-1 flex items-center gap-2 text-[11.5px] text-dim">
+          Pary oznaczone „to nie duplikat”: {notDuplicates}
+          <button type="button" className="text-muted hover:text-fg-strong hover:underline" onClick={clearNotDuplicates} data-testid="duplicates-undismiss">
             pokazuj znowu
           </button>
         </div>

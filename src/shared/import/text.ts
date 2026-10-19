@@ -65,3 +65,6 @@ export function parseCsv(text: string, sep = ';'): Rows {
   }
   return rows
 }
+
+/** A bank's file read at most this big (T42): a file of hundreds of MB is no statement – never read into a window. */
+export const IMPORT_MAX_BYTES = 20 * 1024 * 1024

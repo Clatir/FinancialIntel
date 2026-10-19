@@ -159,13 +159,38 @@ function ruleEntries(rules: readonly ImportRule[], aliases: BrandAliases, file: 
       if (r.kind !== 'expense') e.person = true
       continue
     }
-    const m = brandOf(r.label || r.match, { dictionary: false })
+    const m = ruleBrand(r)
     // A rule learned on the name with the bank's additions (before 1.2.3) of a shop of the file is that shop.
     if (file.has(m.key)) continue
     const words = m.words.length ? m.words : [r.match]
     out.set(r.match, { brand: r.match, label: r.label || r.match, names: [r.label || r.match], count: 0, rules: [r], words, head: words, distinct: distinctOf(words, brandsOf), person: r.kind !== 'expense' })
   }
   return out
+}
+
+/** A rule's brand as its label says it, once per rule (W33: the rules of years, each pass of the panel). */
+const ruleBrands = new WeakMap<ImportRule, ReturnType<typeof brandOf>>()
+function ruleBrand(r: ImportRule): ReturnType<typeof brandOf> {
+  let m = ruleBrands.get(r)
+  if (!m) ruleBrands.set(r, (m = brandOf(r.label || r.match, { dictionary: false })))
+  return m
+}
+
+/** The exact rules by their key, once per list of rules (W33). */
+const exactIndex = new WeakMap<readonly ImportRule[], Map<string, ImportRule[]>>()
+function exactRules(rules: readonly ImportRule[]): Map<string, ImportRule[]> {
+  let map = exactIndex.get(rules)
+  if (!map) {
+    map = new Map()
+    for (const r of rules) {
+      if (r.mode !== 'exact') continue
+      const list = map.get(r.match)
+      if (list) list.push(r)
+      else map.set(r.match, [r])
+    }
+    exactIndex.set(rules, map)
+  }
+  return map
 }
 
 /**
@@ -183,8 +208,9 @@ export function similarPairs(
   // The keys the rules of the file's rows are looked up by (`findRule`).
   const used = new Set(groups.flatMap((g) => g.rows.flatMap((p) => [p.target.raw, p.target.key, ...(p.target.legacy ?? [])])))
   const known = [...ruleEntries(opts.rules ?? [], aliases, entries, used, entries.brandsOf).values()]
-  // The rules of a brand of the file (it keeps them when the other one is merged into it).
-  for (const e of file) e.rules = (opts.rules ?? []).filter((r) => r.mode === 'exact' && r.match === e.brand)
+  // The rules of a brand of the file (it keeps them when the other one is merged into it) – by their key (W33).
+  const exact = exactRules(opts.rules ?? [])
+  for (const e of file) e.rules = exact.get(e.brand) ?? []
   const out: SimilarPair[] = []
   const side = (e: Entry): SimilarSide => ({ brand: e.brand, label: e.label, names: e.names, count: e.count, rules: e.rules })
   // Only names that may be alike are compared (a history of years has hundreds of names): a common telling word or

@@ -12,9 +12,10 @@
  * kept one's is a conflict – shown, not ticked by default; both docked = blocked (one docking to undo by hand).
  */
 import { addDays } from '../calc/dates'
+import { withBankAmount } from '../calc/share'
 import type { Docking, Transaction } from '../schema/records'
 import { keyOccurrence, keyOnAccount, rowIdentity } from './mbank'
-import { formatsOf, joinable, looseMatch, MATCH_DAYS, similarCounterparty } from './reconcile'
+import { formatsOf, joinable, looseMatch, looseSure, MATCH_DAYS, similarCounterparty, type LooseMatch } from './reconcile'
 
 export type DuplicateKind = 'same-row' | 'manual' | 'bank-format'
 
@@ -30,6 +31,11 @@ export interface DuplicateGroup {
   blocked: string | null
   /** How the copy differs, for the screen: '' the same, 'name', 'amount', 'both'. */
   differs: '' | 'name' | 'amount' | 'both'
+  /**
+   * A possible duplicate the import would ask about (N88, `looseSure`: one common word, another amount – not a card
+   * purchase a day apart): shown, not ticked by default.
+   */
+  ask?: boolean
 }
 
 /** The key of a hand-typed operation and its copy (the two ids, sorted). */
@@ -170,15 +176,16 @@ export function findDuplicates(
     if (!days) near.set(date, (days = Array.from({ length: 2 * MATCH_DAYS + 1 }, (_, i) => addDays(date, i - MATCH_DAYS))))
     return days
   }
-  const candidates: Array<{ own: Transaction; copy: Transaction; days: number; exact: boolean; similar: boolean }> = []
+  const candidates: Array<{ own: Transaction; copy: Transaction } & LooseMatch> = []
   for (const own of manual)
     for (const day of around(own.date))
       for (const copy of banked.get(`${own.accountId}|${day}`) ?? []) {
-        const m = looseMatch(own, { amount: copy.amount, date: copy.date, name: copy.bank!.counterparty || copy.counterparty })
+        // The bank's name as the import compares it (N89): its counterparty, else its description – never „” (alike to all).
+        const m = looseMatch(own, { amount: copy.amount, date: copy.date, name: copy.bank!.counterparty || copy.bank!.description })
         if (!m || dismissed[duplicateKey([own.id, copy.id])]) continue
         candidates.push({ own, copy, ...m })
       }
-  candidates.sort((a, b) => Number(b.exact) - Number(a.exact) || Number(b.similar) - Number(a.similar) || a.days - b.days || a.own.date.localeCompare(b.own.date))
+  candidates.sort((a, b) => Number(b.exact) - Number(a.exact) || Number(b.strong) - Number(a.strong) || Number(b.similar) - Number(a.similar) || a.days - b.days || a.own.date.localeCompare(b.own.date))
   const used = new Set<string>()
   for (const c of candidates) {
     if (used.has(c.own.id) || used.has(c.copy.id)) continue
@@ -191,7 +198,9 @@ export function findDuplicates(
       remove: [c.copy.id],
       conflict: conflicting(c.own, [c.copy]),
       blocked: blockedOf(c.own, [c.copy]),
-      differs: !c.exact && !c.similar ? 'both' : !c.exact ? 'amount' : !c.similar ? 'name' : ''
+      differs: !c.exact && !c.similar ? 'both' : !c.exact ? 'amount' : !c.similar ? 'name' : '',
+      // The same amount under a similar name is the import's sure join; else as the import asks.
+      ...(c.exact && c.similar ? {} : looseSure(c, c.copy.bank!.operation) ? {} : { ask: true })
     })
   }
 
@@ -246,7 +255,8 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
   let out: Transaction = { ...keep }
   const bankCopy = copies.find((c) => c.bank)
   if (kind === 'manual' && bankCopy) {
-    out = { ...out, date: bankCopy.date, amount: bankCopy.amount, bank: bankCopy.bank, counterparty: out.counterparty || bankCopy.counterparty, title: out.title || bankCopy.title }
+    // A receipt's lines follow the bank's amount (B99), a shared purchase's are made again.
+    out = withBankAmount({ ...out, date: bankCopy.date, bank: bankCopy.bank, counterparty: out.counterparty || bankCopy.counterparty, title: out.title || bankCopy.title }, bankCopy.amount)
   }
   if (kind === 'same-row' && out.bank?.pending && copies.some((c) => c.bank && !c.bank.pending)) out = { ...out, bank: { ...out.bank, pending: false } }
   // The other format's key stays with the kept one: a file of it finds the operation at once.

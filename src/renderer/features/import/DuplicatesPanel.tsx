@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { findDuplicates, mergeDuplicate, type DuplicateGroup } from '@shared/import/duplicates'
-import type { Transaction } from '@shared/schema'
+import { TX_KIND_LABEL, type Transaction, type TxKind } from '@shared/schema'
 import { errorMessage } from '../../lib/api'
 import { plural } from '../../lib/format'
 import { listOf, replaceRecords, updateRecord, updateSettings, useData, useFolderLocked } from '../../store/data'
@@ -76,7 +76,32 @@ export function useKnownDuplicateCount(firstAfterMs = 10_000): number {
   return fresh ? known.count : 0
 }
 
+/**
+ * The duplicates while a file is open (N75): their panel waits for the import or the file closed – said, not hidden (the
+ * link from Operacje leads here).
+ */
+export function DuplicatesNote() {
+  const n = useDuplicateCount()
+  if (!n) return null
+  return (
+    <Panel title="Duplikaty operacji">
+      <p className="text-[11.5px] text-muted" data-testid="import-duplicates-note">
+        Możliwe duplikaty: {n} – scalisz je po imporcie albo po zamknięciu pliku.
+      </p>
+    </Panel>
+  )
+}
+
 const DIFFERS = { '': '', name: 'inna nazwa', amount: 'inna kwota', both: 'inna nazwa i kwota' } as const
+
+/** „to nie duplikat” taken back (N74): the pair is shown again. */
+function undismiss(key: string): void {
+  updateSettings((f) => {
+    const notDuplicates = { ...f.settings.import.notDuplicates }
+    delete notDuplicates[key]
+    return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates } } }
+  })
+}
 
 /**
  * Operacje that are one and the same (D77, like ICTTJ's „Duplikaty z importu”): the kept one takes what only the
@@ -86,6 +111,7 @@ const DIFFERS = { '': '', name: 'inna nazwa', amount: 'inna kwota', both: 'inna 
 export function DuplicatesPanel() {
   const { groups, byId } = useDuplicates()
   const dockings = useRecordList('dockings')
+  const operations = useData((s) => s.records.transactions)
   const readOnly = useFolderLocked()
   const cats = useCategories()
   const accounts = useAccounts()
@@ -93,7 +119,11 @@ export function DuplicatesPanel() {
   const [toggled, setToggled] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   if (!groups.length) return null
-  const picked = (g: DuplicateGroup) => !g.blocked && (g.conflict ? toggled.has(g.key) : !toggled.has(g.key))
+  // An operation a newer version wrote is read only here (B95): its group waits – never a copy deleted for a kept one
+  // that cannot take the bank's data.
+  const blockedOf = (g: DuplicateGroup) => g.blocked ?? ([g.keep, ...g.remove].some((id) => operations[id]?.readOnly) ? 'zapisana przez nowszą wersję aplikacji – tylko do odczytu' : null)
+  // A conflict, and a possible duplicate the import asks about (N88), are not ticked until the user looks.
+  const picked = (g: DuplicateGroup) => !blockedOf(g) && (g.conflict || g.ask ? toggled.has(g.key) : !toggled.has(g.key))
   const chosen = groups.filter(picked)
   const nRemove = chosen.reduce((n, g) => n + g.remove.length, 0)
   const toggle = (key: string) => setToggled((s) => (s.has(key) ? new Set([...s].filter((k) => k !== key)) : new Set([...s, key])))
@@ -120,6 +150,19 @@ export function DuplicatesPanel() {
           }
         ids.push(...copies.map((t) => t.id))
       }
+      // A member's payment that covers a copy (B100, „Pokrywa”): it covers the kept operation now.
+      const gone = new Map(chosen.flatMap((g) => g.remove.map((id) => [id, g.keep] as const)))
+      const keptIds = new Set(kept.map((t) => t.id))
+      for (const t of Object.values(byId)) {
+        if (!t.covers?.some((id) => gone.has(id)) || gone.has(t.id)) continue
+        const covers = [...new Set(t.covers.map((id) => gone.get(id) ?? id))]
+        const at = kept.findIndex((k) => k.id === t.id)
+        if (at >= 0) kept[at] = { ...kept[at]!, covers }
+        else if (!keptIds.has(t.id)) {
+          originals.push(t)
+          kept.push({ ...t, covers, updatedAt: now })
+        }
+      }
       replaceRecords('transactions', kept)
       // „Cofnij”: the kept operations as they were, the dockings back on their copies, then the copies themselves.
       const undo = () => {
@@ -135,17 +178,21 @@ export function DuplicatesPanel() {
     }
   }
 
-  const dismiss = (g: DuplicateGroup) =>
+  // Remembered for the folder, with „Cofnij” (N74; all of them back in Ustawienia → Import z banku).
+  const dismiss = (g: DuplicateGroup) => {
     updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates: { ...f.settings.import.notDuplicates, [g.key]: new Date().toISOString() } } } }))
+    toast('Para oznaczona „to nie duplikat” – nie będzie pokazywana.', 'info', 7000, { label: 'Cofnij', run: () => undismiss(g.key) })
+  }
 
   const line = (t: Transaction | undefined, role: 'keep' | 'copy') => {
     if (!t) return null
     const account = accounts.find((a) => a.id === t.accountId)?.name ?? '?'
-    const category = t.kind === 'expense' ? cats.label(t.categoryId) || 'bez kategorii' : t.kind
+    // The kind by its name (N81), as the rest of the screen.
+    const category = t.kind === 'expense' ? cats.label(t.categoryId) || 'bez kategorii' : (TX_KIND_LABEL[t.kind as TxKind] ?? t.kind)
     return (
       <button
         type="button"
-        className="grid w-full grid-cols-[62px_minmax(0,1fr)_88px] items-center gap-2 text-left hover:text-fg-strong"
+        className="grid w-full grid-cols-[76px_minmax(0,1fr)_88px] items-center gap-2 text-left hover:text-fg-strong"
         onClick={() => {
           setFilter({ period: { kind: 'all' }, query: '' })
           selectOperation(t.id)
@@ -154,7 +201,7 @@ export function DuplicatesPanel() {
         data-testid={`duplicate-${role}`}
       >
         <span className="num text-muted">
-          {t.date.slice(8, 10)}.{t.date.slice(5, 7)}.{t.date.slice(2, 4)}
+          {t.date.slice(8, 10)}.{t.date.slice(5, 7)}.{t.date.slice(0, 4)}
         </span>
         <span className="min-w-0 truncate">
           <span className={role === 'keep' ? 'text-fg-strong' : 'text-muted'}>{t.counterparty || t.title || '(bez nazwy)'}</span>
@@ -174,18 +221,20 @@ export function DuplicatesPanel() {
       <div className="flex flex-col gap-1.5 text-[12px]" data-testid="duplicates">
         <p className="text-[11.5px] text-muted">
           Ta sama operacja dwa razy: wpis ręczny i jego kopia z banku (±3 dni, ta sama kwota albo prawie ta sama przy podobnej nazwie) albo ten sam wiersz banku
-          zaimportowany dwa razy (np. na dwóch komputerach przed synchronizacją – zostaje nowsza wersja). Zostaje jedna operacja z danymi banku i Twoją
-          kategorią, notatką, godziną; kopie są usuwane – „Cofnij” je przywraca. Grupa, w której kopia ma inną decyzję, nie jest zaznaczona – sprawdź ją.
+          zaimportowany dwa razy (np. na dwóch komputerach przed synchronizacją – zostaje zadokowana, potem ta z Twoimi danymi: kategorią, notatką, godziną,
+          potem nowsza). Zostaje jedna operacja z danymi banku i Twoją kategorią, notatką, godziną; kopie są usuwane – „Cofnij” je odzyskuje. Grupa, w której
+          kopia ma inną decyzję, i możliwy duplikat (jedno wspólne słowo nazwy przy innej kwocie) nie są zaznaczone – sprawdź je.
         </p>
         {groups.map((g) => (
-          <div key={g.key} className="flex items-start gap-2 border-l border-line pl-2" data-testid="duplicate-group" data-kind={g.kind} data-conflict={g.conflict}>
-            <input type="checkbox" className="mt-[3px]" checked={picked(g)} disabled={readOnly || !!g.blocked} onChange={() => toggle(g.key)} aria-label="Scal tę grupę" data-testid="duplicate-pick" />
+          <div key={g.key} className="flex items-start gap-2 border-l border-line pl-2" data-testid="duplicate-group" data-kind={g.kind} data-conflict={g.conflict} data-ask={g.ask || undefined}>
+            <input type="checkbox" className="mt-[3px]" checked={picked(g)} disabled={readOnly || !!blockedOf(g)} onChange={() => toggle(g.key)} aria-label="Scal tę grupę" data-testid="duplicate-pick" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                 <Badge>{g.kind === 'same-row' ? 'ten sam wiersz banku' : g.kind === 'bank-format' ? 'lista operacji + historia rachunku' : 'wpis ręczny + bank'}</Badge>
                 {g.differs && <span className="text-dim">{DIFFERS[g.differs]}</span>}
                 {g.conflict && <Badge tone="warn">inna decyzja w kopii</Badge>}
-                {g.blocked && <span className="text-accent">{g.blocked}</span>}
+                {g.ask && !g.conflict && <Badge tone="warn">możliwy duplikat – zaznacz, jeśli to ta sama operacja</Badge>}
+                {blockedOf(g) && <span className="text-accent">{blockedOf(g)}</span>}
                 <span className="flex-1" />
                 <button type="button" className="text-[11px] text-muted hover:text-fg-strong hover:underline" disabled={readOnly} onClick={() => dismiss(g)} data-testid="duplicate-dismiss">
                   to nie duplikat

@@ -51,7 +51,9 @@ export function SimilarPanel() {
   const dismissed = useData((s) => s.fi?.settings.import.notSimilar ?? NO_DISMISSED)
   const readOnly = useFolderLocked()
   const cats = useCategories()
-  const pairs = useMemo(() => similarPairs(groups, { rules, aliases, dismissed }), [groups, rules, aliases, dismissed])
+  // All the pairs once per file, rules and merges (W33); „To nie to samo” only filters them.
+  const all = useMemo(() => similarPairs(groups, { rules, aliases, limit: Infinity }), [groups, rules, aliases])
+  const pairs = useMemo(() => all.filter((p) => !dismissed[p.key]).slice(0, 60), [all, dismissed])
   if (!pairs.length) return null
   const catLabel = (id: string | null) => cats.label(id)
   return (
@@ -132,7 +134,7 @@ export function RuleProposal({ g, choice }: { g: ImportGroup; choice: Choice }) 
   const label = (group: string) => groups.find((x) => x.group === group)?.label ?? ''
   // The decision as the settings write the rule (N16): what the keyword will hold.
   const decision = ruleDecisionText(
-    { kind: choice.kind, categoryId: choice.categoryId, refundable: choice.refundable, household: choice.household, memberId: choice.memberId, gift: choice.gift, share: choice.share } as ImportRule,
+    { kind: choice.kind, categoryId: choice.categoryId, refundable: choice.refundable, household: choice.household, memberId: choice.memberId, gift: choice.gift, share: choice.share ?? undefined, counterAccountId: choice.counterAccountId },
     (id) => cats.label(id)
   )
   const take = (text: string, rows: number) => {
