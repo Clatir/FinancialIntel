@@ -3,7 +3,7 @@
 **Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa R** (1.6.6 – teksty, wygląd,
 wygoda) na gałęzi `claude/grupa-r-1.6.6`, PR do `main`; po niej od razu funkcje S, T, U, V – każda grupa z własnym PR i
 wydaniem (D71).
-**1.6.5 scalone** (PR #27), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -54,7 +54,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **N** | 1.6.2 Gra, ICTTJ, domownicy, cele, kreator: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.2 | ✅ D87 | ✅ wydane (PR #24) |
 | **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.3 | ✅ D87 | ✅ wydane (PR #25) |
 | **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ scalone (PR #26) |
-| **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 | ✅ D87 | ✅ scalone (PR #27) |
+| **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 (w 1.6.6) | ✅ D87 | ✅ scalone (PR #27), wydanie przepadło – wchodzi w 1.6.6 |
 | **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1 h (zegar sesji, z przeglądem, 47 mutacjami i pełnym E2E; plan był ok. 1,5 h) | 1.6.6 | ✅ D87 | ✅ PR do `main` |
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | plan ok. 3 h | 1.7.0 | ✅ D87 | czeka |
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | czeka |
@@ -776,6 +776,12 @@ Zakres: „Przed grupą R” wyżej. Zrobione:
   aplikacji); test czeka na rozmiar jak na inne wartości (lokalnie nie do odtworzenia, także na jednym rdzeniu). Na
   Windows CI ekran ma 720 px wysokości obszaru roboczego: okno szybkiego wpisu przy 150 % jest – zgodnie z F30 –
   przycięte do ekranu (720 zamiast 900), test liczy oczekiwany rozmiar z obszaru roboczego.
+- 1.6.5 nie wyszło: job Windows na `main` po scaleniu PR #27 padł na E2E „Cofnij import” (po 10 s 162 z 269 plików
+  usuniętych); w PR #28 ten sam test padł na ponownym imporcie (193 z 269). Przyczyna – wolniejszy runner Windows: w tych
+  przebiegach każdy test trwał 1,5–2,5 × dłużej niż w PR #27 (np. podobne nazwy 12,6 s zamiast 5,2 s), a test czekał na
+  setki plików najwyżej 10 s. Kroki masowe czekają teraz do 30 s (`MASS`, jak 20 s w importie i duplikatach), testy z nimi
+  do 3 min. 1.6.5 wchodzi w 1.6.6: notatki wydania dostają sekcje wersji niewydanych od ostatniego wydania
+  (`scripts/release-notes.mjs --since`, krok „Publish” podaje ostatnie wydanie – „Co nowego” w aplikacji pokazuje też 1.6.5).
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.6.6, Windows):
 1. Ctrl+Plus / Ctrl+Minus w oknie głównym i w szybkim wpisie, Ctrl+Shift+0 – 100 %; „Wyższy kontrast” w Ustawieniach →

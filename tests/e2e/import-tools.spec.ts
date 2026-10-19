@@ -6,6 +6,12 @@ import { launch } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
+/**
+ * Hundreds of files written or deleted at once (an import, its undo): a slow Windows runner of CI takes over the default
+ * 10 s for them (1.6.5 on main, 1.6.6 – every test there 1.5–2.5× slower), so these polls wait longer.
+ */
+const MASS = { timeout: 30_000 }
+
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 const ACC = '01KDEFACC00000000000000001'
 
@@ -61,6 +67,7 @@ function historia(dir: string, start: number, rows: Array<{ date: string; shop: 
 }
 
 test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; numer rachunku; plik już zaimportowany (F4, N13)', async () => {
+  test.setTimeout(180_000)
   const { app, page, dataDir, errors } = await launch()
   const files = mkdtempSync(join(tmpdir(), 'fi-import-tools-'))
   try {
@@ -71,28 +78,28 @@ test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; nume
     await expect(page.getByTestId('import-account-warning')).toHaveCount(0)
     await page.getByTestId('import-run').click()
     await expect(page.getByTestId('import-done')).toBeVisible()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(269)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
     await expect.poll(async () => (await records(dataDir, 'imports')).length).toBe(1)
 
     // The whole file taken back: the dialog says what goes.
     await page.getByTestId('import-undo').click()
     await expect(page.getByTestId('import-undo-plan')).toContainText('269')
     await page.getByTestId('import-undo-confirm').click()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(0)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(0)
     await expect(page.getByTestId('import-undone')).toBeVisible()
     // „Cofnij” of the undo: the import as it was.
     await page.getByRole('status').filter({ hasText: 'Import cofnięty' }).getByTestId('toast-action').click()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(269)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
     await page.getByTestId('import-undo').click()
     await page.getByTestId('import-undo-confirm').click()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(0)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(0)
 
     // The same file again: every row comes in (taken back ≠ deleted by the user – T39).
     await openFile(app, page, first)
     await expect(page.getByTestId('import-count-new')).toHaveText('269')
     await expect(page.getByTestId('import-count-deleted')).toHaveCount(0)
     await page.getByTestId('import-run').click()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(269)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
 
     // Once more: nothing new – said, saved without changes (N13).
     await openFile(app, page, first)
@@ -119,12 +126,13 @@ test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; nume
 })
 
 test('„Cofnij import” czeka na operacje, których nie ma na tym komputerze; „Cofnij mimo to” (F4)', async () => {
+  test.setTimeout(180_000)
   const { app, page, dataDir, errors } = await launch()
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await openFile(app, page, FIXTURE)
     await page.getByTestId('import-run').click()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(269)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
     // One file gone outside the app – no version in the history, like one still on its way from the other computer.
     const files = (await fs.readdir(join(dataDir, 'transactions'), { recursive: true })).map(String).filter((f) => f.endsWith('.json'))
     await fs.rm(join(dataDir, 'transactions', files[0]!))
@@ -139,7 +147,7 @@ test('„Cofnij import” czeka na operacje, których nie ma na tym komputerze; 
     await expect(waiting).toBeVisible()
     expect((await records(dataDir, 'transactions')).length).toBe(268)
     await waiting.getByTestId('toast-action').click()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(0)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(0)
     await expect(page.getByTestId('import-undone')).toBeVisible()
     expect(errors).toEqual([])
   } finally {
@@ -185,6 +193,7 @@ test('Telemetria z banku: historia rachunku zgodna – saldo potwierdzone samo; 
 })
 
 test('Oficer zna sieć i historię marki w edytorze; audyt reguł: niespójna operacja i „Zastosuj do historii” z „Cofnij” (F8, F22)', async () => {
+  test.setTimeout(180_000)
   const { app, page, dataDir, errors } = await launch()
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
@@ -198,7 +207,7 @@ test('Oficer zna sieć i historię marki w edytorze; audyt reguł: niespójna op
     await search.fill('')
     await page.getByTestId('import-run').click()
     await expect(page.getByTestId('import-done')).toBeVisible()
-    await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(269)
+    await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
 
     // F8: „Dino” typed by hand, no category – the officer knows the chain from the bank's „DINO TESTOWO 4”.
     await page.keyboard.press('Control+2')
