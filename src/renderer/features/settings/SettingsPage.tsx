@@ -223,12 +223,23 @@ function FolderTab() {
   // While another folder opens (B31): its progress and „Przerwij” here, the buttons off, no edits anywhere.
   const switching = useData((s) => s.switching)
   const [progress, resetProgress] = useOpenProgress()
-  const switchTo = async (fn: () => ReturnType<typeof api.pickDataDir>) => {
+  const switchTo = async (fn: () => ReturnType<typeof api.pickDataDir>): Promise<void> => {
     resetProgress()
     const res = await switchFolder(fn)
     if (res === 'unsaved') toast('Nie udało się zapisać bieżących zmian – folder nie został zmieniony. Spróbuj ponownie za chwilę.', 'error', 7000)
     else if (res.ok) toast('Otwarto folder danych.', 'success')
-    else if (res.reason !== 'cancelled') toast(res.message, 'error', 6000)
+    else if (res.reason !== 'cancelled') {
+      // As on the setup screen (B53): new data in a remembered folder found empty or missing only on purpose; a folder
+      // of other files – its FinancialIntel subfolder.
+      const dir = res.dir
+      const startOver = res.remembered && (res.problem === 'empty' || res.problem === 'missing') && dir
+      const action = startOver
+        ? { label: 'Utwórz tu nowe dane', run: () => void switchTo(() => api.openDataDir(dir, true, true)) }
+        : res.problem === 'other' && res.subfolder
+          ? { label: 'Utwórz podfolder FinancialIntel', run: () => void switchTo(() => api.openDataDir(res.subfolder!, true)) }
+          : undefined
+      toast(res.message, 'error', action ? 12000 : 6000, action)
+    }
   }
   return (
     <>

@@ -8,13 +8,15 @@ describe('system (1.5.3, grupa J)', () => {
     expect(altGrConflict('Alt+Control+Z')).toBe('ż')
     expect(altGrConflict('CommandOrControl+Alt+u')).toBe('€')
     expect(altGrConflict('AltGr+L')).toBe('ł')
-    // Shift or the Windows key make it free; other letters are not AltGr characters.
-    expect(altGrConflict('Control+Alt+Shift+S')).toBeNull()
+    // With Shift – the capital letter (AltGr+Shift+S = „Ś”); the Windows key makes it free; other letters are not AltGr
+    // characters.
+    expect(altGrConflict('Control+Alt+Shift+S')).toBe('Ś')
     expect(altGrConflict('Control+Super+S')).toBeNull()
     expect(altGrConflict('Control+Alt+B')).toBeNull()
     expect(altGrConflict('Control+Shift+S')).toBeNull()
     expect(machinePrefsFrom({ quickShortcut: 'Control+Alt+E' }).quickShortcut).toBe(DEFAULT_QUICK_SHORTCUT)
-    expect(machinePrefsFrom({ quickShortcut: 'Control+Alt+Shift+E' }).quickShortcut).toBe('Control+Alt+Shift+E')
+    expect(machinePrefsFrom({ quickShortcut: 'Control+Alt+Shift+E' }).quickShortcut).toBe(DEFAULT_QUICK_SHORTCUT)
+    expect(machinePrefsFrom({ quickShortcut: 'Control+Alt+D' }).quickShortcut).toBe('Control+Alt+D')
     expect(machinePrefsFrom({ quickShortcut: '' }).quickShortcut).toBe('')
   })
 

@@ -75,12 +75,16 @@ test('skrót szybkiego wpisu (1.5.3, B29): Ctrl+Alt+litera polskiego znaku zamie
     const field = page.getByTestId('settings-shortcut')
     await field.click()
     await page.keyboard.press('Control+Alt+KeyE')
-    await expect(page.getByRole('status').filter({ hasText: 'AltGr+E („ę”)' })).toContainText('Ctrl+Alt+Shift+E')
+    await expect(page.getByRole('status').filter({ hasText: 'AltGr+E („ę”)' })).toContainText('Wybierz inną literę')
     await expect(field).toHaveText('Naciśnij skrót…')
-    // With Shift it is free.
+    // With Shift it is the capital letter – refused too.
     await page.keyboard.press('Control+Alt+Shift+KeyE')
-    await expect(field).toHaveText('Ctrl+Alt+Shift+E')
-    await expect.poll(async () => (await json(join(userData, 'config.json'))).prefs?.quickShortcut).toBe('Control+Alt+Shift+E')
+    await expect(page.getByRole('status').filter({ hasText: 'AltGr+Shift+E („Ę”)' })).toBeVisible()
+    await expect(field).toHaveText('Naciśnij skrót…')
+    // Another letter is free.
+    await page.keyboard.press('Control+Alt+KeyD')
+    await expect(field).toHaveText('Ctrl+Alt+D')
+    await expect.poll(async () => (await json(join(userData, 'config.json'))).prefs?.quickShortcut).toBe('Control+Alt+D')
     expect(errors).toEqual([])
   } finally {
     await app.close()
@@ -148,6 +152,31 @@ test('zmiana folderu z Ustawień (1.5.3, B31): postęp z „Przerwij”, w trakc
     }, first)
     expect(refused).toContain('Trwa otwieranie innego folderu')
     expect(await shipOf(first)).toBe('Pierwszy bis')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('zapamiętany pusty folder z Ustawień (1.5.3, B53): nowe dane tylko na wyraźne „Utwórz tu nowe dane”', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'fi-system-recent-'))
+  const current = join(base, 'Dom', 'FinancialIntel')
+  const emptied = join(base, 'Stary', 'FinancialIntel')
+  seedFolder(current, {})
+  mkdirSync(emptied, { recursive: true })
+  const { app, page, errors } = await launch({ userData: userDataWith({ dataDir: current, recentDirs: [current, emptied] }), usePreset: false })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-folder').click()
+    await page.getByTestId('recent-folder-open').click()
+    const told = page.getByRole('status').filter({ hasText: 'Zapamiętany folder danych jest pusty' })
+    await expect(told).toBeVisible()
+    expect(existsSync(join(emptied, 'fi.json'))).toBe(false)
+    await expect(page.getByTestId('settings-data-dir')).toHaveText(current)
+    await told.getByRole('button', { name: 'Utwórz tu nowe dane' }).click()
+    await expect(page.getByTestId('settings-data-dir')).toHaveText(emptied)
+    expect(existsSync(join(emptied, 'fi.json'))).toBe(true)
     expect(errors).toEqual([])
   } finally {
     await app.close()

@@ -538,7 +538,8 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       // Closing: no rescan before the last writes (B43); another folder opened meanwhile: nothing to read here.
       if (store !== opened || windowClosing) return
       try {
-        send(await opened.refresh(paths))
+        // A refresh finishing after another folder opened is that folder's no more (B31).
+        sendFrom(opened, await opened.refresh(paths))
       } catch (e) {
         log('error', 'refresh failed', e)
         throw e
@@ -723,9 +724,11 @@ function registerIpc(): void {
     const s = writableStore()
     sendFrom(s, await s.resolveConflict(id, keep))
   })
-  handle('mergeConflict', async (id: string, merged: unknown) => {
+  handle('mergeConflict', async (id: string, merged: unknown, seen?: unknown) => {
     const s = writableStore()
-    sendFrom(s, await s.mergeConflict(id, merged))
+    const sides = seen && typeof seen === 'object' ? (seen as { canonical?: unknown; copy?: unknown }) : {}
+    const asOf = typeof sides.canonical === 'number' && typeof sides.copy === 'number' ? { canonical: sides.canonical, copy: sides.copy } : undefined
+    sendFrom(s, await s.mergeConflict(id, merged, asOf))
   })
   handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
     const s = writableStore()

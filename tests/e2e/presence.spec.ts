@@ -27,9 +27,11 @@ function gameFolder(prefix: string): string {
 
 const frozenDays = async (dir: string) => (await records(dir, 'game')).reduce((n, g) => n + Object.keys(g.days as object).length, 0)
 
-test('dwa komputery (1.5.3, N20, F21): baner tylko dla komputera w użyciu, w Synchronizacji – w użyciu / w zasobniku', async () => {
+test('dwa komputery (1.5.3, N20, F21): baner tylko dla komputera w użyciu, w Synchronizacji – w użyciu / w zasobniku i ostatnia zmiana', async () => {
   const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-presence-')), 'FinancialIntel')
-  seedFolder(dataDir, {})
+  const { date: today } = warsawNow()
+  // An operation the laptop wrote: the newest change from another computer.
+  seedFolder(dataDir, { records: { transactions: [{ date: today, accountId: MBANK, amount: -zl(12), counterparty: 'Kiosk', updatedBy: 'LAPTOP', updatedAt: '2026-10-18T19:05:00.000Z' }] } })
   const now = Date.now()
   const presence = (name: string, data: Record<string, unknown>) => {
     mkdirSync(join(dataDir, '.presence'), { recursive: true })
@@ -49,6 +51,7 @@ test('dwa komputery (1.5.3, N20, F21): baner tylko dla komputera w użyciu, w Sy
     await page.getByTestId('nav-sync').click()
     await expect(page.locator('[data-testid="sync-machine"][data-in-use="yes"]')).toContainText('LAPTOP – w użyciu')
     await expect(page.locator('[data-testid="sync-machine"][data-in-use="no"]')).toContainText('DESKTOP – w zasobniku')
+    await expect(page.getByTestId('sync-last-remote')).toContainText('LAPTOP')
     expect(errors).toEqual([])
   } finally {
     await app.close()

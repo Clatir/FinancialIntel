@@ -1453,9 +1453,14 @@ export class DataStore {
    * A conflict merged field by field (N17): both versions go to the history, the merged one is written at the original's
    * path (the original's id), every other file of the pair to the bin – as keeping the copy, with the merged content.
    */
-  mergeConflict(conflictId: string, merged: unknown): Promise<ChangeSet | null> {
+  mergeConflict(conflictId: string, merged: unknown, asOf?: { canonical: number; copy: number }): Promise<ChangeSet | null> {
     return this.mutex.run(async () => {
       this.assertWritable()
+      // Merged from the versions the window saw: a side changed since (a save of this record, OneDrive) is never
+      // written over by a merge that does not know it.
+      const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
+      if (asOf && conflict && (conflict.canonical.mtimeMs !== asOf.canonical || conflict.copy.mtimeMs !== asOf.copy))
+        throw new Error('Jedna z wersji zmieniła się w trakcie scalania – otwórz „Scal…” jeszcze raz.')
       const settingsWritten = await this.resolveOne(conflictId, 'copy', merged)
       return this.diff(this.buildViews(), settingsWritten)
     })

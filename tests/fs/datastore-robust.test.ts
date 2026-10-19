@@ -228,7 +228,11 @@ describe('folder danych: scalanie kopii konfliktu (1.5.3, N17)', () => {
     const found = await store.refresh()
     expect(found!.conflicts.map((c) => c.id)).toEqual([copyRel])
     const merged = { ...entry.record, amount: -5000, note: 'z domu' }
-    const change = await store.mergeConflict(copyRel, merged)
+    // Made from other versions than there are now (a save, OneDrive meanwhile): refused, nothing written.
+    const conflict = found!.conflicts[0]!
+    await expect(store.mergeConflict(copyRel, merged, { canonical: conflict.canonical.mtimeMs - 1, copy: conflict.copy.mtimeMs })).rejects.toThrow(/zmieniła się w trakcie scalania/)
+    expect(await exists(join(store.root, ...copyRel.split('/')))).toBe(true)
+    const change = await store.mergeConflict(copyRel, merged, { canonical: conflict.canonical.mtimeMs, copy: conflict.copy.mtimeMs })
     expect(change?.conflicts).toEqual([])
     const snap = await store.snapshot()
     expect(snap.records.transactions.map((e) => [e.record.id, e.record.amount, e.record.note])).toEqual([[entry.record.id, -5000, 'z domu']])

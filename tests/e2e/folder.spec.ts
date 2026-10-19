@@ -46,6 +46,10 @@ test('folder tylko do odczytu (1.5.3, N2): pola i przyciski zmian wyłączone, h
     await page.keyboard.press('Control+2')
     await page.getByTestId('operation-tick').first().click()
     await expect(page.getByTestId('operations-bulk-apply')).toBeDisabled()
+    // Un-ticking is no change of the folder: at hand.
+    await page.getByTestId('operations-bulk-clear').click()
+    await expect(page.getByTestId('operations-bulk')).toHaveCount(0)
+    await page.getByTestId('operation-tick').first().click()
     await page.getByTestId('operation-row').first().click()
     await page.getByTestId('operation-editor').getByTestId('history-open').click()
     await expect(page.getByTestId('history-dialog')).toBeVisible()

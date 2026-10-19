@@ -22,7 +22,8 @@ export function shortcutProblem(accelerator: string): string | null {
   const char = altGrConflict(accelerator)
   if (!char) return null
   const key = accelerator.split('+').pop() ?? ''
-  return `${shortcutLabel(accelerator)} to w polskim układzie AltGr+${key} („${char}”) – skrót zabrałby ten znak wszystkim programom. Dodaj Shift: ${shortcutLabel(accelerator.replace(/\+([^+]+)$/, '+Shift+$1'))}.`
+  const shift = /(^|\+)shift(\+|$)/i.test(accelerator) ? 'Shift+' : ''
+  return `${shortcutLabel(accelerator)} to w polskim układzie AltGr+${shift}${key} („${char}”) – skrót zabrałby ten znak wszystkim programom. Wybierz inną literę albo cyfrę, np. Ctrl+Alt+B.`
 }
 
 /** Press the new shortcut (Esc keeps the old one, Backspace clears it; AltGr+letter is refused – B29). */

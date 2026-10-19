@@ -32,6 +32,8 @@ interface DataState {
    * freeze of the game's days waits for them). */
   openedAt: number
   externalAt: number
+  /** The newest record another computer wrote (F21): which one and when – kept as changes come, never by a scan. */
+  lastRemote: { machine: string; at: string } | null
   appInfo: AppInfo | null
   /** fi.json: the folder's settings. */
   fi: SettingsFile | null
@@ -132,6 +134,7 @@ export const useData = create<DataState>(() => ({
   switching: false,
   openedAt: 0,
   externalAt: 0,
+  lastRemote: null,
   appInfo: null,
   fi: null,
   records: emptyMaps(),
@@ -197,6 +200,22 @@ function bumpPending(delta: number, patch: Partial<SaveState> = {}): void {
   set((s) => ({ save: { ...s.save, pending: Math.max(0, s.save.pending + delta), ...patch } }))
 }
 
+type Stamped = { updatedAt?: string; updatedBy?: string }
+
+/** `cur` or a newer record written by another computer of `records` (F21). */
+function laterRemote(cur: DataState['lastRemote'], records: Iterable<Stamped>): DataState['lastRemote'] {
+  const me = get().appInfo?.machineName
+  let out = cur
+  for (const r of records) if (r.updatedBy && r.updatedBy !== me && r.updatedAt && (!out || r.updatedAt > out.at)) out = { machine: r.updatedBy, at: r.updatedAt }
+  return out
+}
+
+function newestRemote(snapshot: Snapshot): DataState['lastRemote'] {
+  let out = laterRemote(null, [snapshot.fi as Stamped])
+  for (const list of Object.values(snapshot.records)) out = laterRemote(out, list.map((e) => e.record as Stamped))
+  return out
+}
+
 export function applySnapshot(snapshot: Snapshot): void {
   for (const t of timers.values()) clearTimeout(t)
   timers.clear()
@@ -215,6 +234,7 @@ export function applySnapshot(snapshot: Snapshot): void {
     setupProblem: null,
     openedAt: Date.now(),
     externalAt: 0,
+    lastRemote: newestRemote(snapshot),
     fi: snapshot.fi,
     records: Object.fromEntries(COLLECTIONS.map((c) => [c, toMap(snapshot.records[c] ?? [])])) as unknown as RecordMaps,
     problems: snapshot.problems,
@@ -259,6 +279,8 @@ export function applyChange(change: ChangeSet): void {
     // Another computer's records arriving (B33): the game's first freeze waits until they stop for a while. A change
     // of the presence alone is none.
     if (external && (change.upserts.length || change.removals.length || change.fi)) next.externalAt = Date.now()
+    const remote = laterRemote(s.lastRemote, [...change.upserts.map((u) => u.entry.record as Stamped), ...(change.fi ? [change.fi as Stamped] : [])])
+    if (remote !== s.lastRemote) next.lastRemote = remote
     const maps: Partial<Record<Collection, AnyMap>> = {}
     const mapFor = (c: Collection) => (maps[c] ??= { ...mapOf(s, c) })
     for (const { collection, entry } of change.upserts) {

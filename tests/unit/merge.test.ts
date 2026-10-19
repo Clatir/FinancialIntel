@@ -1,6 +1,6 @@
 // adapted from ICTTJ tests/unit/merge.test.ts @ 84a8339
 import { describe, expect, it } from 'vitest'
-import { chooser, deepEqual, diffRecords, fieldLabel, formatValue, merge3, pathKey } from '@shared/merge'
+import { chooser, deepEqual, diffRecords, fieldLabel, formatValue, merge3, pathKey, valueAt } from '@shared/merge'
 
 const base = {
   id: 'T',
@@ -98,6 +98,17 @@ describe('scalanie trzech wersji', () => {
     expect(r.merged.splits).toEqual([{ id: 'a', p: 10 }, { id: 't', p: 8 }, { id: 'b', p: 20 }, { id: 'm', p: 9 }])
     const takeTheirs = merge3(b, mine, theirs, () => 'theirs')
     expect(takeTheirs.merged.splits.map((x) => x.id)).toEqual(['a', 't', 'm'])
+  })
+
+  it('wartość pod ścieżką konfliktu – także element listy po id (N17: podpowiedź strony w „Scal…”)', () => {
+    const mine = { ...base, splits: [{ id: 's1', amount: -3000, categoryId: 'c1' }] }
+    const theirs = { ...base, note: 'obiad' }
+    const all = merge3(undefined, mine, theirs).conflicts
+    expect(all.map((c) => pathKey(c.path))).toEqual(expect.arrayContaining([pathKey(['note']), pathKey(['splits', '#s1', 'amount'])]))
+    expect(valueAt(base, ['splits', '#s1', 'amount'])).toBe(-2500)
+    expect(valueAt(base, ['payee', 'name'])).toBe('Biedronka')
+    expect(valueAt(base, ['splits', '#nie-ma', 'amount'])).toBeUndefined()
+    expect(valueAt(base, ['note', 'x'])).toBeUndefined()
   })
 
   it('bez wersji bazowej każda różnica jest konfliktem; identyczne zmiany nie są', () => {

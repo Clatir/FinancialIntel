@@ -10,7 +10,7 @@ import { memberName } from '@shared/calc/household'
 import { shareOf } from '@shared/calc/share'
 import { membersNow } from '../household/actions'
 import { shareNames } from '../household/ShareEditor'
-import { READ_ONLY_MESSAGE, canWrite, replaceRecords, updateSettings, useData } from '../../store/data'
+import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, canWrite, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { countLabel } from '../../lib/format'
 
@@ -207,14 +207,16 @@ export function saveKeywordRule(input: {
   share?: Share | null
   counterAccountId?: string | null
 }): string | null {
-  // Said by the caller as an error, like the others (N2): never „zapamiętano” in a read-only folder.
-  if (useData.getState().status?.readOnly) return READ_ONLY_MESSAGE
+  // Said by the caller as an error, like the others (N2): never „zapamiętano” in a read-only folder, nor while another
+  // folder opens (B31).
+  const locked = (): string => (useData.getState().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE)
+  if (useData.getState().status?.readOnly || useData.getState().switching) return locked()
   const match = normalizeKeyword(input.keyword)
   if (match.replace(/[^a-z?]/g, '').length < 3) return 'Słowo kluczowe musi mieć co najmniej 3 litery.'
   if (match.split(' ').every(isGenericWord)) return `„${input.keyword.trim()}” jest za ogólne – bank pisze je przy wielu operacjach. Wybierz słowo, które mówi, co to było.`
   if (input.kind === 'expense' && !input.categoryId) return 'Wybierz kategorię.'
   const now = new Date().toISOString()
-  updateSettings((f) => {
+  const saved = updateSettings((f) => {
     const rules = f.settings.import.rules
     const at = rules.findIndex((r) => r.mode === 'keyword' && r.match === match && r.direction === input.direction)
     const rule: ImportRule = {
@@ -241,7 +243,7 @@ export function saveKeywordRule(input: {
     else next.push(rule)
     return { ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next } } }
   })
-  return null
+  return saved ? null : locked()
 }
 
 // ------------------------------------------------------------------ names merged by the user (1.2.2, D78)

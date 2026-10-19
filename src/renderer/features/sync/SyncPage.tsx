@@ -1,10 +1,10 @@
 // adapted from ICTTJ src/renderer/features/sync/SyncPage.tsx @ 84a8339
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSelection, type Selection } from '../../lib/selection'
 import type { ConflictEntry, HistoryEntry, HistoryKind } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import { newerSide, newestResolutions } from '@shared/conflicts'
-import { chooser, fieldLabel, formatValue, isAmountKey, isAmountPath, merge3, pathKey, type MergeConflict, type Side } from '@shared/merge'
+import { chooser, deepEqual, fieldLabel, formatValue, isAmountKey, isAmountPath, merge3, pathKey, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText } from '../../components/fields'
 import { recordTitle } from '../../lib/recordTitle'
 import { HistoryButton } from '../history/HistoryDialog'
@@ -47,26 +47,6 @@ function flatten(value: unknown, prefix = '', out: Record<string, string> = {}):
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
-/** The newest record another computer wrote (F21): which computer and when – none = only this one writes here. */
-function useLastRemoteChange(): { machine: string; at: string } | null {
-  const records = useData((s) => s.records)
-  const fi = useData((s) => s.fi)
-  const me = useData((s) => s.appInfo?.machineName ?? '')
-  return useMemo(() => {
-    let machine = ''
-    let at = ''
-    const take = (r: { updatedAt?: string; updatedBy?: string }) => {
-      if (r.updatedBy && r.updatedBy !== me && r.updatedAt && r.updatedAt > at) {
-        machine = r.updatedBy
-        at = r.updatedAt
-      }
-    }
-    if (fi) take(fi as { updatedAt?: string; updatedBy?: string })
-    for (const map of Object.values(records)) for (const e of Object.values(map)) take(e.record as { updatedAt?: string; updatedBy?: string })
-    return at ? { machine, at } : null
-  }, [records, fi, me])
-}
-
 /**
  * The base of a conflict's merge (N17): the newest version in the history saved before either side's change (its
  * `updatedAt` not later than both); none = every difference is a question.
@@ -87,31 +67,46 @@ async function mergeBase(c: ConflictEntry): Promise<unknown> {
 const shownValue = (path: readonly string[], v: unknown) => (typeof v === 'number' && isAmountPath([...path]) ? `${plnText(v)} zł` : formatValue(v))
 
 /**
- * „Scal” (N17): the two versions joined field by field, as the window of a change from another computer does – what
- * changed on one side only is taken, a field changed on both is a choice (the newer side proposed).
+ * „Scal” (N17): the two versions joined field by field – every field that differs is a choice, never taken silently: a
+ * version of the history found as the base may be one side's own earlier edit, not what both started from. The base
+ * only proposes the side that changed the field; changed on both (or no base) – the newer side.
  */
 function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClose: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
-  const [state, setState] = useState<{ base: unknown; conflicts: MergeConflict[]; choices: Record<string, Side> } | null>(null)
+  const [state, setState] = useState<{ fields: MergeConflict[]; choices: Record<string, Side> } | null>(null)
   const readOnly = useFolderLocked()
+  // Every change of the folder brings new conflict objects: only other versions of the two files start it again.
+  const seen = useRef(c)
+  seen.current = c
+  const versions = `${c.id}|${c.canonical.mtimeMs}|${c.copy.mtimeMs}`
   useEffect(() => {
     let alive = true
-    void mergeBase(c).then((base) => {
+    const now = seen.current
+    void mergeBase(now).then((base) => {
       if (!alive) return
-      const { conflicts } = merge3(base, c.canonical.record, c.copy.record)
-      const proposed: Side = newerSide(c) === 'copy' ? 'theirs' : 'mine'
-      setState({ base, conflicts, choices: Object.fromEntries(conflicts.map((x) => [pathKey(x.path), proposed])) })
+      const fields = merge3(undefined, now.canonical.record, now.copy.record).conflicts
+      const newer: Side = newerSide(now) === 'copy' ? 'theirs' : 'mine'
+      const proposed = (f: MergeConflict): Side => {
+        if (base === undefined) return newer
+        const b = valueAt(base, f.path)
+        const mineChanged = !deepEqual(b, f.mine)
+        const theirsChanged = !deepEqual(b, f.theirs)
+        return mineChanged === theirsChanged ? newer : mineChanged ? 'mine' : 'theirs'
+      }
+      setState({ fields, choices: Object.fromEntries(fields.map((f) => [pathKey(f.path), proposed(f)])) })
     })
     return () => {
       alive = false
     }
-  }, [c])
+  }, [versions])
   if (!state) return <div className="mt-2 text-[11.5px] text-muted">Szukam wspólnej wersji w historii…</div>
   const save = async () => {
     setBusy(true)
     try {
       if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian (albo czekają zmiany z drugiego komputera) – spróbuj ponownie za chwilę.')
-      const { merged } = merge3(state.base, c.canonical.record, c.copy.record, chooser(state.choices))
-      await api.mergeConflict(c.id, merged)
+      const now = seen.current
+      const { merged } = merge3(undefined, now.canonical.record, now.copy.record, chooser(state.choices))
+      // The versions the choices were made on: a side changed meanwhile (a save just now, OneDrive) refuses the merge.
+      await api.mergeConflict(now.id, merged, { canonical: now.canonical.mtimeMs, copy: now.copy.mtimeMs })
       toast('Scalono obie wersje – każda z nich jest w historii wpisu.', 'success')
       onClose()
     } catch (e) {
@@ -123,10 +118,11 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
   return (
     <div className="mt-2 flex flex-col gap-1.5 border border-accent/40 p-2" data-testid="conflict-merge">
       <div className="text-[11.5px] text-muted">
-        {state.base === undefined ? 'Bez wspólnej wersji w historii – każda różnica to wybór.' : 'Zmiany tylko po jednej stronie łączą się same; wybierz przy polach zmienionych po obu.'}
+        Pola, którymi wersje się różnią – przy każdym wybierz wersję. Zaznaczona jest ta, która pole zmieniła (według historii wpisu), a przy zmianie po obu
+        stronach – nowsza.
       </div>
-      {state.conflicts.length === 0 && <div className="text-[12px] text-fg" data-testid="conflict-merge-clean">Wszystko łączy się bez pytań.</div>}
-      {state.conflicts.map((x) => {
+      {state.fields.length === 0 && <div className="text-[12px] text-fg" data-testid="conflict-merge-clean">Wersje mają tę samą treść.</div>}
+      {state.fields.map((x) => {
         const key = pathKey(x.path)
         const pick = (side: Side) => setState((s) => (s ? { ...s, choices: { ...s.choices, [key]: side } } : s))
         return (
@@ -399,7 +395,8 @@ export function SyncPage() {
   const problems = useData((s) => s.problems)
   const status = useData((s) => s.status)
   const locked = useFolderLocked()
-  const lastRemote = useLastRemoteChange()
+  // The newest record another computer wrote (F21) – none = only this one writes here.
+  const lastRemote = useData((s) => s.lastRemote)
   const fi = useData((s) => s.fi)
   return (
     <div className="h-full overflow-y-auto p-3">

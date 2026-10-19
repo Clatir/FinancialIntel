@@ -64,21 +64,23 @@ export interface MachinePrefs {
 export const DEFAULT_QUICK_SHORTCUT = 'Control+Alt+B'
 
 /**
- * Ctrl+Alt+letter is AltGr+letter on the Polish keyboard (B29, D86): ą ć ę ł ń ó ś ź ż – and € on U. A global shortcut
- * there would take the letter from every program, so it is never set; with Shift or the Windows key it is free.
+ * Ctrl+Alt+letter is AltGr+letter on the Polish keyboard (B29, D86): ą ć ę ł ń ó ś ź ż – and € on U; with Shift the
+ * capitals (Ą … Ż). A global shortcut there would take the letter from every program, so it is never set; with the
+ * Windows key it is free.
  */
 export const ALTGR_CHARS: Readonly<Record<string, string>> = { A: 'ą', C: 'ć', E: 'ę', L: 'ł', N: 'ń', O: 'ó', S: 'ś', U: '€', X: 'ź', Z: 'ż' }
 
 const CTRL_NAMES = new Set(['control', 'ctrl', 'commandorcontrol', 'cmdorctrl'])
 
-/** The AltGr character a global shortcut would take ('ś' for Ctrl+Alt+S); null = no conflict. */
+/** The AltGr character a global shortcut would take ('ś' for Ctrl+Alt+S, 'Ś' with Shift); null = no conflict. */
 export function altGrConflict(accelerator: string): string | null {
   const parts = accelerator.split('+').map((p) => p.trim().toLowerCase())
   const key = (parts.pop() ?? '').toUpperCase()
   const mods = new Set(parts.map((m) => (CTRL_NAMES.has(m) ? 'control' : m === 'option' ? 'alt' : m)))
   const altGr = mods.has('altgr') || (mods.has('control') && mods.has('alt'))
-  const free = mods.has('shift') || mods.has('super') || mods.has('meta') || mods.has('command') || mods.has('cmd')
-  return altGr && !free ? (ALTGR_CHARS[key] ?? null) : null
+  const free = mods.has('super') || mods.has('meta') || mods.has('command') || mods.has('cmd')
+  const char = altGr && !free ? (ALTGR_CHARS[key] ?? null) : null
+  return char && mods.has('shift') ? char.toUpperCase() : char
 }
 
 export const DEFAULT_MACHINE_PREFS: MachinePrefs = {

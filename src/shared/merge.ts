@@ -155,6 +155,18 @@ function pick(c: MergeConflict, conflicts: MergeConflict[], choose: (c: MergeCon
   return choose(c)
 }
 
+/** The value at a path of `merge3` / `diffRecords` (a `#id` part = the array item of that id); undefined = none. */
+export function valueAt(root: unknown, path: Path): unknown {
+  let v: unknown = root
+  for (const part of path) {
+    if (part.startsWith('#') && isIdArray(v)) v = v.find((x) => x.id === part.slice(1))
+    else if (isObject(v)) v = v[part]
+    else return undefined
+    if (v === undefined) return undefined
+  }
+  return v
+}
+
 /** Choices keyed by the conflict path (from a dialog) as a `choose` function; unknown paths take `fallback`. */
 export function chooser(choices: ReadonlyMap<string, Side> | Record<string, Side>, fallback: Side = 'mine'): (c: MergeConflict) => Side {
   const get = (k: string) => (choices instanceof Map ? choices.get(k) : (choices as Record<string, Side>)[k])
