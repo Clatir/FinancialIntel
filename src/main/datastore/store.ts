@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/main/datastore/store.ts @ 84a8339
 import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { CONFLICT_COPY_MESSAGE, SLOW_FILE_MS, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
+import { CONFLICT_COPY_MESSAGE, SLOW_FILE_MS, type BackupDiffItem, type BackupPreview, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import {
   BACKUPS_DIR,
@@ -19,6 +19,7 @@ import {
   type ConflictName,
   type FileKind
 } from '@shared/paths'
+import { sameContentAs } from '@shared/merge'
 import { SCHEMAS, parseRecordText, serializeRecord, type AnyRecord, type RecordTypes } from '@shared/records'
 import { SCHEMA_VERSION, type SettingsFile } from '@shared/schema'
 import { pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
@@ -26,6 +27,7 @@ import { mapLimit, walkFiles } from './fsutil'
 import { ReadTracker, type LoadProgress, type LoadStats } from './progress'
 import { RecordHistory } from './history'
 import { isDataFile } from './backup'
+import type { BackupData } from './restore'
 import { diskSource, writeZipFile, zipFolder, type ZipResult, type ZipSource } from './zip'
 
 /** The settings file of an ICT Trade Journal data folder. */
@@ -1604,35 +1606,109 @@ export class DataStore {
       this.assertWritable()
       const old = await this.history.read(kind, id, file)
       if (!old) throw new Error('Tej wersji nie ma już w historii (mogła zostać usunięta na innym komputerze).')
-      const stampNow = { schemaVersion: SCHEMA_VERSION, updatedAt: this.opts.now(), updatedBy: this.opts.machineName }
       if (kind === 'fi') {
-        const fi = SCHEMAS.fi.parse({ ...old, ...stampNow })
-        const existing = this.files.get(SETTINGS_FILE)
-        if (existing?.status === 'record' && existing.record) await this.history.snapshot('fi', existing.record as SettingsFile, 'restore')
-        await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
-        this.fi = fi
+        const fi = await this.putSettings(old)
         this.commit(this.buildViews())
         return { change: null, fi }
       }
-      const parsed = SCHEMAS[kind].safeParse({ ...old, id, ...stampNow })
-      if (!parsed.success) throw new Error(`Tej wersji nie da się odtworzyć: ${parsed.error.issues[0]?.path.join('.')}: ${parsed.error.issues[0]?.message}`)
-      const record = parsed.data as AnyRecord
-      const existing = this.currentState(kind, id)
-      if (existing?.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
-      const rel = recordRelPath(kind, record as unknown as Record<string, unknown>)
-      const occupant = this.files.get(rel)
-      if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== id) {
-        throw new Error(`Plik ${rel} należy do innego wpisu (np. plan tego miesiąca już istnieje) – usuń go albo zmień datę.`)
-      }
-      if (occupant?.status === 'problem') await this.setAsideProblem(occupant)
-      await this.keepDuplicate(occupant, existing, kind, id)
-      if (existing?.record) await this.history.snapshot(kind, existing.record as AnyRecord, 'restore')
-      await this.writeState(rel, kind, record, serializeRecord(kind, record))
-      if (existing && existing.relPath !== rel) {
-        await removeFile(this.abs(existing.relPath))
-        this.files.delete(existing.relPath)
-      }
+      await this.putVersion(kind, id, old)
       return { change: this.diff(this.buildViews(), false), fi: null }
+    })
+  }
+
+  private stampNow() {
+    return { schemaVersion: SCHEMA_VERSION, updatedAt: this.opts.now(), updatedBy: this.opts.machineName }
+  }
+
+  /** Settings made current again (a version of the history, a backup's): the current ones kept first ('restore'). */
+  private async putSettings(old: unknown): Promise<SettingsFile> {
+    const fi = SCHEMAS.fi.parse({ ...(old as object), ...this.stampNow() })
+    const existing = this.files.get(SETTINGS_FILE)
+    if (existing?.status === 'record' && existing.record) await this.history.snapshot('fi', existing.record as SettingsFile, 'restore')
+    await this.writeState(SETTINGS_FILE, 'fi', fi, serializeRecord('fi', fi))
+    this.fi = fi
+    return fi
+  }
+
+  /**
+   * A version of a record made current (a version of the history, a backup's – F3): the current version (if any) is kept
+   * first ('restore'), the old one written with a new updatedAt at its canonical path (a deleted record comes back).
+   */
+  private async putVersion(kind: Collection, id: string, old: unknown): Promise<void> {
+    const parsed = SCHEMAS[kind].safeParse({ ...(old as object), id, ...this.stampNow() })
+    if (!parsed.success) throw new Error(`Tej wersji nie da się odtworzyć: ${parsed.error.issues[0]?.path.join('.')}: ${parsed.error.issues[0]?.message}`)
+    const record = parsed.data as AnyRecord
+    const existing = this.currentState(kind, id)
+    if (existing?.readOnly) throw new ReadOnlyError('Ten wpis jest tylko do odczytu.')
+    const rel = recordRelPath(kind, record as unknown as Record<string, unknown>)
+    const occupant = this.files.get(rel)
+    if (occupant?.status === 'record' && (occupant.record as AnyRecord).id !== id) {
+      throw new Error(`Plik ${rel} należy do innego wpisu (np. plan tego miesiąca już istnieje) – usuń go albo zmień datę.`)
+    }
+    if (occupant?.status === 'problem') await this.setAsideProblem(occupant)
+    await this.keepDuplicate(occupant, existing, kind, id)
+    if (existing?.record) await this.history.snapshot(kind, existing.record as AnyRecord, 'restore')
+    await this.writeState(rel, kind, record, serializeRecord(kind, record))
+    if (existing && existing.relPath !== rel) {
+      await removeFile(this.abs(existing.relPath))
+      this.files.delete(existing.relPath)
+    }
+  }
+
+  /**
+   * A backup against the folder (F3, D86): the records changed or deleted since it (the latest edited first, by
+   * collection – the import's batches are bookkeeping, left out), those added since counted, the settings – compared
+   * without the bookkeeping fields (`sameContentAs`).
+   */
+  compareBackup(data: BackupData): Promise<Omit<BackupPreview, 'path'>> {
+    return this.mutex.run(async () => {
+      const views = this.buildViews()
+      const items: BackupDiffItem[] = []
+      const added: BackupPreview['added'] = {}
+      let total = 0
+      for (const c of COLLECTIONS) {
+        const current = views.records[c]
+        const inBackup = new Set<string>()
+        const found: Array<BackupDiffItem & { at: string }> = []
+        for (const r of data.records[c]) {
+          total++
+          inBackup.add(r.id)
+          if (c === 'imports') continue
+          const now = current.get(r.id)?.record
+          if (!now) found.push({ collection: c, id: r.id, change: 'deleted', backup: r, at: r.updatedAt })
+          else if (!sameContentAs(now, r)) found.push({ collection: c, id: r.id, change: 'changed', backup: r, at: (now as AnyRecord).updatedAt })
+        }
+        found.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+        items.push(...found.map(({ at: _, ...item }) => item))
+        if (c === 'imports') continue
+        let since = 0
+        for (const id of current.keys()) if (!inBackup.has(id)) since++
+        if (since) added[c] = since
+      }
+      return { items, added, settings: { changed: !!data.fi && !!this.fi && !sameContentAs(this.fi, data.fi), backup: data.fi }, total, invalid: data.invalid.length, tooNew: data.tooNew }
+    })
+  }
+
+  /**
+   * Records of a backup made current again (F3): one by one as `historyRestore` does (each current version kept in the
+   * history first), one change set; a record that cannot be written says why, the others are written.
+   */
+  restoreVersions(items: ReadonlyArray<{ kind: Collection; record: AnyRecord }>, fi: SettingsFile | null): Promise<{ change: ChangeSet | null; fi: SettingsFile | null; done: string[]; failed: Array<{ id: string; error: string }> }> {
+    return this.mutex.run(async () => {
+      this.assertWritable()
+      const done: string[] = []
+      const failed: Array<{ id: string; error: string }> = []
+      for (const { kind, record } of items) {
+        try {
+          await this.putVersion(kind, record.id, record)
+          done.push(record.id)
+        } catch (e) {
+          failed.push({ id: record.id, error: (e as Error).message })
+        }
+      }
+      // The settings go back to the caller (as `historyRestore`'s – adopted there, not a change set's).
+      const written = fi ? await this.putSettings(fi) : null
+      return { change: this.diff(this.buildViews(), false), fi: written, done, failed }
     })
   }
 

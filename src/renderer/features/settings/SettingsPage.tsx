@@ -15,6 +15,7 @@ import { ImportTab } from './ImportTab'
 import { LayersTab, NotifyTab } from './MachineTabs'
 import { IctjTab } from './IctjTab'
 import { HouseholdTab } from './HouseholdTab'
+import { RecoverDialog } from './RecoverDialog'
 import { IconFolder, IconPlus, IconSync } from '../../components/icons'
 import { Field, NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
@@ -199,6 +200,8 @@ function FolderTab() {
   const [recent, setRecent] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [backups, setBackups] = useState<{ dir: string; files: BackupInfo[] } | null>(null)
+  // The backup whose recovery window is open (F3).
+  const [recovering, setRecovering] = useState<BackupInfo | null>(null)
   const loadBackups = useCallback(async () => {
     try {
       setBackups(await api.listBackups())
@@ -342,15 +345,32 @@ function FolderTab() {
         {backups && <BackupAge files={backups.files} />}
         {backups && backups.files.length === 0 && <span className="text-[11.5px] text-dim">Brak kopii.</span>}
         {backups?.files.map((b) => (
-          <div key={b.path} className="grid grid-cols-[120px_minmax(0,1fr)_90px_150px] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="backup-row">
+          <div key={b.path} className="grid grid-cols-[120px_minmax(0,1fr)_90px_150px_auto] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="backup-row">
             <span className="text-muted">{BACKUP_KIND[b.kind]}</span>
             <button className="num truncate text-left hover:text-fg-strong" onClick={() => api.showPath(b.path)} title={b.path}>
               {b.name}
             </button>
             <span className="num text-right text-muted">{fmtBytes(b.bytes)}</span>
             <span className="num text-right text-dim">{new Date(b.mtimeMs).toLocaleString('pl-PL')}</span>
+            <button className="btn h-[20px] px-1.5 text-[11px]" disabled={switching} title="Porównaj z bieżącym folderem i odzyskaj wybrane wpisy albo cały folder (F3)" onClick={() => setRecovering(b)} data-testid="backup-recover">
+              Odzyskaj…
+            </button>
           </div>
         ))}
+        {recovering && (
+          <RecoverDialog
+            backup={recovering}
+            label={BACKUP_KIND[recovering.kind]}
+            onClose={() => setRecovering(null)}
+            onFolder={() => {
+              const path = recovering.path
+              setRecovering(null)
+              // A large folder's backup takes a while to unpack before the new folder opens.
+              toast('Rozpakowywanie kopii do nowego folderu…', 'info', 4000)
+              void switchTo(() => api.backupToFolder(path))
+            }}
+          />
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button className="btn h-[22px]" disabled={busy} onClick={() => run(async () => void (await api.setBackupDir('pick'), await loadBackups()))}>
             Zmień folder kopii…
@@ -375,7 +395,7 @@ function FolderTab() {
           >
             Eksport: ZIP całego folderu…
           </button>
-          <span className="text-[11px] text-dim">Przywracanie: rozpakuj ZIP do pustego folderu i wskaż go wyżej („Otwórz inny folder…”).</span>
+          <span className="text-[11px] text-dim">Odzyskanie: „Odzyskaj…” przy kopii – wybrane wpisy albo cały folder do nowego folderu obok.</span>
         </div>
       </Panel>
       {recent.length > 1 && (
