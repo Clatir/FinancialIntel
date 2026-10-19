@@ -94,7 +94,42 @@ test('rozmiar interfejsu i wyższy kontrast (1.6.6, F30): Ctrl+Plus / Ctrl+Minus
     expect(await small.evaluate((e) => (globalThis as unknown as Win).getComputedStyle(e).fontSize)).toBe('11.5px')
     await page.getByTestId('settings-contrast').click()
     await expect.poll(() => page.evaluate(() => (globalThis as unknown as Win).document.documentElement.dataset.contrast ?? null)).toBe('high')
-    expect(await small.evaluate((e) => (globalThis as unknown as Win).getComputedStyle(e).fontSize)).toBe('12px')
+    // TEMPORARY diagnostics (CI only fails here): what the page has at this moment.
+    const probe = () =>
+      page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = globalThis as any
+        const d = w.document
+        const all = [...d.querySelectorAll('.text-\\[11\\.5px\\]')].slice(0, 4)
+        const rules: string[] = []
+        for (const s of d.styleSheets)
+          try {
+            for (const r of s.cssRules) if (String(r.cssText).includes('data-contrast')) rules.push(String(r.cssText).slice(0, 90))
+          } catch {
+            rules.push('(unreadable sheet)')
+          }
+        return JSON.stringify({
+          contrast: d.documentElement.dataset.contrast ?? null,
+          attrs: [...d.documentElement.attributes].map((a: { name: string; value: string }) => `${a.name}=${a.value}`),
+          els: all.map((e: { outerHTML: string; matches(s: string): boolean }) => ({
+            html: e.outerHTML.slice(0, 120),
+            matches: e.matches(':root[data-contrast="high"] :is(.text-\\[11\\.5px\\])'),
+            font: w.getComputedStyle(e).fontSize
+          })),
+          muted: w.getComputedStyle(d.documentElement).getPropertyValue('--color-muted'),
+          rules,
+          visibility: d.visibilityState,
+          dpr: w.devicePixelRatio
+        })
+      })
+    console.log(`probe 1: ${await probe()}`)
+    try {
+      await expect.poll(() => small.evaluate((e) => (globalThis as unknown as Win).getComputedStyle(e).fontSize), { timeout: 5000 }).toBe('12px')
+    } catch (e) {
+      if (e instanceof Error) e.message += `\nprobe 2: ${await probe()}`
+      throw e
+    }
+    console.log(`probe 3: ${await probe()}`)
     await expect.poll(async () => (await prefsOf(userData)).highContrast).toBe(true)
     expect(errors).toEqual([])
   } finally {
