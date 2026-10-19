@@ -52,7 +52,13 @@ const KEY_SETTINGS = ['accounts', 'budget', 'categories', 'household', 'layers',
 const KEY_COLLECTIONS = ['transactions', 'containers', 'goals', 'months', 'dockings', 'loans', 'balances'] as const
 type FleetKey = { date: string; parts: readonly unknown[] }
 
-const partsOf = (fi: Fi, records: Records): unknown[] => [...KEY_SETTINGS.map((k) => fi.settings[k]), ...KEY_COLLECTIONS.map((c) => records[c])]
+// Of the game's settings only the serious overrun's threshold (N102: it colours the envelopes' alarms) – the day without
+// spending and the game's start written in the background never run the engine again.
+const partsOf = (fi: Fi, records: Records): unknown[] => [
+  ...KEY_SETTINGS.map((k) => fi.settings[k]),
+  fi.settings.game.seriousEnvelopePct,
+  ...KEY_COLLECTIONS.map((c) => records[c])
+]
 const keyOf = (fi: Fi, records: Records, date: string): FleetKey => ({ date, parts: partsOf(fi, records) })
 const NO_PARTS: unknown[] = []
 const sameKey = (a: FleetKey, b: FleetKey) => a.date === b.date && a.parts.every((p, i) => p === b.parts[i])

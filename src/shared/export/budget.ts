@@ -9,9 +9,8 @@ import { TX_KIND_LABEL } from '../schema/records'
 import { financersText, incomeShares, memberName } from '../calc/household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
 import { categoryIndex, sum } from '../calc/operations'
-import { debriefing } from '../calc/plan'
+import { debriefing, transactionsOfMonth } from '../calc/plan'
 import type { Alarm, FleetEvent } from '../calc/fleet'
-import { monthOf } from '../calc/dates'
 import type { XlsxSheet } from './xlsx'
 
 /** Grosze as Excel in Polish reads them: '-1234,56'. */
@@ -120,8 +119,10 @@ export interface MonthRow {
   salary: number | null
   costs: number
   income: number
-  /** „Miesiąc zamknięty na plus” (spec) – as the debriefing tells it (N6). */
+  /** „Miesiąc zamknięty na plus” (spec) – as the debriefing tells it (N6); null in a month still running (N65). */
   plus: boolean | null
+  /** The month still runs (N65): „w toku” instead of a result. */
+  inProgress: boolean
   /** The energy left at the month's end. */
   loot: number | null
 }
@@ -131,19 +132,21 @@ export function monthRows(
   months: readonly string[]
 ): MonthRow[] {
   const ctx = input.income ?? plainIncomeContext(input.transactions)
+  // The month's operations from the list's index by month (W30): never the whole history for each month.
   return months.map((month) => {
     const d = debriefing(month, input)
-    return { month, salary: d.salary, costs: d.costs, income: incomeOfPeriod(input.transactions.filter((t) => monthOf(t.date) === month), ctx).total, plus: d.plus, loot: d.loot }
+    return { month, salary: d.salary, costs: d.costs, income: incomeOfPeriod(transactionsOfMonth(input.transactions, month), ctx).total, plus: d.plus, inProgress: !d.ended, loot: d.loot }
   })
 }
 
-const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Wpływy (zł)', 'Na plus', 'Łupy (zł)'] as const
-const yesNo = (v: boolean | null) => (v == null ? '' : v ? 'tak' : 'nie')
+// The income as D81 counts it – „Przychody” everywhere it means that (N24).
+const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)'] as const
+const plusText = (r: Pick<MonthRow, 'plus' | 'inProgress'>) => (r.inProgress ? 'w toku' : r.plus == null ? '' : r.plus ? 'tak' : 'nie')
 
 export function monthsCsv(rows: readonly MonthRow[]): string {
   return toCsv(
     MONTH_HEADER,
-    rows.map((r) => [r.month, r.salary == null ? '' : plnCell(r.salary), plnCell(r.costs), plnCell(r.income), yesNo(r.plus), r.loot == null ? '' : plnCell(r.loot)])
+    rows.map((r) => [r.month, r.salary == null ? '' : plnCell(r.salary), plnCell(r.costs), plnCell(r.income), plusText(r), r.loot == null ? '' : plnCell(r.loot)])
   )
 }
 
@@ -155,11 +158,11 @@ export function monthsSheet(rows: readonly MonthRow[]): XlsxSheet {
       { header: 'Miesiąc', kind: 'text', width: 10 },
       { header: 'Pensja (zł)', kind: 'money', width: 13 },
       { header: 'Koszty netto (zł)', kind: 'money', width: 16 },
-      { header: 'Wpływy (zł)', kind: 'money', width: 13 },
+      { header: 'Przychody (zł)', kind: 'money', width: 15 },
       { header: 'Na plus', kind: 'text', width: 9 },
       { header: 'Łupy (zł)', kind: 'money', width: 12 }
     ],
-    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, yesNo(r.plus), r.loot == null ? null : r.loot / 100])
+    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100])
   }
 }
 

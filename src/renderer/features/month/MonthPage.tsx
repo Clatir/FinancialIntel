@@ -9,7 +9,7 @@ import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
-import { AmountField, plnText } from '../../components/fields'
+import { AmountField, amountsHidden, plnText, signedPln } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
@@ -60,6 +60,11 @@ export function MonthPage() {
   const briefMonth = month < current ? month : addMonths(current, -1)
   const briefOf = (m: string) => debriefing(m, { transactions, categories: categories!, plans, log: fleet?.log ?? [], alarms: fleet?.alarms ?? [], containers, today })
   const brief = useMemo(() => (categories ? briefOf(briefMonth) : null), [briefMonth, transactions, categories, plans, fleet, today, containers])
+  // The shown month's own debriefing (N54, W38): a month that ended is `brief` itself; this month – its spending so far.
+  const shownBrief = useMemo(
+    () => (!categories || month > current ? null : month === briefMonth ? brief : briefOf(month)),
+    [month, current, briefMonth, brief, transactions, categories, plans, fleet, today, containers]
+  )
   if (!fleet || !categories) return <Empty>Wczytywanie…</Empty>
 
   return (
@@ -103,7 +108,7 @@ export function MonthPage() {
           </div>
           <div className="flex min-w-0 flex-col">
             {month === current && <DailyPanel fleet={fleet} />}
-            <EnvelopesPanel month={month} current={current} fleet={fleet} brief={month < current ? briefOf(month) : null} />
+            <EnvelopesPanel month={month} current={current} fleet={fleet} brief={shownBrief} />
             {brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? (
               <DebriefPanel brief={brief} fleet={fleet} today={today} plans={plans} readOnly={readOnly} />
             ) : (
@@ -167,7 +172,7 @@ function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { 
         ))}
         {aboveIncome && (
           <div className="text-[11.5px] text-accent" data-testid="month-salary-above-income">
-            Pensja wyższa niż średnie wpływy z 6 mies. o {zl(aboveIncome.amount)} – osłony będą się kurczyć.
+            Pensja wyższa niż średni przychód z 6 mies. o {zl(aboveIncome.amount)} – osłony będą się kurczyć.
           </div>
         )}
         {plan && plan.salary > 0 && fleet.shields.target != null && month === current && (
@@ -285,14 +290,39 @@ function DailyPanel({ fleet }: { fleet: FleetState }) {
   )
 }
 
+/**
+ * The envelopes of the month's plan against their limits – this month and a month that ended the same way (N54): only
+ * categories with an envelope; the spending without one is a neutral line apart.
+ */
 function EnvelopesPanel({ month, current, fleet, brief }: { month: string; current: string; fleet: FleetState; brief: Debriefing | null }) {
+  const cats = useCategories()
   const rows = month === current ? fleet.envelopes : (brief?.envelopes ?? [])
+  const outside = brief?.outside ?? []
   if (month > current) return null
   return (
     <Panel title="Koperty" testId="month-envelopes">
       {!rows.length ? <Empty>Brak kopert w tym miesiącu.</Empty> : <EnvelopeBars rows={rows} elapsed={month === current ? monthElapsed(fleet.today) : undefined} />}
+      {outside.length > 0 && <OutsideRow outside={outside} label={cats.label} />}
     </Panel>
   )
+}
+
+/** The spending of categories without an envelope that month (N25, N101): their sum and names – no limit, no red. */
+function OutsideRow({ outside, label }: { outside: Debriefing['outside']; label: (id: string) => string }) {
+  return (
+    <Row
+      className="mt-1.5 text-[12px]"
+      label="Bez koperty"
+      sub={outside.map((o) => `${label(o.categoryId)} ${zl(o.spent)}`).join(' · ')}
+      value={zl(outside.reduce((a, o) => a + o.spent, 0))}
+      testId="month-outside"
+    />
+  )
+}
+
+/** A FVG of an envelope (+ left, − over): green / red – neutral while the amounts are hidden (B61). */
+function Gap({ value }: { value: number }) {
+  return <span className={amountsHidden() ? undefined : value < 0 ? 'text-down' : 'text-up'}>{value >= 0 && !amountsHidden() ? `+${plnText(value)}` : signedPln(value)} zł</span>
 }
 
 function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debriefing; fleet: FleetState; today: string; plans: MonthPlan[]; readOnly: boolean }) {
@@ -353,21 +383,12 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
           )}
           {brief.uncategorized > 0 && <Row label="Bez kategorii" sub="liczy się do puli codziennej" value={zl(brief.uncategorized)} />}
           {brief.daily && (
-            <Row
-              label="Pula codzienna (koperty codzienne, łupy i bez kategorii)"
-              sub={`${zl(brief.daily.spent)} z ${zl(brief.daily.limit)}`}
-              value={<span className={brief.daily.gap < 0 ? 'text-down' : 'text-up'}>{brief.daily.gap >= 0 ? `+${plnText(brief.daily.gap)}` : plnText(brief.daily.gap)} zł</span>}
-              testId="debrief-daily"
-            />
+            <Row label="Pula codzienna (koperty codzienne, łupy i bez kategorii)" sub={`${zl(brief.daily.spent)} z ${zl(brief.daily.limit)}`} value={<Gap value={brief.daily.gap} />} testId="debrief-daily" />
           )}
           {brief.envelopes.map((e) => (
-            <Row
-              key={e.categoryId}
-              label={cats.label(e.categoryId)}
-              sub={`${zl(e.spent)} z ${zl(e.limit)}`}
-              value={<span className={e.gap < 0 ? 'text-down' : 'text-up'}>{e.gap >= 0 ? `+${plnText(e.gap)}` : plnText(e.gap)} zł</span>}
-            />
+            <Row key={e.categoryId} label={cats.label(e.categoryId)} sub={`${zl(e.spent)} z ${zl(e.limit)}`} value={<Gap value={e.gap} />} testId="debrief-envelope" />
           ))}
+          {brief.outside.length > 0 && <OutsideRow outside={brief.outside} label={cats.label} />}
           <p className="text-[11px] text-dim">FVG kopert: luka między planem a faktem (+ zostało, − ponad plan).</p>
         </div>
         <div className="border-t border-line pt-1.5" data-testid="loot">

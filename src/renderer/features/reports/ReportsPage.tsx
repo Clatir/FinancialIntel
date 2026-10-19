@@ -12,8 +12,10 @@ import { setReportTab, setWatchMonday, useReportsUi, type ReportTab } from './st
 import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
+import { BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
+import { sum } from '@shared/calc/operations'
 import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
-import { formatPln } from '@shared/format'
+import { formatPln, rangeText } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useGameView } from '../../store/game'
@@ -81,11 +83,14 @@ function BriefingReport() {
   const fleet = useFleet()
   const items = useBriefingItems(fleet)
   if (!fleet) return null
+  const bias = dailyBias(fleet)
   return (
     <Columns id="reports-briefing" tracks={['minmax(420px,1fr)']} className="grid items-start">
       <Panel title={`Odprawa – ${dayLabel(fleet.today)}`} name="Odprawa" testId="reports-briefing">
         <div className="flex flex-col text-[12px]">
           {fleet.daily && <Line label="Energia dziś" value={zl(fleet.daily.left)} strong />}
+          {/* The briefing's first element (spec, N26) – as on the bridge. */}
+          {bias && <Line label="Daily Bias" value={BIAS_LABEL[bias]} testId="reports-briefing-bias" />}
           {!items.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
           {items.map((i) => (
             <span key={i.key} className={cx('py-0.5', i.level === 'red' ? 'text-down' : 'text-fg')} data-testid="reports-briefing-item">
@@ -131,7 +136,7 @@ function WatchReport() {
               </button>
             </div>
             <Line label="Koszty netto" value={zl(w.costs)} strong testId="reports-watch-costs" />
-            <Line label="Wpływy" value={zl(w.income)} />
+            <Line label={<span title="Przychód (D81): praca i trading netto – bez zwrotów, pożyczek i pieniędzy domowników">Przychody</span>} value={zl(w.income)} />
             <div className="flex flex-col pt-1">
               {w.days.map((d) => {
                 const g = days.get(d.date)
@@ -247,6 +252,9 @@ function DebriefReport() {
         ['Pensja od siebie', b.salary == null ? '—' : money(b.salary)],
         ['Koszty netto', money(b.costs)],
         ['Ładownia i odkładki', money(b.cargo)],
+        // The parts of the costs without an envelope (N25): the rows add up to the net costs with the envelopes below.
+        ...(b.outside.length ? ([['Bez koperty', `${money(sum(b.outside.map((o) => o.spent)))} (${b.outside.map((o) => label(o.categoryId)).join(', ')})`]] as Array<[string, string]>) : []),
+        ...(b.uncategorized > 0 ? ([['Bez kategorii (w puli codziennej)', money(b.uncategorized)]] as Array<[string, string]>) : []),
         // What household members financed (D80): not my costs, shown apart.
         ['Sfinansowane przez domowników', financedText(b.financed, money, settings.household.members)],
         // The month's energy as the engine ran it (N6): the salary less the tanks' installments, the loot given to it.
@@ -256,7 +264,8 @@ function DebriefReport() {
               ['Wydane z energii (i ponad nią z osłon)', money(b.energy.used)]
             ] as Array<[string, string]>)
           : []),
-        ['Miesiąc zamknięty na plus', b.plus == null ? '—' : b.plus ? 'tak' : 'nie'],
+        // A month in progress is never „na plus” yet (N65).
+        ['Miesiąc zamknięty na plus', !b.ended ? 'miesiąc trwa' : b.plus == null ? '—' : b.plus ? 'tak' : 'nie'],
         ['Łupy (energia na koniec miesiąca)', b.loot == null ? 'miesiąc trwa' : money(b.loot)]
       ]
     },
@@ -286,7 +295,9 @@ function DebriefReport() {
       lines: [
         ['Plan', `${d.log.plan.count} · ${money(d.log.plan.amount)}`],
         ['Impuls', `${d.log.impulse.count} · ${money(d.log.impulse.amount)}`],
-        ['Bez oznaczenia (od progu)', String(d.log.unmarked)]
+        ['Bez oznaczenia (od progu)', String(d.log.unmarked)],
+        // As the Wywiad counts it (N26): planned among the marked.
+        ['Trafność (plan wśród oznaczonych)', d.log.plan.count + d.log.impulse.count ? `${Math.round((d.log.plan.count / (d.log.plan.count + d.log.impulse.count)) * 100)}%` : '—']
       ]
     },
     ...(loot
@@ -390,13 +401,19 @@ function YearReport() {
       lines: [
         ['Koszty netto', money(y.costs)],
         ['Sfinansowane przez domowników', financedText(y.financed, money, settings.household.members)],
-        ['Wpływy', money(y.income)],
-        ['Majątek na początku (31.12 roku wcześniej)', money(wealth.start)],
-        [`Majątek na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(wealth.end)],
-        ['Zasięg teraz', fleet.range == null ? '—' : `${fleet.range.toFixed(1).replace('.', ',')} mies.${fleet.shipClass ? ` (${SHIP_CLASS_LABEL[fleet.shipClass]})` : ''}`]
+        ['Przychody', money(y.income)],
+        // The sum of the accounts' balances (T81, N63) – borrowed money and the household's advances in it.
+        ['Pieniądze na kontach na początku (31.12 roku wcześniej)', money(wealth.start)],
+        [`Pieniądze na kontach na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(wealth.end)],
+        ['Zasięg teraz', fleet.range == null ? '—' : `${rangeText(fleet.range)}${fleet.shipClass ? ` (${SHIP_CLASS_LABEL[fleet.shipClass]})` : ''}`]
       ]
     },
-    { title: 'Miesiące', table: { head: ['Miesiąc', 'Koszty', 'Wpływy'], rows: y.months.map((m) => [monthLabel(m.month), money(m.costs), money(m.income)]), numeric: [1, 2] } },
+    {
+      title: 'Miesiące',
+      table: { head: ['Miesiąc', 'Koszty', 'Przychody'], rows: y.months.map((m) => [monthLabel(m.month), money(m.costs), money(m.income)]), numeric: [1, 2] },
+      // Why the months do not add up to the year's income (N66, T119).
+      text: 'Trading netto liczony w każdym miesiącu osobno (dopłaty do XTB nie schodzą poniżej zera); przychody roku nettują dopłaty z całego roku. Pieniądze na kontach to suma sald – z pożyczonymi i depozytem domowników.'
+    },
     { title: 'Kategorie', table: { head: ['Kategoria', 'Koszty'], rows: y.categories.slice(0, 12).map((c) => [c.id === 'cargo' ? 'Ładownia' : c.id === '-' ? 'bez kategorii' : cats.label(c.id), money(c.cost)]), numeric: [1] } },
     {
       title: 'Cele i osiągnięcia',

@@ -207,11 +207,11 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 
 ### Priorytet niski
 
-- [ ] **B61** Ctrl+$ nie maskuje notatek Radaru („w zbiorniku …”) ani otwartego okna szybkiego wpisu – `renderer/features/radar/RadarPage.tsx:40-44`, `shared/calc/radar.ts:72` (+15)
-- [ ] **B62** Data decyzji o łupach w debriefingu pokazana w UTC, a nie w czasie warszawskim – `renderer/features/month/MonthPage.tsx:328`, `renderer/features/month/actions.ts:57` (+1)
-- [ ] **B63** Panel kontenera: podpowiedź „Najbliższa” płatność pokazuje datę z przeszłości – `renderer/features/cargo/CargoPage.tsx:35-38`, `renderer/features/cargo/CargoPage.tsx:158` (+3)
+- [x] **B61** Ctrl+$ nie maskuje notatek Radaru („w zbiorniku …”) ani otwartego okna szybkiego wpisu – `renderer/features/radar/RadarPage.tsx:40-44`, `shared/calc/radar.ts:72` (+15)
+- [x] **B62** Data decyzji o łupach w debriefingu pokazana w UTC, a nie w czasie warszawskim – `renderer/features/month/MonthPage.tsx:328`, `renderer/features/month/actions.ts:57` (+1)
+- [x] **B63** Panel kontenera: podpowiedź „Najbliższa” płatność pokazuje datę z przeszłości – `renderer/features/cargo/CargoPage.tsx:35-38`, `renderer/features/cargo/CargoPage.tsx:158` (+3)
 - [ ] **B64** Ctrl+N („nowa operacja”) jest opisany jako skrót ogólny (ściągawka, paleta, podpowiedź na Mostku), a działa tylko na ekranie Operacje – `renderer/app/ShortcutsHelp.tsx:13`, `renderer/app/App.tsx:74-118` (+5)
-- [ ] **B65** Raport wachty w ostatni dzień miesiąca planuje koperty „na 1 dni”, choć jutro koperty startują od nowa – `shared/calc/intel.ts:284-291`, `renderer/features/reports/ReportsPage.tsx:118` (+5)
+- [x] **B65** Raport wachty w ostatni dzień miesiąca planuje koperty „na 1 dni”, choć jutro koperty startują od nowa – `shared/calc/intel.ts:284-291`, `renderer/features/reports/ReportsPage.tsx:118` (+5)
 - [ ] **B66** „Cofnij” zbiorczej kategorii albo finansującego przywraca całe stare rekordy i nadpisuje późniejsze zmiany – `renderer/features/operations/state.ts:92-115`, `renderer/features/operations/state.ts:131-142` (+3)
 - [ ] **B67** Pojedyncze pliki z nowszej wersji (np. w trakcie synchronizacji OneDrive): edytory poza Operacjami po cichu gubią zmiany, usunięcie znika z ekranu, a plik gry, którego ta wersja nie odczyta, daje stały „błąd zapisu” *(do potwierdzenia)* – `renderer/store/data.ts:489`, `renderer/store/data.ts:531` (+11)
 - [ ] **B68** Pole kwoty przyjmuje po cichu więcej niż 2 miejsca po przecinku – „1.200” to 1,20 zł – `renderer/lib/format.ts:101-107`, `renderer/components/fields.tsx:52-58`
@@ -230,15 +230,15 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **B81** Domyślny miesiąc listy Operacji nie zmienia się po zmianie miesiąca, gdy aplikacja działa w zasobniku – `renderer/features/operations/state.ts:46-50`
 - [ ] **B82** Filtr kategorii z zarchiwizowaną albo usuniętą kategorią: w podsumowaniu ULID zamiast nazwy, a w menu nie ma pola do odznaczenia – `renderer/features/operations/OperationsPage.tsx:100`, `renderer/features/operations/OperationsPage.tsx:402` (+1)
 - [ ] **B83** „Saldo w banku teraz” liczy się jako saldo na koniec dzisiejszego dnia – wydatek z rana dopisany wieczorem daje błędną korektę *(do potwierdzenia)* – `renderer/features/settings/AccountsTab.tsx:125`, `renderer/features/settings/AccountsTab.tsx:133` (+4)
-- [ ] **B84** Rozkazy przyjmują minimalne osłony większe niż cel osłon – stały alarm, Bearish i poważne naruszenia w grze – `renderer/features/settings/MachineTabs.tsx:25`, `renderer/features/settings/MachineTabs.tsx:38` (+4)
-- [ ] **B85** Pożyczka wzięta: „Do spłaty razem” mniejsze niż kwota przechodzi bez sprawdzenia i zaniża dług – `renderer/features/radar/RadarPage.tsx:266`, `renderer/features/radar/RadarPage.tsx:270` (+1)
+- [x] **B84** Rozkazy przyjmują minimalne osłony większe niż cel osłon – stały alarm, Bearish i poważne naruszenia w grze – `renderer/features/settings/MachineTabs.tsx:25`, `renderer/features/settings/MachineTabs.tsx:38` (+4)
+- [x] **B85** Pożyczka wzięta: „Do spłaty razem” mniejsze niż kwota przechodzi bez sprawdzenia i zaniża dług – `renderer/features/radar/RadarPage.tsx:266`, `renderer/features/radar/RadarPage.tsx:270` (+1)
 - [ ] **B86** Esc w polu nazwy w Ustawieniach przenosi z Ustawień na poprzedni ekran – `renderer/components/ui.tsx:425`, `renderer/app/App.tsx:58`
 - [ ] **B87** Mapa gwiezdna: cel osiągnięty po terminie świeci się na czerwono „będzie po terminie”, a nieosiągnięty po terminie bez tempa nie ma żadnego oznaczenia – `renderer/features/starmap/StarMapPage.tsx:188`, `renderer/features/starmap/StarMapPage.tsx:245` (+1)
 - [ ] **B88** Kliknięcie powiadomienia wieczornego albo „Raport wachty dnia” w zasobniku kasuje zapisany filtr Operacji – `renderer/store/notifier.ts:51`, `renderer/store/notifier.ts:52` (+4)
 - [ ] **B89** Podniesiony kontener: naruszenie trafia na dzień przed zmianą, a zmiana 2. dnia miesiąca nie jest zapisana wcale – `shared/calc/game.ts:214`, `shared/calc/game.ts:217` (+2)
 - [ ] **B90** Starsza wersja na drugim komputerze ocenia misję nieznanego szablonu jako niewykonaną i źle czyta nieznany stopień *(do potwierdzenia)* – `shared/calc/game.ts:419`, `shared/calc/game.ts:420` (+6)
 - [ ] **B91** Wybór misji tygodnia zależy od dnia uruchomienia: w poniedziałek „Pełna energia” nie widzi niedzieli – `shared/calc/game.ts:325-329`, `shared/calc/game.ts:530` (+3)
-- [ ] **B92** Eksport „Miesiące”: miesiące sprzed startu budżetu mają „Łupy 0,00” zamiast pustej komórki – `shared/calc/plan.ts:318`, `shared/calc/plan.ts:319` (+4)
+- [x] **B92** Eksport „Miesiące”: miesiące sprzed startu budżetu mają „Łupy 0,00” zamiast pustej komórki – `shared/calc/plan.ts:318`, `shared/calc/plan.ts:319` (+4)
 - [ ] **B93** W trakcie importu ekran dalej przyjmuje zmiany: decyzje zmienione podczas kopii przepadają, upuszczony plik jest zamykany, „Zamknij plik” nie przerywa importu – `renderer/features/import/state.ts:447`, `renderer/features/import/state.ts:454` (+6)
 - [ ] **B94** Upuszczenie pliku omija limit 20 MB i odczyt w procesie głównym (T42), a błąd odczytu nie jest obsłużony – `renderer/features/import/ImportPage.tsx:79`, `renderer/features/import/ImportPage.tsx:80` (+2)
 - [ ] **B95** Błąd w połowie zapisu importu zostawia otwarty plik z nieaktualnym podglądem; ponowny import nie uczy już reguł, a operacje z nowszej wersji są po cichu pomijane – `renderer/features/import/state.ts:460`, `renderer/features/import/state.ts:462` (+8)
@@ -272,9 +272,9 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **B123** Nieudana kopia dzienna (np. folder kopii na odłączonym dysku) zostawia tylko wpis w logu – użytkownik nie wie, że kopie nie powstają – `main/index.ts:413`, `main/index.ts:415` (+2)
 - [ ] **B124** Awaria renderera okna szybkiego wpisu (lub panelu odłączonego) nie jest obsługiwana – skrót pokazuje martwe okno aż do restartu – `main/index.ts:1009`, `main/index.ts:1013` (+3)
 - [ ] **B125** Otwarty szybki wpis nie odświeża danych (kategorie, konta, energia, tylko do odczytu), a zapis nie sprawdza, czy konto i kategoria nadal istnieją – `renderer/features/quick/QuickApp.tsx:72`, `main/quick.ts:104` (+3)
-- [ ] **B126** Pensja miesiąca startu (T45): zwroty sprzed startu ją zwiększają, a kreator zapowiada inną kwotę niż wypłaca silnik – `shared/calc/fleet.ts:575`, `shared/calc/fleet.ts:579` (+2)
-- [ ] **B127** Kreator: saldo otwarcia z salda „teraz” odejmuje też operacje z przyszłą datą – saldo konta trwale zawyżone – `shared/calc/start.ts:285`, `renderer/features/wizard/state.ts:114`
-- [ ] **B128** ETA celów liczone z „tempa”, które obejmuje przydział środków na starcie budżetu – `shared/calc/goals.ts:95`, `shared/calc/goals.ts:103` (+2)
+- [x] **B126** Pensja miesiąca startu (T45): zwroty sprzed startu ją zwiększają, a kreator zapowiada inną kwotę niż wypłaca silnik – `shared/calc/fleet.ts:575`, `shared/calc/fleet.ts:579` (+2)
+- [x] **B127** Kreator: saldo otwarcia z salda „teraz” odejmuje też operacje z przyszłą datą – saldo konta trwale zawyżone – `shared/calc/start.ts:285`, `renderer/features/wizard/state.ts:114`
+- [x] **B128** ETA celów liczone z „tempa”, które obejmuje przydział środków na starcie budżetu – `shared/calc/goals.ts:95`, `shared/calc/goals.ts:103` (+2)
 - [ ] **B129** Dwa komputery: potwierdzenie salda przed synchronizacją OneDrive dodaje drugą, identyczną korektę – `renderer/features/balances/actions.ts:28`, `renderer/features/balances/actions.ts:44` (+2)
 
 ## Wydajność i duże dane (38: 8 wysokich, 19 średnich, 11 niskich)
@@ -314,9 +314,9 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 
 ### Priorytet niski
 
-- [ ] **W28** Okno dokowania liczy cały silnik drugi raz: przy otwarciu, co minutę i po każdej zmianie rekordu – `renderer/features/dock/DockingDialog.tsx:59`, `renderer/features/dock/DockingDialog.tsx:66` (+2)
-- [ ] **W29** Mostek, „Ostatnie operacje”: przy każdym renderze kopia i sortowanie wszystkich operacji, żeby pokazać 10 – `renderer/features/bridge/BridgePage.tsx:115`, `renderer/features/bridge/BridgePage.tsx:132`
-- [ ] **W30** Eksport „Miesiące – CSV” i Excel: monthRows to O(miesiące × (operacje + log silnika)), całe liczenie w kliknięciu – `shared/export/budget.ts:134`, `shared/export/budget.ts:136` (+5)
+- [x] **W28** Okno dokowania liczy cały silnik drugi raz: przy otwarciu, co minutę i po każdej zmianie rekordu – `renderer/features/dock/DockingDialog.tsx:59`, `renderer/features/dock/DockingDialog.tsx:66` (+2)
+- [x] **W29** Mostek, „Ostatnie operacje”: przy każdym renderze kopia i sortowanie wszystkich operacji, żeby pokazać 10 – `renderer/features/bridge/BridgePage.tsx:115`, `renderer/features/bridge/BridgePage.tsx:132`
+- [x] **W30** Eksport „Miesiące – CSV” i Excel: monthRows to O(miesiące × (operacje + log silnika)), całe liczenie w kliknięciu – `shared/export/budget.ts:134`, `shared/export/budget.ts:136` (+5)
 - [ ] **W31** findRule skanuje liniowo wszystkie reguły dla każdego wiersza, a wzorzec słowa kluczowego jest kompilowany przy każdym porównaniu – `shared/import/classify.ts:69`, `shared/import/classify.ts:70` (+9)
 - [ ] **W32** Decyzja zbiorcza („Ustaw” dla zaznaczonych): osobny setState na każdą grupę – O(G²) kopii i powiadomienie wszystkich subskrypcji – `renderer/features/import/state.ts:362`, `renderer/features/import/state.ts:373` (+5)
 - [ ] **W33** Podobne nazwy: similarPairs filtruje wszystkie reguły dla każdej marki i liczy się od nowa przy każdym „To nie to samo” – `renderer/features/import/Learning.tsx:54`, `shared/import/similar.ts:369` (+2)
@@ -324,7 +324,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **W35** Reguły importu w fi.json rosną z każdą marką i nigdy nie są przycinane (≈0,4 KB na regułę), a wszystkie odczyty przeglądają je liniowo – `shared/schema/budget.ts:215`, `shared/import/reconcile.ts:610` (+2)
 - [ ] **W36** Scalanie i różnice na tablicach z id są O(R²) – przy tysiącach reguł importu każda zmiana fi.json kosztuje setki ms – `shared/merge.ts:63`, `shared/merge.ts:67` (+5)
 - [ ] **W37** Po przeładowaniu okna (np. po awarii renderera) folder jest czytany od nowa z dysku zamiast z pamięci – `main/index.ts:482-487`, `main/index.ts:1009-1016` (+2)
-- [ ] **W38** Plan miesiąca: każde przejście miesiąca (i każda minuta) liczy pensję i debriefing po całej historii, debriefing dwa razy – `renderer/features/month/MonthPage.tsx:54`, `renderer/features/month/MonthPage.tsx:57` (+6)
+- [x] **W38** Plan miesiąca: każde przejście miesiąca (i każda minuta) liczy pensję i debriefing po całej historii, debriefing dwa razy – `renderer/features/month/MonthPage.tsx:54`, `renderer/features/month/MonthPage.tsx:57` (+6)
 
 ## Niespójności (104: 1 wysokich, 20 średnich, 83 niskich)
 
@@ -357,15 +357,15 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 
 ### Priorytet niski
 
-- [ ] **N22** Mostek („Układy gwiezdne · cele”) i Mapa gwiezdna („w celach”) pokazują różną sumę pieniędzy w celach, gdy zarchiwizowany cel ma środki – `renderer/features/bridge/BridgePage.tsx:375`, `renderer/features/bridge/BridgePage.tsx:387` (+3)
-- [ ] **N23** „Budżet jeszcze nie wystartował” (baner, kreator) przy budżecie, który silnik już prowadzi od salda otwarcia (T25) – `renderer/app/Banners.tsx:98-104`, `renderer/features/wizard/state.ts:66` (+3)
-- [ ] **N24** „Wpływy” w Operacjach i w Raportach / eksporcie to różne wielkości pod tą samą nazwą, a ta sama średnia raz jest „wpływami”, raz „przychodem” – `shared/operationsView.ts:117-138`, `renderer/features/operations/OperationsPage.tsx:435` (+12)
-- [ ] **N25** Debriefing: wiersze nie składają się na „Koszty netto”, a w Raportach i PDF brakuje „Bez kategorii” – `shared/calc/plan.ts:303`, `shared/calc/plan.ts:312` (+3)
-- [ ] **N26** Raporty: debriefing i odprawa bez elementów ze specyfikacji (seria, trafność dziennika, plan następnego miesiąca, Daily Bias) – `renderer/features/reports/ReportsPage.tsx:241`, `renderer/features/reports/ReportsPage.tsx:268` (+8)
-- [ ] **N27** Odsłuch odprawy: ujemna energia czytana jako 0 zł, brak zachowania z T7 – `renderer/features/bridge/BridgePage.tsx:222`, `renderer/features/bridge/BridgePage.tsx:258` (+5)
-- [ ] **N28** Kliknięcie alarmu w odprawie zawsze prowadzi do Planu miesiąca – `renderer/features/bridge/BridgePage.tsx:73`, `renderer/features/bridge/BridgePage.tsx:85` (+6)
+- [x] **N22** Mostek („Układy gwiezdne · cele”) i Mapa gwiezdna („w celach”) pokazują różną sumę pieniędzy w celach, gdy zarchiwizowany cel ma środki – `renderer/features/bridge/BridgePage.tsx:375`, `renderer/features/bridge/BridgePage.tsx:387` (+3)
+- [x] **N23** „Budżet jeszcze nie wystartował” (baner, kreator) przy budżecie, który silnik już prowadzi od salda otwarcia (T25) – `renderer/app/Banners.tsx:98-104`, `renderer/features/wizard/state.ts:66` (+3)
+- [x] **N24** „Wpływy” w Operacjach i w Raportach / eksporcie to różne wielkości pod tą samą nazwą, a ta sama średnia raz jest „wpływami”, raz „przychodem” – `shared/operationsView.ts:117-138`, `renderer/features/operations/OperationsPage.tsx:435` (+12)
+- [x] **N25** Debriefing: wiersze nie składają się na „Koszty netto”, a w Raportach i PDF brakuje „Bez kategorii” – `shared/calc/plan.ts:303`, `shared/calc/plan.ts:312` (+3)
+- [x] **N26** Raporty: debriefing i odprawa bez elementów ze specyfikacji (seria, trafność dziennika, plan następnego miesiąca, Daily Bias) – `renderer/features/reports/ReportsPage.tsx:241`, `renderer/features/reports/ReportsPage.tsx:268` (+8)
+- [x] **N27** Odsłuch odprawy: ujemna energia czytana jako 0 zł, brak zachowania z T7 – `renderer/features/bridge/BridgePage.tsx:222`, `renderer/features/bridge/BridgePage.tsx:258` (+5)
+- [x] **N28** Kliknięcie alarmu w odprawie zawsze prowadzi do Planu miesiąca – `renderer/features/bridge/BridgePage.tsx:73`, `renderer/features/bridge/BridgePage.tsx:85` (+6)
 - [ ] **N29** Dowództwo opisuje rozkaz „Dzienny przydział energii” wzorem podstawowego przydziału, a egzekwuje coś innego – `renderer/features/command/CommandPage.tsx:368`, `shared/calc/fleet.ts:130` (+1)
-- [ ] **N30** Specyfikacja odprawy i powiadomień: brak godziny odprawy, automatycznego odsłuchu i godzin powiadomień; Silver Bullet nie skraca odprawy – `docs/specyfikacja.md:323`, `docs/specyfikacja.md:334` (+7)
+- [x] **N30** Specyfikacja odprawy i powiadomień: brak godziny odprawy, automatycznego odsłuchu i godzin powiadomień; Silver Bullet nie skraca odprawy – `docs/specyfikacja.md:323`, `docs/specyfikacja.md:334` (+7)
 - [ ] **N31** Mostek: „Masa ładunku” bez prawdziwej nazwy i kwoty (reguła D34) – `renderer/features/bridge/BridgePage.tsx:406`, `renderer/features/bridge/BridgePage.tsx:408` (+22)
 - [ ] **N32** Próg dziennika kapitańskiego 0 zł: szybki wpis nigdy nie pyta, reszta aplikacji pyta o każdy wydatek – `renderer/features/quick/QuickApp.tsx:102`, `shared/calc/operations.ts:112` (+5)
 - [ ] **N33** Niespójne formaty kwot, dat i tekstów między ekranami – `renderer/features/quick/QuickApp.tsx:104`, `renderer/app/App.tsx:240` (+18)
@@ -387,21 +387,21 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **N49** Nieaktualny opis: przepływy domowników sprzed startu „dla statystyk” nigdy się już nie liczą – `shared/calc/household.ts:5`, `shared/calc/income.ts:56` (+2)
 - [ ] **N50** Filtr „Kategoria → bez kategorii” łapie wpływy, przelewy, XTB i zakupy domowników – inaczej niż oznaczenie „bez kategorii” – `shared/operationsView.ts:87`, `shared/operationsView.ts:32` (+4)
 - [ ] **N51** Filtr „Oznaczenia” działa jako I (AND), pozostałe menu jako LUB – ten sam wygląd, inne znaczenie – `shared/operationsView.ts:92`, `shared/operationsView.ts:85` (+2)
-- [ ] **N52** Zaokrąglenie odkładki: Ładownia pokazuje Math.round, harmonogram i Plan – trunc z resztą w ostatniej racie – `renderer/features/cargo/CargoPage.tsx:102`, `renderer/features/cargo/CargoPage.tsx:173` (+3)
+- [x] **N52** Zaokrąglenie odkładki: Ładownia pokazuje Math.round, harmonogram i Plan – trunc z resztą w ostatniej racie – `renderer/features/cargo/CargoPage.tsx:102`, `renderer/features/cargo/CargoPage.tsx:173` (+3)
 - [ ] **N53** Błędy językowe w tekstach ekranów – `renderer/features/month/MonthPage.tsx:149`, `renderer/features/wizard/WizardPage.tsx:114` (+11)
-- [ ] **N54** Panel „Koperty” bieżącego miesiąca pomija kategorie bez koperty, a dla minionych miesięcy je pokazuje – `renderer/features/month/MonthPage.tsx:266`, `shared/calc/fleet.ts:902` (+1)
+- [x] **N54** Panel „Koperty” bieżącego miesiąca pomija kategorie bez koperty, a dla minionych miesięcy je pokazuje – `renderer/features/month/MonthPage.tsx:266`, `shared/calc/fleet.ts:902` (+1)
 - [ ] **N55** Historia operacji niedostępna w trybie tylko do odczytu i dla wpisu z nowszej wersji – przycisk leży w fieldset disabled – `renderer/features/operations/OperationEditor.tsx:107`, `renderer/features/operations/OperationEditor.tsx:114` (+1)
-- [ ] **N56** Zasięg zaokrąglony do 0,1 miesiąca pokazuje próg klasy, której okręt nie ma – `renderer/features/bridge/BridgePage.tsx:35`, `renderer/features/bridge/BridgePage.tsx:150` (+9)
+- [x] **N56** Zasięg zaokrąglony do 0,1 miesiąca pokazuje próg klasy, której okręt nie ma – `renderer/features/bridge/BridgePage.tsx:35`, `renderer/features/bridge/BridgePage.tsx:150` (+9)
 - [ ] **N57** Nieaktualne teksty w UI: „w późniejszych etapach” zasobnik pokaże energię, ICTTJ „w wersji 1.1” – `renderer/features/settings/SettingsPage.tsx:366`, `renderer/features/wizard/WizardPage.tsx:280` (+3)
 - [ ] **N58** Specyfikacja zapowiada na Mostku radar, wywiad i krzywą majątku – po E6 i E8 ich tam nie ma – `docs/specyfikacja.md:277`, `renderer/features/bridge/BridgePage.tsx:163`
-- [ ] **N59** „Zaległa” na Radarze od 1. dnia po terminie, a w pożyczce i odprawie dopiero po 3 dniach – `shared/calc/radar.ts:89`, `renderer/features/radar/RadarPage.tsx:164` (+5)
+- [x] **N59** „Zaległa” na Radarze od 1. dnia po terminie, a w pożyczce i odprawie dopiero po 3 dniach – `shared/calc/radar.ts:89`, `renderer/features/radar/RadarPage.tsx:164` (+5)
 - [ ] **N60** Czerwień i zieleń poza kwotami: ETA po terminie, Bearish, plakietka „zaszyfrowany” – `renderer/features/starmap/StarMapPage.tsx:245`, `renderer/features/bridge/BridgePage.tsx:263` (+1)
 - [ ] **N61** Menu „Układ” na ekranie kreatora pokazuje identyfikator „wizard” zamiast nazwy – `renderer/features/layout/LayoutMenu.tsx:51`, `shared/panels.ts:220`
 - [ ] **N62** „Zapisz teraz” w palecie pomija pytanie o zmiany z drugiego komputera, które obsługuje Ctrl+S – `renderer/features/palette/CommandPalette.tsx:52`, `renderer/app/App.tsx:100`
-- [ ] **N63** Krzywa majątku i przegląd roczny liczą pożyczkę zaciągniętą i depozyt domowników jako majątek – fałszywy BOS/CHoCH w górę – `shared/calc/intel.ts:27-88`, `shared/calc/intel.ts:330-334` (+8)
+- [x] **N63** Krzywa majątku i przegląd roczny liczą pożyczkę zaciągniętą i depozyt domowników jako majątek – fałszywy BOS/CHoCH w górę – `shared/calc/intel.ts:27-88`, `shared/calc/intel.ts:330-334` (+8)
 - [ ] **N64** Klasa okrętu bez histerezy: każdy powrót ponad tę samą granicę to nowy ekran „Nowa klasa” z fanfarą (D73) – `shared/calc/game.ts:636-643`, `renderer/store/game.ts:124` (+5)
-- [ ] **N65** Miesiąc w toku raportowany jako „Miesiąc zamknięty na plus: tak” (Raporty → Debriefing, CSV i Excel miesięcy) – `shared/calc/plan.ts:319-330`, `shared/export/budget.ts:123-124` (+6)
-- [ ] **N66** Przegląd roczny: suma „Wpływów” z tabeli miesięcy różni się od „Wpływów” roku na tym samym ekranie i w PDF – `shared/calc/intel.ts:303-316`, `shared/calc/intel.ts:310` (+4)
+- [x] **N65** Miesiąc w toku raportowany jako „Miesiąc zamknięty na plus: tak” (Raporty → Debriefing, CSV i Excel miesięcy) – `shared/calc/plan.ts:319-330`, `shared/export/budget.ts:123-124` (+6)
+- [x] **N66** Przegląd roczny: suma „Wpływów” z tabeli miesięcy różni się od „Wpływów” roku na tym samym ekranie i w PDF – `shared/calc/intel.ts:303-316`, `shared/calc/intel.ts:310` (+4)
 - [ ] **N67** Próg poważnego przekroczenia koperty w dwóch miejscach: alarm silnika na sztywno 20%, gra wg ustawienia z Dowództwa – `shared/calc/fleet.ts:907`, `shared/calc/game.ts:210-212` (+1)
 - [ ] **N68** Status misji „Pełna energia” w trakcie tygodnia nie widzi dwóch ostatnich dni – „kurs utrzymany” obok „Dziś na razie: naruszenie” – `shared/calc/game.ts:385-390`, `renderer/features/command/CommandPage.tsx:74` (+4)
 - [ ] **N69** Status misji „Dzień bez wydatków” liczy dzisiejszy, niezakończony dzień jako wolny od wydatków – `shared/calc/game.ts:414-417`, `renderer/features/command/CommandPage.tsx:74` (+3)
@@ -436,9 +436,9 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **N98** „Zainstaluje się po zamknięciu aplikacji” – przy domyślnym zamykaniu do zasobnika aktualizacja nigdy nie instaluje się sama – `renderer/app/Banners.tsx:43`, `renderer/features/settings/UpdatesTab.tsx:73` (+6)
 - [ ] **N99** Dymek zasobnika bez „Energia dziś” po włączeniu zamykania do zasobnika w trakcie pracy – `main/index.ts:663`, `main/index.ts:546` (+3)
 - [ ] **N100** Kreator startu nadpisuje ustawienia tego komputera: skrót wraca do Ctrl+Alt+B, „zamykaj do zasobnika” wymuszone; drugi komputer nigdy nie dostaje autostartu – `renderer/features/wizard/state.ts:57`, `renderer/features/wizard/state.ts:125` (+3)
-- [ ] **N101** Kategoria bez koperty w tym miesiącu: w trakcie „bez limitu”, w debriefingu czerwone „ponad plan” – `shared/calc/plan.ts:312`, `shared/calc/plan.ts:314` (+2)
-- [ ] **N102** Przekroczenie koperty ma różne reguły w silniku, odprawie, powiadomieniach, grze i Daily Bias (próg 20%, koperty codzienne, limit 0) – `shared/calc/fleet.ts:907`, `shared/calc/game.ts:210` (+5)
-- [ ] **N103** Odprawa pokazuje tylko pierwszą dopłatę do XTB wbrew firewallowi w miesiącu – `shared/calc/briefing.ts:152`, `shared/calc/briefing.ts:155`
+- [x] **N101** Kategoria bez koperty w tym miesiącu: w trakcie „bez limitu”, w debriefingu czerwone „ponad plan” – `shared/calc/plan.ts:312`, `shared/calc/plan.ts:314` (+2)
+- [x] **N102** Przekroczenie koperty ma różne reguły w silniku, odprawie, powiadomieniach, grze i Daily Bias (próg 20%, koperty codzienne, limit 0) – `shared/calc/fleet.ts:907`, `shared/calc/game.ts:210` (+5)
+- [x] **N103** Odprawa pokazuje tylko pierwszą dopłatę do XTB wbrew firewallowi w miesiącu – `shared/calc/briefing.ts:152`, `shared/calc/briefing.ts:155`
 - [ ] **N104** Wieczorne przypomnienie ustawione w godzinach ciszy nocnej nigdy nie przychodzi – `shared/notify.ts:40`, `shared/notify.ts:55` (+1)
 
 ## Brakujące funkcje (43)

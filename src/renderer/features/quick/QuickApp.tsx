@@ -186,7 +186,11 @@ export function QuickApp() {
         setBusy(false)
       }
     })
-    const offPrefs = api.onMachinePrefs((p) => setAmountsHidden(p.hideAmounts))
+    // Ctrl+$ in the main window (B61): the preview's and the window's amounts change at once, not at the next opening.
+    const offPrefs = api.onMachinePrefs((p) => {
+      setAmountsHidden(p.hideAmounts)
+      setData((x) => (x && x.hideAmounts !== p.hideAmounts ? { ...x, hideAmounts: p.hideAmounts } : x))
+    })
     void api.quickRefresh()
     return () => {
       offData()

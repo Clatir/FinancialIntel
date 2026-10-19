@@ -8,6 +8,7 @@ import { setMachinePrefs, useMachine } from '../../store/machine'
 import { AmountField, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
 import { Field, NumberField, Panel, Toggle } from '../../components/ui'
+import { toast } from '../../store/ui'
 
 /** Ustawienia → Warstwy i rozkazy (fi.json – the same on every computer): the layers' targets and the orders. */
 export function LayersTab() {
@@ -22,7 +23,18 @@ export function LayersTab() {
       <Panel title="Warstwy okrętu">
         <div className="flex flex-col gap-2 text-[12px]">
           <Field label="Osłony – cel" labelWidth={200} hint="Bufor na pensje: tyle pensji.">
-            <NumberField className="w-[80px]" value={layers.shieldSalaries} decimals={0} step={1} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 24} onChange={(v) => v != null && setLayers({ shieldSalaries: v })} aria-label="Osłony w pensjach" data-testid="layers-shields" />
+            <NumberField
+              className="w-[80px]"
+              value={layers.shieldSalaries}
+              decimals={0}
+              step={1}
+              commitOnBlur
+              isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries}
+              onChange={(v) => v != null && setLayers({ shieldSalaries: v })}
+              onReject={(v) => toast(v != null && v >= 1 && v < orders.minShieldSalaries ? `Cel osłon nie może być mniejszy niż minimalne osłony (${orders.minShieldSalaries} pensji) – najpierw zmniejsz minimum.` : 'Cel osłon to od 1 do 24 pensji – zostaje poprzedni.', 'error', 6000)}
+              aria-label="Osłony w pensjach"
+              data-testid="layers-shields"
+            />
           </Field>
           <Field label="Kadłub – cel" labelWidth={200} hint="Fundusz awaryjny: tyle miesięcy średnich kosztów netto (D12).">
             <NumberField className="w-[80px]" value={layers.hullMonths} decimals={0} step={1} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 36} onChange={(v) => v != null && setLayers({ hullMonths: v })} aria-label="Kadłub w miesiącach" data-testid="layers-hull" />
@@ -34,8 +46,23 @@ export function LayersTab() {
       </Panel>
       <Panel title="Rozkazy">
         <div className="flex flex-col gap-2 text-[12px]">
-          <Field label="Minimalne osłony (pensje)" labelWidth={200}>
-            <NumberField className="w-[80px]" value={orders.minShieldSalaries} decimals={1} step={0.5} commitOnBlur isValid={(v) => v != null && v >= 0 && v <= 24} onChange={(v) => v != null && setOrders({ minShieldSalaries: v })} aria-label="Minimalne osłony" />
+          <Field
+            label="Minimalne osłony (pensje)"
+            labelWidth={200}
+            hint={orders.minShieldSalaries > layers.shieldSalaries - 1 ? 'Minimum blisko celu osłon – po każdej pensji osłony mogą spaść poniżej minimum (alarm, Bearish).' : undefined}
+          >
+            <NumberField
+              className="w-[80px]"
+              value={orders.minShieldSalaries}
+              decimals={1}
+              step={0.5}
+              commitOnBlur
+              isValid={(v) => v != null && v >= 0 && v <= 24 && v <= layers.shieldSalaries}
+              onChange={(v) => v != null && setOrders({ minShieldSalaries: v })}
+              onReject={(v) => toast(v != null && v > layers.shieldSalaries ? `Minimalne osłony nie mogą przekraczać celu osłon (${layers.shieldSalaries} pensji) – zostaje poprzednie.` : 'Minimalne osłony to od 0 do 24 pensji – zostaje poprzednie.', 'error', 6000)}
+              aria-label="Minimalne osłony"
+              data-testid="orders-min-shields"
+            />
           </Field>
           <Field label="Linia zanurzenia (% pensji)" labelWidth={200}>
             <NumberField className="w-[80px]" value={orders.cargoLimitPct} decimals={0} step={5} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} aria-label="Linia zanurzenia" data-testid="orders-cargo" />

@@ -633,6 +633,27 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/cargo-status.test.ts`, `inbox.test.ts`, poszerzone `notify`, `format`, `game`, `operations-view`;
   `tests/fs/restore.test.ts`; E2E `tests/e2e/fees.spec.ts`, `series.spec.ts`, `inbox.spec.ts`, `recover.spec.ts`.
 
+## Kod (1.6.1 – liczby, plan, raporty, Mostek, grupa M, D87)
+- Plan i debriefing (T215, T222): `calc/plan.ts` – `costsByMonth` (WeakMap, wynik tylko do odczytu), `transactionsOfMonth`
+  (indeks po miesiącach), `logIndex` / `logOfMonth` (dziennik silnika po miesiącach, końce miesięcy, start);
+  `Debriefing.ended`, `outside` (kategorie bez koperty), koperty tylko z planu (0 zł też), pula dzienna jak energia,
+  `plus` null przed końcem miesiąca, `loot` tylko gdy silnik przeszedł koniec miesiąca; `export/budget.ts`
+  `MonthRow.inProgress` („w toku”), nagłówek „Przychody (zł)”.
+- Silnik i reguły (T216, T219, T220): `calc/fleet.ts` `envelopeOverrun` (alarm, gra, powiadomienia – próg
+  `settings.game.seriousEnvelopePct`, `SERIOUS_ENVELOPE_PCT`), `startMonthSpentOf` (silnik i kreator), `minShields` =
+  min(minimum, cel); `notify.ts` – koperta codzienna łagodnie, limit 0 powiadamia; `briefing.ts` – Daily Bias po kopertach
+  planowych, klucz alarmu z `txId` dla korekty i firewalla; `radar.ts` – „po terminie N dni”, „zaległa rata” od 3 dni;
+  `intel.ts` `nextWeekEnvelopes` – ostatni dzień miesiąca pusty; `goals.ts` `NOT_PACE`; `start.ts` `openingFromNow` – tylko
+  operacje z dziś; `format.ts` `rangeText` / `rangeGapText` (T218); `operationsView.ts` `newestOperations`.
+- Renderer: `store/fleet.ts` – klucz silnika z `settings.game.seriousEnvelopePct` (nie całe `game`); `store/game.ts` – gra
+  startuje po kreatorze; `app/Banners.tsx` (`fromOpening` – saldo otwarcia do dziś); `notifier.ts` → `seriousPct`; Mostek – `openAlarm` (klucz `alarm:<rodzaj>:<ref>[:<txId>]:<miesiąc>`), `usePolishVoice` /
+  `briefing-no-voice`, `recent` z `newestOperations`; Plan miesiąca – `shownBrief`, `OutsideRow` (`month-outside`),
+  `Gap` (`debrief-envelope`); Raporty – `reports-briefing-bias`, „Bez koperty”, „Trafność”, przegląd roczny „Pieniądze na
+  kontach”; Wywiad „Na kontach”; Ładownia `installmentText`, `nextPaymentOf`; Mapa gwiezdna `starmap-total` + część
+  zarchiwizowana, `goalInflow` w memo; Radar / szybki wpis – Ctrl+$ od razu; Ustawienia i kreator – minimum osłon ≤ cel
+  (`orders-min-shields`); Radar – pożyczka z „Do spłaty razem” < kwoty odrzucona.
+- Testy: `tests/unit/plan-reports.test.ts`, `export.test.ts` (miesiąc w toku).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -720,4 +741,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.6.0 Funkcje (grupa L, D86): opłaty stałe w miesiącu (stan, alarm, Radar), szybki wpis seriami, wieczorny raport
   wachty z „Dziś bez wydatków”, meldunki do rozpatrzenia z licznikiem w menu, odzyskanie z kopii (wybrane wpisy albo cały
   folder do nowego)
+- [x] 1.6.1 Liczby, plan, raporty, Mostek (grupa M, D87): debriefing z kopertami tylko z planu i „na plus” po końcu
+  miesiąca, jedna reguła przekroczenia koperty, „Przychody” i „Pieniądze na kontach”, zasięg bez fałszywej klasy, alarmy
+  odprawy do przyczyny, minimum osłon ≤ cel, gra po kreatorze, szybszy plan i raporty
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

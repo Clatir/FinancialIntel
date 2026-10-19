@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { BIAS_LABEL, briefing, confirmationsOf, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
 import { daysBetween, isoWeekOf } from '@shared/calc/dates'
@@ -6,8 +6,9 @@ import { financersText, memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
 import { SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
-import { amountTone } from '@shared/operationsView'
+import { amountTone, newestOperations } from '@shared/operationsView'
 import { shortcutLabel } from '@shared/machine'
+import { plural, rangeText } from '@shared/format'
 import type { DetachEvent } from '@shared/api'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -22,7 +23,7 @@ import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { dayLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
-import { newOperation, openRefundables, selectOperation, setFilter } from '../operations/state'
+import { newOperation, openOperation, openRefundables, selectOperation, setFilter } from '../operations/state'
 import { EnvelopeBars, monthElapsed } from '../month/EnvelopeBars'
 import { IncomePanel } from '../month/IncomePanel'
 import { startWizard } from '../wizard/state'
@@ -34,7 +35,8 @@ import { useGameRecords } from '../../store/game'
 import { useMembers } from '../household/actions'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
-const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).replace('.', ',')} mies.`)
+// Cut down (N56): never the threshold of a class the ship has not reached.
+const fmtRange = rangeText
 
 /** What the bridge's panels draw – in the main window and in their own windows (D45) alike, as plain JSON. */
 export type BridgeFleet = Pick<
@@ -84,7 +86,26 @@ function openTarget(t: BridgeTarget, key?: string): void {
   else if (t === 'loan' || t === 'pit38') navigate({ page: 'radar' })
   else if (t === 'house') openRefundables()
   else if (t === 'mission') navigate({ page: 'command' })
+  else if (t === 'alarm') openAlarm(key)
   else navigate({ page: 'month' })
+}
+
+/**
+ * An alarm of the briefing opens where it is decided (N28) – its kind and operation are in its key
+ * (`alarm:<kind>:<ref>[:<txId>]:<month>`): the cargo's mass and a tank short → Ładownia, a correction or a top-up of XTB
+ * against the firewall → that operation, the envelopes, the salary, the shields and the energy → Plan miesiąca.
+ */
+function openAlarm(key: string | undefined): void {
+  const parts = key?.split(':') ?? []
+  const kind = parts[1]
+  const txId = parts.length === 5 ? parts[3] : undefined
+  if (kind === 'cargo-over' || kind === 'sinking-short') return navigate({ page: 'cargo' })
+  if (kind === 'correction' || kind === 'firewall') {
+    const tx = txId ? useData.getState().records.transactions[txId]?.record : undefined
+    if (tx) return openOperation(tx)
+    return navigate({ page: 'operations' })
+  }
+  navigate({ page: 'month' })
 }
 
 /** A click in a detached panel: the main window goes there. */
@@ -144,6 +165,43 @@ function HostedPanel({ panelKey, spec }: { panelKey: string; spec: DetachSpec | 
   return null
 }
 
+/** An amount as read aloud: „1 234 złote 50 groszy” (the grosze too – N27). */
+function spokenPln(grosze: number): string {
+  const zl = Math.floor(Math.abs(grosze) / 100)
+  const gr = Math.abs(grosze) % 100
+  return `${zl} ${plural(zl, 'złoty', 'złote', 'złotych')}${gr ? ` ${gr} ${plural(gr, 'grosz', 'grosze', 'groszy')}` : ''}`
+}
+
+/** Is there a Polish voice of the system (T7)? null = the voices are not listed yet (Chromium lists them a moment later). */
+function polishVoiceNow(): boolean | null {
+  const synth = window.speechSynthesis
+  if (!synth) return false
+  const voices = synth.getVoices()
+  return voices.length ? voices.some((v) => v.lang.toLowerCase().startsWith('pl')) : null
+}
+
+/** The Polish voice of the system, followed as the system lists its voices; none after 2 s = none at all. */
+function usePolishVoice(): boolean | null {
+  const [has, setHas] = useState<boolean | null>(polishVoiceNow)
+  useEffect(() => {
+    const synth = window.speechSynthesis
+    if (!synth) return
+    const update = () => {
+      const now = polishVoiceNow()
+      if (now != null) setHas(now)
+    }
+    synth.addEventListener('voiceschanged', update)
+    update()
+    // A system without any voice may never send the event.
+    const timer = setTimeout(() => setHas((h) => h ?? false), 2000)
+    return () => {
+      synth.removeEventListener('voiceschanged', update)
+      clearTimeout(timer)
+    }
+  }, [])
+  return has
+}
+
 /** The briefing read aloud with a Polish voice of the system (D49), when the system has one. */
 function speak(text: string): boolean {
   const synth = window.speechSynthesis
@@ -172,8 +230,9 @@ export function BridgePage() {
   const items = useBriefingItems(fleet)
   const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
   const specs = useBridgeSpecs(fleet, items)
+  // The 10 newest in one pass (W29): the bridge renders every minute – never a sort of the whole history.
+  const recent = useMemo(() => newestOperations(transactions, 10), [transactions])
   if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
-  const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 10)
   // A household member's purchase or money (D80) says whose it is instead of the category.
   const noteOf = (t: (typeof recent)[number]): string => {
     const financed = financersText(t, members)
@@ -263,7 +322,8 @@ function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
     const bias = dailyBias(fleet)
     const d = fleet.daily
     const parts = [`Odprawa, ${dayLabel(fleet.today)}.`]
-    if (d && !hidden) parts.push(`Energia na dziś: ${Math.floor(Math.max(0, d.left) / 100)} złotych.`)
+    // Over the day it is said so (N27) – never „0 złotych”.
+    if (d && !hidden) parts.push(d.left < 0 ? `Energia na dziś przekroczona o ${spokenPln(-d.left)}.` : `Energia na dziś: ${spokenPln(d.left)}.`)
     if (bias) parts.push(`Daily Bias: ${BIAS_LABEL[bias]}.`)
     for (const i of items) parts.push(i.text.replaceAll(`${AMOUNT_MASK} zł`, 'kwota ukryta').replace(/zł/g, 'złotych'))
     if (!items.length) parts.push('Bez alarmów.')
@@ -272,7 +332,16 @@ function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
   return { spoken, say }
 }
 
+/** „Odsłuchaj” only with a Polish voice of the system (T7) – without one, how to add it (no reading in a foreign voice). */
 function SpeakButton({ onClick }: { onClick: () => void }) {
+  const voice = usePolishVoice()
+  if (voice == null) return null
+  if (!voice)
+    return (
+      <span className="text-[11px] text-dim" title="Ustawienia Windows → Czas i język → Mowa → Zarządzaj głosami → dodaj głos polski" data-testid="briefing-no-voice">
+        Odsłuch: brak polskiego głosu systemu
+      </span>
+    )
   return (
     <button className="btn h-[22px]" onClick={onClick} title="Przeczytaj odprawę głosem systemu" data-testid="briefing-speak">
       Odsłuchaj

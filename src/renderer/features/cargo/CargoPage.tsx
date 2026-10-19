@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { daysInMonth, monthsBetween, warsawNow } from '@shared/calc/dates'
-import { cyclePosition, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
+import { cyclePosition, nextUnpaidOf, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
 import { monthlyShare, recurringPayments, simulateCargo, type CargoSimulation } from '@shared/calc/plan'
+import { rangeText } from '@shared/format'
 import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -31,13 +32,15 @@ const CYCLES: Array<[number, string]> = [
   [12, 'co rok']
 ]
 const cycleLabel = (n: number) => CYCLES.find(([m]) => m === n)?.[1] ?? `co ${n} mies.`
-const fmtRange = (r: number | null) => (r == null ? '—' : `${r.toFixed(1).replace('.', ',')} mies.`)
+const fmtRange = rangeText
 const fmtPct = (p: number | null) => (p == null ? '—' : `${p.toFixed(1).replace('.', ',')}%`)
 
-/** The next payment's date of a container from this month on: its due month and day (cut to the month's length). */
-function nextPayment(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'dueDay'>, month: string): string {
-  const due = cyclePosition(c, month).dueMonth
-  return `${due}-${String(Math.min(c.dueDay, daysInMonth(due))).padStart(2, '0')}`
+/** A tank's installment as the engine's schedule takes it (N52, T29): the last one carries the rest of the grosze. */
+function installmentText(amount: number, cycleMonths: number): string {
+  const plan = sinkingSchedule(amount, cycleMonths)
+  const first = plan[0] ?? 0
+  const last = plan[plan.length - 1] ?? 0
+  return last === first ? zl(first) : `${zl(first)}, ostatnia ${zl(last)}`
 }
 
 /**
@@ -117,7 +120,7 @@ export function CargoPage() {
                       <span className="w-[96px] text-right text-[11px] text-muted">{cycleLabel(c.cycleMonths)}</span>
                       <StateBadge s={status.get(c.id)} />
                       <span className="num w-[96px] text-right">{zl(c.amount)}</span>
-                      <span className="num w-[86px] text-right text-[11px] text-muted" title="Miesięcznie">
+                      <span className="num w-[86px] text-right text-[11px] text-muted" title="Średnio miesięcznie (opłata okresowa: rata zbiornika, ostatnia z resztą groszy)">
                         {zl(monthlyShare(c))}/m
                       </span>
                     </button>
@@ -172,11 +175,13 @@ function SimulationLine({ sim, verb }: { sim: CargoSimulation; verb: string }) {
   )
 }
 
-function ContainerFields({ c, set, saved }: { c: ContainerDraft; set: (p: Partial<ContainerDraft>) => void; saved?: boolean }) {
+function ContainerFields({ c, set, saved, paidDue }: { c: ContainerDraft; set: (p: Partial<ContainerDraft>) => void; saved?: boolean; paidDue?: string | null }) {
   // „inny…” chosen stays chosen while its number is typed (B1): the mode is the field's, not read from the value.
   const [otherCycle, setOtherCycle] = useState(() => !CYCLES.some(([m]) => m === c.cycleMonths))
   const custom = otherCycle || !CYCLES.some(([m]) => m === c.cycleMonths)
-  const next = nextPayment(c, c.dueMonth)
+  // The next payment still to make from today on (B63) – as the Radar and the briefing count it: never a date of a
+  // past cycle, nor this cycle's when its tank paid it already.
+  const next = nextUnpaidOf(c, warsawNow().date, paidDue)
   return (
     <div className="flex flex-col gap-2 text-[12px]">
       <Field label="Nazwa">
@@ -195,7 +200,7 @@ function ContainerFields({ c, set, saved }: { c: ContainerDraft; set: (p: Partia
           <span className="text-muted">zł</span>
         </div>
       </Field>
-      <Field label="Cykl" hint={c.cycleMonths > 1 ? `Opłata okresowa: co miesiąc z energii idzie rata do zbiornika (${zl(Math.round(c.amount / c.cycleMonths))} – odkładka).` : undefined}>
+      <Field label="Cykl" hint={c.cycleMonths > 1 ? `Opłata okresowa: co miesiąc z energii idzie rata do zbiornika (${installmentText(c.amount, c.cycleMonths)} – odkładka).` : undefined}>
         <div className="flex items-center gap-2">
           <select
             className="input w-[150px]"
@@ -305,6 +310,7 @@ function NewContainer({ draft, setDraft, sim, limitPct, onAdded }: { draft: Cont
 }
 
 function ContainerEditor({ c, status, readOnly, onDeleted, sim }: { c: Container; status: CargoStatus | undefined; readOnly: boolean; onDeleted: () => void; sim: CargoSimulation }) {
+  const paidDue = useFleet()?.tanks.find((t) => t.containerId === c.id)?.paidDue ?? null
   return (
     <Panel
       title={`Kontener: ${c.name}`}
@@ -328,7 +334,7 @@ function ContainerEditor({ c, status, readOnly, onDeleted, sim }: { c: Container
     >
       <fieldset disabled={readOnly} className="flex flex-col gap-2">
         {status && <ThisMonth c={c} s={status} />}
-        <ContainerFields c={c} set={(p) => patchContainer(c.id, p)} saved />
+        <ContainerFields c={c} set={(p) => patchContainer(c.id, p)} saved paidDue={paidDue} />
         {c.counterparty.trim() && <LinkPayments c={c} />}
         <Toggle checked={c.archived} onChange={(archived) => archiveContainer(c, archived)} label="Zarchiwizowany (zrzucony z ładowni)" data-testid="container-archived" />
         {!c.archived && (
@@ -431,7 +437,7 @@ function LoadLine({ fleet }: { fleet: FleetState }) {
         <Meter value={c.pct ?? 0} max={100} mark={c.limitPct / 100} />
         {c.pct == null && <p className="text-[11.5px] text-dim">Bez pensji w planie miesiąca nie ma z czym porównać.</p>}
         {c.over && <p className="text-[11.5px] text-down">Ładunek ponad linią zanurzenia: stałe koszty zjadają za dużo pensji.</p>}
-        <p className="text-[11px] text-dim">Opłaty okresowe liczą się miesięczną częścią (np. OC 1 240 zł rocznie = 103 zł miesięcznie).</p>
+        <p className="text-[11px] text-dim">Opłaty okresowe liczą się miesięczną częścią (np. OC 1 240 zł rocznie ≈ 103,33 zł miesięcznie).</p>
       </div>
     </Panel>
   )

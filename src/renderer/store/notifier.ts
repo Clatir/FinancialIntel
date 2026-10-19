@@ -104,7 +104,8 @@ function check(opened: boolean, shown = false): void {
     ictjProblem: null,
     members: fi.settings.household.members,
     cargo: cargoStatusesNow(),
-    evening: eveningNow()
+    evening: eveningNow(),
+    seriousPct: fi.settings.game.seriousEnvelopePct
   })
   const already = sent()
   const fresh: Notice[] = notices.filter((n) => !already[n.key])

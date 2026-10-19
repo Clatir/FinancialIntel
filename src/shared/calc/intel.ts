@@ -282,7 +282,9 @@ export function weekNumbers(transactions: readonly Transaction[], categories: re
  * after today, for up to 7 of them (`days` – fewer at the month's end: the envelopes start again on the 1st).
  */
 export function nextWeekEnvelopes(envelopes: ReadonlyArray<{ categoryId: string; limit: number; spent: number }>, today: string): Array<{ categoryId: string; week: number; left: number; days: number }> {
-  const daysLeft = Math.max(1, daysBetween(today, lastDayOf(monthOf(today))))
+  const daysLeft = daysBetween(today, lastDayOf(monthOf(today)))
+  // The month's last day (B65): tomorrow the envelopes start again – nothing of this month is left to plan.
+  if (daysLeft <= 0) return []
   const days = Math.min(7, daysLeft)
   return envelopes.map((e) => {
     const left = Math.max(0, e.limit - e.spent)

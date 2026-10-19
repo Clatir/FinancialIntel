@@ -129,6 +129,9 @@ export function renumber(goals: readonly Goal[], now: string): Goal[] {
   return goals.flatMap((g, i) => (g.priority === i + 1 ? [] : [changeGoal(g, { priority: i + 1 }, now)]))
 }
 
+/** Events moving money into the goals that are no monthly pace (B128). */
+const NOT_PACE: ReadonlySet<FleetEvent['kind']> = new Set(['start', 'account', 'household'])
+
 /**
  * The money that went into the goals a month, on average over the last full months of the budget (at most `count`):
  * the deliveries and the loot – what a goal paid out does not count, nor money moved between goals. null = no full
@@ -143,7 +146,9 @@ export function goalInflow(log: readonly FleetEvent[], start: string | null, mon
   const inMonths = new Set(months)
   let total = 0
   for (const e of log) {
-    if (!inMonths.has(monthOf(e.date)) || !e.moves.goals || e.kind === 'goal') continue
+    // The pace is what came in month by month (B128): the money given out at the start, an account joining it later and
+    // the household's advances at the start are no pace – only deliveries, the loot and what else flows month by month.
+    if (!inMonths.has(monthOf(e.date)) || !e.moves.goals || e.kind === 'goal' || NOT_PACE.has(e.kind)) continue
     for (const v of Object.values(e.moves.goals)) if (v > 0) total += v
   }
   return Math.round(total / months.length)

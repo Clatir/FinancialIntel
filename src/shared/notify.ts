@@ -6,7 +6,7 @@
 import { briefing, dm, type BriefingInput } from './calc/briefing'
 import { WATCH_TIME } from './calc/intel'
 import { dayOfMonth, daysBetween, inClockWindow, monthOf, warsawNow, weekdayOf } from './calc/dates'
-import type { FleetState } from './calc/fleet'
+import { envelopeOverrun, SERIOUS_ENVELOPE_PCT, type FleetState } from './calc/fleet'
 import { ICTJ_POOL_LABEL } from './ictj'
 import { plural } from './format'
 import type { NotifyPrefs } from './machine'
@@ -71,6 +71,8 @@ export interface NotifyInput extends Omit<BriefingInput, 'fleet'> {
   money: (grosze: number) => string
   /** The evening report (F13): none – the plain reminder. */
   evening?: EveningState
+  /** The game's serious overrun threshold (N102, `settings.game.seriousEnvelopePct`); none – the default 20%. */
+  seriousPct?: number
 }
 
 export function dueNotices(o: NotifyInput): Notice[] {
@@ -102,11 +104,24 @@ export function dueNotices(o: NotifyInput): Notice[] {
       out.push({ key: `low:daily:${today}`, tag: 'low', title: 'Energia dziś na wyczerpaniu', body: `Zostało ${o.money(d.left)} z ${o.money(d.allowance)}.` })
   }
   for (const e of f.envelopes) {
-    if (e.limit <= 0) continue
     const name = o.label(e.categoryId)
-    if (e.spent > e.limit) {
-      if (p.overrun) out.push({ key: `overrun:${e.categoryId}:${f.month}`, tag: 'overrun', alarm: true, title: `Koperta ${name} przekroczona`, body: `Wydane ${o.money(e.spent)} z ${o.money(e.limit)}.` })
-    } else if (p.low && e.spent > e.limit * 0.8)
+    // The engine's and the game's rule (N102): a limit of 0 too.
+    const overrun = envelopeOverrun(e, o.seriousPct ?? SERIOUS_ENVELOPE_PCT)
+    if (overrun.over) {
+      // A daily envelope gently – its overrun is no alarm, the daily pool decides (D16).
+      if (p.overrun)
+        out.push(
+          e.kind === 'daily'
+            ? { key: `overrun:${e.categoryId}:${f.month}`, tag: 'overrun', title: `Koperta ${name} ponad podział`, body: `Wydane ${o.money(e.spent)} z ${o.money(e.limit)} – liczy się pula dzienna (energia dziś).` }
+            : {
+                key: `overrun:${e.categoryId}:${f.month}`,
+                tag: 'overrun',
+                alarm: true,
+                title: `Koperta ${name} przekroczona`,
+                body: `Wydane ${o.money(e.spent)} z ${o.money(e.limit)}${overrun.serious ? ' – ponad próg poważnego naruszenia' : ''}.`
+              }
+        )
+    } else if (p.low && e.limit > 0 && e.spent > e.limit * 0.8)
       out.push({ key: `low:${e.categoryId}:${f.month}`, tag: 'low', title: `Koperta ${name} ponad 80%`, body: `Zostało ${o.money(e.limit - e.spent)} z ${o.money(e.limit)}.` })
   }
   // The briefing's asteroid keys: one within 14 days, one within 3 days of the payment.

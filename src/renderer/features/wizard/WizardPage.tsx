@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addDays, daysInMonth, warsawNow } from '@shared/calc/dates'
 import { balanceAt } from '@shared/calc/balances'
-import { sinkingInstallment } from '@shared/calc/fleet'
+import { sinkingInstallment, startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
-import { costOf, sum } from '@shared/calc/operations'
+import { sum } from '@shared/calc/operations'
 import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments } from '@shared/calc/plan'
 import { startSplit, startTargets } from '@shared/calc/start'
+import { plural } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { useData, useFolderLocked } from '../../store/data'
@@ -66,8 +67,15 @@ export function WizardPage() {
   const spentThisMonth = useMemo(() => {
     const periodic = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
     const chosenKeys = new Set(chosen.filter((p) => p.cycleMonths > 1).map((p) => p.key))
-    return sum(transactions.filter((t) => t.date.slice(0, 7) === month && t.date < today && !(t.containerId && periodic.has(t.containerId)) && !chosenKeys.has(payeeKey(t))).map(costOf))
+    // The engine's rule (B126): the start is today; the chosen proposals' payments get linked to their containers.
+    return startMonthSpentOf(transactions, today, (t) => (!!t.containerId && periodic.has(t.containerId)) || chosenKeys.has(payeeKey(t)))
   }, [transactions, month, today, containers, chosen])
+  // Operations dated after today by account (B127): not in the bank's balance now – the engine takes them on their day.
+  const aheadBy = useMemo(() => {
+    const out = new Map<string, number>()
+    for (const t of transactions) if (t.date > today) out.set(t.accountId, (out.get(t.accountId) ?? 0) + 1)
+    return out
+  }, [transactions, today])
   const envelopeProposals = useMemo(
     () => proposeEnvelopes(transactions, cats.mains.length ? [...cats.byId.values()] : [], month, [...containers, ...chosen.map((p) => ({ counterparty: p.label, archived: false }))], history),
     [transactions, cats, month, containers, chosen, history]
@@ -114,6 +122,7 @@ export function WizardPage() {
       <Note>Saldo każdego konta tak, jak widzisz je teraz w banku (z dzisiejszymi operacjami). Od dziś suma kont = warstwy okrętu.</Note>
       {accounts.map((a) => {
         const opened = openings.has(a.id)
+        const ahead = aheadBy.get(a.id) ?? 0
         return (
           <Field
             key={a.id}
@@ -126,7 +135,9 @@ export function WizardPage() {
                   ? a.kind === 'cash'
                     ? 'Gotówka w portfelu – puste = 0 zł.'
                     : 'Potrzebne – 0, jeśli konto jest puste.'
-                  : undefined
+                  : ahead
+                    ? `Na koncie ${ahead} ${plural(ahead, 'operacja', 'operacje', 'operacji')} z datą po dziś – saldo „teraz” ich nie obejmuje, silnik odejmie je w ich dniu.`
+                    : undefined
             }
           >
             <div className="flex items-center gap-2">
@@ -182,7 +193,8 @@ export function WizardPage() {
         </Note>
       )}
       <Field label="Osłony – cel w pensjach" labelWidth={170} hint={targets.shields != null ? `Cel osłon: ${zl(targets.shields)}.` : undefined}>
-        <NumberField className="w-[70px]" value={w.shieldSalaries} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 24} onChange={(v) => v != null && patchWizard({ shieldSalaries: v })} aria-label="Osłony w pensjach" />
+        {/* Never under the minimum of the orders (B84): the shields would stay below it for good. */}
+        <NumberField className="w-[70px]" value={w.shieldSalaries} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries} onChange={(v) => v != null && patchWizard({ shieldSalaries: v })} aria-label="Osłony w pensjach" />
       </Field>
       <Field
         label="Kadłub – cel w miesiącach"
@@ -330,8 +342,8 @@ export function WizardPage() {
         <TextField value={w.shipName} onChange={(shipName) => patchWizard({ shipName })} maxLength={40} data-testid="wizard-ship" />
       </Field>
       <span className="label mt-1">Rozkazy (zmienisz je później)</span>
-      <Field label="Minimalne osłony (pensje)" labelWidth={170}>
-        <NumberField className="w-[70px]" value={orders.minShieldSalaries} decimals={1} step={0.5} isValid={(v) => v != null && v >= 0 && v <= 24} onChange={(v) => v != null && setOrders({ minShieldSalaries: v })} />
+      <Field label="Minimalne osłony (pensje)" labelWidth={170} hint={`Najwyżej cel osłon (${w.shieldSalaries} pensji).`}>
+        <NumberField className="w-[70px]" value={orders.minShieldSalaries} decimals={1} step={0.5} isValid={(v) => v != null && v >= 0 && v <= 24 && v <= w.shieldSalaries} onChange={(v) => v != null && setOrders({ minShieldSalaries: v })} />
       </Field>
       <Field label="Linia zanurzenia (% pensji)" labelWidth={170}>
         <NumberField className="w-[70px]" value={orders.cargoLimitPct} decimals={0} step={5} isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} />

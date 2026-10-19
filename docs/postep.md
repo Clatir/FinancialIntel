@@ -1,9 +1,9 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa L** (1.6.0 – funkcje) zrobiona na gałęzi
-`claude/grupa-l-1.6.0`, PR #22 do `main` (scalenie po zielonym CI – D71); to ostatnia grupa ciągu – po niej **pauza**
-(D67).
-**1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa M** (1.6.1 – liczby, plan,
+raporty, Mostek) w toku na gałęzi `claude/grupa-m-1.6.1`; po niej od razu N, O, P, Q, R (niskie pozycje przeglądu) i
+funkcje S, T, U, V – każda grupa z własnym PR i wydaniem (D71).
+**1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,9 +12,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu PR #22 i wydaniu 1.6.0 – **pauza (D67)**: kolejna grupa tylko na komendę użytkownika
-(w przeglądzie zostają niskie pozycje B / N / W i dalsze funkcje F – do wyboru). Do sprawdzenia w aplikacji: 1.5.0–1.6.0 –
-listy w sekcjach niżej.
+**Następny krok:** grupa M → PR → scalenie po zielonym CI → wydanie 1.6.1 → od razu grupa N (D87). Po wznowieniu
+pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
+aplikacji: 1.5.0–1.6.0 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -49,9 +49,20 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **I** | 1.5.2 Liczby się zgadzają: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.2 | ✅ D86 | ✅ wydane (PR #19) |
 | **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 2–3 h) | 1.5.3 | ✅ D86 | ✅ wydane (PR #20) |
 | **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z pomiarami 30 / 150 tys., wzorcami wyników, przeglądem i E2E; część W27 w czasie CI grupy J; plan był ok. 2 h) | 1.5.4 | ✅ D86 | ✅ wydane (PR #21) |
-| **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar commitów, z przeglądem i E2E; część w czasie CI grupy K; plan był 3–4 h) | 1.6.0 | ✅ D86 | ✅ zrobione – PR #22, CI, scalenie |
+| **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar commitów, z przeglądem i E2E; część w czasie CI grupy K; plan był 3–4 h) | 1.6.0 | ✅ D86 | ✅ wydane (PR #22) |
+| **M** | 1.6.1 Liczby, plan, raporty, Mostek: B61–B63, B65, B84, B85, B92, B126–B128, N22–N28, N30, N52, N54, N56, N59, N63, N65, N66, N101–N103, W28–W30, W38 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji, z przeglądem i E2E; plan był ok. 2 h) | 1.6.1 | ✅ D87 | ✅ PR do `main` |
+| **N** | 1.6.2 Gra, ICTTJ, domownicy, cele, kreator: B69–B73, B75, B87, B89–B91, B129, N29, N38, N40–N49, N64, N67–N71, N73 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.2 | ✅ D87 | czeka |
+| **O** | 1.6.3 Import: B93–B106, N74–N90, W31–W36 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.3 | ✅ D87 | czeka |
+| **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | plan ok. 1,5 h | 1.6.4 | ✅ D87 | czeka |
+| **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | plan ok. 2 h | 1.6.5 | ✅ D87 | czeka |
+| **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **xhigh** (w ciągu na max) | plan ok. 1,5 h | 1.6.6 | ✅ D87 | czeka |
+| **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | plan ok. 3 h | 1.7.0 | ✅ D87 | czeka |
+| **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | czeka |
+| **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
+| **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L** | | | **ok. 37,5 h** | | | |
+| | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -522,6 +533,47 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.6.0, Windows):
 4. Meldunki (menu boczne): licznik, każdy przycisk prowadzi do właściwego miejsca.
 5. Odzyskanie z kopii – najlepiej na kopii folderu: „Odzyskaj…” przy kopii, podgląd, wybrany wpis z „Cofnij”; „Odzyskaj
    cały folder do nowego…” – nowy folder obok, stary bez zmian (wracasz z „Ostatnio używane foldery”).
+
+## Przed grupą M – liczby, plan, raporty, Mostek (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa L wydana (1.6.0 – PR #22). Ciąg M–V (D87) idzie bez pauz między grupami, każda z
+   własnym PR i wydaniem. Grupa M (1.6.1): niskie pozycje przeglądu dotyczące liczb silnika i planu, raportów, Mostka i
+   Radaru – B61–B63, B65, B84, B85, B92, B126–B128; N22–N28, N30, N52, N54, N56, N59, N63, N65, N66, N101–N103;
+   W28–W30, W38. Format folderu bez zmian.
+2. **Co użytkownik musi powiedzieć** – ✅ D87. Tam, gdzie przegląd zostawia wybór (N63 – nazwa krzywej majątku, N66 –
+   wpływy roku, N102 – koperty codzienne), wybieram wariant zgodny z decyzjami użytkownika i zapisuję go jako T-decyzję
+   do zmiany na życzenie.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2 h.
+
+## 1.6.1 – liczby, plan, raporty, Mostek (grupa M, 19.10.2026)
+
+Zakres: B61–B63, B65, B84, B85, B92, B126–B128, N22–N28, N30, N52, N54, N56, N59, N63, N65, N66, N101–N103, W28–W30, W38
+(„Przed grupą M” wyżej; B62 i W28 były już poprawione w 1.4.2 / 1.4.3 – odhaczone). Zrobione:
+- Debriefing (T215): koperty tylko z planu (0 zł też), „Bez koperty” osobno bez czerwieni, pula dzienna jak energia,
+  „na plus” po końcu miesiąca („miesiąc trwa”, w CSV / Excel „w toku”), łupy tylko z miesiąca przebytego przez silnik.
+- Jedna reguła przekroczenia koperty (T216): alarm wg progu Dowództwa, koperta codzienna łagodnie, limit 0 powiadamia,
+  Daily Bias po kopertach planowych.
+- Nazwy (T217): „Przychody” w raportach, eksporcie i alarmie pensji; „Na kontach” / „Pieniądze na kontach” w Wywiadzie i
+  przeglądzie rocznym; odprawa w Raportach z Daily Bias, trafność dziennika w debriefingu (T214); zasięg obcięty w dół
+  (T218).
+- Mostek i Radar (T221): alarm odprawy do przyczyny, „Odsłuchaj” tylko z polskim głosem, każda dopłata do XTB osobno,
+  „po terminie N dni” / „zaległa rata” od 3 dni, Ctrl+$ od razu w Radarze i szybkim wpisie; Ładownia – najbliższa
+  płatność od dziś, rata z harmonogramu; Mapa gwiezdna – część w zarchiwizowanych; pożyczka z ratami poniżej kwoty
+  odrzucona.
+- Start i ustawienia (T219, T220): minimum osłon ≤ cel, kreator liczy wydane przed startem jak silnik, saldo otwarcia bez
+  operacji z przyszłości, tempo celów bez środków startowych, gra po kreatorze, baner przy budżecie od salda otwarcia.
+- Wydajność (T222): indeksy po miesiącach (operacje, dziennik silnika, koszty), „Ostatnie operacje” jednym przejściem,
+  debriefing raz.
+- Przegląd `/code-review` high: 8 kandydatów – wszystkie poprawione (T223), w tym kolejność hooków na Mostku.
+- Testy: 574 unit + fs (nowy `plan-reports.test.ts` – 13 testów, każda poprawka sprawdzona mutacją: test pada bez niej;
+  `export.test.ts`), E2E 46.
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.6.1, Windows):
+1. Plan miesiąca → debriefing poprzedniego miesiąca: „Bez koperty”, pula dzienna, „na plus”; Raporty → Debriefing
+   bieżącego miesiąca: „miesiąc trwa”.
+2. Mostek: kliknięcie alarmu masy ładunku / korekty prowadzi do Ładowni / operacji; „Odsłuchaj” (polski głos).
+3. Ustawienia → Warstwy i rozkazy: minimum osłon wyższe od celu – komunikat.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
