@@ -10,7 +10,7 @@ import { recordTitle } from '../../lib/recordTitle'
 import { HistoryButton } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
 import { api, errorMessage } from '../../lib/api'
-import { flushSaves, useData } from '../../store/data'
+import { flushSaves, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
 import { Badge, Panel, cx } from '../../components/ui'
@@ -70,7 +70,7 @@ const shownValue = (path: readonly string[], v: unknown) => (typeof v === 'numbe
  */
 function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClose: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const [state, setState] = useState<{ base: unknown; conflicts: MergeConflict[]; choices: Record<string, Side> } | null>(null)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   useEffect(() => {
     let alive = true
     void mergeBase(c).then((base) => {
@@ -138,7 +138,7 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
 
 function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEntry; selected: boolean; onSelect: (v: boolean) => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const newer = newerSide(c)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const [merging, setMerging] = useState(false)
   const a = flatten(c.canonical.record ?? {})
   const b = flatten(c.copy.record ?? {})
@@ -247,7 +247,7 @@ function DeletedRecords() {
   const [busy, setBusy] = useState(false)
   // A search over the titles and who deleted them.
   const [query, setQuery] = useState('')
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const parts = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = items?.filter((d) => {
     if (!parts.length) return true
@@ -317,7 +317,7 @@ function DeletedRecords() {
  */
 function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictEntry[]; sel: Selection; busy: boolean; setBusy: (b: boolean) => void }) {
   const chosen = conflicts.filter((c) => sel.selected.has(c.id))
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const run = async (ids: string[]) => {
     setBusy(true)
     const plan = newestResolutions(conflicts, ids)
@@ -376,6 +376,7 @@ export function SyncPage() {
   const [busy, setBusy] = useState(false)
   const problems = useData((s) => s.problems)
   const status = useData((s) => s.status)
+  const locked = useFolderLocked()
   const fi = useData((s) => s.fi)
   return (
     <div className="h-full overflow-y-auto p-3">
@@ -438,7 +439,7 @@ export function SyncPage() {
                   </button>
                   <button
                     className="btn h-[22px] hover:text-down"
-                    disabled={!!status?.readOnly}
+                    disabled={locked}
                     onClick={() => api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))}
                   >
                     <IconTrash size={12} /> Do Kosza

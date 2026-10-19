@@ -5,7 +5,7 @@ import { diffRecords, fieldLabel, formatValue, isAmountPath, type FieldChange, t
 import type { SettingsFile } from '@shared/schema'
 import { api } from '../../lib/api'
 import { recordTitle } from '../../lib/recordTitle'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { IconHistory } from '../../components/icons'
 import { plnText } from '../../components/fields'
 import { Modal } from '../../components/Modal'
@@ -84,7 +84,7 @@ export function HistoryDialog({ kind, id, current, onClose }: { kind: HistoryKin
   const [selected, setSelected] = useState<string | null>(null)
   const [version, setVersion] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
 
   useEffect(() => {
     let alive = true

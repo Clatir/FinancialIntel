@@ -4,7 +4,7 @@ import { cyclePosition, sinkingSchedule, type FleetState } from '@shared/calc/fl
 import { sum } from '@shared/calc/operations'
 import { monthlyShare, recurringPayments, simulateCargo, type CargoSimulation } from '@shared/calc/plan'
 import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/schema'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { AmountField, DateField, MonthField, plnText } from '../../components/fields'
@@ -47,7 +47,7 @@ export function CargoPage() {
   const fleet = useFleet()
   const containers = useRecordList('containers')
   const transactions = useRecordList('transactions')
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const [selected, setSelected] = useState<string | null>(null)
   const [draft, setDraft] = useState<ContainerDraft | null>(null)
   // Each new draft is a new form (its own „inny…” mode).

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow } from '@shared/schema'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useFleet, useHousehold } from '../../store/fleet'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
@@ -22,7 +22,7 @@ const INFLOW_OPTIONS: Array<{ value: MemberInflow; label: string }> = [
  */
 export function HouseholdTab() {
   const members = useMembers()
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const names = new Set(members.map((m) => m.name.toLowerCase()))
   return (
     <Panel
@@ -67,7 +67,7 @@ function SinceRow() {
   const budgetStart = fleet?.start ?? null
   // Dated before the start, added after the balances on it were set (B14): they count right after them.
   const late = fleet?.household.late.length ?? 0
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 border-y border-line/70 py-2 text-[11.5px]" data-testid="household-since-row">
       <span className="text-fg-strong">Rozliczenia od:</span>

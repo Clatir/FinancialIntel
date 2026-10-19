@@ -8,7 +8,7 @@ import type { IctjProgram } from '@shared/api'
 import { chosenForecast } from '@shared/ictj'
 import { api, errorMessage } from '../../lib/api'
 import { countLabel } from '../../lib/format'
-import { updateSettings, useData } from '../../store/data'
+import { updateSettings, useData, useFolderLocked } from '../../store/data'
 import { openIctj, setIctjDir, useIctj } from '../../store/ictj'
 import { navigate, toast } from '../../store/ui'
 import { Badge, Field, Panel } from '../../components/ui'
@@ -26,7 +26,7 @@ const chooseForecast = (id: string) => updateSettings((f) => ({ ...f, settings: 
 export function IctjTab() {
   const snap = useIctj((s) => s.snap)
   const forecastId = useData((s) => s.fi?.settings.ictj.forecastId ?? null)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const [suggested, setSuggested] = useState<string | null>(null)
   const [program, setProgram] = useState<IctjProgram | null>(null)
   const [pending, setPending] = useState<string | null>(null)

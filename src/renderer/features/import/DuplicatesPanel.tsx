@@ -4,7 +4,7 @@ import { findDuplicates, mergeDuplicate, type DuplicateGroup } from '@shared/imp
 import type { Transaction } from '@shared/schema'
 import { errorMessage } from '../../lib/api'
 import { plural } from '../../lib/format'
-import { listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
+import { listOf, replaceRecords, updateRecord, updateSettings, useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
 import { signedPln } from '../../components/fields'
@@ -63,7 +63,7 @@ const DIFFERS = { '': '', name: 'inna nazwa', amount: 'inna kwota', both: 'inna 
 export function DuplicatesPanel() {
   const { groups, byId } = useDuplicates()
   const dockings = useRecordList('dockings')
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const cats = useCategories()
   const accounts = useAccounts()
   // Groups the user ticked or unticked against the default (ticked unless a conflict or blocked).

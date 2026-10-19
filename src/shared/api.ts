@@ -66,6 +66,8 @@ export interface Snapshot {
   conflicts: ConflictEntry[]
   status: FolderStatus
   loadMs: number
+  /** Which folder open this is (B31): the window says it shows it, and only then are its writes taken. */
+  generation?: number
 }
 
 export interface ChangeSet {
@@ -245,6 +247,8 @@ export interface FiApi {
   /** Keep a version that is about to be dropped without being written (e.g. local edits discarded in a merge). */
   historyKeep(kind: HistoryKind, record: unknown, reason: HistoryReason): Promise<void>
   saveSettings(fi: SettingsFile): Promise<SettingsFile>
+  /** The window shows this folder open (B31): main takes its writes from now on. */
+  folderShown(generation: number): Promise<void>
   resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<void>
   /** The conflict merged field by field (N17): both versions to the history, the merged one at the original's path. */
   mergeConflict(conflictId: string, merged: unknown): Promise<void>

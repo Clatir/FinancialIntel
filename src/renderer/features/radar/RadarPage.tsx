@@ -8,7 +8,7 @@ import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates
 import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
 import { pit38Deadline, radar, type RadarItem } from '@shared/calc/radar'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
-import { canWrite, useData } from '../../store/data'
+import { canWrite, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
@@ -36,7 +36,7 @@ export function RadarPage() {
     return v ? memberName(v, members) : null
   }
   const containers = useRecordList('containers')
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const items = useMemo(
     () => (fleet ? radar({ today: fleet.today, plans, containers, tanks: fleet.tanks, loans: fleet.loans, money: zl }) : []),
     // The notes carry amounts (masked while hidden): computed again with the fleet.

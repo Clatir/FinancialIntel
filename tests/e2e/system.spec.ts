@@ -86,3 +86,70 @@ test('skrót szybkiego wpisu (1.5.3, B29): Ctrl+Alt+litera polskiego znaku zamie
     await app.close()
   }
 })
+
+test('zmiana folderu z Ustawień (1.5.3, B31): postęp z „Przerwij”, w trakcie bez edycji, zapis tylko do folderu pokazanego w oknie', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'fi-system-switch-'))
+  const first = join(base, 'Dom', 'FinancialIntel')
+  const second = join(base, 'Laptop', 'FinancialIntel')
+  seedFolder(first, { settings: (s) => ({ ...s, shipName: 'Pierwszy' }) })
+  seedFolder(second, {
+    settings: (s) => ({ ...s, shipName: 'Drugi' }),
+    records: { transactions: Array.from({ length: 120 }, (_, i) => ({ date: '2026-09-10', accountId: '01KDEFACC00000000000000001', amount: -(1000 + i), counterparty: 'Sklep' })) }
+  })
+  // Every read waits: the second folder takes seconds, like one OneDrive fetches from the cloud.
+  const userData = userDataWith({ dataDir: first, recentDirs: [first, second] })
+  const { app, page, errors } = await launch({ userData, usePreset: false, env: { FI_OPEN_DELAY_MS: '1500' } })
+  const shipOf = async (dir: string) => (await json(join(dir, 'fi.json'))).settings.shipName
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible({ timeout: 30_000 })
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-folder').click()
+    await expect(page.getByTestId('settings-data-dir')).toHaveText(first)
+
+    // The open in progress: its progress here, „Przerwij”, the folder buttons off.
+    await page.getByTestId('recent-folder-open').click()
+    await expect(page.getByTestId('open-progress')).toBeVisible()
+    await expect(page.getByTestId('recent-folder-open')).toBeDisabled()
+    // Meanwhile nothing changes the budget: the folder's settings only to look at.
+    await page.getByTestId('settings-tab-general').click()
+    await expect(page.getByTestId('settings-read-only')).toContainText('Trwa otwieranie innego folderu')
+    await expect(page.getByTestId('ship-name-input')).toBeDisabled()
+    await page.getByTestId('settings-tab-folder').click()
+    await page.getByTestId('open-cancel').click()
+    await expect(page.getByRole('status').filter({ hasText: 'Przerwano wczytywanie folderu' })).toBeVisible()
+    await expect(page.getByTestId('open-progress')).toHaveCount(0)
+    await expect(page.getByTestId('settings-data-dir')).toHaveText(first)
+
+    // Stopped: the first folder works as before – a change lands in it.
+    await page.getByTestId('settings-tab-general').click()
+    const ship = page.getByTestId('ship-name-input')
+    await expect(ship).toBeEnabled()
+    await ship.fill('Pierwszy bis')
+    await ship.press('Enter')
+    await expect.poll(() => shipOf(first)).toBe('Pierwszy bis')
+
+    // Opened to the end: the second folder shown, nothing of the first one written into it.
+    await page.getByTestId('settings-tab-folder').click()
+    await page.getByTestId('recent-folder-open').click()
+    await expect(page.getByTestId('settings-data-dir')).toHaveText(second, { timeout: 30_000 })
+    await expect(page.getByRole('status').filter({ hasText: 'Otwarto folder danych' })).toBeVisible()
+    expect(await shipOf(second)).toBe('Drugi')
+
+    // Main takes a write only for the folder the window shows: another folder opened behind the window's back (the
+    // window still shows this one) refuses the window's write instead of putting it into that folder.
+    const refused = await page.evaluate(async (dir) => {
+      const fi = (globalThis as unknown as { fi: { openDataDir: (d: string, c: boolean) => Promise<{ ok: boolean; snapshot?: { fi: unknown } }>; saveSettings: (f: unknown) => Promise<unknown> } }).fi
+      const res = await fi.openDataDir(dir, false)
+      if (!res.ok || !res.snapshot) return 'not opened'
+      return fi.saveSettings({ ...(res.snapshot.fi as object), settings: { ...(res.snapshot.fi as { settings: object }).settings, shipName: 'Obcy' } }).then(
+        () => 'saved',
+        (e: Error) => e.message
+      )
+    }, first)
+    expect(refused).toContain('Trwa otwieranie innego folderu')
+    expect(await shipOf(first)).toBe('Pierwszy bis')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

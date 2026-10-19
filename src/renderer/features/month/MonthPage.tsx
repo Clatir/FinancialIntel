@@ -5,7 +5,7 @@ import { debriefing, lootApplied, lootDeadline, lootExtraOf, planFor, proposeEnv
 import { memberName } from '@shared/calc/household'
 import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
@@ -48,7 +48,7 @@ export function MonthPage() {
   const transactions = useRecordList('transactions')
   const containers = useRecordList('containers')
   const categories = useData((s) => s.fi?.settings.categories)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const plan = planFor(plans, month)
   const own = plans.find((p) => p.month === month) ?? null
   // The tanks' installments and the loot given to the month as the engine took them (N11).

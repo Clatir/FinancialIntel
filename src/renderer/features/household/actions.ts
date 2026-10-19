@@ -87,7 +87,7 @@ export function rememberInflows(incomes: ReadonlyArray<Pick<Transaction, 'kind' 
  */
 export function setHouseholdSince(since: string | null): void {
   const state = useData.getState()
-  if (state.status?.readOnly || !state.fi) return
+  if (state.status?.readOnly || state.switching || !state.fi) return
   const today = warsawNow().date
   if (since && since > today) {
     toast('Rozliczenia nie mogą zaczynać się w przyszłości.', 'error')
@@ -135,8 +135,10 @@ export function seedSince(transactions: readonly Pick<Transaction, 'date' | 'ban
  * start and added later counts after them).
  */
 export function useHouseholdSinceSeed(): void {
-  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since === undefined)
-  const unstamped = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined)
+  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since === undefined)
+  const unstamped = useData(
+    (s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined
+  )
   useEffect(() => {
     if (!unset) return
     const input = fleetInputNow()

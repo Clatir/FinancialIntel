@@ -65,7 +65,7 @@ export const setEnvelopes = (month: string, envelopes: Record<string, number>) =
  */
 export function dropEnvelope(categoryId: string): Map<string, number> {
   const taken = new Map<string, number>()
-  if (useData.getState().status?.readOnly) return taken
+  if (!canWrite()) return taken
   const current = warsawNow().month
   const plans = allPlans()
   const inForce = planFor(plans, current)

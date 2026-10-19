@@ -9,7 +9,7 @@ import { byPriority } from '@shared/calc/goals'
 import { fitSplit } from '@shared/calc/fleet'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
-import { useData } from '../../store/data'
+import { useFolderLocked } from '../../store/data'
 import { fleetInputNow, useEngineParts, useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { Modal } from '../../components/Modal'
@@ -62,7 +62,7 @@ function Docked({ onEnd }: { onEnd: () => void }) {
 
 function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const fleet = useFleet()
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const parts = useEngineParts()
   const goalsAll = useRecordList('goals')
   const goals = useMemo(() => byPriority(goalsAll.filter((g) => !g.archived)), [goalsAll])

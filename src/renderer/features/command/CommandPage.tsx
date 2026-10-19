@@ -22,7 +22,7 @@ import {
 } from '@shared/calc/game'
 import { CLASS_FROM, SHIP_CLASS_LABEL, SHIP_CLASSES, type ShipClass } from '@shared/calc/fleet'
 import type { GameSettings } from '@shared/schema'
-import { updateSettings, useData } from '../../store/data'
+import { updateSettings, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useGame } from '../../store/game'
 import { navigate } from '../../store/ui'
@@ -66,7 +66,7 @@ export function CommandPage() {
   const game = useGame()
   const fleet = useFleet()
   const settings = useData((s) => s.fi?.settings ?? null)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const cats = useCategories()
   if (!game || !fleet || !settings) return <Empty>Wczytywanie…</Empty>
   const { view, today, input } = game

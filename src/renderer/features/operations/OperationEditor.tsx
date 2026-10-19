@@ -3,7 +3,7 @@ import { newId } from '@shared/ids'
 import { asksImpulse, isNight, sum } from '@shared/calc/operations'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
 import { HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
-import { updateRecord, useData } from '../../store/data'
+import { updateRecord, useData, useFolderLocked } from '../../store/data'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
@@ -82,7 +82,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function OperationEditor({ id }: { id: string }) {
   const entry = useData((s) => s.records.transactions[id])
   const isDraft = useData((s) => !!s.drafts[id])
-  const folderReadOnly = useData((s) => !!s.status?.readOnly)
+  const folderReadOnly = useFolderLocked()
   const orders = useData((s) => s.fi?.settings.orders)
   const fleet = useFleet()
   const accounts = useAccounts()

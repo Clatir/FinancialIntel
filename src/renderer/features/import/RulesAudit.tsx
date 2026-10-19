@@ -10,7 +10,7 @@ import { fold } from '@shared/fold'
 import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
 import type { ImportRule } from '@shared/schema'
-import { listOf, useData } from '../../store/data'
+import { listOf, useData, useFolderLocked } from '../../store/data'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { Panel, TextField, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
@@ -98,7 +98,7 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
 
 /** The operations a rule catches decided otherwise – and of another kind – with „Zastosuj do historii”. */
 function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudit; label: (id: string | null) => string }) {
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const differ = audit.differ.get(rule.id) ?? []
   const other = audit.otherKind.get(rule.id) ?? []
   return (
@@ -142,7 +142,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
 /** Ustawienia → Import z banku → „Reguły importu” (`audit` – `useRuleAudit`, once for the tab). */
 export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progress: number }) {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const cats = useCategories()
   const members = useMembers()
   const [query, setQuery] = useState('')
@@ -222,7 +222,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
 /** Brands with expenses of two and more categories (F22): a rule up to an amount when the amounts split them. */
 export function MixedBrandsPanel({ audit }: { audit: RuleAudit | null }) {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const cats = useCategories()
   const mixed = audit?.mixed ?? []
   if (!mixed.length) return null

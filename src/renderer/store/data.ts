@@ -26,6 +26,8 @@ interface DataState {
   setupDir: string | null
   /** Why the folder did not open (B53): the setup screen's buttons by it, never by the message. */
   setupProblem: SetupProblem | null
+  /** Another folder opening from Settings (B31): nothing is edited or written until it opens or fails. */
+  switching: boolean
   appInfo: AppInfo | null
   /** fi.json: the folder's settings. */
   fi: SettingsFile | null
@@ -123,6 +125,7 @@ export const useData = create<DataState>(() => ({
   setupMessage: null,
   setupDir: null,
   setupProblem: null,
+  switching: false,
   appInfo: null,
   fi: null,
   records: emptyMaps(),
@@ -213,6 +216,8 @@ export function applySnapshot(snapshot: Snapshot): void {
     drafts: {},
     save: { pending: 0, lastSavedAt: null, error: null }
   })
+  // Before any write of this folder leaves the window (B31): main takes writes only for the folder shown.
+  if (snapshot.generation != null) void api.folderShown(snapshot.generation).catch(() => undefined)
 }
 
 const pendingFor = (key: string) => useRemote.getState().pending.find((p) => p.key === key)
@@ -644,16 +649,37 @@ function scheduleSave(collection: Collection | 'fi', id: string, delay = saveDel
   )
 }
 
-const folderReadOnly = () => !!get().status?.readOnly
+const folderReadOnly = () => !!get().status?.readOnly || get().switching
+
+/** Fields and buttons that change data off: a read-only folder, or another one opening (B31). */
+export const useFolderLocked = (): boolean => useData((s) => !!s.status?.readOnly || s.switching)
 
 export const READ_ONLY_MESSAGE = 'Folder jest tylko do odczytu – zmiany nie są zapisywane.'
+export const SWITCHING_MESSAGE = 'Trwa otwieranie innego folderu – zmiany w tej chwili nie są przyjmowane.'
 let readOnlyNoticedAt = 0
 
 /** A change the read-only folder does not take (N2): said once in a few seconds – never silently, never as a success. */
 function readOnlyNotice(): void {
   if (Date.now() - readOnlyNoticedAt < 4000) return
   readOnlyNoticedAt = Date.now()
-  toast(READ_ONLY_MESSAGE, 'error', 5000)
+  toast(get().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE, 'error', 5000)
+}
+
+/**
+ * Another folder from Settings (B31): this one's changes are written first, then – while the other one opens – nothing
+ * is edited or written: a change never lands in the other folder, nor gets lost when this one closes. A failed or
+ * stopped open leaves this folder as it was. 'unsaved' = this folder's changes could not be written: no switch.
+ */
+export async function switchFolder(open: () => Promise<OpenFolderResult>): Promise<OpenFolderResult | 'unsaved'> {
+  if (!(await flushSaves())) return 'unsaved'
+  set({ switching: true })
+  try {
+    const res = await open()
+    if (res.ok) applySnapshot(res.snapshot)
+    return res
+  } finally {
+    set({ switching: false })
+  }
 }
 
 /** A user's action may write: false – with the one message – in a read-only folder (N2); its success is never shown. */

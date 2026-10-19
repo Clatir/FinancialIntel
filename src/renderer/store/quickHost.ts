@@ -164,6 +164,7 @@ export function initQuickHost(): void {
     const s = useData.getState()
     if (!s.fi || s.phase !== 'ready') return answer({ ok: false, message: 'Najpierw otwórz folder danych.' })
     if (s.status?.readOnly) return answer({ ok: false, message: 'Folder jest tylko do odczytu.' })
+    if (s.switching) return answer({ ok: false, message: 'Trwa otwieranie innego folderu – spróbuj za chwilę.' })
     const draft = raw as QuickDraft
     // Sent again (a second Enter before the answer came, B51): it is saved already.
     if (draft.id && s.records.transactions[draft.id]) return answer({ ok: true, message: 'Zapisano.' })

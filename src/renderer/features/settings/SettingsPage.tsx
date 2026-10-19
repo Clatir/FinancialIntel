@@ -5,7 +5,8 @@ import { DEFAULT_SHIP_NAME } from '@shared/schema'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
 import { api, errorMessage } from '../../lib/api'
 import { fmtBytes } from '../../lib/format'
-import { flushSaves, openResult, updateSettings, useData } from '../../store/data'
+import { flushSaves, switchFolder, updateSettings, useData, useFolderLocked } from '../../store/data'
+import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
 import { UpdatesTab } from './UpdatesTab'
 import { AccountsTab } from './AccountsTab'
@@ -41,7 +42,8 @@ export function SettingsPage() {
   const route = useUi((s) => s.route)
   const tab = (route.page === 'settings' && route.tab) || 'general'
   const fi = useData((s) => s.fi)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
+  const switching = useData((s) => s.switching)
   if (!fi) return null
   // The budget's settings (fi.json) in a read-only folder: to look at only (N2); this computer's ones stay at hand.
   const locked = readOnly && (tab === 'general' || tab === 'accounts' || tab === 'categories' || tab === 'layers' || tab === 'household')
@@ -68,7 +70,7 @@ export function SettingsPage() {
         <div className="mx-auto flex max-w-[980px] flex-col gap-3">
           {locked && (
             <p className="text-[11.5px] text-accent" data-testid="settings-read-only">
-              Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.
+              {switching ? 'Trwa otwieranie innego folderu – ustawień budżetu nie można teraz zmieniać.' : 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.'}
             </p>
           )}
           <fieldset disabled={locked} className="contents">
@@ -213,14 +215,15 @@ function FolderTab() {
       setBusy(false)
     }
   }
+  // While another folder opens (B31): its progress and „Przerwij” here, the buttons off, no edits anywhere.
+  const switching = useData((s) => s.switching)
+  const [progress, resetProgress] = useOpenProgress()
   const switchTo = async (fn: () => ReturnType<typeof api.pickDataDir>) => {
-    if (!(await flushSaves())) {
-      toast('Nie udało się zapisać bieżących zmian – folder nie został zmieniony. Spróbuj ponownie za chwilę.', 'error', 7000)
-      return
-    }
-    const res = await fn()
-    if (await openResult(res)) toast('Otwarto folder danych.', 'success')
-    else if (!res.ok && res.reason !== 'cancelled') toast(res.message, 'error', 6000)
+    resetProgress()
+    const res = await switchFolder(fn)
+    if (res === 'unsaved') toast('Nie udało się zapisać bieżących zmian – folder nie został zmieniony. Spróbuj ponownie za chwilę.', 'error', 7000)
+    else if (res.ok) toast('Otwarto folder danych.', 'success')
+    else if (res.reason !== 'cancelled') toast(res.message, 'error', 6000)
   }
   return (
     <>
@@ -233,16 +236,17 @@ function FolderTab() {
             <button className="btn" onClick={() => api.showInFolder(null)}>
               <IconFolder size={13} /> Pokaż w Eksploratorze
             </button>
-            <button className="btn" onClick={() => switchTo(() => api.pickDataDir('open'))}>
+            <button className="btn" disabled={switching} onClick={() => switchTo(() => api.pickDataDir('open'))}>
               Otwórz inny folder…
             </button>
-            <button className="btn" onClick={() => switchTo(() => api.pickDataDir('create'))}>
+            <button className="btn" disabled={switching} onClick={() => switchTo(() => api.pickDataDir('create'))}>
               <IconPlus size={13} /> Nowe dane w innym folderze…
             </button>
             <button className="btn" onClick={() => api.rescan().then(() => toast('Przeskanowano folder.', 'success'), (e) => toast(errorMessage(e), 'error'))}>
               <IconSync size={13} /> Przeskanuj
             </button>
           </div>
+          {switching && progress && <OpenProgressPanel progress={progress} />}
           <p className="text-[11.5px] text-muted">
             Żeby przenieść dane, zamknij aplikację, przenieś cały folder w Eksploratorze i wskaż go tutaj. Wszystkie ścieżki w plikach są względne, więc
             folder działa w nowym miejscu bez zmian.
@@ -365,7 +369,7 @@ function FolderTab() {
             .map((d) => (
               <Row key={d} className="grid-cols-[1fr_auto]">
                 <span className="num truncate text-[12px]">{d}</span>
-                <button className="btn h-[22px]" onClick={() => switchTo(() => api.openDataDir(d, false))}>
+                <button className="btn h-[22px]" disabled={switching} onClick={() => switchTo(() => api.openDataDir(d, false))} data-testid="recent-folder-open">
                   Otwórz
                 </button>
               </Row>

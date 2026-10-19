@@ -252,7 +252,18 @@ function ictjSource(): IctjSource {
 const ictjDirOf = (): string | null => process.env.FI_ICTJ_DIR || config.get().ictj.dir
 
 function send(change: ChangeSet | null): void {
-  if (change && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:change', change)
+  if (!change) return
+  // The window not showing this folder yet (B31): its snapshot is older than the change – sent once it does.
+  if (shownGeneration !== storeGeneration) {
+    unshown.push(change)
+    return
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('fi:change', change)
+}
+
+/** A write's changes, only while its folder is still the open one: the window never gets the previous folder's records (B31). */
+function sendFrom(s: DataStore, change: ChangeSet | null): void {
+  if (s === store) send(change)
 }
 
 async function trash(absPath: string): Promise<void> {
@@ -475,6 +486,8 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     if (generation !== openGeneration) return superseded()
     const opened = next
     store = opened
+    snapshot.generation = ++storeGeneration
+    unshown = []
     opened.otherMachines = others
     snapshot.status = opened.status()
     const queue = new RefreshQueue(async (paths) => {
@@ -496,7 +509,9 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     presenceTimer = setInterval(() => void heartbeat(), 60_000)
     // Daily backup (decision D31), in the background.
     dailyBackup()
-    await config.rememberDir(target)
+    // The folder is open from here on: remembering it failing must not report the open as failed – the window would
+    // keep the previous folder while main writes to this one (B31).
+    await config.rememberDir(target).catch((e) => log('warn', `remember ${target} failed`, e))
     const count = Object.values(snapshot.records).reduce((n, list) => n + list.length, 0)
     const st = opened.loadStats
     const times = st ? ` (list ${st.listMs} ms, read ${st.readMs} ms of ${st.files} files, ${st.slow} slow, migrate ${st.migrateMs} ms)` : ''
@@ -535,6 +550,22 @@ async function insideIctj(dir: string): Promise<boolean> {
 function requireStore(): DataStore {
   if (!store) throw new Error('Nie wybrano folderu danych.')
   return store
+}
+
+/** Every folder opened counts up; the window says which one it shows (B31). */
+let storeGeneration = 0
+let shownGeneration = 0
+/** The open folder's changes from before the window showed it. */
+let unshown: ChangeSet[] = []
+
+/**
+ * The folder a write from the window may go to (B31): only the one the window shows – a write sent for the previous
+ * folder while another one was opening is refused, never written into the new one.
+ */
+function writableStore(): DataStore {
+  const s = requireStore()
+  if (shownGeneration !== storeGeneration) throw new Error('Trwa otwieranie innego folderu – zmiana nie została zapisana.')
+  return s
 }
 
 function requireUpdater(): Updater {
@@ -591,57 +622,73 @@ function registerIpc(): void {
   handle('cancelOpen', () => {
     opening?.abort()
   })
+  // The window shows this folder now (B31): its writes are taken from here on.
+  handle('folderShown', (generation: number) => {
+    if (generation !== storeGeneration || generation === shownGeneration) return
+    shownGeneration = generation
+    const waiting = unshown
+    unshown = []
+    for (const change of waiting) send(change)
+  })
   handle('saveRecord', async (collection: Collection, record: never) => {
-    const s = requireStore()
+    const s = writableStore()
     try {
       const { entry, change } = await s.saveRecord(collection, record)
-      send(change)
+      sendFrom(s, change)
       return entry
     } catch (e) {
       // Removed on another computer a moment ago (B49): the window gets the removal (its question), the write waits.
       // Its month made on another computer (B46): the copy shows in Synchronizacja.
-      if (e instanceof RemovedOutsideError || e instanceof ConflictCopyError) send(e.change)
+      if (e instanceof RemovedOutsideError || e instanceof ConflictCopyError) sendFrom(s, e.change)
       throw e
     }
   })
   handle('saveRecords', async (collection: Collection, records: never[]) => {
-    const { results, changes } = await requireStore().saveRecords(collection, records)
-    for (const change of changes) send(change)
+    const s = writableStore()
+    const { results, changes } = await s.saveRecords(collection, records)
+    for (const change of changes) sendFrom(s, change)
     return results
   })
   handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown) => {
+    const s = writableStore()
     // 'drop' (no version in the history) only for the imports' batches: never the user's records.
-    const { results, change } = await requireStore().deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
-    send(change)
+    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
+    sendFrom(s, change)
     return results
   })
   handle('deleteRecord', async (collection: Collection, id: string) => {
-    send(await requireStore().deleteRecord(collection, id))
+    const s = writableStore()
+    sendFrom(s, await s.deleteRecord(collection, id))
   })
   handle('historyList', (kind: HistoryKind, id: string) => requireStore().historyList(kind, id))
   handle('historyRead', (kind: HistoryKind, id: string, file: string) => requireStore().historyRead(kind, id, file))
   handle('historyDeleted', (collection: Collection) => requireStore().historyDeleted(collection))
-  handle('historyKeep', (kind: HistoryKind, record: unknown, reason: HistoryReason) => requireStore().historyKeep(kind, record, reason))
+  handle('historyKeep', (kind: HistoryKind, record: unknown, reason: HistoryReason) => writableStore().historyKeep(kind, record, reason))
   handle('historyRestore', async (kind: HistoryKind, id: string, file: string) => {
-    const { change, fi } = await requireStore().historyRestore(kind, id, file)
-    send(change)
+    const s = writableStore()
+    const { change, fi } = await s.historyRestore(kind, id, file)
+    sendFrom(s, change)
     // Restored settings go back to the caller (they are not part of a change set's upserts).
     return fi
   })
-  handle('saveSettings', (fi: never) => requireStore().saveSettings(fi))
+  handle('saveSettings', (fi: never) => writableStore().saveSettings(fi))
   handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy') => {
-    send(await requireStore().resolveConflict(id, keep))
+    const s = writableStore()
+    sendFrom(s, await s.resolveConflict(id, keep))
   })
   handle('mergeConflict', async (id: string, merged: unknown) => {
-    send(await requireStore().mergeConflict(id, merged))
+    const s = writableStore()
+    sendFrom(s, await s.mergeConflict(id, merged))
   })
   handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
-    const { results, change } = await requireStore().resolveConflicts(items)
-    send(change)
+    const s = writableStore()
+    const { results, change } = await s.resolveConflicts(items)
+    sendFrom(s, change)
     return results
   })
   handle('trashProblemFile', async (rel: string) => {
-    send(await requireStore().trashFile(rel))
+    const s = writableStore()
+    sendFrom(s, await s.trashFile(rel))
   })
   handle('showInFolder', async (rel: string | null) => {
     const s = requireStore()
@@ -721,7 +768,7 @@ function registerIpc(): void {
     return manualBackup(checkedData(s), s.backupsDir)
   })
   handle('importBackup', async () => {
-    const s = requireStore()
+    const s = writableStore()
     return importBackup(s, s.backupsDir)
   })
   handle('pickImportFile', async () => {

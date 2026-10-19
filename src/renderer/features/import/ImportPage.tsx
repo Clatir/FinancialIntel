@@ -6,7 +6,7 @@ import { TX_KIND_LABEL, type HouseholdMember, type Share, type TxKind } from '@s
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
 import { opKindOf } from '@shared/import/reconcile'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { useWizard } from '../wizard/state'
 import { useFleet } from '../../store/fleet'
@@ -174,7 +174,7 @@ function FilePanel() {
 
 function Summary() {
   const { plan, choices, busy } = useImport()
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   if (!plan) return null
   const n = (status: RowPlan['status']) => plan.rows.filter((p) => p.status === status).length
   const merges = plan.rows.filter((p) => p.status === 'merge')
@@ -444,7 +444,7 @@ const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out
  */
 function NewMember({ g }: { g: ImportGroup }) {
   const members = useMembers()
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const name = g.names[0] ?? g.label
   if (readOnly || g.direction !== 'in' || opKindOf(g.rows[0]!.row.operation) !== 'transfer' || !name.trim()) return null
   if (members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.trim().toUpperCase()))) return null
@@ -643,7 +643,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const members = useMembers()
   const loans = useRecordList('loans')
   const selected = useImport((s) => s.selected)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const query = useImport((s) => s.query)
   const [option, setOption] = useState<Option>('expense')
   const [categoryId, setCategoryId] = useState<string | null>(null)

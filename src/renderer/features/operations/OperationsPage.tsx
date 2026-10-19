@@ -5,7 +5,7 @@ import { MARK_LABEL, OPERATION_MARKS, amountTone, compareOperations, marksOf, ma
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
-import { discardDraft, listOf, useData } from '../../store/data'
+import { discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { navigate, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
@@ -257,7 +257,7 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const firstMember = members.find((m) => !m.archived)
   // Only what the list shows: an operation that left it (edited, deleted, changed elsewhere) is not changed.
   const shown = visible.filter((t) => ticked[t.id])
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const n = shown.length
   if (!n) return null
   const sum = shown.reduce((s, t) => s + t.amount, 0)

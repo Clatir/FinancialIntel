@@ -6,7 +6,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { planConfirmation } from '@shared/calc/balances'
 import { statementCheck, type Statement } from '@shared/import/statement'
-import { listOf, useData } from '../../store/data'
+import { listOf, useData, useFolderLocked } from '../../store/data'
 import { plnText, signedPln } from '../../components/fields'
 import { Panel } from '../../components/ui'
 import { plDate } from '../../lib/format'
@@ -31,7 +31,7 @@ function Group({ title, children, count, testId }: { title: string; children: Re
 export function BankTelemetry({ statement, confirmed }: { statement: Statement; confirmed: string | null }) {
   const transactions = useData((s) => s.records.transactions)
   const balances = useData((s) => s.records.balances)
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const accounts = useAccounts()
   const name = accounts.find((a) => a.id === statement.accountId)?.name ?? 'konto'
   const check = useMemo(() => statementCheck(statement, { transactions: listOf(transactions), balances: listOf(balances), tx: (id) => transactions[id]?.record }), [statement, transactions, balances])

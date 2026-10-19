@@ -33,6 +33,7 @@ const api: FiApi = {
   historyRestore: (kind, id, file) => invoke('historyRestore', kind, id, file),
   historyKeep: (kind, record, reason) => invoke('historyKeep', kind, record, reason),
   saveSettings: (fi) => invoke('saveSettings', fi),
+  folderShown: (generation) => invoke('folderShown', generation),
   resolveConflict: (id, keep) => invoke('resolveConflict', id, keep),
   resolveConflicts: (items) => invoke('resolveConflicts', items),
   mergeConflict: (id, merged) => invoke('mergeConflict', id, merged),

@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react'
 import { byPriority, goalEtas, goalInflow } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
@@ -25,7 +25,7 @@ const zl = (g: number) => `${plnText(g)} zł`
 export function StarMapPage() {
   const fleet = useFleet()
   const goalsAll = useRecordList('goals')
-  const readOnly = useData((s) => !!s.status?.readOnly)
+  const readOnly = useFolderLocked()
   const snap = useIctj((s) => s.snap)
   const forecastId = useData((s) => s.fi?.settings.ictj.forecastId ?? null)
   const active = useMemo(() => byPriority(goalsAll.filter((g) => !g.archived)), [goalsAll])

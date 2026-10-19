@@ -13,7 +13,7 @@ export function useIctjGoalSync(): void {
   const snap = useIctj((s) => s.snap)
   const forecastId = useData((s) => s.fi?.settings.ictj.forecastId ?? null)
   const goals = useData((s) => s.records.goals)
-  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly)
+  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching)
   useEffect(() => {
     if (!ready || snap.status !== 'ok') return
     const chosen = chosenForecast(snap.forecasts, forecastId)
