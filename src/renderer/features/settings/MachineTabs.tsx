@@ -224,6 +224,8 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['loans', 'Rata pożyczki 3 dni po terminie (własna albo spłata od dłużnika)'],
   ['pit38', 'PIT-38 – 14 i 3 dni przed 30 kwietnia'],
   ['house', 'Domownik nie oddał za zakupy – po 30 dniach od najstarszego'],
+  ['plans', 'Boje i terminy (dni przed, ustawione w boi), boja po terminie, koniec kontenera – 14 dni przed'],
+  ['accounts', 'Za mało na koncie przed płatnością (salda kont za 90 dni)'],
   ['watch', 'Raport wachty – w niedzielę od 18:00']
 ]
 

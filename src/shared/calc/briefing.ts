@@ -15,8 +15,10 @@ import { daysBetween, firstDayOf, warsawNow } from './dates'
 import type { Delivery } from './dock'
 import { isOpeningItem, memberName } from './household'
 import { HOUSE_DAYS } from './loans'
-import { pit38Deadline } from './radar'
+import { lastPaymentOf, pit38Deadline } from './radar'
 import { activeIn, nextPaymentOf, nextUnpaidOf, type Alarm, type FleetState } from './fleet'
+import type { AccountAhead } from './ahead'
+import { remindStep, type ScheduledDay } from './scheduled'
 
 /** The Daily Bias (spec, „Wywiad”): Bullish – today's energy at least the base allowance and the envelopes on plan;
  * Bearish – the energy under half the base or the shields under their minimum; else Neutral. */
@@ -37,7 +39,7 @@ export const BIAS_LABEL: Record<DailyBias, string> = { bullish: 'Bullish', beari
 export interface BriefingItem {
   level: 'red' | 'yellow' | 'info'
   /** What the item is about (the screen it leads to; 'dock' – the docking window of the delivery in `key`). */
-  kind: 'alarm' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house' | 'mission'
+  kind: 'alarm' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'loot' | 'start' | 'dock' | 'ictj' | 'loan' | 'pit38' | 'house' | 'mission' | 'plan' | 'end' | 'account'
   text: string
   /** Stable key (the notifications send each once). */
   key: string
@@ -100,6 +102,10 @@ export interface BriefingInput {
   members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'> & { via?: string | null }>
   /** The fixed fees of this month (F1, `cargoStatuses`): an overdue one is an alert. */
   cargo?: readonly CargoStatus[]
+  /** The planned operations' days (F16, `scheduledWindow`): each one's reminders, a late one. */
+  scheduled?: readonly ScheduledDay[]
+  /** The accounts ahead (F26, `accountsAhead`): a payment taking one below zero. */
+  accounts?: readonly AccountAhead[]
 }
 
 export interface AccountConfirmation {
@@ -160,6 +166,27 @@ export const IMPORT_DUE_DAYS = 3
 export const BALANCES_DUE_DAYS = 7
 /** The asteroids are announced from 14 days before. */
 export const ASTEROID_DAYS = 14
+/** A container's end (its last payment – F16) is announced from 14 days before. */
+export const END_DAYS = 14
+
+const inDays = (days: number) => (days === 0 ? 'dziś' : `za ${days} ${days === 1 ? 'dzień' : 'dni'}`)
+
+/** The line of a planned operation's day (F16) – null when it is not to be recalled today. */
+export function planItem(d: ScheduledDay, zl: (grosze: number) => string): BriefingItem | null {
+  const s = d.scheduled
+  const what = s.amount == null ? '' : ` – ${zl(Math.abs(s.amount))} (${s.amount < 0 ? 'wydatek' : 'wpływ'})`
+  if (d.state === 'late')
+    return {
+      level: 'yellow',
+      kind: 'plan',
+      key: `plan:${s.id}:${d.date}:late`,
+      text: `Boja po terminie: ${s.name} (${dm(d.date)})${what} – ${s.amount == null ? 'odhacz, gdy zrobione' : 'bez operacji w banku: wykonaj albo odhacz'}.`
+    }
+  if (d.state !== 'ahead' && d.state !== 'today') return null
+  const step = remindStep(s, d.days)
+  if (step == null) return null
+  return { level: d.days <= 3 ? 'yellow' : 'info', kind: 'plan', key: `plan:${s.id}:${d.date}:${step}`, text: `${s.amount == null ? 'Termin' : 'Boja'}: ${s.name} ${inDays(d.days)}${what}.` }
+}
 
 export function briefing(o: BriefingInput): BriefingItem[] {
   const f = o.fleet
@@ -267,5 +294,25 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     }
   }
   if (o.mission) items.push({ level: 'info', kind: 'mission', key: `mission:${o.mission.week}`, text: `Misja tygodnia – ${o.mission.title}: ${o.mission.text}` })
+  // The planned operations (F16): each reminder of a day once, a late one until it is done.
+  for (const d of o.scheduled ?? []) {
+    const item = planItem(d, zl)
+    if (item) items.push(item)
+  }
+  // A container's end (F16): its last payment within 14 days – the hold lighter after it.
+  for (const c of o.containers) {
+    if (c.archived) continue
+    const date = lastPaymentOf(c, f.today)
+    const days = date ? daysBetween(f.today, date) : null
+    if (!date || days == null || days > END_DAYS) continue
+    const monthly = Math.round(c.amount / Math.max(1, c.cycleMonths))
+    items.push({ level: 'info', kind: 'end', key: `end:${c.id}:${date}`, text: `Koniec kontenera: ${c.name} – ostatnia płatność ${dm(date)}, potem ładownia lżejsza o ${zl(monthly)}/mies.` })
+  }
+  // An account short before a payment (F26): the money is on another account.
+  for (const a of o.accounts ?? []) {
+    if (!a.short) continue
+    const from = a.source ? ` – przelej z konta ${a.source.name}` : ''
+    items.push({ level: 'yellow', kind: 'account', key: `account:${a.accountId}:${a.short.date}`, text: `Na koncie ${a.name} zabraknie ${zl(a.short.amount)} na płatność ${dm(a.short.date)} (${a.short.cause})${from}.` })
+  }
   return items
 }

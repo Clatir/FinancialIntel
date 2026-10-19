@@ -2,6 +2,8 @@
  * Loans (E6, D72): a new loan with its schedule (and its operation – the money out or in), a taken one with its
  * installments as a container of the cargo hold; a repayment or an installment recorded; closed, deleted with „Cofnij”.
  */
+import { coverAmount, type AccountAhead } from '@shared/calc/ahead'
+import { warsawNow } from '@shared/calc/dates'
 import { monthlySchedule, type LoanState } from '@shared/calc/loans'
 import { newId } from '@shared/ids'
 import { containerSchema, loanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Loan, type Transaction } from '@shared/schema'
@@ -12,6 +14,7 @@ import { plnText } from '../../components/fields'
 import { countLabel } from '../../lib/format'
 import { errorMessage } from '../../lib/api'
 import { patchContainer } from '../cargo/actions'
+import { openOperation } from '../operations/state'
 
 export interface NewLoan {
   direction: Loan['direction']
@@ -181,4 +184,28 @@ export function closeLoan(loan: Loan, closed: boolean): void {
       for (const c of changed) updateRecord('containers', c.id, () => ({ ...c, updatedAt: at }))
     }
   })
+}
+
+/**
+ * „Zaplanuj przelew własny” (F26): the money a payment lacks moved from the account that keeps it – one operation of
+ * both accounts (F10), today, up to whole złoty; saved and opened in Operacje (its day and amount to change there).
+ */
+export function planTransfer(a: AccountAhead): void {
+  if (!canWrite() || !a.short) return
+  if (!a.source) return toast('Żadne inne konto nie ma tyle do tego dnia – przelew trzeba zaplanować ręcznie.', 'error', 6000)
+  const t = transactionSchema.parse({
+    ...stamp(),
+    id: newId(),
+    date: warsawNow().date,
+    accountId: a.source.accountId,
+    kind: 'transfer',
+    amount: -coverAmount(a.short.amount),
+    counterAccountId: a.accountId,
+    bothSides: true,
+    title: `Przelew własny na płatność: ${a.short.cause}`.slice(0, 1000)
+  })
+  addRecord('transactions', t)
+  playSound('entry')
+  openOperation(t)
+  toast(`Przelew ${plnText(-t.amount)} zł z konta ${a.source.name} na konto ${a.name} zapisany – zmień dzień, gdy zrobisz go później.`, 'success', 7000, { label: 'Cofnij', run: () => deleteOrSay('transactions', t.id) })
 }

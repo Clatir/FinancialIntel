@@ -66,7 +66,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
-  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `calc/scheduled.ts` (boje), `calc/ahead.ts` (salda kont naprzód), `calc/course.ts` (kurs i manewry), `calc/yearPlan.ts` (plan roczny), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `threadpool.ts` (pula wątków plików), `quick.ts` (szybki wpis i globalny skrót),
@@ -835,6 +835,45 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/transfers.test.ts`, `operations-list.test.ts`, `search.test.ts`, `change-log.test.ts`, poszerzone
   `operations-state`, `inbox`, `duplicates`; E2E `tests/e2e/operations-s.spec.ts`, `look.spec.ts` (wolny zapis).
 
+## Kod (1.8.0 – przyszłość, grupa T, D87)
+- Cel z terminem (F15, T272): `calc/fleet.ts` `goalInstallment`, `ratedIn`, rata w `payMonth` po zbiornikach tylko przy
+  pełnych osłonach i kadłubie na przełomie (zdarzenie `rate`); `goal.rates` (`goalRateSchema`), `goalPast.deadline`,
+  `goals.ts` `goalAt` (z terminem) / `changeGoal`; `plan.ts` `ratesOf`, `salarySplit(…, {rates, extra})` (`rates`,
+  `envelopes.*.extra`), `debriefing` `energy.rates`; renderer: Mapa gwiezdna `GoalCourse` (`starmap-need`,
+  `starmap-rate`), `starmap/actions.ts` `setGoalRate`, Plan miesiąca `split-rates`.
+- Boje (F16, T273): kolekcja `scheduled/` (`scheduledSchema`, `paths.ts` układ 'id', migracje, etykiety Synchronizacji,
+  historii i odzyskania), `calc/scheduled.ts` (`occurrences`, `dayInYear`, `scheduledDays` – dopasowanie `looseMatch` w ±3
+  dni każdego dnia z kwotą, także operacji zapisanej z wyprzedzeniem, `LAPSE_DAYS`, `scheduledWindow`, `openDays`,
+  `remindStep`, `remindReach`, `nextDayOf`); `radar.ts` rodzaje `plan` i `end`
+  (`lastPaymentOf`), `briefing.ts` `planItem`, `END_DAYS`, `notify.ts` (`notify.plans`); renderer
+  `features/radar/scheduled.ts` (`addScheduled`, `patchScheduled`, `deleteScheduled`, `tickDay`, `notThis`, `executeDay`),
+  `Buoys.tsx` (`radar-buoys`, `buoy-day` z `data-state`, `buoy-execute`, `buoy-tick`, `buoy-edit`, `buoys-done`,
+  `buoy-not-this`, `buoys-later`, `radar-new-buoy`, `buoy-name` / `-date` / `-yearly` / `-amount` / `-account` /
+  `-counterparty` / `-remind` / `-save`), `future.ts` (`useFuture` / `futureNow` – dni boi w oknie Radaru i `reminders` tak
+  daleko, jak sięga najdłuższe przypomnienie, pozycje Radaru, salda kont; Radar, odprawa, powiadomienia).
+- Salda kont (F26, T274): `calc/ahead.ts` (`accountsAhead`, `coverAmount`), `RadarItem.accountId`, odprawa `account`
+  (`notify.accounts`); Radar `radar-accounts`, `radar-account` (`data-name`), `radar-account-short`,
+  `radar-account-transfer` (`radar/actions.ts` `planTransfer`); osłony po zdarzeniu `shieldsAfter` (`shieldsLine`, T275,
+  `radar-shields-after`).
+- Kurs i manewry (F27, F35, T276, T277): `calc/course.ts` (`course`, `courseIncome`, `COURSE_KINDS`, `maneuver` – pensja do
+  następnego własnego planu `CourseInput.planMonths`, koszty nieznane bez zmian –, `MANEUVER_GOAL`); `intel.ts` `rangeForecast(…, plans)` (`withPlans`, `plansEmpty`); renderer `features/intel/Course.tsx`
+  (`useCourseInput`, `CoursePanel` – `intel-course`, `-summary`, `-below`, `-months`; `ManeuverPanel` – `intel-maneuver`,
+  `maneuver-salary` / `-purchase` / `-purchase-from` / `-noxtb` / `-costs` / `-goal` / `-container` / `-result` /
+  `-range` / `-below` / `-apply-salary`).
+- Koperty (F28, T278, T279): `lootSchema.envelopes`, `monthPlan.envelopeCovers` (`envelopeCoverSchema`); silnik
+  `envelopeExtra` (zapas z łupów), `coverMoves(plan, now, cut)`, `FleetInput.coversBefore` (gra – `rateDay`); `plan.ts`
+  `keptOf`, `envelopeExtraOf`, `lootExtraOf` bez zapasu kopert, `lootDecision(…, envelopes)`, `lootApplied.envelopes`;
+  `game.ts` `coversOf`, wpis dziennika `cover` (`gameView(…, covers)`); renderer `month/actions.ts` `coverEnvelope`,
+  `decideLoot(…, envelopes)`, `EnvelopeBars` `onCover` (`envelope-cover`), `CoverDialog` (`cover-dialog`, `cover-from`,
+  `cover-amount`, `cover-confirm`), `loot-envelope` / `loot-envelope-input`, `month-envelope-extra`.
+- Plan kampanii (F37, T280): `calc/yearPlan.ts` (`yearPlan` – `extraOf` zapasu i pokryć, `YearCell.extra`, `copyOnMonths`),
+  `plan.ts` `monthSpending` (wydatki kopert – wspólne z debriefingiem); renderer `month/YearPlan.tsx`
+  (`YearPlanPanel` – `year-plan`, `-prev` / `-next`, `-grid`, `-month`, `year-row` z `data-id`, `year-cell` z
+  `data-month` / `data-own` / `data-over`, `year-cell-input`, `year-cell-copy`, `year-cell-spent`, `year-row-total`),
+  `month/actions.ts` `copyOnward`, przełącznik `month-year-toggle`; `lib/format.ts` `monthGenLabel` (T281).
+- Testy: `tests/unit/future.test.ts`, poszerzone `plan`, `fleet`, `goals`; E2E `tests/e2e/future.spec.ts` (pola kwot z
+  wartością – najpierw klik, potem wpisanie).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -846,6 +885,7 @@ dockings/RRRR/RRRR-MM-DD_ULID.json       dokowanie: źródło (wpis ICTTJ albo w
 loans/ULID.json                          pożyczka w jedną albo drugą stronę, z harmonogramem
 balances/RRRR/RRRR-MM-DD_ULID.json       saldo otwarcia albo potwierdzenie salda konta
 game/RRRR-MM.json                        oceny dni, naruszenia, misje, awanse (zamrożone)
+scheduled/ULID.json                      boja: zaplanowany wydatek, wpływ albo termin (1.8.0)
 backups/  .history/  .presence/          kopie ZIP, poprzednie wersje, obecność komputerów
 ```
 - JSON z wcięciem 2 spacje i końcowym `\n`; identyfikatory ULID; czasy UTC ISO 8601; ścieżki względne z `/`.
@@ -949,4 +989,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   pary sprzed 1.7.0 w Meldunkach), zmiana zaznaczonych z podglądem skutku i „Cofnij”, ostrzeżenie w potwierdzonym
   okresie, filtry zaawansowane, kolejność, zapisane widoki i eksport widocznej listy, paleta szuka wpisów, dziennik zmian
   folderu
+- [x] 1.8.0 Przyszłość (grupa T, D87): boje nawigacyjne (zaplanowane wydatki, wpływy, terminy), salda kont za 90 dni z
+  „Zaplanuj przelew własny”, osłony po każdym zdarzeniu Radaru, rata celu z terminem, zapas koperty na następny miesiąc i
+  „pokryj z koperty…”, plan kampanii (12 miesięcy), kurs na 12 miesięcy i symulator manewrów
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

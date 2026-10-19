@@ -1789,3 +1789,80 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   dysku ukrycie zapisywane dłużej kasowało nowsze „Pokaż na …” zamówione w międzyczasie, a bezczynność chowała kwoty od
   razu (job Windows na `main` – 1.6.6 bez wydania, wchodzi w 1.7.0). Zmienna testowa `FI_CONFIG_WRITE_DELAY_MS` (wolny
   zapis config.json) odtwarza to w E2E na każdym komputerze.
+
+### 1.8.0 – przyszłość, funkcje (grupa T, 19.10.2026)
+
+- **T272** Cel z terminem – potrzebna rata (F15, D87): `fleet.ts` `goalInstallment(brak, miesiąc, termin)` = brak
+  podzielony po równo na miesiące do terminu (ten włącznie), w całych groszach w dół, reszta w miesiącu terminu; po
+  terminie 0. Mapa gwiezdna pokazuje ją przy każdym celu z terminem zawsze („kurs przechwycenia: X/mies. do MM.RRRR”, obok
+  tempo z ETA; akcent, gdy rata wyższa niż tempo). „Rata z pensji” to opcja celu: `goal.rates` [{from, until}] (addytywne,
+  od następnego miesiąca; wyłączenie zamyka okres na bieżącym miesiącu – raty pobrane zostają w celu). Silnik bierze raty
+  przy wypłacie pensji po zbiornikach, tylko gdy osłony i kadłub są pełne na przełomie miesiąca (przed pensją – kolejność
+  D13 bez zmian), z energii miesiąca (najwyżej to, co jest), cele po priorytecie; zdarzenie dziennika `rate`. Termin celu
+  jest w jego historii zmian (`past[].deadline`, `goalAt` – stan sprzed 1.8.0 bez terminu bierze najbliższy późniejszy
+  znany): zmiana terminu nie zmienia rat miesięcy przed nią. Plan miesiąca: wiersz „Kurs przechwycenia – raty celów z
+  terminem” (miesiąc przed silnikiem: raty planowe z dopiskiem „gdy osłony i kadłub pełne 1. dnia”), debriefing –
+  „− raty celów” w energii miesiąca.
+- **T273** Zaplanowane operacje – boje nawigacyjne (F16): kolekcja `scheduled/ULID.json` (układ 'id', addytywna –
+  starsza wersja jej nie czyta): nazwa, dzień, kwota ze znakiem (null = termin bez kwoty), `yearly` (29 lutego – 28. w
+  innych latach), konto, kategoria (wydatek), kontrahent, `remind` (dni przed terminem, domyślnie 14 i 3), `done`
+  {dzień: id operacji | '' = odhaczone}, `notMatched`, notatka. Dzień zrobiony: operacja zrobiona z boi („Wykonaj
+  teraz” – zapisuje operację dziś z kwotą, kategorią, kontem i kontrahentem boi i otwiera ją w Operacjach, „Cofnij”
+  zdejmuje oba), odhaczenie albo operacja dopasowana jak wpis ręczny w imporcie (`looseMatch`: ta sama kwota ±3 dni,
+  podobna nazwa przed samą kwotą, bliższy dzień; jedna operacja – jeden dzień, konto boi, gdy ustawione, nigdy przelew
+  własny ani korekta; także operacja zapisana z wyprzedzeniem – prognoza sald kont liczy ją, a boi już nie); „to nie
+  ta” wyklucza operację na stałe. Dzień po terminie zostaje „po terminie” przez 30
+  dni (`LAPSE_DAYS`), potem znika (co roku – czeka na następny rok). Radar (rodzaj `plan`, konto płatności), odprawa
+  (przypomnienia z `remind`, po terminie), powiadomienia (`notify.plans`); koniec kontenera z `until` (ostatnia płatność
+  w 14 dniach – Radar `end`, odprawa, powiadomienie: „potem ładownia lżejsza o X/mies.”).
+- **T274** Prognoza sald kont (F26): `calc/ahead.ts` `accountsAhead` – każde konto budżetu przez 90 dni Radaru od
+  dzisiejszego salda: płatności Radaru z kontem (kontenery i pożyczki z kontem, boje z kontem – zaległa dziś) i operacje
+  już zapisane z późniejszą datą (każda strona przelewu na swoim koncie). Brak = pierwszy dzień, w którym płatność schodzi
+  poniżej zera przy dzisiejszym saldzie ≥ 0 (saldo ujemne już dziś to sprawa banku, nie prognozy); źródło = inne konto
+  (nie gotówka), które do tego dnia zachowuje najwięcej i co najmniej brakującą kwotę. „Zaplanuj przelew własny” zapisuje
+  jeden przelew (F10, obie strony) dziś na kwotę w górę do pełnych złotych i otwiera go w Operacjach („Cofnij”). Odprawa
+  i powiadomienie (`notify.accounts`, alarm): „Na koncie X zabraknie … na płatność dd.mm (przyczyna) – przelej z konta Y”.
+  Wydatki codzienne nie są prognozowane (bez dnia i konta).
+- **T275** Osłony po zdarzeniu na Radarze (F27): od dzisiejszych warstw – pensja 1. dnia z osłon (z kadłuba, gdy brakuje
+  – D14), boja-wydatek z osłon (kadłub, gdy brakuje), boja-wpływ dokowany w kolejności D13, spłata pożyczki udzielonej do
+  osłon. Płatności ładowni i zbiorników idą z pensji (osłony ich nie widzą), wpływów bez dnia nie liczymy – linia z samych
+  znanych zdarzeń.
+- **T276** Kurs na 12 miesięcy (F27, Wywiad): `calc/course.ts` `course` – od dzisiejszych warstw miesiąc po miesiącu
+  regułami silnika: pensja z osłon 1. dnia (kadłub, gdy brakuje), raty celów (T272) tylko przy pełnych osłonach i
+  kadłubie, koszty po średniej z pensji (ponad nią – z osłon), boje i spodziewane spłaty w swoich miesiącach, wpływy
+  dokowane D13, reszta energii do osłon (łupy). Trzy kursy wpływów: „bez wypłat z XTB” (mediana pracy), mediana, średnia
+  z 12 miesięcy (panel Przychody). Wynik: osłony i kadłub pełne, ETA celów (akcent po terminie), miesiące poniżej
+  minimum osłon i z pensją z kadłuba, tabela osłon i kadłuba. Nic nie jest zapisywane.
+- **T277** Symulator manewrów (F35): manewr to zmienione wejście kursu (`maneuver`) – pensja od miesiąca, zakup w
+  miesiącu (z osłon albo z pieniędzy celu – brak dopłacają osłony), N miesięcy bez wypłat z XTB, koszty wyższe o %, nowy
+  cel (z opcją raty), nowy kontener (miesięczny udział kosztów); porównanie „teraz” / „po manewrze” na wybranym kursie.
+  Jedyny zapis: „Zastosuj pensję od …” (plan miesiąca, jak zmiana pensji w Planie miesiąca).
+- **T278** Reszta koperty planowej na następny miesiąc (F28, D87): decyzja łupów ma `envelopes` {kategoria: kwota}
+  (addytywne; najwyżej to, czego koperta nie wydała – ekran), kolejność: cele → koperty planowe → koperty codzienne
+  następnego miesiąca → osłony. Silnik dodaje kwotę do energii i do limitu koperty w miesiącu decyzji (`envelopeExtra`);
+  podział pensji pokazuje „+X” przy kopercie, debriefing „w tym ±X zapasu i pokryć”. Starsza wersja oddaje tę część
+  osłonom.
+- **T279** „Pokryj z koperty…” (F28, D73 bez zmian): `monthPlan.envelopeCovers` [{id, from, to, amount, at}] (addytywne)
+  – przesunięcie limitu w bieżącym miesiącu z koperty z zapasem na przekroczoną planową (domyślnie mniejsza z kwot:
+  przekroczenie, zapas źródła); dwie zmiany planu w jednej, „Cofnij”. Gra ocenia dzień według limitów sprzed pokryć z
+  tego dnia (`coversBefore` = początek dnia oceny) – pokrycie z wcześniejszego dnia już się liczy; dziennik wachty
+  pokazuje każde pokrycie.
+- **T280** Plan kampanii (F37): siatka 12 miesięcy roku w Planie miesiąca – pensja i limit każdej koperty (plan w mocy:
+  własny miesiąca jasno, odziedziczony przygaszony), pod limitem fakt (wydatki jak w debriefingu: bez płatności
+  kontenerów, pieniędzy celów i zakupów do zwrotu; pensja – koszty miesiąca), w podpowiedzi ten sam miesiąc rok wcześniej
+  (sezon). Edycja bieżącego i dalszych miesięcy (miesiąc miniony zostaje – silnik go przeliczył); puste pole = bez
+  koperty w tym miesiącu; „»” kopiuje wartość na dalsze miesiące roku z własnym planem (pozostałe biorą ją z planu
+  wcześniejszego) z „Cofnij”. Wiersz kategorii zarchiwizowanej tylko, gdy plan roku daje jej limit.
+- **T281** Teksty 1.8.0: miesiąc po „od / do / z” w dopełniaczu (`monthGenLabel` – „od stycznia 2027”), także w
+  „+ łupy z …” planu miesiąca; konto nazwane wprost („Na koncie mBank zabraknie …”, „z konta Portfel XTB”) – metafora
+  ładowni zostaje dla kontenerów (D34); „pensja / pensje / pensji” przez `countLabel`.
+- **T282** Przegląd grupy T (`/code-review` high, 10 kandydatów – wszystkie poprawione): operacja zapisana z wyprzedzeniem
+  zamyka boję (każdy dzień boi z kwotą szuka swojej operacji w ±3 dni, nie tylko dni do 3 dni naprzód – prognoza sald
+  kont nie liczy tych pieniędzy dwa razy); przypomnienia boi dalej niż 90 dni (odprawa i powiadomienia czytają dni tak
+  daleko, jak sięga najdłuższe przypomnienie – `remindReach`; Radar i panel boi zostają przy 90 dniach); symulator –
+  koszty jeszcze nieznane zostają nieznane (zmiana kosztów i kontener bez skutku, z podpowiedzią), pensja manewru do
+  następnego miesiąca z własnym planem (jak „Zastosuj pensję”), zasięg „teraz” z całym długiem (rata tego miesiąca i
+  zaległa jeszcze niezapłacone); plan kampanii – przekroczenie według limitu silnika (zapas i pokrycia miesiąca –
+  `extraOf`, „+” / „−” przy fakcie) i w akcencie (zieleń / czerwień tylko dla kwot na plus / minus); jedno liczenie
+  wydatków kopert dla debriefingu i planu rocznego (`monthSpending`); klasa okrętu w symulatorze z `shipClass`; indeks
+  operacji boi raz na listę.

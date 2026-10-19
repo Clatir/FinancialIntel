@@ -4,7 +4,7 @@
  * before come from each record's history on demand. The game's frozen days and the import's batches are written by
  * the app itself – not in it.
  */
-export const CHANGELOG_KINDS = ['transactions', 'months', 'containers', 'goals', 'loans', 'balances', 'dockings', 'fi'] as const
+export const CHANGELOG_KINDS = ['transactions', 'months', 'containers', 'goals', 'loans', 'balances', 'dockings', 'scheduled', 'fi'] as const
 export type ChangeLogKind = (typeof CHANGELOG_KINDS)[number]
 
 export const CHANGELOG_KIND_LABEL: Record<ChangeLogKind, string> = {
@@ -15,6 +15,7 @@ export const CHANGELOG_KIND_LABEL: Record<ChangeLogKind, string> = {
   loans: 'pożyczka',
   balances: 'saldo',
   dockings: 'dokowanie',
+  scheduled: 'boja',
   fi: 'ustawienia'
 }
 

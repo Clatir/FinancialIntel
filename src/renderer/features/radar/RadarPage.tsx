@@ -1,19 +1,20 @@
 /**
  * Radar (spec, „Ekrany”: 90 dni – pensje, asteroidy, spodziewane wpłaty, PIT-38; E6, D72): what comes in the next 90
- * days; the loans both ways with their schedules (new, repayment / installment, close), the receivables (the house,
- * the loans given) and the PIT-38 deadline (the amount stays in ICTTJ).
+ * days with the shields after each event that moves them (F27); the buoys – planned operations and terms (F16); the
+ * accounts' balances ahead (F26); the loans both ways with their schedules (new, repayment / installment, close), the
+ * receivables (the house, the loans given) and the PIT-38 deadline (the amount stays in ICTTJ).
  */
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import type { AccountAhead } from '@shared/calc/ahead'
+import { dm } from '@shared/calc/briefing'
 import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates'
 import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
-import { pit38Deadline, radar, type RadarItem } from '@shared/calc/radar'
+import { pit38Deadline, type RadarItem } from '@shared/calc/radar'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
 import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
-import { useMachine } from '../../store/machine'
-import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
@@ -23,18 +24,18 @@ import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName } from '@shared/calc/household'
 import { openRefundables } from '../operations/state'
-import { addLoan, closeLoan, deleteLoan, recordPayment, type NewLoan } from './actions'
+import { addLoan, closeLoan, deleteLoan, planTransfer, recordPayment, type NewLoan } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
-import { useCargoStatuses } from '../cargo/status'
 import { useFocusRecord } from '../../components/focus'
+import { BuoysPanel, NewBuoyPanel } from './Buoys'
+import { useFuture } from './future'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
-const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin' }
+const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin', plan: 'boja', end: 'koniec' }
 
 export function RadarPage() {
   const fleet = useFleet()
-  const plans = useRecordList('months')
   const members = useMembers()
   // Opened from the palette (F19): the loan marked (a closed one's list opened).
   useFocusRecord('loan')
@@ -43,16 +44,11 @@ export function RadarPage() {
     const v = members.find((m) => m.id === id)?.via
     return v ? memberName(v, members) : null
   }
-  const containers = useRecordList('containers')
-  const cargo = useCargoStatuses()
   const readOnly = useFolderLocked()
-  // The notes carry amounts (B61): masked or shown at once with Ctrl+$, not at the next minute's fleet.
-  const hidden = useMachine((s) => s.prefs.hideAmounts)
-  const items = useMemo(
-    () => (fleet ? radar({ today: fleet.today, plans, containers, tanks: fleet.tanks, loans: fleet.loans, money: zl, cargo }) : []),
-    // `hidden` is no input of the radar, but it changes what `zl` writes.
-    [fleet, plans, containers, cargo, hidden]
-  )
+  // The items, the buoys' days and the accounts ahead (F16, F26, F27) – the notes carry amounts (B61): masked or shown at
+  // once with Ctrl+$.
+  const future = useFuture()
+  const items = future.items
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const loans = fleet.loans
   const r = fleet.receivables
@@ -72,8 +68,11 @@ export function RadarPage() {
             <Panel title="Na radarze" testId="radar-items">
               {!items.length ? <Empty>Nic na radarze w najbliższych 90 dniach.</Empty> : <Timeline items={items} />}
             </Panel>
+            <BuoysPanel days={future.days} today={fleet.today} readOnly={readOnly} />
+            {!readOnly && <NewBuoyPanel today={fleet.today} />}
           </div>
           <div className="flex min-w-0 flex-col">
+            <AccountsPanel accounts={future.accounts} readOnly={readOnly} />
             <Panel title={active.length ? `Pożyczki (${active.length})` : 'Pożyczki'} name="Pożyczki" testId="radar-loans">
               <div className="flex flex-col text-[12px]">
                 {!active.length && <span className="text-muted">Brak otwartych pożyczek.</span>}
@@ -159,6 +158,45 @@ export function RadarPage() {
   )
 }
 
+/**
+ * The accounts' balances ahead (F26): today's and the lowest in 90 days by the payments with their account; one a payment
+ * takes below zero – how much, when, and „Zaplanuj przelew własny” from the account that keeps the money.
+ */
+function AccountsPanel({ accounts, readOnly }: { accounts: readonly AccountAhead[]; readOnly: boolean }) {
+  const shown = accounts.filter((a) => a.moves.length || a.balance !== 0)
+  return (
+    <Panel title="Salda kont za 90 dni" name="Salda kont" testId="radar-accounts">
+      <div className="flex flex-col gap-1 text-[12px]">
+        {!shown.length && <span className="text-muted">Brak płatności z przypisanym kontem w najbliższych 90 dniach.</span>}
+        {shown.map((a) => (
+          <div key={a.accountId} className="flex flex-col" data-testid="radar-account" data-name={a.name}>
+            <div className="flex items-baseline gap-2">
+              <span className="text-fg-strong">{a.name}</span>
+              <span className="num ml-auto">{zl(a.balance)}</span>
+              <span className={cx('num w-[150px] text-right text-[11px]', a.low.amount < 0 ? 'text-accent' : 'text-dim')} title="Najniższe saldo w 90 dniach">
+                min. {zl(a.low.amount)} ({dm(a.low.date)})
+              </span>
+            </div>
+            {a.short && (
+              <div className="flex items-baseline gap-2 text-[11.5px]" data-testid="radar-account-short">
+                <span className="min-w-0 flex-1 text-accent">
+                  Zabraknie {zl(a.short.amount)} na płatność {dm(a.short.date)} ({a.short.cause}){a.source ? ` – przelej z konta ${a.source.name}` : ''}
+                </span>
+                {!readOnly && a.source && (
+                  <button className="shrink-0 text-accent hover:underline" onClick={() => planTransfer(a)} data-testid="radar-account-transfer">
+                    Zaplanuj przelew własny
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+        <span className="text-[11px] text-dim">Liczą się płatności kontenerów i pożyczek z kontem, boje z kontem i operacje z późniejszą datą; bez wydatków codziennych.</span>
+      </div>
+    </Panel>
+  )
+}
+
 function Timeline({ items }: { items: RadarItem[] }) {
   return (
     <div className="flex flex-col text-[12px]">
@@ -175,6 +213,9 @@ function Timeline({ items }: { items: RadarItem[] }) {
               <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{i.overdue ? i.note || 'po terminie' : i.note}</span>
               <span className={cx('num w-[110px] text-right', i.direction === 'in' ? 'text-up' : 'text-fg')}>
                 {i.amount == null ? '—' : `${i.direction === 'in' ? '+' : i.direction === 'out' ? '−' : ''}${zl(i.amount)}`}
+              </span>
+              <span className={cx('num w-[96px] text-right text-[11px]', i.shieldsAfter != null && i.shieldsAfter < 0 ? 'text-accent' : 'text-dim')} title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)" data-testid="radar-shields-after">
+                {i.shieldsAfter != null ? zl(i.shieldsAfter) : ''}
               </span>
             </div>
           </div>

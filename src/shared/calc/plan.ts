@@ -8,7 +8,7 @@ import { envelopeKind, type Category, type EnvelopeKind } from '../schema/budget
 import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { counterpartyKey } from '../import/classify'
 import { addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
-import { activeIn, cyclePosition, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
+import { activeIn, coverMoves, cyclePosition, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
 import { coveredMonths, firstFullOf, historyStart, monthsBefore } from './history'
 import { financedBy } from './household'
 import { categoryIndex, costOf, isCargoPayment, partsOf, sum } from './operations'
@@ -261,7 +261,16 @@ export interface SalarySplit {
   cargo: { items: Array<{ containerId: string; name: string; amount: number }>; total: number }
   /** The month's installments of the periodic fees' tanks (actual for a month the engine ran, else the plan's). */
   tanks: { items: Array<{ containerId: string; name: string; amount: number; dueMonth: string; due: number }>; total: number }
-  envelopes: Record<EnvelopeKind, { items: Array<{ categoryId: string; limit: number }>; total: number }>
+  /**
+   * The goals' installments (F15 – „Kurs przechwycenia”): as the engine took them that month, else the plan's – these
+   * only when the shields and the hull are full at the turn (`planned`).
+   */
+  rates: { items: Array<{ goalId: string; name: string; amount: number; deadline: string | null }>; total: number; planned: boolean }
+  /**
+   * Each envelope's limit of the plan and what the month adds to it (F28): the loot kept in it from the month before and
+   * the covers moved to it (− from it); `total` – the plan's limits, the salary's.
+   */
+  envelopes: Record<EnvelopeKind, { items: Array<{ categoryId: string; limit: number; extra: number }>; total: number; extra: number }>
   /** The loot of the month before given to this month (T28 – it adds to the daily envelopes, N11): not the salary's. */
   lootExtra: number
   /** „Podstawowy przydział”: the daily envelopes and the loot added to them over the days of the month (as the engine). */
@@ -282,7 +291,13 @@ export function salarySplit(
   containers: readonly Container[],
   categories: readonly Category[],
   sinking?: ReadonlyMap<string, number>,
-  lootExtra = 0
+  lootExtra = 0,
+  more: {
+    /** The goals' installments (F15): the engine's of the month (`ratesOf`) or the planned ones. */
+    rates?: { items: SalarySplit['rates']['items']; planned: boolean }
+    /** What the month adds to each envelope's limit (F28): the loot kept (`keptOf`) and the covers (`coverMoves`). */
+    extra?: ReadonlyMap<string, number>
+  } = {}
 ): SalarySplit {
   const active = containers.filter((c) => activeIn(c, month))
   const cargoItems = active.filter((c) => c.cycleMonths <= 1).map((c) => ({ containerId: c.id, name: c.name, amount: c.amount }))
@@ -294,23 +309,53 @@ export function salarySplit(
       return { containerId: c.id, name: c.name, amount: sinking ? (sinking.get(c.id) ?? 0) : planned, dueMonth: pos.dueMonth, due: c.amount }
     })
   const cats = categoryIndex(categories)
-  const envelopes: SalarySplit['envelopes'] = { planned: { items: [], total: 0 }, daily: { items: [], total: 0 } }
+  const envelopes: SalarySplit['envelopes'] = { planned: { items: [], total: 0, extra: 0 }, daily: { items: [], total: 0, extra: 0 } }
   for (const main of cats.mains) {
     const kind = envelopeKind(main)
     const limit = plan.envelopes[main.id]
-    if (!kind || limit == null) continue
-    envelopes[kind].items.push({ categoryId: main.id, limit })
-    envelopes[kind].total += limit
+    const extra = more.extra?.get(main.id) ?? 0
+    if (!kind || (limit == null && !extra)) continue
+    envelopes[kind].items.push({ categoryId: main.id, limit: limit ?? 0, extra })
+    envelopes[kind].total += limit ?? 0
+    envelopes[kind].extra += extra
   }
   const cargo = { items: cargoItems, total: sum(cargoItems.map((c) => c.amount)) }
   const tanks = { items: tankItems, total: sum(tankItems.map((c) => c.amount)) }
-  const allocated = cargo.total + tanks.total + envelopes.planned.total + envelopes.daily.total
-  return { salary: plan.salary, cargo, tanks, envelopes, lootExtra, dailyBase: Math.floor((envelopes.daily.total + lootExtra) / daysInMonth(month)), allocated, unallocated: plan.salary - allocated }
+  const rateItems = more.rates?.items ?? []
+  const rates = { items: rateItems, total: sum(rateItems.map((r) => r.amount)), planned: more.rates?.planned ?? false }
+  const allocated = cargo.total + tanks.total + rates.total + envelopes.planned.total + envelopes.daily.total
+  // The daily pool as the engine's: its limits, what the month moved to them and the loot of the month before.
+  const dailyBase = Math.floor((envelopes.daily.total + envelopes.daily.extra + lootExtra) / daysInMonth(month))
+  return { salary: plan.salary, cargo, tanks, rates, envelopes, lootExtra, dailyBase, allocated, unallocated: plan.salary - allocated }
 }
 
-/** The loot of the month before the engine gave to `month` (a decision „na następny miesiąc” – N11): its daily envelopes'. */
+/**
+ * The loot of the month before the engine gave to `month` for its daily envelopes (a decision „na następny miesiąc” –
+ * N11); what it kept in planned envelopes (F28) is theirs (`keptOf`).
+ */
 export function lootExtraOf(log: readonly FleetEvent[], month: string): number {
-  return sum(logOfMonth(log, month).filter((e) => e.kind === 'loot').map((e) => Math.max(0, e.moves.energy ?? 0)))
+  return sum(logOfMonth(log, month).filter((e) => e.kind === 'loot').map((e) => Math.max(0, (e.moves.energy ?? 0) - sum(Object.values(e.moves.envelopes ?? {})))))
+}
+
+/** The loot of the month before the engine kept in each planned envelope of `month` (F28). */
+export function keptOf(log: readonly FleetEvent[], month: string): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const e of logOfMonth(log, month)) if (e.kind === 'loot') for (const [id, v] of Object.entries(e.moves.envelopes ?? {})) out.set(id, (out.get(id) ?? 0) + v)
+  return out
+}
+
+/** What `month` adds to each envelope's limit (F28): the loot kept in it and the covers of the month's own plan (± ). */
+export function envelopeExtraOf(log: readonly FleetEvent[], month: string, plans: readonly MonthPlan[], now = Infinity): Map<string, number> {
+  const out = keptOf(log, month)
+  for (const [id, v] of coverMoves(plans.find((p) => p.month === month), now)) out.set(id, (out.get(id) ?? 0) + v)
+  return out
+}
+
+/** The goals' installments the engine took in `month` (F15): goal → grosze. */
+export function ratesOf(log: readonly FleetEvent[], month: string): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const e of logOfMonth(log, month)) if (e.kind === 'rate') for (const [id, v] of Object.entries(e.moves.goals ?? {})) out.set(id, (out.get(id) ?? 0) + v)
+  return out
 }
 
 /** The tanks' installments the engine took in `month` (its log). */
@@ -340,19 +385,23 @@ export interface Debriefing {
    */
   plus: boolean | null
   /**
-   * The month's energy as the engine ran it (N6, N11): `budget` = the salary paid less the tanks' installments plus the
-   * loot of the month before given to it; `used` = what the spending took of it and over it (from the shields);
+   * The month's energy as the engine ran it (N6, N11): `budget` = the salary paid less the tanks' and the goals'
+   * installments (F15) plus the loot of the month before given to it (its daily envelopes' and the planned ones' kept –
+   * F28); `used` = what the spending took of it and over it (from the shields);
    * `result` = budget − used (+ left – the loot at the month's end, − the shields paid). null = no salary paid by the engine
    * that month.
    */
-  energy: { salary: number; sinking: number; loot: number; budget: number; used: number; exhausted: number; result: number } | null
+  energy: { salary: number; sinking: number; rates: number; loot: number; budget: number; used: number; exhausted: number; result: number } | null
   /**
    * The daily pool as the engine's daily energy counts it (N11): the daily envelopes and the loot added to them against
    * their spending and the spending without a category. null = no daily envelope that month.
    */
   daily: { limit: number; extra: number; spent: number; gap: number } | null
-  /** Plan against fact per envelope of the month's plan – the FVG of the debriefing (+ = left, − = over); 0 zł is a limit too. */
-  envelopes: Array<{ categoryId: string; kind: EnvelopeKind; limit: number; spent: number; gap: number }>
+  /**
+   * Plan against fact per envelope of the month's plan – the FVG of the debriefing (+ = left, − = over); 0 zł is a limit
+   * too. `limit` with what the month added to it (`extra` – the loot kept, the covers; F28).
+   */
+  envelopes: Array<{ categoryId: string; kind: EnvelopeKind; limit: number; extra: number; spent: number; gap: number }>
   /**
    * Spending of the main categories without an envelope that month (N25, N54, N101): no limit to be over – shown apart,
    * without red. A daily one still counts in the daily pool (as the engine's daily energy); the most first.
@@ -375,6 +424,31 @@ export interface Debriefing {
  * a change of it, not a second plan of the month.
  */
 export const monthPlanId = (month: string): string => `01KMTH${month.replace('-', '').padStart(20, '0')}`
+
+/**
+ * A month's spending of the main categories as the debriefing counts it (and the year's plan – F37): the expenses without
+ * a goal's money, the parts to be refunded not, the cargo's payments apart – of a container that exists (B58); null = every
+ * linked payment is the cargo's (an older caller).
+ */
+export function monthSpending(txs: readonly Transaction[], cats: ReturnType<typeof categoryIndex>, containerIds: ReadonlySet<string> | null): { spent: Map<string, number>; cargo: number; uncategorized: number } {
+  const spent = new Map<string, number>()
+  let cargo = 0
+  let uncategorized = 0
+  for (const t of txs) {
+    if (t.kind !== 'expense' || t.goalId) continue
+    if (containerIds ? isCargoPayment(t, containerIds) : t.containerId) {
+      cargo += costOf(t)
+      continue
+    }
+    for (const p of partsOf(t)) {
+      if (p.refundable) continue
+      const main = cats.mainOf(p.categoryId)
+      if (main) spent.set(main.id, (spent.get(main.id) ?? 0) - p.amount)
+      else uncategorized -= p.amount
+    }
+  }
+  return { spent, cargo, uncategorized }
+}
 
 /** The planned month in force for `month`: its own plan or the last earlier one. */
 export function planFor(plans: readonly MonthPlan[], month: string): MonthPlan | null {
@@ -402,35 +476,22 @@ export function debriefing(
   const cats = categoryIndex(input.categories)
   const txs = transactionsOfMonth(input.transactions, month)
   const costs = sum(txs.map(costOf))
-  const spent = new Map<string, number>()
-  let cargo = 0
-  let uncategorized = 0
   // Without the containers (an older caller): every linked payment is the cargo's.
-  const ids = input.containers ? new Set(input.containers.map((c) => c.id)) : null
-  for (const t of txs) {
-    if (t.kind !== 'expense' || t.goalId) continue
-    // The cargo as the engine sees it: payments linked to a container that exists (B58).
-    if (ids ? isCargoPayment(t, ids) : t.containerId) {
-      cargo += costOf(t)
-      continue
-    }
-    for (const p of partsOf(t)) {
-      if (p.refundable) continue
-      const main = cats.mainOf(p.categoryId)
-      if (main) spent.set(main.id, (spent.get(main.id) ?? 0) - p.amount)
-      else uncategorized -= p.amount
-    }
-  }
+  const { spent, cargo, uncategorized } = monthSpending(txs, cats, input.containers ? new Set(input.containers.map((c) => c.id)) : null)
   const envelopes: Debriefing['envelopes'] = []
   const outside: Debriefing['outside'] = []
+  // What the month added to the limits (F28): the loot kept in an envelope, the covers of the month's own plan.
+  const extras = envelopeExtraOf(input.log ?? [], month, input.plans)
   // The daily pool's spending as the engine's daily energy counts it: every daily category's, with an envelope or not.
   let dailySpent = uncategorized
   for (const main of cats.mains) {
     const kind = envelopeKind(main)
-    const limit = plan?.envelopes[main.id]
+    const base = plan?.envelopes[main.id]
+    const extra = extras.get(main.id) ?? 0
+    const limit = base == null && !extra ? null : Math.max(0, (base ?? 0) + extra)
     const s = spent.get(main.id) ?? 0
     if (kind === 'daily') dailySpent += s
-    if (kind && limit != null) envelopes.push({ categoryId: main.id, kind, limit, spent: s, gap: limit - s })
+    if (kind && limit != null) envelopes.push({ categoryId: main.id, kind, limit, extra, spent: s, gap: limit - s })
     else if (s) outside.push({ categoryId: main.id, spent: s })
   }
   outside.sort((a, b) => b.spent - a.spent)
@@ -448,18 +509,20 @@ export function debriefing(
   let energy: Debriefing['energy'] = null
   if (salaries.length) {
     const paid = sum(salaries.map((e) => e.amount))
-    const sinking = -sum(inMonth.filter((e) => e.kind === 'sinking').map((e) => e.moves.energy ?? 0))
-    const extra = lootExtraOf(log, month)
+    const sinking = 0 - sum(inMonth.filter((e) => e.kind === 'sinking').map((e) => e.moves.energy ?? 0))
+    const rates = 0 - sum(inMonth.filter((e) => e.kind === 'rate').map((e) => e.moves.energy ?? 0))
+    // The loot given to the month: its daily envelopes' and what it kept in the planned ones (F28).
+    const extra = lootExtraOf(log, month) + sum([...keptOf(log, month).values()])
     // What the operations took of the energy (less what came back to it) and what the shields paid when it ran out.
     const spentOf = -sum(inMonth.filter((e) => e.txId).map((e) => e.moves.energy ?? 0))
     const exhausted = sum((input.alarms ?? []).filter((a) => a.kind === 'energy-exhausted' && monthOf(a.date) === month).map((a) => a.amount))
-    const budget = paid - sinking + extra
+    const budget = paid - sinking - rates + extra
     const used = spentOf + exhausted
-    energy = { salary: paid, sinking, loot: extra, budget, used, exhausted, result: budget - used }
+    energy = { salary: paid, sinking, rates, loot: extra, budget, used, exhausted, result: budget - used }
   }
   // The daily pool (N11): the daily envelopes, the loot added to them; their spending and the spending without a category.
   const dailyRows = envelopes.filter((e) => e.kind === 'daily')
-  const extra = energy?.loot ?? lootExtraOf(log, month)
+  const extra = lootExtraOf(log, month)
   const daily =
     dailyRows.length || extra
       ? (() => {
@@ -487,27 +550,38 @@ export function debriefing(
 }
 
 /** The loot decision (D18) as the month plan stores it; what is not given away stays in the shields. */
-export function lootDecision(loot: number, choice: { nextMonth: number; goals: Record<string, number> }, decidedAt: string): NonNullable<MonthPlan['loot']> {
+export function lootDecision(loot: number, choice: { nextMonth: number; goals: Record<string, number>; envelopes?: Record<string, number> }, decidedAt: string): NonNullable<MonthPlan['loot']> {
   let rest = Math.max(0, loot)
+  const take = (v: number) => {
+    const t = Math.min(rest, Math.max(0, Math.round(v)))
+    rest -= t
+    return t
+  }
   const goals: Record<string, number> = {}
   for (const [id, v] of Object.entries(choice.goals)) {
-    const take = Math.min(rest, Math.max(0, Math.round(v)))
-    if (take) goals[id] = take
-    rest -= take
+    const t = take(v)
+    if (t) goals[id] = t
   }
-  const nextMonth = Math.min(rest, Math.max(0, Math.round(choice.nextMonth)))
-  rest -= nextMonth
-  return { decidedAt, shields: rest, nextMonth, goals }
+  // The engine's order: the goals, the planned envelopes kept for the next month (F28), the daily ones, the shields.
+  const envelopes: Record<string, number> = {}
+  for (const [id, v] of Object.entries(choice.envelopes ?? {})) {
+    const t = take(v)
+    if (t) envelopes[id] = t
+  }
+  const nextMonth = take(choice.nextMonth)
+  return { decidedAt, shields: rest, nextMonth, goals, envelopes }
 }
 
 /**
  * How the engine split the loot of `month` (B10): the loot as it is now (a late import changes it) by the decision –
- * the goals first, then the next month, the rest to the shields – or all to the shields after the 7th. null = not yet.
+ * the goals first, then the envelopes kept (F28) and the next month, the rest to the shields – or all to the shields
+ * after the 7th. null = not yet.
  */
-export function lootApplied(log: readonly FleetEvent[], month: string): { date: string; amount: number; goals: number; nextMonth: number; shields: number } | null {
+export function lootApplied(log: readonly FleetEvent[], month: string): { date: string; amount: number; goals: number; envelopes: number; nextMonth: number; shields: number } | null {
   const e = log.find((x) => x.kind === 'loot' && x.ref === month)
   if (!e) return null
-  return { date: e.date, amount: e.amount, goals: sum(Object.values(e.moves.goals ?? {})), nextMonth: e.moves.energy ?? 0, shields: e.moves.shields ?? 0 }
+  const envelopes = sum(Object.values(e.moves.envelopes ?? {}))
+  return { date: e.date, amount: e.amount, goals: sum(Object.values(e.moves.goals ?? {})), envelopes, nextMonth: (e.moves.energy ?? 0) - envelopes, shields: e.moves.shields ?? 0 }
 }
 
 /** Until when the loot of `month` waits for a decision: the 7th of the next month (then it goes to the shields – D18). */

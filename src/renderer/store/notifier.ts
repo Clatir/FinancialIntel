@@ -21,6 +21,7 @@ import { usePresence } from './presence'
 import { showFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
 import { cargoStatusesNow } from '../features/cargo/status'
+import { futureNow } from '../features/radar/future'
 import { confirmNoSpend, eveningNow, snoozeEvening } from '../features/evening/state'
 
 const SENT_KEY = 'fi.notify.sent'
@@ -108,6 +109,9 @@ function check(opened: boolean, shown = false): void {
     ictjProblem: null,
     members: fi.settings.household.members,
     cargo: cargoStatusesNow(),
+    // The buoys (F16) and the accounts ahead (F26).
+    scheduled: futureNow().reminders,
+    accounts: futureNow().accounts,
     evening: eveningNow(),
     seriousPct: fi.settings.game.seriousEnvelopePct
   })

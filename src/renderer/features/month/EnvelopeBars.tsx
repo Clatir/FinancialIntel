@@ -13,11 +13,14 @@ import { useCategories } from '../operations/pickers'
 export function EnvelopeBars({
   rows,
   labels,
-  elapsed
+  elapsed,
+  onCover
 }: {
   rows: ReadonlyArray<{ categoryId: string; kind: EnvelopeKind; limit: number; spent: number }>
   labels?: Readonly<Record<string, string>>
   elapsed?: number
+  /** A planned envelope over its limit: „pokryj z koperty…” (F28) – this month only. */
+  onCover?: (categoryId: string) => void
 }) {
   const cats = useCategories()
   const label = (id: string) => labels?.[id] ?? cats.label(id)
@@ -41,6 +44,11 @@ export function EnvelopeBars({
               {plnText(e.spent)} / {plnText(e.limit)} zł
             </span>
           </div>
+          {onCover && e.kind === 'planned' && e.spent > e.limit && (
+            <button className="self-end text-[11px] text-accent hover:underline" onClick={() => onCover(e.categoryId)} title="Przesuń limit z koperty, w której jest zapas" data-testid="envelope-cover">
+              pokryj z koperty…
+            </button>
+          )}
           <Meter value={e.spent} max={e.limit} over mark={e.limit > 0 ? 0.8 : undefined} tick={elapsed != null && e.limit > 0 ? elapsed : undefined} />
         </div>
       ))}

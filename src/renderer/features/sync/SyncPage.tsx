@@ -26,6 +26,7 @@ const KIND_LABEL: Record<string, string> = {
   balances: 'Saldo',
   game: 'Dowództwo',
   imports: 'Import z banku',
+  scheduled: 'Boja (zaplanowane)',
   fi: 'Ustawienia (fi.json)'
 }
 const PROBLEM_LABEL: Record<string, string> = {

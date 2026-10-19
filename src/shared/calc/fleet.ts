@@ -104,6 +104,36 @@ export interface SalaryPayment {
   alarm: 'yellow' | 'red' | null
 }
 
+/**
+ * A goal's installment from the salary in `month` (F15, D87 – „Kurs przechwycenia”): what it lacks (`need`) over the
+ * months to its deadline – this one included – in whole grosze, the rest in the deadline's month (as T29 splits a fee);
+ * 0 past the deadline or with nothing lacking.
+ */
+export function goalInstallment(need: number, month: string, deadline: string): number {
+  if (need <= 0 || month > deadline) return 0
+  if (month === deadline) return need
+  return Math.floor(need / (monthsBetween(month, deadline) + 1))
+}
+
+/** A goal takes installments from the salary in `month` (F15): one of its periods holds it. */
+export const ratedIn = (rates: ReadonlyArray<{ from: string; until: string | null }> | undefined, month: string): boolean =>
+  (rates ?? []).some((r) => r.from <= month && (r.until == null || month <= r.until))
+
+/**
+ * The month's limits moved between envelopes (F28): each cover of the month's own plan made by `now` (ms) – and, for
+ * the game, before `cut` (D73: a day is rated by the limits before the covers made that day). Category → + / − grosze.
+ */
+export function coverMoves(own: Pick<MonthPlan, 'envelopeCovers'> | null | undefined, now = Infinity, cut = Infinity): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const c of own?.envelopeCovers ?? []) {
+    const at = Date.parse(c.at)
+    if (!(at <= now) || !(at < cut)) continue
+    out.set(c.from, (out.get(c.from) ?? 0) - c.amount)
+    out.set(c.to, (out.get(c.to) ?? 0) + c.amount)
+  }
+  return out
+}
+
 /** The salary on the 1st (D11, D14): from the shields, what is missing from the hull. */
 export function paySalary(salary: number, shields: number, hull: number): SalaryPayment {
   const fromShields = Math.min(salary, Math.max(0, shields))
@@ -401,6 +431,11 @@ export interface FleetInput {
   balances?: readonly Balance[]
   /** The moment of the state; the budget's day is its Warsaw date. */
   now: Date | string
+  /**
+   * The game's day (F28, D73): the covers of an overrun made from this moment on (ISO – the rated day's start) do not
+   * count – the day is rated by the limits before them.
+   */
+  coversBefore?: string
 }
 
 export type AlarmKind =
@@ -441,12 +476,17 @@ export interface Moves {
   goals?: Record<string, number>
   tanks?: Record<string, number>
   loans?: Record<string, number>
+  /** No layer (F28): the part of `energy` the loot keeps in a planned envelope for its month (its limit grows by it). */
+  envelopes?: Record<string, number>
 }
 
 export interface FleetEvent {
   date: string
-  /** 'goal' = a goal's money moved out (to the shields or another goal – 1.4.2); 'tank' = a tank's rest back to the shields after its fee's life (1.4.2). */
-  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'month-end' | 'loot' | 'goal' | 'tank' | TxKind
+  /**
+   * 'goal' = a goal's money moved out (to the shields or another goal – 1.4.2); 'tank' = a tank's rest back to the
+   * shields after its fee's life (1.4.2); 'rate' = a goal's installment from the salary (1.8.0, F15).
+   */
+  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'rate' | 'month-end' | 'loot' | 'goal' | 'tank' | TxKind
   amount: number
   txId?: string
   /** 'loot': the month whose loot it splits (1.4.2, B10). */
@@ -679,6 +719,8 @@ export function computeFleet(input: FleetInput): FleetState {
   for (const t of txs) if (t.kind === 'loan' && t.amount > 0 && t.loanId && start && t.date < start && loansById.get(t.loanId)?.direction === 'given') givenBack.set(t.loanId, (givenBack.get(t.loanId) ?? 0) + t.amount)
   const salaryOfMonth = new Map<string, SalaryPayment>()
   const dailyExtra = new Map<string, number>()
+  /** The loot kept in the planned envelopes (F28): month → category → grosze. */
+  const envelopeExtra = new Map<string, Map<string, number>>()
   const alarms: Alarm[] = []
   const log: FleetEvent[] = []
 
@@ -823,6 +865,9 @@ export function computeFleet(input: FleetInput): FleetState {
       shields += tank
       record({ date, kind: 'tank', amount: tank, moves: { tanks: { [c.id]: -tank }, shields: tank } })
     }
+    // The shields and the hull full at the turn (before the salary): the goals' installments may come after the tanks.
+    const turn = targetsAt(date)
+    const full = turn.shields != null && turn.hull != null && shields >= turn.shields && hull >= turn.hull
     const salary = salaryOf(m)
     if (salary != null && salary > 0) {
       const due = start && m === monthOf(start) ? Math.max(0, salary - startMonthSpent) : salary
@@ -848,6 +893,24 @@ export function computeFleet(input: FleetInput): FleetState {
       energy -= take
       tanks.set(c.id, tank + take)
       record({ date, kind: 'sinking', amount: take, moves: { energy: -take, tanks: { [c.id]: take } } })
+    }
+    // The goals' installments from the salary (F15, D87): after the tanks, only with the shields and the hull full at the
+    // turn – they come first (D13); each goal of a deadline with its option on this month, by the priority then.
+    if (!full) return
+    const at = dayStart(date)
+    const rated = goalsAll
+      .filter((g) => ratedIn(g.rates, m) && goalTakes(g, at))
+      .map((g) => ({ g, then: goalAt(g, at) }))
+      .sort((a, b) => a.then.priority - b.then.priority || a.g.createdAt.localeCompare(b.g.createdAt) || a.g.id.localeCompare(b.g.id))
+    for (const { g, then } of rated) {
+      if (!then.deadline) continue
+      const want = goalInstallment(then.target - (goalAmount.get(g.id) ?? 0), m, then.deadline)
+      const take = Math.min(want, Math.max(0, energy))
+      if (take <= 0) continue
+      energy -= take
+      const moves: Moves = { energy: -take }
+      addGoal(g.id, take, moves)
+      record({ date, kind: 'rate', amount: take, ref: g.id, moves })
     }
   }
 
@@ -1131,10 +1194,22 @@ export function computeFleet(input: FleetInput): FleetState {
                 addGoal(id, take, moves)
                 rest -= take
               }
+              // What a planned envelope did not spend, kept in it for this month (F28): its limit grows by it.
+              for (const [id, v] of Object.entries(decision.envelopes ?? {})) {
+                const take = Math.min(rest, v)
+                if (take <= 0) continue
+                energy += take
+                moves.energy = (moves.energy ?? 0) + take
+                moves.envelopes = { ...moves.envelopes, [id]: (moves.envelopes?.[id] ?? 0) + take }
+                const kept = envelopeExtra.get(m) ?? new Map<string, number>()
+                kept.set(id, (kept.get(id) ?? 0) + take)
+                envelopeExtra.set(m, kept)
+                rest -= take
+              }
               const next = Math.min(rest, decision.nextMonth)
               if (next) {
                 energy += next
-                moves.energy = next
+                moves.energy = (moves.energy ?? 0) + next
                 dailyExtra.set(m, (dailyExtra.get(m) ?? 0) + next)
                 rest -= next
               }
@@ -1232,10 +1307,15 @@ export function computeFleet(input: FleetInput): FleetState {
       }
     }
     let dailyLimit = dailyExtra.get(month) ?? 0
+    // The loot kept in the envelopes (F28) and the covers of the month's own plan – the game's day without its own (D73).
+    const kept = envelopeExtra.get(month)
+    const moved = coverMoves(plans.find((p) => p.month === month), nowMs, input.coversBefore ? Date.parse(input.coversBefore) : Infinity)
     for (const main of cats.mains) {
       const kind = envelopeKind(main)
       if (!kind) continue
-      const limit = plan.envelopes[main.id]
+      const base = plan.envelopes[main.id]
+      const extra = (kept?.get(main.id) ?? 0) + (moved.get(main.id) ?? 0)
+      const limit = base == null && !extra ? null : Math.max(0, (base ?? 0) + extra)
       if (kind === 'daily') dailyLimit += limit ?? 0
       if (limit == null) continue
       const s = spentBy.get(main.id) ?? { before: 0, today: 0 }

@@ -54,7 +54,8 @@ const STEPS: Record<FileKind, Record<number, Step>> = {
   loans: { 0: withIdAndTimestamps },
   balances: { 0: withIdAndTimestamps },
   game: { 0: withIdAndTimestamps },
-  imports: { 0: withIdAndTimestamps }
+  imports: { 0: withIdAndTimestamps },
+  scheduled: { 0: withIdAndTimestamps }
 }
 
 export interface MigrationResult {

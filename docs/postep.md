@@ -1,9 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa S** (1.7.0 – operacje, funkcje)
-na gałęzi `claude/grupa-s-1.7.0`, PR do `main`; po niej od razu funkcje T, U, V – każda grupa z własnym PR i wydaniem
-(D71).
-**1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa T** (1.8.0 – przyszłość, funkcje)
+na gałęzi `claude/grupa-t-1.8.0`, PR do `main`; po niej od razu U i V – każda grupa z własnym PR i wydaniem (D71).
+**1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,9 +11,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa S → scalenie po zielonym CI → wydanie 1.7.0 → od razu grupa T (D87). Po wznowieniu
+**Następny krok:** grupa T → scalenie po zielonym CI → wydanie 1.8.0 → od razu grupa U (D87). Po wznowieniu
 pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.7.0 – listy w sekcjach niżej.
+aplikacji: 1.5.0–1.8.0 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -56,8 +55,8 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **P** | 1.6.4 Operacje, edytor, szybki wpis: B64, B66, B68, B74, B76–B83, B86, B88, B118, B125, N32, N36, N37, N39, N50, N51, N55, N104 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem, mutacjami i dwoma pełnymi E2E; plan był ok. 1,5 h) | 1.6.4 | ✅ D87 | ✅ scalone (PR #26) |
 | **Q** | 1.6.5 Folder, system, dwa komputery: B67, B107–B117, B119–B124, N62, N91–N100, W37 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z przeglądem, 31 mutacjami i dwoma pełnymi E2E; plan był ok. 2 h) | 1.6.5 (w 1.6.6) | ✅ D87 | ✅ scalone (PR #27), wydanie przepadło – wchodzi w 1.6.6 |
 | **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1,5 h (zegar sesji, z przeglądem, 47 mutacjami, pełnym E2E i dwiema poprawkami CI; plan był ok. 1,5 h) | 1.6.6 (w 1.7.0) | ✅ D87 | ✅ scalone (PR #28), wydanie przepadło – wchodzi w 1.7.0 |
-| **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar gałęzi, z przeglądem, 64 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy R; plan był ok. 3 h) | 1.7.0 | ✅ D87 | ✅ PR do `main` |
-| **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | czeka |
+| **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar gałęzi, z przeglądem, 64 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy R; plan był ok. 3 h) | 1.7.0 | ✅ D87 | ✅ wydane (PR #29, z 1.6.5 i 1.6.6) |
+| **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | plan ok. 4–5 h | 1.8.0 | ✅ D87 | w toku |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | czeka |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
@@ -837,6 +836,49 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 2. Operacje: zaznacz kilka, „Zmień zaznaczone” → podgląd skutku → „Cofnij”; „Więcej filtrów”, widok zapisany na drugim
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
+
+## Przed grupą T – przyszłość, funkcje (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa S wydana (1.7.0, PR #29, z 1.6.5 i 1.6.6). Grupa T (1.8.0): funkcje „przyszłości” z
+   przeglądu po 1.4.1 – F15 (cel z terminem: potrzebna rata, opcjonalna rata z pensji), F16 (zaplanowane operacje i
+   terminy na Radarze – boje, koniec kontenera), F26 (prognoza sald kont i „Zaplanuj przelew własny”), F27 (kurs na 12
+   miesięcy, osłony po każdym zdarzeniu Radaru), F28 (zapas koperty na następny miesiąc, „pokryj z koperty…”), F35
+   (symulator manewrów), F37 (plan roczny). Format folderu addytywny: kolekcja `scheduled/`, pola `goal.rates`,
+   `past[].deadline`, `loot.envelopes`, `envelopeCovers` – starsza wersja je zachowuje (zapas kopert z łupów oddaje
+   osłonom, boi nie widzi).
+2. **Co użytkownik musi powiedzieć** – ✅ D87: F15 – „potrzebna rata miesięczna celu z terminem zawsze widoczna;
+   odkładka z pensji tylko jako opcja celu, brana po osłonach i kadłubie (kolejność D13 bez zmian)”; F28 – „„pokryj
+   przekroczenie z innej koperty” – gra ocenia dzień według stanu sprzed przesunięcia (D73 bez zmian)”. Reszta wg
+   propozycji przeglądu.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 4–5 h.
+
+## 1.8.0 – przyszłość, funkcje (grupa T, 19.10.2026)
+
+Zakres: „Przed grupą T” wyżej. Zrobione:
+- Boje nawigacyjne (T273): zaplanowane wydatki, wpływy i terminy (raz albo co roku) na Radarze, w odprawie i
+  powiadomieniach; operacja dopasowana zamyka dzień (także zapisana z wyprzedzeniem), „Wykonaj teraz”, „odhacz”, „to
+  nie ta”; koniec kontenera z datą końca.
+- Salda kont za 90 dni z „Zaplanuj przelew własny” (T274); osłony po każdym zdarzeniu Radaru (T275).
+- Kurs na 12 miesięcy w trzech wariantach wpływów i symulator manewrów (T276, T277); prognoza zasięgu z bojami.
+- Cel z terminem: potrzebna rata zawsze widoczna, opcja „rata z pensji” po zbiornikach przy pełnych osłonach i kadłubie
+  (T272, D87 – D13 bez zmian).
+- Zapas koperty planowej na następny miesiąc i „pokryj z koperty…” – gra według limitów sprzed pokrycia (T278, T279, D87 –
+  D73 bez zmian); dziennik wachty pokazuje pokrycia.
+- Plan kampanii – pensja i koperty na 12 miesięcy, fakt, rok wcześniej, „kopiuj dalej” (T280); teksty (T281).
+- Przegląd `/code-review` high: 10 kandydatów, wszystkie poprawione z testem (T282) – najważniejszy: operacja zapisana z
+  wyprzedzeniem nie zamykała boi, więc prognoza sald kont liczyła te pieniądze dwa razy (fałszywy alarm braku).
+- Testy: 744 unit + fs (nowy `future.test.ts`; poszerzone `plan`, `fleet`, `goals`), E2E 61 (nowy `future.spec.ts`);
+  80 mutacji – 78 wykrytych, 1 równoważna (termin bez kwoty w dopasowaniu), 1 zbędny warunek usunięty z kodu.
+- E2E niezależne od pory dnia: dwa testy szybkiego wpisu (`bridge`, `series`) wpisują godzinę 12:00 – pełny przebieg o
+  23:06 trafiał domyślną godziną (teraz) w ciszę nocną i zapis czekał na potwierdzenie.
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.8.0, Windows):
+1. Radar → „Nowa boja” (np. 3 000 zł z mBanku za 10 dni): boja na osi, w odprawie; „Salda kont” – czy brakuje i
+   „Zaplanuj przelew własny”.
+2. Mapa gwiezdna: cel z terminem – „kurs przechwycenia”, „rata z pensji”; Plan miesiąca następnego miesiąca – wiersz raty.
+3. Plan miesiąca: „pokryj z koperty…” przy przekroczonej kopercie planowej, „Plan kampanii” z „»”; Wywiad – kurs i
+   symulator manewrów.
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 

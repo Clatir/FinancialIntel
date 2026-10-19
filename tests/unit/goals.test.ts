@@ -52,7 +52,7 @@ describe('cele: zmiana liczy się od chwili zmiany (1.4.2, D84 C1, B2)', () => {
     const a = fresh('Rower', zl(2000), 1)
     const b = fresh('Laptop', zl(5000), 2)
     const archived = changeGoal(a, { archived: true }, noon('2026-10-10'))
-    expect(archived.past).toEqual([{ until: noon('2026-10-10'), priority: 1, target: zl(2000), archived: false }])
+    expect(archived.past).toEqual([{ until: noon('2026-10-10'), priority: 1, target: zl(2000), archived: false, deadline: null }])
     const s = fleet([archived, b], [toGoals('2026-10-05', zl(1500)), toGoals('2026-10-12', zl(1000))])
     expect(amounts(s)).toEqual({ Rower: zl(1500), Laptop: zl(1000) })
     expect(s.goals.map((g) => [g.name, g.takes])).toEqual([
@@ -87,8 +87,8 @@ describe('cele: zmiana liczy się od chwili zmiany (1.4.2, D84 C1, B2)', () => {
     const b = fresh('B', zl(1000), 2)
     const moved = renumber([b, a], noon('2026-10-10'))
     expect(moved.map((g) => [g.name, g.priority, g.past])).toEqual([
-      ['B', 1, [{ until: noon('2026-10-10'), priority: 2, target: zl(1000), archived: false }]],
-      ['A', 2, [{ until: noon('2026-10-10'), priority: 1, target: zl(1000), archived: false }]]
+      ['B', 1, [{ until: noon('2026-10-10'), priority: 2, target: zl(1000), archived: false, deadline: null }]],
+      ['A', 2, [{ until: noon('2026-10-10'), priority: 1, target: zl(1000), archived: false, deadline: null }]]
     ])
     // 5.10: A first (500 zł); 12.10: B first (700 zł).
     expect(amounts(fleet(moved, [toGoals('2026-10-05', zl(500)), toGoals('2026-10-12', zl(700))]))).toEqual({ A: zl(500), B: zl(700) })
@@ -143,13 +143,13 @@ describe('cele: zmiana liczy się od chwili zmiany (1.4.2, D84 C1, B2)', () => {
     const once = changeGoal(a, { priority: 1 }, '2026-10-10T08:00:00.000Z')
     const twice = changeGoal(once, { target: zl(3000) }, '2026-10-10T09:00:00.000Z')
     expect(twice.past).toEqual([
-      { until: '2026-10-10T08:00:00.000Z', priority: 3, target: zl(1000), archived: false },
-      { until: '2026-10-10T09:00:00.000Z', priority: 1, target: zl(1000), archived: false }
+      { until: '2026-10-10T08:00:00.000Z', priority: 3, target: zl(1000), archived: false, deadline: null },
+      { until: '2026-10-10T09:00:00.000Z', priority: 1, target: zl(1000), archived: false, deadline: null }
     ])
     expect(['2026-10-10T07:59:59.000Z', '2026-10-10T08:00:00.000Z', '2026-10-10T09:30:00.000Z'].map((t) => goalAt(twice, ms(t)))).toEqual([
-      { priority: 3, target: zl(1000), archived: false },
-      { priority: 1, target: zl(1000), archived: false },
-      { priority: 1, target: zl(3000), archived: false }
+      { priority: 3, target: zl(1000), archived: false, deadline: null },
+      { priority: 1, target: zl(1000), archived: false, deadline: null },
+      { priority: 1, target: zl(3000), archived: false, deadline: null }
     ])
     // A malformed entry (a hand-edited file) is dropped, not the whole history; the entries kept in time order.
     const parsed = goalSchema.parse({ ...twice, past: [twice.past[1], { until: 'zła data' }, twice.past[0]] })
@@ -241,6 +241,6 @@ describe('cele ze scenariusza ICTTJ (C1)', () => {
     expect(first.add.map((g) => [g.activeFrom, g.past, g.transfers])).toEqual([[NOW, [], []]])
     const old = goal('Laptop', zl(6000), 2, { source: 'ictj', activeFrom: '2026-10-01T00:00:00.000Z', ictj: { forecastId: forecast.id, goalId: 'X', currency: 'PLN', amount: zl(6000), version: '2026-10-01T10:00:00.000Z' } })
     const sync = syncIctjGoals(forecast, [...first.add, old], NOW)
-    expect(sync.update.map((g) => [g.name, g.archived, g.past])).toEqual([['Laptop', true, [{ until: NOW, priority: 2, target: zl(6000), archived: false }]]])
+    expect(sync.update.map((g) => [g.name, g.archived, g.past])).toEqual([['Laptop', true, [{ until: NOW, priority: 2, target: zl(6000), archived: false, deadline: null }]]])
   })
 })

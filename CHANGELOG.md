@@ -1,5 +1,35 @@
 # Financial Intel – zmiany
 
+## 1.8.0
+
+Przyszłość (grupa T, D87): co jest przed okrętem – zaplanowane wydatki, salda kont, kurs na rok, plan roczny.
+
+Radar:
+- Boje nawigacyjne – zaplanowane wydatki, wpływy i terminy bez kwoty (jednorazowe albo co roku): na osi Radaru, w
+  odprawie i w powiadomieniach (domyślnie 14 i 3 dni przed). Operacja z banku o tej samej kwocie (±3 dni) zamyka boję
+  sama („to nie ta”, gdy pomyłka); „Wykonaj teraz” zapisuje operację z boi, „odhacz” – bez operacji.
+- Salda kont za 90 dni: płatności kontenerów, pożyczek i boi z kontem oraz operacje z późniejszą datą. Gdy płatność
+  zabierze więcej, niż jest na koncie – kwota, dzień, przyczyna i „Zaplanuj przelew własny” z konta, które ma zapas
+  (jeden przelew, „Cofnij”); także w odprawie.
+- Przy każdym zdarzeniu osłony po nim; koniec kontenera z datą końca – „potem ładownia lżejsza o …/mies.”.
+
+Cele i koperty:
+- Cel z terminem pokazuje zawsze potrzebną ratę („kurs przechwycenia”) obok tempa. Opcja „rata z pensji”: rata idzie z
+  pensji po zbiornikach, tylko gdy osłony i kadłub są pełne na początku miesiąca; widać ją w podziale pensji i w
+  debriefingu.
+- Zapas koperty planowej przy podziale łupów może zostać w niej na następny miesiąc (jej limit rośnie).
+- „pokryj z koperty…” przy przekroczonej kopercie planowej: limit przechodzi z koperty z zapasem, z „Cofnij”; ocena
+  dnia w grze liczy limity sprzed pokrycia, dziennik wachty je pokazuje.
+- Plan kampanii w Planie miesiąca: pensja i koperty na 12 miesięcy roku, fakt pod limitem, ten sam miesiąc rok
+  wcześniej w podpowiedzi; edycja bieżącego i dalszych miesięcy, „»” kopiuje wartość na resztę roku.
+
+Wywiad:
+- Kurs na 12 miesięcy: osłony, kadłub i cele miesiąc po miesiącu w trzech wariantach wpływów (bez wypłat z XTB,
+  mediana, średnia) – kiedy warstwy będą pełne, kiedy cele, czy osłony spadną poniżej minimum.
+- Symulator manewrów: inna pensja, zakup, miesiące bez wypłat z XTB, wyższe koszty, nowy cel albo kontener – porównanie
+  „teraz” i „po manewrze”; nic się nie zapisuje (poza „Zastosuj pensję”).
+- Prognoza zasięgu z bojami – druga kreska w każdym miesiącu.
+
 ## 1.7.0
 
 Nowe funkcje Operacji (grupa S, D87).

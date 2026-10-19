@@ -23,7 +23,8 @@ const NOUN: Record<Collection, [string, string, string]> = {
   loans: ['pożyczka', 'pożyczki', 'pożyczek'],
   balances: ['saldo', 'salda', 'sald'],
   game: ['miesiąc gry', 'miesiące gry', 'miesięcy gry'],
-  imports: ['import', 'importy', 'importów']
+  imports: ['import', 'importy', 'importów'],
+  scheduled: ['boja', 'boje', 'boi']
 }
 const count = (c: Collection, n: number) => `${n} ${plural(n, ...NOUN[c])}`
 
