@@ -66,13 +66,44 @@ describe('config.json tego komputera', () => {
     const c = await new ConfigStore(dir).load()
     expect(c.dataDir).toBe('D:/OneDrive/FinancialIntel')
     expect(c.recentDirs).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'])
-    expect(c.tray).toEqual({ closeToTray: true, launchAtLogin: true, notified: false })
+    expect(c.tray).toEqual({ closeToTray: true, launchAtLogin: true, notified: false, autostartAsked: false })
     expect(c.updates).toMatchObject({ prefs: { autoCheck: false, autoDownload: true }, pending: null, token: null })
 
     await fs.writeFile(join(dir, 'config.json'), '{ "dataDir": ')
-    const broken = await new ConfigStore(dir).load()
+    const store = new ConfigStore(dir)
+    const broken = await store.load()
     expect(broken.dataDir).toBeNull()
     expect(broken.tray.closeToTray).toBe(true)
+    // The broken file kept aside for a look (B114), never only overwritten.
+    expect(store.setAside).toMatch(/^config\.uszkodzony-.*\.json$/)
+    expect(await fs.readFile(join(dir, store.setAside!), 'utf8')).toBe('{ "dataDir": ')
+  })
+
+  it('config.json nie do odczytu teraz (OneDrive, antywirus): domyślne tylko w pamięci, plik nigdy nie nadpisany; zmiany z tej chwili dochodzą pole po polu (B114)', async () => {
+    const dir = await configDir()
+    // Unreadable as a file (another error than "missing"): a folder stands for a locked file.
+    await fs.mkdir(join(dir, 'config.json'))
+    await fs.writeFile(join(dir, 'config.json', 'tu-jest-cos'), 'x')
+    const store = new ConfigStore(dir)
+    const c = await store.load()
+    expect(store.loadFailed).toBeTruthy()
+    expect(c.dataDir).toBeNull()
+    // A change in this session stays in memory – the settings on the disk are not replaced by the defaults.
+    const after = await store.update({ backupDirOverride: 'D:/Kopie' })
+    expect(after.backupDirOverride).toBe('D:/Kopie')
+    // The tray's object made from the defaults: only the field changed counts later.
+    await store.update({ tray: { ...store.get().tray, closeToTray: false } })
+    await store.updateUpdates({ pending: { version: '9.9.9', notes: '', file: 'x.update', sha256: 'abc', mode: 'portable' } })
+    expect((await fs.stat(join(dir, 'config.json'))).isDirectory()).toBe(true)
+    // Readable again: read for real – the changes made meanwhile put onto it, field by field – and written.
+    await fs.rm(join(dir, 'config.json'), { recursive: true })
+    await fs.writeFile(join(dir, 'config.json'), JSON.stringify({ dataDir: 'D:/OneDrive/FinancialIntel', tray: { closeToTray: true, launchAtLogin: true, notified: true } }))
+    const read = await store.load()
+    expect(store.loadFailed).toBeNull()
+    expect(read).toMatchObject({ dataDir: 'D:/OneDrive/FinancialIntel', backupDirOverride: 'D:/Kopie', tray: { closeToTray: false, launchAtLogin: true, notified: true }, updates: { pending: { version: '9.9.9' } } })
+    expect(JSON.parse(await fs.readFile(join(dir, 'config.json'), 'utf8'))).toMatchObject({ dataDir: 'D:/OneDrive/FinancialIntel', backupDirOverride: 'D:/Kopie', tray: { closeToTray: false, launchAtLogin: true } })
+    await store.update({ backupDirOverride: 'E:/Kopie' })
+    expect(JSON.parse(await fs.readFile(join(dir, 'config.json'), 'utf8'))).toMatchObject({ dataDir: 'D:/OneDrive/FinancialIntel', backupDirOverride: 'E:/Kopie' })
   })
 
   it('pobrana aktualizacja czeka w pending; ostatnie foldery: nowy na początku, bez powtórzeń, najwyżej 8', async () => {
@@ -99,7 +130,7 @@ describe('config.json tego komputera', () => {
       config.update({ tray: { closeToTray: false, launchAtLogin: false, notified: true } })
     ])
     const back = await new ConfigStore(dir).load()
-    expect(back.tray).toEqual({ closeToTray: false, launchAtLogin: false, notified: true })
+    expect(back.tray).toEqual({ closeToTray: false, launchAtLogin: false, notified: true, autostartAsked: false })
     expect(back.window).toEqual({ width: 1200, height: 800, maximized: false })
   })
 })

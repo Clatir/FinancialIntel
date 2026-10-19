@@ -41,7 +41,9 @@ export class RecordHistory {
   constructor(
     private readonly root: string,
     private readonly machineName: string,
-    private readonly now: () => string
+    private readonly now: () => string,
+    /** A version not kept (B112: the history folder not writable for a moment) – said in the log, never silent. */
+    private readonly failed?: (e: unknown) => void
   ) {}
 
   private dir(kind: FileKind, id: string): string {
@@ -50,10 +52,10 @@ export class RecordHistory {
 
   /**
    * Keep `record` (the version about to be replaced or deleted). Never throws: a failed snapshot must not block
-   * the save itself (it is reported through `onError`). Returns the file written (null = none: throttled or failed) –
-   * `drop` takes it back (a delete the disk refused).
+   * the save itself (it is reported to the log). Returns the file written (null = none: throttled or failed) – `drop`
+   * takes it back (a delete the disk refused).
    */
-  async snapshot(kind: FileKind, record: SnapshotFile['record'], reason: HistoryReason, onError?: (e: unknown) => void): Promise<string | null> {
+  async snapshot(kind: FileKind, record: SnapshotFile['record'], reason: HistoryReason): Promise<string | null> {
     try {
       const id = String(record.id ?? 'fi')
       const key = `${kind}/${id}`
@@ -64,16 +66,18 @@ export class RecordHistory {
         const last = this.lastSnapshot.get(key)
         if (last != null && nowMs - last < EDIT_THROTTLE_MS) return null
       }
-      this.lastSnapshot.set(key, nowMs)
       const dir = this.dir(kind, id)
       const name = `${fileStamp(nowIso)}_${reason}_${randomBytes(2).toString('hex')}.json`
       const body: SnapshotFile = { savedAt: nowIso, savedBy: this.machineName, reason, record }
       const file = join(dir, name)
       await writeFileAtomic(file, `${JSON.stringify(body, null, 2)}\n`)
-      await this.prune(dir)
+      // Only a version written holds the next edits back (B112): a failed one is tried again at the next edit.
+      this.lastSnapshot.set(key, nowMs)
+      // The oldest versions over the limit go; a file that would not go now goes at a later snapshot.
+      await this.prune(dir).catch(() => undefined)
       return file
     } catch (e) {
-      onError?.(e)
+      this.failed?.(e)
       return null
     }
   }

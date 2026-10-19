@@ -8,8 +8,9 @@ import type { RecurringPayment } from '@shared/calc/plan'
 import type { Orders } from '@shared/schema'
 import { DEFAULT_QUICK_SHORTCUT } from '@shared/machine'
 import { api } from '../../lib/api'
-import { flushSaves, updateSettings, useData } from '../../store/data'
-import { setMachinePrefs } from '../../store/machine'
+import { unsavedNote, updateSettings, useData } from '../../store/data'
+import { setMachinePrefs, useMachine } from '../../store/machine'
+import { setTrayPrefs } from '../../store/tray'
 import { navigate, toast } from '../../store/ui'
 import { setOpening } from '../balances/actions'
 import { editPlan } from '../month/actions'
@@ -81,8 +82,16 @@ export function startWizard(): void {
     shieldSalaries: fi?.settings.layers.shieldSalaries ?? 3,
     hullMonths: fi?.settings.layers.hullMonths ?? 6,
     assumedCosts: fi?.settings.layers.assumedCosts ?? null,
-    orders: fi?.settings.orders ?? null
+    orders: fi?.settings.orders ?? null,
+    // This computer's own choices (N100): its shortcut, its start with Windows – on unless switched off here before.
+    shortcut: useMachine.getState().prefs.quickShortcut || DEFAULT_QUICK_SHORTCUT
   })
+  void api.trayPrefs().then(
+    (p) => {
+      if (useWizard.getState().active) useWizard.setState({ autostart: p.launchAtLogin || !p.autostartAsked })
+    },
+    () => undefined
+  )
   navigate({ page: 'wizard' })
 }
 
@@ -96,7 +105,7 @@ export function cancelWizard(): void {
 /**
  * Start the budget: the opening balances at the start of today (the balance now without today's operations), the
  * settings (the ship, the layers, the orders, the start and its split), this month's plan, the chosen containers, the
- * shortcut and the start with Windows (D64: the wizard turns it on).
+ * shortcut and the start with Windows (D64: the wizard asks about it).
  */
 export async function finishWizard(o: { salary: number; hull: number; goals: Record<string, number>; envelopes: Record<string, number> }): Promise<boolean> {
   const s = useData.getState()
@@ -131,14 +140,15 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
   for (const p of Object.values(w.cargo)) addContainer(draftFromPayment(p))
   await setMachinePrefs({ quickShortcut: w.shortcut })
   try {
-    await api.setTrayPrefs({ launchAtLogin: w.autostart, closeToTray: true })
+    // The closing to the tray stays this computer's choice (N100): the wizard asks only about the start with Windows.
+    await setTrayPrefs({ launchAtLogin: w.autostart })
   } catch {
     /* the tray settings stay as they were */
   }
-  const saved = await flushSaves()
+  const note = await unsavedNote()
   useWizard.setState(initial())
   navigate({ page: 'bridge' })
   playSound('docking')
-  toast(saved ? 'Okręt wypłynął: budżet działa od dziś.' : 'Budżet uruchomiony – część zmian zapisze się za chwilę.', saved ? 'success' : 'info', 5000)
+  toast(note ? `Budżet uruchomiony – ${note}.` : 'Okręt wypłynął: budżet działa od dziś.', note ? 'info' : 'success', note ? 9000 : 5000)
   return true
 }

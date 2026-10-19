@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import type { UpdatePrefs, UpdateState } from '@shared/update'
 import { api, errorMessage } from '../lib/api'
-import { flushSaves } from './data'
+import { saveFirst } from './data'
 import { toast } from './ui'
 
 /** Update status pushed by the main process (null until the first answer). */
@@ -59,11 +59,8 @@ export async function dismissUpdateNotice(): Promise<void> {
 
 /** Save everything, then quit, install and start the new version. */
 export async function restartToUpdate(): Promise<void> {
-  if (!(await flushSaves())) {
-    toast('Nie udało się zapisać bieżących zmian – aktualizacja wstrzymana. Spróbuj ponownie za chwilę.', 'error', 7000)
-    return
-  }
   try {
+    await saveFirst('aktualizacja')
     await api.installUpdateNow()
   } catch (e) {
     toast(errorMessage(e), 'error')

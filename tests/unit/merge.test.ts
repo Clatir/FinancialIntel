@@ -140,3 +140,14 @@ describe('scalanie trzech wersji', () => {
     expect(r.merged).toMatchObject({ updatedAt: 'theirs', updatedBy: 'PC-B', note: 'm' })
   })
 })
+
+describe('nazwy pól w historii i oknach zmian (1.6.5, N92)', () => {
+  const CAT = '01K6H3Z0W8Q4M2N5P7R9S1T3V5'
+  it('identyfikator w ścieżce zamieniony na nazwę: koperta kategorii, bez nazwy – jak dotąd', () => {
+    const names = new Map([[CAT, 'Jedzenie']])
+    expect(fieldLabel(['envelopes', CAT], names)).toBe('Koperty – Jedzenie')
+    expect(fieldLabel(['envelopes', CAT])).toBe(`Koperty – ${CAT}`)
+    // A known field keeps its own label; the name is not doubled.
+    expect(fieldLabel(['note'], names)).toBe(fieldLabel(['note']))
+  })
+})

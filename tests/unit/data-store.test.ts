@@ -17,6 +17,7 @@ const api = {
 vi.stubGlobal('window', { fi: api })
 const store = await import('../../src/renderer/store/data')
 const { useRemote } = await import('../../src/renderer/store/remote')
+const { useUi } = await import('../../src/renderer/store/ui')
 type PendingRemote = import('../../src/renderer/store/remote').PendingRemote
 type RemoteDecision = import('../../src/renderer/store/data').RemoteDecision
 
@@ -528,5 +529,196 @@ describe('wiele zmian z drugiego komputera naraz (1.5.4, W25)', () => {
     ])
     expect(current(idOf(0))?.note).toBe('z B 0')
     expect(api.historyKeep).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('przyczyna niezapisanych zmian (1.6.5, B108, B67, N62)', () => {
+  const toasts = () => useUi.getState().toasts.map((t) => t.text)
+  const newerError = () => new Error("Error invoking remote method 'fi:saveRecord': NewerFileError: Ten wpis zapisała nowsza wersja aplikacji (na drugim komputerze) – ta wersja go nie zmieni.")
+  beforeEach(() => {
+    useUi.setState({ toasts: [] })
+    useRemote.setState({ pending: [], open: false })
+  })
+
+  /** My unsaved note and the other computer's other note: a decision waits (only it saves the record). */
+  function waitingDecision(t: Transaction): void {
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'moja' }))
+    change({ upserts: [incoming({ ...t, note: 'z laptopa', updatedAt: '2026-03-16T10:00:00.000Z', updatedBy: 'LAPTOP' })] })
+    expect(useRemote.getState().pending).toHaveLength(1)
+  }
+
+  it('decyzja o zmianie z drugiego komputera: zamknięcie i „zapisz przed…” mówią prawdę i otwierają okno decyzji', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    waitingDecision(t)
+    // „Później” in the decisions' dialog.
+    useRemote.setState({ open: false })
+    // The window closing: the reason travels to main's question, the decisions' dialog opens behind it.
+    await expect(store.flushForClose()).resolves.toEqual({ saved: false, waiting: 1, newer: 0, error: null })
+    expect(useRemote.getState().open).toBe(true)
+    useRemote.setState({ open: false })
+    // A backup, an import, an update…: never „file locked, try again” – the decision is asked for.
+    await expect(store.saveFirst('kopia')).rejects.toThrow('Czekają zmiany z drugiego komputera (1) – kopia czeka na Twoją decyzję w otwartym oknie.')
+    expect(useRemote.getState().open).toBe(true)
+    // Another folder: not opened, said why.
+    const open = vi.fn()
+    expect(await store.switchFolder(open)).toEqual({ unsaved: expect.stringMatching(/^Czekają zmiany z drugiego komputera \(1\) – zmiana folderu czeka/) })
+    expect(open).not.toHaveBeenCalled()
+    expect(api.saveRecord).not.toHaveBeenCalled()
+  })
+
+  it('nieudany zapis: „zapisz przed…” podaje błąd i to, że aplikacja ponawia; zapisane wszystko – przechodzi', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockRejectedValue(new Error('EBUSY: plik zablokowany'))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'x' }))
+    await expect(store.saveFirst('eksport')).rejects.toThrow(/^Nie udało się zapisać bieżących zmian \(EBUSY: plik zablokowany\), więc eksport czeka – aplikacja ponawia zapis/)
+    expect(useRemote.getState().open).toBe(false)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    await expect(store.saveFirst('eksport')).resolves.toBeUndefined()
+    await expect(store.flushForClose()).resolves.toEqual({ saved: true, waiting: 0, newer: 0, error: null })
+  })
+
+  it('wpis zapisany przez nowszą wersję: komunikat raz, bez pętli ponowień; „zapisz przed…” go nie wstrzymuje (B67)', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockRejectedValue(newerError())
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'tutaj' }))
+    await vi.advanceTimersByTimeAsync(450)
+    expect(api.saveRecord).toHaveBeenCalledTimes(1)
+    expect(toasts().filter((x) => /ta wersja jej nie zapisze – zaktualizuj aplikację/.test(x))).toHaveLength(1)
+    // Minutes later: no attempt more – trying again changes nothing until the app is updated.
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(api.saveRecord).toHaveBeenCalledTimes(1)
+    expect(store.hasUnsaved()).toBe(true)
+    expect(store.unsavedReport()).toEqual({ saved: false, waiting: 0, newer: 1, error: null })
+    // Not on the disk for anybody: a backup or an import goes on; closing asks with its own words (main).
+    await expect(store.saveFirst('kopia')).resolves.toBeUndefined()
+    await expect(store.flushForClose()).resolves.toMatchObject({ saved: false, newer: 1, error: null })
+    // Saved after all (the app updated meanwhile – „ponów”): nothing left.
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    await expect(store.flushSaves()).resolves.toBe(true)
+    expect(store.unsavedReport()).toEqual({ saved: true, waiting: 0, newer: 0, error: null })
+  })
+
+  it('paczka: wpis nowszej wersji (`newer`) nie wraca do ponawiania, reszta zapisana (B67)', async () => {
+    const t = transaction()
+    const u = transaction(ID2)
+    load(t)
+    store.addRecords('transactions', [u])
+    api.saveRecords.mockResolvedValueOnce([{ id: u.id, entry: saved(u) }])
+    await vi.advanceTimersByTimeAsync(10)
+    api.saveRecords.mockResolvedValueOnce([
+      { id: t.id, error: 'Ten wpis zapisała nowsza wersja aplikacji.', newer: true },
+      { id: u.id, entry: saved({ ...u, note: 'b' }) }
+    ])
+    store.replaceRecords('transactions', [
+      { ...t, note: 'a' },
+      { ...u, note: 'b' }
+    ])
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(api.saveRecords).toHaveBeenCalledTimes(2)
+    expect(api.saveRecord).not.toHaveBeenCalled()
+    expect(store.unsavedReport()).toEqual({ saved: false, waiting: 0, newer: 1, error: null })
+  })
+
+  it('wpis nowszej wersji w pamięci: zmiana odrzucona z komunikatem, usunięcie – odmowa, wpis zostaje (B67)', async () => {
+    const t = transaction()
+    load(t)
+    store.useData.setState((s) => ({ records: { ...s.records, transactions: { [t.id]: { ...s.records.transactions[t.id]!, readOnly: true } } } }))
+    // The notice is said once in a few seconds: none of an earlier test holds it back.
+    vi.setSystemTime(Date.now() + 60_000)
+    expect(store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'x' }))).toBe(false)
+    expect(toasts()).toContain(store.NEWER_RECORD_MESSAGE)
+    // A fill of the app: quietly nothing.
+    useUi.setState({ toasts: [] })
+    expect(store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'x' }), { background: true })).toBe(false)
+    expect(toasts()).toEqual([])
+    await expect(store.deleteRecord('transactions', t.id)).rejects.toThrow(store.NEWER_RECORD_MESSAGE)
+    expect(current()?.note).toBe('')
+    expect(api.deleteRecord).not.toHaveBeenCalled()
+    // A deletion nobody waits for says the refusal (never an unhandled error).
+    store.deleteOrSay('transactions', t.id)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(toasts()).toContain(store.NEWER_RECORD_MESSAGE)
+  })
+
+  it('miesiące, których plik zapisała nowsza wersja i ta go nie odczyta: gra i plan miesiąca nic na nich nie tworzą (B67)', () => {
+    const problems = [
+      { relPath: 'game/2026-03.json', kind: 'too-new' as const, message: 'nowszy format' },
+      { relPath: 'months/2026-04.json', kind: 'too-new' as const, message: 'nowszy format' },
+      { relPath: 'game/2026-05.json', kind: 'corrupt' as const, message: 'uszkodzony' },
+      { relPath: 'transactions/2026/2026-03-16_X.json', kind: 'too-new' as const, message: 'nowszy format' }
+    ]
+    expect([...store.tooNewMonths(problems, 'game')]).toEqual(['2026-03'])
+    expect([...store.tooNewMonths(problems, 'months')]).toEqual(['2026-04'])
+  })
+
+  it('po kroku zrobionym w pamięci (import, kreator): co jeszcze nie jest na dysku i dlaczego (B108)', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'zapisz' }))
+    await expect(store.unsavedNote()).resolves.toBeNull()
+    api.saveRecord.mockRejectedValue(new Error('EBUSY: plik zablokowany'))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'jeszcze raz' }))
+    await expect(store.unsavedNote()).resolves.toBe('część zmian nie zapisała się jeszcze w folderze (EBUSY: plik zablokowany) – aplikacja ponawia zapis automatycznie')
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    await store.flushSaves()
+    waitingDecision(t)
+    useRemote.setState({ open: false })
+    await expect(store.unsavedNote()).resolves.toBe('część zmian zapisze się po Twojej decyzji o zmianach z drugiego komputera (1)')
+    expect(useRemote.getState().open).toBe(true)
+  })
+
+  it('Ctrl+S i „Zapisz teraz” z palety – jedna droga: czekające decyzje otwierają okno, inaczej „Zapisano.” (N62)', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'zapisz' }))
+    await store.saveNow()
+    expect(toasts()).toContain('Zapisano. (Zapis jest automatyczny – Ctrl+S nie jest potrzebne.)')
+    expect(useRemote.getState().open).toBe(false)
+    useUi.setState({ toasts: [] })
+    waitingDecision(t)
+    useRemote.setState({ open: false })
+    await store.saveNow()
+    expect(useRemote.getState().open).toBe(true)
+    expect(toasts()).toContain('Czekają zmiany z drugiego komputera (1) – te wpisy zapiszą się po Twojej decyzji.')
+  })
+
+  it('Ctrl+S: czeka decyzja o wpisie nie zmienianym tutaj, a zapis innego się nie udał – bez „Zapisano.” (przegląd grupy Q)', async () => {
+    const t = transaction()
+    load(t, { remoteChanges: 'ask' })
+    // Another computer changed this record; nothing edited here – the „ask” mode waits for a decision anyway.
+    change({ upserts: [incoming({ ...t, note: 'z laptopa', updatedAt: '2026-03-16T10:00:00.000Z', updatedBy: 'LAPTOP' })] })
+    expect(useRemote.getState().pending).toHaveLength(1)
+    const u = transaction(ID2)
+    api.saveRecords.mockResolvedValue([{ id: u.id, error: 'EBUSY: plik zablokowany' }])
+    api.saveRecord.mockRejectedValue(new Error('EBUSY: plik zablokowany'))
+    store.addRecords('transactions', [u])
+    useUi.setState({ toasts: [] })
+    await store.saveNow()
+    expect(toasts()).toContain('Czekają zmiany z drugiego komputera – zdecyduj o nich w oknie.')
+    expect(toasts().some((x) => x.startsWith('Zapisano.'))).toBe(false)
+    expect(toasts()).toContain('Nie udało się zapisać: EBUSY: plik zablokowany. Aplikacja ponowi zapis automatycznie.')
+  })
+})
+
+
+describe('zasobnik i start z Windows w oknie (1.6.5, N98, N100)', () => {
+  it('kiedy zainstaluje się pobrana aktualizacja; pytanie o start z Windows tylko raz, na komputerze z działającym budżetem', async () => {
+    const tray = await import('../../src/renderer/store/tray')
+    expect(tray.installWhen(false)).toBe('po zamknięciu aplikacji')
+    expect(tray.installWhen(true)).toMatch(/„Zakończ” w menu ikony/)
+    const prefs = { closeToTray: true, launchAtLogin: false, notified: false, autostartAsked: false, loginSupported: true }
+    expect(tray.asksAutostart(prefs, true)).toBe(true)
+    // Not before the budget runs (the start wizard asks), never again once answered, not where it cannot be set.
+    expect(tray.asksAutostart(prefs, false)).toBe(false)
+    expect(tray.asksAutostart({ ...prefs, autostartAsked: true }, true)).toBe(false)
+    expect(tray.asksAutostart({ ...prefs, launchAtLogin: true }, true)).toBe(false)
+    expect(tray.asksAutostart({ ...prefs, loginSupported: false }, true)).toBe(false)
+    expect(tray.asksAutostart(null, true)).toBe(false)
   })
 })

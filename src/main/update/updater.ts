@@ -88,6 +88,11 @@ export class Updater {
   private timers: Array<ReturnType<typeof setTimeout>> = []
   private lastProgressEmit = 0
   private downloading: Promise<void> | null = null
+  /**
+   * The update downloaded and checked (B122): a newer version found meanwhile does not drop it – a failed download of
+   * that one goes back to this, and quitting while it downloads installs this.
+   */
+  private staged: PendingUpdate | null = null
 
   constructor(private readonly deps: UpdaterDeps) {
     this.state = {
@@ -162,6 +167,7 @@ export class Updater {
       }
       if (valid) {
         keepFile = pending.file
+        this.staged = pending
         this.state.phase = 'ready'
         this.state.release = { version: pending.version, notes: pending.notes, publishedAt: null, htmlUrl: `${RELEASES_PAGE}/tag/v${pending.version}` }
       } else {
@@ -304,12 +310,26 @@ export class Updater {
           throw e
         }
       }
-      await this.deps.savePending({ version: release.version, notes: release.notes, file: dest, sha256, mode: this.deps.mode })
+      const pending: PendingUpdate = { version: release.version, notes: release.notes, file: dest, sha256, mode: this.deps.mode }
+      await this.deps.savePending(pending)
+      this.staged = pending
       this.deps.log('info', `update ready ${release.version} (${dest})`)
       this.set({ phase: 'ready', progress: null, error: null })
     } catch (e) {
       this.deps.log('warn', 'update download failed', e instanceof Error ? e.message : e)
-      this.set({ phase: 'error', progress: null, error: describeError(e, 'download', !!this.token) })
+      const error = describeError(e, 'download', !!this.token)
+      // A version downloaded before is still there (B122): it stays ready to install – the newer one later.
+      const staged = this.staged
+      if (staged && staged.version !== release.version && existsSync(staged.file)) {
+        this.set({
+          phase: 'ready',
+          progress: null,
+          release: { version: staged.version, notes: staged.notes, publishedAt: null, htmlUrl: `${RELEASES_PAGE}/tag/v${staged.version}` },
+          error: `Nie udało się pobrać wersji ${release.version} (${error}) – po zamknięciu zainstaluje się pobrana wcześniej ${staged.version}.`
+        })
+        return
+      }
+      this.set({ phase: 'error', progress: null, error })
     }
   }
 
@@ -356,12 +376,13 @@ export class Updater {
    */
   applyOnQuit(): boolean {
     this.stopAuto()
-    if (this.state.phase !== 'ready') return false
+    // Ready – or a newer one downloading, with the one downloaded before still there (B122).
+    if (this.state.phase !== 'ready' && !(this.staged && existsSync(this.staged.file))) return false
     if (this.installPostponed) {
       this.deps.log('info', 'session ending - the update is installed at the next close')
       return false
     }
-    const pending = this.deps.pending()
+    const pending = this.state.phase === 'ready' ? this.deps.pending() : this.staged
     if (!pending || !existsSync(pending.file)) return false
     const logFile = join(this.deps.userDataDir, 'logs', 'update.log')
     try {

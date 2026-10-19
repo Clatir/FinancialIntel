@@ -1,13 +1,13 @@
 // adapted from ICTTJ src/renderer/store/journal.ts @ 84a8339
 import { create } from 'zustand'
-import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry, type FolderStatus, type OpenFolderResult, type Problem, type RecordEntry, type Snapshot } from '@shared/api'
+import { CONFLICT_COPY_MESSAGE, type AppInfo, type ChangeSet, type ConflictEntry, type FlushResult, type FolderStatus, type OpenFolderResult, type Problem, type RecordEntry, type Snapshot } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { RecordTypes } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { chooser, deepEqual, merge3, pathKey, sameContentAs, type Path, type Side } from '@shared/merge'
 import { changedPaths, decideRemote, decideRemoteRemoval, isoMs, newerChoice, newerFields, relatedPaths, type RemoteMode } from '@shared/remoteChanges'
-import { api, errorMessage } from '../lib/api'
-import { useRemote, type PendingRemote } from './remote'
+import { api, errorMessage, isNewerFileError } from '../lib/api'
+import { setRemoteDialog, useRemote, type PendingRemote } from './remote'
 import { commitActiveField, toast } from './ui'
 
 type EntryMap<C extends Collection> = Record<string, RecordEntry<RecordTypes[C]>>
@@ -67,6 +67,11 @@ const retryDelay = new Map<string, number>()
 /** Keys whose last save attempt failed, with the error message. */
 const failed = new Map<string, string>()
 /**
+ * Keys this version cannot write (B67): a newer version of the app wrote the record's file. No retry loop – the change
+ * stays in memory with its message; another edit or „ponów” tries once more.
+ */
+const newer = new Set<string>()
+/**
  * Version of a dirty record as it is on disk (before the local edits, or the last version this computer wrote):
  * the base of a three-way merge when the same record changes on another computer.
  */
@@ -112,6 +117,7 @@ function forget(key: string): void {
   firstDirtyAt.delete(key)
   retryDelay.delete(key)
   failed.delete(key)
+  newer.delete(key)
   bases.delete(key)
   forgetEdits(key)
 }
@@ -223,6 +229,7 @@ export function applySnapshot(snapshot: Snapshot): void {
   firstDirtyAt.clear()
   retryDelay.clear()
   failed.clear()
+  newer.clear()
   bases.clear()
   fieldEdits.clear()
   userEditedAt.clear()
@@ -574,9 +581,13 @@ function applySaved(c: Collection, saved: readonly Saved[]): void {
   })
 }
 
-/** A save that failed: its month made on another computer (B46) – the copy waits in Synchronizacja; else retried. */
-function saveFailed(c: Collection, id: string, key: string, message: string): void {
-  if (message.startsWith(CONFLICT_COPY_MESSAGE)) {
+/**
+ * A save that failed: its month made on another computer (B46) – the copy waits in Synchronizacja; its file a newer
+ * version of the app wrote (B67) – kept unsaved without retries; else retried.
+ */
+function saveFailed(c: Collection | 'fi', id: string, key: string, message: string, newerFile = false): void {
+  if (newerFile) return refusedForGood(key, message)
+  if (c !== 'fi' && message.startsWith(CONFLICT_COPY_MESSAGE)) {
     forget(key)
     set((s) => {
       const map = { ...mapOf(s, c) }
@@ -589,6 +600,17 @@ function saveFailed(c: Collection, id: string, key: string, message: string): vo
   // A record deleted meanwhile is no longer dirty: nothing to report or retry.
   if (dirty.has(key)) failed.set(key, message)
   scheduleRetry(key)
+}
+
+export const NEWER_RECORD_MESSAGE = 'Ten wpis zapisała nowsza wersja aplikacji (na drugim komputerze) – ta wersja go nie zmieni. Zaktualizuj aplikację (Ustawienia → Aktualizacje).'
+
+/** A write this version can never make (B67): said once, no retry loop; the change stays in memory, unsaved. */
+function refusedForGood(key: string, message: string): void {
+  if (!dirty.has(key)) return
+  failed.set(key, message)
+  if (newer.has(key)) return
+  newer.add(key)
+  toast(`${message} Zmiana zostaje w tym oknie, ale ta wersja jej nie zapisze – zaktualizuj aplikację (Ustawienia → Aktualizacje).`, 'error', 10000)
 }
 
 /** Many records saved with one call (W1: an import, a bulk change), after any save of them already on its way. */
@@ -639,12 +661,13 @@ async function runSaveMany(c: Collection, ids: readonly string[]): Promise<void>
     for (const x of sent) {
       const r = byId.get(x.id)
       if (r?.entry) saved.push({ id: x.id, key: x.key, version: x.version, entry: r.entry as RecordEntry<RecordTypes[Collection]> })
-      else saveFailed(c, x.id, x.key, r?.error ?? 'Nie udało się zapisać.')
+      else saveFailed(c, x.id, x.key, r?.error ?? 'Nie udało się zapisać.', !!r?.newer)
     }
     applySaved(c, saved)
     for (const x of saved) {
       retryDelay.delete(x.key)
       failed.delete(x.key)
+      newer.delete(x.key)
     }
     savedAt = new Date().toISOString()
     // A change from another computer came while these writes were on their way (B48): the decision must reach the disk.
@@ -653,7 +676,7 @@ async function runSaveMany(c: Collection, ids: readonly string[]): Promise<void>
   } catch (e) {
     // The whole call failed (the folder gone) or its answer could not be taken: what is still unsaved is retried on its own.
     const message = errorMessage(e)
-    for (const x of sent) if (dirty.has(x.key)) saveFailed(c, x.id, x.key, message)
+    for (const x of sent) if (dirty.has(x.key)) saveFailed(c, x.id, x.key, message, isNewerFileError(e))
   } finally {
     bumpPending(-1, savedAt ? { lastSavedAt: savedAt, error: saveError() } : { error: saveError() })
   }
@@ -690,16 +713,12 @@ async function runSave(key: string): Promise<void> {
     }
     retryDelay.delete(key)
     failed.delete(key)
+    newer.delete(key)
     bumpPending(-1, { lastSavedAt: new Date().toISOString(), error: saveError() })
     // A change from another computer came while this write was on its way (B48): the decision about it must reach the disk.
     if (pendingFor(key)) useRemote.setState((r) => ({ pending: r.pending.map((p) => (p.key === key ? { ...p, savedAfter: true } : p)) }))
   } catch (e) {
-    const message = errorMessage(e)
-    if (target.collection !== 'fi') saveFailed(target.collection, target.id, key, message)
-    else {
-      if (dirty.has(key)) failed.set(key, message)
-      scheduleRetry(key)
-    }
+    saveFailed(target.collection, target.id, key, errorMessage(e), isNewerFileError(e))
     bumpPending(-1, { error: saveError() })
   }
 }
@@ -762,19 +781,50 @@ export const SWITCHING_MESSAGE = 'Trwa otwieranie innego folderu – zmiany w te
 let readOnlyNoticedAt = 0
 
 /** A change the read-only folder does not take (N2): said once in a few seconds – never silently, never as a success. */
-function readOnlyNotice(): void {
-  if (Date.now() - readOnlyNoticedAt < 4000) return
-  readOnlyNoticedAt = Date.now()
-  toast(get().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE, 'error', 5000)
+function readOnlyNotice(message = get().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE): void {
+  const now = Date.now()
+  // A clock set back meanwhile never silences it.
+  if (now >= readOnlyNoticedAt && now - readOnlyNoticedAt < 4000) return
+  readOnlyNoticedAt = now
+  toast(message, 'error', 5000)
+}
+
+/** A record a newer version of the app wrote (B67): its editor's fields and buttons off, as in a read-only folder, with a note. */
+export const useEntryNewer = (collection: Collection, id: string | null | undefined): boolean =>
+  useData((s) => !!id && !!(s.records[collection] as AnyMap | undefined)?.[id]?.readOnly)
+
+/**
+ * Months of a collection kept a file per month (game, months) whose file a newer version of the app wrote and this one
+ * cannot read (B67): no record is made over it – the window has none of it, the disk does.
+ */
+export function tooNewMonths(problems: readonly Problem[], collection: 'game' | 'months'): Set<string> {
+  const out = new Set<string>()
+  for (const p of problems) {
+    if (p.kind !== 'too-new' || !p.relPath.startsWith(`${collection}/`)) continue
+    const m = /^[^/]+\/(\d{4}-\d{2})\.json$/.exec(p.relPath)
+    if (m) out.add(m[1]!)
+  }
+  return out
+}
+
+/** A month's file of `collection` written by a newer version of the app (B67): said, and nothing made over it. */
+export function monthTooNew(collection: 'game' | 'months', month: string): boolean {
+  if (!tooNewMonths(get().problems, collection).has(month)) return false
+  readOnlyNotice(NEWER_RECORD_MESSAGE)
+  return true
 }
 
 /**
  * Another folder from Settings (B31): this one's changes are written first, then – while the other one opens – nothing
  * is edited or written: a change never lands in the other folder, nor gets lost when this one closes. A failed or
- * stopped open leaves this folder as it was. 'unsaved' = this folder's changes could not be written: no switch.
+ * stopped open leaves this folder as it was. `unsaved` = why this folder's changes could not be written: no switch.
  */
-export async function switchFolder(open: () => Promise<OpenFolderResult>): Promise<OpenFolderResult | 'unsaved'> {
-  if (!(await flushSaves())) return 'unsaved'
+export async function switchFolder(open: () => Promise<OpenFolderResult>): Promise<OpenFolderResult | { unsaved: string }> {
+  await flushSaves()
+  // Decisions about another computer's changes, or a failed write: no switch, said why (B108). Changes this version can
+  // never write (B67) stay behind – they would not reach the disk here either.
+  const hold = unsavedHold('zmiana folderu')
+  if (hold) return { unsaved: hold }
   set({ switching: true })
   try {
     const res = await open()
@@ -803,7 +853,12 @@ export function updateRecord<C extends Collection>(collection: C, id: string, up
     if (!opts.background) readOnlyNotice()
     return false
   }
-  if (!current || current.readOnly) return false
+  if (!current) return false
+  // Written by a newer version of the app (B67): never a silent no-op – said, as a read-only folder's change is.
+  if (current.readOnly) {
+    if (!opts.background) readOnlyNotice(NEWER_RECORD_MESSAGE)
+    return false
+  }
   const key = keyOf(collection, id)
   if (!dirty.has(key) && !bases.has(key) && !get().drafts[id]) bases.set(key, current.record)
   const record = updater(current.record)
@@ -891,6 +946,8 @@ export function discardDraft(collection: Collection, id: string): void {
 export async function deleteRecord(collection: Collection, id: string): Promise<void> {
   const key = keyOf(collection, id)
   const entry = mapOf(get(), collection)[id]
+  // Written by a newer version of the app (B67): this one never deletes it – it stays on the screen, the caller says why.
+  if (entry?.readOnly) throw new Error(NEWER_RECORD_MESSAGE)
   const unsaved = dirty.has(key)
   forget(key)
   useRemote.setState((r) => ({ pending: r.pending.filter((p) => p.key !== key) }))
@@ -916,6 +973,11 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
     }
     throw e
   }
+}
+
+/** `deleteRecord` nobody waits for (an undo, a cleanup): its refusal said (B9, B67), never an unhandled error. */
+export function deleteOrSay(collection: Collection, id: string): void {
+  deleteRecord(collection, id).catch((e: unknown) => toast(errorMessage(e), 'error', 8000))
 }
 
 /**
@@ -1016,11 +1078,101 @@ export function hasUnsaved(): boolean {
   return dirty.size > 0
 }
 
+/**
+ * What is unsaved and why (B108): records held by a decision about another computer's change (only the decision saves
+ * them), records a newer version of the app wrote (B67 – this one never saves them), the others' last write error.
+ */
+export function unsavedReport(): FlushResult {
+  const waitingKeys = new Set(useRemote.getState().pending.map((p) => p.key))
+  let waiting = 0
+  let newerCount = 0
+  let error: string | null = null
+  for (const key of dirty.keys()) {
+    if (waitingKeys.has(key)) waiting++
+    else if (newer.has(key)) newerCount++
+    else error = failed.get(key) ?? error ?? 'zapis jeszcze trwa'
+  }
+  return { saved: dirty.size === 0, waiting, newer: newerCount, error }
+}
+
+/** The window closing (B108): everything written, the reason of what is not – a waiting decision's dialog opened behind the question. */
+export async function flushForClose(): Promise<FlushResult> {
+  await flushSaves()
+  const r = unsavedReport()
+  if (r.waiting) setRemoteDialog(true)
+  return r
+}
+
+/**
+ * Every change on the disk before a step that reads the folder or replaces records (a copy, an export, an import, a
+ * version brought back, an update, another folder – B108). Throws the real reason: decisions about another computer's
+ * changes – their dialog opens, no write saves those records before it –, or a failed write, which the app retries.
+ * Changes this version can never write (B67) do not hold the step: they are not on the disk for anybody.
+ */
+export async function saveFirst(what: string): Promise<void> {
+  await flushSaves()
+  const hold = unsavedHold(what)
+  if (hold) throw new Error(hold)
+}
+
+/** Why `what` waits for the unsaved changes (`saveFirst`); null = nothing holds it. Decisions waiting: their dialog opens. */
+function unsavedHold(what: string): string | null {
+  const r = unsavedReport()
+  if (r.waiting) {
+    setRemoteDialog(true)
+    return `Czekają zmiany z drugiego komputera (${r.waiting}) – ${what} czeka na Twoją decyzję w otwartym oknie.`
+  }
+  return r.error ? `Nie udało się zapisać bieżących zmian (${r.error}), więc ${what} czeka – aplikacja ponawia zapis, spróbuj ponownie za chwilę.` : null
+}
+
+/**
+ * After a step done in memory (an import, its undo, the start wizard): what of it is not on the disk yet and why (B108);
+ * null = all saved. Decisions about another computer's changes waiting: their dialog opens.
+ */
+export async function unsavedNote(): Promise<string | null> {
+  await flushSaves()
+  const r = unsavedReport()
+  if (r.waiting) {
+    setRemoteDialog(true)
+    return `część zmian zapisze się po Twojej decyzji o zmianach z drugiego komputera (${r.waiting})`
+  }
+  if (r.error) return `część zmian nie zapisała się jeszcze w folderze (${r.error}) – aplikacja ponawia zapis automatycznie`
+  return r.newer ? 'części zmian ta wersja nie zapisze – te wpisy zapisała nowsza wersja aplikacji' : null
+}
+
+/** Ctrl+S and the palette's „Zapisz teraz” (N62): one way – decisions about another computer's changes open their dialog. */
+export async function saveNow(): Promise<void> {
+  const saved = await flushSaves()
+  const r = unsavedReport()
+  if (useRemote.getState().pending.length) {
+    setRemoteDialog(true)
+    const rest = !r.error && !r.newer
+    toast(
+      r.waiting
+        ? `Czekają zmiany z drugiego komputera (${r.waiting}) – te wpisy zapiszą się po Twojej decyzji.`
+        : `${rest ? 'Zapisano. ' : ''}Czekają zmiany z drugiego komputera – zdecyduj o nich w oknie.`,
+      'info',
+      5000
+    )
+    if (rest) return
+  } else if (saved) return toast('Zapisano. (Zapis jest automatyczny – Ctrl+S nie jest potrzebne.)', 'success', 2200)
+  if (r.error) toast(`Nie udało się zapisać: ${r.error}. Aplikacja ponowi zapis automatycznie.`, 'error', 6000)
+  else if (r.newer) toast(`Nie zapisano: ${NEWER_RECORD_MESSAGE}`, 'error', 8000)
+}
+
 export async function boot(): Promise<void> {
   const info = await api.appInfo()
   set({ appInfo: info })
   api.onChange(applyChange)
-  api.onFlushRequest(flushSaves)
+  api.onFlushRequest(flushForClose)
+  // This computer's settings read at last (B114): its folder opens now, unless another was chosen meanwhile.
+  api.onConfigReady(() => {
+    if (get().phase === 'setup') void loadCurrent()
+  })
+  await loadCurrent()
+}
+
+async function loadCurrent(): Promise<void> {
   const res = await api.loadCurrent()
   if (res?.ok) applySnapshot(res.snapshot)
   else set({ phase: 'setup', ...setupOf(res) })

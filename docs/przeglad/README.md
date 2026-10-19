@@ -213,7 +213,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **B64** Ctrl+N („nowa operacja”) jest opisany jako skrót ogólny (ściągawka, paleta, podpowiedź na Mostku), a działa tylko na ekranie Operacje – `renderer/app/ShortcutsHelp.tsx:13`, `renderer/app/App.tsx:74-118` (+5)
 - [x] **B65** Raport wachty w ostatni dzień miesiąca planuje koperty „na 1 dni”, choć jutro koperty startują od nowa – `shared/calc/intel.ts:284-291`, `renderer/features/reports/ReportsPage.tsx:118` (+5)
 - [x] **B66** „Cofnij” zbiorczej kategorii albo finansującego przywraca całe stare rekordy i nadpisuje późniejsze zmiany – `renderer/features/operations/state.ts:92-115`, `renderer/features/operations/state.ts:131-142` (+3)
-- [ ] **B67** Pojedyncze pliki z nowszej wersji (np. w trakcie synchronizacji OneDrive): edytory poza Operacjami po cichu gubią zmiany, usunięcie znika z ekranu, a plik gry, którego ta wersja nie odczyta, daje stały „błąd zapisu” *(do potwierdzenia)* – `renderer/store/data.ts:489`, `renderer/store/data.ts:531` (+11)
+- [x] **B67** Pojedyncze pliki z nowszej wersji (np. w trakcie synchronizacji OneDrive): edytory poza Operacjami po cichu gubią zmiany, usunięcie znika z ekranu, a plik gry, którego ta wersja nie odczyta, daje stały „błąd zapisu” *(do potwierdzenia)* – `renderer/store/data.ts:489`, `renderer/store/data.ts:531` (+11)
 - [x] **B68** Pole kwoty przyjmuje po cichu więcej niż 2 miejsca po przecinku – „1.200” to 1,20 zł – `renderer/lib/format.ts:101-107`, `renderer/components/fields.tsx:52-58`
 - [x] **B69** Wpływ na Portfel XTB wpisany szybkim wpisem (rodzaj „wpływ”) nie jest parą wypłaty ICTTJ – „Portfel XTB?” tworzy drugą operację, pula przepada *(do potwierdzenia)* – `shared/calc/dock.ts:88`, `renderer/store/quickHost.ts:127` (+1)
 - [x] **B70** Pula Podatek z podziałem zmienionym w oknie: silnik dokuje część do budżetu, a przychody liczą całość jako podatek – `shared/calc/income.ts:44`, `shared/calc/fleet.ts:661` (+1)
@@ -253,24 +253,24 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **B104** Klucz marki „constructor” trafia w Object.prototype: resolveBrand zwraca undefined (wyjątek przy regule „zawiera”, decyzja grupy nigdy nie zostaje zapamiętana) – `shared/import/aliases.ts:16`, `shared/import/classify.ts:82` (+3)
 - [x] **B105** „PŁATNOŚĆ …” i „SPRZEDAŻ …” nie są rozpoznawane jako rodzaj operacji (\b po polskiej literze) – `shared/import/mbank.ts:88`, `shared/import/mbank.ts:134` (+2)
 - [x] **B106** „XTB” gdziekolwiek w opisie (także w tytule) robi z przelewu własnego i wpłaty domownika operację tradingową *(do potwierdzenia)* – `shared/import/classify.ts:223`, `shared/import/classify.ts:323-327`
-- [ ] **B107** saveSettings i przywrócenie fi.json z historii połykają zmiany: kopia „-zewnetrzna-” / odsunięty uszkodzony fi.json nie docierają do okna, a restore nadpisuje uszkodzony fi.json bez odsunięcia – `main/datastore/store.ts:934`, `main/datastore/store.ts:938` (+7)
-- [ ] **B108** Oczekująca decyzja o zmianie z drugiego komputera blokuje każde „zapisz wszystko”, a komunikaty mówią o zablokowanym pliku i ponowieniu, którego nie ma – `renderer/store/data.ts:385`, `renderer/store/data.ts:598` (+9)
-- [ ] **B109** Nieczytelny fi.json przy otwarciu (start z Windows przed OneDrive) kończy się ekranem wyboru bez „Spróbuj ponownie” i bez ponowienia; uszkodzony fi.json nie ma ścieżki naprawy – `main/datastore/store.ts:319`, `main/datastore/store.ts:413` (+3)
-- [ ] **B110** Pełne skanowanie po własnej akcji (Do Kosza, rozstrzygnięcie konfliktu) oznacza cudze zmiany jako „local” – omijają scalanie i tryb „pytaj” – `main/datastore/store.ts:987`, `main/datastore/store.ts:998` (+3)
-- [ ] **B111** Usunięcie wpisu z duplikatem id: starsza kopia od razu wraca jako ten wpis – `main/datastore/store.ts:885`, `main/datastore/store.ts:889` (+2)
-- [ ] **B112** Błąd zapisu historii jest połykany bez śladu, a próg 10 min ustawiany przed zapisem blokuje też następną próbę; usunięcie przechodzi bez wersji w historii – `main/datastore/history.ts:190`, `main/datastore/history.ts:201` (+4)
-- [ ] **B113** Obserwator niedostępnego folderu restartuje się co 5 s bez końca i co 5 s pisze błąd ze stosem do main.log – `main/datastore/watch.ts:127`, `main/datastore/watch.ts:136` (+2)
-- [ ] **B114** config.json: każdy błąd odczytu (nie tylko brak pliku) daje ustawienia domyślne, a pierwszy zapis nadpisuje prawdziwe – znika autostart, folder danych, folder ICTTJ, token, skrót – `main/config.ts:70`, `main/config.ts:82` (+5)
-- [ ] **B115** Własny folder kopii (backupDirOverride) jest wspólny dla wszystkich folderów danych komputera – kopia dzienna drugiego folderu się nie robi, a „kopia z dziś” bywa innym budżetem – `main/index.ts:379`, `main/index.ts:631` (+5)
-- [ ] **B116** Heartbeat i odświeżenie przy fokusie wysyłają do okna zmiany starego folderu po przełączeniu – `main/index.ts:268`, `main/index.ts:904` (+2)
-- [ ] **B117** openFolder zwraca błąd już po przełączeniu magazynu (zapis config.json) – `main/index.ts:391`, `main/index.ts:418` (+1)
+- [x] **B107** saveSettings i wersja fi.json wzięta z historii połykają zmiany: kopia „-zewnetrzna-” / odsunięty uszkodzony fi.json nie docierają do okna, a restore nadpisuje uszkodzony fi.json bez odsunięcia – `main/datastore/store.ts:934`, `main/datastore/store.ts:938` (+7)
+- [x] **B108** Oczekująca decyzja o zmianie z drugiego komputera blokuje każde „zapisz wszystko”, a komunikaty mówią o zablokowanym pliku i ponowieniu, którego nie ma – `renderer/store/data.ts:385`, `renderer/store/data.ts:598` (+9)
+- [x] **B109** Nieczytelny fi.json przy otwarciu (start z Windows przed OneDrive) kończy się ekranem wyboru bez „Spróbuj ponownie” i bez ponowienia; uszkodzony fi.json nie ma ścieżki naprawy – `main/datastore/store.ts:319`, `main/datastore/store.ts:413` (+3)
+- [x] **B110** Pełne skanowanie po własnej akcji (Do Kosza, rozstrzygnięcie konfliktu) oznacza cudze zmiany jako „local” – omijają scalanie i tryb „pytaj” – `main/datastore/store.ts:987`, `main/datastore/store.ts:998` (+3)
+- [x] **B111** Usunięcie wpisu z duplikatem id: starsza kopia od razu wraca jako ten wpis – `main/datastore/store.ts:885`, `main/datastore/store.ts:889` (+2)
+- [x] **B112** Błąd zapisu historii jest połykany bez śladu, a próg 10 min ustawiany przed zapisem blokuje też następną próbę; usunięcie przechodzi bez wersji w historii – `main/datastore/history.ts:190`, `main/datastore/history.ts:201` (+4)
+- [x] **B113** Obserwator niedostępnego folderu restartuje się co 5 s bez końca i co 5 s pisze błąd ze stosem do main.log – `main/datastore/watch.ts:127`, `main/datastore/watch.ts:136` (+2)
+- [x] **B114** config.json: każdy błąd odczytu (nie tylko brak pliku) daje ustawienia domyślne, a pierwszy zapis nadpisuje prawdziwe – znika autostart, folder danych, folder ICTTJ, token, skrót – `main/config.ts:70`, `main/config.ts:82` (+5)
+- [x] **B115** Własny folder kopii (backupDirOverride) jest wspólny dla wszystkich folderów danych komputera – kopia dzienna drugiego folderu się nie robi, a „kopia z dziś” bywa innym budżetem – `main/index.ts:379`, `main/index.ts:631` (+5)
+- [x] **B116** Heartbeat i odświeżenie przy fokusie wysyłają do okna zmiany starego folderu po przełączeniu – `main/index.ts:268`, `main/index.ts:904` (+2)
+- [x] **B117** openFolder zwraca błąd już po przełączeniu magazynu (zapis config.json) – `main/index.ts:391`, `main/index.ts:418` (+1)
 - [x] **B118** Szybki wpis: po podziale paragonu i zmianie rodzaju na „Wpływ” zapis blokuje niewidoczny podział – `renderer/features/quick/QuickApp.tsx:182`, `renderer/features/quick/QuickApp.tsx:239` (+1)
-- [ ] **B119** Start ukryty z systemem gubi maksymalizację okna – `main/index.ts:835`, `main/index.ts:869`
-- [ ] **B120** Sprawdzanie folderu ICTTJ w rodzicach wywala otwieranie, gdy rodzica nie można wylistować *(do potwierdzenia)* – `main/index.ts:439`, `main/datastore/store.ts:187`
-- [ ] **B121** Folder kopii zapasowych można ustawić w folderze danych ICTTJ – `main/index.ts:623`, `main/index.ts:337` (+1)
-- [ ] **B122** Pobrana aktualizacja przepada do restartu, gdy ręczne „Sprawdź” znajdzie nowszą wersję, a jej pobieranie się nie uda – `main/update/updater.ts:225`, `main/update/updater.ts:229` (+4)
-- [ ] **B123** Nieudana kopia dzienna (np. folder kopii na odłączonym dysku) zostawia tylko wpis w logu – użytkownik nie wie, że kopie nie powstają – `main/index.ts:413`, `main/index.ts:415` (+2)
-- [ ] **B124** Awaria renderera okna szybkiego wpisu (lub panelu odłączonego) nie jest obsługiwana – skrót pokazuje martwe okno aż do restartu – `main/index.ts:1009`, `main/index.ts:1013` (+3)
+- [x] **B119** Start ukryty z systemem gubi maksymalizację okna – `main/index.ts:835`, `main/index.ts:869`
+- [x] **B120** Sprawdzanie folderu ICTTJ w rodzicach wywala otwieranie, gdy rodzica nie można wylistować *(do potwierdzenia)* – `main/index.ts:439`, `main/datastore/store.ts:187`
+- [x] **B121** Folder kopii zapasowych można ustawić w folderze danych ICTTJ – `main/index.ts:623`, `main/index.ts:337` (+1)
+- [x] **B122** Pobrana aktualizacja przepada do restartu, gdy ręczne „Sprawdź” znajdzie nowszą wersję, a jej pobieranie się nie uda – `main/update/updater.ts:225`, `main/update/updater.ts:229` (+4)
+- [x] **B123** Nieudana kopia dzienna (np. folder kopii na odłączonym dysku) zostawia tylko wpis w logu – użytkownik nie wie, że kopie nie powstają – `main/index.ts:413`, `main/index.ts:415` (+2)
+- [x] **B124** Awaria renderera okna szybkiego wpisu (lub panelu odłączonego) nie jest obsługiwana – skrót pokazuje martwe okno aż do restartu – `main/index.ts:1009`, `main/index.ts:1013` (+3)
 - [x] **B125** Otwarty szybki wpis nie odświeża danych (kategorie, konta, energia, tylko do odczytu), a zapis nie sprawdza, czy konto i kategoria nadal istnieją – `renderer/features/quick/QuickApp.tsx:72`, `main/quick.ts:104` (+3)
 - [x] **B126** Pensja miesiąca startu (T45): zwroty sprzed startu ją zwiększają, a kreator zapowiada inną kwotę niż wypłaca silnik – `shared/calc/fleet.ts:575`, `shared/calc/fleet.ts:579` (+2)
 - [x] **B127** Kreator: saldo otwarcia z salda „teraz” odejmuje też operacje z przyszłą datą – saldo konta trwale zawyżone – `shared/calc/start.ts:285`, `renderer/features/wizard/state.ts:114`
@@ -323,7 +323,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **W34** keywordProposals: każde słowo-kandydat przegląda wszystkie wiersze pliku i parsuje wzorzec przy każdym wywołaniu; liczone od nowa przy każdej zmianie `choices` – `shared/import/learn.ts:148`, `shared/import/learn.ts:169` (+3)
 - [x] **W35** Reguły importu w fi.json rosną z każdą marką i nigdy nie są przycinane (≈0,4 KB na regułę), a wszystkie odczyty przeglądają je liniowo – `shared/schema/budget.ts:215`, `shared/import/reconcile.ts:610` (+2)
 - [x] **W36** Scalanie i różnice na tablicach z id są O(R²) – przy tysiącach reguł importu każda zmiana fi.json kosztuje setki ms – `shared/merge.ts:63`, `shared/merge.ts:67` (+5)
-- [ ] **W37** Po przeładowaniu okna (np. po awarii renderera) folder jest czytany od nowa z dysku zamiast z pamięci – `main/index.ts:482-487`, `main/index.ts:1009-1016` (+2)
+- [x] **W37** Po przeładowaniu okna (np. po awarii renderera) folder jest czytany od nowa z dysku zamiast z pamięci – `main/index.ts:482-487`, `main/index.ts:1009-1016` (+2)
 - [x] **W38** Plan miesiąca: każde przejście miesiąca (i każda minuta) liczy pensję i debriefing po całej historii, debriefing dwa razy – `renderer/features/month/MonthPage.tsx:54`, `renderer/features/month/MonthPage.tsx:57` (+6)
 
 ## Niespójności (104: 1 wysokich, 20 średnich, 83 niskich)
@@ -397,7 +397,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **N59** „Zaległa” na Radarze od 1. dnia po terminie, a w pożyczce i odprawie dopiero po 3 dniach – `shared/calc/radar.ts:89`, `renderer/features/radar/RadarPage.tsx:164` (+5)
 - [ ] **N60** Czerwień i zieleń poza kwotami: ETA po terminie, Bearish, plakietka „zaszyfrowany” – `renderer/features/starmap/StarMapPage.tsx:245`, `renderer/features/bridge/BridgePage.tsx:263` (+1)
 - [ ] **N61** Menu „Układ” na ekranie kreatora pokazuje identyfikator „wizard” zamiast nazwy – `renderer/features/layout/LayoutMenu.tsx:51`, `shared/panels.ts:220`
-- [ ] **N62** „Zapisz teraz” w palecie pomija pytanie o zmiany z drugiego komputera, które obsługuje Ctrl+S – `renderer/features/palette/CommandPalette.tsx:52`, `renderer/app/App.tsx:100`
+- [x] **N62** „Zapisz teraz” w palecie pomija pytanie o zmiany z drugiego komputera, które obsługuje Ctrl+S – `renderer/features/palette/CommandPalette.tsx:52`, `renderer/app/App.tsx:100`
 - [x] **N63** Krzywa majątku i przegląd roczny liczą pożyczkę zaciągniętą i depozyt domowników jako majątek – fałszywy BOS/CHoCH w górę – `shared/calc/intel.ts:27-88`, `shared/calc/intel.ts:330-334` (+8)
 - [x] **N64** Klasa okrętu bez histerezy: każdy powrót ponad tę samą granicę to nowy ekran „Nowa klasa” z fanfarą (D73) – `shared/calc/game.ts:636-643`, `renderer/store/game.ts:124` (+5)
 - [x] **N65** Miesiąc w toku raportowany jako „Miesiąc zamknięty na plus: tak” (Raporty → Debriefing, CSV i Excel miesięcy) – `shared/calc/plan.ts:319-330`, `shared/export/budget.ts:123-124` (+6)
@@ -426,16 +426,16 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **N88** Panel duplikatów domyślnie scala możliwe duplikaty, przy których import pyta i ich nie łączy – `shared/import/reconcile.ts:166-186`, `shared/import/duplicates.ts:306-329` (+2)
 - [x] **N89** Ta sama reguła looseMatch dostaje inną nazwę banku w imporcie i w panelu – operacja banku bez nazwy jest w panelu „podobna” do wszystkiego – `shared/import/reconcile.ts:175`, `shared/import/reconcile.ts:46-50` (+2)
 - [x] **N90** Wiersz usuniętej operacji wpuszczony „importuj mimo to” wchodzi z gołą propozycją – nie ma go w grupach ani tematach – `shared/import/reconcile.ts:327`, `shared/import/reconcile.ts:554-561` (+2)
-- [ ] **N91** Zachowana kopia konfliktu jest zapisywana z czasem tego komputera, ale z nazwą komputera kopii (updatedBy) – `main/datastore/store.ts:963`, `main/datastore/store.ts:971`
-- [ ] **N92** Etykiety pól w Historii i oknie zmian: angielskie klucze i surowe ULID-y zamiast nazw – `shared/merge.ts:155`, `shared/merge.ts:224` (+2)
-- [ ] **N93** Obecność: komputer z zegarem przestawionym do przodu nigdy nie jest „aktywny” – znika ostrzeżenie o folderze otwartym na dwóch komputerach – `main/datastore/presence.ts:39`, `renderer/app/Banners.tsx:83`
-- [ ] **N94** Strona Synchronizacja porównuje wersje inaczej niż okna Historii i Zmian (surowe klucze, indeksy, updatedBy jako różnica) – `renderer/features/sync/SyncPage.tsx:34`, `renderer/features/sync/SyncPage.tsx:49` (+3)
-- [ ] **N95** „Do Kosza” bez potwierdzenia przy każdym pliku z problemem – także w nowszym formacie i chwilowo nieczytelnym – `renderer/features/sync/SyncPage.tsx:338`, `main/datastore/store.ts:990` (+1)
-- [ ] **N96** „Eksport: ZIP całego folderu” i przywracanie z niego tracą historię; strona Synchronizacja odsyła do backups/ mimo innego folderu kopii – `main/index.ts:571`, `main/datastore/backup.ts:19` (+3)
-- [ ] **N97** Ta sama akcja nazywa się „Zachowaj nowsze” (Konflikty) i „Zaakceptuj nowsze” (Zmiany z drugiego komputera); „Weź z inny komputer” – `renderer/features/sync/SyncPage.tsx:259`, `renderer/features/sync/RemoteChangesDialog.tsx:253` (+2)
-- [ ] **N98** „Zainstaluje się po zamknięciu aplikacji” – przy domyślnym zamykaniu do zasobnika aktualizacja nigdy nie instaluje się sama – `renderer/app/Banners.tsx:43`, `renderer/features/settings/UpdatesTab.tsx:73` (+6)
-- [ ] **N99** Dymek zasobnika bez „Energia dziś” po włączeniu zamykania do zasobnika w trakcie pracy – `main/index.ts:663`, `main/index.ts:546` (+3)
-- [ ] **N100** Kreator startu nadpisuje ustawienia tego komputera: skrót wraca do Ctrl+Alt+B, „zamykaj do zasobnika” wymuszone; drugi komputer nigdy nie dostaje autostartu – `renderer/features/wizard/state.ts:57`, `renderer/features/wizard/state.ts:125` (+3)
+- [x] **N91** Zachowana kopia konfliktu jest zapisywana z czasem tego komputera, ale z nazwą komputera kopii (updatedBy) – `main/datastore/store.ts:963`, `main/datastore/store.ts:971`
+- [x] **N92** Etykiety pól w Historii i oknie zmian: angielskie klucze i surowe ULID-y zamiast nazw – `shared/merge.ts:155`, `shared/merge.ts:224` (+2)
+- [x] **N93** Obecność: komputer z zegarem przestawionym do przodu nigdy nie jest „aktywny” – znika ostrzeżenie o folderze otwartym na dwóch komputerach – `main/datastore/presence.ts:39`, `renderer/app/Banners.tsx:83`
+- [x] **N94** Strona Synchronizacja porównuje wersje inaczej niż okna Historii i Zmian (surowe klucze, indeksy, updatedBy jako różnica) – `renderer/features/sync/SyncPage.tsx:34`, `renderer/features/sync/SyncPage.tsx:49` (+3)
+- [x] **N95** „Do Kosza” bez potwierdzenia przy każdym pliku z problemem – także w nowszym formacie i chwilowo nieczytelnym – `renderer/features/sync/SyncPage.tsx:338`, `main/datastore/store.ts:990` (+1)
+- [x] **N96** „Eksport: ZIP całego folderu” i przywracanie z niego tracą historię; strona Synchronizacja odsyła do backups/ mimo innego folderu kopii – `main/index.ts:571`, `main/datastore/backup.ts:19` (+3)
+- [x] **N97** Ta sama akcja nazywa się „Zachowaj nowsze” (Konflikty) i „Zaakceptuj nowsze” (Zmiany z drugiego komputera); „Weź z inny komputer” – `renderer/features/sync/SyncPage.tsx:259`, `renderer/features/sync/RemoteChangesDialog.tsx:253` (+2)
+- [x] **N98** „Zainstaluje się po zamknięciu aplikacji” – przy domyślnym zamykaniu do zasobnika aktualizacja nigdy nie instaluje się sama – `renderer/app/Banners.tsx:43`, `renderer/features/settings/UpdatesTab.tsx:73` (+6)
+- [x] **N99** Dymek zasobnika bez „Energia dziś” po włączeniu zamykania do zasobnika w trakcie pracy – `main/index.ts:663`, `main/index.ts:546` (+3)
+- [x] **N100** Kreator startu nadpisuje ustawienia tego komputera: skrót wraca do Ctrl+Alt+B, „zamykaj do zasobnika” wymuszone; drugi komputer nigdy nie dostaje autostartu – `renderer/features/wizard/state.ts:57`, `renderer/features/wizard/state.ts:125` (+3)
 - [x] **N101** Kategoria bez koperty w tym miesiącu: w trakcie „bez limitu”, w debriefingu czerwone „ponad plan” – `shared/calc/plan.ts:312`, `shared/calc/plan.ts:314` (+2)
 - [x] **N102** Przekroczenie koperty ma różne reguły w silniku, odprawie, powiadomieniach, grze i Daily Bias (próg 20%, koperty codzienne, limit 0) – `shared/calc/fleet.ts:907`, `shared/calc/game.ts:210` (+5)
 - [x] **N103** Odprawa pokazuje tylko pierwszą dopłatę do XTB wbrew firewallowi w miesiącu – `shared/calc/briefing.ts:152`, `shared/calc/briefing.ts:155`

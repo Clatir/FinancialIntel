@@ -126,16 +126,18 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     expect((await store.snapshot()).records.transactions).toEqual([])
   })
 
-  it('usunięcie wpisu: wersja w historii, plik usunięty od razu; do kosza (shell.trashItem) tylko bez wersji w historii (1.5.2)', async () => {
+  it('usunięcie wpisu: wersja w historii, plik usunięty od razu; bez wersji w historii – odmowa, plik zostaje (1.5.2, B112)', async () => {
     const root = join(tempDir(), 'dane')
     await DataStore.initialize(root)
     const trashed: string[] = []
+    const logged: string[] = []
     const store = new DataStore(root, {
       machineName: 'X',
       trash: async (p) => {
         trashed.push(p)
         await fs.rm(p)
-      }
+      },
+      log: (_level, message) => logged.push(message)
     })
     await store.open()
     const t = sampleTransaction()
@@ -147,13 +149,21 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     expect(await exists(join(store.root, entry.relPath))).toBe(false)
     expect((await store.historyList('transactions', t.id)).map((e) => e.reason)).toEqual(['delete'])
     expect(await store.deleteRecord('transactions', t.id)).toBeNull()
-    // The history cannot keep it (its folder is a file here): the file goes to the bin, never lost.
+    // The history cannot keep it (its folder is a file here): no deletion – a deleted record without its version could
+    // never be brought back („Cofnij”, „Usunięte wpisy”), and the bin is no place it is looked for (B112).
     const u = sampleTransaction({ date: '2026-03-18' })
     const saved = await store.saveRecord('transactions', u)
     await fs.rm(join(root, '.history', 'transactions'), { recursive: true, force: true })
     await fs.writeFile(join(root, '.history', 'transactions'), 'x')
-    await store.deleteRecord('transactions', u.id)
-    expect(trashed).toEqual([store.abs(saved.entry.relPath)])
+    await expect(store.deleteRecord('transactions', u.id)).rejects.toThrow(/Nie udało się odłożyć wersji do historii/)
+    // Why – in the log (B112).
+    expect(logged).toContain('history snapshot failed')
+    expect(await exists(store.abs(saved.entry.relPath))).toBe(true)
+    expect(trashed).toEqual([])
+    // The history back: deleted with its version.
+    await fs.rm(join(root, '.history', 'transactions'), { force: true })
+    expect((await store.deleteRecord('transactions', u.id))?.removals).toEqual([{ collection: 'transactions', id: u.id }])
+    expect(await exists(store.abs(saved.entry.relPath))).toBe(false)
   })
 
   it('ścieżki poza folderem danych są odrzucane', async () => {

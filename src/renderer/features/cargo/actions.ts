@@ -2,7 +2,7 @@ import { firstDayOf, monthOf, warsawNow } from '@shared/calc/dates'
 import { unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
 import { newId } from '@shared/ids'
 import { containerSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Container, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteRecord, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, deleteOrSay, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { plnText } from '../../components/fields'
 import { deleteWithUndo } from '../history/actions'
@@ -144,6 +144,6 @@ export function payContainer(c: Container): string | null {
     containerId: c.id
   })
   addRecord('transactions', record)
-  toast(`Zapisano płatność: ${c.name} ${plnText(c.amount)} zł (dziś).`, 'success', 6000, { label: 'Cofnij', run: () => void deleteRecord('transactions', record.id) })
+  toast(`Zapisano płatność: ${c.name} ${plnText(c.amount)} zł (dziś).`, 'success', 6000, { label: 'Cofnij', run: () => deleteOrSay('transactions', record.id) })
   return record.id
 }

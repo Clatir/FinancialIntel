@@ -13,7 +13,7 @@ import { statementCheck, statementOf, type Statement } from '@shared/import/stat
 import { openingOf } from '@shared/calc/balances'
 import { balanceSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Balance, type HouseholdMember, type ImportBatchSettings, type ImportSettings, type Share, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
-import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, updateSettings, useData } from '../../store/data'
+import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
@@ -771,7 +771,7 @@ export async function runImport(): Promise<void> {
     // A shared purchase's percents not summing to 100 % (D83): said before anything is written.
     const choices = [...Object.values(st.choices.themes), ...Object.values(st.choices.groups), ...Object.values(st.choices.rows)]
     if (choices.some((c) => c.kind === 'expense' && c.share && !shareComplete(c.share, null))) throw new Error('Wspólny zakup: procenty osób muszą dać razem 100 % – popraw podział i importuj jeszcze raz.')
-    if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – import wstrzymany. Spróbuj ponownie za chwilę.')
+    await saveFirst('import')
     // The plan once more against what there is now – the operations deleted meanwhile too (B38) – with the decisions
     // carried over; another one than shown is shown first and imported on the next click.
     const shown = planSignature(useImport.getState().plan)
@@ -838,7 +838,7 @@ export async function runImport(): Promise<void> {
     const fiAfter = useData.getState().fi!
     const importAfter = fiAfter.settings.import
     const membersAfter = fiAfter.settings.household.members
-    const saved = await flushSaves()
+    const note = await unsavedNote()
     // The bank's balances (F5): the budget the same at the end of the file = the balance confirmed by itself.
     const createdByKey = new Map(result.create.map((t) => [t.bank?.key ?? '', t.id]))
     const rowByKey = new Map(plan.rows.map((p) => [p.key, p]))
@@ -857,7 +857,7 @@ export async function runImport(): Promise<void> {
     if (batchId) await flushSaves()
     // The import is done in memory (its records, rules and batch): the folder taking the saves later is said, the file
     // closed with its result all the same (B95 – never a second import of the same rows with no decisions left).
-    if (!saved) toast('Część zmian importu nie zapisała się jeszcze w folderze – aplikacja ponawia zapis automatycznie.', 'error', 10000)
+    if (note) toast(`Import: ${note}.`, 'error', 10000)
     if (removal?.error) toast(`Nie udało się usunąć części nierozliczonych operacji, których bank już nie pokazuje: ${removal.error}`, 'error', 10000)
     useImport.setState({
       done: { counts: result.counts, backup, accountId: acc, rules: learned, batchId, statement, confirmed: confirmation?.date ?? null },

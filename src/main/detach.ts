@@ -74,6 +74,10 @@ export function setupDetach(deps: DetachDeps): { closeAll: () => void; windows: 
       const main = deps.main()
       if (main && !main.isDestroyed()) main.webContents.send('fi:detachClosed', key)
     })
+    // Its renderer gone (B124): an empty window is closed – the panel goes back to the main window ('closed').
+    win.webContents.on('render-process-gone', (_e, details) => {
+      if (details.reason !== 'clean-exit' && !win.isDestroyed()) win.destroy()
+    })
     void deps.load(win, key)
   }
 

@@ -1,10 +1,11 @@
 // adapted from ICTTJ src/renderer/app/Banners.tsx @ 84a8339
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import { useData } from '../store/data'
 import { navigate, useUi } from '../store/ui'
 import { startWizard } from '../features/wizard/state'
 import { dismissUpdateNotice, downloadUpdate, restartToUpdate, useUpdate } from '../store/update'
+import { asksAutostart, installWhen, loadTrayPrefs, setTrayPrefs, useTray } from '../store/tray'
 import { openExternalSafe } from '../features/settings/UpdatesTab'
 import { IconCheck, IconSync, IconWarn } from '../components/icons'
 import { cx } from '../components/ui'
@@ -21,6 +22,7 @@ const showUpdates = () => navigate({ page: 'settings', tab: 'updates' })
 
 function useUpdateBanners(): BannerItem[] {
   const s = useUpdate((x) => x.state)
+  const closeToTray = useTray((x) => x.prefs?.closeToTray)
   // Hidden for this session only ("later"); key = phase + version.
   const [hidden, setHidden] = useState<string | null>(null)
   if (!s) return []
@@ -41,7 +43,7 @@ function useUpdateBanners(): BannerItem[] {
     items.push({
       key: 'update-ready',
       icon: <IconSync size={14} className="shrink-0 text-accent" />,
-      text: `Wersja ${v} jest pobrana – zainstaluje się po zamknięciu aplikacji.`,
+      text: `Wersja ${v} jest pobrana – zainstaluje się ${installWhen(closeToTray)}.`,
       actions: [
         { label: 'Uruchom ponownie teraz', onClick: () => void restartToUpdate(), accent: true, testId: 'banner-restart-update' },
         { label: 'Szczegóły', onClick: showUpdates }
@@ -86,6 +88,10 @@ export function Banners() {
     return Object.values(s.records.balances ?? {}).some((e) => e.record.kind === 'opening' && e.record.date <= today)
   })
   const page = useUi((s) => s.route.page)
+  const tray = useTray((s) => s.prefs)
+  useEffect(() => {
+    void loadTrayPrefs()
+  }, [])
   const items: BannerItem[] = []
   if (status?.readOnlyReason) items.push({ key: 'ro', text: status.readOnlyReason })
   // Only a computer in use (a move in its window within 10 min – D86): one in the tray writes nothing in the background.
@@ -112,6 +118,16 @@ export function Banners() {
         ? 'Budżet liczy się na razie od salda otwarcia, bez planu: kreator startu ustawi od dziś salda, pensję, warstwy okrętu i koperty. Dowództwo zacznie się po kreatorze.'
         : 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
       actions: [{ label: 'Kreator startu', onClick: startWizard, accent: true, testId: 'banner-wizard-start' }]
+    })
+  // Another computer with the running budget (N100, D64): the start with Windows asked once – the wizard asked the first.
+  if (asksAutostart(tray, !!budgetStart) && !status?.readOnly)
+    items.push({
+      key: 'autostart',
+      text: 'Uruchamiać Financial Intel z Windows na tym komputerze? Przypomnienia i powiadomienia działają wtedy w tle (ukryta w zasobniku).',
+      actions: [
+        { label: 'Tak, z Windows', onClick: () => void setTrayPrefs({ launchAtLogin: true }), accent: true, testId: 'banner-autostart-yes' },
+        { label: 'Nie', onClick: () => void setTrayPrefs({ autostartAsked: true }), testId: 'banner-autostart-no' }
+      ]
     })
   items.push(...updates)
   if (!items.length) return null

@@ -1606,3 +1606,60 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   dniach, domownik w szybkim wpisie (okno i zapis), „Cofnij” wspólnego zakupu po zmianie kwoty i reguł przeczytanych po
   zapisie, komunikat o niecofniętych, wpisane saldo do zapisu, jeden przebieg planu potwierdzenia. Bez zmian: konto
   zarchiwizowane w trakcie szybkiego wpisu zmienia wybór z komunikatem (T243, propozycja B125).
+- **T246** Wpisy zapisane przez nowszą wersję aplikacji (B67): main odróżnia `NewerFileError` (plik wpisu nowszej
+  wersji – ponawianie nic nie da) od `ReadOnlyError` folderu (chwilowo niedostępny – ponawiany jak dotąd). Okno trzyma
+  taką zmianę w pamięci z jednym komunikatem, bez pętli prób (kolejna zmiana albo „ponów” próbują raz); zmiana takiego
+  wpisu – komunikat zamiast cichego „nic”; usunięcie – odmowa, wpis zostaje; edytory kontenera, celu, pożyczki i planu
+  miesiąca wyłączone z dopiskiem; zmiany zbiorcze liczą takie operacje osobno. Gra i plan miesiąca nie tworzą wpisu na
+  ścieżce pliku nowszej wersji, którego ta nie odczyta (`tooNewMonths`). Kroki wymagające zapisu wszystkiego (kopia,
+  eksport, import…) na takie zmiany nie czekają – ta wersja nigdy ich nie zapisze.
+- **T247** Prawdziwa przyczyna niezapisanych zmian (B108, N62): `unsavedReport` – czekające decyzje o zmianach z drugiego
+  komputera, wpisy nowszej wersji, błąd zapisu reszty. Zamknięcie okna pyta według przyczyny (decyzja – okno decyzji
+  otwarte za pytaniem, „Anuluj” zostawia aplikację z nim; błąd zapisu – z powodem; nowsza wersja – „zaktualizuj
+  aplikację”). Kroki wymagające zapisu (kopia, eksport, import i jego cofnięcie, odzyskanie wersji i z kopii, aktualizacja,
+  zmiana folderu, rozstrzygnięcie i scalenie konfliktu) przez `saveFirst`: „Czekają zmiany z drugiego komputera (n) –
+  kopia czeka na Twoją decyzję w otwartym oknie” albo „Nie udało się zapisać bieżących zmian (powód), więc kopia czeka –
+  aplikacja ponawia zapis”. Po krokach zrobionych w pamięci (import, jego cofnięcie, kreator) `unsavedNote` mówi, co
+  jeszcze nie jest na dysku i dlaczego. Ctrl+S i „Zapisz teraz” z palety – jedna funkcja `saveNow`.
+- **T248** fi.json (B107, B109): zapis ustawień zwraca zmianę folderu obok (kopia „-zewnetrzna-”, odsunięty uszkodzony
+  plik) – okno wie od razu; wersja ustawień wzięta z historii odsuwa uszkodzony fi.json, nigdy go nie nadpisuje.
+  Nieczytelny fi.json przy otwarciu (OneDrive jeszcze go nie pobrał) – ekran z „Spróbuj ponownie” i ponowieniem co 30 s;
+  uszkodzony – „Weź ustawienia z historii”: najnowsza czytelna wersja z `.history/fi` staje się fi.json, uszkodzony plik
+  zostaje obok jako kopia w Synchronizacji.
+- **T249** Folder i kopie (B111, B112, B113, B115, B120, B121, B123, N96): usunięcie wpisu z drugą kopią (ten sam id z
+  dwóch komputerów) – odmowa do rozstrzygnięcia w Synchronizacji; wersja do historii się nie zapisała (folder `.history`
+  niedostępny) – odmowa zamiast Kosza (wpisu bez wersji nie dałoby się odzyskać „Cofnij”). Obserwator niedostępnego folderu –
+  ponowienia po 5 s, 10 s… do 5 min (od nowa po minucie działania); w logu pierwszy błąd, potem najwyżej raz na godzinę z
+  liczbą pominiętych. Własny folder kopii tego komputera – podfolder na każdy folder danych (`nazwa-<skrót ścieżki>`;
+  dotychczasowe kopie zostają w starym miejscu, nietknięte); rotacja i lista kopii tylko plików z nazwami FI; folder
+  kopii nigdy w folderze ICTTJ. Folder bez prawa listowania – „niedostępny”, rodzice sprawdzani tylko po `journal.json`.
+  Nieudana kopia dzienna – w Ustawieniach (kiedy i dlaczego; udana kopia ręczna zdejmuje ostrzeżenie), powiadomienie raz
+  dziennie, gdy najnowsza widoczna kopia ma 3 dni albo – żadnej nie widać (folder kopii odłączony, nowy podfolder) –
+  kopie dzienne nie powstają od 3 dni.
+  Eksport całego folderu niesie historię zmian (kopie dzienne bez niej – T20); Synchronizacja podaje prawdziwy folder kopii.
+- **T250** config.json tego komputera (B114): odczyt ponawiany; błąd inny niż brak pliku – ustawienia domyślne tylko w
+  pamięci, zapisy wstrzymane (plik nigdy nie nadpisany domyślnymi), ponowna próba co 15 s, po udanej – folder, zasobnik,
+  skrót, ICTTJ i sprawdzanie aktualizacji jak przy starcie; zmiany z tej chwili (pobrana aktualizacja, zasobnik, folder)
+  dochodzą do odczytanego pliku pole po polu – nigdy wartości domyślne obok nich; uszkodzony JSON odsunięty jako
+  `config.uszkodzony-<czas>.json`.
+- **T251** System i okna (B116, B119, B122, B124, N98, N99, N100, W37): obecność po przełączeniu folderu nie pisze do
+  starego; start ukryty pamięta maksymalizację; nieudane pobranie nowszej wersji zostawia gotową wcześniej pobraną (z
+  komunikatem w Aktualizacjach); awaria okna szybkiego wpisu albo panelu odłączonego – okno tworzone od nowa przy
+  następnym otwarciu. Kiedy zainstaluje się aktualizacja – według zamykania do zasobnika („po „Zakończ” w menu ikony”);
+  pobrana aktualizacja czekająca przy oknie w zasobniku – powiadomienie raz. Dymek zasobnika z energią także po
+  włączeniu zasobnika w trakcie pracy. Kreator nie zmienia skrótu ani zamykania do zasobnika; start z Windows proponuje
+  (włączony, jeśli nie wybrano wcześniej), a drugi komputer z działającym budżetem pyta raz baner (`autostartAsked`).
+  Przeładowane okno dostaje folder z pamięci procesu głównego, bez czytania dysku od nowa.
+- **T252** Dwa komputery i Synchronizacja (N91, N92, N94, N95, N97): zachowana kopia konfliktu zapisana z czasem i
+  komputerem rozstrzygnięcia; nazwy pól po polsku i nazwy zamiast identyfikatorów (kategorie, cele, kontenery, pożyczki,
+  domownicy) w Historii, oknie zmian i na karcie konfliktu (ta sama lista zmian); plik z problemem: nieczytelny teraz –
+  „Wczytaj ponownie”, nowszy format – „zaktualizuj aplikację”, uszkodzony – „Do Kosza” z potwierdzeniem; „Zaakceptuj
+  nowsze” w obu miejscach, „z drugiego komputera” zamiast nazwy komputera, gdy jej brak.
+- **T253** Przegląd grupy Q (`/code-review` high, 9 kandydatów – 8 poprawionych z testem, 1 bez zmian): zmiany ustawień
+  komputera z chwili nieczytelnego config.json (także pobrana aktualizacja i sprawdzanie aktualizacji), powiadomienie o
+  kopiach dopiero po 3 dniach także bez widocznych kopii, ostrzeżenie zdejmowane przez kopię ręczną i przy innym
+  folderze, obecność przy ponownym otwarciu tego samego folderu, gra nie liczy się od nowa przy każdej zmianie folderu,
+  Ctrl+S bez „Zapisano.” przy nieudanym zapisie, nowa awaria obserwatora po spokojnym okresie od razu w logu, zmiana
+  folderu z niezapisywalnymi zmianami pyta („Zmień mimo to”). Bez zmian: komputer sprzed 1.6.5 bez zapisanej odpowiedzi o
+  starcie z Windows dostaje pytanie raz (nie wiadomo, na którym komputerze kreator pytał – raz to mniej niż nigdy na
+  drugim komputerze, N100).

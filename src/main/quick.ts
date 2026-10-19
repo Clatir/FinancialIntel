@@ -107,6 +107,15 @@ export class QuickEntry {
     }
     win.on('show', () => visible(true))
     win.on('hide', () => visible(false))
+    // Its renderer gone (a GPU failure, out of memory – B124): the frameless window on top would stay dead under the
+    // shortcut – it goes, the next shortcut makes a new one.
+    win.webContents.on('render-process-gone', (_e, details) => {
+      if (details.reason === 'clean-exit') return
+      this.d.log('warn', `szybki wpis: okno przestało działać (${details.reason}) – zostanie utworzone od nowa`)
+      if (this.win === win) this.win = null
+      visible(false)
+      if (!win.isDestroyed()) win.destroy()
+    })
     void this.d.load(win)
     return win
   }

@@ -13,7 +13,7 @@ import { pendingPairDays } from '@shared/calc/dock'
 import { useDeliveries } from '../features/dock/state'
 import type { RecordEntry } from '@shared/api'
 import type { GameMonth, GameSettings } from '@shared/schema'
-import { addRecords, listOf, updateRecord, updateSettings, useData } from './data'
+import { addRecords, listOf, tooNewMonths, updateRecord, updateSettings, useData } from './data'
 import { fleetNow, useToday } from './fleet'
 import { usePresence } from './presence'
 import { timed } from '../lib/timing'
@@ -39,7 +39,9 @@ export function gameInputOf(fi: Fi, records: Records): GameInput {
 /** What the game reads (W10): the engine's parts, its settings and its records – a change of anything else is not its. */
 const GAME_SETTINGS = ['accounts', 'budget', 'categories', 'household', 'layers', 'orders', 'game'] as const
 const GAME_COLLECTIONS = ['transactions', 'containers', 'goals', 'months', 'dockings', 'loans', 'balances', 'game'] as const
-const gameParts = (s: DataState): unknown[] => (s.fi ? [...GAME_SETTINGS.map((k) => s.fi!.settings[k]), ...GAME_COLLECTIONS.map((c) => s.records[c])] : [])
+/** Months whose file a newer version wrote and this one cannot read (B67) – as text: every change brings a new list. */
+const lockedKey = (s: DataState): string => [...tooNewMonths(s.problems, 'game')].join(',')
+const gameParts = (s: DataState): unknown[] => (s.fi ? [...GAME_SETTINGS.map((k) => s.fi!.settings[k]), ...GAME_COLLECTIONS.map((c) => s.records[c]), lockedKey(s)] : [])
 
 /** Days rated in one pass (W16): each is a whole run of the engine – a long backlog goes in portions, the window between them. */
 const DAYS_PER_PASS = 2
@@ -95,8 +97,9 @@ export function useGameAdvance(): void {
       return
     }
     // A portion; its months saved change the records, and the next portion runs after the window painted. Months a
-    // newer version wrote are not this one's to write: passed over (a portion would never get past them).
-    const locked = new Set(Object.values(records.game ?? {}).flatMap((e) => (e.readOnly ? [e.record.month] : [])))
+    // newer version wrote are not this one's to write: passed over (a portion would never get past them) – those whose
+    // file this version cannot even read too (B67): never made again here over that file.
+    const locked = new Set([...Object.values(records.game ?? {}).flatMap((e) => (e.readOnly ? [e.record.month] : [])), ...tooNewMonths(useData.getState().problems, 'game')])
     const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date(), { maxDays: DAYS_PER_PASS, locked, hold }))
     if (!change.months.length) return
     const fresh = change.months.filter((m) => !records.game[m.id])

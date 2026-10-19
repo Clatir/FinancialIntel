@@ -8,7 +8,8 @@ import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates
 import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
 import { pit38Deadline, radar, type RadarItem } from '@shared/calc/radar'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
-import { canWrite, useData, useFolderLocked } from '../../store/data'
+import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/data'
+import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useMachine } from '../../store/machine'
@@ -180,7 +181,10 @@ function Timeline({ items }: { items: RadarItem[] }) {
   )
 }
 
-function LoanRow({ s, today, readOnly }: { s: LoanState; today: string; readOnly: boolean }) {
+function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: string; readOnly: boolean }) {
+  // Written by a newer version of the app (B67): no payment, closing or deletion from here.
+  const newer = useEntryNewer('loans', s.loan.id)
+  const readOnly = folderLocked || newer
   const taken = s.loan.direction === 'taken'
   const [paying, setPaying] = useState(false)
   const [amount, setAmount] = useState<number | null>(s.next?.amount ?? s.open)
@@ -228,7 +232,8 @@ function LoanRow({ s, today, readOnly }: { s: LoanState; today: string; readOnly
         )}
         <HistoryButton kind="loans" id={s.loan.id} current={s.loan} variant="link" />
       </div>
-      {paying && (
+      <NewerNote show={newer} />
+      {paying && !readOnly && (
         <div className="flex items-center gap-2">
           <AmountField className="h-[24px] w-[110px]" value={amount} onChange={setAmount} aria-label="Kwota spłaty" data-testid="loan-pay-amount" />
           <DateField className="h-[24px] w-[100px]" value={date} onChange={setDate} aria-label="Data spłaty" />

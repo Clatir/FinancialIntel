@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/preload/index.ts @ 84a8339
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ChangeSet, DetachEvent, DetachPayload, FiApi, OpenProgress, QuickData, QuickResult } from '@shared/api'
+import type { ChangeSet, DetachEvent, DetachPayload, FiApi, FlushResult, OpenProgress, QuickData, QuickResult } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import type { IctjSnapshot } from '@shared/ictj'
 import type { UpdateState } from '@shared/update'
@@ -17,6 +17,7 @@ const api: FiApi = {
   appInfo: () => invoke('appInfo'),
   getConfig: () => invoke('getConfig'),
   loadCurrent: () => invoke('loadCurrent'),
+  repairSettings: (dir) => invoke('repairSettings', dir),
   defaultDataDir: () => invoke('defaultDataDir'),
   pickDataDir: (mode) => invoke('pickDataDir', mode),
   openDataDir: (dir, createIfEmpty, force) => invoke('openDataDir', dir, createIfEmpty, force === true),
@@ -73,13 +74,13 @@ const api: FiApi = {
       // Still saving: said every second, so closing waits for it (B43).
       const alive = setInterval(() => ipcRenderer.send('fi:flushing'), 1000)
       cb().then(
-        (saved) => {
+        (result) => {
           clearInterval(alive)
-          ipcRenderer.send('fi:flushed', saved)
+          ipcRenderer.send('fi:flushed', result)
         },
-        () => {
+        (e: unknown) => {
           clearInterval(alive)
-          ipcRenderer.send('fi:flushed', false)
+          ipcRenderer.send('fi:flushed', { saved: false, waiting: 0, newer: 0, error: e instanceof Error ? e.message : String(e) } satisfies FlushResult)
         }
       )
     }),
@@ -98,6 +99,7 @@ const api: FiApi = {
   reportActivity: () => invoke('reportActivity'),
   inUseNow: () => invoke('inUseNow'),
   onInUse: (cb) => listen<[boolean]>('inUse', cb),
+  onConfigReady: (cb) => listen<[]>('configReady', cb),
   quickShortcutState: () => invoke('quickShortcutState'),
   quickOpen: () => invoke('quickOpen'),
   onQuickRequest: (cb) => listen<[]>('quickRequest', cb),

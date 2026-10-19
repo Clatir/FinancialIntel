@@ -253,11 +253,101 @@ const LABELS: Record<string, string> = {
   'settings.household.members.inflow': 'Domownicy – reszta wpłaty',
   'settings.household.members.via': 'Domownicy – przekazuje przez',
   'settings.household.members.opening': 'Domownicy – saldo na start',
-  'settings.household.members.archived': 'Domownicy – archiwum'
+  'settings.household.members.archived': 'Domownicy – archiwum',
+  // Every record's own fields (N92): the history and the window of changes speak Polish everywhere.
+  share: 'Wspólnie',
+  'share.mode': 'Wspólnie – sposób podziału',
+  'share.lines': 'Wspólnie – osoby',
+  gift: 'Prezent',
+  'splits.gift': 'Podział – prezent',
+  'splits.note': 'Podział – notatka',
+  'bank.counterparty': 'Dane z banku – kontrahent',
+  'bank.operation': 'Dane z banku – rodzaj operacji',
+  'bank.category': 'Dane z banku – kategoria mBanku',
+  'bank.key': 'Dane z banku – klucz wiersza',
+  'bank.importedAt': 'Dane z banku – zaimportowano',
+  'bank.bankName': 'Dane z banku – nazwa',
+  type: 'Typ',
+  from: 'Od',
+  until: 'Do',
+  to: 'Do',
+  direction: 'Kierunek',
+  schedule: 'Harmonogram',
+  'schedule.date': 'Harmonogram – data',
+  'schedule.amount': 'Harmonogram – kwota',
+  closedAt: 'Zamknięta',
+  pool: 'Pula ICTTJ',
+  split: 'Podział dostawy',
+  'split.shields': 'Podział dostawy – osłony',
+  'split.hull': 'Podział dostawy – kadłub',
+  'split.taxHold': 'Podział dostawy – rezerwa na PIT-38',
+  'split.goals': 'Podział dostawy – cele',
+  transactionId: 'Operacja',
+  correctionId: 'Korekta',
+  deadline: 'Termin',
+  source: 'Źródło',
+  'source.ictjEntryId': 'Źródło – wpis ICTTJ',
+  entryDate: 'Data wpisu ICTTJ',
+  ictjEntryId: 'Wpis ICTTJ',
+  activeFrom: 'Od chwili',
+  achievedAt: 'Osiągnięty',
+  archivedAt: 'Zarchiwizowany',
+  amountAt: 'Masa od dnia',
+  past: 'Wcześniejsze stany',
+  transfers: 'Przeniesienia',
+  'transfers.amount': 'Przeniesienia – kwota',
+  'transfers.to': 'Przeniesienia – do celu',
+  decidedAt: 'Decyzja',
+  'loot.shields': 'Podział łupów – osłony',
+  'loot.nextMonth': 'Podział łupów – następny miesiąc',
+  'loot.goals': 'Podział łupów – cele',
+  ictj: 'Cel z ICTTJ',
+  'settings.layers.shieldSalaries': 'Warstwy – osłony (pensje)',
+  'settings.layers.hullMonths': 'Warstwy – kadłub (miesiące)',
+  'settings.layers.assumedCosts': 'Warstwy – przyjęte koszty',
+  'settings.orders.minShieldSalaries': 'Rozkazy – minimum osłon',
+  'settings.orders.cargoLimitPct': 'Rozkazy – limit ładowni',
+  'settings.orders.quietHours': 'Rozkazy – cisza nocna',
+  'settings.orders.impulseThreshold': 'Rozkazy – próg dziennika',
+  'settings.orders.firewall': 'Rozkazy – firewall',
+  'settings.budget.start': 'Start budżetu – dzień',
+  'settings.budget.initial': 'Start budżetu – podział',
+  'settings.game': 'Gra',
+  'settings.game.start': 'Gra – start',
+  'settings.game.promoteDays': 'Gra – dni do awansu',
+  'settings.game.windowDays': 'Gra – okno dni',
+  'settings.game.seriousEnvelopePct': 'Gra – próg poważnego przekroczenia',
+  'settings.game.demoteSerious': 'Gra – poważne naruszenia do degradacji',
+  'settings.game.missionDays': 'Gra – dni misji',
+  'settings.game.noSpend': 'Gra – dni bez wydatków',
+  'settings.ictj': 'ICTTJ',
+  'settings.ictj.forecastId': 'ICTTJ – scenariusz prognozy',
+  'settings.ictj.skipped': 'ICTTJ – pominięte wpisy',
+  'settings.import.aliases': 'Połączone nazwy',
+  'settings.import.notSimilar': 'Nazwy „to nie to samo”',
+  'settings.import.notDuplicates': 'Pary „to nie duplikat”',
+  'settings.import.lastImport': 'Ostatni import',
+  'settings.import.coveredTo': 'Zasięg plików z banku',
+  'settings.import.accountNumbers': 'Numery rachunków',
+  'settings.import.log': 'Dziennik importów',
+  'settings.seeded': 'Ustawienia startowe'
 }
 
-/** Polish label of a changed field: known fields by name, items of lists by their position in the path. */
-export function fieldLabel(path: Path): string {
+/** A path's part that is an id (ULID, `#id` of a list item): named by `names` when it is known (N92). */
+const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/
+
+/**
+ * Polish label of a changed field: known fields by name, items of lists by their position in the path; an id in the
+ * path (an envelope's category, a goal of the loot) by its name from `names`.
+ */
+export function fieldLabel(path: Path, names?: ReadonlyMap<string, string>): string {
+  const base = fieldLabelOf(path)
+  const id = [...path].reverse().map((p) => (p.startsWith('#') ? p.slice(1) : p)).find((p) => ULID.test(p))
+  const name = id ? names?.get(id) : undefined
+  return name && !base.includes(name) ? `${base.replace(/ – [0-9A-HJKMNP-TV-Z]{26}$/, '')} – ${name}` : base
+}
+
+function fieldLabelOf(path: Path): string {
   const named = path.filter((p) => !p.startsWith('#'))
   const key = named.join('.')
   if (LABELS[key]) return LABELS[key]

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
-import { addRecord, canWrite, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, monthTooNew, tooNewMonths, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
 const NO_PLANS = {}
@@ -31,6 +31,8 @@ const sameEnvelopes = (a: Record<string, number>, b: Record<string, number>) => 
 export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): void {
   if (!canWrite()) return
   const plans = allPlans()
+  // The month's file a newer version of the app wrote, unreadable here (B67): no plan of this version made over it.
+  if (!plans.some((p) => p.month === month) && monthTooNew('months', month)) return
   const now = new Date().toISOString()
   const own = plans.find((p) => p.month === month)
   const base = own ?? ownPlan(month, planFor(plans, month), now)
@@ -38,7 +40,7 @@ export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): void {
   const next = addMonths(month, 1)
   if ((changed.salary !== base.salary || !sameEnvelopes(changed.envelopes, base.envelopes)) && month < warsawNow().month && !plans.some((p) => p.month === next)) {
     const inForce = planFor(plans, next)
-    if (inForce) addRecord('months', ownPlan(next, inForce, now))
+    if (inForce && !tooNewMonths(useData.getState().problems, 'months').has(next)) addRecord('months', ownPlan(next, inForce, now))
   }
   if (own) updateRecord('months', own.id, fn)
   else addRecord('months', changed)

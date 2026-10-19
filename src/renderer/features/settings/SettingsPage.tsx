@@ -5,9 +5,10 @@ import { DEFAULT_SHIP_NAME } from '@shared/schema'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
 import { api, errorMessage } from '../../lib/api'
 import { fmtBytes } from '../../lib/format'
-import { flushSaves, switchFolder, updateSettings, useData, useFolderLocked } from '../../store/data'
+import { saveFirst, switchFolder, unsavedReport, updateSettings, useData, useFolderLocked } from '../../store/data'
 import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
+import { loadTrayPrefs, setTrayPrefs, useTray } from '../../store/tray'
 import { UpdatesTab } from './UpdatesTab'
 import { AccountsTab } from './AccountsTab'
 import { CategoriesTab } from './CategoriesTab'
@@ -179,16 +180,24 @@ function backupAge(files: readonly BackupInfo[], now = new Date()): { text: stri
   return { text: days <= 0 ? 'dziś' : days === 1 ? 'wczoraj' : `${days} dni temu`, days }
 }
 
-/** The newest backup's age; a warning when it is older than 3 days (F2). */
-function BackupAge({ files }: { files: readonly BackupInfo[] }) {
+/** The newest backup's age; a warning when it is older than 3 days (F2), and why the last daily one did not come (B123). */
+function BackupAge({ files, failure }: { files: readonly BackupInfo[]; failure: { at: string; message: string } | null }) {
   const age = backupAge(files.filter((f) => f.kind !== 'pre-migration'))
-  if (!age) return null
-  const stale = age.days > BACKUP_STALE_DAYS
+  const stale = !!age && age.days > BACKUP_STALE_DAYS
   return (
-    <p className={cx('mb-2 text-[11.5px]', stale ? 'text-accent' : 'text-muted')} data-testid="backup-age" data-stale={stale ? '1' : '0'}>
-      Ostatnia kopia: {age.text}
-      {stale && ' – starsza niż 3 dni: sprawdź folder kopii albo zrób kopię teraz.'}
-    </p>
+    <>
+      {age && (
+        <p className={cx('mb-2 text-[11.5px]', stale ? 'text-accent' : 'text-muted')} data-testid="backup-age" data-stale={stale ? '1' : '0'}>
+          Ostatnia kopia: {age.text}
+          {stale && ' – starsza niż 3 dni: sprawdź folder kopii albo zrób kopię teraz.'}
+        </p>
+      )}
+      {failure && (
+        <p className="mb-2 text-[11.5px] text-accent" data-testid="backup-failure">
+          Kopia dzienna nie powstała ({new Date(failure.at).toLocaleString('pl-PL')}): {failure.message} – sprawdź, czy folder kopii jest dostępny (np. dysk podłączony).
+        </p>
+      )}
+    </>
   )
 }
 
@@ -199,7 +208,7 @@ function FolderTab() {
   const count = useData((s) => Object.values(s.records).reduce((n, m) => n + Object.keys(m).length, 0))
   const [recent, setRecent] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
-  const [backups, setBackups] = useState<{ dir: string; files: BackupInfo[] } | null>(null)
+  const [backups, setBackups] = useState<Awaited<ReturnType<typeof api.listBackups>> | null>(null)
   // The backup whose recovery window is open (F3).
   const [recovering, setRecovering] = useState<BackupInfo | null>(null)
   const loadBackups = useCallback(async () => {
@@ -226,10 +235,19 @@ function FolderTab() {
   // While another folder opens (B31): its progress and „Przerwij” here, the buttons off, no edits anywhere.
   const switching = useData((s) => s.switching)
   const [progress, resetProgress] = useOpenProgress()
-  const switchTo = async (fn: () => ReturnType<typeof api.pickDataDir>): Promise<void> => {
+  const switchTo = async (fn: () => ReturnType<typeof api.pickDataDir>, dropNewer = false): Promise<void> => {
+    // Changes this version can never write (B67): another folder drops them – asked first, as closing the window does.
+    const newer = unsavedReport().newer
+    if (newer && !dropNewer)
+      return toast(
+        `Zmian wpisów zapisanych przez nowszą wersję aplikacji (${newer}) ta wersja nie zapisze – po zmianie folderu przepadną. Zaktualizuj aplikację albo zmień folder mimo to.`,
+        'error',
+        12000,
+        { label: 'Zmień mimo to', run: () => void switchTo(fn, true) }
+      )
     resetProgress()
     const res = await switchFolder(fn)
-    if (res === 'unsaved') toast('Nie udało się zapisać bieżących zmian – folder nie został zmieniony. Spróbuj ponownie za chwilę.', 'error', 7000)
+    if ('unsaved' in res) toast(`${res.unsaved} Folder nie został zmieniony.`, 'error', 8000)
     else if (res.ok) toast('Otwarto folder danych.', 'success')
     else if (res.reason !== 'cancelled') {
       // As on the setup screen (B53): new data in a remembered folder found empty or missing only on purpose; a folder
@@ -319,7 +337,7 @@ function FolderTab() {
               disabled={busy}
               onClick={() =>
                 run(async () => {
-                  if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – kopia wstrzymana, żeby ich nie pominąć. Spróbuj ponownie za chwilę.')
+                  await saveFirst('kopia')
                   const path = await api.backupNow()
                   toast(`Utworzono kopię: ${path}`, 'success', 6000)
                   await loadBackups()
@@ -342,7 +360,7 @@ function FolderTab() {
           tygodniowych); przed każdym importem z banku (10 ostatnich) i przed migracją formatu zawsze. Folder:{' '}
           <span className="num">{backups?.dir}</span>
         </p>
-        {backups && <BackupAge files={backups.files} />}
+        {backups && <BackupAge files={backups.files} failure={backups.failure} />}
         {backups && backups.files.length === 0 && <span className="text-[11.5px] text-dim">Brak kopii.</span>}
         {backups?.files.map((b) => (
           <div key={b.path} className="grid grid-cols-[120px_minmax(0,1fr)_90px_150px_auto] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="backup-row">
@@ -386,7 +404,7 @@ function FolderTab() {
             disabled={busy}
             onClick={() =>
               run(async () => {
-                if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – eksport wstrzymany. Spróbuj ponownie za chwilę.')
+                await saveFirst('eksport')
                 const path = await api.exportZip()
                 if (path) toast(`Zapisano ZIP: ${path}`, 'success', 6000)
               })
@@ -395,7 +413,9 @@ function FolderTab() {
           >
             Eksport: ZIP całego folderu…
           </button>
-          <span className="text-[11px] text-dim">Odzyskanie: „Odzyskaj…” przy kopii – wybrane wpisy albo cały folder do nowego folderu obok.</span>
+          <span className="text-[11px] text-dim">
+            Z historią zmian (kopie dzienne są bez niej). Odzyskanie: „Odzyskaj…” przy kopii – wybrane wpisy albo cały folder do nowego folderu obok.
+          </span>
         </div>
       </Panel>
       {recent.length > 1 && (
@@ -420,12 +440,11 @@ function FolderTab() {
 
 /** Tray and start with Windows (decision D46): settings of this computer. */
 function SystemTab() {
-  const [prefs, setPrefs] = useState<(TrayPrefs & { loginSupported: boolean }) | null>(null)
+  const prefs = useTray((s) => s.prefs)
   useEffect(() => {
-    api.trayPrefs().then(setPrefs, () => undefined)
+    void loadTrayPrefs()
   }, [])
-  const change = (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin'>>) =>
-    api.setTrayPrefs(patch).then(setPrefs, (e: unknown) => toast(`Nie udało się zapisać: ${errorMessage(e)}`, 'error'))
+  const change = (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin'>>) => setTrayPrefs(patch).catch((e: unknown) => toast(`Nie udało się zapisać: ${errorMessage(e)}`, 'error'))
   if (!prefs) return <Panel title="Zasobnik i start z Windows">Wczytywanie…</Panel>
   return (
     <Panel title="Zasobnik i start z Windows (ten komputer)">
