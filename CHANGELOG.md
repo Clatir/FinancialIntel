@@ -1,5 +1,36 @@
 # Financial Intel – zmiany
 
+## 1.9.0
+
+Ładownia i czujniki (grupa U, D87): okręt sam zauważa nowe ceny, ciche kontenery, nowe opłaty, pliki z banku,
+nietypowe wydatki i zwroty, które nie dotarły.
+
+Ładownia:
+- Kontener cięższy (albo lżejszy) niż w manifeście: dwie ostatnie płatności w innej cenie (opłata okresowa – ostatnia;
+  kilka przelewów jednego terminu, np. czynsz w dwóch częściach, liczy się razem) dają „Netflix: 43,00 zł → 49,00 zł co miesiąc (+14%, +72,00 zł rocznie)” w odprawie, w Meldunkach i w Ładowni – z
+  symulacją linii zanurzenia i zasięgu. „Zaktualizuj od …” zmienia kwotę od bieżącego miesiąca (wcześniejsze miesiące
+  liczą się starą kwotą – historia kwot w kontenerze), „To nie zmiana ceny” – ta kwota nie wraca jako propozycja.
+- Kontener bez płatności: dwa terminy bez płatności (w zasięgu plików z banku) – „subskrypcja anulowana?”; „Zrzuć z
+  ładowni” albo „Nadal płacę”.
+- Opłaty co 2, 3 i 6 miesięcy oraz harmonogram miesięcy („w miesiącach: mar, maj, wrz, lis” – podatek od
+  nieruchomości): zbiornik zbiera do najbliższej płatności. Rachunek o zmiennej kwocie (prąd, woda) – kwota z roku
+  płatności (75. percentyl); gdy rok się zmieni o ponad 10%, Ładownia proponuje nową.
+- Propozycje z historii rozpoznają te cykle i rachunki zmienne; nowa opłata w historii jest ogłaszana w odprawie raz w
+  miesiącu; „Nie proponuj” chowa płatność (do „proponuj znowu”).
+
+Czujniki:
+- Nowy plik CSV z mBanku w folderze Pobrane (albo w folderze ostatniego importu): powiadomienie „Nowy meldunek z
+  mBanku”, pozycja odprawy i przycisk „Importuj” – jeden klik otwiera go w imporcie; po imporcie „Przenieś plik do
+  Kosza” (plik zawiera numer konta i operacje). Wyłącznik na tym komputerze: Ustawienia → Import z banku. Przypomnienie
+  o zaległym imporcie mówi, jak pobrać plik w mBanku.
+- Nieznany sygnał na radarze: zakup znacznie powyżej zwykłej kwoty u tej marki, kategoria ponad 2× średniej z 3
+  miesięcy, nowy kontrahent od progu dziennika, dwa obciążenia z banku tej samej marki i kwoty dzień po dniu (możliwe
+  podwójne pobranie – do sprawdzenia, nigdy nie łączone). W odprawie, Meldunkach, powiadomieniach i jako oznaczenie
+  „nietypowa” w Operacjach; „To w porządku” zapamiętuje.
+- Zwroty w drodze (Turtle Soup): przy wydatku „Czekam na zwrot pieniędzy” – kwota i termin (domyślnie całość, 14 dni).
+  Wpływ tej samej marki (±10%) – z importu albo wpisany – zamyka zwrot sam; po terminie przypomnienie w odprawie i
+  powiadomienie, na Radarze panel „Zwroty w drodze” i spodziewany wpływ, w Operacjach oznaczenie „czeka na zwrot”.
+
 ## 1.8.0
 
 Przyszłość (grupa T, D87): co jest przed okrętem – zaplanowane wydatki, salda kont, kurs na rok, plan roczny.

@@ -10,7 +10,10 @@ import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
 import { noNarrowing } from '@shared/operationsView'
 import { listOf, updateSettings, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
-import { navigate } from '../../store/ui'
+import { focusRecord, navigate } from '../../store/ui'
+import { useCargoWatch } from '../cargo/status'
+import { openSensor } from '../sensors/open'
+import { useAnomalies, useReturns } from '../sensors/state'
 import { openDocking, useDeliveries } from '../dock/state'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
 import { openOperation, openRefundables, showFilter } from '../operations/state'
@@ -53,6 +56,13 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     const list = listOf(balances)
     return accounts ? confirmationsOf(accounts, list).map((c) => ({ ...c, opened: openingOf(c.accountId, list)?.date ?? null })) : []
   }, [accounts, balances])
+  // The sensors (F31, F34): unknown signals, returns late.
+  const anomalies = useAnomalies()
+  const returns = useReturns()
+  // The cargo hold's watch (F9): a new price, a container gone quiet.
+  const watch = useCargoWatch()
+  const containers = useData((s) => s.records.containers)
+  const cargo = useMemo(() => ({ prices: watch.prices, dead: watch.dead, containers: listOf(containers) }), [watch, containers])
   if (!fleet) return []
   return inboxItems({
     today: fleet.today,
@@ -69,7 +79,10 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     corrections,
     transfers,
     accountName: (id) => accounts?.find((a) => a.id === id)?.name ?? 'Konto',
-    money
+    money,
+    cargo,
+    anomalies,
+    returns
   })
 }
 
@@ -108,7 +121,10 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
     const issue = transferIssueOf(item)
     if (issue?.kind === 'lone') addOtherSide(issue.tx)
     else if (issue) void joinTransfers([issue])
-  } else if (item.kind === 'corrections' && item.ref) {
+  } else if (item.kind === 'cargo' && item.ref) focusRecord('container', item.ref, { page: 'cargo' })
+  else if (item.kind === 'anomalies' && item.ref) openSensor(item.ref)
+  else if (item.kind === 'returns' && item.ref) openSensor(`return:${item.ref}`)
+  else if (item.kind === 'corrections' && item.ref) {
     const t = useData.getState().records.transactions[item.ref]?.record
     if (t) openOperation(t)
     else navigate({ page: 'operations' })

@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/preload/index.ts @ 84a8339
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ChangeSet, DetachEvent, DetachPayload, FiApi, FlushResult, OpenProgress, QuickData, QuickResult } from '@shared/api'
+import type { BankFile, ChangeSet, DetachEvent, DetachPayload, FiApi, FlushResult, OpenProgress, QuickData, QuickResult } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import type { IctjSnapshot } from '@shared/ictj'
 import type { UpdateState } from '@shared/update'
@@ -57,6 +57,10 @@ const api: FiApi = {
   backupToFolder: (path) => invoke('backupToFolder', path),
   putVersions: (items, fi) => invoke('putVersions', items, fi),
   pickImportFile: () => invoke('pickImportFile'),
+  bankFiles: () => invoke('bankFiles'),
+  onBankFiles: (cb) => listen<[BankFile[]]>('bankFiles', cb),
+  readBankFile: (id) => invoke('readBankFile', id),
+  trashBankFile: (id) => invoke('trashBankFile', id),
   setBackupDir: (mode) => invoke('setBackupDir', mode),
   showPath: (abs) => invoke('showPath', abs),
   updateState: () => invoke('updateState'),

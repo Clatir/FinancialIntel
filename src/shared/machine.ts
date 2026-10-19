@@ -49,6 +49,12 @@ export interface NotifyPrefs {
   plans: boolean
   /** An account short before a payment (F26). */
   accounts: boolean
+  /** The cargo hold's watch (1.9.0, F9, F23): a container's new price, one gone quiet, a fee new in the history. */
+  cargoWatch: boolean
+  /** An unknown signal (1.9.0, F31): an unusual amount, a new payee, a possible double charge. */
+  anomalies: boolean
+  /** A return of money not come by its day (1.9.0, F34). */
+  returns: boolean
 }
 
 export interface SoundPrefs {
@@ -71,6 +77,8 @@ export interface MachinePrefs {
   zoom: number
   /** Brighter dimmed texts and the smallest ones at 12 px (F30). */
   highContrast: boolean
+  /** New files of mBank looked for in Pobrane and the last folder of the import (1.9.0, F14). */
+  bankFiles: boolean
   notify: NotifyPrefs
   sounds: SoundPrefs
 }
@@ -141,7 +149,8 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   hideOnStart: false,
   zoom: 1,
   highContrast: false,
-  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, cargo: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true, plans: true, accounts: true },
+  bankFiles: true,
+  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, cargo: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true, plans: true, accounts: true, cargoWatch: true, anomalies: true, returns: true },
   // Sounds on and quiet (D70).
   sounds: { enabled: true, volume: 0.3, events: { entry: true, docking: true, alarm: true, promotion: true, plus: true } }
 }
@@ -166,6 +175,7 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     hideOnStart: bool(r.hideOnStart, d.hideOnStart),
     zoom: typeof r.zoom === 'number' && Number.isFinite(r.zoom) ? clampZoom(r.zoom) : d.zoom,
     highContrast: bool(r.highContrast, d.highContrast),
+    bankFiles: bool(r.bankFiles, d.bankFiles),
     notify: {
       briefing: bool(n.briefing, d.notify.briefing),
       evening: bool(n.evening, d.notify.evening),
@@ -183,6 +193,9 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
       house: bool(n.house, d.notify.house),
       plans: bool(n.plans, d.notify.plans),
       accounts: bool(n.accounts, d.notify.accounts),
+      cargoWatch: bool(n.cargoWatch, d.notify.cargoWatch),
+      anomalies: bool(n.anomalies, d.notify.anomalies),
+      returns: bool(n.returns, d.notify.returns),
       watch: bool(n.watch, d.notify.watch)
     },
     sounds: {

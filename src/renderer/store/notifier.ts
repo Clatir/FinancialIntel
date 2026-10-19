@@ -20,8 +20,11 @@ import { useIctj } from './ictj'
 import { usePresence } from './presence'
 import { showFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
-import { cargoStatusesNow } from '../features/cargo/status'
+import { cargoStatusesNow, cargoWatchNow } from '../features/cargo/status'
 import { futureNow } from '../features/radar/future'
+import { newBankFilesNow, openBankFile } from './bankFiles'
+import { openSensor } from '../features/sensors/open'
+import { anomaliesNow, returnsNow } from '../features/sensors/state'
 import { confirmNoSpend, eveningNow, snoozeEvening } from '../features/evening/state'
 
 const SENT_KEY = 'fi.notify.sent'
@@ -67,6 +70,8 @@ export function openTag(tag: string): void {
     showFilter({ period: { kind: 'range', from: today, to: today }, ...noNarrowing() })
     navigate({ page: 'operations' })
   } else if (tag === 'asteroid' || tag === 'cargo') navigate({ page: 'cargo' })
+  else if (tag.startsWith('bankfile:')) void openBankFile(tag.slice('bankfile:'.length))
+  else if (tag.startsWith('anomaly:') || tag.startsWith('return:')) openSensor(tag)
   else if (tag === 'import') navigate({ page: 'import' })
   else if (tag === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (tag === 'backups') navigate({ page: 'settings', tab: 'folder' })
@@ -112,6 +117,12 @@ function check(opened: boolean, shown = false): void {
     // The buoys (F16) and the accounts ahead (F26).
     scheduled: futureNow().reminders,
     accounts: futureNow().accounts,
+    // The cargo hold's watch (F9, F23); the new files of mBank (F14 – when they are looked for).
+    watch: cargoWatchNow(),
+    bankFiles: prefs.bankFiles ? newBankFilesNow() : [],
+    // The sensors (F31, F34).
+    anomalies: anomaliesNow(),
+    returns: returnsNow(),
     evening: eveningNow(),
     seriousPct: fi.settings.game.seriousEnvelopePct
   })

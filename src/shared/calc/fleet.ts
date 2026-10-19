@@ -147,22 +147,71 @@ export function sinkingSchedule(amount: number, cycleMonths: number): number[] {
   return splitEvenly(amount, cycleMonths)
 }
 
-/** Position of `month` in a container's cycle: 0 = the first month after a payment, cycleMonths − 1 = the payment's month. */
-export function cyclePosition(container: Pick<Container, 'cycleMonths' | 'dueMonth'>, month: string): { index: number; dueMonth: string } {
+/** A container's payment calendar: its cycle, or – a fee of a schedule (F23) – its payment months. */
+export type CycleOf = Pick<Container, 'cycleMonths' | 'dueMonth'> & { schedule?: readonly number[] | null }
+
+/**
+ * The payment months of a fee of a schedule (1.9.0, F23): 2–11 distinct months of the year, sorted – only for a periodic
+ * fee (`cycleMonths` > 1); null = its cycle counts.
+ */
+export function scheduleOf(c: Pick<Container, 'cycleMonths'> & { schedule?: readonly number[] | null }): number[] | null {
+  if (c.cycleMonths <= 1 || !c.schedule?.length) return null
+  const months = [...new Set(c.schedule.filter((m) => Number.isInteger(m) && m >= 1 && m <= 12))].sort((a, b) => a - b)
+  return months.length >= 2 && months.length <= 11 ? months : null
+}
+
+/**
+ * Position of `month` in a container's cycle: 0 = the first month after a payment, `length` − 1 = the payment's month
+ * (`dueMonth`). A fee of a schedule (F23): the cycle from its payment month before to the next one – its length varies.
+ */
+export function cyclePosition(container: CycleOf, month: string): { index: number; dueMonth: string; length: number } {
+  const months = scheduleOf(container)
+  if (months) {
+    const m = Number(month.slice(5, 7))
+    const next = months.find((x) => x >= m)
+    const dueMonth = next != null ? addMonths(month, next - m) : addMonths(month, 12 - m + months[0]!)
+    const due = Number(dueMonth.slice(5, 7))
+    const i = months.indexOf(due)
+    const length = due - (i > 0 ? months[i - 1]! : months[months.length - 1]! - 12)
+    return { index: length - 1 - monthsBetween(month, dueMonth), dueMonth, length }
+  }
   const n = container.cycleMonths
   const r = ((monthsBetween(container.dueMonth, month) % n) + n) % n
   const dueMonth = addMonths(month, (n - r) % n)
-  return { index: n - 1 - monthsBetween(month, dueMonth), dueMonth }
+  return { index: n - 1 - monthsBetween(month, dueMonth), dueMonth, length: n }
+}
+
+/** A container's amount with its history (F9): the earlier amounts up to their months. */
+export type AmountOf = Pick<Container, 'amount'> & { past?: ReadonlyArray<{ until: string; amount: number }> | null }
+
+/** Its amount in `month` (1.9.0, F9): the earlier amount whose month is the first not before it, else the current one. */
+export function amountIn(c: AmountOf, month: string): number {
+  let found: { until: string; amount: number } | null = null
+  for (const p of c.past ?? []) if (month <= p.until && (!found || p.until < found.until)) found = p
+  return found ? found.amount : c.amount
+}
+
+/** Its payments a year: 12 over the cycle, or the schedule's months (F23). */
+export const paymentsPerYear = (c: Pick<Container, 'cycleMonths'> & { schedule?: readonly number[] | null }): number => scheduleOf(c)?.length ?? 12 / Math.max(1, c.cycleMonths)
+
+/**
+ * A container's monthly weight (the load line's, the plans'): its payment over its cycle – a fee of a schedule by its
+ * payments a year over 12 (F23); `month` given – its amount then (F9), else the current one.
+ */
+export function monthlyWeight(c: AmountOf & Pick<Container, 'cycleMonths'> & { schedule?: readonly number[] | null }, month?: string): number {
+  const amount = month ? amountIn(c, month) : c.amount
+  const months = scheduleOf(c)
+  return Math.round(months ? (amount * months.length) / 12 : amount / Math.max(1, c.cycleMonths))
 }
 
 /**
  * This month's contribution to a tank: the plan's installment plus an even share of what the tank lacks against
- * the plan (a fee added late, a smaller salary) – or minus an even share of a surplus. Never negative.
+ * the plan (a fee added late, a smaller salary) – or minus an even share of a surplus. Never negative. The plan is the
+ * cycle's of this month: the amount then (F9), the cycle up to the next payment (a schedule's – F23).
  */
-export function sinkingInstallment(container: Pick<Container, 'amount' | 'cycleMonths' | 'dueMonth'>, month: string, tank: number): number {
-  const n = container.cycleMonths
-  const plan = sinkingSchedule(container.amount, n)
-  const { index } = cyclePosition(container, month)
+export function sinkingInstallment(container: CycleOf & AmountOf, month: string, tank: number): number {
+  const { index, length: n } = cyclePosition(container, month)
+  const plan = sinkingSchedule(amountIn(container, month), n)
   const expected = sum(plan.slice(0, index))
   const left = n - index
   const deficit = expected - tank
@@ -257,7 +306,7 @@ export function shipClass(range: number): ShipClass {
 }
 
 /** The next payment of a container on or after `today`. */
-export function nextPaymentOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'dueDay'>, today: string): string {
+export function nextPaymentOf(c: CycleOf & Pick<Container, 'dueDay'>, today: string): string {
   const at = (month: string) => `${month}-${String(Math.min(c.dueDay, daysInMonth(month))).padStart(2, '0')}`
   const due = cyclePosition(c, today.slice(0, 7)).dueMonth
   const date = at(due)
@@ -267,7 +316,7 @@ export function nextPaymentOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'd
 }
 
 /** The next payment still to make (B55): when this cycle's (`paidDue` – its due month) is paid already, the one after it. */
-export function nextUnpaidOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'dueDay'>, today: string, paidDue: string | null | undefined): string {
+export function nextUnpaidOf(c: CycleOf & Pick<Container, 'dueDay'>, today: string, paidDue: string | null | undefined): string {
   const date = nextPaymentOf(c, today)
   return paidDue && date.slice(0, 7) === paidDue ? nextPaymentOf(c, addDays(date, 1)) : date
 }
@@ -277,10 +326,10 @@ export function nextUnpaidOf(c: Pick<Container, 'cycleMonths' | 'dueMonth' | 'du
  * months or more – the next due month's when paid the month before it (early: the 1st on a Monday), only while the cycle
  * before is closed (`closed` – paid, or before the fee was followed): else it is that cycle's, late. null = paid late.
  */
-export function paidCycleOf(c: Pick<Container, 'cycleMonths' | 'dueMonth'>, month: string, closed: (dueMonth: string) => boolean = () => true): string | null {
-  const due = cyclePosition(c, month).dueMonth
+export function paidCycleOf(c: CycleOf, month: string, closed: (dueMonth: string) => boolean = () => true): string | null {
+  const { dueMonth: due, length } = cyclePosition(c, month)
   if (due === month) return due
-  return c.cycleMonths >= 3 && addMonths(month, 1) === due && closed(addMonths(due, -c.cycleMonths)) ? due : null
+  return length >= 3 && addMonths(month, 1) === due && closed(addMonths(due, -length)) ? due : null
 }
 
 /** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
@@ -299,7 +348,7 @@ const lifeOver = (c: Pick<Container, 'archived' | 'until'> & { archivedAt?: stri
 
 /** The cargo's mass: fixed costs a month (periodic fees by their monthly share) as a % of the salary; the load line 40%. */
 export function cargoMass(containers: readonly Container[], month: string, salary: number | null, limitPct: number): FleetState['cargo'] {
-  const monthly = sum(containers.filter((c) => activeIn(c, month)).map((c) => Math.round(c.amount / c.cycleMonths)))
+  const monthly = sum(containers.filter((c) => activeIn(c, month)).map((c) => monthlyWeight(c, month)))
   const pct = salary && salary > 0 ? (monthly / salary) * 100 : null
   return { monthly, pct, limitPct, over: pct != null && pct > limitPct }
 }
@@ -1344,7 +1393,7 @@ export function computeFleet(input: FleetInput): FleetState {
   /** The tank's cycle: this one, or – paid already – the next one (B6). */
   const tankCycle = (c: Container) => {
     const due = cyclePosition(c, month).dueMonth
-    return paidCycles.get(c.id)?.has(due) ? { dueMonth: addMonths(due, c.cycleMonths), paidDue: due } : { dueMonth: due, paidDue: null }
+    return paidCycles.get(c.id)?.has(due) ? { dueMonth: cyclePosition(c, addMonths(due, 1)).dueMonth, paidDue: due } : { dueMonth: due, paidDue: null }
   }
   return {
     today,
@@ -1359,7 +1408,11 @@ export function computeFleet(input: FleetInput): FleetState {
     energy,
     tanks: containers
       .filter((c) => c.cycleMonths > 1 && (activeIn(c, month) || (tanks.get(c.id) ?? 0) !== 0))
-      .map((c) => ({ containerId: c.id, name: c.name, amount: tanks.get(c.id) ?? 0, ...tankCycle(c), due: c.amount })),
+      .map((c) => {
+        const cycle = tankCycle(c)
+        // The payment it collects for at its amount then (F9: a raise from a month on).
+        return { containerId: c.id, name: c.name, amount: tanks.get(c.id) ?? 0, ...cycle, due: amountIn(c, cycle.dueMonth) }
+      }),
     taxHold,
     deposit,
     loot: { month: lootMonth, amount: loot },

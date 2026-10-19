@@ -419,6 +419,18 @@ export function seedSettings<T extends Seedable>(s: T): T {
   return { ...s, accounts, categories, import: { ...s.import, rules }, seeded: [...s.seeded, ...todo.map((x) => x.id)] }
 }
 
+// ------------------------------------------------------------------ the cargo hold and the sensors (1.9.0)
+
+export const cargoSettingsSchema = z.looseObject({
+  /** The payees (`counterpartyKey`) whose recurring payments are not proposed for the hold (F23 – „Nie proponuj”). */
+  ignored: z.array(z.string().max(300)).catch([]).default([])
+})
+
+export const anomalySettingsSchema = z.looseObject({
+  /** The anomalies said „w porządku” to (F31): their keys – never reported again. */
+  ok: z.array(z.string().max(200)).catch([]).default([])
+})
+
 // ------------------------------------------------------------------ saved views of Operacje (1.7.0, F18)
 
 export const operationViewSchema = z.looseObject({
@@ -444,5 +456,7 @@ export const budgetSettingsShape = {
   /** `SEEDS` already added to this folder. */
   seeded: z.array(z.string().max(60)).catch([]).default([]),
   /** Saved views of Operacje (F18): chips over the list, shared by the computers. */
-  operationViews: lenientList(operationViewSchema).catch([]).default([])
+  operationViews: lenientList(operationViewSchema).catch([]).default([]),
+  cargo: cargoSettingsSchema.prefault({}),
+  anomalies: anomalySettingsSchema.prefault({})
 }

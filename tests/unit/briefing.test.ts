@@ -46,7 +46,7 @@ describe('odprawa (spec: „Rytuały”, Daily Bias)', () => {
     expect(items.map((i) => [i.kind, i.level, i.text])).toEqual([
       ['alarm', 'yellow', 'Koperta Auto ponad limit o 50,00 zł.'],
       ['asteroid', 'info', 'Asteroida: OC za 12 dni – 1 240,00 zł, w zbiorniku 0,00 zł.'],
-      ['import', 'info', 'mBank: ostatni import 5 dni temu – zaimportuj nowy plik.']
+      ['import', 'info', 'mBank: ostatni import 5 dni temu – zaimportuj nowy plik (w mBanku: Historia → lista operacji → „Eksportuj” CSV).']
     ])
     // Never confirmed, never imported: both asked.
     const fresh = briefing({ fleet: f, containers: [], imports: [{ name: 'mBank', last: null }], lastConfirmation: null, label: () => '' })

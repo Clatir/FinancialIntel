@@ -1,3 +1,4 @@
+import { cycleText } from '@shared/calc/cargoWatch'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addDays, daysInMonth, warsawNow } from '@shared/calc/dates'
 import { balanceAt } from '@shared/calc/balances'
@@ -111,7 +112,7 @@ export function WizardPage() {
   // The tanks of the first month as the engine fills them (N9, T29): a fee due soon catches up – more than its share.
   const tanksMonthly =
     sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map((c) => sinkingInstallment(c, month, 0))) +
-    sum(chosen.filter((p) => p.cycleMonths > 1).map((p) => sinkingInstallment({ amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth }, month, 0)))
+    sum(chosen.filter((p) => p.cycleMonths > 1).map((p) => sinkingInstallment({ amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule }, month, 0)))
   const tanksLater = sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map(monthlyShare)) + sum(chosen.filter((p) => p.cycleMonths > 1).map(monthlyShare))
   const envelopesTotal = sum(Object.values(envelopes))
   const unallocated = (salary ?? 0) - cargoMonthly - tanksMonthly - envelopesTotal
@@ -234,7 +235,10 @@ export function WizardPage() {
                 }}
               />
               <span className="min-w-0 flex-1 truncate">{p.label}</span>
-              <span className="text-[11px] text-muted">{p.cycleMonths === 1 ? 'co miesiąc' : 'co rok'}</span>
+              <span className="text-[11px] text-muted">
+                {cycleText(p)}
+                {p.variable ? ' · zmienna' : ''}
+              </span>
               <span className="num w-[90px] text-right">{zl(p.amount)}</span>
             </label>
           ))

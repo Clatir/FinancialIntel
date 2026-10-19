@@ -63,10 +63,14 @@ import {
   setSkip,
   skipSelected,
   themeStatus,
+  trashImportFile,
   useImport,
   useImportGroups,
   type ThemeStatus
 } from './state'
+import { filePeriodText } from '@shared/import/bankFiles'
+import { openBankFile, useNewBankFiles } from '../../store/bankFiles'
+import { useMachine } from '../../store/machine'
 
 const day = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`
 const fullDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
@@ -143,6 +147,7 @@ function FilePanel() {
           mBank → Historia → lista operacji → „Eksportuj” CSV (albo historia rachunku CSV). Kolejne importy mogą się nakładać: operacje już wczytane są
           rozpoznawane i pomijane. Przed zapisem powstaje kopia zapasowa.
         </p>
+        <NewBankFiles />
         {error && (
           <div className="border border-down/50 px-2 py-1.5 text-down" data-testid="import-error">
             {errorName ?? fileName}: {error}
@@ -1071,6 +1076,48 @@ function BalanceCheckRow({ account: a, balance, value: v, onValue }: { account: 
   )
 }
 
+/** The new files of mBank found in the downloads (F14): opened with one click. */
+function NewBankFiles() {
+  const files = useNewBankFiles()
+  const open = useImport((s) => s.fileRef)
+  const busy = useImport((s) => s.busy)
+  const watching = useMachine((s) => s.prefs.bankFiles)
+  const list = files.filter((f) => f.id !== open)
+  if (!watching || !list.length) return null
+  return (
+    <div className="flex flex-col gap-1 border-l-2 border-accent pl-2" data-testid="import-bank-files">
+      <span className="label text-accent">Nowe pliki z mBanku</span>
+      {list.map((f) => (
+        <div key={f.id} className="flex flex-wrap items-center gap-2" data-testid="import-bank-file" data-name={f.name}>
+          <span className="num min-w-0 truncate text-fg-strong">{f.name}</span>
+          <span className="text-[11px] text-muted">
+            {f.period ? `${filePeriodText(f)} · ` : ''}
+            {countLabel(f.rows, 'operacja', 'operacje', 'operacji')} · {f.where}
+          </span>
+          <button type="button" className="btn btn-accent h-[22px]" disabled={busy} onClick={() => void openBankFile(f.id)} data-testid="import-bank-file-open">
+            Importuj
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** After the import (F14): the file holds the account's number and operations – to the Recycle Bin in one click. */
+function TrashFile() {
+  const ref = useImport((s) => s.fileRef)
+  const name = useImport((s) => s.fileName)
+  if (!ref) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted" data-testid="import-trash">
+      <span>Plik „{name}” zawiera numer konta i operacje – po imporcie nie jest potrzebny.</span>
+      <button type="button" className="btn h-[22px]" onClick={() => void trashImportFile()} data-testid="import-trash-file">
+        Przenieś plik do Kosza
+      </button>
+    </div>
+  )
+}
+
 function DonePanel() {
   const done = useImport((s) => s.done)
   const batch = useData((s) => (done?.batchId ? s.records.imports[done.batchId]?.record : undefined))
@@ -1102,6 +1149,7 @@ function DonePanel() {
             </span>
           )}
         </div>
+        {batch && !batch.undoneAt && <TrashFile />}
       </div>
     </Panel>
   )

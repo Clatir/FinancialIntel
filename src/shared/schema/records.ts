@@ -107,6 +107,15 @@ export const bankRowSchema = z.looseObject({
 })
 export type BankRow = z.infer<typeof bankRowSchema>
 
+/** A return of money awaited (1.9.0, F34). */
+export const awaitReturnSchema = z.looseObject({
+  amount: grosze.min(1),
+  until: isoDate,
+  /** Closed by the user (it came another way, or it will not); null = open. */
+  closedAt: isoDateTime.nullable().catch(null).default(null)
+})
+export type AwaitReturn = z.infer<typeof awaitReturnSchema>
+
 export const transactionSchema = z.looseObject({
   ...recordBase,
   /** Warsaw date of the operation (the file lives under it). */
@@ -169,11 +178,26 @@ export const transactionSchema = z.looseObject({
   /** Paid from a goal's money. */
   goalId: ulidSchema.nullable().default(null),
   loanId: ulidSchema.nullable().default(null),
-  bank: bankRowSchema.nullable().default(null)
+  bank: bankRowSchema.nullable().default(null),
+  /**
+   * A return of money awaited for this purchase (1.9.0, F34 – goods sent back, a complaint, a booking cancelled): the
+   * amount and its last day; an incoming operation of the same brand (±10%) closes it, or the user does (`closedAt`).
+   */
+  awaitReturn: awaitReturnSchema.nullable().optional().catch(undefined)
 })
 export type Transaction = z.infer<typeof transactionSchema>
 
+/** A malformed item (a hand-edited file) dropped, not the whole list. */
+const lenientList = <T extends z.ZodType>(item: T) => z.array(item.nullable().catch(null)).transform((xs) => xs.filter((x): x is NonNullable<z.output<T>> => x != null))
+
 // ------------------------------------------------------------------ cargo hold
+
+/** A container's amount before a change (1.9.0, F9 – „historia kwot”): it held up to `until` (that month included). */
+export const containerPastSchema = z.looseObject({
+  until: isoMonth,
+  amount: grosze.min(0)
+})
+export type ContainerPast = z.infer<typeof containerPastSchema>
 
 export const CONTAINER_TYPES = ['fixed', 'subscription', 'installment'] as const
 export type ContainerType = (typeof CONTAINER_TYPES)[number]
@@ -206,6 +230,23 @@ export const containerSchema = z.looseObject({
    * change; none = not known (before 1.6.2 – its last change of any kind counts).
    */
   amountAt: isoDateTime.optional().catch(undefined),
+  /**
+   * Its earlier amounts (1.9.0, F9): each up to its month, `amount` from the month after the last one – a raise counts
+   * from its month, the months before keep the old amount. Empty = `amount` always.
+   */
+  past: lenientList(containerPastSchema).catch([]).default([]),
+  /**
+   * The payment months of a fee no single cycle describes (1.9.0, F23 – a property tax on 15.03, 15.05, 15.09, 15.11):
+   * 2–11 months of the year, each payment `amount`; it counts with `cycleMonths` > 1 (12 – an older version reads it as
+   * a yearly fee). Empty = its cycle.
+   */
+  schedule: z.array(z.number().int().min(1).max(12)).max(12).catch([]).default([]),
+  /** A bill of a varying amount (1.9.0, F23 – electricity, water): `amount` = the 75th percentile of a year's payments. */
+  variable: z.boolean().catch(false).default(false),
+  /** A new price said „nie” to (F9): this amount is not proposed again. */
+  priceIgnored: grosze.nullable().catch(null).default(null),
+  /** „Nadal płacę” (F9): the payments missing before this day never make it look cancelled. */
+  aliveAt: isoDate.nullable().catch(null).default(null),
   note: text
 })
 export type Container = z.infer<typeof containerSchema>
@@ -232,9 +273,6 @@ export const goalTransferSchema = z.looseObject({
   amount: grosze.min(0)
 })
 export type GoalTransfer = z.infer<typeof goalTransferSchema>
-
-/** A malformed item (a hand-edited file) dropped, not the whole list. */
-const lenientList = <T extends z.ZodType>(item: T) => z.array(item.nullable().catch(null)).transform((xs) => xs.filter((x): x is NonNullable<z.output<T>> => x != null))
 
 /** A period of a goal's installments from the salary (1.8.0, F15): from–until months, until null = open. */
 export const goalRateSchema = z.looseObject({

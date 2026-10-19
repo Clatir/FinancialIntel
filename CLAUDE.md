@@ -66,7 +66,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
-  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `calc/scheduled.ts` (boje), `calc/ahead.ts` (salda kont naprzód), `calc/course.ts` (kurs i manewry), `calc/yearPlan.ts` (plan roczny), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `calc/scheduled.ts` (boje), `calc/ahead.ts` (salda kont naprzód), `calc/course.ts` (kurs i manewry), `calc/yearPlan.ts` (plan roczny), `calc/cargoWatch.ts` (ceny i ciche kontenery), `calc/anomalies.ts` (radar anomalii), `calc/returns.ts` (zwroty w drodze), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `threadpool.ts` (pula wątków plików), `quick.ts` (szybki wpis i globalny skrót),
@@ -99,7 +99,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `FI_DEFAULT_DATA_DIR` (propozycja folderu), `FI_UPDATE_URL`, `FI_UPDATE_CHECK_DELAY_MS`, `FI_UPDATE_TOKEN`,
   `FI_E2E_EXECUTABLE`, od E5 `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` / `FI_ICTJ_LAUNCH`, od 1.6.6 `FI_SYSTEM_IDLE` (stała
   bezczynność systemu w s), `FI_IDLE_CHECK_MS`, `FI_CONFIG_RETRY_MS`, od 1.7.0 `FI_CONFIG_WRITE_DELAY_MS` (wolny zapis
-  config.json – T271); Windows CI: `FI_UPDATE_FROM` /
+  config.json – T271), od 1.9.0 `FI_DOWNLOADS_DIR` (folder Pobrane – w `launch()` folder testu) i `FI_BANK_FILES_POLL_MS`
+  (przegląd plików z banku); Windows CI: `FI_UPDATE_FROM` /
   `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E
   `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Ikona: `node scripts/make-icon.mjs` (`CHROMIUM_PATH=…` jeśli trzeba) → `resources/icon.png`.
@@ -874,6 +875,48 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/future.test.ts`, poszerzone `plan`, `fleet`, `goals`; E2E `tests/e2e/future.spec.ts` (pola kwot z
   wartością – najpierw klik, potem wpisanie).
 
+## Kod (1.9.0 – ładownia i czujniki, grupa U, D87)
+- Ceny i ciche kontenery (F9, T283–T285): `container.past` (`containerPastSchema`), `priceIgnored`, `aliveAt`; `fleet.ts`
+  `amountIn(c, miesiąc)`, `monthlyWeight(c, miesiąc)`, `paymentsPerYear`; `calc/cargoWatch.ts` (`priceChanges` –
+  `priceTolerance` / `variableTolerance`, `deadContainers` – `DEAD_CYCLES`, `pastAfterChange`, `cycleText`, `priceText`,
+  `deadText`); `cargoStatus.ts` `paymentsIndex` / `paymentDay` (eksport); renderer `cargo/actions.ts` (`updatePrice`,
+  `ignorePrice`, `clearPast`, `keepContainer`, `patchContainer` z historią kwot), `cargo/status.ts` (`useCargoWatch` /
+  `cargoWatchNow` – ceny, ciche, propozycje, nowe), Ładownia – `cargo-row-price`, `cargo-row-dead`, `container-price`
+  (`-update`, `-ignore`), `container-dead` (`-drop`, `-keep`), `container-history` (`-amounts`, `-payments`, `-clear`).
+- Opłaty cykliczne (F23, T286): `container.schedule` / `variable`; `fleet.ts` `scheduleOf`, `cyclePosition` → `length`,
+  `sinkingInstallment` / `paidCycleOf` po długości cyklu; `plan.ts` `recurringPayments(…, ignored)` (`detectCycle`:
+  `MID_CYCLES`, `VARIABLE_SPREAD`, `BILL_DAY_SLACK`, harmonogram, `fresh`), `p75`; `settings.cargo.ignored`
+  (`cargoSettingsSchema`); Ładownia – `container-cycle` z „harmonogram…” (`container-schedule`, `-month`),
+  `container-variable`, `cargo-proposal` (`data-cycle`, `-cycle`, `-ignore`), `cargo-proposals-unignore`.
+- Pliki z mBanku (F14, T287): main `bankFiles.ts` (`BankFiles` – `setDirs`, `register`, `read`, `pathOf`, `refresh`;
+  `BANK_FILE_DAYS`), `index.ts` `watchBankFiles` (Pobrane + `config.importDir`), IPC `bankFiles`, `readBankFile`,
+  `trashBankFile`, zdarzenie `fi:bankFiles` (`BankFile` w `shared/api.ts`); `shared/import/bankFiles.ts` (`newBankFiles`,
+  `accountOfFile`, `bankFileText`, `filePeriodText`, `MBANK_EXPORT_HINT`); `machine.ts` `prefs.bankFiles`; okno
+  `store/bankFiles.ts` (`initBankFiles`, `useNewBankFiles`, `newBankFilesNow`, `openBankFile`), import `state.ts`
+  `fileRef` / `loadImportFile(…, ref)` / `trashImportFile`; testid `import-bank-files`, `import-bank-file` (`-open`),
+  `import-trash` (`-file`), `settings-bank-files`.
+- Radar anomalii (F31, T288): `calc/anomalies.ts` (`anomalies`, `anomalousIds`, `anomalyText`; progi `ANOMALY_DAYS`,
+  `BRAND_FACTOR`, `BRAND_MIN_HISTORY`, `CATEGORY_FACTOR`, `CATEGORY_MIN_AVERAGE`, `NEW_PAYEE_HISTORY_DAYS`),
+  `settings.anomalies.ok` (`anomalySettingsSchema`); `operationsView.ts` oznaczenia `anomaly` / `awaiting`
+  (`MarkFlags`, `marksOf(t, rozkazy, flagi)`, `FilterContext.flags`); `briefing.ts` `ANOMALY_BRIEFING_DAYS`.
+- Zwroty w drodze (F34, T289): operacja `awaitReturn` (`awaitReturnSchema`); `calc/returns.ts` (`awaitedReturns`,
+  `defaultReturn`, `onTheWay`, `lateReturnText`, `RETURN_DAYS`, `RETURN_TOLERANCE`); `radar.ts` rodzaj `return`;
+  `kinds.ts` `withKind` zdejmuje `awaitReturn` poza wydatkiem.
+- Czujniki w oknie: `features/sensors/` – `state.ts` (`useAnomalies`, `useReturns`, `anomaliesNow`, `returnsNow`,
+  `useMarkFlags`, `dismissAnomaly` – `OK_KEEP`, `setAwaitReturn`, `startAwaitReturn`, `closeReturn`), `open.ts`
+  (`openSensor`), `EditorBoxes.tsx` (`AnomalyNote` – `operation-anomaly`, `-ok`; `AwaitReturnBox` – `operation-await`,
+  `-box` z `data-state`, `-amount`, `-until`, `-state`, `-close`, `-off`); Radar `radar-returns`, `radar-return`
+  (`-open`, `-close`); Meldunki – rodzaje `anomalies` (`inbox-anomaly-ok`), `returns`, `cargo`; odprawa – `price`, `dead`,
+  `recurring`, `anomaly`, `return`, plik z banku (`bankfile:`); `notify.ts` – tag `operations`, `notify.cargoWatch` /
+  `anomalies` / `returns`.
+- Wydajność i wspólne (T290): `features/sensors/inputs.ts` `sensorTransactions` (lista operacji ta sama, dopóki nie
+  zmieni się pole czytane przez czujniki – `SENSOR_FIELDS`; pamięć ładowni, anomalii i zwrotów po niej),
+  `cargoWatch.ts` `cyclesPaid` (suma płatności cyklu), main `bankFiles.ts` `looksLikeMbank` (16 KB nagłówka), `pathOf`
+  tylko istniejącego pliku; `format.ts` `dm`, `plan.ts` `percentile` / `p75`, `cargoWatch.ts` `SHORT_MONTHS`.
+- Testy: `tests/unit/cargo-watch.test.ts`, `bank-files.test.ts`, `sensors.test.ts`, `sensor-inputs.test.ts`,
+  `cargo-actions.test.ts` (dwa ostatnie ze sklepami okna – w `tsconfig.web.json`), `tests/fs/bank-files.test.ts`,
+  poszerzone `fleet`, `inbox`, `briefing`; E2E `tests/e2e/sensors.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -992,4 +1035,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.8.0 Przyszłość (grupa T, D87): boje nawigacyjne (zaplanowane wydatki, wpływy, terminy), salda kont za 90 dni z
   „Zaplanuj przelew własny”, osłony po każdym zdarzeniu Radaru, rata celu z terminem, zapas koperty na następny miesiąc i
   „pokryj z koperty…”, plan kampanii (12 miesięcy), kurs na 12 miesięcy i symulator manewrów
+- [x] 1.9.0 Ładownia i czujniki (grupa U, D87): nowa cena kontenera z „Zaktualizuj” i historią kwot, kontener bez
+  płatności, opłaty co 2 / 3 / 6 miesięcy, harmonogram miesięcy i rachunki o zmiennej kwocie, plik z mBanku w Pobranych
+  (import jednym kliknięciem, plik do Kosza), radar anomalii z „to w porządku”, zwroty w drodze
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

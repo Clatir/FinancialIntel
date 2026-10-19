@@ -34,6 +34,8 @@ export interface ImportDone {
 
 interface ImportSession {
   fileName: string | null
+  /** The open file's id in the main process (F14 – found in the downloads or chosen): moved to the Recycle Bin after the import. */
+  fileRef: string | null
   file: MbankFile | null
   error: string | null
   /** The file the error is about (another than the open one – N12: a wrong file never closes the open one). */
@@ -73,6 +75,7 @@ const emptyChoices = (): ImportChoices => ({ themes: {}, rememberThemes: {}, gro
 
 export const useImport = create<ImportSession>(() => ({
   fileName: null,
+  fileRef: null,
   file: null,
   error: null,
   errorName: null,
@@ -239,7 +242,7 @@ function restore(snap: Snapshot): void {
   replanImport()
 }
 
-export async function loadImportFile(name: string, bytes: Uint8Array): Promise<void> {
+export async function loadImportFile(name: string, bytes: Uint8Array, ref: string | null = null): Promise<void> {
   const before = useImport.getState()
   try {
     const file = parseMbank(decodeText(bytes))
@@ -249,6 +252,7 @@ export async function loadImportFile(name: string, bytes: Uint8Array): Promise<v
     // Nothing is ticked by itself: pending operations the list no longer shows may only be filtered out of it.
     useImport.setState({
       fileName: name,
+      fileRef: ref,
       file,
       error: null,
       errorName: null,
@@ -294,7 +298,7 @@ export async function dropImportFile(f: File): Promise<void> {
 export async function pickImportFile(): Promise<void> {
   try {
     const picked = await api.pickImportFile()
-    if (picked) await loadImportFile(picked.name, picked.bytes)
+    if (picked) await loadImportFile(picked.name, picked.bytes, picked.ref ?? null)
   } catch (e) {
     toast(errorMessage(e), 'error', 7000)
   }
@@ -424,12 +428,28 @@ export function replanImport(): void {
   })
 }
 
+/**
+ * „Przenieś plik do Kosza” (F14): the file just imported – it holds the account's number and operations – moved to the
+ * Recycle Bin (it may be taken back from there).
+ */
+export async function trashImportFile(): Promise<void> {
+  const { fileRef, fileName } = useImport.getState()
+  if (!fileRef) return
+  try {
+    const ok = await api.trashBankFile(fileRef)
+    if (ok) useImport.setState({ fileRef: null })
+    toast(ok ? `„${fileName}” przeniesiony do Kosza.` : `Nie ma już pliku „${fileName}” – nic nie przeniesiono.`, ok ? 'success' : 'info', 5000)
+  } catch (e) {
+    toast(`Nie udało się przenieść „${fileName}” do Kosza: ${errorMessage(e)}`, 'error', 7000)
+  }
+}
+
 export function closeImport(): void {
   const before = useImport.getState()
   // An import being written (B93): the file stays until it is done.
   if (before.busy) return
   const prev = before.file && hasDecisions(before) ? snapshot(before) : null
-  useImport.setState({ fileName: null, file: null, error: null, errorName: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: { themes: {}, groups: {} }, lastDecided: null, noProposal: {}, done: null })
+  useImport.setState({ fileName: null, fileRef: null, file: null, error: null, errorName: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: { themes: {}, groups: {} }, lastDecided: null, noProposal: {}, done: null })
   // Decisions not imported (N12): back in one click.
   if (prev) toast(`Zamknięto „${prev.fileName}” bez importu.`, 'info', 10000, { label: 'Cofnij', run: () => restore(prev) })
 }

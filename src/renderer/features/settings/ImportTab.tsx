@@ -4,7 +4,8 @@ import { useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { countLabel } from '../../lib/format'
 import { IconPlus } from '../../components/icons'
-import { Panel, TextField } from '../../components/ui'
+import { Panel, TextField, Toggle } from '../../components/ui'
+import { setMachinePrefs, useMachine } from '../../store/machine'
 import { KeywordRules } from '../import/KeywordRules'
 import { RecentImports } from '../import/RecentImports'
 import { MixedBrandsPanel, RulesPanel, useRuleAudit } from '../import/RulesAudit'
@@ -101,6 +102,22 @@ function MergedNames() {
  * next decision in the import or in Operacje writes it again), the user's keywords (1.2.1), the names merged (1.2.2)
  * and the account holder's names (own transfers).
  */
+/** New files of mBank looked for in Pobrane (F14) – a setting of this computer. */
+function BankFilesWatch() {
+  const on = useMachine((s) => s.prefs.bankFiles)
+  return (
+    <Panel title="Pliki z mBanku w Pobranych">
+      <div className="flex flex-col gap-1.5 text-[12px]">
+        <Toggle checked={on} onChange={(bankFiles) => void setMachinePrefs({ bankFiles })} label="Szukaj nowych plików z mBanku w folderze Pobrane (na tym komputerze)" data-testid="settings-bank-files" />
+        <p className="text-[11.5px] text-dim">
+          Także w folderze, z którego ostatnio wybrano plik importu. Nowy plik CSV z mBanku daje powiadomienie i przycisk „Importuj” na ekranie Import; po imporcie FI proponuje
+          przeniesienie pliku do Kosza (zawiera numer konta i operacje). Pliki są tylko czytane, nic nie wychodzi z komputera.
+        </p>
+      </div>
+    </Panel>
+  )
+}
+
 export function ImportTab() {
   const names = useData((s) => s.fi?.settings.import.ownNames ?? NO_NAMES)
   const [name, setName] = useState('')
@@ -108,6 +125,7 @@ export function ImportTab() {
   const { audit, progress } = useRuleAudit()
   return (
     <>
+      <BankFilesWatch />
       <RulesPanel audit={audit} progress={progress} />
       <MixedBrandsPanel audit={audit} />
       <Panel title="Słowa kluczowe">

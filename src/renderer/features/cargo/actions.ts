@@ -1,17 +1,18 @@
 import { firstDayOf, monthOf, warsawNow } from '@shared/calc/dates'
+import { pastAfterChange } from '@shared/calc/cargoWatch'
 import { unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
 import { newId } from '@shared/ids'
 import { containerSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Container, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteOrSay, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, deleteOrSay, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { plnText } from '../../components/fields'
-import { countLabel, plDate } from '../../lib/format'
+import { countLabel, monthGenLabel, plDate } from '../../lib/format'
 import { deleteWithUndo } from '../history/actions'
 
 /** A new container's fields before it goes into the hold (the load line is checked first – spec). */
 export type ContainerDraft = Pick<
   Container,
-  'name' | 'type' | 'amount' | 'cycleMonths' | 'dueMonth' | 'dueDay' | 'accountId' | 'categoryId' | 'counterparty' | 'from' | 'until' | 'loanId' | 'archived' | 'note'
+  'name' | 'type' | 'amount' | 'cycleMonths' | 'dueMonth' | 'dueDay' | 'accountId' | 'categoryId' | 'counterparty' | 'from' | 'until' | 'loanId' | 'archived' | 'note' | 'schedule' | 'variable'
 >
 
 export function emptyDraft(): ContainerDraft {
@@ -23,14 +24,19 @@ export function emptyDraft(): ContainerDraft {
   return { ...parsed, name: '' }
 }
 
-/** A recurring payment of the history as a container (a monthly one = a subscription, a yearly one = a fixed fee). */
+/**
+ * A recurring payment of the history as a container (a monthly one = a subscription, the others – and a bill of a
+ * varying amount – a fixed fee); a schedule's and a variable bill's with their marks (F23).
+ */
 export function draftFromPayment(p: RecurringPayment): ContainerDraft {
   return {
     ...emptyDraft(),
     name: p.label.slice(0, 80),
-    type: p.cycleMonths === 1 ? 'subscription' : 'fixed',
+    type: p.cycleMonths === 1 && !p.variable ? 'subscription' : 'fixed',
     amount: p.amount,
     cycleMonths: p.cycleMonths,
+    schedule: p.schedule,
+    variable: p.variable,
     dueMonth: p.dueMonth,
     dueDay: p.dueDay,
     accountId: p.accountId,
@@ -87,16 +93,84 @@ export function linkPayments(containerId: string, counterparty: string, quiet = 
   return found.length
 }
 
-/** What makes a container's monthly mass (B89): its change is the game's day of a raise. */
-const MASS_FIELDS = ['amount', 'cycleMonths', 'from', 'until', 'archived', 'archivedAt'] as const
+/**
+ * What makes a container's monthly mass (B89): its change is the game's day of a raise – the schedule's months and the
+ * amounts of months before (F9, F23) too.
+ */
+const MASS_FIELDS = ['amount', 'cycleMonths', 'from', 'until', 'archived', 'archivedAt', 'schedule', 'past'] as const
+
+/** The same value – a list (the schedule, the amounts before) by its content. */
+const same = (a: unknown, b: unknown) => a === b || (Array.isArray(a) && Array.isArray(b) && JSON.stringify(a) === JSON.stringify(b))
 
 export const patchContainer = (id: string, p: Partial<Container>) =>
   updateRecord('containers', id, (c) => {
-    const next = { ...c, ...p }
-    const massChanged = MASS_FIELDS.some((k) => k in p && p[k] !== c[k])
+    let next = { ...c, ...p }
+    // A new amount counts from this month (F9): the months before keep the old one.
+    if ('amount' in p && p.amount !== c.amount && !('past' in p)) next = { ...next, past: pastAfterChange(c, warsawNow().month) }
+    const massChanged = MASS_FIELDS.some((k) => k in next && !same(next[k], c[k]))
     const stamped = massChanged ? { ...next, amountAt: new Date().toISOString() } : next
     return c.cycleMonths <= 1 && stamped.cycleMonths > 1 ? fromNow(stamped) : stamped
   })
+
+/** What a change of a container's amount writes (F9) – its „Cofnij” puts these back. */
+const AMOUNT_FIELDS = ['amount', 'past', 'priceIgnored', 'amountAt'] as const
+
+function amountUndo(c: Container): () => void {
+  const before: Partial<Container> = {}
+  for (const k of AMOUNT_FIELDS) (before as Record<string, unknown>)[k] = c[k]
+  return () => updateRecord('containers', c.id, (x) => ({ ...x, ...before }))
+}
+
+/**
+ * „Zaktualizuj” (F9): the container's new price from this month on – the months before keep the old one (its history of
+ * amounts); „Cofnij” takes it back.
+ */
+export function updatePrice(c: Container, to: number): void {
+  if (!canWrite()) return
+  const undo = amountUndo(c)
+  const { month } = warsawNow()
+  patchContainer(c.id, { amount: to, priceIgnored: null })
+  toast(`${c.name}: ${plnText(to)} zł od ${monthGenLabel(month)} – wcześniejsze miesiące liczą się kwotą ${plnText(c.amount)} zł.`, 'success', 8000, { label: 'Cofnij', run: undo })
+}
+
+/** „To nie zmiana ceny” (F9): this price is not proposed again (another one would be). */
+export function ignorePrice(c: Container, to: number): void {
+  if (!canWrite()) return
+  patchContainer(c.id, { priceIgnored: to })
+  toast(`${c.name}: kwota ${plnText(to)} zł nie będzie proponowana.`, 'info', 6000, { label: 'Cofnij', run: () => patchContainer(c.id, { priceIgnored: c.priceIgnored }) })
+}
+
+/** The amount for every month (F9 – a typo set right, not a raise): the history of amounts goes. */
+export function clearPast(c: Container): void {
+  if (!canWrite() || !c.past.length) return
+  patchContainer(c.id, { past: [] })
+  toast(`${c.name}: ${plnText(c.amount)} zł we wszystkich miesiącach.`, 'success', 8000, { label: 'Cofnij', run: () => patchContainer(c.id, { past: c.past }) })
+}
+
+/** „Nadal płacę” (F9): the payments missing so far never make it look cancelled. */
+export function keepContainer(c: Container): void {
+  if (!canWrite()) return
+  patchContainer(c.id, { aliveAt: warsawNow().date })
+  toast(`${c.name} zostaje w ładowni.`, 'info', 6000, { label: 'Cofnij', run: () => patchContainer(c.id, { aliveAt: c.aliveAt }) })
+}
+
+/** „Nie proponuj” (F23): the payee's recurring payments are not proposed for the hold any more. */
+export function ignoreProposal(p: Pick<RecurringPayment, 'key' | 'label'>): void {
+  if (!canWrite()) return
+  const set = (on: boolean) =>
+    updateSettings((f) => {
+      const list = f.settings.cargo.ignored.filter((k) => k !== p.key)
+      return { ...f, settings: { ...f.settings, cargo: { ...f.settings.cargo, ignored: on ? [...list, p.key] : list } } }
+    })
+  set(true)
+  toast(`„${p.label}” nie będzie proponowany do ładowni.`, 'info', 6000, { label: 'Cofnij', run: () => set(false) })
+}
+
+/** „Proponuj znowu” (F23): the payees said „nie proponuj” to – back among the proposals. */
+export function unignoreProposals(keys: readonly string[]): void {
+  if (!canWrite() || !keys.length) return
+  updateSettings((f) => ({ ...f, settings: { ...f.settings, cargo: { ...f.settings.cargo, ignored: f.settings.cargo.ignored.filter((k) => !keys.includes(k)) } } }))
+}
 
 /** Dropped from the hold (or brought back): it still counts until this month's end – the months before stay as they were (B56). */
 export const archiveContainer = (c: Container, archived: boolean) => patchContainer(c.id, { archived, archivedAt: archived ? new Date().toISOString() : null })

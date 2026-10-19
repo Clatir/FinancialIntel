@@ -1866,3 +1866,78 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `extraOf`, „+” / „−” przy fakcie) i w akcencie (zieleń / czerwień tylko dla kwot na plus / minus); jedno liczenie
   wydatków kopert dla debriefingu i planu rocznego (`monthSpending`); klasa okrętu w symulatorze z `shipClass`; indeks
   operacji boi raz na listę.
+
+### 1.9.0 – ładownia i czujniki, funkcje (grupa U, 19.10.2026)
+
+- **T283** Historia kwot kontenera (F9): `container.past` [{until, amount}] (addytywne). Zmiana kwoty – w edytorze albo
+  „Zaktualizuj” – liczy się od bieżącego miesiąca: miesiące wcześniejsze zostają przy starej kwocie (`pastAfterChange`:
+  dotychczasowa kwota do poprzedniego miesiąca, chyba że kontener liczy się dopiero od tego miesiąca – `from`, inaczej
+  miesiąc utworzenia – albo zmiana z tego miesiąca już zamknęła historię: druga zmiana w miesiącu ustawia tylko nową
+  kwotę). `amountIn(c, miesiąc)` wszędzie, gdzie liczy się kwota w miesiącu (podział pensji, raty zbiorników, linia
+  zanurzenia `monthlyWeight(c, miesiąc)`, Radar, odprawa, stan opłat). „Jedna kwota we wszystkich miesiącach”
+  (`clearPast`) to poprawka pomyłki, nie podwyżka. Starsza wersja czyta samo `amount`.
+- **T284** Nowa cena kontenera (F9): płatności liczone cyklami – suma płatności jednego terminu (płatność do 14 dni
+  przed terminem należy do niego, jak w stanie opłat; czynsz w dwóch przelewach to jedna kwota), ostatni cykl dopiero
+  cały (minęły jego dni albo ma tyle płatności co cykl przed nim). Opłata co miesiąc i co 2 miesiące – dwa ostatnie
+  cykle po ostatniej zmianie kwoty (`amountAt`; cena ustawiona po nich to decyzja), każdy dalej od kwoty niż max(5%,
+  2 zł) i zgodne ze sobą; opłata okresowa (co 3 miesiące i rzadziej, harmonogram) – ostatni cykl; rachunek zmienny –
+  75. percentyl cykli z 12 miesięcy (co najmniej 3), w górę do pełnych złotych, dalej niż max(10%, 2 zł). Kontener pożyczki pomijany (raty są
+  pożyczki). „Zaktualizuj od <miesiąca>” (T283, „Cofnij”), „To nie zmiana ceny” – `priceIgnored` = ta kwota (inna cena
+  będzie proponowana). Odprawa (`price`, raz na nową cenę), powiadomienie (`notify.cargoWatch`), Meldunki („Ładownia”),
+  Ładownia – znaczek „cięższy / lżejszy”, w edytorze płatności, symulacja linii zanurzenia i zasięgu z nową kwotą.
+- **T285** Kontener bez płatności (F9): kontener z płatnościami, bez płatności w dwóch ostatnich terminach – termin w
+  dniu płatności (`paymentDay`: środkowy z ostatnich płatności, inaczej dzień kontenera), po swoich 3 dniach
+  (`OVERDUE_DAYS`) i w zasięgu plików z banku jego konta (`coveredTo` albo ostatni wiersz z banku; konto bez plików –
+  dziś); płatność do 14 dni przed terminem należy do niego; po `until` kontenera terminów nie ma. „Zrzuć z ładowni”
+  (archiwizacja, najpierw symulacja), „Nadal płacę” (`aliveAt` – liczy się jak płatność tego dnia). Odprawa (`dead`, klucz
+  z drugim brakującym terminem), powiadomienie, Meldunki.
+- **T286** Opłaty cykliczne (F23): `container.schedule` [miesiące 1–12] (addytywne) – opłata w zaznaczonych miesiącach
+  (2–11; dzień z daty płatności; każda w kwocie płatności), `cycleMonths` = 12, więc starsza wersja czyta ją jak opłatę co
+  rok (zbiornik zbiera na cały rok – bezpiecznie). Cykl = od poprzedniego zaznaczonego miesiąca do następnego
+  (`cyclePosition` → `length`), raty zbiornika na tę długość, waga miesięczna = kwota × liczba miesięcy / 12.
+  `container.variable` (addytywne) – rachunek o zmiennej kwocie (pilnowany wg T284). Rozpoznanie w historii
+  (`recurringPayments`): co miesiąc – stała kwota (±15%) albo rachunek zmienny (±60% mediany, dzień miesiąca ±6 dni od
+  środkowego; kwota = 75. percentyl roku w górę do złotych); co 2, 3, 6 miesięcy – co najmniej 3 ostatnie płatności w
+  odstępie cyklu (±12 dni), stała kwota, następna nie przegapiona; co rok – jak dotąd; harmonogram – 3–11 płatności w 12
+  miesiącach, każda w innym miesiącu, stała kwota, ten sam dzień (±6), historia z banku od co najmniej roku, następna nie
+  przegapiona (najdłuższa przerwa). Nowa opłata (`fresh` – płatność poprzedniego miesiąca zrobiła z niej opłatę) –
+  odprawa (`recurring`, raz w miesiącu) i powiadomienie. „Nie proponuj” → `settings.cargo.ignored` (klucze odbiorców,
+  addytywne; „Ukryte propozycje: N – proponuj znowu”).
+- **T287** Plik z mBanku w Pobranych (F14): main `BankFiles` obserwuje Pobrane (`app.getPath('downloads')`, w testach
+  `FI_DOWNLOADS_DIR`) i folder pliku ostatnio wybranego w imporcie (`config.importDir`) – `fs.watch` i przegląd co minutę;
+  plik CSV do 20 MB zmieniony w ostatnich 14 dniach czytany parserem importu (nagłówek, okres, numer rachunku, liczba
+  wierszy). Okno może przeczytać albo przenieść do Kosza tylko plik, o którym dostało wiadomość (id = SHA-1 ścieżki).
+  Nowy = nie ma importu tej nazwy i okresu (niecofniętego) ani importów jego konta obejmujących okres po zapisaniu
+  pliku. Odprawa („Nowy meldunek z mBanku (dd.mm–dd.mm): nazwa w folderze Pobrane – importuj.”), powiadomienie (zawsze
+  przy włączonej obserwacji), Import – „Nowe pliki z mBanku” z „Importuj”; po imporcie „Przenieś plik do Kosza”.
+  Wyłącznik per komputer `prefs.bankFiles` (Ustawienia → Import z banku). Przypomnienie o zaległym imporcie podaje, jak
+  pobrać plik w mBanku (`MBANK_EXPORT_HINT`).
+- **T288** Radar anomalii (F31): wydatki z 60 dni (zakupy – wydatek bez pieniędzy celu i bez całego zakupu domownika;
+  płatności kontenerów tylko w (d) – pilnuje ich Ładownia): (a) koszt > 1,5 × 90. percentyl zakupów marki z roku przed
+  nim (co najmniej 5); (b) kategoria w tym miesiącu > 2 × średniej z 3 miesięcy przed (średnia ≥ 50 zł, historia sprzed
+  tych 3 miesięcy, bez ładowni); (c) nowy kontrahent (marka pierwszy raz) od progu dziennika (`impulseThreshold`, 0 =
+  wyłączone) przy co najmniej 90 dniach historii przed nim; (d) dwa wiersze z banku (nie nierozliczone) jednej marki i
+  kwoty tego samego albo następnego dnia – możliwe podwójne pobranie (nigdy nie łączone; żółte). „To w porządku” →
+  `settings.anomalies.ok` (klucze, ostatnie 1000, „Cofnij”). Odprawa – sygnały z 14 dni; Meldunki – wszystkie;
+  Operacje – oznaczenie „nietypowa” (filtr); powiadomienie (`notify.anomalies`); edytor operacji – notatka z „To w
+  porządku”.
+- **T289** Zwroty w drodze (F34): operacja `awaitReturn` {amount, until, closedAt} (addytywne) – wydatek czekający na
+  pieniądze; domyślnie cała kwota i 14 dni od zakupu. Wpływ tej samej marki (wpływ albo wydatek o dodatniej kwocie –
+  zwrot towaru) ±10% kwoty, w dniu zakupu albo później, zamyka go sam (jeden wpływ – jeden zakup, najpierw
+  najwcześniejszy zakup, najbliższa kwota). Po `until` – odprawa (żółta, codziennie do zwrotu albo zamknięcia),
+  powiadomienie (`notify.returns`), Meldunki („Zwroty w drodze”); Radar – panel „Zwroty w drodze” i spodziewany wpływ w
+  jego dniu (bez konta: prognoza sald kont na nim nie polega); Operacje – oznaczenie „czeka na zwrot”. „Zamknij”
+  (`closedAt`, zostaje w historii), „Nie czekam na zwrot” zdejmuje; zmiana rodzaju operacji z wydatku i kierunku na
+  wpływ zdejmuje też `awaitReturn` (wpływ nigdy nie czeka – byłby swoim własnym zwrotem); zakup bez kwoty – przycisk
+  nieaktywny.
+- **T290** Przegląd grupy U (`/code-review` high, 10 kandydatów – 9 poprawionych z testem, wersja 1.9.0 przed PR):
+  cena kontenera płaconego kilkoma przelewami z sumy cyklu (T284 – wcześniej czynsz w dwóch przelewach dawał fałszywe
+  „lżejszy 2 000 → 1 000 zł”); zwrot po zmianie kierunku na wpływ nie paruje się sam ze sobą (T289); otwarcie pliku z
+  banku z powiadomienia albo odprawy czeka na koniec zapisu importu (jak upuszczenie pliku – B93); harmonogram i historia
+  kwot kontenera zapisują chwilę zmiany masy (`amountAt` – ocena ładunku w grze); czujniki liczone tylko po zmianie
+  pól, które czytają (`sensorTransactions` – lista operacji ta sama po wpisaniu notatki, dziennika, godziny; ładownia
+  po treści miesięcy historii silnika, anomalie po swoich ustawieniach, nie całym fi.json): pomiar na 150 tys. operacji –
+  propozycje z historii ≈ 170 ms i anomalie ≈ 130 ms na każdą zmianę, licznik menu bocznego jest zawsze zamontowany;
+  oznaczenia wierszy Operacji z jednego liczenia strony; obserwacja Pobranych czyta najpierw 16 KB (nagłówek mBanku –
+  inny CSV nigdy w całości); „Przenieś plik do Kosza” przy pliku już usuniętym – „nic nie przeniesiono” zamiast błędu;
+  wspólne `dm` (`format.ts`), `percentile` (`plan.ts`), `SHORT_MONTHS`. Wersja w `package.json` – podbita przed PR.
