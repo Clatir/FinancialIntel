@@ -19,6 +19,7 @@ import { Badge, Empty, NameInput, Panel, cx } from '../../components/ui'
 import { Modal } from '../../components/Modal'
 import { countLabel, monthLabel } from '../../lib/format'
 import { addGoal, archiveGoal, moveGoal, moveGoalMoney, patchGoal, type GoalMoneyTarget } from './actions'
+import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -343,6 +344,7 @@ function GoalRow({
             archiwizuj
           </button>
         )}
+        <HistoryButton kind="goals" id={g.id} current={g} variant="icon" />
       </div>
       <div className="pl-[26px]">
         <Meter value={amount} max={noTarget ? null : g.target} />

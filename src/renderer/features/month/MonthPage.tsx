@@ -20,6 +20,7 @@ import { decideLoot, setEnvelope, setEnvelopes, setSalary, usePlans } from './ac
 import { EnvelopeBars, monthElapsed } from './EnvelopeBars'
 import { IncomePanel } from './IncomePanel'
 import { playSound } from '../../lib/sounds'
+import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const KIND_TITLE: Record<EnvelopeKind, string> = { planned: 'Koperty planowe', daily: 'Koperty codzienne' }
@@ -84,6 +85,8 @@ export function MonthPage() {
         <span className="text-[11.5px] text-muted" data-testid="month-source">
           {own ? 'plan tego miesiąca' : plan ? `korzysta z planu: ${monthLabel(plan.month)} – zmiana utworzy własny` : 'brak planu – wpisz pensję'}
         </span>
+        {/* The plan's earlier versions – also the one set aside when two computers changed it (N18). */}
+        {own && <HistoryButton kind="months" id={own.id} current={own} small />}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="month" tracks={['minmax(380px,1.1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
@@ -137,7 +140,7 @@ function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { 
     <Panel title="Pensja" testId="month-salary-panel">
       <div className="flex flex-col gap-2 text-[12px]">
         <div className="flex items-center gap-2">
-          <AmountField className="w-[140px]" value={plan?.salary ?? null} allowEmpty onChange={(v) => !readOnly && setSalary(month, v ?? 0)} aria-label="Pensja" data-testid="month-salary" />
+          <AmountField className="w-[140px]" value={plan?.salary ?? null} allowEmpty onChange={(v) => setSalary(month, v ?? 0)} disabled={readOnly} aria-label="Pensja" data-testid="month-salary" />
           <span className="text-muted">zł · wypłata z osłon 1. dnia miesiąca</span>
         </div>
         {proposal && proposal.amount !== plan?.salary && (
@@ -228,7 +231,8 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
                     value={plan.envelopes[c.id] ?? null}
                     allowEmpty
                     placeholder="—"
-                    onChange={(v) => !readOnly && setEnvelope(month, c.id, v)}
+                    onChange={(v) => setEnvelope(month, c.id, v)}
+                    disabled={readOnly}
                     aria-label={`Koperta ${c.name}`}
                     data-testid="month-envelope-input"
                   />

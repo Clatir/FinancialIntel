@@ -21,6 +21,7 @@ import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName } from '@shared/calc/household'
 import { openRefundables } from '../operations/state'
 import { addLoan, closeLoan, deleteLoan, recordPayment, type NewLoan } from './actions'
+import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -219,6 +220,7 @@ function LoanRow({ s, today, readOnly }: { s: LoanState; today: string; readOnly
             </button>
           </>
         )}
+        <HistoryButton kind="loans" id={s.loan.id} current={s.loan} variant="link" />
       </div>
       {paying && (
         <div className="flex items-center gap-2">

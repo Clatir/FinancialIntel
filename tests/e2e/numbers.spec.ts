@@ -151,6 +151,14 @@ test('Dokowanie (1.5.2): wypłata z inną kwotą w banku dzieli kwotę z banku �
     await expect(page.getByTestId('docking-shields')).toHaveText('895,00 zł')
     await expect(page.getByTestId('docking-hull')).toHaveValue('100,00')
     await expect(page.getByTestId('docking-split-fitted')).toHaveCount(0)
+    // The docking's history from its window (N18): Esc closes only the dialog on top.
+    await page.getByTestId('docking-dialog').getByTestId('history-open').click()
+    await expect(page.getByTestId('history-dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('history-dialog')).toHaveCount(0)
+    await expect(page.getByTestId('docking-dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('docking-dialog')).toHaveCount(0)
     expect(errors).toEqual([])
   } finally {
     await app.close()

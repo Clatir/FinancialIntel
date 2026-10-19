@@ -11,7 +11,7 @@ import { setRemoteDialog, useRemote, type PendingRemote } from '../../store/remo
 import { toast } from '../../store/ui'
 import { Modal } from '../../components/Modal'
 import { Badge, Segmented, cx } from '../../components/ui'
-import { ChangeList, displayValue, useDictNames } from '../history/HistoryDialog'
+import { ChangeList, HistoryButton, displayValue, useDictNames } from '../history/HistoryDialog'
 
 type Choice = 'merge' | Side
 
@@ -99,6 +99,8 @@ function ItemCard({
           <Badge tone="warn">usunięty na innym komputerze</Badge>
           {item.hadLocalEdits && <Badge tone="accent">masz niezapisane zmiany</Badge>}
           <NewerBadge item={item} machine={machine} />
+          <span className="flex-1" />
+          <HistoryButton kind={item.collection} id={item.id} current={mine ?? theirs} variant="link" />
         </div>
         <Segmented
           size="sm"
@@ -122,6 +124,9 @@ function ItemCard({
         {item.hadLocalEdits ? <Badge tone="accent">masz niezapisane zmiany ({localChanges.length})</Badge> : <Badge>bez Twoich zmian</Badge>}
         {conflicts.length > 0 && <Badge tone="warn">to samo pole zmienione po obu stronach: {conflicts.length}</Badge>}
         <NewerBadge item={item} machine={machine} />
+        {/* The versions set aside so far – the one dropped here goes there too (N18). */}
+        <span className="flex-1" />
+        <HistoryButton kind={item.collection} id={item.id} current={mine ?? theirs} variant="link" />
       </div>
       <Segmented
         size="sm"

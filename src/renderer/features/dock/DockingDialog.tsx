@@ -18,6 +18,7 @@ import { Badge, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { closeDocking, useDeliveries, useDocking } from './state'
 import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, walletOperation, type SplitDraft } from './actions'
+import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -125,6 +126,7 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
               Pomiń wpis
             </button>
           )}
+          {d.state === 'docked' && d.docking && <HistoryButton kind="dockings" id={d.docking.id} current={d.docking} small />}
           <span className="flex-1" />
           <button className="btn h-[26px]" onClick={closeDocking}>
             Anuluj

@@ -1,8 +1,15 @@
 // adapted from ICTTJ src/renderer/components/Modal.tsx @ 84a8339
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { IconClose } from './icons'
 
-/** Centered dialog over a dimmed page; Esc and a click outside close it (unless `onClose` is omitted). */
+/** The dialogs open now, the last on top: Esc closes only that one (a history opened from a dialog – N18). */
+const open: object[] = []
+
+/**
+ * Centered dialog over a dimmed page; Esc and a click outside close it (unless `onClose` is omitted). Rendered at the
+ * page's end: a dialog opened from another one covers the whole window, not only the first one's box.
+ */
 export function Modal({
   title,
   children,
@@ -18,19 +25,25 @@ export function Modal({
   footer?: ReactNode
   testId?: string
 }) {
+  // The latest onClose, while the dialog keeps its place on the stack through re-renders.
+  const close = useRef(onClose)
+  close.current = onClose
   useEffect(() => {
-    if (!onClose) return
+    const me = {}
+    open.push(me)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        onClose()
-      }
+      if (e.key !== 'Escape' || open[open.length - 1] !== me || !close.current) return
+      e.preventDefault()
+      e.stopPropagation()
+      close.current()
     }
     window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
-  return (
+    return () => {
+      open.splice(open.indexOf(me), 1)
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [])
+  return createPortal(
     <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60" onMouseDown={() => onClose?.()} data-testid={testId}>
       <div
         className="flex max-h-[88vh] animate-pop-in flex-col border border-line-strong bg-panel"
@@ -50,6 +63,7 @@ export function Modal({
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
         {footer && <div className="flex shrink-0 items-center gap-2 border-t border-line px-3 py-2">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

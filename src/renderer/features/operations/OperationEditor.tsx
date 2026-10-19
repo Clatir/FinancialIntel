@@ -125,295 +125,298 @@ export function OperationEditor({ id }: { id: string }) {
   const account = accounts.find((a) => a.id === t.accountId)
 
   return (
-    <fieldset className="flex min-h-0 flex-col gap-2.5 p-3 text-[12px]" disabled={readOnly} data-testid="operation-editor">
+    <div className="flex min-h-0 flex-col gap-2.5 p-3 text-[12px]" data-testid="operation-editor">
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-medium text-fg-strong" data-testid="operation-editor-title">
           {isDraft ? 'Nowa operacja' : TX_KIND_LABEL[t.kind]}
         </span>
         {t.bank && <Badge tone={t.bank.pending ? 'warn' : 'default'}>{t.bank.pending ? 'nierozliczona' : 'z banku'}</Badge>}
         <span className="flex-1" />
+        {/* The history stays at hand in a read-only folder too – to look at (N18). */}
         {!isDraft && <HistoryButton kind="transactions" id={t.id} current={t} small />}
         {!isDraft && !readOnly && <DeleteButton title="Usuń operację" onConfirm={() => void deleteOperation(t, operationLabel(t))} testId="operation-delete" />}
       </div>
+      <fieldset className="contents" disabled={readOnly}>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Segmented
-          size="sm"
-          value={MAIN_KINDS.includes(t.kind) ? t.kind : null}
-          onChange={(k) => {
-            setZeroSign(null)
-            update((r) => withKind(r, k))
-          }}
-          options={MAIN_KINDS.map((k) => ({ value: k, label: k === 'trading' ? 'XTB' : TX_KIND_LABEL[k] }))}
-          aria-label="Rodzaj operacji"
-        />
-        <select
-          className={cx('input h-[22px] w-auto py-0 text-[11.5px]', OTHER_KINDS.includes(t.kind) && 'border-accent/60 text-accent')}
-          value={OTHER_KINDS.includes(t.kind) ? t.kind : ''}
-          onChange={(e) => {
-            const k = e.currentTarget.value as TxKind | ''
-            if (!k) return
-            setZeroSign(null)
-            update((r) => withKind(r, k))
-          }}
-          aria-label="Inny rodzaj"
-          data-testid="operation-kind-other"
-        >
-          <option value="">inne…</option>
-          {OTHER_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {TX_KIND_LABEL[k]}
-            </option>
-          ))}
-        </select>
-      </div>
-      {directions && (
-        <Segmented
-          size="sm"
-          value={outgoing ? 'out' : 'in'}
-          onChange={(d) => setDirection(d === 'out' ? -1 : 1)}
-          options={[
-            { value: 'out', label: directions[0] },
-            { value: 'in', label: directions[1] }
-          ]}
-          aria-label="Kierunek"
-        />
-      )}
-
-      <Field label="Kwota" hint={t.kind === 'expense' && t.amount > 0 ? 'Zwrot towaru: ujemny wydatek tej samej kategorii.' : undefined}>
-        <div className="flex items-center gap-2">
-          <AmountField
-            className={cx('w-[140px]', t.amount > 0 && 'text-up')}
-            value={abs}
-            // The lines follow the sign chosen before the total was typed; a shared purchase's are made again (D83).
-            onChange={(v) => update((r) => withAmount(r, sign * (v ?? 0)))}
-            autoFocus={isDraft}
-            aria-label="Kwota"
-            data-testid="operation-amount"
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Segmented
+            size="sm"
+            value={MAIN_KINDS.includes(t.kind) ? t.kind : null}
+            onChange={(k) => {
+              setZeroSign(null)
+              update((r) => withKind(r, k))
+            }}
+            options={MAIN_KINDS.map((k) => ({ value: k, label: k === 'trading' ? 'XTB' : TX_KIND_LABEL[k] }))}
+            aria-label="Rodzaj operacji"
           />
-          <span className="text-muted">zł</span>
-        </div>
-      </Field>
-      <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
-        <div className="flex items-center gap-2">
-          <DateField className="w-[110px]" value={t.date} notAfter={fleet?.today} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
-          <TimeField className="w-[70px]" value={t.time} allowEmpty onChange={(time) => patch({ time })} aria-label="Godzina" data-testid="operation-time" />
-          {night && (
-            <Badge tone="warn" title={`Cisza nocna ${orders.quietHours.from}–${orders.quietHours.to}`} data-testid="operation-night">
-              noc
-            </Badge>
-          )}
-          {fleet && t.date > fleet.today && (
-            <Badge tone="warn" title="Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia" data-testid="operation-future">
-              w przyszłości
-            </Badge>
-          )}
-        </div>
-      </Field>
-      <Field label="Konto">
-        <AccountSelect
-          className="w-[200px]"
-          value={t.accountId}
-          onChange={(accountId) => {
-            if (!accountId) return
-            rememberAccount(accountId)
-            patch({ accountId, counterAccountId: t.counterAccountId === accountId ? null : t.counterAccountId })
-          }}
-          data-testid="operation-account"
-        />
-      </Field>
-      <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'}>
-        <TextField commit value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
-      </Field>
-      {(t.title || t.kind === 'transfer' || t.kind === 'income') && (
-        <Field label="Tytuł">
-          <TextField commit value={t.title} onChange={(title) => patch({ title })} maxLength={1000} data-testid="operation-title" />
-        </Field>
-      )}
-
-      {t.kind === 'expense' && (
-        <Section title="Kategoria">
-          {t.splits.length === 0 || share ? (
-            <>
-              <div className="flex items-center gap-2">
-                <CategorySelect
-                  className="min-w-0 flex-1"
-                  value={t.categoryId}
-                  // A shared purchase's lines take the category with it (one category, D83).
-                  onChange={(categoryId) => update((r) => (shareOf(r) ? withShare({ ...r, categoryId }, r.share!) : { ...r, categoryId }))}
-                  data-testid="operation-category"
-                />
-                {!share && (
-                  <button
-                    type="button"
-                    className="btn h-[24px] shrink-0"
-                    onClick={() =>
-                      patch({
-                        splits: [
-                          { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, ...(t.refundable && t.gift ? { gift: true } : {}), note: '' },
-                          { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
-                        ],
-                        gift: undefined
-                      })
-                    }
-                    title="Kilka kategorii albo część swoja i część domownika"
-                    data-testid="operation-split"
-                  >
-                    Podziel paragon
-                  </button>
-                )}
-              </div>
-              {!share && t.bank && bankNameOf(t) && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
-                <button
-                  type="button"
-                  className="self-start text-[11.5px] text-accent hover:underline"
-                  onClick={() => rememberCategory(t, cats.label(t.categoryId))}
-                  title="Kolejne importy z banku dadzą temu kontrahentowi tę kategorię – po nazwie, którą pisze bank"
-                  data-testid="operation-remember"
-                >
-                  {/* The bank's name: the one the rule learns (N15); the user's own in brackets. */}
-                  Zapamiętaj: „{bankNameOf(t)}”{t.counterparty && t.counterparty !== bankNameOf(t) ? ` (${t.counterparty})` : ''} → {cats.label(t.categoryId)}
-                </button>
-              )}
-              {officer && (
-                <button
-                  type="button"
-                  className="self-start text-[11.5px] text-accent hover:underline"
-                  onClick={() => update((r) => (shareOf(r) ? withShare({ ...r, categoryId: officer.categoryId }, r.share!) : { ...r, categoryId: officer.categoryId }))}
-                  title={`Oficer: ${OFFICER_SOURCE_LABEL[officer.source]}`}
-                  data-testid="operation-officer"
-                >
-                  oficer: {cats.label(officer.categoryId)}
-                </button>
-              )}
-              {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId, goalId: containerId ? null : t.goalId })} />}
-              {share ? (
-                <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2">
-                  <span className="text-[11.5px] text-muted">{outgoing ? 'Wspólnie – kto ile płaci' : 'Zwrot wspólnego zakupu – dla kogo ile'}</span>
-                  <ShareEditor share={share} total={abs} members={members} onChange={(s) => update((r) => withShare(r, s))} onClear={() => update((r) => withShare(r, null))} testId="operation-share" />
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
-                  <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" />
-                  {firstMember && (
-                    <button
-                      type="button"
-                      className="btn h-[24px] shrink-0"
-                      onClick={() => update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))}
-                      title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami (D83)"
-                      data-testid="operation-share-start"
-                    >
-                      Wspólnie
-                    </button>
-                  )}
-                </div>
-              )}
-              <FinancedNote t={t} />
-            </>
-          ) : (
-            <SplitEditor t={t} sign={sign} update={update} />
-          )}
-          <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
-        </Section>
-      )}
-
-      {t.kind === 'income' && t.amount >= 0 && <MemberIncome t={t} patch={patch} />}
-
-      {t.kind === 'transfer' && (
-        <Field label={outgoing ? 'Na konto' : 'Z konta'}>
-          <AccountSelect
-            className="w-[200px]"
-            value={t.counterAccountId}
-            onChange={(counterAccountId) => patch({ counterAccountId })}
-            none="konto spoza budżetu"
-            exclude={t.accountId}
-            data-testid="operation-counter-account"
-          />
-        </Field>
-      )}
-      {t.kind === 'trading' && (
-        <p className="text-[11.5px] text-muted">
-          {outgoing
-            ? 'Dopłata do konta tradingowego XTB – tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (rozkaz „firewall”).'
-            : 'Wypłata z konta tradingowego dokuje jak każda dostawa; FI łączy ją z wpisem w ICTTJ (pula Cele, Podatek…) – Mostek → Dokowanie.'}
-        </p>
-      )}
-      {t.kind === 'loan' && (
-        <Field label="Pożyczka">
-          <select className="input w-[240px]" value={t.loanId ?? ''} disabled={readOnly} onChange={(e) => patch({ loanId: e.currentTarget.value || null })} data-testid="operation-loan">
-            <option value="">— bez pożyczki z radaru —</option>
-            {loans.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name} ({l.direction === 'given' ? 'udzielona' : 'wzięta'})
+          <select
+            className={cx('input h-[22px] w-auto py-0 text-[11.5px]', OTHER_KINDS.includes(t.kind) && 'border-accent/60 text-accent')}
+            value={OTHER_KINDS.includes(t.kind) ? t.kind : ''}
+            onChange={(e) => {
+              const k = e.currentTarget.value as TxKind | ''
+              if (!k) return
+              setZeroSign(null)
+              update((r) => withKind(r, k))
+            }}
+            aria-label="Inny rodzaj"
+            data-testid="operation-kind-other"
+          >
+            <option value="">inne…</option>
+            {OTHER_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {TX_KIND_LABEL[k]}
               </option>
             ))}
           </select>
-          {!t.loanId && <LoanHint t={t} fleet={fleet} loans={loans} readOnly={readOnly} onPick={(loanId) => patch({ loanId })} />}
-        </Field>
-      )}
-
-      {showLog && (
-        <Section title="Dziennik kapitański">
-          <div className="flex items-center gap-2">
-            <Segmented
-              size="sm"
-              value={t.impulse}
-              onChange={(impulse) => patch({ impulse })}
-              options={[
-                { value: 'plan', label: 'plan' },
-                { value: 'impulse', label: 'impuls' }
-              ]}
-              aria-label="Plan czy impuls"
-            />
-            {t.impulse && (
-              <button type="button" className="text-[11px] text-dim hover:text-fg-strong" onClick={() => patch({ impulse: null })}>
-                wyczyść
-              </button>
-            )}
-            {asksImpulse(t, orders) && !t.impulse && <span className="text-[11.5px] text-accent">od {plnText(orders.impulseThreshold)} zł: plan czy impuls?</span>}
-          </div>
-          <TextArea
-            commit
-            value={t.logNote}
-            onChange={(logNote) => patch({ logNote })}
-            rows={2}
-            placeholder={night ? 'Zakup w ciszy nocnej – krótko: dlaczego teraz?' : 'Krótko: skąd ten zakup?'}
-            data-testid="operation-log"
-          />
-          {night && !t.logNote.trim() && (
-            <p className="text-[11.5px] text-accent" data-testid="operation-night-confirm">
-              Godzina w ciszy nocnej ({orders.quietHours.from}–{orders.quietHours.to}): zakup o tej porze potwierdź krótkim wpisem wyżej (D40). Dopisujesz zakup z dnia?{' '}
-              <button type="button" className="text-accent underline" onClick={() => patch({ time: null })} data-testid="operation-night-clear">
-                usuń godzinę
-              </button>
-            </p>
-          )}
-        </Section>
-      )}
-
-      <Field label="Notatka">
-        <TextArea commit value={t.note} onChange={(note) => patch({ note })} rows={2} data-testid="operation-note" />
-      </Field>
-
-      {t.bank && (
-        <Section title={`Z banku${account ? ` (${account.name})` : ''}`}>
-          <div className="text-[11.5px] break-words text-muted" data-testid="operation-bank">
-            {t.bank.description}
-          </div>
-          <div className="flex flex-wrap gap-x-3 text-[11px] text-dim">
-            {t.bank.operation && <span>{t.bank.operation}</span>}
-            {t.bank.category && <span>kategoria mBanku: {t.bank.category}</span>}
-          </div>
-        </Section>
-      )}
-      {!isDraft && (
-        <div className="text-[10.5px] text-dim">
-          zapisano {new Date(t.updatedAt).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
-          {t.updatedBy ? ` · ${t.updatedBy}` : ''}
         </div>
-      )}
-    </fieldset>
+        {directions && (
+          <Segmented
+            size="sm"
+            value={outgoing ? 'out' : 'in'}
+            onChange={(d) => setDirection(d === 'out' ? -1 : 1)}
+            options={[
+              { value: 'out', label: directions[0] },
+              { value: 'in', label: directions[1] }
+            ]}
+            aria-label="Kierunek"
+          />
+        )}
+
+        <Field label="Kwota" hint={t.kind === 'expense' && t.amount > 0 ? 'Zwrot towaru: ujemny wydatek tej samej kategorii.' : undefined}>
+          <div className="flex items-center gap-2">
+            <AmountField
+              className={cx('w-[140px]', t.amount > 0 && 'text-up')}
+              value={abs}
+              // The lines follow the sign chosen before the total was typed; a shared purchase's are made again (D83).
+              onChange={(v) => update((r) => withAmount(r, sign * (v ?? 0)))}
+              autoFocus={isDraft}
+              aria-label="Kwota"
+              data-testid="operation-amount"
+            />
+            <span className="text-muted">zł</span>
+          </div>
+        </Field>
+        <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
+          <div className="flex items-center gap-2">
+            <DateField className="w-[110px]" value={t.date} notAfter={fleet?.today} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
+            <TimeField className="w-[70px]" value={t.time} allowEmpty onChange={(time) => patch({ time })} aria-label="Godzina" data-testid="operation-time" />
+            {night && (
+              <Badge tone="warn" title={`Cisza nocna ${orders.quietHours.from}–${orders.quietHours.to}`} data-testid="operation-night">
+                noc
+              </Badge>
+            )}
+            {fleet && t.date > fleet.today && (
+              <Badge tone="warn" title="Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia" data-testid="operation-future">
+                w przyszłości
+              </Badge>
+            )}
+          </div>
+        </Field>
+        <Field label="Konto">
+          <AccountSelect
+            className="w-[200px]"
+            value={t.accountId}
+            onChange={(accountId) => {
+              if (!accountId) return
+              rememberAccount(accountId)
+              patch({ accountId, counterAccountId: t.counterAccountId === accountId ? null : t.counterAccountId })
+            }}
+            data-testid="operation-account"
+          />
+        </Field>
+        <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'}>
+          <TextField commit value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
+        </Field>
+        {(t.title || t.kind === 'transfer' || t.kind === 'income') && (
+          <Field label="Tytuł">
+            <TextField commit value={t.title} onChange={(title) => patch({ title })} maxLength={1000} data-testid="operation-title" />
+          </Field>
+        )}
+
+        {t.kind === 'expense' && (
+          <Section title="Kategoria">
+            {t.splits.length === 0 || share ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <CategorySelect
+                    className="min-w-0 flex-1"
+                    value={t.categoryId}
+                    // A shared purchase's lines take the category with it (one category, D83).
+                    onChange={(categoryId) => update((r) => (shareOf(r) ? withShare({ ...r, categoryId }, r.share!) : { ...r, categoryId }))}
+                    data-testid="operation-category"
+                  />
+                  {!share && (
+                    <button
+                      type="button"
+                      className="btn h-[24px] shrink-0"
+                      onClick={() =>
+                        patch({
+                          splits: [
+                            { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, ...(t.refundable && t.gift ? { gift: true } : {}), note: '' },
+                            { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
+                          ],
+                          gift: undefined
+                        })
+                      }
+                      title="Kilka kategorii albo część swoja i część domownika"
+                      data-testid="operation-split"
+                    >
+                      Podziel paragon
+                    </button>
+                  )}
+                </div>
+                {!share && t.bank && bankNameOf(t) && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
+                  <button
+                    type="button"
+                    className="self-start text-[11.5px] text-accent hover:underline"
+                    onClick={() => rememberCategory(t, cats.label(t.categoryId))}
+                    title="Kolejne importy z banku dadzą temu kontrahentowi tę kategorię – po nazwie, którą pisze bank"
+                    data-testid="operation-remember"
+                  >
+                    {/* The bank's name: the one the rule learns (N15); the user's own in brackets. */}
+                    Zapamiętaj: „{bankNameOf(t)}”{t.counterparty && t.counterparty !== bankNameOf(t) ? ` (${t.counterparty})` : ''} → {cats.label(t.categoryId)}
+                  </button>
+                )}
+                {officer && (
+                  <button
+                    type="button"
+                    className="self-start text-[11.5px] text-accent hover:underline"
+                    onClick={() => update((r) => (shareOf(r) ? withShare({ ...r, categoryId: officer.categoryId }, r.share!) : { ...r, categoryId: officer.categoryId }))}
+                    title={`Oficer: ${OFFICER_SOURCE_LABEL[officer.source]}`}
+                    data-testid="operation-officer"
+                  >
+                    oficer: {cats.label(officer.categoryId)}
+                  </button>
+                )}
+                {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId, goalId: containerId ? null : t.goalId })} />}
+                {share ? (
+                  <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2">
+                    <span className="text-[11.5px] text-muted">{outgoing ? 'Wspólnie – kto ile płaci' : 'Zwrot wspólnego zakupu – dla kogo ile'}</span>
+                    <ShareEditor share={share} total={abs} members={members} onChange={(s) => update((r) => withShare(r, s))} onClear={() => update((r) => withShare(r, null))} testId="operation-share" />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
+                    <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" />
+                    {firstMember && (
+                      <button
+                        type="button"
+                        className="btn h-[24px] shrink-0"
+                        onClick={() => update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))}
+                        title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami (D83)"
+                        data-testid="operation-share-start"
+                      >
+                        Wspólnie
+                      </button>
+                    )}
+                  </div>
+                )}
+                <FinancedNote t={t} />
+              </>
+            ) : (
+              <SplitEditor t={t} sign={sign} update={update} />
+            )}
+            <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
+          </Section>
+        )}
+
+        {t.kind === 'income' && t.amount >= 0 && <MemberIncome t={t} patch={patch} />}
+
+        {t.kind === 'transfer' && (
+          <Field label={outgoing ? 'Na konto' : 'Z konta'}>
+            <AccountSelect
+              className="w-[200px]"
+              value={t.counterAccountId}
+              onChange={(counterAccountId) => patch({ counterAccountId })}
+              none="konto spoza budżetu"
+              exclude={t.accountId}
+              data-testid="operation-counter-account"
+            />
+          </Field>
+        )}
+        {t.kind === 'trading' && (
+          <p className="text-[11.5px] text-muted">
+            {outgoing
+              ? 'Dopłata do konta tradingowego XTB – tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (rozkaz „firewall”).'
+              : 'Wypłata z konta tradingowego dokuje jak każda dostawa; FI łączy ją z wpisem w ICTTJ (pula Cele, Podatek…) – Mostek → Dokowanie.'}
+          </p>
+        )}
+        {t.kind === 'loan' && (
+          <Field label="Pożyczka">
+            <select className="input w-[240px]" value={t.loanId ?? ''} disabled={readOnly} onChange={(e) => patch({ loanId: e.currentTarget.value || null })} data-testid="operation-loan">
+              <option value="">— bez pożyczki z radaru —</option>
+              {loans.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.direction === 'given' ? 'udzielona' : 'wzięta'})
+                </option>
+              ))}
+            </select>
+            {!t.loanId && <LoanHint t={t} fleet={fleet} loans={loans} readOnly={readOnly} onPick={(loanId) => patch({ loanId })} />}
+          </Field>
+        )}
+
+        {showLog && (
+          <Section title="Dziennik kapitański">
+            <div className="flex items-center gap-2">
+              <Segmented
+                size="sm"
+                value={t.impulse}
+                onChange={(impulse) => patch({ impulse })}
+                options={[
+                  { value: 'plan', label: 'plan' },
+                  { value: 'impulse', label: 'impuls' }
+                ]}
+                aria-label="Plan czy impuls"
+              />
+              {t.impulse && (
+                <button type="button" className="text-[11px] text-dim hover:text-fg-strong" onClick={() => patch({ impulse: null })}>
+                  wyczyść
+                </button>
+              )}
+              {asksImpulse(t, orders) && !t.impulse && <span className="text-[11.5px] text-accent">od {plnText(orders.impulseThreshold)} zł: plan czy impuls?</span>}
+            </div>
+            <TextArea
+              commit
+              value={t.logNote}
+              onChange={(logNote) => patch({ logNote })}
+              rows={2}
+              placeholder={night ? 'Zakup w ciszy nocnej – krótko: dlaczego teraz?' : 'Krótko: skąd ten zakup?'}
+              data-testid="operation-log"
+            />
+            {night && !t.logNote.trim() && (
+              <p className="text-[11.5px] text-accent" data-testid="operation-night-confirm">
+                Godzina w ciszy nocnej ({orders.quietHours.from}–{orders.quietHours.to}): zakup o tej porze potwierdź krótkim wpisem wyżej (D40). Dopisujesz zakup z dnia?{' '}
+                <button type="button" className="text-accent underline" onClick={() => patch({ time: null })} data-testid="operation-night-clear">
+                  usuń godzinę
+                </button>
+              </p>
+            )}
+          </Section>
+        )}
+
+        <Field label="Notatka">
+          <TextArea commit value={t.note} onChange={(note) => patch({ note })} rows={2} data-testid="operation-note" />
+        </Field>
+
+        {t.bank && (
+          <Section title={`Z banku${account ? ` (${account.name})` : ''}`}>
+            <div className="text-[11.5px] break-words text-muted" data-testid="operation-bank">
+              {t.bank.description}
+            </div>
+            <div className="flex flex-wrap gap-x-3 text-[11px] text-dim">
+              {t.bank.operation && <span>{t.bank.operation}</span>}
+              {t.bank.category && <span>kategoria mBanku: {t.bank.category}</span>}
+            </div>
+          </Section>
+        )}
+        {!isDraft && (
+          <div className="text-[10.5px] text-dim">
+            zapisano {new Date(t.updatedAt).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+            {t.updatedBy ? ` · ${t.updatedBy}` : ''}
+          </div>
+        )}
+      </fieldset>
+    </div>
   )
 }
 

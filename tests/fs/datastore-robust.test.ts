@@ -218,3 +218,40 @@ describe('folder danych: zapis i usuwanie paczkami (1.4.3, W1, W8)', () => {
     ])
   })
 })
+
+describe('folder danych: scalanie kopii konfliktu (1.5.3, N17)', () => {
+  it('operacja zmieniona na dwóch komputerach: scalona zostaje pod oryginałem, obie strony w historii wpisu, kopii nie ma', async () => {
+    const store = await freshStore()
+    const { entry } = await store.saveRecord('transactions', sampleTransaction({ note: 'z domu' }))
+    const copyRel = entry.relPath.replace('.json', '-LAPTOP.json')
+    await fs.writeFile(join(store.root, ...copyRel.split('/')), serializeRecord('transactions', { ...entry.record, amount: -5000, note: 'z laptopa', updatedAt: '2026-03-21T10:00:00.000Z' }))
+    const found = await store.refresh()
+    expect(found!.conflicts.map((c) => c.id)).toEqual([copyRel])
+    const merged = { ...entry.record, amount: -5000, note: 'z domu' }
+    const change = await store.mergeConflict(copyRel, merged)
+    expect(change?.conflicts).toEqual([])
+    const snap = await store.snapshot()
+    expect(snap.records.transactions.map((e) => [e.record.id, e.record.amount, e.record.note])).toEqual([[entry.record.id, -5000, 'z domu']])
+    expect(await exists(join(store.root, ...copyRel.split('/')))).toBe(false)
+    const kept = await store.historyList('transactions', entry.record.id)
+    expect(kept.filter((e) => e.reason === 'merge')).toHaveLength(2)
+    const notes = await Promise.all(kept.filter((e) => e.reason === 'merge').map(async (e) => ((await store.historyRead('transactions', entry.record.id, e.file)) as { note: string }).note))
+    expect(notes.sort()).toEqual(['z domu', 'z laptopa'])
+  })
+
+  it('fi.json z dwóch komputerów: reguły z jednego i nazwa okrętu z drugiego w jednym pliku', async () => {
+    const store = await freshStore()
+    const snap = await store.snapshot()
+    const mine = await store.saveSettings({ ...snap.fi, settings: { ...snap.fi.settings, shipName: 'Dom' } })
+    await fs.writeFile(join(store.root, 'fi-LAPTOP.json'), serializeRecord('fi', { ...mine, settings: { ...mine.settings, shipName: 'Laptop', import: { ...mine.settings.import, ownNames: ['Kapitan'] } }, updatedAt: '2026-03-21T10:00:00.000Z' }))
+    const found = await store.refresh()
+    const conflict = found!.conflicts.find((c) => c.kind === 'fi')!
+    await store.mergeConflict(conflict.id, { ...mine, settings: { ...mine.settings, import: { ...mine.settings.import, ownNames: ['Kapitan'] } } })
+    const after = await store.snapshot()
+    expect(after.fi.settings.shipName).toBe('Dom')
+    expect(after.fi.settings.import.ownNames).toEqual(['Kapitan'])
+    expect(after.conflicts).toEqual([])
+    expect(await exists(join(store.root, 'fi-LAPTOP.json'))).toBe(false)
+    expect((await store.historyList('fi', mine.id)).filter((e) => e.reason === 'merge')).toHaveLength(2)
+  })
+})
