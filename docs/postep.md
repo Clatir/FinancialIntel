@@ -1,17 +1,17 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa J** (1.5.3 – system, folder, dwa komputery) zrobiona na
-gałęzi `claude/grupa-j-1.5.3`, PR #20 do `main` (scalenie po zielonym CI – D71); po J bez pauzy K (1.5.4 – wydajność,
-reszta) i L (1.6.0 – funkcje), każda z własnym PR i wydaniem; po L **pauza** (D67).
-**1.5.2 wydane** (PR #19), **1.5.1 wydane** (PR #18), **1.5.0 wydane**
+**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa K** (1.5.4 – szybkość, reszta) zrobiona na gałęzi
+`claude/grupa-k-1.5.4`, PR #21 do `main` (scalenie po zielonym CI – D71); po K bez pauzy L (1.6.0 – funkcje) z własnym
+PR i wydaniem; po L **pauza** (D67).
+**1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19), **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
 okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
 **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu PR #20 i wydaniu 1.5.3 – grupa K („Przed grupą K”), potem L bez czekania na komendę
-(D86). Do sprawdzenia w aplikacji: 1.5.0–1.5.3 – listy w sekcjach niżej.
+**Następny krok:** po scaleniu PR #21 i wydaniu 1.5.4 – grupa L („Przed grupą L”) bez czekania na komendę (D86), po
+niej pauza. Do sprawdzenia w aplikacji: 1.5.0–1.5.4 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -44,11 +44,11 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **G** | 1.5.0 Domownicy (D83: wielu finansujących, gotówka, prezent) + ICTTJ i dokowanie (B14–B22, B40, B41, N5) + święta (F42) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 3–4 h) | 1.5.0 | ✅ D83 | ✅ wydane (PR #17) |
 | **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.1 | ✅ D84 (C11) | ✅ wydane (PR #18) |
 | **I** | 1.5.2 Liczby się zgadzają: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.2 | ✅ D86 | ✅ wydane (PR #19) |
-| **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 2–3 h) | 1.5.3 | ✅ D86 | ✅ zrobione – PR #20, CI, scalenie |
-| **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | ok. 2 h | 1.5.4 | ✅ D86 | czeka na J |
+| **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 2–3 h) | 1.5.3 | ✅ D86 | ✅ wydane (PR #20) |
+| **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z pomiarami 30 / 150 tys., wzorcami wyników, przeglądem i E2E; część W27 w czasie CI grupy J; plan był ok. 2 h) | 1.5.4 | ✅ D86 | ✅ zrobione – PR #21, CI, scalenie |
 | **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | ok. 3–4 h | 1.6.0 | ✅ D86 | czeka na K |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J** | | | **ok. 34 h** (K–L: plan ok. 5–6 h) | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K** | | | **ok. 36 h** (L: plan ok. 3–4 h) | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -427,6 +427,58 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.5.3, Windows):
 5. Ustawienia → Powiadomienia: skrót Ctrl+Alt+S – komunikat; wersja portable z autostartem – jeden wpis w Menedżerze
    zadań → Uruchamianie.
 6. Mostek: Odprawa w osobnym oknie na drugim monitorze, praca w Operacjach – okno się odświeża i prowadzi kliknięciem.
+
+## Przed grupą K – szybkość, reszta (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa J wydana (1.5.3 – PR #20). Grupa K (1.5.4): pozostałe średnie pozycje wydajności z
+   przeglądu: ekran importu rysuje wszystko przy każdej decyzji (W17), plan importu od nowa po każdym zapisie ustawień
+   (W18), lista usuniętych przy każdym pliku importu blokuje zapisy (W19), import całej historii w kreatorze (W20), duża
+   paczka zmian z drugiego komputera w trybie „pytaj” (W25), silnik floty sortuje całą historię przy każdym przeliczeniu
+   (W27). Zachowanie bez zmian – tylko czas; każdy refaktor porównany z wynikami starego kodu.
+2. **Co użytkownik musi powiedzieć** – ✅ D86 (nic nowego).
+3. **Co przygotować** – nic przed startem; po wydaniu 1.5.4 (Windows): duży plik z mBanku, tryb „pytaj” przy pracy na
+   dwóch komputerach.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 2 h.
+
+## 1.5.4 – szybkość, reszta (grupa K, 19.10.2026)
+
+Zakres: W17–W20, W25, W27 („Przed grupą K” wyżej). Zrobione:
+- Silnik floty (T202): operacje sortowane raz na listę i wplatane w zdarzenia kalendarza, salda kont i przepływy pożyczek
+  jednym przejściem, części operacji z pamięci.
+- Plan importu i rozpoznanie (T203): indeksy operacji konta raz na listę, wpisy ręczne z ±3 dni, reguły po trybie i
+  kierunku, pamięć marek, nazw i podpowiedzi; plan od nowa tylko przy zmianie treści tego, co czyta.
+- Ekran importu (T204): temat, marka i wiersz rysowane tylko przy własnej zmianie, duży temat zwinięty na start, listy
+  po 100 z „pokaż kolejne”.
+- Lista usuniętych (T205): id pod blokadą, historia poza nią (16 naraz), wersja usuniętego zapamiętana po nazwie pliku.
+- Zmiany z drugiego komputera (T206): „Zastosuj” i „Zaakceptuj nowsze” jedną zmianą stanu i jednym zapisem, okno po 50.
+- Przegląd `/code-review` high: 7 kandydatów – wszystkie poprawione z testami (T207); pierwszą wersję pamięci kluczy
+  usuniętych złapało też pełne E2E (ponowny import po usunięciu operacji) – zastąpiona pamięcią w procesie głównym.
+- Testy: 539 unit + fs (kolejność zdarzeń silnika i pożyczki w `fleet.test.ts` / `loans.test.ts`, grupa K w
+  `import.test.ts`, nowy `import-replan.test.ts`, lista usuniętych w `tests/fs/history.test.ts`, zmiany z drugiego komputera
+  naraz w `data-store.test.ts`), E2E 41 (nowy `speed.spec.ts`: duży import, wiele zmian z drugiego komputera). Poprawki z
+  testem sprawdzonym bez nich (padają).
+
+Pomiary (dane syntetyczne, Linux; przed → po):
+
+| Co | 30 tys. operacji | 150 tys. operacji |
+| --- | --- | --- |
+| Silnik floty – jedno przeliczenie | 239 → 145–162 ms | 1,24–1,9 → 0,63–1,0 s |
+| Plan pliku z 90 dni (ciepły) | 241 → 28 ms | 3 528 → 72 ms (zimny ok. 0,65 s) |
+| Kreator: cała historia (30 tys. wierszy) do pustego budżetu | 5 265 → 251 ms (zimny ok. 0,6 s) | – |
+| Lista usuniętych (2 000 usuniętych) | 892–1 111 → 420–512 ms, kolejne wczytanie 96–100 ms; zapis w trakcie czekał 1 235 → 21–60 ms | – |
+| „Zastosuj” 1 000 zmian z drugiego komputera | 30,4–30,9 s → 31–49 ms; 500 zapisów → 1 paczka | 233–243 s → 253–264 ms |
+| Okno zmian z 1 000 czekającymi (pierwsze rysowanie) | 358–515 → 57–99 ms (50 kart zamiast 1 000) | – |
+
+Ekran importu (rysowanie całej strony, plik roku: 3 tys. wierszy i 600 marek / 15 tys. wierszy i 2 tys. marek):
+617–791 → 63–94 ms i 2,2–2,6 s → 165–192 ms; z wyszukiwaniem 1 111 → 482 ms i 5 704 → 1 236 ms.
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.5.4, Windows):
+1. Import dużego pliku z mBanku (np. cała historia rachunku): temat z wieloma markami zwinięty na start, „pokaż kolejne”,
+   decyzje i wyszukiwanie bez zacięć.
+2. Drugi plik importu w tej samej sesji: wczytanie bez czekania; operacja usunięta w Operacjach nie wraca.
+3. Ustawienia → Okręt → „Zawsze pytaj przed przyjęciem zmian”, import na drugim komputerze: okno zmian – 50 wpisów,
+   „pokaż kolejne”, „Zastosuj” i „Zaakceptuj nowsze”.
+4. Duży folder: Mostek i Operacje przeliczają się bez zacięć (np. szybki wpis, edycja kwoty).
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
@@ -1202,3 +1254,8 @@ Do sprawdzenia przez użytkownika (Windows 11):
   tylko do odczytu bez fałszywych sukcesów, „Scal…” kopii konfliktu, historia każdego wpisu, komputer „w użyciu” (baner,
   zapisy w tle, powiadomienia), pierwsze zamrożenie po otwarciu czeka, odłączone panele Mostka; przegląd `/code-review`
   high – 9 poprawek; nowe E2E `system.spec.ts`, `folder.spec.ts`, `presence.spec.ts`; PR #20 do `main`.
+- 19.10.2026 – PR #20 scalony, wydanie 1.5.3 opublikowane (job Windows na `main`); grupa K (1.5.4, szybkość – reszta):
+  silnik floty bez sortowania całej historii, plan importu i rozpoznanie z indeksami i pamięcią (także kreator), plan od
+  nowa tylko przy zmianie treści, ekran importu rysujący tylko zmienione, lista usuniętych bez blokady zapisów, zmiany z
+  drugiego komputera naraz; pomiar na 30 i 150 tys.; przegląd `/code-review` high – 7 poprawek; nowy E2E `speed.spec.ts`;
+  PR #21 do `main`.

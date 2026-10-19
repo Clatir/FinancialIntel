@@ -583,6 +583,27 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `tests/e2e/system.spec.ts`, `folder.spec.ts`, `presence.spec.ts` (`launch({hidden})` – start w zasobniku),
   `bridge.spec.ts` (okno odłączone poza Mostkiem), `numbers.spec.ts` (historia dokowania, Esc).
 
+## Kod (1.5.4 – szybkość, reszta, grupa K, D86)
+- Silnik (W27, T202): `calc/fleet.ts` – `sortedOps` (operacje sortowane raz na listę, WeakMap, komparator `opOrder`),
+  zdarzenia kalendarza sortowane osobno i wplatane dwoma wskaźnikami (`evFirst`), salda kont i ruchy sprzed startu jednym
+  przejściem; `calc/loans.ts` `flowsByLoan` (przepływy wszystkich pożyczek naraz); `calc/operations.ts` `partsOf` z pamięci
+  (WeakMap po rekordzie), `ownLines`; `calc/history.ts` `coveredMonths` bez powtórzeń.
+- Import (W18, W20, T203): `import/reconcile.ts` `budgetedOf` (indeksy konta raz na listę operacji), `manualNear` (wpisy
+  ręczne ±3 dni); `import/classify.ts` `ruleIndexOf(rules, kierunek)` (reguły po trybie, wzorzec słowa przy pierwszym
+  użyciu), pamięć `ruleTargetOf` / `hintFor` / `payeesOf`; `import/brands.ts` pamięć `brandOf` (do 50 tys.), `keywordIn`,
+  `keywordMatcher`; `features/import/state.ts` – plan od nowa tylko przy zmianie treści (`BY_CONTENT` + `deepEqual`),
+  listy z `listOf`. Ekran (W17, T204): `ImportPage.tsx` – `memo` tematu (`BIG_THEME` 30 – zwinięty na start), marki i
+  wiersza (`ImportRowLine`), selektory po kluczu, listy po 100 (`ShowMore` w `components/ui.tsx` – `import-groups-more`,
+  `import-rows-more`, `import-merge-more`, `import-deleted-more`), `skippedIn`; `operations/pickers.tsx` `categoryOptions`
+  z pamięci.
+- Lista usuniętych (W19, T205): `DataStore.historyDeleted` – id pod blokadą, historia poza nią; `RecordHistory.deleted` –
+  16 odczytów naraz (`mapLimit`), `deletedRead` (ostatnia wersja po nazwie pliku).
+- Zmiany z drugiego komputera (W25, T206): `store/data.ts` `resolveRemoteMany` / `RemoteDecision` (`resolveRemote` i
+  `acceptNewer` przez nią, zapis paczką `saveBatch`), `applyChange` – czekające po kluczu, `runSaveMany` zapomina wpis,
+  którego nie ma w pamięci; `RemoteChangesDialog.tsx` – 50 kart (`remote-more`, `remote-hidden`), `ItemCard` w `memo`.
+- Testy: `fleet.test.ts` / `loans.test.ts` (W27), `import.test.ts` (grupa K), `import-replan.test.ts`, `tests/fs/history.test.ts`
+  (W19), `data-store.test.ts` (W25), E2E `tests/e2e/speed.spec.ts` (duży import, wiele zmian z drugiego komputera).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -664,4 +685,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   pierwsze zamrożenie po otwarciu czeka, zmiana folderu z postępem i blokadą zapisów, tylko do odczytu bez fałszywych
   sukcesów, „Scal…” kopii konfliktu, historia każdego wpisu, odłączone panele Mostka, skrót AltGr, autostart, okno na
   ekranie, ekran wyboru folderu po przyczynie
+- [x] 1.5.4 Szybkość – reszta (grupa K, D86): ekran importu bez rysowania wszystkiego, plan importu bez przeglądania
+  wszystkiego (także kreator), lista usuniętych bez blokady zapisów, zmiany z drugiego komputera naraz, silnik floty bez
+  sortowania całej historii
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

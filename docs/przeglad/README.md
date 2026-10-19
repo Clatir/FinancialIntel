@@ -132,8 +132,8 @@ Wykonane według D84 (grupy E–H jednym ciągiem, `docs/postep.md`): **1.4.2** 
 oraz ICTTJ i dokowanie – B14–B22, B40, B41, N5, F0, F42), **1.5.1** = H (import – B34–B39, N12–N16 i z listy funkcji F4,
 F5, F8, F22). Według D86 (grupy I–L jednym ciągiem): **1.5.2** = I (liczby się zgadzają – B7, B8, B12, B23, B25, B26,
 B28, B57–B60, N3, N4, N6–N11, N21; B41 zamknięte według D85), **1.5.3** = J (system, folder i dwa komputery – B27, B29,
-B31, B33, B52–B54, N2, N17, N18, N20, F21). Zostają m.in.: K, L (wydajność – reszta, funkcje F1, F3, F6, F7, F13) i
-dalsze, niskie pozycje – niezaznaczone niżej.
+B31, B33, B52–B54, N2, N17, N18, N20, F21), **1.5.4** = K (wydajność – W17–W20, W25, W27). Zostają m.in.: L (funkcje
+F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone niżej.
 
 ## Lista do odhaczania
 
@@ -300,17 +300,17 @@ dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **W14** Wyszukiwanie na liście operacji składa i normalizuje (NFD) tekst każdej operacji przy każdym znaku zapytania – `shared/operationsView.ts:77`, `shared/operationsView.ts:96` (+5)
 - [x] **W15** Każde otwarcie szybkiego wpisu sortuje wszystkie wydatki (localeCompare) i może przeliczyć cały silnik – `renderer/store/quickHost.ts:30-75`, `main/quick.ts:111-122` (+5)
 - [x] **W16** Zaległe dni gry: każdy dzień to osobny pełny computeFleet od startu budżetu, liczony synchronicznie w rendererze i bez górnej granicy – `shared/calc/game.ts:532`, `shared/calc/game.ts:534` (+4)
-- [ ] **W17** Ekran importu bez wirtualizacji i memo: każda decyzja, zaznaczenie i znak w wyszukiwarce renderuje wszystkie grupy – `renderer/features/import/ImportPage.tsx:480`, `renderer/features/import/ImportPage.tsx:481` (+12)
-- [ ] **W18** Pełny ponowny plan importu po każdym zapisie fi.json – także gdy reguły się nie zmieniły – `renderer/features/import/ImportPage.tsx:786`, `renderer/features/import/ImportPage.tsx:791` (+7)
-- [ ] **W19** historyDeleted przy każdym wczytaniu pliku importu i na stronie Synchronizacja: przebudowa widoków na każdą kolekcję + sekwencyjny odczyt ostatniej wersji każdego usuniętego – `main/datastore/store.ts:1013`, `main/datastore/history.ts:131` (+10)
-- [ ] **W20** Import całej historii (kreator): koszt jednego wiersza 70–145 µs (brandOf liniowo po słowniku, findRule filtruje wszystkie reguły), a pełny plan liczy się od nowa po każdym słowie kluczowym czy połączeniu nazw – `shared/import/brands.ts:62`, `shared/import/brands.ts:639` (+7)
+- [x] **W17** Ekran importu bez wirtualizacji i memo: każda decyzja, zaznaczenie i znak w wyszukiwarce renderuje wszystkie grupy – `renderer/features/import/ImportPage.tsx:480`, `renderer/features/import/ImportPage.tsx:481` (+12)
+- [x] **W18** Pełny ponowny plan importu po każdym zapisie fi.json – także gdy reguły się nie zmieniły – `renderer/features/import/ImportPage.tsx:786`, `renderer/features/import/ImportPage.tsx:791` (+7)
+- [x] **W19** historyDeleted przy każdym wczytaniu pliku importu i na stronie Synchronizacja: przebudowa widoków na każdą kolekcję + sekwencyjny odczyt ostatniej wersji każdego usuniętego – `main/datastore/store.ts:1013`, `main/datastore/history.ts:131` (+10)
+- [x] **W20** Import całej historii (kreator): koszt jednego wiersza 70–145 µs (brandOf liniowo po słowniku, findRule filtruje wszystkie reguły), a pełny plan liczy się od nowa po każdym słowie kluczowym czy połączeniu nazw – `shared/import/brands.ts:62`, `shared/import/brands.ts:639` (+7)
 - [x] **W21** Pełne przeskanowanie folderu co 30 s i przy każdym fokusie okna, bez łączenia zaległych żądań – `main/datastore/watch.ts:52`, `main/index.ts:399-407` (+6)
 - [x] **W22** Na Windows każdy zapis prawdopodobnie wywołuje pełne przeskanowanie folderu (zdarzenie katalogu z rekurencyjnego fs.watch) – `main/datastore/watch.ts:66-73`, `main/datastore/store.ts:662-668` (+3)
 - [x] **W23** Rozstrzyganie konfliktów i „Do Kosza” robią pełny rescan na każdą pozycję; lista konfliktów bez wirtualizacji i w każdym ChangeSet – `main/datastore/store.ts:950`, `main/datastore/store.ts:987` (+4)
 - [x] **W24** Otwarcie folderu: zbędny stat przed każdym odczytem, wolny fs.promises.readFile i drugi pełny listing (cleanupTempFiles) – `main/datastore/store.ts:309`, `main/datastore/store.ts:318` (+2)
-- [ ] **W25** Tryb „pytaj” przy dużej paczce zmian z drugiego komputera: okno renderuje wszystkie karty, „Zastosuj” kopiuje mapę na każdą pozycję – `renderer/features/sync/RemoteChangesDialog.tsx:39`, `renderer/features/sync/RemoteChangesDialog.tsx:207` (+3)
+- [x] **W25** Tryb „pytaj” przy dużej paczce zmian z drugiego komputera: okno renderuje wszystkie karty, „Zastosuj” kopiuje mapę na każdą pozycję – `renderer/features/sync/RemoteChangesDialog.tsx:39`, `renderer/features/sync/RemoteChangesDialog.tsx:207` (+3)
 - [x] **W26** Proces główny trzyma pełny tekst każdego pliku (FileState.text) – połowa pamięci magazynu – `main/datastore/store.ts:47`, `main/datastore/store.ts:364-373` (+2)
-- [ ] **W27** computeFleet odtwarza całą historię od startu przy każdym wywołaniu – stałe koszty O(n log n) z dużą alokacją, a pożyczki i konta po osobnym przebiegu każde – `shared/calc/fleet.ts:846`, `shared/calc/fleet.ts:850` (+8)
+- [x] **W27** computeFleet odtwarza całą historię od startu przy każdym wywołaniu – stałe koszty O(n log n) z dużą alokacją, a pożyczki i konta po osobnym przebiegu każde – `shared/calc/fleet.ts:846`, `shared/calc/fleet.ts:850` (+8)
 
 ### Priorytet niski
 
