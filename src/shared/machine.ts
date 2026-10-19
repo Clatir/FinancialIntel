@@ -27,6 +27,8 @@ export interface NotifyPrefs {
   overrun: boolean
   /** A periodic fee (asteroid) 14 and 3 days before its month. */
   asteroid: boolean
+  /** A fixed fee (a container) 3 days after its due without a payment (F1). */
+  cargo: boolean
   /** No import from mBank for 3 days. */
   importOverdue: boolean
   /** Confirm the balances on Sunday. */
@@ -86,7 +88,7 @@ export function altGrConflict(accelerator: string): string | null {
 export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   quickShortcut: DEFAULT_QUICK_SHORTCUT,
   hideAmounts: false,
-  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true },
+  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, cargo: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true },
   // Sounds on and quiet (D70).
   sounds: { enabled: true, volume: 0.3, events: { entry: true, docking: true, alarm: true, promotion: true, plus: true } }
 }
@@ -114,6 +116,7 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
       low: bool(n.low, d.notify.low),
       overrun: bool(n.overrun, d.notify.overrun),
       asteroid: bool(n.asteroid, d.notify.asteroid),
+      cargo: bool(n.cargo, d.notify.cargo),
       importOverdue: bool(n.importOverdue, d.notify.importOverdue),
       balances: bool(n.balances, d.notify.balances),
       debriefing: bool(n.debriefing, d.notify.debriefing),

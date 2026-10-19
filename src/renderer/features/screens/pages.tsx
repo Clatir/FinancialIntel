@@ -3,7 +3,7 @@ import { IconBox, IconCalendar, IconChart, IconHelm, IconImport, IconList, IconR
 import type { Page } from '../../store/ui'
 
 export interface PageDef {
-  page: Exclude<Page, 'settings' | 'sync' | 'wizard'>
+  page: Exclude<Page, 'settings' | 'sync' | 'wizard' | 'inbox'>
   label: string
   /** The metaphor's subtitle in the menu (decision D34: the metaphor with the real name). */
   sub: string

@@ -18,6 +18,8 @@ import { useIctj } from './ictj'
 import { usePresence } from './presence'
 import { setFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
+import { cargoStatusesNow } from '../features/cargo/status'
+import { confirmNoSpend, eveningNow, snoozeEvening } from '../features/evening/state'
 
 const SENT_KEY = 'fi.notify.sent'
 
@@ -48,12 +50,20 @@ const CLICK_KEEPS_MS = 5000
 
 /** Where a notification's click (or the tray's „Raport wachty dnia” – 'today') leads. */
 export function openTag(tag: string): void {
+  // The evening report's answers from the tray's menu (F13): done here, the window stays where it is.
+  if (tag === 'evening:nospend' || tag === 'evening:snooze') {
+    const ok = tag === 'evening:nospend' ? confirmNoSpend() : (snoozeEvening(), true)
+    // The window hidden: the answer as a notification (its toast is not seen).
+    if (document.visibilityState !== 'visible')
+      void api.notify({ title: 'Raport wachty dnia', body: !ok ? 'Nie zapisano – otwórz okno aplikacji.' : tag === 'evening:nospend' ? 'Dziś bez wydatków – zapisane.' : 'Przypomnę za 30 minut.', tag: 'evening', silent: true })
+    return
+  }
   clickedAt = Date.now()
   const today = warsawNow().date
   if (tag === 'today' || tag === 'evening') {
     setFilter({ period: { kind: 'range', from: today, to: today }, accounts: [], kinds: [], categories: [], marks: [], query: '' })
     navigate({ page: 'operations' })
-  } else if (tag === 'asteroid') navigate({ page: 'cargo' })
+  } else if (tag === 'asteroid' || tag === 'cargo') navigate({ page: 'cargo' })
   else if (tag === 'import') navigate({ page: 'import' })
   else if (tag === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (tag === 'debriefing' || tag === 'low' || tag === 'overrun') navigate({ page: 'month' })
@@ -92,7 +102,9 @@ function check(opened: boolean, shown = false): void {
     money: (g) => `${plnText(g)} zł`,
     deliveries: deliveriesNow(),
     ictjProblem: null,
-    members: fi.settings.household.members
+    members: fi.settings.household.members,
+    cargo: cargoStatusesNow(),
+    evening: eveningNow()
   })
   const already = sent()
   const fresh: Notice[] = notices.filter((n) => !already[n.key])

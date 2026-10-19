@@ -1,9 +1,10 @@
 import { firstDayOf, monthOf, warsawNow } from '@shared/calc/dates'
 import { unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
 import { newId } from '@shared/ids'
-import { containerSchema, SCHEMA_VERSION, type Container, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
+import { containerSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Container, type Transaction } from '@shared/schema'
+import { addRecord, canWrite, deleteRecord, listOf, replaceRecords, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
+import { plnText } from '../../components/fields'
 import { deleteWithUndo } from '../history/actions'
 
 /** A new container's fields before it goes into the hold (the load line is checked first – spec). */
@@ -112,4 +113,32 @@ export async function deleteContainer(c: Container): Promise<boolean> {
     if (still.length) replaceRecords('transactions', still.map((t) => ({ ...t, containerId: null })))
   }
   return ok
+}
+
+/**
+ * A fixed fee paid where no file of the bank shows it (cash, Portfel XTB) – or before its import (F1): its operation
+ * today, linked to the container, with its amount, account and category; „Cofnij” takes it back. An operation of an
+ * imported account is matched with the bank's row by the next import (a hand-typed entry).
+ */
+export function payContainer(c: Container): string | null {
+  if (!canWrite()) return null
+  const accounts = useData.getState().fi?.settings.accounts ?? []
+  const accountId = accounts.some((a) => a.id === c.accountId && !a.archived) ? c.accountId! : MBANK_ACCOUNT_ID
+  const now = new Date().toISOString()
+  const record = transactionSchema.parse({
+    schemaVersion: SCHEMA_VERSION,
+    id: newId(),
+    createdAt: now,
+    updatedAt: now,
+    date: warsawNow().date,
+    accountId,
+    amount: -c.amount,
+    kind: 'expense',
+    categoryId: c.categoryId,
+    counterparty: c.counterparty.trim() || c.name,
+    containerId: c.id
+  })
+  addRecord('transactions', record)
+  toast(`Zapisano płatność: ${c.name} ${plnText(c.amount)} zł (dziś).`, 'success', 6000, { label: 'Cofnij', run: () => void deleteRecord('transactions', record.id) })
+  return record.id
 }

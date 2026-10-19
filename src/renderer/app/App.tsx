@@ -25,6 +25,8 @@ import { useHouseholdSinceSeed } from '../features/household/actions'
 import { CommandPage } from '../features/command/CommandPage'
 import { IntelPage } from '../features/intel/IntelPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
+import { InboxPage } from '../features/inbox/InboxPage'
+import { useInboxCount } from '../features/inbox/state'
 import { GameCelebrations } from '../features/command/Celebration'
 import { useGameAdvance, useGameCelebrations } from '../store/game'
 import { DockingDialog } from '../features/dock/DockingDialog'
@@ -36,7 +38,7 @@ import { useFleet } from '../store/fleet'
 import { api } from '../lib/api'
 import { plnText, setAmountsHidden } from '../components/fields'
 import { Toasts } from '../components/Toasts'
-import { IconExternal, IconGear, IconSync } from '../components/icons'
+import { IconExternal, IconGear, IconInbox, IconSync } from '../components/icons'
 import { cx } from '../components/ui'
 import { PageBar } from './PageBar'
 import { Banners } from './Banners'
@@ -61,7 +63,7 @@ function useBackNavigation(): void {
       const el = document.activeElement as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
       const route = useUi.getState().route
-      if (route.page === 'settings' || route.page === 'sync') goBack()
+      if (route.page === 'settings' || route.page === 'sync' || route.page === 'inbox') goBack()
     }
     window.addEventListener('mouseup', onMouse)
     window.addEventListener('keydown', onKey)
@@ -92,6 +94,9 @@ function useGlobalHotkeys(): void {
       } else if (k === 'y' && e.shiftKey) {
         e.preventDefault()
         navigate({ page: 'sync' })
+      } else if (k === 'm' && e.shiftKey) {
+        e.preventDefault()
+        navigate({ page: 'inbox' })
       } else if (e.key === '$' || (e.shiftKey && e.code === 'Digit4')) {
         e.preventDefault()
         toggleHideAmounts()
@@ -146,6 +151,7 @@ function NavItem({
       onClick={onClick}
       title={[keys ? `${label} (${keys})` : label, dim].filter(Boolean).join(' – ')}
       data-testid={testId}
+      data-badge={badge || undefined}
       aria-current={active ? 'page' : undefined}
       className={cx(
         'relative flex h-[38px] w-full shrink-0 items-center gap-2.5 border-l-2 px-3 text-left transition-colors duration-100',
@@ -168,6 +174,7 @@ function NavItem({
 function SideMenu({ route }: { route: Route }) {
   const shipName = useData((s) => s.fi?.settings.shipName ?? '')
   const issues = useData((s) => s.conflicts.length + s.problems.filter((p) => p.kind !== 'unknown-file').length)
+  const reports = useInboxCount()
   return (
     <nav className="flex w-[208px] shrink-0 flex-col overflow-y-auto border-r border-line bg-panel [scrollbar-width:none]" data-testid="side-menu">
       <div className="flex h-[52px] shrink-0 flex-col justify-center border-b border-line px-3">
@@ -194,6 +201,16 @@ function SideMenu({ route }: { route: Route }) {
       <div className="flex-1" />
       <div className="flex flex-col border-t border-line py-1">
         <NavItem
+          active={route.page === 'inbox'}
+          onClick={() => navigate({ page: 'inbox' })}
+          icon={<IconInbox size={16} />}
+          label="Meldunki"
+          sub="do rozpatrzenia"
+          keys="Ctrl Shift M"
+          badge={reports}
+          testId="nav-inbox"
+        />
+        <NavItem
           active={false}
           onClick={() => void openIctj(() => navigate({ page: 'settings', tab: 'ictj' }))}
           icon={<IconExternal size={16} />}
@@ -219,6 +236,7 @@ function SideMenu({ route }: { route: Route }) {
 function Page({ route }: { route: Route }) {
   if (route.page === 'settings') return <SettingsPage />
   if (route.page === 'sync') return <SyncPage />
+  if (route.page === 'inbox') return <InboxPage />
   if (route.page === 'operations') return <OperationsPage />
   if (route.page === 'import') return <ImportPage />
   if (route.page === 'month') return <MonthPage />

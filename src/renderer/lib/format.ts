@@ -1,5 +1,6 @@
 // adapted from ICTTJ src/renderer/lib/format.ts @ 84a8339
-import { addDays } from '@shared/calc/dates'
+import { addDays, warsawNow } from '@shared/calc/dates'
+import { plural } from '@shared/format'
 const MINUS = '−'
 
 export function fmtNum(v: number | null | undefined, decimals = 2): string {
@@ -10,19 +11,8 @@ export function fmtPercent(v: number | null | undefined, decimals = 0): string {
   return v == null || !Number.isFinite(v) ? '—' : `${(v * 100).toFixed(decimals)}%`
 }
 
-/**
- * Polish plural form of the noun after a number: 1 → `one`, 2–4 (except 12–14) → `few`, otherwise `many`;
- * a fractional number takes `fraction` (genitive singular: "2.5 pipsa"), by default the `few` form.
- */
-export function plural(n: number, one: string, few: string, many: string, fraction = few): string {
-  if (!Number.isFinite(n)) return many
-  const abs = Math.abs(n)
-  if (!Number.isInteger(abs)) return fraction
-  if (abs === 1) return one
-  const last = abs % 10
-  const lastTwo = abs % 100
-  return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? few : many
-}
+/** Polish plural form of the noun after a number (in `shared/format.ts` – the notifications and the inbox use it too). */
+export { plural }
 
 /** "3 cele", "5 miesięcy", "1 dzień". */
 export function countLabel(n: number, one: string, few: string, many: string, fraction?: string): string {
@@ -97,14 +87,44 @@ export function parseNumberInput(text: string): number | null | undefined {
 
 /**
  * An amount typed or shown with grouped thousands: spaces (also U+00A0) ignored, comma or dot, minus "-" or
- * U+2212; a value beyond ±1e12 is clipped (appendix B); null = empty, undefined = invalid.
+ * U+2212; a value beyond ±1e12 is clipped (appendix B); null = empty, undefined = invalid. Counted when typed as a sum
+ * (F7): „12,50+8,30”, „3*4,99”, „100-15” – multiplying and dividing first, the result to the grosz.
  */
 export function parseAmountInput(text: string): number | null | undefined {
-  const t = text.replace(/\s/g, '').replace(MINUS, '-').replace(',', '.')
+  const t = text.replace(/\s/g, '').replaceAll(MINUS, '-')
   if (t === '') return null
-  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(t)) return undefined
-  const v = Number(t)
-  return Number.isFinite(v) ? Math.min(1e12, Math.max(-1e12, v)) : undefined
+  const plain = t.replace(',', '.')
+  if (/^[-+]?(\d+\.?\d*|\.\d+)$/.test(plain)) {
+    const v = Number(plain)
+    return Number.isFinite(v) ? Math.min(1e12, Math.max(-1e12, v)) : undefined
+  }
+  const v = sumOf(t.replaceAll(',', '.'))
+  return v === undefined || !Number.isFinite(v) ? undefined : Math.min(1e12, Math.max(-1e12, Math.round(v * 100) / 100))
+}
+
+/** „12.5+8*2-1” (no brackets): multiplying and dividing first, left to right; undefined = not such a sum. */
+function sumOf(t: string): number | undefined {
+  const parts = /^[-+]?(\d+\.?\d*|\.\d+)([-+*/:](\d+\.?\d*|\.\d+))*$/.exec(t)
+  if (!parts) return undefined
+  const tokens = t.match(/^[-+]|\d+\.?\d*|\.\d+|[-+*/:]/g) ?? []
+  let i = 0
+  let sign = 1
+  if (tokens[0] === '-' || tokens[0] === '+') sign = tokens[i++] === '-' ? -1 : 1
+  let total = 0
+  let term = sign * Number(tokens[i++])
+  while (i < tokens.length) {
+    const op = tokens[i++]!
+    const v = Number(tokens[i++])
+    if (op === '*') term *= v
+    else if (op === '/' || op === ':') {
+      if (v === 0) return undefined
+      term /= v
+    } else {
+      total += term
+      term = op === '-' ? -v : v
+    }
+  }
+  return total + term
 }
 
 /** Parse "330", "3:30", "03.30", "0330" → "03:30". */
@@ -136,13 +156,21 @@ function isoDay(y: number, mo: number, d: number): string | null {
 
 const dayMs = (iso: string) => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)))
 
+/** Days typed by word (F7): today, yesterday, the day before. */
+const DAY_WORDS: Record<string, number> = { dziś: 0, dzis: 0, dzisiaj: 0, wczoraj: -1, wcz: -1, przedwczoraj: -2 }
+
 /**
  * Parse "2026-03-16", "16.03.2026", "16.03" (the fallback year). `notAfter` (an operation's date – B12): "16.03" without
  * a year is the day nearest to `near` (the field's date: 02.01 typed on an operation of 30.12 is the January after) and
  * never more than a week after `notAfter` – 28.12 typed on 3 January is the December gone by. A later day needs its year.
+ * Also by word (F7): „dziś”, „wczoraj” („wcz”), „przedwczoraj”, „-3” (days before `today`).
  */
-export function parseDateInput(text: string, fallbackYear = new Date().getFullYear(), notAfter?: string, near?: string): string | null {
+export function parseDateInput(text: string, fallbackYear = new Date().getFullYear(), notAfter?: string, near?: string, today = warsawNow().date): string | null {
   const t = text.trim()
+  const key = t.toLowerCase()
+  if (Object.hasOwn(DAY_WORDS, key)) return addDays(today, DAY_WORDS[key]!)
+  const back = /^-(\d{1,3})$/.exec(t)
+  if (back) return addDays(today, -Number(back[1]))
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
   if (m) return isoDay(Number(m[1]), Number(m[2]), Number(m[3]))
   if (!(m = /^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}))?$/.exec(t))) return null

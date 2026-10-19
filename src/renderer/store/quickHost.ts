@@ -4,6 +4,7 @@
  * owns the data folder's records.
  */
 import type { QuickData, QuickResult } from '@shared/api'
+import { quickTemplates } from '@shared/calc/quick'
 import { daysInMonth, warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
@@ -12,7 +13,7 @@ import { envelopeKind, inflowOf, SCHEMA_VERSION, shareSchema, transactionSchema,
 import { rememberInflows } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
-import { addRecord, useData } from './data'
+import { addRecord, listOf, useData } from './data'
 import { officerNow } from './officer'
 import { fleetNow } from './fleet'
 import { useMachine } from './machine'
@@ -63,7 +64,8 @@ export function quickData(): QuickData | null {
         return { id: m.id, name: m.name, owed: b?.owed ?? 0, deposit: b?.deposit ?? 0, inflow: inflowOf(m), via: m.via ?? null }
       }),
     hideAmounts: useMachine.getState().prefs.hideAmounts,
-    readOnly: !!s.status?.readOnly
+    readOnly: !!s.status?.readOnly,
+    ...quickTemplates(listOf(s.records.transactions))
   }
 }
 
@@ -181,6 +183,7 @@ export function initQuickHost(): void {
     playSound('entry')
     const today = warsawNow().date
     toast(`Szybki wpis: ${t.counterparty || (t.kind === 'income' ? 'wpływ' : 'wydatek')}${t.date !== today ? ` (${t.date})` : ''}.`, 'success', 2500)
-    answer({ ok: true, message: 'Zapisano.' })
+    // The data as it is after it (F7): a series goes on with today's energy as it is now.
+    answer({ ok: true, message: 'Zapisano.', data: quickData() })
   })
 }

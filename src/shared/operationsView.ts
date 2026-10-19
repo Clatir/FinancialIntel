@@ -23,13 +23,19 @@ export const MARK_LABEL: Record<OperationMark, string> = {
   manual: 'wpisana ręcznie'
 }
 
+/**
+ * An expense without a category (the mark „bez kategorii”, F6's inbox): a receipt's parts and a member's purchase have
+ * theirs, and a payment of a container or one paid from a goal has its place in the budget (no energy, no envelope).
+ */
+export const isUncategorized = (t: Transaction): boolean => t.kind === 'expense' && !t.categoryId && !t.splits.length && !t.refundable && !t.containerId && !t.goalId
+
 export function marksOf(t: Transaction, orders: Pick<Orders, 'quietHours'>): OperationMark[] {
   const out: OperationMark[] = []
   if (t.refundable || t.splits.some((s) => s.refundable)) out.push('refundable')
   if (t.impulse) out.push(t.impulse)
   if (isNight(t, orders)) out.push('night')
   if (t.splits.length) out.push('split')
-  if (t.kind === 'expense' && !t.categoryId && !t.splits.length && !t.refundable) out.push('uncategorized')
+  if (isUncategorized(t)) out.push('uncategorized')
   if (t.bank) out.push(t.bank.pending ? 'pending' : 'bank')
   else out.push('manual')
   return out

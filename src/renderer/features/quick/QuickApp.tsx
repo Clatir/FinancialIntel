@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { QuickData, QuickResult } from '@shared/api'
-import { inClockWindow, warsawNow } from '@shared/calc/dates'
+import type { QuickData, QuickResult, QuickTemplate } from '@shared/api'
+import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
 import { energyAfter } from '@shared/calc/fleet'
 import { dm } from '@shared/calc/briefing'
 import { OFFICER_SOURCE_LABEL, officerHint, type OfficerSource } from '@shared/import/officer'
@@ -28,6 +28,29 @@ interface Line {
 const blank = (data: QuickData | null): QuickDraft => {
   const { date, time } = warsawNow()
   return { id: newId(), kind: 'expense', amount: 0, categoryId: null, accountId: data?.accountId ?? '', date, time, counterparty: '', note: '', impulse: null, logNote: '', household: false, memberId: null, advance: false, gift: false, splits: [] }
+}
+
+/** A draft closed unsaved (Esc, the tray, the shortcut) waits this long for the next opening (F7). */
+export const KEEP_DRAFT_MS = 30 * 60 * 1000
+
+/** Something typed that would be lost by a fresh form. */
+const typedIn = (d: QuickDraft, lines: readonly Line[], share: Share | null) => d.amount > 0 || !!d.counterparty.trim() || !!d.note.trim() || !!d.logNote.trim() || lines.length > 0 || share != null
+
+/** A template's or the last operation's fields over a fresh draft (F7): today, now, an account still in use. */
+function fromTemplate(t: QuickTemplate, data: QuickData, base: QuickDraft): QuickDraft {
+  return {
+    ...base,
+    kind: t.kind,
+    amount: t.amount,
+    counterparty: t.counterparty,
+    categoryId: t.kind === 'income' ? null : t.categoryId,
+    accountId: data.accounts.some((a) => a.id === t.accountId) ? t.accountId : base.accountId,
+    // Whose money it was (D80): a member's purchase or gift, a member's income – the member still on the list.
+    memberId: t.kind === 'refundable' ? (t.memberId ?? data.members[0]?.id ?? null) : t.kind === 'income' && data.members.some((m) => m.id === t.memberId) ? t.memberId : null,
+    household: t.kind === 'income' && data.members.some((m) => m.id === t.memberId),
+    advance: t.kind === 'income' && t.advance && data.members.some((m) => m.id === t.memberId),
+    gift: t.kind === 'refundable' && t.gift
+  }
 }
 
 /** A household member to pick (D80): „ja” = my own purchase. */
@@ -76,24 +99,49 @@ export function QuickApp() {
   const [officer, setOfficer] = useState<{ categoryId: string; source: OfficerSource } | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const [opened, setOpened] = useState(0)
+  // „Zapisz i następny” (F7, Ctrl+Enter): the window stays, the series counts.
+  const [series, setSeries] = useState(0)
+  const next = useRef(false)
+  // The draft as typed and when it was last touched: closed unsaved, it waits for the next opening (F7).
+  const kept = useRef({ d, lines, share, at: 0 })
+  kept.current = { d, lines, share, at: kept.current.at }
+  useEffect(() => {
+    kept.current.at = Date.now()
+  }, [d, lines, share])
+  // The half hour counts from the closing too (Esc, the button, the system's close – the window only hides).
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') kept.current.at = Date.now()
+    }
+    document.addEventListener('visibilitychange', onHidden)
+    return () => document.removeEventListener('visibilitychange', onHidden)
+  }, [])
+  const [restored, setRestored] = useState(false)
   useEffect(() => {
     if (opened) amountRef.current?.focus()
   }, [opened])
 
   useEffect(() => {
     document.title = 'Szybki wpis – Financial Intel'
-    const offData = api.onQuickData((next) => {
+    const offData = api.onQuickData((fresh) => {
       if (closing.current) clearTimeout(closing.current)
       closing.current = null
-      setData(next)
-      setAmountsHidden(!!next?.hideAmounts)
-      setD(blank(next))
-      setLines([])
-      setShare(null)
-      setShares({})
-      setNightOk(false)
+      setData(fresh)
+      setAmountsHidden(!!fresh?.hideAmounts)
+      const k = kept.current
+      // Closed unsaved within the last 30 minutes: it is still here (F7) – „Wyczyść” starts afresh.
+      const keep = typedIn(k.d, k.lines, k.share) && Date.now() - k.at <= KEEP_DRAFT_MS
+      if (!keep) {
+        setD(blank(fresh))
+        setLines([])
+        setShare(null)
+        setShares({})
+        setNightOk(false)
+        setOfficer(null)
+      } else if (fresh && !fresh.accounts.some((a) => a.id === k.d.accountId)) setD((x) => ({ ...x, accountId: fresh.accountId }))
+      setRestored(keep)
       setMsg(null)
-      setOfficer(null)
+      setSeries(0)
       setBusy(false)
       sending.current = false
       // Focus after the reset has rendered (an earlier focus would take the previous amount as its draft).
@@ -101,6 +149,25 @@ export function QuickApp() {
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
       setMsg({ ok: r.ok, text: r.message })
+      setRestored(false)
+      if (r.ok && next.current) {
+        // „Zapisz i następny” (F7): a fresh draft of the same account, day and kind; the energy as it is now.
+        next.current = false
+        if (r.data) setData(r.data)
+        setD((x) => ({ ...blank(null), accountId: x.accountId, date: x.date, time: x.time, kind: x.kind === 'income' ? 'income' : 'expense' }))
+        setLines([])
+        setShare(null)
+        setShares({})
+        setNightOk(false)
+        setOfficer(null)
+        kept.current.at = 0
+        setSeries((n) => n + 1)
+        sending.current = false
+        setBusy(false)
+        setOpened((n) => n + 1)
+        return
+      }
+      next.current = false
       if (r.ok) {
         // Saved: a fresh draft (a new id) right away, the window stays locked until it opens again.
         setD((x) => ({ ...blank(null), accountId: x.accountId }))
@@ -228,7 +295,7 @@ export function QuickApp() {
     return out
   }, [data, d, lines, share, cats, money, shares])
 
-  const save = useCallback(() => {
+  const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
     if (data.readOnly) return setMsg({ ok: false, text: 'Folder jest tylko do odczytu.' })
     if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
@@ -237,6 +304,7 @@ export function QuickApp() {
     if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
     sending.current = true
+    next.current = andNext
     setBusy(true)
     setMsg(null)
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
@@ -252,14 +320,17 @@ export function QuickApp() {
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.preventDefault()
+      kept.current.at = Date.now()
       void api.quickClose()
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
         e.preventDefault()
+        // Ctrl+Enter: saved, and the window stays for the next one (F7); Enter saves and closes (D70).
+        const andNext = e.ctrlKey || e.metaKey
         // The field being typed in applies its value first (amounts are drafts until left).
         ;(document.activeElement as HTMLElement | null)?.blur()
-        setTimeout(() => saveRef.current(), 0)
+        setTimeout(() => saveRef.current(andNext), 0)
       }
     }
     window.addEventListener('keydown', onEscape, true)
@@ -270,6 +341,30 @@ export function QuickApp() {
     }
   }, [])
 
+  /** A fresh form (F7: „Wyczyść” of a draft kept from the last opening). */
+  const clear = () => {
+    setD(blank(data))
+    setLines([])
+    setShare(null)
+    setShares({})
+    setNightOk(false)
+    setOfficer(null)
+    setRestored(false)
+    setMsg(null)
+    // Focused once the fresh form is drawn (a focus now would take the old amount as its draft).
+    setOpened((n) => n + 1)
+  }
+  /** „Powtórz ostatni” / a template (F7): its fields over a fresh form – a template without its amount. */
+  const fill = (t: QuickTemplate, withAmount: boolean) => {
+    if (!data) return
+    setLines([])
+    setShare(null)
+    setShares({})
+    setOfficer(null)
+    setRestored(false)
+    setD((x) => fromTemplate(withAmount ? t : { ...t, amount: x.amount }, data, { ...blank(data), accountId: x.accountId || data.accountId }))
+    setOpened((n) => n + 1)
+  }
   const onCounterparty = (counterparty: string) => {
     set({ counterparty })
     // F8: by the brand – what was used with it last, the import's rule, the chain's category.
@@ -288,7 +383,15 @@ export function QuickApp() {
           </span>
         )}
         <span className="flex-1" />
-        <button className="btn btn-ghost h-[22px] px-1 [-webkit-app-region:no-drag]" title="Zamknij (Esc)" onClick={() => void api.quickClose()} data-testid="quick-close">
+        <button
+          className="btn btn-ghost h-[22px] px-1 [-webkit-app-region:no-drag]"
+          title="Zamknij (Esc)"
+          onClick={() => {
+            kept.current.at = Date.now()
+            void api.quickClose()
+          }}
+          data-testid="quick-close"
+        >
           <IconClose size={12} />
         </button>
       </div>
@@ -307,6 +410,43 @@ export function QuickApp() {
             ]}
             aria-label="Rodzaj"
           />
+          {(data.last || !!data.templates?.length) && (
+            <div className="flex flex-wrap items-center gap-1" data-testid="quick-templates">
+              {data.last && (
+                <button
+                  type="button"
+                  className="btn h-[22px] px-1.5 text-[11px]"
+                  title={`${data.last.counterparty || (data.last.kind === 'income' ? 'wpływ' : 'wydatek')} · ${money(data.last.amount)}`}
+                  onClick={() => fill(data.last!, true)}
+                  data-testid="quick-repeat"
+                >
+                  Powtórz ostatni
+                </button>
+              )}
+              {(data.templates ?? []).map((t) => (
+                <button
+                  key={`${t.counterparty}|${t.categoryId}`}
+                  type="button"
+                  className="btn h-[22px] max-w-[170px] truncate px-1.5 text-[11px]"
+                  title={`${t.counterparty} · ${cats.get(t.categoryId ?? '')?.label ?? ''}`}
+                  onClick={() => fill(t, false)}
+                  data-testid="quick-template"
+                  data-name={t.counterparty}
+                >
+                  {t.counterparty}
+                  <span className="text-dim"> · {(cats.get(t.categoryId ?? '')?.label ?? '').split(' · ').at(-1)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {restored && (
+            <div className="flex items-center gap-2 text-[11px] text-muted" data-testid="quick-restored">
+              Szkic z poprzedniego otwarcia.
+              <button type="button" className="text-accent hover:underline" onClick={clear} data-testid="quick-clear">
+                Wyczyść
+              </button>
+            </div>
+          )}
           <Row label="Kwota">
             <div className="flex items-center gap-2">
               <AmountField ref={amountRef} className="w-[130px] text-[14px]" value={d.amount || null} allowEmpty onChange={(v) => set({ amount: v ?? 0 })} aria-label="Kwota" data-testid="quick-amount" />
@@ -416,6 +556,11 @@ export function QuickApp() {
             <div className="flex items-center gap-2">
               <DateField className="w-[104px]" value={d.date} notAfter={warsawNow().date} onChange={(date) => date && set({ date })} aria-label="Data" data-testid="quick-date" />
               <TimeField className="w-[64px]" value={d.time} allowEmpty onChange={(time) => set({ time })} aria-label="Godzina" data-testid="quick-time" />
+              {d.date === warsawNow().date && (
+                <button type="button" className="text-[11px] text-accent hover:underline" title="Zakup z wczoraj – bez godziny" onClick={() => set({ date: addDays(warsawNow().date, -1), time: null })} data-testid="quick-yesterday">
+                  wczoraj
+                </button>
+              )}
               {night && <span className="text-[11px] text-accent">cisza nocna</span>}
               {d.date > warsawNow().date && (
                 <span className="text-[11px] text-accent" data-testid="quick-future">
@@ -496,9 +641,20 @@ export function QuickApp() {
         </div>
       )}
       <div className="flex shrink-0 items-center gap-2 border-t border-line px-3 py-2">
-        {msg && <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : 'text-accent')} data-testid="quick-message">{msg.text}</span>}
-        {!msg && <span className="flex-1 text-[11px] text-dim">Enter – zapisz · Esc – zamknij</span>}
-        <button className="btn btn-accent h-[26px]" disabled={!data || busy} onClick={save} data-testid="quick-save">
+        {msg && (
+          <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : 'text-accent')} data-testid="quick-message">
+            {msg.text}
+            {msg.ok && series > 0 && (
+              <span className="text-muted" data-testid="quick-series">
+                {' '}
+                Dopisano: {series}
+                {data?.energyLeft != null ? ` · energia dziś ${money(data.energyLeft)}` : ''}
+              </span>
+            )}
+          </span>
+        )}
+        {!msg && <span className="flex-1 text-[11px] text-dim">Enter – zapisz · Ctrl+Enter – zapisz i następny · Esc – zamknij</span>}
+        <button className="btn btn-accent h-[26px]" disabled={!data || busy} onClick={() => save()} data-testid="quick-save">
           Zapisz
         </button>
       </div>

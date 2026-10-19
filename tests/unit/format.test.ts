@@ -104,6 +104,31 @@ describe('formatowanie i parsowanie pól', () => {
     expect(parseAmountInput('9'.repeat(20))).toBe(1e12)
     expect(parseAmountInput(`-${'9'.repeat(20)}`)).toBe(-1e12)
   })
+  it('kwota jako działanie (F7): mnożenie i dzielenie najpierw, wynik do grosza; niepełne działanie – błąd', () => {
+    expect(parseAmountInput('12,50+8,30')).toBe(20.8)
+    expect(parseAmountInput('3*4,99')).toBe(14.97)
+    expect(parseAmountInput('100 - 15')).toBe(85)
+    expect(parseAmountInput('2+3*4')).toBe(14)
+    expect(parseAmountInput('10/3')).toBe(3.33)
+    expect(parseAmountInput('10:4')).toBe(2.5)
+    expect(parseAmountInput(`${MINUS}5+2`)).toBe(-3)
+    expect(parseAmountInput('12+')).toBeUndefined()
+    expect(parseAmountInput('1/0')).toBeUndefined()
+    expect(parseAmountInput('2**3')).toBeUndefined()
+    expect(parseAmountInput('1.234,56')).toBeUndefined()
+  })
+  it('data słowem (F7): dziś, wczoraj, przedwczoraj, „-3” – od dziś', () => {
+    const today = '2026-10-19'
+    expect(parseDateInput('wczoraj', 2026, today, today, today)).toBe('2026-10-18')
+    expect(parseDateInput('Wcz', 2026, today, today, today)).toBe('2026-10-18')
+    expect(parseDateInput('dziś', 2026, today, today, today)).toBe(today)
+    expect(parseDateInput('przedwczoraj', 2026, today, today, today)).toBe('2026-10-17')
+    // Never a name of Object's prototype.
+    expect(parseDateInput('constructor', 2026, today, today, today)).toBeNull()
+    expect(parseDateInput('__proto__', 2026, today, today, today)).toBeNull()
+    expect(parseDateInput('-3', 2026, today, today, today)).toBe('2026-10-16')
+    expect(parseDateInput('jutro', 2026, today, today, today)).toBeNull()
+  })
   it('godziny w skróconych formatach', () => {
     expect(parseClockInput('330')).toBe('03:30')
     expect(parseClockInput('3:30')).toBe('03:30')

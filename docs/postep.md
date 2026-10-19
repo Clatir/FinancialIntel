@@ -1,17 +1,20 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa K** (1.5.4 – szybkość, reszta) zrobiona na gałęzi
-`claude/grupa-k-1.5.4`, PR #21 do `main` (scalenie po zielonym CI – D71); po K bez pauzy L (1.6.0 – funkcje) z własnym
-PR i wydaniem; po L **pauza** (D67).
-**1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19), **1.5.1 wydane** (PR #18), **1.5.0 wydane**
+**Stan:** ciąg grup I–L (D86, komenda „Start I–L”) – **grupa L** (1.6.0 – funkcje) zrobiona na gałęzi
+`claude/grupa-l-1.6.0`, PR #22 do `main` (scalenie po zielonym CI – D71); to ostatnia grupa ciągu – po niej **pauza**
+(D67).
+**1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
+**1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
 okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/przeglad/`),
 **1.4.1 wydane** (PR #12), **1.4.0 wydane** (PR #11), **1.3.0 wydane** (PR #10), **1.2.3 wydane** (PR #9), **1.2.2 wydane** (PR #8), **1.2.1 wydane** (PR #7), **1.2.0 wydane** (PR #6), **1.1.0 wydane** (PR #5),
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu PR #21 i wydaniu 1.5.4 – grupa L („Przed grupą L”) bez czekania na komendę (D86), po
-niej pauza. Do sprawdzenia w aplikacji: 1.5.0–1.5.4 – listy w sekcjach niżej.
+**Następny krok:** po scaleniu PR #22 i wydaniu 1.6.0 – **pauza (D67)**: kolejna grupa tylko na komendę użytkownika
+(w przeglądzie zostają niskie pozycje B / N / W i dalsze funkcje F – do wyboru). Do sprawdzenia w aplikacji: 1.5.0–1.6.0 –
+listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -45,10 +48,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **H** | 1.5.1 Import: B34–B39, N12–N16, „Cofnij import” (F4), saldo z pliku (F5), oficer zna marki (F8), audyt reguł (F22) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.1 | ✅ D84 (C11) | ✅ wydane (PR #18) |
 | **I** | 1.5.2 Liczby się zgadzają: B7, B8, B12, B23, B25, B26, B28, B57–B60, N3, N4, N6–N11, N21 | Opus 5.5 | **max** | zmierzone ok. 1 h (zegar sesji, z przeglądem i E2E; plan był 2–3 h) | 1.5.2 | ✅ D86 | ✅ wydane (PR #19) |
 | **J** | 1.5.3 System, folder, dwa komputery: B27, B29, B31, B33, B52–B54, N2, N17, N18, N20, F21 | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi, z przeglądem i E2E; plan był 2–3 h) | 1.5.3 | ✅ D86 | ✅ wydane (PR #20) |
-| **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z pomiarami 30 / 150 tys., wzorcami wyników, przeglądem i E2E; część W27 w czasie CI grupy J; plan był ok. 2 h) | 1.5.4 | ✅ D86 | ✅ zrobione – PR #21, CI, scalenie |
-| **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | ok. 3–4 h | 1.6.0 | ✅ D86 | czeka na K |
+| **K** | 1.5.4 Wydajność – reszta: W17–W20, W25, W27 | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar sesji, z pomiarami 30 / 150 tys., wzorcami wyników, przeglądem i E2E; część W27 w czasie CI grupy J; plan był ok. 2 h) | 1.5.4 | ✅ D86 | ✅ wydane (PR #21) |
+| **L** | 1.6.0 Funkcje: opłaty stałe w miesiącu (F1), odzyskanie z kopii (F3), meldunki (F6), szybki wpis seriami (F7), wieczorne przypomnienie (F13) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar commitów, z przeglądem i E2E; część w czasie CI grupy K; plan był 3–4 h) | 1.6.0 | ✅ D86 | ✅ zrobione – PR #22, CI, scalenie |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K** | | | **ok. 36 h** (L: plan ok. 3–4 h) | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L** | | | **ok. 37,5 h** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -479,6 +482,46 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.5.4, Windows):
 3. Ustawienia → Okręt → „Zawsze pytaj przed przyjęciem zmian”, import na drugim komputerze: okno zmian – 50 wpisów,
    „pokaż kolejne”, „Zastosuj” i „Zaakceptuj nowsze”.
 4. Duży folder: Mostek i Operacje przeliczają się bez zacięć (np. szybki wpis, edycja kwoty).
+
+## Przed grupą L – funkcje (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa K wydana (1.5.4 – PR #21). Grupa L (1.6.0) – funkcje z przeglądu wybrane w D86: opłaty
+   stałe w miesiącu (F1), szybki wpis seriami (F7), mądrzejsze wieczorne przypomnienie (F13 – D84 C15), meldunki do
+   rozpatrzenia (F6), odzyskanie z kopii (F3); N7 (krok ICTTJ i celów w kreatorze) zrobione już w 1.5.2. Format folderu
+   bez zmian (pola addytywne: `settings.game.noSpend`, `notify.cargo` komputera).
+2. **Co użytkownik musi powiedzieć** – ✅ D86 (szczegóły każdej funkcji przyjęte w propozycji).
+3. **Co przygotować** – nic przed startem; po wydaniu 1.6.0 (Windows): kontener z płatnościami z historii, szybki wpis
+   kilku paragonów naraz, wieczór z przypomnieniem, kopia zapasowa do odzyskania (najlepiej na kopii folderu).
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3–4 h.
+
+## 1.6.0 – funkcje (grupa L, 19.10.2026)
+
+Zakres: F1, F3, F6, F7, F13 („Przed grupą L” wyżej). Zrobione:
+- Opłaty stałe w miesiącu (T208): stan kontenera miesięcznego – zapłacone / czeka / po terminie (termin z historii
+  płatności, 3 dni, czeka na import), „Kontener niezaładowany” w odprawie i powiadomieniu (do wyłączenia), opłaty
+  miesięczne na Radarze, „Zapłacone” w Ładowni.
+- Szybki wpis seriami (T209): Ctrl+Enter – zapisz i następny z licznikiem i energią, „Powtórz ostatni”, 5 par kontrahent +
+  kategoria, działania w kwocie, „wczoraj” i data słowem, szkic po Esc do 30 min.
+- Wieczorny raport wachty (T210): pasek w Operacjach od godziny przypomnienia (ile dopisano z godziną, „Dopisz”, „Dziś bez
+  wydatków” w dzienniku wachty, „Przypomnij za 30 min”), te same akcje w zasobniku, bez przypomnienia po wydatku od 18:00.
+- Meldunki do rozpatrzenia (T211): skrzynka z licznikiem w menu bocznym (Ctrl+Shift+M) – dokowanie, łupy, folder danych,
+  bez kategorii, duplikaty, zwroty, salda ponad 30 dni; każdy meldunek prowadzi do decyzji; bez nowych powiadomień.
+- Odzyskanie z kopii (T212): „Odzyskaj…” przy kopii – podgląd różnic, wybrane wpisy i ustawienia jako nowa wersja z
+  historią i „Cofnij”, albo cały folder rozpakowany do nowego obok i otwarty (bieżący nietknięty).
+- Przegląd `/code-review` high: 10 kandydatów – 9 poprawionych z testami sprawdzonymi bez poprawki, 1 bez zmiany
+  zachowania (T213); pierwszą wersję podglądu różnic (porównanie z opakowaniem wpisu zamiast samego wpisu) złapał E2E.
+- Testy: 561 unit + fs (nowe `cargo-status.test.ts`, `inbox.test.ts`, `tests/fs/restore.test.ts`; poszerzone `notify`,
+  `format`, `game`, `operations-view`), E2E 46 (nowe `fees.spec.ts`, `series.spec.ts`, `inbox.spec.ts`, `recover.spec.ts`).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.6.0, Windows):
+1. Ładownia: kontener z płatnościami z banku – „dzień płatności z historii”, stan w tym miesiącu; „Zapłacone” dla
+   opłaty gotówką; Radar – opłaty w kolejnych miesiącach.
+2. Szybki wpis: kilka paragonów pod rząd Ctrl+Enter, „12,50+8,30” w kwocie, szablon, „Powtórz ostatni”, Esc i ponowne
+   otwarcie (szkic czeka).
+3. Wieczorem: pasek „Raport wachty dnia” w Operacjach, „Dziś bez wydatków” z zasobnika, „Przypomnij za 30 min”.
+4. Meldunki (menu boczne): licznik, każdy przycisk prowadzi do właściwego miejsca.
+5. Odzyskanie z kopii – najlepiej na kopii folderu: „Odzyskaj…” przy kopii, podgląd, wybrany wpis z „Cofnij”; „Odzyskaj
+   cały folder do nowego…” – nowy folder obok, stary bez zmian (wracasz z „Ostatnio używane foldery”).
 
 ## Przed grupą F – szybkość przy dużym folderze (18.10.2026)
 
@@ -1259,3 +1302,8 @@ Do sprawdzenia przez użytkownika (Windows 11):
   nowa tylko przy zmianie treści, ekran importu rysujący tylko zmienione, lista usuniętych bez blokady zapisów, zmiany z
   drugiego komputera naraz; pomiar na 30 i 150 tys.; przegląd `/code-review` high – 7 poprawek; nowy E2E `speed.spec.ts`;
   PR #21 do `main`.
+- 19.10.2026 – PR #21 scalony, wydanie 1.5.4 opublikowane (job Windows na `main` za drugim razem – jednorazowe
+  zawieszenie testu duplikatów, ponowienie zielone); grupa L (1.6.0): opłaty stałe w miesiącu, szybki wpis seriami,
+  wieczorny raport wachty z „Dziś bez wydatków”, meldunki do rozpatrzenia, odzyskanie z kopii; przegląd `/code-review`
+  high – 9 poprawek; nowe E2E `fees.spec.ts`, `series.spec.ts`, `inbox.spec.ts`, `recover.spec.ts`; PR #22 do `main`;
+  koniec ciągu I–L – pauza (D67).

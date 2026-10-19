@@ -113,6 +113,31 @@ export interface BackupInfo {
   mtimeMs: number
 }
 
+/** A record of a backup that differs from the folder (F3, D86): changed since the backup, or deleted since. */
+export interface BackupDiffItem {
+  collection: Collection
+  id: string
+  change: 'changed' | 'deleted'
+  /** The record as the backup has it: shown beside the current one, written back as a new version. */
+  backup: unknown
+}
+
+/** A backup against the open folder (F3): what can be taken back from it. */
+export interface BackupPreview {
+  path: string
+  /** Records changed or deleted since the backup – the latest edited first, by collection. */
+  items: BackupDiffItem[]
+  /** Records added since the backup, by collection: they stay (only the whole folder goes back to the backup). */
+  added: Partial<Record<Collection, number>>
+  /** The settings (fi.json) differ from the backup's; `backup` null = the backup has none. */
+  settings: { changed: boolean; backup: SettingsFile | null }
+  /** The backup's records read. */
+  total: number
+  /** Its files that could not be read (damaged, or of a newer version: `tooNew`). */
+  invalid: number
+  tooNew: boolean
+}
+
 /** Settings of this computer (userData/config.json, never synced – decision T12). */
 export interface MachineConfig {
   dataDir: string | null
@@ -285,6 +310,20 @@ export interface FiApi {
   backupNow(): Promise<string>
   /** The backup before an import from the bank (backups/pre-import); returns its path. */
   importBackup(): Promise<string>
+  /** A backup of the list against the open folder (F3): what changed or was deleted since it. */
+  backupPreview(path: string): Promise<BackupPreview>
+  /**
+   * Records of the backup (`picks`) and its settings (`settings`) made current again (F3): each current version goes to
+   * the history first. The change comes as a folder change; the settings written return (null = not taken).
+   */
+  backupRecover(path: string, picks: ReadonlyArray<{ collection: Collection; id: string }>, settings: boolean): Promise<{ fi: SettingsFile | null; done: string[]; failed: Array<{ id: string; error: string }> }>
+  /** The whole backup unpacked into a new folder beside the data folder and opened (F3) – the current one untouched. */
+  backupToFolder(path: string): Promise<OpenFolderResult>
+  /**
+   * Versions of records (and settings) written back in one call, each current one kept in the history first – the
+   * recovery's „Cofnij” (F3). The change comes as a folder change; the settings written return.
+   */
+  putVersions(items: ReadonlyArray<{ collection: Collection; record: unknown }>, fi: SettingsFile | null): Promise<{ fi: SettingsFile | null; done: string[]; failed: Array<{ id: string; error: string }> }>
   /** Choose a bank's export file (CSV): its name and bytes (decoded by the renderer); null = cancelled. */
   pickImportFile(): Promise<{ name: string; bytes: Uint8Array } | null>
   /** Change the backups folder on this machine: 'pick' shows a dialog, 'default' = backups/ in the data folder. */
@@ -396,11 +435,32 @@ export interface QuickData {
   members: Array<{ id: string; name: string; owed: number; deposit: number; inflow: 'ask' | 'advance' | 'income'; via: string | null }>
   hideAmounts: boolean
   readOnly: boolean
+  /** „Powtórz ostatni” (F7): the last operation typed by hand (one line). */
+  last?: QuickTemplate | null
+  /** The templates (F7): the latest counterparty + category pairs typed by hand, at most 5, newest first. */
+  templates?: QuickTemplate[]
+}
+
+/** What a template or „Powtórz ostatni” fills in the quick entry (F7). */
+export interface QuickTemplate {
+  kind: 'expense' | 'income' | 'refundable'
+  /** Grosze (a template of a pair: the last amount with it). */
+  amount: number
+  counterparty: string
+  categoryId: string | null
+  accountId: string
+  /** Who financed it ('refundable'), whose money came ('income'). */
+  memberId: string | null
+  /** A member's gift ('refundable'); a member's money kept as their advance ('income'). */
+  gift: boolean
+  advance: boolean
 }
 
 export interface QuickResult {
   ok: boolean
   message: string
+  /** The data after the save (F7): a series („Zapisz i następny”) shows the energy as it is now. */
+  data?: QuickData | null
 }
 
 /** A panel shown in its own window: what to draw (a known kind) and its data (plain JSON, sent again on change). */

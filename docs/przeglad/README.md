@@ -132,8 +132,8 @@ Wykonane według D84 (grupy E–H jednym ciągiem, `docs/postep.md`): **1.4.2** 
 oraz ICTTJ i dokowanie – B14–B22, B40, B41, N5, F0, F42), **1.5.1** = H (import – B34–B39, N12–N16 i z listy funkcji F4,
 F5, F8, F22). Według D86 (grupy I–L jednym ciągiem): **1.5.2** = I (liczby się zgadzają – B7, B8, B12, B23, B25, B26,
 B28, B57–B60, N3, N4, N6–N11, N21; B41 zamknięte według D85), **1.5.3** = J (system, folder i dwa komputery – B27, B29,
-B31, B33, B52–B54, N2, N17, N18, N20, F21), **1.5.4** = K (wydajność – W17–W20, W25, W27). Zostają m.in.: L (funkcje
-F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone niżej.
+B31, B33, B52–B54, N2, N17, N18, N20, F21), **1.5.4** = K (wydajność – W17–W20, W25, W27), **1.6.0** = L (funkcje F1, F3, F6, F7,
+F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 
 ## Lista do odhaczania
 
@@ -445,13 +445,13 @@ F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone niżej.
 
 ### Priorytet wysoki
 
-- [ ] **F1** Opłaty stałe w miesiącu: zapłacone / czeka / po terminie, alarm brakującej płatności, kontenery miesięczne na Radarze *(nakład M)*
+- [x] **F1** Opłaty stałe w miesiącu: zapłacone / czeka / po terminie, alarm brakującej płatności, kontenery miesięczne na Radarze *(nakład M)*
 - [x] **F2** Kopia dzienna także wtedy, gdy aplikacja tygodniami działa w zasobniku *(nakład S)* · ⚠ Zmienia decyzję techniczną T20 („przy starcie raz dziennie”) – zgodnie z D31 (kopie codzienne).
-- [ ] **F3** Przywracanie z kopii zapasowej w aplikacji (cały folder albo wybrane wpisy) *(nakład M)*
+- [x] **F3** Przywracanie z kopii zapasowej w aplikacji (cały folder albo wybrane wpisy) *(nakład M)*
 - [x] **F4** „Cofnij import” – całe wczytanie pliku z mBanku jednym przyciskiem *(nakład M)* · ⚠ T39 (operacja usunięta przez użytkownika nie wraca z kolejnym importem): usunięcie przy cofnięciu importu nie może być liczone jako „usunięte przez użytkownika”, inaczej ponowny import pominie te wiersze.
 - [x] **F5** Saldo z pliku banku: automatyczne potwierdzenie i wskazanie dnia rozbieżności *(nakład M)* · ⚠ D73: misja „Inwentaryzacja” liczy potwierdzenia sald, więc potwierdzenie z pliku zaliczy ją dla mBanku samo – trzeba zdecydować, czy tak ma być.
-- [ ] **F6** „Meldunki do rozpatrzenia”: skrzynka zaległych spraw i diagnostyka danych z licznikiem w menu *(nakład M)*
-- [ ] **F7** Szybki wpis seriami: „Zapisz i następny”, szablony, powtórz ostatni, działania w kwocie, „wczoraj”, szkic po Esc *(nakład M)* · ⚠ D70 (Enter zapisuje, Esc zamyka) zostaje bez zmian – seria działa pod Ctrl+Enter.
+- [x] **F6** „Meldunki do rozpatrzenia”: skrzynka zaległych spraw i diagnostyka danych z licznikiem w menu *(nakład M)*
+- [x] **F7** Szybki wpis seriami: „Zapisz i następny”, szablony, powtórz ostatni, działania w kwocie, „wczoraj”, szkic po Esc *(nakład M)* · ⚠ D70 (Enter zapisuje, Esc zamyka) zostaje bez zmian – seria działa pod Ctrl+Enter.
 - [x] **F8** Oficer szybkiego wpisu zna marki, reguły importu i słownik sieci *(nakład S)*
 
 ### Priorytet średni
@@ -460,7 +460,7 @@ F1, F3, F6, F7, F13) i dalsze, niskie pozycje – niezaznaczone niżej.
 - [ ] **F10** Przelew między kontami budżetu z drugą nogą *(nakład M)*
 - [ ] **F11** Zbiorcze naprawy w Operacjach: usuń, zmień konto, rodzaj albo datę zaznaczonych – z „Cofnij” *(nakład M)*
 - [ ] **F12** Ostrzeżenie przy edycji operacji z potwierdzonego okresu albo z banku *(nakład S)* · ⚠ D28 (pełna edycja) – zostaje, bo to tylko ostrzeżenie, bez blokady.
-- [ ] **F13** Mądrzejsze wieczorne przypomnienie: „Dziś bez wydatków”, „Przypomnij za 30 min”, pominięcie po dopisaniu *(nakład S)*
+- [x] **F13** Mądrzejsze wieczorne przypomnienie: „Dziś bez wydatków”, „Przypomnij za 30 min”, pominięcie po dopisaniu *(nakład S)*
 - [ ] **F14** Nowy plik z mBanku wykryty sam w folderze Pobrane – import jednym kliknięciem *(nakład S)*
 - [ ] **F15** Cel z terminem: potrzebna rata miesięczna i opcjonalna odkładka z pensji *(nakład M)* · ⚠ Samo pokazanie potrzebnej raty – bez konfliktu. Rata z pensji omija kolejność D13 (osłony → kadłub → cele) i D72 (cele zasilane z dokowania) – do decyzji użytkownika.
 - [ ] **F16** Zaplanowane operacje jednorazowe, spodziewane wpływy i przypomnienia własne na Radarze *(nakład M)*

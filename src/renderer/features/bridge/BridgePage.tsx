@@ -28,6 +28,7 @@ import { IncomePanel } from '../month/IncomePanel'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
+import { useCargoStatuses } from '../cargo/status'
 import { useIctj } from '../../store/ictj'
 import { useGameRecords } from '../../store/game'
 import { useMembers } from '../household/actions'
@@ -344,6 +345,7 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
   const deliveries = useDeliveries()
   const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
   const game = useGameRecords()
+  const cargo = useCargoStatuses()
   return useMemo(() => {
     if (!fleet || !fi) return []
     const imports = fi.settings.accounts.filter((a) => !a.archived && a.importFormat === 'mbank').map((a) => ({ name: a.name, last: fi.settings.import.lastImport[a.id] ?? null }))
@@ -352,9 +354,9 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
     const week = isoWeekOf(fleet.today)
     const m = game.flatMap((g) => g.missions).find((x) => x.week === week)
     const mission = m ? { week, title: missionTitle(m.template), text: missionText(m, cats.label, zl) } : null
-    return briefing({ fleet, containers, imports, confirmations: confirmationsOf(fi.settings.accounts, balances), label, money: zl, deliveries, ictjProblem, mission, members: fi.settings.household.members })
+    return briefing({ fleet, containers, imports, confirmations: confirmationsOf(fi.settings.accounts, balances), label, money: zl, deliveries, ictjProblem, mission, members: fi.settings.household.members, cargo })
     // `hidden`: the amounts of the texts mask on a change.
-  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game])
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo])
 }
 
 /** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */

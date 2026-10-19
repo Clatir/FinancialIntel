@@ -6,8 +6,10 @@ import { hostname } from 'node:os'
 import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, Notification, app, clipboard, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
-import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
-import type { Collection } from '@shared/paths'
+import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
+import { COLLECTIONS, type Collection } from '@shared/paths'
+import type { AnyRecord } from '@shared/records'
+import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError } from './datastore/store'
@@ -15,6 +17,7 @@ import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { IN_USE_MS, clearPresence, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
 import { importBackup, listBackups, manualBackup, runBackups, type DataSource } from './datastore/backup'
+import { readBackupZip, unpackBackup, type BackupData } from './datastore/restore'
 import { sleep, withRetry, writeFileAtomic } from './datastore/atomic'
 import { describeProgress, untilAborted } from './datastore/progress'
 import { htmlToPdf } from './export/pdf'
@@ -145,6 +148,8 @@ function appTray(): AppTray {
       showMainWindow()
       mainWindow?.webContents.send('fi:notificationClick', 'today')
     },
+    // Answered without showing the window (F13).
+    evening: (answer) => mainWindow?.webContents.send('fi:notificationClick', `evening:${answer}`),
     quit: quitApp,
     updateReady: () => !!updater?.isReady,
     restartForUpdate: () => {
@@ -406,6 +411,32 @@ const sameDir = (a: string, b: string): boolean => {
 
 /** This computer's data folder now or before (B53): found empty or missing, it gets no new data unasked. */
 const rememberedDir = (dir: string): boolean => [config.get().dataDir, ...config.get().recentDirs].some((d) => !!d && sameDir(d, dir))
+
+/** A backup of the list (F3): only a ZIP the backups folder holds is read. */
+async function listedBackup(s: DataStore, path: string): Promise<BackupInfo> {
+  const listed = (await listBackups(s.backupsDir)).find((f) => f.path === path)
+  if (!listed) throw new Error('Tej kopii nie ma już na liście kopii (mogła zostać usunięta) – odśwież listę.')
+  return listed
+}
+
+/**
+ * The backup taken back (F3): read once for its preview, kept for the records chosen from it – for 10 minutes at most
+ * (a large folder's backup is a lot of memory), and not after the recovery.
+ */
+let backupRead: { path: string; mtimeMs: number; data: BackupData } | null = null
+const BACKUP_KEPT_MS = 10 * 60_000
+
+async function backupData(s: DataStore, path: string): Promise<BackupData> {
+  const listed = await listedBackup(s, path)
+  if (backupRead?.path === path && backupRead.mtimeMs === listed.mtimeMs) return backupRead.data
+  const data = await readBackupZip(path)
+  const read = { path, mtimeMs: listed.mtimeMs, data }
+  backupRead = read
+  setTimeout(() => {
+    if (backupRead === read) backupRead = null
+  }, BACKUP_KEPT_MS).unref()
+  return data
+}
 
 async function openFolder(dir: string, createIfEmpty: boolean, force = false): Promise<OpenFolderResult> {
   opening?.abort()
@@ -820,6 +851,45 @@ function registerIpc(): void {
   handle('importBackup', async () => {
     const s = writableStore()
     return importBackup(s, s.backupsDir)
+  })
+  handle('backupPreview', async (path: string) => {
+    const s = requireStore()
+    return { path, ...(await s.compareBackup(await backupData(s, path))) }
+  })
+  handle('backupRecover', async (path: string, picks: Array<{ collection: Collection; id: string }>, settings: boolean) => {
+    const s = writableStore()
+    const data = await backupData(s, path)
+    const items: Array<{ kind: Collection; record: AnyRecord }> = []
+    const byId = new Map<Collection, Map<string, AnyRecord>>()
+    for (const p of Array.isArray(picks) ? picks : []) {
+      if (!COLLECTIONS.includes(p.collection) || p.collection === 'imports') continue
+      let ids = byId.get(p.collection)
+      if (!ids) byId.set(p.collection, (ids = new Map(data.records[p.collection].map((r) => [r.id, r]))))
+      const record = ids.get(p.id)
+      if (record) items.push({ kind: p.collection, record })
+    }
+    const { change, fi, done, failed } = await s.restoreVersions(items, settings === true ? data.fi : null)
+    backupRead = null
+    sendFrom(s, change)
+    log('info', `backup recover ${basename(path)}: ${done.length} records${fi ? ' + settings' : ''}${failed.length ? `, ${failed.length} failed` : ''}`)
+    return { fi, done, failed }
+  })
+  handle('putVersions', async (items: Array<{ collection: Collection; record: AnyRecord }>, fi: unknown) => {
+    const s = writableStore()
+    const list = (Array.isArray(items) ? items : []).filter((i) => COLLECTIONS.includes(i.collection) && i.collection !== 'imports' && !!i.record)
+    const { change, fi: written, done, failed } = await s.restoreVersions(
+      list.map((i) => ({ kind: i.collection, record: i.record })),
+      fi ? (fi as SettingsFile) : null
+    )
+    sendFrom(s, change)
+    return { fi: written, done, failed }
+  })
+  handle('backupToFolder', async (path: string) => {
+    const s = requireStore()
+    const listed = await listedBackup(s, path)
+    const dir = await unpackBackup(path, s.root, listed.mtimeMs)
+    log('info', `backup unpacked ${basename(path)} -> ${dir}`)
+    return openFolder(dir, false)
   })
   handle('pickImportFile', async () => {
     const res = await dialog.showOpenDialog(mainWindow!, {

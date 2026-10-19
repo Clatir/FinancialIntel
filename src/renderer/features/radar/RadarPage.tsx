@@ -22,10 +22,11 @@ import { isOpeningItem, memberName } from '@shared/calc/household'
 import { openRefundables } from '../operations/state'
 import { addLoan, closeLoan, deleteLoan, recordPayment, type NewLoan } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
+import { useCargoStatuses } from '../cargo/status'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
-const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', installment: 'rata', repayment: 'spłata', pit38: 'termin' }
+const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin' }
 
 export function RadarPage() {
   const fleet = useFleet()
@@ -37,11 +38,12 @@ export function RadarPage() {
     return v ? memberName(v, members) : null
   }
   const containers = useRecordList('containers')
+  const cargo = useCargoStatuses()
   const readOnly = useFolderLocked()
   const items = useMemo(
-    () => (fleet ? radar({ today: fleet.today, plans, containers, tanks: fleet.tanks, loans: fleet.loans, money: zl }) : []),
+    () => (fleet ? radar({ today: fleet.today, plans, containers, tanks: fleet.tanks, loans: fleet.loans, money: zl, cargo }) : []),
     // The notes carry amounts (masked while hidden): computed again with the fleet.
-    [fleet, plans, containers]
+    [fleet, plans, containers, cargo]
   )
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const loans = fleet.loans

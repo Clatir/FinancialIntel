@@ -19,6 +19,8 @@ export interface TrayDeps {
   quick: (() => void) | null
   /** „Raport wachty dnia”: the window on today's operations. */
   today: () => void
+  /** The evening report's answers (F13): „Dziś bez wydatków”, „Przypomnij za 30 min” – the window does them. */
+  evening: (answer: 'nospend' | 'snooze') => void
   quit: () => void
   /** A downloaded update waits for the restart. */
   updateReady: () => boolean
@@ -74,6 +76,8 @@ export class AppTray {
         ...(quick ? [{ label: 'Szybki wpis', click: () => quick() }] : []),
         { label: 'Otwórz', click: () => this.d.show() },
         { label: 'Raport wachty dnia', click: () => this.d.today() },
+        { label: 'Dziś bez wydatków', click: () => this.d.evening('nospend') },
+        { label: 'Przypomnij za 30 min', click: () => this.d.evening('snooze') },
         ...(ready ? [{ label: 'Uruchom ponownie i zaktualizuj', click: () => this.d.restartForUpdate() }] : []),
         { type: 'separator' },
         { label: 'Zakończ', click: () => this.d.quit() }
