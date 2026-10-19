@@ -1560,3 +1560,49 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   rozliczenia; słowo kluczowe bez pasujących niezapisane; temat z jednakowymi decyzjami marek; nierozliczona tylko do
   odczytu nie jest „zniknięta”; ta sama marka i krótkie nazwy (pytane); mTransfer z przecinkiem w tytule; plakietka
   „nowsza” po zapisie ustawień.
+- **T238** „Bez kategorii” – jedno znaczenie (N50, B76, B78, N51, B82): oznaczenie, filtr „bez kategorii” i meldunki
+  (F6) to wydatek własny (bez kontenera i celu) z częścią moją bez kategorii – operacji albo paragonu (`partsOf`); część
+  0 zł zostawiona po „Podziel paragon” niczego nie czeka; wpływy, przelewy i zakupy domowników nie są „bez kategorii”;
+  meldunki liczą kwotę tylko takich części. Filtr kategorii patrzy na części (reszta starego podziału – w kategorii
+  operacji), znak „domownik” – na części jak pieniądze. „Podziel paragon” przenosi kategorię i finansowanie operacji na
+  pierwszą część; reszta bez części to linia bez kategorii (edytor ją nazywa). Oznaczenia: w grupie (pochodzenie: z
+  banku / nierozliczona / wpisana ręcznie; dziennik: plan / impuls) dowolne z zaznaczonych, między grupami wszystkie.
+  Kategoria zarchiwizowana albo usunięta w filtrze – z nazwą „(archiwum)” / „nieznana kategoria”, do odznaczenia.
+- **T239** Lista operacji (B64, B77, B81, B88): Ctrl+N dodaje operację z każdego ekranu (nie nad paletą ani oknem). Nowa
+  operacja zawsze widoczna: okres bez jej dnia (też „od–do”) → miesiąc operacji, filtry, które by ją ukryły, zdjęte w
+  widoku. Bieżący miesiąc listy idzie z kalendarzem (aplikacja w zasobniku tygodniami), miesiąc wybrany zostaje. Widok z
+  innego ekranu (Mostek, powiadomienie, zasobnik, meldunki, duplikaty, skok do operacji) chowający część zapisanego
+  filtra jest widokiem: zmiany w nim (także „wyczyść filtry”) zostają widoku, „mój filtr” pokazuje zapisany, po nim zmiany
+  zapisują się znowu; widok zmieniający tylko okres albo wyszukiwanie (albo te same wartości) nie jest widokiem.
+- **T240** „Cofnij” zmian zbiorczych (B66): cofa tylko pola akcji i tylko tam, gdzie wciąż są jej – kategoria zmieniona
+  w międzyczasie (tu albo na drugim komputerze) zostaje; finansowanie porównywane bez kwot (wspólny zakup po zmianie kwoty
+  ma nowe linie, a „Cofnij” i tak zdejmuje wspólne finansowanie); reguły importu zapisane akcją porównywane treścią
+  (ustawienia przeczytane po zapisie to inne obiekty), reguły dodane w międzyczasie zostają. Gdy coś zostało, komunikat
+  „Cofnięto n z m – … zmieniły się w międzyczasie”.
+- **T241** Edytor operacji (B68, B74, B79, B80, N32): notatka do 5000 znaków, dziennik kapitański do 2000 (limity
+  schematu – dłuższy tekst nie blokuje zapisu); kwota z więcej niż dwiema cyframi po przecinku odrzucana („1.200” to nie
+  1,20 zł) – także w działaniach; „Ładownia” widoczna przy podziale paragonu z dopiskiem, że cała operacja liczy się do
+  ładowni; wybór kategorii pokazuje bieżącą podkategorię zarchiwizowanej kategorii głównej (tylko tę); próg „Plan czy
+  impuls?” 0 albo pusty – dziennik nie pyta nigdzie.
+- **T242** „Potwierdź saldo” dziś (B83, doprecyzowuje T25 – wariant zgodny z D-decyzjami: potwierdzenie dalej na koniec
+  dnia, bez wyboru dnia): różnica wobec operacji do końca dnia pyta najpierw „Dzisiejsze operacje są już dopisane?” –
+  „Tak – zapisz korektę” albo „Dopiszę i potwierdzę później” (nic nie zapisane); zgodne saldo i saldo otwarcia od razu.
+  Wpisane saldo zostaje w polu do zapisu (po „później” – do następnego „Potwierdź”), zmiana wpisanej kwoty zamyka pytanie;
+  plan potwierdzenia liczony raz (Ustawienia → Konta i ekran importu).
+- **T243** Szybki wpis (B118, B125, N39): główne okno wysyła świeże dane (listy, energia, tylko do odczytu) do widocznego
+  okna szybkiego wpisu najwyżej co 500 ms – bez utraty wpisu; wybór spoza nowych list (konto, kategoria, domownik –
+  także części paragonu, wspólny zakup, części wpłaty) czyszczony z komunikatem „Lista … się zmieniła – sprawdź wybór”.
+  Lista okna ma tylko aktywne konta i domowników, więc zarchiwizowanie wybranego zmienia wybór (z komunikatem); zapis w
+  głównym oknie odrzuca tylko konto, kategorię i domownika spoza folderu (zarchiwizowani to wciąż folder). Wpływ nie ma
+  części paragonu (zmiana rodzaju je czyści). „Zaliczka czy przychód” osoby zapamiętane tylko po wyborze użytkownika.
+- **T244** Szkice formularzy i drobne (N36, N37, N104): „Nowa pożyczka”, „Nowy kontener”, „Nowy cel” i podział łupów
+  trzymają wpisany tekst w pamięci okna po kluczu formularza (nie na dysku; inny folder albo restart – od nowa); pusty
+  formularz liczony od nowa przy każdym rysowaniu bez wpisu – po dniach w zasobniku z dzisiejszą datą (sprawdzone raz
+  zegarem Playwrighta, test trwa minutę – poza CI). Ściągawka skrótów: ustawiony skrót szybkiego wpisu albo „brak
+  skrótu”, z ostrzeżeniem, gdy się nie zarejestrował. Wieczorne przypomnienie w godzinach ciszy nocnej przychodzi minutę
+  przed nią (powiadomienie i raport w Operacjach), Ustawienia to mówią.
+- **T245** Przegląd grupy P (`/code-review` high, 10 kandydatów – 9 poprawionych z testem albo E2E, 1 bez zmian):
+  pusta część paragonu, widok filtra z innego ekranu (zmiany i „wyczyść” w nim, widok tylko z okresem), pusty formularz po
+  dniach, domownik w szybkim wpisie (okno i zapis), „Cofnij” wspólnego zakupu po zmianie kwoty i reguł przeczytanych po
+  zapisie, komunikat o niecofniętych, wpisane saldo do zapisu, jeden przebieg planu potwierdzenia. Bez zmian: konto
+  zarchiwizowane w trakcie szybkiego wpisu zmienia wybór z komunikatem (T243, propozycja B125).

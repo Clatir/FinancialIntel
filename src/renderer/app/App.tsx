@@ -13,6 +13,7 @@ import { CommandPalette } from '../features/palette/CommandPalette'
 import { PAGES, pageDef } from '../features/screens/pages'
 import { PlaceholderPage } from '../features/screens/PlaceholderPage'
 import { OperationsPage } from '../features/operations/OperationsPage'
+import { newOperation } from '../features/operations/state'
 import { ImportPage } from '../features/import/ImportPage'
 import { MonthPage } from '../features/month/MonthPage'
 import { CargoPage } from '../features/cargo/CargoPage'
@@ -91,6 +92,11 @@ function useGlobalHotkeys(): void {
       if (def) {
         e.preventDefault()
         navigate({ page: def.page })
+      } else if (k === 'n' && !e.shiftKey) {
+        // A new operation from every screen (B64) – not over the palette or a dialog.
+        if (useUi.getState().paletteOpen || document.querySelector('[role="dialog"]')) return
+        e.preventDefault()
+        newOperation()
       } else if (k === 'y' && e.shiftKey) {
         e.preventDefault()
         navigate({ page: 'sync' })

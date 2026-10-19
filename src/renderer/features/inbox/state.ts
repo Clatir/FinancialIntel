@@ -12,7 +12,7 @@ import { useFleet } from '../../store/fleet'
 import { navigate } from '../../store/ui'
 import { openDocking, useDeliveries } from '../dock/state'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
-import { openOperation, openRefundables, setFilter } from '../operations/state'
+import { openOperation, openRefundables, showFilter } from '../operations/state'
 
 /** The inbox counts the duplicates a while after the last change (0,6 s at 150 tys. operacji – never while typing). */
 export const DUPLICATES_AFTER_MS = 3000
@@ -81,7 +81,7 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
   else if (item.kind === 'loot') navigate({ page: 'month' })
   else if (item.kind === 'folder') navigate({ page: 'sync' })
   else if (item.kind === 'uncategorized') {
-    setFilter({ period: from ? { kind: 'range', from, to: null } : { kind: 'all' }, marks: ['uncategorized'], accounts: [], kinds: [], categories: [], query: '' })
+    showFilter({ period: from ? { kind: 'range', from, to: null } : { kind: 'all' }, marks: ['uncategorized'], accounts: [], kinds: [], categories: [], query: '' })
     navigate({ page: 'operations' })
   } else if (item.kind === 'duplicates') navigate({ page: 'import' })
   else if (item.kind === 'refunds') openRefundables()

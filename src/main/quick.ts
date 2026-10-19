@@ -38,6 +38,10 @@ export class QuickEntry {
     ipcMain.handle('fi:quickResult', (e, result: QuickResult) => {
       if (fromMain(e)) this.send('fi:quickResult', result)
     })
+    // The folder changed while the window is open (B125): its lists and energy follow – the draft stays.
+    ipcMain.handle('fi:quickUpdate', (e, data: QuickData | null) => {
+      if (fromMain(e) && this.isOpen) this.send('fi:quickUpdate', data)
+    })
     ipcMain.handle('fi:quickAdd', (e, draft: unknown) => {
       if (!fromQuick(e)) return
       const main = d.main()
@@ -96,6 +100,13 @@ export class QuickEntry {
     win.on('closed', () => {
       if (this.win === win) this.win = null
     })
+    // The main window sends updates only while the window is shown (B125: its data costs a pass over the operations).
+    const visible = (on: boolean) => {
+      const main = this.d.main()
+      if (main && !main.isDestroyed()) main.webContents.send('fi:quickVisible', on)
+    }
+    win.on('show', () => visible(true))
+    win.on('hide', () => visible(false))
     void this.d.load(win)
     return win
   }

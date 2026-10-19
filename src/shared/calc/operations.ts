@@ -156,7 +156,7 @@ export function isConfirmedNight(t: Pick<Transaction, 'time' | 'kind' | 'amount'
   return isNight(t, orders) && t.logNote.trim() !== ''
 }
 
-/** From the threshold the captain's log asks „plan czy impuls?” (D41). */
+/** From the threshold the captain's log asks „plan czy impuls?” (D41); 0 = the log never asks (N32 – everywhere alike). */
 export function asksImpulse(t: Pick<Transaction, 'kind' | 'amount'>, orders: Pick<Orders, 'impulseThreshold'>): boolean {
-  return t.kind === 'expense' && t.amount < 0 && -t.amount >= orders.impulseThreshold
+  return orders.impulseThreshold > 0 && t.kind === 'expense' && t.amount < 0 && -t.amount >= orders.impulseThreshold
 }

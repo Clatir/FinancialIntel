@@ -6,6 +6,7 @@ import { memberName } from '@shared/calc/household'
 import { useMembers } from '../household/actions'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
+import { clearDraft, useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
@@ -331,8 +332,16 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
   const deadline = lootDeadline(brief.month)
   const decision = plans.find((p) => p.month === brief.month)?.loot ?? null
   const pending = fleet.loot.month === brief.month && fleet.loot.amount > 0 && today <= deadline
-  const [next, setNext] = useState(0)
-  const [goals, setGoals] = useState<Record<string, number>>({})
+  // The split typed is kept while another screen is looked at (N36) – until a decision of the month (here or from the
+  // other computer).
+  const lootKey = `month:loot:${brief.month}`
+  const [loot, setLoot] = useDraft<{ next: number; goals: Record<string, number> }>(lootKey, () => ({ next: 0, goals: {} }))
+  const { next, goals } = loot
+  const setNext = (v: number) => setLoot((x) => ({ ...x, next: v }))
+  const setGoals = (v: Record<string, number>) => setLoot((x) => ({ ...x, goals: v }))
+  useEffect(() => {
+    if (decision) clearDraft(lootKey)
+  }, [decision, lootKey])
   // Only the goals that take money today (B13): an archived one, or one added later, never.
   const offered = useMemo(() => fleet.goals.filter((g) => g.takes).sort((a, b) => a.priority - b.priority), [fleet.goals])
   const chosen = Object.fromEntries(offered.filter((g) => (goals[g.id] ?? 0) > 0).map((g) => [g.id, goals[g.id]!]))

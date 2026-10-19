@@ -8,6 +8,7 @@ import { byPriority, goalEtas, goalLate, goalPace } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
+import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
@@ -434,17 +435,18 @@ function orderedIds(): string[] {
 }
 
 function NewGoal({ readOnly }: { readOnly: boolean }) {
-  const [name, setName] = useState('')
-  const [target, setTarget] = useState<number | null>(null)
-  const [deadline, setDeadline] = useState('')
+  // Kept while another screen is looked at (N36).
+  const [g, setG, clearG] = useDraft<{ name: string; target: number | null; deadline: string }>('starmap:newGoal', () => ({ name: '', target: null, deadline: '' }))
+  const { name, target, deadline } = g
+  const setName = (v: string) => setG((x) => ({ ...x, name: v }))
+  const setTarget = (v: number | null) => setG((x) => ({ ...x, target: v }))
+  const setDeadline = (v: string) => setG((x) => ({ ...x, deadline: v }))
   const add = () => {
     if (!name.trim()) return toast('Podaj nazwę celu.', 'error')
     if (!target || target <= 0) return toast('Podaj kwotę celu.', 'error')
     addGoal({ name, target, deadline: deadline || null })
     toast(`Nowy cel „${name.trim()}” na końcu listy.`, 'success')
-    setName('')
-    setTarget(null)
-    setDeadline('')
+    clearG()
   }
   return (
     <Panel title="Nowy cel" testId="starmap-new">

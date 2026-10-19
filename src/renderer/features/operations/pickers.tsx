@@ -22,22 +22,33 @@ const optionsMemo = new WeakMap<CategoryIndex, Map<string, ReactNode>>()
 
 function categoryOptions(cats: CategoryIndex, value: string | null): ReactNode {
   // An archived category only as the current value.
-  const archived = value && cats.byId.get(value)?.archived ? value : ''
+  // Also a subcategory of an archived main one (B80): shown as the value it is, never as „bez kategorii”.
+  const archived = value && (cats.byId.get(value)?.archived || cats.mainOf(value)?.archived) ? value : ''
   let byArchived = optionsMemo.get(cats)
   if (!byArchived) optionsMemo.set(cats, (byArchived = new Map()))
   let nodes = byArchived.get(archived)
   if (nodes === undefined) {
     const shown = (c: Category) => !c.archived || c.id === archived
-    nodes = cats.mains.filter(shown).map((main) => (
-      <optgroup key={main.id} label={main.name}>
-        <option value={main.id}>{main.name}</option>
-        {cats.childrenOf(main.id).filter(shown).map((c) => (
-          <option key={c.id} value={c.id}>
-            {main.name} · {c.name}
-          </option>
-        ))}
-      </optgroup>
-    ))
+    const holder = archived ? cats.mainOf(archived)?.id : undefined
+    nodes = cats.mains
+      .filter((main) => shown(main) || main.id === holder)
+      .map((main) => {
+        // An archived main category shown for the current value only: that value alone.
+        const only = main.archived
+        return (
+          <optgroup key={main.id} label={main.name}>
+            {(!only || main.id === archived) && <option value={main.id}>{main.name}</option>}
+            {cats
+              .childrenOf(main.id)
+              .filter((c) => (only ? c.id === archived : shown(c)))
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {main.name} · {c.name}
+                </option>
+              ))}
+          </optgroup>
+        )
+      })
     byArchived.set(archived, nodes)
   }
   return nodes

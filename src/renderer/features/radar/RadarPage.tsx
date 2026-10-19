@@ -9,6 +9,7 @@ import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
 import { pit38Deadline, radar, type RadarItem } from '@shared/calc/radar'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
 import { canWrite, useData, useFolderLocked } from '../../store/data'
+import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
 import { useMachine } from '../../store/machine'
 import { useRecordList } from '../../store/records'
@@ -267,7 +268,8 @@ function NewLoanPanel({ today }: { today: string }) {
     firstDue: sameDayNextMonth(today),
     withOperation: true
   })
-  const [o, setO] = useState<NewLoan>(blank)
+  // Kept while another screen is looked at (N36).
+  const [o, setO, clearO] = useDraft<NewLoan>('radar:newLoan', blank)
   const set = (p: Partial<NewLoan>) => setO((x) => ({ ...x, ...p }))
   const taken = o.direction === 'taken'
   const save = () => {
@@ -278,7 +280,7 @@ function NewLoanPanel({ today }: { today: string }) {
     if (taken && o.total > 0 && o.total < o.amount) return toast('„Do spłaty razem” nie może być mniej niż kwota pożyczki (puste = kwota).', 'error', 6000)
     if (!canWrite()) return
     addLoan({ ...o, total: taken && o.total > 0 ? o.total : o.amount })
-    setO(blank())
+    clearO()
   }
   return (
     <Panel title="Nowa pożyczka" testId="radar-new-loan">

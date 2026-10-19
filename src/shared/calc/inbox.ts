@@ -5,7 +5,7 @@
  * the side menu counts the reports, the inbox lists them.
  */
 import { formatPln, plural } from '../format'
-import { isUncategorized } from '../operationsView'
+import { isUncategorized, uncategorizedAmount } from '../operationsView'
 import type { Transaction } from '../schema/records'
 import { daysBetween } from './dates'
 import { deliveryItem, dm, type AccountConfirmation } from './briefing'
@@ -57,7 +57,8 @@ export function uncategorizedOf(transactions: readonly Transaction[], from: stri
   for (const t of transactions) {
     if (!isUncategorized(t) || (from && t.date < from) || drafts[t.id]) continue
     count++
-    amount -= t.amount
+    // A receipt's lines without a category only (N50): its other lines have theirs.
+    amount -= uncategorizedAmount(t)
   }
   return { count, amount, from }
 }

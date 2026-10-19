@@ -88,13 +88,14 @@ export function parseNumberInput(text: string): number | null | undefined {
 /**
  * An amount typed or shown with grouped thousands: spaces (also U+00A0) ignored, comma or dot, minus "-" or
  * U+2212; a value beyond ±1e12 is clipped (appendix B); null = empty, undefined = invalid. Counted when typed as a sum
- * (F7): „12,50+8,30”, „3*4,99”, „100-15” – multiplying and dividing first, the result to the grosz.
+ * (F7): „12,50+8,30”, „3*4,99”, „100-15” – multiplying and dividing first, the result to the grosz. Two decimals at
+ * most (B68): „1.200” is no 1,20 zł – a dot of thousands is never guessed, the amount is refused.
  */
 export function parseAmountInput(text: string): number | null | undefined {
   const t = text.replace(/\s/g, '').replaceAll(MINUS, '-')
   if (t === '') return null
   const plain = t.replace(',', '.')
-  if (/^[-+]?(\d+\.?\d*|\.\d+)$/.test(plain)) {
+  if (/^[-+]?(\d+(\.\d{0,2})?|\.\d{1,2})$/.test(plain)) {
     const v = Number(plain)
     return Number.isFinite(v) ? Math.min(1e12, Math.max(-1e12, v)) : undefined
   }
@@ -104,9 +105,9 @@ export function parseAmountInput(text: string): number | null | undefined {
 
 /** „12.5+8*2-1” (no brackets): multiplying and dividing first, left to right; undefined = not such a sum. */
 function sumOf(t: string): number | undefined {
-  const parts = /^[-+]?(\d+\.?\d*|\.\d+)([-+*/:](\d+\.?\d*|\.\d+))*$/.exec(t)
+  const parts = /^[-+]?(\d+(\.\d{0,2})?|\.\d{1,2})([-+*/:](\d+(\.\d{0,2})?|\.\d{1,2}))*$/.exec(t)
   if (!parts) return undefined
-  const tokens = t.match(/^[-+]|\d+\.?\d*|\.\d+|[-+*/:]/g) ?? []
+  const tokens = t.match(/^[-+]|\d+(?:\.\d{0,2})?|\.\d{1,2}|[-+*/:]/g) ?? []
   let i = 0
   let sign = 1
   if (tokens[0] === '-' || tokens[0] === '+') sign = tokens[i++] === '-' ? -1 : 1

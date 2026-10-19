@@ -702,6 +702,36 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/import-fixes.test.ts` (mutacje: każda poprawka i znalezisko przeglądu), poszerzone `share`, E2E
   `import.spec.ts` (odpowiedź „zaliczka czy przychód?” po „+ domownik”).
 
+## Kod (1.6.4 – operacje, edytor, szybki wpis, grupa P, D87)
+- „Bez kategorii” i filtr (T238): `operationsView.ts` – `isUncategorized` po częściach (`partsOf`, część 0 zł paragonu
+  pomijana), `uncategorizedAmount` (meldunki), `MARK_GROUP` (oznaczenia w grupie „lub”, między grupami „i”), filtr
+  kategorii po częściach, znak `refundable` z części; `OperationsPage.tsx` – kategorie zarchiwizowane / nieznane w filtrze
+  (`CheckMenu note`), `operations-stored-filter` („mój filtr”); `calc/operations.ts` `asksImpulse` – próg 0 nie pyta.
+- Lista (T239, T240): `features/operations/state.ts` – `shown` (widok z innego ekranu: `showFilter` tylko gdy chowa część
+  zapisanego filtra, `setFilter` / `resetFilter` w widoku bez zapisu, `showStoredFilter`), `STORED_KEYS`,
+  `followCurrentMonth` (co minutę z `OperationsPage`), `newOperation` (miesiąc operacji, filtry zdjęte w widoku), „Cofnij”
+  zbiorczych zmian – `financers` (bez kwot), `undoRules` (treścią, `deepEqual`), `undoneNote`; Ctrl+N w `App.tsx` (każdy
+  ekran, nie nad paletą ani oknem); wywołania `showFilter`: Mostek, `notifier.ts`, meldunki, `DuplicatesPanel`.
+- Edytor (T241): `OperationEditor.tsx` – `TextArea maxLength` (dziennik 2000, notatka 5000), „Podziel paragon” przenosi
+  kategorię i finansowanie na pierwszą część, `CargoSelect` przy podziale (`operation-split-cargo`), `SplitEditor` –
+  `split-rest`, `split-rest-last`, `split-over`; `pickers.tsx` – zarchiwizowana kategoria główna bieżącej podkategorii;
+  `lib/format.ts` `parseAmountInput` – najwyżej 2 miejsca po przecinku.
+- Saldo dziś (T242): `features/balances/ConfirmToday.tsx` (`useConfirmToday(konto, nazwa, onDone)`, `ConfirmTodayAsk` –
+  `confirm-ask`, `-yes`, `-later`), `confirmBalance(…, planned)`; Ustawienia → Konta i `ImportPage` `BalanceCheckRow`.
+- Szybki wpis (T243): `main/quick.ts` `fi:quickUpdate` (tylko przy otwartym oknie), `fi:quickVisible`; `api.ts` / preload
+  `quickUpdate` / `onQuickUpdate` / `onQuickVisible`; `store/quickHost.ts` – wysyłka co ≤ 500 ms przy widocznym oknie,
+  odmowa konta / kategorii / domownika spoza folderu, `QuickDraft.advanceChosen`; `QuickApp.tsx` – `onQuickUpdate`
+  (wybór spoza list czyszczony z komunikatem), wpływ bez części paragonu.
+- Formularze i drobne (T244): `store/drafts.ts` (`useDraft(klucz, pusty)` – szkic w pamięci okna, pusty formularz liczony
+  przy każdym rysowaniu bez wpisu; `clearDraft`; zmiana folderu czyści) – Radar `radar:newLoan`, Ładownia
+  `cargo:container`, Mapa gwiezdna `starmap:newGoal`, Plan miesiąca `month:loot:<mies.>`; `ShortcutsHelp.tsx` – skrót z
+  ustawień komputera i `quickShortcutState`; `notify.ts` `eveningAt` (wieczór w ciszy nocnej – minuta przed nią,
+  `EveningReport`, `notify-evening-quiet` w Ustawieniach).
+- Testy: `tests/unit/operations-fixes.test.ts`, `operations-state.test.ts` (sklepy okna z atrapą `window.fi` – w
+  `tsconfig.web.json`), E2E `tests/e2e/operations-fixes.spec.ts` (Ctrl+N z Mostka, szkic pożyczki, szybki wpis: podział →
+  wpływ, domownik zarchiwizowany i spoza folderu), `operations.spec.ts` (pytanie przy różnicy salda, saldo zostaje w polu),
+  `series.spec.ts` (cisza nocna bez północy).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -800,4 +830,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   reguły z kategorią zarchiwizowaną, podobne nazwy bez słów ogólnych (ta sama marka – podobna), usunięte nierozliczone nie
   wracają, paragon przeskalowany z kwotą banku, „+ domownik” z pytaniem, ekran czeka na zapis, panel duplikatów jak import,
   szybsze propozycje, podobne nazwy i reguły
+- [x] 1.6.4 Operacje, edytor, szybki wpis (grupa P, D87): Ctrl+N z każdego ekranu, nowa operacja zawsze widoczna, widok
+  z innego ekranu nie zmienia zapisanego filtra, „bez kategorii” jedno znaczenie, „Cofnij” zbiorczych zmian tylko swoich
+  pól, pytanie przy różnicy salda dziś, szybki wpis ze świeżymi listami, szkice formularzy po zmianie ekranu, limity
+  notatek, kwoty do grosza, wieczór w ciszy nocnej
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

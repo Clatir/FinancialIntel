@@ -186,6 +186,34 @@ export function QuickApp() {
         setBusy(false)
       }
     })
+    // The folder changed while the window is open (B125): new lists and energy, the draft stays; a choice the lists no
+    // longer have is cleared, with a word.
+    const offUpdate = api.onQuickUpdate((fresh) => {
+      setData(fresh)
+      if (!fresh) return
+      setAmountsHidden(!!fresh.hideAmounts)
+      const k = kept.current
+      const has = (id: string | null) => !id || fresh.categories.some((c) => c.id === id)
+      const member = (id: string | null | undefined) => !id || fresh.members.some((m) => m.id === id)
+      const account = !!k.d.accountId && !fresh.accounts.some((a) => a.id === k.d.accountId)
+      const category = !has(k.d.categoryId) || k.lines.some((l) => !has(l.categoryId))
+      const people = !member(k.d.memberId) || k.lines.some((l) => !member(l.memberId)) || !!k.share?.lines.some((l) => !member(l.memberId))
+      if (account) setD((x) => ({ ...x, accountId: fresh.accountId }))
+      if (category) {
+        setD((x) => (has(x.categoryId) ? x : { ...x, categoryId: null }))
+        setLines((ls) => ls.map((l) => (has(l.categoryId) ? l : { ...l, categoryId: null })))
+      }
+      if (people) {
+        // A member gone (another folder, removed): their choice is made again – nothing saved for someone the folder lacks.
+        const first = fresh.members[0]?.id ?? null
+        setD((x) => (member(x.memberId) ? x : { ...x, memberId: x.kind === 'refundable' ? first : null, household: false, advance: false, advanceChosen: false }))
+        setLines((ls) => ls.map((l) => (member(l.memberId) ? l : { ...l, memberId: null, refundable: false, gift: false })))
+        setShare((sh) => (sh && sh.lines.some((l) => !member(l.memberId)) ? null : sh))
+        setShares((xs) => Object.fromEntries(Object.entries(xs).filter(([id]) => member(id))))
+      }
+      const changed = [account && 'kont', category && 'kategorii', people && 'domowników'].filter((x): x is string => !!x)
+      if (changed.length) setMsg({ ok: false, text: `Lista ${changed.length > 1 ? `${changed.slice(0, -1).join(', ')} i ${changed.at(-1)}` : changed[0]} się zmieniła – sprawdź wybór.` })
+    })
     // Ctrl+$ in the main window (B61): the preview's and the window's amounts change at once, not at the next opening.
     const offPrefs = api.onMachinePrefs((p) => {
       setAmountsHidden(p.hideAmounts)
@@ -195,6 +223,7 @@ export function QuickApp() {
     return () => {
       offData()
       offResult()
+      offUpdate()
       offPrefs()
     }
   }, [])
@@ -303,7 +332,7 @@ export function QuickApp() {
     if (busy || sending.current || !data) return
     if (data.readOnly) return setMsg({ ok: false, text: 'Folder jest tylko do odczytu.' })
     if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
-    if (lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
+    if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
     if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
     if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
@@ -313,7 +342,7 @@ export function QuickApp() {
     setMsg(null)
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
     const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
-    void api.quickAdd({ ...d, splits: !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
+    void api.quickAdd({ ...d, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
   }, [busy, data, d, lines, share, night, nightOk, shares])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
@@ -406,7 +435,11 @@ export function QuickApp() {
           <Segmented
             size="sm"
             value={d.kind}
-            onChange={(kind: Kind) => set({ kind, household: false, memberId: kind === 'refundable' ? (data.members[0]?.id ?? null) : null, advance: false })}
+            onChange={(kind: Kind) => {
+              set({ kind, household: false, memberId: kind === 'refundable' ? (data.members[0]?.id ?? null) : null, advance: false, advanceChosen: false })
+              // Money in has no receipt (B118): lines hidden for it never block its saving.
+              if (kind === 'income') setLines([])
+            }}
             options={[
               { value: 'expense', label: 'Wydatek' },
               { value: 'income', label: 'Wpływ' },
@@ -579,7 +612,7 @@ export function QuickApp() {
                 <MemberPick
                   data={data}
                   value={d.household ? d.memberId : null}
-                  onChange={(memberId) => set({ household: !!memberId, memberId, advance: data.members.find((m) => m.id === memberId)?.inflow === 'advance' })}
+                  onChange={(memberId) => set({ household: !!memberId, memberId, advance: data.members.find((m) => m.id === memberId)?.inflow === 'advance', advanceChosen: false })}
                   none="— nie —"
                   testId="quick-payer"
                 />
@@ -587,7 +620,7 @@ export function QuickApp() {
                   <Segmented
                     size="sm"
                     value={d.advance ? 'advance' : 'income'}
-                    onChange={(v) => set({ advance: v === 'advance' })}
+                    onChange={(v) => set({ advance: v === 'advance', advanceChosen: true })}
                     options={[
                       { value: 'income', label: 'przychód' },
                       { value: 'advance', label: 'zaliczka' }

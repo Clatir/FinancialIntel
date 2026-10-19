@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { warsawNow } from '@shared/calc/dates'
-import { eveningState, eveningText } from '@shared/notify'
+import { eveningAt, eveningState, eveningText } from '@shared/notify'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useMinute } from '../../store/fleet'
 import { useMachine } from '../../store/machine'
@@ -16,6 +16,8 @@ const NO_DAYS: Record<string, string> = {}
 export function EveningReport() {
   const minute = useMinute()
   const eveningTime = useMachine((s) => s.prefs.notify.eveningTime)
+  const quietFrom = useData((s) => s.fi?.settings.orders.quietHours.from)
+  const quietTo = useData((s) => s.fi?.settings.orders.quietHours.to)
   const transactions = useData((s) => s.records.transactions)
   const noSpend = useData((s) => s.fi?.settings.game.noSpend ?? NO_DAYS)
   const locked = useFolderLocked()
@@ -23,7 +25,9 @@ export function EveningReport() {
   const [snoozed, setSnoozed] = useState(0)
   const { date: today, time } = warsawNow(new Date(minute))
   const state = useMemo(() => eveningState(listOf(transactions), today, noSpend, eveningSnooze(today)), [transactions, today, noSpend, snoozed, minute])
-  if (time < eveningTime || state.done || (state.snooze && time < state.snooze.until)) return null
+  // Its hour in the quiet hours: the minute before them, as the notification (N104).
+  const from = quietFrom && quietTo ? eveningAt(eveningTime, { from: quietFrom, to: quietTo }) : eveningTime
+  if (time < from || state.done || (state.snooze && time < state.snooze.until)) return null
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/40 bg-accent-soft px-3 py-1.5 text-[12px]" data-testid="evening-report">
       <span className="text-fg-strong">Raport wachty dnia</span>

@@ -4,7 +4,7 @@
  */
 import type { Account, Orders } from './schema/budget'
 import type { Transaction, TxKind } from './schema/records'
-import { asksImpulse, costOf, isNight, type CategoryIndex } from './calc/operations'
+import { asksImpulse, costOf, isNight, partsOf, type CategoryIndex, type Part } from './calc/operations'
 import { fold } from './fold'
 
 /** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
@@ -23,15 +23,44 @@ export const MARK_LABEL: Record<OperationMark, string> = {
   manual: 'wpisana ręcznie'
 }
 
+const waitsForCategory = (t: Transaction, p: Part): boolean => !p.categoryId && !p.refundable && (p.amount !== 0 || !t.splits.length)
+
 /**
- * An expense without a category (the mark „bez kategorii”, F6's inbox): a receipt's parts and a member's purchase have
- * theirs, and a payment of a container or one paid from a goal has its place in the budget (no energy, no envelope).
+ * An expense to categorize (the mark „bez kategorii”, the filter „bez kategorii”, F6's inbox – one meaning, N50): a line
+ * of mine without a category – the operation's own or a receipt's part (`partsOf`); a member's purchase is theirs, and a
+ * payment of a container or one paid from a goal has its place in the budget (no energy, no envelope). A receipt's line
+ * of 0 zł (one „Podziel paragon” adds, left empty) has nothing to categorize.
  */
-export const isUncategorized = (t: Transaction): boolean => t.kind === 'expense' && !t.categoryId && !t.splits.length && !t.refundable && !t.containerId && !t.goalId
+export const isUncategorized = (t: Transaction): boolean => t.kind === 'expense' && !t.containerId && !t.goalId && partsOf(t).some((p) => waitsForCategory(t, p))
+
+/** What of an expense waits for a category (grosze, as the operation's sign): its lines of mine without one. */
+export function uncategorizedAmount(t: Transaction): number {
+  if (!isUncategorized(t)) return 0
+  let out = 0
+  for (const p of partsOf(t)) if (waitsForCategory(t, p)) out += p.amount
+  return out
+}
+
+/**
+ * Marks that exclude one another (N51): where an operation comes from, the captain's log's answer. A filter of several
+ * marks of one group shows any of them; of several groups – all the groups at once.
+ */
+const MARK_GROUP: Record<OperationMark, string> = {
+  refundable: 'refundable',
+  impulse: 'log',
+  plan: 'log',
+  night: 'night',
+  split: 'split',
+  uncategorized: 'uncategorized',
+  bank: 'origin',
+  pending: 'origin',
+  manual: 'origin'
+}
 
 export function marksOf(t: Transaction, orders: Pick<Orders, 'quietHours'>): OperationMark[] {
   const out: OperationMark[] = []
-  if (t.refundable || t.splits.some((s) => s.refundable)) out.push('refundable')
+  // As the money counts it (B78): a line a member finances – a receipt's part, its rest, or the operation itself.
+  if (partsOf(t).some((p) => p.refundable)) out.push('refundable')
   if (t.impulse) out.push(t.impulse)
   if (isNight(t, orders)) out.push('night')
   if (t.splits.length) out.push('split')
@@ -110,13 +139,15 @@ export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterCo
   if (f.accounts.length && !f.accounts.includes(t.accountId)) return false
   if (f.kinds.length && !f.kinds.includes(t.kind)) return false
   if (f.categories.length) {
-    const ids = t.splits.length ? t.splits.map((s) => s.categoryId) : [t.categoryId]
-    const mains = ids.map((id) => ctx.categories.mainOf(id)?.id ?? '')
-    if (!mains.some((m) => f.categories.includes(m))) return false
+    // The lines as the budget counts them (B76: a receipt's rest in the operation's category); „bez kategorii” = an
+    // expense to categorize, as its mark (N50).
+    const mains = partsOf(t).map((p) => (p.categoryId ? (ctx.categories.mainOf(p.categoryId)?.id ?? p.categoryId) : null))
+    if (!f.categories.some((c) => (c === '' ? isUncategorized(t) : mains.includes(c)))) return false
   }
   if (f.marks.length) {
     const marks = marksOf(t, ctx.orders)
-    if (!f.marks.every((m) => marks.includes(m))) return false
+    const groups = new Set(f.marks.map((m) => MARK_GROUP[m]))
+    for (const g of groups) if (!f.marks.some((m) => MARK_GROUP[m] === g && marks.includes(m))) return false
   }
   const q = f.query.trim()
   if (q) {

@@ -97,6 +97,8 @@ export interface QuickDraft {
   share?: Share | null
   /** A household member's money carrying others' (D81, „w tym za …”): their parts, the rest the sender's. */
   shares?: Array<{ memberId: string; amount: number; advance: boolean }>
+  /** „Zaliczka / przychód” switched by the user (N39): only then remembered for a member still asked (D80 b). */
+  advanceChosen?: boolean
 }
 
 /** The operation of a quick draft (or why not). */
@@ -161,6 +163,26 @@ export function initQuickHost(): void {
   if (started) return
   started = true
   api.onQuickRequest(() => void api.quickData(quickData()))
+  // The quick window open while the folder changes (B125: another folder, archived categories or accounts, read only,
+  // the day's spending): its data follows, its draft stays – at most twice a second, never while it is hidden.
+  let visible = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const push = () => {
+    if (!visible || timer) return
+    timer = setTimeout(() => {
+      timer = null
+      if (visible) void api.quickUpdate(quickData())
+    }, 500)
+  }
+  api.onQuickVisible((on) => {
+    visible = on
+  })
+  useData.subscribe((s, p) => {
+    if (s.fi !== p.fi || s.status !== p.status || s.phase !== p.phase || s.records.transactions !== p.records.transactions) push()
+  })
+  useMachine.subscribe((s, p) => {
+    if (s.prefs !== p.prefs) push()
+  })
   api.onQuickAdd((raw) => {
     const answer = (r: QuickResult) => void api.quickResult(r)
     const s = useData.getState()
@@ -172,9 +194,18 @@ export function initQuickHost(): void {
     if (draft.id && s.records.transactions[draft.id]) return answer({ ok: true, message: 'Zapisano.' })
     const t = quickTransaction(draft)
     if (typeof t === 'string') return answer({ ok: false, message: t })
+    // The lists of the window may be older than the folder's (B125): an account, a category or a household member it
+    // no longer has is refused – an archived one is still the folder's.
+    const settings = s.fi.settings
+    if (!settings.accounts.some((a) => a.id === t.accountId)) return answer({ ok: false, message: 'Lista kont się zmieniła – wybierz konto ponownie.' })
+    const known = new Set(settings.categories.map((c) => c.id))
+    if ([t.categoryId, ...t.splits.map((x) => x.categoryId)].some((id) => id && !known.has(id))) return answer({ ok: false, message: 'Lista kategorii się zmieniła – wybierz kategorię ponownie.' })
+    const members = new Set(settings.household.members.map((m) => m.id))
+    if ([t.memberId, ...t.splits.map((x) => x.memberId), ...(t.share?.lines.map((l) => l.memberId) ?? [])].some((id) => id && !members.has(id)))
+      return answer({ ok: false, message: 'Lista domowników się zmieniła – wybierz domownika ponownie.' })
     addRecord('transactions', t)
-    // A household member's money with the rest chosen here: asked once, remembered for them (D80 b).
-    if (t.kind === 'income' && t.memberId) rememberInflows([t])
+    // A household member's money with the rest chosen here – by the user (N39): asked once, remembered for them (D80 b).
+    if (t.kind === 'income' && t.memberId && draft.advanceChosen) rememberInflows([t])
     try {
       localStorage.setItem(ACCOUNT_KEY, t.accountId)
     } catch {
