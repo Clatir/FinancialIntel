@@ -16,14 +16,15 @@ const saveTo = (app: ElectronApplication, path: string) =>
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: p })
   }, path)
 
-/** An operation opened through the palette (F19): its counterparty typed, Enter. */
-async function openByPalette(page: Page, query: string): Promise<void> {
+/** An operation opened through the palette (F19): its counterparty typed, Enter – the editor shows it. */
+async function openByPalette(page: Page, query: string, name: string): Promise<void> {
   await page.keyboard.press('Control+k')
   await page.getByTestId('palette-input').fill(query)
-  await expect(page.getByTestId('palette-operation').first()).toBeVisible()
-  // The commands matching nothing: the first item is the operation.
+  // The commands matching nothing: the first item is the operation – of this query (never of the last opening's).
+  await expect(page.getByTestId('palette-operation').first()).toContainText(name)
   await page.keyboard.press('Enter')
-  await expect(page.getByTestId('operation-editor')).toBeVisible()
+  await expect(page.getByTestId('palette')).toHaveCount(0)
+  await expect(page.getByTestId('operation-counterparty')).toHaveValue(name)
 }
 
 test('przelew jedną operacją (F10), zmiana zaznaczonych z podglądem (F11), ostrzeżenie w potwierdzonym okresie (F12), paleta (F19)', async () => {
@@ -84,17 +85,17 @@ test('przelew jedną operacją (F10), zmiana zaznaczonych z podglądem (F11), os
 
     // A transfer of before 1.7.0 given an account of the budget: still its own side only – the other account's money
     // never comes twice (its other side may be an operation of its own).
-    await openByPalette(page, 'lokata zewnętrzna')
+    await openByPalette(page, 'lokata zewnętrzna', 'Lokata zewnętrzna')
     await page.getByTestId('operation-counter-account').selectOption({ label: 'Portfel XTB' })
     await expect(page.getByTestId('operation-transfer-legacy')).toBeVisible()
     await expect(page.getByTestId('balance-Portfel XTB')).toHaveText('350,00 zł')
 
     // F19 + F10: the transfer from the palette, one operation of both accounts.
-    await openByPalette(page, 'przelew na portfel')
+    await openByPalette(page, 'przelew na portfel', 'Przelew na portfel')
     await expect(page.getByTestId('operation-transfer-both')).toContainText('Jedna operacja dla obu kont')
 
     // F12: an operation before the account's confirmed balance – marked; a change of its amount asks first.
-    await openByPalette(page, 'sklep okresowy')
+    await openByPalette(page, 'sklep okresowy', 'Sklep Okresowy')
     await expect(page.getByTestId('operation-confirmed')).toBeVisible()
     const amount = page.getByTestId('operation-amount')
     await amount.fill('50')

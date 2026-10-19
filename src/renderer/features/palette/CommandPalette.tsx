@@ -1,5 +1,5 @@
 // adapted from ICTTJ src/renderer/features/palette/CommandPalette.tsx @ 84a8339
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { Command } from 'cmdk'
 import { fold } from '@shared/fold'
 import { searchRecords, type SearchHits, type SettingsItem } from '@shared/search'
@@ -70,6 +70,12 @@ const NO_HITS: SearchHits = { operations: [], containers: [], goals: [], loans: 
  */
 export function CommandPalette() {
   const open = useUi((s) => s.paletteOpen)
+  // Each opening its own palette – its typing and its results: the search follows the typing a moment later, and the
+  // results of the last opening shown for that moment were opened by an Enter typed fast (the record searched before).
+  return open ? <Palette /> : null
+}
+
+function Palette() {
   const layoutPresets = useData((s) => s.fi?.settings.layoutPresets ?? NO_PRESETS)
   const page = useUi((s) => s.route.page)
   // „Pokaż na 5 minut” / „do końca sesji” only with the amounts hidden (F40): nothing to hide again otherwise.
@@ -122,22 +128,16 @@ export function CommandPalette() {
   )
 
   const [query, setQuery] = useState('')
-  // Each opening starts empty.
-  useEffect(() => {
-    if (!open) setQuery('')
-  }, [open])
   const deferred = useDeferredValue(query)
-  const hits = useRecordHits(open ? deferred : '')
+  const hits = useRecordHits(deferred)
   // The commands by the words typed (no Polish letters), in their order.
   const shownActions = useMemo(() => {
     const ws = fold(query).split(/\s+/).filter(Boolean)
     return ws.length ? actions.filter((a) => ws.every((w) => fold(a.label).includes(w))) : actions
   }, [actions, query])
 
-  if (!open) return null
   const run = (fn: () => void) => {
     setPalette(false)
-    setQuery('')
     fn()
   }
   const any = shownActions.length + hits.operations.length + hits.containers.length + hits.goals.length + hits.loans.length + hits.members.length + hits.settings.length > 0

@@ -823,6 +823,9 @@ Zakres: „Przed grupą S” wyżej. Zrobione:
   wolnym dysku kasowało „Pokaż na …” zamówione tuż po nim (T271). Odtworzone lokalnie wolnym zapisem
   (`FI_CONFIG_WRITE_DELAY_MS`), poprawione, test ukrywania kwot biegnie teraz z wolnym zapisem. 1.6.5 i 1.6.6 wchodzą w
   1.7.0 (notatki wydania z sekcjami wersji niewydanych).
+- CI PR #29: E2E palety raz na kilka przebiegów otwierał poprzednio szukaną operację – po ponownym otwarciu palety
+  wyszukiwanie (opóźnione za pisaniem) przez chwilę pokazywało wyniki poprzedniego otwarcia, a Enter wpisany szybko brał
+  pierwszy z nich. Każde otwarcie palety ma teraz własne pisanie i wyniki; test czeka na wynik tego zapytania.
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 1. Meldunki → „Przelewy między kontami” → „Połącz…”: lista par, odznaczenie pary do sprawdzenia, „Połącz zaznaczone”;
