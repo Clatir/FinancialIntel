@@ -2,7 +2,8 @@ import { useDeferredValue, useEffect, useMemo, useState, type DragEvent } from '
 import { warsawNow } from '@shared/calc/dates'
 import type { DecisionSource } from '@shared/import/classify'
 import { importThemes, joins, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
-import { TX_KIND_LABEL, type HouseholdMember, type TxKind } from '@shared/schema'
+import { SHARE_MODES, TX_KIND_LABEL, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
+import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
 import { opKindOf } from '@shared/import/reconcile'
 import { useData } from '../../store/data'
@@ -22,6 +23,7 @@ import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { bulkOptions, choiceFor, hasCategory, optionOf, optionsFor, type Option } from './options'
 import { addMemberFromBank, useMembers } from '../household/actions'
+import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
   acceptGroupHint,
   acceptHints,
@@ -323,7 +325,9 @@ function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, con
   const c = b.choice
   if (c.kind === 'expense') {
     const cat = catLabel(c.categoryId) || 'bez kategorii'
-    return t.direction === 'in' ? `Zwroty · ${cat}` : c.refundable ? `Finansuje: ${memberName(c.memberId, members)} · ${cat}` : cat
+    // Who (D80, D83): a member, their gift, several people; a product return – for whom (B40).
+    const who = c.refundable ? `${t.direction === 'in' ? 'dla' : c.gift ? 'prezent od' : 'finansuje'}: ${memberName(c.memberId, members)}` : c.share ? `wspólnie: ${shareNames(c.share, members)}` : ''
+    return t.direction === 'in' ? `Zwroty${who ? ` ${who}` : ''} · ${cat}` : who ? `${who.charAt(0).toUpperCase()}${who.slice(1)} · ${cat}` : cat
   }
   if (c.kind === 'income') return c.household ? `Od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}` : 'Wpływy (przychód)'
   if (c.kind === 'transfer') return 'Przelewy własne'
@@ -336,12 +340,22 @@ function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, con
 const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out' ? 'expense' : 'income', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null })
 
 /** The kind and the category of a decision (a theme's, a group's); the household's per member (D80). */
+/** A shared purchase's split for the import (D83): equally or by percents – each row has its own amount. */
+const IMPORT_SHARE_MODES = SHARE_MODES.filter((m) => m !== 'amounts')
+
 function DecisionFields({ choice, direction, onChange, testId }: { choice: Choice; direction: 'in' | 'out'; onChange: (c: Choice) => void; testId: string }) {
   const members = useMembers()
   const option = optionOf(choice, direction)
+  const first = members.find((m) => !m.archived)
   return (
     <>
-      <select className="input h-[24px] w-[230px] py-0" value={option} onChange={(e) => onChange(choiceFor(e.currentTarget.value as Option, choice))} aria-label="Co to jest" data-testid={`${testId}-kind`}>
+      <select
+        className="input h-[24px] w-[230px] py-0"
+        value={option}
+        onChange={(e) => onChange(choiceFor(e.currentTarget.value as Option, choice, first ? startShare(first.id) : null))}
+        aria-label="Co to jest"
+        data-testid={`${testId}-kind`}
+      >
         {optionsFor(direction, members, choice).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -350,6 +364,11 @@ function DecisionFields({ choice, direction, onChange, testId }: { choice: Choic
       </select>
       {choice.kind === 'expense' && (
         <CategorySelect className="h-[24px] min-w-[180px] flex-1 py-0" value={choice.categoryId} onChange={(categoryId) => onChange({ ...choice, categoryId })} data-testid={`${testId}-category`} />
+      )}
+      {choice.kind === 'expense' && choice.share && (
+        <div className="basis-full pl-1">
+          <ShareEditor share={choice.share} total={null} members={members} onChange={(share: Share) => onChange({ ...choice, share })} modes={IMPORT_SHARE_MODES} testId={`${testId}-share`} />
+        </div>
       )}
     </>
   )
@@ -563,6 +582,8 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
   const query = useImport((s) => s.query)
   const [option, setOption] = useState<Option>('expense')
   const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [share, setShare] = useState<Share | null>(null)
+  const first = members.find((m) => !m.archived)
   const [asKeyword, setAsKeyword] = useState(false)
   const nGroups = groups.filter((g) => selected.groups[g.group]).length
   const mergeable = namesToMerge(groups, selected.groups)
@@ -579,7 +600,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
       note = err ? ` Słowo kluczowe: ${err}` : ` Słowo kluczowe „${keyword}” zapamiętane.`
     }
     setAsKeyword(false)
-    const { applied, unfit } = chooseSelected(groups, option, category)
+    const { applied, unfit } = chooseSelected(groups, option, category, option === 'share' ? share : null)
     toast((unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`) + note, unfit ? 'info' : 'success', 5000)
   }
   return (
@@ -588,7 +609,17 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
         Zaznaczone: {nGroups ? `${count(nGroups, 'grupa', 'grupy', 'grup')}, ` : ''}
         {operations(rows)}
       </span>
-      <select className="input h-[24px] w-[220px] py-0" value={option} onChange={(e) => setOption(e.currentTarget.value as Option)} aria-label="Decyzja dla zaznaczonych" data-testid="import-bulk-kind">
+      <select
+        className="input h-[24px] w-[220px] py-0"
+        value={option}
+        onChange={(e) => {
+          const next = e.currentTarget.value as Option
+          setOption(next)
+          if (next === 'share' && !share && first) setShare(startShare(first.id))
+        }}
+        aria-label="Decyzja dla zaznaczonych"
+        data-testid="import-bulk-kind"
+      >
         {bulkOptions(members).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -596,13 +627,21 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
         ))}
       </select>
       {hasCategory(option) && <CategorySelect className="h-[24px] min-w-[170px] py-0" value={categoryId} onChange={setCategoryId} data-testid="import-bulk-category" />}
+      {option === 'share' && share && <ShareEditor share={share} total={null} members={members} onChange={setShare} modes={IMPORT_SHARE_MODES} testId="import-bulk-share" />}
       {keywordKind && (
         <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają operacje z tym słowem w nazwie albo tytule same">
           <input type="checkbox" checked={asKeyword} onChange={(e) => setAsKeyword(e.currentTarget.checked)} data-testid="import-bulk-keyword" />
           zapamiętaj „{keyword}” jako słowo kluczowe
         </label>
       )}
-      <button type="button" className="btn btn-accent h-[24px]" onClick={apply} data-testid="import-bulk-apply">
+      <button
+        type="button"
+        className="btn btn-accent h-[24px]"
+        // Percents of the people not summing to 100 % (D83): never applied as typed – the quick entry refuses them too.
+        disabled={option === 'share' && (!share || !shareComplete(share, null))}
+        onClick={apply}
+        data-testid="import-bulk-apply"
+      >
         Ustaw
       </button>
       <button type="button" className="btn h-[24px]" onClick={() => toast(`Nie importuję: ${operations(skipSelected(groups, true))}.`, 'info', 3500)} data-testid="import-bulk-skip">

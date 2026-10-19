@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { addWorkingDays, deliveries, previewDocking, type DeliveriesInput } from '@shared/calc/dock'
+import { addWorkingDays, deliveries, pendingPairDays, previewDocking, type DeliveriesInput } from '@shared/calc/dock'
+import { isPolishHoliday } from '@shared/calc/dates'
 import { computeFleet, layersSum, type FleetEvent, type FleetInput } from '@shared/calc/fleet'
 import { goalEtas, goalInflow, renumber, syncIctjGoals, byPriority } from '@shared/calc/goals'
 import { createDefaultSettings } from '@shared/defaults'
@@ -31,7 +32,7 @@ const entry = (date: string, amount: number, over: Partial<IctjEntry> = {}): Ict
 const docking = (t: Transaction, over: Partial<Docking> = {}): Docking => dockingSchema.parse({ ...base(), date: t.date, transactionId: t.id, ...over })
 const goal = (name: string, target: number, priority: number, over: Partial<Goal> = {}) => goalSchema.parse({ ...base(), name, target, priority, ...over })
 
-const input = (over: Partial<DeliveriesInput>): DeliveriesInput => ({ entries: [], transactions: [], dockings: [], start: '2026-10-01', today: '2026-10-20', skipped: [], ictjOn: true, importedOn: null, ...over })
+const input = (over: Partial<DeliveriesInput>): DeliveriesInput => ({ entries: [], transactions: [], dockings: [], start: '2026-10-01', today: '2026-10-20', skipped: [], ictjOn: true, coveredTo: null, ...over })
 
 describe('ICTTJ: odczyt wpisów i scenariuszy (tylko używane pola, nowszy format czytany)', () => {
   it('wypłata i zwrot w groszach, wydatek pominięty, nieznana pula = zwykłe dokowanie', () => {
@@ -103,7 +104,7 @@ describe('dopasowanie wypłat z ICTTJ do wpływów z XTB (D56, D72: 3 dni robocz
 
   it('bez pary po 3 dniach roboczych → Portfel XTB do potwierdzenia; wcześniej czeka na import', () => {
     const e = entry('2026-10-16', zl(500))
-    const different = tx('2026-10-19', zl(499))
+    const different = tx('2026-10-19', zl(450))
     expect(deliveries(input({ entries: [e], transactions: [different], today: '2026-10-21' })).find((d) => d.entry)).toMatchObject({ state: 'waiting', wallet: false })
     const late = deliveries(input({ entries: [e], transactions: [different], today: '2026-10-22' }))
     expect(late[0]).toMatchObject({ key: `ictj:${e.id}`, state: 'pending', wallet: true, transaction: null })
@@ -113,8 +114,8 @@ describe('dopasowanie wypłat z ICTTJ do wpływów z XTB (D56, D72: 3 dni robocz
 
   it('Portfel XTB dopiero, gdy import z mBanku sięga za okno – bez nowego importu wypłata dalej czeka (bez podwójnego liczenia)', () => {
     const e = entry('2026-10-16', zl(500))
-    expect(deliveries(input({ entries: [e], today: '2026-10-23', importedOn: '2026-10-19' }))[0]).toMatchObject({ state: 'waiting', wallet: false })
-    expect(deliveries(input({ entries: [e], today: '2026-10-23', importedOn: '2026-10-22' }))[0]).toMatchObject({ state: 'pending', wallet: true })
+    expect(deliveries(input({ entries: [e], today: '2026-10-23', coveredTo: '2026-10-19' }))[0]).toMatchObject({ state: 'waiting', wallet: false })
+    expect(deliveries(input({ entries: [e], today: '2026-10-23', coveredTo: '2026-10-22' }))[0]).toMatchObject({ state: 'pending', wallet: true })
   })
 
   it('dwa dokowania jednej operacji (dwa komputery naraz): liczy się wcześniejsze – w silniku i w oknie', () => {
@@ -183,6 +184,110 @@ function ship(extra: Partial<FleetInput> = {}): FleetInput {
     ...extra
   }
 }
+
+describe('dokowanie (1.5.0): święta, zasięg pliku, granica startu, osierocone i podwójne dokowania, inna kwota (B15–B22, F42)', () => {
+  it('F42: polskie święta nie są dniami roboczymi – Wielkanoc 2027, Wigilia od 2025, Boże Ciało', () => {
+    expect(isPolishHoliday('2027-03-29')).toBe(true)
+    expect(isPolishHoliday('2027-03-28')).toBe(true)
+    expect(isPolishHoliday('2026-06-04')).toBe(true)
+    expect(isPolishHoliday('2025-12-24')).toBe(true)
+    expect(isPolishHoliday('2024-12-24')).toBe(false)
+    expect(isPolishHoliday('2026-11-11')).toBe(true)
+    expect(isPolishHoliday('2026-11-12')).toBe(false)
+    // Thursday + 3 working days: Friday, (weekend, Easter Monday) Tuesday, Wednesday.
+    expect(addWorkingDays('2027-03-25', 3)).toBe('2027-03-31')
+    expect(addWorkingDays('2026-12-23', 2)).toBe('2026-12-29')
+  })
+
+  it('B18: „Portfel XTB?” liczy się od zasięgu pliku z banku, nie od chwili importu', () => {
+    const e = entry('2026-10-16', zl(500))
+    expect(deliveries(input({ entries: [e], today: '2026-10-25', coveredTo: '2026-10-10' }))[0]).toMatchObject({ state: 'waiting', wallet: false })
+    expect(deliveries(input({ entries: [e], today: '2026-10-25', coveredTo: '2026-10-22' }))[0]).toMatchObject({ state: 'pending', wallet: true })
+  })
+
+  it('B19: o starcie budżetu decyduje data pieniędzy – para sprzed startu „sprzed startu”, wpis sprzed startu z parą po nim dokuje', () => {
+    const start = '2026-10-01'
+    // (a) The inflow on 30.09 (in the opening balance), the entry on 01.10: both before the start – nothing to dock.
+    const before = tx('2026-09-30', zl(1200))
+    const a = deliveries(input({ start, entries: [entry('2026-10-01', zl(1200))], transactions: [before], today: '2026-10-20', coveredTo: '2026-10-19' }))
+    expect(a.map((d) => [d.state, d.wallet, d.transaction?.id ?? null])).toEqual([['before-start', false, before.id]])
+    // (b) The entry of the pool Podatek on 29.09, the money on 02.10: it docks with its pool, no „bez wpisu”.
+    const after = tx('2026-10-02', zl(800))
+    const b = deliveries(input({ start, entries: [entry('2026-09-29', zl(800), { pool: 'tax' })], transactions: [after], today: '2026-10-20' }))
+    expect(b.map((d) => [d.key.split(':')[0], d.state, d.transaction?.id])).toEqual([['ictj', 'pending', after.id]])
+    // (c) No pair, the window beginning before the start: in the opening balances – never Portfel XTB.
+    expect(deliveries(input({ start, entries: [entry('2026-10-02', zl(300))], today: '2026-10-20', coveredTo: '2026-10-19' }))[0]).toMatchObject({ state: 'before-start', wallet: false })
+  })
+
+  it('B22: kwota w banku inna o grosze – możliwa para, bez „Portfel XTB?” i bez „wpływ bez wpisu”; dokładna para ma pierwszeństwo', () => {
+    const e = entry('2026-10-16', zl(1000))
+    const near = tx('2026-10-19', zl(999.5))
+    const list = deliveries(input({ entries: [e], transactions: [near], today: '2026-10-28', coveredTo: '2026-10-27' }))
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({ key: `ictj:${e.id}`, state: 'pending', near: true, mismatch: true, wallet: false, transaction: near })
+    // A transfer after the holidays: past the window, within the days after it.
+    const late = tx('2026-10-24', zl(995))
+    expect(deliveries(input({ entries: [e], transactions: [late], today: '2026-10-28' }))[0]).toMatchObject({ near: true, transaction: late })
+    // Far off (> max(5 zł, 1%)): no pair.
+    expect(deliveries(input({ entries: [e], transactions: [tx('2026-10-19', zl(980))], today: '2026-10-28' }))[0]).toMatchObject({ near: false, transaction: null })
+    // Two entries: the exact one takes its operation, the other the near one.
+    const e2 = entry('2026-10-16', zl(999.5))
+    const both = deliveries(input({ entries: [e, e2], transactions: [near, tx('2026-10-19', zl(1000))], today: '2026-10-28' }))
+    expect(both.find((d) => d.key === `ictj:${e2.id}`)).toMatchObject({ near: false, transaction: near })
+  })
+
+  it('B15: dokowanie operacji, której nie ma (usunięta) – wpis znów do zadokowania, z innym wpływem albo Portfelem', () => {
+    const e = entry('2026-10-16', zl(800), { pool: 'tax' })
+    const gone = tx('2026-10-16', zl(800), { accountId: XTB_WALLET_ACCOUNT_ID })
+    const orphan = docking(gone, { ictjEntryId: e.id, pool: 'tax' })
+    const real = tx('2026-10-17', zl(800))
+    const list = deliveries(input({ entries: [e], transactions: [real], dockings: [orphan], today: '2026-10-25' }))
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({ key: `ictj:${e.id}`, state: 'pending', transaction: real, orphans: [orphan] })
+  })
+
+  it('B16: pula zmieniona w ICTTJ po dokowaniu – oznaczona; B17: dwa dokowania jednego wpisu (dwa komputery) – drugie do usunięcia', () => {
+    const e = entry('2026-10-16', zl(800), { pool: 'tax' })
+    const t = tx('2026-10-17', zl(800))
+    const d = docking(t, { ictjEntryId: e.id, pool: 'current' })
+    expect(deliveries(input({ entries: [e], transactions: [t], dockings: [d] }))[0]).toMatchObject({ state: 'docked', poolChanged: true, mismatch: false })
+    const w1 = tx('2026-10-16', zl(800), { accountId: XTB_WALLET_ACCOUNT_ID, createdAt: '2026-10-20T10:00:00.000Z' })
+    const w2 = tx('2026-10-16', zl(800), { accountId: XTB_WALLET_ACCOUNT_ID, createdAt: '2026-10-20T10:05:00.000Z' })
+    const d1 = docking(w1, { ictjEntryId: e.id, pool: 'tax', createdAt: '2026-10-20T10:00:00.000Z' })
+    const d2 = docking(w2, { ictjEntryId: e.id, pool: 'tax', createdAt: '2026-10-20T10:05:00.000Z' })
+    const twice = deliveries(input({ entries: [e], transactions: [w1, w2], dockings: [d2, d1] }))
+    expect(twice).toHaveLength(1)
+    expect(twice[0]).toMatchObject({ docking: d1, transaction: w1, extra: [{ docking: d2, transaction: w2 }] })
+    // One computer on Portfel XTB (earlier), the other with the bank's inflow: the bank's counts, the made-up one goes.
+    const bank = tx('2026-10-17', zl(800), { bank: { key: 'k1', importedAt: AT } as Transaction['bank'] })
+    const db = docking(bank, { ictjEntryId: e.id, pool: 'tax', createdAt: '2026-10-20T10:07:00.000Z' })
+    const mixed = deliveries(input({ entries: [e], transactions: [w1, bank], dockings: [d1, db] }))
+    expect(mixed).toHaveLength(1)
+    expect(mixed[0]).toMatchObject({ docking: db, transaction: bank, extra: [{ docking: d1, transaction: w1 }] })
+  })
+
+  it('B21: wpis usunięty w ICTTJ i wpisany od nowa – operacja banku paruje z nowym; bez nowego – do zadokowania z dopiskiem', () => {
+    const old = entry('2026-10-16', zl(800), { pool: 'tax' })
+    const fresh = entry('2026-10-16', zl(800), { pool: 'current' })
+    const t = tx('2026-10-17', zl(800))
+    const d = docking(t, { ictjEntryId: old.id, pool: 'tax' })
+    const list = deliveries(input({ entries: [fresh], transactions: [t], dockings: [d], entriesComplete: true, today: '2026-10-25', coveredTo: '2026-10-24' }))
+    expect(list.map((x) => [x.key, x.state, x.transaction?.id, x.docking?.id, x.wallet])).toEqual([[`ictj:${fresh.id}`, 'pending', t.id, d.id, false]])
+    const alone = deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: true }))
+    expect(alone[0]).toMatchObject({ key: `tx:${t.id}`, state: 'pending', entryGone: true })
+    // ICTTJ not read whole (a file syncing): the docking stands – nothing to dock again.
+    expect(deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: false }))).toEqual([])
+    // The payouts listed whole, its own file not read (a broken one): not deleted either.
+    expect(deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: true, unreadEntries: [old.id] }))).toEqual([])
+  })
+
+  it('B20: dni do wstrzymania gry – para wypłaty bez dokowania', () => {
+    const e = entry('2026-10-16', zl(800), { pool: 'tax' })
+    const t = tx('2026-10-17', zl(800))
+    expect(pendingPairDays(deliveries(input({ entries: [e], transactions: [t] })))).toEqual(['2026-10-17'])
+    expect(pendingPairDays(deliveries(input({ entries: [e], transactions: [t], dockings: [docking(t, { ictjEntryId: e.id, pool: 'tax' })] })))).toEqual([])
+  })
+})
 
 describe('silnik: pule ICTTJ', () => {
   it('pula Cele: najpierw cele z prognozy ICTTJ (wg listy), potem własne; nadmiar do osłon', () => {

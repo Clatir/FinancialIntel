@@ -448,6 +448,38 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/fs/folder-speed.test.ts`, poszerzone `backup`, `datastore-robust`, `watch`, `tests/unit/data-store.test.ts`,
   `game.test.ts`, E2E `sync.spec.ts` (pole w trakcie pisania); pomiar na 30 tys. / 150 tys. – `docs/postep.md` „1.4.3”.
 
+## Kod (1.5.0 – domownicy, ICTTJ i dokowanie, grupa G, D83 / D84)
+- Wspólne finansowanie (D83, F0, T156–T158): `shared/calc/share.ts` – `share` operacji (`shareSchema`: `mode` równo /
+  procenty / kwoty, `lines` {`memberId` – null = ja, `value`, `gift`}) to opis, prawdą są linie `splits` (jedna na osobę,
+  kategoria operacji; starsza wersja czyta je jak paragon): `shareAmounts`, `shareSplits` (id linii po pozycji),
+  `shareOf` (linie wciąż z podziału), `withShare`, `withAmount` (edytor), `withBankAmount` (import: tylko wspólny zakup
+  od nowa), `shareComplete`, `percentSum`, `equalPercents`, `restIndex`, `changeMode`, `startShare`; prezent `gift`
+  (operacja z jednym finansującym albo linia) – `Part.gift`, `MemberFlow.gift` (zaliczka, potem osłony; zwrot do osłon),
+  `operations.ts` `ownSpent` (moja część), `household.ts` `financersText`; reguła importu i decyzja (`importRuleSchema.gift`
+  / `.share`, `ImportDecision`, `Choice`, `proposalSig`, `upsertRule` – cała decyzja); konto `cash` (`CASH_ACCOUNT_ID`,
+  seed `account:gotowka`, kreator bez wymaganego salda gotówki). Renderer: `features/household/ShareEditor.tsx`
+  (`ShareEditor` – testid `<prefiks>-line/-person/-percent/-amount/-part/-gift/-remove/-add/-sum/-clear`, `shareNames`),
+  `MemberPickers.tsx` `FinancerSelect` (`pay:` / `gift:`), edytor (`operation-share-start`, `operation-share`), szybki wpis
+  (`quick-joint-start`, `quick-joint`, `quick-gift`; `QuickDraft.gift` / `.share`), Operacje (`operations-bulk-financer`
+  „wspólnie…”, `operations-bulk-share`, `financeTicked`, `categorizeTicked` także wspólnych), import (`options.ts` `gift:` /
+  `share`, `import-bulk-share`, `<decyzja>-share`; procenty ≠ 100 % odrzucone w `runImport`), `rules.ts` `financingOf`.
+- Domownicy i gra (B14, B40, B41, N5, T159–T161): `settings.household.openingIds` (operacje, które salda na start
+  obejmują – `fleet.ts` `openingIdsOf`, ustawiane z datą rozliczeń i raz w folderze sprzed 1.5.0), `LedgerOptions.covered`,
+  `HouseholdLedger.late` / `lateDeposit` (spoza listy – zaraz po saldach na start), `rebaseOpenings` bez nich,
+  `seedSince` (dzień po ostatniej operacji z banku), `household-since-late`; import – reguła „finansuje” w obie strony,
+  zwrot kartą z reguły zakupu, `shareMerged` nie oddaje decyzji pieniądzom domownika; `game.ts` – naruszenia, tag i misje
+  z `ownSpent`, osłony bez pożyczonych domownikom i prezentów.
+- ICTTJ i dokowanie (B15–B22, F42, T162–T164): `dock.ts` `deliveries` – `orphans` (operacji nie ma), `entryGone` (wpis
+  usunięty – `entriesComplete` + `unreadEntries` z `IctjSnapshot.unread` / `complete`, czytnik `main/ictj/reader.ts`),
+  `poolChanged`, `extra` (operacja z banku przed Portfelem XTB), `near` / `nearAmount` / `NEAR_EXTRA_DAYS` (po dokładnych
+  parach), `coveredTo` (`settings.import.coveredTo` – okres pliku z banku, `dock/state.ts` `coveredToOf`), start po dacie
+  pieniędzy, `pendingPairDays` → `advanceGame` `hold` (`store/game.ts`, 7 dni); `ids.ts` `derivedId` (operacja Portfela i
+  dokowanie z id wpisu), `dock/actions.ts` `removeExtraDockings`, `deleteOperation` z dokowaniami (`restoreDeleted`),
+  znaczki w `DockPanel` i dopiski w `DockingDialog` (`docking-entry-gone`, `-near`, `-pool-changed`, `-extra`);
+  `dates.ts` `easterOf`, `isPolishHoliday`, `isWorkingDay` (tylko w `addWorkingDays`).
+- Testy: `tests/unit/share.test.ts`, poszerzone `dock`, `import`, `game`, `household`, `fleet`, `settings-defaults`,
+  `tests/fs/ictj.test.ts`; E2E `tests/e2e/shared.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -517,4 +549,7 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   okresowe i życie kontenera, łupy, dwa formaty pliku z banku, folder danych i dwa komputery, szybki wpis, Esc w polach
 - [x] 1.4.3 Szybkość przy dużym folderze (grupa F, D84): zapis paczkami i przyrostowe widoki, okno bez przeliczeń przy
   pisaniu, obserwator bez pełnych skanów, kopie ZIP w jednym przejściu, kopia dzienna w zasobniku, 14 + 8 kopii
+- [x] 1.5.0 Domownicy, ICTTJ i dokowanie (grupa G, D83 / D84): wspólne finansowanie (równo / procenty / kwoty), prezent,
+  konto „Gotówka”, operacje spoza sald na start, zwroty domowników z importu, gra bez naruszeń za cudze zakupy, dokowanie
+  odporne na usunięcia, zmiany puli, dwa komputery, zasięg pliku, inne kwoty i święta
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

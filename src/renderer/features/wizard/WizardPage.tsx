@@ -87,7 +87,12 @@ export function WizardPage() {
       {accounts.map((a) => {
         const opened = openings.has(a.id)
         return (
-          <Field key={a.id} label={a.name} labelWidth={140} hint={opened ? 'Ma już saldo otwarcia – puste pole zostawia saldo z operacji.' : w.balances[a.id] == null ? 'Potrzebne – 0, jeśli konto jest puste.' : undefined}>
+          <Field
+            key={a.id}
+            label={a.name}
+            labelWidth={140}
+            hint={opened ? 'Ma już saldo otwarcia – puste pole zostawia saldo z operacji.' : w.balances[a.id] == null ? (a.kind === 'cash' ? 'Gotówka w portfelu – puste = 0 zł.' : 'Potrzebne – 0, jeśli konto jest puste.') : undefined}
+          >
             <div className="flex items-center gap-2">
               <AmountField
                 className="w-[140px]"
@@ -324,7 +329,7 @@ export function WizardPage() {
             </button>
           ) : (
             <FinishButton
-              disabled={readOnly || salary == null || salary <= 0 || accounts.some((a) => w.balances[a.id] == null && !openings.has(a.id))}
+              disabled={readOnly || salary == null || salary <= 0 || accounts.some((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id))}
               onFinish={() => finishWizard({ salary: salary ?? 0, hull, envelopes })}
             />
           )}

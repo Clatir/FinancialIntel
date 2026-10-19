@@ -83,7 +83,11 @@ function DeliveryRow({ d }: { d: Delivery }) {
         {detail && <span className="text-muted"> · {detail}</span>}
       </span>
       {d.wallet && <Badge tone="warn" title="Brak pary w mBanku po 3 dniach roboczych">Portfel XTB?</Badge>}
-      {d.mismatch && <Badge tone="warn" title="Kwota w ICTTJ różni się od operacji w banku">rozbieżność</Badge>}
+      {d.near && <Badge tone="warn" title="W banku jest wpływ z XTB o prawie tej samej kwocie – sprawdź i połącz">inna kwota</Badge>}
+      {d.mismatch && !d.near && <Badge tone="warn" title="Kwota w ICTTJ różni się od operacji w banku">rozbieżność</Badge>}
+      {d.poolChanged && <Badge tone="warn" title="Pula wpisu zmieniła się w ICTTJ po dokowaniu – zadokuj ponownie">pula zmieniona</Badge>}
+      {d.entryGone && <Badge tone="warn" title="Wpis tej wypłaty usunięto w ICTTJ – zadokuj ponownie">wpis usunięty</Badge>}
+      {d.extra.length > 0 && <Badge tone="warn" title="Ten wpis zadokowano dwa razy (np. na dwóch komputerach)">podwójnie</Badge>}
       <span className={cx('text-[11px]', d.state === 'pending' ? 'text-accent' : 'text-dim')}>{STATE_LABEL[d.state]}</span>
       <span className={cx('num w-[100px] text-right', d.direction === 'in' ? 'text-up' : 'text-fg')}>
         {d.direction === 'in' ? '+' : '−'}

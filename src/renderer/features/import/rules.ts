@@ -3,9 +3,11 @@ import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
 import { findRule, ruleTargetOf, upsertRule } from '@shared/import/classify'
 import { cleanBankName } from '@shared/import/names'
 import { newId } from '@shared/ids'
-import { TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Transaction, type TxKind } from '@shared/schema'
+import { TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
 import { memberName } from '@shared/calc/household'
+import { shareOf } from '@shared/calc/share'
 import { membersNow } from '../household/actions'
+import { shareNames } from '../household/ShareEditor'
 import { updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
@@ -21,13 +23,22 @@ export function ruleFor(t: Transaction): ImportRule | null {
   return target.key ? findRule(rules, target, t.amount < 0 ? 'out' : 'in') : null
 }
 
+/**
+ * Who finances an expense, as its rule remembers it (D80, D83): a member (both directions – a product return of their
+ * purchase is their money, B40), their gift, several people – or me.
+ */
+function financingOf(t: Transaction): Pick<ImportRule, 'refundable' | 'memberId' | 'gift' | 'share'> {
+  const share = shareOf(t)
+  if (share) return { refundable: false, memberId: null, share }
+  return t.refundable ? { refundable: true, memberId: t.memberId, gift: t.gift || undefined } : { refundable: false, memberId: null }
+}
+
 /** Remember the category of an operation for its brand (a decision in Operacje teaches the import too). */
 export function rememberCategory(t: Transaction, label: string): void {
   const { brand } = targetOf(t)
   if (!brand.key || t.kind !== 'expense') return
   const direction = t.amount < 0 ? 'out' : 'in'
-  const refundable = direction === 'out' && t.refundable
-  const rule = { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId: t.categoryId, refundable, household: false, memberId: refundable ? t.memberId : null, counterAccountId: null } as const
+  const rule = { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId: t.categoryId, ...financingOf(t), household: false, counterAccountId: null } as const
   updateSettings((f) => ({
     ...f,
     settings: { ...f.settings, import: { ...f.settings.import, rules: upsertRule(f.settings.import.rules, rule, { now: new Date().toISOString(), makeId: newId, hits: 1 }) } }
@@ -49,8 +60,7 @@ export function rememberBrands(ops: readonly Transaction[], categoryId: string):
     const prev = rules.get(key)
     if (prev) prev.hits++
     else {
-      const refundable = direction === 'out' && t.refundable
-      rules.set(key, { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId, refundable, household: false, memberId: refundable ? t.memberId : null, counterAccountId: null, hits: 1 })
+      rules.set(key, { match: brand.key, direction, label: brand.brand?.label ?? t.counterparty, kind: 'expense', categoryId, ...financingOf(t), household: false, counterAccountId: null, hits: 1 })
     }
   }
   if (!rules.size) return 0
@@ -71,7 +81,8 @@ export const keywordOfSearch = (query: string): string | null => {
 
 /** What a rule decides, in a few words (the user's keywords, a brand of a rule among similar names). */
 export function ruleDecisionText(r: ImportRule, catLabel: (id: string | null) => string, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = membersNow()): string {
-  if (r.kind === 'expense') return `${r.refundable ? `finansuje: ${memberName(r.memberId, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}`
+  if (r.kind === 'expense')
+    return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}`
   if (r.kind === 'income') return r.household ? `od domownika: ${memberName(r.memberId, members)}` : 'wpływ (przychód)'
   return r.kind === 'transfer' ? 'przelew własny' : (TX_KIND_LABEL[r.kind as TxKind] ?? r.kind)
 }
@@ -89,10 +100,12 @@ export function saveKeywordRule(input: {
   direction: 'in' | 'out' | null
   kind: TxKind
   categoryId: string | null
-  /** A decision of the import taken as a keyword (1.2.2): a member's purchase or money (D80), an account. */
+  /** A decision of the import taken as a keyword (1.2.2): a member's purchase or money (D80), their gift, several people (D83), an account. */
   refundable?: boolean
   household?: boolean
   memberId?: string | null
+  gift?: boolean
+  share?: Share | null
   counterAccountId?: string | null
 }): string | null {
   const match = normalizeKeyword(input.keyword)
@@ -112,9 +125,11 @@ export function saveKeywordRule(input: {
       label: input.keyword.trim().replace(/\s+/g, ' '),
       kind: input.kind,
       categoryId: input.kind === 'expense' ? input.categoryId : null,
-      refundable: input.kind === 'expense' && input.direction === 'out' && !!input.refundable,
+      refundable: input.kind === 'expense' && !!input.refundable,
       household: input.kind === 'income' && !!input.household,
-      memberId: (input.kind === 'expense' && input.direction === 'out' && input.refundable) || (input.kind === 'income' && input.household) ? (input.memberId ?? null) : null,
+      memberId: (input.kind === 'expense' && input.refundable) || (input.kind === 'income' && input.household) ? (input.memberId ?? null) : null,
+      gift: input.kind === 'expense' && input.refundable && input.gift ? true : undefined,
+      share: input.kind === 'expense' && !input.refundable && input.share ? input.share : undefined,
       counterAccountId: input.kind === 'transfer' ? (input.counterAccountId ?? null) : null,
       learned: false,
       hits: at >= 0 ? rules[at]!.hits : 0,

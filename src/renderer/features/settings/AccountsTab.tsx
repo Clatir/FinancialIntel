@@ -12,7 +12,7 @@ import { confirmBalance, setOpening } from '../balances/actions'
 import { toast } from '../../store/ui'
 import { useAccounts } from '../operations/pickers'
 
-const KIND_LABEL: Record<AccountKind, string> = { bank: 'konto bankowe', wallet: 'portfel z kartą', other: 'inne' }
+const KIND_LABEL: Record<AccountKind, string> = { bank: 'konto bankowe', wallet: 'portfel z kartą', cash: 'gotówka', other: 'inne' }
 
 const NO_BALANCES: Record<string, { record: Balance }> = {}
 
@@ -47,7 +47,8 @@ export function AccountsTab() {
       >
         <p className="mb-2 text-[11.5px] text-muted">
           Pieniądze tych kont tworzą warstwy okrętu. Konto tradingowe XTB nie należy do budżetu (prowadzi je ICT Trade Journal); Portfel XTB z kartą – tak.
-          Gotówka nie ma konta: wypłata z bankomatu to wydatek „Gotówka”.
+          Gotówka: pieniądze oddane gotówką (np. przez domowników) wpisz jako wpływ na konto „Gotówka”, a wydatki z nich – szybkim wpisem z tym kontem.
+          Wypłata z bankomatu to nadal wydatek „Gotówka” (albo przelew własny na konto „Gotówka”, jeśli wolisz wpisywać każdy wydatek z portfela).
         </p>
         <div className="flex flex-col">
           {accounts.map((a) => (

@@ -1,5 +1,45 @@
 # Financial Intel – zmiany
 
+## 1.5.0
+
+Domownicy, ICTTJ i dokowanie: wspólne finansowanie wydatków (D83) i poprawki z przeglądu aplikacji po 1.4.1 (D84).
+
+Wspólne finansowanie:
+- Wydatek może sfinansować kilka osób naraz: „Wspólnie” w edytorze operacji – ja i domownicy, równo, procentami albo
+  kwotami. Moja część to mój wydatek, części innych idą do ich sald; jedna kategoria, bez rozbijania paragonu. Nowa kwota
+  albo kategoria przelicza części.
+- To samo w szybkim wpisie („wspólnie”), w Operacjach dla zaznaczonych („wspólnie…”), w decyzjach importu z mBanku i w
+  regułach – kolejne importy dzielą zakupy tej marki same. Procenty, które nie dają razem 100 %, nie zostaną zapisane.
+- „Prezent od: X” – osoba płaci za mnie i nic nie jest winna: najpierw z jej zaliczki, resztę pokrywają osłony; wydatek
+  nie zjada energii ani kopert. Prezent także jako część wspólnego zakupu.
+- Konto „Gotówka” (portfel): zwrot gotówką od domownika to wpływ na tym koncie, wydatki z portfela – szybkim wpisem;
+  w kreatorze saldo gotówki nieobowiązkowe.
+- Babcia i dziadek jako dwie osoby (Ustawienia → Domownicy); ich wspólną wpłatę dzieli podział wpłaty z 1.4.0.
+
+Domownicy:
+- Operacje sprzed dnia rozliczeń, których salda na start nie obejmują – dopisane później (import z banku z opóźnieniem,
+  drugi komputer), z datą przesuniętą przed ten dzień albo z domownikiem dodanym potem – liczą się zaraz po saldach na
+  start, nic nie znika; Ustawienia → Domownicy podają ich liczbę. Dzień rozliczeń nowego folderu to dzień po ostatniej
+  operacji z banku.
+- Zwrot towaru z zakupu domownika z importu trafia do niego („Zwrot towaru – dla: X”), nie do mnie.
+- Połączone nazwy nie zabierają wpłacie domownika rozpoznania.
+- Gra: zakup za domownika (albo jego prezent) nie daje naruszenia ciszy nocnej, impulsu ani osłon poniżej minimum –
+  liczy się tylko moja część.
+- Reguła zapamiętana jeszcze raz (np. sama kategoria) nie zostawia starego podziału ani prezentu.
+
+ICTTJ i dokowanie:
+- Usunięcie zadokowanej operacji usuwa jej dokowanie („Cofnij” cofa oba) – wpis ICTTJ znów czeka na zadokowanie.
+- Pula wpisu zmieniona w ICTTJ po dokowaniu – znaczek „pula zmieniona”; ponowne dokowanie bierze nową.
+- Wpis zadokowany na dwóch komputerach przed synchronizacją – znaczek „podwójnie” i przycisk usuwający drugie
+  dokowanie (zostaje to z operacją z banku); ta sama wypłata na Portfelu XTB z obu komputerów to jeden plik.
+- „Portfel XTB?” dopiero, gdy plik z banku obejmuje dni po oknie wypłaty (okres pliku, nie dzień importu).
+- O starcie budżetu decyduje data pieniędzy w banku: wypłata wpisana w ICTTJ przed startem, a zaksięgowana po nim, dokuje.
+- Dzień z niezadokowaną parą wypłaty czeka w grze (najwyżej tydzień) – najpierw pula, potem ocena dnia.
+- Wpis usunięty w ICTTJ i wpisany od nowa – operacja z banku paruje z nowym, bez „Portfel XTB?”.
+- Kwota w banku inna o grosze (przewalutowanie, opłata) albo przelew po świętach – „inna kwota” do potwierdzenia w
+  oknie dokowania, pieniądze nie liczą się dwa razy.
+- Dni robocze bez polskich świąt (Wielkanoc, Boże Ciało, 11 listopada, Wigilia…) w oknie 3 dni roboczych wypłaty.
+
 ## 1.4.3
 
 Szybkość przy dużym folderze – poprawki z przeglądu aplikacji po 1.4.1 (decyzje D84). Zmierzone na syntetycznym folderze

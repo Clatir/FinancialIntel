@@ -4,7 +4,7 @@
  */
 import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
-import { householdOf, rebaseOpenings } from '@shared/calc/fleet'
+import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
 import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
@@ -97,11 +97,13 @@ export function setHouseholdSince(since: string | null): void {
   const input = fleetInputNow()
   const openings = input ? timed('rozliczenia: saldo na start', () => rebaseOpenings(input, today, since)) : null
   const changed = openings ? before.members.filter((m) => !sameOpening(m.opening, openings.get(m.id))) : []
+  // The balances on the new start take in the operations there are now before it (B14: one added later counts after them).
+  const openingIds = input ? openingIdsOf(input, today, since) : undefined
   updateSettings((f) => ({
     ...f,
     settings: {
       ...f.settings,
-      household: { ...f.settings.household, since, members: f.settings.household.members.map((m) => (openings?.has(m.id) ? { ...m, opening: openings.get(m.id)! } : m)) }
+      household: { ...f.settings.household, since, openingIds, members: f.settings.household.members.map((m) => (openings?.has(m.id) ? { ...m, opening: openings.get(m.id)! } : m)) }
     }
   }))
   if (!changed.length) return
@@ -116,18 +118,33 @@ const sameOpening = (a: MemberOpening, b: MemberOpening | undefined) => !b || (a
 const openingText = (o: MemberOpening) => (o.deposit > 0 ? `zaliczka ${formatPln(o.deposit)} zł` : o.owed > 0 ? `ma oddać ${formatPln(o.owed)} zł` : '0 zł')
 
 /**
- * The settlements from today (D81): a folder without the date chosen gets today, once. What each member owed or held
- * until yesterday (as 1.3.0 counted it) becomes their opening balance – nothing marked before is lost, and it can be
- * changed in Ustawienia → Domownicy.
+ * The settlements' start (D81) of a folder without one: the day after the bank's data end (the last imported operation –
+ * B14: the next import brings the days between as operations after it), at most today; none imported – today. What each
+ * member owed or held until then (as 1.3.0 counted it) becomes their opening balance – nothing marked before is lost, and
+ * it can be changed in Ustawienia → Domownicy.
+ */
+export function seedSince(transactions: readonly Pick<Transaction, 'date' | 'bank'>[], today: string): string {
+  let last: string | null = null
+  for (const t of transactions) if (t.bank && t.date <= today && (last == null || t.date > last)) last = t.date
+  return last && addDays(last, 1) < today ? addDays(last, 1) : today
+}
+
+/**
+ * Once per folder: the settlements' start (`seedSince`) with the members' balances on it and the operations they take in;
+ * a folder of before 1.5.0 – the operations its balances take in (B14: the ones there are now – one dated before the
+ * start and added later counts after them).
  */
 export function useHouseholdSinceSeed(): void {
   const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since === undefined)
+  const unstamped = useData((s) => s.phase === 'ready' && !s.status?.readOnly && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined)
   useEffect(() => {
     if (!unset) return
     const input = fleetInputNow()
     if (!input || useData.getState().fi?.settings.household.since !== undefined) return
     const today = warsawNow().date
-    const before = timed('rozliczenia: saldo na start', () => householdOf(input, today, addDays(today, -1)))
+    const since = seedSince(input.transactions, today)
+    const before = timed('rozliczenia: saldo na start', () => householdOf(input, today, addDays(since, -1)))
+    const openingIds = openingIdsOf(input, today, since)
     updateSettings(
       (f) => ({
         ...f,
@@ -135,7 +152,8 @@ export function useHouseholdSinceSeed(): void {
           ...f.settings,
           household: {
             ...f.settings.household,
-            since: today,
+            since,
+            openingIds,
             members: f.settings.household.members.map((m) => {
               const b = balanceOf(before, m.id)
               return b.owed || b.deposit ? { ...m, opening: { owed: b.owed, deposit: b.deposit } } : m
@@ -146,5 +164,13 @@ export function useHouseholdSinceSeed(): void {
       { background: true }
     )
   }, [unset])
+  useEffect(() => {
+    if (!unstamped) return
+    const input = fleetInputNow()
+    const household = useData.getState().fi?.settings.household
+    if (!input || !household || household.openingIds !== undefined || household.since === undefined) return
+    const openingIds = openingIdsOf(input, warsawNow().date, household.since)
+    updateSettings((f) => (f.settings.household.openingIds !== undefined ? f : { ...f, settings: { ...f.settings, household: { ...f.settings.household, openingIds } } }), { background: true })
+  }, [unstamped])
 }
 

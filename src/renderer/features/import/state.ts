@@ -5,7 +5,8 @@ import type { BrandAliases } from '@shared/import/aliases'
 import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
 import { buildImport, importGroups, planImport, sameChoice, type Choice, type ImportChoices, type ImportGroup, type ImportPlan, type ImportTheme } from '@shared/import/reconcile'
 import { decodeText } from '@shared/import/text'
-import { HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, type HouseholdMember, type ImportRule, type Transaction } from '@shared/schema'
+import { shareComplete } from '@shared/calc/share'
+import { HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, type HouseholdMember, type ImportRule, type Share, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { addRecords, deleteRecords, flushSaves, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -359,9 +360,9 @@ export function selectedRowKeys(groups: readonly ImportGroup[], selected = useIm
  * One decision for everything ticked: a ticked group takes it as its own (remembered), a row ticked apart as the
  * row's; where it does not fit the money (income for a purchase) nothing changes. Returns how many took it, and not.
  */
-export function chooseSelected(groups: readonly ImportGroup[], option: Option, categoryId: string | null): { applied: number; unfit: number } {
+export function chooseSelected(groups: readonly ImportGroup[], option: Option, categoryId: string | null, share: Share | null = null): { applied: number; unfit: number } {
   const { selected, lastDecided } = useImport.getState()
-  const choice = choiceFor(option, { kind: 'expense', categoryId })
+  const choice = choiceFor(option, { kind: 'expense', categoryId }, share)
   // A bulk decision proposes no keyword (D78): the one proposed for a group decided apart closes when it changes.
   if (lastDecided && selected.groups[lastDecided]) useImport.setState({ lastDecided: null })
   let applied = 0
@@ -450,6 +451,9 @@ export async function runImport(): Promise<void> {
   try {
     const status = useData.getState().status
     if (status?.readOnly) throw new Error(`Folder jest tylko do odczytu${status.readOnlyReason ? ` (${status.readOnlyReason})` : ''} – import niemożliwy.`)
+    // A shared purchase's percents not summing to 100 % (D83): said before anything is written.
+    const choices = [...Object.values(st.choices.themes), ...Object.values(st.choices.groups), ...Object.values(st.choices.rows)]
+    if (choices.some((c) => c.kind === 'expense' && c.share && !shareComplete(c.share, null))) throw new Error('Wspólny zakup: procenty osób muszą dać razem 100 % – popraw podział i importuj jeszcze raz.')
     if (!(await flushSaves())) throw new Error('Nie udało się zapisać bieżących zmian – import wstrzymany. Spróbuj ponownie za chwilę.')
     const backup = await api.importBackup()
     const plan = planNow(st.file, st.accountId, st.deletedKeys)
@@ -464,6 +468,8 @@ export async function runImport(): Promise<void> {
     if (removal?.error) throw new Error(removal.error)
     const client = st.file.client
     const learned = result.rules.length - s.fi.settings.import.rules.length
+    // What the file covers (B18): its period, else its latest row – never less than an earlier file did.
+    const covered = plan.period?.to ?? plan.rows.reduce<string | null>((m, p) => (m == null || p.row.date > m ? p.row.date : m), null)
     updateSettings((f) => ({
       ...f,
       settings: {
@@ -473,6 +479,7 @@ export async function runImport(): Promise<void> {
           rules: result.rules,
           ownNames: client && !f.settings.import.ownNames.some((n) => n.toLowerCase() === client.toLowerCase()) ? [...f.settings.import.ownNames, client] : f.settings.import.ownNames,
           lastImport: { ...f.settings.import.lastImport, [st.accountId]: now },
+          coveredTo: covered && covered > (f.settings.import.coveredTo[st.accountId] ?? '') ? { ...f.settings.import.coveredTo, [st.accountId]: covered } : f.settings.import.coveredTo,
           // The imports' times (the mission „Łączność z bazą”, E7): the last 100.
           log: Object.fromEntries(
             Object.entries({ ...f.settings.import.log, [now]: st.accountId })

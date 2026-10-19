@@ -2,11 +2,12 @@ import { create } from 'zustand'
 import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
 import { emptyFilter, OPERATION_MARKS, type OperationsFilter } from '@shared/operationsView'
-import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type Transaction } from '@shared/schema'
-import { addRecord, discardDraft, replaceRecords, updateSettings, useData } from '../../store/data'
+import { shareOf, withShare } from '@shared/calc/share'
+import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type Share, type Transaction } from '@shared/schema'
+import { addRecord, deleteRecords, discardDraft, replaceRecords, updateSettings, useData } from '../../store/data'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
-import { deleteWithUndo } from '../history/actions'
+import { deleteWithUndo, restoreDeleted } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
 
 /** Filters of this computer (the period and the search start fresh: this month, empty). */
@@ -86,12 +87,16 @@ export function categorizeTicked(visibleIds: readonly string[], categoryId: stri
     .filter((id) => ticked[id] && !data.drafts[id])
     .map((id) => data.records.transactions[id]?.record)
     .filter((t): t is Transaction => !!t)
-  const fit = ops.filter((t) => t.kind === 'expense' && !t.splits.length)
+  // One category: an expense without lines, or a shared purchase (D83 – its lines take the category with it).
+  const fit = ops.filter((t) => t.kind === 'expense' && (!t.splits.length || shareOf(t)))
   const before = fit.filter((t) => t.categoryId !== categoryId)
   const rulesBefore = data.fi?.settings.import.rules ?? null
   replaceRecords(
     'transactions',
-    before.map((t) => ({ ...t, categoryId }))
+    before.map((t) => {
+      const share = shareOf(t)
+      return share ? withShare({ ...t, categoryId }, share) : { ...t, categoryId }
+    })
   )
   let note = ''
   if (remember === 'brands') note = ` · reguły importu: ${rememberBrands(fit, categoryId)}`
@@ -115,22 +120,35 @@ export function categorizeTicked(visibleIds: readonly string[], categoryId: stri
   )
 }
 
+/** Who finances the ticked (D80 g, D83): me (`memberId` null), a household member or their gift, or several people. */
+export type FinanceChoice = { memberId: string | null; gift?: boolean } | { share: Share }
+
+/** What of an operation the financing is: compared before a bulk change (an unchanged one is not written). */
+const financing = (t: Transaction) => JSON.stringify([t.refundable, t.refundable ? t.memberId : null, !!t.gift, t.share ?? null, t.splits.map((s) => [s.amount, s.refundable, s.memberId, !!s.gift])])
+
 /**
- * Who finances the ticked expenses (D80 g): a household member (not my cost, not the energy's) or me again. A split
- * receipt keeps its lines (each says it) – skipped, as other kinds of operations.
+ * Who finances the ticked expenses (D80 g, D83): a household member (not my cost, not the energy's), their gift, several
+ * people (each operation's amount split so) or me again. A split receipt keeps its lines (each says it) – skipped, as
+ * other kinds of operations; a shared purchase takes the new financing.
  */
-export function financeTicked(visibleIds: readonly string[], memberId: string | null, label: string): void {
+export function financeTicked(visibleIds: readonly string[], choice: FinanceChoice, label: string): void {
   const { ticked } = useOperationsUi.getState()
   const data = useData.getState()
   const ops = visibleIds
     .filter((id) => ticked[id] && !data.drafts[id])
     .map((id) => data.records.transactions[id]?.record)
     .filter((t): t is Transaction => !!t)
-  const fit = ops.filter((t) => t.kind === 'expense' && !t.splits.length)
-  const before = fit.filter((t) => t.refundable !== !!memberId || (memberId != null && t.memberId !== memberId))
+  const fit = ops.filter((t) => t.kind === 'expense' && (!t.splits.length || shareOf(t)))
+  const next = (t: Transaction): Transaction => {
+    if ('share' in choice) return withShare(t, choice.share)
+    const plain = shareOf(t) ? withShare(t, null) : t
+    return { ...plain, refundable: !!choice.memberId, memberId: choice.memberId, gift: choice.memberId && choice.gift ? true : undefined }
+  }
+  const pairs = fit.map((t) => [t, next(t)] as const).filter(([a, b]) => financing(a) !== financing(b))
+  const before = pairs.map(([a]) => a)
   replaceRecords(
     'transactions',
-    before.map((t) => ({ ...t, refundable: !!memberId, memberId }))
+    pairs.map(([, b]) => b)
   )
   const skipped = ops.length - fit.length
   clearTicked()
@@ -190,7 +208,14 @@ export function newOperation(over: Partial<Transaction> = {}): string {
 
 export async function deleteOperation(t: Transaction, label: string): Promise<void> {
   if (useOperationsUi.getState().selectedId === t.id) useOperationsUi.setState({ selectedId: null })
-  await deleteWithUndo('transactions', t.id, label, `Usunięto: ${label}.`)
+  // Its dockings go with it (B15): the ICTTJ payout docked on it docks again – with another operation, or Portfel XTB;
+  // „Cofnij” brings them back too.
+  const dockings = Object.values(useData.getState().records.dockings ?? {})
+    .map((e) => e.record)
+    .filter((d) => d.transactionId === t.id)
+    .map((d) => d.id)
+  const ok = await deleteWithUndo('transactions', t.id, label, `Usunięto: ${label}.`, undefined, dockings.length ? () => restoreDeleted('dockings', dockings) : undefined)
+  if (ok && dockings.length) await deleteRecords('dockings', dockings)
 }
 
 /** Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80). */

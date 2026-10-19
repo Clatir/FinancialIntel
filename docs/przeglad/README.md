@@ -109,6 +109,8 @@ może mieć albo nie mieć konta bankowego).”
   bankomatu; c) podział równo / procenty / kwoty; d) „Dziadkowie” jako jedna osoba czy dwie; e) „sfinansowane jako
   prezent” (nikt nic nie jest winien, wydatek nie zjada energii).
 - Etap: 1.5.0 (tabela niżej), Opus 5.5 · max, ok. 2–3 h po odpowiedziach.
+- ✅ Zrobione w 1.5.0 (D83, T156–T158): wspólne finansowanie równo / procentami / kwotami w edytorze, szybkim wpisie,
+  decyzji zbiorczej i imporcie (z regułą), prezent, konto „Gotówka”, babcia i dziadek jako dwie osoby.
 
 ## Proponowana kolejność etapów
 
@@ -148,15 +150,15 @@ Razem ok. 21–28 h.
 - [x] **B11** Zmiana planu minionego miesiąca zmienia też bieżący i kolejne miesiące, które z niego „korzystały” – wbrew T46 – `renderer/features/month/actions.ts:24-38`, `shared/calc/plan.ts:270-274` (+10)
 - [ ] **B12** Data wpisana jako „dd.mm” bierze rok z bieżącej wartości pola – na początku stycznia grudniowy zakup trafia w przyszły grudzień, a silnik go pomija bez ostrzeżenia – `renderer/components/fields.tsx:118`, `renderer/lib/format.ts:130-148` (+4)
 - [x] **B13** Podział łupów proponuje zarchiwizowane cele, a silnik wpłaca do nich pieniądze – `renderer/features/month/MonthPage.tsx:340-345`, `shared/calc/fleet.ts:507` (+9)
-- [ ] **B14** Rozliczenia „od dziś” (seed 1.4.0) gubią operacje domowników datowane przed dniem rozliczeń i dodane później (opóźniony import mBanku) – `renderer/features/household/actions.ts:104`, `shared/calc/household.ts:221` (+2)
-- [ ] **B15** Usunięta operacja zadokowanej dostawy zostawia osierocone dokowanie: wpis ICTTJ na zawsze „zadokowany”, pieniądze bez puli – `shared/calc/dock.ts:85`, `shared/calc/dock.ts:101` (+2)
-- [ ] **B16** Zmiana puli wpisu w ICTTJ po dokowaniu nie jest wykrywana – silnik liczy starą pulę – `shared/calc/dock.ts:103`, `renderer/features/dock/actions.ts:48` (+1)
-- [ ] **B17** Dwa dokowania jednego wpisu na Portfelu XTB (dwa komputery przed synchronizacją) dublują pieniądze, a drugiej operacji nie widać w dokowaniu – `renderer/features/dock/actions.ts:64`, `shared/calc/dock.ts:85` (+2)
-- [ ] **B18** Propozycja „Portfel XTB?” liczona od chwili importu (dowolnego konta mBank), a nie od zakresu pliku z banku – `shared/calc/dock.ts:130`, `renderer/features/dock/state.ts:42` (+5)
-- [ ] **B19** Granica startu budżetu dla dostaw liczona po dacie wpisu ICTTJ, a nie po dacie pieniędzy w banku – `shared/calc/dock.ts:86`, `shared/calc/dock.ts:110` (+4)
-- [ ] **B20** Para wypłaty ICTTJ jeszcze niezadokowana: silnik ignoruje pulę (Podatek w osłonach, zwrot z puli Podatek = czerwony firewall), na komputerze bez ICTTJ zawsze – `shared/calc/fleet.ts:657`, `shared/calc/fleet.ts:670` (+4)
-- [ ] **B21** Wpis ICTTJ usunięty i wpisany od nowa: operacja banku zostaje zablokowana przez dokowanie nieistniejącego wpisu, a nowy wpis dostaje „Portfel XTB?” – `shared/calc/dock.ts:85`, `shared/calc/dock.ts:88` (+3)
-- [ ] **B22** Kwota w banku inna niż w ICTTJ albo przelew po świętach: wpis dostaje „Portfel XTB?”, a wpływ „bez wpisu” – po potwierdzeniu pieniądze liczą się dwa razy – `shared/calc/dock.ts:114`, `shared/calc/dock.ts:120` (+4)
+- [x] **B14** Rozliczenia „od dziś” (seed 1.4.0) gubią operacje domowników datowane przed dniem rozliczeń i dodane później (opóźniony import mBanku) – `renderer/features/household/actions.ts:104`, `shared/calc/household.ts:221` (+2)
+- [x] **B15** Usunięta operacja zadokowanej dostawy zostawia osierocone dokowanie: wpis ICTTJ na zawsze „zadokowany”, pieniądze bez puli – `shared/calc/dock.ts:85`, `shared/calc/dock.ts:101` (+2)
+- [x] **B16** Zmiana puli wpisu w ICTTJ po dokowaniu nie jest wykrywana – silnik liczy starą pulę – `shared/calc/dock.ts:103`, `renderer/features/dock/actions.ts:48` (+1)
+- [x] **B17** Dwa dokowania jednego wpisu na Portfelu XTB (dwa komputery przed synchronizacją) dublują pieniądze, a drugiej operacji nie widać w dokowaniu – `renderer/features/dock/actions.ts:64`, `shared/calc/dock.ts:85` (+2)
+- [x] **B18** Propozycja „Portfel XTB?” liczona od chwili importu (dowolnego konta mBank), a nie od zakresu pliku z banku – `shared/calc/dock.ts:130`, `renderer/features/dock/state.ts:42` (+5)
+- [x] **B19** Granica startu budżetu dla dostaw liczona po dacie wpisu ICTTJ, a nie po dacie pieniędzy w banku – `shared/calc/dock.ts:86`, `shared/calc/dock.ts:110` (+4)
+- [x] **B20** Para wypłaty ICTTJ jeszcze niezadokowana: silnik ignoruje pulę (Podatek w osłonach, zwrot z puli Podatek = czerwony firewall), na komputerze bez ICTTJ zawsze – `shared/calc/fleet.ts:657`, `shared/calc/fleet.ts:670` (+4)
+- [x] **B21** Wpis ICTTJ usunięty i wpisany od nowa: operacja banku zostaje zablokowana przez dokowanie nieistniejącego wpisu, a nowy wpis dostaje „Portfel XTB?” – `shared/calc/dock.ts:85`, `shared/calc/dock.ts:88` (+3)
+- [x] **B22** Kwota w banku inna niż w ICTTJ albo przelew po świętach: wpis dostaje „Portfel XTB?”, a wpływ „bez wpisu” – po potwierdzeniu pieniądze liczą się dwa razy – `shared/calc/dock.ts:114`, `shared/calc/dock.ts:120` (+4)
 - [ ] **B23** Propozycje pensji i „Koperty ze średnich” dla przyszłego miesiąca liczą niepełny bieżący miesiąc (i miesiące bez danych) jako pełne (wbrew T47) – `shared/calc/plan.ts:33`, `shared/calc/plan.ts:35` (+3)
 - [x] **B24** Esc w polach kwoty, daty i godziny nie anuluje szkicu – wpisana wartość i tak się zapisuje – `renderer/components/fields.tsx:82-89`, `renderer/components/fields.tsx:90-96` (+8)
 - [ ] **B25** Średnie i propozycje liczą od najstarszej operacji dowolnego rodzaju – jedna stara pożyczka z Radaru dokłada puste miesiące i zaniża pensję, koperty i cel kadłuba – `shared/calc/plan.ts:25-30`, `shared/calc/plan.ts:33-38` (+5)
@@ -174,8 +176,8 @@ Razem ok. 21–28 h.
 - [ ] **B37** „Ustaw” dla zaznaczonych bez wybranej kategorii nadpisuje propozycje sieci i uczy reguł „wydatek bez kategorii” – kolejne importy pokazują te marki jako gotowe – `renderer/features/import/ImportPage.tsx:562`, `renderer/features/import/ImportPage.tsx:571` (+5)
 - [ ] **B38** Plan na ekranie nie jest liczony od nowa po zmianie nazwisk właściciela, kontenerów, kategorii ani operacji – import liczy go od nowa i decyzje o zmienionych kluczach przepadają po cichu – `renderer/features/import/ImportPage.tsx:791`, `renderer/features/import/state.ts:40` (+7)
 - [ ] **B39** Po przeliczeniu planu (słowo kluczowe, połączenie nazw, „+ domownik”) temat traci swoją decyzję, a jej późniejsza zmiana nie obejmuje żadnej grupy – `renderer/features/import/state.ts:192`, `renderer/features/import/state.ts:243` (+4)
-- [ ] **B40** Zwrot towaru z zakupu, który finansuje domownik, trafia do mnie: import nigdy nie tworzy zwrotu „finansuje: X” – `shared/import/classify.ts:340-347`, `shared/import/reconcile.ts:562-564` (+3)
-- [ ] **B41** Wpłata domownika traci rozpoznanie przez regułę bez osoby: słowo kluczowe z tytułu albo reguła połączonej nazwy – `shared/import/classify.ts:298-302`, `shared/import/classify.ts:327-336` (+3)
+- [x] **B40** Zwrot towaru z zakupu, który finansuje domownik, trafia do mnie: import nigdy nie tworzy zwrotu „finansuje: X” – `shared/import/classify.ts:340-347`, `shared/import/reconcile.ts:562-564` (+3)
+- [ ] **B41** Wpłata domownika traci rozpoznanie przez regułę bez osoby: słowo kluczowe z tytułu albo reguła połączonej nazwy – `shared/import/classify.ts:298-302`, `shared/import/classify.ts:327-336` (+3) · 1.5.0: część 2 (połączone nazwy) zrobiona; część 1 (słowo z tytułu) czeka na decyzję użytkownika – „Przed grupą H”
 - [x] **B42** Jednorazowy błąd odczytu pliku zostaje „uszkodzonym plikiem” aż do restartu, a zapis w to miejsce odsuwa poprawny plik – `main/datastore/store.ts:314`, `main/datastore/store.ts:315` (+6)
 - [x] **B43** Zamknięcie aplikacji czeka na zapis tylko 4 s – przy 150 tys. zapisy i rescan trwają dłużej, okno zamyka się jak po udanym zapisie – `main/index.ts:900`, `main/index.ts:904` (+6)
 - [x] **B44** „Zachowaj tę wersję” / „Zachowaj nowsze” nie odkłada odrzuconej wersji do historii: oryginał nadpisany w miejscu bez śladu, kopia tylko do Kosza tego komputera (albo usunięta bez Kosza) – `main/datastore/store.ts:952`, `main/datastore/store.ts:957` (+10)
@@ -328,7 +330,7 @@ Razem ok. 21–28 h.
 - [ ] **N2** Tryb tylko do odczytu: część ekranów pokazuje sukces, choć nic się nie zapisało – `renderer/features/settings/AccountsTab.tsx:126`, `renderer/features/balances/actions.ts:39` (+53)
 - [ ] **N3** Szybki wpis: podgląd „Energia dziś → …” liczy inaczej niż silnik (kategoria bez koperty, data inna niż dziś) – `renderer/features/quick/QuickApp.tsx:142-144`, `renderer/features/quick/QuickApp.tsx:150` (+10)
 - [ ] **N4** Panel „Przychody”: mediana „Razem” liczona z miesięcy z ujemnym tradingiem – niezgodna z resztą panelu i z raportami – `shared/calc/income.ts:129`, `shared/calc/income.ts:145` (+4)
-- [ ] **N5** Zakup sfinansowany przez domownika nadal daje poważne naruszenie (cisza nocna, osłony poniżej minimum) – wbrew D80 f / T107 – `shared/calc/game.ts:237`, `shared/calc/game.ts:187` (+12)
+- [x] **N5** Zakup sfinansowany przez domownika nadal daje poważne naruszenie (cisza nocna, osłony poniżej minimum) – wbrew D80 f / T107 – `shared/calc/game.ts:237`, `shared/calc/game.ts:187` (+12)
 - [ ] **N6** „Miesiąc zamknięty na plus” (T52) przeczy silnikowi: fanfara przy alarmie „energia wyczerpana”, a miesiąc opłaty ze zbiornika nigdy nie jest na plus – `shared/calc/plan.ts:290`, `shared/calc/plan.ts:326` (+12)
 - [ ] **N7** Kreator startu: nieaktualne teksty o „wersji 1.1”, brak kroku folderu ICTTJ i celów w podziale środków (spec, kroki 5–6) – `renderer/features/wizard/WizardPage.tsx:230`, `renderer/features/wizard/WizardPage.tsx:280` (+7)
 - [ ] **N8** Koperta zarchiwizowanej kategorii znika z formularza planu, ale dalej liczy się do sum, energii dnia i kolejnych miesięcy – `renderer/features/month/MonthPage.tsx:172`, `renderer/features/month/MonthPage.tsx:203` (+3)
@@ -483,5 +485,5 @@ Razem ok. 21–28 h.
 - [ ] **F39** Ulgi z PIT-37 / PIT-36: wydatki do odliczenia w roku *(nakład M)* · ⚠ D58 dotyczy tylko PIT-38 (termin bez kwoty) – PIT-37/36 to nowa sprawa. D8 (trading bez ZUS) sugeruje, że dochodu z PIT-37 może nie być – do potwierdzenia przez użytkownika.
 - [ ] **F40** Automatyczne ukrycie kwot po bezczynności i przy starcie z Windows *(nakład S)* · ⚠ D30 (bez blokady) – zgodne, bo to tylko ukrycie kwot.
 - [ ] **F41** Wpisy z telefonu przez skrzynkę na OneDrive *(nakład M)* · ⚠ D2 (bez wersji na iPhone'a) – to nie aplikacja na telefon, tylko skrót iOS zapisujący plik; do decyzji użytkownika.
-- [ ] **F42** Polskie dni wolne w liczeniu dni roboczych *(nakład S)* · ⚠ T63 (decyzja techniczna: „pon–pt, bez świąt”) – do zmiany. D72 mówi o „3 dniach roboczych”, więc uwzględnienie świąt jest zgodne z intencją użytkownika.
+- [x] **F42** Polskie dni wolne w liczeniu dni roboczych *(nakład S)* · ⚠ T63 (decyzja techniczna: „pon–pt, bez świąt”) – do zmiany. D72 mówi o „3 dniach roboczych”, więc uwzględnienie świąt jest zgodne z intencją użytkownika.
 - [ ] **F43** Zamknięcie i archiwizacja starych lat, porządki w folderze *(nakład L)* · ⚠ Brak sprzeczności z decyzją użytkownika. Zmienia decyzję techniczną T2 (jeden plik JSON na rekord) dla zamkniętych lat i wymaga ostrożności przy scalaniu / konfliktach (T18).

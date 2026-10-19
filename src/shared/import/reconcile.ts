@@ -12,10 +12,11 @@
  *   for removal – never ticked by themselves: a filtered list lacks rows too.
  */
 import { addDays, daysBetween } from '../calc/dates'
+import { shareSplits, withBankAmount } from '../calc/share'
 import { fold } from '../fold'
 import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
-import { transactionSchema, type BankRow, type Transaction } from '../schema/records'
+import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isFeeOperation, upsertRule, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type RuleTarget } from './classify'
 import { rowKeys, type MbankFile, type MbankRow } from './mbank'
@@ -149,8 +150,12 @@ export interface ImportPlan {
 export function proposalSig(d: ImportDecision): string {
   if (d.source === 'none') return d.household ? `?${d.kind}:d:${d.memberId ?? '-'}` : `?${d.kind}`
   const member = d.refundable || d.household ? (d.memberId ?? '-') : ''
-  return [d.kind, d.categoryId ?? '', d.refundable ? 'z' : '', d.household ? 'd' : '', member, d.household && d.advance ? 'a' : '', d.counterAccountId ?? '', d.containerId ?? '', d.byTitle ? 't' : ''].join(':')
+  return [d.kind, d.categoryId ?? '', d.refundable ? 'z' : '', d.household ? 'd' : '', member, d.household && d.advance ? 'a' : '', d.counterAccountId ?? '', d.containerId ?? '', d.byTitle ? 't' : '', d.refundable && d.gift ? 'g' : '', shareKey(d.share)].join(':')
 }
+
+/** A shared purchase's split as one text (D83): '' = none. */
+export const shareKey = (s: Share | null | undefined): string =>
+  s ? `${s.mode}/${s.lines.map((l) => `${l.memberId ?? 'me'}=${s.mode === 'equal' ? '' : l.value}${l.gift ? 'g' : ''}`).join(',')}` : ''
 
 /**
  * Group of new rows (spec: history categorized in groups): one brand – a chain whatever its city or shop, else the
@@ -325,6 +330,9 @@ function shareMerged(list: Array<Classified | null>, rows: readonly MbankRow[]):
     const name = rows[best.i]!.counterparty || rows[best.i]!.description
     for (const i of at) {
       const c = list[i]!
+      // A household member's money asked about (inflow „pytaj”) stays their question (B41): only a decision about the
+      // same member's money passes on – never a plain income that would not pay their debt back.
+      if (c.decision.household && !(donor.decision.household && donor.decision.memberId === c.decision.memberId)) continue
       // A container is linked by its exact payee (`classifyRow`), not passed on.
       if (c.decision.source === 'none') list[i] = { ...c, decision: { ...donor.decision, containerId: null, ruleId: null, reason: `jak „${name}” (połączone nazwy)` } }
     }
@@ -516,6 +524,10 @@ export interface Choice {
   memberId: string | null
   /** A household member's money: the rest beyond their debt is their advance (else income). */
   advance: boolean
+  /** A purchase the member gives (D83, with `refundable`): nobody owes it. */
+  gift?: boolean
+  /** A purchase financed by several people (D83): each row's amount split so. */
+  share?: Share | null
   counterAccountId: string | null
 }
 
@@ -553,6 +565,8 @@ export const choiceOf = (d: ImportDecision): Choice => ({
   household: d.household,
   memberId: d.refundable || d.household ? d.memberId : null,
   advance: d.household && d.advance,
+  gift: d.refundable && d.gift,
+  share: d.kind === 'expense' && !d.refundable ? d.share : null,
   counterAccountId: d.counterAccountId
 })
 
@@ -566,6 +580,8 @@ export const sameChoice = (a: Choice, b: Choice): boolean =>
   a.household === b.household &&
   memberKey(a) === memberKey(b) &&
   (a.household && a.advance) === (b.household && b.advance) &&
+  (a.refundable && !!a.gift) === (b.refundable && !!b.gift) &&
+  shareKey(a.share) === shareKey(b.share) &&
   a.counterAccountId === b.counterAccountId
 
 export interface ImportResult {
@@ -612,7 +628,8 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
       counts.settled++
       // The counterparty as the bank wrote it then (not changed by the user) takes the bank's new one.
       const bankCounterparty = p.tx.counterparty === '' || p.tx.counterparty === (p.tx.bank?.counterparty ?? '')
-      update.push({ ...p.tx, date: p.row.date, amount: p.row.amount, counterparty: bankCounterparty ? p.row.counterparty : p.tx.counterparty, bank: bankOf(p) })
+      // A shared purchase's lines made again for the new amount (D83).
+      update.push(withBankAmount({ ...p.tx, date: p.row.date, counterparty: bankCounterparty ? p.row.counterparty : p.tx.counterparty, bank: bankOf(p) }, p.row.amount))
       continue
     }
     if (p.status === 'deleted' && !choices.restoreDeleted[p.key]) {
@@ -625,14 +642,18 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
     }
     if (p.status === 'merge' && joins(p, choices)) {
       counts.merged++
-      update.push({
-        ...p.tx,
-        date: p.row.date,
-        amount: p.row.amount,
-        counterparty: p.tx.counterparty || p.row.counterparty,
-        title: p.tx.title || p.row.title,
-        bank: bankOf(p)
-      })
+      update.push(
+        withBankAmount(
+          {
+            ...p.tx,
+            date: p.row.date,
+            counterparty: p.tx.counterparty || p.row.counterparty,
+            title: p.tx.title || p.row.title,
+            bank: bankOf(p)
+          },
+          p.row.amount
+        )
+      )
       continue
     }
     const group = p.status === 'new' || p.status === 'deleted' ? p.group : null
@@ -644,8 +665,10 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
     // The row's own decision, else its group's, else its theme's, else the proposal.
     const c = choices.rows[p.key] ?? (group ? choices.groups[group] : undefined) ?? (theme ? choices.themes[theme] : undefined) ?? base
     const out = p.row.amount < 0
-    const refundable = c.kind === 'expense' && out && c.refundable
+    // A member's purchase – and its product return, their money (B40); a shared purchase's lines (D83).
+    const refundable = c.kind === 'expense' && c.refundable
     const household = c.kind === 'income' && !out && c.household
+    const share = c.kind === 'expense' && !refundable && c.share ? c.share : null
     counts.created++
     create.push(
       transactionSchema.parse({
@@ -663,6 +686,8 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
         // A household member's purchase or money (D80): whose; their money beyond their debt is their advance or income.
         memberId: refundable || household ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
         advance: household && c.advance,
+        ...(refundable && c.gift ? { gift: true } : {}),
+        ...(share ? { share, splits: shareSplits({ amount: p.row.amount, categoryId: c.categoryId }, share) } : {}),
         counterparty: p.row.counterparty,
         title: p.row.title,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null,
@@ -701,9 +726,11 @@ export function buildImport(plan: ImportPlan, choices: ImportChoices, opts: { no
         label: g.label,
         kind: c.kind,
         categoryId: c.kind === 'expense' ? c.categoryId : null,
-        refundable: c.kind === 'expense' && g.direction === 'out' && c.refundable,
+        refundable: c.kind === 'expense' && c.refundable,
         household: c.kind === 'income' && c.household,
-        memberId: (c.kind === 'expense' && g.direction === 'out' && c.refundable) || (c.kind === 'income' && c.household) ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
+        memberId: (c.kind === 'expense' && c.refundable) || (c.kind === 'income' && c.household) ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
+        gift: c.kind === 'expense' && c.refundable && c.gift ? true : undefined,
+        share: c.kind === 'expense' && !c.refundable && c.share ? c.share : undefined,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null
       },
       { now: opts.now, makeId: opts.makeId, hits: total }

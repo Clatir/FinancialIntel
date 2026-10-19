@@ -22,7 +22,7 @@ import { envelopeKind, type EnvelopeKind, type MemberOpening } from '../schema/b
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
 import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawEndOf, warsawNow, warsawStamp, warsawStartOf } from './dates'
 import { openingsOf } from './balances'
-import { balanceOf, heldOf, settleHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
+import { balanceOf, heldOf, settleHousehold, settlesHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
 import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type IncomeStats } from './income'
 import { goalAt, goalDecided, goalTakes } from './goals'
 import { debtOf, loanStates, type LoanState } from './loans'
@@ -250,7 +250,8 @@ const ledgerOptions = (settings: Pick<Settings, 'household'>, budgetStart: strin
   from: settleFromOf(settings, budgetStart),
   reset: budgetStart,
   openings: new Map([...openings].map(([id, o]) => [id, o.date])),
-  members: settings.household.members
+  members: settings.household.members,
+  covered: settings.household.openingIds ?? null
 })
 
 /**
@@ -281,13 +282,33 @@ export function rebaseOpenings(input: Pick<FleetInput, 'settings' | 'balances' |
     for (const m of settings.household.members) value.set(m.id, net(balanceOf(then, m.id)))
   } else {
     // The balances as 1.3.0 counted them (from the budget's start, no openings) – the old opening's typed part on top.
+    // The operations the old openings never took in (B14) are not given back: they count after the new start as before.
+    const late = new Set(householdOf(input, today).late)
     const members = settings.household.members.map((m) => ({ ...m, opening: { owed: 0, deposit: 0 } }))
-    const plain = { ...input, settings: { ...settings, household: { ...settings.household, since: null, members } } }
+    const plain = {
+      ...input,
+      transactions: late.size ? input.transactions.filter((t) => !late.has(t.id)) : input.transactions,
+      settings: { ...settings, household: { ...settings.household, since: null, members } }
+    }
     const atNext = householdOf(plain, today, addDays(next, -1))
     const atFrom = householdOf(plain, today, addDays(from, -1))
     for (const m of settings.household.members) value.set(m.id, net(balanceOf(atNext, m.id)) + net(m.opening) - net(balanceOf(atFrom, m.id)))
   }
   return new Map([...value].map(([id, v]) => [id, v >= 0 ? { owed: 0, deposit: v } : { owed: -v, deposit: 0 }]))
+}
+
+/**
+ * The operations the members' balances at a settlements' start take in (B14, `settings.household.openingIds`): the
+ * household's operations dated from the budget's start to the day before it – set together with the balances.
+ */
+export function openingIdsOf(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, today: string, since: string | null): string[] {
+  const budgetStart = budgetStartOf(input.settings, input.balances ?? [], today)
+  const from = settleFromOf({ household: { ...input.settings.household, since } }, budgetStart)
+  if (!budgetStart || !from || from <= budgetStart) return []
+  return input.transactions
+    .filter((t) => t.date >= budgetStart && t.date < from && settlesHousehold(t))
+    .map((t) => t.id)
+    .sort()
 }
 
 // ------------------------------------------------------------------ the whole state
@@ -643,6 +664,9 @@ export function computeFleet(input: FleetInput): FleetState {
         deposit += f.advance
         moves.deposit = (moves.deposit ?? 0) + f.advance
       }
+      // Their gift (D83): the shields pay what their advance did not – nobody owes it; a returned gift comes back.
+      if (f.gift > 0) drawShields(f.gift, moves)
+      else if (f.gift < 0) addShields(-f.gift, moves)
     }
   }
 
@@ -867,7 +891,8 @@ export function computeFleet(input: FleetInput): FleetState {
       events.push({
         key: at(settleFrom, 1, 'h'),
         run: () => {
-          const target = sum(settings.household.members.map((m) => m.opening?.deposit ?? 0))
+          // The operations dated before it and added after the openings were set (B14) count after them: their part too.
+          const target = sum(settings.household.members.map((m) => m.opening?.deposit ?? 0)) + household.lateDeposit
           const delta = target - deposit
           if (!delta) return
           const moves: Moves = { deposit: delta }

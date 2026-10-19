@@ -4,8 +4,8 @@
  */
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import { warsawNow } from '@shared/calc/dates'
 import { deliveries, type Delivery } from '@shared/calc/dock'
+import { MBANK_ACCOUNT_ID, type Transaction } from '@shared/schema'
 import type { IctjSnapshot } from '@shared/ictj'
 import { listOf, useData } from '../../store/data'
 import { fleetNow, useFleet } from '../../store/fleet'
@@ -15,33 +15,47 @@ type Records = ReturnType<typeof useData.getState>['records']
 
 const NO_SKIPPED: string[] = []
 
-let memo: { tx: Records['transactions']; dk: Records['dockings']; skipped: readonly string[]; snap: IctjSnapshot; start: string | null; today: string; importedOn: string | null; list: Delivery[] } | null = null
+let memo: { tx: Records['transactions']; dk: Records['dockings']; skipped: readonly string[]; snap: IctjSnapshot; start: string | null; today: string; covered: Readonly<Record<string, string>>; list: Delivery[] } | null = null
 
-function deliveriesOf(records: Pick<Records, 'transactions' | 'dockings'>, skipped: readonly string[], snap: IctjSnapshot, start: string | null, today: string, importedOn: string | null): Delivery[] {
-  if (memo && memo.tx === records.transactions && memo.dk === records.dockings && memo.skipped === skipped && memo.snap === snap && memo.start === start && memo.today === today && memo.importedOn === importedOn)
+/**
+ * The last day the bank's files cover on the accounts the XTB money comes to (B18): the accounts with trading operations
+ * (else mBank), the least covered one – its period's end as imported, or its latest row from the bank (a folder of
+ * before 1.5.0). null = none imported: the time alone decides.
+ */
+function coveredToOf(transactions: readonly Transaction[], covered: Readonly<Record<string, string>>): string | null {
+  const last = new Map<string, string>()
+  const trading = new Set<string>()
+  for (const t of transactions) {
+    if (t.kind === 'trading') trading.add(t.accountId)
+    if (t.bank && t.date > (last.get(t.accountId) ?? '')) last.set(t.accountId, t.date)
+  }
+  const accounts = [...trading].filter((id) => last.has(id) || covered[id])
+  const ends = (accounts.length ? accounts : [MBANK_ACCOUNT_ID]).map((id) => [covered[id] ?? '', last.get(id) ?? ''].sort().at(-1)!).filter(Boolean)
+  return ends.length ? ends.sort()[0]! : null
+}
+
+function deliveriesOf(records: Pick<Records, 'transactions' | 'dockings'>, skipped: readonly string[], snap: IctjSnapshot, start: string | null, today: string, covered: Readonly<Record<string, string>>): Delivery[] {
+  if (memo && memo.tx === records.transactions && memo.dk === records.dockings && memo.skipped === skipped && memo.snap === snap && memo.start === start && memo.today === today && memo.covered === covered)
     return memo.list
+  const transactions = listOf(records.transactions)
   const list = deliveries({
     entries: snap.status === 'ok' ? snap.entries : [],
-    transactions: listOf(records.transactions),
+    transactions,
     dockings: listOf(records.dockings),
     start,
     today,
     skipped,
     ictjOn: snap.status === 'ok',
-    importedOn
+    // A payout of ICTTJ not read (still syncing) is never taken for deleted (B21); a newer format's warning changes nothing.
+    entriesComplete: snap.status === 'ok' && snap.complete !== false,
+    unreadEntries: snap.unread,
+    coveredTo: coveredToOf(transactions, covered)
   })
-  memo = { tx: records.transactions, dk: records.dockings, skipped, snap, start, today, importedOn, list }
+  memo = { tx: records.transactions, dk: records.dockings, skipped, snap, start, today, covered, list }
   return list
 }
 
-type Fi = NonNullable<ReturnType<typeof useData.getState>['fi']>
-
-/** Warsaw date of the last import from mBank (the latest of the accounts it is imported to). */
-function importedOnOf(fi: Fi | null): string | null {
-  if (!fi) return null
-  const stamps = fi.settings.accounts.filter((a) => a.importFormat === 'mbank').map((a) => fi.settings.import.lastImport[a.id]).filter((x): x is string => !!x)
-  return stamps.length ? warsawNow(stamps.sort().at(-1)!).date : null
-}
+const NO_COVERED: Record<string, string> = {}
 
 export function useDeliveries(): Delivery[] {
   const fleet = useFleet()
@@ -49,12 +63,12 @@ export function useDeliveries(): Delivery[] {
   const transactions = useData((s) => s.records.transactions)
   const dockings = useData((s) => s.records.dockings)
   const skipped = useData((s) => s.fi?.settings.ictj.skipped ?? NO_SKIPPED)
-  const importedOn = useData((s) => importedOnOf(s.fi))
+  const covered = useData((s) => s.fi?.settings.import.coveredTo ?? NO_COVERED)
   const snap = useIctj((s) => s.snap)
   const ready = !!fleet
   const start = fleet?.started ? fleet.start : null
   const today = fleet?.today ?? ''
-  return useMemo(() => (ready ? deliveriesOf({ transactions, dockings }, skipped, snap, start, today, importedOn) : []), [ready, transactions, dockings, skipped, snap, start, today, importedOn])
+  return useMemo(() => (ready ? deliveriesOf({ transactions, dockings }, skipped, snap, start, today, covered) : []), [ready, transactions, dockings, skipped, snap, start, today, covered])
 }
 
 /** The same list outside React (the notifications). */
@@ -62,7 +76,7 @@ export function deliveriesNow(): Delivery[] {
   const s = useData.getState()
   const fleet = fleetNow()
   if (!s.fi || !fleet) return []
-  return deliveriesOf(s.records, s.fi.settings.ictj.skipped, useIctj.getState().snap, fleet.started ? fleet.start : null, fleet.today, importedOnOf(s.fi))
+  return deliveriesOf(s.records, s.fi.settings.ictj.skipped, useIctj.getState().snap, fleet.started ? fleet.start : null, fleet.today, s.fi.settings.import.coveredTo)
 }
 
 /** The docking window: the delivery's key, or null. */

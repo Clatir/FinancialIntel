@@ -20,7 +20,7 @@ export async function restoreVersion(kind: HistoryKind, id: string, file: string
 }
 
 /** Delete a record with "Cofnij" in the toast: the undo restores the version kept by the deletion, like "Usunięte wpisy". */
-export async function deleteWithUndo(collection: Collection, id: string, label: string, text: string, beforeUndo?: () => boolean): Promise<boolean> {
+export async function deleteWithUndo(collection: Collection, id: string, label: string, text: string, beforeUndo?: () => boolean, afterUndo?: () => Promise<void>): Promise<boolean> {
   try {
     await deleteRecord(collection, id)
   } catch (e) {
@@ -36,9 +36,26 @@ export async function deleteWithUndo(collection: Collection, id: string, label: 
         const last = kept[0]
         if (!last) return toast('Tej wersji nie ma już w historii.', 'error')
         await restoreVersion(collection, id, last.file, label)
+        // What went with it (an operation's dockings – B15).
+        await afterUndo?.()
       })()
   })
   return true
+}
+
+/** Records deleted with another one back from the versions their deletion kept (B15); quietly – the other says it. */
+export async function restoreDeleted(collection: Collection, ids: readonly string[]): Promise<void> {
+  for (const id of ids) {
+    const last = (await api.historyList(collection, id)).find((e) => e.reason === 'delete')
+    if (!last) continue
+    try {
+      const fi = await api.historyRestore(collection, id, last.file)
+      if (fi) adoptSettings(fi)
+    } catch (e) {
+      toast(errorMessage(e), 'error', 7000)
+      return
+    }
+  }
 }
 
 /**

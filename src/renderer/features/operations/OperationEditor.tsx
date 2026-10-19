@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
 import { asksImpulse, isNight, sum } from '@shared/calc/operations'
-import { TX_KIND_LABEL, type Split, type Transaction, type TxKind } from '@shared/schema'
+import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
+import { HOUSE_MEMBER_ID, TX_KIND_LABEL, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { updateRecord, useData } from '../../store/data'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
@@ -16,6 +17,8 @@ import { deleteOperation, rememberAccount } from './state'
 import { rememberCategory, ruleFor } from '../import/rules'
 import { useCategories } from './pickers'
 import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberPickers'
+import { ShareEditor } from '../household/ShareEditor'
+import { useMembers } from '../household/actions'
 
 /** The kinds on the first row of the editor; the rest under „inne”. */
 const MAIN_KINDS: TxKind[] = ['expense', 'income', 'transfer', 'trading']
@@ -48,6 +51,9 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     refundable: kind === 'expense' ? t.refundable : false,
     // Who finances a purchase and whose money an income is are other things (D80): the member stays with the same kind.
     memberId: kind === t.kind ? t.memberId : null,
+    // A gift and a shared purchase (D83): an expense's only.
+    gift: kind === 'expense' ? t.gift : undefined,
+    share: kind === 'expense' ? t.share : null,
     advance: kind === 'income' ? t.advance : false,
     covers: kind === 'income' ? t.covers : [],
     // A receipt's lines and an income's parts (D81) are other things too: they stay with the same kind.
@@ -81,6 +87,7 @@ export function OperationEditor({ id }: { id: string }) {
   const cats = useCategories()
   const rules = useData((s) => s.fi?.settings.import.rules)
   const loans = useRecordList('loans')
+  const members = useMembers()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
@@ -94,12 +101,11 @@ export function OperationEditor({ id }: { id: string }) {
     setZeroSign(s)
     if (abs === 0 && t.splits.every((x) => x.amount === 0)) return
     // The lines of a split receipt turn with it; a product return of a member's purchase is theirs (D80).
-    update((r) => ({
-      ...r,
-      amount: s * Math.abs(r.amount),
-      splits: r.splits.map((x) => ({ ...x, amount: s * Math.abs(x.amount) }))
-    }))
+    update((r) => withAmount(r, s * Math.abs(r.amount)))
   }
+  // A purchase financed by several people (D83): its lines follow the share.
+  const share = shareOf(t)
+  const firstMember = members.find((m) => !m.archived)
   const directions = DIRECTIONS[t.kind]
   const outgoing = sign < 0
   const night = isNight(t, orders)
@@ -167,14 +173,8 @@ export function OperationEditor({ id }: { id: string }) {
           <AmountField
             className={cx('w-[140px]', t.amount > 0 && 'text-up')}
             value={abs}
-            onChange={(v) =>
-              update((r) => ({
-                ...r,
-                amount: sign * (v ?? 0),
-                // The lines follow the sign chosen before the total was typed.
-                splits: r.splits.map((x) => ({ ...x, amount: sign * Math.abs(x.amount) }))
-              }))
-            }
+            // The lines follow the sign chosen before the total was typed; a shared purchase's are made again (D83).
+            onChange={(v) => update((r) => withAmount(r, sign * (v ?? 0)))}
             autoFocus={isDraft}
             aria-label="Kwota"
             data-testid="operation-amount"
@@ -216,28 +216,37 @@ export function OperationEditor({ id }: { id: string }) {
 
       {t.kind === 'expense' && (
         <Section title="Kategoria">
-          {t.splits.length === 0 ? (
+          {t.splits.length === 0 || share ? (
             <>
               <div className="flex items-center gap-2">
-                <CategorySelect className="min-w-0 flex-1" value={t.categoryId} onChange={(categoryId) => patch({ categoryId })} data-testid="operation-category" />
-                <button
-                  type="button"
-                  className="btn h-[24px] shrink-0"
-                  onClick={() =>
-                    patch({
-                      splits: [
-                        { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, note: '' },
-                        { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
-                      ]
-                    })
-                  }
-                  title="Kilka kategorii albo część swoja i część domownika"
-                  data-testid="operation-split"
-                >
-                  Podziel paragon
-                </button>
+                <CategorySelect
+                  className="min-w-0 flex-1"
+                  value={t.categoryId}
+                  // A shared purchase's lines take the category with it (one category, D83).
+                  onChange={(categoryId) => update((r) => (shareOf(r) ? withShare({ ...r, categoryId }, r.share!) : { ...r, categoryId }))}
+                  data-testid="operation-category"
+                />
+                {!share && (
+                  <button
+                    type="button"
+                    className="btn h-[24px] shrink-0"
+                    onClick={() =>
+                      patch({
+                        splits: [
+                          { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, ...(t.refundable && t.gift ? { gift: true } : {}), note: '' },
+                          { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
+                        ],
+                        gift: undefined
+                      })
+                    }
+                    title="Kilka kategorii albo część swoja i część domownika"
+                    data-testid="operation-split"
+                  >
+                    Podziel paragon
+                  </button>
+                )}
               </div>
-              {t.bank && t.counterparty && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
+              {!share && t.bank && t.counterparty && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
                 <button
                   type="button"
                   className="self-start text-[11.5px] text-accent hover:underline"
@@ -249,10 +258,28 @@ export function OperationEditor({ id }: { id: string }) {
                 </button>
               )}
               {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId, goalId: containerId ? null : t.goalId })} />}
-              <div className="flex items-center gap-2">
-                <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
-                <FinancerSelect refundable={t.refundable} memberId={t.memberId} onChange={(p) => patch(p)} testId="operation-financer" />
-              </div>
+              {share ? (
+                <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2">
+                  <span className="text-[11.5px] text-muted">{outgoing ? 'Wspólnie – kto ile płaci' : 'Zwrot wspólnego zakupu – dla kogo ile'}</span>
+                  <ShareEditor share={share} total={abs} members={members} onChange={(s) => update((r) => withShare(r, s))} onClear={() => update((r) => withShare(r, null))} testId="operation-share" />
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
+                  <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" />
+                  {firstMember && (
+                    <button
+                      type="button"
+                      className="btn h-[24px] shrink-0"
+                      onClick={() => update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))}
+                      title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami (D83)"
+                      data-testid="operation-share-start"
+                    >
+                      Wspólnie
+                    </button>
+                  )}
+                </div>
+              )}
               <FinancedNote t={t} />
             </>
           ) : (
@@ -408,14 +435,15 @@ function GoalSelect({ value, outgoing, goals, onChange }: { value: string | null
 /** A split receipt: lines with their own category, a household member's part (D80); the lines sum to the amount. */
 function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update: (fn: (r: Transaction) => Transaction) => void }) {
   const rest = useMemo(() => t.amount - sum(t.splits.map((s) => s.amount)), [t])
-  const setLine = (id: string, p: Partial<Split>) => update((r) => ({ ...r, splits: r.splits.map((s) => (s.id === id ? { ...s, ...p } : s)) }))
+  // Lines changed by hand are a receipt of their own: no shared purchase's split is kept for them (D83).
+  const setLine = (id: string, p: Partial<Split>) => update((r) => ({ ...r, share: null, splits: r.splits.map((s) => (s.id === id ? { ...s, ...p } : s)) }))
   return (
     <div className="flex flex-col gap-1.5" data-testid="operation-splits">
       {t.splits.map((s, i) => (
         <div key={s.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto_auto] items-center gap-1.5" data-testid="split-line">
           <AmountField value={Math.abs(s.amount)} onChange={(v) => setLine(s.id, { amount: sign * (v ?? 0) })} aria-label={`Kwota części ${i + 1}`} data-testid="split-amount" />
           <CategorySelect value={s.categoryId} onChange={(categoryId) => setLine(s.id, { categoryId })} data-testid="split-category" />
-          <FinancerSelect refundable={s.refundable} memberId={s.memberId} onChange={(p) => setLine(s.id, p)} compact testId="split-financer" />
+          <FinancerSelect refundable={s.refundable} memberId={s.memberId} gift={s.gift} onChange={(p) => setLine(s.id, p)} compact testId="split-financer" />
           <button
             type="button"
             className="btn btn-ghost h-[22px] px-1"
@@ -424,9 +452,17 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
               update((r) => {
                 const splits = r.splits.filter((x) => x.id !== s.id)
                 // One line left: back to a plain operation of that line's category.
-                if (splits.length > 1) return { ...r, splits }
+                if (splits.length > 1) return { ...r, share: null, splits }
                 const only = splits[0]
-                return { ...r, splits: [], categoryId: only?.categoryId ?? r.categoryId, refundable: only?.refundable ?? false, memberId: only?.refundable ? only.memberId : null }
+                return {
+                  ...r,
+                  share: null,
+                  splits: [],
+                  categoryId: only?.categoryId ?? r.categoryId,
+                  refundable: only?.refundable ?? false,
+                  memberId: only?.refundable ? only.memberId : null,
+                  gift: only?.refundable && only.gift ? true : undefined
+                }
               })
             }
           >

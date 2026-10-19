@@ -1,10 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { BIAS_LABEL, briefing, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
 import { daysBetween, isoWeekOf } from '@shared/calc/dates'
-import { memberName, payerOf } from '@shared/calc/household'
+import { financersText, memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
 import { SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
-import { financedOf, sum } from '@shared/calc/operations'
+import { sum } from '@shared/calc/operations'
 import { amountTone } from '@shared/operationsView'
 import { shortcutLabel } from '@shared/machine'
 import type { DetachEvent } from '@shared/api'
@@ -132,8 +132,8 @@ export function BridgePage() {
   const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 10)
   // A household member's purchase or money (D80) says whose it is instead of the category.
   const noteOf = (t: (typeof recent)[number]): string => {
-    const financed = [...financedOf(t).keys()]
-    if (financed.length) return `finansuje: ${financed.map((id) => memberName(id, members)).join(', ')}`
+    const financed = financersText(t, members)
+    if (financed) return `finansuje: ${financed}`
     const payer = payerOf(t)
     if (payer) return `od: ${memberName(payer, members)}`
     return t.categoryId ? cats.label(t.categoryId) : ''

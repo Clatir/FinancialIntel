@@ -54,6 +54,10 @@ export interface IctjSnapshot {
   forecasts: IctjForecast[]
   /** Read with a reservation: a newer format, files that could not be read. */
   warnings: string[]
+  /** Payout files not read (ids from their names – a file still syncing, a broken one): none of them is deleted (B21). */
+  unread?: string[]
+  /** Every folder of the payouts listed (else no entry can be told deleted – B21). Absent = yes. */
+  complete?: boolean
   readAt: string | null
 }
 

@@ -9,7 +9,7 @@ import { cleanBankName, counterpartyKey } from './names'
 import { resolveBrand, type BrandAliases } from './aliases'
 import { brandById, brandOf, keywordIn, keywordMatches, tokens, words, type BrandMatch, type CategoryPlace } from './brands'
 import type { Category, HouseholdMember, ImportRule } from '../schema/budget'
-import type { Container } from '../schema/records'
+import type { Container, Share } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '../schema/budget'
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
@@ -27,7 +27,7 @@ export const directionOf = (row: Pick<MbankRow, 'amount'>): Direction => (row.am
  */
 export function upsertRule(
   rules: readonly ImportRule[],
-  r: Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'counterAccountId'>,
+  r: Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'>,
   opts: { now: string; makeId: () => string; hits: number }
 ): ImportRule[] {
   const out = [...rules]
@@ -36,6 +36,9 @@ export function upsertRule(
   const rule: ImportRule = {
     ...prev,
     ...r,
+    // The decision is the new one whole: one remembered without a gift or a share has none (a rule's old split never stays).
+    gift: r.gift || undefined,
+    share: r.share ?? undefined,
     id: prev?.id ?? opts.makeId(),
     mode: 'exact',
     learned: prev?.learned ?? true,
@@ -189,6 +192,10 @@ export interface ImportDecision {
   memberId: string | null
   /** A household member's money: what they do not owe is their advance (else income – D80 b). */
   advance: boolean
+  /** A purchase the member gives (D83, with `refundable`): nobody owes it. */
+  gift: boolean
+  /** A purchase financed by several people (D83): the row's amount split so. */
+  share: Share | null
   counterAccountId: string | null
   /** A payment of a container of the cargo (its counterparty): the cargo's, not an envelope's spending. */
   containerId: string | null
@@ -240,6 +247,8 @@ const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = 
   household: false,
   memberId: null,
   advance: false,
+  gift: false,
+  share: null,
   counterAccountId: null,
   containerId: null,
   source: 'builtin',
@@ -302,7 +311,8 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (rule && !(member && rule.kind === 'income' && !rule.memberId)) {
     const kind = rule.kind as TxKind
     const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
-    const refundable = kind === 'expense' && direction === 'out' && rule.refundable
+    // A member's purchase (D80) – its product return is theirs too (B40); a shared purchase (D83) is split the same way.
+    const refundable = kind === 'expense' && rule.refundable
     const household = kind === 'income' && rule.household
     const memberId = refundable || household ? rule.memberId : null
     return out(
@@ -314,6 +324,8 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
         refundable,
         household,
         memberId,
+        gift: refundable && !!rule.gift,
+        share: kind === 'expense' && !refundable ? (rule.share ?? null) : null,
         // What the member's money beyond their debt is, as the member's setting says (D80 b; „ask” = income, D20).
         advance: household && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance',
         counterAccountId: kind === 'transfer' ? rule.counterAccountId : null
@@ -341,7 +353,22 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     // A product return: a negative expense of the purchase's category (spec) – the purchases' rule says which, else the
     // chain's category.
     const bought = findRule(ctx.rules, target, 'out')
-    if (bought) return out(decision('expense', 'zwrot towaru', { categoryId: bought.kind === 'expense' ? bought.categoryId : null, source: 'rule', ruleId: bought.id }))
+    if (bought) {
+      // Of a purchase a member finances – their money (B40); of a shared one – split as the purchase (D83).
+      const expense = bought.kind === 'expense'
+      const refundable = expense && bought.refundable
+      return out(
+        decision('expense', 'zwrot towaru', {
+          categoryId: expense ? bought.categoryId : null,
+          refundable,
+          memberId: refundable ? bought.memberId : null,
+          gift: refundable && !!bought.gift,
+          share: expense && !refundable ? (bought.share ?? null) : null,
+          source: 'rule',
+          ruleId: bought.id
+        })
+      )
+    }
     const chain = brand.brand?.category ? placed(brand.brand.category, ctx.categories) : null
     if (chain) return out(decision('expense', `zwrot towaru – sieć ${brand.brand!.label}`, { categoryId: chain, source: 'brand' }))
     return out(decision('expense', 'zwrot towaru'))

@@ -24,17 +24,27 @@ function useOffered(current: string | null) {
   return out
 }
 
-/** „Finansuje”: me (a cost of mine) or a household member (not my cost, D80). */
+/** What „Finansuje” sets: me (a cost of mine), a household member (not my cost, D80) – or their gift (nobody owes it, D83). */
+export type Financer = {
+  refundable: boolean
+  memberId: string | null
+  /** Absent = no (the record keeps no `gift: false`). */
+  gift?: boolean
+}
+
+/** „Finansuje”: me (a cost of mine), a household member (not my cost, D80) or their gift (D83: nobody owes it). */
 export function FinancerSelect({
   refundable,
   memberId,
+  gift,
   onChange,
   compact,
   testId
 }: {
   refundable: boolean
   memberId: string | null
-  onChange: (p: { refundable: boolean; memberId: string | null }) => void
+  gift?: boolean
+  onChange: (p: Financer) => void
   compact?: boolean
   testId: string
 }) {
@@ -42,20 +52,25 @@ export function FinancerSelect({
   const offered = useOffered(current)
   return (
     <select
-      className={cx('input py-0', compact ? 'h-[22px] w-[96px] text-[11px]' : 'h-[24px] min-w-0 flex-1')}
-      value={current ?? ''}
+      className={cx('input py-0', compact ? 'h-[22px] w-[110px] text-[11px]' : 'h-[24px] min-w-0 flex-1')}
+      value={current ? `${gift ? 'gift' : 'pay'}:${current}` : ''}
       onChange={(e) => {
-        const id = e.currentTarget.value
-        onChange(id ? { refundable: true, memberId: id } : { refundable: false, memberId: null })
+        const [how, id] = e.currentTarget.value.split(':')
+        onChange(id ? { refundable: true, memberId: id, gift: how === 'gift' ? true : undefined } : { refundable: false, memberId: null, gift: undefined })
       }}
       aria-label="Kto finansuje"
-      title="Wydatek, który finansuje domownik: nie zjada energii i nie jest Twoim kosztem – najpierw z jego zaliczki, resztę pożyczają osłony"
+      title="Wydatek, który finansuje domownik: nie zjada energii i nie jest Twoim kosztem – najpierw z jego zaliczki, resztę pożyczają osłony (ma oddać); prezent – nikt nic nie jest winien, resztę pokrywają osłony"
       data-testid={testId}
     >
       <option value="">{compact ? 'ja' : '— ja (mój wydatek) —'}</option>
       {offered.map((m) => (
-        <option key={m.id} value={m.id}>
+        <option key={m.id} value={`pay:${m.id}`}>
           {compact ? m.name : `finansuje: ${m.name}`}
+        </option>
+      ))}
+      {offered.map((m) => (
+        <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
+          {compact ? `${m.name} – prezent` : `prezent od: ${m.name}`}
         </option>
       ))}
     </select>
@@ -71,7 +86,14 @@ export function FinancedNote({ t }: { t: Transaction }) {
   return (
     <div className="text-[11.5px] text-muted" data-testid="operation-financed">
       {flows.map((f) => {
-        const parts = [f.fromDeposit ? `z zaliczki ${plnText(f.fromDeposit)} zł` : '', f.lent ? `pożyczone z osłon ${plnText(f.lent)} zł (ma oddać)` : '', f.repaid ? `spłaca ${plnText(f.repaid)} zł` : '', f.advance ? `do zaliczki ${plnText(f.advance)} zł` : '']
+        const parts = [
+          f.fromDeposit ? `z zaliczki ${plnText(f.fromDeposit)} zł` : '',
+          f.lent ? `pożyczone z osłon ${plnText(f.lent)} zł (ma oddać)` : '',
+          f.gift > 0 ? `prezent – z osłon ${plnText(f.gift)} zł (nikt nic nie jest winien)` : '',
+          f.gift < 0 ? `zwrot prezentu do osłon ${plnText(-f.gift)} zł` : '',
+          f.repaid ? `spłaca ${plnText(f.repaid)} zł` : '',
+          f.advance ? `do zaliczki ${plnText(f.advance)} zł` : ''
+        ]
         return (
           <div key={f.memberId}>
             {memberName(f.memberId, members)}: {parts.filter(Boolean).join(' · ') || '—'}

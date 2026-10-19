@@ -102,7 +102,8 @@ export async function finishWizard(o: { salary: number; hull: number; envelopes:
   const { date: today, month } = warsawNow()
   const txs = Object.values(s.records.transactions).map((e) => e.record)
   const balances = Object.values(s.records.balances).map((e) => e.record)
-  const missing = s.fi.settings.accounts.filter((a) => !a.archived && w.balances[a.id] == null && !openingOf(a.id, balances))
+  // The cash (D83) has no history of the bank: empty = 0 zł.
+  const missing = s.fi.settings.accounts.filter((a) => !a.archived && a.kind !== 'cash' && w.balances[a.id] == null && !openingOf(a.id, balances))
   if (missing.length) {
     toast(`Wpisz saldo teraz (krok 1): ${missing.map((a) => a.name).join(', ')} – 0, jeśli konto jest puste.`, 'error', 6000)
     useWizard.setState({ step: 0 })

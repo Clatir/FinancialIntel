@@ -9,6 +9,7 @@ import { KeywordRules } from '../import/KeywordRules'
 import { clearDismissedSimilar, deleteRule, inactiveAlias, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
 import { useAccounts, useCategories } from '../operations/pickers'
 import { useMembers } from '../household/actions'
+import { shareNames } from '../household/ShareEditor'
 import { memberName } from '@shared/calc/household'
 
 const NO_RULES: ImportRule[] = []
@@ -102,7 +103,8 @@ export function ImportTab() {
   const [name, setName] = useState('')
   const decision = (r: ImportRule) => {
     const kind = TX_KIND_LABEL[r.kind as TxKind] ?? r.kind
-    if (r.kind === 'expense') return `${r.refundable ? `finansuje: ${memberName(r.memberId, members)}` : kind}${r.categoryId ? ` · ${cats.label(r.categoryId)}` : ''}`
+    if (r.kind === 'expense')
+      return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)}` : r.share ? `wspólnie: ${shareNames(r.share, members)}` : kind}${r.categoryId ? ` · ${cats.label(r.categoryId)}` : ''}`
     if (r.kind === 'income' && r.household) return `od domownika: ${memberName(r.memberId, members)}`
     if (r.kind === 'transfer') return `${kind}${r.counterAccountId ? ` · ${accounts.find((a) => a.id === r.counterAccountId)?.name ?? '?'}` : ''}`
     return kind

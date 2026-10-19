@@ -21,6 +21,9 @@ import { CategorySelect, useAccounts, useCategories } from './pickers'
 import { categorizeTicked, clearTicked, financeTicked, newOperation, resetFilter, selectOperation, setFilter, tickOperations, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
 import { incomeShares, memberName } from '@shared/calc/household'
+import { SHARE_MODES } from '@shared/schema'
+import { shareComplete, shareOf, startShare } from '@shared/calc/share'
+import { ShareEditor, shareNames } from '../household/ShareEditor'
 
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
@@ -147,13 +150,17 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
   // A member's money says whose (D80, D81: the parts of a split income – the sender's rest last).
   const shares = t.kind === 'income' ? incomeShares(t) : []
   const whose = [...new Set(shares.map((x) => x.memberId))].filter((x): x is string => !!x)
+  // A purchase financed by several people (D83): its category and who.
+  const share = t.kind === 'expense' ? shareOf(t) : null
   const category = whose.length
     ? `od: ${whose.map((id) => memberName(id, members)).join(', ')}`
-    : t.splits.length
-      ? `${t.splits.length} ${plural(t.splits.length, 'część', 'części', 'części')}`
-      : t.kind === 'expense'
-        ? cats.label(t.categoryId)
-        : TX_KIND_LABEL[t.kind]
+    : share
+      ? `${cats.label(t.categoryId) || 'bez kategorii'} · wspólnie: ${shareNames(share, members)}`
+      : t.splits.length
+        ? `${t.splits.length} ${plural(t.splits.length, 'część', 'części', 'części')}`
+        : t.kind === 'expense'
+          ? cats.label(t.categoryId)
+          : TX_KIND_LABEL[t.kind]
   const account = accounts.find((a) => a.id === t.accountId)?.name ?? '?'
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split'].includes(m))
   const ticked = useOperationsUi((s) => !!s.ticked[t.id])
@@ -185,7 +192,7 @@ function Row({ t, selected, index, top }: { t: Transaction; selected: boolean; i
         <span className={cx(draft ? 'text-accent' : 'text-fg-strong')}>{draft ? 'nowa operacja' : t.counterparty || t.title || TX_KIND_LABEL[t.kind]}</span>
         <span className="ml-2 text-[11px] text-dim">{account}</span>
       </span>
-      <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')}>
+      <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')} title={category || undefined}>
         {t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : 'bez kategorii') : category}
       </span>
       <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
@@ -246,6 +253,8 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [remember, setRemember] = useState<'none' | 'brands' | 'keyword'>('none')
   const [financer, setFinancer] = useState<string>('')
+  const [share, setShare] = useState<ReturnType<typeof startShare> | null>(null)
+  const firstMember = members.find((m) => !m.archived)
   // Only what the list shows: an operation that left it (edited, deleted, changed elsewhere) is not changed.
   const shown = visible.filter((t) => ticked[t.id])
   const n = shown.length
@@ -274,8 +283,18 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
       >
         Ustaw
       </button>
-      {/* Who finances them (D80 g): a household member or me again. */}
-      <select className="input h-[24px] w-[170px] py-0" value={financer} onChange={(e) => setFinancer(e.currentTarget.value)} aria-label="Kto finansuje zaznaczone" data-testid="operations-bulk-financer">
+      {/* Who finances them (D80 g): a household member, their gift, several people (D83) or me again. */}
+      <select
+        className="input h-[24px] w-[170px] py-0"
+        value={financer}
+        onChange={(e) => {
+          const v = e.currentTarget.value
+          setFinancer(v)
+          setShare(v === 'share' && firstMember ? (share ?? startShare(firstMember.id)) : null)
+        }}
+        aria-label="Kto finansuje zaznaczone"
+        data-testid="operations-bulk-financer"
+      >
         <option value="">— finansuje… —</option>
         <option value="-">ja (mój wydatek)</option>
         {members
@@ -285,19 +304,32 @@ function BulkBar({ visible }: { visible: readonly Transaction[] }) {
               {m.name}
             </option>
           ))}
+        {members
+          .filter((m) => !m.archived)
+          .map((m) => (
+            <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
+              {m.name} – prezent
+            </option>
+          ))}
+        {firstMember && <option value="share">wspólnie…</option>}
       </select>
+      {financer === 'share' && share && <ShareEditor share={share} total={null} members={members} onChange={setShare} modes={SHARE_MODES.filter((m) => m !== 'amounts')} testId="operations-bulk-share" />}
       <button
         type="button"
         className="btn h-[24px]"
-        disabled={!financer}
+        // Percents of the people not summing to 100 % (D83): never applied as typed – the quick entry refuses them too.
+        disabled={!financer || (financer === 'share' && (!share || !shareComplete(share, null)))}
         onClick={() => {
-          const id = financer === '-' ? null : financer
-          financeTicked(
-            shown.map((t) => t.id),
-            id,
-            id ? `Finansuje ${members.find((m) => m.id === id)?.name ?? 'domownik'}` : 'Mój wydatek'
-          )
+          if (financer === 'share') {
+            if (share) financeTicked(shown.map((t) => t.id), { share }, `Wspólnie: ${shareNames(share, members)}`)
+          } else {
+            const gift = financer.startsWith('gift:')
+            const id = financer === '-' ? null : gift ? financer.slice('gift:'.length) : financer
+            const name = members.find((m) => m.id === id)?.name ?? 'domownik'
+            financeTicked(shown.map((t) => t.id), { memberId: id, gift }, id ? (gift ? `Prezent od: ${name}` : `Finansuje ${name}`) : 'Mój wydatek')
+          }
           setFinancer('')
+          setShare(null)
         }}
         data-testid="operations-bulk-finance"
       >
