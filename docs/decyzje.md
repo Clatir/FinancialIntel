@@ -2058,4 +2058,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ponawiana po jednym wpisie – jak przed 1.10.1, z pytaniem procesu głównego po minucie. Testy jednostkowe: zmiana w
   trakcie zapisu, paczka zaczęta w trakcie zamykania, usunięcie jednego i kilku wpisów w drodze, zapis nieudany (jedna
   próba), wstrzymanie przy Ctrl+S, kopii i zmianie folderu, koniec wstrzymania z nowym folderem; 14 mutacji – 13
-  wykrytych, jedna nieobserwowalna (zakończone usunięcie zostawione w zbiorze daje tylko puste rundy).
+  wykrytych, jedna nieobserwowalna (zakończone usunięcie zostawione w zbiorze daje tylko puste rundy). CI na Windows:
+  podsumowanie pierwszego importu (269 operacji i kopia folderu) w teście „Cofnij import” czeka jak kroki masowe tego
+  testu (`MASS`, 30 s; lokalnie import przed zmianą i po niej trwa tyle samo), porażka pokazuje komunikaty okna i
+  main.log; długi zapis wszystkiego (od 500 ms) zostawia w main.log rundy i liczbę niezapisanych.

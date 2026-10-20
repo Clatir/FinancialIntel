@@ -924,6 +924,12 @@ Zakres: „Przed etapem 1.10.1” wyżej. Zrobione:
   po jednym wpisie jak przed 1.10.1.
 - Testy: 828 unit + fs (7 nowych w `data-store.test.ts`), E2E 67; 14 mutacji – 13 wykrytych, jedna nieobserwowalna
   (zakończone usunięcie zostawione w zbiorze daje tylko puste rundy).
+- CI na Windows (PR #35): test „Cofnij import” nie doczekał się podsumowania pierwszego importu (269 operacji i kopia
+  folderu) w domyślnych 10 s; drugi test z tym samym importem w tym przebiegu i wszystkie inne trwały tyle co na `main`.
+  Lokalnie pierwszy import trwa tyle samo przed zmianą i po niej (0,65–0,92 s i 0,73–0,94 s, 5 przebiegów; pod pełnym
+  obciążeniem procesora 1,2–1,4 s), więc to czekanie dostało limit kroków masowych tego testu (`MASS`, 30 s – jak
+  wcześniej odpytywanie folderu, 1.6.5 / 1.6.6), a porażka pokazuje komunikaty okna i koniec main.log; długi zapis
+  wszystkiego (≥ 500 ms) zostawia w main.log liczbę rund i to, co zostało niezapisane.
 
 Do sprawdzenia przez użytkownika (po wydaniu 1.10.1, Windows):
 1. Zmiana w edytorze operacji i od razu „Zakończ” z menu ikony w zasobniku (albo zamknięcie okna przy wyłączonym

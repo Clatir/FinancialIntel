@@ -2,7 +2,7 @@ import { mkdtempSync, promises as fs, readFileSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { launch } from './app'
+import { launch, withMainLog } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -11,6 +11,22 @@ import { seedFolder, zl } from './seed'
  * 10 s for them (1.6.5 on main, 1.6.6 – every test there 1.5–2.5× slower), so these polls wait longer.
  */
 const MASS = { timeout: 30_000 }
+
+/**
+ * An import's summary – shown once all its records are on the disk: as long as the polls of mass steps may take (MASS); a
+ * failure brings what the window said (its messages) and the end of main.log (T301).
+ */
+async function importDone(page: Page, userData: string): Promise<void> {
+  await withMainLog(userData, async () => {
+    try {
+      await expect(page.getByTestId('import-done')).toBeVisible(MASS)
+    } catch (e) {
+      const said = await page.getByRole('status').allTextContents().catch(() => [] as string[])
+      if (e instanceof Error) e.message += `\n--- komunikaty okna ---\n${said.join('\n') || '(brak)'}`
+      throw e
+    }
+  })
+}
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 const ACC = '01KDEFACC00000000000000001'
@@ -68,7 +84,7 @@ function historia(dir: string, start: number, rows: Array<{ date: string; shop: 
 
 test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; numer rachunku; plik już zaimportowany (F4, N13)', async () => {
   test.setTimeout(180_000)
-  const { app, page, dataDir, errors } = await launch()
+  const { app, page, dataDir, userData, errors } = await launch()
   const files = mkdtempSync(join(tmpdir(), 'fi-import-tools-'))
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
@@ -77,7 +93,7 @@ test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; nume
     await expect(page.getByTestId('import-count-new')).toHaveText('269')
     await expect(page.getByTestId('import-account-warning')).toHaveCount(0)
     await page.getByTestId('import-run').click()
-    await expect(page.getByTestId('import-done')).toBeVisible()
+    await importDone(page, userData)
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
     await expect.poll(async () => (await records(dataDir, 'imports')).length).toBe(1)
 

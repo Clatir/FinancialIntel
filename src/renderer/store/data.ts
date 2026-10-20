@@ -1121,6 +1121,8 @@ const FLUSH_ROUNDS = 10
  */
 export async function flushSaves(): Promise<boolean> {
   return holding(async () => {
+    const t0 = performance.now()
+    let rounds = 0
     // A field still being typed in (window closing, Ctrl+S): its value first.
     commitActiveField()
     // In rounds (T301): a record changed while its write was on its way – a field committed, an edit, a write started
@@ -1140,8 +1142,11 @@ export async function flushSaves(): Promise<boolean> {
         void enqueue(key)
       }
       if (!inFlight.size && !deletions.size) break
+      rounds++
       await Promise.all([...inFlight.values(), ...deletions].map((p) => p.catch(() => undefined)))
     }
+    // A long one in the log (from 500 ms): its rounds and what it left unsaved.
+    api.rendererStep?.(`zapis wszystkiego: rundy ${rounds}, niezapisane ${dirty.size}`, performance.now() - t0)
     return !hasUnsaved()
   })
 }
