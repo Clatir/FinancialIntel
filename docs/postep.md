@@ -2,8 +2,8 @@
 
 **Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) zakończony – każda grupa z własnym PR i
 wydaniem (D71); pauza do komendy użytkownika (D67).
-**1.10.0** – PR #32 scalony, wydanie z poprawką PR #33 (job Windows na `main` po PR #32 złapał wyścig ustawień komputera
-między oknami, T300; po scaleniu PR #33 sprawdzić v1.10.0 w Releases), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
+oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -12,8 +12,7 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** po scaleniu PR #33 – sprawdzić, czy CI na `main` opublikowało v1.10.0 (job Windows, krok Publish);
-potem pauza – kolejne prace tylko na komendę użytkownika (D67). Na później, każda do osobnej decyzji:
+**Następny krok:** pauza – kolejne prace tylko na komendę użytkownika (D67). Na później, każda do osobnej decyzji:
 flota rezerwowa – IKE, IKZE, PPK, lokaty (F32), paragony i gwarancje przy operacji (F38), ulgi PIT-37 / PIT-36 (F39),
 wpisy z telefonu przez OneDrive (F41), archiwizacja starych lat (F43). Do sprawdzenia w aplikacji: 1.5.0–1.10.0 – listy
 w sekcjach niżej.
@@ -61,10 +60,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar gałęzi, z przeglądem, 64 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy R; plan był ok. 3 h) | 1.7.0 | ✅ D87 | ✅ wydane (PR #29, z 1.6.5 i 1.6.6) |
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar gałęzi, z przeglądem, 80 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy S; plan był 4–5 h) | 1.8.0 | ✅ D87 | ✅ wydane (PR #30) |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
-| **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.10.0 | ✅ D87 | ✅ scalone (PR #32, poprawka PR #33), wydanie po PR #33 |
+| **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V** | | | **ok. 53,5 h** | | | |
-| | **Ciąg M–V (D87)** | | | **zmierzone ok. 16 h (plan był ok. 24–25 h)** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V** | | | **ok. 54,5 h** | | | |
+| | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -881,7 +880,7 @@ Zakres: „Przed grupą V” wyżej. Zrobione:
   okien w chwili zmiany, klawisze rozmiaru wysyłają tylko klawisz, krok liczy proces główny; E2E z wolnym zapisem
   config.json (na starym kodzie pada za każdym razem, na nowym 3 z 3 przebiegów zielone), dwa przeglądy `/code-review`
   high (nieudany zapis – okno bierze ustawienia procesu głównego, komunikat „działają, ale bez zapisu”), 11 mutacji –
-  wszystkie wykryte. Poprawka w PR #33 – wydanie 1.10.0 publikuje job Windows na `main` po jej scaleniu.
+  wszystkie wykryte. Poprawka w PR #33 – z nią job Windows na `main` wydał 1.10.0.
 - Testy: 821 unit + fs (nowe `intel-v`, `intel-v-store`; poszerzone `export`, `plan-reports`, `household`, przy T300
   `texts-look` i `machine-store`), E2E 67
   (nowy `intel-v.spec.ts`); 62 mutacje – 52 wykryte od razu, 10 po nowych testach (limity tagów, ostatni tag z
