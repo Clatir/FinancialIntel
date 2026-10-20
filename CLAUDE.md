@@ -974,7 +974,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   selektorze i jeszcze raz w efekcie); długi zapis wszystkiego w main.log (`rendererStep` „zapis wszystkiego: rundy …,
   niezapisane …”, od 500 ms).
 - Testy: `tests/unit/data-store.test.ts` („zamykanie okna: zapis w rundach, zapisy w tle wstrzymane”), E2E
-  `import-tools.spec.ts` `importDone` (podsumowanie importu w limicie `MASS`, przy porażce komunikaty okna i main.log).
+  `tests/e2e/app.ts` `importDone` / `MASS` – każde czekanie na podsumowanie importu w limicie kroków masowych (30 s), przy
+  porażce komunikaty okna i main.log (import-tools, import, duplicates, learning, sensors).
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```

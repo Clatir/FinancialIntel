@@ -2,31 +2,9 @@ import { mkdtempSync, promises as fs, readFileSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { launch, withMainLog } from './app'
+import { importDone, launch, MASS } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
-
-/**
- * Hundreds of files written or deleted at once (an import, its undo): a slow Windows runner of CI takes over the default
- * 10 s for them (1.6.5 on main, 1.6.6 – every test there 1.5–2.5× slower), so these polls wait longer.
- */
-const MASS = { timeout: 30_000 }
-
-/**
- * An import's summary – shown once all its records are on the disk: as long as the polls of mass steps may take (MASS); a
- * failure brings what the window said (its messages) and the end of main.log (T301).
- */
-async function importDone(page: Page, userData: string): Promise<void> {
-  await withMainLog(userData, async () => {
-    try {
-      await expect(page.getByTestId('import-done')).toBeVisible(MASS)
-    } catch (e) {
-      const said = await page.getByRole('status').allTextContents().catch(() => [] as string[])
-      if (e instanceof Error) e.message += `\n--- komunikaty okna ---\n${said.join('\n') || '(brak)'}`
-      throw e
-    }
-  })
-}
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 const ACC = '01KDEFACC00000000000000001'
@@ -122,7 +100,7 @@ test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; nume
     await expect(page.getByTestId('import-already')).toBeVisible()
     await expect(page.getByTestId('import-run')).toContainText('bez zmian')
     await page.getByTestId('import-run').click()
-    await expect(page.getByTestId('import-done')).toBeVisible()
+    await importDone(page, userData)
 
     // A file of another account at the bank: said before the import.
     await openFile(app, page, withAccount(files, 'lista2.csv', '99 9999 8888 7777 6666 5555 4444'))
@@ -174,7 +152,7 @@ test('„Cofnij import” czeka na operacje, których nie ma na tym komputerze; 
 test('Telemetria z banku: historia rachunku zgodna – saldo potwierdzone samo; wpis ręczny bez pary w banku – dzień rozbieżności (F5)', async () => {
   const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-telemetry-')), 'FinancialIntel')
   seedFolder(dataDir, { records: { balances: [{ date: '2026-09-01', accountId: ACC, kind: 'opening', amount: zl(1000) }] } })
-  const { app, page, errors } = await launch({ dataDir })
+  const { app, page, userData, errors } = await launch({ dataDir })
   const files = mkdtempSync(join(tmpdir(), 'fi-telemetry-files-'))
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
@@ -185,6 +163,7 @@ test('Telemetria z banku: historia rachunku zgodna – saldo potwierdzone samo; 
     ]
     await openFile(app, page, historia(files, zl(1000), rows))
     await page.getByTestId('import-run').click()
+    await importDone(page, userData)
     await expect(page.getByTestId('bank-telemetry-match')).toContainText('Saldo potwierdzone')
     await expect.poll(async () => (await records(dataDir, 'balances')).filter((b) => b.kind === 'confirmation').map((b) => [b.date, b.amount])).toEqual([['2026-09-05', zl(1000 - 12.5 - 40 - 7.99)]])
 
@@ -210,7 +189,7 @@ test('Telemetria z banku: historia rachunku zgodna – saldo potwierdzone samo; 
 
 test('Oficer zna sieć i historię marki w edytorze; audyt reguł: niespójna operacja i „Zastosuj do historii” z „Cofnij” (F8, F22)', async () => {
   test.setTimeout(180_000)
-  const { app, page, dataDir, errors } = await launch()
+  const { app, page, dataDir, userData, errors } = await launch()
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await openFile(app, page, FIXTURE)
@@ -222,7 +201,7 @@ test('Oficer zna sieć i historię marki w edytorze; audyt reguł: niespójna op
     await expect(bolt.getByTestId('import-group-remember')).toBeChecked()
     await search.fill('')
     await page.getByTestId('import-run').click()
-    await expect(page.getByTestId('import-done')).toBeVisible()
+    await importDone(page, userData)
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
 
     // F8: „Dino” typed by hand, no category – the officer knows the chain from the bank's „DINO TESTOWO 4”.

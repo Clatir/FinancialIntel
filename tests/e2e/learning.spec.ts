@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { launch } from './app'
+import { importDone, launch } from './app'
 import { records } from './files'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'historia_rachunku.csv')
@@ -12,7 +12,7 @@ const brandGroup = (page: Page, brand: string, direction: 'in' | 'out') => page.
 const importSettings = async (dataDir: string) => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import
 
 test('Podobne nazwy i propozycja reguły (D78, 1.2.3): historia rachunku z datami w nazwach, połącz, cofnij, rozłącz, „to nie to samo”, słowo z liczbą operacji', async () => {
-  const { app, page, dataDir, errors } = await launch()
+  const { app, page, dataDir, userData, errors } = await launch()
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await page.keyboard.press('Control+3')
@@ -91,7 +91,7 @@ test('Podobne nazwy i propozycja reguły (D78, 1.2.3): historia rachunku z datam
     // The import: shops saved without the bank's additions, the bank's row keeps them.
     await page.keyboard.press('Control+3')
     await page.getByTestId('import-run').click()
-    await expect(page.getByTestId('import-done')).toBeVisible()
+    await importDone(page, userData)
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, { timeout: 20_000 }).toBe(18)
     const saved = await records(dataDir, 'transactions')
     expect(saved.filter((t) => /DATA TRANSAKCJI|testowo|\//i.test(String(t.counterparty)))).toEqual([])

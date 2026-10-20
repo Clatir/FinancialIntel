@@ -109,6 +109,29 @@ export async function withMainLog<T>(userData: string, run: () => Promise<T>, li
 }
 
 /**
+ * Hundreds of files written or deleted at once (an import, its undo): a slow Windows runner of CI takes over the default
+ * 10 s for them (1.6.5 on main, 1.6.6 – every test there 1.5–2.5× slower), so these waits are longer.
+ */
+export const MASS = { timeout: 30_000 }
+
+/**
+ * An import's summary – shown once all its records are on the disk: as long as a mass step may take (MASS), for every
+ * import of a test (T301: the runner's disk at times over 2× slower for a minute – 10 s were not enough in PR #35 and #36);
+ * a failure brings what the window said (its messages) and the end of main.log.
+ */
+export async function importDone(page: Page, userData: string): Promise<void> {
+  await withMainLog(userData, async () => {
+    try {
+      await expect(page.getByTestId('import-done')).toBeVisible(MASS)
+    } catch (e) {
+      const said = await page.getByRole('status').allTextContents().catch(() => [] as string[])
+      if (e instanceof Error) e.message += `\n--- komunikaty okna ---\n${said.join('\n') || '(brak)'}`
+      throw e
+    }
+  })
+}
+
+/**
  * Clicks a button that closes its own window and waits for the window to close. The window can go while the click is
  * still in flight ("Target page … has been closed" on a slow machine), so the closing is the check, not the click.
  */
