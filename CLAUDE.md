@@ -975,7 +975,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   niezapisane …”, od 500 ms).
 - Testy: `tests/unit/data-store.test.ts` („zamykanie okna: zapis w rundach, zapisy w tle wstrzymane”), E2E
   `tests/e2e/app.ts` `importDone` / `MASS` – każde czekanie na podsumowanie importu w limicie kroków masowych (30 s), przy
-  porażce komunikaty okna i main.log (import-tools, import, duplicates, learning, sensors).
+  porażce komunikaty okna i main.log (import-tools, import, duplicates, learning, sensors); `look.spec.ts` – kwoty
+  pokazane na chwilę 3 s, dłużej niż dwa wolne zapisy config.json (T302).
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```

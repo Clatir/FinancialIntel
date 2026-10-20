@@ -60,7 +60,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar gałęzi, z przeglądem, 80 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy S; plan był 4–5 h) | 1.8.0 | ✅ D87 | ✅ wydane (PR #30) |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
-| 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36) |
+| 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
 | | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 56,5 h** | | | |
@@ -935,6 +935,9 @@ Zakres: „Przed etapem 1.10.1” wyżej. Zrobione:
   „Cofnij import” 17–39 s), a w przebiegu PR #36 sąsiednie testy importu szły w tej samej minucie 1,4–2,4 × wolniej –
   dysk runnera bywa chwilami wolniejszy. `importDone` i `MASS` przeniesione do `tests/e2e/app.ts` i użyte przy każdym
   czekaniu na podsumowanie importu (import-tools, import, duplikaty, podobne nazwy, plik z Pobranych).
+- CI na `main` po PR #36: test „kwoty ukryte po bezczynności” (`look.spec.ts`) – kwoty pokazane na chwilę (0,6 s) nie
+  dały się zobaczyć, bo odpowiedź na „pokaż” przychodzi po zapisie config.json, w teście celowo wolnym (300 ms, za
+  zapisem ukrycia). Lokalnie to samo przy zapisie 500 ms; chwila w teście trwa teraz 3 s (T302, PR #37), wersja bez zmian.
 
 Do sprawdzenia przez użytkownika (Windows):
 1. Zmiana w edytorze operacji i od razu „Zakończ” z menu ikony w zasobniku (albo zamknięcie okna przy wyłączonym

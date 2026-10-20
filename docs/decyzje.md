@@ -2067,3 +2067,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Windows (1.8.0–1.10.1) czasy testów importu po 1.10.1 są takie jak przed nim – „Oficer…” ok. 7,5 s, „Cofnij import”
   17–39 s – a w przebiegu PR #36 sąsiednie testy importu szły w tej samej minucie 1,4–2,4 × wolniej: dysk runnera bywa
   chwilami wolniejszy, a 10 s domyślnego czekania nie wystarcza wtedy na zapis setek plików.
+- **T302** E2E „kwoty ukryte po bezczynności” (1.6.6, F40) na wolnym dysku (CI na `main` po PR #36): „pokazane na
+  chwilę” trwało w teście 0,6 s (`revealAmounts(0.01)`), a odpowiedź `revealAmounts` przychodzi po zapisie config.json
+  – za zapisem ukrycia tuż przed nim (w teście wolny zapis 300 ms każdy, T271). Job Windows dostał odpowiedź, gdy 0,6 s
+  już minęło, i kwot pokazanych nie zobaczył (24 sprawdzenia w 10 s); lokalnie to samo przy zapisie 500 ms. Teraz chwila
+  trwa 3 s (`revealAmounts(0.05)`) – dłużej niż dwa wolne zapisy, a koniec chwili nadal mieści się w czekaniu na ukrycie
+  (10 s); przy zapisie 500 ms test przechodzi. Aplikacja bez zmian.

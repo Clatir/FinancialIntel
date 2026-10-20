@@ -126,10 +126,12 @@ test('kwoty ukryte po bezczynności (1.6.6, F40): „Pokaż na 5 min”, „do k
     await page.waitForTimeout(1200)
     await expect(page.getByTestId('amounts-hidden')).toHaveCount(0)
     await expect(page.getByTestId('state-shields')).not.toContainText('•••')
-    // Hidden by hand, shown for a while (here 0.6 s): the end of the while hides them – not the idleness.
+    // Hidden by hand, shown for a while (here 3 s): the end of the while hides them – not the idleness. The answer comes
+    // once config.json is written – after the write of the hiding before it (300 ms each here, more on a slow disk: 0.6 s
+    // were over by then on Windows CI), so the while is longer than that.
     await page.keyboard.press('Control+Shift+Digit4')
     await expect(page.getByTestId('amounts-hidden')).toBeVisible()
-    await page.evaluate(() => (globalThis as unknown as Win).fi.revealAmounts(0.01))
+    await page.evaluate(() => (globalThis as unknown as Win).fi.revealAmounts(0.05))
     await expect(page.getByTestId('amounts-hidden')).toHaveCount(0)
     await expect(page.getByTestId('amounts-hidden')).toBeVisible()
     expect(await idleHides(userData)).toBe(1)
