@@ -325,6 +325,11 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   - F36: inflacja GUS wpisywana ręcznie, bez pobierania z sieci.
   Poza zakresem, każda do osobnej decyzji: F32 (flota rezerwowa), F38 (paragony i gwarancje), F39 (ulgi PIT-37 / 36),
   F41 (wpisy z telefonu), F43 (archiwizacja starych lat).
+- **D88** (20.10.2026) Po wydaniu 1.10.0 – odpowiedź na dwie propozycje („Ok co do 1, drugie nie”):
+  - tak: 1.10.1 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany („zapis jeszcze trwa” – job Windows
+    w PR #32 i #34): zapis przy zamykaniu w rundach, zapisy w tle wstrzymane na czas zapisu (T301);
+  - nie: F32 (flota rezerwowa – IKE, IKZE, PPK, lokaty), F38 (paragony i gwarancje przy operacji), F39 (ulgi PIT-37 /
+    PIT-36), F41 (wpisy z telefonu przez OneDrive), F43 (archiwizacja starych lat) – odrzucone, poza planem.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -2033,3 +2038,27 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   czasie pokazane). Suwak i „100%” w Ustawieniach zostają rozmiarem wprost (wybrany, nie krok). E2E `look.spec.ts` z
   wolnym zapisem config.json (300 ms) – na starym kodzie pada za każdym razem (90 % zamiast 140 %); 11 mutacji – wszystkie
   wykryte.
+- **T301** Zamknięcie bez fałszywego „zapis jeszcze trwa” (1.10.1, D88 – job Windows w PR #32 i #34): przy zamykaniu
+  `flushSaves` wysyłał zapis każdego niezapisanego wpisu i czekał tylko na zapisy trwające w tej chwili. Wpis zmieniony
+  w trakcie – na przykład pole zatwierdzone przy zamykaniu, zapis paczką zaczęty tuż przed albo zapis w tle (porcja dni
+  gry, cele ICTTJ, data i salda rozliczeń) – zostawał niezapisany bez błędu, więc proces główny pytał „niezapisane
+  zmiany (zapis jeszcze trwa)” i stawał na synchronicznym pytaniu (main.log z CI nie mówi, który wpis – poprawka działa
+  po wersjach wpisów, więc obejmuje każde z tych źródeł). Teraz `flushSaves` pisze w rundach (najwyżej 10): każda wysyła
+  wpisy, których wersja zmieniła się od wysłania w tym zapisie, i czeka na wszystkie trwające zapisy i usunięcia
+  (`deletions` – `deleteRecord`, `deleteRecords`: wpis, którego pliku dysk nie oddał, jest znowu w pamięci z niezapisaną
+  zmianą i ta zapisuje się przed odpowiedzią); zapis nieudany albo czekający na decyzję o zmianie z drugiego komputera
+  nie jest wysyłany drugi raz (odpowiedzią jest jego błąd albo decyzja – bez pętli). Na czas każdego zapisu wszystkiego
+  (zamykanie, Ctrl+S, „zapisz przed…” kopii, eksportu, importu, cofnięcia, aktualizacji; zmiana folderu – od zapisu do
+  otwarcia innego) zapisy w tle nie ruszają (`backgroundHeld`, `holding`, warunek `writesInBackground` w
+  `useGameAdvance`, `useIctjGoalSync`, `useHouseholdSinceSeed` – sprawdzany przy rysowaniu i jeszcze raz, gdy efekt
+  rusza); po zamknięciu z zapisanym wszystkim – aż okno zniknie, najwyżej 10 s (gdyby proces główny okno zostawił:
+  pytanie po minucie zapisu, „Anuluj”); nowy obraz folderu (`applySnapshot`) to wstrzymanie kończy. Świadomie bez zmian
+  (przegląd): efekty zapisów w tle ruszają po każdym zapisie wszystkiego – gra bez dni do zamrożenia tylko przegląda
+  zamrożone dni, cele ICTTJ i rozliczenia tylko porównują; paczka, której zapis nie wyszedł w trakcie zamykania,
+  ponawiana po jednym wpisie – jak przed 1.10.1, z pytaniem procesu głównego po minucie. Testy jednostkowe: zmiana w
+  trakcie zapisu, paczka zaczęta w trakcie zamykania, usunięcie jednego i kilku wpisów w drodze, zapis nieudany (jedna
+  próba), wstrzymanie przy Ctrl+S, kopii i zmianie folderu, koniec wstrzymania z nowym folderem; 14 mutacji – 13
+  wykrytych, jedna nieobserwowalna (zakończone usunięcie zostawione w zbiorze daje tylko puste rundy). CI na Windows:
+  podsumowanie pierwszego importu (269 operacji i kopia folderu) w teście „Cofnij import” czeka jak kroki masowe tego
+  testu (`MASS`, 30 s; lokalnie import przed zmianą i po niej trwa tyle samo), porażka pokazuje komunikaty okna i
+  main.log; długi zapis wszystkiego (od 500 ms) zostawia w main.log rundy i liczbę niezapisanych.

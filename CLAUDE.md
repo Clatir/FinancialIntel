@@ -964,6 +964,18 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/intel-v.test.ts`, `intel-v-store.test.ts` (sklepy okna – w `tsconfig.web.json`), poszerzone
   `export`, `plan-reports`, `household` (`line`); E2E `tests/e2e/intel-v.spec.ts`.
 
+## Kod (1.10.1 – zamykanie, D88)
+- Zapis wszystkiego (T301, `store/data.ts`): `flushSaves` w rundach (`FLUSH_ROUNDS` 10 – wpis zmieniony od wysłania w
+  tym zapisie wysłany jeszcze raz, nieudany i czekający na decyzję raz, mapa `sent` wersji; czeka na `inFlight` i
+  usunięcia w drodze – `deletions` / `deleting` w `deleteRecord` i `deleteRecords`), `holding(run)` – na czas zapisu
+  wszystkiego `backgroundHeld` (licznik `holds`; `flushSaves`, `flushForClose`, `switchFolder` – do otwarcia innego
+  folderu); po zamknięciu z zapisanym wszystkim `closeHold` (`CLOSE_HOLD_MS` 10 s, kończy go `applySnapshot`);
+  `writesInBackground(s)` – warunek zapisów w tle (`useGameAdvance`, `useIctjGoalSync`, `useHouseholdSinceSeed`: w
+  selektorze i jeszcze raz w efekcie); długi zapis wszystkiego w main.log (`rendererStep` „zapis wszystkiego: rundy …,
+  niezapisane …”, od 500 ms).
+- Testy: `tests/unit/data-store.test.ts` („zamykanie okna: zapis w rundach, zapisy w tle wstrzymane”), E2E
+  `import-tools.spec.ts` `importDone` (podsumowanie importu w limicie `MASS`, przy porażce komunikaty okna i main.log).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -1088,4 +1100,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
 - [x] 1.10.0 Wywiad (grupa V, D87): tagi i wyprawy (koszt wyjazdu przez wiele kategorii, z celem), wydatki do
   podkategorii i operacji, namierzone cele (marki), porównanie miesiąca, siła floty netto, bilans paliwa i stopa
   oszczędności, „skąd ta liczba?” na Mostku i słowniczek okrętu, osobista inflacja z CPI GUS wpisanym ręcznie
+- [x] 1.10.1 Zamykanie (D88): zmiana zrobiona w trakcie zapisu zapisuje się przed zamknięciem okna, bez pytania o
+  niezapisane zmiany; zapisy w tle wstrzymane na czas zapisu
+- ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja
+  starych lat~~ – odrzucone (D88)
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

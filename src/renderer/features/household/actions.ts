@@ -9,7 +9,7 @@ import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
-import { canWrite, updateSettings, useData } from '../../store/data'
+import { canWrite, updateSettings, useData, writesInBackground } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
 import { toast } from '../../store/ui'
@@ -138,13 +138,14 @@ export function seedSince(transactions: readonly Pick<Transaction, 'date' | 'ban
 export function useHouseholdSinceSeed(): void {
   // A computer only in the tray writes nothing in the background (D86).
   const inUse = usePresence((s) => s.inUse)
-  const unset = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since === undefined) && inUse
+  const unset = useData((s) => writesInBackground(s) && s.fi != null && s.fi.settings.household.since === undefined) && inUse
   const unstamped =
     useData(
-      (s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined
+      (s) => writesInBackground(s) && s.fi != null && s.fi.settings.household.since !== undefined && s.fi.settings.household.openingIds === undefined
     ) && inUse
   useEffect(() => {
-    if (!unset) return
+    // Each checked again as it runs (T301): changes being written since the render hold it.
+    if (!unset || !writesInBackground(useData.getState())) return
     const input = fleetInputNow()
     if (!input || useData.getState().fi?.settings.household.since !== undefined) return
     const today = warsawNow().date
@@ -176,15 +177,13 @@ export function useHouseholdSinceSeed(): void {
   const undated =
     useData(
       (s) =>
-        s.phase === 'ready' &&
-        !s.status?.readOnly &&
-        !s.switching &&
+        writesInBackground(s) &&
         s.fi != null &&
         !!s.fi.settings.household.since &&
         s.fi.settings.household.members.some((m) => m.opening.owed > 0 && m.opening.since === undefined)
     ) && inUse
   useEffect(() => {
-    if (!undated) return
+    if (!undated || !writesInBackground(useData.getState())) return
     const input = fleetInputNow()
     const household = useData.getState().fi?.settings.household
     if (!input || !household?.since) return
@@ -211,7 +210,7 @@ export function useHouseholdSinceSeed(): void {
     )
   }, [undated])
   useEffect(() => {
-    if (!unstamped) return
+    if (!unstamped || !writesInBackground(useData.getState())) return
     const input = fleetInputNow()
     const household = useData.getState().fi?.settings.household
     if (!input || !household || household.openingIds !== undefined || household.since === undefined) return

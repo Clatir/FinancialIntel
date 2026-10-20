@@ -479,7 +479,7 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **F29** „Skąd ta liczba?” – rozbicie energii dziś, zasięgu i warstw oraz słowniczek metafory *(nakład M)*
 - [x] **F30** Skala interfejsu i tryb wyższego kontrastu (ustawienie komputera) *(nakład S)* · ⚠ D33 (wygląd jak ICTTJ) – tylko jako opcja komputera, domyślnie bez zmian.
 - [x] **F31** Radar anomalii: nietypowe kwoty i możliwe podwójne obciążenia *(nakład M)*
-- [ ] **F32** Flota rezerwowa: IKE, IKZE, PPK, obligacje i lokaty poza budżetem *(nakład L)* · ⚠ D10 (jeden zbiór kont, podział wirtualny) i T31 – aktywa wychodzą poza warstwy, więc nie zmieniają osłon ani zasięgu. D73 / T81 – krzywa majątku jako suma sald kont budżetu. D54 – konto tradingowe (maklerskie) XTB nie może tu trafić. Jeśli IKE / IKZE są w XTB, trzeba potwierdzić, że to nie konto tradingowe.
+- [ ] ❌ **F32** Flota rezerwowa: IKE, IKZE, PPK, obligacje i lokaty poza budżetem *(nakład L)* · ⚠ D10 (jeden zbiór kont, podział wirtualny) i T31 – aktywa wychodzą poza warstwy, więc nie zmieniają osłon ani zasięgu. D73 / T81 – krzywa majątku jako suma sald kont budżetu. D54 – konto tradingowe (maklerskie) XTB nie może tu trafić. Jeśli IKE / IKZE są w XTB, trzeba potwierdzić, że to nie konto tradingowe. · **Odrzucone (D88, 20.10.2026).**
 
 ### Priorytet niski
 
@@ -488,9 +488,9 @@ F13). Zostają dalsze, niskie pozycje – niezaznaczone niżej.
 - [x] **F35** Symulator manewrów „co jeśli” *(nakład M)*
 - [x] **F36** Osobista inflacja koszyka *(nakład M)* · ⚠ Automatyczne pobieranie CPI z GUS łamałoby zasadę „sieć tylko do aktualizacji” (D74), stąd wariant z CPI wpisywanym ręcznie.
 - [x] **F37** Plan roczny: siatka kopert i pensji na 12 miesięcy *(nakład M)*
-- [ ] **F38** Paragony, faktury i gwarancje przy operacji – z terminem zwrotu lub rękojmi *(nakład M)* · ⚠ Brak sprzeczności z decyzją użytkownika. Trzeba zmienić decyzje techniczne T22 („bez protokołu plików – FI nie ma screenów”) i T20 (kopia „folder FI jest mały, bez screenów”) – kopie bez załączników albo tygodniowe, pilnowanie rozmiaru folderu na OneDrive.
-- [ ] **F39** Ulgi z PIT-37 / PIT-36: wydatki do odliczenia w roku *(nakład M)* · ⚠ D58 dotyczy tylko PIT-38 (termin bez kwoty) – PIT-37/36 to nowa sprawa. D8 (trading bez ZUS) sugeruje, że dochodu z PIT-37 może nie być – do potwierdzenia przez użytkownika.
+- [ ] ❌ **F38** Paragony, faktury i gwarancje przy operacji – z terminem zwrotu lub rękojmi *(nakład M)* · ⚠ Brak sprzeczności z decyzją użytkownika. Trzeba zmienić decyzje techniczne T22 („bez protokołu plików – FI nie ma screenów”) i T20 (kopia „folder FI jest mały, bez screenów”) – kopie bez załączników albo tygodniowe, pilnowanie rozmiaru folderu na OneDrive. · **Odrzucone (D88, 20.10.2026).**
+- [ ] ❌ **F39** Ulgi z PIT-37 / PIT-36: wydatki do odliczenia w roku *(nakład M)* · ⚠ D58 dotyczy tylko PIT-38 (termin bez kwoty) – PIT-37/36 to nowa sprawa. D8 (trading bez ZUS) sugeruje, że dochodu z PIT-37 może nie być – do potwierdzenia przez użytkownika. · **Odrzucone (D88, 20.10.2026).**
 - [x] **F40** Automatyczne ukrycie kwot po bezczynności i przy starcie z Windows *(nakład S)* · ⚠ D30 (bez blokady) – zgodne, bo to tylko ukrycie kwot.
-- [ ] **F41** Wpisy z telefonu przez skrzynkę na OneDrive *(nakład M)* · ⚠ D2 (bez wersji na iPhone'a) – to nie aplikacja na telefon, tylko skrót iOS zapisujący plik; do decyzji użytkownika.
+- [ ] ❌ **F41** Wpisy z telefonu przez skrzynkę na OneDrive *(nakład M)* · ⚠ D2 (bez wersji na iPhone'a) – to nie aplikacja na telefon, tylko skrót iOS zapisujący plik; do decyzji użytkownika. · **Odrzucone (D88, 20.10.2026).**
 - [x] **F42** Polskie dni wolne w liczeniu dni roboczych *(nakład S)* · ⚠ T63 (decyzja techniczna: „pon–pt, bez świąt”) – do zmiany. D72 mówi o „3 dniach roboczych”, więc uwzględnienie świąt jest zgodne z intencją użytkownika.
-- [ ] **F43** Zamknięcie i archiwizacja starych lat, porządki w folderze *(nakład L)* · ⚠ Brak sprzeczności z decyzją użytkownika. Zmienia decyzję techniczną T2 (jeden plik JSON na rekord) dla zamkniętych lat i wymaga ostrożności przy scalaniu / konfliktach (T18).
+- [ ] ❌ **F43** Zamknięcie i archiwizacja starych lat, porządki w folderze *(nakład L)* · ⚠ Brak sprzeczności z decyzją użytkownika. Zmienia decyzję techniczną T2 (jeden plik JSON na rekord) dla zamkniętych lat i wymaga ostrożności przy scalaniu / konfliktach (T18). · **Odrzucone (D88, 20.10.2026).**
