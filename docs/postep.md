@@ -1,8 +1,7 @@
 # Financial Intel – postęp
 
-**Stan:** 1.10.1 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany (D88, T301) w PR #35: po zielonym
-CI scalenie (D71) i wydanie z joba Windows na `main`, potem pauza do komendy użytkownika (D67). Ciąg grup M–V (D87)
-zakończony – każda grupa z własnym PR i wydaniem.
+**Stan:** pauza do komendy użytkownika (D67). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
+**1.10.1 wydane** (PR #35 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany, D88, T301),
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
 oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
@@ -61,10 +60,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar gałęzi, z przeglądem, 80 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy S; plan był 4–5 h) | 1.8.0 | ✅ D87 | ✅ wydane (PR #30) |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
-| 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | ok. 1 h (zegar sesji, z przeglądem, 14 mutacjami i dwoma pełnymi E2E) | 1.10.1 | ✅ D88 | 🔄 PR #35 – CI, scalenie, wydanie |
+| 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35) |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 55,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 56 h** | | | |
 | | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -929,9 +928,10 @@ Zakres: „Przed etapem 1.10.1” wyżej. Zrobione:
   Lokalnie pierwszy import trwa tyle samo przed zmianą i po niej (0,65–0,92 s i 0,73–0,94 s, 5 przebiegów; pod pełnym
   obciążeniem procesora 1,2–1,4 s), więc to czekanie dostało limit kroków masowych tego testu (`MASS`, 30 s – jak
   wcześniej odpytywanie folderu, 1.6.5 / 1.6.6), a porażka pokazuje komunikaty okna i koniec main.log; długi zapis
-  wszystkiego (≥ 500 ms) zostawia w main.log liczbę rund i to, co zostało niezapisane.
+  wszystkiego (≥ 500 ms) zostawia w main.log liczbę rund i to, co zostało niezapisane. Z tym CI PR #35 zielone (test na
+  Windows 19 s), a po scaleniu job Windows na `main` wydał 1.10.1.
 
-Do sprawdzenia przez użytkownika (po wydaniu 1.10.1, Windows):
+Do sprawdzenia przez użytkownika (Windows):
 1. Zmiana w edytorze operacji i od razu „Zakończ” z menu ikony w zasobniku (albo zamknięcie okna przy wyłączonym
    „Zamykaj do zasobnika”) – bez pytania o niezapisane zmiany; po ponownym otwarciu zmiana jest.
 
