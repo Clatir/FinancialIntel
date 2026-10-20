@@ -1,7 +1,7 @@
 /**
  * Operacje (1.7.0, F18): more filters (the amount, the members, the counterparty, what an operation is linked to, the
- * other account of a transfer), the list's order by its headers, the views saved in the folder and the visible list to
- * CSV / Excel – exactly what the list shows, in its order.
+ * other account of a transfer), the list's order by its headers, the views saved in the folder, the visible list to
+ * CSV / Excel – exactly what the list shows, in its order – and (1.11.0, D89) the columns the list shows.
  */
 import { useMemo, useState, type ReactNode } from 'react'
 import { brandTargetOf, inPeriod, type OperationSort, type OperationsFilter } from '@shared/operationsView'
@@ -13,7 +13,7 @@ import { AmountField } from '../../components/fields'
 import { Popover } from '../../components/Popover'
 import { cx } from '../../components/ui'
 import { api } from '../../lib/api'
-import { countLabel } from '../../lib/format'
+import { countLabel, plural } from '../../lib/format'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
@@ -22,6 +22,7 @@ import { useAccounts } from './pickers'
 import { tagKey } from '@shared/calc/tags'
 import { useKnownTags } from '../tags/state'
 import { applyView, deleteView, isShownView, saveView, setFilter, useOperationsUi } from './state'
+import { COLUMN_LABEL, OPERATION_COLUMNS, resetColumns, showColumn, useOperationColumns } from './columns'
 
 /** How many of the extra filters are on (the chip „Więcej filtrów: N”). */
 export function extraFilters(f: OperationsFilter): number {
@@ -283,5 +284,66 @@ export function ExportVisible({ rows, view }: { rows: readonly Transaction[]; vi
         Excel
       </button>
     </span>
+  )
+}
+
+/**
+ * „Kolumny” (1.11.0, D89): which columns the list shows – on this computer. The date and the amount always; the export
+ * takes every column whatever is shown.
+ */
+export function ColumnsMenu() {
+  const hidden = useOperationColumns((s) => s.hidden)
+  const n = hidden.length
+  return (
+    <Popover
+      buttonClassName="btn h-[22px] px-1.5"
+      pressed={n > 0}
+      width={230}
+      testId="operations-columns"
+      panelTestId="operations-columns-menu"
+      label={
+        <>
+          Kolumny{n ? `: ${n} ${plural(n, 'ukryta', 'ukryte', 'ukrytych')}` : ''}
+          <span className="ml-1 text-[9px] opacity-60" aria-hidden>
+            ▾
+          </span>
+        </>
+      }
+    >
+      {() => (
+        <div className="flex flex-col gap-1 text-[12px]">
+          <label className="flex items-center gap-2 text-dim">
+            <input type="checkbox" checked disabled />
+            Data
+          </label>
+          {OPERATION_COLUMNS.map((c) => (
+            <label key={c} className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!hidden.includes(c)}
+                onChange={(e) => {
+                  const on = e.currentTarget.checked
+                  // The counterparty's header is the only one of its order: without it the list goes newest first again.
+                  if (!on && c === 'counterparty' && useOperationsUi.getState().filter.sort === 'counterparty') setFilter({ sort: 'date' })
+                  showColumn(c, on)
+                }}
+                data-testid={`operations-column-${c}`}
+              />
+              {COLUMN_LABEL[c]}
+            </label>
+          ))}
+          <label className="flex items-center gap-2 text-dim">
+            <input type="checkbox" checked disabled />
+            Kwota
+          </label>
+          {n > 0 && (
+            <button type="button" className="mt-1 self-start text-accent hover:underline" onClick={resetColumns} data-testid="operations-columns-reset">
+              przywróć domyślne
+            </button>
+          )}
+          <span className="text-[11px] text-dim">Na tym komputerze. Data i kwota zawsze widoczne; eksport CSV / Excel ma wszystkie kolumny.</span>
+        </div>
+      )}
+    </Popover>
   )
 }

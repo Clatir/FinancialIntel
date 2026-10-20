@@ -1,5 +1,20 @@
 # Financial Intel – zmiany
 
+## 1.11.0
+
+Opis wydatku i kolumny listy operacji (D89):
+- Kolumna „Notatka” na liście operacji: czym jest wydatek – pierwsza linia notatki, cała notatka po najechaniu
+  kursorem. Operacja bez notatki pokazuje opisy części paragonu („zakupy na tydzień · kabel HDMI”).
+- Opis każdej części paragonu: pole „opis części” pod każdą częścią w edytorze podziału (do 500 znaków). Wyszukiwarka
+  w Operacjach i paleta (Ctrl+K) znajdują operację po opisie części; w eksporcie CSV i Excel opisy części są w kolumnie
+  „Notatka” po notatce operacji, każdy z kategorią swojej części. Usunięcie przedostatniej części przenosi opis ostatniej
+  do notatki operacji.
+- „Kolumny” nad listą operacji: Godzina, Kontrahent, Konto, Notatka, Kategoria, Tagi i Oznaczenia można ukryć (Data i
+  Kwota zawsze widoczne), „przywróć domyślne” pokazuje wszystkie. Wybór zapamiętany na tym komputerze – laptop i duży
+  monitor mogą mieć inne. Konto i tagi mają teraz własne kolumny. Eksport zawsze ma wszystkie kolumny.
+- Ukrycie kolumny „Kontrahent”, gdy lista jest posortowana po kontrahencie, wraca do kolejności po dacie; nowa operacja
+  bez kolumny kontrahenta ma napis „nowa operacja” w następnej widocznej kolumnie.
+
 ## 1.10.1
 
 Poprawka (D88):

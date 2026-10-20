@@ -1,6 +1,6 @@
 # Financial Intel – postęp
 
-**Stan:** pauza do komendy użytkownika (D67). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
+**Stan:** 1.11.0 (opis wydatku i kolumny listy operacji, D89) – zrobione, PR do `main`. Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
 **1.10.1 wydane** (PR #35 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany, D88, T301),
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
 oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
@@ -12,8 +12,8 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** 1.11.0 – opis wydatku i kolumny listy operacji: plan w „Przed etapem 1.11.0”, czeka na odpowiedzi
-i komendę użytkownika (D67). Flota rezerwowa (F32), paragony i
+**Następny krok:** 1.11.0 (opis wydatku i kolumny listy operacji, D89) – PR do `main`, po zielonym CI scalenie (D71) i
+sprawdzenie wydania; potem pauza – kolejne prace tylko na komendę użytkownika (D67). Flota rezerwowa (F32), paragony i
 gwarancje (F38), ulgi PIT-37 / PIT-36 (F39), wpisy z telefonu (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.10.1 – listy w sekcjach niżej.
 
@@ -62,10 +62,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
-| 1.11.0 | Opis wydatku: notatka na liście operacji, opis części paragonu, wybór widocznych kolumn listy (D89 – czeka) | Opus 5.5 | **xhigh** (z górką; wystarczyłby high) | ok. 1–1,5 h (z przeglądem, E2E i CI) | 1.11.0 | ⏳ odpowiedzi na pytania a–e i komenda | ⏳ plan gotowy, czeka na komendę |
+| 1.11.0 | Opis wydatku: notatka na liście operacji, opis części paragonu, wybór widocznych kolumn listy (D89) | Opus 5.5 | **xhigh** (z górką; wystarczyłby high) | zmierzone ok. 1 h (zegar sesji od zgody do PR, z przeglądem, 11 mutacjami i pełnym E2E; plan był 1–1,5 h) | 1.11.0 | ✅ D89 | ⏳ PR do `main`, CI |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 56,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1 + 1.11.0** | | | **ok. 57,5 h** | | | |
 | | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -961,7 +961,7 @@ Do sprawdzenia przez użytkownika (Windows):
    - **Wybór kolumn** – przycisk „Kolumny” nad listą (menu z polami wyboru, jak „Więcej filtrów”) i „Przywróć
      domyślne”; szablon siatki liczony z widocznych kolumn (kolumny tekstowe ustępują w wąskim oknie jak dziś – nagłówek
      nigdy nie wchodzi pod panel szczegółów). Schemat folderu bez zmian (pole `note` części już jest – bez migracji).
-2. **Co użytkownik musi powiedzieć** – pytania z propozycją (✅ = moja propozycja):
+2. **Co użytkownik musi powiedzieć** – ✅ „Zgoda na wszystkie propozycje” (D89). Pytania z propozycją (✅ = moja propozycja):
    - a) Notatka na liście jako **osobna kolumna „Notatka”** (✅ – i tak będzie wybór kolumn) czy szary tekst pod
      kontrahentem w tym samym wierszu?
    - b) Kolumny do wyboru: Data i Kwota zawsze widoczne; do ukrycia: Godzina, Kontrahent, **Konto**, Notatka,
@@ -980,6 +980,35 @@ Do sprawdzenia przez użytkownika (Windows):
    przy 150 tys. operacji). Sonnet 5.5 · high też da radę, z większym ryzykiem poprawek po przeglądzie. Czas: ok.
    1–1,5 h z testami (unit: kolumny i wyszukiwanie w opisach części; E2E: notatka na liście, opis części, ukrycie /
    przywrócenie kolumn), `/code-review` high, PR i CI (Linux i Windows); wydanie 1.11.0.
+
+## 1.11.0 – opis wydatku i kolumny listy operacji (20.10.2026)
+
+Zakres: „Przed etapem 1.11.0” wyżej, wszystkie propozycje przyjęte (D89). Zrobione:
+- Kolumna „Notatka” na liście operacji: pierwsza linia notatki, całość w dymku; bez notatki – opisy części paragonu
+  („zakupy na tydzień · kabel HDMI”).
+- Opis każdej części paragonu w edytorze podziału (`split-note`, 500 znaków) – istniejące pole `split.note`, bez zmiany
+  schematu; wyszukiwarka listy i paleta szukają w opisach części; eksport – w kolumnie „Notatka” po notatce operacji, każdy
+  z kategorią swojej części.
+- „Kolumny” nad listą (w wierszu sum, przy CSV / Excel): Godzina, Kontrahent, Konto, Notatka, Kategoria, Tagi,
+  Oznaczenia do ukrycia, Data i Kwota zawsze, „przywróć domyślne”; wybór na tym komputerze (localStorage); konto i tagi
+  we własnych kolumnach (T303).
+- Przegląd `/code-review` high: 9 kandydatów, wszystkie poprawione – usunięcie przedostatniej części przenosi jej opis do
+  notatki (jak tagi), ukrycie „Kontrahenta” przy kolejności po nim wraca do kolejności po dacie, „nowa operacja” w
+  pierwszej widocznej kolumnie tekstowej, odstęp kolumn 6 px (dziewięć kolumn tak wąsko jak siedem przed 1.11.0),
+  ukryte kolumny nowszej wersji zostają w zapisie, tagi wiersza i eksportu jednym `tagsText` (liczone tylko przy
+  widocznej kolumnie), eksport z kategorią przy opisie części i notatką operacji bez zmian, `noteLineOf` na `notesOf`,
+  duplikaty liczą opis części jako treść użytkownika.
+- Testy: 828 → 835 unit + fs (`operation-notes.test.ts`, `operations-columns.test.ts`), nowy E2E `notes.spec.ts` (notatka
+  na liście, opis części, wyszukiwanie, kolejność po ukryciu kontrahenta, szkic bez kolumny kontrahenta, wybór po ponownym
+  uruchomieniu, „przywróć domyślne”, usunięcie części, nagłówek przy oknie 1024 px z panelem szczegółów); pełny E2E
+  68 z 68 zielonych (Linux, 4 min); 11 mutacji – 10 wykrytych od razu, jedna (kolejność ukrytych w pamięci – nieobserwowalna dla siatki) wykryta po
+  dopisanej asercji.
+
+Do sprawdzenia przez użytkownika (Windows):
+1. Operacje: notatka przy kilku wydatkach – widać ją w kolumnie „Notatka”, cała po najechaniu kursorem.
+2. Podział paragonu z opisem części; wyszukanie operacji po słowie z opisu części; eksport CSV / Excel.
+3. „Kolumny”: ukrycie kilku (np. Godzina, Tagi) przy otwartym panelu szczegółów i w wąskim oknie; po ponownym
+   uruchomieniu wybór zostaje; na drugim komputerze lista ma swój wybór.
 
 ## Przed grupą U – ładownia i czujniki, funkcje (19.10.2026)
 

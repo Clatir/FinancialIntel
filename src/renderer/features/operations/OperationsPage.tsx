@@ -1,13 +1,14 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
-import { amountOn, isTwoSided, touchesAccount } from '@shared/calc/operations'
-import { tagKeysOf, tagsOf, withTags } from '@shared/calc/tags'
+import { amountOn, isTwoSided, notesOf, touchesAccount } from '@shared/calc/operations'
+import { tagsText } from '@shared/calc/tags'
 import { useMarkFlags } from '../sensors/state'
-import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { BulkChangeBar } from './BulkChange'
-import { ExportVisible, extraFilters, MoreFilters, SortHeader, ViewsBar } from './ListTools'
+import { ColumnsMenu, ExportVisible, extraFilters, MoreFilters, SortHeader, ViewsBar } from './ListTools'
+import { columnsTemplate, useOperationColumns, type OperationColumn } from './columns'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
@@ -34,12 +35,6 @@ import { EveningReport } from '../evening/EveningReport'
 /** The details pane can be hidden like a panel: the list takes its width. */
 const DETAILS_KEY = 'operations:Szczegóły'
 const ROW = 28
-/**
- * The list's columns: the counterparty and the category give way in a narrow window (the window's least width with the
- * details at their width – CI on Windows): the header never reaches under the details' panel.
- */
-const TEMPLATE = '16px 78px 44px minmax(64px, 1.6fr) minmax(0, 1fr) minmax(0, auto) 110px'
-
 
 const TONE_CLASS = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
 
@@ -175,7 +170,16 @@ function CheckMenu<T extends string>({
   )
 }
 
-function Row({ t, selected, index, top, view, flags }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null; flags: MarkFlags }) {
+/** Where a new entry says „nowa operacja” (D89): the first of these shown. */
+const DRAFT_COLUMNS: readonly OperationColumn[] = ['counterparty', 'note', 'category', 'account', 'tags']
+
+/** The columns shown (D89): the list's grid and which cells a row draws. */
+interface Columns {
+  template: string
+  shown: (c: OperationColumn) => boolean
+}
+
+function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null; flags: MarkFlags; columns: Columns }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const orders = useData((s) => s.fi?.settings.orders)
@@ -204,16 +208,22 @@ function Row({ t, selected, index, top, view, flags }: { t: Transaction; selecte
   const amount = view && touchesAccount(t, view) ? amountOn(t, view) : t.amount
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split'].includes(m))
   const ticked = useOperationsUi((s) => !!s.ticked[t.id])
+  const name = t.counterparty || t.title || TX_KIND_LABEL[t.kind]
+  const { shown } = columns
+  const tags = shown('tags') ? tagsText(t) : ''
+  // A new entry says so in the first text column shown (the counterparty's – hidden, the next one; none – the date).
+  const draftIn = draft ? (DRAFT_COLUMNS.find(shown) ?? null) : null
+  const NEW = <span className="text-accent">nowa operacja</span>
   return (
     <div
       data-testid="operation-row"
       data-key={t.id}
       onClick={() => selectOperation(t.id)}
       className={cx(
-        'absolute left-0 grid w-full items-center gap-x-2 border-b border-line/70 px-2 text-[12px]',
+        'absolute left-0 grid w-full items-center gap-x-1.5 border-b border-line/70 px-2 text-[12px]',
         selected ? 'bg-accent-soft' : index % 2 ? 'bg-white/[0.012] hover:bg-hover' : 'hover:bg-hover'
       )}
-      style={{ top, height: ROW, gridTemplateColumns: TEMPLATE }}
+      style={{ top, height: ROW, gridTemplateColumns: columns.template }}
     >
       <input
         type="checkbox"
@@ -224,37 +234,51 @@ function Row({ t, selected, index, top, view, flags }: { t: Transaction; selecte
         aria-label="Zaznacz operację"
         data-testid="operation-tick"
       />
-      <span className="num truncate text-fg">
+      <span className={cx('num truncate', draft && !draftIn ? 'text-accent' : 'text-fg')} title={draft && !draftIn ? 'nowa operacja' : undefined}>
         {t.date.slice(8, 10)}.{t.date.slice(5, 7)} <span className="text-dim">{WEEKDAY_PL[weekdayOf(t.date)]}</span>
       </span>
-      <span className="num text-muted">{t.time ?? ''}</span>
-      <span className="min-w-0 truncate">
-        <span className={cx(draft ? 'text-accent' : 'text-fg-strong')}>{draft ? 'nowa operacja' : t.counterparty || t.title || TX_KIND_LABEL[t.kind]}</span>
-        <span className="ml-2 text-[11px] text-dim">{account}</span>
-        {/* F17: the operation's tags and its lines'. */}
-        {tagKeysOf(t).size > 0 && (
-          <span className="ml-2 text-[11px] text-muted" data-testid="operation-row-tags">
-            {withTags(tagsOf(t), t.splits.flatMap((x) => x.tags ?? []))
-              .map((x) => `#${x}`)
-              .join(' ')}
-          </span>
-        )}
-      </span>
-      <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')} title={category || undefined}>
-        {t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : t.containerId ? 'ładownia' : t.goalId ? 'z celu' : 'bez kategorii') : category}
-      </span>
-      <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
-        {shownMarks.map((m) => (
-          <Badge key={m} tone={m === 'impulse' || m === 'night' || m === 'pending' || m === 'anomaly' ? 'warn' : 'default'}>
-            {MARK_LABEL[m]}
-          </Badge>
-        ))}
-        {orders && needsLog(t, orders) && (
-          <Badge tone="warn" title="Od progu dziennika kapitańskiego: plan czy impuls?">
-            ?
-          </Badge>
-        )}
-      </span>
+      {shown('time') && <span className="num text-muted">{t.time ?? ''}</span>}
+      {shown('counterparty') && (
+        <span className="min-w-0 truncate text-fg-strong" title={draft ? undefined : name}>
+          {draftIn === 'counterparty' ? NEW : name}
+        </span>
+      )}
+      {shown('account') && (
+        <span className="min-w-0 truncate text-[11px] text-dim" title={account} data-testid="operation-row-account">
+          {draftIn === 'account' ? NEW : account}
+        </span>
+      )}
+      {/* D89: what the operation is – its note (the receipt lines' without one), the whole in the hint. */}
+      {shown('note') && (
+        <span className="min-w-0 truncate text-[11.5px] text-muted" title={notesOf(t).join('\n') || undefined} data-testid="operation-row-note">
+          {draftIn === 'note' ? NEW : noteLineOf(t)}
+        </span>
+      )}
+      {shown('category') && (
+        <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')} title={category || undefined}>
+          {draftIn === 'category' ? NEW : t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : t.containerId ? 'ładownia' : t.goalId ? 'z celu' : 'bez kategorii') : category}
+        </span>
+      )}
+      {/* F17: the operation's tags and its lines'. */}
+      {shown('tags') && (
+        <span className="min-w-0 truncate text-[11px] text-muted" title={tags || undefined} data-testid="operation-row-tags">
+          {draftIn === 'tags' ? NEW : tags}
+        </span>
+      )}
+      {shown('marks') && (
+        <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
+          {shownMarks.map((m) => (
+            <Badge key={m} tone={m === 'impulse' || m === 'night' || m === 'pending' || m === 'anomaly' ? 'warn' : 'default'}>
+              {MARK_LABEL[m]}
+            </Badge>
+          ))}
+          {orders && needsLog(t, orders) && (
+            <Badge tone="warn" title="Od progu dziennika kapitańskiego: plan czy impuls?">
+              ?
+            </Badge>
+          )}
+        </span>
+      )}
       <span className={cx('num text-right font-medium', TONE_CLASS[tone])} data-testid="operation-amount-cell">
         {signedPln(amount)}
       </span>
@@ -413,6 +437,8 @@ export function OperationsPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const deferred = useDeferredValue(filter)
+  const hidden = useOperationColumns((s) => s.hidden)
+  const columns = useMemo<Columns>(() => ({ template: columnsTemplate(hidden), shown: (c) => !hidden.includes(c) }), [hidden])
 
   const all = useMemo(() => listOf(records), [records])
   // The marks „nietypowa” and „czeka na zwrot” (F31, F34).
@@ -547,6 +573,7 @@ export function OperationsPage() {
           </span>
           <DuplicatesLink />
           <ExportVisible rows={rows} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
+          <ColumnsMenu />
           <span className="flex-1" />
           {balances.map((a) => (
             <span key={a.id} className="text-muted" title={a.opening ? `Saldo otwarcia ${plnText(a.opening.amount)} zł na początek ${plDate(a.opening.date)}` : 'Bez salda otwarcia – suma operacji (Ustawienia → Konta)'}>
@@ -560,17 +587,22 @@ export function OperationsPage() {
         </div>
 
         <BulkBar visible={rows} />
-        <div className="grid h-[24px] shrink-0 items-center gap-x-2 overflow-hidden border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: TEMPLATE }}>
+        <div className="grid h-[24px] shrink-0 items-center gap-x-1.5 overflow-hidden border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: columns.template }} data-testid="operations-header">
           <TickAll rows={rows} />
           <SortHeader sort={filter.sort} by="date">
             Data
           </SortHeader>
-          <span>Godz.</span>
-          <SortHeader sort={filter.sort} by="counterparty">
-            Kontrahent · konto
-          </SortHeader>
-          <span>Kategoria</span>
-          <span />
+          {columns.shown('time') && <span>Godz.</span>}
+          {columns.shown('counterparty') && (
+            <SortHeader sort={filter.sort} by="counterparty">
+              Kontrahent
+            </SortHeader>
+          )}
+          {columns.shown('account') && <span className="min-w-0 truncate">Konto</span>}
+          {columns.shown('note') && <span className="min-w-0 truncate">Notatka</span>}
+          {columns.shown('category') && <span className="min-w-0 truncate">Kategoria</span>}
+          {columns.shown('tags') && <span className="min-w-0 truncate">Tagi</span>}
+          {columns.shown('marks') && <span />}
           <SortHeader sort={filter.sort} by="amount" className="justify-end">
             Kwota
           </SortHeader>
@@ -593,7 +625,7 @@ export function OperationsPage() {
             <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
               {virtualizer.getVirtualItems().map((v) => {
                 const t = rows[v.index] as Transaction
-                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} flags={flags} />
+                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} flags={flags} columns={columns} />
               })}
             </div>
           )}

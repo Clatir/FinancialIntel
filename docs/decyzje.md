@@ -330,6 +330,16 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     w PR #32 i #34): zapis przy zamykaniu w rundach, zapisy w tle wstrzymane na czas zapisu (T301);
   - nie: F32 (flota rezerwowa – IKE, IKZE, PPK, lokaty), F38 (paragony i gwarancje przy operacji), F39 (ulgi PIT-37 /
     PIT-36), F41 (wpisy z telefonu przez OneDrive), F43 (archiwizacja starych lat) – odrzucone, poza planem.
+- **D89** (20.10.2026) Pytanie: jak opisać, czym jest wydatek (nie tylko kontrahent i tytuł przelewu)? Odpowiedź: jest
+  „Notatka” (edytor, szybki wpis), dziennik kapitański i tagi; braki – notatki nie widać na liście, część paragonu nie ma
+  opisu. Prośba: dodać te funkcje i wybór widocznych kolumn listy operacji. „Zgoda na wszystkie propozycje” (1.11.0):
+  - a) notatka na liście jako osobna kolumna „Notatka” (pierwsza linia, całość w dymku; bez notatki – opisy części);
+  - b) kolumny do ukrycia: Godzina, Kontrahent, Konto, Notatka, Kategoria, Tagi, Oznaczenia (konto i tagi we własnych
+    kolumnach); Data i Kwota zawsze; domyślnie wszystkie widoczne;
+  - c) wybór kolumn zapamiętany na tym komputerze;
+  - d) zapisane widoki listy nie pamiętają kolumn;
+  - e) eksport widocznej listy zawsze ze wszystkimi kolumnami;
+  - opis części paragonu w edytorze operacji (do 500 znaków), w wyszukiwarce i w eksporcie; szybki wpis bez zmian.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -2073,3 +2083,18 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   już minęło, i kwot pokazanych nie zobaczył (24 sprawdzenia w 10 s); lokalnie to samo przy zapisie 500 ms. Teraz chwila
   trwa 3 s (`revealAmounts(0.05)`) – dłużej niż dwa wolne zapisy, a koniec chwili nadal mieści się w czekaniu na ukrycie
   (10 s); przy zapisie 500 ms test przechodzi. Aplikacja bez zmian.
+- **T303** Opis wydatku i kolumny listy operacji (1.11.0, D89): opis części paragonu to istniejące pole `split.note`
+  (schemat bez zmian, bez migracji; limit 500 znaków tylko w polu edytora). `calc/operations.ts` `notesOf` (notatka i
+  opisy części, przycięte, niepuste – dymek kolumny), `operationsView.ts` `noteLineOf` (pierwsza linia notatki; bez niej
+  opisy części z „ · ”), wyszukiwarka listy i paleta szukają też w opisach części (`searchTextOf`); eksport – kolumna
+  „Notatka”: notatka operacji jak jest, potem opisy części z kategorią części („Rozrywka i hobby: kabel HDMI”), bo
+  „Kategoria” wymienia wszystkie części, a opisy tylko opisane; duplikaty – opis części liczy się do treści użytkownika
+  (kopia z nim zostaje). Usunięcie przedostatniej części: opis ostatniej przechodzi do notatki operacji (jak jej tagi).
+  Kolumny: `features/operations/columns.ts` – w localStorage `fi.operations.columns` zapisane ukryte (kolumna nowszej
+  wersji widoczna, dopóki jej nie ukryć; ukryte nieznane tej wersji zostają w zapisie, „Przywróć domyślne” czyści
+  wszystko), `columnsTemplate` – siatka z widocznych kolumn; kolumny tekstowe `minmax(0, …fr)` (kontrahent najmniej
+  64 px), odstęp 6 px zamiast 8 px – dziewięć kolumn ma najmniejszą szerokość taką jak siedem przed 1.11.0 (nagłówek nie
+  wchodzi pod panel szczegółów w oknie 1024 px – E2E). Ukrycie kolumny „Kontrahent” przy kolejności po kontrahencie
+  wraca do kolejności po dacie (jej nagłówek był jedynym znakiem kolejności); „nowa operacja” w pierwszej widocznej
+  kolumnie tekstowej (bez żadnej – data w akcencie). Tagi wiersza i eksportu jednym `tags.ts` `tagsText`, liczone tylko
+  przy widocznej kolumnie.
