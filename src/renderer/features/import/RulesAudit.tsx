@@ -18,6 +18,8 @@ import { openOperation } from '../operations/state'
 import { useAccounts, useCategories } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
+import { TagsField } from '../../components/TagsField'
+import { useKnownTags } from '../tags/state'
 import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, directionText, editRule, ruleDecisionText } from './rules'
 
 const NO_RULES: ImportRule[] = []
@@ -64,8 +66,10 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
   const [direction, setDirection] = useState<'in' | 'out' | null>(rule.direction === 'in' ? 'in' : rule.direction === 'out' ? 'out' : null)
   const [choice, setChoice] = useState<Choice>(() => choiceOfRule(rule))
   const [limit, setLimit] = useState<number | null>(rule.maxAmount ?? null)
+  const [tags, setTags] = useState<string[]>(() => [...(rule.tags ?? [])])
+  const known = useKnownTags()
   const save = () => {
-    editRule(rule.id, { direction, choice, maxAmount: limit })
+    editRule(rule.id, { direction, choice, maxAmount: limit, tags })
     onDone()
   }
   return (
@@ -84,6 +88,11 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
             zł
           </label>
         )}
+      </div>
+      {/* F17: the operations the rule makes carry its tags („Netia → #ulga-internet”). */}
+      <div className="flex items-center gap-2 text-muted">
+        <span className="shrink-0">Tagi operacji</span>
+        <TagsField className="flex-1" value={tags} onChange={setTags} known={known} compact placeholder="#ulga-internet…" testId="import-rule-tags" />
       </div>
       <div className="flex items-center gap-2">
         <button type="button" className="btn btn-accent h-[24px]" disabled={rule.mode === 'amount' && !limit} onClick={save} data-testid="import-rule-save">
@@ -192,7 +201,10 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                 {r.mode === 'amount' && r.maxAmount ? <span className="ml-1 text-[11px] text-accent">do {plnText(r.maxAmount)} zł</span> : null}
               </span>
               <span className="text-muted">{directionText(r.direction)}</span>
-              <span className="truncate text-muted">{decision(r)}</span>
+              <span className="truncate text-muted">
+                {decision(r)}
+                {r.tags?.length ? <span className="ml-1 text-fg" data-testid="import-rule-tag-list">{r.tags.map((x) => `#${x}`).join(' ')}</span> : null}
+              </span>
               <span className={cx('num text-right', audit && !hitsOf(r) ? 'text-dim' : 'text-fg')} data-testid="import-rule-hits">
                 {audit ? `${hitsOf(r)} op.` : '…'}
               </span>

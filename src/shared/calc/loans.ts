@@ -49,17 +49,27 @@ interface Flows {
 function flowsByLoan(loans: readonly Loan[], transactions: readonly Transaction[], containers: readonly Container[], today: string): Map<string, Flows> {
   const flows = new Map<string, Flows>()
   for (const l of loans) flows.set(l.id, { out: 0, in: 0 })
+  forEachLoanOperation(loans, transactions, containers, today, (id, t) => {
+    const f = flows.get(id)!
+    if (t.amount < 0) f.out += -t.amount
+    else f.in += t.amount
+  })
+  return flows
+}
+
+/**
+ * Each operation of the loans up to `today` with its loan: the loan's own operations and its container's payments (an
+ * installment of a taken loan is the cargo's) – the one reading of them, for the loans' states and the net worth (F24).
+ */
+export function forEachLoanOperation(loans: readonly Loan[], transactions: readonly Transaction[], containers: readonly Container[], today: string, each: (loanId: string, t: Transaction) => void): void {
+  const known = new Set(loans.map((l) => l.id))
   const loanOfContainer = new Map<string, string>()
-  for (const c of containers) if (c.loanId != null && flows.has(c.loanId)) loanOfContainer.set(c.id, c.loanId)
+  for (const c of containers) if (c.loanId != null && known.has(c.loanId)) loanOfContainer.set(c.id, c.loanId)
   for (const t of transactions) {
     if (t.date > today) continue
     const id = t.kind === 'loan' ? t.loanId : t.kind === 'expense' && t.containerId != null ? loanOfContainer.get(t.containerId) : undefined
-    const f = id != null ? flows.get(id) : undefined
-    if (!f) continue
-    if (t.amount < 0) f.out += -t.amount
-    else f.in += t.amount
+    if (id != null && known.has(id)) each(id, t)
   }
-  return flows
 }
 
 export function loanState(loan: Loan, transactions: readonly Transaction[], containers: readonly Container[], today: string): LoanState {

@@ -19,6 +19,8 @@ import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { useMembers } from '../household/actions'
 import { useAccounts } from './pickers'
+import { tagKey } from '@shared/calc/tags'
+import { useKnownTags } from '../tags/state'
 import { applyView, deleteView, isShownView, saveView, setFilter, useOperationsUi } from './state'
 
 /** How many of the extra filters are on (the chip „Więcej filtrów: N”). */
@@ -30,7 +32,8 @@ export function extraFilters(f: OperationsFilter): number {
     (f.containers.length ? 1 : 0) +
     (f.goals.length ? 1 : 0) +
     (f.loans.length ? 1 : 0) +
-    (f.transferAccounts.length ? 1 : 0)
+    (f.transferAccounts.length ? 1 : 0) +
+    (f.tags.length ? 1 : 0)
   )
 }
 
@@ -98,6 +101,13 @@ function BrandPicker({ filter }: { filter: OperationsFilter }) {
   )
 }
 
+/** The tags to tick (F17): the history's, by their key – the filter's own too, when no operation has it now. */
+function tagOptions(known: readonly string[], picked: readonly string[]): Array<{ value: string; label: string }> {
+  const options = known.map((t) => ({ value: tagKey(t), label: `#${t}` }))
+  const have = new Set(options.map((o) => o.value))
+  return [...options, ...picked.filter((k) => !have.has(k)).map((k) => ({ value: k, label: `#${k}` }))]
+}
+
 /** „Więcej filtrów” (F18): what the bar's menus do not cover. */
 export function MoreFilters({ filter }: { filter: OperationsFilter }) {
   const accounts = useAccounts()
@@ -105,6 +115,7 @@ export function MoreFilters({ filter }: { filter: OperationsFilter }) {
   const containers = useRecordList('containers')
   const goals = useRecordList('goals')
   const loans = useRecordList('loans')
+  const knownTags = useKnownTags()
   const on = extraFilters(filter)
   // Archived ones only while the filter has them (to untick).
   const live = <T extends { id: string; name: string; archived?: boolean }>(list: readonly T[], picked: readonly string[]) =>
@@ -151,6 +162,9 @@ export function MoreFilters({ filter }: { filter: OperationsFilter }) {
           <Section title="Pożyczka" testId="operations-more-loans">
             <Checks options={loans.map((l) => ({ value: l.id, label: l.name }))} value={filter.loans} onChange={(v) => setFilter({ loans: v })} testId="operations-more-loan" />
           </Section>
+          <Section title="Tag (wyprawa, projekt)" testId="operations-more-tags">
+            <Checks options={tagOptions(knownTags, filter.tags)} value={filter.tags} onChange={(v) => setFilter({ tags: v })} testId="operations-more-tag" />
+          </Section>
           <Section title="Konto przelewu" testId="operations-more-transfer">
             <Checks options={[...live(accounts, filter.transferAccounts), { value: '', label: 'konto spoza budżetu' }]} value={filter.transferAccounts} onChange={(v) => setFilter({ transferAccounts: v })} testId="operations-more-transfer" />
           </Section>
@@ -158,7 +172,7 @@ export function MoreFilters({ filter }: { filter: OperationsFilter }) {
             <button
               type="button"
               className="self-start text-dim hover:text-fg-strong"
-              onClick={() => setFilter({ amountMin: null, amountMax: null, members: [], brands: [], containers: [], goals: [], loans: [], transferAccounts: [] })}
+              onClick={() => setFilter({ amountMin: null, amountMax: null, members: [], brands: [], containers: [], goals: [], loans: [], transferAccounts: [], tags: [] })}
               data-testid="operations-more-clear"
             >
               wyczyść te filtry

@@ -1,10 +1,13 @@
 /**
  * Wywiad (spec „Wywiad i raporty”, E8, D73): the structure of the own money in the language of ICT – the wealth week by
- * week with its drawdown and BOS / CHoCH, the killzones of spending, the FVG of the envelopes (plan against fact), the
- * spending over time with the cargo as the Order Block, the range forecast without any payout, the captain's log.
+ * week with its drawdown and BOS / CHoCH (1.10.0: beside it the net worth – F24), the fuel balance of the months (F25),
+ * the killzones of spending, the FVG of the envelopes (plan against fact), the spending over time with the cargo as the
+ * Order Block – to the detail (F20) –, the brands, a month against its averages, the range forecast without any payout,
+ * the expeditions (F17), the personal inflation (F36), the captain's log.
  */
 import { useMemo, useState } from 'react'
 import { addDays, addMonths, monthOf, monthRange } from '@shared/calc/dates'
+import { glossaryOf } from '@shared/glossary'
 import { openDays, scheduledDays } from '@shared/calc/scheduled'
 import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth } from '@shared/calc/intel'
 import { debriefing } from '@shared/calc/plan'
@@ -21,7 +24,11 @@ import { monthGenLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { KillzoneMap, WealthChart } from './charts'
 import { CoursePanel, ManeuverPanel, useCourseInput } from './Course'
-import { useWealth } from './wealth'
+import { useNetWorth, useWealth } from './wealth'
+import { ComparisonPanel, SpendingTable, TargetsPanel } from './Drill'
+import { ExpeditionsPanel } from './Expeditions'
+import { FuelPanel } from './Fuel'
+import { InflationPanel } from './Inflation'
 
 const zl = (g: number) => `${plnText(g)} zł`
 type Period = '3' | '6' | '12'
@@ -30,6 +37,17 @@ const PERIODS: Array<{ value: Period; label: string }> = [
   { value: '6', label: '6 mies.' },
   { value: '12', label: '12 mies.' }
 ]
+
+/** Which line of the wealth the structure and the drawdown read (F24), kept on this computer. */
+type Basis = 'accounts' | 'net'
+const BASIS_KEY = 'fi.intel.wealthBasis'
+function readBasis(): Basis {
+  try {
+    return localStorage.getItem(BASIS_KEY) === 'net' ? 'net' : 'accounts'
+  } catch {
+    return 'accounts'
+  }
+}
 
 export function IntelPage() {
   const fleet = useFleet()
@@ -42,7 +60,21 @@ export function IntelPage() {
   // The day and the month only: the fleet is a new object every minute, the analyses change with the day.
   const today = fleet?.today ?? null
   const month = fleet?.month ?? null
-  const { points: wealth, ...structure } = useWealth(today)
+  const accounts = useWealth(today)
+  const net = useNetWorth(accounts.points, today, fleet?.household ?? null)
+  const [basis, setBasisState] = useState<Basis>(readBasis)
+  const setBasis = (b: Basis) => {
+    setBasisState(b)
+    try {
+      localStorage.setItem(BASIS_KEY, b)
+    } catch {
+      /* storage unavailable: the choice lives for the session */
+    }
+  }
+  // The line the structure, the peak and the drawdown are of; the other one drawn thin beside it.
+  const chosen = basis === 'net' && net.points.length ? net : accounts
+  const { points: wealth, ...structure } = chosen
+  const second = chosen === net ? accounts.points : net.points
   const months = useMemo(() => (month ? monthRange(addMonths(month, -(Number(period) - 1)), month) : []), [month, period])
   const killzones = useMemo(() => (today && months.length ? killzoneGrid(transactions, `${months[0]}-01`, today) : null), [transactions, months, today])
   const spending = useMemo(() => spendingByMonth(transactions, settings?.categories ?? [], months), [transactions, settings, months])
@@ -62,10 +94,11 @@ export function IntelPage() {
   const fvgOf = fvgMonth ?? (fleet.start && addMonths(fleet.month, -1) >= fleet.start.slice(0, 7) ? addMonths(fleet.month, -1) : fleet.month)
   const brief = debriefing(fvgOf, { transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today })
   const forecast = rangeForecast({ shields: fleet.shields.amount, hull: fleet.hull.amount, debt: fleet.debt, costs: fleet.costs.average, month: fleet.month, plans: buoys })
-  const last = wealth.at(-1)
   const peak = wealth.length ? Math.max(...wealth.map((p) => p.value)) : 0
   const maxDd = wealth.reduce((m, p) => Math.min(m, p.drawdown), 0)
   const maxSpend = Math.max(1, ...spending.rows.flatMap((r) => r.values), ...spending.cargo)
+  const lastNet = net.points.at(-1)
+  const lastAccounts = accounts.points.at(-1)
   const fvgMonths = monthRange(fleet.start ? fleet.start.slice(0, 7) : fleet.month, fleet.month).reverse().slice(0, 12)
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-intel">
@@ -83,8 +116,22 @@ export function IntelPage() {
                 <Empty>Za mało danych – krzywa pojawi się po dwóch tygodniach historii.</Empty>
               ) : (
                 <div className="flex flex-col gap-2 text-[12px]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Segmented
+                      size="sm"
+                      value={chosen === net ? 'net' : 'accounts'}
+                      onChange={setBasis}
+                      options={[
+                        { value: 'accounts', label: 'na kontach', title: 'Suma sald kont budżetu' },
+                        { value: 'net', label: 'siła floty netto', title: 'Konta + należności (domownicy, pożyczki udzielone) − dług (pożyczki wzięte, pieniądze domowników)' }
+                      ]}
+                      aria-label="Linia majątku"
+                    />
+                    <span className="text-[11px] text-dim">struktura i drawdown liczone na wybranej linii, druga – przerywana</span>
+                  </div>
                   <div className="flex flex-wrap items-baseline gap-4">
-                    <Fact label="Na kontach" value={last ? zl(last.value) : '—'} strong />
+                    <Fact label="Na kontach" value={lastAccounts ? zl(lastAccounts.value) : '—'} strong={chosen !== net} testId="intel-wealth-accounts" />
+                    {lastNet && <Fact label="Siła floty netto" value={zl(lastNet.value)} strong={chosen === net} testId="intel-wealth-net" />}
                     <Fact label="Szczyt" value={zl(peak)} />
                     <Fact label="Największy drawdown" value={zl(maxDd)} />
                     <Fact
@@ -93,11 +140,11 @@ export function IntelPage() {
                       testId="intel-trend"
                     />
                   </div>
-                  <WealthChart points={wealth} marks={structure.marks} />
+                  <WealthChart points={wealth} marks={structure.marks} net={second} />
                   <span className="text-[11px] text-dim">
-                    Suma sald kont budżetu na koniec każdego tygodnia – z pieniędzmi pożyczonymi i depozytem domowników (zasięg i klasa okrętu odejmują
-                    dług). BOS – przebicie ostatniego swingu zgodnie z trendem, CHoCH – pierwsze przebicie przeciw
-                    trendowi (zmiana charakteru). Pod spodem drawdown od szczytu.
+                    Na kontach – suma sald kont budżetu na koniec każdego tygodnia, z pieniędzmi pożyczonymi i depozytem domowników. Siła floty netto – do tego należności
+                    (domownicy, pożyczki udzielone) minus dług (pożyczki wzięte, pieniądze domowników na kontach): wzięta pożyczka jej nie podnosi. BOS – przebicie
+                    ostatniego swingu zgodnie z trendem, CHoCH – pierwsze przebicie przeciw trendowi (zmiana charakteru). Pod spodem drawdown od szczytu.
                   </span>
                   {structure.marks.length > 0 && (
                     <div className="flex flex-col" data-testid="intel-marks">
@@ -115,36 +162,11 @@ export function IntelPage() {
                 </div>
               )}
             </Panel>
+            <FuelPanel fleet={fleet} />
             <Panel title="Wydatki w czasie" testId="intel-spending">
-              <div className="overflow-x-auto">
-                <table className="w-full text-[11.5px]">
-                  <thead>
-                    <tr className="text-dim">
-                      <th className="py-0.5 pr-2 text-left font-normal">Kategoria</th>
-                      {months.map((m) => (
-                        <th key={m} className="px-1 text-right font-normal">
-                          {monthLabel(m).slice(0, 3)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <SpendRow label="Order Block · ładownia" values={spending.cargo} max={maxSpend} accent title="Kontenery ładowni – stała strefa kosztów (Order Block)" testId="intel-order-block" />
-                    {spending.rows.map((r) => (
-                      <SpendRow key={r.id} label={r.id === '-' ? 'bez kategorii' : cats.label(r.id)} values={r.values} max={maxSpend} />
-                    ))}
-                    <tr className="border-t border-line text-fg-strong">
-                      <td className="py-0.5 pr-2">Razem</td>
-                      {spending.totals.map((v, i) => (
-                        <td key={months[i]} className="num px-1 text-right">
-                          {plnText(v)}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              <SpendingTable months={months} spending={spending} max={maxSpend} />
             </Panel>
+            <TargetsPanel from={`${months[0] ?? fleet.month}-01`} to={fleet.today} aliases={settings.import.aliases} />
             <Panel title="Killzones wydatków" testId="intel-killzones-panel">
               {!killzones || !killzones.withTime ? (
                 <Empty>Brak zakupów z godziną w tym okresie – godzinę mają wpisy z szybkiego wpisu i Operacji (import z mBanku jej nie ma).</Empty>
@@ -184,6 +206,7 @@ export function IntelPage() {
                 <span className="text-[11px] text-dim">Fair Value Gap: luka między planem a faktem – na plus zostało w kopercie, na minus przekroczenie.</span>
               </div>
             </Panel>
+            <ComparisonPanel month={fleet.month} start={fleet.start} covered={fleet.historyMonths} />
             <Panel title="Prognoza zasięgu" testId="intel-range">
               <div className="flex flex-col gap-1.5 text-[12px]">
                 <span className="text-fg-strong" data-testid="intel-range-text">
@@ -217,6 +240,8 @@ export function IntelPage() {
             </Panel>
             <CoursePanel fleet={fleet} input={courseInput} />
             <ManeuverPanel fleet={fleet} input={courseInput} />
+            <ExpeditionsPanel />
+            <InflationPanel fleet={fleet} />
             <Panel title="Dziennik kapitański" testId="intel-log">
               <table className="w-full text-[11.5px]">
                 <thead>
@@ -266,21 +291,5 @@ function Fact({ label, value, strong, testId }: { label: string; value: string; 
         {value}
       </span>
     </div>
-  )
-}
-
-function SpendRow({ label, values, max, accent, title, testId }: { label: string; values: number[]; max: number; accent?: boolean; title?: string; testId?: string }) {
-  return (
-    <tr className={cx(accent && 'bg-accent-soft')} title={title} data-testid={testId}>
-      <td className={cx('max-w-[180px] truncate py-0.5 pr-2', accent ? 'text-accent' : 'text-fg')}>{label}</td>
-      {values.map((v, i) => (
-        <td key={i} className="px-1 text-right">
-          <div className="flex flex-col items-end">
-            <span className="num">{v ? plnText(v) : '—'}</span>
-            <div className="h-[2px] bg-accent/60" style={{ width: `${Math.round((Math.max(0, v) / max) * 60)}px` }} />
-          </div>
-        </td>
-      ))}
-    </tr>
   )
 }

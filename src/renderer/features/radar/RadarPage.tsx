@@ -5,6 +5,7 @@
  * receivables (the house, the loans given) and the PIT-38 deadline (the amount stays in ICTTJ).
  */
 import { useState } from 'react'
+import { glossaryOf } from '@shared/glossary'
 import type { AccountAhead } from '@shared/calc/ahead'
 import { dm } from '@shared/calc/briefing'
 import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates'
@@ -67,7 +68,7 @@ export function RadarPage() {
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="radar" tracks={['minmax(420px,3fr)', 'minmax(340px,2fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
-            <Panel title="Na radarze" testId="radar-items">
+            <Panel title="Na radarze" hint={glossaryOf('Radar')} testId="radar-items">
               {!items.length ? <Empty>Nic na radarze w najbliższych 90 dniach.</Empty> : <Timeline items={items} />}
             </Panel>
             <BuoysPanel days={future.days} today={fleet.today} readOnly={readOnly} />

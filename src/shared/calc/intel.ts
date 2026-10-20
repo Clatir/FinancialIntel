@@ -167,11 +167,25 @@ export function killzoneGrid(transactions: readonly Transaction[], from: string,
 
 // ------------------------------------------------------------------ spending over time
 
-/** Net costs by main category, month by month (`months` in order); the cargo (container payments) as its own row. */
-export function spendingByMonth(transactions: readonly Transaction[], categories: readonly Category[], months: readonly string[]): { rows: Array<{ id: string; values: number[]; total: number }>; totals: number[]; cargo: number[] } {
+export interface SpendingRow {
+  id: string
+  values: number[]
+  total: number
+  /**
+   * Its subcategories (F20 – drilling down): each with its money; the parts set on the main category itself under the
+   * main's own id („bez podkategorii”). Largest first.
+   */
+  children: Array<{ id: string; values: number[]; total: number }>
+}
+
+/**
+ * Net costs by main category, month by month (`months` in order), each with its subcategories (F20); the cargo
+ * (container payments) as its own row.
+ */
+export function spendingByMonth(transactions: readonly Transaction[], categories: readonly Category[], months: readonly string[]): { rows: SpendingRow[]; totals: number[]; cargo: number[] } {
   const cats = categoryIndex(categories)
   const index = new Map(months.map((m, i) => [m, i]))
-  const byCat = new Map<string, number[]>()
+  const byCat = new Map<string, { values: number[]; children: Map<string, number[]> }>()
   const cargo = months.map(() => 0)
   const totals = months.map(() => 0)
   for (const t of transactions) {
@@ -184,13 +198,26 @@ export function spendingByMonth(transactions: readonly Transaction[], categories
     }
     for (const p of partsOf(t)) {
       if (p.refundable) continue
-      const id = cats.mainOf(p.categoryId)?.id ?? '-'
-      const row = byCat.get(id) ?? months.map(() => 0)
-      row[i]! -= p.amount
-      byCat.set(id, row)
+      const main = cats.mainOf(p.categoryId)
+      const id = main?.id ?? '-'
+      let row = byCat.get(id)
+      if (!row) byCat.set(id, (row = { values: months.map(() => 0), children: new Map() }))
+      row.values[i]! -= p.amount
+      // A part of a subcategory under it; one of the main itself (or none) under the main's own id.
+      const child = main && p.categoryId && p.categoryId !== main.id && cats.byId.has(p.categoryId) ? p.categoryId : id
+      let values = row.children.get(child)
+      if (!values) row.children.set(child, (values = months.map(() => 0)))
+      values[i]! -= p.amount
     }
   }
-  const rows = [...byCat.entries()].map(([id, values]) => ({ id, values, total: sum(values) })).sort((a, b) => b.total - a.total)
+  const rows = [...byCat.entries()]
+    .map(([id, r]) => ({
+      id,
+      values: r.values,
+      total: sum(r.values),
+      children: [...r.children.entries()].map(([cid, values]) => ({ id: cid, values, total: sum(values) })).sort((a, b) => b.total - a.total)
+    }))
+    .sort((a, b) => b.total - a.total)
   return { rows, totals, cargo }
 }
 

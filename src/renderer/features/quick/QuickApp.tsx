@@ -8,6 +8,8 @@ import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
+import { TagsField } from '../../components/TagsField'
+import { tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -34,7 +36,8 @@ const blank = (data: QuickData | null): QuickDraft => {
 export const KEEP_DRAFT_MS = 30 * 60 * 1000
 
 /** Something typed that would be lost by a fresh form. */
-const typedIn = (d: QuickDraft, lines: readonly Line[], share: Share | null) => d.amount > 0 || !!d.counterparty.trim() || !!d.note.trim() || !!d.logNote.trim() || lines.length > 0 || share != null
+const typedIn = (d: QuickDraft, lines: readonly Line[], share: Share | null) =>
+  d.amount > 0 || !!d.counterparty.trim() || !!d.note.trim() || !!d.logNote.trim() || lines.length > 0 || share != null || !!d.tags?.length
 
 /** A template's or the last operation's fields over a fresh draft (F7): today, now, an account still in use. */
 function fromTemplate(t: QuickTemplate, data: QuickData, base: QuickDraft): QuickDraft {
@@ -151,10 +154,11 @@ export function QuickApp() {
       setMsg({ ok: r.ok, text: r.message })
       setRestored(false)
       if (r.ok && next.current) {
-        // „Zapisz i następny” (F7): a fresh draft of the same account, day and kind; the energy as it is now.
+        // „Zapisz i następny” (F7): a fresh draft of the same account, day, kind and tags (a trip's receipts – F17); the
+        // energy as it is now.
         next.current = false
         if (r.data) setData(r.data)
-        setD((x) => ({ ...blank(null), accountId: x.accountId, date: x.date, time: x.time, kind: x.kind === 'income' ? 'income' : 'expense' }))
+        setD((x) => ({ ...blank(null), accountId: x.accountId, date: x.date, time: x.time, kind: x.kind === 'income' ? 'income' : 'expense', ...(x.tags?.length ? { tags: x.tags } : {}) }))
         setLines([])
         setShare(null)
         setShares({})
@@ -401,7 +405,8 @@ export function QuickApp() {
   const onCounterparty = (counterparty: string) => {
     set({ counterparty })
     // F8: by the brand – what was used with it last, the import's rule, the chain's category.
-    const hint = data ? officerHint({ counterparty }, data, { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id) }) : null
+    // The brand is the name without its „#słowo” (F17).
+    const hint = data ? officerHint({ counterparty: withoutHashTags(counterparty) }, data, { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id) }) : null
     setOfficer(hint)
     if (hint && !d.categoryId) set({ counterparty, categoryId: hint.categoryId })
   }
@@ -646,6 +651,17 @@ export function QuickApp() {
               ))}
           <Row label="Notatka">
             <input className="input" value={d.note} onChange={(e) => set({ note: e.currentTarget.value })} maxLength={500} data-testid="quick-note" />
+          </Row>
+          {/* F17: a trip's, a project's tags – „#słowo” in the name or the note adds one too; the last one in a click. */}
+          <Row label="Tagi">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <TagsField className="flex-1" value={d.tags ?? []} onChange={(tags) => set({ tags })} known={data.knownTags ?? []} compact testId="quick-tags" />
+              {data.lastTag && !(d.tags ?? []).some((x) => tagKey(x) === tagKey(data.lastTag!)) && (
+                <button type="button" className="chip h-[20px] shrink-0 px-1.5 text-[11px]" title="Tag ostatnich dni" onClick={() => set({ tags: withTags(d.tags ?? [], [data.lastTag!]) })} data-testid="quick-tag-last">
+                  + #{data.lastTag}
+                </button>
+              )}
+            </div>
           </Row>
           {(asks || night) && (
             <div className={cx('flex flex-col gap-1 border-l-2 pl-2', night ? 'border-accent' : 'border-line-strong')} data-testid="quick-log">

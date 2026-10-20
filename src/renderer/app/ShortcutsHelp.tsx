@@ -1,6 +1,7 @@
 // adapted from ICTTJ src/renderer/app/ShortcutsHelp.tsx @ 84a8339
 import { useEffect, useState } from 'react'
 import { shortcutLabel } from '@shared/machine'
+import { GLOSSARY } from '@shared/glossary'
 import { IconClose } from '../components/icons'
 import { Kbd } from '../components/ui'
 import { PAGES } from '../features/screens/pages'
@@ -86,7 +87,7 @@ export function ShortcutsHelp() {
     <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60" onMouseDown={() => setOpen(false)} data-testid="shortcuts">
       <div className="w-[860px] animate-pop-in border border-line-strong bg-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex h-[34px] items-center border-b border-line px-3">
-          <span className="label flex-1">Skróty klawiszowe</span>
+          <span className="label flex-1">Skróty klawiszowe i słowniczek</span>
           <button className="btn btn-ghost h-[24px] px-1.5" onClick={() => setOpen(false)} aria-label="Zamknij">
             <IconClose />
           </button>
@@ -106,6 +107,17 @@ export function ShortcutsHelp() {
               ))}
             </div>
           ))}
+          {/* F29: the metaphor's glossary – each ship's word with its real meaning. */}
+          <div className="col-span-3 flex flex-col gap-1 border-t border-line pt-3" data-testid="shortcuts-glossary">
+            <span className="label mb-1 text-accent">Słowniczek okrętu</span>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              {GLOSSARY.map((g) => (
+                <div key={g.term} className="text-[12px]" data-testid="glossary-term">
+                  <span className="text-fg-strong">{g.term}</span> <span className="text-muted">– {g.meaning}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -1,8 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa U** (1.9.0 – ładownia i czujniki,
-funkcje) na gałęzi `claude/grupa-u-1.9.0`, PR do `main`; po niej od razu V – każda grupa z własnym PR i wydaniem (D71).
-**1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) – **grupa V** (1.10.0 – wywiad, funkcje),
+ostatnia grupa ciągu, na gałęzi `claude/grupa-v-1.10.0`, PR do `main` – każda grupa z własnym PR i wydaniem (D71).
+**1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia
@@ -11,9 +11,11 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa U → scalenie po zielonym CI → wydanie 1.9.0 → od razu grupa V (D87). Po wznowieniu
-pracy: sprawdzić, która grupa jest w toku (gałąź `claude/grupa-<litera>-<wersja>`, PR) i kontynuować. Do sprawdzenia w
-aplikacji: 1.5.0–1.9.0 – listy w sekcjach niżej.
+**Następny krok:** grupa V → scalenie po zielonym CI → wydanie 1.10.0 → koniec ciągu M–V (D87) i pauza: kolejne prace
+tylko na komendę użytkownika (D67); na później, każda do osobnej decyzji – flota rezerwowa (F32), paragony i gwarancje
+(F38), ulgi PIT-37 / PIT-36 (F39), wpisy z telefonu przez OneDrive (F41), archiwizacja starych lat (F43). Po wznowieniu
+pracy: sprawdzić, czy PR grupy V jest scalony i 1.10.0 wydane. Do sprawdzenia w aplikacji: 1.5.0–1.10.0 – listy w
+sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -57,11 +59,11 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **R** | 1.6.6 Teksty, wygląd, wygoda: N31, N33–N35, N53, N57, N58, N60, N61, N72, skala i kontrast (F30), ukrycie kwot po bezczynności (F40) | Opus 5.5 | **max** (plan był xhigh) | zmierzone ok. 1,5 h (zegar sesji, z przeglądem, 47 mutacjami, pełnym E2E i dwiema poprawkami CI; plan był ok. 1,5 h) | 1.6.6 (w 1.7.0) | ✅ D87 | ✅ scalone (PR #28), wydanie przepadło – wchodzi w 1.7.0 |
 | **S** | 1.7.0 Operacje – funkcje: przelew z drugą nogą (F10), zbiorcze naprawy (F11), ostrzeżenie edycji (F12), filtry, sortowanie, widoki, eksport (F18), paleta szuka wpisów (F19), dziennik zmian folderu (F33) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar gałęzi, z przeglądem, 64 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy R; plan był ok. 3 h) | 1.7.0 | ✅ D87 | ✅ wydane (PR #29, z 1.6.5 i 1.6.6) |
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar gałęzi, z przeglądem, 80 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy S; plan był 4–5 h) | 1.8.0 | ✅ D87 | ✅ wydane (PR #30) |
-| **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | plan ok. 3 h | 1.9.0 | ✅ D87 | w toku |
-| **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | plan ok. 3 h | 1.10.0 | ✅ D87 | czeka |
+| **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
+| **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.10.0 | ✅ D87 | PR, CI |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T** | | | **ok. 50,5 h** | | | |
-| | **Ciąg M–V (D87, plan)** | | | **ok. 24–25 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V** | | | **ok. 53,5 h** | | | |
+| | **Ciąg M–V (D87)** | | | **zmierzone ok. 16 h (plan był ok. 24–25 h)** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -836,6 +838,53 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 2. Operacje: zaznacz kilka, „Zmień zaznaczone” → podgląd skutku → „Cofnij”; „Więcej filtrów”, widok zapisany na drugim
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
+
+## Przed grupą V – wywiad, funkcje (19.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa U scalona (1.9.0, PR #31). Grupa V (1.10.0) – ostatnia grupa ciągu M–V: funkcje
+   „wywiadu” z przeglądu po 1.4.1 – F17 (tagi i wyprawy: koszt wyjazdu albo projektu przez wiele kategorii, z celem),
+   F20 (Wywiad do szczegółu: podkategorie, komórka → operacje, marki, porównanie miesiąca, rok kontrahenta w
+   edytorze), F24 (majątek netto – druga linia krzywej), F25 (bilans paliwa i stopa oszczędności), F29 („skąd ta
+   liczba?” na Mostku, słowniczek okrętu), F36 (osobista inflacja). Format folderu addytywny: `tags` operacji, części
+   paragonu i reguły importu, `settings.intel` (`tagGoals`, `cpi`) – starsza wersja je zachowuje.
+2. **Co użytkownik musi powiedzieć** – ✅ D87: F24 – majątek netto jako druga linia wykresu (definicja krzywej z D73 /
+   T81 bez zmian); F36 – CPI GUS wpisywane ręcznie, bez sieci. Reszta wg propozycji przeglądu.
+3. **Co przygotować** – nic (CPI GUS – raz w miesiącu, jeśli chcesz porównania „Twoja vs GUS”).
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 3 h.
+
+## 1.10.0 – wywiad, funkcje (grupa V, 19.10.2026)
+
+Zakres: „Przed grupą V” wyżej. Zrobione:
+- Tagi i wyprawy (T291): tagi operacji i części paragonu (edytor, „#” przy części), szybki wpis (pole, „+ #tag”
+  ostatnich dni, „#słowo” w nazwie i notatce, seria zachowuje tagi), reguła importu z tagami, filtr „Tag” w Operacjach,
+  wyszukiwanie „#tag”, kolumna „Tagi” w CSV i Excel; Wywiad → „Wyprawy”: koszt netto przez kategorie i miesiące, cel z
+  Mapy gwiezdnej, „Pokaż w Operacjach”.
+- Wywiad do szczegółu (T292): podkategorie w „Wydatkach w czasie”, kwota → jej operacje, „Namierzone cele” (marki),
+  „Porównanie” miesiąca ze średnimi i rokiem wcześniej, „Rozpoznanie celu” w edytorze zakupu.
+- Siła floty netto (T293): druga linia krzywej majątku z przełącznikiem dla struktury i drawdownu, przegląd roczny.
+- Bilans paliwa (T294): Wywiad, debriefing (Plan miesiąca, Raporty), przegląd roczny, kolumny eksportu „Miesiące”.
+- „Skąd ta liczba?” (T295): rozbicie energii dziś, zasięgu, celów warstw i ostatniej dostawy na Mostku (też w osobnym
+  oknie), dymek zasobnika, słowniczek okrętu pod F1 i w nagłówkach paneli.
+- Osobista inflacja (T296): kategorie rok do roku, średni paragon u tych samych marek, ceny kontenerów, „Twoja
+  inflacja” i CPI GUS wpisane ręcznie, cel kadłuba rok temu i teraz.
+- Przegląd `/code-review` high: 10 kandydatów, wszystkie poprawione (T298) – najważniejsze: przelew domownika z tagiem
+  wyprawy zmniejszał jej koszt (teraz tylko moje pieniądze), udział marki w kategorii pomijał zakupy bez nazwy
+  (gotówka – wychodziło 100%), waga kontenera w „Twojej inflacji” liczona za 12 miesięcy przy krótszej historii, „bez
+  podkategorii” otwierało w Operacjach całą kategorię, tagi „#a, #b” zostawiały „#” w drugim.
+- CI na Windows (PR #32): jeden test zawiesił się na zamknięciu aplikacji (pytanie o niezapisane zmiany blokuje proces
+  główny); lokalnie (także przy oknie 1024 × 768) 8 z 8 przebiegów zielonych. Zamykanie w E2E z limitem i przyczyna w
+  main.log (T299) – następne takie zdarzenie powie, co zostało niezapisane.
+- Testy: 817 unit + fs (nowe `intel-v`, `intel-v-store`; poszerzone `export`, `plan-reports`, `household`), E2E 67
+  (nowy `intel-v.spec.ts`); 62 mutacje – 52 wykryte od razu, 10 po nowych testach (limity tagów, ostatni tag z
+  najnowszej daty, średnie tylko z miesięcy historii, miesiąc nie liczony drugi raz do swoich median, przepływy
+  domowników w dniu operacji, minimum zakupów marki, kontener czynny rok temu i teraz, spłata pożyczki z datą po dziś).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.10.0, Windows):
+1. Wyprawa: tag na kilku operacjach (edytor, szybki wpis z „#słowo”), Wywiad → „Wyprawy” – koszt, cel z Mapy gwiezdnej,
+   „Pokaż w Operacjach”.
+2. Wywiad: „Wydatki w czasie” – rozwiń kategorię, kliknij kwotę; „Namierzone cele”; „Porównanie”; krzywa „siła floty
+   netto” przy pożyczce; „Bilans paliwa” na prawdziwej historii.
+3. Mostek: „skąd ta liczba?” pod energią dziś, klik w zasięg; F1 – słowniczek; Wywiad → „Osobista inflacja” z CPI.
 
 ## Przed grupą U – ładownia i czujniki, funkcje (19.10.2026)
 

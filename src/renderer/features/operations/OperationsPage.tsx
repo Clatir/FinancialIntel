@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { amountOn, isTwoSided, touchesAccount } from '@shared/calc/operations'
+import { tagKeysOf, tagsOf, withTags } from '@shared/calc/tags'
 import { useMarkFlags } from '../sensors/state'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
@@ -230,6 +231,14 @@ function Row({ t, selected, index, top, view, flags }: { t: Transaction; selecte
       <span className="min-w-0 truncate">
         <span className={cx(draft ? 'text-accent' : 'text-fg-strong')}>{draft ? 'nowa operacja' : t.counterparty || t.title || TX_KIND_LABEL[t.kind]}</span>
         <span className="ml-2 text-[11px] text-dim">{account}</span>
+        {/* F17: the operation's tags and its lines'. */}
+        {tagKeysOf(t).size > 0 && (
+          <span className="ml-2 text-[11px] text-muted" data-testid="operation-row-tags">
+            {withTags(tagsOf(t), t.splits.flatMap((x) => x.tags ?? []))
+              .map((x) => `#${x}`)
+              .join(' ')}
+          </span>
+        )}
       </span>
       <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')} title={category || undefined}>
         {t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : t.containerId ? 'ładownia' : t.goalId ? 'z celu' : 'bez kategorii') : category}

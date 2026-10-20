@@ -4,6 +4,7 @@
  * against its target, its month and the ETA at the pace of the last months.
  */
 import { useMemo, useState } from 'react'
+import { glossaryOf } from '@shared/glossary'
 import { addMonths, monthsBetween } from '@shared/calc/dates'
 import { goalInstallment, ratedIn } from '@shared/calc/fleet'
 import { byPriority, goalEtas, goalLate, goalPace } from '@shared/calc/goals'
@@ -80,7 +81,7 @@ export function StarMapPage() {
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="starmap" tracks={['minmax(460px,2fr)', 'minmax(280px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
-            <Panel title="Kolejność wypełniania" testId="starmap-goals">
+            <Panel title="Kolejność wypełniania" hint={glossaryOf('Mapa gwiezdna')} testId="starmap-goals">
               {!active.length ? (
                 <Empty>Brak celów – dodaj własny albo wybierz scenariusz prognozy ICTTJ (Ustawienia → ICTTJ).</Empty>
               ) : (

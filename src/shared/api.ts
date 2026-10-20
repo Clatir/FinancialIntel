@@ -494,6 +494,9 @@ export interface QuickData {
   last?: QuickTemplate | null
   /** The templates (F7): the latest counterparty + category pairs typed by hand, at most 5, newest first. */
   templates?: QuickTemplate[]
+  /** The tags of the history (F17 – suggested) and the one used within the last days (offered with one click). */
+  knownTags?: string[]
+  lastTag?: string | null
 }
 
 /** What a template or „Powtórz ostatni” fills in the quick entry (F7). */

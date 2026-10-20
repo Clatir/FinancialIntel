@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { monthRows, monthsCsv, operationRows, operationsCsv, operationsSheet, plnCell, reportHtml, toCsv } from '@shared/export/budget'
+import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, plnCell, reportHtml, toCsv } from '@shared/export/budget'
 import { xlsxParts } from '@shared/export/xlsx'
 import { defaultWatchMonday } from '@shared/calc/intel'
 import { createDefaultSettings } from '@shared/defaults'
@@ -30,7 +30,7 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
       ['2026-10-03', -zl(12.5), '', 'impuls']
     ])
     expect(rows[1]!.category).toBe('Jedzenie · zakupy spożywcze')
-    expect(operationsCsv(rows).split('\r\n')[2]).toBe('2026-10-03;09:15;mBank;Wydatek;-12,50;Jedzenie · zakupy spożywcze;Biedronka;;;impuls;')
+    expect(operationsCsv(rows).split('\r\n')[2]).toBe('2026-10-03;09:15;mBank;Wydatek;-12,50;Jedzenie · zakupy spożywcze;Biedronka;;;impuls;;')
     expect(operationsSheet(rows).rows[1]![4]).toBe(-12.5)
     expect(xlsxParts([operationsSheet(rows)]).map((p) => p.path)).toContain('xl/worksheets/sheet1.xml')
     // An income carrying two members' money (D81): whose it is, no categories of its parts.
@@ -43,15 +43,28 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
     expect(operationRows([shared], s.categories, s.accounts, '2026-10-01', '2026-10-31', s.household.members).map((r) => [r.category, r.financed])).toEqual([['', 'od: Dom']])
   })
 
+  it('kolumna „Tagi” (F17): tagi operacji i części paragonu, każdy raz', () => {
+    const split = (tags?: string[]) => ({ id: nextId(), amount: -zl(10), categoryId: null, refundable: false, memberId: null, advance: false, note: '', ...(tags ? { tags } : {}) })
+    const t = tx('2026-10-05', -zl(20), { tags: ['Wakacje 2027'], splits: [split(['wakacje 2027', 'Paliwo']), split()] })
+    const rows = operationRows([t], s.categories, s.accounts, '2026-10-01', '2026-10-31', s.household.members)
+    expect(rows[0]!.tags).toBe('#Wakacje 2027 #Paliwo')
+    expect(operationsCsv(rows).split('\r\n')[0]!.endsWith(';Notatka;Tagi')).toBe(true)
+    expect(operationsCsv(rows).split('\r\n')[1]!.endsWith(';#Wakacje 2027 #Paliwo')).toBe(true)
+    expect(operationsSheet(rows).rows[0]!.at(-1)).toBe('#Wakacje 2027 #Paliwo')
+  })
+
   it('miesiące: pensja, koszty, wpływy, na plus', () => {
     const plans = [monthPlanSchema.parse({ ...base(), month: '2026-10', salary: zl(3000) })]
     const rows = monthRows({ transactions: [tx('2026-10-05', -zl(500)), tx('2026-10-06', zl(4000), { kind: 'income', categoryId: null })], categories: s.categories, plans, log: [], today: '2026-11-02' }, ['2026-10'])
-    expect(rows).toEqual([{ month: '2026-10', salary: zl(3000), costs: zl(500), income: zl(4000), plus: true, inProgress: false, loot: null }])
+    expect(rows).toEqual([{ month: '2026-10', salary: zl(3000), costs: zl(500), income: zl(4000), plus: true, inProgress: false, loot: null, balance: zl(3500), rate: 87.5 }])
     // A household member's money is no income (D80: their advance here).
     const member = s.household.members[0]!.id
     const advance = tx('2026-10-07', zl(300), { kind: 'income', categoryId: null, memberId: member, advance: true })
     expect(monthRows({ transactions: [advance], categories: s.categories, plans, log: [], today: '2026-10-20' }, ['2026-10'])[0]!.income).toBe(0)
-    expect(monthsCsv(rows).split('\r\n')[1]).toBe('2026-10;3000,00;500,00;4000,00;tak;')
+    expect(monthsCsv(rows).split('\r\n')[1]).toBe('2026-10;3000,00;500,00;4000,00;tak;;3500,00;87,5')
+    // F25: the fuel balance and the savings rate (3 500 of 4 000 zł).
+    expect(monthsCsv(rows).split('\r\n')[0]!.endsWith(';Bilans (zł);Stopa oszczędności (%)')).toBe(true)
+    expect(monthsSheet(rows).rows[0]!.slice(-2)).toEqual([3500, 87.5])
   })
 
   it('raport HTML bez skryptów, teksty uciekane', () => {

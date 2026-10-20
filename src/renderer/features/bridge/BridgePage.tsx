@@ -39,6 +39,8 @@ import { useGameRecords } from '../../store/game'
 import { useMembers } from '../household/actions'
 import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
+import { deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
+import { glossaryOf } from '@shared/glossary'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 // Cut down (N56): never the threshold of a class the ship has not reached.
@@ -47,10 +49,20 @@ const fmtRange = rangeText
 /** What the bridge's panels draw – in the main window and in their own windows (D45) alike, as plain JSON. */
 export type BridgeFleet = Pick<
   FleetState,
-  'today' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'deposit' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
->
+  'today' | 'month' | 'plan' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'deposit' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
+> & {
+  /** „Skąd ta liczba?” (F29): the layers' targets as set and the last delivery's split. */
+  layers: { shieldSalaries: number; hullMonths: number }
+  lastDelivery: { date: string; lines: WhyLine[] } | null
+}
 
-export const bridgeFleet = (f: FleetState): BridgeFleet => ({
+const DEFAULT_LAYERS = { shieldSalaries: 3, hullMonths: 6 }
+
+export const bridgeFleet = (f: FleetState, layers: { shieldSalaries: number; hullMonths: number } = DEFAULT_LAYERS): BridgeFleet => ({
+  month: f.month,
+  plan: f.plan,
+  layers: { shieldSalaries: layers.shieldSalaries, hullMonths: layers.hullMonths },
+  lastDelivery: deliveryWhy(f.log, (id) => f.goals.find((g) => g.id === id)?.name ?? 'cel'),
   today: f.today,
   started: f.started,
   total: f.total,
@@ -141,7 +153,8 @@ const DETACHED_PANELS: Record<string, BridgePanel> = { Odprawa: 'briefing', 'Sta
  */
 function useBridgeSpecs(fleet: FleetState | null, items: BriefingItem[]): Record<BridgePanel, DetachSpec> | null {
   const cats = useCategories()
-  const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
+  const layers = useData((s) => s.fi?.settings.layers)
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers) : null), [fleet, layers])
   const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
   return useMemo(() => {
     if (!view) return null
@@ -286,7 +299,8 @@ export function BridgePage() {
   const cats = useCategories()
   const members = useMembers()
   const items = useBriefingItems(fleet)
-  const view = useMemo(() => (fleet ? bridgeFleet(fleet) : null), [fleet])
+  const layers = useData((s) => s.fi?.settings.layers)
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers) : null), [fleet, layers])
   const specs = useBridgeSpecs(fleet, items)
   // The 10 newest in one pass (W29): the bridge renders every minute – never a sort of the whole history.
   const recent = useMemo(() => newestOperations(transactions, 10), [transactions])
@@ -333,7 +347,7 @@ export function BridgePage() {
             <BridgeWealth today={fleet.today} />
           </div>
           <div className="flex min-w-0 flex-col">
-            <Panel title="Koperty" testId="bridge-envelopes" detach={specs.envelopes}>
+            <Panel title="Koperty" hint={glossaryOf('Koperty')} testId="bridge-envelopes" detach={specs.envelopes}>
               <Envelopes rows={fleet.envelopes} elapsed={monthElapsed(fleet.today)} />
             </Panel>
             <Receivables fleet={fleet} />
@@ -420,6 +434,7 @@ function BriefingPanel({ fleet, items, detach }: { fleet: BridgeFleet; items: Br
 function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; items: BriefingItem[]; spoken: boolean; onOpen: (t: BridgeTarget, key?: string) => void }) {
   const bias = dailyBias(fleet)
   const d = fleet.daily
+  const [why, setWhy] = useState(false)
   return (
     <div className="flex flex-col gap-2 text-[12px]">
       {fleet.started && (
@@ -429,7 +444,13 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
             <span className={cx('num text-[24px] leading-tight', d && d.left < 0 ? 'text-down' : 'text-fg-strong')} data-testid="bridge-energy">
               {d ? zl(d.left) : '—'}
             </span>
-            <span className="text-[11px] text-dim">{d ? `przydział ${zl(d.allowance)} · podstawowy ${zl(d.base)}` : 'bez planu tego miesiąca'}</span>
+            {d ? (
+              <button type="button" className="self-start text-[11px] text-dim hover:text-fg-strong" onClick={() => setWhy(!why)} aria-expanded={why} title={glossaryOf('Energia')} data-testid="bridge-energy-why">
+                przydział {zl(d.allowance)} · podstawowy {zl(d.base)} · <span className="text-accent">{why ? 'zwiń' : 'skąd ta liczba?'}</span>
+              </button>
+            ) : (
+              <span className="text-[11px] text-dim">bez planu tego miesiąca</span>
+            )}
           </div>
           {bias && (
             <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-accent' : bias === 'bullish' ? 'text-fg-strong' : 'text-muted')} data-testid="bridge-bias" title="Daily Bias (spec, Wywiad)">
@@ -438,6 +459,7 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
           )}
         </div>
       )}
+      {fleet.started && d && why && <WhyList lines={energyWhy(d, fleet.month)} testId="bridge-energy-lines" />}
       {fleet.started && silverBullet() && <SilverBullet fleet={fleet} items={items} />}
       {!fleet.started && (
         <div className="flex items-center gap-3 border border-accent/40 bg-accent-soft px-3 py-2">
@@ -555,11 +577,14 @@ function DetachedBriefing({ fleet, items }: { fleet: BridgeFleet; items: Briefin
   )
 }
 
-function Line({ metaphor, name, value, children, testId }: { metaphor: string; name: string; value: ReactNode; children?: ReactNode; testId?: string }) {
+function Line({ metaphor, name, value, children, hint, testId }: { metaphor: string; name: string; value: ReactNode; children?: ReactNode; hint?: string; testId?: string }) {
   return (
     <div className="flex flex-col gap-0.5" data-testid={testId}>
       <div className="flex items-baseline gap-2">
-        <span className="text-fg-strong">{metaphor}</span>
+        {/* The metaphor's meaning on hover (F29, the glossary). */}
+        <span className={cx('text-fg-strong', hint && 'cursor-help')} title={hint}>
+          {metaphor}
+        </span>
         <span className="text-[11px] text-dim">· {name}</span>
         <span className="num ml-auto text-fg-strong">{value}</span>
       </div>
@@ -570,11 +595,14 @@ function Line({ metaphor, name, value, children, testId }: { metaphor: string; n
 
 function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTarget) => void }) {
   const s = fleet.shields
+  // „Skąd ta liczba?” (F29): one breakdown open at a time.
+  const [why, setWhy] = useState<'range' | 'targets' | 'delivery' | null>(null)
+  const toggle = (w: 'range' | 'targets' | 'delivery') => setWhy(why === w ? null : w)
   const goals = sum(fleet.goals.map((g) => g.amount))
   const tanks = sum(fleet.tanks.map((t) => t.amount))
   return (
     <div className="flex flex-col gap-2 text-[12px]">
-      <Line metaphor="Osłony" name="bufor na pensje" value={<>{zl(s.amount)}{s.target != null && <span className="text-dim"> / {zl(s.target)}</span>}</>} testId="state-shields">
+      <Line metaphor="Osłony" name="bufor na pensje" hint={glossaryOf('Osłony')} value={<>{zl(s.amount)}{s.target != null && <span className="text-dim"> / {zl(s.target)}</span>}</>} testId="state-shields">
         <Meter value={s.amount} max={s.target} mark={s.min != null && s.target ? s.min / s.target : undefined} />
         {s.free > 0 && <span className="text-[11px] text-muted">wolne do decyzji: {zl(s.free)}</span>}
         {s.free === 0 && s.over > 0 && (
@@ -583,10 +611,22 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
           </span>
         )}
       </Line>
-      <Line metaphor="Energia" name="pensja miesiąca do wydania" value={zl(fleet.energy)} testId="state-energy" />
-      <Line metaphor="Kadłub" name="fundusz awaryjny" value={<>{zl(fleet.hull.amount)}{fleet.hull.target != null && <span className="text-dim"> / {zl(fleet.hull.target)}</span>}</>} testId="state-hull">
+      <Line metaphor="Energia" name="pensja miesiąca do wydania" hint={glossaryOf('Energia')} value={zl(fleet.energy)} testId="state-energy" />
+      <Line metaphor="Kadłub" name="fundusz awaryjny" hint={glossaryOf('Kadłub')} value={<>{zl(fleet.hull.amount)}{fleet.hull.target != null && <span className="text-dim"> / {zl(fleet.hull.target)}</span>}</>} testId="state-hull">
         <Meter value={fleet.hull.amount} max={fleet.hull.target} />
       </Line>
+      <div className="flex flex-wrap gap-x-3 text-[11px]">
+        <button type="button" className={cx('hover:text-fg-strong', why === 'targets' ? 'text-accent' : 'text-dim')} onClick={() => toggle('targets')} aria-expanded={why === 'targets'} data-testid="state-targets-why">
+          skąd cele osłon i kadłuba?
+        </button>
+        {fleet.lastDelivery && (
+          <button type="button" className={cx('hover:text-fg-strong', why === 'delivery' ? 'text-accent' : 'text-dim')} onClick={() => toggle('delivery')} aria-expanded={why === 'delivery'} title={glossaryOf('Dostawa')} data-testid="state-delivery-why">
+            ostatnia dostawa ({plDate(fleet.lastDelivery.date)}) – dokąd poszła?
+          </button>
+        )}
+      </div>
+      {why === 'targets' && <WhyList lines={targetsWhy(fleet, fleet.layers)} testId="state-targets-lines" />}
+      {why === 'delivery' && fleet.lastDelivery && <WhyList lines={fleet.lastDelivery.lines} testId="state-delivery-lines" />}
       {fleet.goals.length > 0 && <Line metaphor="Układy gwiezdne" name="cele" value={zl(goals)} />}
       {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" value={zl(tanks)} />}
       {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" value={zl(fleet.taxHold)} />}
@@ -594,13 +634,13 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
       {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" value={zl(fleet.loot.amount)} />}
       {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" value={zl(fleet.debt)} testId="state-debt" />}
       <div className="grid grid-cols-3 gap-2 border-t border-line pt-2">
-        <div className="flex flex-col">
+        <button type="button" className="flex flex-col text-left hover:text-accent" onClick={() => toggle('range')} aria-expanded={why === 'range'} title={glossaryOf('Zasięg')} data-testid="state-range-why">
           <span className="label">Zasięg</span>
           <span className="num text-[14px] text-fg-strong" data-testid="state-range">
             {fmtRange(fleet.range)}
           </span>
           <span className="text-[10.5px] text-dim">{fleet.debt > 0 ? '(osłony − dług + kadłub) / koszty' : '(osłony + kadłub) / koszty'}</span>
-        </div>
+        </button>
         <div className="flex flex-col">
           <span className="label">Klasa</span>
           <span className="text-[14px] text-fg-strong">{fleet.shipClass ? SHIP_CLASS_LABEL[fleet.shipClass] : '—'}</span>
@@ -614,7 +654,22 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
           </span>
         </button>
       </div>
+      {why === 'range' && <WhyList lines={rangeWhy(fleet)} testId="state-range-lines" />}
       <div className="text-[11px] text-dim">Suma kont budżetu: {zl(fleet.total)}</div>
+    </div>
+  )
+}
+
+/** „Skąd ta liczba?” (F29): a number taken apart – lines one adds up, the result last. */
+function WhyList({ lines, testId }: { lines: readonly WhyLine[]; testId: string }) {
+  return (
+    <div className="flex flex-col border-l-2 border-line-strong pl-2 text-[11.5px]" data-testid={testId}>
+      {lines.map((l, i) => (
+        <div key={i} className={cx('flex items-baseline gap-2', l.total ? 'mt-0.5 border-t border-line pt-0.5 text-fg-strong' : 'text-muted')} data-testid="why-line">
+          <span className="min-w-0 flex-1">{l.label}</span>
+          <span className={cx('num', l.total ? 'text-fg-strong' : 'text-fg')}>{l.amount == null ? (l.text ?? '—') : zl(l.amount)}</span>
+        </div>
+      ))}
     </div>
   )
 }

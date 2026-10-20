@@ -23,6 +23,12 @@ export const grosze = z.number().int('Kwota w groszach musi być liczbą całkow
 
 export const text = z.string().default('')
 
+/**
+ * Tags of an operation, a line of a receipt or an import rule (1.10.0, F17 – „Wakacje Chorwacja 2027”, „Remont
+ * łazienki”): words for „po co”, across the categories. Absent = none; a broken list (a hand-edited file) – none.
+ */
+export const tagListSchema = z.array(z.string().trim().min(1).max(40)).max(20)
+
 export const recordBase = {
   schemaVersion: z.number().int(),
   id: ulidSchema,

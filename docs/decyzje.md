@@ -1941,3 +1941,81 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   oznaczenia wierszy Operacji z jednego liczenia strony; obserwacja Pobranych czyta najpierw 16 KB (nagłówek mBanku –
   inny CSV nigdy w całości); „Przenieś plik do Kosza” przy pliku już usuniętym – „nic nie przeniesiono” zamiast błędu;
   wspólne `dm` (`format.ts`), `percentile` (`plan.ts`), `SHORT_MONTHS`. Wersja w `package.json` – podbita przed PR.
+
+### 1.10.0 – wywiad, funkcje (grupa V, 19.10.2026)
+
+- **T291** Tagi i wyprawy (F17): `transaction.tags`, `split.tags` i `importRule.tags` (addytywne, `tagListSchema` – do
+  20 tagów po 40 znaków; zły zapis – pole pominięte, nie rekord). Jeden tag różnie zapisany („#Wakacje”, „wakacje ”)
+  to jeden (`tagKey` – bez wielkości liter i polskich znaków), zostaje pierwsza pisownia. Tag operacji dotyczy
+  wszystkich jej części, część paragonu może mieć własny. Gdzie: edytor (pole „Tagi” przy wydatku i wpływie, „#” przy
+  części paragonu; ostatnia część usunięta oddaje swoje tagi operacji), szybki wpis (pole, „+ #tag” ostatnich 7 dni –
+  `LAST_TAG_DAYS`, „#słowo” w nazwie – wyjęte z nazwy, żeby marka była bez niego – albo w notatce – zostaje w niej;
+  „Zapisz i następny” zachowuje tagi; „#” z cyfrą na początku to część nazwy, np. „Pizzeria #1”), reguła importu
+  („zmień” → „Tagi operacji”; operacja z reguły dostaje jej tagi tylko wtedy, gdy decyzja wiersza jest decyzją
+  reguły), filtr Operacji („Więcej filtrów” → „Tag” – klucze tagów, także w zapisanych widokach), wyszukiwanie (tekst
+  operacji z „#tag”), wiersz listy, eksport CSV i Excel („Tagi”). Wywiad → „Wyprawy”: wydane netto (zwrot towaru i
+  zaliczki odejmuje; część domownika nie jest moim kosztem; zakup z pieniędzy celu się liczy – wyprawa jest na niego),
+  operacje, okres, karta po kategoriach głównych i miesiącach, cel z Mapy gwiezdnej (`settings.intel.tagGoals`: klucz
+  tagu → id celu, „Ekspedycja „X”: wydano … z … celu”, ponad cel – akcent) i „Pokaż w Operacjach” (cała historia;
+  widok – zapisany filtr zostaje, B88).
+- **T292** Wywiad do szczegółu (F20): „Wydatki w czasie” – kategoria główna rozwija podkategorie (część na samej
+  kategorii głównej – „bez podkategorii”), kwota w komórce otwiera Operacje (miesiąc, wydatki, ta kategoria; wiersz
+  ładowni – jej kontenery). „Namierzone cele” – marki okresu strony (z połączonymi nazwami importu, 1.2.2): suma,
+  kontakty, średni paragon, trend wobec tak samo długiego okresu wcześniej, główna kategoria i udział marki w niej,
+  ostatnia wizyta (dymek „Rozpoznanie celu – …”); klik – Operacje tej marki z całej historii; bez opłat ładowni i
+  zakupów z pieniędzy celu. „Porównanie – miesiąc” (domyślnie ostatni pełny): kategorie główne i ładownia wobec
+  średniej z 3 i 12 miesięcy przed nim (tylko miesiące objęte historią) i tego samego miesiąca rok wcześniej; akcent
+  (▲) tylko przy przekroczeniu o ponad 10% (`OVER_SHARE`). Edytor wydatku: „Rozpoznanie celu: u tego kontrahenta w RRRR
+  – N zakupów, X zł, średnio Y zł” (od 2 zakupów w roku operacji; indeks marek liczony raz na listę operacji –
+  `brandYears`).
+- **T293** Majątek netto (F24, D87 – druga linia, D73 / T81 bez zmian): „Siła floty netto” = salda kont + należności −
+  dług. Pożyczka udzielona: otwarta w danym dniu kwota (od dnia pożyczki, minus spłaty do tego dnia; zamknięta – 0 od
+  dnia `closedAt`), wzięta – tak samo ze znakiem minus; domownicy – saldo teraz (należne − depozyt) minus przepływy
+  operacji po danym dniu (pożyczone − oddane − (zaliczki − wzięte z depozytu)). Wykres Wywiadu: przełącznik „na kontach
+  / siła floty netto” (na tym komputerze, `fi.intel.wealthBasis`) – struktura (BOS / CHoCH), szczyt i drawdown na
+  wybranej linii, druga przerywana; przegląd roczny – siła floty netto na początku i końcu roku. Mostek bez zmian.
+- **T294** Bilans paliwa (F25): przychód miesiąca (praca i trading netto, bez pieniędzy domowników – D81; miesiąc
+  samych dopłat do XTB – 0, N4) minus koszty netto (jak debriefing) = ile miesiąc dołożył do okrętu; stopa
+  oszczędności = bilans / przychód (jedno miejsce po przecinku; bez przychodu „—”); wariant bez tradingu (praca −
+  koszty). Wywiad – 12 pełnych miesięcy objętych historią (bieżący w toku – pominięty), mediany 6 i 12 miesięcy,
+  mediana bez tradingu, trend (mediana 3 ostatnich wobec 3 wcześniejszych); debriefing (Plan miesiąca, Raporty) –
+  „Bilans paliwa …, stopa oszczędności X% (mediana 6 mies.: Y%)” (mediana z 6 miesięcy przed tym miesiącem); przegląd
+  roczny – bilans i stopa roku; eksport „Miesiące” – kolumny „Bilans (zł)” i „Stopa oszczędności (%)”. Wykres
+  przepływu (Sankey, w propozycji opcjonalny) – nie.
+- **T295** „Skąd ta liczba?” (F29): Mostek – energia dziś rozbita (koperty codzienne miesiąca z łupami, wydane do
+  wczoraj, zostało na N dni, podstawowy przydział, zaoszczędzone / przekroczone wcześniej na każdy dzień, przydział na
+  dziś, wydane dziś = energia dziś), zasięg (osłony + kadłub − dług = paliwo, koszty miesiąca ze źródłem, zasięg), cele
+  osłon i kadłuba (× pensja, × koszty), ostatnia dostawa (rezerwa PIT-38, osłony, kadłub, cele) – jedno rozbicie naraz,
+  także w osobnym oknie (dane w `BridgeFleet`). Dymek zasobnika: „Energia dziś: X zł (przydział Y − dziś Z)” od
+  pierwszego wydatku dnia. Słowniczek metafory (`shared/glossary.ts`) pod F1, „?” w nagłówkach paneli (`Panel hint`:
+  Koperty, Pensja, Dzienny przydział, Linia zanurzenia, Odkładki, Kolejność wypełniania, Na radarze, Dokowanie, Wyprawy,
+  Bilans paliwa) i dymki metafor stanu okrętu.
+- **T296** Osobista inflacja (F36, D87 – CPI GUS wpisywane ręcznie, bez sieci): porównywane są te z 12 ostatnich
+  pełnych miesięcy, które mają w historii swój miesiąc rok wcześniej; kategorie główne rok do roku (ceny i nawyki
+  razem); średni paragon u tych samych marek (co najmniej 3 zakupy w obu latach – `INFLATION_MIN_PURCHASES`);
+  kontenery – kwota sprzed roku i teraz (historia kwot, F9); „Twoja inflacja” = zmiany marek i kontenerów ważone
+  pieniędzmi sprzed roku; CPI za miesiąc (`settings.intel.cpi` RRRR-MM → % rok do roku, −50…200, „4,9”; puste
+  zdejmuje; domyślnie poprzedni miesiąc – GUS publikuje w połowie następnego), pokazywane ostatnie wpisane; cel kadłuba
+  (miesiące × średnia kosztów 12 objętych miesięcy) rok temu i teraz.
+- **T297** Wywiad w kodzie: panele w osobnych plikach (`features/intel/Drill.tsx`, `Expeditions.tsx`, `Fuel.tsx`,
+  `Inflation.tsx`), obliczenia czyste (`calc/drill.ts`, `tags.ts`, `fuel.ts`, `netWorth.ts`, `inflation.ts`, `why.ts`,
+  `shared/glossary.ts`), liczone raz na stan danych (tagi historii, podsumowania wypraw i indeks marek – WeakMap po
+  liście operacji; panele – `useMemo`).
+- **T298** Przegląd grupy V (`/code-review` high, 10 kandydatów – wszystkie poprawione, z testem tam, gdzie liczby):
+  tagi wpisane po przecinku z „#” („#wakacje, #remont”) – bez „#” w drugim (`tagLabel` obcina spacje przed „#”); wpływ
+  z tagiem odejmuje od wyprawy tylko moje pieniądze – przelew domownika i jego część wpłaty nie są „mniej wydanym”
+  (D80, D81: `incomeShares` z numerem części – `line`, moja część ze swoimi tagami i kategorią); „bez podkategorii” w
+  „Wydatkach w czasie” bez kliknięcia (filtr Operacji bierze kategorię główną z podkategoriami – pokazałby więcej niż
+  kwota); udział marki w kategorii liczony od wszystkich zakupów kategorii w okresie, także bez nazwy (gotówka, wpis
+  ręczny – wcześniej 100%); waga kontenera w „Twojej inflacji” z porównywanych miesięcy jak waga marek (wcześniej × 12
+  przy krótszej historii); majątek netto czyta operacje pożyczek tym samym przejściem co stan pożyczek
+  (`forEachLoanOperation`); zasięg w „Skąd ta liczba?” tekstem Mostka (`rangeText`); ostatni tag szybkiego wpisu liczony
+  raz na listę operacji i dzień (`lastTagOf` – nie przy każdym otwarciu okna); bilans paliwa bez zieleni i czerwieni
+  przy ukrytych kwotach (B61); usunięte nieużywane `brandYear`, `periodMonths`, `summaryTotal`. Poza przeglądem: „?”
+  słowniczka obok tytułu panelu, nie w nim (nazwa panelu w menu „Układ” bez „?”).
+- **T299** Zamykanie aplikacji w E2E (1.10.0, Windows CI): test zawiesił się na `app.close()` – proces główny czekał na
+  synchroniczne pytanie o niezapisane zmiany, co blokuje też Playwright i sprzątanie workera (3 min + 90 s bez słowa o
+  przyczynie). `launch()` (`tests/e2e/app.ts` `guardClose`) zamyka aplikację z limitem 40 s, po nim kończy proces
+  (SIGKILL – na SIGTERM Electron sam się zamyka, czego zablokowany proces nie zrobi) i zgłasza błąd z końcem main.log;
+  proces główny przed pytaniem zapisuje w logu jego przyczynę (decyzje o zmianach z drugiego komputera, wpisy nowszej
+  wersji, błąd zapisu) – także dla użytkownika, który prześle main.log.

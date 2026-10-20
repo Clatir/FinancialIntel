@@ -70,7 +70,7 @@ describe('analizy wywiadu', () => {
 
   it('wydatki w czasie: kategorie główne miesiąc po miesiącu, ładownia osobno', () => {
     const s = spendingByMonth([tx('2026-09-10', -zl(30)), tx('2026-10-02', -zl(70), { categoryId: AUTO }), tx('2026-10-03', -zl(500), { containerId: nextId() }), tx('2026-10-04', -zl(20), { refundable: true })], categories, ['2026-09', '2026-10'])
-    expect(s.rows).toEqual([
+    expect(s.rows.map(({ id, values, total }) => ({ id, values, total }))).toEqual([
       { id: AUTO, values: [0, zl(70)], total: zl(70) },
       { id: FOOD, values: [zl(30), 0], total: zl(30) }
     ])

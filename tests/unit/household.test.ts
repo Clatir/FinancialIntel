@@ -272,8 +272,9 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
       counterparty: 'PIOTR TESTOWY',
       splits: [{ id: nextId(), amount: zl(300), categoryId: null, refundable: false, memberId: MAMA, advance: false, note: '' }]
     })
+    // Each part with its line of the split (1.10.0: a tag's money back reads its own lines); the rest – none.
     expect(incomeShares(transfer)).toEqual([
-      { memberId: MAMA, amount: zl(300), advance: false },
+      { memberId: MAMA, amount: zl(300), advance: false, line: 0 },
       { memberId: TATA, amount: zl(200), advance: true }
     ])
     const ledger = settleHousehold([forMama, transfer])
@@ -296,8 +297,8 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
       ]
     })
     expect(incomeShares(mine)).toEqual([
-      { memberId: null, amount: zl(70), advance: false },
-      { memberId: MAMA, amount: zl(30), advance: false }
+      { memberId: null, amount: zl(70), advance: false, line: 0 },
+      { memberId: MAMA, amount: zl(30), advance: false, line: 1 }
     ])
   })
 

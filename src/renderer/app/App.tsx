@@ -248,7 +248,9 @@ function Page({ route }: { route: Route }) {
 function TrayStatus() {
   const fleet = useFleet()
   useMachine((s) => s.prefs.hideAmounts)
-  const text = fleet?.daily ? `Energia dziś: ${plnText(fleet.daily.left)} zł` : null
+  // F29: where today's number comes from, in a line – the allowance less today's spending.
+  const d = fleet?.daily
+  const text = d ? `Energia dziś: ${plnText(d.left)} zł${d.spentToday ? ` (przydział ${plnText(d.allowance)} − dziś ${plnText(d.spentToday)})` : ''}` : null
   useEffect(() => {
     void api.setTrayStatus(text)
   }, [text])

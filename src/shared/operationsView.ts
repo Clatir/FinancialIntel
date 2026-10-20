@@ -9,6 +9,7 @@ import { incomeShares } from './calc/household'
 import type { BrandAliases } from './import/aliases'
 import { ruleTargetOf } from './import/classify'
 import { fold } from './fold'
+import { hasTag, tagsOf } from './calc/tags'
 
 /** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
 export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
@@ -115,6 +116,8 @@ export interface OperationsFilter {
   loans: string[]
   /** The other account of a transfer (F18); '' – an account outside the budget. */
   transferAccounts: string[]
+  /** Tags (F17), by their key (`tagKey`): the operation's own or a line's of its receipt. */
+  tags: string[]
   sort: OperationSort
 }
 
@@ -133,11 +136,12 @@ export const emptyFilter = (month: string): OperationsFilter => ({
   goals: [],
   loans: [],
   transferAccounts: [],
+  tags: [],
   sort: 'date'
 })
 
 /** The lists of the filter a choice narrows (the period, the search, the amounts and the order apart). */
-export const LIST_KEYS = ['accounts', 'kinds', 'categories', 'marks', 'members', 'brands', 'containers', 'goals', 'loans', 'transferAccounts'] as const satisfies ReadonlyArray<keyof OperationsFilter>
+export const LIST_KEYS = ['accounts', 'kinds', 'categories', 'marks', 'members', 'brands', 'containers', 'goals', 'loans', 'transferAccounts', 'tags'] as const satisfies ReadonlyArray<keyof OperationsFilter>
 
 type Narrowing = Pick<OperationsFilter, (typeof LIST_KEYS)[number] | 'query' | 'amountMin' | 'amountMax'>
 
@@ -157,6 +161,7 @@ export const noNarrowing = (): Narrowing => ({
   goals: [],
   loans: [],
   transferAccounts: [],
+  tags: [],
   query: '',
   amountMin: null,
   amountMax: null
@@ -204,6 +209,7 @@ export function filterOf(raw: unknown, month: string): OperationsFilter {
     goals: strings(f.goals),
     loans: strings(f.loans),
     transferAccounts: strings(f.transferAccounts),
+    tags: strings(f.tags),
     sort: (OPERATION_SORTS as readonly unknown[]).includes(f.sort) ? (f.sort as OperationSort) : 'date'
   }
 }
@@ -281,7 +287,7 @@ export interface FilterContext {
  */
 let texts: { categories: CategoryIndex; accounts: readonly Account[]; names: Map<string, string>; byTx: WeakMap<Transaction, string> } | null = null
 
-/** Text the search looks in: counterparty, title, notes, the bank's description, category, account. */
+/** Text the search looks in: counterparty, title, notes, the bank's description, category, account, tags (F17). */
 export function searchTextOf(t: Transaction, ctx: FilterContext): string {
   if (!texts || texts.categories !== ctx.categories || texts.accounts !== ctx.accounts)
     texts = { categories: ctx.categories, accounts: ctx.accounts, names: new Map(ctx.accounts.map((a) => [a.id, a.name])), byTx: new WeakMap() }
@@ -289,7 +295,8 @@ export function searchTextOf(t: Transaction, ctx: FilterContext): string {
   if (text === undefined) {
     const cats = [t.categoryId, ...t.splits.map((s) => s.categoryId)].filter(Boolean).map((id) => ctx.categories.label(id))
     const other = isTwoSided(t) ? (texts.names.get(t.counterAccountId!) ?? '') : ''
-    text = fold([t.counterparty, t.title, t.note, t.logNote, t.bank?.description ?? '', ...cats, texts.names.get(t.accountId) ?? '', other].join(' \u0001 '))
+    const tags = [...tagsOf(t), ...t.splits.flatMap((x) => x.tags ?? [])].map((x) => `#${x}`)
+    text = fold([t.counterparty, t.title, t.note, t.logNote, t.bank?.description ?? '', ...cats, texts.names.get(t.accountId) ?? '', other, ...tags].join(' \u0001 '))
     texts.byTx.set(t, text)
   }
   return text
@@ -322,6 +329,7 @@ export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterCo
   if (f.loans.length && !(t.loanId && f.loans.includes(t.loanId))) return false
   if (f.transferAccounts.length && !transferAccountsOf(t).some((a) => f.transferAccounts.includes(a))) return false
   if (f.brands.length && !f.brands.includes(brandKeyOf(t, ctx.aliases))) return false
+  if (f.tags.length && !f.tags.some((k) => hasTag(t, k))) return false
   if (f.marks.length) {
     const marks = marksOf(t, ctx.orders, ctx.flags)
     const groups = new Set(f.marks.map((m) => MARK_GROUP[m]))
