@@ -1,6 +1,6 @@
 // adapted from ICTTJ tests/unit/journal-store.test.ts @ 84a8339
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ChangeSet, FolderStatus, RecordEntry, Snapshot } from '@shared/api'
+import type { ChangeSet, FolderStatus, OpenFolderResult, RecordEntry, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import { COLLECTIONS } from '@shared/paths'
 import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type SettingsFile, type Transaction } from '@shared/schema'
@@ -706,6 +706,141 @@ describe('przyczyna niezapisanych zmian (1.6.5, B108, B67, N62)', () => {
   })
 })
 
+
+describe('zamykanie okna: zapis w rundach, zapisy w tle wstrzymane (1.10.1, T301)', () => {
+  beforeEach(() => {
+    useRemote.setState({ pending: [], open: false })
+  })
+  const held = () => store.useData.getState().backgroundHeld
+  const inBackground = () => store.writesInBackground(store.useData.getState())
+
+  it('zmiana zrobiona, gdy zapis wpisu był w drodze: zapisana jeszcze raz przed odpowiedzią – nie „zapis jeszcze trwa”', async () => {
+    const t = transaction()
+    load(t)
+    let finish: () => void = () => undefined
+    api.saveRecord
+      .mockImplementationOnce((_c: string, r: Transaction) => new Promise((resolve) => (finish = () => resolve(saved(r)))))
+      .mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'pierwsza' }))
+    const closing = store.flushForClose()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.saveRecord).toHaveBeenCalledTimes(1)
+    // Typed while its write was on its way (a field committed as the window closes).
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'druga' }))
+    finish()
+    await expect(closing).resolves.toEqual({ saved: true, waiting: 0, newer: 0, error: null })
+    expect(api.saveRecord.mock.calls.map((c) => c[1].note)).toEqual(['pierwsza', 'druga'])
+    expect(store.hasUnsaved()).toBe(false)
+    await vi.advanceTimersByTimeAsync(10_000)
+  })
+
+  it('paczka zaczęta w trakcie zamykania (import, porcja gry): odpowiedź czeka na nią; zapisy w tle wstrzymane, aż okno zniknie', async () => {
+    const t = transaction()
+    load(t)
+    let finish: () => void = () => undefined
+    api.saveRecord.mockImplementationOnce((_c: string, r: Transaction) => new Promise((resolve) => (finish = () => resolve(saved(r)))))
+    api.saveRecords.mockImplementation((_c: string, rs: Transaction[]) => new Promise((resolve) => setTimeout(() => resolve(rs.map((r) => ({ id: r.id, entry: saved(r) }))), 100)))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'x' }))
+    expect(inBackground()).toBe(true)
+    const closing = store.flushForClose()
+    // From the first moment of the close: no write starts in the background.
+    expect(held()).toBe(true)
+    expect(inBackground()).toBe(false)
+    await vi.advanceTimersByTimeAsync(0)
+    store.addRecords('transactions', [transaction(ID2)])
+    finish()
+    await vi.advanceTimersByTimeAsync(150)
+    await expect(closing).resolves.toEqual({ saved: true, waiting: 0, newer: 0, error: null })
+    expect(api.saveRecords).toHaveBeenCalledTimes(1)
+    expect(store.hasUnsaved()).toBe(false)
+    // Everything written: the window goes – held on its way out; a while only (main may keep the window after all).
+    expect(held()).toBe(true)
+    await vi.advanceTimersByTimeAsync(9_000)
+    expect(held()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(held()).toBe(false)
+    expect(inBackground()).toBe(true)
+  })
+
+  it('usunięcie w drodze przy zamykaniu: odpowiedź czeka na nie – wpis, którego pliku dysk nie oddał, jest znowu na liście, a jego zmiana zapisana', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    let refuse: () => void = () => undefined
+    api.deleteRecord.mockImplementation(() => new Promise((_resolve, reject) => (refuse = () => reject(new Error('EBUSY: plik zajęty')))))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'zmiana przed usunięciem' }))
+    const deleting = store.deleteRecord('transactions', t.id).catch((e: unknown) => e)
+    expect(current()).toBeUndefined()
+    const closing = store.flushForClose()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.deleteRecord).toHaveBeenCalledTimes(1)
+    refuse()
+    await expect(closing).resolves.toEqual({ saved: true, waiting: 0, newer: 0, error: null })
+    expect(api.saveRecord.mock.calls.map((c) => c[1].note)).toEqual(['zmiana przed usunięciem'])
+    expect(current()?.note).toBe('zmiana przed usunięciem')
+    expect(await deleting).toBeInstanceOf(Error)
+    await vi.advanceTimersByTimeAsync(10_000)
+  })
+
+  it('usunięcie kilku wpisów w drodze przy zamykaniu: odpowiedź czeka i na nie', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    let answer: () => void = () => undefined
+    api.deleteRecords.mockImplementation(() => new Promise((resolve) => (answer = () => resolve([{ id: t.id, error: 'EBUSY: plik zajęty' }]))))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'zmiana przed usunięciem' }))
+    const deleting = store.deleteRecords('transactions', [t.id])
+    const closing = store.flushForClose()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.deleteRecords).toHaveBeenCalledTimes(1)
+    answer()
+    await expect(closing).resolves.toEqual({ saved: true, waiting: 0, newer: 0, error: null })
+    expect(api.saveRecord.mock.calls.map((c) => c[1].note)).toEqual(['zmiana przed usunięciem'])
+    await expect(deleting).resolves.toEqual({ deleted: [], error: 'EBUSY: plik zajęty' })
+    await vi.advanceTimersByTimeAsync(10_000)
+  })
+
+  it('folder pokazany od nowa: wstrzymanie po zamknięciu, które nie nastąpiło, się kończy', async () => {
+    const t = transaction()
+    load(t)
+    await expect(store.flushForClose()).resolves.toMatchObject({ saved: true })
+    expect(held()).toBe(true)
+    load(t)
+    expect(held()).toBe(false)
+    expect(inBackground()).toBe(true)
+  })
+
+  it('zapis, który się nie udaje: jedna próba w tym zapisie i jego błąd w odpowiedzi; okno zostaje – zapisy w tle ruszają od razu', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockRejectedValue(new Error('brak dostępu'))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'x' }))
+    await expect(store.flushForClose()).resolves.toEqual({ saved: false, waiting: 0, newer: 0, error: 'brak dostępu' })
+    expect(api.saveRecord).toHaveBeenCalledTimes(1)
+    expect(held()).toBe(false)
+    expect(inBackground()).toBe(true)
+  })
+
+  it('Ctrl+S i „zapisz przed…”: wstrzymane na czas zapisu; zmiana folderu – aż do otwarcia innego', async () => {
+    const t = transaction()
+    load(t)
+    api.saveRecord.mockImplementation(async (_c: string, r: Transaction) => saved(r))
+    store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'x' }))
+    const copying = store.saveFirst('kopia')
+    expect(held()).toBe(true)
+    await copying
+    expect(held()).toBe(false)
+    const seen: boolean[] = []
+    const open = vi.fn(async (): Promise<OpenFolderResult> => {
+      seen.push(held())
+      return { ok: false, reason: 'error', message: 'Folder niedostępny.' }
+    })
+    await store.switchFolder(open)
+    expect(seen).toEqual([true])
+    expect(held()).toBe(false)
+    expect(inBackground()).toBe(true)
+  })
+})
 
 describe('zasobnik i start z Windows w oknie (1.6.5, N98, N100)', () => {
   it('kiedy zainstaluje się pobrana aktualizacja; pytanie o start z Windows tylko raz, na komputerze z działającym budżetem', async () => {

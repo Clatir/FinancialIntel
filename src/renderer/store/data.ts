@@ -28,6 +28,8 @@ interface DataState {
   setupProblem: SetupProblem | null
   /** Another folder opening from Settings (B31): nothing is edited or written until it opens or fails. */
   switching: boolean
+  /** Changes being written (the window closing, Ctrl+S, a step that needs them on the disk – T301): no write starts in the background. */
+  backgroundHeld: boolean
   /** When the folder opened in this window, and when a change from another computer came last (B33: the first
    * freeze of the game's days waits for them). */
   openedAt: number
@@ -138,6 +140,7 @@ export const useData = create<DataState>(() => ({
   setupDir: null,
   setupProblem: null,
   switching: false,
+  backgroundHeld: false,
   openedAt: 0,
   externalAt: 0,
   lastRemote: null,
@@ -234,7 +237,11 @@ export function applySnapshot(snapshot: Snapshot): void {
   fieldEdits.clear()
   userEditedAt.clear()
   useRemote.setState({ pending: [], open: false })
+  // A folder shown anew: the hold of a close that did not come is over (T301).
+  clearTimeout(closeHold)
+  closeHold = undefined
   set({
+    backgroundHeld: holds > 0,
     phase: 'ready',
     setupMessage: null,
     setupDir: null,
@@ -737,6 +744,17 @@ function enqueue(key: string): Promise<void> {
   return p
 }
 
+/** Deletions on their way (T301): a flush waits for them – a file the disk keeps brings its record back, unsaved edits and all. */
+const deletions = new Set<Promise<unknown>>()
+
+function deleting<T>(run: () => Promise<T>): Promise<T> {
+  const p = run()
+  deletions.add(p)
+  const done = () => deletions.delete(p)
+  void p.then(done, done)
+  return p
+}
+
 /** A save failed: keep the change and try again later (never drop it silently). */
 function scheduleRetry(key: string): void {
   if (timers.has(key) || !dirty.has(key)) return
@@ -775,6 +793,37 @@ const folderReadOnly = () => !!get().status?.readOnly || get().switching
 
 /** Fields and buttons that change data off: a read-only folder, or another one opening (B31). */
 export const useFolderLocked = (): boolean => useData((s) => !!s.status?.readOnly || s.switching)
+
+/**
+ * Writes the app makes on its own – the game's days frozen, ICTTJ's goals followed, the settlements' start (D86: on a
+ * computer in use only): in a writable folder shown in full, never while changes are being written (T301) – a write
+ * started then would keep the flush going or reach the disk after its answer („zapis jeszcze trwa” at the window's close).
+ */
+export const writesInBackground = (s: DataState): boolean => s.phase === 'ready' && !s.status?.readOnly && !s.switching && !s.backgroundHeld
+
+/** Flushes and steps running now that hold the background writes (T301). */
+let holds = 0
+/** The window closing with everything written: the background writes held until it goes (T301). */
+let closeHold: ReturnType<typeof setTimeout> | undefined
+/** How long at most: the window goes in a moment – unless main keeps it (its question after a minute of writing, „Anuluj”). */
+const CLOSE_HOLD_MS = 10_000
+
+function syncHeld(): void {
+  const held = holds > 0 || closeHold !== undefined
+  if (get().backgroundHeld !== held) set({ backgroundHeld: held })
+}
+
+/** `run` with the background writes held: none starts until it ends (T301). */
+async function holding<T>(run: () => Promise<T>): Promise<T> {
+  holds++
+  syncHeld()
+  try {
+    return await run()
+  } finally {
+    holds--
+    syncHeld()
+  }
+}
 
 export const READ_ONLY_MESSAGE = 'Folder jest tylko do odczytu – zmiany nie są zapisywane.'
 export const SWITCHING_MESSAGE = 'Trwa otwieranie innego folderu – zmiany w tej chwili nie są przyjmowane.'
@@ -820,19 +869,22 @@ export function monthTooNew(collection: 'game' | 'months', month: string): boole
  * stopped open leaves this folder as it was. `unsaved` = why this folder's changes could not be written: no switch.
  */
 export async function switchFolder(open: () => Promise<OpenFolderResult>): Promise<OpenFolderResult | { unsaved: string }> {
-  await flushSaves()
-  // Decisions about another computer's changes, or a failed write: no switch, said why (B108). Changes this version can
-  // never write (B67) stay behind – they would not reach the disk here either.
-  const hold = unsavedHold('zmiana folderu')
-  if (hold) return { unsaved: hold }
-  set({ switching: true })
-  try {
-    const res = await open()
-    if (res.ok) applySnapshot(res.snapshot)
-    return res
-  } finally {
-    set({ switching: false })
-  }
+  // No background write between this folder's last writes and the switch (T301).
+  return holding(async () => {
+    await flushSaves()
+    // Decisions about another computer's changes, or a failed write: no switch, said why (B108). Changes this version can
+    // never write (B67) stay behind – they would not reach the disk here either.
+    const hold = unsavedHold('zmiana folderu')
+    if (hold) return { unsaved: hold }
+    set({ switching: true })
+    try {
+      const res = await open()
+      if (res.ok) applySnapshot(res.snapshot)
+      return res
+    } finally {
+      set({ switching: false })
+    }
+  })
 }
 
 /** A user's action may write: false – with the one message – in a read-only folder (N2); its success is never shown. */
@@ -960,19 +1012,21 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
     delete drafts[id]
     return { ...withMap(s, collection, map), drafts }
   })
-  await settled(inFlight.get(key))
-  if (wasDraft) return
-  try {
-    await api.deleteRecord(collection, id)
-  } catch (e) {
-    // The file stays on the disk (held by another program – B9): the record back on the screen, the caller says why;
-    // its unsaved edits are saved after all.
-    if (entry && !mapOf(get(), collection)[id]) {
-      set((s) => withMap(s, collection, { ...mapOf(s, collection), [id]: entry }))
-      if (unsaved) scheduleSave(collection, id)
+  return deleting(async () => {
+    await settled(inFlight.get(key))
+    if (wasDraft) return
+    try {
+      await api.deleteRecord(collection, id)
+    } catch (e) {
+      // The file stays on the disk (held by another program – B9): the record back on the screen, the caller says why;
+      // its unsaved edits are saved after all.
+      if (entry && !mapOf(get(), collection)[id]) {
+        set((s) => withMap(s, collection, { ...mapOf(s, collection), [id]: entry }))
+        if (unsaved) scheduleSave(collection, id)
+      }
+      throw e
     }
-    throw e
-  }
+  })
 }
 
 /** `deleteRecord` nobody waits for (an undo, a cleanup): its refusal said (B9, B67), never an unhandled error. */
@@ -1003,34 +1057,36 @@ export async function deleteRecords(collection: Collection, ids: readonly string
     }
     return { ...withMap(st, collection, map), drafts: left }
   })
-  await Promise.all(keys.map((k) => settled(inFlight.get(k))))
-  const onDisk = ids.filter((id) => !drafts.includes(id))
-  if (!onDisk.length) return { deleted: [...ids], error: null }
-  let results: Array<{ id: string; error?: string }>
-  try {
-    results = await api.deleteRecords(collection, onDisk, opts.reason)
-  } catch (e) {
-    results = onDisk.map((id) => ({ id, error: errorMessage(e) }))
-  }
-  // The files that stay on the disk (held by another program – B9): their records back on the screen, with their unsaved
-  // edits saved after all.
-  const refused = results.filter((r) => r.error)
-  const back: string[] = []
-  if (refused.length)
-    set((st) => {
-      const map = { ...mapOf(st, collection) }
-      for (const r of refused) {
-        const entry = entries.get(r.id)
-        if (entry && !map[r.id]) {
-          map[r.id] = entry
-          back.push(r.id)
+  return deleting(async () => {
+    await Promise.all(keys.map((k) => settled(inFlight.get(k))))
+    const onDisk = ids.filter((id) => !drafts.includes(id))
+    if (!onDisk.length) return { deleted: [...ids], error: null }
+    let results: Array<{ id: string; error?: string }>
+    try {
+      results = await api.deleteRecords(collection, onDisk, opts.reason)
+    } catch (e) {
+      results = onDisk.map((id) => ({ id, error: errorMessage(e) }))
+    }
+    // The files that stay on the disk (held by another program – B9): their records back on the screen, with their unsaved
+    // edits saved after all.
+    const refused = results.filter((r) => r.error)
+    const back: string[] = []
+    if (refused.length)
+      set((st) => {
+        const map = { ...mapOf(st, collection) }
+        for (const r of refused) {
+          const entry = entries.get(r.id)
+          if (entry && !map[r.id]) {
+            map[r.id] = entry
+            back.push(r.id)
+          }
         }
-      }
-      return withMap(st, collection, map)
-    })
-  for (const id of back) if (unsaved.has(keyOf(collection, id))) scheduleSave(collection, id)
-  const failedIds = new Set(refused.map((r) => r.id))
-  return { deleted: ids.filter((id) => !failedIds.has(id)), error: refused[0]?.error ?? null }
+        return withMap(st, collection, map)
+      })
+    for (const id of back) if (unsaved.has(keyOf(collection, id))) scheduleSave(collection, id)
+    const failedIds = new Set(refused.map((r) => r.id))
+    return { deleted: ids.filter((id) => !failedIds.has(id)), error: refused[0]?.error ?? null }
+  })
 }
 
 /** Settings written by the main process (restored from the history): replace the in-memory copy. */
@@ -1056,22 +1112,38 @@ export function updateSettings(updater: (f: SettingsFile) => SettingsFile, opts:
   return true
 }
 
+/** A flush writes again what changed while it wrote – at most this many times (T301). */
+const FLUSH_ROUNDS = 10
+
 /**
  * Write every pending change now (window close, folder switch, Ctrl+S, "retry"), including changes
  * whose earlier save failed. Resolves to true when nothing is left unsaved.
  */
 export async function flushSaves(): Promise<boolean> {
-  // A field still being typed in (window closing, Ctrl+S): its value first.
-  commitActiveField()
-  for (const key of new Set([...timers.keys(), ...dirty.keys()])) {
-    const t = timers.get(key)
-    if (t) clearTimeout(t)
-    timers.delete(key)
-    firstDirtyAt.delete(key)
-    void enqueue(key)
-  }
-  await Promise.all([...inFlight.values()].map(settled))
-  return !hasUnsaved()
+  return holding(async () => {
+    // A field still being typed in (window closing, Ctrl+S): its value first.
+    commitActiveField()
+    // In rounds (T301): a record changed while its write was on its way – a field committed, an edit, a write started
+    // just before, a record a refused deletion brought back – is written once more before the answer. The version each
+    // record was sent at: a write that failed or waits for a decision about another computer's change is not sent again –
+    // its error or the decision is the answer.
+    const sent = new Map<string, number>()
+    for (let round = 0; round < FLUSH_ROUNDS; round++) {
+      for (const key of new Set([...timers.keys(), ...dirty.keys()])) {
+        const version = versions.get(key) ?? 0
+        if (sent.get(key) === version) continue
+        sent.set(key, version)
+        const t = timers.get(key)
+        if (t) clearTimeout(t)
+        timers.delete(key)
+        firstDirtyAt.delete(key)
+        void enqueue(key)
+      }
+      if (!inFlight.size && !deletions.size) break
+      await Promise.all([...inFlight.values(), ...deletions].map((p) => p.catch(() => undefined)))
+    }
+    return !hasUnsaved()
+  })
 }
 
 export function hasUnsaved(): boolean {
@@ -1097,10 +1169,21 @@ export function unsavedReport(): FlushResult {
 
 /** The window closing (B108): everything written, the reason of what is not – a waiting decision's dialog opened behind the question. */
 export async function flushForClose(): Promise<FlushResult> {
-  await flushSaves()
-  const r = unsavedReport()
-  if (r.waiting) setRemoteDialog(true)
-  return r
+  return holding(async () => {
+    await flushSaves()
+    const r = unsavedReport()
+    if (r.waiting) setRemoteDialog(true)
+    // Everything written: the window goes now – no background write starts on its way out (T301). Not written: main asks,
+    // and the window may stay – the background writes go on.
+    if (r.saved) {
+      clearTimeout(closeHold)
+      closeHold = setTimeout(() => {
+        closeHold = undefined
+        syncHeld()
+      }, CLOSE_HOLD_MS)
+    }
+    return r
+  })
 }
 
 /**

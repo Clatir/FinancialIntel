@@ -1,7 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** ciąg grup M–V (D87 – zgoda na całość bez przerw między grupami) zakończony – każda grupa z własnym PR i
-wydaniem (D71); pauza do komendy użytkownika (D67).
+**Stan:** 1.10.1 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany (D88, T301) w PR #35: po zielonym
+CI scalenie (D71) i wydanie z joba Windows na `main`, potem pauza do komendy użytkownika (D67). Ciąg grup M–V (D87)
+zakończony – każda grupa z własnym PR i wydaniem.
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
 oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
@@ -12,10 +13,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – kolejne prace tylko na komendę użytkownika (D67). Na później, każda do osobnej decyzji:
-flota rezerwowa – IKE, IKZE, PPK, lokaty (F32), paragony i gwarancje przy operacji (F38), ulgi PIT-37 / PIT-36 (F39),
-wpisy z telefonu przez OneDrive (F41), archiwizacja starych lat (F43). Do sprawdzenia w aplikacji: 1.5.0–1.10.0 – listy
-w sekcjach niżej.
+**Następny krok:** pauza – kolejne prace tylko na komendę użytkownika (D67). Flota rezerwowa (F32), paragony i
+gwarancje (F38), ulgi PIT-37 / PIT-36 (F39), wpisy z telefonu (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
+Do sprawdzenia w aplikacji: 1.5.0–1.10.1 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -61,8 +61,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **T** | 1.8.0 Przyszłość: cel z terminem (F15), zaplanowane operacje na Radarze (F16), prognoza sald kont (F26), kurs na 12 miesięcy (F27), reszta koperty i pokrycie przekroczenia (F28), symulator „co jeśli” (F35), plan roczny (F37) | Opus 5.5 | **max** | zmierzone ok. 2 h (zegar gałęzi, z przeglądem, 80 mutacjami i dwoma pełnymi E2E; część w czasie CI grupy S; plan był 4–5 h) | 1.8.0 | ✅ D87 | ✅ wydane (PR #30) |
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
+| 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | ok. 1 h (zegar sesji, z przeglądem, 14 mutacjami i dwoma pełnymi E2E) | 1.10.1 | ✅ D88 | 🔄 PR #35 – CI, scalenie, wydanie |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V** | | | **ok. 54,5 h** | | | |
+| ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 55,5 h** | | | |
 | | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -893,6 +895,39 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.10.0, Windows):
 2. Wywiad: „Wydatki w czasie” – rozwiń kategorię, kliknij kwotę; „Namierzone cele”; „Porównanie”; krzywa „siła floty
    netto” przy pożyczce; „Bilans paliwa” na prawdziwej historii.
 3. Mostek: „skąd ta liczba?” pod energią dziś, klik w zasięg; F1 – słowniczek; Wywiad → „Osobista inflacja” z CPI.
+
+## Przed etapem 1.10.1 – zamykanie aplikacji (20.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.10.0 wydane (PR #32, poprawka PR #33), ciąg M–V zamknięty (PR #34). Job Windows dwa razy
+   (PR #32 i #34) zawiesił się na zamknięciu aplikacji – main.log: „niezapisane zmiany (decyzje: 0, nowsza wersja: 0,
+   błąd: zapis jeszcze trwa)”. Przy zamykaniu aplikacja czekała tylko na zapisy trwające w tej chwili; wpis zmieniony w
+   trakcie zostawał niezapisany i proces główny pytał o niezapisane zmiany (u użytkownika – zbędne pytanie przy
+   zamykaniu). Zakres: zapis przy zamykaniu w rundach, zapisy w tle wstrzymane na czas zapisu.
+2. **Co użytkownik musi powiedzieć** – ✅ D88: 1.10.1 tak; F32, F38, F39, F41 i F43 – nie.
+3. **Co przygotować** – nic.
+4. **Model, thinking, czas** – Opus 5.5 · max · ok. 1 h z testami, przeglądem i CI.
+
+## 1.10.1 – zamknięcie bez fałszywego pytania (20.10.2026)
+
+Zakres: „Przed etapem 1.10.1” wyżej. Zrobione:
+- Zapis w rundach (T301): przy zamykaniu, Ctrl+S, „zapisz przed…” (kopia, eksport, import, cofnięcie, aktualizacja) i
+  zmianie folderu wpis zmieniony, gdy jego zapis był w drodze, i zapis zaczęty w trakcie są zapisane przed odpowiedzią
+  (najwyżej 10 rund); zapis nieudany albo czekający na decyzję o zmianie z drugiego komputera – jedna próba, w
+  odpowiedzi jego błąd albo decyzja (bez pętli).
+- Zapisy w tle (zamrażanie dni gry, cele ICTTJ, data i salda rozliczeń) nie ruszają na czas zapisu; po zamknięciu z
+  zapisanym wszystkim – aż okno zniknie (najwyżej 10 s); przy zmianie folderu – do otwarcia innego.
+- Przegląd `/code-review` high: 6 kandydatów, 3 poprawione – zapis przed zamknięciem czeka też na usunięcia w drodze
+  (wpis, którego pliku dysk nie oddał, jest znowu w pamięci i jego zmiana zapisuje się przed odpowiedzią), nowy obraz
+  folderu kończy wstrzymanie po zamknięciu (też izolacja testów), efekty zapisów w tle sprawdzają warunek jeszcze raz,
+  gdy ruszają; 3 świadomie bez zmian (T301): efekty ruszają po każdym zapisie wszystkiego (koszt pomijalny), wstrzymanie
+  najwyżej 10 s także wtedy, gdy proces główny po minucie zapisu okno zostawi, paczka nieudana przy zamykaniu ponawiana
+  po jednym wpisie jak przed 1.10.1.
+- Testy: 828 unit + fs (7 nowych w `data-store.test.ts`), E2E 67; 14 mutacji – 13 wykrytych, jedna nieobserwowalna
+  (zakończone usunięcie zostawione w zbiorze daje tylko puste rundy).
+
+Do sprawdzenia przez użytkownika (po wydaniu 1.10.1, Windows):
+1. Zmiana w edytorze operacji i od razu „Zakończ” z menu ikony w zasobniku (albo zamknięcie okna przy wyłączonym
+   „Zamykaj do zasobnika”) – bez pytania o niezapisane zmiany; po ponownym otwarciu zmiana jest.
 
 ## Przed grupą U – ładownia i czujniki, funkcje (19.10.2026)
 

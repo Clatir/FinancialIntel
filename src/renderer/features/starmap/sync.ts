@@ -6,7 +6,7 @@
 import { useEffect } from 'react'
 import { syncIctjGoals } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
-import { addRecords, replaceRecords, updateSettings, useData } from '../../store/data'
+import { addRecords, replaceRecords, updateSettings, useData, writesInBackground } from '../../store/data'
 import { useIctj } from '../../store/ictj'
 import { usePresence } from '../../store/presence'
 
@@ -16,9 +16,10 @@ export function useIctjGoalSync(): void {
   const goals = useData((s) => s.records.goals)
   // A computer only in the tray writes nothing in the background (D86).
   const inUse = usePresence((s) => s.inUse)
-  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching) && inUse
+  const ready = useData(writesInBackground) && inUse
   useEffect(() => {
-    if (!ready || snap.status !== 'ok') return
+    // Checked again as it runs (T301): changes being written since the render hold it.
+    if (!ready || snap.status !== 'ok' || !writesInBackground(useData.getState())) return
     const chosen = chosenForecast(snap.forecasts, forecastId)
     // The scenario is remembered the first time (D84 C3): editing another one in ICTTJ never switches the goals.
     if (!forecastId && chosen)

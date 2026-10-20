@@ -1,5 +1,16 @@
 # Financial Intel – zmiany
 
+## 1.10.1
+
+Poprawka (D88):
+- Zamknięcie aplikacji tuż po zmianie nie pyta już o „niezapisane zmiany (zapis jeszcze trwa)”: zmiana zrobiona, gdy
+  poprzedni zapis był w drodze (na przykład zatwierdzone pole, zapis kilku wpisów naraz, zamrożenie dnia gry w tle),
+  zapisuje się przed zamknięciem okna; zamknięcie czeka też na usunięcie, które jeszcze trwa (gdy dysk nie odda pliku,
+  wpis zostaje razem ze swoją zmianą). Pytanie zostaje tylko z prawdziwym powodem: decyzja o zmianie z drugiego
+  komputera, wpis nowszej wersji aplikacji albo błąd zapisu.
+- Na czas zapisu przed zamknięciem, Ctrl+S, kopią, eksportem, importem i zmianą folderu aplikacja nie zaczyna zapisów w
+  tle (zamrażanie dni gry, cele z ICTTJ, data i salda rozliczeń) – ruszają zaraz po nim.
+
 ## 1.10.0
 
 Wywiad (grupa V, D87): skąd liczby, dokąd idą pieniądze i ile zostaje – do szczegółu, z wyprawami, majątkiem netto,

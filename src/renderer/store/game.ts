@@ -13,7 +13,7 @@ import { pendingPairDays } from '@shared/calc/dock'
 import { useDeliveries } from '../features/dock/state'
 import type { RecordEntry } from '@shared/api'
 import type { GameMonth, GameSettings } from '@shared/schema'
-import { addRecords, listOf, tooNewMonths, updateRecord, updateSettings, useData } from './data'
+import { addRecords, listOf, tooNewMonths, updateRecord, updateSettings, useData, writesInBackground } from './data'
 import { fleetNow, useToday } from './fleet'
 import { usePresence } from './presence'
 import { timed } from '../lib/timing'
@@ -79,7 +79,7 @@ function useFreezeSettled(): boolean {
 export function useGameAdvance(): void {
   const inUse = usePresence((s) => s.inUse)
   const settled = useFreezeSettled()
-  const ready = useData((s) => s.phase === 'ready' && !s.status?.readOnly && !s.switching) && inUse && settled
+  const ready = useData(writesInBackground) && inUse && settled
   const parts = useData(useShallow(gameParts))
   const today = useToday()
   // A paired ICTTJ payout not docked yet (B20): its day waits – for a week at most (then it is frozen as it stands). The
@@ -87,8 +87,10 @@ export function useGameAdvance(): void {
   const deliveries = useDeliveries()
   const hold = useMemo(() => pendingPairDays(deliveries).find((d) => daysBetween(d, today) <= HOLD_DAYS) ?? null, [deliveries, today])
   useEffect(() => {
-    const { fi, records } = useData.getState()
-    if (!ready || !fi) return
+    const state = useData.getState()
+    const { fi, records } = state
+    // Checked again as it runs (T301): changes being written since the render hold it – it runs once they are written.
+    if (!ready || !fi || !writesInBackground(state)) return
     if (!fi.settings.game.start) {
       // The game starts from zero (spec): the first full day after the budget runs with this version – once the start
       // wizard ran (N23): a budget the engine counts from an opening balance alone has no salary and no plan to judge by.
