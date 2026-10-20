@@ -126,18 +126,29 @@ export interface KeyInput {
   shift: boolean
 }
 
+/** A key of the size (F30): one step bigger, one step smaller, 100 %. */
+export type ZoomKey = 'in' | 'out' | 'reset'
+
+export const isZoomKey = (v: unknown): v is ZoomKey => v === 'in' || v === 'out' || v === 'reset'
+
 /**
- * The size the window's key asks for (F30), null = not a key of the size: Ctrl+Plus (also Ctrl+= and the numeric
- * keypad's plus), Ctrl+Minus, Ctrl+Shift+0 = 100 % (Ctrl+0 is Raporty); AltGr (Ctrl+Alt) never. The application menu
- * is off – nothing else zooms.
+ * The key of the size a window's key is (F30), null = not one: Ctrl+Plus (also Ctrl+= and the numeric keypad's plus),
+ * Ctrl+Minus, Ctrl+Shift+0 = 100 % (Ctrl+0 is Raporty); AltGr (Ctrl+Alt) never. The application menu is off – nothing
+ * else zooms.
  */
-export function zoomFromKey(input: KeyInput, zoom: number): number | null {
+export function zoomKeyOf(input: KeyInput): ZoomKey | null {
   if (!(input.control || input.meta) || input.alt) return null
-  if (input.key === '+' || input.key === '=' || input.code === 'NumpadAdd') return zoomStep(zoom, 1)
-  if (input.key === '-' || input.code === 'NumpadSubtract' || input.code === 'Minus') return zoomStep(zoom, -1)
-  if (input.shift && input.code === 'Digit0') return 1
+  if (input.key === '+' || input.key === '=' || input.code === 'NumpadAdd') return 'in'
+  if (input.key === '-' || input.code === 'NumpadSubtract' || input.code === 'Minus') return 'out'
+  if (input.shift && input.code === 'Digit0') return 'reset'
   return null
 }
+
+/**
+ * The size after the key – worked out by the main process from the size it has, never by the window: its copy of the
+ * preferences may not have another window's change yet (T300).
+ */
+export const zoomByKey = (zoom: number, key: ZoomKey): number => (key === 'reset' ? 1 : zoomStep(zoom, key === 'in' ? 1 : -1))
 
 /** The idle times offered (F40), in minutes; 0 = never. */
 export const HIDE_IDLE_CHOICES = [0, 1, 5, 10, 15, 30, 60] as const

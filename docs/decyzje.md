@@ -2019,3 +2019,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (SIGKILL – na SIGTERM Electron sam się zamyka, czego zablokowany proces nie zrobi) i zgłasza błąd z końcem main.log;
   proces główny przed pytaniem zapisuje w logu jego przyczynę (decyzje o zmianach z drugiego komputera, wpisy nowszej
   wersji, błąd zapisu) – także dla użytkownika, który prześle main.log.
+- **T300** Ustawienia komputera w oknach od razu, klawisze rozmiaru (F30) jako krok liczony w procesie głównym (1.10.0 –
+  job Windows na `main` po PR #32): proces główny zmieniał ustawienia w pamięci od razu, ale stosował je i rozsyłał do
+  okien dopiero po zapisie config.json – zapisy idą po kolei, każda zmiana czeka na swój (na Windows antywirus spowalnia
+  każdy), a każde echo niosło stan z chwili swojej zmiany. Okno liczyło nowy rozmiar ze swojej kopii: Ctrl+Plus × 5 w
+  oknie głównym i od razu Ctrl+Minus w szybkim wpisie – okno szybkiego wpisu miało jeszcze 130 % i wysłało 120 % (zamiast
+  140 %), które proces główny zapisał jako ostatnie. Teraz `changePrefs` stosuje zmianę (rozmiar, skrót, pliki z banku)
+  i rozsyła ją w chwili zmiany w pamięci, zapis po nim, odpowiedź = ustawienia po zapisie (najnowsze); okno wysyła tylko
+  klawisz rozmiaru (`zoomKeyOf` → `'in'` / `'out'` / `'reset'`, IPC `zoomBy`), krok liczy proces główny od rozmiaru,
+  który ma (`zoomByKey`; na granicy 90 / 150 % bez zapisu), okno niczego nie zgaduje (odpowiedź pokazana, gdy żadna
+  zmiana tego okna nie jest w drodze). Nieudany zapis zostawia zmianę działającą (komunikat „działają, ale bez
+  zapisu”), a okno bierze wtedy ustawienia procesu głównego (`loadMachinePrefs` – echa innych zmian nie były w tym
+  czasie pokazane). Suwak i „100%” w Ustawieniach zostają rozmiarem wprost (wybrany, nie krok). E2E `look.spec.ts` z
+  wolnym zapisem config.json (300 ms) – na starym kodzie pada za każdym razem (90 % zamiast 140 %); 11 mutacji – wszystkie
+  wykryte.

@@ -30,7 +30,7 @@ import { startPortableSwap, startSilentInstaller } from './update/apply'
 import { setupDetach } from './detach'
 import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
 import { QuickEntry } from './quick'
-import { patchMachinePrefs, type MachinePrefs } from '@shared/machine'
+import { isZoomKey, patchMachinePrefs, zoomByKey, type MachinePrefs } from '@shared/machine'
 import { windowBounds } from '@shared/bounds'
 import { warsawNow } from '@shared/calc/dates'
 import { IctjSource } from './ictj/source'
@@ -1106,6 +1106,13 @@ function registerIpc(): void {
   })
   handle('dismissUpdateNotice', () => requireUpdater().dismissNotice())
   handle('setMachinePrefs', (patch: unknown) => changePrefs(patch))
+  // A key of the size (F30): the step from the size this process has – a window's copy may not have another window's
+  // change yet (T300: Ctrl+Plus in the main window, at once Ctrl+Minus in the quick entry).
+  handle('zoomBy', (key: unknown) => {
+    const prefs = config.get().prefs
+    const zoom = isZoomKey(key) ? zoomByKey(prefs.zoom, key) : prefs.zoom
+    return zoom === prefs.zoom ? prefs : changePrefs({ zoom })
+  })
   // „Pokaż na 5 minut” / „Pokaż do końca sesji” (F40): the amounts shown, hidden again then – or not by idleness till the quit.
   handle('revealAmounts', (minutes: unknown) => {
     // Shown already: a showing for a while has nothing to hide later – and a running one goes on as it was.
@@ -1196,7 +1203,11 @@ function broadcastPrefs(prefs: MachinePrefs): void {
   for (const w of appWindows()) w.webContents.send('fi:machinePrefs', prefs)
 }
 
-/** This computer's preferences changed (a window, a key of the size, the idleness): saved, applied, told to every window. */
+/**
+ * This computer's preferences changed (a window, a key of the size, the idleness): in memory, applied and told to every
+ * window at once, then saved – a write waits for the ones before it (a slow disk), and windows told only after it would
+ * show older preferences meanwhile, one after another (T300). The answer: the preferences after the write (the newest).
+ */
 async function changePrefs(patch: unknown): Promise<MachinePrefs> {
   const before = config.get().prefs
   const prefs = patchMachinePrefs(before, patch)
@@ -1204,7 +1215,9 @@ async function changePrefs(patch: unknown): Promise<MachinePrefs> {
   // Hidden by hand (or by the end of a showing): the idleness hides them again from the next showing on (F40) – at the
   // change, not after its write: a showing asked meanwhile (a slow disk) is newer and stays.
   if (p.hideAmounts === true) clearReveal()
-  await config.update({ prefs })
+  const saved = config.update({ prefs })
+  // Awaited after the changes below – a failure of one of them must not leave the write's failure unheard of.
+  saved.catch(() => undefined)
   // The shortcut registered again only when it was set (also the same one: a retry after another program let it go).
   if ('quickShortcut' in p) {
     quick?.applyShortcut(prefs.quickShortcut)
@@ -1213,7 +1226,8 @@ async function changePrefs(patch: unknown): Promise<MachinePrefs> {
   if (prefs.zoom !== before.zoom) applyZoom()
   if (prefs.bankFiles !== before.bankFiles) watchBankFiles()
   broadcastPrefs(prefs)
-  return prefs
+  await saved
+  return config.get().prefs
 }
 
 /** The size of this computer (F30) on every window – the quick entry's grows with it. */

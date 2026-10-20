@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_MACHINE_PREFS, patchMachinePrefs, shortcutLabel, zoomFromKey, type MachinePrefs } from '@shared/machine'
+import { DEFAULT_MACHINE_PREFS, patchMachinePrefs, shortcutLabel, zoomKeyOf, type MachinePrefs, type ZoomKey } from '@shared/machine'
 import { api } from '../lib/api'
 import { toast } from './ui'
 
@@ -9,7 +9,8 @@ export const useMachine = create<{ prefs: MachinePrefs }>(() => ({ prefs: DEFAUL
 let listening = false
 /**
  * This window's changes on their way to config.json: while any is, the answers of the earlier ones (and their echo to
- * every window) are not shown – they would take back a later change made meanwhile (two Ctrl+Plus in a row: one step).
+ * every window) are not shown – they would take back a later change made meanwhile (two switches in a row: the first
+ * one's answer would turn the second back).
  */
 let pending = 0
 
@@ -23,25 +24,48 @@ export async function loadMachinePrefs(): Promise<void> {
   }
   try {
     const c = await api.getConfig()
-    // A change made meanwhile (Ctrl+Plus at the start) is newer than this answer.
+    // A change of this window made meanwhile (a switch at the start) is newer than this answer; a key of the size comes
+    // after it anyway (asked later, told to the windows after this answer).
     if (c.prefs && !pending) useMachine.setState({ prefs: c.prefs })
   } catch {
     /* defaults */
   }
 }
 
+/** The main process applies a change before its write (T300): a failed write leaves it working, only not saved. */
+const saveFailed = (e: unknown) => toast(`Nie udało się zapisać ustawień tego komputera (działają, ale bez zapisu): ${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
+
 export async function setMachinePrefs(patch: Partial<MachinePrefs>): Promise<void> {
   // At once on the screen; config.json and the other windows follow.
   pending++
   useMachine.setState((s) => ({ prefs: patchMachinePrefs(s.prefs, patch) }))
+  let failed = false
   try {
     const prefs = await api.setMachinePrefs(patch)
     // The last answer carries all of them (the main process applies them in turn).
     if (pending === 1) useMachine.setState({ prefs })
   } catch (e) {
-    toast(`Nie udało się zapisać ustawień tego komputera: ${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
+    failed = true
+    saveFailed(e)
   } finally {
     pending--
+  }
+  // No answer to show: the preferences the main process has (the echoes of other changes were not shown meanwhile).
+  if (failed && !pending) void loadMachinePrefs()
+}
+
+/**
+ * A key of the size: the main process takes the step from the size it has and tells every window at once – this
+ * window's copy may not have another window's change yet (T300: Ctrl+Plus in the main window, at once Ctrl+Minus in the
+ * quick entry). Nothing guessed here meanwhile.
+ */
+async function zoomBy(key: ZoomKey): Promise<void> {
+  try {
+    const prefs = await api.zoomBy(key)
+    // Not over a change of this window on its way – its own answer comes after this one.
+    if (!pending) useMachine.setState({ prefs })
+  } catch (e) {
+    saveFailed(e)
   }
 }
 
@@ -84,12 +108,11 @@ export function installZoomKeys(): void {
   window.addEventListener(
     'keydown',
     (e) => {
-      const zoom = useMachine.getState().prefs.zoom
-      const next = zoomFromKey({ key: e.key, code: e.code, control: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey }, zoom)
-      if (next == null) return
+      const key = zoomKeyOf({ key: e.key, code: e.code, control: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey })
+      if (!key) return
       e.preventDefault()
       e.stopImmediatePropagation()
-      if (next !== zoom) void setMachinePrefs({ zoom: next })
+      void zoomBy(key)
     },
     true
   )
