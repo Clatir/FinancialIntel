@@ -61,7 +61,36 @@ export async function launch(
     await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible())), { timeout: 30_000 }).toBe(true)
   // Stable screenshots: no transitions.
   await page.emulateMedia({ reducedMotion: 'reduce' })
+  guardClose(app, userData)
   return { app, page, dataDir, userData, errors }
+}
+
+/** How long a test's `app.close()` may take (a normal close takes a second or two; the writes drain at most 30 s). */
+const CLOSE_LIMIT_MS = 40_000
+
+/**
+ * `app.close()` that never hangs the run: a close held by the app – the main process blocked by its question about
+ * unsaved changes – ends the app and fails with the end of main.log, instead of the test's timeout and minutes of the
+ * worker's teardown with no word of the reason (Windows CI, 1.10.0).
+ */
+function guardClose(app: ElectronApplication, userData: string): void {
+  const close = app.close.bind(app)
+  app.close = async () => {
+    let timer: NodeJS.Timeout | undefined
+    const closing = close()
+    const done = await Promise.race([
+      closing.then(() => true),
+      new Promise<false>((r) => {
+        timer = setTimeout(() => r(false), CLOSE_LIMIT_MS)
+      })
+    ]).finally(() => clearTimeout(timer))
+    if (done) return
+    closing.catch(() => undefined)
+    const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '(brak main.log)')
+    // SIGKILL: Electron answers SIGTERM by quitting – which the blocked main process never gets to.
+    app.process().kill('SIGKILL')
+    throw new Error(`Aplikacja nie zamknęła się w ${CLOSE_LIMIT_MS / 1000} s\n--- main.log (koniec) ---\n${log.split(/\r?\n/).slice(-40).join('\n')}`)
+  }
 }
 
 /**

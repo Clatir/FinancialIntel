@@ -954,6 +954,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `features/intel/Inflation.tsx` (`setCpi`; `intel-inflation`, `-personal`, `-cpi`, `-hull`, `-months`, `-brand` /
   `-container` z `data-name`, `-categories`; `intel-cpi`, `-month`, `-value`).
 - Przegląd (T298): poprawki z testami w `intel-v.test.ts` („poprawki z przeglądu grupy V”) i `intel-v-store.test.ts`.
+- E2E (T299): `launch()` – `app.close()` z limitem 40 s (`guardClose`: koniec main.log w błędzie, SIGKILL); main loguje
+  przyczynę niezapisanych zmian przed pytaniem przy zamykaniu („zamykanie: niezapisane zmiany …”).
 - Testy: `tests/unit/intel-v.test.ts`, `intel-v-store.test.ts` (sklepy okna – w `tsconfig.web.json`), poszerzone
   `export`, `plan-reports`, `household` (`line`); E2E `tests/e2e/intel-v.spec.ts`.
 

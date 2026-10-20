@@ -2013,3 +2013,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   raz na listę operacji i dzień (`lastTagOf` – nie przy każdym otwarciu okna); bilans paliwa bez zieleni i czerwieni
   przy ukrytych kwotach (B61); usunięte nieużywane `brandYear`, `periodMonths`, `summaryTotal`. Poza przeglądem: „?”
   słowniczka obok tytułu panelu, nie w nim (nazwa panelu w menu „Układ” bez „?”).
+- **T299** Zamykanie aplikacji w E2E (1.10.0, Windows CI): test zawiesił się na `app.close()` – proces główny czekał na
+  synchroniczne pytanie o niezapisane zmiany, co blokuje też Playwright i sprzątanie workera (3 min + 90 s bez słowa o
+  przyczynie). `launch()` (`tests/e2e/app.ts` `guardClose`) zamyka aplikację z limitem 40 s, po nim kończy proces
+  (SIGKILL – na SIGTERM Electron sam się zamyka, czego zablokowany proces nie zrobi) i zgłasza błąd z końcem main.log;
+  proces główny przed pytaniem zapisuje w logu jego przyczynę (decyzje o zmianach z drugiego komputera, wpisy nowszej
+  wersji, błąd zapisu) – także dla użytkownika, który prześle main.log.

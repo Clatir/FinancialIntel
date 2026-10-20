@@ -871,6 +871,9 @@ Zakres: „Przed grupą V” wyżej. Zrobione:
   wyprawy zmniejszał jej koszt (teraz tylko moje pieniądze), udział marki w kategorii pomijał zakupy bez nazwy
   (gotówka – wychodziło 100%), waga kontenera w „Twojej inflacji” liczona za 12 miesięcy przy krótszej historii, „bez
   podkategorii” otwierało w Operacjach całą kategorię, tagi „#a, #b” zostawiały „#” w drugim.
+- CI na Windows (PR #32): jeden test zawiesił się na zamknięciu aplikacji (pytanie o niezapisane zmiany blokuje proces
+  główny); lokalnie (także przy oknie 1024 × 768) 8 z 8 przebiegów zielonych. Zamykanie w E2E z limitem i przyczyna w
+  main.log (T299) – następne takie zdarzenie powie, co zostało niezapisane.
 - Testy: 817 unit + fs (nowe `intel-v`, `intel-v-store`; poszerzone `export`, `plan-reports`, `household`), E2E 67
   (nowy `intel-v.spec.ts`); 62 mutacje – 52 wykryte od razu, 10 po nowych testach (limity tagów, ostatni tag z
   najnowszej daty, średnie tylko z miesięcy historii, miesiąc nie liczony drugi raz do swoich median, przepływy
