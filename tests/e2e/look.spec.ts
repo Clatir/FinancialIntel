@@ -49,7 +49,10 @@ const prefsOf = async (userData: string) => JSON.parse(await readFile(join(userD
 const idleHides = async (userData: string) => ((await readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')).match(/kwoty ukryte: \d+ min bez ruchu/g) ?? []).length
 
 test('rozmiar interfejsu i wyższy kontrast (1.6.6, F30): Ctrl+Plus / Ctrl+Minus / Ctrl+Shift+0 we wszystkich oknach, suwak, kontrast', async () => {
-  const { app, page, userData, errors } = await launch({ dataDir: budget() })
+  // A slow disk (T300 – the Windows CI): the writes of config.json go one after another; before T300 a change reached the
+  // other windows only after its write, and the quick entry's key right after the main window's stepped from an older
+  // size.
+  const { app, page, userData, errors } = await launch({ dataDir: budget(), env: { FI_CONFIG_WRITE_DELAY_MS: '300' } })
   const quickSize = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible() && w.isAlwaysOnTop()).map((w) => [Math.round(w.webContents.getZoomFactor() * 100), ...w.getSize()]))
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { alarmText } from '@shared/calc/briefing'
 import { ACHIEVEMENT_INFO, MISSION_TITLE, RANK_GENITIVE, RANK_LABEL, RANKS, VIOLATION_LABEL } from '@shared/calc/game'
-import { DEFAULT_MACHINE_PREFS, HIDE_IDLE_CHOICES, clampZoom, machinePrefsFrom, patchMachinePrefs, zoomFromKey, zoomStep, type KeyInput } from '@shared/machine'
+import { DEFAULT_MACHINE_PREFS, HIDE_IDLE_CHOICES, clampZoom, isZoomKey, machinePrefsFrom, patchMachinePrefs, zoomByKey, zoomKeyOf, zoomStep, type KeyInput } from '@shared/machine'
 import { PAGE_LABELS } from '@shared/panels'
 import { formatPln } from '@shared/format'
 
@@ -23,17 +23,31 @@ describe('rozmiar interfejsu (1.6.6, F30)', () => {
   })
 
   it('klawisze: Ctrl+Plus (też Ctrl+= i plus z klawiatury numerycznej), Ctrl+Minus, Ctrl+Shift+0 = 100 %; reszta nie', () => {
-    expect(zoomFromKey(key({ key: '+', shift: true, code: 'Equal' }), 1)).toBe(1.1)
-    expect(zoomFromKey(key({ key: '=', code: 'Equal' }), 1)).toBe(1.1)
-    expect(zoomFromKey(key({ key: '+', code: 'NumpadAdd' }), 1.2)).toBe(1.3)
-    expect(zoomFromKey(key({ key: '-', code: 'Minus' }), 1.2)).toBe(1.1)
-    expect(zoomFromKey(key({ key: '-', code: 'NumpadSubtract' }), 1)).toBe(0.9)
-    expect(zoomFromKey(key({ key: ')', code: 'Digit0', shift: true }), 1.4)).toBe(1)
+    expect(zoomKeyOf(key({ key: '+', shift: true, code: 'Equal' }))).toBe('in')
+    expect(zoomKeyOf(key({ key: '=', code: 'Equal' }))).toBe('in')
+    expect(zoomKeyOf(key({ key: '+', code: 'NumpadAdd' }))).toBe('in')
+    expect(zoomKeyOf(key({ key: '-', code: 'Minus' }))).toBe('out')
+    expect(zoomKeyOf(key({ key: '-', code: 'NumpadSubtract' }))).toBe('out')
+    expect(zoomKeyOf(key({ key: ')', code: 'Digit0', shift: true }))).toBe('reset')
     // Ctrl+0 is Raporty; without Ctrl or with Alt (AltGr) – not the size.
-    expect(zoomFromKey(key({ key: '0', code: 'Digit0' }), 1.4)).toBeNull()
-    expect(zoomFromKey(key({ key: '+', control: false }), 1)).toBeNull()
-    expect(zoomFromKey(key({ key: '+', alt: true }), 1)).toBeNull()
-    expect(zoomFromKey(key({ key: '$', code: 'Digit4', shift: true }), 1)).toBeNull()
+    expect(zoomKeyOf(key({ key: '0', code: 'Digit0' }))).toBeNull()
+    expect(zoomKeyOf(key({ key: '+', control: false }))).toBeNull()
+    expect(zoomKeyOf(key({ key: '+', alt: true }))).toBeNull()
+    expect(zoomKeyOf(key({ key: '$', code: 'Digit4', shift: true }))).toBeNull()
+  })
+
+  it('rozmiar po klawiszu – liczy go proces główny ze swojego rozmiaru (T300)', () => {
+    expect(zoomByKey(1, 'in')).toBe(1.1)
+    expect(zoomByKey(1.2, 'in')).toBe(1.3)
+    expect(zoomByKey(1.2, 'out')).toBe(1.1)
+    expect(zoomByKey(1, 'out')).toBe(0.9)
+    expect(zoomByKey(1.4, 'reset')).toBe(1)
+    // At the bounds the size stays (the main process then writes nothing).
+    expect(zoomByKey(1.5, 'in')).toBe(1.5)
+    expect(zoomByKey(0.9, 'out')).toBe(0.9)
+    // Only the three keys come from a window.
+    expect(['in', 'out', 'reset'].every(isZoomKey)).toBe(true)
+    expect([null, '', 'up', 1, { key: 'in' }].some(isZoomKey)).toBe(false)
   })
 })
 

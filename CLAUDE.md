@@ -771,7 +771,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 
 ## Kod (1.6.6 – teksty, wygląd, wygoda, grupa R, D87)
 - Wygląd i prywatność komputera (F30, F40, T259, T260): `shared/machine.ts` – `prefs.zoom` (`ZOOM_MIN` / `ZOOM_MAX`,
-  `clampZoom`, `zoomStep`, `zoomFromKey` / `KeyInput`), `highContrast`, `hideIdleMin` (`HIDE_IDLE_CHOICES`, 0 = nigdy),
+  `clampZoom`, `zoomStep`, `zoomKeyOf` / `ZoomKey` / `zoomByKey` / `KeyInput` – od 1.10.0, T300), `highContrast`, `hideIdleMin` (`HIDE_IDLE_CHOICES`, 0 = nigdy),
   `hideOnStart`; main `index.ts` – `changePrefs` (jedna droga zmian: IPC `setMachinePrefs`, bezczynność), `applyZoom` /
   `prepareWindow` (`setZoomFactor` wszystkich okien, po każdym wczytaniu), `watchIdleAmounts` (`powerMonitor`, blokada
   ekranu), `revealAmounts` (IPC: minuty albo do końca sesji – `revealTimer` / `revealedForSession`, `clearReveal`),
@@ -956,6 +956,11 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Przegląd (T298): poprawki z testami w `intel-v.test.ts` („poprawki z przeglądu grupy V”) i `intel-v-store.test.ts`.
 - E2E (T299): `launch()` – `app.close()` z limitem 40 s (`guardClose`: koniec main.log w błędzie, SIGKILL); main loguje
   przyczynę niezapisanych zmian przed pytaniem przy zamykaniu („zamykanie: niezapisane zmiany …”).
+- Ustawienia komputera (T300): `changePrefs` (main) stosuje i rozsyła zmianę w chwili zmiany w pamięci, zapis po nim,
+  odpowiedź = ustawienia po zapisie; klawisze rozmiaru – okno wysyła tylko klawisz (`installZoomKeys` → `zoomKeyOf`, IPC
+  `zoomBy`, odpowiedź pokazana bez zmiany tego okna w drodze), krok liczy proces główny (`zoomByKey`; na granicy bez
+  zapisu); nieudany zapis – okno bierze ustawienia procesu głównego (`setMachinePrefs` → `loadMachinePrefs`); E2E
+  `look.spec.ts` z `FI_CONFIG_WRITE_DELAY_MS`.
 - Testy: `tests/unit/intel-v.test.ts`, `intel-v-store.test.ts` (sklepy okna – w `tsconfig.web.json`), poszerzone
   `export`, `plan-reports`, `household` (`line`); E2E `tests/e2e/intel-v.spec.ts`.
 

@@ -6,7 +6,7 @@ import type { RecordTypes } from './records'
 import type { ImportRule, SettingsFile } from './schema'
 import type { BrandAliases } from './import/aliases'
 import type { PendingUpdate, UpdatePrefs, UpdateState } from './update'
-import type { MachinePrefs } from './machine'
+import type { MachinePrefs, ZoomKey } from './machine'
 import type { IctjSnapshot } from './ictj'
 
 export interface RecordEntry<T> {
@@ -403,6 +403,8 @@ export interface FiApi {
   detachFullscreen(on?: boolean): Promise<boolean>
   /** Preferences of this computer (shortcut, notifications, sounds, hidden amounts): a patch, the result for all windows. */
   setMachinePrefs(patch: Partial<MachinePrefs>): Promise<MachinePrefs>
+  /** A key of the size (F30, T300): the main process takes the step from the size it has; the result for all windows. */
+  zoomBy(key: ZoomKey): Promise<MachinePrefs>
   onMachinePrefs(cb: (prefs: MachinePrefs) => void): () => void
   /** The hidden amounts shown (F40): for these minutes (then hidden again), null = till the app quits (no hiding by idleness). */
   revealAmounts(minutes: number | null): Promise<MachinePrefs>

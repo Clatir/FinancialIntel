@@ -98,6 +98,7 @@ const api: FiApi = {
   detachEmit: (event) => invoke('detachEmit', event),
   detachFullscreen: (on) => invoke('detachFullscreen', on),
   setMachinePrefs: (patch) => invoke('setMachinePrefs', patch),
+  zoomBy: (key) => invoke('zoomBy', key),
   onMachinePrefs: (cb) => listen<[MachinePrefs]>('machinePrefs', cb),
   revealAmounts: (minutes) => invoke('revealAmounts', minutes),
   reportActivity: () => invoke('reportActivity'),

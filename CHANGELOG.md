@@ -41,6 +41,11 @@ Skąd ta liczba:
 - Słowniczek okrętu (Osłony = bufor na pensje, Kadłub = fundusz awaryjny…) pod F1, w nagłówkach paneli („?”) i w
   dymkach stanu okrętu.
 
+Poprawka:
+- Ustawienia komputera (rozmiar, kontrast, ukrywanie kwot) widać we wszystkich oknach od razu, nie dopiero po zapisie
+  na dysk; Ctrl+Minus w szybkim wpisie zaraz po kilku Ctrl+Plus w oknie głównym zmniejszał o kilka kroków naraz (przy
+  wolnym zapisie ustawień) – teraz zawsze o jeden.
+
 ## 1.9.0
 
 Ładownia i czujniki (grupa U, D87): okręt sam zauważa nowe ceny, ciche kontenery, nowe opłaty, pliki z banku,
