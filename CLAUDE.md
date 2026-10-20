@@ -978,6 +978,20 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   porażce komunikaty okna i main.log (import-tools, import, duplicates, learning, sensors); `look.spec.ts` – kwoty
   pokazane na chwilę 3 s, dłużej niż dwa wolne zapisy config.json (T302).
 
+## Kod (1.11.0 – opis wydatku i kolumny listy operacji, D89)
+- Opis (T303): `calc/operations.ts` `notesOf` (notatka i opisy części paragonu `split.note`), `operationsView.ts`
+  `noteLineOf` (kolumna „Notatka”: pierwsza linia notatki, bez niej opisy części), `searchTextOf` z opisami części;
+  `export/budget.ts` – „Notatka” z opisami części i ich kategorią; `calc/tags.ts` `tagsText` (wiersz i eksport);
+  `import/duplicates.ts` `userContent` liczy opisy części; edytor `SplitEditor` – `split-note` (500 znaków), usunięcie
+  przedostatniej części przenosi opis do notatki.
+- Kolumny: `features/operations/columns.ts` (`OPERATION_COLUMNS`, `COLUMN_LABEL`, `useOperationColumns`, `showColumn`,
+  `resetColumns`, `hiddenOf`, `columnsTemplate`; localStorage `fi.operations.columns` – ukryte, nieznane zachowane),
+  `ListTools.tsx` `ColumnsMenu` (`operations-columns`, `-menu`, `operations-column-<kolumna>`, `operations-columns-reset`),
+  `OperationsPage.tsx` – nagłówek `operations-header`, komórki `operation-row-account`, `operation-row-note`,
+  `operation-row-tags`, „nowa operacja” w pierwszej widocznej kolumnie tekstowej (`DRAFT_COLUMNS`).
+- Testy: `tests/unit/operation-notes.test.ts`, `operations-columns.test.ts` (sklep okna – w `tsconfig.web.json`), E2E
+  `tests/e2e/notes.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -1104,6 +1118,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   oszczędności, „skąd ta liczba?” na Mostku i słowniczek okrętu, osobista inflacja z CPI GUS wpisanym ręcznie
 - [x] 1.10.1 Zamykanie (D88): zmiana zrobiona w trakcie zapisu zapisuje się przed zamknięciem okna, bez pytania o
   niezapisane zmiany; zapisy w tle wstrzymane na czas zapisu
+- [x] 1.11.0 Opis wydatku i kolumny listy (D89): kolumna „Notatka” na liście operacji, opis każdej części paragonu
+  (wyszukiwarka, eksport), wybór widocznych kolumn listy na tym komputerze
 - ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja
   starych lat~~ – odrzucone (D88)
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

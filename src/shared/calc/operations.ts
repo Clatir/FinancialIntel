@@ -170,6 +170,14 @@ export function ownSpent(t: Transaction): number {
  */
 export const isCargoPayment = (t: Pick<Transaction, 'containerId'>, containerIds: ReadonlySet<string>): boolean => t.containerId != null && containerIds.has(t.containerId)
 
+/**
+ * What an operation is (1.11.0, D89): its note, then its receipt lines' – the list's „Notatka” as a whole (the hint), the
+ * export's column.
+ */
+export function notesOf(t: Pick<Transaction, 'note' | 'splits'>): string[] {
+  return [t.note, ...t.splits.map((s) => s.note)].map((x) => x.trim()).filter(Boolean)
+}
+
 // ------------------------------------------------------------------ the captain's log marks
 
 /** A purchase in the quiet hours (D40): only operations with a known time (an import has none). */

@@ -55,6 +55,12 @@ export const withoutHashTags = (text: string): string => text.replace(/(?:^|\s)#
 /** The tags of an operation (none – []). */
 export const tagsOf = (t: Pick<Transaction, 'tags'>): readonly string[] => t.tags ?? []
 
+/** The operation's tags and its lines' as one text („#Chorwacja #Paliwo”) – the list's „Tagi”, the export's. */
+export const tagsText = (t: Pick<Transaction, 'tags' | 'splits'>): string =>
+  withTags(tagsOf(t), t.splits.flatMap((s) => s.tags ?? []))
+    .map((x) => `#${x}`)
+    .join(' ')
+
 /** Does the operation carry the tag (its own, or a line's of its receipt)? */
 export function hasTag(t: Pick<Transaction, 'tags' | 'splits'>, key: string): boolean {
   if (tagsOf(t).some((x) => tagKey(x) === key)) return true
