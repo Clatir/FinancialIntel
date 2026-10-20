@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { launch } from './app'
+import { importDone, launch } from './app'
 import { records } from './files'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
@@ -20,7 +20,7 @@ const group = (page: Page, label: string) => page.locator(`[data-testid="import-
 const brandGroup = (page: Page, brand: string, direction: 'in' | 'out') => page.locator(`[data-testid="import-group"][data-group^="${brand}|${direction}|"]`).first()
 
 test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, reguły, kopia, ponowny import, saldo', async () => {
-  const { app, page, dataDir, errors } = await launch()
+  const { app, page, dataDir, userData, errors } = await launch()
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
 
@@ -121,6 +121,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.screenshot({ path: join('test-results', 'screens', '06-import.png') })
 
     await page.getByTestId('import-run').click()
+    await importDone(page, userData)
     await expect(page.getByTestId('import-done')).toContainText('Nowe: 265')
     await expect(page.getByTestId('import-done')).toContainText('połączone z wpisami: 1')
     await expect(page.getByTestId('import-done')).toContainText('nie importowane (Twój wybór): 3')

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { launch } from './app'
+import { importDone, launch } from './app'
 import { records } from './files'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
@@ -19,7 +19,7 @@ async function typeExpense(page: Page, amount: string, counterparty: string, dat
 }
 
 test('Duplikaty (D77): wpis ręczny pod inną nazwą łączony przy imporcie, wpis dopisany po imporcie scalany z „Cofnij”', async () => {
-  const { app, page, dataDir, errors } = await launch()
+  const { app, page, dataDir, userData, errors } = await launch()
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     const operations = () => records(dataDir, 'transactions')
@@ -35,6 +35,7 @@ test('Duplikaty (D77): wpis ręczny pod inną nazwą łączony przy imporcie, wp
     await expect(page.getByTestId('import-count-merge')).toHaveText('1')
     await expect(page.getByTestId('import-merge-loose')).toContainText('inna nazwa')
     await page.getByTestId('import-run').click()
+    await importDone(page, userData)
     await expect(page.getByTestId('import-done')).toContainText('połączone z wpisami: 1')
     await expect.poll(async () => (await operations()).length, { timeout: 20_000 }).toBe(269)
     const taxi = (await operations()).find((t) => t.counterparty === 'Taksówka do domu')!

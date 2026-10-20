@@ -2059,6 +2059,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   trakcie zapisu, paczka zaczęta w trakcie zamykania, usunięcie jednego i kilku wpisów w drodze, zapis nieudany (jedna
   próba), wstrzymanie przy Ctrl+S, kopii i zmianie folderu, koniec wstrzymania z nowym folderem; 14 mutacji – 13
   wykrytych, jedna nieobserwowalna (zakończone usunięcie zostawione w zbiorze daje tylko puste rundy). CI na Windows:
-  podsumowanie pierwszego importu (269 operacji i kopia folderu) w teście „Cofnij import” czeka jak kroki masowe tego
-  testu (`MASS`, 30 s; lokalnie import przed zmianą i po niej trwa tyle samo), porażka pokazuje komunikaty okna i
-  main.log; długi zapis wszystkiego (od 500 ms) zostawia w main.log rundy i liczbę niezapisanych.
+  podsumowanie importu (269 operacji i kopia folderu) czeka jak kroki masowe (`MASS`, 30 s; lokalnie import przed zmianą
+  i po niej trwa tyle samo), porażka pokazuje komunikaty okna i main.log; długi zapis wszystkiego (od 500 ms) zostawia w
+  main.log rundy i liczbę niezapisanych. W PR #35 tylko test „Cofnij import”; PR #36 (sama dokumentacja) padł na tym
+  samym czekaniu w teście „Oficer…”, więc `importDone` i `MASS` są w `tests/e2e/app.ts` dla każdego czekania na
+  podsumowanie importu (import-tools, import, duplikaty, podobne nazwy, plik z Pobranych). Na 15 przebiegach joba
+  Windows (1.8.0–1.10.1) czasy testów importu po 1.10.1 są takie jak przed nim – „Oficer…” ok. 7,5 s, „Cofnij import”
+  17–39 s – a w przebiegu PR #36 sąsiednie testy importu szły w tej samej minucie 1,4–2,4 × wolniej: dysk runnera bywa
+  chwilami wolniejszy, a 10 s domyślnego czekania nie wystarcza wtedy na zapis setek plików.

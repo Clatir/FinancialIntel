@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { importDone, launch } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -169,7 +169,7 @@ test('plik z mBanku w Pobranych (1.9.0, F14): meldunek w odprawie, import jednym
       months: [{ month: addMonths(month, -1), salary: zl(4000), envelopes: {} }]
     }
   })
-  const { app, page, errors } = await launch({ dataDir, env: { FI_DOWNLOADS_DIR: downloads, FI_BANK_FILES_POLL_MS: '300' } })
+  const { app, page, userData, errors } = await launch({ dataDir, env: { FI_DOWNLOADS_DIR: downloads, FI_BANK_FILES_POLL_MS: '300' } })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     const news = page.locator('[data-testid="briefing-item"][data-kind="import"]').filter({ hasText: 'Nowy meldunek z mBanku' })
@@ -181,7 +181,7 @@ test('plik z mBanku w Pobranych (1.9.0, F14): meldunek w odprawie, import jednym
     await expect(page.getByTestId('import-file')).toBeVisible()
     await expect(page.getByTestId('import-count-new')).toHaveText('3')
     await page.getByTestId('import-run').click()
-    await expect(page.getByTestId('import-done')).toBeVisible()
+    await importDone(page, userData)
     // After the import: the file to the Recycle Bin (the bin of the system replaced – the test's file is only noted).
     await app.evaluate(({ shell }) => {
       ;(globalThis as { trashed?: string[] }).trashed = []
