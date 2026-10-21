@@ -22,7 +22,7 @@ import { envelopeKind, type EnvelopeKind, type MemberOpening } from '../schema/b
 import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
 import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawEndOf, warsawNow, warsawStamp, warsawStartOf } from './dates'
 import { openingsOf } from './balances'
-import { balanceOf, heldOf, settleHousehold, settlesHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
+import { balanceOf, heldOf, ledgerOrder, settleHousehold, settlesHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
 import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type IncomeStats } from './income'
 import { goalAt, goalDecided, goalTakes } from './goals'
 import { debtOf, loanStates, type LoanState } from './loans'
@@ -392,7 +392,8 @@ const ledgerOptions = (settings: Pick<Settings, 'household'>, budgetStart: strin
   reset: budgetStart,
   openings: new Map([...openings].map(([id, o]) => [id, o.date])),
   members: settings.household.members,
-  covered: settings.household.openingIds ?? null
+  covered: settings.household.openingIds ?? null,
+  assignFrom: settings.household.assignFrom
 })
 
 /**
@@ -402,6 +403,14 @@ const ledgerOptions = (settings: Pick<Settings, 'household'>, budgetStart: strin
 export function householdOf(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, today: string, until: string = today): HouseholdLedger {
   const balances = input.balances ?? []
   return settleHousehold(input.transactions, ledgerOptions(input.settings, budgetStartOf(input.settings, balances, today), openingsOf(balances, today), until))
+}
+
+/**
+ * The household's ledger just before an operation (N40, D91): the operations before it in the ledger's order, up to its
+ * day – what its money finds open (the editor, the purchases a repayment pays back).
+ */
+export function householdBefore(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, t: Transaction, today: string): HouseholdLedger {
+  return householdOf({ ...input, transactions: input.transactions.filter((x) => x.id !== t.id && ledgerOrder(x, t) < 0) }, today, t.date)
 }
 
 /**

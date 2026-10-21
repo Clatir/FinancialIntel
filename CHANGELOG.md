@@ -1,5 +1,23 @@
 # Financial Intel – zmiany
 
+## 1.12.0
+
+Zwrot domownika przypisany do konkretnego wydatku (D91) – zamiast „od najstarszego”:
+- Wpłata domownika (także jego część w przelewie innej osoby – pośrednik) spłaca zakupy, które wskazuje. Sama je
+  wskazuje, gdy kwota pasuje pewnie: kwota jednego zakupu tej osoby, suma wszystkich jej zakupów do oddania albo jedyny
+  zestaw 2–3 zakupów z ostatnich 90 dni – przy imporcie z mBanku, w szybkim wpisie i po wyborze osoby w edytorze.
+- Bez pewnego dopasowania wpłata „czeka na przypisanie”: to, co osoba ma oddać, i tak maleje (osłony, depozyt i przychody
+  liczą się jak dotąd), ale żaden zakup nie jest oznaczony jako oddany. Meldunki → „Zwroty do przypisania” prowadzą do
+  wpłaty, a edytor wpłaty pokazuje „Za co oddaje” osobno dla każdej osoby, z „Pasuje: …” albo „Może: …” jednym
+  kliknięciem.
+- Zakup finansowany przez domownika pokazuje, ile z niego oddano i którą wpłatą („oddane 30 z 50 zł · do oddania 20 zł”,
+  przejście do wpłaty), oraz „Przypisz zwrot…” z pieniędzy tej osoby czekających na przypisanie. Zwrot towaru – do
+  wskazanego zakupu (sam, gdy u tego kontrahenta jest jeden).
+- Lista operacji: „domownik · do oddania / częściowo oddane / oddane” i filtr Oznaczenia po nich. Radar: zakupy do
+  oddania każdej osoby i zwrot do przypisania; odprawa i Ustawienia → Domownicy też go pokazują.
+- Zwroty sprzed aktualizacji zostają, jak były (od najstarszego); w Ustawieniach → Domownicy „Zwrot spłaca wskazany zakup
+  od:” – dzień do zmiany albo „dla wszystkich zwrotów”.
+
 ## 1.11.0
 
 Opis wydatku i kolumny listy operacji (D89):

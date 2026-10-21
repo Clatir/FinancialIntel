@@ -12,11 +12,14 @@ import { fold } from './fold'
 import { hasTag, tagsOf } from './calc/tags'
 
 /** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
-export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
+export const OPERATION_MARKS = ['refundable', 'owed', 'partlyRepaid', 'repaid', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
 export type OperationMark = (typeof OPERATION_MARKS)[number]
 
 export const MARK_LABEL: Record<OperationMark, string> = {
   refundable: 'domownik',
+  owed: 'do oddania',
+  partlyRepaid: 'częściowo oddane',
+  repaid: 'oddane',
   impulse: 'impuls',
   plan: 'plan',
   night: 'noc',
@@ -53,6 +56,9 @@ export function uncategorizedAmount(t: Transaction): number {
  */
 const MARK_GROUP: Record<OperationMark, string> = {
   refundable: 'refundable',
+  owed: 'repaid',
+  partlyRepaid: 'repaid',
+  repaid: 'repaid',
   impulse: 'log',
   plan: 'log',
   night: 'night',
@@ -69,12 +75,16 @@ const MARK_GROUP: Record<OperationMark, string> = {
 export interface MarkFlags {
   anomalies?: ReadonlySet<string>
   awaiting?: ReadonlySet<string>
+  /** A household member's purchase paid back (1.12.0, D91): its state – of all its members, the least paid back. */
+  repaid?: ReadonlyMap<string, 'owed' | 'partlyRepaid' | 'repaid'>
 }
 
 export function marksOf(t: Transaction, orders: Pick<Orders, 'quietHours'>, flags: MarkFlags = {}): OperationMark[] {
   const out: OperationMark[] = []
   // As the money counts it (B78): a line a member finances – a receipt's part, its rest, or the operation itself.
   if (partsOf(t).some((p) => p.refundable)) out.push('refundable')
+  const repaid = flags.repaid?.get(t.id)
+  if (repaid) out.push(repaid)
   if (t.impulse) out.push(t.impulse)
   if (isNight(t, orders)) out.push('night')
   if (t.splits.length) out.push('split')

@@ -281,6 +281,7 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
         memberId: c.memberId,
         advance: c.advance,
         covers: c.covers,
+        coversOpening: c.coversOpening,
         repaid: c.repaid,
         counterAccountId: c.counterAccountId,
         // A transfer in one operation stays one (F10): its other side's row and day with it.

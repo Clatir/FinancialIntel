@@ -124,7 +124,7 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
   } else if (item.kind === 'cargo' && item.ref) focusRecord('container', item.ref, { page: 'cargo' })
   else if (item.kind === 'anomalies' && item.ref) openSensor(item.ref)
   else if (item.kind === 'returns' && item.ref) openSensor(`return:${item.ref}`)
-  else if (item.kind === 'corrections' && item.ref) {
+  else if ((item.kind === 'corrections' || item.kind === 'repayments') && item.ref) {
     const t = useData.getState().records.transactions[item.ref]?.record
     if (t) openOperation(t)
     else navigate({ page: 'operations' })

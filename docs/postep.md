@@ -1,6 +1,6 @@
 # Financial Intel – postęp
 
-**Stan:** pauza do komendy użytkownika (D67). **1.11.0 wydane** (PR #38 – opis wydatku na liście operacji, opis części paragonu, wybór kolumn, D89). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
+**Stan:** 1.12.0 (zwrot domownika przypisany do zakupu, D91) – zrobione, PR do `main`. **1.11.0 wydane** (PR #38 – opis wydatku na liście operacji, opis części paragonu, wybór kolumn, D89). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
 **1.10.1 wydane** (PR #35 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany, D88, T301),
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
 oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
@@ -12,8 +12,8 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** 1.12.0 – zwroty domowników przypisane do wydatków: plan w „Przed etapem 1.12.0”, czeka na odpowiedzi
-i komendę użytkownika (D67). Przed każdym zadaniem tabela prac z modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i
+**Następny krok:** 1.12.0 (zwrot domownika przypisany do zakupu, D91) – PR do `main`, po zielonym CI scalenie (D71) i
+sprawdzenie wydania; potem pauza (D67). Przed każdym zadaniem tabela prac z modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i
 gwarancje (F38), ulgi PIT-37 / PIT-36 (F39), wpisy z telefonu (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.11.0 – listy w sekcjach niżej.
 
@@ -63,10 +63,10 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
 | 1.11.0 | Opis wydatku: notatka na liście operacji, opis części paragonu, wybór widocznych kolumn listy (D89) | Opus 5.5 | **xhigh** (z górką; wystarczyłby high) | zmierzone ok. 1 h (zegar sesji od zgody do PR, z przeglądem, 11 mutacjami i pełnym E2E; plan był 1–1,5 h) | 1.11.0 | ✅ D89 | ✅ wydane (PR #38) |
-| 1.12.0 | Zwrot domownika przypisany do konkretnego wydatku (także przez pośrednika), bez „od najstarszego” | Opus 5.5 | **xhigh** (z górką; minimum high) | ok. 2–2,5 h (z przeglądem, E2E i CI) | 1.12.0 | ⏳ odpowiedzi a–f i komenda | ⏳ plan gotowy, czeka na komendę |
+| 1.12.0 | Zwrot domownika przypisany do konkretnego wydatku (także przez pośrednika), bez „od najstarszego” | Opus 5.5 | **xhigh** (z górką; minimum high) | zmierzone ok. 1,5 h (zegar sesji od komendy do PR, z przeglądem, 26 mutacjami i dwoma pełnymi E2E; plan był 2–2,5 h) | 1.12.0 | ✅ D91 | ⏳ PR do `main`, CI |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1 + 1.11.0** | | | **ok. 57,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1 + 1.11.0 + 1.12.0** | | | **ok. 59 h** | | | |
 | | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
@@ -1036,7 +1036,8 @@ Do sprawdzenia przez użytkownika (Windows):
    - **Edytor wpłaty**: „Za co oddaje” osobno dla każdej osoby (przy pośredniku – sekcja na osobę), z sumą i tym, co
      zostaje (do przypisania albo zaliczka / przychód, gdy osoba nic więcej nie ma do oddania).
    - **Zwrot towaru** zakupu domownika – do wskazanego zakupu (podpowiedź: ostatni zakup tej osoby u tego kontrahenta).
-2. **Co użytkownik musi powiedzieć** – pytania z propozycją (✅ = moja propozycja):
+2. **Co użytkownik musi powiedzieć** – ✅ komenda „Rozpocznij całość prac (etapy 1–5) jednym ciągiem” = przyjęte
+   propozycje (D91). Pytania z propozycją (✅ = moja propozycja):
    - a) Wpłata bez pewnego dopasowania: ✅ „zwrot do przypisania” (saldo osoby maleje, zakupy czekają na wskazanie), czy
      zostaje „od najstarszego”, tylko widoczne w edytorze zakupu z „zmień”?
    - b) Pewne dopasowanie (kwota jednego zakupu, suma wszystkich, jedyny zestaw 2–3): ✅ wiąże samo (do zmiany), czy
@@ -1062,6 +1063,35 @@ Do sprawdzenia przez użytkownika (Windows):
    | 4. Lista, Radar, Meldunki, odprawa | oznaczenia i filtr „oddane / częściowo / do oddania”, „do przypisania” na Radarze i w Domownikach, meldunek „Przypisz zwrot”, przypomnienie | Sonnet 5.5 high → **Opus 5.5 high** | ok. 20 min |
    | 5. Domknięcie | E2E (wpłata dopasowana sama, przypisana ręcznie, pośrednik, meldunek), `/code-review` high, mutacje, dokumentacja, PR, CI, wydanie | Opus 5.5 high → **xhigh** | ok. 25–35 min |
    | **Razem** | jeden PR i wydanie 1.12.0 | **Opus 5.5 · xhigh** dla całości (kroki 3–4 same dałyby radę na Sonnet 5.5 high, ale etap idzie jednym ciągiem) | **ok. 2–2,5 h** |
+
+## 1.12.0 – zwrot domownika przypisany do zakupu (21.10.2026)
+
+Zakres: „Przed etapem 1.12.0” wyżej, propozycje przyjęte komendą (D91). Zrobione (T304):
+- Silnik: od dnia przejścia (ustawiany raz – dzień aktualizacji) wpłata domownika spłaca tylko wskazane zakupy, w
+  kolejności wskazania; spłacone ponad nie czeka na przypisanie; pieniądze floty bez zmian (test porównuje). Stan każdego
+  zakupu (oddane, którymi wpłatami), dług salda na start też do wskazania (`coversOpening`).
+- Dopasowanie samo przy pewnej kwocie (jeden zakup, suma wszystkich, jedyny zestaw 2–3 z 90 dni; zwrot towaru – ten sam
+  kontrahent): import z mBanku (przed zapisem, wpłaty po kolei), szybki wpis, wybór osoby w edytorze.
+- Edytor wpłaty – „Za co oddaje” dla każdej osoby (pośrednik), „Pasuje: …” / „Może: …”, wynik („spłaca …”, „do
+  przypisania …”); edytor zakupu – stan zwrotu z przejściem do wpłaty, „Przypisz zwrot…”; zwrot towaru – „Zwrot do
+  zakupu”.
+- Lista – „domownik · do oddania / częściowo oddane / oddane” i filtr; Meldunki „Zwroty do przypisania”; Radar – zakupy
+  do oddania i zwrot do przypisania; odprawa; Ustawienia → Domownicy – dzień przejścia z „Cofnij” i kwota do przypisania.
+- Przegląd `/code-review` high: 10 kandydatów, wszystkie poprawione – zakup przypisany później bierze to, co zostało
+  (kolejność wskazania), „Wydatek” kliknięty jeszcze raz nie czyści wskazań zwrotu towaru, najwyżej 500 wskazań (schemat),
+  „Przypisz zwrot…” bez wpłat sprzed zakupu w kolejności dnia, `since` tylko przy długu (misja i przypomnienie), Radar bez
+  „zaliczka 0 zł”, dopasowanie importu tylko na operacjach domowników, jedno rozliczenie przed wpłatą w edytorze,
+  komentarze na miejscu, wspólne `dm` / `assignsOn` / `plDate`.
+- Testy: 835 → 854 unit + fs (`repayments.test.ts`: silnik, dopasowanie, oznaczenia, poprawki z przeglądu; poprawione porównania
+  `toMatchObject` w starych testach – nowe pola), E2E 68 → 69 (`repayments.spec.ts`: dopasowanie przy wyborze osoby, „do
+  przypisania” i meldunek, „Przypisz zwrot…”, pośrednik z „Pasuje”, filtr „oddane” / „do oddania”); 26 mutacji – 26
+  wykrytych.
+
+Do sprawdzenia przez użytkownika (Windows):
+1. Wpłata od domownika o kwocie jednego zakupu – powiązana sama (edytor wpłaty: „Za co oddaje”).
+2. Wpłata bez pasującej kwoty – Meldunki „Zwroty do przypisania” → wskazanie zakupów; albo z zakupu „Przypisz zwrot…”.
+3. Przelew przez pośrednika z częścią drugiej osoby – „Pasuje: …” dla każdej osoby.
+4. Lista operacji: filtr Oznaczenia → „do oddania” / „oddane”; Radar → Należności → zakupy do oddania.
 
 ## Przed grupą U – ładownia i czujniki, funkcje (19.10.2026)
 

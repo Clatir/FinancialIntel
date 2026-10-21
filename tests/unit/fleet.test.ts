@@ -369,7 +369,7 @@ describe('zakup „do zwrotu” i wpłata domownika (D20, D21)', () => {
     expect(s.energy).toBe(plain.energy)
     expect(s.daily?.spentBefore).toBe(0)
     expect(s.shields.amount).toBe(plain.shields.amount - zl(150))
-    expect(s.receivables).toEqual({
+    expect(s.receivables).toMatchObject({
       house: zl(150),
       houseSince: '2026-10-05',
       members: [{ memberId: HOUSE_MEMBER_ID, owed: zl(150), deposit: 0, open: [{ txId: bought.id, date: '2026-10-05', amount: zl(150) }], since: '2026-10-05' }],

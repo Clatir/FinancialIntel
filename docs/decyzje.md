@@ -345,6 +345,13 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   „Zasada współpracy”). Zgłoszenie do 1.12.0: zwrot domownika liczony „od najstarszego wydatku” jest nieintuicyjny –
   zwrot (także przez pośrednika) ma być powiązany z konkretnym wydatkiem; propozycja w „Przed etapem 1.12.0”
   (`docs/postep.md`), czeka na odpowiedzi.
+- **D91** (21.10.2026) Komenda „Rozpocznij całość prac (etapy 1–5) jednym ciągiem” po „Przed etapem 1.12.0” – bez
+  odpowiedzi na pytania a–f, więc przyjęte propozycje (jak D86): a) wpłata bez pewnego dopasowania – „zwrot do
+  przypisania” (saldo osoby maleje, zakupy czekają na wskazanie); b) pewne dopasowanie (kwota jednego zakupu, suma
+  wszystkich, jedyny zestaw 2–3 z 90 dni) wiąże samo, do zmiany; c) nadwyżka ponad wskazane zakupy – przy innych
+  zakupach do oddania „do przypisania”, bez nich wg ustawienia osoby; d) dawne zwroty zostają jak są (od najstarszego) do
+  dnia aktualizacji, dzień do zmiany w Ustawieniach → Domownicy; e) zwrot towaru – do wskazanego zakupu (podpowiedź: ten
+  sam kontrahent); f) zaliczka idzie sama na najbliższy zakup (jak dotąd). Wydanie 1.12.0.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -2103,3 +2110,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wraca do kolejności po dacie (jej nagłówek był jedynym znakiem kolejności); „nowa operacja” w pierwszej widocznej
   kolumnie tekstowej (bez żadnej – data w akcencie). Tagi wiersza i eksportu jednym `tags.ts` `tagsText`, liczone tylko
   przy widocznej kolumnie.
+- **T304** Zwrot domownika przypisany do zakupu (1.12.0, D91). Pieniądze bez zmian: wpłata spłaca najwyżej to, co osoba
+  ma oddać, reszta to zaliczka albo przychód – osłony, depozyt, przychody i warstwy liczą się jak przed 1.12.0 (test
+  porównuje flotę „od najstarszego” i „wskazane”). Zmienia się tylko to, który zakup jest oddany: `calc/household.ts`
+  `repay` – od dnia `settings.household.assignFrom` (`assignsOn`; brak = jak dotąd, null = od początku) tylko zakupy, które
+  operacja wskazuje (`covers` w kolejności wskazania – przypisany później bierze to, co zostało; `coversOpening` – dług
+  salda na start rozliczeń, który nie ma operacji: osobne pole, bo `covers` przyjmuje tylko id operacji, a zmiana formatu
+  wyczyściłaby wskazania w starszej wersji), całą kwotą wpłaty; spłacone ponad wskazane czeka na przypisanie
+  (`MemberBalance.unassigned`, `owed` = otwarte zakupy − to), wpłata za zakup już spłacony czekającymi pieniędzmi zużywa je
+  (najstarsze najpierw). `since` tylko przy długu. Stan każdego zakupu `HouseholdLedger.purchases` (`PurchaseState`:
+  pożyczone, z zaliczki, oddane, którymi operacjami), `purchaseStatus`, `repaidMarks` (oznaczenia listy, pamięć po
+  mapie). Dopasowanie `calc/repayments.ts`: `matchCovers` (jeden zakup o tej kwocie, suma wszystkich – najwyżej
+  `MAX_COVERS` 500 jak schemat, jedyny zestaw 2–3 z ostatnich 40 zakupów z 90 dni), `matchReturn` (ten sam kontrahent),
+  `proposeCovers` (każda osoba przelewu osobno), `linkRepayments` (nowe operacje po kolei – każda widzi wcześniejsze;
+  tylko operacje domowników, reszta historii odfiltrowana raz) – import (`withRepayments` przed zapisem), szybki wpis i
+  wybór osoby w edytorze (`sureCoversOf`). `withKind` zostawia wskazania przy wydatku (zwrot towaru). Dzień przejścia
+  ustawiany raz na folder (dziś – `useHouseholdSinceSeed`), zmiana w Ustawieniach → Domownicy z „Cofnij”.

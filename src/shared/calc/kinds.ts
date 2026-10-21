@@ -22,7 +22,10 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     gift: kind === 'expense' ? t.gift : undefined,
     share: kind === 'expense' ? t.share : null,
     advance: kind === 'income' ? t.advance : false,
-    covers: kind === 'income' ? t.covers : [],
+    // The purchases a member's money pays back (D91): an income's, an expense's (a product return's) – the editor's
+    // „Wydatek” clicked again keeps them.
+    covers: kind === 'income' || kind === 'expense' ? t.covers : [],
+    coversOpening: kind === 'income' || kind === 'expense' ? t.coversOpening : undefined,
     // A receipt's lines and an income's parts (D81) are other things too: they stay with the same kind.
     splits: kind === t.kind && (kind === 'expense' || kind === 'income') ? t.splits : [],
     repaid: kind === 'income' ? t.repaid : 0,

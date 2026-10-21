@@ -145,8 +145,13 @@ export const transactionSchema = z.looseObject({
   gift: z.boolean().optional().catch(undefined),
   /** Financed by several people in one move (D83): how its lines were made; absent / null = none (or a split receipt). */
   share: shareSchema.nullable().optional().catch(undefined),
-  /** A household member's income: the purchases it pays back first (operations' ids), then the oldest. */
+  /**
+   * A household member's money (an income, a product return of their purchase): the purchases it pays back (operations'
+   * ids) – from `settings.household.assignFrom` only them (1.12.0, D91), before it first them, then the oldest.
+   */
   covers: z.array(ulidSchema).max(500).catch([]).default([]),
+  /** …and the debt of the settlements' start of its member (D91: the opening balance has no operation). Absent = no. */
+  coversOpening: z.boolean().optional().catch(undefined),
   /** A split receipt (its lines replace `categoryId` / `refundable`); the lines sum to `amount`. */
   splits: z.array(splitSchema).default([]),
   /** Payee or payer as shown (shop, person). */

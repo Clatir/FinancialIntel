@@ -206,7 +206,9 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
   const account = isTwoSided(t) ? (t.amount < 0 ? `${nameOf(t.accountId)} → ${nameOf(t.counterAccountId)}` : `${nameOf(t.counterAccountId)} → ${nameOf(t.accountId)}`) : nameOf(t.accountId)
   // The list of one account shows a transfer's money on it.
   const amount = view && touchesAccount(t, view) ? amountOn(t, view) : t.amount
-  const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split'].includes(m))
+  // A member's purchase says in its one badge how much of it is paid back (D91): „domownik · oddane”.
+  const repaid = marks.find((m) => m === 'owed' || m === 'partlyRepaid' || m === 'repaid')
+  const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split', 'owed', 'partlyRepaid', 'repaid'].includes(m))
   const ticked = useOperationsUi((s) => !!s.ticked[t.id])
   const name = t.counterparty || t.title || TX_KIND_LABEL[t.kind]
   const { shown } = columns
@@ -270,6 +272,7 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
           {shownMarks.map((m) => (
             <Badge key={m} tone={m === 'impulse' || m === 'night' || m === 'pending' || m === 'anomaly' ? 'warn' : 'default'}>
               {MARK_LABEL[m]}
+              {m === 'refundable' && repaid ? ` · ${MARK_LABEL[repaid]}` : ''}
             </Badge>
           ))}
           {orders && needsLog(t, orders) && (
