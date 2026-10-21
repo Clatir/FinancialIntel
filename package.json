@@ -18,13 +18,18 @@
     "build": "electron-vite build",
     "prestart": "node scripts/check-node.mjs",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.mobile.json",
     "pretest": "node scripts/check-node.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "dist:win": "npm run build && electron-builder --win --x64 --publish never",
-    "dist:dir": "npm run build && electron-builder --dir --publish never"
+    "dist:dir": "npm run build && electron-builder --dir --publish never",
+    "dev:mobile": "vite --config vite.mobile.config.mts",
+    "build:mobile": "vite build --config vite.mobile.config.mts",
+    "build:mobile:e2e": "vite build --config vite.mobile.config.mts --mode e2e",
+    "test:e2e:mobile": "npm run build:mobile:e2e && playwright test -c playwright.mobile.config.ts",
+    "cap:sync": "npm run build:mobile && cap sync ios"
   },
   "devDependencies": {
     "@capacitor/app": "8.1.2",

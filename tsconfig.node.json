@@ -2,8 +2,12 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "lib": ["ES2023"],
-    "types": ["node"]
+    "lib": [
+      "ES2023"
+    ],
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "electron.vite.config.mts",
@@ -17,5 +21,18 @@
     "tests/**/*",
     "scripts/**/*"
   ],
-  "exclude": ["tests/unit/data-store.test.ts", "tests/unit/import-replan.test.ts", "tests/unit/operations-state.test.ts", "tests/unit/loan-close.test.ts", "tests/unit/machine-store.test.ts", "tests/unit/wealth-memo.test.ts", "tests/unit/sensor-inputs.test.ts", "tests/unit/cargo-actions.test.ts", "tests/unit/intel-v-store.test.ts"]
+  "exclude": [
+    "tests/unit/data-store.test.ts",
+    "tests/unit/import-replan.test.ts",
+    "tests/unit/operations-state.test.ts",
+    "tests/unit/loan-close.test.ts",
+    "tests/unit/machine-store.test.ts",
+    "tests/unit/wealth-memo.test.ts",
+    "tests/unit/sensor-inputs.test.ts",
+    "tests/unit/cargo-actions.test.ts",
+    "tests/unit/intel-v-store.test.ts",
+    "tests/mobile/**/*",
+    "tests/e2e-mobile/**/*",
+    "playwright.mobile.config.ts"
+  ]
 }

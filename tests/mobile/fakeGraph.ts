@@ -214,7 +214,7 @@ export class FakeDrive {
     const url = new URL(req.url)
     const path = decodeURIComponent(url.pathname.replace(/^\/v1\.0/, ''))
     this.log.push(`${req.method} ${path}`)
-    if (path === '/__token') return this.tokenEndpoint(req)
+    if (path === '/__token' || path === '/token') return this.tokenEndpoint(req)
     for (const f of this.fail)
       if (f.times > 0 && f.match.test(`${req.method} ${path}`)) {
         f.times--

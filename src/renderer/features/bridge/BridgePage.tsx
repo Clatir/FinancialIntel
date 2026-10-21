@@ -294,26 +294,8 @@ function BridgeWealthChart({ today }: { today: string }) {
 export function BridgePage() {
   const fleet = useFleet()
   const fi = useData((s) => s.fi)
-  const transactions = useRecordList('transactions')
   const shortcut = useMachine((s) => s.prefs.quickShortcut)
-  const cats = useCategories()
-  const members = useMembers()
-  const items = useBriefingItems(fleet)
-  const layers = useData((s) => s.fi?.settings.layers)
-  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers) : null), [fleet, layers])
-  const specs = useBridgeSpecs(fleet, items)
-  // The 10 newest in one pass (W29): the bridge renders every minute – never a sort of the whole history.
-  const recent = useMemo(() => newestOperations(transactions, 10), [transactions])
-  if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
-  // A household member's purchase or money (D80) says whose it is instead of the category.
-  const noteOf = (t: (typeof recent)[number]): string => {
-    const financed = financersText(t, members)
-    if (financed) return `finansuje: ${financed}`
-    const payer = payerOf(t)
-    if (payer) return `od: ${memberName(payer, members)}`
-    return t.categoryId ? cats.label(t.categoryId) : ''
-  }
-
+  if (!fleet || !fi) return <Empty>Wczytywanie…</Empty>
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-bridge">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
@@ -335,59 +317,108 @@ export function BridgePage() {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <Columns id="bridge" tracks={['minmax(360px,1fr)', 'minmax(360px,1fr)']} className="grid min-h-full items-start">
-          <div className="flex min-w-0 flex-col">
-            <BriefingPanel fleet={view} items={items} detach={specs.briefing} />
-            {fleet.started && (
-              <Panel title="Stan okrętu" testId="bridge-state" detach={specs.state}>
-                <ShipState fleet={view} onOpen={openTarget} />
-              </Panel>
-            )}
-            {fleet.started && <DockPanel />}
-            <BridgeWealth today={fleet.today} />
-          </div>
-          <div className="flex min-w-0 flex-col">
-            <Panel title="Koperty" hint={glossaryOf('Koperty')} testId="bridge-envelopes" detach={specs.envelopes}>
-              <Envelopes rows={fleet.envelopes} elapsed={monthElapsed(fleet.today)} />
-            </Panel>
-            <Receivables fleet={fleet} />
-            <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" />
-            <Panel title="Ostatnie operacje" testId="bridge-recent">
-              {!recent.length ? (
-                <Empty>Brak operacji – szybki wpis albo import z mBanku.</Empty>
-              ) : (
-                <div className="flex flex-col text-[12px]">
-                  {recent.map((t) => {
-                    const tone = amountTone(t)
-                    return (
-                      <button
-                        key={t.id}
-                        className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 text-left last:border-b-0 hover:bg-hover"
-                        onClick={() => {
-                          showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, ...noNarrowing() })
-                          navigate({ page: 'operations' })
-                          selectOperation(t.id)
-                        }}
-                        data-testid="bridge-recent-row"
-                      >
-                        <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(t.date).slice(0, 5)}</span>
-                        <span className="min-w-0 flex-1 truncate text-fg-strong">{t.counterparty || t.title || '—'}</span>
-                        <span className="w-[130px] truncate text-[11px] text-dim">{noteOf(t)}</span>
-                        <span className={cx('num w-[100px] text-right', tone === 'up' ? 'text-up' : tone === 'muted' ? 'text-muted' : tone === 'accent' ? 'text-accent' : 'text-fg')}>{signedPln(t.amount)}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </Panel>
-          </div>
-        </Columns>
+        <BridgePanels />
       </div>
     </div>
   )
 }
 
-/** The briefing read aloud: the hidden amounts are not read either. */
+/**
+ * The bridge's panels: two columns on a computer; one on the phone (T305) – there without the docking (ICTTJ is read on
+ * a computer).
+ */
+export function BridgePanels({ single = false }: { single?: boolean }) {
+  const fleet = useFleet()
+  const fi = useData((s) => s.fi)
+  const transactions = useRecordList('transactions')
+  const cats = useCategories()
+  const members = useMembers()
+  const items = useBriefingItems(fleet)
+  const layers = useData((s) => s.fi?.settings.layers)
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers) : null), [fleet, layers])
+  const specs = useBridgeSpecs(fleet, items)
+  // The 10 newest in one pass (W29): the bridge renders every minute – never a sort of the whole history.
+  const recent = useMemo(() => newestOperations(transactions, 10), [transactions])
+  if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
+  // A household member's purchase or money (D80) says whose it is instead of the category.
+  const noteOf = (t: (typeof recent)[number]): string => {
+    const financed = financersText(t, members)
+    if (financed) return `finansuje: ${financed}`
+    const payer = payerOf(t)
+    if (payer) return `od: ${memberName(payer, members)}`
+    return t.categoryId ? cats.label(t.categoryId) : ''
+  }
+  const briefingPanel = <BriefingPanel fleet={view} items={items} detach={specs.briefing} />
+  const statePanel = fleet.started && (
+    <Panel title="Stan okrętu" testId="bridge-state" detach={specs.state}>
+      <ShipState fleet={view} onOpen={openTarget} />
+    </Panel>
+  )
+  const envelopesPanel = (
+    <Panel title="Koperty" hint={glossaryOf('Koperty')} testId="bridge-envelopes" detach={specs.envelopes}>
+      <Envelopes rows={fleet.envelopes} elapsed={monthElapsed(fleet.today)} />
+    </Panel>
+  )
+  const recentPanel = (
+    <Panel title="Ostatnie operacje" testId="bridge-recent">
+      {!recent.length ? (
+        <Empty>Brak operacji – szybki wpis albo import z mBanku.</Empty>
+      ) : (
+        <div className="flex flex-col text-[12px]">
+          {recent.map((t) => {
+            const tone = amountTone(t)
+            return (
+              <button
+                key={t.id}
+                className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 text-left last:border-b-0 hover:bg-hover"
+                onClick={() => {
+                  showFilter({ period: { kind: 'month', month: t.date.slice(0, 7) }, ...noNarrowing() })
+                  navigate({ page: 'operations' })
+                  selectOperation(t.id)
+                }}
+                data-testid="bridge-recent-row"
+              >
+                <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(t.date).slice(0, 5)}</span>
+                <span className="min-w-0 flex-1 truncate text-fg-strong">{t.counterparty || t.title || '—'}</span>
+                <span className={cx('truncate text-[11px] text-dim', single ? 'w-[90px]' : 'w-[130px]')}>{noteOf(t)}</span>
+                <span className={cx('num text-right', single ? 'w-[86px]' : 'w-[100px]', tone === 'up' ? 'text-up' : tone === 'muted' ? 'text-muted' : tone === 'accent' ? 'text-accent' : 'text-fg')}>{signedPln(t.amount)}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </Panel>
+  )
+  if (single)
+    return (
+      <div className="flex min-w-0 flex-col" data-testid="bridge-panels">
+        {briefingPanel}
+        {statePanel}
+        {envelopesPanel}
+        {recentPanel}
+        <Receivables fleet={fleet} />
+        <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" />
+        <BridgeWealth today={fleet.today} />
+      </div>
+    )
+  return (
+    <Columns id="bridge" tracks={['minmax(360px,1fr)', 'minmax(360px,1fr)']} className="grid min-h-full items-start">
+      <div className="flex min-w-0 flex-col">
+        {briefingPanel}
+        {statePanel}
+        {fleet.started && <DockPanel />}
+        <BridgeWealth today={fleet.today} />
+      </div>
+      <div className="flex min-w-0 flex-col">
+        {envelopesPanel}
+        <Receivables fleet={fleet} />
+        <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" />
+        {recentPanel}
+      </div>
+    </Columns>
+  )
+}
+
 function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
   const [spoken, setSpoken] = useState(true)
   const say = () => {

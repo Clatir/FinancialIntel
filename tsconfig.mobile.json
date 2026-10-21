@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/mobile/**/*",
+    "src/renderer/env.d.ts",
+    "vite.mobile.config.mts",
+    "playwright.mobile.config.ts",
+    "tests/e2e-mobile/**/*",
+    "tests/mobile/**/*",
+    "scripts/mobile-aliases.d.mts"
+  ]
+}
