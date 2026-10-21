@@ -287,10 +287,6 @@ export function planNotifications(list: Parameters<Platform['notifications']['pl
   return need().platform.notifications.plan(list)
 }
 
-export function deliveredNotices(): Promise<string[]> {
-  return need().platform.notifications.delivered()
-}
-
 export function phoneVersion(): string {
   return need().platform.version
 }

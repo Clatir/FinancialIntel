@@ -39,8 +39,6 @@ export interface Platform {
   notifications: Notifications & {
     /** The planned ones replaced by these. */
     plan(list: readonly PlannedNotice[]): Promise<void>
-    /** Keys of the notifications delivered since the app was last open (the notifier does not show them again). */
-    delivered(): Promise<string[]>
     permission(): Promise<boolean>
   }
   openUrl(url: string): Promise<void>
@@ -71,9 +69,13 @@ function nativePlatform(version: string): Platform {
     remove: async (key) => void (await Preferences.remove({ key }))
   }
   let tap: ((tag: string) => void) | null = null
+  // The app started by the tap: kept until the host listens.
+  let tapped: string | null = null
   void LocalNotifications.addListener('localNotificationActionPerformed', (a) => {
     const tag = (a.notification.extra as { tag?: string } | undefined)?.tag
-    if (tag) tap?.(tag)
+    if (!tag) return
+    if (tap) tap(tag)
+    else tapped = tag
   })
   const notifications: Platform['notifications'] = {
     show: async (n) => {
@@ -82,6 +84,8 @@ function nativePlatform(version: string): Platform {
     },
     onTap: (cb) => {
       tap = cb
+      if (tapped) cb(tapped)
+      tapped = null
     },
     plan: async (list) => {
       // Every planned one is the app's: all replaced by the new list.
@@ -91,10 +95,6 @@ function nativePlatform(version: string): Platform {
       await LocalNotifications.schedule({
         notifications: list.map((n) => ({ id: noticeId(n.key), title: n.title, body: n.body, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { tag: n.tag, key: n.key } }))
       })
-    },
-    delivered: async () => {
-      const got = await LocalNotifications.getDeliveredNotifications()
-      return got.notifications.map((x) => (x.extra as { key?: string } | undefined)?.key).filter((k): k is string => !!k)
     },
     permission: async () => {
       const cur = await LocalNotifications.checkPermissions()
@@ -162,7 +162,6 @@ function webPlatform(cfg: PhoneTestConfig, version: string): Platform {
       plan: async (list) => {
         notices.planned = [...list]
       },
-      delivered: async () => [],
       permission: async () => true
     },
     openUrl: async (url) => void window.open(url, '_blank'),

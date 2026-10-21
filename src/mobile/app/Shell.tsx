@@ -24,7 +24,7 @@ import { usePhone } from '../phone'
 import { phoneHost } from '../hostRef'
 import { PhoneBridge } from './PhoneBridge'
 import { PhoneSettings } from './PhoneSettings'
-import { NoticePlanner } from './notices'
+import { NoticePlanner, installPlannedDue } from './notices'
 
 type PhoneTab = 'main' | 'settings'
 export const usePhoneTab = create<{ tab: PhoneTab }>(() => ({ tab: 'main' }))
@@ -134,11 +134,21 @@ export function Shell() {
   // The hidden amounts (D30): every amount of the tree renders masked.
   const hideAmounts = useMachine((s) => s.prefs.hideAmounts)
   setAmountsHidden(hideAmounts)
+  // A screen opened from elsewhere (a notification's tap, a link): shown, also over the phone's settings.
+  useEffect(
+    () =>
+      useUi.subscribe((s, prev) => {
+        if (s.route !== prev.route) usePhoneTab.setState({ tab: 'main' })
+      }),
+    []
+  )
   useEffect(() => {
     void boot()
     initIctj()
     initQuickHost()
     initPresence()
+    // What iOS shows by the plan is not shown again by the notifier: marked before it looks.
+    installPlannedDue()
     initNotifier()
   }, [])
   const screen =

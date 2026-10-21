@@ -88,6 +88,8 @@ async function tokenRequest(http: Http, tokenUrl: string, form: Record<string, s
     body: new URLSearchParams(form).toString()
   })
   const body = (res.json ?? {}) as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string }
+  // Microsoft's passing trouble (busy, down): tried again later – the account stays signed in.
+  if (res.status === 429 || res.status >= 500) throw new Error(`Logowanie Microsoft chwilowo nie odpowiada (błąd ${res.status}) – spróbuję za chwilę.`)
   if (res.status !== 200 || !body.access_token) {
     const why = body.error_description?.split(/\r?\n/)[0] ?? body.error ?? `błąd ${res.status}`
     throw new SignInError(`Microsoft odmówił: ${why}`)
@@ -130,7 +132,7 @@ export class TokenSource {
     return this.tokens!.accessToken
   }
 
-  /** A new access token; false = the refresh token no longer works (sign in again). Network errors are thrown. */
+  /** A new access token; false = the refresh token no longer works (sign in again). Network and server errors are thrown. */
   renew(): Promise<boolean> {
     this.renewing ??= (async () => {
       try {

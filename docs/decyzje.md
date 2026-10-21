@@ -2091,3 +2091,69 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   już minęło, i kwot pokazanych nie zobaczył (24 sprawdzenia w 10 s); lokalnie to samo przy zapisie 500 ms. Teraz chwila
   trwa 3 s (`revealAmounts(0.05)`) – dłużej niż dwa wolne zapisy, a koniec chwili nadal mieści się w czekaniu na ukrycie
   (10 s); przy zapisie 500 ms test przechodzi. Aplikacja bez zmian.
+- **T303** Folder danych na telefonie (iA, IP0.1): `DataStore` komputera (`src/main/datastore/`) działa na telefonie bez
+  zmian nad wirtualnym systemem plików w pamięci (`src/mobile/vfs/vfs.ts`, `Vfs`) utrwalanym w IndexedDB (`fi-phone`:
+  `entries`, `folders`, `kv`; zapisy grupowane). Moduły Node podmienia build telefonu i projekt Vitest `mobile`
+  (`scripts/mobile-aliases.mjs`: `node:fs` → `src/mobile/node/fs.ts`, `node:path`, `node:crypto` – SHA-1 i losowe bajty;
+  `zlib` / `stream` – „nie działa na telefonie – kopie zapasowe robi komputer”). Każdy plik lustra ma numer zmiany
+  (`dirty` – kolejka do wysłania) i metadane OneDrive (`id`, `eTag`, `cTag`); usunięcie pliku znanego na OneDrive
+  zostawia nagrobek do wysłania, pliki tymczasowe zapisu atomowego nie są utrwalane ani wysyłane. Lustro to tylko
+  `.json` folderu bez `backups/` i `.history/` (historia wersji i kopie zostają na komputerze; historia zmian zrobionych
+  na telefonie jest tylko w telefonie) i bez folderów ukrytych poza `.presence/`. Telefon ma system plików bez rozróżniania
+  wielkości liter jak OneDrive (`process.platform` = `ios` w buildzie). Bez sieci aplikacja startuje z lustra.
+- **T304** Synchronizacja z OneDrive i logowanie (iA, IP0.1, IP0.5): Microsoft Graph – zmiany folderu przez `delta` po
+  identyfikatorach (drzewo folderów zapamiętane, więc przeniesienia i zmiany nazw folderów dochodzą), strony delty zebrane
+  przed zastosowaniem, 410 = pełna lista od nowa (pliki, których nie ma, usuwane z lustra), pobieranie przez
+  `@microsoft.graph.downloadUrl` (bez nagłówka autoryzacji – adresy działają z CORS; wygasły adres pobierany od nowa),
+  paczki po 50 i 8 naraz. Wysyłanie: PUT `items/{folder}:/{ścieżka}:/content` z `If-Match` (eTag wersji, którą zmiana
+  zastępuje) albo `conflictBehavior=fail` dla nowego pliku, 404 = brakujące foldery tworzone i jeszcze raz, usunięcie z
+  `If-Match`; 429 / 503 z `Retry-After`, 401 = jedno odnowienie tokenu. Konflikt (412 / 409 – plik zmienił się na
+  OneDrive): wersja z OneDrive zostaje w lustrze i w folderze, wersja z telefonu idzie obok jako
+  `<nazwa>-telefon-<czas>.json`, którą komputer pokazuje w Synchronizacji jako kopię konfliktu („zmiana z telefonu w tym
+  samym czasie co na komputerze”, `guessConflictSource`) – wybór albo „Scal…” na komputerze; usunięcie odrzucone przez
+  412 przywraca wersję z OneDrive. Plik obecności telefonu nadpisywany bez `If-Match`. Zmiany z OneDrive trafiają do
+  magazynu w jego kolejce (`DataStore.applyExternal`: zapis do lustra i odświeżenie tych ścieżek pod blokadą – okno
+  dostaje je jak zmiany z drugiego komputera, z pytaniem przy własnych niezapisanych edycjach). Harmonogram: przy otwarciu,
+  co 30 s przy otwartej aplikacji, 1,5 s po zmianie, przy przejściu do tła (najpierw zapis zmian okna); bez sieci –
+  ponowienia po 10 / 30 / 60 / 120 s. Logowanie: kod autoryzacji z PKCE dla klienta publicznego (`consumers`,
+  przekierowanie `financialintel://auth`, zakresy `Files.ReadWrite offline_access User.Read`, aplikacja zarejestrowana
+  przez użytkownika – D89); żądanie tokenu natywnym HTTP Capacitora (żądanie z WebView dostaje od Microsoft
+  AADSTS9002326 – wymiana kodu z innego originu tylko dla SPA), Graph i pobieranie przez `fetch`. Token odświeżania w
+  Preferences (pamięć aplikacji, nie pęk kluczy – bez wtyczki spoza Capacitora), token dostępu tylko w pamięci, odnawiany
+  5 min przed końcem, jedno odnowienie naraz; odrzucony token odświeżania = stan „zaloguj ponownie” (przycisk w
+  Ustawieniach telefonu – lustro i czekające zmiany zostają), chwilowa awaria Microsoft (429, 5xx) i brak sieci nie
+  wylogowują.
+- **T305** Aplikacja telefonu (iA, IP0.3, IP1, IP2): renderer komputera bez zmian nad `window.fi` z
+  `src/mobile/host/host.ts` (`PhoneHost` – to, co na komputerze robi proces główny: magazyn nad lustrem, zmiany po
+  pokazaniu folderu, obecność telefonu w `.presence/` i „w użyciu” jak na PC – D86, ustawienia telefonu w Preferences);
+  błędy przechodzą w formacie IPC Electrona (`errorMessage` okna zdejmuje przedrostek), funkcje tylko komputera
+  (import, kopie, eksport, ICTTJ, aktualizacje, pliki) odpowiadają „To zrobisz na komputerze”. Szybki wpis to okno
+  komputera (`QuickApp`) w arkuszu nad aplikacją – ten sam protokół `quick*` w jednym oknie. Telefon: menu na dole
+  (Mostek, „+ Szybki wpis”, Telefon), pasek z okrętem, stanem synchronizacji i ukryciem kwot, panele w `CompactContext`
+  (bez odłączania, powiększania, ukrywania i zmiany rozmiaru), Mostek w jednej kolumnie (`BridgePanels single` – bez
+  dokowania, które zostaje na PC), ekran spoza telefonu mówi, że jest na komputerze, i prowadzi na Mostek. Build
+  `vite.mobile.config.mts` (`out/mobile`, Safari 16, CSP: tylko własne pliki i https), E2E `tests/e2e-mobile/`
+  (Playwright, profil iPhone 13, Chromium na Linuksie i WebKit na macOS, udawany OneDrive `tests/mobile/fakeGraph.ts` na
+  lokalnym serwerze razem z aplikacją).
+- **T306** Powiadomienia z wyprzedzeniem (iA, IP0.4): iOS nie uruchamia aplikacji w tle, więc przy każdym otwarciu i
+  chwilę po każdej zmianie danych aplikacja oddaje systemowi plan na 7 dni (`src/shared/notifyPlan.ts`
+  `plannedNotices`): odprawa poranna po ciszy nocnej, nie przed 7:00 (domyślna cisza kończy się o 5:00), raport wachty o
+  jego godzinie (w ciszy nocnej – minutę przed nią, jak na PC; zrobiony dziś – nie dziś), dni z Radaru o 9:00 (opłaty,
+  raty, boje, PIT-38, zwroty – wg przełączników telefonu), nic w ciszy nocnej ani w przeszłości, najwyżej 60 (iOS trzyma
+  64). Klucze odprawy i raportu są kluczami powiadomień okna: plan jest zapamiętany (`fi.phone.planned` –
+  `keepPlanned`: minione zostają dwa dni, anulowane znikają), a klucze należne w ciągu 2 minut trafiają do
+  `fi.notify.sent` przed sprawdzeniem okna (`installPlannedDue` przed `initNotifier`) – tego samego powiadomienia nie
+  pokazują iOS i okno. Dotknięcie powiadomienia, które uruchomiło aplikację, czeka, aż okno zacznie słuchać; w 1.11.0
+  każde prowadzi na Mostek (pozostałe ekrany dochodzą w iB–iE).
+- **T307** Wydanie na iPhone'a (iA, IP0.2): Capacitor 8 (Swift Package Manager, wtyczki App, Browser, Preferences,
+  LocalNotifications), projekt `ios/` w repozytorium (`app.financialintel.ios`, iOS 16+, tylko pion, ciemny wygląd,
+  schemat URL `financialintel`), ikona i ekran startowy z `resources/icon.png` (`scripts/make-ios-assets.py`). CI:
+  job macOS `ios` (PR, gałąź domyślna, ręcznie – jak Windows): E2E telefonu w WebKit, build aplikacji z opcjonalnym
+  identyfikatorem klienta ze zmiennej repozytorium `FI_CLIENT_ID` (inaczej wpisywany przy pierwszym uruchomieniu),
+  `xcodebuild` bez podpisu → `Financial-Intel.ipa` (AltStore podpisuje ją Apple ID użytkownika), uruchomienie w
+  symulatorze (build Debug wypisuje konsolę aplikacji – czeka na `FI_PHONE_BOOT_OK`). Job `ios-release` po wydaniu z jobu
+  Windows dołącza do niego `.ipa`, źródło AltStore `altstore.json` (`scripts/altstore-source.mjs`) i dopisuje sumę `.ipa`
+  do `SHA256SUMS.txt` (aktualizator na Windows bierze tylko swoje pliki; na chwilę podmiany sumy ma też `digest`
+  GitHuba). Wydanie dla Windows nie czeka na macOS – czerwony job `ios` nie wstrzymuje aktualizacji komputerów, a
+  kolejne wypchnięcie tej samej wersji dołącza brakującą `.ipa`. Źródło AltStore:
+  `https://github.com/Clatir/FinancialIntel/releases/latest/download/altstore.json`. Instrukcja: `docs/iphone.md`.

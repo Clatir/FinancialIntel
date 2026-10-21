@@ -69,6 +69,9 @@ type Listener<A extends unknown[]> = (...args: A) => void
 
 class Emitter<A extends unknown[]> {
   private readonly set = new Set<Listener<A>>()
+  get size(): number {
+    return this.set.size
+  }
   on(cb: Listener<A>): () => void {
     this.set.add(cb)
     return () => this.set.delete(cb)
@@ -82,6 +85,13 @@ class Emitter<A extends unknown[]> {
       }
     }
   }
+}
+
+/** The notifications' screens the phone has (iA: Mostek); a tap on any other leads to Mostek, whose briefing lists it. */
+const PHONE_TAGS: ReadonlySet<string> = new Set(['briefing'])
+
+export function phoneTapTag(tag: string): string {
+  return PHONE_TAGS.has(tag) ? tag : 'briefing'
 }
 
 const MACHINE_KEY = 'fi.phone.machine'
@@ -104,6 +114,8 @@ export class PhoneHost {
   private revealTimer: ReturnType<typeof setTimeout> | null = null
   private flusher: (() => Promise<FlushResult>) | null = null
   private quickVisible = false
+  /** A notification tapped before the window listened (the app started by the tap). */
+  private pendingTap: string | null = null
   private readonly now: () => number
 
   readonly changes = new Emitter<[ChangeSet]>()
@@ -121,7 +133,11 @@ export class PhoneHost {
 
   constructor(private readonly d: HostDeps) {
     this.now = d.now ?? Date.now
-    d.notifications.onTap((tag) => this.taps.emit(tag))
+    d.notifications.onTap((tag) => {
+      const target = phoneTapTag(tag)
+      if (this.taps.size) this.taps.emit(target)
+      else this.pendingTap = target
+    })
     this.api = this.buildApi()
   }
 
@@ -515,7 +531,13 @@ export class PhoneHost {
       quickClose: call('quickClose', () => this.closeQuick()),
       setTrayStatus: call('setTrayStatus', () => undefined),
       notify: call('notify', (n: { title: string; body: string; tag: string; silent?: boolean }) => this.d.notifications.show({ title: n.title, body: n.body, tag: n.tag, silent: n.silent })),
-      onNotificationClick: (cb) => this.taps.on(cb),
+      onNotificationClick: (cb) => {
+        const off = this.taps.on(cb)
+        const tag = this.pendingTap
+        this.pendingTap = null
+        if (tag) queueMicrotask(() => cb(tag))
+        return off
+      },
       ictjState: call('ictjState', () => EMPTY_ICTJ),
       ictjSuggest: call('ictjSuggest', () => null),
       ictjPickDir: call('ictjPickDir', () => null),

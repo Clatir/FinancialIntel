@@ -9,7 +9,7 @@ import { toast } from '@renderer/store/ui'
 import { Panel, cx } from '@renderer/components/ui'
 import { plural } from '@shared/format'
 import type { NotifyPrefs } from '@shared/machine'
-import { changeFolder, pendingChanges, phoneVersion, signOut, syncNow, usePhone } from '../phone'
+import { changeFolder, pendingChanges, phoneVersion, signIn, signOut, syncNow, usePhone } from '../phone'
 import { phoneHost } from '../hostRef'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -49,6 +49,9 @@ export function PhoneSettings() {
   const account = usePhone((s) => s.account)
   const folder = usePhone((s) => s.folder)
   const sync = usePhone((s) => s.sync)
+  const clientId = usePhone((s) => s.clientId)
+  const busy = usePhone((s) => s.busy)
+  const message = usePhone((s) => s.message)
   const conflicts = useData((s) => s.conflicts.length)
   const prefs = useMachine((s) => s.prefs)
   const [name, setName] = useState(() => phoneHost().machineName)
@@ -77,6 +80,19 @@ export function PhoneSettings() {
           <span className="num">{when(sync.lastSync)}</span>
         </Row>
         {sync.message && <p className="py-2 text-[12px] leading-snug text-down">{sync.message}</p>}
+        {sync.state === 'auth' && (
+          <>
+            {/* Signed in again with the same account: the copy on the phone and what waits stay. */}
+            <button className="btn btn-accent mt-2 h-[40px] w-full text-[13px]" disabled={busy} onClick={() => void signIn(clientId)} data-testid="phone-signin-again">
+              {busy ? 'Logowanie…' : 'Zaloguj ponownie'}
+            </button>
+            {message && (
+              <p className="py-2 text-[12px] leading-snug text-down" data-testid="phone-message">
+                {message}
+              </p>
+            )}
+          </>
+        )}
         {sync.copies.length > 0 && (
           <p className="py-2 text-[12px] leading-snug text-accent" data-testid="phone-sync-copies">
             Ta sama rzecz zmieniła się w tym czasie na komputerze – wersja z telefonu jest obok jako kopia. Wybierz w Synchronizacji na komputerze.
@@ -128,7 +144,7 @@ export function PhoneSettings() {
         </Row>
       </Panel>
       <Panel title="Powiadomienia">
-        <Row label="Odprawa poranna (koniec ciszy nocnej)">
+        <Row label="Odprawa poranna (po ciszy nocnej, nie przed 7:00)">
           <Toggle on={prefs.notify.briefing} onChange={(v) => notify({ briefing: v })} testId="phone-notify-briefing" />
         </Row>
         <Row label="Raport wachty wieczorem">
@@ -148,7 +164,7 @@ export function PhoneSettings() {
           <Toggle on={prefs.notify.overrun} onChange={(v) => notify({ overrun: v, low: v })} testId="phone-notify-overrun" />
         </Row>
         <p className="pt-2 text-[12px] leading-snug text-muted">
-          iPhone nie uruchamia aplikacji w tle: powiadomienia na najbliższy tydzień są planowane przy każdym otwarciu, reszta przychodzi, gdy aplikacja jest otwarta. W ciszy nocnej nic.
+          iPhone nie uruchamia aplikacji w tle: powiadomienia na najbliższy tydzień są planowane przy każdym otwarciu (dni z Radaru o 9:00), reszta przychodzi, gdy aplikacja jest otwarta. W ciszy nocnej nic.
         </p>
       </Panel>
       <div className="px-3 py-4 text-[12px] text-muted" data-testid="phone-version">

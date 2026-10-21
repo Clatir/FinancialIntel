@@ -144,10 +144,33 @@ test('powiadomienia na najbliższe dni zaplanowane przy otwarciu; ekran komputer
   await page.getByTestId('phone-nav-settings').click()
   await page.getByTestId('phone-notify-evening').click()
   await expect.poll(() => page.evaluate(() => window.__FI_NOTICES__!.planned.some((n) => n.key.startsWith('evening:')))).toBe(false)
+  // A radar day's notice tapped (the Radar is not on the phone yet): Mostek, also from the phone's settings.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('fi:notice-tap', { detail: 'radar' })))
+  await expect(page.getByTestId('page-bridge')).toBeVisible()
   // A screen only a computer has (the operations of the latest list): said so, with the way back.
   await page.getByTestId('phone-nav-bridge').click()
   await page.getByTestId('bridge-recent-row').first().click()
   await expect(page.getByTestId('phone-not-here')).toHaveAttribute('data-page', 'operations')
   await page.getByRole('button', { name: 'Wróć na Mostek' }).click()
   await expect(page.getByTestId('page-bridge')).toBeVisible()
+})
+
+test('logowanie wygasło: „Zaloguj ponownie” – kopia na telefonie i czekający wpis zostają', async ({ page }) => {
+  await connect(page)
+  // Microsoft revokes the sign-in (a new password): the next sync asks to sign in again.
+  srv.drive.offline = true
+  await quickExpense(page, '19,99', 'Apteka')
+  srv.drive.token = 'token-2'
+  srv.drive.refresh.clear()
+  srv.drive.offline = false
+  await page.getByTestId('phone-nav-settings').click()
+  await page.getByTestId('phone-sync-now').click()
+  await expect(page.getByTestId('phone-sync')).toHaveAttribute('data-state', 'auth')
+  await expect(page.getByTestId('phone-sync-state')).toHaveText('zaloguj się ponownie')
+  expect(driveTransactions().some((t) => t.counterparty === 'Apteka')).toBe(false)
+  await page.getByTestId('phone-signin-again').click()
+  // The same folder, no new copy: the entry that waited goes up.
+  await expect.poll(() => driveTransactions().some((t) => t.counterparty === 'Apteka'), { timeout: 20_000 }).toBe(true)
+  await expect(page.getByTestId('phone-sync')).toHaveAttribute('data-pending', '0')
+  await expect(page.getByTestId('phone-shell')).toBeVisible()
 })
