@@ -1,8 +1,9 @@
 # Financial Intel – postęp
 
 **Stan:** iPhone (D92 / D93): **1.13.0 wydane** (PR #42 – grupa iA, z `.ipa` i źródłem AltStore), **1.14.0 wydane**
-(PR #43 – grupa iB), grupa iC (**1.15.0**) – PR i CI; po iC przerwa na limit tygodniowy (D93). 1.11.0 i 1.12.0 wydała w
-tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0, decyzje D92 / D93, T305–T311.
+(PR #43 – grupa iB), **1.15.0 wydane** (PR #44 – grupa iC); przerwa po iC (D93) – „Przed grupą iD” niżej. 1.11.0 i
+1.12.0 wydała w tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0, decyzje
+D92 / D93, T305–T311.
 **1.12.0 wydane** (PR #40 – zwrot domownika przypisany do zakupu, D91). **1.11.0 wydane** (PR #38 – opis wydatku na liście operacji, opis części paragonu, wybór kolumn, D89). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
 **1.10.1 wydane** (PR #35 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany, D88, T301),
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
@@ -15,10 +16,10 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** grupa iC (iPhone, 1.15.0) – CI (Linux, Windows, macOS), scalenie i wydanie z `.ipa`; potem przerwa
-(D93) – procent limitu tygodniowego od użytkownika. iD czeka na odpowiedź do IP15 (czy folder danych ICTTJ jest na
-OneDrive), iE – na decyzje IP21 (kreator) i IP24 (zapisy w tle). Przed każdym zadaniem tabela prac z modelem
-oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
+**Następny krok:** przerwa po iC (D93) – od użytkownika: procent limitu tygodniowego (kolumna „Rzeczywiste”), odpowiedź
+do IP15 (czy folder danych ICTTJ jest na OneDrive – bez niej iD nie startuje), decyzje IP21 (kreator) i IP24 (zapisy w
+tle) przed iE, uwagi z telefonu do iA–iC; potem grupa iD (1.16.0) na komendę (D67). Przed każdym zadaniem tabela prac z
+modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
 wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w sekcjach niżej; iPhone – „1.13.0”, „1.14.0” i „1.15.0” niżej oraz
 `docs/iphone.md`.
@@ -72,8 +73,8 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.12.0 | Zwrot domownika przypisany do konkretnego wydatku (także przez pośrednika), bez „od najstarszego” | Opus 5.5 | **xhigh** (z górką; minimum high) | zmierzone ok. 1,5 h (zegar sesji od komendy do PR, z przeglądem, 26 mutacjami i dwoma pełnymi E2E; plan był 2–2,5 h) | 1.12.0 | ✅ D91 | ✅ wydane (PR #40) |
 | **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji od komendy do PR, z przeglądem, CI macOS na gałęzi i scaleniem 1.11.0 / 1.12.0; plan był 7,5–10,5 h) | 1.13.0 | ✅ D92, D93 (komenda). Do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera (`docs/iphone.md`) | ✅ wydane (PR #42) |
 | **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | zmierzone ok. 0,5 h (zegar commitów od „Przed grupą iB” do PR, z przeglądem i E2E; plan był 2–2,5 h) | 1.14.0 | iA na telefonie: logowanie, pierwsze pobranie, szybki wpis widoczny na PC (odbiór może iść równolegle z iB) | ✅ wydane (PR #43) |
-| **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | zmierzone ok. 0,75 h (zegar commitów od „Przed grupą iC” do PR, z przeglądem, mutacjami i E2E; plan był 5–6,5 h) | 1.15.0 | iB scalone; uwagi z telefonu do iA / iB (jeśli są) | 🔨 PR – CI, scalenie i wydanie (D71) |
-| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** | 4–4,5 h (z górką 5 h) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC | ⏳ |
+| **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | zmierzone ok. 0,75 h (zegar commitów od „Przed grupą iC” do PR, z przeglądem, mutacjami i E2E; plan był 5–6,5 h) | 1.15.0 | iB scalone; uwagi z telefonu do iA / iB (jeśli są) | ✅ wydane (PR #44) |
+| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏳ czeka na odpowiedzi |
 | **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **max** | 5,5–7,5 h (z górką 8 h) | 1.17.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
 | | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
@@ -92,9 +93,12 @@ Grupy FI kończyły się w ok. 0,7 czasu planu. „Oczekiwane” = 0,7 środka p
 | iA | ok. 11 % | 20 % | 75 % | – |
 | iB | ok. 2,5 % | 5 % | 80 % | – |
 | iC | ok. 6 % | 12 % | 92 % | – |
-| iD | ok. 5 % | 8,5 % | po odnowieniu | – |
+| iD | ok. 2,5 % (bez IP15 ok. 1 %) | 3,5 % | rzeczywiste po iC + 3,5 % | – |
 | iE | ok. 7 % | 13,5 % | po odnowieniu | – |
-| **Razem** | **ok. 31,5 %** | **ok. 59 %** | | |
+| **Razem** | **ok. 29 %** | **ok. 54 %** | | |
+
+iD przeliczone z czasu w „Przed grupą iD” (21.10, po iC: grupy iA–iC trwały 0,15–0,3 planu); iE – w „Przed grupą iE”.
+Po podaniu procentu po iC przeliczam zużycie na godzinę pracy i obie grupy.
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -869,6 +873,49 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 2. Operacje: zaznacz kilka, „Zmień zaznaczone” → podgląd skutku → „Cofnij”; „Więcej filtrów”, widok zapisany na drugim
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
+
+## Przed grupą iD – iPhone: Ładownia i gwiazdy (21.10.2026)
+
+1. **Co trzeba wiedzieć** – grupy iA–iC wydane (1.13.0–1.15.0, PR #42–#44); po iC przerwa (D93). Grupa iD (1.16.0):
+   - IP15 Dokowanie z ICTTJ – tylko gdy folder danych ICTTJ jest na OneDrive. Telefon czyta z niego wyłącznie
+     `payouts/**` i `forecasts/*.json` (Graph, to samo logowanie – `Files.ReadWrite` obejmuje cały OneDrive, w Entra
+     nic nie dochodzi) i nigdy nic do niego nie wysyła: osobna kopia tylko do pobierania, bez obecności telefonu i bez
+     kopii konfliktu w folderze ICTTJ. Na telefonie: wybór folderu ICTTJ w ustawieniach telefonu, panel „Dokowanie” na
+     Mostku, okno dokowania z podziałem, wypłata bez pary w mBanku po 3 dniach roboczych → Portfel XTB (D72), meldunek
+     „Dokowanie”, scenariusz ICTTJ na Mapie gwiezdnej. Bez IP15 dokowanie zostaje na komputerze – liczby na telefonie i
+     tak są te same (dokowania leżą w folderze FI).
+   - IP16 Ładownia – ekran komputera na telefonie: kontenery (dodanie, zmiana, archiwizacja, historia kwot), linia
+     zanurzenia, zbiorniki, symulacja, propozycje opłat, nowe ceny i ciche kontenery, harmonogram miesięcy; meldunek
+     „Ładownia” rozpatrywany na telefonie.
+   - IP17 Mapa gwiezdna – cele (dodanie, kwota, termin i rata, archiwizacja z przeniesieniem pieniędzy); kolejność celów
+     przyciskami ↑ ↓ – na komputerze przeciąganiem, które na iPhonie nie działa pewnie.
+   - Zapisy w tle z telefonu (zamrażanie dni gry, cele ICTTJ z prognozy) – nie w iD (IP24, grupa iE). Format folderu
+     bez zmian.
+2. **Co użytkownik musi powiedzieć**:
+   - IP15: czy folder danych ICTTJ jest na OneDrive, a jeśli tak – gdzie (np. `OneDrive\ICT Trade Journal`).
+     Propozycja: tak → IP15 jak wyżej (telefon podpowie folder z `journal.json` w głównym folderze OneDrive); nie → iD
+     bez IP15.
+   - Procent limitu tygodniowego teraz (po iA–iC) – kolumna „Rzeczywiste”.
+   - Przed iE (można już teraz): IP21 kreator startu – propozycja: bez niego (budżet startuje na komputerze: kreator
+     dzieli środki i proponuje pensję z historii z banku, a import z mBanku jest tylko na komputerze; telefon przed
+     startem budżetu mówi, że kreator jest na komputerze). IP24 zapisy w tle z telefonu – propozycja: tak (telefon w
+     użyciu zamraża dni gry i – z IP15 – uzupełnia cele ICTTJ, jak komputer w użyciu, z tą samą kontrolą konfliktu);
+     bez tego dni zamraża komputer przy otwarciu, a do tego czasu ocena dnia może się zmienić po późniejszej edycji
+     operacji.
+   - Uwagi z telefonu do iA–iC (jeśli są) – poprawki wejdą do iD.
+3. **Co przygotować** – nic nowego (uprawnienie OneDrive obejmuje folder ICTTJ, nowych wtyczek nie ma).
+4. **Model, thinking, czas** – tabela prac (D90); grupy iA–iC trwały 0,15–0,3 planu:
+
+| Krok | Co obejmuje | Model i thinking (z górką) | Czas Claude'a |
+| --- | --- | --- | --- |
+| iD-1 | Folder ICTTJ na telefonie: kopia tylko do pobierania (`payouts/`, `forecasts/`), wybór folderu, odświeżanie razem z synchronizacją, stan ICTTJ w oknie (IP15) | Opus 5.5 · max (minimum xhigh – granica „nigdy nie zapisuj w folderze ICTTJ”) | 0,5–0,75 h |
+| iD-2 | Dokowanie na telefonie: panel na Mostku, okno dokowania, Portfel XTB, meldunek (IP15) | Opus 5.5 · xhigh (minimum high) | 0,25 h |
+| iD-3 | Ładownia na telefonie, meldunek ładowni (IP16) | Opus 5.5 · xhigh (minimum high) | 0,25 h |
+| iD-4 | Mapa gwiezdna na telefonie, kolejność przyciskami (IP17) | Opus 5.5 · high (minimum medium) | 0,1–0,25 h |
+| iD-5 | E2E telefonu, przegląd zrzutów, `/code-review` high, CI (Linux, Windows, macOS), wydanie 1.16.0 | Opus 5.5 · xhigh | 0,25 h |
+| Razem | rekomendacja: Opus 5.5 · max z IP15, xhigh bez niego | | z IP15 1,25–1,75 h (z górką 2 h), bez 0,5–0,75 h (z górką 1 h); plan był 4–4,5 h |
+
+Limit tygodniowy (D93): iD ok. 2,5 % (bez IP15 ok. 1 %), z górką 3,5 % – przeliczę po procencie po iC.
 
 ## 1.15.0 – iPhone: Dziennik i kurs (grupa iC, 21.10.2026)
 

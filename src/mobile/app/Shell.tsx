@@ -138,7 +138,7 @@ function MoreItem({ onClick, label, sub, glyph, testId }: { onClick: () => void;
   )
 }
 
-/** „Więcej”: the plan and the radar (previews), this phone's settings. */
+/** „Więcej”: the month's plan, the radar, this phone's settings. */
 function MoreScreen() {
   return (
     <div className="flex flex-col" data-testid="phone-more">
@@ -149,10 +149,10 @@ function MoreScreen() {
   )
 }
 
-/** A screen of the computers the phone does not have yet: said, with the way back. */
 /** The screens that stay on a computer (D92: the import from mBank, the reports, the full Synchronizacja). */
 const COMPUTER_ONLY: ReadonlySet<string> = new Set(['import', 'reports', 'sync'])
 
+/** A screen of the computers the phone does not have (yet, or for good – `COMPUTER_ONLY`): said, with the way back. */
 function NotOnPhone({ page }: { page: string }) {
   const def = PAGES.find((p) => p.page === page)
   const name = def?.label ?? (page === 'inbox' ? 'Meldunki' : page === 'sync' ? 'Synchronizacja' : page === 'settings' ? 'Ustawienia' : page)
