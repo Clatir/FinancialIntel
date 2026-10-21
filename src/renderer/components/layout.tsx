@@ -1,11 +1,12 @@
 // adapted from ICTTJ src/renderer/components/layout.tsx @ 84a8339
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { create } from 'zustand'
 import { dragPane, dragColumns, parseTrackWidths, visibleColumnsKey, visibleTemplate } from '@shared/panels'
 import { setColumns, useColumns } from '../store/columns'
 import { showAllPanels } from '../store/layout'
 import { hiddenSignature, usePanels } from '../store/panels'
 import { useUi } from '../store/ui'
+import { CompactContext } from './compact'
 
 /**
  * Drag with the pointer captured by the handle: `move` gets the distance from the start, `end` the last one.
@@ -260,6 +261,15 @@ export function Columns({
 }) {
   const page = useUi((s) => s.route.page)
   const { props: layout, empty } = useColumnGrid(id, tracks, { sep, style, keepEmpty: emptyNote })
+  // The phone: the columns one under another, full width.
+  if (useContext(CompactContext)) {
+    const Tag = as
+    return (
+      <Tag disabled={as === 'fieldset' ? disabled : undefined} className="flex min-w-0 flex-col" data-testid={testId}>
+        {children}
+      </Tag>
+    )
+  }
   const note = empty && emptyNote && (
     <div className="flex flex-col items-center justify-center gap-2 p-6 text-[12px] text-muted" data-columns-note="1" data-testid="all-panels-hidden">
       Wszystkie panele tej strony są ukryte.

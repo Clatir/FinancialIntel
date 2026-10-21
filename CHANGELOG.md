@@ -1,5 +1,22 @@
 # Financial Intel – zmiany
 
+## 1.14.0
+
+Wachta na iPhonie (grupa iB, D92): operacje, meldunki, plan miesiąca i radar w telefonie.
+
+- Operacje: lista z wyszukiwaniem (nazwa, notatka, kwota, #tag), miesiącem (‹ › albo cała historia) i filtrami – konto,
+  kategoria, oznaczenia; sumy wpływów i wydatków. Dotknięcie otwiera edytor operacji na cały ekran – te same pola co na
+  komputerze (kwota, data, kategoria, notatka, tagi, finansujący, podział paragonu…), „Historia” i usunięcie z „Cofnij”.
+  „+ Nowa” dodaje operację.
+- Meldunki z licznikiem w dolnym menu: wydatki bez kategorii (prosto do Operacji), nieznane sygnały („to w porządku”),
+  zwroty w drodze i salda do potwierdzenia – saldo z aplikacji banku wpisujesz w samym meldunku. Pozostałe meldunki
+  (dokowanie, duplikaty, pary przelewów, ładownia) telefon policzy i odeśle na komputer.
+- Plan miesiąca i Radar – podgląd: pensja, podział, koperty, debriefing, plan kampanii, 90 dni, pożyczki, boje, salda
+  kont naprzód. Zmiany robisz na komputerze (na telefonie w kolejnej wersji).
+- Dolne menu: Mostek, Operacje, „+ Wpis”, Meldunki, Więcej (Plan miesiąca, Radar, ustawienia telefonu). Dotknięcie
+  powiadomienia otwiera jego ekran: raport wieczorny – Operacje, przekroczenia i debriefing – Plan miesiąca, dni z
+  radaru – Radar.
+
 ## 1.13.0
 
 Okręt w kieszeni (grupa iA, D92): Financial Intel na iPhonie – ten sam folder danych na OneDrive co na komputerze,

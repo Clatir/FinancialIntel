@@ -2215,3 +2215,16 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   GitHuba). Wydanie dla Windows nie czeka na macOS – czerwony job `ios` nie wstrzymuje aktualizacji komputerów, a
   kolejne wypchnięcie tej samej wersji dołącza brakującą `.ipa`. Źródło AltStore:
   `https://github.com/Clatir/FinancialIntel/releases/latest/download/altstore.json`. Instrukcja: `docs/iphone.md`.
+- **T310** Wachta na telefonie (iB, IP3–IP7): dolne menu – Mostek, Operacje, „+ Wpis”, Meldunki (licznik meldunków
+  telefonu), Więcej (Plan miesiąca, Radar, Telefon); kolumny ekranów komputera w trybie telefonu jedna pod drugą
+  (`Columns` w `CompactContext`, kontekst w `components/compact.ts` – bez cyklu `Panel` ↔ `layout`). Operacje
+  (`src/mobile/app/PhoneOperations.tsx`): lista kart na filtrze listy komputera (`useOperationsUi` – zapisany filtr tego
+  telefonu jak na komputerze): wyszukiwanie, miesiąc (‹ ›, „cała historia”), konta, kategorie główne, oznaczenia, sumy;
+  filtry ustawione inaczej (kwota, domownik, marka, tagi) działają i można je zdjąć; dotknięcie – edytor komputera na
+  cały ekran (wszystkie pola, „Historia”, usunięcie z „Cofnij”), „+ Nowa” – szkic porzucany bez zmiany. Meldunki
+  (`PhoneInbox.tsx`): bez kategorii, anomalie („to w porządku”), zwroty w drodze i salda – saldo z banku wpisane w
+  meldunku (`useConfirmToday`: różnica pyta, czy dzisiejsze operacje są dopisane); pozostałe rodzaje policzone, „na
+  komputerze”; duplikatów telefon nie szuka (`useInbox(0)`). Plan miesiąca i Radar: `MonthPage` / `RadarPage` z
+  `preview` – tylko do odczytu niezależnie od folderu, miesiące i plan kampanii do przejrzenia (edycja – iC). Dotknięcie
+  powiadomienia prowadzi do Operacji (dziś, wieczór, operacja czujnika), Planu miesiąca (przydział, koperty, debriefing)
+  i Radaru; reszta – Mostek (`phoneTapTag`).

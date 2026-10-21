@@ -18,21 +18,29 @@ import { Toasts } from '@renderer/components/Toasts'
 import { RemoteChangesDialog } from '@renderer/features/sync/RemoteChangesDialog'
 import { QuickApp } from '@renderer/features/quick/QuickApp'
 import { PAGES } from '@renderer/features/screens/pages'
-import { IconGear } from '@renderer/components/icons'
+import { IconGear, IconInbox } from '@renderer/components/icons'
 import { api } from '@renderer/lib/api'
 import { usePhone } from '../phone'
 import { phoneHost } from '../hostRef'
 import { PhoneBridge } from './PhoneBridge'
 import { PhoneSettings } from './PhoneSettings'
+import { PhoneOperations } from './PhoneOperations'
+import { PhoneInbox, usePhoneInbox } from './PhoneInbox'
+import { PhoneMonth, PhoneRadar } from './PhonePreview'
 import { NoticePlanner, installPlannedDue } from './notices'
 
-type PhoneTab = 'main' | 'settings'
+type PhoneTab = 'main' | 'more' | 'settings'
 export const usePhoneTab = create<{ tab: PhoneTab }>(() => ({ tab: 'main' }))
 
-export function goBridge(): void {
+/** The screens the phone has (the rest says it is on a computer). */
+type PhonePage = 'bridge' | 'operations' | 'inbox' | 'month' | 'radar'
+
+export function goPage(page: PhonePage): void {
   usePhoneTab.setState({ tab: 'main' })
-  navigate({ page: 'bridge' })
+  navigate({ page })
 }
+
+export const goBridge = (): void => goPage('bridge')
 
 function SyncPill() {
   const sync = usePhone((s) => s.sync)
@@ -77,25 +85,52 @@ function TopBar() {
   )
 }
 
-function NavButton({ active, onClick, label, icon, testId }: { active: boolean; onClick: () => void; label: string; icon: ReactNode; testId: string }) {
+function NavButton({ active, onClick, label, icon, testId, badge = 0 }: { active: boolean; onClick: () => void; label: string; icon: ReactNode; testId: string; badge?: number }) {
   return (
-    <button className={cx('flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px]', active ? 'text-accent' : 'text-muted')} onClick={onClick} data-testid={testId} aria-current={active ? 'page' : undefined}>
+    <button className={cx('relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px]', active ? 'text-accent' : 'text-muted')} onClick={onClick} data-testid={testId} data-badge={badge || undefined} aria-current={active ? 'page' : undefined}>
       {icon}
       {label}
+      {badge > 0 && <span className="num absolute top-[5px] left-[calc(50%+6px)] min-w-[16px] bg-accent px-1 text-center text-[10px] leading-[16px] text-bg">{badge > 99 ? '99+' : badge}</span>}
     </button>
   )
 }
 
+const icon = (page: string) => PAGES.find((p) => p.page === page)?.icon(18)
+
 function BottomNav({ tab, page }: { tab: PhoneTab; page: string }) {
-  const bridge = PAGES.find((p) => p.page === 'bridge')
+  const reports = usePhoneInbox().items.length
+  const more = tab !== 'main' || page === 'month' || page === 'radar'
   return (
     <nav className="phone-bottom flex shrink-0 items-stretch border-t border-line bg-panel" data-testid="phone-nav">
-      <NavButton active={tab === 'main' && page === 'bridge'} onClick={goBridge} label="Mostek" icon={bridge?.icon(18)} testId="phone-nav-bridge" />
-      <button className="mx-2 my-1.5 flex flex-[1.2] items-center justify-center bg-accent text-[13px] font-medium text-bg" onClick={() => void api.quickOpen()} data-testid="phone-nav-quick">
-        + Szybki wpis
+      <NavButton active={tab === 'main' && page === 'bridge'} onClick={goBridge} label="Mostek" icon={icon('bridge')} testId="phone-nav-bridge" />
+      <NavButton active={tab === 'main' && page === 'operations'} onClick={() => goPage('operations')} label="Operacje" icon={icon('operations')} testId="phone-nav-operations" />
+      <button className="mx-1 my-1.5 flex w-[64px] shrink-0 flex-col items-center justify-center bg-accent text-bg" onClick={() => void api.quickOpen()} aria-label="Szybki wpis" data-testid="phone-nav-quick">
+        <span className="text-[20px] leading-none">+</span>
+        <span className="text-[10.5px] font-medium">Wpis</span>
       </button>
-      <NavButton active={tab === 'settings'} onClick={() => usePhoneTab.setState({ tab: 'settings' })} label="Telefon" icon={<IconGear size={18} />} testId="phone-nav-settings" />
+      <NavButton active={tab === 'main' && page === 'inbox'} onClick={() => goPage('inbox')} label="Meldunki" icon={<IconInbox size={18} />} badge={reports} testId="phone-nav-inbox" />
+      <NavButton active={more} onClick={() => usePhoneTab.setState({ tab: 'more' })} label="Więcej" icon={<span className="text-[20px] leading-[18px] tracking-[1px]">⋯</span>} testId="phone-nav-more" />
     </nav>
+  )
+}
+
+/** „Więcej”: the plan and the radar (previews), this phone's settings. */
+function MoreScreen() {
+  const Item = ({ onClick, label, sub, glyph, testId }: { onClick: () => void; label: string; sub: string; glyph: ReactNode; testId: string }) => (
+    <button className="flex min-h-[56px] w-full items-center gap-3 border-b border-line px-4 text-left active:bg-hover" onClick={onClick} data-testid={testId}>
+      <span className="text-muted">{glyph}</span>
+      <span className="flex flex-col">
+        <span className="text-[14px] text-fg-strong">{label}</span>
+        <span className="text-[11.5px] text-muted">{sub}</span>
+      </span>
+    </button>
+  )
+  return (
+    <div className="flex flex-col" data-testid="phone-more">
+      <Item onClick={() => goPage('month')} label="Plan miesiąca" sub="pensja, koperty, debriefing – podgląd" glyph={icon('month')} testId="phone-more-month" />
+      <Item onClick={() => goPage('radar')} label="Radar" sub="90 dni, pożyczki, boje – podgląd" glyph={icon('radar')} testId="phone-more-radar" />
+      <Item onClick={() => usePhoneTab.setState({ tab: 'settings' })} label="Telefon" sub="synchronizacja, konto, powiadomienia" glyph={<IconGear size={18} />} testId="phone-nav-settings" />
+    </div>
   )
 }
 
@@ -160,8 +195,18 @@ export function Shell() {
       </div>
     ) : tab === 'settings' ? (
       <PhoneSettings />
+    ) : tab === 'more' ? (
+      <MoreScreen />
     ) : route.page === 'bridge' ? (
       <PhoneBridge />
+    ) : route.page === 'operations' ? (
+      <PhoneOperations />
+    ) : route.page === 'inbox' ? (
+      <PhoneInbox />
+    ) : route.page === 'month' ? (
+      <PhoneMonth />
+    ) : route.page === 'radar' ? (
+      <PhoneRadar />
     ) : (
       <NotOnPhone page={route.page} />
     )
@@ -169,7 +214,7 @@ export function Shell() {
     <CompactContext.Provider value>
       <div className="phone-safe flex h-full flex-col bg-bg" data-amounts={hideAmounts ? 'hidden' : 'shown'} data-testid="phone-shell">
         <TopBar />
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain" key={tab === 'settings' ? 'settings' : route.page}>
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain" key={tab === 'main' ? route.page : tab}>
           {screen}
         </main>
         <BottomNav tab={tab} page={route.page} />

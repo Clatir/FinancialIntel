@@ -37,7 +37,8 @@ const zl = (g: number) => `${plnText(g)} zł`
 
 const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin', plan: 'boja', end: 'koniec', return: 'zwrot' }
 
-export function RadarPage() {
+/** `preview` – read only whatever the folder (the phone, IP7: loans, buoys and transfers are changed on a computer). */
+export function RadarPage({ preview = false }: { preview?: boolean } = {}) {
   const fleet = useFleet()
   const members = useMembers()
   const transactions = useData((s) => s.records.transactions)
@@ -48,7 +49,8 @@ export function RadarPage() {
     const v = members.find((m) => m.id === id)?.via
     return v ? memberName(v, members) : null
   }
-  const readOnly = useFolderLocked()
+  const folderLocked = useFolderLocked()
+  const readOnly = preview || folderLocked
   // The items, the buoys' days and the accounts ahead (F16, F26, F27) – the notes carry amounts (B61): masked or shown at
   // once with Ctrl+$.
   const future = useFuture()

@@ -102,14 +102,17 @@ describe('window.fi na telefonie', () => {
 
   it('dotknięcie powiadomienia przed startem okna dochodzi raz; ekrany spoza telefonu prowadzą na Mostek', async () => {
     const { h, notifications } = host()
-    notifications.tap('radar')
+    notifications.tap('cargo')
     const taps: string[] = []
     h.api.onNotificationClick((t) => taps.push(t))
     await Promise.resolve()
     expect(taps).toEqual(['briefing'])
-    notifications.tap('briefing')
-    expect(taps).toEqual(['briefing', 'briefing'])
+    notifications.tap('radar')
+    expect(taps).toEqual(['briefing', 'radar'])
+    // The phone's screens (iB): Operacje (today, the evening, a sensor's operation), Plan miesiąca, Radar.
+    for (const tag of ['today', 'evening', 'low', 'overrun', 'debriefing', 'anomaly:k1', 'return:t1']) expect(phoneTapTag(tag)).toBe(tag)
     expect(phoneTapTag('dock:abc')).toBe('briefing')
+    expect(phoneTapTag('import')).toBe('briefing')
     // A second listener gets no old tap.
     const later: string[] = []
     h.api.onNotificationClick((t) => later.push(t))

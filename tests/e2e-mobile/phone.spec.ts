@@ -51,6 +51,12 @@ async function connect(page: Page): Promise<void> {
   await expect(page.getByTestId('page-bridge')).toBeVisible()
 }
 
+/** The phone's settings: „Więcej” → „Telefon” (iB). */
+async function openSettings(page: Page): Promise<void> {
+  await page.getByTestId('phone-nav-more').click()
+  await page.getByTestId('phone-nav-settings').click()
+}
+
 /** The transactions on the fake OneDrive (the computer's view of the folder). */
 function driveTransactions(): Array<Record<string, unknown>> {
   return srv.drive
@@ -106,7 +112,7 @@ test('zmiana z komputera dochodzi; bez sieci wpis czeka, z siecią idzie; start 
   // A computer renames the ship: the phone's next sync brings it.
   const fi = JSON.parse(srv.drive.read(`${FOLDER}/fi.json`)!) as { settings: { shipName: string }; updatedAt: string }
   srv.drive.put(`${FOLDER}/fi.json`, `${JSON.stringify({ ...fi, settings: { ...fi.settings, shipName: 'Orzeł' }, updatedAt: new Date().toISOString(), updatedBy: 'DOM-PC' }, null, 2)}\n`)
-  await page.getByTestId('phone-nav-settings').click()
+  await openSettings(page)
   await page.getByTestId('phone-sync-now').click()
   await expect(page.getByTestId('phone-ship')).toContainText('Orzeł')
 
@@ -115,7 +121,7 @@ test('zmiana z komputera dochodzi; bez sieci wpis czeka, z siecią idzie; start 
   await page.getByTestId('phone-nav-bridge').click()
   await quickExpense(page, '7', 'Kiosk')
   await expect(page.getByTestId('phone-sync')).toHaveAttribute('data-pending', '1', { timeout: 20_000 })
-  await page.getByTestId('phone-nav-settings').click()
+  await openSettings(page)
   await page.getByTestId('phone-sync-now').click()
   await expect(page.getByTestId('phone-sync')).toHaveAttribute('data-state', 'offline')
   expect(driveTransactions().some((t) => t.counterparty === 'Kiosk')).toBe(false)
@@ -132,7 +138,7 @@ test('zmiana z komputera dochodzi; bez sieci wpis czeka, z siecią idzie; start 
   await expect(page.getByTestId('bridge-recent-row')).toHaveCount(2)
 })
 
-test('powiadomienia na najbliższe dni zaplanowane przy otwarciu; ekran komputera mówi, że jest na komputerze', async ({ page }) => {
+test('powiadomienia na najbliższe dni zaplanowane przy otwarciu; dotknięcie prowadzi do ekranu, który telefon ma', async ({ page }) => {
   await connect(page)
   await expect
     .poll(() => page.evaluate(() => (window.__FI_NOTICES__?.planned ?? []).map((n) => n.key.split(':')[0])), { timeout: 15_000 })
@@ -141,18 +147,21 @@ test('powiadomienia na najbliższe dni zaplanowane przy otwarciu; ekran komputer
   // The container's payment in 3 days – on its day, in the morning.
   expect(planned.find((n) => n.key.startsWith('planned:'))?.body).toContain('OC auta')
   // Switched off: gone from the plan.
-  await page.getByTestId('phone-nav-settings').click()
+  await openSettings(page)
   await page.getByTestId('phone-notify-evening').click()
   await expect.poll(() => page.evaluate(() => window.__FI_NOTICES__!.planned.some((n) => n.key.startsWith('evening:')))).toBe(false)
-  // A radar day's notice tapped (the Radar is not on the phone yet): Mostek, also from the phone's settings.
+  // A radar day's notice tapped: the Radar (its preview), also from the phone's settings; a screen the phone has not –
+  // Mostek.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('fi:notice-tap', { detail: 'radar' })))
+  await expect(page.getByTestId('page-radar')).toBeVisible()
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('fi:notice-tap', { detail: 'cargo' })))
   await expect(page.getByTestId('page-bridge')).toBeVisible()
-  // A screen only a computer has (the operations of the latest list): said so, with the way back.
+  // The latest list's operation opens in Operacje (on the phone since iB) – the editor, „← Operacje” back to the list.
   await page.getByTestId('phone-nav-bridge').click()
   await page.getByTestId('bridge-recent-row').first().click()
-  await expect(page.getByTestId('phone-not-here')).toHaveAttribute('data-page', 'operations')
-  await page.getByRole('button', { name: 'Wróć na Mostek' }).click()
-  await expect(page.getByTestId('page-bridge')).toBeVisible()
+  await expect(page.getByTestId('phone-operation')).toBeVisible()
+  await page.getByTestId('phone-operation-back').click()
+  await expect(page.getByTestId('page-operations')).toBeVisible()
 })
 
 test('logowanie wygasło: „Zaloguj ponownie” – kopia na telefonie i czekający wpis zostają', async ({ page }) => {
@@ -163,7 +172,7 @@ test('logowanie wygasło: „Zaloguj ponownie” – kopia na telefonie i czekaj
   srv.drive.token = 'token-2'
   srv.drive.refresh.clear()
   srv.drive.offline = false
-  await page.getByTestId('phone-nav-settings').click()
+  await openSettings(page)
   await page.getByTestId('phone-sync-now').click()
   await expect(page.getByTestId('phone-sync')).toHaveAttribute('data-state', 'auth')
   await expect(page.getByTestId('phone-sync-state')).toHaveText('zaloguj się ponownie')

@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { clampPanelHeight, dragColumns, mergePanelLayout, panelKey, panelName, type PanelLayout } from '@shared/panels'
 import { setColumns } from '../store/columns'
+import { CompactContext } from './compact'
 import { columnOf, dragColumnBoundary, resetColumns, startDrag, useColumnsEpoch } from './layout'
 import { useDetachedPanel, type DetachSpec } from '../store/detach'
 import { hidePanel } from '../store/layout'
@@ -23,8 +24,7 @@ const join = (...parts: Array<string | false | null | undefined>) => parts.filte
 
 /** True inside a detached window: panels fill it and have no layout controls. */
 export const DetachedContext = createContext(false)
-/** The phone (T307): panels keep their title and collapse – no window of their own, no maximize, no edges to drag. */
-export const CompactContext = createContext(false)
+export { CompactContext }
 /** The panel's body has a set size (dragged, maximized, detached): charts fill it instead of their default height. */
 const FillContext = createContext(false)
 export function usePanelFill(): boolean {
