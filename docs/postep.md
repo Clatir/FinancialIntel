@@ -867,6 +867,30 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
 
+## Przed grupą iB – iPhone: Wachta (21.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa iA (1.13.0) w PR #42: telefon ma Mostek, szybki wpis, powiadomienia i ustawienia,
+   synchronizację z OneDrive i `.ipa` z CI. Grupa iB (1.14.0, D92 / D93 – jednym ciągiem po iA): IP3 Operacje – lista
+   z wyszukiwaniem, miesiącem i filtrami (konto, kategoria, oznaczenia); IP4 edycja operacji – edytor komputera na cały
+   ekran (kwota, data, kategoria, notatka, tagi, finansujący i reszta pól edytora); IP5 Meldunki – bez kategorii,
+   anomalie, zwroty w drodze, potwierdzenie salda (pozostałe rodzaje – na komputerze do iC); IP6 Plan miesiąca i IP7
+   Radar – podgląd (ekrany komputera tylko do odczytu, w jednej kolumnie; edycja w iC). Dolne menu: Mostek, Operacje,
+   „+ Szybki wpis”, Meldunki z licznikiem, Więcej (Plan miesiąca, Radar, Telefon); dotknięcie powiadomienia prowadzi do
+   jego ekranu, gdy telefon go ma. Format folderu bez zmian.
+2. **Co użytkownik musi powiedzieć** – nic przed startem (D93). Odbiór iA na telefonie może iść równolegle (lista w
+   „1.13.0”); limit tygodniowy po iA – proszę o aktualny procent (tabela „Rzeczywiste”).
+3. **Co przygotować** – nic nowego (instalacja iA: `docs/iphone.md`).
+4. **Model, thinking, czas** – tabela prac (D90):
+
+| Krok | Co obejmuje | Model i thinking (z górką) | Czas Claude'a |
+| --- | --- | --- | --- |
+| iB-1 | Dolne menu i „Więcej”, układ kolumn ekranów komputera w jednej kolumnie, dotknięcia powiadomień do ekranów | Opus 5.5 · high (minimum medium) | 0,25 h |
+| iB-2 | Operacje: lista na telefon (wyszukiwanie, miesiąc, filtry, sumy), edytor na cały ekran, nowa operacja (IP3, IP4) | Opus 5.5 · xhigh (minimum high) | 0,75–1 h |
+| iB-3 | Meldunki: cztery rodzaje z decyzją na telefonie, potwierdzenie salda w meldunku, reszta „na komputerze” (IP5) | Opus 5.5 · high | 0,5 h |
+| iB-4 | Plan miesiąca i Radar – podgląd (IP6, IP7) | Opus 5.5 · high | 0,25–0,5 h |
+| iB-5 | E2E telefonu, `/code-review` high, CI (Linux, Windows, macOS), wydanie 1.14.0 | Opus 5.5 · xhigh | 0,5 h |
+| Razem | rekomendacja: Opus 5.5 · xhigh (max – bez szkody, wolniej) | | 2,25–2,75 h (z górką 3 h) |
+
 ## 1.13.0 – iPhone: Okręt w kieszeni (grupa iA, 21.10.2026)
 
 Zakres: „Przed grupą iA” niżej (tam jeszcze z numerami sprzed przesunięcia: D89 / D90, 1.11.0). Zrobione:
