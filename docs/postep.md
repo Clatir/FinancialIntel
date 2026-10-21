@@ -13,7 +13,7 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
 **Następny krok:** wersja na iPhone'a (D89) – grupy iA–iE (`docs/plan.md`, „Wersja na iPhone'a”); „Przed grupą iA”
-niżej, start na komendę użytkownika (D67). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36
+niżej; komenda D90 – grupa iA w toku. Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36
 (F39), wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.10.1 – listy w sekcjach niżej.
 
@@ -62,16 +62,31 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
-| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | 7,5–10,5 h (z górką 11 h) | 1.11.0 | ✅ D89; rejestracja w Entra (identyfikator aplikacji) i AltStore – do końca grupy | ⏳ czeka na komendę |
-| **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | 2–2,5 h (z górką 3 h) | 1.12.0 | odbiór iA na telefonie | ⏳ |
-| **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | 5–6,5 h (z górką 7 h) | 1.13.0 | odbiór iB | ⏳ |
-| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** | 4–4,5 h (z górką 5 h) | 1.14.0 | czy folder ICTTJ jest na OneDrive (IP15) | ⏳ |
-| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **max** | 5,5–7,5 h (z górką 8 h) | 1.15.0 | IP21 i IP24 – decyzje | ⏳ |
+| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | 7,5–10,5 h (z górką 11 h) | 1.11.0 | ✅ D89, D90 (komenda). Na koniec grupy, do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera | 🔨 w toku |
+| **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | 2–2,5 h (z górką 3 h) | 1.12.0 | iA na telefonie: logowanie, pierwsze pobranie, szybki wpis widoczny na PC (odbiór może iść równolegle z iB) | ⏳ |
+| **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | 5–6,5 h (z górką 7 h) | 1.13.0 | iB scalone; uwagi z telefonu do iA / iB (jeśli są) | ⏳ |
+| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** | 4–4,5 h (z górką 5 h) | 1.14.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC | ⏳ |
+| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **max** | 5,5–7,5 h (z górką 8 h) | 1.15.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
 | | **iPhone iA–iE (D89)** | | | **24–31,5 h (z górką 34 h)** | | | |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
 | | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 56,5 h** | | | |
 | | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
+
+**iPhone – limit tygodniowy (D90).** Plan Max 20x, odnowienie w niedzielę o 18:00; 21.10.2026 zużyte 55 %. Podstawa:
+od odnowienia 18.10 o 18:00 grupy E–V i 1.10.1 (ok. 33 h pracy Claude'a – zegar z tabeli, Opus 5.5 · max, przegląd
+`/code-review` high, mutacje, E2E) i koniec przeglądu ultracode zużyły ok. 55 %, czyli ok. 1,4–1,7 % na godzinę pracy.
+Grupy FI kończyły się w ok. 0,7 czasu planu. „Oczekiwane” = 0,7 środka planu × 1,55 %/h (+ zapas na CI macOS w iA),
+„z górką” = górna granica „z górką” × 1,7 %/h. Rzeczywiste zużycie wpisuję po każdej grupie (użytkownik podaje %).
+
+| Grupa | Oczekiwane | Z górką | Narastająco z górką | Rzeczywiste |
+| --- | --- | --- | --- | --- |
+| iA | ok. 11 % | 20 % | 75 % | – |
+| iB | ok. 2,5 % | 5 % | 80 % | – |
+| iC | ok. 6 % | 12 % | 92 % | – |
+| iD | ok. 5 % | 8,5 % | po odnowieniu | – |
+| iE | ok. 7 % | 13,5 % | po odnowieniu | – |
+| **Razem** | **ok. 31,5 %** | **ok. 59 %** | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -1867,3 +1882,4 @@ Do sprawdzenia przez użytkownika (Windows 11):
   10 poprawek; PR do `main`.
 - 21.10.2026 – wersja na iPhone'a: szacunek, ograniczenia wersji towarzyszącej, numeracja IP…, plan grup iA–iE;
   D89 (D2 zniesione, AltStore, rejestracja w Entra, wspólna numeracja); „Przed grupą iA”; pauza do komendy.
+- 21.10.2026 – D90 (komenda „Rozpocznij grupy”), szacunek limitu tygodniowego na grupę; start grupy iA.

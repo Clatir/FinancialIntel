@@ -344,7 +344,10 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   - grupy iA–iE z pauzą i komendą przed każdą (D67), jeden PR i wydanie na grupę (D71).
   Do decyzji później: IP21 (kreator na telefonie – propozycja: bez niego), IP15 (dokowanie – tylko gdy folder ICTTJ jest
   na OneDrive; przed iD), IP24 (zapisy w tle z telefonu; przed iE). F41 (skrót iOS zapisujący plik) nadal odrzucone (D88).
-
+- **D90** (21.10.2026) Komenda „Rozpocznij grupy” – grupy iA–iE jedna po drugiej, każda z własnym PR i wydaniem (D71);
+  w tabeli prac przy każdej grupie – co potrzebne przed nią i szacunek zużycia limitu tygodniowego (plan Max 20x, 55 %
+  zużyte 21.10.2026; odnowienie w niedzielę o 18:00). Przerwa po grupie iC na sprawdzenie limitu (z górką iA–iC ok.
+  37 %), chyba że użytkownik powie inaczej; iD czeka na odpowiedź o folderze ICTTJ (IP15), iE – na IP21 i IP24.
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
 - **T2** Dane: jeden plik JSON na rekord (układ jak ICTTJ), moduły folderu danych przeniesione z ICTTJ.
