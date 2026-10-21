@@ -1020,6 +1020,17 @@ export class DataStore {
       .then((listing) => this.mutex.run(() => this.refreshInQueue(undefined, listing ?? undefined)))
   }
 
+  /**
+   * Files changed by the phone's sync (T304) in this store's turn: `write` changes them while no save of this store
+   * runs (never between a save's check of a file and its write), then they are read as a change from outside.
+   */
+  applyExternal(paths: string[], write: () => Promise<void>): Promise<ChangeSet | null> {
+    return this.mutex.run(async () => {
+      await write()
+      return this.refreshInQueue(paths)
+    })
+  }
+
   /** The refresh in its turn of the queue; `listing` = a full check's files and their stats made before it. */
   private async refreshInQueue(paths?: string[], listing?: Map<string, FileStat | null>): Promise<ChangeSet | null> {
     const wasAvailable = this.available
