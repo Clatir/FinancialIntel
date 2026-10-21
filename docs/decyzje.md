@@ -340,6 +340,11 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   - d) zapisane widoki listy nie pamiętają kolumn;
   - e) eksport widocznej listy zawsze ze wszystkimi kolumnami;
   - opis części paragonu w edytorze operacji (do 500 znaków), w wyszukiwarce i w eksporcie; szybki wpis bez zmian.
+- **D90** (21.10.2026) Zasada współpracy: przed każdym zadaniem tabela prac – krok, zakres, model i thinking oszczędne,
+  ale z górką (o stopień wyżej niż minimum), szacowany czas pracy Claude'a; razem i rekomendacja dla całości (CLAUDE.md,
+  „Zasada współpracy”). Zgłoszenie do 1.12.0: zwrot domownika liczony „od najstarszego wydatku” jest nieintuicyjny –
+  zwrot (także przez pośrednika) ma być powiązany z konkretnym wydatkiem; propozycja w „Przed etapem 1.12.0”
+  (`docs/postep.md`), czeka na odpowiedzi.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.

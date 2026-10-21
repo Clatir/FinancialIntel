@@ -12,7 +12,8 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – kolejne prace tylko na komendę użytkownika (D67). Flota rezerwowa (F32), paragony i
+**Następny krok:** 1.12.0 – zwroty domowników przypisane do wydatków: plan w „Przed etapem 1.12.0”, czeka na odpowiedzi
+i komendę użytkownika (D67). Przed każdym zadaniem tabela prac z modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i
 gwarancje (F38), ulgi PIT-37 / PIT-36 (F39), wpisy z telefonu (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.11.0 – listy w sekcjach niżej.
 
@@ -62,6 +63,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
 | 1.11.0 | Opis wydatku: notatka na liście operacji, opis części paragonu, wybór widocznych kolumn listy (D89) | Opus 5.5 | **xhigh** (z górką; wystarczyłby high) | zmierzone ok. 1 h (zegar sesji od zgody do PR, z przeglądem, 11 mutacjami i pełnym E2E; plan był 1–1,5 h) | 1.11.0 | ✅ D89 | ✅ wydane (PR #38) |
+| 1.12.0 | Zwrot domownika przypisany do konkretnego wydatku (także przez pośrednika), bez „od najstarszego” | Opus 5.5 | **xhigh** (z górką; minimum high) | ok. 2–2,5 h (z przeglądem, E2E i CI) | 1.12.0 | ⏳ odpowiedzi a–f i komenda | ⏳ plan gotowy, czeka na komendę |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
 | | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1 + 1.11.0** | | | **ok. 57,5 h** | | | |
@@ -1010,6 +1012,56 @@ Do sprawdzenia przez użytkownika (Windows):
 2. Podział paragonu z opisem części; wyszukanie operacji po słowie z opisu części; eksport CSV / Excel.
 3. „Kolumny”: ukrycie kilku (np. Godzina, Tagi) przy otwartym panelu szczegółów i w wąskim oknie; po ponownym
    uruchomieniu wybór zostaje; na drugim komputerze lista ma swój wybór.
+
+## Przed etapem 1.12.0 – zwrot domownika przypisany do wydatku (21.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.11.0 wydane (PR #38, #39), nic nie jest otwarte. Zgłoszenie: zwrot domownika liczony „od
+   najstarszego wydatku” jest nieintuicyjny; zwrot (także przez pośrednika) ma być powiązany z konkretnym wydatkiem.
+   Dziś (`calc/household.ts` `repay`): wpłata domownika spłaca najpierw zakupy zaznaczone w „Pokrywa (inaczej od
+   najstarszych)” w edytorze wpłaty (`covers`), resztę od najstarszego otwartego zakupu; import i szybki wpis nic nie
+   wiążą, a wydatek nie pokazuje, czy i czym został oddany. Pośrednik (D81) już ma części osób w jednym przelewie –
+   `covers` operacji działa dla każdej osoby osobno (kolejka każdej osoby ma tylko jej zakupy). Propozycja:
+   - **Zwrot zawsze do konkretnych wydatków.** Wpłata osoby (albo jej część w przelewie pośrednika) spłaca tylko
+     wskazane zakupy, w podanej kolejności; bez „od najstarszego”.
+   - **Dopasowanie samo, gdy pewne** – przy imporcie z banku, w edytorze i w szybkim wpisie: kwota = jeden otwarty zakup
+     tej osoby (jedyny o tej kwocie), = suma wszystkich jej otwartych zakupów albo = suma jedynego zestawu 2–3 zakupów z
+     ostatnich 90 dni → powiązane od razu (do zmiany). Kilka możliwości → pytanie z listą.
+   - **Bez pewnego dopasowania – „zwrot do przypisania”.** Pieniądze i tak zmniejszają to, co osoba ma oddać (osłony,
+     depozyt i przychody liczone jak dziś – liczby floty bez zmian), ale żaden zakup nie jest oznaczony jako oddany;
+     Meldunki „Przypisz zwrot (Mama, 120 zł)” z podpowiedziami, Radar i Ustawienia → Domownicy pokazują kwotę do
+     przypisania.
+   - **Strona wydatku**: w edytorze zakupu finansowanego przez domownika „Oddane 30 z 80 zł · przelew Mama 12.10 →”
+     (przejście do wpłaty), „Do oddania 50 zł”, przycisk „Przypisz zwrot…” (wpłaty tej osoby z kwotą do przypisania);
+     na liście operacji oznaczenia „do oddania” / „częściowo oddane” / „oddane” i filtr po nich.
+   - **Edytor wpłaty**: „Za co oddaje” osobno dla każdej osoby (przy pośredniku – sekcja na osobę), z sumą i tym, co
+     zostaje (do przypisania albo zaliczka / przychód, gdy osoba nic więcej nie ma do oddania).
+   - **Zwrot towaru** zakupu domownika – do wskazanego zakupu (podpowiedź: ostatni zakup tej osoby u tego kontrahenta).
+2. **Co użytkownik musi powiedzieć** – pytania z propozycją (✅ = moja propozycja):
+   - a) Wpłata bez pewnego dopasowania: ✅ „zwrot do przypisania” (saldo osoby maleje, zakupy czekają na wskazanie), czy
+     zostaje „od najstarszego”, tylko widoczne w edytorze zakupu z „zmień”?
+   - b) Pewne dopasowanie (kwota jednego zakupu, suma wszystkich, jedyny zestaw 2–3): ✅ wiąże samo (do zmiany), czy
+     zawsze pytać?
+   - c) Nadwyżka ponad wskazane zakupy (np. 100 zł za zakup 80 zł): ✅ gdy osoba ma jeszcze inne zakupy do oddania –
+     „do przypisania”; gdy nie – jak dziś wg ustawienia osoby (zaliczka / przychód / pytaj).
+   - d) Dawne zwroty (sprzed aktualizacji): ✅ zostają jak są – od najstarszego do dnia aktualizacji (bez przepisywania
+     plików; każdy można przepiąć w edytorze), czy przeliczyć wszystkie od nowa (wszystkie dawne bez wskazania – „do
+     przypisania”)?
+   - e) Zwrot towaru zakupu domownika: ✅ do wskazanego zakupu z podpowiedzią (ostatni zakup tej osoby u tego
+     kontrahenta), bez wskazania – „do przypisania”?
+   - f) Zakup opłacony z zaliczki osoby (depozyt): ✅ jak dziś – zaliczka idzie na najbliższy zakup sama (to „z góry
+     zapłacone”), czy też wskazywać ręcznie?
+3. **Co przygotować** – nic przed startem; po wydaniu: jedna wpłata domownika dopasowana sama, jedna przypisana ręcznie,
+   przelew przez pośrednika z częścią drugiej osoby, Meldunki „Przypisz zwrot”, status zakupu w edytorze i na liście.
+4. **Model, thinking, czas** – tabela prac (D90; model oszczędny, w nawiasie z górką):
+
+   | Krok | Zakres | Model i thinking (minimum → z górką) | Czas Claude'a |
+   | --- | --- | --- | --- |
+   | 1. Silnik rozliczeń | `household.ts`: spłata tylko wskazanych, „do przypisania”, dzień przejścia (dawne od najstarszego), stan każdego zakupu (oddane / częściowo / do oddania, którymi wpłatami); testy jednostkowe na przykładach | Opus 5.5 high → **xhigh** (pieniądze i salda osób) | ok. 30 min |
+   | 2. Dopasowanie | kwota jednego zakupu, suma wszystkich, jedyny zestaw 2–3; import (`reconcile.ts` decyzja z `covers`), szybki wpis, edytor; testy | Opus 5.5 high → **xhigh** | ok. 30 min |
+   | 3. Edytor wpłaty i zakupu | „Za co oddaje” na osobę (pośrednik), status zakupu z przejściem do wpłaty, „Przypisz zwrot…”, zwrot towaru | Sonnet 5.5 high → **Opus 5.5 high** | ok. 25 min |
+   | 4. Lista, Radar, Meldunki, odprawa | oznaczenia i filtr „oddane / częściowo / do oddania”, „do przypisania” na Radarze i w Domownikach, meldunek „Przypisz zwrot”, przypomnienie | Sonnet 5.5 high → **Opus 5.5 high** | ok. 20 min |
+   | 5. Domknięcie | E2E (wpłata dopasowana sama, przypisana ręcznie, pośrednik, meldunek), `/code-review` high, mutacje, dokumentacja, PR, CI, wydanie | Opus 5.5 high → **xhigh** | ok. 25–35 min |
+   | **Razem** | jeden PR i wydanie 1.12.0 | **Opus 5.5 · xhigh** dla całości (kroki 3–4 same dałyby radę na Sonnet 5.5 high, ale etap idzie jednym ciągiem) | **ok. 2–2,5 h** |
 
 ## Przed grupą U – ładownia i czujniki, funkcje (19.10.2026)
 

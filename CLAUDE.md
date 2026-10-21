@@ -8,6 +8,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 ## Zasada współpracy
 - Przed wykonaniem każdego zadania podaj użytkownikowi, jaki model i jaki poziom thinking będzie najodpowiedniejszy,
   dopiero potem wykonuj.
+- **Przed każdym zadaniem tabela prac (D90)**: krok, co obejmuje, model i thinking – najtańszy, który wystarczy, z górką
+  (o stopień wyżej) – oraz szacowany czas pracy Claude'a; na końcu razem i rekomendacja dla całości.
 - **Przed każdym etapem komunikat „Przed etapem N”**: (1) co trzeba wiedzieć – zakres etapu, stan poprzednich, rzeczy
   otwarte; (2) co użytkownik musi powiedzieć – pytania z propozycją, odbiór poprzedniego etapu; (3) co trzeba dodać /
   przygotować – pliki, klucze, ustawienia, testy po stronie użytkownika; (4) model, thinking, szacunek czasu.
