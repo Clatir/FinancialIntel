@@ -2,7 +2,8 @@
 
 Osobista aplikacja budżetowa na Windows (Electron). Użytkownik jest kapitanem okrętu, a jego finanse to systemy
 okrętu (osłony, kadłub, energia, ładownia); analizy mówią językiem ICT. Działa offline, na kilku komputerach (nigdy
-jednocześnie), dane w folderze na OneDrive. Trading (konto maklerskie XTB) jest wyłącznie w ICTTJ. Interfejs po polsku, terminy ICT po angielsku. Siostrzana aplikacja:
+jednocześnie), dane w folderze na OneDrive. Od D92 także iPhone (Capacitor, ten sam folder na OneDrive przez Microsoft Graph,
+instalacja przez AltStore; plan grup iA–iE w `docs/plan.md`). Trading (konto maklerskie XTB) jest wyłącznie w ICTTJ. Interfejs po polsku, terminy ICT po angielsku. Siostrzana aplikacja:
 ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam autor, ten sam stos, ten sam wygląd.
 
 ## Zasada współpracy
@@ -54,12 +55,17 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   Tailwind; zod (schematy = źródło typów), zustand, luxon, ulid, yazl / yauzl, cmdk, @tanstack/react-virtual,
   lightweight-charts.
 - **Żadnych natywnych modułów Node.** Wszystkie biblioteki w `devDependencies`, bundlowane do `out/`.
-- Testy: Vitest (`tests/unit` – czyste obliczenia, `tests/fs` – folder danych), Playwright `_electron` (`tests/e2e`,
-  na Linuksie pod `xvfb-run`).
+- Testy: Vitest (`tests/unit` – czyste obliczenia, `tests/fs` – folder danych, `tests/mobile` – telefon, projekt
+  `mobile` z modułami Node telefonu), Playwright `_electron` (`tests/e2e`, na Linuksie pod `xvfb-run`), telefon –
+  Playwright w przeglądarce rozmiaru iPhone'a (`tests/e2e-mobile`, `playwright.mobile.config.ts`).
 - Build: electron-builder → `Financial-Intel-Setup.exe` (NSIS) i `Financial-Intel-portable.exe`;
   `appId` `app.financialintel.desktop`, `productName` „Financial Intel”.
-- CI (`.github/workflows/ci.yml`, wzór ICTTJ): Linux przy każdym wypchnięciu (testy, build, E2E pod Xvfb); Windows (build, smoke, test
-  aktualizacji) tylko dla PR, gałęzi domyślnej i ręcznie; wydanie GitHub Releases dla nowej wersji z `SHA256SUMS.txt`.
+- iPhone (D92, od 1.13.0): Capacitor 8 (`ios/`, `capacitor.config.json`, `app.financialintel.ios`), web app telefonu
+  `vite.mobile.config.mts` → `out/mobile`; `.ipa` bez podpisu (AltStore), źródło AltStore `altstore.json` w wydaniu.
+- CI (`.github/workflows/ci.yml`, wzór ICTTJ): Linux przy każdym wypchnięciu (testy, build, E2E pod Xvfb, E2E telefonu w
+  Chromium); Windows (build, smoke, test aktualizacji) i macOS (`ios`: E2E telefonu w WebKit, `.ipa`, symulator) tylko dla
+  PR, gałęzi domyślnej i ręcznie; wydanie GitHub Releases dla nowej wersji z `SHA256SUMS.txt` (job Windows), potem
+  `ios-release` dołącza `.ipa` i `altstore.json`.
 - Aktualizacje: wzór ICTTJ (GitHub Releases, SHA-256, portable i instalator); repozytorium publiczne (D61), token
   GitHub per komputer w `safeStorage` tylko na wypadek prywatnego.
 - Node do budowania ≥ 22.12, przypięty w `.node-version` (jak ICTTJ, z `scripts/check-node.mjs`).
@@ -76,6 +82,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `ictj/` (odczyt ICTTJ).
 - `src/preload` – `window.fi` (contextBridge); okno z contextIsolation, sandbox, CSP; jedna instancja aplikacji.
 - `src/renderer` – React; `store/` (zustand, autozapis jak ICTTJ), `features/<ekran>/`, `components/` (z ICTTJ).
+- `src/mobile` – iPhone (od 1.13.0): `window.fi` w oknie aplikacji (`host/`), lustro folderu (`vfs/`, `node/`),
+  synchronizacja z OneDrive (`sync/`), ekrany telefonu (`app/`) nad rendererem komputera bez zmian.
 - **Stany warstw nigdy nie są zapisywane** – liczy je `calc/fleet.ts` z rekordów, deterministycznie (wzór:
   `calc/payouts.ts` w ICTTJ). Każda reguła ma test na przykładzie ze specyfikacji.
 
@@ -1010,6 +1018,43 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   „domownik · …”); Meldunki rodzaj `repayments`; Radar `radar-member-unassigned`, `radar-member-open`,
   `radar-member-purchase`; Ustawienia → Domownicy `household-assign-row` (`-from`, `-all`, `-today`), `member-unassigned`.
 - Testy: `tests/unit/repayments.test.ts`, E2E `tests/e2e/repayments.spec.ts`.
+## Kod (iA – telefon, 1.13.0, D92)
+- Lustro folderu (T305): `src/mobile/vfs/vfs.ts` (`Vfs` – pliki w pamięci, `StoredEntry` {data, mtimeMs, `dirty` – numer
+  zmiany do wysłania, `meta` OneDrive {id, eTag, cTag}}, nagrobki usunięć, `applyRemote` / `markSynced` / `setMeta` /
+  `moveEntry`, `onLocalChange`, pliki `.tmp-` nieutrwalane; `MemoryPersistence` w testach), `vfs/idb.ts` (IndexedDB
+  `fi-phone`: `entries`, `folders`, `kv`); moduły Node telefonu `src/mobile/node/` (`fs.ts` – `useVfs`, `promises`,
+  `FileHandle`; `path.ts`; `crypto.ts`; `unsupported.ts`) przez aliasy `scripts/mobile-aliases.mjs` (build i projekt
+  Vitest `mobile`); magazyn komputera bez zmian nad `MIRROR` (`/fi`), `DataStore.applyExternal(ścieżki, zapis)` (zapis
+  synchronizacji i odświeżenie w kolejce magazynu).
+- Synchronizacja (T306): `sync/graph.ts` (`GraphClient` – `delta`, `download` przez downloadUrl, `upload` z `ifMatch` /
+  `newOnly`, `ensureFolders`, `remove`; `GraphError`, `AuthError`; 429 / 503, jedno odnowienie przy 401), `sync/engine.ts`
+  (`SyncEngine` – `pull` z drzewem folderów po id, pełna lista po 410, `push` z kopią konfliktu `-telefon-<czas>`;
+  `mirrored` – tylko `.json`, bez `backups/`, `.history/` i ukrytych poza `.presence/`), `sync/state.ts` (drzewo folderów,
+  `deltaLink`), `sync/scheduler.ts` (`SyncScheduler` – 30 s, 1,5 s po zmianie, ponowienia, `SyncStatus`), `sync/auth.ts`
+  (PKCE, `authorizeUrl`, `codeFromRedirect`, `exchangeCode`, `refreshTokens`, `TokenSource`; 429 / 5xx nie wylogowuje),
+  `sync/http.ts` (`fetchHttp`, `capacitorHttp` – tylko token, `NetworkError`); `shared/paths.ts` `guessConflictSource` –
+  kopia `-telefon-`.
+- Host i ekrany (T307): `host/host.ts` (`PhoneHost` – `FiApi` w oknie: magazyn nad lustrem, zmiany po `folderShown`,
+  obecność `.presence/<nazwa>.json` i „w użyciu”, ustawienia telefonu `fi.phone.prefs` / `fi.phone.machine`, szybki wpis
+  w tym samym oknie – `quickSheet`, `PC_ONLY`, `phoneTapTag` – dotknięcie prowadzi na Mostek, `pendingTap`), `hostRef.ts`,
+  `platform.ts` (Capacitor albo przeglądarka testów – `window.__FI_PHONE_TEST__`, `window.__FI_NOTICES__`, zdarzenie
+  `fi:notice-tap`; `noticeId`), `phone.ts` (`usePhone`: fazy starting / signin / folder / first-sync / ready, `startPhone`,
+  `signIn` – także ponowne, `chooseFolder`, `firstSync`, `syncNow`, `signOut`, `planNotifications`), `main.tsx`
+  (`window.fi` przed rendererem), `app/` – `Connect.tsx` (`phone-client-id`, `phone-signin`, `phone-folder`,
+  `phone-folder-connect`, `phone-first-sync`, `phone-message`), `Shell.tsx` (`phone-shell`, `phone-sync` z `data-state` /
+  `data-pending`, `phone-ship`, `phone-hide-amounts`, `phone-nav-bridge` / `-quick` / `-settings`, `phone-quick-sheet`,
+  `phone-not-here` z `data-page`; zmiana trasy zamyka ustawienia telefonu), `PhoneBridge.tsx`, `PhoneSettings.tsx`
+  (`phone-sync-*`, `phone-signin-again`, `phone-signout`, `phone-machine`, `phone-pref-*`, `phone-notify-*`,
+  `phone-version`), `notices.ts` (`NoticePlanner`, `installPlannedDue`, `markPlannedDue`), `PhoneApp.tsx` (`mount` –
+  `FI_PHONE_BOOT_OK`); renderer – `components/Panel.tsx` `CompactContext`, `features/bridge/BridgePage.tsx` `BridgePanels`
+  (`single` – jedna kolumna, bez dokowania).
+- Powiadomienia (T308): `shared/notifyPlan.ts` (`plannedNotices` – 7 dni, `morningAt`, `BRIEFING_FROM` 7:00, `RADAR_FROM`
+  9:00, `PLANNED_MAX` 60, `warsawAt`, `keepPlanned`, `plannedDue`).
+- iOS i wydanie (T309): `ios/` (Capacitor SPM), `scripts/make-ios-assets.py` (ikona, ekran startowy),
+  `scripts/altstore-source.mjs`, CI `ios` / `ios-release`, instrukcja `docs/iphone.md`.
+- Testy: `tests/mobile/vfs.test.ts`, `sync.test.ts` (udawany OneDrive `tests/mobile/fakeGraph.ts` – `FakeDrive`),
+  `auth.test.ts`, `host.test.ts`, `tests/unit/notify-plan.test.ts`; E2E `tests/e2e-mobile/phone.spec.ts` (serwer
+  `server.ts` – aplikacja i `FakeDrive` na jednym porcie, `seedDrive`); zmienne `FI_PHONE_BROWSER` (webkit), `FI_CHROMIUM`.
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
@@ -1058,6 +1103,9 @@ npm run build        # out/
 npx playwright test  # E2E (po npm run build); Linux: xvfb-run -a npx playwright test
 npm run dist:win     # release/*.exe
 build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
+npm run dev:mobile   # telefon w przeglądarce – wygląd; OneDrive i logowanie tylko udawane (jak E2E, window.__FI_PHONE_TEST__)
+npm run build:mobile # out/mobile (web app telefonu), potem npx cap sync ios
+npm run test:e2e:mobile  # E2E telefonu (build z --mode e2e + Playwright)
 ```
 
 ## Etapy (szczegóły i kryteria: `docs/plan.md`)
@@ -1141,6 +1189,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   (wyszukiwarka, eksport), wybór widocznych kolumn listy na tym komputerze
 - [x] 1.12.0 Zwrot domownika przypisany do zakupu (D91): bez „od najstarszego”, pewne dopasowanie samo (import, szybki
   wpis, edytor), „do przypisania” w Meldunkach, stan zakupu z wpłatą i „Przypisz zwrot…”, pośrednik, oznaczenia listy
+- [ ] iA–iE Wersja na iPhone'a (D92) → 1.13.0–1.17.0: OneDrive przez Graph, `.ipa` przez AltStore, wersja
+  towarzysząca (iA, iB) i pełny port bez importu z mBanku, raportów i pełnej Synchronizacji (iC–iE)
 - ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja
   starych lat~~ – odrzucone (D88)
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

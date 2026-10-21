@@ -7,7 +7,7 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }
 
-export { Panel, usePanelFill, DetachedContext } from './Panel'
+export { Panel, usePanelFill, DetachedContext, CompactContext } from './Panel'
 
 export function Field({
   label,

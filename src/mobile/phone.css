@@ -1,0 +1,32 @@
+/* The phone (T307): the computers' look within the screen's safe areas; the phone's own bars sized for a finger. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The notch and the home indicator: the bars stay out of them. */
+.phone-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.phone-top {
+  min-height: 46px;
+}
+.phone-bottom {
+  height: calc(54px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.phone-sheet {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* The panels of the computers in one column: full width, no side borders. */
+[data-testid='phone-shell'] main section {
+  border-left: 0;
+  border-right: 0;
+}

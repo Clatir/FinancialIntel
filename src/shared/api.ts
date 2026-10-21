@@ -442,7 +442,8 @@ export interface FiApi {
   /** The tray's tooltip: today's energy (null = only the app's name). */
   setTrayStatus(text: string | null): Promise<void>
   /** A Windows notification; clicking it shows the window and sends `tag` back. */
-  notify(n: { title: string; body: string; tag: string; silent?: boolean }): Promise<void>
+  /** `key` – the notifier's (the phone drops the same one planned for later). */
+  notify(n: { title: string; body: string; tag: string; silent?: boolean; key?: string }): Promise<void>
   onNotificationClick(cb: (tag: string) => void): () => void
   /** The ICTTJ folder of this computer as read now (payouts and forecast goals, D72). */
   ictjState(): Promise<IctjSnapshot>

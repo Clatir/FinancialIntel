@@ -98,6 +98,8 @@ export interface ConflictName {
 export function guessConflictSource(remainder: string): string {
   if (/^-zewnetrzna-/.test(remainder)) return 'zmiana z zewnątrz podczas edycji'
   if (/^-uszkodzona-/.test(remainder)) return 'uszkodzony plik odsunięty przy zapisie'
+  // The phone's change that met a computer's (T306): OneDrive keeps the computer's, the phone's goes beside it.
+  if (/^-telefon-/.test(remainder)) return 'zmiana z telefonu w tym samym czasie co na komputerze'
   if (/sync-conflict/i.test(remainder)) return 'Syncthing'
   if (/conflicted copy|kopia powoduj|konflikt/i.test(remainder)) return 'Dropbox'
   if (/^ \(\d+\)$/.test(remainder)) return 'Google Drive / kopia'

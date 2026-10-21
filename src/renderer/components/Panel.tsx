@@ -23,6 +23,8 @@ const join = (...parts: Array<string | false | null | undefined>) => parts.filte
 
 /** True inside a detached window: panels fill it and have no layout controls. */
 export const DetachedContext = createContext(false)
+/** The phone (T307): panels keep their title and collapse – no window of their own, no maximize, no edges to drag. */
+export const CompactContext = createContext(false)
 /** The panel's body has a set size (dragged, maximized, detached): charts fill it instead of their default height. */
 const FillContext = createContext(false)
 export function usePanelFill(): boolean {
@@ -66,6 +68,7 @@ export function Panel({
   style?: CSSProperties
 }) {
   const detachedMode = useContext(DetachedContext)
+  const compact = useContext(CompactContext)
   const page = useUi((s) => s.route.page)
   const n = name ?? panelName(title)
   const key = n ? panelKey(page, n) : null
@@ -74,7 +77,7 @@ export function Panel({
   const layout = key ? stored : local
   const [maximized, setMaximized] = useState(false)
   const controls = !detachedMode && (title != null || actions != null)
-  const det = useDetachedPanel(controls && detach ? key : null, detach, typeof title === 'string' ? title : (n ?? 'Wykres'))
+  const det = useDetachedPanel(controls && detach && !compact ? key : null, detach, typeof title === 'string' ? title : (n ?? 'Wykres'))
   const hidden = controls && !!key && !!layout?.hidden
   const collapsed = controls && !maximized && !!layout?.collapsed
   const height = controls && !maximized && !collapsed ? (layout?.height ?? null) : null
@@ -112,8 +115,8 @@ export function Panel({
   const hiddenOnPage = usePanels((s) => hiddenSignature(s, page))
   const columnsEpoch = useColumnsEpoch()
   useLayoutEffect(() => {
-    setWidthEdge(!!sectionRef.current && !maximized && !detachedMode && !!columnOf(sectionRef.current))
-  }, [maximized, detachedMode, collapsed, hidden, hiddenOnPage, columnsEpoch])
+    setWidthEdge(!!sectionRef.current && !maximized && !detachedMode && !compact && !!columnOf(sectionRef.current))
+  }, [maximized, detachedMode, compact, collapsed, hidden, hiddenOnPage, columnsEpoch])
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>, axes: 'y' | 'xy') => {
     const start = bodyRef.current?.getBoundingClientRect().height ?? 120
@@ -201,12 +204,12 @@ export function Panel({
           {!collapsed && actions}
           {controls && (
             <span className="-mr-1 flex shrink-0 items-center">
-              {det.available && !det.detached && (
+              {det.available && !det.detached && !compact && (
                 <PanelButton title="Otwórz w osobnym oknie (pełny ekran)" onClick={det.open} testId="panel-detach">
                   <IconDetach size={13} />
                 </PanelButton>
               )}
-              {!collapsed && (
+              {!collapsed && !compact && (
                 <PanelButton title={maximized ? 'Przywróć rozmiar (Esc)' : 'Powiększ na całe okno'} onClick={() => setMaximized(!maximized)} testId="panel-maximize">
                   {maximized ? <IconRestore size={13} /> : <IconMaximize size={13} />}
                 </PanelButton>
@@ -216,7 +219,7 @@ export function Panel({
                   {collapsed ? <IconChevronRight size={13} /> : <IconChevronDown size={13} />}
                 </PanelButton>
               )}
-              {!maximized && key && n && (
+              {!maximized && key && n && !compact && (
                 <PanelButton title="Ukryj panel (pokażesz go w menu Układ nad stroną)" onClick={() => hidePanel(key, n)} testId="panel-hide">
                   <IconEyeOff size={13} />
                 </PanelButton>
@@ -236,7 +239,7 @@ export function Panel({
           </div>
         </FillContext.Provider>
       )}
-      {controls && !collapsed && !maximized && (
+      {controls && !collapsed && !maximized && !compact && (
         <div
           role="separator"
           aria-orientation="horizontal"

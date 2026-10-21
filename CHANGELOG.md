@@ -1,5 +1,33 @@
 # Financial Intel – zmiany
 
+## 1.13.0
+
+Okręt w kieszeni (grupa iA, D92): Financial Intel na iPhonie – ten sam folder danych na OneDrive co na komputerze,
+instalacja bez App Store przez AltStore (instrukcja: `docs/iphone.md` w repozytorium).
+
+Na telefonie:
+- Logowanie do OneDrive kontem Microsoft (aplikacja zarejestrowana raz w Microsoft Entra), wybór folderu danych
+  (domyślnie `FinancialIntel`) i pierwsza kopia z postępem. Potem tylko zmiany, a aplikacja startuje z kopii w telefonie
+  – także bez sieci.
+- Mostek z tymi samymi liczbami co na komputerze: stan okrętu, energia dziś, koperty, odprawa, Daily Bias, „skąd ta
+  liczba?”, ostatnie operacje, należności, przychody i krzywa majątku.
+- Szybki wpis przyciskiem na dole: tagi, „za domownika”, wspólne finansowanie. Bez sieci wpis czeka w telefonie
+  („offline · 1 czeka”) i wysyła się, gdy sieć wróci.
+- Powiadomienia na najbliższy tydzień planowane przy każdym otwarciu: odprawa poranna (po ciszy nocnej, nie przed
+  7:00), raport wachty wieczorem i dni z Radaru – opłaty, raty, boje, PIT-38 – o 9:00. To samo powiadomienie nie
+  przychodzi dwa razy.
+- Telefon jest dla folderu kolejnym komputerem („iPhone”, nazwę można zmienić): komputer widzi go w Synchronizacji i w
+  banerze, gdy jest w użyciu.
+- Logowanie unieważnione przez Microsoft (na przykład po zmianie hasła): „Zaloguj ponownie” w Ustawieniach telefonu –
+  kopia folderu i czekające wpisy zostają.
+- Ekranów, których telefon jeszcze nie ma, dotyczy komunikat z powrotem na Mostek. Operacje, meldunki, plan miesiąca i
+  Radar dochodzą w kolejnych wersjach. Import z mBanku, raporty i kopie zapasowe zostają na komputerze.
+
+Na komputerze:
+- Zmiana zrobiona na telefonie w tej samej chwili co na komputerze nie przepada: wersja z telefonu jest kopią
+  konfliktu `…-telefon-…` w Synchronizacji, z opisem „zmiana z telefonu w tym samym czasie co na komputerze” – „Zachowaj
+  tę” albo „Scal…”.
+- Wydanie zawiera też `Financial-Intel.ipa` i źródło AltStore. `SHA256SUMS.txt` ma sumy wszystkich plików.
 ## 1.12.0
 
 Zwrot domownika przypisany do konkretnego wydatku (D91) – zamiast „od najstarszego”:

@@ -1,0 +1,15 @@
+{
+  "appId": "app.financialintel.ios",
+  "appName": "Financial Intel",
+  "webDir": "out/mobile",
+  "backgroundColor": "#0b0d10",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0b0d10"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "presentationOptions": ["banner", "list", "sound"]
+    }
+  }
+}

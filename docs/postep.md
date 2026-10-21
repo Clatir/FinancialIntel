@@ -1,6 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** pauza do komendy użytkownika (D67). **1.12.0 wydane** (PR #40 – zwrot domownika przypisany do zakupu, D91). **1.11.0 wydane** (PR #38 – opis wydatku na liście operacji, opis części paragonu, wybór kolumn, D89). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
+**Stan:** grupa iA (iPhone, **1.13.0**, D92 / D93) – PR i CI; potem iB i iC jednym ciągiem. 1.11.0 i 1.12.0 wydała w tym
+czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0, decyzje D92 / D93, T305–T309.
+**1.12.0 wydane** (PR #40 – zwrot domownika przypisany do zakupu, D91). **1.11.0 wydane** (PR #38 – opis wydatku na liście operacji, opis części paragonu, wybór kolumn, D89). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
 **1.10.1 wydane** (PR #35 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany, D88, T301),
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
 oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
@@ -12,10 +14,11 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – kolejne prace tylko na komendę użytkownika (D67). Przed każdym zadaniem tabela prac z
-modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i
-gwarancje (F38), ulgi PIT-37 / PIT-36 (F39), wpisy z telefonu (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
-Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w sekcjach niżej.
+**Następny krok:** grupa iA (iPhone, 1.13.0 – D92, D93) – PR, CI (Linux, Windows, macOS), scalenie i wydanie z
+`.ipa`; potem grupy iB i iC jednym ciągiem (D93), przerwa po iC na limit tygodniowy. Przed każdym zadaniem tabela prac
+z modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
+wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
+Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w sekcjach niżej; iPhone – „1.13.0” niżej i `docs/iphone.md`.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -64,10 +67,31 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
 | 1.11.0 | Opis wydatku: notatka na liście operacji, opis części paragonu, wybór widocznych kolumn listy (D89) | Opus 5.5 | **xhigh** (z górką; wystarczyłby high) | zmierzone ok. 1 h (zegar sesji od zgody do PR, z przeglądem, 11 mutacjami i pełnym E2E; plan był 1–1,5 h) | 1.11.0 | ✅ D89 | ✅ wydane (PR #38) |
 | 1.12.0 | Zwrot domownika przypisany do konkretnego wydatku (także przez pośrednika), bez „od najstarszego” | Opus 5.5 | **xhigh** (z górką; minimum high) | zmierzone ok. 1,5 h (zegar sesji od komendy do PR, z przeglądem, 26 mutacjami i dwoma pełnymi E2E; plan był 2–2,5 h) | 1.12.0 | ✅ D91 | ✅ wydane (PR #40) |
+| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji od komendy do PR, z przeglądem, CI macOS na gałęzi i scaleniem 1.11.0 / 1.12.0; plan był 7,5–10,5 h) | 1.13.0 | ✅ D92, D93 (komenda). Do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera (`docs/iphone.md`) | 🔨 PR – CI, scalenie i wydanie (D71) |
+| **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | 2–2,5 h (z górką 3 h) | 1.14.0 | iA na telefonie: logowanie, pierwsze pobranie, szybki wpis widoczny na PC (odbiór może iść równolegle z iB) | ⏳ |
+| **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | 5–6,5 h (z górką 7 h) | 1.15.0 | iB scalone; uwagi z telefonu do iA / iB (jeśli są) | ⏳ |
+| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** | 4–4,5 h (z górką 5 h) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC | ⏳ |
+| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **max** | 5,5–7,5 h (z górką 8 h) | 1.17.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
+| | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1 + 1.11.0 + 1.12.0** | | | **ok. 59 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1 + 1.11.0 + 1.12.0 + iA** | | | **ok. 61,5 h** | | | |
 | | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
+
+**iPhone – limit tygodniowy (D93).** Plan Max 20x, odnowienie w niedzielę o 18:00; 21.10.2026 zużyte 55 %. Podstawa:
+od odnowienia 18.10 o 18:00 grupy E–V i 1.10.1 (ok. 33 h pracy Claude'a – zegar z tabeli, Opus 5.5 · max, przegląd
+`/code-review` high, mutacje, E2E) i koniec przeglądu ultracode zużyły ok. 55 %, czyli ok. 1,4–1,7 % na godzinę pracy.
+Grupy FI kończyły się w ok. 0,7 czasu planu. „Oczekiwane” = 0,7 środka planu × 1,55 %/h (+ zapas na CI macOS w iA),
+„z górką” = górna granica „z górką” × 1,7 %/h. Rzeczywiste zużycie wpisuję po każdej grupie (użytkownik podaje %).
+
+| Grupa | Oczekiwane | Z górką | Narastająco z górką | Rzeczywiste |
+| --- | --- | --- | --- | --- |
+| iA | ok. 11 % | 20 % | 75 % | – |
+| iB | ok. 2,5 % | 5 % | 80 % | – |
+| iC | ok. 6 % | 12 % | 92 % | – |
+| iD | ok. 5 % | 8,5 % | po odnowieniu | – |
+| iE | ok. 7 % | 13,5 % | po odnowieniu | – |
+| **Razem** | **ok. 31,5 %** | **ok. 59 %** | | |
 
 Grupa B zajęła ok. 1,5 h zegara sesji (od utworzenia gałęzi do wypchnięcia PR, z przeglądami kodu i pełnymi E2E) –
 dużo mniej niż plan 4–6 h; grupa C ok. 1 h (plan 2–3 h). Szacunki D–E przeliczone na tej podstawie, nadal z zapasem:
@@ -842,6 +866,73 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 2. Operacje: zaznacz kilka, „Zmień zaznaczone” → podgląd skutku → „Cofnij”; „Więcej filtrów”, widok zapisany na drugim
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
+
+## 1.13.0 – iPhone: Okręt w kieszeni (grupa iA, 21.10.2026)
+
+Zakres: „Przed grupą iA” niżej (tam jeszcze z numerami sprzed przesunięcia: D89 / D90, 1.11.0). Zrobione:
+- Folder danych na telefonie (T305): magazyn komputera bez zmian nad lustrem folderu w IndexedDB; bez sieci aplikacja
+  startuje z lustra, zmiany czekają w kolejce. Historia wersji i kopie zostają na komputerze.
+- Synchronizacja z OneDrive (T306): zmiany folderu przez Microsoft Graph (delta), zapis z wersją, którą zastępuje,
+  konflikt → kopia `…-telefon-<czas>.json` do wyboru w Synchronizacji na PC (opis w karcie konfliktu), ponowienia bez
+  sieci, logowanie PKCE kontem osobistym (aplikacja zarejestrowana przez użytkownika), „Zaloguj ponownie” bez utraty
+  lustra – innym kontem odrzucone.
+- Aplikacja (T307): renderer komputera nad `window.fi` w oknie telefonu – Mostek w jednej kolumnie (bez dokowania),
+  szybki wpis w arkuszu, ustawienia telefonu (synchronizacja, konto i folder, nazwa, ukrywanie kwot, powiadomienia),
+  ekrany spoza telefonu mówią „tylko na komputerze”; obecność „iPhone” widoczna na PC.
+- Powiadomienia (T308): plan na 7 dni przy każdym otwarciu (odprawa nie przed 7:00, raport wachty, dni Radaru o 9:00),
+  bez dubli z powiadomieniami otwartej aplikacji.
+- iOS i wydanie (T309): projekt Capacitor `ios/`, job CI macOS (E2E w WebKit, `.ipa` bez podpisu, symulator), job
+  `ios-release` (`.ipa`, `altstore.json`, suma w `SHA256SUMS.txt`), instrukcja `docs/iphone.md`.
+- Przegląd `/code-review` high: 9 kandydatów, 9 poprawionych – odprawa przy wczesnym otwarciu nie przychodzi drugi raz z
+  iOS (pokazane w aplikacji zdejmuje zaplanowane), „Dziś bez wydatków” i nowy dzień planują od nowa, rano po ciszy
+  nocnej także dla ciszy kończącej się po południu i ciszy w dzień, nieudany plan nie liczy na stary, ponowne logowanie
+  innym kontem odrzucone, komunikat chwilowej awarii logowania bez obietnicy ponowienia, błąd logowania w ustawieniach
+  tylko z tej próby, dotknięcie powiadomienia tylko do słuchającego okna (jeden bufor).
+- Scalenie z `main` (1.11.0 – PR #38, 1.12.0 – PR #40, równoległa sesja): konflikty tylko w dokumentach i konfiguracji;
+  numery iPhone'a przesunięte (wersje 1.13.0–1.17.0, D92 / D93, T305–T309).
+- Testy: 911 unit + fs + telefon (nowe: `tests/mobile/vfs`, `sync`, `auth`, `host`, `tests/unit/notify-plan`), E2E
+  desktopu 69, E2E telefonu 4 (Chromium; na CI macOS też WebKit). CI na gałęzi (Linux, Windows, macOS – ręcznie, przed
+  scaleniem z `main`) zielone: `.ipa` w 70 s, w symulatorze iOS aplikacja wstaje (`FI_PHONE_BOOT_OK` z konsoli).
+
+Do sprawdzenia przez użytkownika (iPhone, `docs/iphone.md`):
+1. Rejestracja aplikacji w Microsoft Entra – identyfikator aplikacji (klienta); AltServer na Windows, AltStore na
+   iPhonie, tryb dewelopera; źródło AltStore z instrukcji i instalacja Financial Intel.
+2. Logowanie, folder `FinancialIntel`, pierwsza kopia – Mostek z tymi samymi liczbami co na komputerze.
+3. Szybki wpis na telefonie – po chwili widoczny na komputerze (zmienione przez „iPhone”); zmiana na komputerze –
+   na telefonie po „Synchronizuj teraz”.
+4. Tryb samolotowy: wpis czeka („offline · 1 czeka”), po włączeniu sieci idzie.
+5. Ta sama operacja zmieniona na komputerze i na telefonie bez sieci – po synchronizacji kopia „zmiana z telefonu…” w
+   Synchronizacji na komputerze.
+6. Powiadomienia: zgoda przy pierwszym planie; następnego dnia odprawa po ciszy nocnej (nie przed 7:00).
+
+## Przed grupą iA – iPhone: Okręt w kieszeni (21.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.10.1 wydane, ciąg M–V zamknięty. D92: wersja na iPhone'a (D2 zniesione), grupy iA–iE
+   (`docs/plan.md`, „Wersja na iPhone'a” – numeracja IP…, kryteria iA). Grupa iA (1.13.0): IP0.1 dostęp do folderu na
+   OneDrive przez Microsoft Graph (pierwsze pobranie, potem tylko zmiany, kopia w telefonie – działa bez sieci), IP0.2
+   opakowanie iOS w Capacitorze i `.ipa` z GitHub Actions (macOS) w wydaniu obok `.exe` + źródło AltStore, IP0.3 układ
+   pod telefon, IP0.4 powiadomienia lokalne, IP0.5 konflikt z PC – obie wersje, wybór w Synchronizacji na PC, IP1
+   szybki wpis, IP2 Mostek. Logika `src/shared` bez zmian – te same liczby. Telefon jest dla folderu kolejnym
+   komputerem (obecność, nazwa „iPhone”). Format folderu bez zmian. Testy: synchronizacja z udawanym Graph (Vitest),
+   ekrany w WebKit w rozmiarze iPhone'a (Playwright), uruchomienie w symulatorze iOS na CI macOS (tylko PR, `main` i
+   ręcznie – jak job Windows). Aplikacja na Windows bez zmian w działaniu. Sprawy techniczne (biblioteki, logowanie,
+   kopia w telefonie, konflikt) rozstrzygam w grupie jako T-decyzje. Na prawdziwym iPhonie testuje użytkownik.
+2. **Co użytkownik musi powiedzieć** – ✅ D92 (D2 zniesione, AltStore, rejestracja w Entra po stronie użytkownika,
+   wspólna numeracja). Później: IP15 (przed iD), IP21 i IP24 (przed iE).
+3. **Co przygotować** – potrzebne dopiero pod koniec grupy (pierwsza instalacja na telefonie):
+   - rejestracja aplikacji w Microsoft Entra: portal.azure.com (konto Microsoft z OneDrive) → Microsoft Entra ID →
+     Rejestracje aplikacji → Nowa rejestracja; nazwa „Financial Intel iPhone”; typy kont „Tylko osobiste konta
+     Microsoft”; identyfikator URI przekierowania – platforma „Klient publiczny / natywny (mobilny i klasyczny)”,
+     `financialintel://auth`; po utworzeniu „Uwierzytelnianie” → „Zezwalaj na przepływy klienta publicznego” → Tak;
+     „Uprawnienia interfejsu API” → Microsoft Graph → delegowane `Files.ReadWrite`, `offline_access`, `User.Read`; bez
+     klucza tajnego. Do Claude'a: „Identyfikator aplikacji (klienta)” – nie jest tajny, trafi do publicznego
+     repozytorium. Gdy portal odpowie, że tworzenie aplikacji poza katalogiem jest wycofane – darmowe konto Azure
+     (karta tylko do weryfikacji) tworzy katalog, potem jak wyżej;
+   - AltStore: na Windows iTunes i iCloud ze strony Apple (nie z Microsoft Store), AltServer z altstore.io, AltStore na
+     iPhonie przez AltServer z własnym Apple ID; na iPhonie „Tryb dewelopera” (Ustawienia → Prywatność i ochrona) po
+     pierwszej instalacji; darmowe Apple ID – najwyżej 3 takie aplikacje naraz;
+   - folder danych na OneDrive – domyślnie `FinancialIntel` w głównym folderze OneDrive (D62); inny – podać ścieżkę.
+4. **Model, thinking, czas** – Opus 5.5 · max · 7,5–10,5 h (z górką 11 h).
 
 ## Przed grupą V – wywiad, funkcje (19.10.2026)
 
@@ -1981,3 +2072,11 @@ Do sprawdzenia przez użytkownika (Windows 11):
   podobne nazwy bez słów ogólnych, usunięte nierozliczone nie wchodzą same, paragon przeskalowany, „+ domownik” z
   pytaniem, ekran czeka na zapis, panel duplikatów jak import, szybsze propozycje i reguły; przegląd `/code-review` high –
   10 poprawek; PR do `main`.
+- 21.10.2026 – wersja na iPhone'a: szacunek, ograniczenia wersji towarzyszącej, numeracja IP…, plan grup iA–iE;
+  D92 (D2 zniesione, AltStore, rejestracja w Entra, wspólna numeracja); „Przed grupą iA”; pauza do komendy.
+- 21.10.2026 – D93 (komenda „Rozpocznij grupy”), szacunek limitu tygodniowego na grupę, tabela „co potrzebne przed grupą”;
+  start iA wstrzymany – użytkownik przełącza thinking z high na max.
+- 21.10.2026 – komenda „Start”: grupa iA (iPhone) – lustro folderu i synchronizacja z OneDrive, host i ekrany telefonu,
+  powiadomienia z wyprzedzeniem, projekt iOS i CI macOS (`.ipa`, symulator, WebKit), źródło AltStore; przegląd
+  `/code-review` high – 9 poprawek; scalenie z `main` (1.11.0 i 1.12.0 z równoległej sesji) – numery iA–iE przesunięte
+  (1.13.0–1.17.0, D92 / D93, T305–T309); PR do `main`.

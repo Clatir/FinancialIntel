@@ -7,7 +7,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 
 ### Zakres i granica
 - **D1** Nazwa: Financial Intel. Okręt nazywa użytkownik, domyślnie „Flagowiec”.
-- **D2** Windows 11, kilka komputerów (nigdy jednocześnie), synchronizacja przez OneDrive. Bez wersji na iPhone'a.
+- **D2** Windows 11, kilka komputerów (nigdy jednocześnie), synchronizacja przez OneDrive. Bez wersji na iPhone'a – **zniesione (D92)**: wersja na iPhone'a.
 - **D3** Zakres: budżet prywatny. Trading zostaje w ICTTJ. Słowo „firma” nie występuje (trading i „firma” to to samo).
 - **D4** Cele aplikacji: spokój przy nieregularnych wypłatach, kontrola codziennych wydatków, budowa poduszki i celów,
   brak niespodzianek z opłatami. Kryteria sukcesu: wszystkie cztery z `specyfikacja.md`.
@@ -352,6 +352,27 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zakupach do oddania „do przypisania”, bez nich wg ustawienia osoby; d) dawne zwroty zostają jak są (od najstarszego) do
   dnia aktualizacji, dzień do zmiany w Ustawieniach → Domownicy; e) zwrot towaru – do wskazanego zakupu (podpowiedź: ten
   sam kontrahent); f) zaliczka idzie sama na najbliższy zakup (jak dotąd). Wydanie 1.12.0.
+
+- **D92** (21.10.2026) Wersja na iPhone'a – odpowiedź na plan grup iA–iE („D2 znosimy, AltStore, rejestracja na az
+  ok, wspólna numeracja”):
+  - D2 zniesione: aplikacja na iPhone'a z tym samym folderem danych na OneDrive; telefon jest dla folderu kolejnym
+    komputerem (nigdy naraz – jak D2);
+  - zakres: wersja towarzysząca (IP0.1–IP0.5, IP1–IP7) i pełny port bez importu z mBanku (IP10), raportów (IP20) i pełnej
+    Synchronizacji (IP23) – te zostają na PC; numeracja IP… w `docs/plan.md`, sekcja „Wersja na iPhone'a”;
+  - instalacja bez App Store: AltStore z darmowym Apple ID (IP-A1; podpis odnawiany co 7 dni przez AltServer na
+    Windows), plik `.ipa` w GitHub Releases i źródło AltStore z repozytorium;
+  - rejestracja aplikacji w Microsoft Entra (Azure) na koncie Microsoft użytkownika – po jego stronie (kroki w „Przed
+    grupą iA” w `docs/postep.md`);
+  - numeracja wersji wspólna z Windows: grupa iA = 1.13.0, kolejne grupy – kolejne wersje (zapisane najpierw jako D89 /
+    D90 z iA = 1.11.0; 1.11.0 i 1.12.0 wydała w tym czasie równoległa sesja – D89, D91 – więc numery przesunięte);
+  - grupy iA–iE z pauzą i komendą przed każdą (D67), jeden PR i wydanie na grupę (D71).
+  Do decyzji później: IP21 (kreator na telefonie – propozycja: bez niego), IP15 (dokowanie – tylko gdy folder ICTTJ jest
+  na OneDrive; przed iD), IP24 (zapisy w tle z telefonu; przed iE). F41 (skrót iOS zapisujący plik) nadal odrzucone (D88).
+- **D93** (21.10.2026) Komenda „Rozpocznij grupy” – grupy iA–iE jedna po drugiej, każda z własnym PR i wydaniem (D71);
+  w tabeli prac przy każdej grupie – co potrzebne przed nią i szacunek zużycia limitu tygodniowego (plan Max 20x, 55 %
+  zużyte 21.10.2026; odnowienie w niedzielę o 18:00). Przerwa po grupie iC na sprawdzenie limitu (z górką iA–iC ok.
+  37 %), chyba że użytkownik powie inaczej; iD czeka na odpowiedź o folderze ICTTJ (IP15), iE – na IP21 i IP24. Start iA
+  wstrzymany do przełączenia thinking na max (prośba użytkownika).
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -2126,3 +2147,71 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   tylko operacje domowników, reszta historii odfiltrowana raz) – import (`withRepayments` przed zapisem), szybki wpis i
   wybór osoby w edytorze (`sureCoversOf`). `withKind` zostawia wskazania przy wydatku (zwrot towaru). Dzień przejścia
   ustawiany raz na folder (dziś – `useHouseholdSinceSeed`), zmiana w Ustawieniach → Domownicy z „Cofnij”.
+- **T305** Folder danych na telefonie (iA, IP0.1): `DataStore` komputera (`src/main/datastore/`) działa na telefonie bez
+  zmian nad wirtualnym systemem plików w pamięci (`src/mobile/vfs/vfs.ts`, `Vfs`) utrwalanym w IndexedDB (`fi-phone`:
+  `entries`, `folders`, `kv`; zapisy grupowane). Moduły Node podmienia build telefonu i projekt Vitest `mobile`
+  (`scripts/mobile-aliases.mjs`: `node:fs` → `src/mobile/node/fs.ts`, `node:path`, `node:crypto` – SHA-1 i losowe bajty;
+  `zlib` / `stream` – „nie działa na telefonie – kopie zapasowe robi komputer”). Każdy plik lustra ma numer zmiany
+  (`dirty` – kolejka do wysłania) i metadane OneDrive (`id`, `eTag`, `cTag`); usunięcie pliku znanego na OneDrive
+  zostawia nagrobek do wysłania, pliki tymczasowe zapisu atomowego nie są utrwalane ani wysyłane. Lustro to tylko
+  `.json` folderu bez `backups/` i `.history/` (historia wersji i kopie zostają na komputerze; historia zmian zrobionych
+  na telefonie jest tylko w telefonie) i bez folderów ukrytych poza `.presence/`. Telefon ma system plików bez rozróżniania
+  wielkości liter jak OneDrive (`process.platform` = `ios` w buildzie). Bez sieci aplikacja startuje z lustra.
+- **T306** Synchronizacja z OneDrive i logowanie (iA, IP0.1, IP0.5): Microsoft Graph – zmiany folderu przez `delta` po
+  identyfikatorach (drzewo folderów zapamiętane, więc przeniesienia i zmiany nazw folderów dochodzą), strony delty zebrane
+  przed zastosowaniem, 410 = pełna lista od nowa (pliki, których nie ma, usuwane z lustra), pobieranie przez
+  `@microsoft.graph.downloadUrl` (bez nagłówka autoryzacji – adresy działają z CORS; wygasły adres pobierany od nowa),
+  paczki po 50 i 8 naraz. Wysyłanie: PUT `items/{folder}:/{ścieżka}:/content` z `If-Match` (eTag wersji, którą zmiana
+  zastępuje) albo `conflictBehavior=fail` dla nowego pliku, 404 = brakujące foldery tworzone i jeszcze raz, usunięcie z
+  `If-Match`; 429 / 503 z `Retry-After`, 401 = jedno odnowienie tokenu. Konflikt (412 / 409 – plik zmienił się na
+  OneDrive): wersja z OneDrive zostaje w lustrze i w folderze, wersja z telefonu idzie obok jako
+  `<nazwa>-telefon-<czas>.json`, którą komputer pokazuje w Synchronizacji jako kopię konfliktu („zmiana z telefonu w tym
+  samym czasie co na komputerze”, `guessConflictSource`) – wybór albo „Scal…” na komputerze; usunięcie odrzucone przez
+  412 przywraca wersję z OneDrive. Plik obecności telefonu nadpisywany bez `If-Match`. Zmiany z OneDrive trafiają do
+  magazynu w jego kolejce (`DataStore.applyExternal`: zapis do lustra i odświeżenie tych ścieżek pod blokadą – okno
+  dostaje je jak zmiany z drugiego komputera, z pytaniem przy własnych niezapisanych edycjach). Harmonogram: przy otwarciu,
+  co 30 s przy otwartej aplikacji, 1,5 s po zmianie, przy przejściu do tła (najpierw zapis zmian okna); bez sieci –
+  ponowienia po 10 / 30 / 60 / 120 s. Logowanie: kod autoryzacji z PKCE dla klienta publicznego (`consumers`,
+  przekierowanie `financialintel://auth`, zakresy `Files.ReadWrite offline_access User.Read`, aplikacja zarejestrowana
+  przez użytkownika – D92); żądanie tokenu natywnym HTTP Capacitora (żądanie z WebView dostaje od Microsoft
+  AADSTS9002326 – wymiana kodu z innego originu tylko dla SPA), Graph i pobieranie przez `fetch`. Token odświeżania w
+  Preferences (pamięć aplikacji, nie pęk kluczy – bez wtyczki spoza Capacitora), token dostępu tylko w pamięci, odnawiany
+  5 min przed końcem, jedno odnowienie naraz; odrzucony token odświeżania = stan „zaloguj ponownie” (przycisk w
+  Ustawieniach telefonu – lustro i czekające zmiany zostają; zapamiętany `me.id` konta: inne konto jest odrzucane, bo
+  folder i czekające zmiany są pierwszego), chwilowa awaria Microsoft (429, 5xx) i brak sieci nie wylogowują.
+- **T307** Aplikacja telefonu (iA, IP0.3, IP1, IP2): renderer komputera bez zmian nad `window.fi` z
+  `src/mobile/host/host.ts` (`PhoneHost` – to, co na komputerze robi proces główny: magazyn nad lustrem, zmiany po
+  pokazaniu folderu, obecność telefonu w `.presence/` i „w użyciu” jak na PC – D86, ustawienia telefonu w Preferences);
+  błędy przechodzą w formacie IPC Electrona (`errorMessage` okna zdejmuje przedrostek), funkcje tylko komputera
+  (import, kopie, eksport, ICTTJ, aktualizacje, pliki) odpowiadają „To zrobisz na komputerze”. Szybki wpis to okno
+  komputera (`QuickApp`) w arkuszu nad aplikacją – ten sam protokół `quick*` w jednym oknie. Telefon: menu na dole
+  (Mostek, „+ Szybki wpis”, Telefon), pasek z okrętem, stanem synchronizacji i ukryciem kwot, panele w `CompactContext`
+  (bez odłączania, powiększania, ukrywania i zmiany rozmiaru), Mostek w jednej kolumnie (`BridgePanels single` – bez
+  dokowania, które zostaje na PC), ekran spoza telefonu mówi, że jest na komputerze, i prowadzi na Mostek. Build
+  `vite.mobile.config.mts` (`out/mobile`, Safari 16, CSP: tylko własne pliki i https), E2E `tests/e2e-mobile/`
+  (Playwright, profil iPhone 13, Chromium na Linuksie i WebKit na macOS, udawany OneDrive `tests/mobile/fakeGraph.ts` na
+  lokalnym serwerze razem z aplikacją).
+- **T308** Powiadomienia z wyprzedzeniem (iA, IP0.4): iOS nie uruchamia aplikacji w tle, więc przy każdym otwarciu i
+  chwilę po każdej zmianie danych aplikacja oddaje systemowi plan na 7 dni (`src/shared/notifyPlan.ts`
+  `plannedNotices`): odprawa poranna po ciszy nocnej, nie przed 7:00 (domyślna cisza kończy się o 5:00), raport wachty o
+  jego godzinie (w ciszy nocnej – minutę przed nią, jak na PC; zrobiony dziś – nie dziś), dni z Radaru o 9:00 (opłaty,
+  raty, boje, PIT-38, zwroty – wg przełączników telefonu), nic w ciszy nocnej ani w przeszłości, najwyżej 60 (iOS trzyma
+  64); plan od nowa także co 10 minut przy otwartej aplikacji, przy powrocie do niej i po „Dziś bez wydatków”. Klucze
+  odprawy i raportu są kluczami powiadomień okna i żadne nie przychodzi dwa razy: plan jest zapamiętany
+  (`fi.phone.planned` – `keepPlanned`: minione zostają dwa dni, anulowane znikają, nieudany plan nie liczy na stary), a
+  klucze należne w ciągu 2 minut trafiają do `fi.notify.sent` przed sprawdzeniem okna (`installPlannedDue` przed
+  `initNotifier`); powiadomienie pokazane przez okno (odprawa przy otwarciu o 6:00) zdejmuje zaplanowane z tym kluczem i
+  plan go już nie dodaje (`notify` z kluczem, `PhoneHost.wasShown`, dwa dni). Dotknięcie powiadomienia, które uruchomiło
+  aplikację, czeka, aż okno zacznie słuchać; w 1.13.0 każde prowadzi na Mostek (pozostałe ekrany dochodzą w iB–iE).
+- **T309** Wydanie na iPhone'a (iA, IP0.2): Capacitor 8 (Swift Package Manager, wtyczki App, Browser, Preferences,
+  LocalNotifications), projekt `ios/` w repozytorium (`app.financialintel.ios`, iOS 16+, tylko pion, ciemny wygląd,
+  schemat URL `financialintel`), ikona i ekran startowy z `resources/icon.png` (`scripts/make-ios-assets.py`). CI:
+  job macOS `ios` (PR, gałąź domyślna, ręcznie – jak Windows): E2E telefonu w WebKit, build aplikacji z opcjonalnym
+  identyfikatorem klienta ze zmiennej repozytorium `FI_CLIENT_ID` (inaczej wpisywany przy pierwszym uruchomieniu),
+  `xcodebuild` bez podpisu → `Financial-Intel.ipa` (AltStore podpisuje ją Apple ID użytkownika), uruchomienie w
+  symulatorze (build Debug wypisuje konsolę aplikacji – czeka na `FI_PHONE_BOOT_OK`). Job `ios-release` po wydaniu z jobu
+  Windows dołącza do niego `.ipa`, źródło AltStore `altstore.json` (`scripts/altstore-source.mjs`) i dopisuje sumę `.ipa`
+  do `SHA256SUMS.txt` (aktualizator na Windows bierze tylko swoje pliki; na chwilę podmiany sumy ma też `digest`
+  GitHuba). Wydanie dla Windows nie czeka na macOS – czerwony job `ios` nie wstrzymuje aktualizacji komputerów, a
+  kolejne wypchnięcie tej samej wersji dołącza brakującą `.ipa`. Źródło AltStore:
+  `https://github.com/Clatir/FinancialIntel/releases/latest/download/altstore.json`. Instrukcja: `docs/iphone.md`.
