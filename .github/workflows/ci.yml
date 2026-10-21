@@ -47,6 +47,9 @@ jobs:
       - run: npx playwright install-deps chromium
       - run: npm run build
       - run: xvfb-run -a npx playwright test
+      # The phone (T305): its web app in a browser the size of an iPhone, against a fake OneDrive.
+      - run: npx playwright install chromium
+      - run: npm run test:e2e:mobile
       - uses: actions/upload-artifact@v4
         if: failure()
         continue-on-error: true
@@ -164,3 +167,117 @@ jobs:
           name: e2e-zrzuty-windows
           path: test-results/
           retention-days: 3
+
+  # The iPhone's app (D89, T307): the same web app in Capacitor, an unsigned .ipa (AltStore signs it with the user's
+  # Apple ID), started in the simulator; the phone's E2E in WebKit (the iPhone's engine). Like the Windows build: pull
+  # requests, the default branch and by hand.
+  ios:
+    name: Aplikacja na iPhone'a (.ipa, symulator, WebKit)
+    needs: [test, e2e, node-gate]
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      # No Electron on the Mac: the phone's build needs only the web tools.
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      # Capacitor 8 ships prebuilt frameworks: the newest Xcode of the runner.
+      - name: Newest Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          xcodebuild -version
+      - name: Phone's E2E in WebKit
+        run: |
+          npx playwright install webkit
+          npm run build:mobile:e2e
+          FI_PHONE_BROWSER=webkit npx playwright test -c playwright.mobile.config.ts
+      - name: Web app for the phone
+        run: npm run build:mobile
+        env:
+          # The app registration's client id built in (optional – the user can type it): a variable of the repository.
+          VITE_FI_CLIENT_ID: ${{ vars.FI_CLIENT_ID }}
+      - run: npx cap sync ios
+      - name: Build the .ipa (unsigned – AltStore signs it)
+        run: |
+          version=$(node -p "require('./package.json').version")
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="${{ github.run_number }}" build | tail -n 40
+          test -d build/ios/Build/Products/Release-iphoneos/App.app
+          mkdir -p dist/Payload
+          cp -R build/ios/Build/Products/Release-iphoneos/App.app dist/Payload/
+          (cd dist && zip -qry Financial-Intel.ipa Payload && rm -rf Payload && ls -l)
+      - name: Smoke test in the simulator (the app starts, its web app boots)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO build | tail -n 20
+          device=$(xcrun simctl list devices available -j | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const all=Object.entries(JSON.parse(s).devices).filter(([r])=>r.includes('iOS')).flatMap(([,d])=>d).filter(d=>/^iPhone/.test(d.name));process.stdout.write(all.at(-1)?.udid??'')})")
+          test -n "$device"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl install "$device" build/sim/Build/Products/Debug-iphonesimulator/App.app
+          # A debug build prints the web app's console (Capacitor): the boot line of src/mobile/app/PhoneApp.tsx.
+          xcrun simctl launch --console-pty "$device" app.financialintel.ios > sim-console.log 2>&1 &
+          launcher=$!
+          for i in $(seq 1 90); do
+            if grep -q FI_PHONE_BOOT_OK sim-console.log; then echo "booted after ${i}s"; break; fi
+            sleep 1
+          done
+          sleep 2
+          xcrun simctl io "$device" screenshot sim-start.png || true
+          xcrun simctl terminate "$device" app.financialintel.ios || true
+          kill "$launcher" 2>/dev/null || true
+          tail -n 40 sim-console.log
+          grep -q FI_PHONE_BOOT_OK sim-console.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Financial-Intel-ipa-${{ github.sha }}
+          path: dist/Financial-Intel.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: ios-symulator-${{ github.sha }}
+          path: |
+            sim-start.png
+            sim-console.log
+            test-results/
+          retention-days: 3
+
+  # The .ipa and the AltStore source go to the release the Windows job published (once per version).
+  ios-release:
+    name: Wydanie – plik .ipa i źródło AltStore
+    needs: [windows, ios]
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@v4
+        with:
+          name: Financial-Intel-ipa-${{ github.sha }}
+          path: dist
+      - name: Attach to v<version>
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if ! gh release view "v$version" > /dev/null 2>&1; then echo "v$version not published – nothing to attach."; exit 0; fi
+          if gh release view "v$version" --json assets -q '.assets[].name' | grep -qx 'Financial-Intel.ipa'; then echo "v$version has its .ipa already."; exit 0; fi
+          node scripts/release-notes.mjs "$version" > notes.md
+          node scripts/altstore-source.mjs "$version" dist/Financial-Intel.ipa "$GITHUB_REPOSITORY" notes.md > dist/altstore.json
+          gh release download "v$version" -p SHA256SUMS.txt -D dist --clobber
+          (cd dist && sha256sum Financial-Intel.ipa >> SHA256SUMS.txt && cat SHA256SUMS.txt)
+          gh release upload "v$version" dist/Financial-Intel.ipa dist/altstore.json dist/SHA256SUMS.txt --clobber
