@@ -4,7 +4,7 @@
  * accounts' balances ahead (F26); the loans both ways with their schedules (new, repayment / installment, close), the
  * receivables (the house, the loans given) and the PIT-38 deadline (the amount stays in ICTTJ).
  */
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
 import type { AccountAhead } from '@shared/calc/ahead'
 import { dm } from '@shared/calc/briefing'
@@ -20,7 +20,7 @@ import { useFleet } from '../../store/fleet'
 import { navigate, toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
-import { Badge, Empty, Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
+import { Badge, CompactContext, Empty, Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
@@ -37,8 +37,7 @@ const zl = (g: number) => `${plnText(g)} zł`
 
 const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin', plan: 'boja', end: 'koniec', return: 'zwrot' }
 
-/** `preview` – read only whatever the folder (the phone, IP7: loans, buoys and transfers are changed on a computer). */
-export function RadarPage({ preview = false }: { preview?: boolean } = {}) {
+export function RadarPage() {
   const fleet = useFleet()
   const members = useMembers()
   const transactions = useData((s) => s.records.transactions)
@@ -49,8 +48,7 @@ export function RadarPage({ preview = false }: { preview?: boolean } = {}) {
     const v = members.find((m) => m.id === id)?.via
     return v ? memberName(v, members) : null
   }
-  const folderLocked = useFolderLocked()
-  const readOnly = preview || folderLocked
+  const readOnly = useFolderLocked()
   // The items, the buoys' days and the accounts ahead (F16, F26, F27) – the notes carry amounts (B61): masked or shown at
   // once with Ctrl+$.
   const future = useFuture()
@@ -83,7 +81,7 @@ export function RadarPage({ preview = false }: { preview?: boolean } = {}) {
               <div className="flex flex-col text-[12px]">
                 {!active.length && <span className="text-muted">Brak otwartych pożyczek.</span>}
                 {active.map((s) => (
-                  <LoanRow key={s.loan.id} s={s} today={fleet.today} readOnly={readOnly} preview={preview} />
+                  <LoanRow key={s.loan.id} s={s} today={fleet.today} readOnly={readOnly} />
                 ))}
                 {closed.length > 0 && (
                   <details className="pt-1 text-[11.5px] text-muted">
@@ -261,26 +259,58 @@ function AccountsPanel({ accounts, readOnly }: { accounts: readonly AccountAhead
 }
 
 function Timeline({ items }: { items: RadarItem[] }) {
+  // The phone (T311): two lines – the day, the name and the amount; the kind, the note and the shields after it under them.
+  const compact = useContext(CompactContext)
   return (
     <div className="flex flex-col text-[12px]">
       {items.map((i, n) => {
         const month = i.date.slice(0, 7)
         const newMonth = n === 0 || items[n - 1]!.date.slice(0, 7) !== month
+        const day = <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(i.date).slice(0, 5)}</span>
+        const kind = <span className={cx('shrink-0 text-[11px] text-dim', !compact && 'w-[72px]')}>{KIND_LABEL[i.kind]}</span>
+        const name = <span className="min-w-0 flex-1 truncate text-fg-strong">{i.name}</span>
+        const note = i.overdue ? i.note || 'po terminie' : i.note
+        const amount = (
+          <span className={cx('num text-right', compact ? 'shrink-0 whitespace-nowrap' : 'w-[110px]', i.direction === 'in' ? 'text-up' : 'text-fg')}>
+            {i.amount == null ? '—' : `${i.direction === 'in' ? '+' : i.direction === 'out' ? '−' : ''}${zl(i.amount)}`}
+          </span>
+        )
+        const shields = (
+          <span
+            className={cx('num text-right text-[11px]', compact ? 'shrink-0 whitespace-nowrap' : 'w-[96px]', i.shieldsAfter != null && i.shieldsAfter < 0 ? 'text-accent' : 'text-dim')}
+            title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)"
+            data-testid="radar-shields-after"
+          >
+            {i.shieldsAfter != null ? zl(i.shieldsAfter) : ''}
+          </span>
+        )
+        const row = { 'data-testid': 'radar-item', 'data-kind': i.kind, 'data-overdue': i.overdue ? 'yes' : undefined }
         return (
           <div key={i.key} className="flex flex-col">
             {newMonth && <span className="label pt-2 first:pt-0">{monthLabel(month)}</span>}
-            <div className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 last:border-b-0" data-testid="radar-item" data-kind={i.kind} data-overdue={i.overdue ? 'yes' : undefined}>
-              <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(i.date).slice(0, 5)}</span>
-              <span className="w-[72px] shrink-0 text-[11px] text-dim">{KIND_LABEL[i.kind]}</span>
-              <span className="min-w-0 flex-1 truncate text-fg-strong">{i.name}</span>
-              <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{i.overdue ? i.note || 'po terminie' : i.note}</span>
-              <span className={cx('num w-[110px] text-right', i.direction === 'in' ? 'text-up' : 'text-fg')}>
-                {i.amount == null ? '—' : `${i.direction === 'in' ? '+' : i.direction === 'out' ? '−' : ''}${zl(i.amount)}`}
-              </span>
-              <span className={cx('num w-[96px] text-right text-[11px]', i.shieldsAfter != null && i.shieldsAfter < 0 ? 'text-accent' : 'text-dim')} title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)" data-testid="radar-shields-after">
-                {i.shieldsAfter != null ? zl(i.shieldsAfter) : ''}
-              </span>
-            </div>
+            {compact ? (
+              <div className="flex flex-col gap-0.5 border-b border-line/60 px-1 py-1.5 last:border-b-0" {...row}>
+                <div className="flex items-baseline gap-2">
+                  {day}
+                  {name}
+                  {amount}
+                </div>
+                <div className="flex items-baseline gap-2 pl-[52px]">
+                  {kind}
+                  <span className={cx('min-w-0 flex-1 truncate text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{note}</span>
+                  {shields}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 last:border-b-0" {...row}>
+                {day}
+                {kind}
+                {name}
+                <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{note}</span>
+                {amount}
+                {shields}
+              </div>
+            )}
           </div>
         )
       })}
@@ -288,7 +318,7 @@ function Timeline({ items }: { items: RadarItem[] }) {
   )
 }
 
-function LoanRow({ s, today, readOnly: folderLocked, preview = false }: { s: LoanState; today: string; readOnly: boolean; preview?: boolean }) {
+function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: string; readOnly: boolean }) {
   // Written by a newer version of the app (B67): no payment, closing or deletion from here.
   const newer = useEntryNewer('loans', s.loan.id)
   const readOnly = folderLocked || newer
@@ -337,7 +367,7 @@ function LoanRow({ s, today, readOnly: folderLocked, preview = false }: { s: Loa
             </button>
           </>
         )}
-        <HistoryButton kind="loans" id={s.loan.id} current={s.loan} readOnly={preview} variant="link" />
+        <HistoryButton kind="loans" id={s.loan.id} current={s.loan} variant="link" />
       </div>
       <NewerNote show={newer} />
       {paying && !readOnly && (

@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
+import { useContext, useMemo } from 'react'
 import { envelopeExtraOf } from '@shared/calc/plan'
 import { yearPlan, type YearCell, type YearRow } from '@shared/calc/yearPlan'
 import { listOf, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
 import { AmountField, plnText } from '../../components/fields'
-import { Panel, cx } from '../../components/ui'
+import { CompactContext, Panel, cx } from '../../components/ui'
 import { IconBack, IconNext } from '../../components/icons'
 import { monthGenLabel, monthLabel } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
@@ -27,6 +27,9 @@ export function YearPlanPanel({ year, today, readOnly, onYear, onMonth }: { year
   const categories = useData((s) => s.fi?.settings.categories)
   const cats = useCategories()
   const fleet = useFleet()
+  // The phone (T311): wider months to scroll through, the row's name kept in sight.
+  const compact = useContext(CompactContext)
+  const pinned = compact ? 'sticky left-0 z-[1] max-w-[120px] bg-panel' : ''
   const plan = useMemo(() => {
     if (!categories) return null
     // What the engine added to the limits of the months it ran (F28): the loot kept, the covers.
@@ -55,24 +58,24 @@ export function YearPlanPanel({ year, today, readOnly, onYear, onMonth }: { year
       }
     >
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[11.5px]" data-testid="year-plan-grid">
+        <table className={cx('border-collapse text-[11.5px]', compact ? 'w-[1136px] table-fixed' : 'w-full min-w-[900px]')} data-testid="year-plan-grid">
           <thead>
             <tr className="text-[10.5px] text-dim">
-              <th className="w-[120px] py-1 pr-2 text-left font-normal">pozycja</th>
+              <th className={cx('w-[120px] py-1 pr-2 text-left font-normal', pinned)}>pozycja</th>
               {plan.months.map((m, i) => (
-                <th key={m} className="px-0.5 py-1 text-right font-normal">
+                <th key={m} className={cx('px-0.5 py-1 text-right font-normal', compact && 'w-[76px]')}>
                   <button className={cx('hover:text-accent', m === today.slice(0, 7) && 'text-accent')} onClick={() => onMonth(m)} title={monthLabel(m)} data-testid="year-plan-month">
                     {MONTH_SHORT[i]}
                   </button>
                 </th>
               ))}
-              <th className="w-[84px] py-1 pl-2 text-right font-normal">rok</th>
+              <th className={cx('py-1 pl-2 text-right font-normal', compact ? 'w-[104px]' : 'w-[84px]')}>rok</th>
             </tr>
           </thead>
           <tbody>
             {plan.rows.map((r) => (
               <tr key={r.id} className="border-t border-line" data-testid="year-row" data-id={r.id} data-name={label(r)}>
-                <td className="py-1 pr-2 align-top">
+                <td className={cx('py-1 pr-2 align-top', pinned)}>
                   <div className="truncate text-fg">{label(r)}</div>
                   <div className="text-[10px] text-dim">{KIND_NOTE[r.kind]}</div>
                 </td>
@@ -117,8 +120,8 @@ function Cell({ row, cell, name, readOnly }: { row: YearRow; cell: YearCell; nam
             data-testid="year-cell-input"
           />
           <button
-            className="absolute -top-[9px] right-0 h-[12px] border border-line bg-raised px-0.5 text-[10px] leading-[10px] text-muted opacity-0 hover:text-accent group-hover:opacity-100 focus:opacity-100"
-            onClick={() => copyOnward(cell.month, row.id, cell.limit, name)}
+            className="absolute -top-[9px] right-0 h-[12px] border border-line bg-raised px-0.5 text-[10px] leading-[10px] text-muted opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-accent focus:opacity-100"
+            onClick={() => copyOnward(cell.month, row.id, name)}
             title="Kopiuj tę wartość na dalsze miesiące roku"
             aria-label={`Kopiuj ${name} od ${monthGenLabel(cell.month)} na dalsze miesiące`}
             data-testid="year-cell-copy"

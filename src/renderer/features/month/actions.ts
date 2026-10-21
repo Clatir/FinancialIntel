@@ -4,7 +4,7 @@ import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
 import { copyOnMonths } from '@shared/calc/yearPlan'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
 import { addRecord, canWrite, monthTooNew, tooNewMonths, updateRecord, useData } from '../../store/data'
-import { toast } from '../../store/ui'
+import { commitActiveField, toast } from '../../store/ui'
 import { newId } from '@shared/ids'
 import { plnText } from '../../components/fields'
 import { monthGenLabel } from '../../lib/format'
@@ -120,11 +120,15 @@ export function coverEnvelope(month: string, from: string, to: string, amount: n
  * its own plan – the months without one take it from the last earlier plan anyway. „Cofnij” sets back each month's value
  * from before (a month that got its own plan keeps it, with the old value).
  */
-export function copyOnward(month: string, rowId: string, value: number | null, label: string): void {
+export function copyOnward(month: string, rowId: string, label: string): void {
+  // The value typed in the cell and not left yet (on the iPhone a tap on „»” keeps the field's focus – T311): saved first,
+  // the month's value read after it.
+  commitActiveField()
   if (!canWrite()) return
   const plans = allPlans()
   const months = copyOnMonths(month.slice(0, 4), month, plans).filter((m) => m >= warsawNow().month && !monthTooNew('months', m))
   const valueOf = (p: MonthPlan | null) => (rowId === 'salary' ? (p?.salary ?? 0) : (p?.envelopes[rowId] ?? null))
+  const value = valueOf(planFor(plans, month))
   const before = new Map(months.map((m) => [m, valueOf(planFor(plans, m))]))
   const set = (m: string, v: number | null) => (rowId === 'salary' ? setSalary(m, v ?? 0) : setEnvelope(m, rowId, v))
   for (const m of months) if (before.get(m) !== value) set(m, value)

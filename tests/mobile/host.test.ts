@@ -208,4 +208,29 @@ describe('window.fi na telefonie', () => {
     expect(presence).toMatchObject({ machine: 'iPhone', appVersion: '1.13.0' })
     await h.close()
   })
+
+  it('eksport listy (T311): plik do udostępniania iOS – CSV jako tekst, Excel jako ZIP; bez ścieżki „Zapisano …”', async () => {
+    const shared: Array<{ name: string; data: Uint8Array; mime: string }> = []
+    const h = new PhoneHost({
+      version: '1.15.0',
+      kv: memoryKv(),
+      notifications: fakeNotifications(),
+      openUrl: async () => undefined,
+      shareFile: async (name, data, mime) => (shared.push({ name, data, mime }), true),
+      now: () => now
+    })
+    expect(await h.api.saveTextFile('operacje.csv', 'Data;Kwota\n', { name: 'CSV', extensions: ['csv'] })).toBeNull()
+    expect(await h.api.saveXlsx('operacje.xlsx', [{ name: 'Operacje', columns: [{ header: 'Kwota', kind: 'number', width: 10 }], rows: [[1.5]] }])).toBeNull()
+    expect(shared.map((f) => [f.name, f.mime])).toEqual([
+      ['operacje.csv', 'text/csv'],
+      ['operacje.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+    ])
+    expect(dec.decode(shared[0]!.data)).toBe('Data;Kwota\n')
+    // A ZIP: the local header's signature „PK\x03\x04”.
+    expect([...shared[1]!.data.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04])
+    // Without the sharing (a phone's build without the plugin): said as a computer's.
+    const { h: bare } = host()
+    const e = await bare.api.saveTextFile('a.csv', 'x', { name: 'CSV', extensions: ['csv'] }).catch((x: unknown) => x)
+    expect((e as Error).message).toContain(PC_ONLY)
+  })
 })

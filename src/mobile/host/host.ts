@@ -23,6 +23,10 @@ import type { Collection } from '@shared/paths'
 import { ConflictCopyError, DataStore, RemovedOutsideError } from '../../main/datastore/store'
 import { IN_USE_MS, readOtherMachines, writePresence } from '../../main/datastore/presence'
 import { MIRROR } from '../sync/engine'
+import { xlsxParts, type XlsxSheet } from '@shared/export/xlsx'
+import { storedZip } from './zip'
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 /** What only a computer does. */
 export const PC_ONLY = 'To zrobisz na komputerze – na telefonie tej funkcji nie ma.'
@@ -55,6 +59,8 @@ export interface HostDeps {
   kv: KeyValue
   notifications: Notifications
   openUrl: (url: string) => Promise<void>
+  /** A file given to iOS's sharing (Pliki, AirDrop, poczta – T311); false = the sharing cancelled. */
+  shareFile?: (name: string, data: Uint8Array, mime: string) => Promise<boolean>
   /** The time (tests). */
   now?: () => number
 }
@@ -394,6 +400,11 @@ export class PhoneHost {
 
   readonly api: FiApi
 
+  private share(name: string, data: Uint8Array, mime: string): Promise<boolean> {
+    if (!this.d.shareFile) throw new Error(PC_ONLY)
+    return this.d.shareFile(name, data, mime)
+  }
+
   private buildApi(): FiApi {
     const call =
       <A extends unknown[], R>(channel: string, fn: (...args: A) => Promise<R> | R) =>
@@ -486,8 +497,18 @@ export class PhoneHost {
       setTrayPrefs: call('setTrayPrefs', () => this.tray()),
       rescan: call('rescan', () => undefined),
       exportZip: pcOnly('exportZip'),
-      saveTextFile: pcOnly('saveTextFile'),
-      saveXlsx: pcOnly('saveXlsx'),
+      // A list's export (T311): the file given to iOS's sharing. Nothing saved where the user chose a place (the computer's
+      // „Zapisano …: <path>”), so no path – the share sheet is the answer.
+      saveTextFile: call('saveTextFile', async (name: string, content: string, filter: { extensions: string[] }) => {
+        const mime = filter.extensions.includes('csv') ? 'text/csv' : 'text/plain'
+        await this.share(name, new TextEncoder().encode(content), mime)
+        return null
+      }),
+      saveXlsx: call('saveXlsx', async (name: string, sheets: XlsxSheet[]) => {
+        const enc = new TextEncoder()
+        await this.share(name, storedZip(xlsxParts(sheets).map((p) => ({ path: p.path, data: enc.encode(p.content) }))), XLSX_MIME)
+        return null
+      }),
       savePdf: pcOnly('savePdf'),
       listBackups: pcOnly('listBackups'),
       backupNow: pcOnly('backupNow'),

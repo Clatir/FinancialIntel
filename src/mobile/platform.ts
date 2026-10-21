@@ -6,6 +6,8 @@
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { Directory, Filesystem } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { Preferences } from '@capacitor/preferences'
 import type { PlannedNotice } from '@shared/notifyPlan'
@@ -24,11 +26,21 @@ export interface PhoneTestConfig {
   version?: string
 }
 
+/** A file given to the sharing in the browser (tests read them). */
+export interface SharedFile {
+  name: string
+  mime: string
+  size: number
+  /** The text of a text file (CSV). */
+  text: string | null
+}
+
 declare global {
   interface Window {
     __FI_PHONE_TEST__?: PhoneTestConfig
     /** The notices shown or planned in the browser (tests read them). */
     __FI_NOTICES__?: { shown: PhoneNotice[]; planned: PlannedNotice[] }
+    __FI_SHARED__?: SharedFile[]
   }
 }
 
@@ -42,6 +54,8 @@ export interface Platform {
     permission(): Promise<boolean>
   }
   openUrl(url: string): Promise<void>
+  /** A file to iOS's sharing (T311): written to the app's cache, offered to Pliki, AirDrop, mail; false = cancelled. */
+  shareFile(name: string, data: Uint8Array, mime: string): Promise<boolean>
   /** Graph and the downloads: `fetch` (Graph allows the browser's CORS; the files' links too). */
   graphHttp: Http
   /** The token endpoint: native on the phone (a web page's request for an app's code is refused by Microsoft). */
@@ -53,6 +67,12 @@ export interface Platform {
   onForeground(cb: (front: boolean) => void): void
   /** The client id built into the app (`VITE_FI_CLIENT_ID`), else the one the user types. */
   builtInClientId: string
+}
+
+function base64Of(bytes: Uint8Array): string {
+  let s = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(s)
 }
 
 /** A number for a notification from its key (iOS wants integers). */
@@ -106,6 +126,19 @@ function nativePlatform(version: string): Platform {
     kv,
     notifications,
     openUrl: async (url) => void (await Browser.open({ url })),
+    shareFile: async (name, data) => {
+      // The exports shared before removed first – not right after the sharing, which a target may still be reading.
+      await Filesystem.rmdir({ path: 'export', directory: Directory.Cache, recursive: true }).catch(() => undefined)
+      const file = await Filesystem.writeFile({ path: `export/${name}`, data: base64Of(data), directory: Directory.Cache, recursive: true })
+      try {
+        await Share.share({ title: name, dialogTitle: name, files: [file.uri] })
+        return true
+      } catch (e) {
+        // Closed without a choice: nothing shared, no error.
+        if (/cancel/i.test(e instanceof Error ? e.message : String(e))) return false
+        throw e
+      }
+    },
     graphHttp: fetchHttp,
     tokenHttp: capacitorHttp((opts) => CapacitorHttp.request(opts as unknown as Parameters<typeof CapacitorHttp.request>[0]) as Promise<{ status: number; headers: Record<string, string>; data: unknown }>),
     graphBase: GRAPH_BASE,
@@ -165,6 +198,10 @@ function webPlatform(cfg: PhoneTestConfig, version: string): Platform {
       permission: async () => true
     },
     openUrl: async (url) => void window.open(url, '_blank'),
+    shareFile: async (name, data, mime) => {
+      ;(window.__FI_SHARED__ ??= []).push({ name, mime, size: data.length, text: mime.startsWith('text/') ? new TextDecoder().decode(data) : null })
+      return true
+    },
     graphHttp: fetchHttp,
     tokenHttp: fetchHttp,
     graphBase: cfg.graphBase ?? GRAPH_BASE,

@@ -1,7 +1,9 @@
 /**
- * Operacje on the phone (IP3, IP4): the computers' list as cards – the search, the month, the accounts, the categories
- * and the marks of the list's filter (`features/operations/state.ts`, stored on this phone like on a computer), the
- * sums; a tap opens the computers' editor over the whole screen, „+ Nowa” a new operation in it.
+ * Operacje on the phone (IP3, IP4, IP11): the computers' list as cards – the search, the month, the accounts, the
+ * categories and the marks of the list's filter (`features/operations/state.ts`, stored on this phone like on a
+ * computer), the sums; a tap opens the computers' editor over the whole screen, „+ Nowa” a new operation in it.
+ * „Zaznacz” ticks with a tap and shows the computer's bar of changes (T311); the saved views in the filters' sheet; the
+ * visible list's export goes to iOS's sharing.
  */
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -16,10 +18,12 @@ import { monthLabel } from '@renderer/lib/format'
 import { useMarkFlags } from '@renderer/features/sensors/state'
 import { useMembers } from '@renderer/features/household/actions'
 import { OperationEditor } from '@renderer/features/operations/OperationEditor'
+import { BulkBar } from '@renderer/features/operations/OperationsPage'
+import { ExportVisible, ViewsBar, viewable } from '@renderer/features/operations/ListTools'
 import { operationRowText } from '@renderer/features/operations/rowText'
 import { useAccounts, useCategories } from '@renderer/features/operations/pickers'
 import { EveningReport } from '@renderer/features/evening/EveningReport'
-import { followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, useOperationsUi } from '@renderer/features/operations/state'
+import { clearTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickOperations, useOperationsUi } from '@renderer/features/operations/state'
 
 const CARD = 58
 const TONE = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
@@ -83,6 +87,18 @@ function OperationsList() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => CARD, overscan: 12 })
   const [filters, setFilters] = useState(false)
+  // Ticking (F11 on the phone): a tap ticks instead of opening; the computer's bar of changes under the list.
+  const [picking, setPicking] = useState(false)
+  // „wszystkie / żadna” of what the list shows (a new entry being written is no operation yet), as the computer's box.
+  const tickable = useMemo(() => rows.filter((t) => !drafts[t.id]).map((t) => t.id), [rows, drafts])
+  const allTicked = useOperationsUi((s) => tickable.length > 0 && tickable.every((id) => s.ticked[id]))
+  // The list gone (an operation opened, another screen): no ticks left behind.
+  useEffect(() => () => clearTicked(), [])
+  const pick = (on: boolean) => {
+    setPicking(on)
+    if (!on) clearTicked()
+  }
+  const view = deferred.accounts.length === 1 ? deferred.accounts[0]! : null
   const month = filter.period.kind === 'month' ? filter.period.month : null
   const active = filter.accounts.length + filter.categories.length + filter.marks.length + (otherFilters(filter) ? 1 : 0)
   return (
@@ -131,6 +147,18 @@ function OperationsList() {
             </button>
           )}
         </div>
+        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <button className={cx('btn h-[30px] px-3 text-[12.5px]', picking && 'border-accent/60 text-accent')} onClick={() => pick(!picking)} aria-pressed={picking} data-testid="phone-operations-pick">
+            {picking ? 'Zakończ zaznaczanie' : 'Zaznacz'}
+          </button>
+          {picking && (
+            <button className="btn h-[30px] px-3 text-[12.5px]" disabled={!tickable.length} onClick={() => tickOperations(tickable, !allTicked)} data-testid="phone-operations-pick-all">
+              {allTicked ? 'żadna' : 'wszystkie'}
+            </button>
+          )}
+          <span className="flex-1" />
+          <ExportVisible rows={rows} view={view} />
+        </div>
       </div>
       {/* The evening's report (F13): „Dopisz”, „Dziś bez wydatków”, „Przypomnij” – the evening notice's tap leads here. */}
       <EveningReport />
@@ -141,17 +169,23 @@ function OperationsList() {
           <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
             {virtualizer.getVirtualItems().map((v) => {
               const t = rows[v.index] as Transaction
-              return <Card key={t.id} t={t} top={v.start} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
+              return <Card key={t.id} t={t} top={v.start} view={view} picking={picking} />
             })}
           </div>
         )}
       </div>
+      {picking && (
+        <div className="max-h-[45%] shrink-0 overflow-y-auto" data-testid="phone-bulk">
+          <BulkBar visible={rows} />
+        </div>
+      )}
       {filters && <FiltersSheet onClose={() => setFilters(false)} />}
     </div>
   )
 }
 
-function Card({ t, top, view }: { t: Transaction; top: number; view: string | null }) {
+function Card({ t, top, view, picking }: { t: Transaction; top: number; view: string | null; picking: boolean }) {
+  const ticked = useOperationsUi((s) => !!s.ticked[t.id])
   const cats = useCategories()
   const accounts = useAccounts()
   const members = useMembers()
@@ -167,12 +201,14 @@ function Card({ t, top, view }: { t: Transaction; top: number; view: string | nu
   return (
     <button
       type="button"
-      onClick={() => selectOperation(t.id)}
-      className="absolute left-0 flex w-full items-center gap-3 border-b border-line/70 px-3 text-left active:bg-hover"
+      onClick={() => (picking ? !draft && tickOperations([t.id], !ticked) : selectOperation(t.id))}
+      className={cx('absolute left-0 flex w-full items-center gap-3 border-b border-line/70 px-3 text-left active:bg-hover', ticked && 'bg-accent-soft')}
       style={{ top, height: CARD }}
       data-testid="operation-row"
       data-key={t.id}
+      data-ticked={ticked ? '1' : undefined}
     >
+      {picking && <input type="checkbox" readOnly tabIndex={-1} checked={ticked} disabled={draft} className="pointer-events-none h-[18px] w-[18px] shrink-0" aria-hidden data-testid="operation-tick" />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className={cx('truncate text-[14px]', draft ? 'text-accent' : 'text-fg-strong')}>{draft ? 'nowa operacja' : name}</span>
         <span className="truncate text-[11.5px] text-muted">
@@ -231,6 +267,9 @@ function FiltersSheet({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
+        <div className="-mx-3">
+          <ViewsBar filter={filter} active={viewable(filter)} />
+        </div>
         <h2 className="label mt-3 mb-1">Konto</h2>
         {accounts.map((a) => (
           <Check key={a.id} on={filter.accounts.includes(a.id)} label={a.name} onClick={() => setFilter({ accounts: toggle(filter.accounts, a.id) })} testId={`phone-filter-account-${a.name}`} />

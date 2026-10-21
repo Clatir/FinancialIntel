@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { INBOX_KINDS, INBOX_TITLE, type InboxItem, type InboxKind } from '@shared/calc/inbox'
 import { plnText } from '../../components/fields'
-import { Empty, Panel } from '../../components/ui'
+import { Empty, Panel, cx } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { useFleet } from '../../store/fleet'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { openOperation } from '../operations/state'
 import { dismissTransfer } from '../operations/transfers'
-import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, transferIssueOf, useInbox } from './state'
+import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, opensPairs, transferIssueOf, useInbox } from './state'
 import { dismissAnomaly } from '../sensors/state'
 import { TransferPairs } from './TransferPairs'
 
@@ -35,7 +35,7 @@ export function InboxPage() {
   const sections = INBOX_KINDS.map((kind) => [kind, items.filter((i) => i.kind === kind)] as const).filter(([, list]) => list.length > 0)
   // The pairs of transfers together (F10): shown before they are joined.
   const [pairs, setPairs] = useState(false)
-  const open = (item: InboxItem) => (item.kind === 'transfers' && !item.ref ? setPairs(true) : openInboxItem(item, from))
+  const open = (item: InboxItem) => (opensPairs(item) ? setPairs(true) : openInboxItem(item, from))
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-inbox">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
@@ -92,7 +92,8 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
   )
 }
 
-function TransferButtons({ item }: { item: InboxItem }) {
+/** A transfer's report (F10): its operation, and „zostaw tak” – also the phone's Meldunki (T311, bigger buttons). */
+export function TransferButtons({ item, size = 'h-[22px] shrink-0' }: { item: InboxItem; size?: string }) {
   const show = () => {
     const issue = transferIssueOf(item)
     if (issue) openOperation(issue.kind === 'lone' ? issue.tx : issue.keep)
@@ -103,10 +104,10 @@ function TransferButtons({ item }: { item: InboxItem }) {
   }
   return (
     <>
-      <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={show} data-testid="inbox-transfer-show">
+      <button type="button" className={cx('btn btn-ghost', size)} onClick={show} data-testid="inbox-transfer-show">
         Pokaż
       </button>
-      <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={dismiss} data-testid="inbox-dismiss">
+      <button type="button" className={cx('btn btn-ghost', size)} onClick={dismiss} data-testid="inbox-dismiss">
         zostaw tak
       </button>
     </>

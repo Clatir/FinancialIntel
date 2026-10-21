@@ -38,6 +38,11 @@ export function extraFilters(f: OperationsFilter): number {
   )
 }
 
+/** The list shows other than a month's operations by date (F18): a view to save – Operacje on a computer and the phone. */
+export function viewable(f: OperationsFilter): boolean {
+  return f.accounts.length + f.kinds.length + f.categories.length + f.marks.length + extraFilters(f) > 0 || !!f.query || f.period.kind !== 'month' || f.sort !== 'date'
+}
+
 const toggled = (list: readonly string[], v: string): string[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
 function Checks({ options, value, onChange, testId }: { options: Array<{ value: string; label: string }>; value: readonly string[]; onChange: (v: string[]) => void; testId: string }) {

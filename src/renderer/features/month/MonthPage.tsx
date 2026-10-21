@@ -46,8 +46,7 @@ function Row({ label, value, sub, className, testId }: { label: ReactNode; value
  * the envelopes, today's energy, the envelopes against their limits, and the debriefing of the month that ended –
  * plan against fact, „Miesiąc zamknięty na plus” and the loot split (D18).
  */
-/** `preview` – read only whatever the folder (the phone, IP6: the plan is changed on a computer). */
-export function MonthPage({ preview = false }: { preview?: boolean } = {}) {
+export function MonthPage() {
   const fleet = useFleet()
   const today = fleet?.today ?? warsawNow().date
   const current = today.slice(0, 7)
@@ -59,7 +58,7 @@ export function MonthPage({ preview = false }: { preview?: boolean } = {}) {
   const folderLocked = useFolderLocked()
   // The month's own plan a newer version of the app wrote – or its file, unreadable here (B67): looked at, not changed.
   const planNewer = useData((s) => Object.values(s.records.months ?? {}).some((e) => e.record.month === month && e.readOnly) || tooNewMonths(s.problems, 'months').has(month))
-  const readOnly = preview || folderLocked || planNewer
+  const readOnly = folderLocked || planNewer
   const plan = planFor(plans, month)
   const own = plans.find((p) => p.month === month) ?? null
   const goalRecords = useRecordList('goals')
@@ -119,11 +118,11 @@ export function MonthPage({ preview = false }: { preview?: boolean } = {}) {
           {own ? 'plan tego miesiąca' : plan ? `korzysta z planu: ${monthLabel(plan.month)} – zmiana utworzy własny` : 'brak planu – wpisz pensję'}
         </span>
         {/* The plan's earlier versions – also the one set aside when two computers changed it (N18). */}
-        {own && <HistoryButton kind="months" id={own.id} current={own} readOnly={preview} small />}
+        {own && <HistoryButton kind="months" id={own.id} current={own} small />}
       </div>
       <NewerNote show={planNewer} />
       <div className="min-h-0 flex-1 overflow-auto">
-        {year && <YearPlanPanel year={month.slice(0, 4)} today={today} readOnly={preview || folderLocked} onYear={(y) => setMonth(`${y}-${month.slice(5, 7)}`)} onMonth={(m) => setMonth(m)} />}
+        {year && <YearPlanPanel year={month.slice(0, 4)} today={today} readOnly={folderLocked} onYear={(y) => setMonth(`${y}-${month.slice(5, 7)}`)} onMonth={(m) => setMonth(m)} />}
         <Columns id="month" tracks={['minmax(380px,1.1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
             <SalaryPanel month={month} plan={plan} fleet={fleet} current={current} readOnly={readOnly} transactions={transactions} />

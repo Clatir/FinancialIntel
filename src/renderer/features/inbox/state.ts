@@ -105,6 +105,9 @@ export function useInboxCount(): number {
   return useInbox(duplicates).length
 }
 
+/** The report of the pairs of transfers together (F10): its list shown first (`TransferPairs`), not joined at once. */
+export const opensPairs = (item: InboxItem): boolean => item.kind === 'transfers' && !item.ref
+
 /** A report's button: the docking window, Operacje with the filter set, or the screen deciding it. */
 export function openInboxItem(item: InboxItem, from: string | null): void {
   if (item.kind === 'dock' && item.ref) openDocking(item.ref)

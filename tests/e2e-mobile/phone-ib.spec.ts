@@ -1,6 +1,6 @@
 // The phone's watch (iB, IP3–IP7): Operacje – the list with the search and the month, an operation edited and sent to
 // OneDrive; Meldunki – without a category to Operacje, a balance confirmed in its report, the counter in the menu;
-// Plan miesiąca and Radar – previews, read only.
+// Plan miesiąca and Radar on the phone.
 import { expect, test, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { startPhoneServer, seedDrive, zl, type PhoneServer } from './server'
@@ -136,14 +136,16 @@ test('Meldunki: bez kategorii do Operacji, saldo potwierdzone w meldunku, liczni
   await expect(page.getByTestId('page-inbox')).toBeVisible()
 })
 
-test('Plan miesiąca i Radar – podgląd tylko do odczytu', async ({ page }) => {
+test('Plan miesiąca i Radar – miesiące do przejrzenia, płatność kontenera na osi', async ({ page }) => {
   await connect(page)
+  // The briefing's reminder of the import from mBank: the import stays on a computer (no duplicates here to merge).
+  await page.locator('[data-testid="briefing-item"][data-kind="import"]').first().click()
+  await expect(page.getByTestId('phone-not-here')).toHaveAttribute('data-page', 'import')
+  await expect(page.getByTestId('phone-not-here')).toContainText('jest tylko na komputerze.')
   await page.getByTestId('phone-nav-more').click()
   await page.getByTestId('phone-more-month').click()
   await expect(page.getByTestId('page-month')).toBeVisible()
-  await expect(page.getByTestId('phone-preview-note')).toContainText('na komputerze')
-  // The salary seen, not changed; the months can be looked through.
-  await expect(page.getByTestId('month-salary')).toBeDisabled()
+  // The salary of the plan before (the last earlier plan); the months can be looked through.
   await expect(page.getByTestId('month-salary')).toHaveValue(/^4\s000,00$/)
   const shown = (await page.getByTestId('month-label').textContent()) ?? ''
   await page.getByTestId('month-prev').click()
@@ -152,8 +154,7 @@ test('Plan miesiąca i Radar – podgląd tylko do odczytu', async ({ page }) =>
   await page.getByTestId('phone-nav-more').click()
   await page.getByTestId('phone-more-radar').click()
   await expect(page.getByTestId('page-radar')).toBeVisible()
-  // The container's payment in 3 days on the radar; no forms of a new loan or buoy.
+  // The container's payment in 3 days on the radar – its name in sight on the narrow screen.
   await expect(page.getByTestId('radar-items')).toContainText('1 240,00')
-  await expect(page.getByTestId('radar-new-buoy')).toHaveCount(0)
-  await expect(page.getByTestId('radar-new-loan')).toHaveCount(0)
+  await expect(page.getByTestId('radar-item').filter({ hasText: 'OC auta' }).getByText('OC auta', { exact: true })).toBeVisible()
 })

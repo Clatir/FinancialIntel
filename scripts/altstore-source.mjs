@@ -9,16 +9,29 @@ if (!version || !ipa || !repo) {
   console.error('użycie: altstore-source.mjs <wersja> <plik .ipa> <właściciel/repozytorium> [notatki.md]')
   process.exit(1)
 }
-/** The notes as plain text (AltStore shows no Markdown): the CHANGELOG's wrapped lines joined. */
-const plain = (md) =>
-  md
-    .replace(/\r\n/g, '\n')
-    .replace(/\n[ \t]{2,}(?=\S)/g, ' ')
+/** A line that starts a new one in Markdown: a list item or a heading (anything else continues the paragraph). */
+const opens = (line) => /^([-*]|\d+\.)\s/.test(line) || line.startsWith('#')
+
+/**
+ * The notes as plain text (AltStore shows no Markdown): a paragraph's and a list item's wrapped lines joined (Markdown
+ * reads a single line break as a space), the empty lines between paragraphs and each list item on its line kept.
+ */
+const plain = (md) => {
+  const out = []
+  for (const raw of md.replace(/\r\n/g, '\n').split('\n')) {
+    const line = raw.trim()
+    const prev = out.at(-1)
+    if (line && prev && !opens(line) && !prev.startsWith('#')) out[out.length - 1] = `${prev} ${line}`
+    else out.push(line)
+  }
+  return out
+    .join('\n')
     .replace(/^#+\s*/gm, '')
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .trim()
+}
 const notes = notesFile ? plain(readFileSync(notesFile, 'utf8')) : `Financial Intel ${version}`
 const source = {
   name: 'Financial Intel',
@@ -32,7 +45,7 @@ const source = {
       developerName: 'Financial Intel',
       subtitle: 'Ten sam budżet co na komputerze (OneDrive)',
       localizedDescription:
-        'Osobisty budżet z okrętem: Mostek, szybki wpis, powiadomienia. Czyta i zapisuje ten sam folder danych na OneDrive co aplikacja na Windows.',
+        'Osobisty budżet z okrętem: Mostek, szybki wpis, operacje, meldunki, plan miesiąca, Radar i powiadomienia. Czyta i zapisuje ten sam folder danych na OneDrive co aplikacja na Windows.',
       iconURL: `https://raw.githubusercontent.com/${repo}/main/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`,
       tintColor: 'e8a33d',
       category: 'utilities',
