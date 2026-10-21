@@ -944,6 +944,9 @@ Zakres: „Przed grupą iC” niżej. Zrobione (T311):
   podglądu, nazwa zdarzenia Radaru, przypomnienie o imporcie), E2E desktopu 69; mutacje – 5 z 5 wykryte („»” bez
   zapisu pola, okienko bez przesunięcia, wiersz Radaru w jednej linii, ekran duplikatów dla każdej trasy importu,
   ścieżka po udostępnieniu).
+- Wydanie: na PR raz zawiesił się symulator iOS (aplikacja nie zgłosiła `FI_PHONE_BOOT_OK`; jedno ponowienie joba –
+  przeszedł, kod bez zmian); CI na `main` zielone, v1.15.0 z oboma `.exe`, `Financial-Intel.ipa`, `altstore.json` i
+  sumami wszystkich trzech plików w `SHA256SUMS.txt`.
 
 Do sprawdzenia przez użytkownika (iPhone):
 1. Operacje → „Zaznacz” → kilka operacji → kategoria „Ustaw”; na komputerze po synchronizacji te same kategorie.
