@@ -83,7 +83,7 @@ export function RadarPage({ preview = false }: { preview?: boolean } = {}) {
               <div className="flex flex-col text-[12px]">
                 {!active.length && <span className="text-muted">Brak otwartych pożyczek.</span>}
                 {active.map((s) => (
-                  <LoanRow key={s.loan.id} s={s} today={fleet.today} readOnly={readOnly} />
+                  <LoanRow key={s.loan.id} s={s} today={fleet.today} readOnly={readOnly} preview={preview} />
                 ))}
                 {closed.length > 0 && (
                   <details className="pt-1 text-[11.5px] text-muted">
@@ -288,7 +288,7 @@ function Timeline({ items }: { items: RadarItem[] }) {
   )
 }
 
-function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: string; readOnly: boolean }) {
+function LoanRow({ s, today, readOnly: folderLocked, preview = false }: { s: LoanState; today: string; readOnly: boolean; preview?: boolean }) {
   // Written by a newer version of the app (B67): no payment, closing or deletion from here.
   const newer = useEntryNewer('loans', s.loan.id)
   const readOnly = folderLocked || newer
@@ -337,7 +337,7 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
             </button>
           </>
         )}
-        <HistoryButton kind="loans" id={s.loan.id} current={s.loan} variant="link" />
+        <HistoryButton kind="loans" id={s.loan.id} current={s.loan} readOnly={preview} variant="link" />
       </div>
       <NewerNote show={newer} />
       {paying && !readOnly && (

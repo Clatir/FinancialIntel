@@ -93,6 +93,17 @@ test('Operacje: miesiąc, wyszukiwanie, edycja kategorii i kwoty idzie na OneDri
   await expect(page.getByTestId('phone-operation')).toContainText('nowa operacja')
   await page.getByTestId('phone-operation-back').click()
   await expect(rows).toHaveCount(2)
+
+  // A field typed in and the tab changed at once: the change is kept. On the iPhone a tap on a button does not take the
+  // focus (WebKit) – no blur saves the field; the click without a focus change is that tap.
+  await rows.filter({ hasText: 'Pracodawca' }).click()
+  await page.getByTestId('phone-operation').getByTestId('operation-note').fill('premia')
+  await page.getByTestId('phone-nav-more').dispatchEvent('click')
+  await expect.poll(() => driveRecords('transactions').find((t) => t.counterparty === 'Pracodawca SA')?.note, { timeout: 20_000 }).toBe('premia')
+  // „Operacje” from the menu: the list, not the operation left open.
+  await page.getByTestId('phone-nav-operations').click()
+  await expect(page.getByTestId('page-operations')).toBeVisible()
+  await expect(rows).toHaveCount(2)
 })
 
 test('Meldunki: bez kategorii do Operacji, saldo potwierdzone w meldunku, licznik w menu', async ({ page }) => {
@@ -119,6 +130,10 @@ test('Meldunki: bez kategorii do Operacji, saldo potwierdzone w meldunku, liczni
   await expect(page.locator('[data-testid="inbox-item"][data-kind="balances"]')).toHaveCount(0)
   await expect(nav).toHaveAttribute('data-badge', '1')
   await expect.poll(() => driveRecords('balances').filter((b) => b.kind === 'confirmation').map((b) => b.amount), { timeout: 20_000 }).toEqual([zl(23939.5)])
+  // The Sunday's „Potwierdzenie sald” notice: Meldunki (on a computer – Ustawienia → Konta).
+  await page.getByTestId('phone-nav-bridge').click()
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('fi:notice-tap', { detail: 'balances' })))
+  await expect(page.getByTestId('page-inbox')).toBeVisible()
 })
 
 test('Plan miesiąca i Radar – podgląd tylko do odczytu', async ({ page }) => {

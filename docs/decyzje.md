@@ -2220,11 +2220,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`Columns` w `CompactContext`, kontekst w `components/compact.ts` – bez cyklu `Panel` ↔ `layout`). Operacje
   (`src/mobile/app/PhoneOperations.tsx`): lista kart na filtrze listy komputera (`useOperationsUi` – zapisany filtr tego
   telefonu jak na komputerze): wyszukiwanie, miesiąc (‹ ›, „cała historia”), konta, kategorie główne, oznaczenia, sumy;
-  filtry ustawione inaczej (kwota, domownik, marka, tagi) działają i można je zdjąć; dotknięcie – edytor komputera na
-  cały ekran (wszystkie pola, „Historia”, usunięcie z „Cofnij”), „+ Nowa” – szkic porzucany bez zmiany. Meldunki
-  (`PhoneInbox.tsx`): bez kategorii, anomalie („to w porządku”), zwroty w drodze i salda – saldo z banku wpisane w
+  filtry ustawione inaczej (kwota, domownik, marka, tagi) działają i można je zdjąć; karta mówi to, co wiersz komputera
+  (`features/operations/rowText.ts` `operationRowText` – wspólne: kategoria, wspólny zakup, pieniądze domownika, konta
+  przelewu, kwota na koncie listy); nad listą raport wieczorny („Dziś bez wydatków”); dotknięcie – edytor komputera na
+  cały ekran (wszystkie pola, „Historia”, usunięcie z „Cofnij”), „+ Nowa” – szkic porzucany bez zmiany; wyjście z
+  Operacji zamyka operację (następna wizyta – lista). Zmiana zakładki zapisuje najpierw pole w trakcie pisania
+  (`setPhoneTab` → `commitActiveField`: na iPhonie dotknięcie przycisku nie zabiera fokusu, więc żadne wyjście z pola
+  go nie zapisze). Meldunki (`PhoneInbox.tsx`): bez kategorii, podwójna korekta („to nie powtórzenie”), anomalie („to w
+  porządku”), wpłaty domownika do przypisania, zakupy do zwrotu, zwroty w drodze i salda – saldo z banku wpisane w
   meldunku (`useConfirmToday`: różnica pyta, czy dzisiejsze operacje są dopisane); pozostałe rodzaje policzone, „na
-  komputerze”; duplikatów telefon nie szuka (`useInbox(0)`). Plan miesiąca i Radar: `MonthPage` / `RadarPage` z
-  `preview` – tylko do odczytu niezależnie od folderu, miesiące i plan kampanii do przejrzenia (edycja – iC). Dotknięcie
-  powiadomienia prowadzi do Operacji (dziś, wieczór, operacja czujnika), Planu miesiąca (przydział, koperty, debriefing)
-  i Radaru; reszta – Mostek (`phoneTapTag`).
+  komputerze”; duplikatów telefon nie szuka (`useInbox(0)`); meldunki liczone raz (`PhoneInboxWatcher` → sklep, licznik
+  menu i ekran czytają go). Plan miesiąca i Radar: `MonthPage` / `RadarPage` z `preview` – tylko do odczytu niezależnie od
+  folderu (także „Historia” – wersje bez „Przywróć”), miesiące i plan kampanii do przejrzenia (edycja – iC). Dotknięcie
+  powiadomienia prowadzi do Operacji (wieczór, operacja czujnika), Planu miesiąca (przydział, koperty, debriefing),
+  Radaru i Meldunków (potwierdzenie sald – tag `inbox` w `openTag`); reszta – Mostek (`phoneTapTag`).

@@ -235,18 +235,7 @@ export function PaneEdge({ pane, side, testId = 'pane-edge' }: { pane: { width: 
  * A page grid of columns (`useColumnLayout`); `fieldset` keeps the read-only `disabled`. With every panel hidden it
  * says so and offers to show them again.
  */
-export function Columns({
-  id,
-  tracks,
-  as = 'div',
-  className,
-  style,
-  sep = true,
-  emptyNote = true,
-  disabled,
-  children,
-  testId
-}: {
+interface ColumnsProps {
   id: string
   tracks: readonly string[]
   as?: 'div' | 'fieldset'
@@ -258,18 +247,25 @@ export function Columns({
   disabled?: boolean
   children: ReactNode
   testId?: string
-}) {
+}
+
+export function Columns(props: ColumnsProps) {
+  // The phone: the columns one under another, full width – no grid of widths to drag.
+  return useContext(CompactContext) ? <StackedColumns {...props} /> : <GridColumns {...props} />
+}
+
+function StackedColumns({ as = 'div', style, disabled, children, testId }: ColumnsProps) {
+  const Tag = as
+  return (
+    <Tag disabled={as === 'fieldset' ? disabled : undefined} className="flex min-w-0 flex-col" style={style} data-testid={testId}>
+      {children}
+    </Tag>
+  )
+}
+
+function GridColumns({ id, tracks, as = 'div', className, style, sep = true, emptyNote = true, disabled, children, testId }: ColumnsProps) {
   const page = useUi((s) => s.route.page)
   const { props: layout, empty } = useColumnGrid(id, tracks, { sep, style, keepEmpty: emptyNote })
-  // The phone: the columns one under another, full width.
-  if (useContext(CompactContext)) {
-    const Tag = as
-    return (
-      <Tag disabled={as === 'fieldset' ? disabled : undefined} className="flex min-w-0 flex-col" data-testid={testId}>
-        {children}
-      </Tag>
-    )
-  }
   const note = empty && emptyNote && (
     <div className="flex flex-col items-center justify-center gap-2 p-6 text-[12px] text-muted" data-columns-note="1" data-testid="all-panels-hidden">
       Wszystkie panele tej strony są ukryte.

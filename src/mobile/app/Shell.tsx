@@ -6,7 +6,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { boot, useData } from '@renderer/store/data'
-import { navigate, useUi } from '@renderer/store/ui'
+import { commitActiveField, navigate, useUi } from '@renderer/store/ui'
+import { selectOperation } from '@renderer/features/operations/state'
 import { initQuickHost } from '@renderer/store/quickHost'
 import { initPresence } from '@renderer/store/presence'
 import { initNotifier } from '@renderer/store/notifier'
@@ -25,7 +26,7 @@ import { phoneHost } from '../hostRef'
 import { PhoneBridge } from './PhoneBridge'
 import { PhoneSettings } from './PhoneSettings'
 import { PhoneOperations } from './PhoneOperations'
-import { PhoneInbox, usePhoneInbox } from './PhoneInbox'
+import { PhoneInbox, PhoneInboxWatcher, usePhoneInbox } from './PhoneInbox'
 import { PhoneMonth, PhoneRadar } from './PhonePreview'
 import { NoticePlanner, installPlannedDue } from './notices'
 
@@ -35,7 +36,16 @@ export const usePhoneTab = create<{ tab: PhoneTab }>(() => ({ tab: 'main' }))
 /** The screens the phone has (the rest says it is on a computer). */
 type PhonePage = 'bridge' | 'operations' | 'inbox' | 'month' | 'radar'
 
+/** Another tab: the field being typed in saves first (the screen goes without a blur). */
+export function setPhoneTab(tab: PhoneTab): void {
+  commitActiveField()
+  usePhoneTab.setState({ tab })
+}
+
 export function goPage(page: PhonePage): void {
+  commitActiveField()
+  // „Operacje” from the menu: the list (an open operation closed, an untouched new one dropped).
+  if (page === 'operations') selectOperation(null)
   usePhoneTab.setState({ tab: 'main' })
   navigate({ page })
 }
@@ -58,7 +68,7 @@ function SyncPill() {
               : 'zsynchronizowano'
   const tone = sync.state === 'error' || sync.state === 'auth' ? 'text-down border-down/40' : sync.state === 'offline' || sync.pending ? 'text-accent border-accent/40' : 'text-muted border-line-strong'
   return (
-    <button className={cx('h-[24px] shrink-0 border px-2 text-[11px]', tone)} onClick={() => usePhoneTab.setState({ tab: 'settings' })} data-testid="phone-sync" data-state={sync.state} data-pending={sync.pending}>
+    <button className={cx('h-[24px] shrink-0 border px-2 text-[11px]', tone)} onClick={() => setPhoneTab('settings')} data-testid="phone-sync" data-state={sync.state} data-pending={sync.pending}>
       {text}
     </button>
   )
@@ -98,7 +108,7 @@ function NavButton({ active, onClick, label, icon, testId, badge = 0 }: { active
 const icon = (page: string) => PAGES.find((p) => p.page === page)?.icon(18)
 
 function BottomNav({ tab, page }: { tab: PhoneTab; page: string }) {
-  const reports = usePhoneInbox().items.length
+  const reports = usePhoneInbox((s) => s.items.length)
   const more = tab !== 'main' || page === 'month' || page === 'radar'
   return (
     <nav className="phone-bottom flex shrink-0 items-stretch border-t border-line bg-panel" data-testid="phone-nav">
@@ -109,14 +119,13 @@ function BottomNav({ tab, page }: { tab: PhoneTab; page: string }) {
         <span className="text-[10.5px] font-medium">Wpis</span>
       </button>
       <NavButton active={tab === 'main' && page === 'inbox'} onClick={() => goPage('inbox')} label="Meldunki" icon={<IconInbox size={18} />} badge={reports} testId="phone-nav-inbox" />
-      <NavButton active={more} onClick={() => usePhoneTab.setState({ tab: 'more' })} label="Więcej" icon={<span className="text-[20px] leading-[18px] tracking-[1px]">⋯</span>} testId="phone-nav-more" />
+      <NavButton active={more} onClick={() => setPhoneTab('more')} label="Więcej" icon={<span className="text-[20px] leading-[18px] tracking-[1px]">⋯</span>} testId="phone-nav-more" />
     </nav>
   )
 }
 
-/** „Więcej”: the plan and the radar (previews), this phone's settings. */
-function MoreScreen() {
-  const Item = ({ onClick, label, sub, glyph, testId }: { onClick: () => void; label: string; sub: string; glyph: ReactNode; testId: string }) => (
+function MoreItem({ onClick, label, sub, glyph, testId }: { onClick: () => void; label: string; sub: string; glyph: ReactNode; testId: string }) {
+  return (
     <button className="flex min-h-[56px] w-full items-center gap-3 border-b border-line px-4 text-left active:bg-hover" onClick={onClick} data-testid={testId}>
       <span className="text-muted">{glyph}</span>
       <span className="flex flex-col">
@@ -125,11 +134,15 @@ function MoreScreen() {
       </span>
     </button>
   )
+}
+
+/** „Więcej”: the plan and the radar (previews), this phone's settings. */
+function MoreScreen() {
   return (
     <div className="flex flex-col" data-testid="phone-more">
-      <Item onClick={() => goPage('month')} label="Plan miesiąca" sub="pensja, koperty, debriefing – podgląd" glyph={icon('month')} testId="phone-more-month" />
-      <Item onClick={() => goPage('radar')} label="Radar" sub="90 dni, pożyczki, boje – podgląd" glyph={icon('radar')} testId="phone-more-radar" />
-      <Item onClick={() => usePhoneTab.setState({ tab: 'settings' })} label="Telefon" sub="synchronizacja, konto, powiadomienia" glyph={<IconGear size={18} />} testId="phone-nav-settings" />
+      <MoreItem onClick={() => goPage('month')} label="Plan miesiąca" sub="pensja, koperty, debriefing – podgląd" glyph={icon('month')} testId="phone-more-month" />
+      <MoreItem onClick={() => goPage('radar')} label="Radar" sub="90 dni, pożyczki, boje – podgląd" glyph={icon('radar')} testId="phone-more-radar" />
+      <MoreItem onClick={() => setPhoneTab('settings')} label="Telefon" sub="synchronizacja, konto, powiadomienia" glyph={<IconGear size={18} />} testId="phone-nav-settings" />
     </div>
   )
 }
@@ -169,11 +182,14 @@ export function Shell() {
   // The hidden amounts (D30): every amount of the tree renders masked.
   const hideAmounts = useMachine((s) => s.prefs.hideAmounts)
   setAmountsHidden(hideAmounts)
-  // A screen opened from elsewhere (a notification's tap, a link): shown, also over the phone's settings.
+  // A screen opened from elsewhere (a notification's tap, a link): shown, also over the phone's settings. Operacje left:
+  // no operation open there next time (an untouched new one dropped – as on a computer).
   useEffect(
     () =>
       useUi.subscribe((s, prev) => {
-        if (s.route !== prev.route) usePhoneTab.setState({ tab: 'main' })
+        if (s.route === prev.route) return
+        usePhoneTab.setState({ tab: 'main' })
+        if (prev.route.page === 'operations' && s.route.page !== 'operations') selectOperation(null)
       }),
     []
   )
@@ -222,6 +238,7 @@ export function Shell() {
         <RemoteChangesDialog />
         <Toasts />
         {phase === 'ready' && <NoticePlanner />}
+        {phase === 'ready' && <PhoneInboxWatcher />}
       </div>
     </CompactContext.Provider>
   )

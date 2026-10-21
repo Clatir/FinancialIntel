@@ -867,6 +867,30 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
 
+## 1.14.0 – iPhone: Wachta (grupa iB, 21.10.2026)
+
+Zakres: „Przed grupą iB” niżej. Zrobione:
+- Dolne menu telefonu: Mostek, Operacje, „+ Wpis”, Meldunki z licznikiem, Więcej (Plan miesiąca, Radar, Telefon);
+  kolumny ekranów komputera jedna pod drugą (T310).
+- Operacje (IP3, IP4): lista kart z wyszukiwaniem, miesiącem, filtrami (konto, kategoria, oznaczenia) i sumami, raport
+  wieczorny nad listą; edytor operacji komputera na cały ekran; „+ Nowa”.
+- Meldunki (IP5): bez kategorii, podwójna korekta, anomalie, wpłaty domowników do przypisania, zakupy do zwrotu, zwroty w
+  drodze, salda – saldo z banku wpisane w meldunku; reszta „na komputerze”.
+- Plan miesiąca i Radar – podgląd (IP6, IP7): ekrany komputera tylko do odczytu, także historia wersji bez „Przywróć”.
+- Dotknięcie powiadomienia: Operacje (wieczór, operacja czujnika), Plan miesiąca, Radar, Meldunki (salda).
+- Przegląd `/code-review` high: 10 kandydatów, 10 poprawionych – zmiana zakładki zapisuje pole w trakcie pisania (na
+  iPhonie dotknięcie przycisku nie zabiera fokusu – test E2E klika bez zmiany fokusu, mutacja wykryta), wyjście z
+  Operacji zamyka operację (następna wizyta – lista), „Historia” w podglądzie bez „Przywróć”, karta telefonu z tekstem
+  wiersza komputera (wspólny zakup, konta przelewu, kwota na koncie listy), powiadomienie o saldach do Meldunków,
+  meldunki, które telefon potrafi rozpatrzyć (korekta, wpłaty, zwroty zakupów), raport wieczorny nad listą, meldunki
+  liczone raz, komponenty filtrów poza renderem, `Columns` telefonu bez siatki komputera.
+- Testy: 911 unit + fs + telefon, E2E telefonu 7 (nowe: `phone-ib.spec.ts`), E2E desktopu 69.
+
+Do sprawdzenia przez użytkownika (iPhone):
+1. Operacje: wyszukiwanie, poprzedni miesiąc, filtr konta; edycja kategorii i kwoty – na komputerze po synchronizacji.
+2. Meldunki: „Pokaż w Operacjach” przy wydatkach bez kategorii; saldo mBanku wpisane w meldunku.
+3. Więcej → Plan miesiąca i Radar – te same liczby co na komputerze, bez możliwości zmiany.
+
 ## Przed grupą iB – iPhone: Wachta (21.10.2026)
 
 1. **Co trzeba wiedzieć** – grupa iA (1.13.0) w PR #42: telefon ma Mostek, szybki wpis, powiadomienia i ustawienia,

@@ -6,11 +6,9 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow } from '@shared/calc/dates'
-import { isTwoSided } from '@shared/calc/operations'
-import { memberName, incomeShares } from '@shared/calc/household'
-import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, narrows, noNarrowing, sortOperations, sumOperations, type OperationMark, type OperationsFilter, type PeriodFilter } from '@shared/operationsView'
-import { TX_KIND_LABEL, type Transaction } from '@shared/schema'
-import { discardDraft, listOf, useData } from '@renderer/store/data'
+import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, narrows, noNarrowing, sortOperations, sumOperations, type OperationsFilter, type PeriodFilter } from '@shared/operationsView'
+import type { Transaction } from '@shared/schema'
+import { listOf, useData } from '@renderer/store/data'
 import { useMinute } from '@renderer/store/fleet'
 import { plnText, signedPln } from '@renderer/components/fields'
 import { Empty, cx } from '@renderer/components/ui'
@@ -18,13 +16,13 @@ import { monthLabel } from '@renderer/lib/format'
 import { useMarkFlags } from '@renderer/features/sensors/state'
 import { useMembers } from '@renderer/features/household/actions'
 import { OperationEditor } from '@renderer/features/operations/OperationEditor'
+import { operationRowText } from '@renderer/features/operations/rowText'
 import { useAccounts, useCategories } from '@renderer/features/operations/pickers'
+import { EveningReport } from '@renderer/features/evening/EveningReport'
 import { followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, useOperationsUi } from '@renderer/features/operations/state'
 
 const CARD = 58
 const TONE = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
-/** The marks a phone's filter offers (the rest stays in the stored filter, shown as „inne filtry”). */
-const MARKS: readonly OperationMark[] = OPERATION_MARKS
 
 const toggle = <T,>(list: readonly T[], v: T): T[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
@@ -33,16 +31,9 @@ const periodLabel = (p: PeriodFilter): string => (p.kind === 'month' ? monthLabe
 /** The filters set beyond the phone's own (amounts, members, brands, tags… – a computer's), the search apart. */
 const otherFilters = (f: OperationsFilter): boolean => narrows({ ...f, accounts: [], categories: [], marks: [], query: '' })
 
+/** The list, or the operation open over it (leaving Operacje closes it – `Shell.tsx`). */
 export function PhoneOperations() {
   const selectedId = useOperationsUi((s) => s.selectedId)
-  // Leaving the screen drops an untouched new entry (as on a computer).
-  useEffect(
-    () => () => {
-      const id = useOperationsUi.getState().selectedId
-      if (id && useData.getState().drafts[id]) discardDraft('transactions', id)
-    },
-    []
-  )
   return selectedId ? <EditorSheet id={selectedId} /> : <OperationsList />
 }
 
@@ -141,6 +132,8 @@ function OperationsList() {
           )}
         </div>
       </div>
+      {/* The evening's report (F13): „Dopisz”, „Dziś bez wydatków”, „Przypomnij” – the evening notice's tap leads here. */}
+      <EveningReport />
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" data-testid="operations-list">
         {rows.length === 0 ? (
           <Empty>{all.length ? 'Brak operacji dla wybranych filtrów.' : 'Brak operacji – dodaj szybkim wpisem albo „+ Nowa”.'}</Empty>
@@ -148,7 +141,7 @@ function OperationsList() {
           <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
             {virtualizer.getVirtualItems().map((v) => {
               const t = rows[v.index] as Transaction
-              return <Card key={t.id} t={t} top={v.start} />
+              return <Card key={t.id} t={t} top={v.start} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
             })}
           </div>
         )}
@@ -158,7 +151,7 @@ function OperationsList() {
   )
 }
 
-function Card({ t, top }: { t: Transaction; top: number }) {
+function Card({ t, top, view }: { t: Transaction; top: number; view: string | null }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const members = useMembers()
@@ -166,20 +159,10 @@ function Card({ t, top }: { t: Transaction; top: number }) {
   const draft = useData((s) => !!s.drafts[t.id])
   const flags = useMarkFlags()
   const marks = orders ? marksOf(t, orders, flags) : []
-  const nameOf = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '?'
-  const account = isTwoSided(t) ? (t.amount < 0 ? `${nameOf(t.accountId)} → ${nameOf(t.counterAccountId)}` : `${nameOf(t.counterAccountId)} → ${nameOf(t.accountId)}`) : nameOf(t.accountId)
-  const whose = t.kind === 'income' ? [...new Set(incomeShares(t).map((x) => x.memberId))].filter((x): x is string => !!x) : []
-  const what = whose.length
-    ? `od: ${whose.map((id) => memberName(id, members)).join(', ')}`
-    : t.splits.length
-      ? `${t.splits.length} części`
-      : t.kind === 'expense'
-        ? cats.label(t.categoryId) || 'bez kategorii'
-        : TX_KIND_LABEL[t.kind]
-  const name = t.counterparty || t.title || t.note.split('\n')[0] || TX_KIND_LABEL[t.kind]
+  // What the computer's row says: the category (a member's money, a shared purchase), the transfer's accounts, the
+  // money on the list's account; „bez kategorii” in the accent.
+  const { name, shown: what, uncategorized, account, amount } = operationRowText(t, { categories: cats, accounts, members, view })
   const tone = amountTone(t)
-  // „bez kategorii” is said by the category itself (in the accent).
-  const uncategorized = marks.includes('uncategorized')
   const shownMarks = marks.filter((m) => m === 'impulse' || m === 'anomaly' || m === 'awaiting' || m === 'pending' || m === 'owed')
   return (
     <button
@@ -203,13 +186,22 @@ function Card({ t, top }: { t: Transaction; top: number }) {
         </span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-0.5">
-        <span className={cx('num text-[14px]', TONE[tone])}>{signedPln(t.amount)} zł</span>
+        <span className={cx('num text-[14px]', TONE[tone])}>{signedPln(amount)} zł</span>
         <span className="num text-[11px] text-dim">
           {t.date.slice(8, 10)}.{t.date.slice(5, 7)}
           {t.time ? ` ${t.time}` : ''}
         </span>
       </span>
     </button>
+  )
+}
+
+function Check({ on, label, onClick, testId }: { on: boolean; label: string; onClick: () => void; testId: string }) {
+  return (
+    <label className="flex min-h-[40px] items-center gap-3 border-b border-line/50 text-[14px] text-fg">
+      <input type="checkbox" className="h-[18px] w-[18px]" checked={on} onChange={onClick} data-testid={testId} />
+      {label}
+    </label>
   )
 }
 
@@ -220,12 +212,6 @@ function FiltersSheet({ onClose }: { onClose: () => void }) {
   const accounts = useAccounts().filter((a) => !a.archived || filter.accounts.includes(a.id))
   const mains = cats.mains.filter((c) => !c.archived || filter.categories.includes(c.id))
   const others = otherFilters(filter)
-  const Check = ({ on, label, onClick, testId }: { on: boolean; label: string; onClick: () => void; testId: string }) => (
-    <label className="flex min-h-[40px] items-center gap-3 border-b border-line/50 text-[14px] text-fg">
-      <input type="checkbox" className="h-[18px] w-[18px]" checked={on} onChange={onClick} data-testid={testId} />
-      {label}
-    </label>
-  )
   return (
     <div className="phone-sheet fixed inset-0 z-40 flex flex-col bg-bg" data-testid="phone-filters">
       <div className="flex h-[48px] shrink-0 items-center gap-2 border-b border-line bg-panel px-3">
@@ -255,13 +241,13 @@ function FiltersSheet({ onClose }: { onClose: () => void }) {
           <Check key={c.id} on={filter.categories.includes(c.id)} label={c.name} onClick={() => setFilter({ categories: toggle(filter.categories, c.id) })} testId={`phone-filter-category-${c.name}`} />
         ))}
         <h2 className="label mt-4 mb-1">Oznaczenia</h2>
-        {MARKS.map((m) => (
+        {OPERATION_MARKS.map((m) => (
           <Check key={m} on={filter.marks.includes(m)} label={MARK_LABEL[m]} onClick={() => setFilter({ marks: toggle(filter.marks, m) })} testId={`phone-filter-mark-${m}`} />
         ))}
         {others && (
           <div className="mt-4 flex items-center gap-2 text-[12px] text-muted">
             <span className="flex-1">Filtry ustawione na komputerze (kwota, domownik, marka, tagi…) też działają.</span>
-            <button className="btn h-[32px] px-2 text-[12px]" onClick={() => setFilter({ ...noNarrowing(), accounts: filter.accounts, categories: filter.categories, marks: filter.marks, query: filter.query, amountMin: null, amountMax: null })} data-testid="phone-filters-others">
+            <button className="btn h-[32px] px-2 text-[12px]" onClick={() => setFilter({ ...noNarrowing(), accounts: filter.accounts, categories: filter.categories, marks: filter.marks, query: filter.query })} data-testid="phone-filters-others">
               Zdejmij
             </button>
           </div>

@@ -1,39 +1,60 @@
 /**
- * Meldunki on the phone (IP5): the reports a phone decides – operations without a category, unknown signals, returns on
- * their way, balances to confirm (typed here, the computers' check of today's difference); the rest (dockings,
- * duplicates, pairs of transfers, the cargo hold…) counted, decided on a computer.
+ * Meldunki on the phone (IP5): the reports a phone decides – operations without a category, a correction twice, unknown
+ * signals, a member's money to assign, purchases to be paid back, returns on their way, balances to confirm (typed
+ * here, the computers' check of today's difference); the rest (dockings, the loot, duplicates, pairs of transfers, the
+ * cargo hold, the folder) counted, decided on a computer. The reports are counted once for the menu and the screen.
  */
-import { useState } from 'react'
-import { INBOX_TITLE, type InboxItem, type InboxKind } from '@shared/calc/inbox'
+import { useEffect, useState } from 'react'
+import { create } from 'zustand'
+import { INBOX_KINDS, INBOX_TITLE, type InboxItem, type InboxKind } from '@shared/calc/inbox'
 import { plnText } from '@renderer/components/fields'
 import { Empty, Panel } from '@renderer/components/ui'
 import { parseAmountInput, plural } from '@renderer/lib/format'
 import { useFleet } from '@renderer/store/fleet'
 import { useData } from '@renderer/store/data'
-import { openInboxItem, useInbox } from '@renderer/features/inbox/state'
+import { dismissCorrection, openInboxItem, useInbox } from '@renderer/features/inbox/state'
 import { dismissAnomaly } from '@renderer/features/sensors/state'
 import { ConfirmTodayAsk, useConfirmToday } from '@renderer/features/balances/ConfirmToday'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
-/** What the phone decides (the order of the computers' inbox). */
-export const PHONE_INBOX_KINDS: readonly InboxKind[] = ['uncategorized', 'anomalies', 'returns', 'balances']
+/** What the phone decides – the operation's editor, the list's filter or the report itself – in the inbox's order. */
+const PHONE_KINDS: ReadonlySet<InboxKind> = new Set(['uncategorized', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'balances'])
+export const PHONE_INBOX_KINDS: readonly InboxKind[] = INBOX_KINDS.filter((k) => PHONE_KINDS.has(k))
 
 const HINT: Partial<Record<InboxKind, string>> = {
   uncategorized: 'Wydatek bez kategorii liczy się do energii dnia jako codzienny i nie trafia do żadnej koperty.',
+  refunds: 'Zakupy finansowane pieniędzmi osłon, których domownik jeszcze nie oddał.',
   balances: 'Wpisz saldo z aplikacji banku – różnica wobec operacji do końca dnia pyta, czy dzisiejsze są już dopisane.'
 }
 
-/** The phone's reports and the computers' (counted). */
-export function usePhoneInbox(): { items: InboxItem[]; elsewhere: InboxItem[] } {
+interface PhoneInboxState {
+  items: readonly InboxItem[]
+  elsewhere: readonly InboxItem[]
+}
+
+const NONE: readonly InboxItem[] = []
+export const usePhoneInbox = create<PhoneInboxState>(() => ({ items: NONE, elsewhere: NONE }))
+
+const signature = (list: readonly InboxItem[]) => list.map((i) => `${i.key}\u0001${i.text}\u0001${i.action}`).join('\u0002')
+
+/** The reports counted once (the shell): the menu's counter and the screen read them. */
+export function PhoneInboxWatcher(): null {
   // The duplicates are looked for on a computer (the import's screen): not on the phone.
   const all = useInbox(0, zl)
-  return { items: all.filter((i) => PHONE_INBOX_KINDS.includes(i.kind)), elsewhere: all.filter((i) => !PHONE_INBOX_KINDS.includes(i.kind)) }
+  useEffect(() => {
+    const items = all.filter((i) => PHONE_KINDS.has(i.kind))
+    const elsewhere = all.filter((i) => !PHONE_KINDS.has(i.kind))
+    const now = usePhoneInbox.getState()
+    if (signature(items) !== signature(now.items) || signature(elsewhere) !== signature(now.elsewhere)) usePhoneInbox.setState({ items, elsewhere })
+  }, [all])
+  return null
 }
 
 export function PhoneInbox() {
   const fleet = useFleet()
-  const { items, elsewhere } = usePhoneInbox()
+  const items = usePhoneInbox((s) => s.items)
+  const elsewhere = usePhoneInbox((s) => s.elsewhere)
   const from = fleet?.started ? fleet.start : null
   const sections = PHONE_INBOX_KINDS.map((kind) => [kind, items.filter((i) => i.kind === kind)] as const).filter(([, list]) => list.length > 0)
   return (
@@ -66,10 +87,16 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
   return (
     <div className="flex flex-col gap-1.5 border-b border-line/50 pb-2 last:border-b-0" data-testid="inbox-item" data-kind={item.kind}>
       <span className="text-fg">{item.text}</span>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button type="button" className="btn h-[34px] px-3 text-[13px]" onClick={onOpen} data-testid="inbox-open">
           {item.action}
         </button>
+        {/* Two real corrections of the same amount (B129): said once, never reported again. */}
+        {item.kind === 'corrections' && item.ref && (
+          <button type="button" className="btn btn-ghost h-[34px] px-3 text-[13px]" onClick={() => dismissCorrection(item.ref!)} data-testid="inbox-dismiss">
+            to nie powtórzenie
+          </button>
+        )}
         {/* An unknown signal (F31): „to w porządku” – never reported again. */}
         {item.kind === 'anomalies' && item.ref && (
           <button type="button" className="btn btn-ghost h-[34px] px-3 text-[13px]" onClick={() => dismissAnomaly({ key: item.ref! })} data-testid="inbox-anomaly-ok">

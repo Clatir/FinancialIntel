@@ -1057,16 +1057,18 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `server.ts` – aplikacja i `FakeDrive` na jednym porcie, `seedDrive`); zmienne `FI_PHONE_BROWSER` (webkit), `FI_CHROMIUM`.
 
 ## Kod (iB – telefon, 1.14.0, D92)
-- Wachta (T310): `src/mobile/app/Shell.tsx` – `goPage`, dolne menu (`phone-nav-bridge`, `-operations`, `-quick`,
+- Wachta (T310): `src/mobile/app/Shell.tsx` – `goPage`, `setPhoneTab` (zapis pola w trakcie pisania), dolne menu (`phone-nav-bridge`, `-operations`, `-quick`,
   `-inbox` z `data-badge`, `-more`), „Więcej” (`phone-more`, `phone-more-month`, `phone-more-radar`, `phone-nav-settings`);
   `PhoneOperations.tsx` (`page-operations`, `operations-search`, `operations-prev-month` / `-next-month`,
-  `operations-period`, `phone-operations-filters`, `phone-filters` – `phone-filter-account-<nazwa>`,
+  `operations-period`, `phone-operations-filters`, raport wieczorny `EveningReport`, `phone-filters` – `phone-filter-account-<nazwa>`,
   `phone-filter-category-<nazwa>` / `-none`, `phone-filter-mark-<oznaczenie>`, `phone-filters-clear` / `-done` /
   `-others`; karta `operation-row`; edytor `phone-operation`, `phone-operation-back`; `operation-new`), `PhoneInbox.tsx`
-  (`PHONE_INBOX_KINDS`, `usePhoneInbox`, `inbox-item` z `data-kind`, `inbox-open`, `inbox-anomaly-ok`,
+  (`PHONE_INBOX_KINDS`, `PhoneInboxWatcher` → sklep `usePhoneInbox`, `inbox-item` z `data-kind`, `inbox-open`, `inbox-dismiss`, `inbox-anomaly-ok`,
   `inbox-balance-amount`, `inbox-balance-confirm`, `inbox-elsewhere`), `PhonePreview.tsx` (`PhoneMonth`, `PhoneRadar`,
-  `phone-preview-note`); renderer – `components/compact.ts` (`CompactContext`), `layout.tsx` `Columns` w jednej kolumnie,
-  `MonthPage({ preview })`, `RadarPage({ preview })`; host – `phoneTapTag` z ekranami telefonu.
+  `phone-preview-note`); renderer – `components/compact.ts` (`CompactContext`), `layout.tsx` `Columns` (`StackedColumns`
+  na telefonie, `GridColumns` na komputerze), `MonthPage({ preview })`, `RadarPage({ preview })`, `HistoryButton readOnly`,
+  `features/operations/rowText.ts` (`operationRowText` – wiersz listy komputera i karta telefonu), `openTag('inbox')`;
+  host – `phoneTapTag` z ekranami telefonu (`balances` → Meldunki).
 - Testy: E2E `tests/e2e-mobile/phone-ib.spec.ts`, `tests/mobile/host.test.ts` (ekrany dotknięć).
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)

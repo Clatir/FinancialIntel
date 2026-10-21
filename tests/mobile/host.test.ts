@@ -110,7 +110,9 @@ describe('window.fi na telefonie', () => {
     notifications.tap('radar')
     expect(taps).toEqual(['briefing', 'radar'])
     // The phone's screens (iB): Operacje (today, the evening, a sensor's operation), Plan miesiąca, Radar.
-    for (const tag of ['today', 'evening', 'low', 'overrun', 'debriefing', 'anomaly:k1', 'return:t1']) expect(phoneTapTag(tag)).toBe(tag)
+    for (const tag of ['evening', 'low', 'overrun', 'debriefing', 'anomaly:k1', 'return:t1']) expect(phoneTapTag(tag)).toBe(tag)
+    // The balances' notice: Meldunki (the balance confirmed in its report), not a computer's settings.
+    expect(phoneTapTag('balances')).toBe('inbox')
     expect(phoneTapTag('dock:abc')).toBe('briefing')
     expect(phoneTapTag('import')).toBe('briefing')
     // A second listener gets no old tap.

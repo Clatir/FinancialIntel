@@ -119,7 +119,7 @@ export function MonthPage({ preview = false }: { preview?: boolean } = {}) {
           {own ? 'plan tego miesiąca' : plan ? `korzysta z planu: ${monthLabel(plan.month)} – zmiana utworzy własny` : 'brak planu – wpisz pensję'}
         </span>
         {/* The plan's earlier versions – also the one set aside when two computers changed it (N18). */}
-        {own && <HistoryButton kind="months" id={own.id} current={own} small />}
+        {own && <HistoryButton kind="months" id={own.id} current={own} readOnly={preview} small />}
       </div>
       <NewerNote show={planNewer} />
       <div className="min-h-0 flex-1 overflow-auto">
