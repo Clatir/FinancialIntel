@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
-import { amountOn, isTwoSided, notesOf, touchesAccount } from '@shared/calc/operations'
+import { notesOf } from '@shared/calc/operations'
 import { tagsText } from '@shared/calc/tags'
 import { useMarkFlags } from '../sensors/state'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
@@ -23,12 +23,12 @@ import { Popover } from '../../components/Popover'
 import { Badge, Kbd, cx } from '../../components/ui'
 import { WEEKDAY_PL, monthLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
+import { operationRowText } from './rowText'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
 import { categorizeTicked, clearTicked, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickOperations, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
-import { incomeShares, memberName } from '@shared/calc/household'
 import { SHARE_MODES } from '@shared/schema'
-import { shareComplete, shareOf, startShare } from '@shared/calc/share'
+import { shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import { EveningReport } from '../evening/EveningReport'
 
@@ -187,30 +187,12 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
   const marks = orders ? marksOf(t, orders, flags) : []
   const tone = amountTone(t)
   const members = useMembers()
-  // A member's money says whose (D80, D81: the parts of a split income – the sender's rest last).
-  const shares = t.kind === 'income' ? incomeShares(t) : []
-  const whose = [...new Set(shares.map((x) => x.memberId))].filter((x): x is string => !!x)
-  // A purchase financed by several people (D83): its category and who.
-  const share = t.kind === 'expense' ? shareOf(t) : null
-  const category = whose.length
-    ? `od: ${whose.map((id) => memberName(id, members)).join(', ')}`
-    : share
-      ? `${cats.label(t.categoryId) || 'bez kategorii'} · wspólnie: ${shareNames(share, members)}`
-      : t.splits.length
-        ? `${t.splits.length} ${plural(t.splits.length, 'część', 'części', 'części')}`
-        : t.kind === 'expense'
-          ? cats.label(t.categoryId)
-          : TX_KIND_LABEL[t.kind]
-  const nameOf = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '?'
-  // A transfer in one operation (F10): from the account the money left to the one it came to.
-  const account = isTwoSided(t) ? (t.amount < 0 ? `${nameOf(t.accountId)} → ${nameOf(t.counterAccountId)}` : `${nameOf(t.counterAccountId)} → ${nameOf(t.accountId)}`) : nameOf(t.accountId)
-  // The list of one account shows a transfer's money on it.
-  const amount = view && touchesAccount(t, view) ? amountOn(t, view) : t.amount
+  // The category, the accounts of a transfer (F10), the money on the list's account – as on the phone's cards.
+  const { name, category, shown: categoryShown, none, account, amount } = operationRowText(t, { categories: cats, accounts, members, view })
   // A member's purchase says in its one badge how much of it is paid back (D91): „domownik · oddane”.
   const repaid = marks.find((m) => m === 'owed' || m === 'partlyRepaid' || m === 'repaid')
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split', 'owed', 'partlyRepaid', 'repaid'].includes(m))
   const ticked = useOperationsUi((s) => !!s.ticked[t.id])
-  const name = t.counterparty || t.title || TX_KIND_LABEL[t.kind]
   const { shown } = columns
   const tags = shown('tags') ? tagsText(t) : ''
   // A new entry says so in the first text column shown (the counterparty's – hidden, the next one; none – the date).
@@ -257,8 +239,8 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
         </span>
       )}
       {shown('category') && (
-        <span className={cx('min-w-0 truncate', t.kind === 'expense' && !t.categoryId && !t.splits.length ? 'text-dim' : 'text-muted')} title={category || undefined}>
-          {draftIn === 'category' ? NEW : t.kind === 'expense' && !t.categoryId && !t.splits.length ? (t.refundable ? 'domownik' : t.containerId ? 'ładownia' : t.goalId ? 'z celu' : 'bez kategorii') : category}
+        <span className={cx('min-w-0 truncate', none ? 'text-dim' : 'text-muted')} title={category || undefined}>
+          {draftIn === 'category' ? NEW : categoryShown}
         </span>
       )}
       {/* F17: the operation's tags and its lines'. */}

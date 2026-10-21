@@ -90,12 +90,13 @@ export function ChangeList({ changes, beforeLabel, afterLabel, testId }: { chang
 }
 
 /** Versions of one record with the differences against the current one; any version can be made current. */
-export function HistoryDialog({ kind, id, current, onClose }: { kind: HistoryKind; id: string; current: unknown; onClose: () => void }) {
+export function HistoryDialog({ kind, id, current, onClose, readOnly: shown = false }: { kind: HistoryKind; id: string; current: unknown; onClose: () => void; readOnly?: boolean }) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [version, setVersion] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
-  const readOnly = useFolderLocked()
+  // A preview (the phone's plan and radar) shows the versions, never restores one.
+  const readOnly = useFolderLocked() || shown
 
   useEffect(() => {
     let alive = true
@@ -202,6 +203,7 @@ export function HistoryButton({
   id,
   current,
   disabled,
+  readOnly,
   small,
   variant = 'button'
 }: {
@@ -209,6 +211,8 @@ export function HistoryButton({
   id: string
   current: unknown
   disabled?: boolean
+  /** The versions shown without „Przywróć” (a preview). */
+  readOnly?: boolean
   small?: boolean
   /** 'icon' – in a narrow row (a goal), 'link' – among a row's text links (a loan, a balance). */
   variant?: 'button' | 'icon' | 'link'
@@ -228,7 +232,7 @@ export function HistoryButton({
           </>
         )}
       </button>
-      {open && <HistoryDialog kind={kind} id={id} current={current} onClose={() => setOpen(false)} />}
+      {open && <HistoryDialog kind={kind} id={id} current={current} readOnly={readOnly} onClose={() => setOpen(false)} />}
     </>
   )
 }

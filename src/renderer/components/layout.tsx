@@ -1,11 +1,12 @@
 // adapted from ICTTJ src/renderer/components/layout.tsx @ 84a8339
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { create } from 'zustand'
 import { dragPane, dragColumns, parseTrackWidths, visibleColumnsKey, visibleTemplate } from '@shared/panels'
 import { setColumns, useColumns } from '../store/columns'
 import { showAllPanels } from '../store/layout'
 import { hiddenSignature, usePanels } from '../store/panels'
 import { useUi } from '../store/ui'
+import { CompactContext } from './compact'
 
 /**
  * Drag with the pointer captured by the handle: `move` gets the distance from the start, `end` the last one.
@@ -234,18 +235,7 @@ export function PaneEdge({ pane, side, testId = 'pane-edge' }: { pane: { width: 
  * A page grid of columns (`useColumnLayout`); `fieldset` keeps the read-only `disabled`. With every panel hidden it
  * says so and offers to show them again.
  */
-export function Columns({
-  id,
-  tracks,
-  as = 'div',
-  className,
-  style,
-  sep = true,
-  emptyNote = true,
-  disabled,
-  children,
-  testId
-}: {
+interface ColumnsProps {
   id: string
   tracks: readonly string[]
   as?: 'div' | 'fieldset'
@@ -257,7 +247,23 @@ export function Columns({
   disabled?: boolean
   children: ReactNode
   testId?: string
-}) {
+}
+
+export function Columns(props: ColumnsProps) {
+  // The phone: the columns one under another, full width – no grid of widths to drag.
+  return useContext(CompactContext) ? <StackedColumns {...props} /> : <GridColumns {...props} />
+}
+
+function StackedColumns({ as = 'div', style, disabled, children, testId }: ColumnsProps) {
+  const Tag = as
+  return (
+    <Tag disabled={as === 'fieldset' ? disabled : undefined} className="flex min-w-0 flex-col" style={style} data-testid={testId}>
+      {children}
+    </Tag>
+  )
+}
+
+function GridColumns({ id, tracks, as = 'div', className, style, sep = true, emptyNote = true, disabled, children, testId }: ColumnsProps) {
   const page = useUi((s) => s.route.page)
   const { props: layout, empty } = useColumnGrid(id, tracks, { sep, style, keepEmpty: emptyNote })
   const note = empty && emptyNote && (

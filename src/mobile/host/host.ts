@@ -87,11 +87,18 @@ class Emitter<A extends unknown[]> {
   }
 }
 
-/** The notifications' screens the phone has (iA: Mostek); a tap on any other leads to Mostek, whose briefing lists it. */
-const PHONE_TAGS: ReadonlySet<string> = new Set(['briefing'])
+/**
+ * The notifications' screens the phone has (iB: Mostek, Operacje – the evening's, a sensor's operation –, Plan miesiąca,
+ * Radar, Meldunki – a balance to confirm); a tap on any other leads to Mostek, whose briefing lists it.
+ */
+const PHONE_TAGS: ReadonlySet<string> = new Set(['briefing', 'evening', 'low', 'overrun', 'debriefing', 'radar'])
+const PHONE_TAG_PREFIXES = ['anomaly:', 'return:']
+/** A computer's screen of the notice has the phone's place elsewhere: the balances (Ustawienia → Konta) – Meldunki. */
+const PHONE_TAG_PLACE: Readonly<Record<string, string>> = { balances: 'inbox' }
 
 export function phoneTapTag(tag: string): string {
-  return PHONE_TAGS.has(tag) ? tag : 'briefing'
+  if (PHONE_TAG_PLACE[tag]) return PHONE_TAG_PLACE[tag]
+  return PHONE_TAGS.has(tag) || PHONE_TAG_PREFIXES.some((p) => tag.startsWith(p)) ? tag : 'briefing'
 }
 
 /** The notifier's notices shown in the app (key → day): the plan for iOS leaves them out. */

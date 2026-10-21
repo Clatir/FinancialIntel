@@ -1056,6 +1056,21 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `auth.test.ts`, `host.test.ts`, `tests/unit/notify-plan.test.ts`; E2E `tests/e2e-mobile/phone.spec.ts` (serwer
   `server.ts` – aplikacja i `FakeDrive` na jednym porcie, `seedDrive`); zmienne `FI_PHONE_BROWSER` (webkit), `FI_CHROMIUM`.
 
+## Kod (iB – telefon, 1.14.0, D92)
+- Wachta (T310): `src/mobile/app/Shell.tsx` – `goPage`, `setPhoneTab` (zapis pola w trakcie pisania), dolne menu (`phone-nav-bridge`, `-operations`, `-quick`,
+  `-inbox` z `data-badge`, `-more`), „Więcej” (`phone-more`, `phone-more-month`, `phone-more-radar`, `phone-nav-settings`);
+  `PhoneOperations.tsx` (`page-operations`, `operations-search`, `operations-prev-month` / `-next-month`,
+  `operations-period`, `phone-operations-filters`, raport wieczorny `EveningReport`, `phone-filters` – `phone-filter-account-<nazwa>`,
+  `phone-filter-category-<nazwa>` / `-none`, `phone-filter-mark-<oznaczenie>`, `phone-filters-clear` / `-done` /
+  `-others`; karta `operation-row`; edytor `phone-operation`, `phone-operation-back`; `operation-new`), `PhoneInbox.tsx`
+  (`PHONE_INBOX_KINDS`, `PhoneInboxWatcher` → sklep `usePhoneInbox`, `inbox-item` z `data-kind`, `inbox-open`, `inbox-dismiss`, `inbox-anomaly-ok`,
+  `inbox-balance-amount`, `inbox-balance-confirm`, `inbox-elsewhere`), `PhonePreview.tsx` (`PhoneMonth`, `PhoneRadar`,
+  `phone-preview-note`); renderer – `components/compact.ts` (`CompactContext`), `layout.tsx` `Columns` (`StackedColumns`
+  na telefonie, `GridColumns` na komputerze), `MonthPage({ preview })`, `RadarPage({ preview })`, `HistoryButton readOnly`,
+  `features/operations/rowText.ts` (`operationRowText` – wiersz listy komputera i karta telefonu), `openTag('inbox')`;
+  host – `phoneTapTag` z ekranami telefonu (`balances` → Meldunki).
+- Testy: E2E `tests/e2e-mobile/phone-ib.spec.ts`, `tests/mobile/host.test.ts` (ekrany dotknięć).
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion

@@ -78,6 +78,8 @@ export function openTag(tag: string): void {
   else if (tag === 'update') navigate({ page: 'settings', tab: 'updates' })
   else if (tag === 'debriefing' || tag === 'low' || tag === 'overrun') navigate({ page: 'month' })
   else if (tag === 'radar') navigate({ page: 'radar' })
+  // The phone (T310): a balance to confirm in its report.
+  else if (tag === 'inbox') navigate({ page: 'inbox' })
   else if (tag === 'reports') openWatchReport()
   else {
     navigate({ page: 'bridge' })
