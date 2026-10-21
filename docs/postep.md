@@ -1,6 +1,8 @@
 # Financial Intel – postęp
 
-**Stan:** pauza do komendy użytkownika (D67). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
+**Stan:** grupa iA (iPhone, **1.13.0**, D92 / D93) – PR i CI; potem iB i iC jednym ciągiem. 1.11.0 i 1.12.0 wydała w tym
+czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0, decyzje D92 / D93, T305–T309.
+**1.12.0 wydane** (PR #40 – zwrot domownika przypisany do zakupu, D91). **1.11.0 wydane** (PR #38 – opis wydatku na liście operacji, opis części paragonu, wybór kolumn, D89). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
 **1.10.1 wydane** (PR #35 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany, D88, T301),
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
 oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
@@ -12,10 +14,11 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** wersja na iPhone'a (D92) – grupy iA–iE (`docs/plan.md`, „Wersja na iPhone'a”); „Przed grupą iA”
-niżej; D93 – start grupy iA po przełączeniu thinking na max (komenda użytkownika). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36
-(F39), wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
-Do sprawdzenia w aplikacji: 1.5.0–1.10.1 – listy w sekcjach niżej.
+**Następny krok:** grupa iA (iPhone, 1.13.0 – D92, D93) – PR, CI (Linux, Windows, macOS), scalenie i wydanie z
+`.ipa`; potem grupy iB i iC jednym ciągiem (D93), przerwa po iC na limit tygodniowy. Przed każdym zadaniem tabela prac
+z modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
+wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
+Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w sekcjach niżej; iPhone – „1.13.0” niżej i `docs/iphone.md`.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -62,7 +65,9 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
-| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | 7,5–10,5 h (z górką 11 h) | 1.13.0 | ✅ D92, D93 (komenda). Na koniec grupy, do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera | ⏳ czeka na thinking max i komendę |
+| 1.11.0 | Opis wydatku: notatka na liście operacji, opis części paragonu, wybór widocznych kolumn listy (D89) | Opus 5.5 | **xhigh** (z górką; wystarczyłby high) | zmierzone ok. 1 h (zegar sesji od zgody do PR, z przeglądem, 11 mutacjami i pełnym E2E; plan był 1–1,5 h) | 1.11.0 | ✅ D89 | ✅ wydane (PR #38) |
+| 1.12.0 | Zwrot domownika przypisany do konkretnego wydatku (także przez pośrednika), bez „od najstarszego” | Opus 5.5 | **xhigh** (z górką; minimum high) | zmierzone ok. 1,5 h (zegar sesji od komendy do PR, z przeglądem, 26 mutacjami i dwoma pełnymi E2E; plan był 2–2,5 h) | 1.12.0 | ✅ D91 | ✅ wydane (PR #40) |
+| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji od komendy do PR, z przeglądem, CI macOS na gałęzi i scaleniem 1.11.0 / 1.12.0; plan był 7,5–10,5 h) | 1.13.0 | ✅ D92, D93 (komenda). Do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera (`docs/iphone.md`) | 🔨 PR – CI, scalenie i wydanie (D71) |
 | **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | 2–2,5 h (z górką 3 h) | 1.14.0 | iA na telefonie: logowanie, pierwsze pobranie, szybki wpis widoczny na PC (odbiór może iść równolegle z iB) | ⏳ |
 | **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | 5–6,5 h (z górką 7 h) | 1.15.0 | iB scalone; uwagi z telefonu do iA / iB (jeśli są) | ⏳ |
 | **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** | 4–4,5 h (z górką 5 h) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC | ⏳ |
@@ -70,7 +75,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
-| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 56,5 h** | | | |
+| | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1 + 1.11.0 + 1.12.0 + iA** | | | **ok. 61,5 h** | | | |
 | | **Ciąg M–V (D87)** | | | **zmierzone ok. 17 h (plan był ok. 24–25 h)** | | | |
 
 **iPhone – limit tygodniowy (D93).** Plan Max 20x, odnowienie w niedzielę o 18:00; 21.10.2026 zużyte 55 %. Podstawa:
@@ -862,6 +867,44 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
 
+## 1.13.0 – iPhone: Okręt w kieszeni (grupa iA, 21.10.2026)
+
+Zakres: „Przed grupą iA” niżej (tam jeszcze z numerami sprzed przesunięcia: D89 / D90, 1.11.0). Zrobione:
+- Folder danych na telefonie (T305): magazyn komputera bez zmian nad lustrem folderu w IndexedDB; bez sieci aplikacja
+  startuje z lustra, zmiany czekają w kolejce. Historia wersji i kopie zostają na komputerze.
+- Synchronizacja z OneDrive (T306): zmiany folderu przez Microsoft Graph (delta), zapis z wersją, którą zastępuje,
+  konflikt → kopia `…-telefon-<czas>.json` do wyboru w Synchronizacji na PC (opis w karcie konfliktu), ponowienia bez
+  sieci, logowanie PKCE kontem osobistym (aplikacja zarejestrowana przez użytkownika), „Zaloguj ponownie” bez utraty
+  lustra – innym kontem odrzucone.
+- Aplikacja (T307): renderer komputera nad `window.fi` w oknie telefonu – Mostek w jednej kolumnie (bez dokowania),
+  szybki wpis w arkuszu, ustawienia telefonu (synchronizacja, konto i folder, nazwa, ukrywanie kwot, powiadomienia),
+  ekrany spoza telefonu mówią „tylko na komputerze”; obecność „iPhone” widoczna na PC.
+- Powiadomienia (T308): plan na 7 dni przy każdym otwarciu (odprawa nie przed 7:00, raport wachty, dni Radaru o 9:00),
+  bez dubli z powiadomieniami otwartej aplikacji.
+- iOS i wydanie (T309): projekt Capacitor `ios/`, job CI macOS (E2E w WebKit, `.ipa` bez podpisu, symulator), job
+  `ios-release` (`.ipa`, `altstore.json`, suma w `SHA256SUMS.txt`), instrukcja `docs/iphone.md`.
+- Przegląd `/code-review` high: 9 kandydatów, 9 poprawionych – odprawa przy wczesnym otwarciu nie przychodzi drugi raz z
+  iOS (pokazane w aplikacji zdejmuje zaplanowane), „Dziś bez wydatków” i nowy dzień planują od nowa, rano po ciszy
+  nocnej także dla ciszy kończącej się po południu i ciszy w dzień, nieudany plan nie liczy na stary, ponowne logowanie
+  innym kontem odrzucone, komunikat chwilowej awarii logowania bez obietnicy ponowienia, błąd logowania w ustawieniach
+  tylko z tej próby, dotknięcie powiadomienia tylko do słuchającego okna (jeden bufor).
+- Scalenie z `main` (1.11.0 – PR #38, 1.12.0 – PR #40, równoległa sesja): konflikty tylko w dokumentach i konfiguracji;
+  numery iPhone'a przesunięte (wersje 1.13.0–1.17.0, D92 / D93, T305–T309).
+- Testy: 911 unit + fs + telefon (nowe: `tests/mobile/vfs`, `sync`, `auth`, `host`, `tests/unit/notify-plan`), E2E
+  desktopu 69, E2E telefonu 4 (Chromium; na CI macOS też WebKit). CI na gałęzi (Linux, Windows, macOS – ręcznie, przed
+  scaleniem z `main`) zielone: `.ipa` w 70 s, w symulatorze iOS aplikacja wstaje (`FI_PHONE_BOOT_OK` z konsoli).
+
+Do sprawdzenia przez użytkownika (iPhone, `docs/iphone.md`):
+1. Rejestracja aplikacji w Microsoft Entra – identyfikator aplikacji (klienta); AltServer na Windows, AltStore na
+   iPhonie, tryb dewelopera; źródło AltStore z instrukcji i instalacja Financial Intel.
+2. Logowanie, folder `FinancialIntel`, pierwsza kopia – Mostek z tymi samymi liczbami co na komputerze.
+3. Szybki wpis na telefonie – po chwili widoczny na komputerze (zmienione przez „iPhone”); zmiana na komputerze –
+   na telefonie po „Synchronizuj teraz”.
+4. Tryb samolotowy: wpis czeka („offline · 1 czeka”), po włączeniu sieci idzie.
+5. Ta sama operacja zmieniona na komputerze i na telefonie bez sieci – po synchronizacji kopia „zmiana z telefonu…” w
+   Synchronizacji na komputerze.
+6. Powiadomienia: zgoda przy pierwszym planie; następnego dnia odprawa po ciszy nocnej (nie przed 7:00).
+
 ## Przed grupą iA – iPhone: Okręt w kieszeni (21.10.2026)
 
 1. **Co trzeba wiedzieć** – 1.10.1 wydane, ciąg M–V zamknięty. D92: wersja na iPhone'a (D2 zniesione), grupy iA–iE
@@ -993,6 +1036,155 @@ Zakres: „Przed etapem 1.10.1” wyżej. Zrobione:
 Do sprawdzenia przez użytkownika (Windows):
 1. Zmiana w edytorze operacji i od razu „Zakończ” z menu ikony w zasobniku (albo zamknięcie okna przy wyłączonym
    „Zamykaj do zasobnika”) – bez pytania o niezapisane zmiany; po ponownym otwarciu zmiana jest.
+
+## Przed etapem 1.11.0 – opis wydatku i kolumny listy operacji (20.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.10.1 wydane (PR #35), nic nie jest otwarte. Pytanie użytkownika: jak opisać, czym jest
+   wydatek, a nie tylko od kogo / dla kogo jest przelew. Operacja już ma „Notatkę” (edytor do 5000 znaków, szybki wpis do
+   500; wyszukiwarka i eksport ją czytają), „Dziennik kapitański” (plan / impuls) i tagi. Braki: notatki nie widać na
+   liście operacji, część paragonu ma pole `note` w schemacie, ale edytor podziału go nie pokazuje, a lista ma stałe
+   kolumny (`OperationsPage.tsx` `TEMPLATE`: zaznaczenie, data, godzina, kontrahent · konto · tagi, kategoria,
+   oznaczenia, kwota). Zakres:
+   - **Notatka na liście** – nowa kolumna „Notatka”: notatka operacji (pierwsza linia, całość w dymku); gdy pusta, a
+     części paragonu mają opisy – opisy części połączone „ · ”.
+   - **Opis części paragonu** – pole „opis” przy każdej części w edytorze podziału (`SplitEditor`, testid
+     `split-note`), do 500 znaków; wyszukiwarka szuka też w opisach części (`operationsView.ts` tekst wyszukiwania);
+     eksport CSV / Excel – kolumna „Notatka” z opisami części po notatce operacji.
+   - **Wybór kolumn** – przycisk „Kolumny” nad listą (menu z polami wyboru, jak „Więcej filtrów”) i „Przywróć
+     domyślne”; szablon siatki liczony z widocznych kolumn (kolumny tekstowe ustępują w wąskim oknie jak dziś – nagłówek
+     nigdy nie wchodzi pod panel szczegółów). Schemat folderu bez zmian (pole `note` części już jest – bez migracji).
+2. **Co użytkownik musi powiedzieć** – ✅ „Zgoda na wszystkie propozycje” (D89). Pytania z propozycją (✅ = moja propozycja):
+   - a) Notatka na liście jako **osobna kolumna „Notatka”** (✅ – i tak będzie wybór kolumn) czy szary tekst pod
+     kontrahentem w tym samym wierszu?
+   - b) Kolumny do wyboru: Data i Kwota zawsze widoczne; do ukrycia: Godzina, Kontrahent, **Konto**, Notatka,
+     Kategoria, **Tagi**, Oznaczenia. Konto i tagi dziś siedzą w kolumnie kontrahenta – ✅ wydzielić je do własnych
+     kolumn (dopiero wtedy da się je osobno ukryć). Domyślnie widoczne ✅ wszystkie (wygląd jak dziś + Notatka).
+   - c) Gdzie zapamiętać wybór kolumn: ✅ **na tym komputerze** (jak szerokości paneli – laptop i duży monitor mogą mieć
+     inne), czy w folderze danych (te same na obu komputerach)?
+   - d) Czy zapisane widoki listy („Widoki”, F18) mają pamiętać też kolumny? ✅ nie – widok to filtr i kolejność; kolumny
+     są ustawieniem ekranu.
+   - e) Eksport widocznej listy (CSV / Excel): ✅ zawsze wszystkie kolumny (do analizy w Excelu), czy tylko widoczne?
+   - Szybki wpis: ✅ bez zmian (ma „Notatkę”; opis części tylko w edytorze operacji).
+3. **Co przygotować** – nic przed startem; po wydaniu: dopisać notatkę do kilku wydatków, opisać części jednego
+   paragonu, ukryć i przywrócić kilka kolumn (także przy otwartym panelu szczegółów i w wąskim oknie).
+4. **Model, thinking, czas** – **Opus 5.5 · xhigh** (z górką; high by wystarczył – to zmiana ekranu bez silnika
+   pieniędzy, ale duży kod z konwencjami testid, E2E i dokumentacji, a lista jest wirtualizowana i musi zostać szybka
+   przy 150 tys. operacji). Sonnet 5.5 · high też da radę, z większym ryzykiem poprawek po przeglądzie. Czas: ok.
+   1–1,5 h z testami (unit: kolumny i wyszukiwanie w opisach części; E2E: notatka na liście, opis części, ukrycie /
+   przywrócenie kolumn), `/code-review` high, PR i CI (Linux i Windows); wydanie 1.11.0.
+
+## 1.11.0 – opis wydatku i kolumny listy operacji (20.10.2026)
+
+Zakres: „Przed etapem 1.11.0” wyżej, wszystkie propozycje przyjęte (D89). Zrobione:
+- Kolumna „Notatka” na liście operacji: pierwsza linia notatki, całość w dymku; bez notatki – opisy części paragonu
+  („zakupy na tydzień · kabel HDMI”).
+- Opis każdej części paragonu w edytorze podziału (`split-note`, 500 znaków) – istniejące pole `split.note`, bez zmiany
+  schematu; wyszukiwarka listy i paleta szukają w opisach części; eksport – w kolumnie „Notatka” po notatce operacji, każdy
+  z kategorią swojej części.
+- „Kolumny” nad listą (w wierszu sum, przy CSV / Excel): Godzina, Kontrahent, Konto, Notatka, Kategoria, Tagi,
+  Oznaczenia do ukrycia, Data i Kwota zawsze, „przywróć domyślne”; wybór na tym komputerze (localStorage); konto i tagi
+  we własnych kolumnach (T303).
+- Przegląd `/code-review` high: 9 kandydatów, wszystkie poprawione – usunięcie przedostatniej części przenosi jej opis do
+  notatki (jak tagi), ukrycie „Kontrahenta” przy kolejności po nim wraca do kolejności po dacie, „nowa operacja” w
+  pierwszej widocznej kolumnie tekstowej, odstęp kolumn 6 px (dziewięć kolumn tak wąsko jak siedem przed 1.11.0),
+  ukryte kolumny nowszej wersji zostają w zapisie, tagi wiersza i eksportu jednym `tagsText` (liczone tylko przy
+  widocznej kolumnie), eksport z kategorią przy opisie części i notatką operacji bez zmian, `noteLineOf` na `notesOf`,
+  duplikaty liczą opis części jako treść użytkownika.
+- Testy: 828 → 835 unit + fs (`operation-notes.test.ts`, `operations-columns.test.ts`), nowy E2E `notes.spec.ts` (notatka
+  na liście, opis części, wyszukiwanie, kolejność po ukryciu kontrahenta, szkic bez kolumny kontrahenta, wybór po ponownym
+  uruchomieniu, „przywróć domyślne”, usunięcie części, nagłówek przy oknie 1024 px z panelem szczegółów); pełny E2E
+  68 z 68 zielonych (Linux, 4 min); 11 mutacji – 10 wykrytych od razu, jedna (kolejność ukrytych w pamięci – nieobserwowalna dla siatki) wykryta po
+  dopisanej asercji.
+- CI PR #38 zielone (Linux, Node 22.12 / 24 / 26, E2E, Windows: build, smoke, test aktualizacji); po scaleniu job Windows na
+  `main` wydał 1.11.0 (instalator, portable, `SHA256SUMS.txt`).
+
+Do sprawdzenia przez użytkownika (Windows):
+1. Operacje: notatka przy kilku wydatkach – widać ją w kolumnie „Notatka”, cała po najechaniu kursorem.
+2. Podział paragonu z opisem części; wyszukanie operacji po słowie z opisu części; eksport CSV / Excel.
+3. „Kolumny”: ukrycie kilku (np. Godzina, Tagi) przy otwartym panelu szczegółów i w wąskim oknie; po ponownym
+   uruchomieniu wybór zostaje; na drugim komputerze lista ma swój wybór.
+
+## Przed etapem 1.12.0 – zwrot domownika przypisany do wydatku (21.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.11.0 wydane (PR #38, #39), nic nie jest otwarte. Zgłoszenie: zwrot domownika liczony „od
+   najstarszego wydatku” jest nieintuicyjny; zwrot (także przez pośrednika) ma być powiązany z konkretnym wydatkiem.
+   Dziś (`calc/household.ts` `repay`): wpłata domownika spłaca najpierw zakupy zaznaczone w „Pokrywa (inaczej od
+   najstarszych)” w edytorze wpłaty (`covers`), resztę od najstarszego otwartego zakupu; import i szybki wpis nic nie
+   wiążą, a wydatek nie pokazuje, czy i czym został oddany. Pośrednik (D81) już ma części osób w jednym przelewie –
+   `covers` operacji działa dla każdej osoby osobno (kolejka każdej osoby ma tylko jej zakupy). Propozycja:
+   - **Zwrot zawsze do konkretnych wydatków.** Wpłata osoby (albo jej część w przelewie pośrednika) spłaca tylko
+     wskazane zakupy, w podanej kolejności; bez „od najstarszego”.
+   - **Dopasowanie samo, gdy pewne** – przy imporcie z banku, w edytorze i w szybkim wpisie: kwota = jeden otwarty zakup
+     tej osoby (jedyny o tej kwocie), = suma wszystkich jej otwartych zakupów albo = suma jedynego zestawu 2–3 zakupów z
+     ostatnich 90 dni → powiązane od razu (do zmiany). Kilka możliwości → pytanie z listą.
+   - **Bez pewnego dopasowania – „zwrot do przypisania”.** Pieniądze i tak zmniejszają to, co osoba ma oddać (osłony,
+     depozyt i przychody liczone jak dziś – liczby floty bez zmian), ale żaden zakup nie jest oznaczony jako oddany;
+     Meldunki „Przypisz zwrot (Mama, 120 zł)” z podpowiedziami, Radar i Ustawienia → Domownicy pokazują kwotę do
+     przypisania.
+   - **Strona wydatku**: w edytorze zakupu finansowanego przez domownika „Oddane 30 z 80 zł · przelew Mama 12.10 →”
+     (przejście do wpłaty), „Do oddania 50 zł”, przycisk „Przypisz zwrot…” (wpłaty tej osoby z kwotą do przypisania);
+     na liście operacji oznaczenia „do oddania” / „częściowo oddane” / „oddane” i filtr po nich.
+   - **Edytor wpłaty**: „Za co oddaje” osobno dla każdej osoby (przy pośredniku – sekcja na osobę), z sumą i tym, co
+     zostaje (do przypisania albo zaliczka / przychód, gdy osoba nic więcej nie ma do oddania).
+   - **Zwrot towaru** zakupu domownika – do wskazanego zakupu (podpowiedź: ostatni zakup tej osoby u tego kontrahenta).
+2. **Co użytkownik musi powiedzieć** – ✅ komenda „Rozpocznij całość prac (etapy 1–5) jednym ciągiem” = przyjęte
+   propozycje (D91). Pytania z propozycją (✅ = moja propozycja):
+   - a) Wpłata bez pewnego dopasowania: ✅ „zwrot do przypisania” (saldo osoby maleje, zakupy czekają na wskazanie), czy
+     zostaje „od najstarszego”, tylko widoczne w edytorze zakupu z „zmień”?
+   - b) Pewne dopasowanie (kwota jednego zakupu, suma wszystkich, jedyny zestaw 2–3): ✅ wiąże samo (do zmiany), czy
+     zawsze pytać?
+   - c) Nadwyżka ponad wskazane zakupy (np. 100 zł za zakup 80 zł): ✅ gdy osoba ma jeszcze inne zakupy do oddania –
+     „do przypisania”; gdy nie – jak dziś wg ustawienia osoby (zaliczka / przychód / pytaj).
+   - d) Dawne zwroty (sprzed aktualizacji): ✅ zostają jak są – od najstarszego do dnia aktualizacji (bez przepisywania
+     plików; każdy można przepiąć w edytorze), czy przeliczyć wszystkie od nowa (wszystkie dawne bez wskazania – „do
+     przypisania”)?
+   - e) Zwrot towaru zakupu domownika: ✅ do wskazanego zakupu z podpowiedzią (ostatni zakup tej osoby u tego
+     kontrahenta), bez wskazania – „do przypisania”?
+   - f) Zakup opłacony z zaliczki osoby (depozyt): ✅ jak dziś – zaliczka idzie na najbliższy zakup sama (to „z góry
+     zapłacone”), czy też wskazywać ręcznie?
+3. **Co przygotować** – nic przed startem; po wydaniu: jedna wpłata domownika dopasowana sama, jedna przypisana ręcznie,
+   przelew przez pośrednika z częścią drugiej osoby, Meldunki „Przypisz zwrot”, status zakupu w edytorze i na liście.
+4. **Model, thinking, czas** – tabela prac (D90; model oszczędny, w nawiasie z górką):
+
+   | Krok | Zakres | Model i thinking (minimum → z górką) | Czas Claude'a |
+   | --- | --- | --- | --- |
+   | 1. Silnik rozliczeń | `household.ts`: spłata tylko wskazanych, „do przypisania”, dzień przejścia (dawne od najstarszego), stan każdego zakupu (oddane / częściowo / do oddania, którymi wpłatami); testy jednostkowe na przykładach | Opus 5.5 high → **xhigh** (pieniądze i salda osób) | ok. 30 min |
+   | 2. Dopasowanie | kwota jednego zakupu, suma wszystkich, jedyny zestaw 2–3; import (`reconcile.ts` decyzja z `covers`), szybki wpis, edytor; testy | Opus 5.5 high → **xhigh** | ok. 30 min |
+   | 3. Edytor wpłaty i zakupu | „Za co oddaje” na osobę (pośrednik), status zakupu z przejściem do wpłaty, „Przypisz zwrot…”, zwrot towaru | Sonnet 5.5 high → **Opus 5.5 high** | ok. 25 min |
+   | 4. Lista, Radar, Meldunki, odprawa | oznaczenia i filtr „oddane / częściowo / do oddania”, „do przypisania” na Radarze i w Domownikach, meldunek „Przypisz zwrot”, przypomnienie | Sonnet 5.5 high → **Opus 5.5 high** | ok. 20 min |
+   | 5. Domknięcie | E2E (wpłata dopasowana sama, przypisana ręcznie, pośrednik, meldunek), `/code-review` high, mutacje, dokumentacja, PR, CI, wydanie | Opus 5.5 high → **xhigh** | ok. 25–35 min |
+   | **Razem** | jeden PR i wydanie 1.12.0 | **Opus 5.5 · xhigh** dla całości (kroki 3–4 same dałyby radę na Sonnet 5.5 high, ale etap idzie jednym ciągiem) | **ok. 2–2,5 h** |
+
+## 1.12.0 – zwrot domownika przypisany do zakupu (21.10.2026)
+
+Zakres: „Przed etapem 1.12.0” wyżej, propozycje przyjęte komendą (D91). Zrobione (T304):
+- Silnik: od dnia przejścia (ustawiany raz – dzień aktualizacji) wpłata domownika spłaca tylko wskazane zakupy, w
+  kolejności wskazania; spłacone ponad nie czeka na przypisanie; pieniądze floty bez zmian (test porównuje). Stan każdego
+  zakupu (oddane, którymi wpłatami), dług salda na start też do wskazania (`coversOpening`).
+- Dopasowanie samo przy pewnej kwocie (jeden zakup, suma wszystkich, jedyny zestaw 2–3 z 90 dni; zwrot towaru – ten sam
+  kontrahent): import z mBanku (przed zapisem, wpłaty po kolei), szybki wpis, wybór osoby w edytorze.
+- Edytor wpłaty – „Za co oddaje” dla każdej osoby (pośrednik), „Pasuje: …” / „Może: …”, wynik („spłaca …”, „do
+  przypisania …”); edytor zakupu – stan zwrotu z przejściem do wpłaty, „Przypisz zwrot…”; zwrot towaru – „Zwrot do
+  zakupu”.
+- Lista – „domownik · do oddania / częściowo oddane / oddane” i filtr; Meldunki „Zwroty do przypisania”; Radar – zakupy
+  do oddania i zwrot do przypisania; odprawa; Ustawienia → Domownicy – dzień przejścia z „Cofnij” i kwota do przypisania.
+- Przegląd `/code-review` high: 10 kandydatów, wszystkie poprawione – zakup przypisany później bierze to, co zostało
+  (kolejność wskazania), „Wydatek” kliknięty jeszcze raz nie czyści wskazań zwrotu towaru, najwyżej 500 wskazań (schemat),
+  „Przypisz zwrot…” bez wpłat sprzed zakupu w kolejności dnia, `since` tylko przy długu (misja i przypomnienie), Radar bez
+  „zaliczka 0 zł”, dopasowanie importu tylko na operacjach domowników, jedno rozliczenie przed wpłatą w edytorze,
+  komentarze na miejscu, wspólne `dm` / `assignsOn` / `plDate`.
+- Testy: 835 → 854 unit + fs (`repayments.test.ts`: silnik, dopasowanie, oznaczenia, poprawki z przeglądu; poprawione porównania
+  `toMatchObject` w starych testach – nowe pola), E2E 68 → 69 (`repayments.spec.ts`: dopasowanie przy wyborze osoby, „do
+  przypisania” i meldunek, „Przypisz zwrot…”, pośrednik z „Pasuje”, filtr „oddane” / „do oddania”); 26 mutacji – 26
+  wykrytych.
+- CI PR #40 zielone (Linux, Node 22.12 / 24 / 26, E2E, Windows: build, smoke, test aktualizacji); po scaleniu job Windows na
+  `main` wydał 1.12.0 (instalator, portable, `SHA256SUMS.txt`).
+
+Do sprawdzenia przez użytkownika (Windows):
+1. Wpłata od domownika o kwocie jednego zakupu – powiązana sama (edytor wpłaty: „Za co oddaje”).
+2. Wpłata bez pasującej kwoty – Meldunki „Zwroty do przypisania” → wskazanie zakupów; albo z zakupu „Przypisz zwrot…”.
+3. Przelew przez pośrednika z częścią drugiej osoby – „Pasuje: …” dla każdej osoby.
+4. Lista operacji: filtr Oznaczenia → „do oddania” / „oddane”; Radar → Należności → zakupy do oddania.
 
 ## Przed grupą U – ładownia i czujniki, funkcje (19.10.2026)
 
@@ -1884,3 +2076,7 @@ Do sprawdzenia przez użytkownika (Windows 11):
   D92 (D2 zniesione, AltStore, rejestracja w Entra, wspólna numeracja); „Przed grupą iA”; pauza do komendy.
 - 21.10.2026 – D93 (komenda „Rozpocznij grupy”), szacunek limitu tygodniowego na grupę, tabela „co potrzebne przed grupą”;
   start iA wstrzymany – użytkownik przełącza thinking z high na max.
+- 21.10.2026 – komenda „Start”: grupa iA (iPhone) – lustro folderu i synchronizacja z OneDrive, host i ekrany telefonu,
+  powiadomienia z wyprzedzeniem, projekt iOS i CI macOS (`.ipa`, symulator, WebKit), źródło AltStore; przegląd
+  `/code-review` high – 9 poprawek; scalenie z `main` (1.11.0 i 1.12.0 z równoległej sesji) – numery iA–iE przesunięte
+  (1.13.0–1.17.0, D92 / D93, T305–T309); PR do `main`.

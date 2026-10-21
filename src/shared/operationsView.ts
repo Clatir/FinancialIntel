@@ -4,7 +4,7 @@
  */
 import type { Account, OperationView, Orders } from './schema/budget'
 import { TX_KINDS, type Transaction, type TxKind } from './schema/records'
-import { asksImpulse, costOf, financedOf, isNight, isTwoSided, partsOf, touchesAccount, type CategoryIndex, type Part } from './calc/operations'
+import { asksImpulse, costOf, financedOf, isNight, isTwoSided, notesOf, partsOf, touchesAccount, type CategoryIndex, type Part } from './calc/operations'
 import { incomeShares } from './calc/household'
 import type { BrandAliases } from './import/aliases'
 import { ruleTargetOf } from './import/classify'
@@ -12,11 +12,14 @@ import { fold } from './fold'
 import { hasTag, tagsOf } from './calc/tags'
 
 /** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
-export const OPERATION_MARKS = ['refundable', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
+export const OPERATION_MARKS = ['refundable', 'owed', 'partlyRepaid', 'repaid', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
 export type OperationMark = (typeof OPERATION_MARKS)[number]
 
 export const MARK_LABEL: Record<OperationMark, string> = {
   refundable: 'domownik',
+  owed: 'do oddania',
+  partlyRepaid: 'częściowo oddane',
+  repaid: 'oddane',
   impulse: 'impuls',
   plan: 'plan',
   night: 'noc',
@@ -53,6 +56,9 @@ export function uncategorizedAmount(t: Transaction): number {
  */
 const MARK_GROUP: Record<OperationMark, string> = {
   refundable: 'refundable',
+  owed: 'repaid',
+  partlyRepaid: 'repaid',
+  repaid: 'repaid',
   impulse: 'log',
   plan: 'log',
   night: 'night',
@@ -69,12 +75,16 @@ const MARK_GROUP: Record<OperationMark, string> = {
 export interface MarkFlags {
   anomalies?: ReadonlySet<string>
   awaiting?: ReadonlySet<string>
+  /** A household member's purchase paid back (1.12.0, D91): its state – of all its members, the least paid back. */
+  repaid?: ReadonlyMap<string, 'owed' | 'partlyRepaid' | 'repaid'>
 }
 
 export function marksOf(t: Transaction, orders: Pick<Orders, 'quietHours'>, flags: MarkFlags = {}): OperationMark[] {
   const out: OperationMark[] = []
   // As the money counts it (B78): a line a member finances – a receipt's part, its rest, or the operation itself.
   if (partsOf(t).some((p) => p.refundable)) out.push('refundable')
+  const repaid = flags.repaid?.get(t.id)
+  if (repaid) out.push(repaid)
   if (t.impulse) out.push(t.impulse)
   if (isNight(t, orders)) out.push('night')
   if (t.splits.length) out.push('split')
@@ -287,7 +297,14 @@ export interface FilterContext {
  */
 let texts: { categories: CategoryIndex; accounts: readonly Account[]; names: Map<string, string>; byTx: WeakMap<Transaction, string> } | null = null
 
-/** Text the search looks in: counterparty, title, notes, the bank's description, category, account, tags (F17). */
+/** The list's „Notatka” in one line (D89): the note's first line; without a note – the receipt lines' notes. */
+export function noteLineOf(t: Pick<Transaction, 'note' | 'splits'>): string {
+  const notes = notesOf(t)
+  if (t.note.trim()) return notes[0]!.split(/\r?\n/)[0]!.trim()
+  return notes.map((x) => x.replace(/\s+/g, ' ')).join(' · ')
+}
+
+/** Text the search looks in: counterparty, title, notes (the receipt lines' too – D89), the bank's description, category, account, tags (F17). */
 export function searchTextOf(t: Transaction, ctx: FilterContext): string {
   if (!texts || texts.categories !== ctx.categories || texts.accounts !== ctx.accounts)
     texts = { categories: ctx.categories, accounts: ctx.accounts, names: new Map(ctx.accounts.map((a) => [a.id, a.name])), byTx: new WeakMap() }
@@ -296,7 +313,7 @@ export function searchTextOf(t: Transaction, ctx: FilterContext): string {
     const cats = [t.categoryId, ...t.splits.map((s) => s.categoryId)].filter(Boolean).map((id) => ctx.categories.label(id))
     const other = isTwoSided(t) ? (texts.names.get(t.counterAccountId!) ?? '') : ''
     const tags = [...tagsOf(t), ...t.splits.flatMap((x) => x.tags ?? [])].map((x) => `#${x}`)
-    text = fold([t.counterparty, t.title, t.note, t.logNote, t.bank?.description ?? '', ...cats, texts.names.get(t.accountId) ?? '', other, ...tags].join(' \u0001 '))
+    text = fold([t.counterparty, t.title, t.note, ...t.splits.map((s) => s.note), t.logNote, t.bank?.description ?? '', ...cats, texts.names.get(t.accountId) ?? '', other, ...tags].join(' \u0001 '))
     texts.byTx.set(t, text)
   }
   return text

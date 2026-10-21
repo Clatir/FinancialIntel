@@ -28,6 +28,38 @@ Na komputerze:
   konfliktu `…-telefon-…` w Synchronizacji, z opisem „zmiana z telefonu w tym samym czasie co na komputerze” – „Zachowaj
   tę” albo „Scal…”.
 - Wydanie zawiera też `Financial-Intel.ipa` i źródło AltStore. `SHA256SUMS.txt` ma sumy wszystkich plików.
+## 1.12.0
+
+Zwrot domownika przypisany do konkretnego wydatku (D91) – zamiast „od najstarszego”:
+- Wpłata domownika (także jego część w przelewie innej osoby – pośrednik) spłaca zakupy, które wskazuje. Sama je
+  wskazuje, gdy kwota pasuje pewnie: kwota jednego zakupu tej osoby, suma wszystkich jej zakupów do oddania albo jedyny
+  zestaw 2–3 zakupów z ostatnich 90 dni – przy imporcie z mBanku, w szybkim wpisie i po wyborze osoby w edytorze.
+- Bez pewnego dopasowania wpłata „czeka na przypisanie”: to, co osoba ma oddać, i tak maleje (osłony, depozyt i przychody
+  liczą się jak dotąd), ale żaden zakup nie jest oznaczony jako oddany. Meldunki → „Zwroty do przypisania” prowadzą do
+  wpłaty, a edytor wpłaty pokazuje „Za co oddaje” osobno dla każdej osoby, z „Pasuje: …” albo „Może: …” jednym
+  kliknięciem.
+- Zakup finansowany przez domownika pokazuje, ile z niego oddano i którą wpłatą („oddane 30 z 50 zł · do oddania 20 zł”,
+  przejście do wpłaty), oraz „Przypisz zwrot…” z pieniędzy tej osoby czekających na przypisanie. Zwrot towaru – do
+  wskazanego zakupu (sam, gdy u tego kontrahenta jest jeden).
+- Lista operacji: „domownik · do oddania / częściowo oddane / oddane” i filtr Oznaczenia po nich. Radar: zakupy do
+  oddania każdej osoby i zwrot do przypisania; odprawa i Ustawienia → Domownicy też go pokazują.
+- Zwroty sprzed aktualizacji zostają, jak były (od najstarszego); w Ustawieniach → Domownicy „Zwrot spłaca wskazany zakup
+  od:” – dzień do zmiany albo „dla wszystkich zwrotów”.
+
+## 1.11.0
+
+Opis wydatku i kolumny listy operacji (D89):
+- Kolumna „Notatka” na liście operacji: czym jest wydatek – pierwsza linia notatki, cała notatka po najechaniu
+  kursorem. Operacja bez notatki pokazuje opisy części paragonu („zakupy na tydzień · kabel HDMI”).
+- Opis każdej części paragonu: pole „opis części” pod każdą częścią w edytorze podziału (do 500 znaków). Wyszukiwarka
+  w Operacjach i paleta (Ctrl+K) znajdują operację po opisie części; w eksporcie CSV i Excel opisy części są w kolumnie
+  „Notatka” po notatce operacji, każdy z kategorią swojej części. Usunięcie przedostatniej części przenosi opis ostatniej
+  do notatki operacji.
+- „Kolumny” nad listą operacji: Godzina, Kontrahent, Konto, Notatka, Kategoria, Tagi i Oznaczenia można ukryć (Data i
+  Kwota zawsze widoczne), „przywróć domyślne” pokazuje wszystkie. Wybór zapamiętany na tym komputerze – laptop i duży
+  monitor mogą mieć inne. Konto i tagi mają teraz własne kolumny. Eksport zawsze ma wszystkie kolumny.
+- Ukrycie kolumny „Kontrahent”, gdy lista jest posortowana po kontrahencie, wraca do kolejności po dacie; nowa operacja
+  bez kolumny kontrahenta ma napis „nowa operacja” w następnej widocznej kolumnie.
 
 ## 1.10.1
 

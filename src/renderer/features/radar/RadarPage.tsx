@@ -17,7 +17,7 @@ import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/d
 import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
-import { toast } from '../../store/ui'
+import { navigate, toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
@@ -40,6 +40,7 @@ const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', astero
 export function RadarPage() {
   const fleet = useFleet()
   const members = useMembers()
+  const transactions = useData((s) => s.records.transactions)
   // Opened from the palette (F19): the loan marked (a closed one's list opened).
   useFocusRecord('loan')
   // Whom a member's money comes through (D81).
@@ -105,21 +106,43 @@ export function RadarPage() {
               <div className="flex flex-col gap-1 text-[12px]">
                 {/* The household (D80): each member's balance both ways – owed purchases, their advance held. */}
                 {r.members
-                  .filter((m) => m.owed > 0 || m.deposit > 0)
+                  .filter((m) => m.owed > 0 || m.deposit > 0 || m.unassigned.length > 0)
                   .map((m) => {
                     const days = m.since ? daysBetween(m.since, fleet.today) : null
+                    // Their money repaid but not assigned to a purchase (D91): what they owe is lower already.
+                    const waiting = m.unassigned.reduce((a, u) => a + u.amount, 0)
                     return (
                       <div key={m.memberId} className="flex flex-col" data-testid="radar-member">
                         <div className="flex items-baseline gap-2">
                           <span className="text-muted">{memberName(m.memberId, members)}</span>
-                          <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : 'zaliczka (depozyt)'}</span>
-                          <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>
+                          <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : m.deposit > 0 ? 'zaliczka (depozyt)' : 'bez długu'}</span>
+                          {(m.owed > 0 || m.deposit > 0) && <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>}
                         </div>
                         {m.since && m.owed > 0 && (
                           <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
                             {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({countLabel(days ?? 0, 'dzień', 'dni', 'dni')})
                             {via(m.memberId) ? ` · przekazuje przez: ${via(m.memberId)}` : ''}
                           </span>
+                        )}
+                        {waiting > 0 && (
+                          <button type="button" className="self-start text-left text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'inbox' })} title="Meldunki: wskaż, które zakupy spłaca ten zwrot" data-testid="radar-member-unassigned">
+                            zwrot do przypisania: {zl(waiting)} – wskaż zakupy w Meldunkach
+                          </button>
+                        )}
+                        {m.open.length > 0 && (
+                          <details className="text-[11.5px] text-dim" data-testid="radar-member-open">
+                            <summary className="cursor-pointer select-none hover:text-fg-strong">{countLabel(m.open.length, 'zakup do oddania', 'zakupy do oddania', 'zakupów do oddania')}</summary>
+                            {m.open.map((o) => {
+                              const t = transactions[o.txId]?.record
+                              return (
+                                <button key={o.txId} type="button" className="flex w-full items-baseline gap-2 text-left hover:text-fg-strong" disabled={!t} onClick={() => t && openOperation(t)} data-testid="radar-member-purchase">
+                                  <span className="num">{plDate(o.date)}</span>
+                                  <span className="min-w-0 flex-1 truncate">{isOpeningItem(o.txId) ? 'saldo na start rozliczeń' : t?.counterparty || 'zakup'}</span>
+                                  <span className="num">{zl(o.amount)}</span>
+                                </button>
+                              )
+                            })}
+                          </details>
                         )}
                       </div>
                     )

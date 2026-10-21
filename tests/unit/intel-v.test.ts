@@ -102,8 +102,8 @@ describe('majątek netto – druga linia krzywej (1.10.0, F24, D87)', () => {
       owed: zl(300),
       deposit: zl(200),
       byTx: new Map([
-        [a.id, [{ memberId: 'M', fromDeposit: 0, lent: zl(400), repaid: 0, advance: 0, income: 0, gift: 0 }]],
-        [b.id, [{ memberId: 'M', fromDeposit: 0, lent: 0, repaid: zl(100), advance: zl(200), income: 0, gift: 0 }]]
+        [a.id, [{ memberId: 'M', fromDeposit: 0, lent: zl(400), repaid: 0, advance: 0, income: 0, gift: 0, paidFor: [], unassigned: 0 }]],
+        [b.id, [{ memberId: 'M', fromDeposit: 0, lent: 0, repaid: zl(100), advance: zl(200), income: 0, gift: 0, paidFor: [], unassigned: 0 }]]
       ])
     }
     // A day of an operation counts its flows (the end of the day).

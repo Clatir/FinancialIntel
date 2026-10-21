@@ -2,7 +2,9 @@ import { create } from 'zustand'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
-import { buildImport, importGroups, joins, planImport, sameChoice, type Choice, type DeletedPending, type ImportChoices, type ImportCounts, type ImportGroup, type ImportPlan, type ImportTheme } from '@shared/import/reconcile'
+import { buildImport, importGroups, joins, planImport, sameChoice, type Choice, type DeletedPending, type ImportChoices, type ImportCounts, type ImportGroup, type ImportPlan, type ImportResult, type ImportTheme } from '@shared/import/reconcile'
+import { warsawNow } from '@shared/calc/dates'
+import { linkRepayments } from '@shared/calc/repayments'
 import { duplicateKey } from '@shared/import/duplicates'
 import { decodeText, IMPORT_MAX_BYTES } from '@shared/import/text'
 import { shareComplete } from '@shared/calc/share'
@@ -16,6 +18,7 @@ import { balanceSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type 
 import { api, errorMessage } from '../../lib/api'
 import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
+import { fleetInputNow } from '../../store/fleet'
 import { choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
 
@@ -759,6 +762,20 @@ function confirmFromStatement(st: Statement): Balance | null {
 }
 
 /**
+ * The purchases the members' money of the file surely pays back (1.12.0, D91): named before it is written, with what
+ * the import changes – a member's transfer finding its purchase in the same file too. None sure – it waits to be assigned.
+ */
+function withRepayments(result: ImportResult): ImportResult {
+  const input = fleetInputNow()
+  if (!input || !result.create.length) return result
+  const changed = new Map([...result.update, ...result.create].map((t) => [t.id, t]))
+  const gone = new Set(result.remove)
+  const transactions = [...input.transactions.filter((t) => !gone.has(t.id) && !changed.has(t.id)), ...changed.values()]
+  const links = linkRepayments({ ...input, transactions }, new Set(result.create.map((t) => t.id)), warsawNow().date)
+  return links.size ? { ...result, create: result.create.map((t) => (links.has(t.id) ? { ...t, ...links.get(t.id)! } : t)) } : result
+}
+
+/**
  * The import's batch (F4 „Cofnij import”), written after its records: what it created, changed and deleted, its rules
  * and settings before and after it. Keeps the last ten. Returns its id.
  */
@@ -814,7 +831,7 @@ export async function runImport(): Promise<void> {
     const now = new Date().toISOString()
     const acc = st.accountId
     const rulesBefore = s.fi.settings.import.rules
-    const result = buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore, accounts: s.fi.settings.accounts.map((a) => a.id) })
+    const result = withRepayments(buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore, accounts: s.fi.settings.accounts.map((a) => a.id) }))
     // Nothing new (N13): no backup, no records – only the time of the import and what the file covers.
     const changes = result.create.length + result.update.length + result.remove.length > 0 || result.rules !== rulesBefore
     const backup = changes ? await api.importBackup() : ''

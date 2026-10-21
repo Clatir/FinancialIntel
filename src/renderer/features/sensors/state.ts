@@ -9,9 +9,10 @@ import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { awaitedReturns, defaultReturn, onTheWay, type AwaitedReturn } from '@shared/calc/returns'
 import type { MarkFlags } from '@shared/operationsView'
+import { repaidMarks } from '@shared/calc/household'
 import type { AwaitReturn, Transaction } from '@shared/schema'
 import { canWrite, updateRecord, updateSettings, useData } from '../../store/data'
-import { useToday } from '../../store/fleet'
+import { useHousehold, useToday } from '../../store/fleet'
 import { toast } from '../../store/ui'
 import { sensorTransactions } from './inputs'
 
@@ -80,14 +81,19 @@ export function useReturns(): AwaitedReturn[] {
 export const anomaliesNow = (): Anomaly[] => anomaliesOf(warsawNow().date, useData.getState())
 export const returnsNow = (): AwaitedReturn[] => returnsOf(warsawNow().date, useData.getState())
 
-let flagsMemo: { list: unknown; returns: unknown; flags: MarkFlags } | null = null
+let flagsMemo: { list: unknown; returns: unknown; purchases: unknown; flags: MarkFlags } | null = null
+const NO_PURCHASES = new Map()
 
-/** The marks „nietypowa” and „czeka na zwrot” of Operacje (F31, F34) – one set for the list and its rows. */
+/**
+ * The marks „nietypowa”, „czeka na zwrot” (F31, F34) and a member's purchase paid back or not (D91) of Operacje – one
+ * set for the list and its rows.
+ */
 export function useMarkFlags(): MarkFlags {
   const list = useAnomalies()
   const returns = useReturns()
-  if (!flagsMemo || flagsMemo.list !== list || flagsMemo.returns !== returns)
-    flagsMemo = { list, returns, flags: { anomalies: anomalousIds(list), awaiting: new Set(onTheWay(returns).map((r) => r.tx.id)) } }
+  const purchases = useHousehold()?.purchases ?? NO_PURCHASES
+  if (!flagsMemo || flagsMemo.list !== list || flagsMemo.returns !== returns || flagsMemo.purchases !== purchases)
+    flagsMemo = { list, returns, purchases, flags: { anomalies: anomalousIds(list), awaiting: new Set(onTheWay(returns).map((r) => r.tx.id)), repaid: repaidMarks(purchases) } }
   return flagsMemo.flags
 }
 

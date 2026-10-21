@@ -330,6 +330,29 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     w PR #32 i #34): zapis przy zamykaniu w rundach, zapisy w tle wstrzymane na czas zapisu (T301);
   - nie: F32 (flota rezerwowa – IKE, IKZE, PPK, lokaty), F38 (paragony i gwarancje przy operacji), F39 (ulgi PIT-37 /
     PIT-36), F41 (wpisy z telefonu przez OneDrive), F43 (archiwizacja starych lat) – odrzucone, poza planem.
+- **D89** (20.10.2026) Pytanie: jak opisać, czym jest wydatek (nie tylko kontrahent i tytuł przelewu)? Odpowiedź: jest
+  „Notatka” (edytor, szybki wpis), dziennik kapitański i tagi; braki – notatki nie widać na liście, część paragonu nie ma
+  opisu. Prośba: dodać te funkcje i wybór widocznych kolumn listy operacji. „Zgoda na wszystkie propozycje” (1.11.0):
+  - a) notatka na liście jako osobna kolumna „Notatka” (pierwsza linia, całość w dymku; bez notatki – opisy części);
+  - b) kolumny do ukrycia: Godzina, Kontrahent, Konto, Notatka, Kategoria, Tagi, Oznaczenia (konto i tagi we własnych
+    kolumnach); Data i Kwota zawsze; domyślnie wszystkie widoczne;
+  - c) wybór kolumn zapamiętany na tym komputerze;
+  - d) zapisane widoki listy nie pamiętają kolumn;
+  - e) eksport widocznej listy zawsze ze wszystkimi kolumnami;
+  - opis części paragonu w edytorze operacji (do 500 znaków), w wyszukiwarce i w eksporcie; szybki wpis bez zmian.
+- **D90** (21.10.2026) Zasada współpracy: przed każdym zadaniem tabela prac – krok, zakres, model i thinking oszczędne,
+  ale z górką (o stopień wyżej niż minimum), szacowany czas pracy Claude'a; razem i rekomendacja dla całości (CLAUDE.md,
+  „Zasada współpracy”). Zgłoszenie do 1.12.0: zwrot domownika liczony „od najstarszego wydatku” jest nieintuicyjny –
+  zwrot (także przez pośrednika) ma być powiązany z konkretnym wydatkiem; propozycja w „Przed etapem 1.12.0”
+  (`docs/postep.md`), czeka na odpowiedzi.
+- **D91** (21.10.2026) Komenda „Rozpocznij całość prac (etapy 1–5) jednym ciągiem” po „Przed etapem 1.12.0” – bez
+  odpowiedzi na pytania a–f, więc przyjęte propozycje (jak D86): a) wpłata bez pewnego dopasowania – „zwrot do
+  przypisania” (saldo osoby maleje, zakupy czekają na wskazanie); b) pewne dopasowanie (kwota jednego zakupu, suma
+  wszystkich, jedyny zestaw 2–3 z 90 dni) wiąże samo, do zmiany; c) nadwyżka ponad wskazane zakupy – przy innych
+  zakupach do oddania „do przypisania”, bez nich wg ustawienia osoby; d) dawne zwroty zostają jak są (od najstarszego) do
+  dnia aktualizacji, dzień do zmiany w Ustawieniach → Domownicy; e) zwrot towaru – do wskazanego zakupu (podpowiedź: ten
+  sam kontrahent); f) zaliczka idzie sama na najbliższy zakup (jak dotąd). Wydanie 1.12.0.
+
 - **D92** (21.10.2026) Wersja na iPhone'a – odpowiedź na plan grup iA–iE („D2 znosimy, AltStore, rejestracja na az
   ok, wspólna numeracja”):
   - D2 zniesione: aplikacja na iPhone'a z tym samym folderem danych na OneDrive; telefon jest dla folderu kolejnym
@@ -340,7 +363,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     Windows), plik `.ipa` w GitHub Releases i źródło AltStore z repozytorium;
   - rejestracja aplikacji w Microsoft Entra (Azure) na koncie Microsoft użytkownika – po jego stronie (kroki w „Przed
     grupą iA” w `docs/postep.md`);
-  - numeracja wersji wspólna z Windows: grupa iA = 1.13.0, kolejne grupy – kolejne wersje;
+  - numeracja wersji wspólna z Windows: grupa iA = 1.13.0, kolejne grupy – kolejne wersje (zapisane najpierw jako D89 /
+    D90 z iA = 1.11.0; 1.11.0 i 1.12.0 wydała w tym czasie równoległa sesja – D89, D91 – więc numery przesunięte);
   - grupy iA–iE z pauzą i komendą przed każdą (D67), jeden PR i wydanie na grupę (D71).
   Do decyzji później: IP21 (kreator na telefonie – propozycja: bez niego), IP15 (dokowanie – tylko gdy folder ICTTJ jest
   na OneDrive; przed iD), IP24 (zapisy w tle z telefonu; przed iE). F41 (skrót iOS zapisujący plik) nadal odrzucone (D88).
@@ -349,6 +373,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zużyte 21.10.2026; odnowienie w niedzielę o 18:00). Przerwa po grupie iC na sprawdzenie limitu (z górką iA–iC ok.
   37 %), chyba że użytkownik powie inaczej; iD czeka na odpowiedź o folderze ICTTJ (IP15), iE – na IP21 i IP24. Start iA
   wstrzymany do przełączenia thinking na max (prośba użytkownika).
+
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
 - **T2** Dane: jeden plik JSON na rekord (układ jak ICTTJ), moduły folderu danych przeniesione z ICTTJ.
@@ -2091,6 +2116,37 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   już minęło, i kwot pokazanych nie zobaczył (24 sprawdzenia w 10 s); lokalnie to samo przy zapisie 500 ms. Teraz chwila
   trwa 3 s (`revealAmounts(0.05)`) – dłużej niż dwa wolne zapisy, a koniec chwili nadal mieści się w czekaniu na ukrycie
   (10 s); przy zapisie 500 ms test przechodzi. Aplikacja bez zmian.
+- **T303** Opis wydatku i kolumny listy operacji (1.11.0, D89): opis części paragonu to istniejące pole `split.note`
+  (schemat bez zmian, bez migracji; limit 500 znaków tylko w polu edytora). `calc/operations.ts` `notesOf` (notatka i
+  opisy części, przycięte, niepuste – dymek kolumny), `operationsView.ts` `noteLineOf` (pierwsza linia notatki; bez niej
+  opisy części z „ · ”), wyszukiwarka listy i paleta szukają też w opisach części (`searchTextOf`); eksport – kolumna
+  „Notatka”: notatka operacji jak jest, potem opisy części z kategorią części („Rozrywka i hobby: kabel HDMI”), bo
+  „Kategoria” wymienia wszystkie części, a opisy tylko opisane; duplikaty – opis części liczy się do treści użytkownika
+  (kopia z nim zostaje). Usunięcie przedostatniej części: opis ostatniej przechodzi do notatki operacji (jak jej tagi).
+  Kolumny: `features/operations/columns.ts` – w localStorage `fi.operations.columns` zapisane ukryte (kolumna nowszej
+  wersji widoczna, dopóki jej nie ukryć; ukryte nieznane tej wersji zostają w zapisie, „Przywróć domyślne” czyści
+  wszystko), `columnsTemplate` – siatka z widocznych kolumn; kolumny tekstowe `minmax(0, …fr)` (kontrahent najmniej
+  64 px), odstęp 6 px zamiast 8 px – dziewięć kolumn ma najmniejszą szerokość taką jak siedem przed 1.11.0 (nagłówek nie
+  wchodzi pod panel szczegółów w oknie 1024 px – E2E). Ukrycie kolumny „Kontrahent” przy kolejności po kontrahencie
+  wraca do kolejności po dacie (jej nagłówek był jedynym znakiem kolejności); „nowa operacja” w pierwszej widocznej
+  kolumnie tekstowej (bez żadnej – data w akcencie). Tagi wiersza i eksportu jednym `tags.ts` `tagsText`, liczone tylko
+  przy widocznej kolumnie.
+- **T304** Zwrot domownika przypisany do zakupu (1.12.0, D91). Pieniądze bez zmian: wpłata spłaca najwyżej to, co osoba
+  ma oddać, reszta to zaliczka albo przychód – osłony, depozyt, przychody i warstwy liczą się jak przed 1.12.0 (test
+  porównuje flotę „od najstarszego” i „wskazane”). Zmienia się tylko to, który zakup jest oddany: `calc/household.ts`
+  `repay` – od dnia `settings.household.assignFrom` (`assignsOn`; brak = jak dotąd, null = od początku) tylko zakupy, które
+  operacja wskazuje (`covers` w kolejności wskazania – przypisany później bierze to, co zostało; `coversOpening` – dług
+  salda na start rozliczeń, który nie ma operacji: osobne pole, bo `covers` przyjmuje tylko id operacji, a zmiana formatu
+  wyczyściłaby wskazania w starszej wersji), całą kwotą wpłaty; spłacone ponad wskazane czeka na przypisanie
+  (`MemberBalance.unassigned`, `owed` = otwarte zakupy − to), wpłata za zakup już spłacony czekającymi pieniędzmi zużywa je
+  (najstarsze najpierw). `since` tylko przy długu. Stan każdego zakupu `HouseholdLedger.purchases` (`PurchaseState`:
+  pożyczone, z zaliczki, oddane, którymi operacjami), `purchaseStatus`, `repaidMarks` (oznaczenia listy, pamięć po
+  mapie). Dopasowanie `calc/repayments.ts`: `matchCovers` (jeden zakup o tej kwocie, suma wszystkich – najwyżej
+  `MAX_COVERS` 500 jak schemat, jedyny zestaw 2–3 z ostatnich 40 zakupów z 90 dni), `matchReturn` (ten sam kontrahent),
+  `proposeCovers` (każda osoba przelewu osobno), `linkRepayments` (nowe operacje po kolei – każda widzi wcześniejsze;
+  tylko operacje domowników, reszta historii odfiltrowana raz) – import (`withRepayments` przed zapisem), szybki wpis i
+  wybór osoby w edytorze (`sureCoversOf`). `withKind` zostawia wskazania przy wydatku (zwrot towaru). Dzień przejścia
+  ustawiany raz na folder (dziś – `useHouseholdSinceSeed`), zmiana w Ustawieniach → Domownicy z „Cofnij”.
 - **T305** Folder danych na telefonie (iA, IP0.1): `DataStore` komputera (`src/main/datastore/`) działa na telefonie bez
   zmian nad wirtualnym systemem plików w pamięci (`src/mobile/vfs/vfs.ts`, `Vfs`) utrwalanym w IndexedDB (`fi-phone`:
   `entries`, `folders`, `kv`; zapisy grupowane). Moduły Node podmienia build telefonu i projekt Vitest `mobile`

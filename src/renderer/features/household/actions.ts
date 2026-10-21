@@ -5,13 +5,15 @@
 import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
 import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
+import { linkRepayments, withNamed, type CoverFields } from '@shared/calc/repayments'
 import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
-import { canWrite, updateSettings, useData, writesInBackground } from '../../store/data'
+import { canWrite, updateRecord, updateSettings, useData, writesInBackground } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
+import { plDate } from '../../lib/format'
 import { toast } from '../../store/ui'
 import { usePresence } from '../../store/presence'
 
@@ -23,6 +25,35 @@ export const membersNow = (): readonly HouseholdMember[] => useData.getState().f
 
 const patchMembers = (fn: (ms: HouseholdMember[]) => HouseholdMember[]) =>
   updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, members: fn([...f.settings.household.members]) } } }))
+
+/**
+ * The purchases an operation of a member's money surely pays back (1.12.0, D91 – `calc/repayments.ts`), as it is now
+ * among the folder's operations (a new one too); null = none sure, or it names some already, or it is paid back the
+ * old way (before `assignFrom`).
+ */
+export function sureCoversOf(t: Transaction): CoverFields | null {
+  const input = fleetInputNow()
+  if (!input) return null
+  const transactions = [...input.transactions.filter((x) => x.id !== t.id), t]
+  return linkRepayments({ ...input, transactions }, new Set([t.id]), warsawNow().date).get(t.id) ?? null
+}
+
+/**
+ * A member's money pays back one more purchase (D91: „Przypisz zwrot…” – the purchase, the inbox): its operation names
+ * it; with „Cofnij”. False – the folder is read-only or the operation is gone.
+ */
+export function assignRepayment(paymentId: string, purchaseId: string, label: string): boolean {
+  const before = useData.getState().records.transactions[paymentId]?.record
+  if (!before) return false
+  const was = { covers: before.covers, coversOpening: before.coversOpening }
+  const ok = updateRecord('transactions', paymentId, (r) => ({ ...r, ...withNamed(r, purchaseId, true) }))
+  if (ok)
+    toast(`Zwrot przypisany: ${label}.`, 'success', 5000, {
+      label: 'Cofnij',
+      run: () => void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
+    })
+  return ok
+}
 
 /** A name of the bank („KOWALSKA ANNA MARIA”) as a member's first name: its first word, capitalized („Kowalska”). */
 function nameOf(bankName: string): string {
@@ -112,6 +143,26 @@ export function setHouseholdSince(since: string | null): void {
   toast(`Saldo na start rozliczeń przeliczone – ${shown.join(', ')}${changed.length > 3 ? ` i ${changed.length - 3} innych` : ''}.`, 'info', 8000, {
     label: 'Cofnij',
     run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, household: before } }))
+  })
+}
+
+/**
+ * From which day a member's money pays back only the purchases it names (D91): a date (not in the future), or null =
+ * from the start (the earlier repayments without a purchase wait to be assigned too) – with „Cofnij”.
+ */
+export function setAssignFrom(assignFrom: string | null): void {
+  const state = useData.getState()
+  if (state.status?.readOnly || state.switching || !state.fi) return
+  if (assignFrom && assignFrom > warsawNow().date) {
+    toast('Dzień nie może być w przyszłości.', 'error')
+    return
+  }
+  const before = state.fi.settings.household.assignFrom
+  if (before === assignFrom) return
+  updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom } } }))
+  toast(assignFrom ? `Zwroty od ${plDate(assignFrom)} spłacają tylko wskazane zakupy.` : 'Wszystkie zwroty spłacają tylko wskazane zakupy – dawne bez wskazania czekają na przypisanie.', 'info', 6000, {
+    label: 'Cofnij',
+    run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom: before } } }))
   })
 }
 
@@ -209,6 +260,14 @@ export function useHouseholdSinceSeed(): void {
       { background: true }
     )
   }, [undated])
+  // Once per folder (D91): repayments from today on pay back only the purchases they name – the ones before stay paid
+  // back as they were (the oldest first).
+  const unassigned = useData((s) => writesInBackground(s) && s.fi != null && s.fi.settings.household.assignFrom === undefined) && inUse
+  useEffect(() => {
+    if (!unassigned || !writesInBackground(useData.getState())) return
+    const today = warsawNow().date
+    updateSettings((f) => (f.settings.household.assignFrom !== undefined ? f : { ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom: today } } }), { background: true })
+  }, [unassigned])
   useEffect(() => {
     if (!unstamped || !writesInBackground(useData.getState())) return
     const input = fleetInputNow()

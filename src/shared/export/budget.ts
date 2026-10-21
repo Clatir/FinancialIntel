@@ -9,7 +9,7 @@ import { TX_KIND_LABEL } from '../schema/records'
 import { financersText, incomeShares, memberName } from '../calc/household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
 import { amountOn, categoryIndex, isTwoSided, sum, touchesAccount } from '../calc/operations'
-import { tagsOf, withTags } from '../calc/tags'
+import { tagsText } from '../calc/tags'
 import { savingsRate } from '../calc/fuel'
 import { debriefing, transactionsOfMonth } from '../calc/plan'
 import type { Alarm, FleetEvent } from '../calc/fleet'
@@ -98,10 +98,12 @@ export function operationRowsOf(
     title: t.title,
     financed: whose(t, members),
     log: t.impulse ? IMPULSE_LABEL[t.impulse] : '',
-    note: t.note,
-    tags: withTags(tagsOf(t), t.splits.flatMap((s) => s.tags ?? []))
-      .map((x) => `#${x}`)
-      .join(' ')
+    // The receipt lines' notes after the operation's (D89), each with its line's category – the column „Kategoria” lists
+    // every line, the notes only the described ones.
+    note: [t.note, ...t.splits.filter((s) => s.note.trim()).map((s) => (cats.label(s.categoryId) ? `${cats.label(s.categoryId)}: ${s.note.trim()}` : s.note.trim()))]
+      .filter((x) => x.trim())
+      .join(' · '),
+    tags: tagsText(t)
   }))
 }
 

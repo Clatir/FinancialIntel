@@ -131,7 +131,7 @@ describe('wspólne finansowanie (D83): podział kwoty na osoby', () => {
     expect(s.log.find((e) => e.txId === t.id)?.moves).toEqual({ energy: -zl(30), deposit: -zl(20), shields: -zl(40), house: zl(10) })
     expect(s.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(10), deposit: 0 })
     expect(s.receivables.members.find((m) => m.memberId === TATA)).toMatchObject({ owed: 0, deposit: 0 })
-    expect(s.household.byTx.get(t.id)).toEqual([
+    expect(s.household.byTx.get(t.id)).toMatchObject([
       { memberId: MAMA, fromDeposit: zl(20), lent: zl(10), repaid: 0, advance: 0, income: 0, gift: 0 },
       { memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: zl(30) }
     ])
@@ -153,7 +153,7 @@ describe('wspólne finansowanie (D83): podział kwoty na osoby', () => {
     const returned = fleet([advance, gift, back])
     expect(returned.shields.amount).toBe(s.shields.amount + zl(50))
     expect(returned.log.find((e) => e.txId === back.id)?.moves).toEqual({ shields: zl(50) })
-    expect(settleHousehold([advance, gift, back]).byTx.get(back.id)).toEqual([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: -zl(50) }])
+    expect(settleHousehold([advance, gift, back]).byTx.get(back.id)).toMatchObject([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: -zl(50) }])
   })
 })
 

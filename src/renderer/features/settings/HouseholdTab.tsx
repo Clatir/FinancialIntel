@@ -8,7 +8,7 @@ import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
-import { addMember, patchMember, setHouseholdSince, useMembers } from '../household/actions'
+import { addMember, patchMember, setAssignFrom, setHouseholdSince, useMembers } from '../household/actions'
 import { useFocusRecord } from '../../components/focus'
 
 const INFLOW_OPTIONS: Array<{ value: MemberInflow; label: string }> = [
@@ -51,12 +51,45 @@ export function HouseholdTab() {
         zwrotu”) należą do pierwszej osoby z listy – zmień jej imię, jeśli to konkretna osoba.
       </p>
       <SinceRow />
+      <AssignFromRow />
       <div className="flex flex-col">
         {members.map((m) => (
           <MemberRow key={m.id} m={m} taken={names} others={members.filter((x) => x.id !== m.id && !x.archived)} />
         ))}
       </div>
     </Panel>
+  )
+}
+
+/** From which day a member's money pays back only the purchases it names (D91); before it – the oldest too. */
+function AssignFromRow() {
+  const assignFrom = useData((s) => s.fi?.settings.household.assignFrom)
+  const readOnly = useFolderLocked()
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-line/70 pb-2 text-[11.5px]" data-testid="household-assign-row">
+      <span className="text-fg-strong">Zwrot spłaca wskazany zakup od:</span>
+      {assignFrom ? (
+        <>
+          <DateField className="w-[104px]" value={assignFrom} onChange={(d) => !readOnly && d && setAssignFrom(d)} aria-label="Zwroty przypisywane od" data-testid="household-assign-from" />
+          <button type="button" className="text-dim hover:text-fg-strong" disabled={readOnly} onClick={() => setAssignFrom(null)} data-testid="household-assign-all">
+            dla wszystkich zwrotów
+          </button>
+        </>
+      ) : assignFrom === null ? (
+        <>
+          <span data-testid="household-assign-none">wszystkich zwrotów</span>
+          <button type="button" className="text-dim hover:text-fg-strong" disabled={readOnly} onClick={() => setAssignFrom(warsawNow().date)} data-testid="household-assign-today">
+            od dziś
+          </button>
+        </>
+      ) : (
+        <span className="text-dim">ustawi się przy pierwszym otwarciu folderu</span>
+      )}
+      <span className="basis-full text-muted">
+        Zwrot domownika (także jego część w przelewie innej osoby) spłaca zakupy, które wskazuje – sam, gdy kwota pasuje pewnie, inaczej czeka w Meldunkach
+        na przypisanie. Wcześniejsze zwroty spłacają też najstarsze zakupy, jak dotąd.
+      </span>
+    </div>
   )
 }
 
@@ -170,6 +203,11 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
         {b && (b.owed > 0 || b.deposit > 0) && (
           <span className={cx('num text-[11.5px]', b.owed > 0 ? 'text-accent' : 'text-muted')} data-testid="member-balance">
             {b.owed > 0 ? `ma oddać ${plnText(b.owed)} zł` : `zaliczka ${plnText(b.deposit)} zł`}
+          </span>
+        )}
+        {b && b.unassigned.length > 0 && (
+          <span className="num text-[11.5px] text-accent" data-testid="member-unassigned">
+            do przypisania {plnText(b.unassigned.reduce((a, u) => a + u.amount, 0))} zł
           </span>
         )}
         <Toggle checked={m.archived} onChange={(archived) => patchMember(m.id, { archived })} label="archiwum" data-testid="member-archived" />

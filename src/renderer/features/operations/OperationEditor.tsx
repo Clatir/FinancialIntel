@@ -25,6 +25,7 @@ import { OFFICER_SOURCE_LABEL, officerHint } from '@shared/import/officer'
 import { officerNow } from '../../store/officer'
 import { useCategories } from './pickers'
 import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberPickers'
+import { PurchaseRepaid, RepaymentPicker } from '../household/Repayments'
 import { ShareEditor } from '../household/ShareEditor'
 import { useMembers } from '../household/actions'
 import { AnomalyNote, AwaitReturnBox } from '../sensors/EditorBoxes'
@@ -364,6 +365,8 @@ export function OperationEditor({ id }: { id: string }) {
               </>
             )}
             <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
+            {/* D91: a household member's purchase – paid back how much and by what; their product return – which purchase. */}
+            {outgoing ? <PurchaseRepaid t={t} /> : <RepaymentPicker t={t} patch={patch} />}
             {/* The sensors (F31, F34): an unknown signal about it, the money of a purchase expected back. */}
             <AnomalyNote t={t} />
             {outgoing && <AwaitReturnBox t={t} readOnly={readOnly} />}
@@ -617,14 +620,19 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
                   refundable: only?.refundable ?? false,
                   memberId: only?.refundable ? only.memberId : null,
                   gift: only?.refundable && only.gift ? true : undefined,
-                  // The line's tags stay the operation's (F17).
-                  ...(only?.tags?.length ? { tags: withTags(r.tags ?? [], only.tags) } : {})
+                  // The line's tags stay the operation's (F17), its description too (D89).
+                  ...(only?.tags?.length ? { tags: withTags(r.tags ?? [], only.tags) } : {}),
+                  ...(only?.note.trim() ? { note: r.note.trim() ? `${r.note}\n${only.note.trim()}` : only.note.trim() } : {})
                 }
               })
             }
           >
             <IconClose size={12} />
           </button>
+          {/* D89: what this line of the receipt is – the list shows it when the operation has no note of its own. */}
+          <div className="col-span-full pl-[100px]">
+            <TextField commit className="h-[24px] text-[11.5px]" value={s.note} onChange={(note) => setLine(s.id, { note })} placeholder="opis części – co to jest…" maxLength={500} aria-label={`Opis części ${i + 1}`} data-testid="split-note" />
+          </div>
           {(!!s.tags?.length || tagLines.has(s.id)) && (
             <div className="col-span-full pl-[100px]">
               <TagsField value={s.tags ?? []} onChange={(tags) => setLine(s.id, { tags: tags.length ? tags : undefined })} known={knownTags} compact placeholder="tag tej części…" testId="split-tags" />

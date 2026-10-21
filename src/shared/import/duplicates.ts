@@ -50,6 +50,8 @@ function userContent(t: Transaction): number {
     Number(!!t.categoryId) +
     t.splits.length +
     Number(!!t.note.trim()) +
+    // The receipt lines' descriptions (D89).
+    Number(t.splits.some((s) => s.note.trim())) +
     Number(!!t.logNote.trim()) +
     Number(!!t.impulse) +
     Number(!!t.time) +
@@ -279,6 +281,7 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
         memberId: c.memberId,
         advance: c.advance,
         covers: c.covers,
+        coversOpening: c.coversOpening,
         repaid: c.repaid,
         counterAccountId: c.counterAccountId,
         // A transfer in one operation stays one (F10): its other side's row and day with it.

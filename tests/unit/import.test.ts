@@ -462,7 +462,7 @@ describe('grupa G (1.5.0): zwrot zakupu domownika, połączone nazwy, wspólne f
     expect(created.amount).toBeGreaterThan(0)
     const bought = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, date: addDays(created.date, -1), accountId: MBANK_ACCOUNT_ID, amount: -created.amount - 1000, categoryId: AUTO, refundable: true, memberId: MAMA })
     // The return repays what she owes for the purchase.
-    expect(settleHousehold([bought, created]).byTx.get(created.id)).toEqual([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: created.amount, advance: 0, income: 0, gift: 0 }])
+    expect(settleHousehold([bought, created]).byTx.get(created.id)).toMatchObject([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: created.amount, advance: 0, income: 0, gift: 0 }])
   })
 
   it('reguła „wspólnie: ja i Mama po połowie” i „prezent od Mamy”: nowe operacje z częściami osób; zwrot – tak samo', () => {
