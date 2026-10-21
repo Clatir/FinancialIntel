@@ -24,7 +24,8 @@ dzieli się na koperty i dzienny przydział energii.
 
 **Założenia stałe**
 - Nazwa: Financial Intel. Okręt nazywa użytkownik, domyślnie „Flagowiec”.
-- Windows 11 na kilku komputerach (nigdy naraz), synchronizacja przez OneDrive, bez wersji na iPhone'a.
+- Windows 11 na kilku komputerach (nigdy naraz), synchronizacja przez OneDrive; od D89 także iPhone (ten sam folder
+  na OneDrive, bez importu z mBanku, raportów i pełnej Synchronizacji).
 - Interfejs po polsku, terminy ICT po angielsku.
 - Wygląd jak w ICT Trade Journal: te same kolory, fonty, panele i paleta poleceń. Kosmos żyje w nazwach, a język ICT
   w analizach.

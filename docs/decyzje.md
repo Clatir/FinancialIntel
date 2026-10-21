@@ -7,7 +7,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 
 ### Zakres i granica
 - **D1** Nazwa: Financial Intel. Okręt nazywa użytkownik, domyślnie „Flagowiec”.
-- **D2** Windows 11, kilka komputerów (nigdy jednocześnie), synchronizacja przez OneDrive. Bez wersji na iPhone'a.
+- **D2** Windows 11, kilka komputerów (nigdy jednocześnie), synchronizacja przez OneDrive. Bez wersji na iPhone'a – **zniesione (D89)**: wersja na iPhone'a.
 - **D3** Zakres: budżet prywatny. Trading zostaje w ICTTJ. Słowo „firma” nie występuje (trading i „firma” to to samo).
 - **D4** Cele aplikacji: spokój przy nieregularnych wypłatach, kontrola codziennych wydatków, budowa poduszki i celów,
   brak niespodzianek z opłatami. Kryteria sukcesu: wszystkie cztery z `specyfikacja.md`.
@@ -330,6 +330,20 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     w PR #32 i #34): zapis przy zamykaniu w rundach, zapisy w tle wstrzymane na czas zapisu (T301);
   - nie: F32 (flota rezerwowa – IKE, IKZE, PPK, lokaty), F38 (paragony i gwarancje przy operacji), F39 (ulgi PIT-37 /
     PIT-36), F41 (wpisy z telefonu przez OneDrive), F43 (archiwizacja starych lat) – odrzucone, poza planem.
+- **D89** (21.10.2026) Wersja na iPhone'a – odpowiedź na plan grup iA–iE („D2 znosimy, AltStore, rejestracja na az
+  ok, wspólna numeracja”):
+  - D2 zniesione: aplikacja na iPhone'a z tym samym folderem danych na OneDrive; telefon jest dla folderu kolejnym
+    komputerem (nigdy naraz – jak D2);
+  - zakres: wersja towarzysząca (IP0.1–IP0.5, IP1–IP7) i pełny port bez importu z mBanku (IP10), raportów (IP20) i pełnej
+    Synchronizacji (IP23) – te zostają na PC; numeracja IP… w `docs/plan.md`, sekcja „Wersja na iPhone'a”;
+  - instalacja bez App Store: AltStore z darmowym Apple ID (IP-A1; podpis odnawiany co 7 dni przez AltServer na
+    Windows), plik `.ipa` w GitHub Releases i źródło AltStore z repozytorium;
+  - rejestracja aplikacji w Microsoft Entra (Azure) na koncie Microsoft użytkownika – po jego stronie (kroki w „Przed
+    grupą iA” w `docs/postep.md`);
+  - numeracja wersji wspólna z Windows: grupa iA = 1.11.0, kolejne grupy – kolejne wersje;
+  - grupy iA–iE z pauzą i komendą przed każdą (D67), jeden PR i wydanie na grupę (D71).
+  Do decyzji później: IP21 (kreator na telefonie – propozycja: bez niego), IP15 (dokowanie – tylko gdy folder ICTTJ jest
+  na OneDrive; przed iD), IP24 (zapisy w tle z telefonu; przed iE). F41 (skrót iOS zapisujący plik) nadal odrzucone (D88).
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.

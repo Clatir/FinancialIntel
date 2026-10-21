@@ -2,7 +2,8 @@
 
 Osobista aplikacja budżetowa na Windows (Electron). Użytkownik jest kapitanem okrętu, a jego finanse to systemy
 okrętu (osłony, kadłub, energia, ładownia); analizy mówią językiem ICT. Działa offline, na kilku komputerach (nigdy
-jednocześnie), dane w folderze na OneDrive. Trading (konto maklerskie XTB) jest wyłącznie w ICTTJ. Interfejs po polsku, terminy ICT po angielsku. Siostrzana aplikacja:
+jednocześnie), dane w folderze na OneDrive. Od D89 także iPhone (Capacitor, ten sam folder na OneDrive przez Microsoft Graph,
+instalacja przez AltStore; plan grup iA–iE w `docs/plan.md`). Trading (konto maklerskie XTB) jest wyłącznie w ICTTJ. Interfejs po polsku, terminy ICT po angielsku. Siostrzana aplikacja:
 ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam autor, ten sam stos, ten sam wygląd.
 
 ## Zasada współpracy
@@ -1104,6 +1105,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   oszczędności, „skąd ta liczba?” na Mostku i słowniczek okrętu, osobista inflacja z CPI GUS wpisanym ręcznie
 - [x] 1.10.1 Zamykanie (D88): zmiana zrobiona w trakcie zapisu zapisuje się przed zamknięciem okna, bez pytania o
   niezapisane zmiany; zapisy w tle wstrzymane na czas zapisu
+- [ ] iA–iE Wersja na iPhone'a (D89) → 1.11.0–1.15.0: OneDrive przez Graph, `.ipa` przez AltStore, wersja
+  towarzysząca (iA, iB) i pełny port bez importu z mBanku, raportów i pełnej Synchronizacji (iC–iE)
 - ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja
   starych lat~~ – odrzucone (D88)
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

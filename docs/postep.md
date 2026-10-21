@@ -12,8 +12,9 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 **1.0.0 wydane** (PR #4); bez asystenta AI (D74) plan etapów E0–E8 jest zamknięty. Wydanie 0.3.0 nie wyszło: E2E na `main` po scaleniu PR #3 padło
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
-**Następny krok:** pauza – kolejne prace tylko na komendę użytkownika (D67). Flota rezerwowa (F32), paragony i
-gwarancje (F38), ulgi PIT-37 / PIT-36 (F39), wpisy z telefonu (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
+**Następny krok:** wersja na iPhone'a (D89) – grupy iA–iE (`docs/plan.md`, „Wersja na iPhone'a”); „Przed grupą iA”
+niżej, start na komendę użytkownika (D67). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36
+(F39), wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.10.1 – listy w sekcjach niżej.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
@@ -61,6 +62,12 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
+| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | 7,5–10,5 h (z górką 11 h) | 1.11.0 | ✅ D89; rejestracja w Entra (identyfikator aplikacji) i AltStore – do końca grupy | ⏳ czeka na komendę |
+| **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | 2–2,5 h (z górką 3 h) | 1.12.0 | odbiór iA na telefonie | ⏳ |
+| **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | 5–6,5 h (z górką 7 h) | 1.13.0 | odbiór iB | ⏳ |
+| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** | 4–4,5 h (z górką 5 h) | 1.14.0 | czy folder ICTTJ jest na OneDrive (IP15) | ⏳ |
+| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **max** | 5,5–7,5 h (z górką 8 h) | 1.15.0 | IP21 i IP24 – decyzje | ⏳ |
+| | **iPhone iA–iE (D89)** | | | **24–31,5 h (z górką 34 h)** | | | |
 | ~~E~~ | ~~E9 Pierwszy oficer~~ | – | – | – | – | – | ❌ wypada (D74: bez asystenta AI) |
 | ~~F~~ | ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja starych lat~~ | – | – | – | – | – | ❌ odrzucone (D88) |
 | | **Całość E0–E8 + 1.2.1–1.4.1 + przegląd + E + F + G + H + I + J + K + L + M + N + O + P + Q + R + S + T + U + V + 1.10.1** | | | **ok. 56,5 h** | | | |
@@ -839,6 +846,35 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 2. Operacje: zaznacz kilka, „Zmień zaznaczone” → podgląd skutku → „Cofnij”; „Więcej filtrów”, widok zapisany na drugim
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
+
+## Przed grupą iA – iPhone: Okręt w kieszeni (21.10.2026)
+
+1. **Co trzeba wiedzieć** – 1.10.1 wydane, ciąg M–V zamknięty. D89: wersja na iPhone'a (D2 zniesione), grupy iA–iE
+   (`docs/plan.md`, „Wersja na iPhone'a” – numeracja IP…, kryteria iA). Grupa iA (1.11.0): IP0.1 dostęp do folderu na
+   OneDrive przez Microsoft Graph (pierwsze pobranie, potem tylko zmiany, kopia w telefonie – działa bez sieci), IP0.2
+   opakowanie iOS w Capacitorze i `.ipa` z GitHub Actions (macOS) w wydaniu obok `.exe` + źródło AltStore, IP0.3 układ
+   pod telefon, IP0.4 powiadomienia lokalne, IP0.5 konflikt z PC – obie wersje, wybór w Synchronizacji na PC, IP1
+   szybki wpis, IP2 Mostek. Logika `src/shared` bez zmian – te same liczby. Telefon jest dla folderu kolejnym
+   komputerem (obecność, nazwa „iPhone”). Format folderu bez zmian. Testy: synchronizacja z udawanym Graph (Vitest),
+   ekrany w WebKit w rozmiarze iPhone'a (Playwright), uruchomienie w symulatorze iOS na CI macOS (tylko PR, `main` i
+   ręcznie – jak job Windows). Aplikacja na Windows bez zmian w działaniu. Sprawy techniczne (biblioteki, logowanie,
+   kopia w telefonie, konflikt) rozstrzygam w grupie jako T-decyzje. Na prawdziwym iPhonie testuje użytkownik.
+2. **Co użytkownik musi powiedzieć** – ✅ D89 (D2 zniesione, AltStore, rejestracja w Entra po stronie użytkownika,
+   wspólna numeracja). Później: IP15 (przed iD), IP21 i IP24 (przed iE).
+3. **Co przygotować** – potrzebne dopiero pod koniec grupy (pierwsza instalacja na telefonie):
+   - rejestracja aplikacji w Microsoft Entra: portal.azure.com (konto Microsoft z OneDrive) → Microsoft Entra ID →
+     Rejestracje aplikacji → Nowa rejestracja; nazwa „Financial Intel iPhone”; typy kont „Tylko osobiste konta
+     Microsoft”; identyfikator URI przekierowania – platforma „Klient publiczny / natywny (mobilny i klasyczny)”,
+     `financialintel://auth`; po utworzeniu „Uwierzytelnianie” → „Zezwalaj na przepływy klienta publicznego” → Tak;
+     „Uprawnienia interfejsu API” → Microsoft Graph → delegowane `Files.ReadWrite`, `offline_access`, `User.Read`; bez
+     klucza tajnego. Do Claude'a: „Identyfikator aplikacji (klienta)” – nie jest tajny, trafi do publicznego
+     repozytorium. Gdy portal odpowie, że tworzenie aplikacji poza katalogiem jest wycofane – darmowe konto Azure
+     (karta tylko do weryfikacji) tworzy katalog, potem jak wyżej;
+   - AltStore: na Windows iTunes i iCloud ze strony Apple (nie z Microsoft Store), AltServer z altstore.io, AltStore na
+     iPhonie przez AltServer z własnym Apple ID; na iPhonie „Tryb dewelopera” (Ustawienia → Prywatność i ochrona) po
+     pierwszej instalacji; darmowe Apple ID – najwyżej 3 takie aplikacje naraz;
+   - folder danych na OneDrive – domyślnie `FinancialIntel` w głównym folderze OneDrive (D62); inny – podać ścieżkę.
+4. **Model, thinking, czas** – Opus 5.5 · max · 7,5–10,5 h (z górką 11 h).
 
 ## Przed grupą V – wywiad, funkcje (19.10.2026)
 
@@ -1829,3 +1865,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
   podobne nazwy bez słów ogólnych, usunięte nierozliczone nie wchodzą same, paragon przeskalowany, „+ domownik” z
   pytaniem, ekran czeka na zapis, panel duplikatów jak import, szybsze propozycje i reguły; przegląd `/code-review` high –
   10 poprawek; PR do `main`.
+- 21.10.2026 – wersja na iPhone'a: szacunek, ograniczenia wersji towarzyszącej, numeracja IP…, plan grup iA–iE;
+  D89 (D2 zniesione, AltStore, rejestracja w Entra, wspólna numeracja); „Przed grupą iA”; pauza do komendy.
