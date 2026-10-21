@@ -8,6 +8,8 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 ## Zasada współpracy
 - Przed wykonaniem każdego zadania podaj użytkownikowi, jaki model i jaki poziom thinking będzie najodpowiedniejszy,
   dopiero potem wykonuj.
+- **Przed każdym zadaniem tabela prac (D90)**: krok, co obejmuje, model i thinking – najtańszy, który wystarczy, z górką
+  (o stopień wyżej) – oraz szacowany czas pracy Claude'a; na końcu razem i rekomendacja dla całości.
 - **Przed każdym etapem komunikat „Przed etapem N”**: (1) co trzeba wiedzieć – zakres etapu, stan poprzednich, rzeczy
   otwarte; (2) co użytkownik musi powiedzieć – pytania z propozycją, odbiór poprzedniego etapu; (3) co trzeba dodać /
   przygotować – pliki, klucze, ustawienia, testy po stronie użytkownika; (4) model, thinking, szacunek czasu.
@@ -992,6 +994,23 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - Testy: `tests/unit/operation-notes.test.ts`, `operations-columns.test.ts` (sklep okna – w `tsconfig.web.json`), E2E
   `tests/e2e/notes.spec.ts`.
 
+## Kod (1.12.0 – zwrot domownika przypisany do zakupu, D91)
+- Silnik (T304, `calc/household.ts`): `repay` – od `settings.household.assignFrom` (`assignsOn`; brak = jak dotąd, null =
+  zawsze) tylko wskazane zakupy (`covers` w kolejności wskazania, `coversOpening` – dług salda na start), spłacone ponad
+  nie czeka na przypisanie (`MemberBalance.unassigned`, `MemberFlow.paidFor` / `unassigned`); pieniądze jak przed 1.12.0;
+  `since` tylko przy długu; `HouseholdLedger.purchases` (`PurchaseState`, `purchaseOf`, `purchaseStatus`, `repaidMarks`).
+- Dopasowanie `calc/repayments.ts`: `matchCovers`, `matchReturn`, `repaymentShares`, `proposeCovers`, `linkRepayments`,
+  `coverFields`, `names`, `withNamed`, `MAX_COVERS`, `SET_DAYS`; `fleet.ts` `householdBefore`; import `withRepayments`
+  (`features/import/state.ts`), szybki wpis i edytor `sureCoversOf`, `assignRepayment`, `setAssignFrom`
+  (`household/actions.ts`, dzień przejścia raz na folder w `useHouseholdSinceSeed`).
+- Renderer: `features/household/Repayments.tsx` (`useLedgerBefore`, `PurchaseRepaid` – `purchase-repaid`,
+  `purchase-repaid-member` z `data-status`, `purchase-repaid-status`, `purchase-repaid-by`, `purchase-assign`,
+  `purchase-assign-option`; `RepaymentPicker` – `repayment-picker`, `repayment-member` z `data-member`, `operation-cover`,
+  `repayment-offer`, `repayment-result`); oznaczenia `owed` / `partlyRepaid` / `repaid` (`MarkFlags.repaid`, plakietka
+  „domownik · …”); Meldunki rodzaj `repayments`; Radar `radar-member-unassigned`, `radar-member-open`,
+  `radar-member-purchase`; Ustawienia → Domownicy `household-assign-row` (`-from`, `-all`, `-today`), `member-unassigned`.
+- Testy: `tests/unit/repayments.test.ts`, E2E `tests/e2e/repayments.spec.ts`.
+
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
 fi.json                                  ustawienia, kategorie, konta, warstwy, rozkazy, domownicy, reguły importu, schemaVersion
@@ -1120,6 +1139,8 @@ build-windows.cmd    # Windows bez wymagań co do Node (wzór ICTTJ)
   niezapisane zmiany; zapisy w tle wstrzymane na czas zapisu
 - [x] 1.11.0 Opis wydatku i kolumny listy (D89): kolumna „Notatka” na liście operacji, opis każdej części paragonu
   (wyszukiwarka, eksport), wybór widocznych kolumn listy na tym komputerze
+- [x] 1.12.0 Zwrot domownika przypisany do zakupu (D91): bez „od najstarszego”, pewne dopasowanie samo (import, szybki
+  wpis, edytor), „do przypisania” w Meldunkach, stan zakupu z wpłatą i „Przypisz zwrot…”, pośrednik, oznaczenia listy
 - ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja
   starych lat~~ – odrzucone (D88)
 - [x] Przegląd po 1.4.1 (`docs/przeglad/`): 129 błędów, 38 problemów wydajności, 104 niespójności, 43 funkcje + F0

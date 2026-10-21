@@ -16,10 +16,10 @@ import { deadText, priceText, type DeadContainer, type PriceChange } from './car
 import { anomalyText, type Anomaly } from './anomalies'
 import { lateReturnText, type AwaitedReturn } from './returns'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'transfers' | 'corrections' | 'anomalies' | 'refunds' | 'returns' | 'cargo' | 'balances'
+export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'refunds' | 'returns' | 'cargo' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'corrections', 'anomalies', 'refunds', 'returns', 'cargo', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
@@ -30,6 +30,7 @@ export const INBOX_TITLE: Record<InboxKind, string> = {
   transfers: 'Przelewy między kontami',
   corrections: 'Podwójne korekty',
   anomalies: 'Nieznane sygnały',
+  repayments: 'Zwroty do przypisania',
   refunds: 'Do zwrotu',
   returns: 'Zwroty w drodze',
   cargo: 'Ładownia',
@@ -46,7 +47,7 @@ export interface InboxItem {
   action: string
   /**
    * The delivery's key ('dock'), the member's id ('refunds'), the account's id ('balances'), the operation's
-   * ('corrections'); a transfer's report – its key (`transferKey`, none for all the pairs together).
+   * ('corrections', the member's money waiting to be assigned – 'repayments'); a transfer's report – its key (`transferKey`, none for all the pairs together).
    */
   ref?: string
 }
@@ -178,6 +179,16 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     })
   // The radar of anomalies (F31): each until „w porządku” – its operation to look at (a category: its month in Operacje).
   for (const a of o.anomalies ?? []) out.push({ kind: 'anomalies', key: `anomalies:${a.key}`, ref: a.key, text: anomalyText(a, zl), action: a.txIds.length ? 'Pokaż operację' : 'Pokaż w Operacjach' })
+  // A member's money repaid but not assigned to a purchase (D91): which purchases it pays back – its operation's editor.
+  for (const m of o.members)
+    for (const u of m.unassigned)
+      out.push({
+        kind: 'repayments',
+        key: `repayments:${u.txId}:${m.memberId}`,
+        ref: u.txId,
+        text: `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} – wskaż, które zakupy spłaca${m.open.length ? ` (do oddania: ${m.open.length} ${plural(m.open.length, 'zakup', 'zakupy', 'zakupów')})` : ''}.`,
+        action: 'Przypisz'
+      })
   for (const m of o.members) {
     if (m.owed <= 0) continue
     const days = m.since ? Math.max(0, daysBetween(m.since, o.today)) : null

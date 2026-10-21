@@ -9,9 +9,13 @@
  *
  * - A purchase a member finances (a refundable part, `financerOf`) takes their advance first; the rest the shields lend
  *   and the member owes it.
- * - A member's money (an income with `memberId`) repays what they owe – the purchases it `covers` first, then the
- *   oldest; the rest is their advance (`advance`) or income (docks as any delivery).
- * - A product return of a financed purchase is the member's money: it repays what they owe, the rest is their advance.
+ * - A member's money (an income with `memberId`) repays what they owe; the rest is their advance (`advance`) or income
+ *   (docks as any delivery). Which purchases it pays back (1.12.0, D91): from the day of `assignFrom` only the ones it
+ *   `covers` – what it repays beyond them waits to be assigned (`unassigned`: what they owe is lower, no purchase is
+ *   marked paid); before that day (and with no day set) the covered ones first, then the oldest. The money's flows are
+ *   the same either way – only the purchases' state differs.
+ * - A product return of a financed purchase is the member's money: it repays what they owe (the purchases it `covers`,
+ *   as a member's money), the rest is their advance.
  * - An income of before 1.3.0 with `repaid` and no member is the first member's money repaying at most that much (D20).
  * - An account joining the budget after its start: its operations before its opening balance are inside that balance
  *   (as the layers' engine skips them) – they settle nothing.
@@ -44,6 +48,10 @@ export interface MemberFlow {
   income: number
   /** Money out of a purchase they gave (D83): what their advance did not cover, paid by the shields – nobody owes it; < 0 = a returned gift back to the shields. */
   gift: number
+  /** Money in (D91): the purchases it paid back (of `repaid`). */
+  paidFor: Repayment[]
+  /** …and what of `repaid` waits to be assigned to a purchase (when it was settled). */
+  unassigned: number
 }
 
 /** A purchase they still owe (its open part). */
@@ -53,16 +61,78 @@ export interface OpenPurchase {
   amount: number
 }
 
+/** A purchase's part paid back by an operation (1.12.0, D91): a member's money, a product return. */
+export interface Repayment {
+  txId: string
+  date: string
+  amount: number
+}
+
+/** A member's money repaid but not assigned to a purchase yet (D91): its operation and how much of it waits. */
+export type Unassigned = Repayment
+
+/** Is an operation's money paid back explicitly (D91): its day from `assignFrom` on (null = always; none set = never). */
+export const assignsOn = (assignFrom: string | null | undefined, date: string): boolean => assignFrom !== undefined && (assignFrom === null || date >= assignFrom)
+
+/**
+ * What a member owes for a purchase and what of it is paid back (1.12.0, D91): the part the shields lent (their advance
+ * paid the rest when bought – `fromDeposit`) and the operations that paid it back. The opening balance's debt is one
+ * too (`OPENING_TX`).
+ */
+export interface PurchaseState {
+  txId: string
+  memberId: string
+  date: string
+  lent: number
+  fromDeposit: number
+  paid: number
+  by: Repayment[]
+}
+
+/** A financed purchase's state for the screens: nothing to pay back (their advance paid it), open, partly or all paid. */
+export type PurchaseStatus = 'deposit' | 'open' | 'partial' | 'paid'
+
+export function purchaseStatus(p: Pick<PurchaseState, 'lent' | 'paid'>): PurchaseStatus {
+  if (p.lent <= 0) return 'deposit'
+  return p.paid <= 0 ? 'open' : p.paid >= p.lent ? 'paid' : 'partial'
+}
+
+/** The list's mark of a purchase paid back (D91): of all its members the least paid back; once per ledger. */
+export type RepaidMark = 'owed' | 'partlyRepaid' | 'repaid'
+const MARK_OF: Record<PurchaseStatus, RepaidMark> = { open: 'owed', partial: 'partlyRepaid', paid: 'repaid', deposit: 'repaid' }
+const MARK_RANK: Record<RepaidMark, number> = { owed: 0, partlyRepaid: 1, repaid: 2 }
+const marksMemo = new WeakMap<ReadonlyMap<string, readonly PurchaseState[]>, Map<string, RepaidMark>>()
+export function repaidMarks(purchases: ReadonlyMap<string, readonly PurchaseState[]>): ReadonlyMap<string, RepaidMark> {
+  let out = marksMemo.get(purchases)
+  if (out) return out
+  out = new Map()
+  for (const [txId, list] of purchases) {
+    if (isOpeningItem(txId) || !list.length) continue
+    out.set(txId, list.map((p) => MARK_OF[purchaseStatus(p)]).reduce((a, b) => (MARK_RANK[b] < MARK_RANK[a] ? b : a)))
+  }
+  marksMemo.set(purchases, out)
+  return out
+}
+
+/** One state for an operation's purchases of one member (an expense with two lines of one member: both together). */
+export function purchaseOf(ledger: Pick<HouseholdLedger, 'purchases'>, txId: string, memberId?: string): PurchaseState | null {
+  const list = ledger.purchases.get(txId)
+  if (!list?.length) return null
+  return (memberId ? list.find((p) => p.memberId === memberId) : list[0]) ?? null
+}
+
 export interface MemberBalance {
   memberId: string
   /** What they owe: purchases financed with the shields' money, not paid back yet. */
   owed: number
   /** Their advance held on the accounts. */
   deposit: number
-  /** The purchases they owe, oldest first. */
+  /** The purchases they owe, oldest first (D91: their money waiting to be assigned is not taken off them). */
   open: OpenPurchase[]
   /** The oldest open purchase's date. */
   since: string | null
+  /** Their money repaid but not assigned to a purchase yet (D91), oldest first; `owed` = the open purchases − this. */
+  unassigned: Unassigned[]
 }
 
 export interface HouseholdLedger {
@@ -79,6 +149,8 @@ export interface HouseholdLedger {
   late: string[]
   /** Their change of the deposit (the engine's deposit at the start = the openings' and this). */
   lateDeposit: number
+  /** Each financed purchase's state (D91), by its operation (an expense of two members' lines has two). */
+  purchases: Map<string, PurchaseState[]>
 }
 
 /** The engine's order of operations: date, time (none first), creation, id. */
@@ -174,23 +246,59 @@ interface State {
   owed: number
   deposit: number
   queue: OpenPurchase[]
+  /** Repaid, not assigned (D91): `owed` = the queue's sum − this list's. */
+  credit: Unassigned[]
 }
 
-const flowOf = (memberId: string): MemberFlow => ({ memberId, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: 0 })
+const flowOf = (memberId: string): MemberFlow => ({ memberId, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: 0, paidFor: [], unassigned: 0 })
 
-/** Pay back up to `v` of what is owed: the covered purchases first (in their order), then the oldest. */
-function repay(st: State, v: number, covers: readonly string[]): number {
-  let rest = Math.min(v, st.owed)
-  const paid = rest
+/**
+ * Pay back up to `v` of what is owed – the money's part is the same as before 1.12.0 (at most what they owe). Which
+ * purchases: `explicit` (D91) – only the covered ones, in the order they were named (the opening balance's debt first:
+ * one named later – „Przypisz zwrot…” – takes what is left, never from the ones named before), with all of `v` (money
+ * waiting to be assigned from before pays what it lacks), the rest of the repaid waits to be assigned; else the
+ * covered ones first, then the oldest.
+ */
+function repay(st: State, v: number, t: Pick<Transaction, 'id' | 'date' | 'covers' | 'coversOpening'>, explicit: boolean, f: MemberFlow, purchase: (txId: string) => PurchaseState | undefined): number {
+  const paid = Math.min(v, st.owed)
+  let rest = explicit ? v : paid
+  let assigned = 0
   const take = (item: OpenPurchase) => {
     const x = Math.min(rest, item.amount)
+    if (x <= 0) return
     item.amount -= x
     rest -= x
+    assigned += x
+    f.paidFor.push({ txId: item.txId, date: item.date, amount: x })
+    const p = purchase(item.txId)
+    if (p) {
+      p.paid += x
+      p.by.push({ txId: t.id, date: t.date, amount: x })
+    }
   }
-  if (covers.length) for (const item of st.queue) if (rest > 0 && covers.includes(item.txId)) take(item)
-  for (const item of st.queue) if (rest > 0) take(item)
+  if (t.coversOpening) for (const item of st.queue) if (rest > 0 && isOpeningItem(item.txId)) take(item)
+  for (const id of t.covers) {
+    if (rest <= 0) break
+    const item = st.queue.find((i) => i.txId === id)
+    if (item) take(item)
+  }
+  if (!explicit) for (const item of st.queue) if (rest > 0) take(item)
   st.queue = st.queue.filter((i) => i.amount > 0)
   st.owed -= paid
+  if (assigned < paid) {
+    // Repaid beyond the purchases it names: waits to be assigned (what they owe is lower all the same).
+    st.credit.push({ txId: t.id, date: t.date, amount: paid - assigned })
+    f.unassigned += paid - assigned
+  } else if (assigned > paid) {
+    // It paid purchases their earlier money (waiting to be assigned) had repaid already: that money is assigned now.
+    let over = assigned - paid
+    for (const c of st.credit) {
+      const x = Math.min(over, c.amount)
+      c.amount -= x
+      over -= x
+    }
+    st.credit = st.credit.filter((c) => c.amount > 0)
+  }
   return paid
 }
 
@@ -215,6 +323,11 @@ export interface LedgerOptions {
    * `from` and not among them counts right after them. None = all of them are in (1.4.x).
    */
   covered?: readonly string[] | null
+  /**
+   * From this day a member's money pays back only the purchases it names (1.12.0, D91 – `settings.household.assignFrom`);
+   * before it the oldest too. null = from the start; none (not set yet) = the oldest everywhere, as before 1.12.0.
+   */
+  assignFrom?: string | null
 }
 
 /** A list of ids as a set and a number for the memo's key, once per list (the settings keep it while unchanged). */
@@ -228,7 +341,7 @@ function coveredOf(ids: readonly string[]): { set: ReadonlySet<string>; n: numbe
 
 /** The household's balances from the operations (`LedgerOptions`). */
 export function settleHousehold(transactions: readonly Transaction[], opts: LedgerOptions = {}): HouseholdLedger {
-  const { until, from, openings } = opts
+  const { until, from, openings, assignFrom } = opts
   const clearAt = opts.reset && from && opts.reset < from ? opts.reset : null
   const opened = from ? (opts.members ?? []).filter((m) => m.opening && (m.opening.owed > 0 || m.opening.deposit > 0)) : []
   const covered = from && clearAt && opts.covered ? coveredOf(opts.covered) : null
@@ -237,21 +350,33 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
     from ?? '',
     clearAt ?? '',
     covered?.n ?? '',
+    assignFrom === undefined ? '-' : (assignFrom ?? '*'),
     openings ? [...openings].map(([id, date]) => `${id}:${date}`).sort().join(',') : '',
     opened.map((m) => `${m.id}:${m.opening!.owed}:${m.opening!.deposit}:${m.opening!.since ?? ''}`).join(',')
   ].join('|')
   const cached = memo.get(transactions)?.get(key)
   if (cached) return cached
   const states = new Map<string, State>()
-  const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, queue: [] }).get(id)!
+  const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, queue: [], credit: [] }).get(id)!
+  const purchases = new Map<string, PurchaseState[]>()
+  const purchaseState = (txId: string, memberId: string, date: string): PurchaseState => {
+    const list = purchases.get(txId) ?? purchases.set(txId, []).get(txId)!
+    let p = list.find((x) => x.memberId === memberId)
+    if (!p) list.push((p = { txId, memberId, date, lent: 0, fromDeposit: 0, paid: 0, by: [] }))
+    return p
+  }
+  // Explicit (D91): the operation's day from `assignFrom` on.
+  const explicitOn = (date: string) => assignsOn(assignFrom, date)
   // The settlements' start: what was owed or held before it is in the opening balances – the members' own (D81).
   const begin = () => {
     states.clear()
+    purchases.clear()
     for (const m of opened) {
       const { owed, deposit, since } = m.opening!
       // Dated by its oldest purchase when known (N41): a debt from June is not „from the settlements' start”.
       const date = since && since < from! ? since : from!
-      states.set(m.id, { owed, deposit, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date, amount: owed }] : [] })
+      states.set(m.id, { owed, deposit, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date, amount: owed }] : [], credit: [] })
+      if (owed) purchaseState(`${OPENING_TX}${m.id}`, m.id, date).lent = owed
     }
   }
   const byTx = new Map<string, MemberFlow[]>()
@@ -287,6 +412,9 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
             continue
           }
           const lent = -p.amount - fromDeposit
+          const ps = purchaseState(t.id, id, t.date)
+          ps.lent += lent
+          ps.fromDeposit += fromDeposit
           if (lent) {
             st.owed += lent
             const last = st.queue.at(-1)
@@ -298,8 +426,8 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
           // A returned gift: back to the shields that paid it (or to me – it was given).
           f.gift -= p.amount
         } else {
-          // A product return of a purchase they financed: their money.
-          const back = repay(st, p.amount, [])
+          // A product return of a purchase they financed: their money – the purchase it names (D91).
+          const back = repay(st, p.amount, t, explicitOn(t.date), f, (x) => purchases.get(x)?.find((y) => y.memberId === id))
           st.deposit += p.amount - back
           f.repaid += back
           f.advance += p.amount - back
@@ -312,7 +440,7 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
         const st = stateOf(share.memberId)
         const f = flow(share.memberId)
         // Before 1.3.0 an income said how much of it repays (`repaid`); the rest was income.
-        const back = repay(st, share.limit ?? share.amount, t.covers)
+        const back = repay(st, share.limit ?? share.amount, t, explicitOn(t.date), f, (x) => purchases.get(x)?.find((y) => y.memberId === share.memberId))
         const rest = share.amount - back
         const advance = share.advance ? rest : 0
         f.repaid += back
@@ -327,6 +455,7 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
     if (!cleared && t.date >= clearAt!) {
       cleared = true
       states.clear()
+      purchases.clear()
     }
     if (!started && t.date >= from!) start()
     if (!isLate(t)) run(t)
@@ -334,9 +463,20 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
   // No operation since the start (yet): the balances are the openings – a start still to come leaves none.
   if (!started) {
     if (from && (until == null || from <= until)) start()
-    else states.clear()
+    else {
+      states.clear()
+      purchases.clear()
+    }
   }
-  const members: MemberBalance[] = [...states].map(([memberId, st]) => ({ memberId, owed: st.owed, deposit: st.deposit, open: st.queue.map((i) => ({ ...i })), since: st.queue[0]?.date ?? null }))
+  const members: MemberBalance[] = [...states].map(([memberId, st]) => ({
+    memberId,
+    owed: st.owed,
+    deposit: st.deposit,
+    open: st.queue.map((i) => ({ ...i })),
+    // Only with a debt (D91): paid back without naming purchases, the purchases stay open – they owe nothing all the same.
+    since: st.owed > 0 ? (st.queue[0]?.date ?? null) : null,
+    unassigned: st.credit.map((c) => ({ ...c }))
+  }))
   const since = members.map((m) => m.since).filter((d): d is string => d != null).sort()[0] ?? null
   const counted = started ? late : []
   const out: HouseholdLedger = {
@@ -346,7 +486,8 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
     deposit: members.reduce((a, m) => a + m.deposit, 0),
     since,
     late: counted.map((t) => t.id),
-    lateDeposit: counted.reduce((a, t) => a + depositMove(byTx.get(t.id)), 0)
+    lateDeposit: counted.reduce((a, t) => a + depositMove(byTx.get(t.id)), 0),
+    purchases
   }
   const forList = memo.get(transactions) ?? new Map<string, HouseholdLedger>()
   forList.set(key, out)
@@ -362,7 +503,7 @@ export const depositMove = (flows: readonly MemberFlow[] | undefined): number =>
 
 /** A member's balance (a member without one = all zero). */
 export function balanceOf(ledger: HouseholdLedger, memberId: string): MemberBalance {
-  return ledger.members.find((m) => m.memberId === memberId) ?? { memberId, owed: 0, deposit: 0, open: [], since: null }
+  return ledger.members.find((m) => m.memberId === memberId) ?? { memberId, owed: 0, deposit: 0, open: [], since: null, unassigned: [] }
 }
 
 /** A member's name for the screens: from the settings, else the first member's „Dom”, else an unknown one. */

@@ -61,8 +61,8 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         uncategorized: { count: 3, amount: zl(54.2), from: '2026-09-01' },
         duplicates: 2,
         members: [
-          { memberId: 'M1', owed: zl(120), deposit: 0, open: [{ txId: 'x', date: '2026-10-03', amount: zl(120) }], since: '2026-10-03' },
-          { memberId: 'M2', owed: 0, deposit: zl(50), open: [], since: null }
+          { memberId: 'M1', owed: zl(120), deposit: 0, open: [{ txId: 'x', date: '2026-10-03', amount: zl(120) }], since: '2026-10-03', unassigned: [{ txId: 'p', date: '2026-10-05', amount: zl(30) }] },
+          { memberId: 'M2', owed: 0, deposit: zl(50), open: [], since: null, unassigned: [] }
         ],
         confirmations: [
           { accountId: MBANK_ACCOUNT_ID, name: 'mBank', last: '2026-09-10', opened: '2026-09-01' },
@@ -103,7 +103,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         }
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
@@ -113,6 +113,8 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(text('folder')).toEqual(['1 konflikt kopii, 2 pliki z błędem – do rozstrzygnięcia w Synchronizacji.'])
     expect(text('uncategorized')).toEqual(['3 wydatki bez kategorii od 01.09.2026 – razem 54.20 zł.'])
     expect(text('duplicates')).toEqual(['2 możliwe duplikaty – ta sama operacja dwa razy.'])
+    // A member's money waiting to be assigned (D91): its operation's editor.
+    expect(items.filter((i) => i.kind === 'repayments').map((i) => [i.ref, i.text, i.action])).toEqual([['p', 'Babcia: zwrot 30.00 zł z 05.10 – wskaż, które zakupy spłaca (do oddania: 1 zakup).', 'Przypisz']])
     expect(text('transfers')).toEqual([
       '1 przelew między kontami zapisany jako dwie osobne operacje (sprzed 1.7.0) – połączenie w jedną operację nie zmienia żadnego salda.',
       'mBank → Portfel XTB 05.10, 500.00 zł: strona konta Portfel XTB zapisana też osobno (06.10) – liczy się dwa razy.',

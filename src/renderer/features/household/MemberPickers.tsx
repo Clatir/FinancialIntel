@@ -3,18 +3,15 @@
  * is – the rest beyond their debt as income or their advance, the purchases it pays back – and what the ledger made of
  * it.
  */
-import { useMemo } from 'react'
-import { warsawNow } from '@shared/calc/dates'
-import { householdOf } from '@shared/calc/fleet'
-import { balanceOf, incomeShares, ledgerOrder, memberName, payerOf, type HouseholdLedger } from '@shared/calc/household'
+import { balanceOf, incomeShares, memberName, payerOf } from '@shared/calc/household'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, inflowOf, type HouseholdMember, type Split, type Transaction } from '@shared/schema'
-import { useData } from '../../store/data'
-import { fleetInputNow, useHousehold } from '../../store/fleet'
+import { useHousehold } from '../../store/fleet'
 import { AmountField, plnText } from '../../components/fields'
 import { IconClose, IconPlus } from '../../components/icons'
 import { Segmented, cx } from '../../components/ui'
-import { rememberInflows, useMembers } from './actions'
+import { rememberInflows, sureCoversOf, useMembers } from './actions'
+import { RepaymentPicker, useLedgerBefore } from './Repayments'
 
 /** The members offered: the active ones and the one already chosen (archived or unknown – it stays as it was). */
 function useOffered(current: string | null) {
@@ -104,17 +101,6 @@ export function FinancedNote({ t }: { t: Transaction }) {
   )
 }
 
-/** The ledger of the operations before `t` (the engine's order): what each member owed when it came. */
-function useLedgerBefore(t: Transaction): HouseholdLedger | null {
-  const records = useData((s) => s.records.transactions)
-  const fi = useData((s) => s.fi)
-  return useMemo(() => {
-    const input = fleetInputNow()
-    if (!input) return null
-    return householdOf({ ...input, transactions: input.transactions.filter((x) => x.id !== t.id && ledgerOrder(x, t) < 0) }, warsawNow().date, t.date)
-    // The engine's input is read whole: it changes with the records and the settings.
-  }, [records, fi, t.id, t.date, t.time, t.createdAt])
-}
 
 const INCOME_REST = [
   { value: 'income', label: 'przychód' },
@@ -129,7 +115,6 @@ const INCOME_REST = [
 export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<Transaction>) => void }) {
   const members = useMembers()
   const ledger = useHousehold()
-  const transactions = useData((s) => s.records.transactions)
   // Chosen before the amount is typed (0 zł) – it stays chosen.
   const payer = t.memberId ?? payerOf(t)
   const offered = useOffered(payer)
@@ -141,14 +126,11 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   // Who passes money through the sender (D81): a hint, one click each – never applied by itself.
   const through = payer ? members.filter((m) => !m.archived && m.via === payer && !parts.some((x) => x.memberId === m.id)) : []
   const shareMembers = [...new Set(incomeShares({ ...t, amount: Math.max(t.amount, partsSum) }).map((x) => x.memberId).filter((x): x is string => !!x))]
-  // The purchases it may pay back: owed by its members just before it (N40 – the ledger without it, as „+ także za”
-  // reads: the one it pays back is still open there) up to its date, and the ones it covers already.
-  const choices = [...new Set([...shareMembers.flatMap((id) => (before ? balanceOf(before, id).open : []).filter((o) => o.date <= t.date).map((o) => o.txId)), ...t.covers])]
-    .map((id) => transactions[id]?.record)
-    .filter((x): x is Transaction => !!x)
   const setMember = (id: string) => {
     const m = members.find((x) => x.id === id)
-    patch(id ? { memberId: id, repaid: 0, advance: inflowOf(m) === 'advance', covers: [] } : { memberId: null, repaid: 0, advance: false, covers: [] })
+    const next: Partial<Transaction> = id ? { memberId: id, repaid: 0, advance: inflowOf(m) === 'advance', covers: [], coversOpening: undefined } : { memberId: null, repaid: 0, advance: false, covers: [], coversOpening: undefined }
+    // The purchase it surely pays back (D91), named at once – the list below changes it.
+    patch(id ? { ...next, ...sureCoversOf({ ...t, ...next }) } : next)
   }
   const setParts = (splits: Split[]) => patch({ splits, repaid: 0 })
   const addPart = (m: Pick<HouseholdMember, 'id' | 'inflow'> | null, amount: number) =>
@@ -259,26 +241,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
             </div>
           )
         })}
-      {choices.length > 0 && (
-        <div className="flex flex-col gap-0.5 text-[11.5px]" data-testid="operation-covers">
-          <span className="text-muted">Pokrywa (inaczej od najstarszych):</span>
-          {choices.map((c) => (
-            <label key={c.id} className="flex items-center gap-1.5 text-muted">
-              <input
-                type="checkbox"
-                checked={t.covers.includes(c.id)}
-                onChange={(e) => patch({ covers: e.currentTarget.checked ? [...t.covers, c.id] : t.covers.filter((x) => x !== c.id) })}
-                data-testid="operation-cover"
-              />
-              <span className="num">
-                {c.date.slice(8, 10)}.{c.date.slice(5, 7)}
-              </span>
-              <span className="min-w-0 flex-1 truncate">{c.counterparty || 'zakup'}</span>
-              <span className="num">{plnText(-c.amount)} zł</span>
-            </label>
-          ))}
-        </div>
-      )}
+      {/* D91: the purchases it pays back, per member. */}
+      <RepaymentPicker t={t} patch={patch} before={before} />
     </div>
   )
 }

@@ -12,7 +12,7 @@ import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import { shareSplits } from '@shared/calc/share'
 import { envelopeKind, inflowOf, SCHEMA_VERSION, shareSchema, transactionSchema, ulidSchema, type Share, type Transaction } from '@shared/schema'
-import { rememberInflows } from '../features/household/actions'
+import { rememberInflows, sureCoversOf } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
 import { addRecord, listOf, useData } from './data'
@@ -213,7 +213,8 @@ export function initQuickHost(): void {
     const members = new Set(settings.household.members.map((m) => m.id))
     if ([t.memberId, ...t.splits.map((x) => x.memberId), ...(t.share?.lines.map((l) => l.memberId) ?? [])].some((id) => id && !members.has(id)))
       return answer({ ok: false, message: 'Lista domowników się zmieniła – wybierz domownika ponownie.' })
-    addRecord('transactions', t)
+    // A member's money paying back one purchase of theirs surely (D91): named now, else it waits to be assigned.
+    addRecord('transactions', { ...t, ...sureCoversOf(t) })
     // A household member's money with the rest chosen here – by the user (N39): asked once, remembered for them (D80 b).
     if (t.kind === 'income' && t.memberId && draft.advanceChosen) rememberInflows([t])
     try {

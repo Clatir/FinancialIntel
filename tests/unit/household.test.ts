@@ -61,7 +61,7 @@ describe('rozliczenia z domownikami (D80)', () => {
     expect(s.energy).toBe(plain.energy)
     expect(s.daily?.spentBefore).toBe(0)
     expect(s.receivables.house).toBe(0)
-    expect(s.receivables.members).toEqual([{ memberId: MAMA, owed: 0, deposit: zl(200), open: [], since: null }])
+    expect(s.receivables.members).toMatchObject([{ memberId: MAMA, owed: 0, deposit: zl(200), open: [], since: null }])
     expect(s.log.find((e) => e.txId === advance.id)?.moves).toEqual({ deposit: zl(500) })
     expect(s.log.find((e) => e.txId === purchase.id)?.moves).toEqual({ deposit: -zl(300) })
     const ledger = settleHousehold([advance, purchase])
@@ -143,7 +143,7 @@ describe('rozliczenia z domownikami (D80)', () => {
     const legacy = tx('2026-10-07', zl(200), { kind: 'income', repaid: zl(100), counterparty: 'Domownik' })
     const ledger = settleHousehold([purchase, legacy])
     expect(balanceOf(ledger, HOUSE_MEMBER_ID)).toMatchObject({ owed: zl(50), since: '2026-10-03' })
-    expect(ledger.byTx.get(legacy.id)).toEqual([{ memberId: HOUSE_MEMBER_ID, fromDeposit: 0, lent: 0, repaid: zl(100), advance: 0, income: zl(100), gift: 0 }])
+    expect(ledger.byTx.get(legacy.id)).toMatchObject([{ memberId: HOUSE_MEMBER_ID, fromDeposit: 0, lent: 0, repaid: zl(100), advance: 0, income: zl(100), gift: 0 }])
     expect(fleet([purchase, legacy]).receivables).toMatchObject({ house: zl(50), houseSince: '2026-10-03' })
   })
 
@@ -168,7 +168,7 @@ describe('rozliczenia z domownikami (D80)', () => {
     const purchase = bought('2026-10-12', 100, MAMA)
     const s = fleet([early, purchase], { balances })
     expect(s.deposit).toBe(0)
-    expect(s.receivables.members).toEqual([{ memberId: MAMA, owed: zl(100), deposit: 0, open: [{ txId: purchase.id, date: '2026-10-12', amount: zl(100) }], since: '2026-10-12' }])
+    expect(s.receivables.members).toMatchObject([{ memberId: MAMA, owed: zl(100), deposit: 0, open: [{ txId: purchase.id, date: '2026-10-12', amount: zl(100) }], since: '2026-10-12' }])
     expect(s.household.byTx.has(early.id)).toBe(false)
     // The game's missions read the same ledger.
     expect(householdOf({ settings: settings(), balances, transactions: [early, purchase] }, '2026-10-20')).toEqual(s.household)
@@ -197,7 +197,7 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     expect(plain.receivables.house).toBe(0)
     expect(plain.settleFrom).toBe(SINCE)
     const s = fleet([before], withHousehold({ since: SINCE }, setMember(MAMA, { opening: { owed: zl(150), deposit: 0 } })))
-    expect(s.receivables.members).toEqual([{ memberId: MAMA, owed: zl(150), deposit: 0, open: [{ txId: `opening:${MAMA}`, date: SINCE, amount: zl(150) }], since: SINCE }])
+    expect(s.receivables.members).toMatchObject([{ memberId: MAMA, owed: zl(150), deposit: 0, open: [{ txId: `opening:${MAMA}`, date: SINCE, amount: zl(150) }], since: SINCE }])
     // Her money after the start pays the opening balance back.
     const t = fleet([before, paid('2026-10-12', 100, MAMA)], withHousehold({ since: SINCE }, setMember(MAMA, { opening: { owed: zl(150), deposit: 0 } })))
     expect(t.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(50) })
@@ -243,7 +243,7 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     const old = bought('2026-09-20', 200, MAMA)
     const transfer = paid('2026-10-05', 200, MAMA)
     const s = fleet([old, transfer], withHousehold({ since: SINCE }))
-    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(200), gift: 0 }])
+    expect(s.household.byTx.get(transfer.id)).toMatchObject([{ memberId: MAMA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(200), gift: 0 }])
     expect(s.log.find((e) => e.txId === transfer.id)?.moves.house).toBeUndefined()
   })
 
@@ -256,7 +256,7 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     // A purchase Tata finances after the start takes his opening advance.
     const spent = fleet([bought('2026-10-12', 50, TATA)], withHousehold({ since: SINCE }, setMember(TATA, { opening: { owed: 0, deposit: zl(200) } })))
     expect(spent.deposit).toBe(zl(150))
-    expect(spent.receivables.members).toEqual([{ memberId: TATA, owed: 0, deposit: zl(150), open: [], since: null }])
+    expect(spent.receivables.members).toMatchObject([{ memberId: TATA, owed: 0, deposit: zl(150), open: [], since: null }])
     // Mama's advance of before the start: forgotten – the money is the shields' now.
     const early = fleet([paid('2026-10-05', 300, MAMA, true)], withHousehold({ since: SINCE }))
     expect(early.deposit).toBe(0)
@@ -278,7 +278,7 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
       { memberId: TATA, amount: zl(200), advance: true }
     ])
     const ledger = settleHousehold([forMama, transfer])
-    expect(ledger.byTx.get(transfer.id)).toEqual([
+    expect(ledger.byTx.get(transfer.id)).toMatchObject([
       { memberId: MAMA, fromDeposit: 0, lent: 0, repaid: zl(200), advance: 0, income: zl(100), gift: 0 },
       { memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: zl(200), income: 0, gift: 0 }
     ])
@@ -315,7 +315,7 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     const transfer = paid('2026-10-12', 1000, TATA)
     const s = fleet([forMama, transfer], withHousehold({}, setMember(MAMA, { via: TATA })))
     expect(s.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(200) })
-    expect(s.household.byTx.get(transfer.id)).toEqual([{ memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(1000), gift: 0 }])
+    expect(s.household.byTx.get(transfer.id)).toMatchObject([{ memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(1000), gift: 0 }])
   })
 })
 

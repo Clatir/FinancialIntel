@@ -25,6 +25,7 @@ import { OFFICER_SOURCE_LABEL, officerHint } from '@shared/import/officer'
 import { officerNow } from '../../store/officer'
 import { useCategories } from './pickers'
 import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberPickers'
+import { PurchaseRepaid, RepaymentPicker } from '../household/Repayments'
 import { ShareEditor } from '../household/ShareEditor'
 import { useMembers } from '../household/actions'
 import { AnomalyNote, AwaitReturnBox } from '../sensors/EditorBoxes'
@@ -364,6 +365,8 @@ export function OperationEditor({ id }: { id: string }) {
               </>
             )}
             <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
+            {/* D91: a household member's purchase – paid back how much and by what; their product return – which purchase. */}
+            {outgoing ? <PurchaseRepaid t={t} /> : <RepaymentPicker t={t} patch={patch} />}
             {/* The sensors (F31, F34): an unknown signal about it, the money of a purchase expected back. */}
             <AnomalyNote t={t} />
             {outgoing && <AwaitReturnBox t={t} readOnly={readOnly} />}

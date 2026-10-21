@@ -334,7 +334,13 @@ export const householdSettingsSchema = z.looseObject({
    * – its first start of 1.5.0). One dated before `since` and not among them – added later (a late import of the bank,
    * another computer), its date or its members changed since – counts right after them. Absent = all of them (1.4.x).
    */
-  openingIds: z.array(z.string()).optional().catch(undefined)
+  openingIds: z.array(z.string()).optional().catch(undefined),
+  /**
+   * From this day a member's money pays back only the purchases it names (1.12.0, D91 – `calc/household.ts`): what it
+   * repays beyond them waits to be assigned; before it, the oldest purchases too (as before 1.12.0). Absent = not set
+   * yet (1.12.0 sets the day it first opens the folder); null = from the start.
+   */
+  assignFrom: isoDate.nullable().optional().catch(undefined)
 })
 export type HouseholdSettings = z.infer<typeof householdSettingsSchema>
 
