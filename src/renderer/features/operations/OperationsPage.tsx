@@ -7,7 +7,7 @@ import { useMarkFlags } from '../sensors/state'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { BulkChangeBar } from './BulkChange'
-import { ColumnsMenu, ExportVisible, extraFilters, MoreFilters, SortHeader, ViewsBar } from './ListTools'
+import { ColumnsMenu, ExportVisible, MoreFilters, SortHeader, ViewsBar, viewable } from './ListTools'
 import { columnsTemplate, useOperationColumns, type OperationColumn } from './columns'
 import { keywordOfSearch } from '../import/rules'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
@@ -301,8 +301,11 @@ function TickAll({ rows }: { rows: readonly Transaction[] }) {
   )
 }
 
-/** One category for the ticked operations (D76), remembered for the import if the user wants. */
-function BulkBar({ visible }: { visible: readonly Transaction[] }) {
+/**
+ * The ticked operations' changes (D76, F11): one category (remembered for the import if the user wants), who finances
+ * them, the account, kind or date with a preview of the effect – also the phone's (T311).
+ */
+export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const ticked = useOperationsUi((s) => s.ticked)
   const query = useOperationsUi((s) => s.filter.query)
   const cats = useCategories()
@@ -477,7 +480,7 @@ export function OperationsPage() {
   }, [rows, selectedIndex, virtualizer])
 
   if (!fi) return null
-  const active = filter.accounts.length + filter.kinds.length + filter.categories.length + filter.marks.length + extraFilters(filter) > 0 || !!filter.query || filter.period.kind !== 'month' || filter.sort !== 'date'
+  const active = viewable(filter)
   const balances = fleet?.accounts.filter((a) => accounts.some((x) => x.id === a.id && !x.archived) || a.balance !== 0) ?? []
 
   return (

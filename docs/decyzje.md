@@ -2234,3 +2234,24 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   folderu (także „Historia” – wersje bez „Przywróć”), miesiące i plan kampanii do przejrzenia (edycja – iC). Dotknięcie
   powiadomienia prowadzi do Operacji (wieczór, operacja czujnika), Planu miesiąca (przydział, koperty, debriefing),
   Radaru i Meldunków (potwierdzenie sald – tag `inbox` w `openTag`); reszta – Mostek (`phoneTapTag`).
+- **T311** Dziennik i kurs na telefonie (iC, IP11–IP14). Operacje: „Zaznacz” – dotknięcie karty zaznacza zamiast
+  otwierać, „wszystkie / żadna”, pod listą pasek zmian zaznaczonych komputera (`BulkBar` z `OperationsPage` – kategoria z
+  zapamiętaniem dla importu, finansujący, konto / rodzaj / data z podglądem skutku i jednym „Cofnij”), zaznaczenie
+  zdjęte przy wyjściu z listy; zapisane widoki (`ViewsBar`, wspólne z komputerami) w arkuszu filtrów; eksport widocznej
+  listy (`ExportVisible`) – CSV i Excel przez udostępnianie iOS (Pliki, AirDrop, poczta): `PhoneHost.saveTextFile` /
+  `saveXlsx` → `HostDeps.shareFile` → `platform.ts` `shareFile` (oficjalne wtyczki Capacitora: Filesystem – plik w
+  `Directory.Cache/export/`, Share – arkusz udostępniania; zamknięty bez wyboru = `null`, bez błędu); Excel składany w
+  oknie (`host/zip.ts` `storedZip` – ZIP bez kompresji z `crc32`, części z `shared/export/xlsx.ts` `xlsxParts`) – bez
+  `yazl` i modułów Node; w przeglądarce testów plik trafia do `window.__FI_SHARED__`. Przelew obiema stronami – edytor
+  komputera (od iB). Meldunki: także łupy, duplikaty (`PhoneDuplicates.tsx` – panel duplikatów ekranu importu pod trasą
+  `import`; liczone chwilę po zmianie jak na komputerze, przycisk „Pokaż i scal”) i pary przelewów (`TransferPairs`,
+  „Pokaż”, „zostaw tak”); dokowanie i ładownia – z iD, konflikty folderu – na komputerze. Plan miesiąca i Radar: ekrany
+  komputera do edycji (podgląd z iB usunięty – bez `preview` i `HistoryButton readOnly`); w trybie telefonu
+  (`CompactContext`) plan kampanii ze stałą szerokością miesięcy i przypiętą kolumną „pozycja” (przewijanie w bok), wiersz
+  Radaru w dwóch liniach (dzień, nazwa, kwota; rodzaj, opis, osłony po zdarzeniu – wcześniej nazwa nie mieściła się
+  wcale). „»” planu kampanii widoczny także w trakcie edycji komórki (`group-focus-within`), a `copyOnward` najpierw
+  zapisuje pole w trakcie pisania (`commitActiveField`) i kopiuje wartość planu miesiąca – na iPhonie dotknięcie „»” nie
+  zabiera fokusu. `Popover` (każde okno): panel przesunięty tak, żeby mieścił się w oknie (właściwość `translate` – łączy
+  się z animacją `transform`; 8 px od krawędzi, szerokość najwyżej okno − 16 px). Źródło AltStore: opis wersji jako
+  tekst bez złamań wierszy CHANGELOG (pojedyncze złamanie w akapicie i w pozycji listy = spacja). Wtyczki
+  `@capacitor/filesystem` 8.1.4 i `@capacitor/share` 8.0.3 (`ios/App/CapApp-SPM/Package.swift`).

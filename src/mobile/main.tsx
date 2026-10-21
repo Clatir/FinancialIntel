@@ -8,7 +8,7 @@ import { setPhoneHost } from './hostRef'
 import { startPhone, usePhone } from './phone'
 
 const platform = createPlatform()
-const host = new PhoneHost({ version: platform.version, kv: platform.kv, notifications: platform.notifications, openUrl: platform.openUrl })
+const host = new PhoneHost({ version: platform.version, kv: platform.kv, notifications: platform.notifications, openUrl: platform.openUrl, shareFile: platform.shareFile })
 setPhoneHost(host)
 ;(window as unknown as { fi: typeof host.api }).fi = host.api
 

@@ -1,5 +1,22 @@
 # Financial Intel – zmiany
 
+## 1.15.0
+
+Dziennik i kurs na iPhonie (grupa iC, D92): pełne Operacje i Meldunki, Plan miesiąca i Radar do edycji na telefonie.
+
+- Operacje: „Zaznacz” – dotknięcie zaznacza operacje (także „wszystkie”), a pod listą jest pasek zmian jak na
+  komputerze: kategoria (z zapamiętaniem dla importu), kto finansuje, konto, rodzaj albo data – z podglądem skutku i
+  „Cofnij”. W filtrach zapisane widoki listy (te same na każdym komputerze). „CSV” i „Excel” wysyłają widoczną listę do
+  udostępniania iOS – Pliki, AirDrop, poczta.
+- Meldunki – także łupy do podziału, pary przelewów zapisanych jako dwie operacje (połączenie w jedną) i możliwe
+  duplikaty („Pokaż i scal” – scalanie z „Cofnij”). Dokowanie i ładownia są na razie na komputerze, konflikty folderu
+  rozstrzygasz na komputerze.
+- Plan miesiąca do edycji: pensja, koperty, łupy, „pokryj z koperty…” i plan kampanii – na telefonie przewijany w bok, z
+  nazwą wiersza zawsze na ekranie; „»” kopiuje wpisaną wartość na dalsze miesiące.
+- Radar do edycji: pożyczki i ich spłaty, boje, „Zaplanuj przelew własny”. Na wąskim ekranie każde zdarzenie w dwóch
+  liniach – nazwa i kwota, pod nimi rodzaj, opis i osłony po zdarzeniu.
+- Na komputerze: okienka pod przyciskami (np. „+ Zapisz widok”) nie wychodzą poza okno.
+
 ## 1.14.0
 
 Wachta na iPhonie (grupa iB, D92): operacje, meldunki, plan miesiąca i radar w telefonie.
@@ -46,6 +63,7 @@ Na komputerze:
   konfliktu `…-telefon-…` w Synchronizacji, z opisem „zmiana z telefonu w tym samym czasie co na komputerze” – „Zachowaj
   tę” albo „Scal…”.
 - Wydanie zawiera też `Financial-Intel.ipa` i źródło AltStore. `SHA256SUMS.txt` ma sumy wszystkich plików.
+
 ## 1.12.0
 
 Zwrot domownika przypisany do konkretnego wydatku (D91) – zamiast „od najstarszego”:

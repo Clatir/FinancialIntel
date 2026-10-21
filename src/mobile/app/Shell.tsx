@@ -27,7 +27,9 @@ import { PhoneBridge } from './PhoneBridge'
 import { PhoneSettings } from './PhoneSettings'
 import { PhoneOperations } from './PhoneOperations'
 import { PhoneInbox, PhoneInboxWatcher, usePhoneInbox } from './PhoneInbox'
-import { PhoneMonth, PhoneRadar } from './PhonePreview'
+import { PhoneDuplicates } from './PhoneDuplicates'
+import { MonthPage } from '@renderer/features/month/MonthPage'
+import { RadarPage } from '@renderer/features/radar/RadarPage'
 import { NoticePlanner, installPlannedDue } from './notices'
 
 type PhoneTab = 'main' | 'more' | 'settings'
@@ -140,21 +142,24 @@ function MoreItem({ onClick, label, sub, glyph, testId }: { onClick: () => void;
 function MoreScreen() {
   return (
     <div className="flex flex-col" data-testid="phone-more">
-      <MoreItem onClick={() => goPage('month')} label="Plan miesiąca" sub="pensja, koperty, debriefing – podgląd" glyph={icon('month')} testId="phone-more-month" />
-      <MoreItem onClick={() => goPage('radar')} label="Radar" sub="90 dni, pożyczki, boje – podgląd" glyph={icon('radar')} testId="phone-more-radar" />
+      <MoreItem onClick={() => goPage('month')} label="Plan miesiąca" sub="pensja, koperty, łupy, plan kampanii" glyph={icon('month')} testId="phone-more-month" />
+      <MoreItem onClick={() => goPage('radar')} label="Radar" sub="90 dni, pożyczki, boje, salda kont" glyph={icon('radar')} testId="phone-more-radar" />
       <MoreItem onClick={() => setPhoneTab('settings')} label="Telefon" sub="synchronizacja, konto, powiadomienia" glyph={<IconGear size={18} />} testId="phone-nav-settings" />
     </div>
   )
 }
 
 /** A screen of the computers the phone does not have yet: said, with the way back. */
+/** The screens that stay on a computer (D92: the import from mBank, the reports, the full Synchronizacja). */
+const COMPUTER_ONLY: ReadonlySet<string> = new Set(['import', 'reports', 'sync'])
+
 function NotOnPhone({ page }: { page: string }) {
   const def = PAGES.find((p) => p.page === page)
   const name = def?.label ?? (page === 'inbox' ? 'Meldunki' : page === 'sync' ? 'Synchronizacja' : page === 'settings' ? 'Ustawienia' : page)
   return (
     <div className="flex flex-col items-start gap-3 p-4 text-[13px]" data-testid="phone-not-here" data-page={page}>
       <p className="text-fg">
-        Ekran „{name}” jest na razie tylko na komputerze – na telefonie dochodzi w kolejnych wersjach.
+        {COMPUTER_ONLY.has(page) ? `Ekran „${name}” jest tylko na komputerze.` : `Ekran „${name}” jest na razie tylko na komputerze – na telefonie dochodzi w kolejnych wersjach.`}
       </p>
       <button className="btn h-[40px] px-4 text-[13px]" onClick={goBridge}>
         Wróć na Mostek
@@ -220,9 +225,12 @@ export function Shell() {
     ) : route.page === 'inbox' ? (
       <PhoneInbox />
     ) : route.page === 'month' ? (
-      <PhoneMonth />
+      <MonthPage />
     ) : route.page === 'radar' ? (
-      <PhoneRadar />
+      <RadarPage />
+    ) : route.page === 'import' ? (
+      // The import's route on the phone: its duplicates (the import itself – a computer's).
+      <PhoneDuplicates fallback={<NotOnPhone page="import" />} />
     ) : (
       <NotOnPhone page={route.page} />
     )

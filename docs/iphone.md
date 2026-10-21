@@ -4,25 +4,29 @@ Aplikacja na iPhone'a (od 1.13.0, D92) czyta i zapisuje **ten sam folder danych 
 Windows. Telefon jest dla folderu kolejnym komputerem („iPhone” – widać go w Synchronizacji i w Ustawieniach komputera).
 Instaluje się bez App Store, przez AltStore.
 
-## Co jest na telefonie (1.14.0)
+## Co jest na telefonie (1.15.0)
 
 - **Mostek** – stan okrętu, energia dziś, koperty, odprawa, Daily Bias, „skąd ta liczba?”, ostatnie operacje,
   należności, przychody, krzywa majątku. Te same liczby co na komputerze (ten sam silnik).
 - **Szybki wpis** – przycisk „+ Wpis” na dole: kwota, kontrahent, kategoria, tagi, „za domownika”, wspólne finansowanie.
 - **Operacje** (od 1.14.0) – lista z wyszukiwaniem, miesiącem i filtrami (konto, kategoria, oznaczenia); dotknięcie
-  otwiera edytor operacji komputera na cały ekran, „+ Nowa” dodaje operację.
-- **Meldunki** (od 1.14.0) – wydatki bez kategorii, nieznane sygnały, zwroty w drodze i salda do potwierdzenia (saldo z
-  aplikacji banku wpisujesz w meldunku); licznik w dolnym menu. Pozostałe meldunki – na komputerze.
-- **Plan miesiąca i Radar** (od 1.14.0, menu „Więcej”) – podgląd; zmiany na komputerze.
+  otwiera edytor operacji komputera na cały ekran, „+ Nowa” dodaje operację. Od 1.15.0: „Zaznacz” i zmiana zaznaczonych
+  (kategoria, kto finansuje, konto, rodzaj, data – z podglądem i „Cofnij”), zapisane widoki w filtrach, „CSV” i „Excel”
+  – widoczna lista do udostępniania (Pliki, AirDrop, poczta).
+- **Meldunki** (od 1.14.0) – wydatki bez kategorii, łupy, możliwe duplikaty (scalanie z „Cofnij”), pary przelewów do
+  połączenia, nieznane sygnały, zwroty w drodze i salda do potwierdzenia (saldo z aplikacji banku wpisujesz w
+  meldunku); licznik w dolnym menu. Dokowanie i ładownia – na razie na komputerze, konflikty folderu – na komputerze.
+- **Plan miesiąca i Radar** (menu „Więcej”, od 1.15.0 do edycji) – pensja, koperty, łupy, „pokryj z koperty…”, plan
+  kampanii (przewijany w bok); pożyczki i spłaty, boje, salda kont naprzód z „Zaplanuj przelew własny”.
 - **Powiadomienia** – odprawa poranna, raport wachty wieczorem i dni z radaru (opłaty, raty, boje, PIT-38) na najbliższy
   tydzień. Planowane przy każdym otwarciu aplikacji, bo iOS nie uruchamia jej w tle – otwórz ją przynajmniej raz w
   tygodniu.
 - **Ustawienia telefonu** (Więcej → Telefon) – synchronizacja, konto i folder, nazwa telefonu, ukrywanie kwot,
   powiadomienia.
 
-Reszta ekranów jest na razie tylko na komputerze. Telefon to mówi i proponuje powrót na Mostek. Edycja planu i radaru,
-wszystkie meldunki, ładownia, mapa gwiezdna, dowództwo i wywiad dochodzą w kolejnych wersjach (`docs/plan.md`, grupy
-iC–iE). Import z mBanku, raporty, kopie zapasowe i pełna Synchronizacja zostają na komputerze.
+Reszta ekranów jest na razie tylko na komputerze. Telefon to mówi i proponuje powrót na Mostek. Dokowanie, ładownia,
+mapa gwiezdna, dowództwo i wywiad dochodzą w kolejnych wersjach (`docs/plan.md`, grupy iD–iE). Import z mBanku,
+raporty, kopie zapasowe i pełna Synchronizacja zostają na komputerze.
 
 ## Raz: rejestracja aplikacji w Microsoft Entra
 

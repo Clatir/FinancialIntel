@@ -1064,12 +1064,26 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `phone-filter-category-<nazwa>` / `-none`, `phone-filter-mark-<oznaczenie>`, `phone-filters-clear` / `-done` /
   `-others`; karta `operation-row`; edytor `phone-operation`, `phone-operation-back`; `operation-new`), `PhoneInbox.tsx`
   (`PHONE_INBOX_KINDS`, `PhoneInboxWatcher` → sklep `usePhoneInbox`, `inbox-item` z `data-kind`, `inbox-open`, `inbox-dismiss`, `inbox-anomaly-ok`,
-  `inbox-balance-amount`, `inbox-balance-confirm`, `inbox-elsewhere`), `PhonePreview.tsx` (`PhoneMonth`, `PhoneRadar`,
-  `phone-preview-note`); renderer – `components/compact.ts` (`CompactContext`), `layout.tsx` `Columns` (`StackedColumns`
-  na telefonie, `GridColumns` na komputerze), `MonthPage({ preview })`, `RadarPage({ preview })`, `HistoryButton readOnly`,
-  `features/operations/rowText.ts` (`operationRowText` – wiersz listy komputera i karta telefonu), `openTag('inbox')`;
+  `inbox-balance-amount`, `inbox-balance-confirm`, `inbox-elsewhere`), podgląd Planu miesiąca i Radaru (do iC – potem ekrany
+  komputera do edycji); renderer – `components/compact.ts` (`CompactContext`), `layout.tsx` `Columns` (`StackedColumns`
+  na telefonie, `GridColumns` na komputerze), `features/operations/rowText.ts` (`operationRowText` – wiersz listy komputera i karta telefonu), `openTag('inbox')`;
   host – `phoneTapTag` z ekranami telefonu (`balances` → Meldunki).
 - Testy: E2E `tests/e2e-mobile/phone-ib.spec.ts`, `tests/mobile/host.test.ts` (ekrany dotknięć).
+
+## Kod (iC – telefon, 1.15.0, D92)
+- Dziennik i kurs (T311): `src/mobile/app/PhoneOperations.tsx` – zaznaczanie (`phone-operations-pick`,
+  `phone-operations-pick-all`, karta z `data-ticked` i `operation-tick`), pasek zmian komputera `BulkBar` (eksport z
+  `OperationsPage.tsx`) w `phone-bulk`, `clearTicked` przy wyjściu z listy, `ExportVisible`, widoki `ViewsBar` w arkuszu
+  filtrów; `PhoneInbox.tsx` – łupy, duplikaty, pary przelewów (`TransferPairs`, `inbox-transfer-show`), `ACTION` (przycisk
+  duplikatów); `PhoneDuplicates.tsx` (`page-duplicates`, trasa `import`); `Shell.tsx` – `MonthPage` i `RadarPage` komputera;
+  host – `saveTextFile` / `saveXlsx` przez `HostDeps.shareFile` (`host/zip.ts` `crc32`, `storedZip`; `platform.ts`
+  `shareFile` – wtyczki Filesystem i Share, w testach `window.__FI_SHARED__`); renderer – `components/Popover.tsx` (panel
+  w oknie: `EDGE`, właściwość `translate`), `month/YearPlan.tsx` (telefon: `table-fixed`, przypięta kolumna „pozycja”,
+  „»” także przy edycji komórki), `month/actions.ts` `copyOnward(miesiąc, wiersz, nazwa)` (`commitActiveField`, wartość z
+  planu), `radar/RadarPage.tsx` `Timeline` (dwie linie na telefonie); `scripts/altstore-source.mjs` `plain` (akapity bez
+  złamań wierszy).
+- Testy: `tests/mobile/zip.test.ts`, E2E `tests/e2e-mobile/phone-ic.spec.ts` (zaznaczone z kategorią, widok, eksport,
+  pary przelewów, duplikat, pensja i „»” bez zmiany fokusu, boja), `phone-ib.spec.ts` (nazwa zdarzenia na Radarze).
 
 ## Dane (folder wybierany przez użytkownika, domyślnie `OneDrive\FinancialIntel`)
 ```
