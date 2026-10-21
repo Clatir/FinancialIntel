@@ -13,7 +13,7 @@ okna), **1.4.2 wydane** (PR #14), przegląd po 1.4.1 scalony (PR #13, `docs/prze
 na wyścigu w teście (plik usuwany w trakcie odczytu), więc job Windows z publikacją się nie uruchomił – zastąpione przez
 1.0.0; testy czytają folder przez `tests/e2e/files.ts`.
 **Następny krok:** wersja na iPhone'a (D89) – grupy iA–iE (`docs/plan.md`, „Wersja na iPhone'a”); „Przed grupą iA”
-niżej; komenda D90 – grupa iA w toku. Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36
+niżej; D90 – start grupy iA po przełączeniu thinking na max (komenda użytkownika). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36
 (F39), wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.10.1 – listy w sekcjach niżej.
 
@@ -62,7 +62,7 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | **U** | 1.9.0 Ładownia i czujniki: ceny i martwe kontenery (F9), plik z mBanku w Pobranych (F14), opłaty cykliczne (F23), radar anomalii (F31), zwroty w drodze (F34) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi 21:16–22:53, z przeglądem, 63 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) | 1.9.0 | ✅ D87 | ✅ wydane (PR #31) |
 | **V** | 1.10.0 Wywiad: tagi i wyprawy (F17), drążenie (F20), majątek netto (F24), stopa oszczędności (F25), „Skąd ta liczba?” (F29), osobista inflacja (F36) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar gałęzi od 22:24, część w czasie CI grupy U, z przeglądem, 62 mutacjami i dwoma pełnymi E2E; plan był ok. 3 h) + ok. 1 h poprawki wydania (T300: diagnoza, dwa przeglądy, 11 mutacji, CI PR i `main`) | 1.10.0 | ✅ D87 | ✅ wydane (PR #32, poprawka PR #33) |
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
-| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | 7,5–10,5 h (z górką 11 h) | 1.11.0 | ✅ D89, D90 (komenda). Na koniec grupy, do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera | 🔨 w toku |
+| **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | 7,5–10,5 h (z górką 11 h) | 1.11.0 | ✅ D89, D90 (komenda). Na koniec grupy, do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera | ⏳ czeka na thinking max i komendę |
 | **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | 2–2,5 h (z górką 3 h) | 1.12.0 | iA na telefonie: logowanie, pierwsze pobranie, szybki wpis widoczny na PC (odbiór może iść równolegle z iB) | ⏳ |
 | **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | 5–6,5 h (z górką 7 h) | 1.13.0 | iB scalone; uwagi z telefonu do iA / iB (jeśli są) | ⏳ |
 | **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** | 4–4,5 h (z górką 5 h) | 1.14.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC | ⏳ |
@@ -1882,4 +1882,5 @@ Do sprawdzenia przez użytkownika (Windows 11):
   10 poprawek; PR do `main`.
 - 21.10.2026 – wersja na iPhone'a: szacunek, ograniczenia wersji towarzyszącej, numeracja IP…, plan grup iA–iE;
   D89 (D2 zniesione, AltStore, rejestracja w Entra, wspólna numeracja); „Przed grupą iA”; pauza do komendy.
-- 21.10.2026 – D90 (komenda „Rozpocznij grupy”), szacunek limitu tygodniowego na grupę; start grupy iA.
+- 21.10.2026 – D90 (komenda „Rozpocznij grupy”), szacunek limitu tygodniowego na grupę, tabela „co potrzebne przed grupą”;
+  start iA wstrzymany – użytkownik przełącza thinking z high na max.

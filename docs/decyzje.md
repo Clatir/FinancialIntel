@@ -347,7 +347,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **D90** (21.10.2026) Komenda „Rozpocznij grupy” – grupy iA–iE jedna po drugiej, każda z własnym PR i wydaniem (D71);
   w tabeli prac przy każdej grupie – co potrzebne przed nią i szacunek zużycia limitu tygodniowego (plan Max 20x, 55 %
   zużyte 21.10.2026; odnowienie w niedzielę o 18:00). Przerwa po grupie iC na sprawdzenie limitu (z górką iA–iC ok.
-  37 %), chyba że użytkownik powie inaczej; iD czeka na odpowiedź o folderze ICTTJ (IP15), iE – na IP21 i IP24.
+  37 %), chyba że użytkownik powie inaczej; iD czeka na odpowiedź o folderze ICTTJ (IP15), iE – na IP21 i IP24. Start iA
+  wstrzymany do przełączenia thinking na max (prośba użytkownika).
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
 - **T2** Dane: jeden plik JSON na rekord (układ jak ICTTJ), moduły folderu danych przeniesione z ICTTJ.
