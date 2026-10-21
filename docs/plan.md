@@ -62,7 +62,7 @@ Szacunek nie obejmuje testowania przez użytkownika.
 
 **E5–E8** – kryteria spisujemy w komunikacie „Przed etapem N”, na podstawie `specyfikacja.md`.
 
-## Wersja na iPhone'a (D89)
+## Wersja na iPhone'a (D92)
 
 Telefon czyta i zapisuje ten sam folder danych na OneDrive (Microsoft Graph, kopia w telefonie – działa bez sieci) i jest
 dla folderu kolejnym komputerem. Logika `src/shared` wspólna z Windows – te same liczby. Opakowanie iOS: Capacitor (ten
@@ -85,7 +85,7 @@ Claude'a, bez testów użytkownika na telefonie.
 | IP5 | Meldunki, część: bez kategorii, anomalie, zwroty, potwierdzenie salda | 0,5 h | iB |
 | IP6 | Plan miesiąca – podgląd | 0,25–0,5 h | iB |
 | IP7 | Radar – podgląd | 0,25–0,5 h | iB |
-| ~~IP10~~ | ~~Import z mBanku~~ – zostaje na PC (D89) | – | – |
+| ~~IP10~~ | ~~Import z mBanku~~ – zostaje na PC (D92) | – | – |
 | IP11 | Operacje pełne: przelew obiema stronami, zmiana zaznaczonych, zapisane widoki, eksport | 1,5–2 h | iC |
 | IP12 | Meldunki – wszystkie (pary przelewów, duplikaty) | 1 h | iC |
 | IP13 | Plan miesiąca – edycja: pensja, koperty, łupy, „pokryj z koperty…”, plan kampanii | 1,5–2 h | iC |
@@ -95,10 +95,10 @@ Claude'a, bez testów użytkownika na telefonie.
 | IP17 | Mapa gwiezdna – pełna | 1 h | iD |
 | IP18 | Dowództwo | 1 h | iE |
 | IP19 | Wywiad | 1,5–2 h | iE |
-| ~~IP20~~ | ~~Raporty z PDF i eksportem~~ – zostają na PC (D89) | – | – |
+| ~~IP20~~ | ~~Raporty z PDF i eksportem~~ – zostają na PC (D92) | – | – |
 | IP21 | Kreator startu (propozycja: bez niego – budżet startuje na PC; do decyzji przed iE) | 1 h | iE |
 | IP22 | Ustawienia (bez folderu i kopii) | 1,5–2,5 h | iE |
-| ~~IP23~~ | ~~Synchronizacja pełna~~ – zostaje na PC (D89) | – | – |
+| ~~IP23~~ | ~~Synchronizacja pełna~~ – zostaje na PC (D92) | – | – |
 | IP24 | Zapisy w tle z telefonu (zamrażanie dni gry, cele ICTTJ) – do decyzji przed iE | 0,5–1 h | iE |
 
 Ograniczenia iOS (IP-L): L1 bez globalnego skrótu, zasobnika, autostartu, folderu Pobrane i odłączanych paneli; L2
@@ -109,15 +109,15 @@ sieci (bez niej – kopia w telefonie); L6 test na iPhonie po stronie użytkowni
 
 | Grupa | Zakres | Model · thinking (z górką) | Czas | Z górką | Wydanie |
 | --- | --- | --- | --- | --- | --- |
-| iA Okręt w kieszeni | IP0.1–IP0.5, IP1, IP2 | Opus 5.5 · max | 7,5–10,5 h | 11 h | 1.11.0 |
-| iB Wachta | IP3–IP7 – wersja towarzysząca gotowa | Opus 5.5 · max | 2–2,5 h | 3 h | 1.12.0 |
-| iC Dziennik i kurs | IP11–IP14 | Opus 5.5 · max | 5–6,5 h | 7 h | 1.13.0 |
-| iD Ładownia i gwiazdy | IP15–IP17 | Opus 5.5 · max | 4–4,5 h | 5 h | 1.14.0 |
-| iE Dowództwo | IP18, IP19, IP21, IP22, IP24 | Opus 5.5 · max | 5,5–7,5 h | 8 h | 1.15.0 |
+| iA Okręt w kieszeni | IP0.1–IP0.5, IP1, IP2 | Opus 5.5 · max | 7,5–10,5 h | 11 h | 1.13.0 |
+| iB Wachta | IP3–IP7 – wersja towarzysząca gotowa | Opus 5.5 · max | 2–2,5 h | 3 h | 1.14.0 |
+| iC Dziennik i kurs | IP11–IP14 | Opus 5.5 · max | 5–6,5 h | 7 h | 1.15.0 |
+| iD Ładownia i gwiazdy | IP15–IP17 | Opus 5.5 · max | 4–4,5 h | 5 h | 1.16.0 |
+| iE Dowództwo | IP18, IP19, IP21, IP22, IP24 | Opus 5.5 · max | 5,5–7,5 h | 8 h | 1.17.0 |
 | | **Razem** | | **24–31,5 h** | **34 h** | |
 
 **iA – gotowe, gdy**
-- `Financial-Intel.ipa` w wydaniu 1.11.0 (z `SHA256SUMS.txt`) instaluje się przez AltStore i startuje; CI Linux,
+- `Financial-Intel.ipa` w wydaniu 1.13.0 (z `SHA256SUMS.txt`) instaluje się przez AltStore i startuje; CI Linux,
   Windows i macOS zielone; aplikacja na Windows działa jak wcześniej.
 - Logowanie kontem Microsoft, wybór folderu danych na OneDrive, pierwsze pobranie z postępem; po zamknięciu i bez sieci
   aplikacja otwiera się z kopii w telefonie.

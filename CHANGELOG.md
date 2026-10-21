@@ -1,8 +1,8 @@
 # Financial Intel – zmiany
 
-## 1.11.0
+## 1.13.0
 
-Okręt w kieszeni (grupa iA, D89): Financial Intel na iPhonie – ten sam folder danych na OneDrive co na komputerze,
+Okręt w kieszeni (grupa iA, D92): Financial Intel na iPhonie – ten sam folder danych na OneDrive co na komputerze,
 instalacja bez App Store przez AltStore (instrukcja: `docs/iphone.md` w repozytorium).
 
 Na telefonie:

@@ -27,7 +27,7 @@ export default defineConfig({
         }
       },
       {
-        // The phone (T303): the data store of the computers over the mirror of OneDrive – `node:fs`, `node:path` and
+        // The phone (T305): the data store of the computers over the mirror of OneDrive – `node:fs`, `node:path` and
         // `node:crypto` are the phone's, as in its build (`vite.mobile.config.mts`).
         extends: true,
         resolve: { alias: mobileNodeAliases(root) },

@@ -1,4 +1,4 @@
-// A fake OneDrive behind Microsoft Graph for the phone's tests (T304): a drive in memory with the endpoints the sync
+// A fake OneDrive behind Microsoft Graph for the phone's tests (T306): a drive in memory with the endpoints the sync
 // uses – items by path, children, delta with pages and links, downloads through links, uploads with If-Match and
 // conflict behaviour, removals, folders; throttling, failures and expired links on demand. The tests write the
 // computer's side straight into the drive (`put`, `remove`, `rename`).
@@ -41,6 +41,8 @@ export class FakeDrive {
   offline = false
   /** The access token the API accepts (401 for others). */
   token = 'token-1'
+  /** The signed-in account's id (`/me`). */
+  userId = 'user-1'
   /** The refresh tokens the token endpoint accepts → the access token it gives. */
   readonly refresh = new Map<string, string>([['refresh-1', 'token-1']])
   /** Downloads through a link of an older version are refused (an expired link). */
@@ -232,7 +234,7 @@ export class FakeDrive {
     }
     if (req.headers?.Authorization !== `Bearer ${this.token}`) return this.error(401, 'InvalidAuthenticationToken')
     let m: RegExpExecArray | null
-    if (path === '/me') return this.ok(200, { displayName: 'Kapitan Testowy', userPrincipalName: 'kapitan@example.com' })
+    if (path === '/me') return this.ok(200, { id: this.userId, displayName: 'Kapitan Testowy', userPrincipalName: this.userId === 'user-1' ? 'kapitan@example.com' : 'ktos@example.com' })
     if (path === '/me/drive/root') return this.ok(200, this.json(this.items.get(this.rootId)!))
     if ((m = /^\/me\/drive\/root:\/(.+?):?$/.exec(path))) {
       const it = this.resolve(this.rootId, m[1]!)

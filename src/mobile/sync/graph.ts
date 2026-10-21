@@ -1,5 +1,5 @@
 /**
- * Microsoft Graph for the phone's sync (T304): the data folder on OneDrive – its item, its changes (delta), a file's
+ * Microsoft Graph for the phone's sync (T306): the data folder on OneDrive – its item, its changes (delta), a file's
  * content, an upload with the version it replaces (If-Match), a removal. Throttling (429 / 503) waits as long as Graph
  * says, a server's hiccup is tried again, an expired token is renewed once.
  */
@@ -119,8 +119,8 @@ export class GraphClient {
   }
 
   /** The signed-in account (its name for the screen). */
-  me(): Promise<{ displayName?: string; userPrincipalName?: string; mail?: string }> {
-    return this.json('GET', '/me?$select=displayName,userPrincipalName,mail')
+  me(): Promise<{ id?: string; displayName?: string; userPrincipalName?: string; mail?: string }> {
+    return this.json('GET', '/me?$select=id,displayName,userPrincipalName,mail')
   }
 
   /** An item by its path from the drive's root (null = none there). */

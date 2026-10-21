@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The AltStore source of the phone's app (T307): `altstore.json` of a release – AltStore (or SideStore) added once with
+// The AltStore source of the phone's app (T309): `altstore.json` of a release – AltStore (or SideStore) added once with
 // https://github.com/<repo>/releases/latest/download/altstore.json shows each new version and installs its .ipa.
 // node scripts/altstore-source.mjs <version> <ipa> <owner/repo> [notes.md] > altstore.json
 import { readFileSync, statSync } from 'node:fs'

@@ -1,4 +1,4 @@
-// The phone's mirror of the data folder (T303): the file system of `vfs/vfs.ts` behind `node:fs`, and the data store of
+// The phone's mirror of the data folder (T305): the file system of `vfs/vfs.ts` behind `node:fs`, and the data store of
 // the computers running over it unchanged.
 import { createHash as nodeHash } from 'crypto'
 import nodePath from 'path'

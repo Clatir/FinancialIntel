@@ -1,5 +1,5 @@
 /**
- * `node:crypto` on the phone (T303): the SHA-1 the data store compares file contents with (`atomic.ts` `sha1`) and
+ * `node:crypto` on the phone (T305): the SHA-1 the data store compares file contents with (`atomic.ts` `sha1`) and
  * random bytes for the names of temp files and of the history's versions.
  */
 import { Buffer } from 'buffer'

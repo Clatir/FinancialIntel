@@ -1,5 +1,5 @@
 /**
- * The phone's notifications planned ahead (IP0.4, T306): iOS runs no app in the background, so at every opening (and
+ * The phone's notifications planned ahead (IP0.4, T308): iOS runs no app in the background, so at every opening (and
  * after a change of the data) the next days' reminders are given to the system – the morning briefing, the evening
  * report and the radar's days (payments, installments, buoys, PIT-38). What is due while the app is open comes as on
  * a computer (`notify.ts`). Nothing in the quiet hours; the keys are the notifier's (one is never shown twice).
@@ -46,12 +46,11 @@ export function warsawAt(date: string, time: string): string {
 }
 
 /**
- * A morning moment: the end of the night's quiet hours, not before `earliest` (the default quiet hours end at 5:00 –
- * too early to ring). No quiet hours (from = to) or ones ending after noon (not a night): `earliest`.
+ * A morning moment: `earliest` (the default quiet hours end at 5:00 – too early to ring), or the end of the quiet
+ * hours when `earliest` falls in them (a night ending at 8:15, a night shift's ending at 13:00).
  */
 export function morningAt(quiet: { from: string; to: string }, earliest: string): string {
-  const end = quiet.from !== quiet.to && quiet.to <= '12:00' ? quiet.to : earliest
-  return end > earliest ? end : earliest
+  return inClockWindow(earliest, quiet.from, quiet.to) ? quiet.to : earliest
 }
 
 /** The morning briefing's notice; a radar day's reminder a little later. */

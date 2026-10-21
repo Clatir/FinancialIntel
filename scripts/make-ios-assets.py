@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The phone's icon and launch screen (T307) from resources/icon.png: the tile full-bleed on 1024x1024 without alpha
+"""The phone's icon and launch screen (T309) from resources/icon.png: the tile full-bleed on 1024x1024 without alpha
 (iOS rounds the corners itself), the launch screen dark with the icon in the middle (no Capacitor logo)."""
 from pathlib import Path
 from PIL import Image

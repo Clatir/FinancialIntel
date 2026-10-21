@@ -23,7 +23,7 @@ const join = (...parts: Array<string | false | null | undefined>) => parts.filte
 
 /** True inside a detached window: panels fill it and have no layout controls. */
 export const DetachedContext = createContext(false)
-/** The phone (T305): panels keep their title and collapse – no window of their own, no maximize, no edges to drag. */
+/** The phone (T307): panels keep their title and collapse – no window of their own, no maximize, no edges to drag. */
 export const CompactContext = createContext(false)
 /** The panel's body has a set size (dragged, maximized, detached): charts fill it instead of their default height. */
 const FillContext = createContext(false)

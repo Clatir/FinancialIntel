@@ -1,4 +1,4 @@
-// The phone's build (T303, T305): the computers' renderer and the data store of `src/main/datastore/` in one web app for
+// The phone's build (T305, T307): the computers' renderer and the data store of `src/main/datastore/` in one web app for
 // Capacitor (`out/mobile` → `ios/`), Node's modules replaced by the phone's (`scripts/mobile-aliases.mjs`).
 // `--mode e2e`: the tests' fake OneDrive on 127.0.0.1 allowed by the CSP.
 import { readFileSync } from 'node:fs'

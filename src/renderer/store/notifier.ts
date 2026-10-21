@@ -140,7 +140,7 @@ function check(opened: boolean, shown = false): void {
   const docks = fresh.filter((n) => n.tag === 'dock')
   const toasts = docks.length >= DOCK_GROUP ? [...fresh.filter((n) => n.tag !== 'dock'), { key: 'dock:group', tag: 'dock' as const, title: 'Nowe wypłaty w ICTTJ do zadokowania', body: `${countLabel(docks.length, 'wpis', 'wpisy', 'wpisów')} ${plural(docks.length, 'czeka', 'czekają', 'czeka')} na dokowanie (Mostek).` }] : fresh
   // Silent toasts: the app's own sounds (switches and volume of this computer) are the only ones – the alarm's here.
-  for (const n of toasts) void api.notify({ title: n.title, body: n.body, tag: n.target ?? n.tag, silent: true })
+  for (const n of toasts) void api.notify({ title: n.title, body: n.body, tag: n.target ?? n.tag, silent: true, key: n.key })
   if (fresh.some((n) => n.alarm)) playSound('alarm')
   // The window brought back from the tray for the morning briefing: the bridge (a fresh start opens there anyway) –
   // unless a notification's click brought it back to its own screen.

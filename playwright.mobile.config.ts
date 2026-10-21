@@ -1,4 +1,4 @@
-// The phone's E2E (T305): the built web app (`npm run build:mobile:e2e`) in a browser the size of an iPhone, with the
+// The phone's E2E (T307): the built web app (`npm run build:mobile:e2e`) in a browser the size of an iPhone, with the
 // fake OneDrive on a local server (`tests/e2e-mobile/server.ts`). Chromium by default (the Linux CI); FI_PHONE_BROWSER=
 // webkit runs it in the iPhone's engine (macOS CI).
 import { existsSync } from 'node:fs'

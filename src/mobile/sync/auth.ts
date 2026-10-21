@@ -1,5 +1,5 @@
 /**
- * Signing in to OneDrive (T304): the Microsoft identity platform's authorization code with PKCE for a public client –
+ * Signing in to OneDrive (T306): the Microsoft identity platform's authorization code with PKCE for a public client –
  * no secret, the app registered by the user (Entra, „Tylko osobiste konta Microsoft”, redirect `financialintel://auth`).
  * The refresh token stays on the phone (Preferences – the app's own storage); the access token only in memory.
  */
@@ -14,6 +14,8 @@ export interface SavedAuth {
   refreshToken: string
   /** The account's name for the screen. */
   account: string | null
+  /** The account's id (Graph `me.id`): signing in again must be the same account – the folder is its. */
+  accountId?: string | null
 }
 
 export interface AuthStore {
@@ -89,7 +91,7 @@ async function tokenRequest(http: Http, tokenUrl: string, form: Record<string, s
   })
   const body = (res.json ?? {}) as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string }
   // Microsoft's passing trouble (busy, down): tried again later – the account stays signed in.
-  if (res.status === 429 || res.status >= 500) throw new Error(`Logowanie Microsoft chwilowo nie odpowiada (błąd ${res.status}) – spróbuję za chwilę.`)
+  if (res.status === 429 || res.status >= 500) throw new Error(`Logowanie Microsoft chwilowo nie odpowiada (błąd ${res.status}) – spróbuj ponownie za chwilę.`)
   if (res.status !== 200 || !body.access_token) {
     const why = body.error_description?.split(/\r?\n/)[0] ?? body.error ?? `błąd ${res.status}`
     throw new SignInError(`Microsoft odmówił: ${why}`)
@@ -121,9 +123,9 @@ export class TokenSource {
   ) {}
 
   /** Signed in now (a code exchanged): kept. */
-  async adopt(clientId: string, tokens: Tokens, account: string | null): Promise<void> {
+  async adopt(clientId: string, tokens: Tokens, account: string | null, accountId: string | null = null): Promise<void> {
     this.tokens = tokens
-    await this.store.set({ clientId, refreshToken: tokens.refreshToken, account })
+    await this.store.set({ clientId, refreshToken: tokens.refreshToken, account, accountId })
   }
 
   async token(): Promise<string> {

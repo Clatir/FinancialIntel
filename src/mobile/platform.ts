@@ -1,5 +1,5 @@
 /**
- * The phone's platform (T305): on the iPhone Capacitor's plugins (Preferences, LocalNotifications, App, Browser, the
+ * The phone's platform (T307): on the iPhone Capacitor's plugins (Preferences, LocalNotifications, App, Browser, the
  * native HTTP for the token); in the browser of the tests and of `npm run dev:mobile` their stand-ins (localStorage, a
  * list of notices, a fake sign-in, `fetch` to the fake OneDrive – `window.__FI_PHONE_TEST__`).
  */
@@ -68,24 +68,21 @@ function nativePlatform(version: string): Platform {
     set: async (key, value) => void (await Preferences.set({ key, value })),
     remove: async (key) => void (await Preferences.remove({ key }))
   }
+  // The host listens from its start – before a tap can come over the bridge (it keeps one for the window).
   let tap: ((tag: string) => void) | null = null
-  // The app started by the tap: kept until the host listens.
-  let tapped: string | null = null
   void LocalNotifications.addListener('localNotificationActionPerformed', (a) => {
     const tag = (a.notification.extra as { tag?: string } | undefined)?.tag
-    if (!tag) return
-    if (tap) tap(tag)
-    else tapped = tag
+    if (tag) tap?.(tag)
   })
   const notifications: Platform['notifications'] = {
     show: async (n) => {
       if (!(await notifications.permission())) return
+      // The same one planned for later (the morning briefing at an early opening): not shown again.
+      if (n.key) await LocalNotifications.cancel({ notifications: [{ id: noticeId(n.key) }] }).catch(() => undefined)
       await LocalNotifications.schedule({ notifications: [{ id: noticeId(`now:${n.key ?? n.tag}:${Date.now()}`), title: n.title, body: n.body, extra: { tag: n.tag, key: n.key ?? null } }] })
     },
     onTap: (cb) => {
       tap = cb
-      if (tapped) cb(tapped)
-      tapped = null
     },
     plan: async (list) => {
       // Every planned one is the app's: all replaced by the new list.
@@ -155,7 +152,10 @@ function webPlatform(cfg: PhoneTestConfig, version: string): Platform {
     version,
     kv,
     notifications: {
-      show: async (n) => void notices.shown.push(n),
+      show: async (n) => {
+        notices.shown.push(n)
+        if (n.key) notices.planned = notices.planned.filter((p) => p.key !== n.key)
+      },
       onTap: (cb) => {
         tap = cb
       },

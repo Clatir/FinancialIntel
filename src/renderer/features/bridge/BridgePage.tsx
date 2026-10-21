@@ -324,7 +324,7 @@ export function BridgePage() {
 }
 
 /**
- * The bridge's panels: two columns on a computer; one on the phone (T305) – there without the docking (ICTTJ is read on
+ * The bridge's panels: two columns on a computer; one on the phone (T307) – there without the docking (ICTTJ is read on
  * a computer).
  */
 export function BridgePanels({ single = false }: { single?: boolean }) {

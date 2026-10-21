@@ -1,5 +1,5 @@
 /**
- * The phone's connecting screens (T305): the Microsoft account (the app registration's client id), the OneDrive folder
+ * The phone's connecting screens (T307): the Microsoft account (the app registration's client id), the OneDrive folder
  * of the data and its first copy.
  */
 import { useState, type ReactNode } from 'react'

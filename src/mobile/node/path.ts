@@ -1,5 +1,5 @@
 /**
- * `node:path` on the phone (T303): the data store of the computers (`main/datastore/`) runs in the app's web view over
+ * `node:path` on the phone (T305): the data store of the computers (`main/datastore/`) runs in the app's web view over
  * the mirror of the OneDrive folder (`vfs/vfs.ts`) – POSIX paths only, the current directory is the root.
  */
 

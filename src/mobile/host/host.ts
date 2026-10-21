@@ -1,5 +1,5 @@
 /**
- * The phone's `window.fi` (T305): what the main process of the computers does, in the app's web view – the data store of
+ * The phone's `window.fi` (T307): what the main process of the computers does, in the app's web view – the data store of
  * the computers over the mirror of OneDrive, the sync, this phone's presence, the quick entry in the same window and the
  * notifications. The screens of the computers' renderer run over it unchanged; what only a computer can do (import,
  * backups, ICTTJ, updates, files) says so.
@@ -94,6 +94,10 @@ export function phoneTapTag(tag: string): string {
   return PHONE_TAGS.has(tag) ? tag : 'briefing'
 }
 
+/** The notifier's notices shown in the app (key → day): the plan for iOS leaves them out. */
+const SHOWN_KEY = 'fi.phone.shown'
+const SHOWN_KEEP_MS = 2 * 86_400_000
+
 const MACHINE_KEY = 'fi.phone.machine'
 const PREFS_KEY = 'fi.phone.prefs'
 /** In use on the phone: the app in front and touched within 10 minutes (D86). */
@@ -108,7 +112,7 @@ export class PhoneHost {
   private activeAt = 0
   private toldInUse: boolean | null = null
   private generation = 0
-  private shown = 0
+  private shownGeneration = 0
   private unshown: ChangeSet[] = []
   private heartbeat: ReturnType<typeof setInterval> | null = null
   private revealTimer: ReturnType<typeof setTimeout> | null = null
@@ -116,6 +120,7 @@ export class PhoneHost {
   private quickVisible = false
   /** A notification tapped before the window listened (the app started by the tap). */
   private pendingTap: string | null = null
+  private shown: Record<string, number> = {}
   private readonly now: () => number
 
   readonly changes = new Emitter<[ChangeSet]>()
@@ -154,6 +159,23 @@ export class PhoneHost {
     // The phone has no global shortcut and no file watching (the prefs keep their place for the computers' code).
     this.prefs = { ...machinePrefsFrom(parsed), quickShortcut: '', bankFiles: false }
     if (this.prefs.hideOnStart) this.prefs = { ...this.prefs, hideAmounts: true }
+    try {
+      const kept = JSON.parse((await this.d.kv.get(SHOWN_KEY)) ?? '{}') as Record<string, unknown>
+      this.shown = Object.fromEntries(Object.entries(kept).filter((e): e is [string, number] => typeof e[1] === 'number'))
+    } catch {
+      this.shown = {}
+    }
+  }
+
+  /** The notifier showed it in the app (the morning briefing at an early opening): not planned for later. */
+  wasShown(key: string): boolean {
+    return key in this.shown
+  }
+
+  private noteShown(key: string): void {
+    const now = this.now()
+    this.shown = Object.fromEntries(Object.entries({ ...this.shown, [key]: now }).filter(([, at]) => at >= now - SHOWN_KEEP_MS))
+    void this.d.kv.set(SHOWN_KEY, JSON.stringify(this.shown)).catch(() => undefined)
   }
 
   async setMachineName(name: string): Promise<void> {
@@ -207,7 +229,7 @@ export class PhoneHost {
 
   private send(change: ChangeSet | null): void {
     if (!change) return
-    if (this.shown !== this.generation) {
+    if (this.shownGeneration !== this.generation) {
       this.unshown.push(change)
       return
     }
@@ -440,8 +462,8 @@ export class PhoneHost {
         return saved
       }),
       folderShown: call('folderShown', (generation: number) => {
-        if (generation !== this.generation || generation === this.shown) return
-        this.shown = generation
+        if (generation !== this.generation || generation === this.shownGeneration) return
+        this.shownGeneration = generation
         const waiting = this.unshown
         this.unshown = []
         for (const c of waiting) this.changes.emit(c)
@@ -530,13 +552,25 @@ export class PhoneHost {
       onQuickResult: (cb) => this.quickResultOut.on(cb),
       quickClose: call('quickClose', () => this.closeQuick()),
       setTrayStatus: call('setTrayStatus', () => undefined),
-      notify: call('notify', (n: { title: string; body: string; tag: string; silent?: boolean }) => this.d.notifications.show({ title: n.title, body: n.body, tag: n.tag, silent: n.silent })),
+      notify: call('notify', (n: { title: string; body: string; tag: string; silent?: boolean; key?: string }) => {
+        if (n.key) this.noteShown(n.key)
+        return this.d.notifications.show({ title: n.title, body: n.body, tag: n.tag, silent: n.silent, key: n.key })
+      }),
       onNotificationClick: (cb) => {
+        let listening = true
         const off = this.taps.on(cb)
         const tag = this.pendingTap
         this.pendingTap = null
-        if (tag) queueMicrotask(() => cb(tag))
-        return off
+        if (tag)
+          queueMicrotask(() => {
+            if (listening) cb(tag)
+            else if (this.taps.size) this.taps.emit(tag)
+            else this.pendingTap = tag
+          })
+        return () => {
+          listening = false
+          off()
+        }
       },
       ictjState: call('ictjState', () => EMPTY_ICTJ),
       ictjSuggest: call('ictjSuggest', () => null),

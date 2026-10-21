@@ -1021,7 +1021,7 @@ export class DataStore {
   }
 
   /**
-   * Files changed by the phone's sync (T304) in this store's turn: `write` changes them while no save of this store
+   * Files changed by the phone's sync (T306) in this store's turn: `write` changes them while no save of this store
    * runs (never between a save's check of a file and its write), then they are read as a change from outside.
    */
   applyExternal(paths: string[], write: () => Promise<void>): Promise<ChangeSet | null> {

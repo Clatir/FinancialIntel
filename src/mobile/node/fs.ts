@@ -1,5 +1,5 @@
 /**
- * `node:fs` on the phone (T303): the promise API the data store of the computers uses (`main/datastore/`), over the
+ * `node:fs` on the phone (T305): the promise API the data store of the computers uses (`main/datastore/`), over the
  * mirror of the OneDrive folder (`vfs/vfs.ts`). `useVfs` sets the mirror the calls go to.
  */
 import { Buffer } from 'buffer'

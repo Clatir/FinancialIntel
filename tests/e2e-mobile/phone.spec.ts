@@ -1,4 +1,4 @@
-// The phone in a browser the size of an iPhone (T305, IP0.1–IP0.5, IP1, IP2): signing in, the first copy of the folder,
+// The phone in a browser the size of an iPhone (T307, IP0.1–IP0.5, IP1, IP2): signing in, the first copy of the folder,
 // Mostek with the computer's numbers, the quick entry going to OneDrive, a computer's change coming in, offline and back,
 // the start from the copy on the phone, the notifications planned ahead.
 import { expect, test, type Page } from '@playwright/test'
@@ -32,7 +32,7 @@ test.beforeEach(async ({ page }) => {
   srv.drive.put(`${FOLDER}/.presence/DOM-PC.json`, JSON.stringify({ machine: 'DOM-PC', lastSeen: new Date().toISOString(), appVersion: '1.10.1', activeAt: null }))
   await page.addInitScript((cfg) => {
     window.__FI_PHONE_TEST__ = cfg
-  }, { graphBase: `${srv.url}/v1.0`, authority: `${srv.url}/v1.0`, version: '1.11.0-test' })
+  }, { graphBase: `${srv.url}/v1.0`, authority: `${srv.url}/v1.0`, version: '1.13.0-test' })
   page.on('pageerror', (e) => console.error('pageerror', e))
 })
 
@@ -168,6 +168,12 @@ test('logowanie wygasło: „Zaloguj ponownie” – kopia na telefonie i czekaj
   await expect(page.getByTestId('phone-sync')).toHaveAttribute('data-state', 'auth')
   await expect(page.getByTestId('phone-sync-state')).toHaveText('zaloguj się ponownie')
   expect(driveTransactions().some((t) => t.counterparty === 'Apteka')).toBe(false)
+  // Another Microsoft account chosen on the sign-in page: refused – the folder is the first account's.
+  srv.drive.userId = 'user-2'
+  await page.getByTestId('phone-signin-again').click()
+  await expect(page.getByTestId('phone-message')).toContainText('ktos@example.com')
+  await expect(page.getByTestId('phone-sync')).toHaveAttribute('data-state', 'auth')
+  srv.drive.userId = 'user-1'
   await page.getByTestId('phone-signin-again').click()
   // The same folder, no new copy: the entry that waited goes up.
   await expect.poll(() => driveTransactions().some((t) => t.counterparty === 'Apteka'), { timeout: 20_000 }).toBe(true)

@@ -1,10 +1,10 @@
 # Financial Intel na iPhonie
 
-Aplikacja na iPhone'a (od 1.11.0, D89) czyta i zapisuje **ten sam folder danych na OneDrive** co Financial Intel na
+Aplikacja na iPhone'a (od 1.13.0, D92) czyta i zapisuje **ten sam folder danych na OneDrive** co Financial Intel na
 Windows. Telefon jest dla folderu kolejnym komputerem („iPhone” – widać go w Synchronizacji i w Ustawieniach komputera).
 Instaluje się bez App Store, przez AltStore.
 
-## Co jest na telefonie (1.11.0)
+## Co jest na telefonie (1.13.0)
 
 - **Mostek** – stan okrętu, energia dziś, koperty, odprawa, Daily Bias, „skąd ta liczba?”, ostatnie operacje,
   należności, przychody, krzywa majątku. Te same liczby co na komputerze (ten sam silnik).
@@ -88,7 +88,7 @@ Od tej chwili aplikacja startuje z kopii w telefonie, także bez sieci.
 - **Konflikt**: gdy plik zmienił się na OneDrive od ostatniej synchronizacji, a telefon ma swoją zmianę, OneDrive
   zachowuje wersję z komputera. Wersja z telefonu trafia obok jako kopia `…-telefon-<czas>.json`. Wybierasz na komputerze
   w **Synchronizacji** („Zachowaj tę” / „Scal…”). Nic nie przepada.
-- Telefon i komputer nie powinny pracować naraz (D2 / D89). Baner na komputerze pokazuje telefon w użyciu.
+- Telefon i komputer nie powinny pracować naraz (D2 / D92). Baner na komputerze pokazuje telefon w użyciu.
 
 ## Prywatność
 

@@ -1,5 +1,5 @@
 /**
- * What the phone's sync keeps between runs (T304): the folders of the data folder on OneDrive (a change's path comes
+ * What the phone's sync keeps between runs (T306): the folders of the data folder on OneDrive (a change's path comes
  * from its parents – Graph's delta gives ids, not paths), the delta link of the last pull and small values.
  */
 

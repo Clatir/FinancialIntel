@@ -1,5 +1,5 @@
 /**
- * The mirror of the data folder on the phone (T303): files in memory, kept in IndexedDB, every local change marked for
+ * The mirror of the data folder on the phone (T305): files in memory, kept in IndexedDB, every local change marked for
  * the upload to OneDrive. The data store of the computers runs over it through `node/fs.ts` – the same reading, writing,
  * history and conflicts as on Windows; the sync engine (`sync/engine.ts`) brings the other computers' changes in.
  *

@@ -2,7 +2,7 @@
 
 Osobista aplikacja budżetowa na Windows (Electron). Użytkownik jest kapitanem okrętu, a jego finanse to systemy
 okrętu (osłony, kadłub, energia, ładownia); analizy mówią językiem ICT. Działa offline, na kilku komputerach (nigdy
-jednocześnie), dane w folderze na OneDrive. Od D89 także iPhone (Capacitor, ten sam folder na OneDrive przez Microsoft Graph,
+jednocześnie), dane w folderze na OneDrive. Od D92 także iPhone (Capacitor, ten sam folder na OneDrive przez Microsoft Graph,
 instalacja przez AltStore; plan grup iA–iE w `docs/plan.md`). Trading (konto maklerskie XTB) jest wyłącznie w ICTTJ. Interfejs po polsku, terminy ICT po angielsku. Siostrzana aplikacja:
 ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam autor, ten sam stos, ten sam wygląd.
 
@@ -58,7 +58,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   Playwright w przeglądarce rozmiaru iPhone'a (`tests/e2e-mobile`, `playwright.mobile.config.ts`).
 - Build: electron-builder → `Financial-Intel-Setup.exe` (NSIS) i `Financial-Intel-portable.exe`;
   `appId` `app.financialintel.desktop`, `productName` „Financial Intel”.
-- iPhone (D89, od 1.11.0): Capacitor 8 (`ios/`, `capacitor.config.json`, `app.financialintel.ios`), web app telefonu
+- iPhone (D92, od 1.13.0): Capacitor 8 (`ios/`, `capacitor.config.json`, `app.financialintel.ios`), web app telefonu
   `vite.mobile.config.mts` → `out/mobile`; `.ipa` bez podpisu (AltStore), źródło AltStore `altstore.json` w wydaniu.
 - CI (`.github/workflows/ci.yml`, wzór ICTTJ): Linux przy każdym wypchnięciu (testy, build, E2E pod Xvfb, E2E telefonu w
   Chromium); Windows (build, smoke, test aktualizacji) i macOS (`ios`: E2E telefonu w WebKit, `.ipa`, symulator) tylko dla
@@ -80,7 +80,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `ictj/` (odczyt ICTTJ).
 - `src/preload` – `window.fi` (contextBridge); okno z contextIsolation, sandbox, CSP; jedna instancja aplikacji.
 - `src/renderer` – React; `store/` (zustand, autozapis jak ICTTJ), `features/<ekran>/`, `components/` (z ICTTJ).
-- `src/mobile` – iPhone (od 1.11.0): `window.fi` w oknie aplikacji (`host/`), lustro folderu (`vfs/`, `node/`),
+- `src/mobile` – iPhone (od 1.13.0): `window.fi` w oknie aplikacji (`host/`), lustro folderu (`vfs/`, `node/`),
   synchronizacja z OneDrive (`sync/`), ekrany telefonu (`app/`) nad rendererem komputera bez zmian.
 - **Stany warstw nigdy nie są zapisywane** – liczy je `calc/fleet.ts` z rekordów, deterministycznie (wzór:
   `calc/payouts.ts` w ICTTJ). Każda reguła ma test na przykładzie ze specyfikacji.
@@ -986,15 +986,15 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   porażce komunikaty okna i main.log (import-tools, import, duplicates, learning, sensors); `look.spec.ts` – kwoty
   pokazane na chwilę 3 s, dłużej niż dwa wolne zapisy config.json (T302).
 
-## Kod (iA – telefon, 1.11.0, D89)
-- Lustro folderu (T303): `src/mobile/vfs/vfs.ts` (`Vfs` – pliki w pamięci, `StoredEntry` {data, mtimeMs, `dirty` – numer
+## Kod (iA – telefon, 1.13.0, D92)
+- Lustro folderu (T305): `src/mobile/vfs/vfs.ts` (`Vfs` – pliki w pamięci, `StoredEntry` {data, mtimeMs, `dirty` – numer
   zmiany do wysłania, `meta` OneDrive {id, eTag, cTag}}, nagrobki usunięć, `applyRemote` / `markSynced` / `setMeta` /
   `moveEntry`, `onLocalChange`, pliki `.tmp-` nieutrwalane; `MemoryPersistence` w testach), `vfs/idb.ts` (IndexedDB
   `fi-phone`: `entries`, `folders`, `kv`); moduły Node telefonu `src/mobile/node/` (`fs.ts` – `useVfs`, `promises`,
   `FileHandle`; `path.ts`; `crypto.ts`; `unsupported.ts`) przez aliasy `scripts/mobile-aliases.mjs` (build i projekt
   Vitest `mobile`); magazyn komputera bez zmian nad `MIRROR` (`/fi`), `DataStore.applyExternal(ścieżki, zapis)` (zapis
   synchronizacji i odświeżenie w kolejce magazynu).
-- Synchronizacja (T304): `sync/graph.ts` (`GraphClient` – `delta`, `download` przez downloadUrl, `upload` z `ifMatch` /
+- Synchronizacja (T306): `sync/graph.ts` (`GraphClient` – `delta`, `download` przez downloadUrl, `upload` z `ifMatch` /
   `newOnly`, `ensureFolders`, `remove`; `GraphError`, `AuthError`; 429 / 503, jedno odnowienie przy 401), `sync/engine.ts`
   (`SyncEngine` – `pull` z drzewem folderów po id, pełna lista po 410, `push` z kopią konfliktu `-telefon-<czas>`;
   `mirrored` – tylko `.json`, bez `backups/`, `.history/` i ukrytych poza `.presence/`), `sync/state.ts` (drzewo folderów,
@@ -1002,7 +1002,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   (PKCE, `authorizeUrl`, `codeFromRedirect`, `exchangeCode`, `refreshTokens`, `TokenSource`; 429 / 5xx nie wylogowuje),
   `sync/http.ts` (`fetchHttp`, `capacitorHttp` – tylko token, `NetworkError`); `shared/paths.ts` `guessConflictSource` –
   kopia `-telefon-`.
-- Host i ekrany (T305): `host/host.ts` (`PhoneHost` – `FiApi` w oknie: magazyn nad lustrem, zmiany po `folderShown`,
+- Host i ekrany (T307): `host/host.ts` (`PhoneHost` – `FiApi` w oknie: magazyn nad lustrem, zmiany po `folderShown`,
   obecność `.presence/<nazwa>.json` i „w użyciu”, ustawienia telefonu `fi.phone.prefs` / `fi.phone.machine`, szybki wpis
   w tym samym oknie – `quickSheet`, `PC_ONLY`, `phoneTapTag` – dotknięcie prowadzi na Mostek, `pendingTap`), `hostRef.ts`,
   `platform.ts` (Capacitor albo przeglądarka testów – `window.__FI_PHONE_TEST__`, `window.__FI_NOTICES__`, zdarzenie
@@ -1016,9 +1016,9 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
   `phone-version`), `notices.ts` (`NoticePlanner`, `installPlannedDue`, `markPlannedDue`), `PhoneApp.tsx` (`mount` –
   `FI_PHONE_BOOT_OK`); renderer – `components/Panel.tsx` `CompactContext`, `features/bridge/BridgePage.tsx` `BridgePanels`
   (`single` – jedna kolumna, bez dokowania).
-- Powiadomienia (T306): `shared/notifyPlan.ts` (`plannedNotices` – 7 dni, `morningAt`, `BRIEFING_FROM` 7:00, `RADAR_FROM`
+- Powiadomienia (T308): `shared/notifyPlan.ts` (`plannedNotices` – 7 dni, `morningAt`, `BRIEFING_FROM` 7:00, `RADAR_FROM`
   9:00, `PLANNED_MAX` 60, `warsawAt`, `keepPlanned`, `plannedDue`).
-- iOS i wydanie (T307): `ios/` (Capacitor SPM), `scripts/make-ios-assets.py` (ikona, ekran startowy),
+- iOS i wydanie (T309): `ios/` (Capacitor SPM), `scripts/make-ios-assets.py` (ikona, ekran startowy),
   `scripts/altstore-source.mjs`, CI `ios` / `ios-release`, instrukcja `docs/iphone.md`.
 - Testy: `tests/mobile/vfs.test.ts`, `sync.test.ts` (udawany OneDrive `tests/mobile/fakeGraph.ts` – `FakeDrive`),
   `auth.test.ts`, `host.test.ts`, `tests/unit/notify-plan.test.ts`; E2E `tests/e2e-mobile/phone.spec.ts` (serwer
@@ -1153,7 +1153,7 @@ npm run test:e2e:mobile  # E2E telefonu (build z --mode e2e + Playwright)
   oszczędności, „skąd ta liczba?” na Mostku i słowniczek okrętu, osobista inflacja z CPI GUS wpisanym ręcznie
 - [x] 1.10.1 Zamykanie (D88): zmiana zrobiona w trakcie zapisu zapisuje się przed zamknięciem okna, bez pytania o
   niezapisane zmiany; zapisy w tle wstrzymane na czas zapisu
-- [ ] iA–iE Wersja na iPhone'a (D89) → 1.11.0–1.15.0: OneDrive przez Graph, `.ipa` przez AltStore, wersja
+- [ ] iA–iE Wersja na iPhone'a (D92) → 1.13.0–1.17.0: OneDrive przez Graph, `.ipa` przez AltStore, wersja
   towarzysząca (iA, iB) i pełny port bez importu z mBanku, raportów i pełnej Synchronizacji (iC–iE)
 - ~~F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu, F43 archiwizacja
   starych lat~~ – odrzucone (D88)

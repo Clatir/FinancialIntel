@@ -1,5 +1,5 @@
 /**
- * The phone's IndexedDB (T303, T304): the mirror's files with their marks for the upload, the OneDrive folders and the
+ * The phone's IndexedDB (T305, T306): the mirror's files with their marks for the upload, the OneDrive folders and the
  * sync's small values – one database, each write one transaction (a file and its mark never apart).
  */
 import type { FolderNode, SyncPersistence } from '../sync/state'

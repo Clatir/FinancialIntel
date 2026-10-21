@@ -47,7 +47,7 @@ jobs:
       - run: npx playwright install-deps chromium
       - run: npm run build
       - run: xvfb-run -a npx playwright test
-      # The phone (T305): its web app in a browser the size of an iPhone, against a fake OneDrive.
+      # The phone (T307): its web app in a browser the size of an iPhone, against a fake OneDrive.
       - run: npx playwright install chromium
       - run: npm run test:e2e:mobile
       - uses: actions/upload-artifact@v4
@@ -168,7 +168,7 @@ jobs:
           path: test-results/
           retention-days: 3
 
-  # The iPhone's app (D89, T307): the same web app in Capacitor, an unsigned .ipa (AltStore signs it with the user's
+  # The iPhone's app (D92, T309): the same web app in Capacitor, an unsigned .ipa (AltStore signs it with the user's
   # Apple ID), started in the simulator; the phone's E2E in WebKit (the iPhone's engine). Like the Windows build: pull
   # requests, the default branch and by hand.
   ios:

@@ -1,4 +1,4 @@
-/** The phone's app (T305): the connecting screens until the folder is on the phone, then the window. */
+/** The phone's app (T307): the connecting screens until the folder is on the phone, then the window. */
 import '@fontsource/inter/latin-400.css'
 import '@fontsource/inter/latin-ext-400.css'
 import '@fontsource/inter/latin-500.css'

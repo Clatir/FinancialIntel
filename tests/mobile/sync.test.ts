@@ -1,4 +1,4 @@
-// The phone's sync with OneDrive (T304, IP0.1, IP0.5): the first copy of the folder, the computers' changes in, the
+// The phone's sync with OneDrive (T306, IP0.1, IP0.5): the first copy of the folder, the computers' changes in, the
 // phone's changes out with the version they replace, conflicts kept as copies, folders, links and failures.
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DataStore } from '../../src/main/datastore/store'

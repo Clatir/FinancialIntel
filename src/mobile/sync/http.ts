@@ -1,5 +1,5 @@
 /**
- * The phone's HTTP (T304): on the device the native one of Capacitor (no CORS, no Origin header – the token endpoint of
+ * The phone's HTTP (T306): on the device the native one of Capacitor (no CORS, no Origin header – the token endpoint of
  * Microsoft refuses a web page's request for an app's code); in the browser of the tests `fetch` to the fake OneDrive.
  */
 

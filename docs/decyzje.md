@@ -7,7 +7,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 
 ### Zakres i granica
 - **D1** Nazwa: Financial Intel. Okręt nazywa użytkownik, domyślnie „Flagowiec”.
-- **D2** Windows 11, kilka komputerów (nigdy jednocześnie), synchronizacja przez OneDrive. Bez wersji na iPhone'a – **zniesione (D89)**: wersja na iPhone'a.
+- **D2** Windows 11, kilka komputerów (nigdy jednocześnie), synchronizacja przez OneDrive. Bez wersji na iPhone'a – **zniesione (D92)**: wersja na iPhone'a.
 - **D3** Zakres: budżet prywatny. Trading zostaje w ICTTJ. Słowo „firma” nie występuje (trading i „firma” to to samo).
 - **D4** Cele aplikacji: spokój przy nieregularnych wypłatach, kontrola codziennych wydatków, budowa poduszki i celów,
   brak niespodzianek z opłatami. Kryteria sukcesu: wszystkie cztery z `specyfikacja.md`.
@@ -330,7 +330,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     w PR #32 i #34): zapis przy zamykaniu w rundach, zapisy w tle wstrzymane na czas zapisu (T301);
   - nie: F32 (flota rezerwowa – IKE, IKZE, PPK, lokaty), F38 (paragony i gwarancje przy operacji), F39 (ulgi PIT-37 /
     PIT-36), F41 (wpisy z telefonu przez OneDrive), F43 (archiwizacja starych lat) – odrzucone, poza planem.
-- **D89** (21.10.2026) Wersja na iPhone'a – odpowiedź na plan grup iA–iE („D2 znosimy, AltStore, rejestracja na az
+- **D92** (21.10.2026) Wersja na iPhone'a – odpowiedź na plan grup iA–iE („D2 znosimy, AltStore, rejestracja na az
   ok, wspólna numeracja”):
   - D2 zniesione: aplikacja na iPhone'a z tym samym folderem danych na OneDrive; telefon jest dla folderu kolejnym
     komputerem (nigdy naraz – jak D2);
@@ -340,11 +340,11 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     Windows), plik `.ipa` w GitHub Releases i źródło AltStore z repozytorium;
   - rejestracja aplikacji w Microsoft Entra (Azure) na koncie Microsoft użytkownika – po jego stronie (kroki w „Przed
     grupą iA” w `docs/postep.md`);
-  - numeracja wersji wspólna z Windows: grupa iA = 1.11.0, kolejne grupy – kolejne wersje;
+  - numeracja wersji wspólna z Windows: grupa iA = 1.13.0, kolejne grupy – kolejne wersje;
   - grupy iA–iE z pauzą i komendą przed każdą (D67), jeden PR i wydanie na grupę (D71).
   Do decyzji później: IP21 (kreator na telefonie – propozycja: bez niego), IP15 (dokowanie – tylko gdy folder ICTTJ jest
   na OneDrive; przed iD), IP24 (zapisy w tle z telefonu; przed iE). F41 (skrót iOS zapisujący plik) nadal odrzucone (D88).
-- **D90** (21.10.2026) Komenda „Rozpocznij grupy” – grupy iA–iE jedna po drugiej, każda z własnym PR i wydaniem (D71);
+- **D93** (21.10.2026) Komenda „Rozpocznij grupy” – grupy iA–iE jedna po drugiej, każda z własnym PR i wydaniem (D71);
   w tabeli prac przy każdej grupie – co potrzebne przed nią i szacunek zużycia limitu tygodniowego (plan Max 20x, 55 %
   zużyte 21.10.2026; odnowienie w niedzielę o 18:00). Przerwa po grupie iC na sprawdzenie limitu (z górką iA–iC ok.
   37 %), chyba że użytkownik powie inaczej; iD czeka na odpowiedź o folderze ICTTJ (IP15), iE – na IP21 i IP24. Start iA
@@ -2091,7 +2091,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   już minęło, i kwot pokazanych nie zobaczył (24 sprawdzenia w 10 s); lokalnie to samo przy zapisie 500 ms. Teraz chwila
   trwa 3 s (`revealAmounts(0.05)`) – dłużej niż dwa wolne zapisy, a koniec chwili nadal mieści się w czekaniu na ukrycie
   (10 s); przy zapisie 500 ms test przechodzi. Aplikacja bez zmian.
-- **T303** Folder danych na telefonie (iA, IP0.1): `DataStore` komputera (`src/main/datastore/`) działa na telefonie bez
+- **T305** Folder danych na telefonie (iA, IP0.1): `DataStore` komputera (`src/main/datastore/`) działa na telefonie bez
   zmian nad wirtualnym systemem plików w pamięci (`src/mobile/vfs/vfs.ts`, `Vfs`) utrwalanym w IndexedDB (`fi-phone`:
   `entries`, `folders`, `kv`; zapisy grupowane). Moduły Node podmienia build telefonu i projekt Vitest `mobile`
   (`scripts/mobile-aliases.mjs`: `node:fs` → `src/mobile/node/fs.ts`, `node:path`, `node:crypto` – SHA-1 i losowe bajty;
@@ -2101,7 +2101,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `.json` folderu bez `backups/` i `.history/` (historia wersji i kopie zostają na komputerze; historia zmian zrobionych
   na telefonie jest tylko w telefonie) i bez folderów ukrytych poza `.presence/`. Telefon ma system plików bez rozróżniania
   wielkości liter jak OneDrive (`process.platform` = `ios` w buildzie). Bez sieci aplikacja startuje z lustra.
-- **T304** Synchronizacja z OneDrive i logowanie (iA, IP0.1, IP0.5): Microsoft Graph – zmiany folderu przez `delta` po
+- **T306** Synchronizacja z OneDrive i logowanie (iA, IP0.1, IP0.5): Microsoft Graph – zmiany folderu przez `delta` po
   identyfikatorach (drzewo folderów zapamiętane, więc przeniesienia i zmiany nazw folderów dochodzą), strony delty zebrane
   przed zastosowaniem, 410 = pełna lista od nowa (pliki, których nie ma, usuwane z lustra), pobieranie przez
   `@microsoft.graph.downloadUrl` (bez nagłówka autoryzacji – adresy działają z CORS; wygasły adres pobierany od nowa),
@@ -2117,13 +2117,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   co 30 s przy otwartej aplikacji, 1,5 s po zmianie, przy przejściu do tła (najpierw zapis zmian okna); bez sieci –
   ponowienia po 10 / 30 / 60 / 120 s. Logowanie: kod autoryzacji z PKCE dla klienta publicznego (`consumers`,
   przekierowanie `financialintel://auth`, zakresy `Files.ReadWrite offline_access User.Read`, aplikacja zarejestrowana
-  przez użytkownika – D89); żądanie tokenu natywnym HTTP Capacitora (żądanie z WebView dostaje od Microsoft
+  przez użytkownika – D92); żądanie tokenu natywnym HTTP Capacitora (żądanie z WebView dostaje od Microsoft
   AADSTS9002326 – wymiana kodu z innego originu tylko dla SPA), Graph i pobieranie przez `fetch`. Token odświeżania w
   Preferences (pamięć aplikacji, nie pęk kluczy – bez wtyczki spoza Capacitora), token dostępu tylko w pamięci, odnawiany
   5 min przed końcem, jedno odnowienie naraz; odrzucony token odświeżania = stan „zaloguj ponownie” (przycisk w
-  Ustawieniach telefonu – lustro i czekające zmiany zostają), chwilowa awaria Microsoft (429, 5xx) i brak sieci nie
-  wylogowują.
-- **T305** Aplikacja telefonu (iA, IP0.3, IP1, IP2): renderer komputera bez zmian nad `window.fi` z
+  Ustawieniach telefonu – lustro i czekające zmiany zostają; zapamiętany `me.id` konta: inne konto jest odrzucane, bo
+  folder i czekające zmiany są pierwszego), chwilowa awaria Microsoft (429, 5xx) i brak sieci nie wylogowują.
+- **T307** Aplikacja telefonu (iA, IP0.3, IP1, IP2): renderer komputera bez zmian nad `window.fi` z
   `src/mobile/host/host.ts` (`PhoneHost` – to, co na komputerze robi proces główny: magazyn nad lustrem, zmiany po
   pokazaniu folderu, obecność telefonu w `.presence/` i „w użyciu” jak na PC – D86, ustawienia telefonu w Preferences);
   błędy przechodzą w formacie IPC Electrona (`errorMessage` okna zdejmuje przedrostek), funkcje tylko komputera
@@ -2135,17 +2135,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `vite.mobile.config.mts` (`out/mobile`, Safari 16, CSP: tylko własne pliki i https), E2E `tests/e2e-mobile/`
   (Playwright, profil iPhone 13, Chromium na Linuksie i WebKit na macOS, udawany OneDrive `tests/mobile/fakeGraph.ts` na
   lokalnym serwerze razem z aplikacją).
-- **T306** Powiadomienia z wyprzedzeniem (iA, IP0.4): iOS nie uruchamia aplikacji w tle, więc przy każdym otwarciu i
+- **T308** Powiadomienia z wyprzedzeniem (iA, IP0.4): iOS nie uruchamia aplikacji w tle, więc przy każdym otwarciu i
   chwilę po każdej zmianie danych aplikacja oddaje systemowi plan na 7 dni (`src/shared/notifyPlan.ts`
   `plannedNotices`): odprawa poranna po ciszy nocnej, nie przed 7:00 (domyślna cisza kończy się o 5:00), raport wachty o
   jego godzinie (w ciszy nocnej – minutę przed nią, jak na PC; zrobiony dziś – nie dziś), dni z Radaru o 9:00 (opłaty,
   raty, boje, PIT-38, zwroty – wg przełączników telefonu), nic w ciszy nocnej ani w przeszłości, najwyżej 60 (iOS trzyma
-  64). Klucze odprawy i raportu są kluczami powiadomień okna: plan jest zapamiętany (`fi.phone.planned` –
-  `keepPlanned`: minione zostają dwa dni, anulowane znikają), a klucze należne w ciągu 2 minut trafiają do
-  `fi.notify.sent` przed sprawdzeniem okna (`installPlannedDue` przed `initNotifier`) – tego samego powiadomienia nie
-  pokazują iOS i okno. Dotknięcie powiadomienia, które uruchomiło aplikację, czeka, aż okno zacznie słuchać; w 1.11.0
-  każde prowadzi na Mostek (pozostałe ekrany dochodzą w iB–iE).
-- **T307** Wydanie na iPhone'a (iA, IP0.2): Capacitor 8 (Swift Package Manager, wtyczki App, Browser, Preferences,
+  64); plan od nowa także co 10 minut przy otwartej aplikacji, przy powrocie do niej i po „Dziś bez wydatków”. Klucze
+  odprawy i raportu są kluczami powiadomień okna i żadne nie przychodzi dwa razy: plan jest zapamiętany
+  (`fi.phone.planned` – `keepPlanned`: minione zostają dwa dni, anulowane znikają, nieudany plan nie liczy na stary), a
+  klucze należne w ciągu 2 minut trafiają do `fi.notify.sent` przed sprawdzeniem okna (`installPlannedDue` przed
+  `initNotifier`); powiadomienie pokazane przez okno (odprawa przy otwarciu o 6:00) zdejmuje zaplanowane z tym kluczem i
+  plan go już nie dodaje (`notify` z kluczem, `PhoneHost.wasShown`, dwa dni). Dotknięcie powiadomienia, które uruchomiło
+  aplikację, czeka, aż okno zacznie słuchać; w 1.13.0 każde prowadzi na Mostek (pozostałe ekrany dochodzą w iB–iE).
+- **T309** Wydanie na iPhone'a (iA, IP0.2): Capacitor 8 (Swift Package Manager, wtyczki App, Browser, Preferences,
   LocalNotifications), projekt `ios/` w repozytorium (`app.financialintel.ios`, iOS 16+, tylko pion, ciemny wygląd,
   schemat URL `financialintel`), ikona i ekran startowy z `resources/icon.png` (`scripts/make-ios-assets.py`). CI:
   job macOS `ios` (PR, gałąź domyślna, ręcznie – jak Windows): E2E telefonu w WebKit, build aplikacji z opcjonalnym

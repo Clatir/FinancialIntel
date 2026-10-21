@@ -1,5 +1,5 @@
 /**
- * The phone's own settings (T305): the account and the folder, the sync (what waits, when it last went, a run now), this
+ * The phone's own settings (T307): the account and the folder, the sync (what waits, when it last went, a run now), this
  * phone's name for the computers, the hidden amounts and the notifications planned ahead (IP0.4).
  */
 import { useState, type ReactNode } from 'react'
@@ -51,7 +51,8 @@ export function PhoneSettings() {
   const sync = usePhone((s) => s.sync)
   const clientId = usePhone((s) => s.clientId)
   const busy = usePhone((s) => s.busy)
-  const message = usePhone((s) => s.message)
+  // This attempt's problem only (the phone's message is shared with the connecting screens).
+  const [loginError, setLoginError] = useState<string | null>(null)
   const conflicts = useData((s) => s.conflicts.length)
   const prefs = useMachine((s) => s.prefs)
   const [name, setName] = useState(() => phoneHost().machineName)
@@ -83,12 +84,20 @@ export function PhoneSettings() {
         {sync.state === 'auth' && (
           <>
             {/* Signed in again with the same account: the copy on the phone and what waits stay. */}
-            <button className="btn btn-accent mt-2 h-[40px] w-full text-[13px]" disabled={busy} onClick={() => void signIn(clientId)} data-testid="phone-signin-again">
+            <button
+              className="btn btn-accent mt-2 h-[40px] w-full text-[13px]"
+              disabled={busy}
+              onClick={() => {
+                setLoginError(null)
+                void signIn(clientId).then((ok) => setLoginError(ok ? null : usePhone.getState().message))
+              }}
+              data-testid="phone-signin-again"
+            >
               {busy ? 'Logowanie…' : 'Zaloguj ponownie'}
             </button>
-            {message && (
+            {loginError && (
               <p className="py-2 text-[12px] leading-snug text-down" data-testid="phone-message">
-                {message}
+                {loginError}
               </p>
             )}
           </>

@@ -1,4 +1,4 @@
-// The phone's notifications planned ahead (IP0.4, T306): the morning briefing, the evening report and the radar's days
+// The phone's notifications planned ahead (IP0.4, T308): the morning briefing, the evening report and the radar's days
 // for the next week – never in the quiet hours or the past, the switches of the phone, iOS's limit, the plan kept
 // between openings so the notifier of the open app does not show the same one again.
 import { describe, expect, it } from 'vitest'
@@ -47,6 +47,12 @@ describe('plan powiadomień na telefonie', () => {
     expect(morningAt({ from: '23:30', to: '08:15' }, '07:00')).toBe('08:15')
     expect(morningAt({ from: '22:00', to: '22:00' }, '07:00')).toBe('07:00')
     expect(morningAt({ from: '13:00', to: '15:00' }, '07:00')).toBe('07:00')
+    // A quiet morning only (8–10): 7:00 is outside it. A night shift's quiet hours till 13:00: their end.
+    expect(morningAt({ from: '08:00', to: '10:00' }, '07:00')).toBe('07:00')
+    expect(morningAt({ from: '22:00', to: '13:00' }, '09:00')).toBe('13:00')
+    const shift = plannedNotices(input({ quietHours: { from: '22:00', to: '13:00' }, items: [item({ key: 'fee', date: '2026-10-23' })], prefs: prefs({ cargo: true }) }))
+    expect(shift.find((n) => n.key === 'planned:fee')?.at).toBe(warsawAt('2026-10-23', '13:00'))
+    expect(shift.find((n) => n.key === 'briefing:2026-10-22')?.at).toBe(warsawAt('2026-10-22', '13:00'))
   })
 
   it('nic w ciszy nocnej: raport wieczorny przed nią', () => {

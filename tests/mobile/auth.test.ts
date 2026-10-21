@@ -1,4 +1,4 @@
-// Signing in to OneDrive (T304): PKCE, the sign-in page's address, the redirect's code, the token kept and renewed –
+// Signing in to OneDrive (T306): PKCE, the sign-in page's address, the redirect's code, the token kept and renewed –
 // a refused refresh token asks to sign in again, Microsoft's passing trouble and no network do not.
 import { describe, expect, it } from 'vitest'
 import { REDIRECT_URI, SCOPES, SignInError, TokenSource, authorizeUrl, codeFromRedirect, exchangeCode, pkce, type AuthStore, type SavedAuth } from '../../src/mobile/sync/auth'

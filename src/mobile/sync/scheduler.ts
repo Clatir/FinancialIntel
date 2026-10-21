@@ -1,5 +1,5 @@
 /**
- * When the phone syncs (T304): a change made here goes up after a moment, OneDrive is asked every half minute while the
+ * When the phone syncs (T306): a change made here goes up after a moment, OneDrive is asked every half minute while the
  * app is in front, at its return to the front and on demand; one run at a time (pull, then push). Without a connection
  * it waits longer each time; a sign-in needed stops it until the user signs in again.
  */

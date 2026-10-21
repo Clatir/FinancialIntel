@@ -1,5 +1,5 @@
 /**
- * The phone's window (T305, IP0.3, IP1, IP2): the bar with the ship and the sync, the screen, the menu at the bottom and
+ * The phone's window (T307, IP0.3, IP1, IP2): the bar with the ship and the sync, the screen, the menu at the bottom and
  * the quick entry as a sheet over everything. The screens are the computers' renderer (the same stores, the same
  * numbers) in one column; what the phone does not have yet says so.
  */

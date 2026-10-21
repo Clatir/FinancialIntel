@@ -1,4 +1,4 @@
-// The phone's `window.fi` (T305): errors cross like Electron's (the window strips the prefix), what only a computer does
+// The phone's `window.fi` (T307): errors cross like Electron's (the window strips the prefix), what only a computer does
 // says so, the quick entry in the same window, a notification's tap kept until the window listens, this phone's
 // preferences, its use and presence, the folder's changes after the window shows the folder.
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -46,7 +46,7 @@ beforeEach(async () => {
 })
 
 function host(kv = memoryKv(), notifications = fakeNotifications()) {
-  const h = new PhoneHost({ version: '1.11.0', kv, notifications, openUrl: async () => undefined, now: () => now })
+  const h = new PhoneHost({ version: '1.13.0', kv, notifications, openUrl: async () => undefined, now: () => now })
   return { h, kv, notifications }
 }
 
@@ -116,7 +116,38 @@ describe('window.fi na telefonie', () => {
     await Promise.resolve()
     expect(later).toEqual([])
     await h.api.notify({ title: 'Odprawa poranna', body: 'x', tag: 'briefing', silent: true })
-    expect(notifications.shown).toEqual([{ title: 'Odprawa poranna', body: 'x', tag: 'briefing', silent: true }])
+    expect(notifications.shown).toEqual([{ title: 'Odprawa poranna', body: 'x', tag: 'briefing', silent: true, key: undefined }])
+  })
+
+  it('tap czekający dla okna, które od razu przestało słuchać, dochodzi do następnego', async () => {
+    const { h, notifications } = host()
+    notifications.tap('briefing')
+    const gone: string[] = []
+    h.api.onNotificationClick((t) => gone.push(t))()
+    const live: string[] = []
+    h.api.onNotificationClick((t) => live.push(t))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(gone).toEqual([])
+    expect(live).toEqual(['briefing'])
+  })
+
+  it('powiadomienie pokazane w aplikacji – zapamiętane (plan dla iOS je pomija), także po ponownym starcie', async () => {
+    const kv = memoryKv()
+    const { h, notifications } = host(kv)
+    await h.load()
+    await h.api.notify({ title: 'Odprawa poranna', body: 'x', tag: 'briefing', silent: true, key: 'briefing:2026-10-21' })
+    expect(notifications.shown.at(-1)?.key).toBe('briefing:2026-10-21')
+    expect(h.wasShown('briefing:2026-10-21')).toBe(true)
+    expect(h.wasShown('evening:2026-10-21')).toBe(false)
+    await Promise.resolve()
+    const again = new PhoneHost({ version: '1.13.0', kv, notifications: fakeNotifications(), openUrl: async () => undefined, now: () => now })
+    await again.load()
+    expect(again.wasShown('briefing:2026-10-21')).toBe(true)
+    // Two days later forgotten.
+    now += 3 * 86_400_000
+    await again.api.notify({ title: 't', body: 'b', tag: 'evening', key: 'evening:2026-10-24' })
+    expect(again.wasShown('briefing:2026-10-21')).toBe(false)
   })
 
   it('ustawienia telefonu: bez skrótu globalnego i plików z banku, zapamiętane; ukrycie kwot przy starcie', async () => {
@@ -128,7 +159,7 @@ describe('window.fi na telefonie', () => {
     const saved = await h.api.setMachinePrefs({ quickShortcut: 'Control+Alt+Q', bankFiles: true, hideOnStart: true })
     expect(saved).toMatchObject({ quickShortcut: '', bankFiles: false, hideOnStart: true, hideAmounts: false })
     expect(seen).toEqual([false])
-    const again = new PhoneHost({ version: '1.11.0', kv, notifications: fakeNotifications(), openUrl: async () => undefined })
+    const again = new PhoneHost({ version: '1.13.0', kv, notifications: fakeNotifications(), openUrl: async () => undefined })
     await again.load()
     expect(again.prefs).toMatchObject({ hideOnStart: true, hideAmounts: true })
     await h.setMachineName('  iPhone Szymona  ')
@@ -169,7 +200,7 @@ describe('window.fi na telefonie', () => {
     expect(changes.length).toBeGreaterThan(0)
     await h.beat(true)
     const presence = JSON.parse(dec.decode(await vfs.readFile(`${MIRROR}/.presence/iPhone.json`))) as { machine: string; appVersion: string }
-    expect(presence).toMatchObject({ machine: 'iPhone', appVersion: '1.11.0' })
+    expect(presence).toMatchObject({ machine: 'iPhone', appVersion: '1.13.0' })
     await h.close()
   })
 })

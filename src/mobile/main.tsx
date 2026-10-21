@@ -1,5 +1,5 @@
 /**
- * The phone's start (T305): the host (`window.fi`) first – the computers' renderer reads it when its modules load –,
+ * The phone's start (T307): the host (`window.fi`) first – the computers' renderer reads it when its modules load –,
  * then the mirror, the account and the folder (`phone.ts`), then the screens.
  */
 import { createPlatform } from './platform'

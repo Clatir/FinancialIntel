@@ -1,4 +1,4 @@
-/* The phone's stylesheet (T305): the computers' look (`renderer/styles/index.css`) with Tailwind reading the renderer's
+/* The phone's stylesheet (T307): the computers' look (`renderer/styles/index.css`) with Tailwind reading the renderer's
    screens too – the phone's build starts in `src/mobile`, where Tailwind looks by itself. */
 @import '../renderer/styles/index.css';
 @source '../renderer';

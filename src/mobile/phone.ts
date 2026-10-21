@@ -1,5 +1,5 @@
 /**
- * The phone's start and connection (T305): the mirror loaded from IndexedDB, the account signed in, the OneDrive folder
+ * The phone's start and connection (T307): the mirror loaded from IndexedDB, the account signed in, the OneDrive folder
  * chosen and copied the first time, then the sync running while the app is in front. The screens follow `usePhone`.
  */
 import { create } from 'zustand'
@@ -175,15 +175,27 @@ export async function signIn(clientId: string): Promise<boolean> {
     const back = await c.platform.signIn(authorizeUrl(id, challenge, state, c.platform.authority))
     const code = codeFromRedirect(back, state)
     const tokens = await exchangeCode(c.platform.tokenHttp, `${c.platform.authority}/token`, id, code, verifier)
-    await c.tokens.adopt(id, tokens, null)
-    let account: string | null = null
+    // Who signed in – asked with this token alone, nothing kept yet.
+    const probe = new GraphClient({ http: c.platform.graphHttp, token: async () => tokens.accessToken, renew: async () => false, base: c.platform.graphBase })
+    let me: Awaited<ReturnType<GraphClient['me']>> | null = null
     try {
-      const me = await c.graph.me()
-      account = me.userPrincipalName ?? me.mail ?? me.displayName ?? null
+      me = await probe.me()
     } catch {
-      /* the name is only for the screen */
+      /* the name is for the screen; the account is checked when Graph answers */
     }
-    await c.tokens.adopt(id, tokens, account)
+    const account = me?.userPrincipalName ?? me?.mail ?? me?.displayName ?? null
+    const before = await authStore(c.platform).get()
+    const kept = usePhone.getState().folder
+    // Signed in again with another account: the folder (its OneDrive id) and the changes waiting on the phone are the
+    // first account's – kept, nothing sent to the other OneDrive.
+    if (kept && before?.accountId && me?.id && me.id !== before.accountId) {
+      set({
+        busy: false,
+        message: `Zalogowano kontem ${account ?? 'innym'}, a folder „${kept.path}” jest na koncie ${before.account ?? 'poprzednim'}. Zaloguj się tamtym kontem – albo wyloguj (kopia folderu zniknie z telefonu).`
+      })
+      return false
+    }
+    await c.tokens.adopt(id, tokens, account, me?.id ?? before?.accountId ?? null)
     set({ account })
     c.scheduler?.resume()
     const folder = usePhone.getState().folder

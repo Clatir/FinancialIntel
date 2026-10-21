@@ -1,5 +1,5 @@
 /**
- * The phone's sync with the data folder on OneDrive (T304, IP0.1, IP0.5): the changes of OneDrive come in (Graph's
+ * The phone's sync with the data folder on OneDrive (T306, IP0.1, IP0.5): the changes of OneDrive come in (Graph's
  * delta), the changes made here go up (each with the version it replaces). The same file changed on a computer and
  * here before either saw the other's: OneDrive keeps the computer's version, the phone's goes beside it as a copy
  * (`…-telefon-<czas>.json`) – Synchronizacja on the computer shows both (nothing is lost, the choice is made there).
