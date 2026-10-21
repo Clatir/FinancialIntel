@@ -867,6 +867,29 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
    komputerze.
 3. Ctrl+K → nazwa kontenera albo celu – otwiera się wyróżniony; Synchronizacja → „Dziennik zmian” → „Zmiany”.
 
+## Przed grupą iC – iPhone: Dziennik i kurs (21.10.2026)
+
+1. **Co trzeba wiedzieć** – grupa iA wydana jako 1.13.0 (PR #42), grupa iB (1.14.0) w PR #43. Grupa iC (1.15.0, D92 /
+   D93 – jednym ciągiem po iB, potem przerwa na limit tygodniowy): IP11 Operacje pełne – zaznaczanie na liście i zmiana
+   zaznaczonych (kategoria, finansujący, konto, rodzaj, data – z podglądem skutku i „Cofnij”), zapisane widoki listy,
+   eksport widocznej listy do CSV i Excela przez udostępnianie iOS (Pliki, AirDrop, poczta – dwie oficjalne wtyczki
+   Capacitora: Filesystem, Share); przelew obiema stronami jest już w edytorze (iB). IP12 Meldunki – także pary przelewów,
+   duplikaty i łupy; dokowanie i ładownia – z grupą iD, konflikty folderu – na komputerze. IP13 Plan miesiąca – edycja
+   (pensja, podział, koperty, łupy, „pokryj z koperty…”, plan kampanii) i IP14 Radar – edycja (pożyczki, spłaty, boje,
+   „Zaplanuj przelew własny”): ekrany komputera bez trybu podglądu. Format folderu bez zmian.
+2. **Co użytkownik musi powiedzieć** – nic przed startem (D93). Po iC przerwa: procent limitu tygodniowego.
+3. **Co przygotować** – nic (wtyczki trafiają do `.ipa`).
+4. **Model, thinking, czas** – tabela prac (D90):
+
+| Krok | Co obejmuje | Model i thinking (z górką) | Czas Claude'a |
+| --- | --- | --- | --- |
+| iC-1 | Operacje pełne: zaznaczanie, zmiana zaznaczonych, widoki, eksport przez udostępnianie (IP11) | Opus 5.5 · xhigh (minimum high) | 1–1,5 h |
+| iC-2 | Meldunki: pary przelewów, duplikaty, łupy (IP12) | Opus 5.5 · high | 0,5 h |
+| iC-3 | Plan miesiąca – edycja, plan kampanii na telefonie (IP13) | Opus 5.5 · xhigh | 0,5–0,75 h |
+| iC-4 | Radar – edycja (IP14) | Opus 5.5 · high | 0,25–0,5 h |
+| iC-5 | E2E telefonu, `/code-review` high, CI (Linux, Windows, macOS), wydanie 1.15.0, przerwa (D93) | Opus 5.5 · xhigh | 0,5 h |
+| Razem | rekomendacja: Opus 5.5 · xhigh (max – bez szkody, wolniej) | | 2,75–3,75 h (z górką 4,5 h; plan był 5–6,5 h) |
+
 ## 1.14.0 – iPhone: Wachta (grupa iB, 21.10.2026)
 
 Zakres: „Przed grupą iB” niżej. Zrobione:
