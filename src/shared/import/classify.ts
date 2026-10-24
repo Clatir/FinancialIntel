@@ -524,12 +524,11 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   // A member's money: asked once what the rest beyond their debt is (D80 b).
   if (member) {
     const inflow = inflowOf(member)
-    const inflowKind = inflow === 'advance' ? 'advance' : inflow === 'income' ? 'income' : 'repay'
     return out(
-      decision('income', inflow === 'ask' ? `od domownika: ${member.name} – spłata zakupów czy niezależny przekaz?` : `od domownika: ${member.name}`, {
+      decision('income', inflow === 'ask' ? `od domownika: ${member.name} – zaliczka czy przychód?` : `od domownika: ${member.name}`, {
         household: true,
         memberId: member.id,
-        inflowKind,
+        inflowKind: 'repay',
         advance: inflow === 'advance',
         source: inflow === 'ask' ? 'none' : 'builtin'
       })

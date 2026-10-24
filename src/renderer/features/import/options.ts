@@ -46,9 +46,8 @@ const gifted = (m: Member) => ({ value: `gift:${m.id}`, label: `Prezent od: ${m.
 const returned = (m: Member) => ({ value: `refundable:${m.id}`, label: `Zwrot towaru – dla: ${m.name}` })
 const shared = (direction: 'in' | 'out') => ({ value: 'share', label: direction === 'out' ? 'Wspólnie – kilka osób płaci' : 'Zwrot towaru – wspólnego zakupu' })
 const fromMember = (m: Member) => [
-  { value: `household:${m.id}:repay`, label: `Od domownika: ${m.name} – spłata zakupów` },
-  { value: `household:${m.id}:income`, label: `Od domownika: ${m.name} – niezależny przychód` },
-  { value: `household:${m.id}:advance`, label: `Od domownika: ${m.name} – zaliczka na przyszłość` }
+  { value: `household:${m.id}:income`, label: `Od domownika: ${m.name} – reszta jako przychód` },
+  { value: `household:${m.id}:advance`, label: `Od domownika: ${m.name} – reszta jako zaliczka` }
 ]
 
 /**
@@ -120,11 +119,7 @@ export function optionOf(c: Choice, direction: 'in' | 'out'): Option {
     if (c.share) return 'share'
     return direction === 'in' ? 'refund' : 'expense'
   }
-  if (c.kind === 'income') {
-    if (!c.household) return 'income'
-    const kind = c.inflowKind ?? (c.advance ? 'advance' : 'repay')
-    return `household:${memberOfChoice(c)}:${kind}`
-  }
+  if (c.kind === 'income') return c.household ? `household:${memberOfChoice(c)}:${c.advance || c.inflowKind === 'advance' ? 'advance' : 'income'}` : 'income'
   if (c.kind === 'loan') return c.loanId ? `loan:${c.loanId}` : 'loan'
   if (c.kind === 'transfer') return c.counterAccountId ? `transfer:${c.counterAccountId}` : 'transfer'
   if (c.kind === 'trading' || c.kind === 'tax') return c.kind
@@ -154,8 +149,8 @@ export function choiceFor(option: Option, prev: Pick<Choice, 'kind' | 'categoryI
   if (option.startsWith('gift:')) return { ...base, refundable: true, gift: true, memberId: option.slice('gift:'.length) || null, categoryId: category }
   if (option.startsWith('household:')) {
     const [, memberId, rest] = option.split(':')
-    const inflowKind = rest === 'advance' ? 'advance' : rest === 'income' ? 'income' : 'repay'
-    return { ...base, kind: 'income', household: true, memberId: memberId || null, inflowKind, advance: rest === 'advance' }
+    const advance = rest === 'advance'
+    return { ...base, kind: 'income', household: true, memberId: memberId || null, advance, ...(advance ? { inflowKind: 'advance' } : {}) }
   }
   if (option.startsWith('loan:')) return { ...base, kind: 'loan', loanId: option.slice('loan:'.length) || null }
   if (option.startsWith('transfer:')) return { ...base, kind: 'transfer', counterAccountId: option.slice('transfer:'.length) || null }

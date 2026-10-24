@@ -129,9 +129,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const setMember = (id: string) => {
     const m = members.find((x) => x.id === id)
     const inflow = inflowOf(m)
-    const inflowKind = inflow === 'advance' ? 'advance' : inflow === 'income' ? 'income' : 'repay'
     const next: Partial<Transaction> = id
-      ? { memberId: id, repaid: 0, inflowKind: t.inflowKind ?? inflowKind, advance: (t.inflowKind ?? inflowKind) === 'advance', covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
+      ? { memberId: id, repaid: 0, inflowKind: t.inflowKind ?? 'repay', advance: inflow === 'advance', covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
       : { memberId: null, repaid: 0, inflowKind: undefined, advance: false, covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
     // The purchase it surely pays back (D91), named at once – the list below changes it.
     patch(id ? { ...next, ...sureCoversOf({ ...t, ...next }) } : next)
@@ -175,7 +174,7 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
             options={[
               { value: 'repay', label: 'spłata zakupów', title: 'Wpłata najpierw spłaca to, co domownik ma oddać' },
               { value: 'income', label: 'niezależny przychód', title: 'Przychód do budżetu od tego domownika – nie spłaca zakupów' },
-              { value: 'advance', label: 'zaliczka na przyszłość', title: 'Zaliczka do depozytu – nie spłaca dotychczasowych zakupów' }
+              { value: 'advance', label: 'depozyt na przyszłość', title: 'Zaliczka do depozytu – nie spłaca dotychczasowych zakupów' }
             ]}
             aria-label="Cel wpłaty domownika"
           />
