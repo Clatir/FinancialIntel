@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { briefing, confirmationsOf } from '@shared/calc/briefing'
 import { computeFleet, energyAfter, fitSplit, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { monthlySchedule } from '@shared/calc/loans'
+import { withKind } from '@shared/calc/kinds'
 import { isConfirmedNight, splitEvenly, sum as sumOf } from '@shared/calc/operations'
 import { isAmountKey, isAmountPath } from '@shared/merge'
 import { parseDateInput } from '../../src/renderer/lib/format'
@@ -268,5 +269,48 @@ describe('pola i ekrany (1.5.2, grupa I)', () => {
     expect(isConfirmedNight(tx('2026-10-10', zl(-30), { time: '23:30', logNote: 'głodny' }), orders)).toBe(true)
     expect(isConfirmedNight(tx('2026-10-10', zl(-30), { time: '23:30' }), orders)).toBe(false)
     expect(isConfirmedNight(tx('2026-10-10', zl(-30), { time: '12:30', logNote: 'obiad' }), orders)).toBe(false)
+  })
+
+  it('wyjaśniona korekta salda nie świeci żółtym alarmem w Odprawie; zmiana rodzaju czyści flagę (N-PC-1)', () => {
+    const corr = tx('2026-10-12', zl(-50), { kind: 'correction' })
+    const baseInput = { settings: settingsWith({ budget: { start: '2026-10-01' } }), balances: [opening('2026-10-01', zl(5000))], months: [plan('2026-10', zl(3000))], now: '2026-10-15T12:00:00+02:00' }
+    expect(fleet({ ...baseInput, transactions: [corr] }).alarms.some((a) => a.kind === 'correction')).toBe(true)
+    const explained = { ...corr, explained: true }
+    expect(fleet({ ...baseInput, transactions: [explained] }).alarms.some((a) => a.kind === 'correction')).toBe(false)
+    expect(withKind(explained, 'expense').explained).toBeUndefined()
+  })
+
+  it('zwrot towaru po wyczerpaniu energii miesiąca najpierw oddaje osłonom – alarm znika, a debriefing i łupy się zgadzają (N-PC-3)', () => {
+    const categories = settingsWith().categories
+    const months = [plan('2026-10', zl(4000))]
+    const over = tx('2026-10-10', zl(-4200), { categoryId: GROCERIES })
+    const ret = tx('2026-10-15', zl(500), { categoryId: GROCERIES })
+    const after = fleet({
+      settings: settingsWith({ budget: { start: '2026-10-01' } }),
+      balances: [opening('2026-10-01', zl(10000))],
+      months,
+      transactions: [over, ret],
+      now: '2026-11-02T12:00:00+01:00'
+    })
+    expect(after.alarms.filter((a) => a.kind === 'energy-exhausted')).toEqual([])
+    expect(after.loot).toEqual({ month: '2026-10', amount: zl(300) })
+    const brief = debriefing('2026-10', { transactions: [over, ret], categories, plans: months, log: after.log, alarms: after.alarms, today: '2026-11-02' })
+    expect(brief.plus).toBe(true)
+    expect(brief.energy).toMatchObject({ budget: zl(4000), used: zl(3700), exhausted: 0, result: zl(300) })
+  })
+
+  it('stan początkowy zbiorników odkładek na starcie budżetu pomniejsza pierwszą ratę do normalnej części miesięcznej (N-PC-7)', () => {
+    const oc = containerSchema.parse({ ...base(), name: 'OC', amount: zl(1200), cycleMonths: 12, dueMonth: '2027-03', dueDay: 10 })
+    const s = fleet({
+      settings: settingsWith({ budget: { start: '2026-10-01', initial: { shields: 0, hull: zl(5000), goals: {}, tanks: { [oc.id]: zl(600) } } } }),
+      balances: [opening('2026-10-01', zl(20000))],
+      months: [plan('2026-10', zl(4000))],
+      containers: [oc],
+      now: '2026-10-15T12:00:00+02:00'
+    })
+    // 600 zł at start + 100 zł (October's 1/12th share of the remaining 6 months) = 700 zł in tank; 3 900 zł left in energy.
+    expect(s.tanks.find((t) => t.containerId === oc.id)?.amount).toBe(zl(700))
+    expect(s.energy).toBe(zl(3900))
+    expect(isAmountKey(`settings.budget.initial.tanks.${oc.id}`)).toBe(true)
   })
 })

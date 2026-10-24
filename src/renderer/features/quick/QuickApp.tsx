@@ -307,7 +307,22 @@ export function QuickApp() {
       )
     }
     if (daily && !data.daily && data.energyLeft == null) out.push(<div key="daily">Bez planu miesiąca – wydatek idzie z osłon.</div>)
-    if (outside) out.push(<div key="outside" data-testid="quick-preview-outside">Poza kopertami {money(outside)} – energia dziś bez zmian (zmniejsza energię miesiąca).</div>)
+    if (outside) {
+      const mEnergy = !otherMonth ? data.monthEnergy : null
+      out.push(
+        <div key="outside" data-testid="quick-preview-outside">
+          Poza kopertami {money(outside)} – energia dziś bez zmian (zmniejsza energię miesiąca
+          {mEnergy != null && (
+            <>
+              : <span className="num">{money(mEnergy)}</span> →{' '}
+              <span className={cx('num', mEnergy - outside < 0 ? 'text-down' : 'text-fg-strong')}>{money(Math.max(0, mEnergy - outside))}</span>
+              {outside > Math.max(0, mEnergy) && <span className="text-down">; z osłon {money(outside - Math.max(0, mEnergy))}</span>}
+            </>
+          )}
+          ).
+        </div>
+      )
+    }
     for (const [mainId, v] of otherMonth ? [] : planned) {
       const left = data.envelopesLeft[mainId]
       const name = (data.categories.find((c) => c.id === mainId)?.label ?? 'koperta').split(' · ')[0]

@@ -339,4 +339,25 @@ describe('przegląd S: przejście do operacji zdejmuje też filtry 1.7.0 (F18), 
     expect(current(out2.id).note).toBe('później')
     api.deleteRecords.mockReset()
   })
+
+  it('N-PC-11 & N-PC-14: repayInCash tworzy wpłatę na konto Gotówka z covers, a usunięcie zakupu czyści covers we wpłacie', async () => {
+    const { repayInCash } = await import('../../src/renderer/features/household/actions')
+    const { CASH_ACCOUNT_ID } = await import('@shared/schema')
+    const purchase = tx({ kind: 'expense', amount: -5000, refundable: true, memberId: HOUSE_MEMBER_ID, counterparty: 'Apteka' })
+    load([purchase])
+    const cashTxId = repayInCash(purchase, HOUSE_MEMBER_ID, 5000)
+    expect(cashTxId).toBeTruthy()
+    expect(current(cashTxId!)).toMatchObject({
+      accountId: CASH_ACCOUNT_ID,
+      kind: 'income',
+      amount: 5000,
+      memberId: HOUSE_MEMBER_ID,
+      covers: [purchase.id]
+    })
+
+    // Deleting the purchase cleans its id from covers of the repayment
+    api.deleteRecord.mockResolvedValue({ ok: true })
+    await ops.deleteOperation(purchase, 'Apteka')
+    expect(current(cashTxId!).covers).toEqual([])
+  })
 })

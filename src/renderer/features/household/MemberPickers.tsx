@@ -128,7 +128,9 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const shareMembers = [...new Set(incomeShares({ ...t, amount: Math.max(t.amount, partsSum) }).map((x) => x.memberId).filter((x): x is string => !!x))]
   const setMember = (id: string) => {
     const m = members.find((x) => x.id === id)
-    const next: Partial<Transaction> = id ? { memberId: id, repaid: 0, advance: inflowOf(m) === 'advance', covers: [], coversOpening: undefined } : { memberId: null, repaid: 0, advance: false, covers: [], coversOpening: undefined }
+    const next: Partial<Transaction> = id
+      ? { memberId: id, repaid: 0, advance: inflowOf(m) === 'advance', covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
+      : { memberId: null, repaid: 0, advance: false, covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
     // The purchase it surely pays back (D91), named at once – the list below changes it.
     patch(id ? { ...next, ...sureCoversOf({ ...t, ...next }) } : next)
   }

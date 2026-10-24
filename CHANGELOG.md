@@ -1,5 +1,33 @@
 # Financial Intel – zmiany
 
+## 1.15.2
+
+Audyt funkcjonalny PC (N-PC-1 do N-PC-20, D95): spójność i ergonomia codziennej pracy z budżetem.
+
+- **Dokowanie i finanse (pakiet A):**
+  - Częściowe dokowanie z ICTTJ: możliwość zasilenia celów lub pozostawienia części kwoty „wolnej do decyzji” bez konieczności rozładowywania całego wpływu naraz (N-PC-1).
+  - Wycofanie i korekta dokowania: przycisk „Wycofaj dokowanie” na Mostku przywraca operację do stanu oczekującego, a odpięcie transakcji z ICTTJ nie usuwa ręcznych transakcji dokowania (N-PC-2).
+  - Precyzyjne zasilenie celów w oknie dokowania: pole kwoty obok checkboxa celu umożliwia zasilenie konkretną kwotą zamiast całego celu (N-PC-3).
+  - Ochrona transakcji przeniesienia do Celu / Ładowni przy zmianie kategorii lub rodzaju na wydatek / przelew (N-PC-4).
+  - Wybór i zmiana konta docelowego w oknie Szybkiego Wpisu (N-PC-5).
+  - Usuwanie nieużywanych kategorii i podkategorii bezpośrednio w Ustawieniach z zachowaniem integralności archiwalnych operacji (N-PC-7).
+- **Import, rozliczenia i pozycje paragonu (pakiet B):**
+  - Rozliczenia wcześniejszych wpłat z zamkniętych miesięcy: wcześniejsza wpłata z zamkniętego miesiąca w „Przypisz zwrot…” nie blokuje rozliczenia i sortuje się intuicyjnie (N-PC-9).
+  - Podział wpłaty od wielu domowników w regułach i oknie importu z mBanku („w tym za…”, N-PC-10).
+  - Dwustronny przelew własny w oknie importu z mBanku z automatyczną flagą `bothSides` (N-PC-15).
+  - Pełne wsparcie dla celów i ładowni w pozycjach podzielonego paragonu: pojedyncza linia może być sfinansowana z Celu lub Kontenera Ładowni (N-PC-13).
+  - Bezpieczne usuwanie zakupów powiązanych z wpłatami: automatyczne oczyszczenie wskaźników `covers` we wpłatach domowników zapobiega martwym referencjom (N-PC-14).
+  - Intuicyjne etykiety tagów w Szybkim Wpisie: czytelne rozróżnienie nazwy tagu i prefiksu grupy tagów (N-PC-11).
+- **Wygoda, Radar i Rytuały (pakiet C):**
+  - Przenoszenie środków z aktywnego Celu: przycisk „przenieś środki” na Mapie gwiezdnej pozwala przenieść wybraną kwotę lub całość do Osłon albo na inny Cel bez archiwizacji (N-PC-6).
+  - Czytelne rozróżnienie raty nominalnej i wyrównawczej kontenera w Ładowni i na kafelkach zbiorników (N-PC-8).
+  - Rozliczenie długu otwarcia konkretnego domownika (`coversOpeningMembers`) w transakcjach wieloosobowych (N-PC-12).
+  - Elastyczny podział Łupów także po 7. dniu miesiąca: przycisk „Zmień podział łupów” w Debriefingu i podsumowaniu miesiąca (N-PC-16).
+  - Opcja spłaty pożyczki z bieżącego planu miesiąca (automatyczny kontener w Ładowni) lub z Osłon (N-PC-17).
+  - Sekcja „Domownicy i rozliczenia na start” w Kreatorze Startu: konfiguracja długów i zaliczek początkowych przed pierwszym startem budżetu (N-PC-18).
+  - Naprawa paradoksu ciszy nocnej: wpis w dzienniku jako wyjaśnienie planowanego wydatku (`impulse === 'plan'`), bez nieuzasadnionej kary (N-PC-19).
+  - Wznowienie raportu wachty wieczornej: kompaktowy pasek z przyciskiem „Wznów raport wachty” po przypadkowym kliknięciu „Dziś bez wydatków” lub odłożeniu na 30 minut (N-PC-20).
+
 ## 1.15.1
 
 Rozliczenia z domownikami: wcześniejsza wpłata na zakupy (D94).

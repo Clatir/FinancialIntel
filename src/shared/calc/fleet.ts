@@ -873,8 +873,22 @@ export function computeFleet(input: FleetInput): FleetState {
   }
   const refundEnergy = (v: number, t: Transaction, moves: Moves) => {
     if (!energyActive(t.date)) return addShields(v, moves)
-    energy += v
-    moves.energy = (moves.energy ?? 0) + v
+    // A return in a month whose energy ran out repays the shields first (N-PC-3): the alarm and the debriefing stay true.
+    let rest = v
+    const m = monthOf(t.date)
+    for (let i = alarms.length - 1; i >= 0 && rest > 0; i--) {
+      const a = alarms[i]!
+      if (a.kind !== 'energy-exhausted' || monthOf(a.date) !== m) continue
+      const back = Math.min(rest, a.amount)
+      a.amount -= back
+      if (a.amount <= 0) alarms.splice(i, 1)
+      addShields(back, moves)
+      rest -= back
+    }
+    if (rest > 0) {
+      energy += rest
+      moves.energy = (moves.energy ?? 0) + rest
+    }
   }
   const record = (ev: FleetEvent) => {
     if (hasKeys(ev.moves)) log.push(ev)
@@ -978,14 +992,16 @@ export function computeFleet(input: FleetInput): FleetState {
     const amt = t.amount
     switch (t.kind) {
       case 'expense': {
-        const container = t.containerId ? containerById.get(t.containerId) : undefined
-        // Its tank pays only during the fee's life: a payment before it (the history linked to a fee added later – B56)
-        // or after it is an ordinary expense.
-        const periodic = container && container.cycleMonths > 1 && activeIn(container, monthOf(t.date)) ? container : undefined
-        const goal = t.goalId && knownGoal(t.goalId) ? t.goalId : null
         for (const p of partsOf(t)) {
           // A household member's part: the ledger's (below).
           if (p.refundable) continue
+          const cid = p.containerId ?? t.containerId
+          const container = cid ? containerById.get(cid) : undefined
+          // Its tank pays only during the fee's life: a payment before it (the history linked to a fee added later – B56)
+          // or after it is an ordinary expense.
+          const periodic = container && container.cycleMonths > 1 && activeIn(container, monthOf(t.date)) ? container : undefined
+          const gid = p.goalId ?? t.goalId
+          const goal = gid && knownGoal(gid) ? gid : null
           if (goal) {
             if (p.amount < 0) {
               const have = goalAmount.get(goal) ?? 0
@@ -1156,6 +1172,12 @@ export function computeFleet(input: FleetInput): FleetState {
             addGoal(id, g, moves)
             rest -= g
           }
+          for (const [id, v] of Object.entries(initial.tanks ?? {})) {
+            if (!v || !periodicIds.has(id)) continue
+            tanks.set(id, (tanks.get(id) ?? 0) + v)
+            moves.tanks = { ...moves.tanks, [id]: (moves.tanks?.[id] ?? 0) + v }
+            rest -= v
+          }
           addShields(rest, moves)
         } else if (startTotal > 0) dock(startTotal, start, warsawEndOf(start).getTime(), moves)
         else addShields(startTotal, moves)
@@ -1218,7 +1240,10 @@ export function computeFleet(input: FleetInput): FleetState {
         }
       })
       const deadline = `${m}-08`
-      if (deadline <= today)
+      const decision = plans.find((p) => p.month === prev)?.loot
+      const decidedStamp = decision ? warsawStamp(decision.decidedAt) : null
+      const decidedDate = decidedStamp ? decidedStamp.slice(0, 10) : null
+      if (deadline <= today && (!decidedDate || decidedDate < firstDayOf(m) || decidedDate > today))
         events.push({
           date: deadline,
           slot: 2,
@@ -1231,52 +1256,50 @@ export function computeFleet(input: FleetInput): FleetState {
             lootMonth = null
           }
         })
-      const decision = plans.find((p) => p.month === prev)?.loot
-      if (decision) {
-        const stamp = warsawStamp(decision.decidedAt)
-        const date = stamp.slice(0, 10)
-        if (date >= firstDayOf(m) && date < deadline && date <= today)
-          events.push({
-            date,
-            slot: 3,
-            rest: stamp.slice(11),
-            run: () => {
-              if (lootMonth !== prev || !loot) return
-              const moves: Moves = { loot: -loot }
-              let rest = loot
-              for (const [id, g] of Object.entries(decision.goals)) {
-                const take = Math.min(rest, g)
-                const target = goalsAll.find((x) => x.id === id)
-                // A goal archived by then takes nothing more (B13): its share stays in the shields.
-                if (!take || !target || !goalDecided(target, Date.parse(decision.decidedAt))) continue
-                addGoal(id, take, moves)
-                rest -= take
-              }
-              // What a planned envelope did not spend, kept in it for this month (F28): its limit grows by it.
-              for (const [id, v] of Object.entries(decision.envelopes ?? {})) {
-                const take = Math.min(rest, v)
-                if (take <= 0) continue
-                energy += take
-                moves.energy = (moves.energy ?? 0) + take
-                moves.envelopes = { ...moves.envelopes, [id]: (moves.envelopes?.[id] ?? 0) + take }
-                const kept = envelopeExtra.get(m) ?? new Map<string, number>()
-                kept.set(id, (kept.get(id) ?? 0) + take)
-                envelopeExtra.set(m, kept)
-                rest -= take
-              }
-              const next = Math.min(rest, decision.nextMonth)
-              if (next) {
-                energy += next
-                moves.energy = (moves.energy ?? 0) + next
-                dailyExtra.set(m, (dailyExtra.get(m) ?? 0) + next)
-                rest -= next
-              }
-              if (rest) addShields(rest, moves)
-              record({ date, kind: 'loot', amount: loot, ref: prev, moves })
-              loot = 0
-              lootMonth = null
+      if (decision && decidedStamp && decidedDate && decidedDate >= firstDayOf(m) && decidedDate <= today) {
+        // A decision made on or after the 8th (N-PC-16) still applies at the deadline (`${m}-07`) once `decidedDate <= today`.
+        const date = decidedDate >= deadline ? `${m}-07` : decidedDate
+        events.push({
+          date,
+          slot: 3,
+          rest: decidedStamp.slice(11),
+          run: () => {
+            if (lootMonth !== prev || !loot) return
+            const moves: Moves = { loot: -loot }
+            let rest = loot
+            for (const [id, g] of Object.entries(decision.goals)) {
+              const take = Math.min(rest, g)
+              const target = goalsAll.find((x) => x.id === id)
+              // A goal archived by then takes nothing more (B13): its share stays in the shields.
+              if (!take || !target || !goalDecided(target, Date.parse(decision.decidedAt))) continue
+              addGoal(id, take, moves)
+              rest -= take
             }
-          })
+            // What a planned envelope did not spend, kept in it for this month (F28): its limit grows by it.
+            for (const [id, v] of Object.entries(decision.envelopes ?? {})) {
+              const take = Math.min(rest, v)
+              if (take <= 0) continue
+              energy += take
+              moves.energy = (moves.energy ?? 0) + take
+              moves.envelopes = { ...moves.envelopes, [id]: (moves.envelopes?.[id] ?? 0) + take }
+              const kept = envelopeExtra.get(m) ?? new Map<string, number>()
+              kept.set(id, (kept.get(id) ?? 0) + take)
+              envelopeExtra.set(m, kept)
+              rest -= take
+            }
+            const next = Math.min(rest, decision.nextMonth)
+            if (next) {
+              energy += next
+              moves.energy = (moves.energy ?? 0) + next
+              dailyExtra.set(m, (dailyExtra.get(m) ?? 0) + next)
+              rest -= next
+            }
+            if (rest) addShields(rest, moves)
+            record({ date, kind: 'loot', amount: loot, ref: prev, moves })
+            loot = 0
+            lootMonth = null
+          }
+        })
       }
     }
     // A goal's money moved out (C2, B30) at the end of its day: what it held then (never more than it holds), to the
@@ -1347,7 +1370,7 @@ export function computeFleet(input: FleetInput): FleetState {
     for (const t of txs) {
       if (monthOf(t.date) !== month || t.kind !== 'expense' || t.goalId || isCargoPayment(t, containerIds)) continue
       for (const p of partsOf(t)) {
-        if (p.refundable) continue
+        if (p.refundable || p.goalId || isCargoPayment(p, containerIds)) continue
         const cost = -p.amount
         const main = cats.mainOf(p.categoryId)
         const kind = main ? envelopeKind(main) : 'daily'
@@ -1392,7 +1415,7 @@ export function computeFleet(input: FleetInput): FleetState {
     if (shields < 0) alarms.push({ kind: 'deficit', level: 'red', date: today, amount: -shields })
     else if (minShields != null && shields < minShields) alarms.push({ kind: 'shields-below-min', level: 'yellow', date: today, amount: minShields - shields })
   }
-  for (const t of txs) if (t.kind === 'correction' && counts(t)) alarms.push({ kind: 'correction', level: 'yellow', date: t.date, amount: t.amount, txId: t.id })
+  for (const t of txs) if (t.kind === 'correction' && !t.explained && counts(t)) alarms.push({ kind: 'correction', level: 'yellow', date: t.date, amount: t.amount, txId: t.id })
   const cargo = cargoMass(containers, month, salary, settings.orders.cargoLimitPct)
   if (cargo.over) alarms.push({ kind: 'cargo-over', level: 'yellow', date: today, amount: cargo.monthly })
   if (salary != null && income.average != null && salary > income.average) alarms.push({ kind: 'salary-above-income', level: 'yellow', date: today, amount: salary - income.average })

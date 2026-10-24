@@ -9,7 +9,7 @@
  */
 import { addDays } from './dates'
 import { fold } from '../fold'
-import type { Transaction } from '../schema/records'
+import type { Split, Transaction } from '../schema/records'
 import { householdBefore, type FleetInput } from './fleet'
 import {
   assignsOn,
@@ -17,6 +17,7 @@ import {
   incomeShares,
   isOpeningItem,
   ledgerOrder,
+  OPENING_TX,
   settlesHousehold,
   type HouseholdLedger,
   type OpenPurchase,
@@ -95,22 +96,60 @@ export function repaymentShares(t: Transaction): RepaymentShare[] {
   return partsOf(t).flatMap((p) => (p.refundable && !p.gift && p.amount > 0 ? [{ memberId: financerOf(p), amount: p.amount, isReturn: true }] : []))
 }
 
-/** The fields naming purchases (D91): the operations' ids, the opening balance's debt apart (it has no operation). */
-export type CoverFields = Pick<Transaction, 'covers' | 'coversOpening'>
+/** The fields naming purchases (D91, N-PC-12): the operations' ids, the opening balance's debt apart (per-member in multi-member operations). */
+export type CoverFields = Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'>
 
-export function coverFields(ids: readonly string[]): CoverFields {
-  return { covers: ids.filter((id) => !isOpeningItem(id)), ...(ids.some(isOpeningItem) ? { coversOpening: true } : {}) }
+export function coverFields(ids: readonly string[], multiMember = false): CoverFields {
+  const openingMembers = [...new Set(ids.filter(isOpeningItem).map((id) => id.slice(OPENING_TX.length)).filter(Boolean))]
+  return {
+    covers: ids.filter((id) => !isOpeningItem(id)),
+    ...(openingMembers.length ? { coversOpening: true } : {}),
+    ...(openingMembers.length && (multiMember || openingMembers.length > 1) ? { coversOpeningMembers: openingMembers } : {})
+  }
 }
 
 /** Does an operation name a purchase (an operation's id, a member's opening balance)? */
-export const names = (t: Pick<Transaction, 'covers' | 'coversOpening'>, txId: string): boolean => (isOpeningItem(txId) ? !!t.coversOpening : t.covers.includes(txId))
+export const names = (t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'>, txId: string): boolean =>
+  isOpeningItem(txId)
+    ? t.coversOpeningMembers?.length
+      ? t.coversOpeningMembers.includes(txId.slice(OPENING_TX.length))
+      : !!t.coversOpening
+    : t.covers.includes(txId)
 
 /** The fields with one purchase named or not (both always – `undefined` takes the opening balance's mark off). */
-export function withNamed(t: Pick<Transaction, 'covers' | 'coversOpening'>, txId: string, on: boolean): Required<Pick<Transaction, 'covers'>> & { coversOpening: true | undefined } {
-  if (isOpeningItem(txId)) return { covers: t.covers, coversOpening: on ? true : undefined }
+export function withNamed(
+  t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'> &
+    Partial<Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'advance'>> & {
+      splits?: ReadonlyArray<Partial<Split>>
+    },
+  txId: string,
+  on: boolean
+): Required<Pick<Transaction, 'covers'>> & { coversOpening: true | undefined; coversOpeningMembers?: string[] | undefined } {
+  const shareMembers =
+    t.kind && t.amount != null && t.splits != null
+      ? [...new Set(repaymentShares(t as Transaction).map((s) => s.memberId))]
+      : [...new Set([t.memberId, ...(t.splits?.map((s) => s.memberId) ?? [])].filter((id): id is string => !!id))]
+  const multiMember = shareMembers.length > 1 || !!t.coversOpeningMembers?.length
+  if (isOpeningItem(txId)) {
+    const memberId = txId.slice(OPENING_TX.length)
+    if (multiMember && memberId) {
+      const current = t.coversOpeningMembers?.length ? t.coversOpeningMembers : t.coversOpening ? shareMembers : []
+      const next = on ? (current.includes(memberId) ? current : [...current, memberId]) : current.filter((id) => id !== memberId)
+      return {
+        covers: t.covers,
+        coversOpening: next.length ? true : undefined,
+        coversOpeningMembers: next.length ? next : undefined
+      }
+    }
+    return { covers: t.covers, coversOpening: on ? true : undefined, ...(t.coversOpeningMembers !== undefined ? { coversOpeningMembers: undefined } : {}) }
+  }
   // Named last (it takes what the ones named before leave); the record keeps at most `MAX_COVERS`.
   const covers = on ? (t.covers.includes(txId) || t.covers.length >= MAX_COVERS ? t.covers : [...t.covers, txId]) : t.covers.filter((x) => x !== txId)
-  return { covers, coversOpening: t.coversOpening ? true : undefined }
+  return {
+    covers,
+    coversOpening: t.coversOpening ? true : undefined,
+    ...(t.coversOpeningMembers?.length ? { coversOpeningMembers: t.coversOpeningMembers } : {})
+  }
 }
 
 export interface Proposal {
@@ -153,7 +192,8 @@ export function linkRepayments(input: Pick<FleetInput, 'settings' | 'balances' |
     const before = householdBefore({ ...input, transactions }, t, today)
     const { covers } = proposeCovers(t, before, (id) => byId.get(id))
     if (!covers.length) continue
-    const fields = coverFields(covers)
+    const multi = new Set(repaymentShares(t).map((s) => s.memberId)).size > 1
+    const fields = coverFields(covers, multi)
     out.set(t.id, fields)
     // The next ones see this one's purchases paid back.
     transactions = transactions.map((x) => (x.id === t.id ? { ...x, ...fields } : x))
@@ -192,6 +232,11 @@ export function choicesForRepayment(before: HouseholdLedger, ledger: HouseholdLe
   return [...openBefore, ...extra.sort(byDate)]
 }
 
+export interface WaitingRepayment extends Unassigned {
+  /** True when assigning this payment to the purchase pulls from prior-month booked income (`f.income > 0` and `pay.date.slice(0, 7) < purchase.date.slice(0, 7)`). */
+  fromPriorIncome?: boolean
+}
+
 /**
  * A member's money available to assign to a financed purchase in the editor („Przypisz zwrot…”, D91, 1.15.1): both later
  * unassigned repayments and earlier inflows with uncommitted money (or unearmarked advance that covered the purchase).
@@ -201,13 +246,13 @@ export function waitingForPurchase(
   purchase: Transaction,
   p: PurchaseState,
   txOf: (txId: string) => Transaction | undefined
-): Unassigned[] {
+): WaitingRepayment[] {
   const openNow = Math.max(0, p.lent - p.paid)
   const namedDeposit = Math.max(0, p.by.reduce((a, b) => a + b.amount, 0) - p.paid)
   const anonDeposit = Math.max(0, p.fromDeposit - namedDeposit)
   if (openNow + anonDeposit <= 0) return []
   const unassigned = balanceOf(ledger, p.memberId).unassigned
-  const out = new Map<string, Unassigned>()
+  const out = new Map<string, WaitingRepayment>()
   if (openNow > 0)
     for (const u of unassigned) {
       const pay = txOf(u.txId)
@@ -223,7 +268,24 @@ export function waitingForPurchase(
     const freeAdvance = Math.max(0, f.advance - Math.max(0, paidForSum - f.repaid))
     const creditNow = unassigned.find((u) => u.txId === txId)?.amount ?? 0
     const avail = openNow > 0 ? creditNow + f.income + freeAdvance : freeAdvance
-    if (avail > 0) out.set(txId, { txId, date: pay.date, amount: avail })
+    if (avail > 0) {
+      const fromPriorIncome = openNow > 0 && f.income > 0 && creditNow + freeAdvance < Math.min(openNow, avail) && pay.date.slice(0, 7) < purchase.date.slice(0, 7)
+      out.set(txId, { txId, date: pay.date, amount: avail, ...(fromPriorIncome ? { fromPriorIncome: true } : {}) })
+    }
   }
-  return [...out.values()].sort(byDate)
+  return [...out.values()].sort((a, b) => Number(!!a.fromPriorIncome) - Number(!!b.fromPriorIncome) || byDate(a, b))
+}
+
+/**
+ * Operations whose `covers` name any of `deletedIds`, with those ids removed (N-PC-14): deleting a purchase leaves no
+ * ghost id in `covers` that would keep a repayment marked as explicitly assigned while covering nothing.
+ */
+export function stripDeletedCovers(transactions: readonly Transaction[], deletedIds: ReadonlySet<string>): Array<{ before: Transaction; after: Transaction }> {
+  if (!deletedIds.size) return []
+  const out: Array<{ before: Transaction; after: Transaction }> = []
+  for (const t of transactions) {
+    if (deletedIds.has(t.id) || !t.covers.some((id) => deletedIds.has(id))) continue
+    out.push({ before: t, after: { ...t, covers: t.covers.filter((id) => !deletedIds.has(id)) } })
+  }
+  return out
 }

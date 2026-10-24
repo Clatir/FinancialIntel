@@ -15,6 +15,10 @@ export interface Part {
   memberId: string | null
   /** A refundable part as the member's gift (D83): nobody owes it. */
   gift: boolean
+  /** Paid from a container of the cargo (N-PC-13) on this line (or inherited from the operation). */
+  containerId?: string | null
+  /** Paid from a goal's money (N-PC-13) on this line (or inherited from the operation). */
+  goalId?: string | null
 }
 
 export const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0)
@@ -49,7 +53,12 @@ export function accountAmounts(t: Transaction): readonly AccountSide[] {
   return isTwoSided(t) ? [[t.accountId, t.amount, t.date], [t.counterAccountId!, -t.amount, t.counterDate ?? t.date]] : [[t.accountId, t.amount, t.date]]
 }
 
-type PartsSource = Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & { memberId?: string | null; gift?: boolean }
+type PartsSource = Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & {
+  memberId?: string | null
+  gift?: boolean
+  containerId?: string | null
+  goalId?: string | null
+}
 
 /** The lines of each operation object (W27): records are never changed in place – a change is a new object. */
 const partsMemo = new WeakMap<PartsSource, readonly Part[]>()
@@ -62,11 +71,29 @@ const partsMemo = new WeakMap<PartsSource, readonly Part[]>()
 export function partsOf(t: PartsSource): readonly Part[] {
   const known = partsMemo.get(t)
   if (known) return known
-  const own = { refundable: t.refundable, memberId: t.refundable ? (t.memberId ?? null) : null, gift: t.refundable && !!t.gift }
+  const own = {
+    refundable: t.refundable,
+    memberId: t.refundable ? (t.memberId ?? null) : null,
+    gift: t.refundable && !!t.gift,
+    ...(t.containerId ? { containerId: t.containerId } : {}),
+    ...(t.goalId ? { goalId: t.goalId } : {})
+  }
   let parts: Part[]
   if (!t.splits.length) parts = [{ amount: t.amount, categoryId: t.categoryId, ...own }]
   else {
-    parts = t.splits.map((s) => ({ amount: s.amount, categoryId: s.categoryId, refundable: s.refundable, memberId: s.refundable ? (s.memberId ?? null) : null, gift: s.refundable && !!s.gift }))
+    parts = t.splits.map((s) => {
+      const containerId = s.containerId ?? t.containerId ?? null
+      const goalId = s.goalId ?? t.goalId ?? null
+      return {
+        amount: s.amount,
+        categoryId: s.categoryId,
+        refundable: s.refundable,
+        memberId: s.refundable ? (s.memberId ?? null) : null,
+        gift: s.refundable && !!s.gift,
+        ...(containerId ? { containerId } : {}),
+        ...(goalId ? { goalId } : {})
+      }
+    })
     const rest = t.amount - sum(parts.map((p) => p.amount))
     if (rest !== 0) parts.push({ amount: rest, categoryId: t.categoryId, ...own })
   }
@@ -152,7 +179,10 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
  */
 export function costOf(t: Transaction): number {
   if (t.kind !== 'expense' || t.goalId) return 0
-  return -ownLines(t) || 0
+  if (!t.splits.length) return t.refundable ? 0 : -t.amount || 0
+  let mine = 0
+  for (const p of partsOf(t)) if (!p.refundable && !p.goalId) mine += p.amount
+  return -mine || 0
 }
 
 /**
@@ -168,7 +198,7 @@ export function ownSpent(t: Transaction): number {
  * A payment of the cargo (B58): linked to a container that exists. A payment of a container deleted (on another
  * computer, or before 1.5.2) is an ordinary expense – the engine takes it from the energy, so the envelopes count it.
  */
-export const isCargoPayment = (t: Pick<Transaction, 'containerId'>, containerIds: ReadonlySet<string>): boolean => t.containerId != null && containerIds.has(t.containerId)
+export const isCargoPayment = (t: { containerId?: string | null }, containerIds: ReadonlySet<string>): boolean => t.containerId != null && containerIds.has(t.containerId)
 
 /**
  * What an operation is (1.11.0, D89): its note, then its receipt lines' – the list's „Notatka” as a whole (the hint), the
@@ -189,9 +219,16 @@ export function isNight(t: Pick<Transaction, 'time' | 'kind' | 'amount'>, orders
  * A purchase in the quiet hours confirmed (D40, spec: „potwierdzony zakup w ciszy nocnej” – N10): its time in the
  * window and its short entry in the captain's log. The quick entry asks for both; an operation typed later in Operacje
  * with a night time and no entry is a purchase of the day written down at night – not the game's serious violation.
+ * A planned/justified purchase (`impulse === 'plan'`, `explained === true`, or a fixed cargo container payment) with a
+ * log entry is an explained necessity, not a quiet-hours violation (N-PC-19).
  */
-export function isConfirmedNight(t: Pick<Transaction, 'time' | 'kind' | 'amount' | 'logNote'>, orders: Pick<Orders, 'quietHours'>): boolean {
-  return isNight(t, orders) && t.logNote.trim() !== ''
+export function isConfirmedNight(
+  t: Pick<Transaction, 'time' | 'kind' | 'amount' | 'logNote'> & { impulse?: Transaction['impulse']; explained?: boolean; containerId?: string | null },
+  orders: Pick<Orders, 'quietHours'>
+): boolean {
+  if (!isNight(t, orders) || t.logNote.trim() === '') return false
+  if (t.impulse === 'plan' || t.explained || t.containerId != null) return false
+  return true
 }
 
 /** From the threshold the captain's log asks „plan czy impuls?” (D41); 0 = the log never asks (N32 – everywhere alike). */

@@ -499,7 +499,14 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   }
   if (loan) return out(decision('loan', `zwrot pożyczki: ${loan.name}`, { loanId: loan.id }))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
-  if (isOwnTransferRow(row, ctx.ownNames)) return out(decision('transfer', 'przelew własny'))
+  if (isOwnTransferRow(row, ctx.ownNames)) {
+    const descDigits = row.description.replace(/\D/g, '')
+    const counterAccountId =
+      ctx.accountNumbers && descDigits.length >= 10
+        ? (Object.entries(ctx.accountNumbers).find(([, n]) => n && n.length >= 10 && descDigits.includes(n))?.[0] ?? null)
+        : null
+    return out(decision('transfer', 'przelew własny', counterAccountId ? { counterAccountId } : {}))
+  }
   // A member's money: asked once what the rest beyond their debt is (D80 b).
   if (member) {
     const inflow = inflowOf(member)

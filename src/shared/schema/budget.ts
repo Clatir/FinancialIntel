@@ -150,7 +150,9 @@ export const budgetStartSchema = z.looseObject({
     .looseObject({
       shields: grosze.min(0).default(0),
       hull: grosze.min(0).default(0),
-      goals: z.record(ulidSchema, grosze.min(0)).default({})
+      goals: z.record(ulidSchema, grosze.min(0)).default({}),
+      /** Initial money already accumulated in periodic cargo tanks (`cycleMonths > 1`) on `start` (N-PC-7). */
+      tanks: z.record(ulidSchema, grosze.min(0)).optional().catch(undefined)
     })
     .nullable()
     .catch(null)

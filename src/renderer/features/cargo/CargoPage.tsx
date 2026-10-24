@@ -3,9 +3,9 @@ import { addMonths, daysInMonth, monthsBetween, warsawNow } from '@shared/calc/d
 import { glossaryOf } from '@shared/glossary'
 import { paymentsIndex } from '@shared/calc/cargoStatus'
 import { cycleText, deadText, priceText, SHORT_MONTHS, type DeadContainer, type PriceChange } from '@shared/calc/cargoWatch'
-import { amountIn, cyclePosition, nextUnpaidOf, scheduleOf, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
+import { amountIn, cyclePosition, nextUnpaidOf, scheduleOf, sinkingInstallment, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
-import { monthlyShare, simulateCargo, type CargoSimulation } from '@shared/calc/plan'
+import { monthlyShare, simulateCargo, sinkingOf, type CargoSimulation } from '@shared/calc/plan'
 import { dm, rangeText } from '@shared/format'
 import { CONTAINER_TYPES, type Container, type ContainerType } from '@shared/schema'
 import { listOf, useData, useEntryNewer, useFolderLocked } from '../../store/data'
@@ -38,6 +38,7 @@ import {
   patchContainer,
   payContainer,
   paymentsToLink,
+  setInitialTank,
   unignoreProposals,
   updatePrice,
   type ContainerDraft
@@ -58,16 +59,32 @@ const fmtRange = rangeText
 const fmtPct = (p: number | null) => (p == null ? '—' : `${p.toFixed(1).replace('.', ',')}%`)
 
 /**
+ * The catch-up installment (N-PC-8) when a periodic container's cycle has fewer months left to `dueMonth` than its full
+ * cycle (or its tank is behind plan): returns the actual monthly installment when it differs from `monthlyShare(c)` by
+ * more than 1 grosz rounding, else null.
+ */
+function catchUpRateOf(c: ContainerDraft & { past?: Container['past'] }, month: string, tankAmount = 0, takenThisMonth?: number): number | null {
+  if (c.cycleMonths <= 1 || c.amount <= 0) return null
+  const nominal = monthlyShare(c)
+  if (takenThisMonth != null && takenThisMonth > 0 && Math.abs(takenThisMonth - nominal) > 1) return takenThisMonth
+  const rate = sinkingInstallment({ ...c, past: c.past ?? [] }, month, tankAmount)
+  return rate > 0 && Math.abs(rate - nominal) > 1 ? rate : null
+}
+
+/**
  * A tank's installment as the engine's schedule takes it (N52, T29): the last one carries the rest of the grosze. A fee
  * of a schedule (F23): the cycle up to its next payment – the gaps differ.
  */
-function installmentText(c: ContainerDraft): string {
-  const pos = cyclePosition(c, warsawNow().month)
+function installmentText(c: ContainerDraft, tankAmount = 0): string {
+  const m = warsawNow().month
+  const pos = cyclePosition(c, m)
   const plan = sinkingSchedule(c.amount, pos.length)
   const first = plan[0] ?? 0
   const last = plan[plan.length - 1] ?? 0
   const text = last === first ? zl(first) : `${zl(first)}, ostatnia ${zl(last)}`
-  return scheduleOf(c) ? `do najbliższej płatności: ${text}` : text
+  const base = scheduleOf(c) ? `do najbliższej płatności: ${text}` : text
+  const catchUp = catchUpRateOf(c, m, tankAmount)
+  return catchUp != null ? `${base}; w tym cyklu z wyrównaniem do terminu: ${zl(catchUp)}/mies.` : base
 }
 
 /**
@@ -109,6 +126,8 @@ export function CargoPage() {
   const current = selected ? containers.find((c) => c.id === selected) : undefined
   const visible = sorted.filter((c) => showArchived || !c.archived)
   const status = new Map(cargo.map((x) => [x.containerId, x]))
+  const tankById = new Map(fleet.tanks.map((t) => [t.containerId, t]))
+  const sinkingTaken = sinkingOf(fleet.log, month)
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-cargo">
@@ -163,8 +182,26 @@ export function CargoPage() {
                       </span>
                       <StateBadge s={status.get(c.id)} />
                       <span className="num w-[96px] text-right">{zl(c.amount)}</span>
-                      <span className="num w-[86px] text-right text-[11px] text-muted" title="Średnio miesięcznie (opłata okresowa: rata zbiornika, ostatnia z resztą groszy)">
+                      <span
+                        className="num w-[86px] text-right text-[11px] text-muted"
+                        title={(() => {
+                          const tk = tankById.get(c.id)
+                          const catchUp = !c.archived && !tk?.paidDue ? catchUpRateOf(c, month, tk?.amount ?? 0, sinkingTaken.get(c.id)) : null
+                          return catchUp != null
+                            ? `Rata nominalna: ${zl(monthlyShare(c))}/mies. · rata wyrównawcza w tym cyklu (do terminu): ${zl(catchUp)}/mies.`
+                            : 'Średnio miesięcznie (opłata okresowa: rata zbiornika, ostatnia z resztą groszy)'
+                        })()}
+                      >
                         {zl(monthlyShare(c))}/m
+                        {(() => {
+                          const tk = tankById.get(c.id)
+                          const catchUp = !c.archived && !tk?.paidDue ? catchUpRateOf(c, month, tk?.amount ?? 0, sinkingTaken.get(c.id)) : null
+                          return catchUp != null ? (
+                            <span className="ml-1 text-[10px] text-accent" data-testid="cargo-row-catchup">
+                              ({zl(catchUp)})
+                            </span>
+                          ) : null
+                        })()}
                       </span>
                     </button>
                   ))}
@@ -653,6 +690,9 @@ function LoadLine({ fleet }: { fleet: FleetState }) {
 }
 
 function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container[] }) {
+  const readOnly = useFolderLocked()
+  const initialTanks = useData((s) => s.fi?.settings.budget.initial?.tanks)
+  const startMonth = fleet.start ? fleet.start.slice(0, 7) : null
   return (
     <Panel title="Odkładki" hint={glossaryOf('Zbiornik')} testId="cargo-tanks">
       {!fleet.tanks.length ? (
@@ -666,6 +706,9 @@ function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container
             const expected = c && pos && !t.paidDue ? sum(sinkingSchedule(amountIn(c, fleet.month), pos.length).slice(0, pos.index + 1)) : null
             const short = expected != null ? expected - t.amount : 0
             const months = monthsBetween(fleet.month, t.dueMonth)
+            const posStart = c && startMonth && (!c.from || c.from <= startMonth) ? cyclePosition(c, startMonth) : null
+            const preStart = c && posStart && posStart.index > 0 ? sum(sinkingSchedule(amountIn(c, startMonth!), posStart.length).slice(0, posStart.index)) : 0
+            const canFill = !readOnly && short > 0 && preStart > (initialTanks?.[t.containerId] ?? 0)
             return (
               <div key={t.containerId} className="flex flex-col gap-0.5" data-testid="cargo-tank" data-name={t.name}>
                 <div className="flex items-baseline gap-2">
@@ -684,7 +727,25 @@ function Tanks({ fleet, containers }: { fleet: FleetState; containers: Container
                     Opłata za {monthLabel(t.paidDue)} zapłacona – zbiornik zbiera na następny termin.
                   </span>
                 )}
-                {short > 0 && <span className="text-[11px] text-accent">Za planem o {zl(short)} – kolejne raty będą większe.</span>}
+                {short > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="text-accent" data-testid="cargo-tank-catchup">
+                      Za planem o {zl(short)} – kolejne raty będą większe
+                      {c ? ` (rata wyrównawcza ${zl(sinkingInstallment(c, months > 0 ? addMonths(fleet.month, 1) : fleet.month, t.amount))}/mies. zamiast nominalnej ${zl(monthlyShare(c))}/mies.)` : ''}.
+                    </span>
+                    {canFill && (
+                      <button
+                        type="button"
+                        className="text-accent hover:underline"
+                        onClick={() => setInitialTank(t.containerId, t.name, preStart)}
+                        title="Przeznacz część obecnych osłon na stan początkowy tego zbiornika (za miesiące cyklu przed startem budżetu)"
+                        data-testid="cargo-tank-fill"
+                      >
+                        Wyrównaj ze startu ({zl(preStart)} z osłon)
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}

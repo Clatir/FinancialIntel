@@ -41,6 +41,8 @@ export interface WizardState {
   hull: number | null
   /** The goals' money at the start (null = the docking order's proposal – N7). */
   goals: Record<string, number> | null
+  /** Initial money in periodic cargo tanks at the start (N-PC-7), keyed by container id or chosen proposal key. */
+  tanks: Record<string, number> | null
   shipName: string
   orders: Orders | null
   shortcut: string
@@ -59,6 +61,7 @@ const initial = (): WizardState => ({
   cargo: {},
   hull: null,
   goals: null,
+  tanks: null,
   shipName: '',
   orders: null,
   shortcut: DEFAULT_QUICK_SHORTCUT,
@@ -107,7 +110,7 @@ export function cancelWizard(): void {
  * settings (the ship, the layers, the orders, the start and its split), this month's plan, the chosen containers, the
  * shortcut and the start with Windows (D64: the wizard asks about it).
  */
-export async function finishWizard(o: { salary: number; hull: number; goals: Record<string, number>; envelopes: Record<string, number> }): Promise<boolean> {
+export async function finishWizard(o: { salary: number; hull: number; goals: Record<string, number>; tanks?: Record<string, number>; envelopes: Record<string, number> }): Promise<boolean> {
   const s = useData.getState()
   if (!s.fi || s.status?.readOnly || s.switching) {
     toast('Folder jest tylko do odczytu – budżetu nie można uruchomić.', 'error')
@@ -125,6 +128,8 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
     return false
   }
   for (const [accountId, now] of Object.entries(w.balances)) if (now != null) setOpening(accountId, openingFromNow(accountId, now, today, txs), today)
+  const initialTanks: Record<string, number> = {}
+  for (const [k, v] of Object.entries(o.tanks ?? {})) if (v > 0 && s.records.containers[k]) initialTanks[k] = v
   updateSettings((f) => ({
     ...f,
     settings: {
@@ -132,12 +137,41 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
       shipName: w.shipName.trim() || f.settings.shipName,
       layers: { ...f.settings.layers, shieldSalaries: w.shieldSalaries, hullMonths: w.hullMonths, assumedCosts: w.assumedCosts },
       orders: w.orders ?? f.settings.orders,
-      budget: { start: today, initial: { shields: 0, hull: o.hull, goals: Object.fromEntries(Object.entries(o.goals).filter(([, v]) => v > 0)) } }
+      household:
+        f.settings.household.since === undefined && f.settings.household.members.some((m) => m.opening.owed > 0 || m.opening.deposit > 0)
+          ? { ...f.settings.household, since: today }
+          : f.settings.household,
+      budget: {
+        start: today,
+        initial: {
+          shields: 0,
+          hull: o.hull,
+          goals: Object.fromEntries(Object.entries(o.goals).filter(([, v]) => v > 0)),
+          ...(Object.keys(initialTanks).length ? { tanks: { ...initialTanks } } : {})
+        }
+      }
     }
   }))
   editPlan(month, (p) => ({ ...p, salary: o.salary, envelopes: { ...o.envelopes } }))
   // After the start: a container links this month's payments of its counterparty (the cargo, not an envelope).
-  for (const p of Object.values(w.cargo)) addContainer(draftFromPayment(p))
+  let addedProposalTanks = false
+  for (const p of Object.values(w.cargo)) {
+    const id = addContainer(draftFromPayment(p))
+    const tank = o.tanks?.[p.key] ?? 0
+    if (id && tank > 0) {
+      initialTanks[id] = tank
+      addedProposalTanks = true
+    }
+  }
+  if (addedProposalTanks) {
+    updateSettings((f) => ({
+      ...f,
+      settings: {
+        ...f.settings,
+        budget: { ...f.settings.budget, initial: f.settings.budget.initial ? { ...f.settings.budget.initial, tanks: { ...initialTanks } } : null }
+      }
+    }))
+  }
   await setMachinePrefs({ quickShortcut: w.shortcut })
   try {
     // The closing to the tray stays this computer's choice (N100): the wizard asks only about the start with Windows.

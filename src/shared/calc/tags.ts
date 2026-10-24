@@ -182,3 +182,18 @@ export function lastTag(transactions: readonly Transaction[], today: string): st
 
 /** A tag's spending against its goal (F17): „wydano 4 320 z 5 000 zł celu” – the share spent (0–∞). */
 export const tagGoalShare = (spent: number, target: number): number | null => (target > 0 ? spent / target : null)
+
+/** The first tag of `tags` mapped to a goal in `tagGoals` (N-PC-5); null when none. */
+export function tagGoalMatch(
+  tags: readonly string[] | undefined,
+  tagGoals: Readonly<Record<string, string>> | undefined,
+  usable?: (goalId: string) => boolean
+): { tag: string; goalId: string } | null {
+  if (!tags?.length || !tagGoals) return null
+  for (const raw of tags) {
+    const label = tagLabel(raw)
+    const id = tagGoals[tagKey(label)]
+    if (label && id && (!usable || usable(id))) return { tag: label, goalId: id }
+  }
+  return null
+}

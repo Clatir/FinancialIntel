@@ -12,7 +12,7 @@ import { Empty, Panel, cx } from '../../components/ui'
 import { monthLabel, plDate, plural } from '../../lib/format'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
-import { setTagGoal, showTag, useTagSummaries } from '../tags/state'
+import { linkTagOperationsToGoal, setTagGoal, showTag, unlinkedTagExpenses, useTagSummaries } from '../tags/state'
 
 const zl = (g: number) => `${plnText(g)} zł`
 const NO_GOALS: Record<string, string> = {}
@@ -78,9 +78,12 @@ export function ExpeditionsPanel() {
 /** A tag's card: by category, by month, its goal, its operations. */
 function ExpeditionCard({ s, label }: { s: TagSummary; label: (id: string | null) => string }) {
   const goals = useRecordList('goals')
+  const transactions = useRecordList('transactions')
   const tagGoals = useData((x) => x.fi?.settings.intel.tagGoals ?? NO_GOALS)
   const readOnly = useFolderLocked()
   const goalId = tagGoals[tagKey(s.label)] ?? ''
+  const goal = goals.find((g) => g.id === goalId) ?? null
+  const unlinked = goalId ? unlinkedTagExpenses(s.label, transactions) : []
   const byCategory = [...s.byCategory].filter(([, v]) => v).sort((a, b) => b[1] - a[1])
   const byMonth = [...s.byMonth].filter(([, v]) => v).sort((a, b) => a[0].localeCompare(b[0]))
   const max = Math.max(1, ...byCategory.map(([, v]) => Math.abs(v)))
@@ -122,6 +125,18 @@ function ExpeditionCard({ s, label }: { s: TagSummary; label: (id: string | null
         <button type="button" className="btn h-[24px]" onClick={() => showTag(s.label)} data-testid="intel-expedition-operations">
           Pokaż w Operacjach
         </button>
+        {goal && unlinked.length > 0 && (
+          <button
+            type="button"
+            className="btn h-[24px]"
+            disabled={readOnly}
+            onClick={() => linkTagOperationsToGoal(s.label, goal.id, goal.name)}
+            title="Ustaw ten cel w polu „Z celu” operacji tej wyprawy – ich koszt zejdzie ze środków celu zamiast z energii i kopert"
+            data-testid="intel-expedition-link-goal"
+          >
+            Rozlicz z celu ({unlinked.length})
+          </button>
+        )}
       </div>
     </div>
   )

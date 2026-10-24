@@ -6,11 +6,11 @@ import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
 import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
 import { linkRepayments, withNamed, type CoverFields } from '@shared/calc/repayments'
-import { balanceOf } from '@shared/calc/household'
-import { inflowOf, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
+import { balanceOf, memberName } from '@shared/calc/household'
+import { CASH_ACCOUNT_ID, inflowOf, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
-import { canWrite, updateRecord, updateSettings, useData, writesInBackground } from '../../store/data'
+import { addRecord, canWrite, deleteRecords, updateRecord, updateSettings, useData, writesInBackground } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
 import { plDate } from '../../lib/format'
@@ -45,7 +45,7 @@ export function sureCoversOf(t: Transaction): CoverFields | null {
 export function assignRepayment(paymentId: string, purchaseId: string, label: string): boolean {
   const before = useData.getState().records.transactions[paymentId]?.record
   if (!before) return false
-  const was = { covers: before.covers, coversOpening: before.coversOpening }
+  const was = { covers: before.covers, coversOpening: before.coversOpening, coversOpeningMembers: before.coversOpeningMembers }
   const ok = updateRecord('transactions', paymentId, (r) => ({ ...r, ...withNamed(r, purchaseId, true) }))
   if (ok)
     toast(`Zwrot przypisany: ${label}.`, 'success', 5000, {
@@ -53,6 +53,48 @@ export function assignRepayment(paymentId: string, purchaseId: string, label: st
       run: () => void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
     })
   return ok
+}
+
+/**
+ * A purchase financed by a household member paid back in cash (N-PC-11): a cash repayment (`CASH_ACCOUNT_ID`) of what
+ * they still owe for this purchase (`amount`), linked to it (`covers: [purchase.id]`), with „Cofnij”.
+ */
+export function repayInCash(purchase: Pick<Transaction, 'id' | 'date' | 'counterparty'>, memberId: string, amount: number): string | null {
+  if (amount <= 0 || !canWrite()) return null
+  const fi = useData.getState().fi
+  if (!fi) return null
+  const who = memberName(memberId, fi.settings.household.members)
+  const cashAcc = fi.settings.accounts.find((a) => a.kind === 'cash' && !a.archived) ?? fi.settings.accounts.find((a) => a.id === CASH_ACCOUNT_ID)
+  const accountId = cashAcc?.id ?? CASH_ACCOUNT_ID
+  if (cashAcc?.archived) {
+    updateSettings((f) => ({
+      ...f,
+      settings: { ...f.settings, accounts: f.settings.accounts.map((a) => (a.id === cashAcc.id ? { ...a, archived: false } : a)) }
+    }))
+  }
+  const now = new Date().toISOString()
+  const { date, time } = warsawNow()
+  const record = transactionSchema.parse({
+    schemaVersion: SCHEMA_VERSION,
+    id: newId(),
+    createdAt: now,
+    updatedAt: now,
+    date,
+    time,
+    accountId,
+    kind: 'income',
+    amount,
+    memberId,
+    counterparty: who,
+    title: `Zwrot gotówką: ${purchase.counterparty || 'zakup'}`,
+    covers: [purchase.id]
+  })
+  if (!addRecord('transactions', record)) return null
+  toast(`Oddane gotówką (${who}): ${formatPln(amount)} zł.`, 'success', 6000, {
+    label: 'Cofnij',
+    run: () => void deleteRecords('transactions', [record.id])
+  })
+  return record.id
 }
 
 /** A name of the bank („KOWALSKA ANNA MARIA”) as a member's first name: its first word, capitalized („Kowalska”). */

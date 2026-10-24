@@ -7,6 +7,7 @@ import { newId } from '@shared/ids'
 import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, showsView, viewFilter, type OperationsFilter } from '@shared/operationsView'
 import type { BrandAliases } from '@shared/import/aliases'
 import { shareOf, withShare } from '@shared/calc/share'
+import { stripDeletedCovers } from '@shared/calc/repayments'
 import { deepEqual } from '@shared/merge'
 import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type ImportRule, type OperationView, type Share, type Transaction, type TxKind } from '@shared/schema'
 import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateSettings, useData } from '../../store/data'
@@ -328,14 +329,33 @@ export function newOperation(over: Partial<Transaction> = {}): string {
 
 export async function deleteOperation(t: Transaction, label: string): Promise<void> {
   if (useOperationsUi.getState().selectedId === t.id) useOperationsUi.setState({ selectedId: null })
+  const state = useData.getState()
   // Its dockings go with it (B15): the ICTTJ payout docked on it docks again – with another operation, or Portfel XTB;
-  // „Cofnij” brings them back too.
-  const dockings = Object.values(useData.getState().records.dockings ?? {})
+  // „Cofnij” brings them back too, along with any `covers` links from repayments (N-PC-14).
+  const dockings = Object.values(state.records.dockings ?? {})
     .map((e) => e.record)
     .filter((d) => d.transactionId === t.id)
     .map((d) => d.id)
-  const ok = await deleteWithUndo('transactions', t.id, label, `Usunięto: ${label}.`, undefined, dockings.length ? () => restoreDeleted('dockings', dockings) : undefined)
-  if (ok && dockings.length) await deleteRecords('dockings', dockings)
+  const stripped = stripDeletedCovers(listOf(state.records.transactions), new Set([t.id]))
+  const undoMore =
+    dockings.length || stripped.length
+      ? async () => {
+          if (dockings.length) await restoreDeleted('dockings', dockings)
+          if (stripped.length) {
+            const now = useData.getState().records.transactions
+            const back = stripped.flatMap(({ before, after }) => {
+              const cur = now[before.id]?.record
+              return cur && deepEqual(cur.covers, after.covers) ? [{ ...cur, covers: before.covers }] : []
+            })
+            if (back.length) replaceRecords('transactions', back)
+          }
+        }
+      : undefined
+  const ok = await deleteWithUndo('transactions', t.id, label, `Usunięto: ${label}.`, undefined, undoMore)
+  if (ok) {
+    if (dockings.length) await deleteRecords('dockings', dockings)
+    if (stripped.length) replaceRecords('transactions', stripped.map((s) => s.after))
+  }
 }
 
 /** One operation open in Operacje: its month, no filters hiding it (the bank's balances – F5, the rules – F22). */
@@ -475,8 +495,9 @@ export function bulkEffect(plan: BulkPlan): Effect | null {
   const now = fleetNow()
   if (!input || !now || !plan.before.length) return null
   const gone = new Set(plan.change.kind === 'delete' ? plan.before.map((t) => t.id) : [])
+  const stripped = gone.size ? new Map(stripDeletedCovers(input.transactions, gone).map((s) => [s.before.id, s.after])) : null
   const changed = new Map(plan.after.map((t) => [t.id, t]))
-  const transactions = input.transactions.flatMap((t) => (gone.has(t.id) ? [] : [changed.get(t.id) ?? t]))
+  const transactions = input.transactions.flatMap((t) => (gone.has(t.id) ? [] : [changed.get(t.id) ?? stripped?.get(t.id) ?? t]))
   const dockings = (input.dockings ?? []).filter((d) => !gone.has(d.transactionId))
   return effectOf(now, computeFleet({ ...input, transactions, dockings }))
 }
@@ -498,16 +519,29 @@ export async function applyBulk(plan: BulkPlan, what = ''): Promise<void> {
   if (plan.change.kind === 'delete') {
     const ids = plan.before.map((t) => t.id)
     if (ids.includes(useOperationsUi.getState().selectedId ?? '')) useOperationsUi.setState({ selectedId: null })
-    // Their dockings go with them (B15) and come back with them – of the operations the disk took off only.
-    const all = listOf(useData.getState().records.dockings)
+    // Their dockings and `covers` references go with them (B15, N-PC-14) and come back with them – of the operations the disk took off only.
+    const state = useData.getState()
+    const all = listOf(state.records.dockings)
+    const allTxs = listOf(state.records.transactions)
     let dockings: string[] = []
+    let stripped: Array<{ before: Transaction; after: Transaction }> = []
     const deleted = new Set(
       await deleteManyWithUndo('transactions', ids, 'operacje', (k) => `Usunięto ${k} ${plural(k, 'operację', 'operacje', 'operacji')}${tail}.`, () => {
         if (dockings.length) void restoreDeleted('dockings', dockings)
+        if (stripped.length) {
+          const now = useData.getState().records.transactions
+          const back = stripped.flatMap(({ before, after }) => {
+            const cur = now[before.id]?.record
+            return cur && deepEqual(cur.covers, after.covers) ? [{ ...cur, covers: before.covers }] : []
+          })
+          if (back.length) replaceRecords('transactions', back)
+        }
       })
     )
     dockings = all.filter((d) => deleted.has(d.transactionId)).map((d) => d.id)
     if (dockings.length) await deleteRecords('dockings', dockings)
+    stripped = stripDeletedCovers(allTxs, deleted)
+    if (stripped.length) replaceRecords('transactions', stripped.map((s) => s.after))
     return
   }
   if (!replaceRecords('transactions', plan.after)) return

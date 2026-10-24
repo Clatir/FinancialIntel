@@ -29,6 +29,8 @@ export interface NewLoan {
   firstDue: string
   /** The money leaves (given) or comes (taken) now: its operation on the account. */
   withOperation: boolean
+  /** A taken loan's installments added as a container in the cargo hold (default true; false = repaid from shields, N-PC-17). */
+  withContainer?: boolean
 }
 
 const stamp = () => {
@@ -64,8 +66,8 @@ export function addLoan(o: NewLoan): Loan {
         loanId: loan.id
       })
     )
-  // Own installments are a container of the cargo hold for the time of the repayment (spec, D72).
-  if (o.direction === 'taken') {
+  // Own installments are a container of the cargo hold for the time of the repayment (spec, D72; optional in N-PC-17).
+  if (o.direction === 'taken' && (o.withContainer ?? true)) {
     const first = loan.schedule[0]
     const last = loan.schedule.at(-1)
     if (first && last)
@@ -93,14 +95,58 @@ export function addLoan(o: NewLoan): Loan {
   return loan
 }
 
-/** A repayment from the borrower (given) or an own installment (taken – paid as the cargo's container). */
-export function recordPayment(s: LoanState, amount: number, date: string): Transaction | null {
+/** Create or restore a cargo container for a taken loan's installments so repayments come from monthly salary (N-PC-17). */
+export function ensureLoanContainer(s: LoanState): Container | null {
+  if (!canWrite() || s.loan.direction !== 'taken') return null
+  const fi = useData.getState()
+  const existing = Object.values(fi.records.containers)
+    .map((e) => e.record)
+    .find((c) => c.loanId === s.loan.id)
+  if (existing && !existing.archived) return existing
+  if (existing && existing.archived) {
+    patchContainer(existing.id, { archived: false, archivedAt: null })
+    toast(`Kontener „${existing.name}” przywrócony do Ładowni.`, 'success', 5000, {
+      label: 'Cofnij',
+      run: () => patchContainer(existing.id, { archived: true, archivedAt: existing.archivedAt })
+    })
+    return useData.getState().records.containers[existing.id]?.record ?? existing
+  }
+  const first = s.next ?? s.loan.schedule[0]
+  const last = s.left.at(-1) ?? s.loan.schedule.at(-1) ?? first
+  const dueDate = first?.date ?? s.loan.date
+  const c = containerSchema.parse({
+    ...stamp(),
+    id: newId(),
+    name: `Rata: ${s.loan.name}`.slice(0, 80),
+    type: 'installment',
+    amount: first?.amount ?? s.open,
+    cycleMonths: 1,
+    dueMonth: dueDate.slice(0, 7),
+    dueDay: Number(dueDate.slice(8, 10)),
+    accountId: s.loan.accountId ?? fi.fi?.settings.accounts[0]?.id ?? null,
+    counterparty: s.loan.counterparty,
+    from: dueDate.slice(0, 7),
+    until: (last?.date ?? dueDate).slice(0, 7),
+    loanId: s.loan.id
+  })
+  addRecord('containers', c)
+  toast(`Utworzono kontener „${c.name}” w Ładowni – raty zejdą z pensji.`, 'success', 5000, {
+    label: 'Cofnij',
+    run: () => deleteOrSay('containers', c.id)
+  })
+  return c
+}
+
+/** A repayment from the borrower (given) or an own installment (taken – paid as the cargo's container, or from shields when `fromShields` is true). */
+export function recordPayment(s: LoanState, amount: number, date: string, opts: { fromShields?: boolean } = {}): Transaction | null {
   if (!canWrite()) return null
   const fi = useData.getState()
   const loan = s.loan
-  const container = Object.values(fi.records.containers)
-    .map((e) => e.record)
-    .find((c) => c.loanId === loan.id && !c.archived)
+  const container = opts.fromShields
+    ? undefined
+    : Object.values(fi.records.containers)
+        .map((e) => e.record)
+        .find((c) => c.loanId === loan.id && !c.archived)
   const accountId = loan.accountId ?? fi.fi?.settings.accounts[0]?.id
   if (!accountId) return null
   const taken = loan.direction === 'taken'

@@ -9,6 +9,7 @@ import type { Container, Transaction } from '../schema/records'
 import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf } from './dates'
 import { activeIn, amountIn, cyclePosition, type FleetState } from './fleet'
 import { OVERDUE_DAYS } from './loans'
+import { partsOf } from './operations'
 
 /** A payment this many days before its due is that due's (a rent paid at the month's end for the next one). */
 export const EARLY_DAYS = 14
@@ -74,11 +75,21 @@ export function paymentsIndex(transactions: readonly Transaction[]): PaymentsInd
   index = { byContainer: new Map(), lastBank: new Map() }
   for (const t of transactions) {
     if (t.bank && t.date > (index.lastBank.get(t.accountId) ?? '')) index.lastBank.set(t.accountId, t.date)
-    if (!t.containerId || t.amount >= 0) continue
-    const p: Linked = { id: t.id, date: t.date, amount: -t.amount, accountId: t.accountId }
-    const list = index.byContainer.get(t.containerId)
-    if (list) list.push(p)
-    else index.byContainer.set(t.containerId, [p])
+    if (t.containerId) {
+      if (t.amount >= 0) continue
+      const p: Linked = { id: t.id, date: t.date, amount: -t.amount, accountId: t.accountId }
+      const list = index.byContainer.get(t.containerId)
+      if (list) list.push(p)
+      else index.byContainer.set(t.containerId, [p])
+    } else if (t.splits.length > 0 && t.kind === 'expense') {
+      for (const part of partsOf(t)) {
+        if (!part.containerId || part.amount >= 0 || part.refundable) continue
+        const p: Linked = { id: t.id, date: t.date, amount: -part.amount, accountId: t.accountId }
+        const list = index.byContainer.get(part.containerId)
+        if (list) list.push(p)
+        else index.byContainer.set(part.containerId, [p])
+      }
+    }
   }
   for (const list of index.byContainer.values()) list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))
   indexes.set(transactions, index)

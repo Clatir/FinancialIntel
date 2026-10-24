@@ -36,9 +36,15 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     // A path under a file is missing too; a folder that cannot be read now (a loop of links here, a drive not ready
     // on Windows) is unavailable – never „missing”, which could get new data (B53).
     expect(await DataStore.inspect(join(dir, 'inny', 'zakupy.txt', 'pod'))).toBe('missing')
-    await fs.symlink(join(dir, 'petla-b'), join(dir, 'petla-a'))
-    await fs.symlink(join(dir, 'petla-a'), join(dir, 'petla-b'))
-    expect(await DataStore.inspect(join(dir, 'petla-a'))).toBe('unavailable')
+    try {
+      await fs.symlink(join(dir, 'petla-b'), join(dir, 'petla-a'))
+      await fs.symlink(join(dir, 'petla-a'), join(dir, 'petla-b'))
+      expect(await DataStore.inspect(join(dir, 'petla-a'))).toBe('unavailable')
+    } catch (e: any) {
+      if (process.platform === 'win32' && e?.code === 'EPERM') {
+        /* Windows without Developer Mode / SeCreateSymbolicLinkPrivilege fails to create symlinks */
+      } else throw e
+    }
     const store = await freshStore()
     await expect(DataStore.initialize(store.root, createDefaultSettings())).rejects.toThrow(/fi\.json/)
     await expect(new DataStore(join(dir, 'inny'), { machineName: 'X' }).open()).rejects.toThrow(/fi\.json/)

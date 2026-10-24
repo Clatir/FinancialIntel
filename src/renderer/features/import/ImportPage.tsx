@@ -19,7 +19,7 @@ import { Badge, Panel, ShowMore, cx } from '../../components/ui'
 import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
-import { DecisionFields, IMPORT_SHARE_MODES } from './DecisionFields'
+import { DecisionFields, IMPORT_SHARE_MODES, IncomeSharesEditor } from './DecisionFields'
 import { DuplicatesNote, DuplicatesPanel } from './DuplicatesPanel'
 import { useLatestImport } from './batches'
 import { BankTelemetry } from './BankTelemetry'
@@ -490,7 +490,11 @@ function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | 
     return who ? `${title ? who.charAt(0).toUpperCase() + who.slice(1) : who} · ${cat}` : cat
   }
   const text = (() => {
-    if (c.kind === 'income') return c.household ? `od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'
+    if (c.kind === 'income') {
+      const shares = c.household ? (c.shares ?? []).filter((s) => s.amount > 0) : []
+      const via = shares.length ? ` (w tym za: ${shares.map((s) => `${memberName(s.memberId, members)} ${plnText(s.amount)} zł`).join(', ')})` : ''
+      return c.household ? `od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}${via}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'
+    }
     if (c.kind === 'transfer') {
       // To / from another account of the budget (F10): its name.
       const account = c.counterAccountId ? (useData.getState().fi?.settings.accounts.find((a) => a.id === c.counterAccountId)?.name ?? 'konto spoza listy') : null
@@ -545,12 +549,15 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
   const mine = useImport((s) => s.choices.rows[p.key])
   const out = useImport((s) => !!s.choices.skip[p.key])
   const ticked = useImport((s) => !!s.selected.rows[p.key])
+  const fileAccount = useImport((s) => s.accountId)
   const cats = useCategories()
   const members = useMembers()
+  const accounts = useAccounts()
   const loans = useRecordList('loans')
   const c = mine ?? choice
   // An operation's own decision of another kind than its group's (N87): said, with the way back to the group's.
-  const otherKind = !!mine && (mine.kind !== 'expense' || choice.kind !== 'expense')
+  const otherKind = !!mine && mine.kind !== choice.kind
+  const otherAccounts = accounts.filter((a) => a.id !== fileAccount && (!a.archived || a.id === c.counterAccountId))
   return (
     <div className={cx('grid grid-cols-[18px_48px_minmax(0,1fr)_96px_200px_64px] items-center gap-2 py-[1px] text-[11.5px]', out && 'opacity-50')} data-testid="import-row">
       <input type="checkbox" checked={ticked} onChange={(e) => selectImport({ rows: [p.key] }, e.currentTarget.checked)} aria-label="Zaznacz operację" data-testid="import-row-select" />
@@ -576,6 +583,31 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
           // The empty choice is what it does (B98): „bez kategorii” when the group has one, the group's own otherwise.
           emptyLabel={mine || choice.categoryId ? '— bez kategorii —' : '(jak grupa)'}
           onChange={(categoryId) => chooseRow(p.key, categoryId === choice.categoryId ? null : { ...c, categoryId })}
+        />
+      ) : c.kind === 'transfer' && otherAccounts.length > 0 ? (
+        <select
+          className={cx('input h-[22px] py-0 text-[11px]', mine && 'border-accent/60')}
+          value={c.counterAccountId ?? ''}
+          onChange={(e) => {
+            const counterAccountId = e.currentTarget.value || null
+            chooseRow(p.key, counterAccountId === choice.counterAccountId ? null : { ...c, counterAccountId })
+          }}
+          aria-label="Konto przelewu własnego"
+          data-testid="import-row-counter-account"
+        >
+          <option value="">— konto spoza budżetu —</option>
+          {otherAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {p.row.amount < 0 ? '→' : '←'} {a.name}
+            </option>
+          ))}
+        </select>
+      ) : c.kind === 'income' && c.household && members.length > 1 ? (
+        <IncomeSharesEditor
+          choice={c}
+          members={members}
+          onChange={(next) => chooseRow(p.key, sameChoice(next, choice) ? null : next)}
+          testId="import-row"
         />
       ) : (
         <span />

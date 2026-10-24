@@ -17,6 +17,7 @@ import {
   type FleetState
 } from '@shared/calc/fleet'
 import { addMonths } from '@shared/calc/dates'
+import { transferGoal } from '@shared/calc/goals'
 import { lootApplied } from '@shared/calc/plan'
 import { costOf, partsOf, splitEvenly } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
@@ -603,5 +604,54 @@ describe('kolejność zdarzeń silnika (W27: bez kluczy tekstowych, sortowanie r
     expect(costOf(changed)).toBe(zl(90))
     expect(costOf({ ...t, splits: [], refundable: false })).toBe(zl(100))
     expect(costOf({ ...t, splits: [], refundable: true })).toBe(0)
+  })
+
+  it('N-PC-6 & N-PC-16: częściowe przeniesienie środków z aktywnego celu oraz zmiana podziału łupów po 7. dniu miesiąca', () => {
+    const g2 = goalSchema.parse({ ...base(), name: 'Auto', priority: 2, target: zl(8000), archived: false })
+    const g1 = transferGoal(
+      goalSchema.parse({ ...base(), name: 'Wakacje', priority: 1, target: zl(5000), archived: false }),
+      g2.id,
+      zl(300),
+      '2026-10-15T10:00:00.000Z'
+    )
+    const s = fleet({
+      settings: settingsWith({
+        budget: {
+          start: '2026-10-01',
+          initial: { shields: zl(10000), hull: zl(10000), goals: { [g1.id]: zl(1000), [g2.id]: zl(500) }, tanks: {} }
+        }
+      }),
+      balances: [opening('2026-10-01', zl(21500))],
+      goals: [g1, g2],
+      months: [
+        plan(
+          '2026-10',
+          zl(4000),
+          { [FOOD]: zl(1500) },
+          {
+            // Decided on 12 November (after the 7 November deadline): still applies the split instead of absorbing 100% into shields.
+            loot: {
+              decidedAt: '2026-11-12T10:00:00.000Z',
+              shields: zl(1000),
+              nextMonth: zl(500),
+              goals: { [g1.id]: zl(1000) }
+            }
+          }
+        ),
+        plan('2026-11', zl(4000), { [FOOD]: zl(1500) })
+      ],
+      transactions: [tx('2026-10-10', zl(-1500), { categoryId: FOOD })],
+      now: '2026-11-15T12:00:00+01:00'
+    })
+    // g1 started at 1000, moved 300 to g2 on Oct 15 (700), then received 1000 from October loot -> 1700 zł, still active (takes: true).
+    expect(s.goals.find((x) => x.id === g1.id)).toMatchObject({ amount: zl(1700), takes: true })
+    expect(s.goals.find((x) => x.id === g2.id)).toMatchObject({ amount: zl(800), takes: true })
+    expect(s.log.find((e) => e.kind === 'loot' && e.ref === '2026-10')).toMatchObject({
+      moves: {
+        shields: zl(1000),
+        energy: zl(500),
+        goals: { [g1.id]: zl(1000) }
+      }
+    })
   })
 })

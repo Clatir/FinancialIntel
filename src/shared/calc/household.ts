@@ -266,7 +266,7 @@ const flowOf = (memberId: string): MemberFlow => ({ memberId, fromDeposit: 0, le
 function repay(
   st: State,
   v: number,
-  t: Pick<Transaction, 'id' | 'date' | 'covers' | 'coversOpening'>,
+  t: Pick<Transaction, 'id' | 'date' | 'covers' | 'coversOpening' | 'coversOpeningMembers'>,
   explicit: boolean,
   f: MemberFlow,
   purchase: (txId: string) => PurchaseState | undefined,
@@ -296,7 +296,8 @@ function repay(
     }
   }
   let futureBudget = v
-  if (t.coversOpening)
+  const coversMemberOpening = t.coversOpeningMembers?.length ? t.coversOpeningMembers.includes(f.memberId) : !!t.coversOpening
+  if (coversMemberOpening)
     for (const item of st.queue)
       if (rest > 0 && isOpeningItem(item.txId)) {
         const before = rest

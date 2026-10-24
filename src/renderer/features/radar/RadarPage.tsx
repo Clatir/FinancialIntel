@@ -27,7 +27,7 @@ import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName } from '@shared/calc/household'
 import { openOperation, openRefundables } from '../operations/state'
 import { closeReturn, useReturns } from '../sensors/state'
-import { addLoan, closeLoan, deleteLoan, planTransfer, recordPayment, type NewLoan } from './actions'
+import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, type NewLoan } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 import { useFocusRecord } from '../../components/focus'
 import { BuoysPanel, NewBuoyPanel } from './Buoys'
@@ -323,9 +323,11 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
   const newer = useEntryNewer('loans', s.loan.id)
   const readOnly = folderLocked || newer
   const taken = s.loan.direction === 'taken'
+  const hasContainer = useData((st) => taken && Object.values(st.records.containers).some((e) => e.record.loanId === s.loan.id && !e.record.archived))
   const [paying, setPaying] = useState(false)
   const [amount, setAmount] = useState<number | null>(s.next?.amount ?? s.open)
   const [date, setDate] = useState(today)
+  const [fromShields, setFromShields] = useState(false)
   return (
     <div className="flex flex-col gap-1 border-b border-line/60 py-1.5 last:border-b-0" data-testid="loan-row" data-name={s.loan.name} data-focus={`loan:${s.loan.id}`}>
       <div className="flex items-baseline gap-2">
@@ -347,12 +349,24 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
         </span>
         {!readOnly && (
           <>
+            {taken && !hasContainer && (
+              <button
+                type="button"
+                className="text-accent hover:underline"
+                onClick={() => ensureLoanContainer(s)}
+                title="Utwórz kontener raty w Ładowni, żeby spłacać pożyczkę z bieżącej pensji"
+                data-testid="loan-create-container"
+              >
+                do Ładowni
+              </button>
+            )}
             <button
               className="text-accent hover:underline"
               onClick={() => {
                 // What is due now (the next installment's rest, else the whole open amount), today.
                 setAmount(s.next?.amount ?? s.open)
                 setDate(today)
+                setFromShields(false)
                 setPaying((v) => !v)
               }}
               data-testid="loan-pay-open"
@@ -371,14 +385,26 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
       </div>
       <NewerNote show={newer} />
       {paying && !readOnly && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <AmountField className="h-[24px] w-[110px]" value={amount} onChange={setAmount} aria-label="Kwota spłaty" data-testid="loan-pay-amount" />
           <DateField className="h-[24px] w-[100px]" value={date} onChange={setDate} aria-label="Data spłaty" />
+          {taken && hasContainer && (
+            <select
+              className="input h-[24px] py-0 text-[11.5px]"
+              value={fromShields ? 'shields' : 'cargo'}
+              onChange={(e) => setFromShields(e.currentTarget.value === 'shields')}
+              aria-label="Źródło spłaty"
+              data-testid="loan-pay-source"
+            >
+              <option value="cargo">z pensji (Ładownia)</option>
+              <option value="shields">z osłon (nadpłata)</option>
+            </select>
+          )}
           <button
             className="btn btn-accent h-[24px]"
             onClick={() => {
               if (!amount || amount <= 0) return toast('Podaj kwotę.', 'error')
-              if (recordPayment(s, amount, date)) setPaying(false)
+              if (recordPayment(s, amount, date, { fromShields })) setPaying(false)
             }}
             data-testid="loan-pay"
           >
@@ -408,7 +434,8 @@ function NewLoanPanel({ today }: { today: string }) {
     accountId: accounts?.find((a) => !a.archived)?.id ?? MBANK_ACCOUNT_ID,
     installments: 1,
     firstDue: sameDayNextMonth(today),
-    withOperation: true
+    withOperation: true,
+    withContainer: true
   })
   // Kept while another screen is looked at (N36).
   const [o, setO, clearO] = useDraft<NewLoan>('radar:newLoan', blank)
@@ -464,7 +491,15 @@ function NewLoanPanel({ today }: { today: string }) {
           </div>
         </Field>
         <Toggle checked={o.withOperation} onChange={(withOperation) => set({ withOperation })} label={taken ? 'Pieniądze już na koncie (operacja wpływu)' : 'Pieniądze już przelane (operacja wypływu z osłon)'} />
-        {taken && <p className="text-[11px] text-dim">Raty trafią do Ładowni jako kontener na czas spłaty; zasięg liczy osłony pomniejszone o dług.</p>}
+        {taken && (
+          <Toggle
+            checked={o.withContainer ?? true}
+            onChange={(withContainer) => set({ withContainer })}
+            label="Raty jako kontener w Ładowni (spłata z pensji; wyłączone = spłata z osłon)"
+            data-testid="loan-with-container"
+          />
+        )}
+        {taken && <p className="text-[11px] text-dim">{(o.withContainer ?? true) ? 'Raty trafią do Ładowni jako kontener na czas spłaty; zasięg liczy osłony pomniejszone o dług.' : 'Spłaty pożyczki będą schodzić z osłon; zasięg liczy osłony pomniejszone o dług.'}</p>}
         <button className="btn btn-accent h-[26px] self-start" onClick={save} data-testid="loan-save">
           Zapisz pożyczkę
         </button>

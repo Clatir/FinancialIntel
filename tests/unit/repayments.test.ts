@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { computeFleet, householdBefore, type FleetInput } from '@shared/calc/fleet'
 import { balanceOf, purchaseOf, purchaseStatus, repaidMarks, settleHousehold, type LedgerOptions } from '@shared/calc/household'
-import { assignsOn, choicesForRepayment, coverFields, linkRepayments, matchCovers, matchReturn, names, proposeCovers, waitingForPurchase, withNamed } from '@shared/calc/repayments'
+import { assignsOn, choicesForRepayment, coverFields, linkRepayments, matchCovers, matchReturn, names, proposeCovers, stripDeletedCovers, waitingForPurchase, withNamed } from '@shared/calc/repayments'
+import { costOf, partsOf } from '@shared/calc/operations'
+import { buildImport, planImport, type ImportChoices } from '@shared/import/reconcile'
+import { categoryIndex } from '@shared/calc/operations'
+import { CASH_ACCOUNT_ID, containerSchema, goalSchema } from '@shared/schema'
 import { withKind } from '@shared/calc/kinds'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type Settings, type Transaction } from '@shared/schema'
@@ -318,5 +322,211 @@ describe('wcześniejsza wpłata finansuje późniejszy zakup (1.15.1)', () => {
     const txOf = (id: string) => (id === pay.id ? pay : id === p.id ? p : undefined)
     const waiting = waitingForPurchase(full, p, ps, txOf)
     expect(waiting).toEqual([{ txId: pay.id, date: '2026-10-05', amount: zl(100) }])
+  })
+
+  it('N-PC-9: waitingForPurchase oznacza wcześniejszą wpłatę z zamkniętego miesiąca jako fromPriorIncome i sortuje ją za nieprzypisanym zwrotem', () => {
+    const payPriorIncome = paid('2026-09-15', 100, MAMA, { advance: false })
+    const p = bought('2026-10-10', 80, MAMA)
+    // Later unassigned payment (2 values open so it is not auto-linked)
+    const p2 = bought('2026-10-11', 80, MAMA)
+    const payUnassigned = paid('2026-10-12', 80, MAMA, { advance: false })
+    const full = settleHousehold([payPriorIncome, p, p2, payUnassigned], EXPLICIT)
+    const ps = purchaseOf(full, p.id)!
+    const byId = new Map([payPriorIncome, p, p2, payUnassigned].map((x) => [x.id, x]))
+    const waiting = waitingForPurchase(full, p, ps, (id) => byId.get(id))
+    expect(waiting).toEqual([
+      { txId: payUnassigned.id, date: '2026-10-12', amount: zl(80) },
+      { txId: payPriorIncome.id, date: '2026-09-15', amount: zl(100), fromPriorIncome: true }
+    ])
+  })
+
+  it('N-PC-14: stripDeletedCovers usuwa id usuniętego zakupu z covers wpłat domowników', () => {
+    const p1 = bought('2026-10-02', 50, MAMA)
+    const p2 = bought('2026-10-05', 30, MAMA)
+    const pay = paid('2026-10-10', 80, MAMA, { covers: [p1.id, p2.id] })
+    const stripped = stripDeletedCovers([p1, p2, pay], new Set([p1.id]))
+    expect(stripped).toHaveLength(1)
+    expect(stripped[0]!.after.covers).toEqual([p2.id])
+  })
+
+  it('N-PC-13: pojedyncza pozycja podzielonego paragonu może być rozliczona z Celu lub Ładowni', () => {
+    const goalId = nextId()
+    const containerId = nextId()
+    const goal = goalSchema.parse({
+      schemaVersion: SCHEMA_VERSION,
+      id: goalId,
+      createdAt: AT,
+      updatedAt: AT,
+      name: 'Wakacje',
+      priority: 1,
+      target: zl(2000),
+      deadline: null
+    })
+    const container = containerSchema.parse({
+      schemaVersion: SCHEMA_VERSION,
+      id: containerId,
+      createdAt: AT,
+      updatedAt: AT,
+      name: 'OC auta',
+      counterparty: 'PZU',
+      amount: zl(600),
+      cycleMonths: 12,
+      dueMonth: '2026-10',
+      dueDay: 15
+    })
+    const splitReceipt = tx('2026-10-12', -zl(350), {
+      kind: 'expense',
+      categoryId: GROCERIES,
+      splits: [
+        { id: nextId(), amount: -zl(100), categoryId: GROCERIES, refundable: false, memberId: null, advance: false, note: 'Jedzenie' },
+        { id: nextId(), amount: -zl(150), categoryId: GROCERIES, refundable: false, memberId: null, advance: false, goalId, note: 'Walizka z celu' },
+        { id: nextId(), amount: -zl(100), categoryId: GROCERIES, refundable: false, memberId: null, advance: false, containerId, note: 'Rata OC' }
+      ]
+    })
+    expect(partsOf(splitReceipt).map((p) => ({ amount: p.amount, goalId: p.goalId, containerId: p.containerId }))).toEqual([
+      { amount: -zl(100), goalId: undefined, containerId: undefined },
+      { amount: -zl(150), goalId, containerId: undefined },
+      { amount: -zl(100), goalId: undefined, containerId }
+    ])
+    // Only non-goal lines count in costOf (100 food + 100 container = 200 zł).
+    expect(costOf(splitReceipt)).toBe(zl(200))
+    const base = input([splitReceipt], null)
+    const fleet = computeFleet({
+      ...base,
+      settings: {
+        ...base.settings,
+        budget: {
+          ...base.settings.budget,
+          initial: { shields: zl(12640), hull: zl(15000), goals: { [goalId]: zl(500) }, tanks: { [containerId]: zl(200) } }
+        }
+      },
+      goals: [goal],
+      containers: [container]
+    })
+    // Goal decreased by 150 zł (500 -> 350), tank topped up to 600 zł for dueMonth 2026-10 and decreased by 100 zł -> 500 zł.
+    expect(fleet.goals.find((g) => g.id === goalId)?.amount).toBe(zl(350))
+    expect(fleet.tanks.find((t) => t.containerId === containerId)?.amount).toBe(zl(500))
+  })
+
+  it('N-PC-10 & N-PC-15: import obsługuje podział wpłaty domownika (shares / w tym za…) oraz dwustronny przelew własny', () => {
+    const s = settings(null)
+    const plan = planImport(
+      {
+        format: 'lista',
+        account: '12 1140 2004 0000 3002 1234 5678',
+        client: 'JAN KOWALSKI',
+        period: { from: '2026-10-01', to: '2026-10-15' },
+        skipped: [],
+        rows: [
+          {
+            line: 1,
+            date: '2026-10-10',
+            operation: 'PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY',
+            description: 'MAMA WPŁATA ZA ZAKUPY',
+            counterparty: 'MAMA',
+            title: 'Za zakupy z Tatą',
+            category: 'Wpływy - inne',
+            accountNo: '',
+            amount: zl(150),
+            balanceAfter: null,
+            pending: false
+          },
+          {
+            line: 2,
+            date: '2026-10-11',
+            operation: 'PRZELEW WŁASNY',
+            description: 'PRZELEW WŁASNY NA GOTÓWKĘ',
+            counterparty: 'JAN KOWALSKI',
+            title: 'Przelew własny',
+            category: 'Przelewy własne',
+            accountNo: '',
+            amount: -zl(200),
+            balanceAfter: null,
+            pending: false
+          }
+        ]
+      },
+      MBANK_ACCOUNT_ID,
+      [],
+      {
+        rules: [],
+        ownNames: ['JAN KOWALSKI'],
+        categories: categoryIndex(s.categories),
+        members: s.household.members
+      }
+    )
+    const incomeKey = plan.rows[0]!.key
+    const transferKey = plan.rows[1]!.key
+    const choices: ImportChoices = {
+      themes: {},
+      rememberThemes: {},
+      groups: {},
+      rows: {
+        [incomeKey]: {
+          kind: 'income',
+          categoryId: null,
+          refundable: false,
+          household: true,
+          memberId: MAMA,
+          advance: true,
+          shares: [{ memberId: TATA, amount: zl(60), advance: false }],
+          counterAccountId: null
+        },
+        [transferKey]: {
+          kind: 'transfer',
+          categoryId: null,
+          refundable: false,
+          household: false,
+          memberId: null,
+          advance: false,
+          counterAccountId: CASH_ACCOUNT_ID
+        }
+      },
+      remember: {},
+      noMerge: {},
+      removeVanished: {},
+      restoreDeleted: {},
+      skip: {},
+      moveHere: {}
+    }
+    const res = buildImport(plan, choices, {
+      now: AT,
+      makeId: nextId,
+      rules: [],
+      accounts: [MBANK_ACCOUNT_ID, CASH_ACCOUNT_ID]
+    })
+    expect(res.create).toHaveLength(2)
+    const importedIncome = res.create.find((x) => x.kind === 'income')!
+    expect(importedIncome.memberId).toBe(MAMA)
+    expect(importedIncome.splits).toMatchObject([{ memberId: TATA, amount: zl(60), advance: false }])
+    const importedTransfer = res.create.find((x) => x.kind === 'transfer')!
+    expect(importedTransfer.counterAccountId).toBe(CASH_ACCOUNT_ID)
+    expect(importedTransfer.bothSides).toBe(true)
+  })
+
+  it('N-PC-12: wpłata wieloosobowa rozlicza dług na start wskazanego domownika (coversOpeningMembers)', () => {
+    const pTata = bought('2026-10-05', 40, TATA)
+    const splitPay = tx('2026-10-10', zl(90), {
+      kind: 'income',
+      categoryId: null,
+      memberId: MAMA,
+      splits: [{ id: nextId(), amount: zl(40), categoryId: null, refundable: false, memberId: TATA, advance: false, note: '' }],
+      ...withNamed({ covers: [pTata.id], memberId: MAMA, splits: [{ memberId: TATA }] }, `opening:${MAMA}`, true)
+    })
+    expect(splitPay.coversOpeningMembers).toEqual([MAMA])
+    expect(names(splitPay, `opening:${MAMA}`)).toBe(true)
+    expect(names(splitPay, `opening:${TATA}`)).toBe(false)
+    const ledger = settleHousehold([pTata, splitPay], {
+      assignFrom: null,
+      from: '2026-10-01',
+      members: [
+        { id: MAMA, opening: { owed: zl(50), deposit: 0 } },
+        { id: TATA, opening: { owed: zl(60), deposit: 0 } }
+      ]
+    })
+    // Mama's 50 zł opening debt is repaid; Tata's 60 zł opening debt stays open because his 40 zł split covered pTata instead.
+    expect(balanceOf(ledger, MAMA).owed).toBe(0)
+    expect(balanceOf(ledger, TATA).owed).toBe(zl(60))
+    expect(purchaseOf(ledger, pTata.id)?.paid).toBe(zl(40))
   })
 })

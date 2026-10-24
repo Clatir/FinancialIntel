@@ -197,7 +197,11 @@ export function spendingByMonth(transactions: readonly Transaction[], categories
       continue
     }
     for (const p of partsOf(t)) {
-      if (p.refundable) continue
+      if (p.refundable || p.goalId) continue
+      if (p.containerId) {
+        cargo[i]! -= p.amount
+        continue
+      }
       const main = cats.mainOf(p.categoryId)
       const id = main?.id ?? '-'
       let row = byCat.get(id)
@@ -308,8 +312,8 @@ export function weekNumbers(transactions: readonly Transaction[], categories: re
   for (const t of txs) {
     if (t.kind !== 'expense' || t.goalId) continue
     for (const p of partsOf(t)) {
-      if (p.refundable) continue
-      const id = t.containerId ? 'cargo' : (cats.mainOf(p.categoryId)?.id ?? '-')
+      if (p.refundable || p.goalId) continue
+      const id = (p.containerId ?? t.containerId) ? 'cargo' : (cats.mainOf(p.categoryId)?.id ?? '-')
       byCat.set(id, (byCat.get(id) ?? 0) - p.amount)
     }
   }

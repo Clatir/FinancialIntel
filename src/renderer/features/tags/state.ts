@@ -3,12 +3,13 @@
  * expeditions' money and the tag used last – once per list of operations –, a tag's goal of the star map, a tag's
  * operations in Operacje.
  */
-import { knownTags, lastTag, tagKey, tagSummaries, type TagSummary } from '@shared/calc/tags'
+import { knownTags, lastTag, tagKey, tagLabel, tagsOf, tagSummaries, type TagSummary } from '@shared/calc/tags'
 import { categoryIndex, type CategoryIndex } from '@shared/calc/operations'
 import { noNarrowing } from '@shared/operationsView'
+import { plural } from '@shared/format'
 import type { Category, Transaction } from '@shared/schema'
-import { listOf, updateSettings, useData } from '../../store/data'
-import { navigate } from '../../store/ui'
+import { canWrite, listOf, replaceRecords, updateSettings, useData } from '../../store/data'
+import { navigate, toast } from '../../store/ui'
 import { showFilter } from '../operations/state'
 
 const knownMemo = new WeakMap<readonly Transaction[], string[]>()
@@ -67,4 +68,35 @@ export function setTagGoal(tag: string, goalId: string | null): void {
 export function showTag(tag: string): void {
   showFilter({ period: { kind: 'all' }, ...noNarrowing(), tags: [tagKey(tag)] })
   navigate({ page: 'operations' })
+}
+
+/** Whole-operation expenses carrying `tag` that have neither a goal nor a container yet (N-PC-5). */
+export function unlinkedTagExpenses(tag: string, transactions: readonly Transaction[]): Transaction[] {
+  const key = tagKey(tag)
+  if (!key) return []
+  return transactions.filter((t) => t.kind === 'expense' && !t.goalId && !t.containerId && tagsOf(t).some((x) => tagKey(x) === key))
+}
+
+/**
+ * Assigns `goalId` to the unlinked expense operations carrying `tag` (N-PC-5) so their cost comes out of the goal's
+ * money instead of the month's energy and envelopes; „Cofnij” restores their previous state.
+ */
+export function linkTagOperationsToGoal(tag: string, goalId: string, goalName: string): number {
+  if (!canWrite()) return 0
+  const targets = unlinkedTagExpenses(tag, listOf(useData.getState().records.transactions))
+  if (!targets.length) return 0
+  const ids = targets.map((t) => t.id)
+  replaceRecords(
+    'transactions',
+    targets.map((t) => ({ ...t, goalId }))
+  )
+  toast(`Rozliczono z celu „${goalName}”: ${targets.length} ${plural(targets.length, 'operacja', 'operacje', 'operacji')} wyprawy #${tagLabel(tag)}.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      const map = useData.getState().records.transactions
+      const back = ids.map((id) => map[id]?.record).filter((r): r is Transaction => !!r && r.goalId === goalId)
+      if (back.length) replaceRecords('transactions', back.map((r) => ({ ...r, goalId: null })))
+    }
+  })
+  return targets.length
 }

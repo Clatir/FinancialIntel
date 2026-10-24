@@ -380,6 +380,20 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zakup zużywa ją w pierwszej kolejności przed wolnymi zaliczkami i pożyczką z osłon, zapisując wpłatę w `PurchaseState.by`
   i otrzymując status `oddane` (lub `częściowo oddane`). W interfejsie zakupu menu „Przypisz zwrot…” oferuje wcześniejsze
   wpłaty z wolną kwotą, a edytor wpłaty oferuje późniejsze zakupy danego domownika.
+- **D95** (24.10.2026) Kompleksowy audyt funkcjonalny aplikacji na PC pod kątem spójności i ergonomii (N-PC-1 do N-PC-20):
+  20 poprawek wdrożonych w 3 pakietach (A, B, C):
+  - *Pakiet A (Dokowanie i finanse)*: N-PC-1 (częściowe dokowanie z ICTTJ), N-PC-2 (wycofanie i korekta dokowania),
+    N-PC-3 (precyzyjne kwoty zasilenia celów w dokowaniu), N-PC-4 (ochrona transakcji celów i ładowni przy zmianie kategorii/rodzaju),
+    N-PC-5 (wybór konta w szybkim wpisie), N-PC-7 (usuwanie nieużywanych kategorii w Ustawieniach).
+  - *Pakiet B (Import, domownicy i pozycje)*: N-PC-9 (wcześniejsze wpłaty z zamkniętych miesięcy w „Przypisz zwrot…”),
+    N-PC-10 (podział wpłaty od wielu domowników w regułach i imporcie), N-PC-15 (dwustronny przelew własny w imporcie),
+    N-PC-13 (cele i ładownia w pozycjach podzielonego paragonu), N-PC-14 (automatyczne oczyszczenie covers usuniętego zakupu),
+    N-PC-11 (czytelne etykiety tagów w szybkim wpisie).
+  - *Pakiet C (Wygoda, Radar i Rytuały)*: N-PC-6 (przenoszenie środków z aktywnego celu bez archiwizacji), N-PC-8 (rata
+    nominalna vs wyrównawcza w ładowni), N-PC-12 (rozliczenie długu otwarcia wybranego domownika w transakcjach wieloosobowych),
+    N-PC-16 (zmiana podziału łupów także po 7. dniu miesiąca), N-PC-17 (spłata pożyczki z planu miesiąca przez kontener ładowni),
+    N-PC-18 (domownicy i rozliczenia na start w Kreatorze), N-PC-19 (naprawa paradoksu ciszy nocnej dla wydatków planowanych),
+    N-PC-20 (wznowienie zamkniętego lub odłożonego raportu wachty wieczornej).
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -2271,3 +2285,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`unassigned`, `income`, `freeAdvance`). `features/household/Repayments.tsx`: `PurchaseLine` oblicza oddaną kwotę z `p.by`
   (`paidAmount = sum(p.by) || p.paid`), poprawnie opisując sfinansowany wydatek. Niezmiennik sumy warstw floty
   (`layersSum(state) === state.total`) zachowany każdego dnia.
+- **T313** Implementacja audytu funkcjonalnego PC (1.15.2, D95): schematy `coversOpeningMembers` w `transactionSchema`,
+  `goalId` i `containerId` w pozycjach podzielonego paragonu (`splitSchema`), obsługa transferów celów i elastycznego podziału
+  łupów (`fleet.ts`), korekta dokowania bez naruszania powiązanych transakcji ręcznych (`dock.ts`), wygaszanie ciszy nocnej
+  dla wydatków planowych lub kontenerowych (`operations.ts`) oraz wznawianie wachty wieczornej (`reopenEvening`). Pełna zgodność typów.

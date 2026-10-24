@@ -51,6 +51,7 @@ export function quickData(): QuickData | null {
     accounts,
     accountId: accounts.find((a) => a.id === last)?.id ?? accounts[0]?.id ?? '',
     energyLeft: fleet?.daily ? fleet.daily.left : null,
+    monthEnergy: fleet?.started && fleet.salary != null ? fleet.energy : null,
     envelopesLeft: Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, e.left])),
     daily: fleet?.daily ? { today: fleet.today, limit: fleet.daily.limit, spentBefore: fleet.daily.spentBefore, spentToday: fleet.daily.spentToday, days: daysInMonth(fleet.month) } : null,
     quietHours: fi.settings.orders.quietHours,

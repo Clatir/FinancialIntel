@@ -853,6 +853,8 @@ export interface Choice {
   gift?: boolean
   /** A purchase financed by several people (D83): each row's amount split so. */
   share?: Share | null
+  /** A household member's money carrying others' (D81, N-PC-10 – „w tym za…”): their parts, the rest the sender's. */
+  shares?: ReadonlyArray<{ memberId: string; amount: number; advance: boolean }>
   counterAccountId: string | null
   /** The loan of the Radar a loan's operation belongs to (B34); none = a loan without its record. */
   loanId?: string | null
@@ -917,6 +919,12 @@ export const choiceOf = (d: ImportDecision): Choice => ({
 /** The member of a choice that has one (null = the first; '' = none). */
 const memberKey = (c: Choice) => (c.refundable || c.household ? (c.memberId ?? HOUSE_MEMBER_ID) : '')
 
+const sharesKey = (xs: Choice['shares']): string =>
+  xs
+    ?.filter((x) => x.amount > 0)
+    .map((x) => `${x.memberId}=${x.amount}:${x.advance ? 'a' : 'i'}`)
+    .join(',') ?? ''
+
 export const sameChoice = (a: Choice, b: Choice): boolean =>
   a.kind === b.kind &&
   a.categoryId === b.categoryId &&
@@ -926,6 +934,7 @@ export const sameChoice = (a: Choice, b: Choice): boolean =>
   (a.household && a.advance) === (b.household && b.advance) &&
   (a.refundable && !!a.gift) === (b.refundable && !!b.gift) &&
   shareKey(a.share) === shareKey(b.share) &&
+  sharesKey(a.shares) === sharesKey(b.shares) &&
   a.counterAccountId === b.counterAccountId &&
   (a.kind === 'loan' ? (a.loanId ?? null) : null) === (b.kind === 'loan' ? (b.loanId ?? null) : null)
 
@@ -1087,6 +1096,12 @@ export function buildImport(
     const refundable = c.kind === 'expense' && c.refundable
     const household = c.kind === 'income' && !out && c.household
     const share = c.kind === 'expense' && !refundable && c.share ? c.share : null
+    const incomeSplits =
+      household && c.shares?.length
+        ? c.shares
+            .filter((x) => x.amount > 0 && x.memberId !== (c.memberId ?? HOUSE_MEMBER_ID))
+            .map((x) => ({ id: opts.makeId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, note: '' }))
+        : []
     // The rule's tags (F17 – „Netia → #ulga-internet”): when its decision stands.
     const ruleTags = planned.decision.ruleId && sameChoice(c, base) ? ruleById.get(planned.decision.ruleId)?.tags : undefined
     counts.created++
@@ -1107,7 +1122,7 @@ export function buildImport(
         memberId: refundable || household ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
         advance: household && c.advance,
         ...(refundable && c.gift ? { gift: true } : {}),
-        ...(share ? { share, splits: shareSplits({ amount: p.row.amount, categoryId: c.categoryId }, share) } : {}),
+        ...(share ? { share, splits: shareSplits({ amount: p.row.amount, categoryId: c.categoryId }, share) } : incomeSplits.length ? { splits: incomeSplits } : {}),
         counterparty: p.row.counterparty,
         title: p.row.title,
         counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null,

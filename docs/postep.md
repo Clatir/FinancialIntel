@@ -1,6 +1,7 @@
 # Financial Intel – postęp
 
-**Stan:** **1.15.1 przygotowane do wydania** (wcześniejsza wpłata domownika finansuje późniejszy zakup, D94, T312).
+**Stan:** **1.15.2 przygotowane do wydania** (audyt funkcjonalny PC – pakiety A, B, C; N-PC-1 do N-PC-20, D95, T313).
+**1.15.1 wydane** (PR #46 – wcześniejsza wpłata domownika finansuje późniejszy zakup, D94, T312).
 iPhone (D92 / D93): **1.13.0 wydane** (PR #42 – grupa iA, z `.ipa` i źródłem AltStore), **1.14.0 wydane**
 (PR #43 – grupa iB), **1.15.0 wydane** (PR #44 – grupa iC); przerwa po iC (D93) – „Przed grupą iD” niżej. 1.11.0 i
 1.12.0 wydała w tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0, decyzje
@@ -72,6 +73,8 @@ na CI. Model i thinking z górką. E0 oraz grupy B, C i D zmierzone zegarem sesj
 | 1.10.1 | Zamknięcie bez fałszywego pytania o niezapisane zmiany: zapis w rundach, zapisy w tle wstrzymane na czas zapisu (T301) | Opus 5.5 | **max** | zmierzone ok. 1,5 h (zegar sesji od decyzji do wydania, z przeglądem, 14 mutacjami, dwoma pełnymi E2E i poprawką testu na CI Windows) + ok. 0,5 h czekania na podsumowanie importu we wszystkich E2E (PR #36: dane z 15 przebiegów Windows) | 1.10.1 | ✅ D88 | ✅ wydane (PR #35; testy PR #36, #37) |
 | 1.11.0 | Opis wydatku: notatka na liście operacji, opis części paragonu, wybór widocznych kolumn listy (D89) | Opus 5.5 | **xhigh** (z górką; wystarczyłby high) | zmierzone ok. 1 h (zegar sesji od zgody do PR, z przeglądem, 11 mutacjami i pełnym E2E; plan był 1–1,5 h) | 1.11.0 | ✅ D89 | ✅ wydane (PR #38) |
 | 1.12.0 | Zwrot domownika przypisany do konkretnego wydatku (także przez pośrednika), bez „od najstarszego” | Opus 5.5 | **xhigh** (z górką; minimum high) | zmierzone ok. 1,5 h (zegar sesji od komendy do PR, z przeglądem, 26 mutacjami i dwoma pełnymi E2E; plan był 2–2,5 h) | 1.12.0 | ✅ D91 | ✅ wydane (PR #40) |
+| 1.15.1 | Wcześniejsza wpłata domownika finansuje późniejszy zakup | Opus 5.5 | **max** | zmierzone ok. 1,5 h | 1.15.1 | ✅ D94 | ✅ wydane (PR #46) |
+| 1.15.2 | Audyt funkcjonalny PC: spójność i ergonomia (pakiety A, B, C; N-PC-1 do N-PC-20) | Argon / Flash | **high** | zmierzone ok. 2,5 h | 1.15.2 | ✅ D95 | ✅ przygotowane do wydania |
 | **iA** | iPhone: Okręt w kieszeni – OneDrive przez Graph, opakowanie iOS, `.ipa` przez AltStore, układ, powiadomienia, konflikty, szybki wpis, Mostek (IP0.1–IP0.5, IP1, IP2) | Opus 5.5 | **max** | zmierzone ok. 2,5 h (zegar sesji od komendy do PR, z przeglądem, CI macOS na gałęzi i scaleniem 1.11.0 / 1.12.0; plan był 7,5–10,5 h) | 1.13.0 | ✅ D92, D93 (komenda). Do pierwszej instalacji: identyfikator aplikacji z Entra, AltServer na Windows i AltStore na iPhonie, tryb dewelopera (`docs/iphone.md`) | ✅ wydane (PR #42) |
 | **iB** | iPhone: Wachta – Operacje (lista, edycja podstawowa), część Meldunków, podgląd planu i Radaru (IP3–IP7) | Opus 5.5 | **max** | zmierzone ok. 0,5 h (zegar commitów od „Przed grupą iB” do PR, z przeglądem i E2E; plan był 2–2,5 h) | 1.14.0 | iA na telefonie: logowanie, pierwsze pobranie, szybki wpis widoczny na PC (odbiór może iść równolegle z iB) | ✅ wydane (PR #43) |
 | **iC** | iPhone: Dziennik i kurs – Operacje pełne, wszystkie Meldunki, edycja planu miesiąca i Radaru (IP11–IP14) | Opus 5.5 | **max** | zmierzone ok. 0,75 h (zegar commitów od „Przed grupą iC” do PR, z przeglądem, mutacjami i E2E; plan był 5–6,5 h) | 1.15.0 | iB scalone; uwagi z telefonu do iA / iB (jeśli są) | ✅ wydane (PR #44) |

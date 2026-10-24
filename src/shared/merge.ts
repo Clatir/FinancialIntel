@@ -290,6 +290,7 @@ const LABELS: Record<string, string> = {
   'split.goals': 'Podział dostawy – cele',
   transactionId: 'Operacja',
   correctionId: 'Korekta',
+  explained: 'Korekta wyjaśniona',
   deadline: 'Termin',
   source: 'Źródło',
   'source.ictjEntryId': 'Źródło – wpis ICTTJ',
@@ -404,6 +405,7 @@ const AMOUNT_FIELDS = [
   'settings.budget.initial.shields',
   'settings.budget.initial.hull',
   'settings.budget.initial.goals.*',
+  'settings.budget.initial.tanks.*',
   'settings.household.members.opening.owed',
   'settings.household.members.opening.deposit',
   'settings.import.rules.maxAmount'

@@ -311,7 +311,8 @@ function envelopesSpent(input: GameInput, from: string, to: string): Map<string,
   for (const t of input.transactions) {
     if (t.date < from || t.date > to || t.kind !== 'expense' || t.goalId || isCargoPayment(t, ids)) continue
     for (const p of partsOf(t)) {
-      const main = p.refundable ? null : cats.mainOf(p.categoryId)?.id
+      if (p.refundable || p.goalId || isCargoPayment(p, ids)) continue
+      const main = cats.mainOf(p.categoryId)?.id
       if (main) out.set(main, (out.get(main) ?? 0) - p.amount)
     }
   }

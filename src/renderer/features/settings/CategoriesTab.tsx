@@ -68,6 +68,11 @@ export function CategoriesTab() {
         własny limit miesięczny, nie rusza energii dnia. Usunięcie to archiwizacja: dawne operacje zachowują kategorię. Kategorie są wspólne dla wszystkich
         komputerów.
       </p>
+      {!cats.mains.some((c) => !c.archived && envelopeKind(c) === 'daily') && (
+        <p className="mb-2 text-[11.5px] text-accent" data-testid="categories-no-daily-warning">
+          Uwaga: żadna aktywna kategoria główna nie ma koperty <b>codzienna</b> – „Energia dziś” na Mostku będzie wynosić 0,00 zł, a wydatki bez kategorii dadzą przekroczenie dnia.
+        </p>
+      )}
       <div className="flex flex-col" data-testid="categories">
         {mains.map((main) => {
           const subs = cats.childrenOf(main.id)

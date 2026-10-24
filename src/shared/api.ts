@@ -467,8 +467,9 @@ export interface QuickData {
   accounts: Array<{ id: string; name: string }>
   /** The account used last on this computer. */
   accountId: string
-  /** Today's energy left (null = no plan this month) and the envelopes left. */
+  /** Today's energy left (null = no plan this month), the month's remaining energy (N-PC-2) and the envelopes left. */
   energyLeft: number | null
+  monthEnergy?: number | null
   envelopesLeft: Record<string, number>
   /**
    * Today's energy as the engine counts it (N3): the daily envelopes' limit, what they spent before today and today,

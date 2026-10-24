@@ -95,6 +95,8 @@ describe('ocena dnia (D73): naruszenia zwykłe i poważne', () => {
     expect(night.violations).toEqual([{ order: 'quiet', serious: true, amount: zl(30), ref: expect.any(String), note: 'Żabka' }])
     // A night time without its entry in the log (N10, D40): a purchase of the day written down at night – no violation.
     expect(rateDay(world({ transactions: [tx('2026-10-10', -zl(30), { time: '23:30', counterparty: 'Żabka' })] }), '2026-10-10').violations).toEqual([])
+    // N-PC-19: a night expense with a log entry that is explicitly marked as planned (impulse: 'plan') is excused.
+    expect(rateDay(world({ transactions: [tx('2026-10-10', -zl(30), { time: '23:30', counterparty: 'Apteka', logNote: 'leki na dyżurze', impulse: 'plan' })] }), '2026-10-10').violations).toEqual([])
     // Shields 6 200 zł against their target 9 300 zł: a top-up of the trading account breaks the firewall (the shields stay
     // above their minimum of 3 100 zł).
     const top = rateDay(world({ transactions: [tx('2026-10-11', -zl(1000), { kind: 'trading', categoryId: null })] }), '2026-10-11')

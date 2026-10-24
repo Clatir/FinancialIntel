@@ -222,3 +222,32 @@ export function payContainer(c: Container): string | null {
   toast(`Zapisano płatność: ${c.name} ${plnText(c.amount)} zł (dziś).`, 'success', 6000, { label: 'Cofnij', run: () => deleteOrSay('transactions', record.id) })
   return record.id
 }
+
+/**
+ * Sets the initial tank balance of a periodic container at the budget's start (`settings.budget.initial.tanks`, N-PC-7)
+ * from the shields, so a cycle that started before the budget does not inflate the remaining installments; „Cofnij”
+ * restores the previous value.
+ */
+export function setInitialTank(containerId: string, name: string, amount: number): void {
+  if (!canWrite()) return
+  const prev = useData.getState().fi?.settings.budget.initial?.tanks?.[containerId] ?? 0
+  const apply = (val: number) =>
+    updateSettings((f) => {
+      const init = f.settings.budget.initial ?? { shields: 0, hull: 0, goals: {} }
+      const tanks = { ...(init.tanks ?? {}) }
+      if (val > 0) tanks[containerId] = val
+      else delete tanks[containerId]
+      return {
+        ...f,
+        settings: {
+          ...f.settings,
+          budget: { ...f.settings.budget, initial: { ...init, ...(Object.keys(tanks).length ? { tanks } : { tanks: undefined }) } }
+        }
+      }
+    })
+  apply(amount)
+  toast(`Zbiornik „${name}” zasilony na starcie budżetu kwotą ${plnText(amount)} zł (z osłon).`, 'success', 7000, {
+    label: 'Cofnij',
+    run: () => apply(prev)
+  })
+}

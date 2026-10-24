@@ -39,6 +39,25 @@ export function snoozeEvening(): string {
   return until
 }
 
+/** Reopen today's evening report after a premature „Dziś bez wydatków” or 30-min snooze (N-PC-20). */
+export function reopenEvening(): boolean {
+  const { date: today } = warsawNow()
+  try {
+    localStorage.removeItem(SNOOZE_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+  const s = useData.getState()
+  if (s.fi?.settings.game.noSpend[today]) {
+    updateSettings((f) => {
+      const { [today]: _, ...rest } = f.settings.game.noSpend
+      return { ...f, settings: { ...f.settings, game: { ...f.settings.game, noSpend: rest } } }
+    })
+  }
+  toast('Wznowiono raport wachty dnia.', 'info', 3000)
+  return true
+}
+
 /** „Dziś bez wydatków”: today confirmed (the watch log marks it, no evening reminder); „Cofnij” takes it back. */
 export function confirmNoSpend(): boolean {
   const { date: today } = warsawNow()

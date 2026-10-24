@@ -54,6 +54,10 @@ export const splitSchema = z.looseObject({
    * and it is no cost of mine. An older version reads the line as financed (the member owes it). Absent = no.
    */
   gift: z.boolean().optional().catch(undefined),
+  /** Paid from a container of the cargo on this line alone (N-PC-13). */
+  containerId: ulidSchema.nullable().optional().catch(undefined),
+  /** Paid from a goal's money on this line alone (N-PC-13). */
+  goalId: ulidSchema.nullable().optional().catch(undefined),
   note: text,
   /** The line's own tags (1.10.0, F17) besides the operation's: one receipt for two trips. */
   tags: tagListSchema.optional().catch(undefined)
@@ -152,6 +156,8 @@ export const transactionSchema = z.looseObject({
   covers: z.array(ulidSchema).max(500).catch([]).default([]),
   /** …and the debt of the settlements' start of its member (D91: the opening balance has no operation). Absent = no. */
   coversOpening: z.boolean().optional().catch(undefined),
+  /** Per-member opening balance debts covered in a multi-member operation (N-PC-12); absent = `coversOpening` applies to all shares. */
+  coversOpeningMembers: z.array(ulidSchema).max(50).optional().catch(undefined),
   /** A split receipt (its lines replace `categoryId` / `refundable`); the lines sum to `amount`. */
   splits: z.array(splitSchema).default([]),
   /** Payee or payer as shown (shop, person). */
@@ -192,7 +198,9 @@ export const transactionSchema = z.looseObject({
    */
   awaitReturn: awaitReturnSchema.nullable().optional().catch(undefined),
   /** Tags (1.10.0, F17): the trip or the project the operation is for; its receipt's lines may add their own. */
-  tags: tagListSchema.optional().catch(undefined)
+  tags: tagListSchema.optional().catch(undefined),
+  /** A balance correction (`kind === 'correction'`) explained by the user (N-PC-1): no longer raises a yellow alarm on the bridge. */
+  explained: z.boolean().optional().catch(undefined)
 })
 export type Transaction = z.infer<typeof transactionSchema>
 

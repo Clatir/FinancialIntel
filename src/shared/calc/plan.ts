@@ -168,7 +168,7 @@ export function proposeEnvelopes(
   for (const t of transactions) {
     if (t.kind !== 'expense' || t.goalId || !inWindow.has(monthOf(t.date)) || paysContainer(t, keys, ids)) continue
     for (const p of partsOf(t)) {
-      if (p.refundable) continue
+      if (p.refundable || p.goalId || isCargoPayment(p, ids)) continue
       const main = cats.mainOf(p.categoryId)
       if (main) spent.set(main.id, (spent.get(main.id) ?? 0) - p.amount)
       else uncategorized -= p.amount
@@ -548,7 +548,11 @@ export function monthSpending(txs: readonly Transaction[], cats: ReturnType<type
       continue
     }
     for (const p of partsOf(t)) {
-      if (p.refundable) continue
+      if (p.refundable || p.goalId) continue
+      if (containerIds ? isCargoPayment(p, containerIds) : p.containerId) {
+        cargo -= p.amount
+        continue
+      }
       const main = cats.mainOf(p.categoryId)
       if (main) spent.set(main.id, (spent.get(main.id) ?? 0) - p.amount)
       else uncategorized -= p.amount
@@ -643,8 +647,8 @@ export function debriefing(
     paid: salaries.length ? sum(salaries.map((e) => e.amount)) : null,
     costs,
     ended,
-    // Never „na plus” before the month's end (N65): the rest of it may still take the energy.
-    plus: !ended ? null : energy ? energy.result >= 0 : salary != null && salary > 0 ? costs <= salary : null,
+    // Never „na plus” before the month's end (N65) nor with an unreturned energy exhaustion (N-PC-3).
+    plus: !ended ? null : energy ? energy.result >= 0 && energy.exhausted === 0 : salary != null && salary > 0 ? costs <= salary : null,
     energy,
     daily,
     envelopes,

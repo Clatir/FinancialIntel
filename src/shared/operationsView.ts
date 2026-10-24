@@ -32,7 +32,7 @@ export const MARK_LABEL: Record<OperationMark, string> = {
   awaiting: 'czeka na zwrot'
 }
 
-const waitsForCategory = (t: Transaction, p: Part): boolean => !p.categoryId && !p.refundable && (p.amount !== 0 || !t.splits.length)
+const waitsForCategory = (t: Transaction, p: Part): boolean => !p.categoryId && !p.refundable && !p.containerId && !p.goalId && (p.amount !== 0 || !t.splits.length)
 
 /**
  * An expense to categorize (the mark „bez kategorii”, the filter „bez kategorii”, F6's inbox – one meaning, N50): a line
@@ -341,8 +341,8 @@ export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterCo
   const abs = Math.abs(t.amount)
   if ((f.amountMin != null && abs < f.amountMin) || (f.amountMax != null && abs > f.amountMax)) return false
   if (f.members.length && !membersIn(t).some((m) => f.members.includes(m))) return false
-  if (f.containers.length && !(t.containerId && f.containers.includes(t.containerId))) return false
-  if (f.goals.length && !(t.goalId && f.goals.includes(t.goalId))) return false
+  if (f.containers.length && !partsOf(t).some((p) => p.containerId && f.containers.includes(p.containerId))) return false
+  if (f.goals.length && !partsOf(t).some((p) => p.goalId && f.goals.includes(p.goalId))) return false
   if (f.loans.length && !(t.loanId && f.loans.includes(t.loanId))) return false
   if (f.transferAccounts.length && !transferAccountsOf(t).some((a) => f.transferAccounts.includes(a))) return false
   if (f.brands.length && !f.brands.includes(brandKeyOf(t, ctx.aliases))) return false

@@ -2,7 +2,7 @@ import { cycleText } from '@shared/calc/cargoWatch'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addDays, daysInMonth, warsawNow } from '@shared/calc/dates'
 import { balanceAt } from '@shared/calc/balances'
-import { sinkingInstallment, startMonthSpentOf } from '@shared/calc/fleet'
+import { cyclePosition, sinkingInstallment, sinkingSchedule, startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
 import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments } from '@shared/calc/plan'
@@ -22,6 +22,7 @@ import { Badge, Empty, Field, NumberField, TextField, Toggle, cx } from '../../c
 import { IconCheck } from '../../components/icons'
 import { plDate } from '../../lib/format'
 import { useAccounts, useCategories } from '../operations/pickers'
+import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
 import { cancelWizard, finishWizard, patchWizard, useWizard, WIZARD_STEPS } from './state'
 
@@ -101,7 +102,18 @@ export function WizardPage() {
   const hull = Math.min(Math.max(0, w.hull ?? proposedSplit.hull), Math.max(0, total))
   const goalsSplit = Object.fromEntries(goals.map((g) => [g.id, Math.max(0, w.goals?.[g.id] ?? proposedSplit.goals[g.id] ?? 0)]))
   const goalsTotal = sum(Object.values(goalsSplit))
-  const overSplit = hull + goalsTotal > Math.max(0, total)
+  // Periodic cargo items (N-PC-7): existing periodic containers and periodic proposals chosen in step 4.
+  const periodicItems = [
+    ...containers.filter((c) => !c.archived && c.cycleMonths > 1).map((c) => ({ key: c.id, name: c.name, amount: c.amount, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, schedule: c.schedule })),
+    ...chosen.filter((p) => p.cycleMonths > 1).map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule }))
+  ].map((item) => {
+    const pos = cyclePosition(item, month)
+    const planAmount = pos.index > 0 ? sum(sinkingSchedule(item.amount, pos.length).slice(0, pos.index)) : 0
+    return { ...item, planAmount }
+  })
+  const tanksSplit = Object.fromEntries(periodicItems.map((item) => [item.key, Math.max(0, w.tanks?.[item.key] ?? 0)]))
+  const tanksTotal = sum(Object.values(tanksSplit))
+  const overSplit = hull + goalsTotal + tanksTotal > Math.max(0, total)
   // The proposals with what was typed over them (B75): choosing the cargo again never drops a typed envelope.
   const envelopes: Record<string, number> = Object.fromEntries(envelopeProposals.envelopes.filter((e) => e.limit > 0).map((e) => [e.categoryId, e.limit]))
   for (const [id, v] of Object.entries(w.envelopes)) {
@@ -109,10 +121,10 @@ export function WizardPage() {
     else envelopes[id] = v
   }
   const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => c.amount)) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
-  // The tanks of the first month as the engine fills them (N9, T29): a fee due soon catches up – more than its share.
+  // The tanks of the first month as the engine fills them (N9, T29, N-PC-7): a fee due soon catches up unless funded at start.
   const tanksMonthly =
-    sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map((c) => sinkingInstallment(c, month, 0))) +
-    sum(chosen.filter((p) => p.cycleMonths > 1).map((p) => sinkingInstallment({ amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule }, month, 0)))
+    sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map((c) => sinkingInstallment(c, month, tanksSplit[c.id] ?? 0))) +
+    sum(chosen.filter((p) => p.cycleMonths > 1).map((p) => sinkingInstallment({ amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule }, month, tanksSplit[p.key] ?? 0)))
   const tanksLater = sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map(monthlyShare)) + sum(chosen.filter((p) => p.cycleMonths > 1).map(monthlyShare))
   const envelopesTotal = sum(Object.values(envelopes))
   const unallocated = (salary ?? 0) - cargoMonthly - tanksMonthly - envelopesTotal
@@ -162,6 +174,7 @@ export function WizardPage() {
         )
       })}
       <Note>Konto tradingowe XTB nie należy do budżetu – prowadzi je ICT Trade Journal. Konta zmienisz w Ustawienia → Konta.</Note>
+      <WizardHouseholdSection readOnly={readOnly} />
     </div>,
     // 1 – the history
     <div key="1" className="flex flex-col gap-2">
@@ -297,11 +310,11 @@ export function WizardPage() {
         <div className="flex items-baseline gap-2">
           <span className="w-[170px] text-muted">Osłony · bufor na pensje</span>
           <span className={cx('num', overSplit ? 'text-down' : 'text-fg-strong')} data-testid="wizard-split-shields">
-            {zl(total - hull - goalsTotal)}
+            {zl(total - hull - goalsTotal - tanksTotal)}
           </span>
           {targets.shields != null && <span className="text-[11px] text-dim">cel {zl(targets.shields)}</span>}
         </div>
-        <Meter value={total - hull - goalsTotal} max={targets.shields} />
+        <Meter value={total - hull - goalsTotal - tanksTotal} max={targets.shields} />
         <div className="mt-1 flex items-center gap-2">
           <span className="w-[170px] text-muted">Kadłub · fundusz awaryjny</span>
           <AmountField className="w-[130px]" value={hull} onChange={(v) => patchWizard({ hull: v ?? 0 })} aria-label="Kadłub na start" data-testid="wizard-split-hull" />
@@ -333,9 +346,35 @@ export function WizardPage() {
             cele – propozycja
           </button>
         )}
+        {periodicItems.map((item) => (
+          <div key={item.key} className="mt-1 flex items-center gap-2" data-testid="wizard-split-tank" data-name={item.name}>
+            <span className="w-[170px] truncate text-muted" title={item.name}>
+              zbiornik: {item.name}
+            </span>
+            <AmountField
+              className="w-[130px]"
+              value={tanksSplit[item.key] ?? 0}
+              onChange={(v) => patchWizard({ tanks: { ...tanksSplit, [item.key]: Math.max(0, v ?? 0) } })}
+              aria-label={`Zbiornik ${item.name} na start`}
+              data-testid="wizard-split-tank-input"
+            />
+            <span className="text-[11px] text-dim">opłata {zl(item.amount)}</span>
+            {item.planAmount > 0 && (tanksSplit[item.key] ?? 0) !== item.planAmount && (
+              <button
+                type="button"
+                className="text-[11px] text-accent hover:underline"
+                onClick={() => patchWizard({ tanks: { ...tanksSplit, [item.key]: item.planAmount } })}
+                title="Tyle przypada za miesiące cyklu przed startem budżetu – po uzupełnieniu rata odkładki nie musi nadrabiać"
+                data-testid="wizard-split-tank-plan"
+              >
+                do planu ({zl(item.planAmount)})
+              </button>
+            )}
+          </div>
+        ))}
         {overSplit && (
           <p className="text-[11.5px] text-down" data-testid="wizard-split-over">
-            Kadłub i cele ({zl(hull + goalsTotal)}) przekraczają obecne środki ({zl(Math.max(0, total))}) – zmniejsz je.
+            Kadłub, cele i zbiorniki ({zl(hull + goalsTotal + tanksTotal)}) przekraczają obecne środki ({zl(Math.max(0, total))}) – zmniejsz je.
           </p>
         )}
       </div>
@@ -413,7 +452,7 @@ export function WizardPage() {
           ) : (
             <FinishButton
               disabled={readOnly || overSplit || salary == null || salary <= 0 || accounts.some((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id))}
-              onFinish={() => finishWizard({ salary: salary ?? 0, hull, goals: goalsSplit, envelopes })}
+              onFinish={() => finishWizard({ salary: salary ?? 0, hull, goals: goalsSplit, tanks: tanksSplit, envelopes })}
             />
           )}
         </div>
@@ -437,6 +476,63 @@ function FinishButton({ disabled, onFinish }: { disabled: boolean; onFinish: () 
     >
       Uruchom budżet
     </button>
+  )
+}
+
+function WizardHouseholdSection({ readOnly }: { readOnly: boolean }) {
+  const members = useMembers().filter((m) => !m.archived)
+  const [name, setName] = useState('')
+  const add = () => {
+    if (readOnly || !name.trim()) return
+    addMember(name)
+    setName('')
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2.5 text-[12px]" data-testid="wizard-household">
+      <span className="label">Domownicy i rozliczenia na start (opcjonalnie)</span>
+      <Note>Osoby, z którymi dzielisz wydatki. Jeśli na start ktoś ma Ci oddać za wcześniejsze zakupy albo trzymasz jego zaliczkę na koncie, wpisz kwotę.</Note>
+      <div className="flex flex-col gap-1.5">
+        {members.map((m) => (
+          <div key={m.id} className="flex flex-wrap items-center gap-2" data-testid="wizard-member-row" data-name={m.name}>
+            <span className="w-[120px] truncate text-fg-strong" title={m.name}>
+              {m.name}
+            </span>
+            <label className="flex items-center gap-1.5 text-muted">
+              <span>ma oddać</span>
+              <AmountField
+                className="h-[24px] w-[100px]"
+                value={m.opening.owed || null}
+                allowEmpty
+                placeholder="0,00"
+                disabled={readOnly}
+                onChange={(v) => patchMember(m.id, { opening: { owed: Math.max(0, v ?? 0), deposit: 0, since: null } })}
+                aria-label={`${m.name} ma oddać`}
+                data-testid="wizard-member-owed"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-muted">
+              <span>zaliczka</span>
+              <AmountField
+                className="h-[24px] w-[100px]"
+                value={m.opening.deposit || null}
+                allowEmpty
+                placeholder="0,00"
+                disabled={readOnly}
+                onChange={(v) => patchMember(m.id, { opening: { owed: 0, deposit: Math.max(0, v ?? 0), since: null } })}
+                aria-label={`${m.name} zaliczka`}
+                data-testid="wizard-member-deposit"
+              />
+            </label>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <TextField className="h-[24px] w-[180px]" value={name} onChange={setName} placeholder="Imię domownika, np. Ania" maxLength={40} data-testid="wizard-member-name" />
+        <button type="button" className="btn h-[24px]" disabled={readOnly || !name.trim()} onClick={add} data-testid="wizard-member-add">
+          Dodaj domownika
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -11,13 +11,13 @@ import { balanceOf, isOpeningItem, memberName, purchaseStatus, type HouseholdLed
 import { dm } from '@shared/format'
 import { assignsOn, choicesForRepayment, matchCovers, matchReturn, names, repaymentShares, waitingForPurchase, withNamed } from '@shared/calc/repayments'
 import type { Transaction } from '@shared/schema'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { fleetInputNow, useHousehold } from '../../store/fleet'
 import { plnText } from '../../components/fields'
 import { Popover } from '../../components/Popover'
 import { cx } from '../../components/ui'
 import { openOperation } from '../operations/state'
-import { assignRepayment, useMembers } from './actions'
+import { assignRepayment, repayInCash, useMembers } from './actions'
 
 /**
  * The ledger of the operations before `t` (the engine's order): what each member owed when it came (N40). Not wanted
@@ -58,6 +58,7 @@ export function PurchaseRepaid({ t }: { t: Transaction }) {
 function PurchaseLine({ p, ledger, t }: { p: PurchaseState; ledger: HouseholdLedger; t: Transaction }) {
   const members = useMembers()
   const transactions = useData((s) => s.records.transactions)
+  const readOnly = useFolderLocked()
   const status = purchaseStatus(p)
   const name = memberName(p.memberId, members)
   const rest = Math.max(0, p.lent - p.paid)
@@ -82,29 +83,52 @@ function PurchaseLine({ p, ledger, t }: { p: PurchaseState; ledger: HouseholdLed
           ↳ {dm(r.date)} {transactions[r.txId]?.record.counterparty || 'wpłata'} · {plnText(r.amount)} zł →
         </button>
       ))}
-      {waiting.length > 0 && (
-        <Popover buttonClassName="self-start text-accent hover:underline" width={300} testId="purchase-assign" panelTestId="purchase-assign-menu" label="Przypisz zwrot…">
-          {(close) => (
-            <div className="flex flex-col gap-1 text-[12px]">
-              <span className="text-[11px] text-muted">Pieniądze {name} czekające na przypisanie:</span>
-              {waiting.map((u) => (
-                <button
-                  key={u.txId}
-                  type="button"
-                  className="flex items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-hover"
-                  onClick={() => {
-                    if (assignRepayment(u.txId, t.id, `${dm(u.date)} ${transactions[u.txId]?.record.counterparty || 'wpłata'} → ${dm(t.date)} ${t.counterparty || 'zakup'}`)) close()
-                  }}
-                  data-testid="purchase-assign-option"
-                >
-                  <span className="num">{dm(u.date)}</span>
-                  <span className="min-w-0 flex-1 truncate">{transactions[u.txId]?.record.counterparty || 'wpłata'}</span>
-                  <span className="num">{plnText(u.amount)} zł</span>
-                </button>
-              ))}
-            </div>
+      {(waiting.length > 0 || rest > 0) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {waiting.length > 0 && (
+            <Popover buttonClassName="self-start text-accent hover:underline" width={340} testId="purchase-assign" panelTestId="purchase-assign-menu" label="Przypisz zwrot…">
+              {(close) => (
+                <div className="flex flex-col gap-1 text-[12px]">
+                  <span className="text-[11px] text-muted">Pieniądze {name} czekające na przypisanie:</span>
+                  {waiting.map((u) => (
+                    <button
+                      key={u.txId}
+                      type="button"
+                      className="flex flex-col gap-0.5 rounded px-1 py-0.5 text-left hover:bg-hover"
+                      onClick={() => {
+                        if (assignRepayment(u.txId, t.id, `${dm(u.date)} ${transactions[u.txId]?.record.counterparty || 'wpłata'} → ${dm(t.date)} ${t.counterparty || 'zakup'}`)) close()
+                      }}
+                      data-testid="purchase-assign-option"
+                    >
+                      <span className="flex w-full items-center gap-2">
+                        <span className="num">{dm(u.date)}</span>
+                        <span className="min-w-0 flex-1 truncate">{transactions[u.txId]?.record.counterparty || 'wpłata'}</span>
+                        <span className="num">{plnText(u.amount)} zł</span>
+                      </span>
+                      {u.fromPriorIncome && (
+                        <span className="text-[10.5px] text-accent" data-testid="purchase-assign-prior-income">
+                          z przychodu {u.date.slice(0, 7)} – zmieni przychód zamkniętego miesiąca
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Popover>
           )}
-        </Popover>
+          {rest > 0 && (
+            <button
+              type="button"
+              className="self-start text-accent hover:underline"
+              disabled={readOnly}
+              onClick={() => repayInCash(t, p.memberId, rest)}
+              title="Zapisz zwrot od domownika w gotówce (konto Gotówka) i przypisz do tego zakupu"
+              data-testid="purchase-repay-cash"
+            >
+              Oddał(a) gotówką ({plnText(rest)} zł)
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -129,7 +153,7 @@ export function RepaymentPicker({ t, patch, before: given }: { t: Transaction; p
   const explicit = assignsOn(assignFrom, t.date)
   const flows = ledger?.byTx.get(t.id) ?? []
   const toggle = (txId: string, on: boolean) => patch(withNamed(t, txId, on))
-  const nameAll = (ids: readonly string[]) => patch(ids.reduce<Pick<Transaction, 'covers' | 'coversOpening'>>((acc, id) => withNamed(acc, id, true), t))
+  const nameAll = (ids: readonly string[]) => patch(ids.reduce<Partial<Transaction>>((acc, id) => ({ ...acc, ...withNamed({ ...t, ...acc }, id, true) }), {}))
   // One section per member (a transfer through another member carries several).
   const byMember = [...new Map(shares.map((s) => [s.memberId, shares.filter((x) => x.memberId === s.memberId).reduce((a, x) => ({ ...x, amount: a.amount + x.amount }))])).values()]
   return (

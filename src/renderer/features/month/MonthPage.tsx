@@ -299,6 +299,16 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
               <Row className="text-[11.5px]" label={`+ łupy z ${monthGenLabel(addMonths(month, -1))} (decyzja „na następny miesiąc”)`} value={zl(split.lootExtra)} testId="split-loot-extra" />
             )}
             {kind === 'daily' && <div className="mt-0.5 text-[11px] text-dim">Podstawowy przydział: {zl(split.dailyBase)} dziennie</div>}
+            {kind === 'daily' && !mains.some((c) => envelopeKind(c) === 'daily') && (
+              <div className="mt-0.5 text-[11px] text-accent" data-testid="month-no-daily-categories">
+                Żadna kategoria główna nie ma koperty „codzienna” (Ustawienia → Kategorie) – „Energia dziś” na Mostku wynosi 0,00 zł.
+              </div>
+            )}
+            {kind === 'daily' && mains.some((c) => envelopeKind(c) === 'daily') && split.envelopes.daily.total === 0 && split.lootExtra === 0 && plan.salary > 0 && (
+              <div className="mt-0.5 text-[11px] text-accent" data-testid="month-zero-daily-envelopes">
+                Brak kwot w kopertach codziennych – „Energia dziś” na Mostku wynosi 0,00 zł (każdy codzienny wydatek da przekroczenie dnia).
+              </div>
+            )}
           </div>
         ))}
         <div className="mt-2 border-t border-line pt-1.5">
@@ -335,6 +345,11 @@ function DailyPanel({ fleet }: { fleet: FleetState }) {
           <Row label={`Koperty codzienne: wydane / limit`} sub={lootExtraOf(fleet.log, fleet.month) > 0 ? `w tym łupy ${zl(lootExtraOf(fleet.log, fleet.month))}` : undefined} value={`${zl(d.spentBefore + d.spentToday)} / ${zl(d.limit)}`} />
           <Row label="Dni do końca miesiąca (z dziś)" value={d.daysLeft} />
           <Row label="Energia miesiąca (pensja do wydania)" value={zl(fleet.energy)} />
+          {d.limit === 0 && (
+            <p className="text-[11.5px] text-accent" data-testid="month-daily-zero-hint">
+              Limit kopert codziennych wynosi 0,00 zł – wpisz kwotę w „Kopertach codziennych” w Podziale pensji (albo ustaw kopertę „codzienna” w Ustawienia → Kategorie), żeby uruchomić dzienny przydział energii.
+            </p>
+          )}
           <p className="text-[11px] text-dim">Niewydana energia przechodzi na kolejne dni, przekroczenie zmniejsza przydział kolejnych dni.</p>
         </div>
       )}
@@ -476,6 +491,9 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
   const deadline = lootDeadline(brief.month)
   const decision = plans.find((p) => p.month === brief.month)?.loot ?? null
   const pending = fleet.loot.month === brief.month && fleet.loot.amount > 0 && today <= deadline
+  const [editingLoot, setEditingLoot] = useState(false)
+  const canEditLoot = !readOnly && brief.loot != null && brief.loot > 0 && brief.month === addMonths(fleet.month, -1)
+  const lootAmount = pending ? fleet.loot.amount : (brief.loot ?? 0)
   // The split typed is kept while another screen is looked at (N36) – until a decision of the month (here or from the
   // other computer).
   const lootKey = `month:loot:${brief.month}`
@@ -486,8 +504,8 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
   const setGoals = (v: Record<string, number>) => setLoot((x) => ({ ...x, goals: v }))
   const setKept = (v: Record<string, number>) => setLoot((x) => ({ ...x, envelopes: v }))
   useEffect(() => {
-    if (decision) clearDraft(lootKey)
-  }, [decision, lootKey])
+    if (decision && !editingLoot) clearDraft(lootKey)
+  }, [decision, editingLoot, lootKey])
   // Only the goals that take money today (B13): an archived one, or one added later, never.
   const offered = useMemo(() => fleet.goals.filter((g) => g.takes).sort((a, b) => a.priority - b.priority), [fleet.goals])
   const chosen = Object.fromEntries(offered.filter((g) => (goals[g.id] ?? 0) > 0).map((g) => [g.id, goals[g.id]!]))
@@ -496,7 +514,7 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
   const spare = brief.envelopes.filter((e) => e.kind === 'planned' && e.gap > 0)
   const keptChosen = Object.fromEntries(spare.filter((e) => (kept[e.categoryId] ?? 0) > 0).map((e) => [e.categoryId, Math.min(e.gap, kept[e.categoryId]!)]))
   const keptTotal = Object.values(keptChosen).reduce((a, b) => a + b, 0)
-  const toShields = Math.max(0, fleet.loot.amount - next - goalsTotal - keptTotal)
+  const toShields = Math.max(0, lootAmount - next - goalsTotal - keptTotal)
   usePlusFanfare(brief)
   return (
     <Panel title={`Debriefing – ${monthLabel(brief.month)}`} testId="month-debrief">
@@ -561,16 +579,32 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
           <span className="label">Podział łupów</span>
           {brief.loot == null ? (
             <p className="text-[11.5px] text-dim">Łupy (niewydana energia) policzymy po końcu miesiąca.</p>
-          ) : decision ? (
-            <LootDecided month={brief.month} decision={decision} fleet={fleet} />
-          ) : pending ? (
+          ) : decision && !editingLoot ? (
+            <div className="flex flex-col gap-1">
+              <LootDecided month={brief.month} decision={decision} fleet={fleet} />
+              {canEditLoot && (
+                <button
+                  type="button"
+                  className="self-start text-[11.5px] text-accent hover:underline"
+                  onClick={() => {
+                    setLoot({ next: decision.nextMonth, goals: { ...decision.goals }, envelopes: { ...(decision.envelopes ?? {}) } })
+                    setEditingLoot(true)
+                  }}
+                  data-testid="debriefing-edit-loot"
+                >
+                  Zmień podział łupów
+                </button>
+              )}
+            </div>
+          ) : pending || editingLoot ? (
             <div className="mt-1 flex flex-col gap-1.5">
               <div className="text-[11.5px] text-muted">
-                Do podziału: <span className="num text-fg-strong">{zl(fleet.loot.amount)}</span> – decyzja do {dayLabel(deadline)}, potem trafią do osłon.
+                Do podziału: <span className="num text-fg-strong">{zl(lootAmount)}</span>
+                {pending ? ` – decyzja do ${dayLabel(deadline)}, potem trafią do osłon.` : ' – zmiana podziału łupów.'}
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-[150px] text-muted">na następny miesiąc</span>
-                <AmountField className="h-[22px] w-[110px]" value={next} onChange={(v) => setNext(Math.min(fleet.loot.amount, v ?? 0))} aria-label="Na następny miesiąc" data-testid="loot-next" />
+                <AmountField className="h-[22px] w-[110px]" value={next} onChange={(v) => setNext(Math.min(lootAmount, v ?? 0))} aria-label="Na następny miesiąc" data-testid="loot-next" />
               </div>
               {offered.map((g) => (
                 <div key={g.id} className="flex items-center gap-2">
@@ -588,17 +622,39 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
                 </div>
               ))}
               <Row label="do osłon (reszta)" value={zl(toShields)} />
-              <button
-                className="btn btn-accent h-[24px] self-start"
-                disabled={readOnly || next + goalsTotal + keptTotal > fleet.loot.amount}
-                onClick={() => decideLoot(brief.month, fleet.loot.amount, { nextMonth: next, goals: chosen, envelopes: keptChosen })}
-                data-testid="loot-confirm"
-              >
-                Zatwierdź podział łupów
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  className="btn btn-accent h-[24px]"
+                  disabled={readOnly || next + goalsTotal + keptTotal > lootAmount}
+                  onClick={() => {
+                    decideLoot(brief.month, lootAmount, { nextMonth: next, goals: chosen, envelopes: keptChosen })
+                    setEditingLoot(false)
+                  }}
+                  data-testid="loot-confirm"
+                >
+                  Zatwierdź podział łupów
+                </button>
+                {editingLoot && (
+                  <button type="button" className="btn h-[24px]" onClick={() => setEditingLoot(false)}>
+                    Anuluj
+                  </button>
+                )}
+              </div>
             </div>
           ) : brief.loot > 0 ? (
-            <p className="text-[11.5px] text-muted">Łupy {zl(brief.loot)} bez decyzji do {dayLabel(deadline)} – trafiły do osłon.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[11.5px] text-muted">Łupy {zl(brief.loot)} bez decyzji do {dayLabel(deadline)} – trafiły do osłon.</p>
+              {canEditLoot && (
+                <button
+                  type="button"
+                  className="text-[11.5px] text-accent hover:underline"
+                  onClick={() => setEditingLoot(true)}
+                  data-testid="debriefing-edit-loot"
+                >
+                  Zmień podział łupów
+                </button>
+              )}
+            </div>
           ) : (
             <p className="text-[11.5px] text-dim">Energia wydana do końca – bez łupów.</p>
           )}
@@ -626,12 +682,12 @@ function LootDecided({ month, decision, fleet }: { month: string; decision: NonN
       Decyzja z {plDate(decidedOn)}: osłony {zl(shown.shields)}, następny miesiąc {zl(shown.nextMonth)}
       {shown.goals ? `, cele ${zl(shown.goals)}` : ''}
       {shown.envelopes ? `, zapas kopert ${zl(shown.envelopes)}` : ''}.
-      {late && applied ? (
-        <span className="block text-accent">Decyzja po terminie (do {dayLabel(lootDeadline(month))}) – łupy trafiły do osłon.</span>
-      ) : applied && applied.amount !== decided ? (
+      {applied && applied.amount !== decided ? (
         <span className="block text-accent" data-testid="loot-changed">
           Łupy zmieniły się po decyzji (było {zl(decided)}, jest {zl(applied.amount)}) – podział przeliczony: cele, następny miesiąc, reszta do osłon.
         </span>
+      ) : late && applied ? (
+        <span className="block text-dim">Decyzja zapisana po {dayLabel(lootDeadline(month))}.</span>
       ) : null}
     </p>
   )

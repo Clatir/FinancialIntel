@@ -4,7 +4,7 @@ import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
 import { DEFAULT_SIGN, withKind } from '@shared/calc/kinds'
 import { confirmedChanges, confirmedPeriodOf, type ConfirmedChange, type OperationEdit } from '@shared/calc/balances'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
-import { HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
+import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { listOf, updateRecord, useData, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
@@ -32,7 +32,7 @@ import { AnomalyNote, AwaitReturnBox } from '../sensors/EditorBoxes'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
 import { BrandYearLine } from '../intel/Drill'
-import { withTags } from '@shared/calc/tags'
+import { tagGoalMatch, withTags } from '@shared/calc/tags'
 
 /** The kinds on the first row of the editor; the rest under „inne”. */
 const MAIN_KINDS: TxKind[] = ['expense', 'income', 'transfer', 'trading']
@@ -71,6 +71,7 @@ export function OperationEditor({ id }: { id: string }) {
   const cats = useCategories()
   const rules = useData((s) => s.fi?.settings.import.rules)
   const aliases = useData((s) => s.fi?.settings.import.aliases)
+  const tagGoals = useData((s) => s.fi?.settings.intel.tagGoals)
   const loans = useRecordList('loans')
   const balances = useRecordList('balances')
   const members = useMembers()
@@ -327,6 +328,11 @@ export function OperationEditor({ id }: { id: string }) {
                     oficer: {cats.label(officer.categoryId)}
                   </button>
                 )}
+                {!t.containerId && !t.goalId && !t.refundable && !share && t.categoryId && cats.mainOf(t.categoryId) && envelopeKind(cats.mainOf(t.categoryId)!) === null && (
+                  <span className="text-[11px] text-dim" data-testid="operation-outside-envelope">
+                    Kategoria bez koperty – nie zmniejsza energii dziś ani żadnej koperty, ale pomniejsza ogólną energię miesiąca (a gdy jej zabraknie – osłony).
+                  </span>
+                )}
                 {outgoing && <CargoSelect value={t.containerId} onChange={(containerId) => patch({ containerId, goalId: containerId ? null : t.goalId })} />}
                 {share ? (
                   <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2">
@@ -365,6 +371,23 @@ export function OperationEditor({ id }: { id: string }) {
               </>
             )}
             <GoalSelect value={t.goalId} outgoing={outgoing} goals={fleet?.goals ?? []} onChange={(goalId) => patch({ goalId, containerId: goalId ? null : t.containerId })} />
+            {(() => {
+              if (t.goalId || t.containerId || readOnly) return null
+              const m = tagGoalMatch(t.tags, tagGoals, (gid) => !!fleet?.goals.some((g) => g.id === gid && (g.takes || g.amount > 0)))
+              const goal = m ? fleet?.goals.find((g) => g.id === m.goalId) : null
+              if (!m || !goal) return null
+              return (
+                <button
+                  type="button"
+                  className="self-start text-[11.5px] text-accent hover:underline"
+                  onClick={() => patch({ goalId: m.goalId, containerId: null })}
+                  title="Tag tej operacji jest połączony z tym celem w Wywiad → Wyprawy – kliknij, żeby rozliczyć wydatek ze środków celu"
+                  data-testid="operation-tag-goal"
+                >
+                  wyprawa #{m.tag} → rozlicz z celu: {goal.name}
+                </button>
+              )
+            })()}
             {/* D91: a household member's purchase – paid back how much and by what; their product return – which purchase. */}
             {outgoing ? <PurchaseRepaid t={t} /> : <RepaymentPicker t={t} patch={patch} />}
             {/* The sensors (F31, F34): an unknown signal about it, the money of a purchase expected back. */}
@@ -412,6 +435,24 @@ export function OperationEditor({ id }: { id: string }) {
             {!t.loanId && <LoanHint t={t} fleet={fleet} loans={loans} readOnly={readOnly} onPick={(loanId) => patch({ loanId })} />}
           </Field>
         )}
+        {t.kind === 'correction' && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-line bg-bg px-2.5 py-1.5 text-[11.5px]" data-testid="operation-correction-box">
+            <span className={t.explained ? 'text-muted' : 'text-accent'}>
+              {t.explained
+                ? 'Korekta salda wyjaśniona – nie świeci żółtym alarmem w Odprawie na Mostku.'
+                : 'Korekta salda wyrównuje rachunek i osłony – dopóki jej nie oznaczysz jako wyjaśnionej, świeci żółtym alarmem w Odprawie.'}
+            </span>
+            <button
+              type="button"
+              className={cx('btn h-[22px] shrink-0', !t.explained && 'btn-accent')}
+              disabled={readOnly}
+              onClick={() => patch({ explained: t.explained ? undefined : true })}
+              data-testid="operation-correction-explained"
+            >
+              {t.explained ? 'Przywróć alarm' : 'Oznacz jako wyjaśnioną'}
+            </button>
+          </div>
+        )}
 
         {showLog && (
           <Section title="Dziennik kapitański">
@@ -449,6 +490,20 @@ export function OperationEditor({ id }: { id: string }) {
                   usuń godzinę
                 </button>
               </p>
+            )}
+            {night && t.logNote.trim() !== '' && (
+              <div className="flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="operation-night-status">
+                {t.impulse === 'plan' || t.explained || t.containerId != null ? (
+                  <span className="text-muted">Wydatek w ciszy nocnej uzasadniony (plan) – wpis w dzienniku wyjaśnia zakup bez naruszenia w grze.</span>
+                ) : (
+                  <>
+                    <span className="text-accent">Potwierdzony zakup w ciszy nocnej – liczy się jako naruszenie w grze.</span>
+                    <button type="button" className="text-accent underline" onClick={() => patch({ impulse: 'plan' })} data-testid="operation-night-justify">
+                      uzasadniony (plan – bez kary)
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </Section>
         )}
@@ -576,10 +631,16 @@ function GoalSelect({ value, outgoing, goals, onChange }: { value: string | null
   )
 }
 
-/** A split receipt: lines with their own category, a household member's part (D80); the lines sum to the amount. */
+/** A split receipt: lines with their own category, a household member's part (D80), or their own goal / cargo container (N-PC-13); the lines sum to the amount. */
 function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update: (fn: (r: Transaction) => Transaction) => void }) {
   const cats = useCategories()
   const knownTags = useKnownTags()
+  const containers = useRecordList('containers')
+  const fleet = useFleet()
+  const goals = useMemo(
+    () => [...(fleet?.goals ?? []).filter((g) => g.takes || g.amount > 0)].sort((a, b) => Number(b.takes) - Number(a.takes) || a.priority - b.priority),
+    [fleet]
+  )
   // Lines whose tags field is open (F17): one with tags shows it always.
   const [tagLines, setTagLines] = useState<ReadonlySet<string>>(() => new Set())
   const rest = useMemo(() => t.amount - sum(t.splits.map((s) => s.amount)), [t])
@@ -588,58 +649,103 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
   const setLine = (id: string, p: Partial<Split>) => update((r) => ({ ...r, share: null, splits: r.splits.map((s) => (s.id === id ? { ...s, ...p } : s)) }))
   return (
     <div className="flex flex-col gap-1.5" data-testid="operation-splits">
-      {t.splits.map((s, i) => (
-        <div key={s.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto_auto_auto] items-center gap-1.5" data-testid="split-line">
-          <AmountField value={Math.abs(s.amount)} onChange={(v) => setLine(s.id, { amount: sign * (v ?? 0) })} aria-label={`Kwota części ${i + 1}`} data-testid="split-amount" />
-          <CategorySelect value={s.categoryId} onChange={(categoryId) => setLine(s.id, { categoryId })} data-testid="split-category" />
-          <FinancerSelect refundable={s.refundable} memberId={s.memberId} gift={s.gift} onChange={(p) => setLine(s.id, p)} compact testId="split-financer" />
-          <button
-            type="button"
-            className={cx('btn btn-ghost h-[22px] px-1 text-[11px]', (!!s.tags?.length || tagLines.has(s.id)) && 'text-accent')}
-            title="Tagi tej części (F17) – np. jedna rzecz z paragonu na wyprawę"
-            onClick={() => setTagLines((x) => (x.has(s.id) ? new Set([...x].filter((y) => y !== s.id)) : new Set([...x, s.id])))}
-            data-testid="split-tags-open"
-          >
-            #{s.tags?.length ? s.tags.length : ''}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost h-[22px] px-1"
-            title="Usuń część"
-            onClick={() =>
-              update((r) => {
-                const splits = r.splits.filter((x) => x.id !== s.id)
-                // One line left: back to a plain operation of that line's category.
-                if (splits.length > 1) return { ...r, share: null, splits }
-                const only = splits[0]
-                return {
-                  ...r,
-                  share: null,
-                  splits: [],
-                  categoryId: only?.categoryId ?? r.categoryId,
-                  refundable: only?.refundable ?? false,
-                  memberId: only?.refundable ? only.memberId : null,
-                  gift: only?.refundable && only.gift ? true : undefined,
-                  // The line's tags stay the operation's (F17), its description too (D89).
-                  ...(only?.tags?.length ? { tags: withTags(r.tags ?? [], only.tags) } : {}),
-                  ...(only?.note.trim() ? { note: r.note.trim() ? `${r.note}\n${only.note.trim()}` : only.note.trim() } : {})
-                }
-              })
-            }
-          >
-            <IconClose size={12} />
-          </button>
-          {/* D89: what this line of the receipt is – the list shows it when the operation has no note of its own. */}
-          <div className="col-span-full pl-[100px]">
-            <TextField commit className="h-[24px] text-[11.5px]" value={s.note} onChange={(note) => setLine(s.id, { note })} placeholder="opis części – co to jest…" maxLength={500} aria-label={`Opis części ${i + 1}`} data-testid="split-note" />
-          </div>
-          {(!!s.tags?.length || tagLines.has(s.id)) && (
-            <div className="col-span-full pl-[100px]">
-              <TagsField value={s.tags ?? []} onChange={(tags) => setLine(s.id, { tags: tags.length ? tags : undefined })} known={knownTags} compact placeholder="tag tej części…" testId="split-tags" />
+      {t.splits.map((s, i) => {
+        const shownContainers = containers.filter((c) => !c.archived || c.id === s.containerId)
+        return (
+          <div key={s.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto_auto_auto] items-center gap-1.5" data-testid="split-line">
+            <AmountField value={Math.abs(s.amount)} onChange={(v) => setLine(s.id, { amount: sign * (v ?? 0) })} aria-label={`Kwota części ${i + 1}`} data-testid="split-amount" />
+            <CategorySelect value={s.categoryId} onChange={(categoryId) => setLine(s.id, { categoryId })} data-testid="split-category" />
+            <FinancerSelect refundable={s.refundable} memberId={s.memberId} gift={s.gift} onChange={(p) => setLine(s.id, p)} compact testId="split-financer" />
+            <button
+              type="button"
+              className={cx('btn btn-ghost h-[22px] px-1 text-[11px]', (!!s.tags?.length || tagLines.has(s.id)) && 'text-accent')}
+              title="Tagi tej części (F17) – np. jedna rzecz z paragonu na wyprawę"
+              onClick={() => setTagLines((x) => (x.has(s.id) ? new Set([...x].filter((y) => y !== s.id)) : new Set([...x, s.id])))}
+              data-testid="split-tags-open"
+            >
+              #{s.tags?.length ? s.tags.length : ''}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost h-[22px] px-1"
+              title="Usuń część"
+              onClick={() =>
+                update((r) => {
+                  const splits = r.splits.filter((x) => x.id !== s.id)
+                  // One line left: back to a plain operation of that line's category.
+                  if (splits.length > 1) return { ...r, share: null, splits }
+                  const only = splits[0]
+                  return {
+                    ...r,
+                    share: null,
+                    splits: [],
+                    categoryId: only?.categoryId ?? r.categoryId,
+                    refundable: only?.refundable ?? false,
+                    memberId: only?.refundable ? only.memberId : null,
+                    gift: only?.refundable && only.gift ? true : undefined,
+                    containerId: only?.containerId ?? r.containerId,
+                    goalId: only?.goalId ?? r.goalId,
+                    // The line's tags stay the operation's (F17), its description too (D89).
+                    ...(only?.tags?.length ? { tags: withTags(r.tags ?? [], only.tags) } : {}),
+                    ...(only?.note.trim() ? { note: r.note.trim() ? `${r.note}\n${only.note.trim()}` : only.note.trim() } : {})
+                  }
+                })
+              }
+            >
+              <IconClose size={12} />
+            </button>
+            {/* D89: what this line of the receipt is – the list shows it when the operation has no note of its own. */}
+            <div className="col-span-full flex flex-wrap items-center gap-1.5 pl-[100px]">
+              <TextField commit className="h-[24px] min-w-[140px] flex-1 text-[11.5px]" value={s.note} onChange={(note) => setLine(s.id, { note })} placeholder="opis części – co to jest…" maxLength={500} aria-label={`Opis części ${i + 1}`} data-testid="split-note" />
+              {t.kind === 'expense' && !s.refundable && (shownContainers.length > 0 || !!s.containerId) && (
+                <select
+                  className="input h-[24px] w-[125px] py-0 text-[11px]"
+                  value={s.containerId ?? ''}
+                  onChange={(e) => {
+                    const containerId = e.currentTarget.value || undefined
+                    setLine(s.id, { containerId, ...(containerId ? { goalId: undefined } : {}) })
+                  }}
+                  aria-label={`Kontener części ${i + 1}`}
+                  title="Rozlicz tę część z kontenera Ładowni"
+                  data-testid="split-container"
+                >
+                  <option value="">— nie z ładowni —</option>
+                  {shownContainers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Ładownia: {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {t.kind === 'expense' && !s.refundable && (goals.length > 0 || !!s.goalId) && (
+                <select
+                  className="input h-[24px] w-[125px] py-0 text-[11px]"
+                  value={s.goalId ?? ''}
+                  onChange={(e) => {
+                    const goalId = e.currentTarget.value || undefined
+                    setLine(s.id, { goalId, ...(goalId ? { containerId: undefined } : {}) })
+                  }}
+                  aria-label={`Cel części ${i + 1}`}
+                  title="Rozlicz tę część z pieniędzy Celu"
+                  data-testid="split-goal"
+                >
+                  <option value="">— nie z celu —</option>
+                  {goals.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      Cel: {g.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
-          )}
-        </div>
-      ))}
+            {(!!s.tags?.length || tagLines.has(s.id)) && (
+              <div className="col-span-full pl-[100px]">
+                <TagsField value={s.tags ?? []} onChange={(tags) => setLine(s.id, { tags: tags.length ? tags : undefined })} known={knownTags} compact placeholder="tag tej części…" testId="split-tags" />
+              </div>
+            )}
+          </div>
+        )
+      })}
       <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
         <button type="button" className="btn h-[22px]" onClick={() => update((r) => ({ ...r, splits: [...r.splits, { id: newId(), amount: Math.sign(rest) === sign ? rest : 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }] }))} data-testid="split-add">
           <IconPlus size={12} /> część

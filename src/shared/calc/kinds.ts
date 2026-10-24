@@ -26,6 +26,7 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     // „Wydatek” clicked again keeps them.
     covers: kind === 'income' || kind === 'expense' ? t.covers : [],
     coversOpening: kind === 'income' || kind === 'expense' ? t.coversOpening : undefined,
+    coversOpeningMembers: kind === 'income' || kind === 'expense' ? t.coversOpeningMembers : undefined,
     // A receipt's lines and an income's parts (D81) are other things too: they stay with the same kind.
     splits: kind === t.kind && (kind === 'expense' || kind === 'income') ? t.splits : [],
     repaid: kind === 'income' ? t.repaid : 0,
@@ -37,7 +38,8 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     loanId: kind === 'loan' ? t.loanId : null,
     // Paid from a goal's money (T24, N1): an expense only; so is a return awaited (F34).
     goalId: kind === 'expense' ? t.goalId : null,
-    ...(kind === 'expense' ? {} : { awaitReturn: undefined })
+    ...(kind === 'expense' ? {} : { awaitReturn: undefined }),
+    ...(kind === 'correction' ? {} : { explained: undefined })
   }
 }
 

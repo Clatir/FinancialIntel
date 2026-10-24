@@ -107,6 +107,7 @@ export function StarMapPage() {
                       dol={g.id === dol}
                       dolPool={g.id === dolPool && dolPool !== dol}
                       month={fleet.month}
+                      onMoveMoney={() => setMoving({ goal: g, archive: false })}
                       onArchive={() => archiveOrAsk(g)}
                     />
                   ))}
@@ -210,11 +211,14 @@ export function StarMapPage() {
 function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goal; amount: number; archive: boolean; others: readonly Goal[]; onClose: () => void }) {
   const [to, setTo] = useState<'shields' | 'goal' | 'stay'>('shields')
   const [goalTo, setGoalTo] = useState(others[0]?.id ?? '')
+  const [moveAmount, setMoveAmount] = useState<number | null>(amount)
   const target: GoalMoneyTarget | null = to === 'stay' ? null : to === 'goal' ? goalTo || null : 'shields'
+  const chosenAmount = moveAmount ?? 0
   const confirm = () => {
     if (to === 'goal' && !goalTo) return toast('Wybierz cel.', 'error')
-    if (archive) archiveGoal(goal, true, target ? { to: target, amount } : null)
-    else if (target) moveGoalMoney(goal, target, amount)
+    if (to !== 'stay' && (chosenAmount <= 0 || chosenAmount > amount)) return toast(`Podaj kwotę od 0,01 zł do ${zl(amount)}.`, 'error')
+    if (archive) archiveGoal(goal, true, target ? { to: target, amount: chosenAmount } : null)
+    else if (target) moveGoalMoney(goal, target, chosenAmount)
     onClose()
   }
   return (
@@ -229,7 +233,7 @@ function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goa
           <button className="btn h-[26px]" onClick={onClose}>
             Anuluj
           </button>
-          <button className="btn btn-accent h-[26px]" disabled={!archive && to === 'stay'} onClick={confirm} data-testid="starmap-money-ok">
+          <button className="btn btn-accent h-[26px]" disabled={(!archive && to === 'stay') || (to !== 'stay' && (chosenAmount <= 0 || chosenAmount > amount))} onClick={confirm} data-testid="starmap-money-ok">
             {archive ? 'Zarchiwizuj' : 'Przenieś'}
           </button>
         </>
@@ -237,8 +241,20 @@ function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goa
     >
       <div className="flex flex-col gap-2 text-[12px]">
         <p>
-          W celu jest <span className="num text-fg-strong">{zl(amount)}</span>.{archive ? ' Od dziś nie trafią do niego nowe pieniądze. Co z tymi, które są?' : ' Dokąd je przenieść?'}
+          W celu jest <span className="num text-fg-strong">{zl(amount)}</span>.{archive ? ' Od dziś nie trafią do niego nowe pieniądze. Co z tymi, które są?' : ' Dokąd i ile przenieść?'}
         </p>
+        {to !== 'stay' && (
+          <label className="flex items-center gap-2">
+            <span className="text-muted">Kwota do przeniesienia</span>
+            <AmountField className="h-[24px] w-[120px]" value={moveAmount} onChange={setMoveAmount} aria-label="Kwota do przeniesienia" data-testid="starmap-money-amount" />
+            <span className="text-muted">zł</span>
+            {chosenAmount !== amount && (
+              <button type="button" className="text-[11px] text-accent hover:underline" onClick={() => setMoveAmount(amount)} data-testid="starmap-money-full">
+                całość ({zl(amount)})
+              </button>
+            )}
+          </label>
+        )}
         <label className="flex items-center gap-2">
           <input type="radio" checked={to === 'shields'} onChange={() => setTo('shields')} data-testid="starmap-money-shields" />
           do osłon (bufor)
@@ -281,6 +297,7 @@ function GoalRow({
   dol,
   dolPool,
   month,
+  onMoveMoney,
   onArchive
 }: {
   goal: Goal
@@ -298,6 +315,7 @@ function GoalRow({
   dol: boolean
   dolPool: boolean
   month: string
+  onMoveMoney: () => void
   onArchive: () => void
 }) {
   // Written by a newer version of the app (B67): looked at, not changed here.
@@ -410,6 +428,11 @@ function GoalRow({
           <MonthField className="h-[22px] w-[90px]" value={g.deadline} allowEmpty onChange={(deadline) => patchGoal(g.id, { deadline })} placeholder="termin" aria-label="Termin celu" />
         ) : (
           g.deadline && <span className="text-[11.5px] text-dim">termin {monthLabel(g.deadline)}</span>
+        )}
+        {amount > 0 && !readOnly && (
+          <button className="btn btn-ghost h-[20px] px-1.5 text-[11px]" onClick={onMoveMoney} title="Przenieś część lub całość środków celu bez archiwizacji" data-testid="goal-move-funds">
+            przenieś środki
+          </button>
         )}
         {!ictj && !readOnly && (
           <button className="btn btn-ghost h-[20px] px-1.5 text-[11px]" onClick={onArchive} title="Zarchiwizuj cel" data-testid="starmap-archive">
