@@ -70,6 +70,22 @@ describe('rozliczenia z domownikami (D80)', () => {
     expect(financedOf(purchase)).toEqual(new Map([[MAMA, zl(300)]]))
   })
 
+  it('wcześniejsza wpłata wskazująca późniejszy zakup trzyma zaliczkę w warstwie depozytu (1.15.1)', () => {
+    const plain = fleet([])
+    const target = bought('2026-10-07', 300, MAMA)
+    // Payer has advance: false (default income), but names target in covers
+    const payment = paid('2026-10-05', 300, MAMA, false, { covers: [target.id] })
+    const s = fleet([payment, target])
+    expect(s.deposit).toBe(0)
+    expect(s.shields.amount).toBe(plain.shields.amount)
+    expect(s.energy).toBe(plain.energy)
+    expect(s.receivables.house).toBe(0)
+    expect(s.receivables.members).toMatchObject([{ memberId: MAMA, owed: 0, deposit: 0, open: [] }])
+    expect(s.log.find((e) => e.txId === payment.id)?.moves).toEqual({ deposit: zl(300) })
+    expect(s.log.find((e) => e.txId === target.id)?.moves).toEqual({ deposit: -zl(300) })
+    expect(layersSum(s)).toBe(s.total)
+  })
+
   it('najpierw płacę ja (osłony pożyczają), wpłata wyrównuje należność, nadwyżka – zaliczka albo przychód', () => {
     const plain = fleet([])
     const purchase = bought('2026-10-03', 150, MAMA)

@@ -1,5 +1,14 @@
 # Financial Intel – zmiany
 
+## 1.15.1
+
+Rozliczenia z domownikami: wcześniejsza wpłata na zakupy (D94).
+
+- Wcześniejsza wpłata domownika (np. przelew na zakupy otrzymany zanim zrobisz wydatek) może teraz finansować późniejszy zakup.
+- W edytorze zakupu menu „Przypisz zwrot…” pokazuje wcześniejsze wpłaty z wolną kwotą — jedno kliknięcie łączy operacje, a zakup otrzymuje status „oddane” (lub „częściowo oddane”).
+- W edytorze wpłaty na liście zakupów do wskazania pojawiają się późniejsze zakupy domownika, które czekają na oddanie lub zostały sfinansowane z zaliczki tej wpłaty.
+- Pieniądze ze wskazanej wcześniejszej wpłaty są rezerwowane na wskazany zakup jako celowa zaliczka w warstwie depozytu i nie są podkradane przez niepowiązane zakupy pośrednie.
+
 ## 1.15.0
 
 Dziennik i kurs na iPhonie (grupa iC, D92): pełne Operacje i Meldunki, Plan miesiąca i Radar do edycji na telefonie.

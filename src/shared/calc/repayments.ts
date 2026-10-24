@@ -11,7 +11,18 @@ import { addDays } from './dates'
 import { fold } from '../fold'
 import type { Transaction } from '../schema/records'
 import { householdBefore, type FleetInput } from './fleet'
-import { assignsOn, balanceOf, incomeShares, isOpeningItem, ledgerOrder, settlesHousehold, type HouseholdLedger, type OpenPurchase } from './household'
+import {
+  assignsOn,
+  balanceOf,
+  incomeShares,
+  isOpeningItem,
+  ledgerOrder,
+  settlesHousehold,
+  type HouseholdLedger,
+  type OpenPurchase,
+  type PurchaseState,
+  type Unassigned
+} from './household'
 import { financerOf, partsOf } from './operations'
 
 /** The days back a set of 2–3 purchases is looked for in. */
@@ -148,4 +159,71 @@ export function linkRepayments(input: Pick<FleetInput, 'settings' | 'balances' |
     transactions = transactions.map((x) => (x.id === t.id ? { ...x, ...fields } : x))
   }
   return out
+}
+
+/**
+ * The purchases offered on a member's money in the editor (D91, 1.15.1): the ones open just before it (up to its day),
+ * the ones it names already, and any later purchase of the member still open (or covered from an unearmarked advance of
+ * this operation) so an earlier inflow can explicitly finance a later purchase.
+ */
+export function choicesForRepayment(before: HouseholdLedger, ledger: HouseholdLedger | null, t: Transaction, memberId: string): OpenPurchase[] {
+  const openBefore = balanceOf(before, memberId).open.filter((o) => o.date <= t.date)
+  if (!ledger?.purchases.size) return openBefore
+  const flow = ledger.byTx.get(t.id)?.find((f) => f.memberId === memberId)
+  const paidForSum = flow ? flow.paidFor.reduce((a, r) => a + r.amount, 0) : 0
+  const freeAdvance = flow ? Math.max(0, flow.advance - Math.max(0, paidForSum - flow.repaid)) : 0
+  const extra: OpenPurchase[] = []
+  for (const list of ledger.purchases.values())
+    for (const p of list) {
+      if (p.memberId !== memberId || openBefore.some((o) => o.txId === p.txId)) continue
+      const openNow = Math.max(0, p.lent - p.paid)
+      const byThis = p.by.filter((b) => b.txId === t.id).reduce((a, b) => a + b.amount, 0)
+      if (names(t, p.txId)) {
+        extra.push({ txId: p.txId, date: p.date, amount: byThis + openNow })
+        continue
+      }
+      const isAfter = !before.purchases.get(p.txId)?.some((x) => x.memberId === memberId)
+      if (!isAfter) continue
+      const namedDeposit = Math.max(0, p.by.reduce((a, b) => a + b.amount, 0) - p.paid)
+      const anonDeposit = Math.max(0, p.fromDeposit - namedDeposit)
+      const amount = openNow + (freeAdvance > 0 ? anonDeposit : 0)
+      if (amount > 0) extra.push({ txId: p.txId, date: p.date, amount })
+    }
+  return [...openBefore, ...extra.sort(byDate)]
+}
+
+/**
+ * A member's money available to assign to a financed purchase in the editor („Przypisz zwrot…”, D91, 1.15.1): both later
+ * unassigned repayments and earlier inflows with uncommitted money (or unearmarked advance that covered the purchase).
+ */
+export function waitingForPurchase(
+  ledger: HouseholdLedger,
+  purchase: Transaction,
+  p: PurchaseState,
+  txOf: (txId: string) => Transaction | undefined
+): Unassigned[] {
+  const openNow = Math.max(0, p.lent - p.paid)
+  const namedDeposit = Math.max(0, p.by.reduce((a, b) => a + b.amount, 0) - p.paid)
+  const anonDeposit = Math.max(0, p.fromDeposit - namedDeposit)
+  if (openNow + anonDeposit <= 0) return []
+  const unassigned = balanceOf(ledger, p.memberId).unassigned
+  const out = new Map<string, Unassigned>()
+  if (openNow > 0)
+    for (const u of unassigned) {
+      const pay = txOf(u.txId)
+      if (pay && !names(pay, purchase.id) && u.amount > 0) out.set(u.txId, { txId: u.txId, date: u.date, amount: u.amount })
+    }
+  for (const [txId, flows] of ledger.byTx) {
+    const f = flows.find((x) => x.memberId === p.memberId)
+    if (!f) continue
+    const pay = txOf(txId)
+    if (!pay || ledgerOrder(pay, purchase) >= 0 || names(pay, purchase.id)) continue
+    if (!repaymentShares(pay).some((s) => s.memberId === p.memberId)) continue
+    const paidForSum = f.paidFor.reduce((a, r) => a + r.amount, 0)
+    const freeAdvance = Math.max(0, f.advance - Math.max(0, paidForSum - f.repaid))
+    const creditNow = unassigned.find((u) => u.txId === txId)?.amount ?? 0
+    const avail = openNow > 0 ? creditNow + f.income + freeAdvance : freeAdvance
+    if (avail > 0) out.set(txId, { txId, date: pay.date, amount: avail })
+  }
+  return [...out.values()].sort(byDate)
 }

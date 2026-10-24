@@ -36,6 +36,9 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - ICTTJ jest źródłem wzorców. Gdy potrzebny moduł, dołącz do sesji repozytorium `Clatir/TradingJournal` **tylko do
   odczytu** i przenieś kod: kopiuj + dostosuj, na początku pliku komentarz
   `// adapted from ICTTJ <ścieżka> @ <krótki hash commita>`. Lista modułów: `docs/specyfikacja.md`, sekcja „Technika”.
+- Praca lokalna (Antigravity, od 24.10.2026): kopia ICTTJ tylko do odczytu w `C:\Users\Szymon\Documents\ICTTJ_ref`
+  (gałąź domyślna `claude/ict-trade-journal-app-9fp4r4`, wypychanie wyłączone – `push` URL `DISABLED`); przed
+  przeniesieniem kodu `git pull`, w kopii nic nie zmieniaj.
 - Nigdy nie zapisuj w repozytorium ICTTJ ani w folderze danych ICTTJ.
 - **Konto tradingowe (maklerskie) XTB nie jest częścią FI** – saldo, wyniki, pule i rezerwa należą wyłącznie do ICTTJ.
   Portfel XTB (konto bankowe z kartą) jest kontem budżetu FI. Kosztów tradingu ani bilansu tradingu w FI nie ma.
