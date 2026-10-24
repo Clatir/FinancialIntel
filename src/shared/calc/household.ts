@@ -92,9 +92,10 @@ export interface PurchaseState {
 /** A financed purchase's state for the screens: nothing to pay back (their advance paid it), open, partly or all paid. */
 export type PurchaseStatus = 'deposit' | 'open' | 'partial' | 'paid'
 
-export function purchaseStatus(p: Pick<PurchaseState, 'lent' | 'paid'>): PurchaseStatus {
-  if (p.lent <= 0) return 'deposit'
-  return p.paid <= 0 ? 'open' : p.paid >= p.lent ? 'paid' : 'partial'
+export function purchaseStatus(p: Pick<PurchaseState, 'lent' | 'paid'> & { by?: readonly Repayment[] }): PurchaseStatus {
+  if (p.lent <= 0) return p.by?.length ? 'paid' : 'deposit'
+  if (p.paid >= p.lent) return 'paid'
+  return p.paid > 0 || (p.by?.length ?? 0) > 0 ? 'partial' : 'open'
 }
 
 /** The list's mark of a purchase paid back (D91): of all its members the least paid back; once per ledger. */
@@ -245,6 +246,8 @@ export function isMemberMoney(t: Pick<Transaction, 'kind' | 'amount' | 'memberId
 interface State {
   owed: number
   deposit: number
+  /** The part of `deposit` earmarked for future purchases named in `covers` (1.15.1). */
+  earmarked: number
   queue: OpenPurchase[]
   /** Repaid, not assigned (D91): `owed` = the queue's sum − this list's. */
   credit: Unassigned[]
@@ -253,36 +256,77 @@ interface State {
 const flowOf = (memberId: string): MemberFlow => ({ memberId, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: 0, paidFor: [], unassigned: 0 })
 
 /**
- * Pay back up to `v` of what is owed – the money's part is the same as before 1.12.0 (at most what they owe). Which
+ * Pay back up to `v` of what is owed – the money's part is the same as before 1.12.0 (at most what they owe), except
+ * what it reserves for future purchases named in `covers` (1.15.1: held as their advance until the purchase). Which
  * purchases: `explicit` (D91) – only the covered ones, in the order they were named (the opening balance's debt first:
  * one named later – „Przypisz zwrot…” – takes what is left, never from the ones named before), with all of `v` (money
  * waiting to be assigned from before pays what it lacks), the rest of the repaid waits to be assigned; else the
  * covered ones first, then the oldest.
  */
-function repay(st: State, v: number, t: Pick<Transaction, 'id' | 'date' | 'covers' | 'coversOpening'>, explicit: boolean, f: MemberFlow, purchase: (txId: string) => PurchaseState | undefined): number {
-  const paid = Math.min(v, st.owed)
-  let rest = explicit ? v : paid
+function repay(
+  st: State,
+  v: number,
+  t: Pick<Transaction, 'id' | 'date' | 'covers' | 'coversOpening'>,
+  explicit: boolean,
+  f: MemberFlow,
+  purchase: (txId: string) => PurchaseState | undefined,
+  takeFuture: (txId: string, max: number) => { amount: number; date: string } | null
+): { paid: number; reserved: number } {
+  let rest = explicit ? v : Math.min(v, st.owed)
   let assigned = 0
+  let reserved = 0
+  const addPaidFor = (txId: string, date: string, amount: number) => {
+    const prev = f.paidFor.find((x) => x.txId === txId)
+    if (prev) prev.amount += amount
+    else f.paidFor.push({ txId, date, amount })
+  }
   const take = (item: OpenPurchase) => {
     const x = Math.min(rest, item.amount)
     if (x <= 0) return
     item.amount -= x
     rest -= x
     assigned += x
-    f.paidFor.push({ txId: item.txId, date: item.date, amount: x })
+    addPaidFor(item.txId, item.date, x)
     const p = purchase(item.txId)
     if (p) {
       p.paid += x
-      p.by.push({ txId: t.id, date: t.date, amount: x })
+      const prev = p.by.find((b) => b.txId === t.id)
+      if (prev) prev.amount += x
+      else p.by.push({ txId: t.id, date: t.date, amount: x })
     }
   }
-  if (t.coversOpening) for (const item of st.queue) if (rest > 0 && isOpeningItem(item.txId)) take(item)
+  let futureBudget = v
+  if (t.coversOpening)
+    for (const item of st.queue)
+      if (rest > 0 && isOpeningItem(item.txId)) {
+        const before = rest
+        take(item)
+        futureBudget -= before - rest
+      }
   for (const id of t.covers) {
-    if (rest <= 0) break
     const item = st.queue.find((i) => i.txId === id)
-    if (item) take(item)
+    if (item) {
+      if (rest > 0) {
+        const before = rest
+        take(item)
+        futureBudget -= before - rest
+      }
+      continue
+    }
+    if (futureBudget <= 0) continue
+    const fut = takeFuture(id, futureBudget)
+    if (fut) {
+      futureBudget -= fut.amount
+      reserved += fut.amount
+      rest = explicit ? v - assigned - reserved : Math.max(0, Math.min(v - reserved, st.owed) - assigned)
+      addPaidFor(id, fut.date, fut.amount)
+    }
   }
-  if (!explicit) for (const item of st.queue) if (rest > 0) take(item)
+  const paid = Math.min(v - reserved, st.owed)
+  if (!explicit) {
+    rest = Math.max(0, paid - assigned)
+    for (const item of st.queue) if (rest > 0) take(item)
+  }
   st.queue = st.queue.filter((i) => i.amount > 0)
   st.owed -= paid
   if (assigned < paid) {
@@ -299,7 +343,7 @@ function repay(st: State, v: number, t: Pick<Transaction, 'id' | 'date' | 'cover
     }
     st.credit = st.credit.filter((c) => c.amount > 0)
   }
-  return paid
+  return { paid, reserved }
 }
 
 const memo = new WeakMap<readonly Transaction[], Map<string, HouseholdLedger>>()
@@ -357,7 +401,7 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
   const cached = memo.get(transactions)?.get(key)
   if (cached) return cached
   const states = new Map<string, State>()
-  const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, queue: [], credit: [] }).get(id)!
+  const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, earmarked: 0, queue: [], credit: [] }).get(id)!
   const purchases = new Map<string, PurchaseState[]>()
   const purchaseState = (txId: string, memberId: string, date: string): PurchaseState => {
     const list = purchases.get(txId) ?? purchases.set(txId, []).get(txId)!
@@ -375,17 +419,51 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
       const { owed, deposit, since } = m.opening!
       // Dated by its oldest purchase when known (N41): a debt from June is not „from the settlements' start”.
       const date = since && since < from! ? since : from!
-      states.set(m.id, { owed, deposit, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date, amount: owed }] : [], credit: [] })
+      states.set(m.id, { owed, deposit, earmarked: 0, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date, amount: owed }] : [], credit: [] })
       if (owed) purchaseState(`${OPENING_TX}${m.id}`, m.id, date).lent = owed
     }
   }
   const byTx = new Map<string, MemberFlow[]>()
   const budgetFrom = clearAt ?? from
   const insideOpening = (t: Transaction) => budgetFrom != null && t.date >= budgetFrom && t.date < (openings?.get(t.accountId) ?? '')
-  const txs = transactions.filter((t) => (until == null || t.date <= until) && settlesHousehold(t) && !insideOpening(t)).sort(ledgerOrder)
+  const allTxs = transactions.filter((t) => settlesHousehold(t) && !insideOpening(t)).sort(ledgerOrder)
+  const txs = until == null ? allTxs : allTxs.filter((t) => t.date <= until)
   // Dated between the budget's start and the settlements', not taken in by the openings (B14): counted right after them.
   const isLate = (t: Transaction) => covered != null && t.date >= clearAt! && t.date < from! && !covered.set.has(t.id)
   const late = txs.filter(isLate)
+  // Purchases that come after an inflow in the same settlement epoch (1.15.1): an inflow naming one in `covers` reserves
+  // its advance for that purchase, so an earlier transfer can explicitly finance a later purchase.
+  const futureLeft = new Map<string, number>()
+  const futureDate = new Map<string, string>()
+  const txEpoch = new Map<string, number>()
+  const txRank = new Map<string, number>()
+  const reservedBy = new Map<string, Repayment[]>()
+  for (const [idx, t] of allTxs.entries()) {
+    const ep = clearAt != null && t.date < clearAt ? 0 : from != null && t.date < from && !isLate(t) ? 1 : 2
+    txEpoch.set(t.id, ep)
+    txRank.set(t.id, ep === 2 && isLate(t) ? idx - allTxs.length : idx)
+    if (t.kind === 'expense')
+      for (const p of partsOf(t))
+        if (p.refundable && !p.gift && p.amount < 0) {
+          const k = `${t.id}:${financerOf(p)}`
+          futureLeft.set(k, (futureLeft.get(k) ?? 0) - p.amount)
+          futureDate.set(t.id, t.date)
+        }
+  }
+  const reserveFuture = (t: Transaction, memberId: string, purchaseId: string, max: number): { amount: number; date: string } | null => {
+    if (txEpoch.get(purchaseId) !== txEpoch.get(t.id) || (txRank.get(purchaseId) ?? -Infinity) <= txRank.get(t.id)!) return null
+    const k = `${purchaseId}:${memberId}`
+    const rem = futureLeft.get(k) ?? 0
+    const x = Math.min(max, rem)
+    if (x <= 0) return null
+    futureLeft.set(k, rem - x)
+    const list = reservedBy.get(k) ?? []
+    const prev = list.find((r) => r.txId === t.id)
+    if (prev) prev.amount += x
+    else list.push({ txId: t.id, date: t.date, amount: x })
+    reservedBy.set(k, list)
+    return { amount: x, date: futureDate.get(purchaseId)! }
+  }
   let cleared = !clearAt
   let started = !from
   const start = () => {
@@ -403,7 +481,25 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
         const st = stateOf(id)
         const f = flow(id)
         if (p.amount < 0) {
-          const fromDeposit = Math.min(-p.amount, st.deposit)
+          const k = `${t.id}:${id}`
+          const resList = reservedBy.get(k)
+          let usedReserved = 0
+          const takenBy: Repayment[] = []
+          if (resList?.length && !p.gift) {
+            let need = -p.amount
+            for (const r of resList) {
+              const x = Math.min(need, r.amount)
+              if (x <= 0) continue
+              r.amount -= x
+              need -= x
+              usedReserved += x
+              takenBy.push({ txId: r.txId, date: r.date, amount: x })
+            }
+          }
+          st.earmarked -= usedReserved
+          const availDeposit = Math.max(0, st.deposit - usedReserved - st.earmarked)
+          const fromGeneral = Math.min(-p.amount - usedReserved, availDeposit)
+          const fromDeposit = usedReserved + fromGeneral
           st.deposit -= fromDeposit
           f.fromDeposit += fromDeposit
           // Their gift (D83): what their advance does not cover the shields pay – nobody owes it.
@@ -415,6 +511,11 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
           const ps = purchaseState(t.id, id, t.date)
           ps.lent += lent
           ps.fromDeposit += fromDeposit
+          for (const r of takenBy) {
+            const prev = ps.by.find((b) => b.txId === r.txId)
+            if (prev) prev.amount += r.amount
+            else ps.by.push(r)
+          }
           if (lent) {
             st.owed += lent
             const last = st.queue.at(-1)
@@ -427,8 +528,17 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
           f.gift -= p.amount
         } else {
           // A product return of a purchase they financed: their money – the purchase it names (D91).
-          const back = repay(st, p.amount, t, explicitOn(t.date), f, (x) => purchases.get(x)?.find((y) => y.memberId === id))
+          const { paid: back, reserved } = repay(
+            st,
+            p.amount,
+            t,
+            explicitOn(t.date),
+            f,
+            (x) => purchases.get(x)?.find((y) => y.memberId === id),
+            (txId, max) => reserveFuture(t, id, txId, max)
+          )
           st.deposit += p.amount - back
+          st.earmarked += reserved
           f.repaid += back
           f.advance += p.amount - back
         }
@@ -440,13 +550,22 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
         const st = stateOf(share.memberId)
         const f = flow(share.memberId)
         // Before 1.3.0 an income said how much of it repays (`repaid`); the rest was income.
-        const back = repay(st, share.limit ?? share.amount, t, explicitOn(t.date), f, (x) => purchases.get(x)?.find((y) => y.memberId === share.memberId))
+        const { paid: back, reserved } = repay(
+          st,
+          share.limit ?? share.amount,
+          t,
+          explicitOn(t.date),
+          f,
+          (x) => purchases.get(x)?.find((y) => y.memberId === share.memberId),
+          (txId, max) => reserveFuture(t, share.memberId!, txId, max)
+        )
         const rest = share.amount - back
-        const advance = share.advance ? rest : 0
+        const advance = share.advance ? rest : reserved
         f.repaid += back
         f.advance += advance
         f.income += rest - advance
         st.deposit += advance
+        st.earmarked += reserved
       }
     }
     if (flows.size) byTx.set(t.id, [...flows.values()])

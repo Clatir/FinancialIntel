@@ -128,3 +128,53 @@ test('Zwrot domownika przypisany do zakupu (1.12.0, D91): pewne dopasowanie, „
     await app.close()
   }
 })
+
+test('Wcześniejsza wpłata domownika finansuje późniejszy zakup (1.15.1): „Przypisz zwrot…” na zakupie, status oddane', async () => {
+  const { date: today, month } = warsawNow()
+  const prev = addMonths(month, -1)
+  const start = `${prev}-01`
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-repay-early-')), 'FinancialIntel')
+  const person = (pid: string, name: string) => ({ id: pid, name, bankNames: [], inflow: 'income', archived: false, via: null, opening: { owed: 0, deposit: 0 } })
+  const PAY = id(10)
+  const BUY = id(11)
+  seedFolder(dataDir, {
+    settings: (s) => ({
+      ...s,
+      budget: { ...s.budget, start },
+      household: { ...s.household, since: null, assignFrom: start, members: [...s.household.members, person(MAMA, 'Mama')] }
+    }),
+    records: {
+      balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(10000) }],
+      months: [{ month: prev, salary: zl(4000), envelopes: { [FOOD]: zl(1500) } }],
+      transactions: [
+        { id: PAY, date: '2026-10-05', accountId: ACC, amount: zl(100), kind: 'income', counterparty: 'Mama na zakupy', memberId: MAMA, covers: [] },
+        { id: BUY, date: '2026-10-10', accountId: ACC, amount: -zl(80), categoryId: GROCERIES, counterparty: 'Biedronka', refundable: true, memberId: MAMA }
+      ]
+    }
+  })
+  const { page, app, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+2')
+    await expect(page.getByTestId('operation-row')).toHaveCount(2)
+
+    // Open purchase: Mama owes 80 zł
+    await page.locator('[data-testid="operation-row"]', { hasText: 'Biedronka' }).click()
+    await expect(page.getByTestId('purchase-repaid-status')).toHaveText('Mama: do oddania 80,00 zł')
+
+    // Click "Przypisz zwrot..." and select earlier payment
+    await page.getByTestId('purchase-assign').click()
+    const option = page.getByTestId('purchase-assign-option')
+    await expect(option).toContainText('Mama na zakupy')
+    await expect(option).toContainText('100,00 zł')
+    await option.click()
+
+    // Status becomes oddane 80,00 zł, paid by earlier payment
+    await expect(page.getByTestId('purchase-repaid-status')).toHaveText('Mama: oddane 80,00 zł')
+    await expect(page.getByTestId('purchase-repaid-by')).toContainText('Mama na zakupy · 80,00 zł')
+    await expect.poll(() => coversOf(dataDir, 'Mama na zakupy')).toEqual([BUY])
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

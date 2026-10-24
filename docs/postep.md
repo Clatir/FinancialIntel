@@ -1,6 +1,7 @@
 # Financial Intel – postęp
 
-**Stan:** iPhone (D92 / D93): **1.13.0 wydane** (PR #42 – grupa iA, z `.ipa` i źródłem AltStore), **1.14.0 wydane**
+**Stan:** **1.15.1 przygotowane do wydania** (wcześniejsza wpłata domownika finansuje późniejszy zakup, D94, T312).
+iPhone (D92 / D93): **1.13.0 wydane** (PR #42 – grupa iA, z `.ipa` i źródłem AltStore), **1.14.0 wydane**
 (PR #43 – grupa iB), **1.15.0 wydane** (PR #44 – grupa iC); przerwa po iC (D93) – „Przed grupą iD” niżej. 1.11.0 i
 1.12.0 wydała w tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0, decyzje
 D92 / D93, T305–T311.
@@ -916,6 +917,25 @@ Do sprawdzenia przez użytkownika (po wydaniu 1.7.0, Windows):
 | Razem | rekomendacja: Opus 5.5 · max z IP15, xhigh bez niego | | z IP15 1,25–1,75 h (z górką 2 h), bez 0,5–0,75 h (z górką 1 h); plan był 4–4,5 h |
 
 Limit tygodniowy (D93): iD ok. 2,5 % (bez IP15 ok. 1 %), z górką 3,5 % – przeliczę po procencie po iC.
+
+## 1.15.1 – Wcześniejsza wpłata domownika finansuje późniejszy zakup (24.10.2026)
+
+Zakres (D94, T312): rozwiązanie problemu, w którym wcześniejszy przelew od domownika (np. na planowane zakupy) nie mógł być powiązany z późniejszym zakupem.
+- Silnik (`calc/household.ts`):
+  - Wpłata wskazująca późniejszy zakup w `covers` rezerwuje kwotę jako celową zaliczkę w warstwie depozytu (`f.advance`, `st.deposit`, `st.earmarked`, `f.paidFor`), nawet przy braku zaznaczenia ogólnej zaliczki (`advance: false`).
+  - Późniejszy zakup zużywa zarezerwowaną zaliczkę (`usedReserved`) przed wolnymi zaliczkami i pożyczką z osłon, a wpłata trafia do `PurchaseState.by`. Status zakupu staje się `oddane` (lub `częściowo oddane`).
+  - Zarezerwowana zaliczka jest chroniona przed niepowiązanymi zakupami pośrednimi.
+  - Zachowany ścisły niezmiennik bilansu warstw floty na każdy dzień (`layersSum(state) === state.total`).
+- Obliczenia (`calc/repayments.ts`):
+  - `choicesForRepayment`: w edytorze wpłaty oferuje do wskazania późniejsze otwarte zakupy domownika oraz zakupy pokryte z nieprzypisanej zaliczki tej wpłaty.
+  - `waitingForPurchase`: w menu „Przypisz zwrot…” na zakupie udostępnia wcześniejsze wpłaty domownika posiadające wolną kwotę (`unassigned`, `income`, `freeAdvance`).
+- Interfejs (`features/household/Repayments.tsx`):
+  - `PurchaseLine`: poprawny opis kwoty oddanej z `p.by` (`oddane X zł` / `oddane X z Y zł · do oddania Z zł`), menu „Przypisz zwrot…” widoczne dla wcześniejszych wpłat z wolną kwotą.
+  - `RepaymentPicker`: lista zakupów domownika uwzględnia późniejsze zakupy.
+- Testy:
+  - Unit tests: 24 testy w `repayments.test.ts` (w tym 5 nowych scenariuszy 1.15.1), 17 testów w `household.test.ts` (w tym zachowanie warstw floty).
+  - E2E tests: `tests/e2e/repayments.spec.ts` rozszerzony o pełny scenariusz powiązania wcześniejszej wpłaty z późniejszym zakupem przez „Przypisz zwrot…”.
+- Weryfikacja: pełny `typecheck`, 714 testów jednostkowych, testy E2E Playwright.
 
 ## 1.15.0 – iPhone: Dziennik i kurs (grupa iC, 21.10.2026)
 

@@ -7,9 +7,9 @@
 import { useMemo } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import { householdBefore } from '@shared/calc/fleet'
-import { balanceOf, isOpeningItem, ledgerOrder, memberName, purchaseStatus, type HouseholdLedger, type OpenPurchase, type PurchaseState } from '@shared/calc/household'
+import { balanceOf, isOpeningItem, memberName, purchaseStatus, type HouseholdLedger, type OpenPurchase, type PurchaseState } from '@shared/calc/household'
 import { dm } from '@shared/format'
-import { assignsOn, matchCovers, matchReturn, names, repaymentShares, withNamed } from '@shared/calc/repayments'
+import { assignsOn, choicesForRepayment, matchCovers, matchReturn, names, repaymentShares, waitingForPurchase, withNamed } from '@shared/calc/repayments'
 import type { Transaction } from '@shared/schema'
 import { useData } from '../../store/data'
 import { fleetInputNow, useHousehold } from '../../store/fleet'
@@ -61,16 +61,14 @@ function PurchaseLine({ p, ledger, t }: { p: PurchaseState; ledger: HouseholdLed
   const status = purchaseStatus(p)
   const name = memberName(p.memberId, members)
   const rest = Math.max(0, p.lent - p.paid)
-  // Their money waiting to be assigned that came after the purchase in the ledger's order (one before it – the same day
-  // too – cannot pay it back).
-  const waiting = balanceOf(ledger, p.memberId).unassigned.filter((u) => {
-    const payment = transactions[u.txId]?.record
-    return !!payment && ledgerOrder(payment, t) > 0
-  })
+  const paidAmount = p.by.reduce((a, b) => a + b.amount, 0) || p.paid
+  const total = paidAmount + rest
+  // Money waiting to be assigned to this purchase (1.15.1: both later unassigned repayments and earlier inflows).
+  const waiting = waitingForPurchase(ledger, t, p, (id) => transactions[id]?.record)
   return (
     <div className="flex flex-col gap-0.5" data-testid="purchase-repaid-member" data-status={status}>
       <span className={cx(status === 'open' || status === 'partial' ? 'text-accent' : 'text-muted')} data-testid="purchase-repaid-status">
-        {name}: {status === 'deposit' ? STATUS_TEXT.deposit : status === 'paid' ? `oddane ${plnText(p.paid)} zł` : status === 'partial' ? `oddane ${plnText(p.paid)} z ${plnText(p.lent)} zł · do oddania ${plnText(rest)} zł` : `do oddania ${plnText(p.lent)} zł`}
+        {name}: {status === 'deposit' ? STATUS_TEXT.deposit : status === 'paid' ? `oddane ${plnText(paidAmount)} zł` : status === 'partial' ? `oddane ${plnText(paidAmount)} z ${plnText(total)} zł · do oddania ${plnText(rest)} zł` : `do oddania ${plnText(p.lent)} zł`}
       </span>
       {p.by.map((r, i) => (
         <button
@@ -84,7 +82,7 @@ function PurchaseLine({ p, ledger, t }: { p: PurchaseState; ledger: HouseholdLed
           ↳ {dm(r.date)} {transactions[r.txId]?.record.counterparty || 'wpłata'} · {plnText(r.amount)} zł →
         </button>
       ))}
-      {rest > 0 && waiting.length > 0 && (
+      {waiting.length > 0 && (
         <Popover buttonClassName="self-start text-accent hover:underline" width={300} testId="purchase-assign" panelTestId="purchase-assign-menu" label="Przypisz zwrot…">
           {(close) => (
             <div className="flex flex-col gap-1 text-[12px]">
@@ -137,10 +135,9 @@ export function RepaymentPicker({ t, patch, before: given }: { t: Transaction; p
   return (
     <div className="flex flex-col gap-1.5" data-testid="repayment-picker">
       {byMember.map((share) => {
-        // The purchases open just before it (up to its day), and the ones it names already.
+        // The purchases open just before it (up to its day), and the ones it names already or can finance (1.15.1).
         const open = balanceOf(before, share.memberId).open.filter((o) => o.date <= t.date)
-        const named = (ledger?.purchases ? [...ledger.purchases.values()].flat() : []).filter((p) => p.memberId === share.memberId && names(t, p.txId) && !open.some((o) => o.txId === p.txId))
-        const choices: OpenPurchase[] = [...open, ...named.map((p) => ({ txId: p.txId, date: p.date, amount: Math.max(0, p.lent - p.paid) }))]
+        const choices = choicesForRepayment(before, ledger, t, share.memberId)
         const flow = flows.find((f) => f.memberId === share.memberId)
         const any = choices.some((c) => names(t, c.txId))
         const match = !any && explicit ? (share.isReturn ? matchReturn(open, share.amount, t.counterparty, (id) => transactions[id]?.record) : matchCovers(open, share.amount, t.date)) : null

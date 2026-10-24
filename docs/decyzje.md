@@ -373,6 +373,13 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   zużyte 21.10.2026; odnowienie w niedzielę o 18:00). Przerwa po grupie iC na sprawdzenie limitu (z górką iA–iC ok.
   37 %), chyba że użytkownik powie inaczej; iD czeka na odpowiedź o folderze ICTTJ (IP15), iE – na IP21 i IP24. Start iA
   wstrzymany do przełączenia thinking na max (prośba użytkownika).
+- **D94** (24.10.2026) Wcześniejsza wpłata domownika może finansować późniejszy zakup: zgłoszenie użytkownika („jeżeli
+  najpierw otrzymam przelew na zrealizowanie zakupów a potem zrobię zakup to nie mogę ustawić że wcześniejsza wpłata
+  finansuje późniejszy zakup”). Wcześniejszy wpływ domownika (`income` lub `repaymentShare`) wskazujący późniejszy
+  zakup w `covers` rezerwuje kwotę jako celową zaliczkę w warstwie depozytu (nawet przy `advance: false`), a późniejszy
+  zakup zużywa ją w pierwszej kolejności przed wolnymi zaliczkami i pożyczką z osłon, zapisując wpłatę w `PurchaseState.by`
+  i otrzymując status `oddane` (lub `częściowo oddane`). W interfejsie zakupu menu „Przypisz zwrot…” oferuje wcześniejsze
+  wpłaty z wolną kwotą, a edytor wpłaty oferuje późniejsze zakupy danego domownika.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -2255,3 +2262,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   się z animacją `transform`; 8 px od krawędzi, szerokość najwyżej okno − 16 px). Źródło AltStore: opis wersji jako
   tekst bez złamań wierszy CHANGELOG (pojedyncze złamanie w akapicie i w pozycji listy = spacja). Wtyczki
   `@capacitor/filesystem` 8.1.4 i `@capacitor/share` 8.0.3 (`ios/App/CapApp-SPM/Package.swift`).
+- **T312** Wcześniejsza wpłata finansująca późniejszy zakup (1.15.1, D94): `calc/household.ts` w `settleHousehold` śledzi
+  w obrębie tej samej epoki rozliczeń przyszłe zakupy (`futureLeft`, `reservedBy`, `reserveFuture`). Wpłata z `covers`
+  rezerwuje kwotę w `f.advance`, `st.deposit` i `st.earmarked` oraz `f.paidFor`. Zakup zużywa zarezerwowaną zaliczkę
+  (`usedReserved`), zdejmując `st.earmarked`, i zapisuje wpłatę w `PurchaseState.by`. Zarezerwowana zaliczka jest chroniona
+  przed niepowiązanymi zakupami pośrednimi. `calc/repayments.ts`: funkcja `choicesForRepayment` uwzględnia późniejsze otwarte
+  zakupy oraz zakupy z nieprzypisanej zaliczki; `waitingForPurchase` udostępnia wcześniejsze wpłaty z wolną kwotą
+  (`unassigned`, `income`, `freeAdvance`). `features/household/Repayments.tsx`: `PurchaseLine` oblicza oddaną kwotę z `p.by`
+  (`paidAmount = sum(p.by) || p.paid`), poprawnie opisując sfinansowany wydatek. Niezmiennik sumy warstw floty
+  (`layersSum(state) === state.total`) zachowany każdego dnia.

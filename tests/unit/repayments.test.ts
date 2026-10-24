@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeFleet, householdBefore, type FleetInput } from '@shared/calc/fleet'
 import { balanceOf, purchaseOf, purchaseStatus, repaidMarks, settleHousehold, type LedgerOptions } from '@shared/calc/household'
-import { assignsOn, coverFields, linkRepayments, matchCovers, matchReturn, names, proposeCovers, withNamed } from '@shared/calc/repayments'
+import { assignsOn, choicesForRepayment, coverFields, linkRepayments, matchCovers, matchReturn, names, proposeCovers, waitingForPurchase, withNamed } from '@shared/calc/repayments'
 import { withKind } from '@shared/calc/kinds'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type Settings, type Transaction } from '@shared/schema'
@@ -257,5 +257,66 @@ describe('oznaczenia listy i pamięć rozliczeń (D91)', () => {
     expect(balanceOf(settleHousehold(list, EXPLICIT), MAMA).unassigned).toHaveLength(1)
     expect(balanceOf(settleHousehold(list), MAMA).unassigned).toHaveLength(0)
     expect(balanceOf(settleHousehold(list, { assignFrom: '2026-10-11' }), MAMA).unassigned).toHaveLength(0)
+  })
+})
+
+describe('wcześniejsza wpłata finansuje późniejszy zakup (1.15.1)', () => {
+  it('wpłata wskazująca późniejszy zakup rezerwuje zaliczkę, zakup z niej korzysta i ma stan oddany', () => {
+    const p = bought('2026-10-10', 80, MAMA)
+    const pay = paid('2026-10-05', 100, MAMA, { covers: [p.id] })
+    const ledger = settleHousehold([pay, p], EXPLICIT)
+    expect(ledger.byTx.get(pay.id)).toMatchObject([{ repaid: 0, advance: zl(80), income: zl(20), paidFor: [{ txId: p.id, amount: zl(80) }] }])
+    expect(purchaseOf(ledger, p.id)).toMatchObject({ lent: 0, fromDeposit: zl(80), paid: 0, by: [{ txId: pay.id, amount: zl(80) }] })
+    expect(purchaseStatus(purchaseOf(ledger, p.id)!)).toBe('paid')
+    expect(balanceOf(ledger, MAMA)).toMatchObject({ owed: 0, deposit: 0, open: [], unassigned: [] })
+  })
+
+  it('częściowe sfinansowanie wcześniejszą wpłatą: resztę pożyczają osłony, status partial', () => {
+    const p = bought('2026-10-10', 80, MAMA)
+    const pay = paid('2026-10-05', 50, MAMA, { covers: [p.id] })
+    const ledger = settleHousehold([pay, p], EXPLICIT)
+    expect(ledger.byTx.get(pay.id)).toMatchObject([{ repaid: 0, advance: zl(50), income: 0, paidFor: [{ txId: p.id, amount: zl(50) }] }])
+    expect(purchaseOf(ledger, p.id)).toMatchObject({ lent: zl(30), fromDeposit: zl(50), paid: 0, by: [{ txId: pay.id, amount: zl(50) }] })
+    expect(purchaseStatus(purchaseOf(ledger, p.id)!)).toBe('partial')
+    expect(balanceOf(ledger, MAMA)).toMatchObject({ owed: zl(30), deposit: 0, open: [{ txId: p.id, amount: zl(30) }] })
+
+    const later = paid('2026-10-12', 30, MAMA, { covers: [p.id] })
+    const full = settleHousehold([pay, p, later], EXPLICIT)
+    expect(purchaseOf(full, p.id)).toMatchObject({ lent: zl(30), fromDeposit: zl(50), paid: zl(30), by: [{ txId: pay.id, amount: zl(50) }, { txId: later.id, amount: zl(30) }] })
+    expect(purchaseStatus(purchaseOf(full, p.id)!)).toBe('paid')
+    expect(balanceOf(full, MAMA)).toMatchObject({ owed: 0, deposit: 0, open: [] })
+  })
+
+  it('niepowiązany zakup pośredni nie podkrada celowej zaliczki', () => {
+    const target = bought('2026-10-10', 80, MAMA)
+    const intermediate = bought('2026-10-07', 50, MAMA)
+    const pay = paid('2026-10-05', 80, MAMA, { covers: [target.id] })
+    const ledger = settleHousehold([pay, intermediate, target], EXPLICIT)
+    expect(purchaseOf(ledger, intermediate.id)).toMatchObject({ lent: zl(50), fromDeposit: 0 })
+    expect(purchaseStatus(purchaseOf(ledger, intermediate.id)!)).toBe('open')
+    expect(purchaseOf(ledger, target.id)).toMatchObject({ lent: 0, fromDeposit: zl(80), by: [{ txId: pay.id, amount: zl(80) }] })
+    expect(purchaseStatus(purchaseOf(ledger, target.id)!)).toBe('paid')
+    expect(balanceOf(ledger, MAMA)).toMatchObject({ owed: zl(50), deposit: 0, open: [{ txId: intermediate.id, amount: zl(50) }] })
+  })
+
+  it('choicesForRepayment oferuje późniejsze zakupy domownika w edytorze wcześniejszej wpłaty', () => {
+    const p1 = bought('2026-10-10', 80, MAMA)
+    const p2 = bought('2026-10-12', 40, TATA)
+    const pay = paid('2026-10-05', 100, MAMA)
+    const all = input([pay, p1, p2], null)
+    const before = householdBefore(all, pay, '2026-10-20')
+    const full = settleHousehold([pay, p1, p2], EXPLICIT)
+    const choices = choicesForRepayment(before, full, pay, MAMA)
+    expect(choices).toEqual([{ txId: p1.id, date: '2026-10-10', amount: zl(80) }])
+  })
+
+  it('waitingForPurchase oferuje wcześniejszą wpłatę w edytorze późniejszego zakupu („Przypisz zwrot…”)', () => {
+    const p = bought('2026-10-10', 80, MAMA)
+    const pay = paid('2026-10-05', 100, MAMA)
+    const full = settleHousehold([pay, p], EXPLICIT)
+    const ps = purchaseOf(full, p.id)!
+    const txOf = (id: string) => (id === pay.id ? pay : id === p.id ? p : undefined)
+    const waiting = waitingForPurchase(full, p, ps, txOf)
+    expect(waiting).toEqual([{ txId: pay.id, date: '2026-10-05', amount: zl(100) }])
   })
 })
