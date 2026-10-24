@@ -6,5 +6,5 @@
     "jsx": "react-jsx",
     "types": []
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*", "tests/unit/data-store.test.ts", "tests/unit/import-replan.test.ts", "tests/unit/operations-state.test.ts", "tests/unit/loan-close.test.ts", "tests/unit/machine-store.test.ts", "tests/unit/wealth-memo.test.ts", "tests/unit/sensor-inputs.test.ts", "tests/unit/cargo-actions.test.ts", "tests/unit/intel-v-store.test.ts", "tests/unit/operations-columns.test.ts"]
+  "include": ["src/renderer/**/*", "src/shared/**/*", "tests/unit/data-store.test.ts", "tests/unit/import-replan.test.ts", "tests/unit/operations-state.test.ts", "tests/unit/title-rules.test.ts", "tests/unit/loan-close.test.ts", "tests/unit/machine-store.test.ts", "tests/unit/wealth-memo.test.ts", "tests/unit/sensor-inputs.test.ts", "tests/unit/cargo-actions.test.ts", "tests/unit/intel-v-store.test.ts", "tests/unit/operations-columns.test.ts"]
 }

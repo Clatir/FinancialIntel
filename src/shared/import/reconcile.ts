@@ -849,12 +849,14 @@ export interface Choice {
   memberId: string | null
   /** A household member's money: the rest beyond their debt is their advance (else income). */
   advance: boolean
+  /** Purpose of an incoming transfer: 'repay' (repay purchases), 'income' (independent income), 'advance' (deposit). */
+  inflowKind?: 'repay' | 'income' | 'advance'
   /** A purchase the member gives (D83, with `refundable`): nobody owes it. */
   gift?: boolean
   /** A purchase financed by several people (D83): each row's amount split so. */
   share?: Share | null
   /** A household member's money carrying others' (D81, N-PC-10 – „w tym za…”): their parts, the rest the sender's. */
-  shares?: ReadonlyArray<{ memberId: string; amount: number; advance: boolean }>
+  shares?: ReadonlyArray<{ memberId: string; amount: number; advance: boolean; inflowKind?: 'repay' | 'income' | 'advance' }>
   counterAccountId: string | null
   /** The loan of the Radar a loan's operation belongs to (B34); none = a loan without its record. */
   loanId?: string | null
@@ -910,6 +912,7 @@ export const choiceOf = (d: ImportDecision): Choice => ({
   household: d.household,
   memberId: d.refundable || d.household ? d.memberId : null,
   advance: d.household && d.advance,
+  inflowKind: d.household ? (d.inflowKind ?? 'repay') : undefined,
   gift: d.refundable && d.gift,
   share: d.kind === 'expense' && !d.refundable ? d.share : null,
   counterAccountId: d.counterAccountId,
@@ -922,7 +925,7 @@ const memberKey = (c: Choice) => (c.refundable || c.household ? (c.memberId ?? H
 const sharesKey = (xs: Choice['shares']): string =>
   xs
     ?.filter((x) => x.amount > 0)
-    .map((x) => `${x.memberId}=${x.amount}:${x.advance ? 'a' : 'i'}`)
+    .map((x) => `${x.memberId}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`)
     .join(',') ?? ''
 
 export const sameChoice = (a: Choice, b: Choice): boolean =>
@@ -931,6 +934,7 @@ export const sameChoice = (a: Choice, b: Choice): boolean =>
   a.refundable === b.refundable &&
   a.household === b.household &&
   memberKey(a) === memberKey(b) &&
+  (a.household ? (a.inflowKind ?? 'repay') : '') === (b.household ? (b.inflowKind ?? 'repay') : '') &&
   (a.household && a.advance) === (b.household && b.advance) &&
   (a.refundable && !!a.gift) === (b.refundable && !!b.gift) &&
   shareKey(a.share) === shareKey(b.share) &&
@@ -966,7 +970,7 @@ export type ImportCounts = {
  * says whose it is: what it repays and what is their advance the ledger counts (`calc/household.ts`, D80).
  */
 /** What a rule says, from a decision (the import's learning, a rule edited in the settings – F22). */
-export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'> {
+export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId' | 'inflowKind'> {
   return {
     kind: c.kind,
     categoryId: c.kind === 'expense' ? c.categoryId : null,
@@ -975,7 +979,8 @@ export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId
     memberId: (c.kind === 'expense' && c.refundable) || (c.kind === 'income' && c.household) ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
     gift: c.kind === 'expense' && c.refundable && c.gift ? true : undefined,
     share: c.kind === 'expense' && !c.refundable && c.share ? c.share : undefined,
-    counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null
+    counterAccountId: c.kind === 'transfer' ? c.counterAccountId : null,
+    inflowKind: c.kind === 'income' && c.household ? c.inflowKind : undefined
   }
 }
 
@@ -1100,7 +1105,7 @@ export function buildImport(
       household && c.shares?.length
         ? c.shares
             .filter((x) => x.amount > 0 && x.memberId !== (c.memberId ?? HOUSE_MEMBER_ID))
-            .map((x) => ({ id: opts.makeId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, note: '' }))
+            .map((x) => ({ id: opts.makeId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, ...(x.inflowKind ? { inflowKind: x.inflowKind } : {}), note: '' }))
         : []
     // The rule's tags (F17 – „Netia → #ulga-internet”): when its decision stands.
     const ruleTags = planned.decision.ruleId && sameChoice(c, base) ? ruleById.get(planned.decision.ruleId)?.tags : undefined
@@ -1121,6 +1126,7 @@ export function buildImport(
         // A household member's purchase or money (D80): whose; their money beyond their debt is their advance or income.
         memberId: refundable || household ? (c.memberId ?? HOUSE_MEMBER_ID) : null,
         advance: household && c.advance,
+        ...(household && c.inflowKind ? { inflowKind: c.inflowKind } : {}),
         ...(refundable && c.gift ? { gift: true } : {}),
         ...(share ? { share, splits: shareSplits({ amount: p.row.amount, categoryId: c.categoryId }, share) } : incomeSplits.length ? { splits: incomeSplits } : {}),
         counterparty: p.row.counterparty,

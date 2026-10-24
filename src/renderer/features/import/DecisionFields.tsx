@@ -11,6 +11,7 @@ import { IconClose, IconPlus } from '../../components/icons'
 import { CategorySelect, useAccounts } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { ShareEditor } from '../household/ShareEditor'
+import { Segmented } from '../../components/ui'
 import { choiceFor, optionOf, optionsFor, type Option } from './options'
 
 /** A shared purchase's split for the import (D83): equally or by percents – each row has its own amount. */
@@ -146,6 +147,20 @@ export function DecisionFields({
             </option>
           ))}
       </select>
+      {direction === 'in' && choice.kind === 'income' && choice.household && (
+        <Segmented
+          size="sm"
+          value={choice.inflowKind ?? (choice.advance ? 'advance' : 'repay')}
+          onChange={(inflowKind) => onChange({ ...choice, inflowKind, advance: inflowKind === 'advance' })}
+          options={[
+            { value: 'repay', label: 'spłata' },
+            { value: 'income', label: 'niezależny przychód' },
+            { value: 'advance', label: 'zaliczka' }
+          ]}
+          aria-label="Cel wpłaty domownika"
+          data-testid={`${testId}-inflow-kind`}
+        />
+      )}
       {choice.kind === 'transfer' && otherAccounts.length > 0 && (
         <select
           className="input h-[24px] w-[195px] py-0 text-[11.5px]"

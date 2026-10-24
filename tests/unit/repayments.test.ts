@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeFleet, householdBefore, type FleetInput } from '@shared/calc/fleet'
 import { balanceOf, purchaseOf, purchaseStatus, repaidMarks, settleHousehold, type LedgerOptions } from '@shared/calc/household'
-import { assignsOn, choicesForRepayment, coverFields, linkRepayments, matchCovers, matchReturn, names, proposeCovers, stripDeletedCovers, waitingForPurchase, withNamed } from '@shared/calc/repayments'
+import { assignsOn, choicesForRepayment, coverFields, linkRepayments, matchCovers, matchReturn, names, proposeCovers, repaymentShares, stripDeletedCovers, waitingForPurchase, withNamed } from '@shared/calc/repayments'
 import { costOf, partsOf } from '@shared/calc/operations'
 import { buildImport, planImport, type ImportChoices } from '@shared/import/reconcile'
 import { categoryIndex } from '@shared/calc/operations'
@@ -528,5 +528,14 @@ describe('wcześniejsza wpłata finansuje późniejszy zakup (1.15.1)', () => {
     expect(balanceOf(ledger, MAMA).owed).toBe(0)
     expect(balanceOf(ledger, TATA).owed).toBe(zl(60))
     expect(purchaseOf(ledger, pTata.id)?.paid).toBe(zl(40))
+  })
+
+  it('niezależny przekaz / przychód nie trafia do repaymentShares ani linkRepayments', () => {
+    const pMama = bought('2026-10-05', 80, MAMA)
+    const indPay = paid('2026-10-10', 80, MAMA, { inflowKind: 'income' })
+    const shares = repaymentShares(indPay)
+    expect(shares).toEqual([])
+    const links = linkRepayments(input([pMama, indPay], null), new Set([indPay.id]), '2026-10-20')
+    expect(links.has(indPay.id)).toBe(false)
   })
 })

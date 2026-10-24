@@ -493,7 +493,8 @@ function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | 
     if (c.kind === 'income') {
       const shares = c.household ? (c.shares ?? []).filter((s) => s.amount > 0) : []
       const via = shares.length ? ` (w tym za: ${shares.map((s) => `${memberName(s.memberId, members)} ${plnText(s.amount)} zł`).join(', ')})` : ''
-      return c.household ? `od domownika: ${memberName(c.memberId, members)}${c.advance ? ' – zaliczka' : ''}${via}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'
+      const kindText = c.inflowKind === 'income' ? ' – niezależny przychód' : c.inflowKind === 'advance' ? ' – zaliczka' : c.advance ? ' – zaliczka' : ''
+      return c.household ? `od domownika: ${memberName(c.memberId, members)}${kindText}${via}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'
     }
     if (c.kind === 'transfer') {
       // To / from another account of the budget (F10): its name.

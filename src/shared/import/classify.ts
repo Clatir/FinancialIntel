@@ -90,7 +90,17 @@ export interface RuleTarget {
 export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction, amount?: number): ImportRule | null {
   const usable = ruleIndexOf(rules, direction)
   const keys = new Set([t.brand, t.raw, ...(t.legacy ?? []), t.key].filter(Boolean))
-  // A rule of the brand up to an amount (F22): the tightest one the amount fits, before the brand's plain rule.
+
+  // 1. A rule matching BOTH a specific counterparty and a title keyword (highest priority)
+  for (const k of usable.keyword) {
+    if (!k.rule.counterparty) continue
+    const cpKey = counterpartyKey(k.rule.counterparty)
+    if (!keys.has(cpKey) && !keys.has(k.rule.counterparty)) continue
+    const matches = (k.matches ??= keywordMatcher(k.rule.match))
+    if (matches(t.title)) return k.rule
+  }
+
+  // 2. A rule of the brand up to an amount (F22): the tightest one the amount fits, before the brand's plain rule.
   if (amount != null) {
     let best: ImportRule | null = null
     for (const r of usable.amount) if (keys.has(r.match) && Math.abs(amount) <= r.maxAmount! && (!best || r.maxAmount! < best.maxAmount!)) best = r
@@ -104,6 +114,7 @@ export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction:
   for (const r of usable.contains) if ((t.key.includes(r.match) || t.brand.includes(r.match) || t.raw.includes(r.match)) && (!best || r.match.length > best.match.length)) best = r
   if (best) return best
   for (const k of usable.keyword) {
+    if (k.rule.counterparty) continue
     const matches = (k.matches ??= keywordMatcher(k.rule.match))
     if ((matches(t.name) || matches(t.title)) && (!best || k.rule.match.length > best.match.length)) best = k.rule
   }
@@ -280,6 +291,8 @@ export interface ImportDecision {
   memberId: string | null
   /** A household member's money: what they do not owe is their advance (else income – D80 b). */
   advance: boolean
+  /** Purpose of an incoming transfer: 'repay' (repay purchases), 'income' (independent income), 'advance' (deposit). */
+  inflowKind?: 'repay' | 'income' | 'advance'
   /** A purchase the member gives (D83, with `refundable`): nobody owes it. */
   gift: boolean
   /** A purchase financed by several people (D83): the row's amount split so. */
@@ -489,10 +502,11 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
         refundable,
         household,
         memberId,
+        inflowKind: household ? (rule.inflowKind ?? 'repay') : undefined,
         gift: refundable && !!rule.gift,
         share: kind === 'expense' && !refundable ? (rule.share ?? null) : null,
         // What the member's money beyond their debt is, as the member's setting says (D80 b; „ask” = income, D20).
-        advance: household && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance',
+        advance: household && (rule.inflowKind === 'advance' || (!rule.inflowKind && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance')),
         counterAccountId: kind === 'transfer' ? rule.counterAccountId : null
       })
     )
@@ -510,10 +524,12 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   // A member's money: asked once what the rest beyond their debt is (D80 b).
   if (member) {
     const inflow = inflowOf(member)
+    const inflowKind = inflow === 'advance' ? 'advance' : inflow === 'income' ? 'income' : 'repay'
     return out(
-      decision('income', inflow === 'ask' ? `od domownika: ${member.name} – reszta ponad należność: zaliczka czy przychód?` : `od domownika: ${member.name}`, {
+      decision('income', inflow === 'ask' ? `od domownika: ${member.name} – spłata zakupów czy niezależny przekaz?` : `od domownika: ${member.name}`, {
         household: true,
         memberId: member.id,
+        inflowKind,
         advance: inflow === 'advance',
         source: inflow === 'ask' ? 'none' : 'builtin'
       })

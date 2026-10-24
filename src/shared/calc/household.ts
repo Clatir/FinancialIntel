@@ -170,6 +170,8 @@ export interface IncomeShare {
   amount: number
   /** What they do not owe is their advance. */
   advance: boolean
+  /** Purpose of the inflow: 'repay' (repay purchases first), 'income' (independent income), 'advance' (deposit). */
+  inflowKind?: 'repay' | 'income' | 'advance'
   /** An income of before 1.3.0: it repays at most this much (`repaid`, D20). */
   limit?: number
   /** The line of the split it is (its index); none – the rest of the amount. */
@@ -181,18 +183,18 @@ export interface IncomeShare {
  * sender's (`payerOf`); unsplit, all of it the sender's. Parts summing to more than the amount (a file edited by hand)
  * are cut at it.
  */
-export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'advance' | 'splits'>): IncomeShare[] {
+export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'advance' | 'splits'> & { inflowKind?: 'repay' | 'income' | 'advance' }): IncomeShare[] {
   const payer = payerOf(t)
   if (t.kind !== 'income' || t.amount <= 0) return []
   const own = (amount: number): IncomeShare =>
-    t.memberId ? { memberId: t.memberId, amount, advance: t.advance } : payer ? { memberId: payer, amount, advance: false, limit: Math.min(amount, t.repaid) } : { memberId: null, amount, advance: false }
+    t.memberId ? { memberId: t.memberId, amount, advance: t.advance, inflowKind: t.inflowKind } : payer ? { memberId: payer, amount, advance: false, limit: Math.min(amount, t.repaid) } : { memberId: null, amount, advance: false }
   if (!t.splits.length) return [own(t.amount)]
   const out: IncomeShare[] = []
   let left = t.amount
   for (const [line, s] of t.splits.entries()) {
     const amount = Math.min(s.amount, left)
     if (amount <= 0) continue
-    out.push({ memberId: s.memberId ?? null, amount, advance: !!s.memberId && !!s.advance, line })
+    out.push({ memberId: s.memberId ?? null, amount, advance: !!s.memberId && !!s.advance, inflowKind: s.inflowKind, line })
     left -= amount
   }
   if (left > 0) out.push(own(left))
@@ -550,6 +552,15 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
         if (!share.memberId) continue
         const st = stateOf(share.memberId)
         const f = flow(share.memberId)
+        if (share.inflowKind === 'income') {
+          f.income += share.amount
+          continue
+        }
+        if (share.inflowKind === 'advance') {
+          f.advance += share.amount
+          st.deposit += share.amount
+          continue
+        }
         // Before 1.3.0 an income said how much of it repays (`repaid`); the rest was income.
         const { paid: back, reserved } = repay(
           st,

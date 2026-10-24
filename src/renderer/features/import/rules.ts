@@ -103,7 +103,11 @@ export function ruleDecisionText(
     const archived = !!r.categoryId && !!settings?.categories.find((c) => c.id === r.categoryId)?.archived
     return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}${archived ? ' (zarchiwizowana)' : ''}`
   }
-  if (r.kind === 'income') return r.household ? `od domownika: ${memberName(r.memberId, members)}` : 'wpływ (przychód)'
+  if (r.kind === 'income') {
+    if (!r.household) return 'wpływ (przychód)'
+    const kindText = (r as ImportRule).inflowKind === 'income' ? ' – niezależny przychód' : (r as ImportRule).inflowKind === 'advance' ? ' – zaliczka' : ''
+    return `od domownika: ${memberName(r.memberId, members)}${kindText}`
+  }
   if (r.kind === 'transfer') {
     const account = r.counterAccountId ? settings?.accounts.find((a) => a.id === r.counterAccountId)?.name : null
     return account ? `przelew własny · ${account}` : 'przelew własny'
@@ -129,7 +133,8 @@ export const choiceOfRule = (r: ImportRule): Choice => ({
   refundable: r.refundable,
   household: r.household,
   memberId: r.memberId,
-  advance: false,
+  advance: r.inflowKind === 'advance',
+  inflowKind: r.inflowKind ?? 'repay',
   gift: r.gift,
   share: r.share ?? null,
   counterAccountId: r.counterAccountId
@@ -216,6 +221,8 @@ export function saveKeywordRule(input: {
   direction: 'in' | 'out' | null
   kind: TxKind
   categoryId: string | null
+  /** An optional counterparty constraint (e.g. transfer from person X with title Y). */
+  counterparty?: string | null
   /** A decision of the import taken as a keyword (1.2.2): a member's purchase or money (D80), their gift, several people (D83), an account. */
   refundable?: boolean
   household?: boolean
@@ -223,6 +230,7 @@ export function saveKeywordRule(input: {
   gift?: boolean
   share?: Share | null
   counterAccountId?: string | null
+  inflowKind?: 'repay' | 'income' | 'advance'
 }): string | null {
   // Said by the caller as an error, like the others (N2): never „zapamiętano” in a read-only folder, nor while another
   // folder opens (B31).
@@ -233,16 +241,24 @@ export function saveKeywordRule(input: {
   if (match.split(' ').every(isGenericWord)) return `„${input.keyword.trim()}” jest za ogólne – bank pisze je przy wielu operacjach. Wybierz słowo, które mówi, co to było.`
   if (input.kind === 'expense' && !input.categoryId) return 'Wybierz kategorię.'
   const now = new Date().toISOString()
+  const cpConstraint = input.counterparty?.trim() || undefined
   const saved = updateSettings((f) => {
     const rules = f.settings.import.rules
-    const at = rules.findIndex((r) => r.mode === 'keyword' && r.match === match && r.direction === input.direction)
+    const at = rules.findIndex(
+      (r) =>
+        r.mode === 'keyword' &&
+        r.match === match &&
+        r.direction === input.direction &&
+        (r.counterparty || undefined) === cpConstraint
+    )
     const rule: ImportRule = {
       ...(at >= 0 ? rules[at] : {}),
       id: at >= 0 ? rules[at]!.id : newId(),
       match,
       mode: 'keyword',
       direction: input.direction,
-      label: input.keyword.trim().replace(/\s+/g, ' '),
+      counterparty: cpConstraint,
+      label: cpConstraint ? `${cpConstraint} · ${input.keyword.trim()}` : input.keyword.trim().replace(/\s+/g, ' '),
       kind: input.kind,
       categoryId: input.kind === 'expense' ? input.categoryId : null,
       refundable: input.kind === 'expense' && !!input.refundable,
@@ -251,6 +267,7 @@ export function saveKeywordRule(input: {
       gift: input.kind === 'expense' && input.refundable && input.gift ? true : undefined,
       share: input.kind === 'expense' && !input.refundable && input.share ? input.share : undefined,
       counterAccountId: input.kind === 'transfer' ? (input.counterAccountId ?? null) : null,
+      inflowKind: input.kind === 'income' && input.household ? input.inflowKind : undefined,
       learned: false,
       hits: at >= 0 ? rules[at]!.hits : 0,
       updatedAt: now

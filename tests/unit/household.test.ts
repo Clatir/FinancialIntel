@@ -333,5 +333,20 @@ describe('domownicy bez bankowości, rozliczenia od dnia (D81)', () => {
     expect(s.receivables.members.find((m) => m.memberId === MAMA)).toMatchObject({ owed: zl(200) })
     expect(s.household.byTx.get(transfer.id)).toMatchObject([{ memberId: TATA, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: zl(1000), gift: 0 }])
   })
+
+  it('niezależny przekaz od domownika: nie spłaca zakupu do oddania – jako przychód lub niezależna zaliczka', () => {
+    const purchase = bought('2026-10-03', 200, MAMA)
+    // 1) Niezależny przychód: trafia do przychodu statystyk i budżetu, Mama nadal ma do oddania 200 zł
+    const independentIncome = paid('2026-10-05', 100, MAMA, false, { inflowKind: 'income' })
+    const ledgerIncome = settleHousehold([purchase, independentIncome], { assignFrom: null })
+    expect(balanceOf(ledgerIncome, MAMA)).toMatchObject({ owed: zl(200), deposit: 0, unassigned: [] })
+    expect(ledgerIncome.byTx.get(independentIncome.id)).toMatchObject([{ repaid: 0, advance: 0, income: zl(100), unassigned: 0, paidFor: [] }])
+
+    // 2) Niezależna zaliczka: trafia do depozytu, Mama nadal ma do oddania 200 zł
+    const independentAdvance = paid('2026-10-06', 150, MAMA, true, { inflowKind: 'advance' })
+    const ledgerAdvance = settleHousehold([purchase, independentAdvance], { assignFrom: null })
+    expect(balanceOf(ledgerAdvance, MAMA)).toMatchObject({ owed: zl(200), deposit: zl(150), unassigned: [] })
+    expect(ledgerAdvance.byTx.get(independentAdvance.id)).toMatchObject([{ repaid: 0, advance: zl(150), income: 0, unassigned: 0, paidFor: [] }])
+  })
 })
 

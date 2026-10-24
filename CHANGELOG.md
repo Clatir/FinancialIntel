@@ -1,5 +1,19 @@
 # Financial Intel – zmiany
 
+## 1.15.3
+
+Rozliczenia z domownikami i automatyczne reguły tytułów:
+
+- **Niezależny przekaz / zaliczka od domownika:**
+  - Wpłata od domownika nie wymusza już traktowania jej jako spłaty zakupów, gdy domownik ma otwarty dług.
+  - Wybór charakteru wpłaty: „spłata zakupów” (rozlicza najstarsze zakupy), „niezależny przychód” (wpływ do budżetu bez kasowania długu) oraz „zaliczka na przyszłość” (zasilenie depozytu domownika).
+  - Wybór dostępny 1-kliknięciem w oknie importu mBanku oraz w edytorze wpłaty w dzienniku i na pozycjach podzielonych (splitach).
+
+- **Automatyczna klasyfikacja po tytule i kontrahencie:**
+  - Możliwość ustawienia reguły dla tytułu operacji bezpośrednio z widoku transakcji w dzienniku (zastosowanie do historii wstecz i wprzód oraz zapis na przyszłość).
+  - Opcjonalne powiązanie reguły z konkretnym kontrahentem (`kontrahent + tytuł`), co umożliwia automatyczną klasyfikację przelewów od określonej osoby o zadanym tytule do wybranej kategorii budżetowej (jako zwrot / pomniejszenie wydatków danej koperty).
+  - Poprawka wyboru kategorii dla zwrotów towaru i rozliczeń w oknie importu.
+
 ## 1.15.2
 
 Audyt funkcjonalny PC (N-PC-1 do N-PC-20, D95): spójność i ergonomia codziennej pracy z budżetem.

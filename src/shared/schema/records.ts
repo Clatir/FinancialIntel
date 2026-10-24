@@ -49,6 +49,8 @@ export const splitSchema = z.looseObject({
   memberId: ulidSchema.nullable().catch(null).default(null),
   /** A member's part of an income (D81): what they do not owe is their advance, not income. */
   advance: z.boolean().catch(false).default(false),
+  /** Purpose of a member's inflow: 'repay' (repay purchases first), 'income' (independent income), 'advance' (deposit). */
+  inflowKind: z.enum(['repay', 'income', 'advance']).optional().catch(undefined),
   /**
    * A member's line as their gift (D83, 1.5.0): it takes their advance first, the rest the shields pay – nobody owes it,
    * and it is no cost of mine. An older version reads the line as financed (the member owes it). Absent = no.
@@ -145,6 +147,8 @@ export const transactionSchema = z.looseObject({
   memberId: ulidSchema.nullable().catch(null).default(null),
   /** A household member's income: what they do not owe is their advance (held in the deposit), not income. */
   advance: z.boolean().catch(false).default(false),
+  /** Purpose of a member's inflow: 'repay' (repay purchases first), 'income' (independent income), 'advance' (deposit). */
+  inflowKind: z.enum(['repay', 'income', 'advance']).optional().catch(undefined),
   /** A purchase a member finances as their gift (D83, with `refundable`): nobody owes it (`Split.gift`). Absent = no. */
   gift: z.boolean().optional().catch(undefined),
   /** Financed by several people in one move (D83): how its lines were made; absent / null = none (or a split receipt). */

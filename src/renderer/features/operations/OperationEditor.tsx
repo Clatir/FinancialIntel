@@ -29,6 +29,7 @@ import { PurchaseRepaid, RepaymentPicker } from '../household/Repayments'
 import { ShareEditor } from '../household/ShareEditor'
 import { useMembers } from '../household/actions'
 import { AnomalyNote, AwaitReturnBox } from '../sensors/EditorBoxes'
+import { TitleRuleAction } from './TitleRuleAction'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
 import { BrandYearLine } from '../intel/Drill'
@@ -262,11 +263,12 @@ export function OperationEditor({ id }: { id: string }) {
             )}
           </div>
         </Field>
-        {(t.title || t.kind === 'transfer' || t.kind === 'income') && (
-          <Field label="Tytuł">
-            <TextField commit value={t.title} onChange={(title) => patch({ title })} maxLength={1000} data-testid="operation-title" />
-          </Field>
-        )}
+        <Field label="Tytuł">
+          <div className="flex flex-col gap-1.5">
+            <TextField commit value={t.title} onChange={(title) => patch({ title })} placeholder="np. przelew, zwrot, opis…" maxLength={1000} data-testid="operation-title" />
+            <TitleRuleAction t={t} patch={patch} />
+          </div>
+        </Field>
 
         {t.kind === 'expense' && (
           <Section title="Kategoria">

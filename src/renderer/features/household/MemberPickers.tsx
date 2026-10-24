@@ -128,9 +128,11 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const shareMembers = [...new Set(incomeShares({ ...t, amount: Math.max(t.amount, partsSum) }).map((x) => x.memberId).filter((x): x is string => !!x))]
   const setMember = (id: string) => {
     const m = members.find((x) => x.id === id)
+    const inflow = inflowOf(m)
+    const inflowKind = inflow === 'advance' ? 'advance' : inflow === 'income' ? 'income' : 'repay'
     const next: Partial<Transaction> = id
-      ? { memberId: id, repaid: 0, advance: inflowOf(m) === 'advance', covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
-      : { memberId: null, repaid: 0, advance: false, covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
+      ? { memberId: id, repaid: 0, inflowKind: t.inflowKind ?? inflowKind, advance: (t.inflowKind ?? inflowKind) === 'advance', covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
+      : { memberId: null, repaid: 0, inflowKind: undefined, advance: false, covers: [], coversOpening: undefined, coversOpeningMembers: undefined }
     // The purchase it surely pays back (D91), named at once – the list below changes it.
     patch(id ? { ...next, ...sureCoversOf({ ...t, ...next }) } : next)
   }
@@ -151,6 +153,36 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
       </select>
       {payer && (
         <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
+          <span>Cel wpłaty:</span>
+          <Segmented
+            size="sm"
+            value={t.inflowKind ?? 'repay'}
+            onChange={(inflowKind) => {
+              if (inflowKind === 'repay') {
+                const next = { memberId: payer, inflowKind: 'repay' as const }
+                patch({ ...next, ...sureCoversOf({ ...t, ...next }) })
+              } else {
+                patch({
+                  memberId: payer,
+                  inflowKind,
+                  covers: [],
+                  coversOpening: undefined,
+                  coversOpeningMembers: undefined,
+                  advance: inflowKind === 'advance'
+                })
+              }
+            }}
+            options={[
+              { value: 'repay', label: 'spłata zakupów', title: 'Wpłata najpierw spłaca to, co domownik ma oddać' },
+              { value: 'income', label: 'niezależny przychód', title: 'Przychód do budżetu od tego domownika – nie spłaca zakupów' },
+              { value: 'advance', label: 'zaliczka na przyszłość', title: 'Zaliczka do depozytu – nie spłaca dotychczasowych zakupów' }
+            ]}
+            aria-label="Cel wpłaty domownika"
+          />
+        </div>
+      )}
+      {payer && (t.inflowKind === 'repay' || !t.inflowKind) && (
+        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
           <span>{parts.length ? `Reszta (${memberName(payer, members)}) ponad to, co ma oddać:` : 'Reszta ponad to, co ma oddać:'}</span>
           <Segmented
             size="sm"
@@ -164,6 +196,16 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
             options={[...INCOME_REST]}
             aria-label="Reszta wpłaty domownika"
           />
+        </div>
+      )}
+      {payer && t.inflowKind === 'income' && (
+        <div className="text-[11px] text-dim" data-testid="inflow-kind-note">
+          Niezależny przychód do budżetu od {memberName(payer, members)} – nie spłaca zakupów, dług domownika pozostaje bez zmian.
+        </div>
+      )}
+      {payer && t.inflowKind === 'advance' && (
+        <div className="text-[11px] text-dim" data-testid="inflow-kind-note">
+          Zaliczka na przyszłe zakupy od {memberName(payer, members)} – zasila depozyt, nie spłaca dotychczasowych zakupów.
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
@@ -212,6 +254,19 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
                   ))}
               </select>
               {x.memberId && (
+                <Segmented
+                  size="sm"
+                  value={x.inflowKind ?? 'repay'}
+                  onChange={(v) => setPart(x.id, { inflowKind: v, advance: v === 'advance' })}
+                  options={[
+                    { value: 'repay', label: 'spłata' },
+                    { value: 'income', label: 'przychód' },
+                    { value: 'advance', label: 'zaliczka' }
+                  ]}
+                  aria-label="Cel części domownika"
+                />
+              )}
+              {x.memberId && (!x.inflowKind || x.inflowKind === 'repay') && (
                 <Segmented size="sm" value={x.advance ? 'advance' : 'income'} onChange={(v) => setPart(x.id, { advance: v === 'advance' })} options={[...INCOME_REST]} aria-label="Reszta części domownika" />
               )}
               <button type="button" className="btn btn-ghost h-[22px] px-1" title="Usuń część" onClick={() => setParts(parts.filter((y) => y.id !== x.id))} data-testid="income-split-remove">

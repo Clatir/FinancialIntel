@@ -183,6 +183,8 @@ export const importRuleSchema = z.looseObject({
   maxAmount: z.number().int().positive().nullable().optional().catch(undefined),
   /** Money in or out; null = both. */
   direction: openEnum(['in', 'out'] as const).nullable().default(null),
+  /** An optional counterparty constraint for a keyword rule (e.g. transfer from person X with title Y). */
+  counterparty: z.string().max(300).optional().catch(undefined),
   /** The counterparty as the bank writes it (for the list of rules). */
   label: z.string().max(200).default(''),
   kind: openEnum(TX_KINDS).default('expense'),
@@ -192,6 +194,8 @@ export const importRuleSchema = z.looseObject({
   household: z.boolean().default(false),
   /** The household member (D80): who finances an expense („refundable”), whose money an income is („household”); null = the first. */
   memberId: ulidSchema.nullable().catch(null).default(null),
+  /** Purpose of an incoming transfer: 'repay' (default), 'income' (independent income), 'advance' (deposit). */
+  inflowKind: z.enum(['repay', 'income', 'advance']).optional().catch(undefined),
   /** A purchase the member gives (D83, with `refundable`): nobody owes it. Absent = no. */
   gift: z.boolean().optional().catch(undefined),
   /** A purchase financed by several people (D83): each row's amount split so (`calc/share.ts`). Absent / null = none. */
