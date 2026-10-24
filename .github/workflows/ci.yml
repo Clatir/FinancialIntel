@@ -215,18 +215,24 @@ jobs:
           (cd dist && zip -qry Financial-Intel.ipa Payload && rm -rf Payload && ls -l)
       - name: Smoke test in the simulator (the app starts, its web app boots)
         run: |
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO build | tail -n 20
           device=$(xcrun simctl list devices available -j | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const all=Object.entries(JSON.parse(s).devices).filter(([r])=>r.includes('iOS')).flatMap(([,d])=>d).filter(d=>/^iPhone/.test(d.name));process.stdout.write(all.at(-1)?.udid??'')})")
           test -n "$device"
-          xcrun simctl boot "$device" || true
-          xcrun simctl bootstatus "$device" -b
+          # Start booting the simulator in parallel with the simulator xcodebuild so cold Data Migration overlaps compilation.
+          (xcrun simctl boot "$device" || true) &
+          boot_pid=$!
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO build | tail -n 20
+          wait "$boot_pid" || true
+          xcrun simctl bootstatus "$device" -b || xcrun simctl bootstatus "$device" -b
           xcrun simctl install "$device" build/sim/Build/Products/Debug-iphonesimulator/App.app
           # A debug build prints the web app's console (Capacitor): the boot line of src/mobile/app/PhoneApp.tsx.
           xcrun simctl launch --console-pty "$device" app.financialintel.ios > sim-console.log 2>&1 &
           launcher=$!
-          for i in $(seq 1 90); do
+          for i in $(seq 1 180); do
             if grep -q FI_PHONE_BOOT_OK sim-console.log; then echo "booted after ${i}s"; break; fi
+            if [ "$i" -eq 60 ] && ! [ -s sim-console.log ]; then
+              xcrun simctl launch "$device" app.financialintel.ios || true
+            fi
             sleep 1
           done
           sleep 2

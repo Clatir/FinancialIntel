@@ -379,13 +379,13 @@ function GoalRow({
           </button>
         </span>
       </div>
-      <div className="flex items-center gap-2 pl-[26px]">
-        <span className="num text-fg-strong" data-testid="starmap-amount">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-[26px]">
+        <span className="num whitespace-nowrap text-fg-strong" data-testid="starmap-amount">
           {zl(amount)}
         </span>
         <span className="text-dim">/</span>
         {ictj || readOnly ? (
-          <span className="num text-muted" title={allIn ? 'Cel bez kwoty w ICTTJ: bierze wszystkie wypłaty z puli Cele w swoim miesiącu' : undefined} data-testid="starmap-no-target">
+          <span className="num whitespace-nowrap text-muted" title={allIn ? 'Cel bez kwoty w ICTTJ: bierze wszystkie wypłaty z puli Cele w swoim miesiącu' : undefined} data-testid="starmap-no-target">
             {noTarget
               ? allIn
                 ? `bez kwoty – pula Cele${g.deadline ? ` w ${monthLabel(g.deadline)}` : ''}`
@@ -406,7 +406,7 @@ function GoalRow({
         )}
         <span className="flex-1" />
         <span
-          className={cx('text-[11.5px]', late ? 'text-accent' : 'text-muted')}
+          className={cx('whitespace-nowrap text-[11.5px]', late ? 'text-accent' : 'text-muted')}
           data-testid="starmap-eta"
           data-late={late || undefined}
           title={late ? (eta || pace ? 'Przy obecnym tempie cel będzie po terminie' : 'Termin minął, a cel nie jest pełny') : undefined}
@@ -427,7 +427,7 @@ function GoalRow({
           // A month typed whole, saved on leaving the field (W2): never a save per key.
           <MonthField className="h-[22px] w-[90px]" value={g.deadline} allowEmpty onChange={(deadline) => patchGoal(g.id, { deadline })} placeholder="termin" aria-label="Termin celu" />
         ) : (
-          g.deadline && <span className="text-[11.5px] text-dim">termin {monthLabel(g.deadline)}</span>
+          g.deadline && <span className="whitespace-nowrap text-[11.5px] text-dim">termin {monthLabel(g.deadline)}</span>
         )}
         {amount > 0 && !readOnly && (
           <button className="btn btn-ghost h-[20px] px-1.5 text-[11px]" onClick={onMoveMoney} title="Przenieś część lub całość środków celu bez archiwizacji" data-testid="goal-move-funds">

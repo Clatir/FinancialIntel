@@ -51,6 +51,9 @@ test('Cele (1.4.2): wydatek z pieniędzy celu, archiwizacja z pytaniem o środki
     await page.keyboard.press('Control+6')
     await expect(goal('Wakacje').getByTestId('starmap-amount')).toHaveText('2 100,00 zł')
 
+    // On Windows CI the virtual screen is 1024x768 – both „przenieś środki” (N-PC-6) and „archiwizuj” must wrap inside the left column.
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1024, 768))
+
     // Archived with its money back to the shields (C2) – and „Cofnij” brings it back as it was.
     await goal('Wakacje').getByTestId('starmap-archive').click()
     await expect(page.getByTestId('starmap-money')).toContainText('2 100,00 zł')
