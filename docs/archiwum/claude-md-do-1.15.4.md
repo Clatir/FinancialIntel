@@ -1,3 +1,7 @@
+> **ARCHIWUM – stan na 1.15.4 (25.10.2026), nieaktualizowane.** Dawny `CLAUDE.md`: mapa kodu każdej wersji 0.1.0–1.15.4
+> i lista etapów. Prawdą jest kod; aktualne zasady: `CLAUDE.md` i `.claude/rules/`. Szukaj tu Grepem po nazwie pliku,
+> funkcji albo wersji – nie czytaj w całości.
+
 # Financial Intel – ustalenia projektu
 
 Osobista aplikacja budżetowa na Windows (Electron). Użytkownik jest kapitanem okrętu, a jego finanse to systemy

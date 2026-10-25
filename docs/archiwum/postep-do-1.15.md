@@ -1,3 +1,6 @@
+> **ARCHIWUM – dziennik postępu do 1.15.1 (stan pliku z 25.10.2026), nieaktualizowane.** Bieżący stan: `docs/postep.md`.
+> Szukaj tu Grepem po wersji, grupie albo identyfikatorze (D…, T…, B…) – nie czytaj w całości.
+
 # Financial Intel – postęp
 
 **Stan:** **1.15.2 przygotowane do wydania** (audyt funkcjonalny PC – pakiety A, B, C; N-PC-1 do N-PC-20, D95, T313).
