@@ -5,8 +5,8 @@ description: Rytm etapu i grupy w Financial Intel – tabela prac i komunikat �
 
 # Etap / grupa – Financial Intel
 
-## Przed zadaniem – tabela prac (D90)
-Krok, co obejmuje, model i thinking – najtańszy, który wystarczy, z górką (o stopień wyżej) – oraz szacowany czas pracy
+## Przed etapem – tabela prac (D96, zmienia D90)
+Przy pojedynczym zadaniu poza etapem wystarczy jedna linia z modelem i thinking. Przed etapem: krok, co obejmuje, model i thinking – najtańszy, który wystarczy, z górką (o stopień wyżej) – oraz szacowany czas pracy
 Claude'a; na końcu razem i rekomendacja dla całości. Szacunki czasu bywały kilkukrotnie za duże (grupy kończyły się
 w 0,15–0,7 planu) – opieraj je na czasach faktycznych z `docs/postep.md` i archiwum.
 
@@ -14,7 +14,8 @@ Dobór modelu (relatywnie: Fable 5.1 ≈ 2,5× Opus 5.5 ≈ 5× Sonnet 5.5; Haik
 
 | Zadanie | Model |
 | --- | --- |
-| Silnik pieniędzy, dokowanie, rozliczenia, migracje danych, granica ICTTJ, synchronizacja | Opus 5.5 (xhigh / max wg ryzyka) |
+| Silnik pieniędzy (warstwy, dokowanie, rozliczenia z domownikami, zwroty, plan miesiąca), granica ICTTJ | Opus 5.5 max (D96) |
+| Migracje danych, synchronizacja, folder danych, telefon, reszta logiki | Opus 5.5 xhigh – domyślny poziom (D96) |
 | Projekt reguł o najwyższej stawce, druga opinia przy znalezisku critical / high | Fable 5.1 – rzadko |
 | Ekrany na gotowym silniku, teksty, testy według jasnej specyfikacji | Opus 5.5 high albo Sonnet 5.5 |
 | CHANGELOG, dokumenty, commit, PR, pilnowanie CI | Sonnet 5.5 |

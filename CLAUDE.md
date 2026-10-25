@@ -8,8 +8,10 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 
 ## Zasada współpracy
 - Przed wykonaniem każdego zadania podaj użytkownikowi, jaki model i jaki poziom thinking będzie najodpowiedniejszy,
-  dopiero potem wykonuj. **Przed każdym zadaniem tabela prac (D90)**: krok, co obejmuje, model i thinking –
+  dopiero potem wykonuj. **Przed każdym etapem tabela prac (D96, zmienia D90)**: krok, co obejmuje, model i thinking –
   najtańszy, który wystarczy, z górką (o stopień wyżej) – oraz szacowany czas pracy Claude'a; na końcu razem i rekomendacja.
+- **Thinking domyślnie xhigh; max tylko** dla kroków silnika pieniędzy (warstwy, dokowanie, rozliczenia z domownikami,
+  zwroty, plan miesiąca) i granicy ICTTJ (D96).
 - **Bez komendy użytkownika nie zaczynaj kolejnego etapu ani grupy** (D67). W grupie etapy idą bez pauzy, jeden PR
   i jedno wydanie na grupę.
 - **Przed każdym etapem** komunikat „Przed etapem N”; **po każdym etapie**: testy → `/code-review` high → commit + push →

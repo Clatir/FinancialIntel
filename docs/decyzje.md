@@ -394,6 +394,11 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
     N-PC-16 (zmiana podziału łupów także po 7. dniu miesiąca), N-PC-17 (spłata pożyczki z planu miesiąca przez kontener ładowni),
     N-PC-18 (domownicy i rozliczenia na start w Kreatorze), N-PC-19 (naprawa paradoksu ciszy nocnej dla wydatków planowanych),
     N-PC-20 (wznowienie zamkniętego lub odłożonego raportu wachty wieczornej).
+- **D96** (25.10.2026) Po audycie zużycia tokenów: (1) **thinking domyślnie xhigh**, **max tylko** dla kroków silnika
+  pieniędzy (warstwy, dokowanie, rozliczenia z domownikami, zwroty, plan miesiąca) i granicy ICTTJ („nigdy nie zapisuj w
+  folderze ICTTJ”) – dotąd prawie wszystkie grupy szły na max; (2) **tabela prac przed każdym etapem** (zamiast przed
+  każdym zadaniem – zmienia D90): krok, zakres, model i thinking z górką, szacowany czas, razem i rekomendacja; przy
+  pojedynczym zadaniu poza etapem wystarczy jedna linia z modelem i thinking.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.

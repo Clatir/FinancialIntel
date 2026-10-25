@@ -14,8 +14,8 @@ iPhone (D92 / D93): 1.13.0–1.15.0 wydane (grupy iA–iC, PR #42–#44); przerw
 decyzje D92 / D93, T305–T311.
 **Następny krok:** przerwa po iC (D93) – od użytkownika: procent limitu tygodniowego (kolumna „Rzeczywiste”), odpowiedź
 do IP15 (czy folder danych ICTTJ jest na OneDrive – bez niej iD nie startuje), decyzje IP21 (kreator) i IP24 (zapisy w
-tle) przed iE, uwagi z telefonu do iA–iC; potem grupa iD (1.16.0) na komendę (D67). Przed każdym zadaniem tabela prac z
-modelem oszczędnym z górką (D90). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
+tle) przed iE, uwagi z telefonu do iA–iC; potem grupa iD (1.16.0) na komendę (D67). Przed każdym etapem tabela prac z
+modelem oszczędnym z górką; thinking domyślnie xhigh, max tylko silnik pieniędzy i granica ICTTJ (D96). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
 wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w archiwum dziennika; iPhone – sekcje „1.13.0”, „1.14.0” i „1.15.0”
 w archiwum oraz `docs/iphone.md`.
@@ -37,7 +37,7 @@ prac” (razem ok. 63 h; ciąg M–V zmierzone ok. 17 h przy planie ok. 24–25 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏳ czeka na odpowiedzi |
-| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **max** | 5,5–7,5 h (z górką 8 h) | 1.17.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
+| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **xhigh** (D96; max tylko w krokach silnika pieniędzy albo granicy ICTTJ) | 5,5–7,5 h (z górką 8 h) | 1.17.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
 | | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |
 
 **iPhone – limit tygodniowy (D93).** Plan Max 20x, odnowienie w niedzielę o 18:00; 21.10.2026 zużyte 55 %. Podstawa:
