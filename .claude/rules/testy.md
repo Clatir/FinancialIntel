@@ -18,7 +18,8 @@ paths:
   `tests/e2e/files.ts` (pomija pliki znikające i tymczasowe), folder z rekordami `tests/e2e/seed.ts`; czekanie na
   podsumowanie importu `importDone` w limicie kroków masowych (`MASS`, 30 s); okno zapisu podstawiane przez
   `app.evaluate`; okno szybkiego wpisu – `page.evaluate('window.fi.quickOpen()')`; pole kwoty z wartością – najpierw
-  klik, potem wpisanie. Testy z należnościami sprzed dziś ustawiają `household.since`.
+  klik, potem wpisanie. Testy z należnościami sprzed dziś ustawiają `household.since`. Kod współdzielony E2E importują
+  względnie (bez aliasów).
 - Zmienne testowe: `FI_USER_DATA`, `FI_DATA_DIR`, `FI_MACHINE_NAME`, `FI_DEFAULT_DATA_DIR`, `FI_UPDATE_URL`,
   `FI_UPDATE_CHECK_DELAY_MS`, `FI_UPDATE_TOKEN`, `FI_E2E_EXECUTABLE`, `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` /
   `FI_ICTJ_LAUNCH`, `FI_SYSTEM_IDLE`, `FI_IDLE_CHECK_MS`, `FI_CONFIG_RETRY_MS`, `FI_CONFIG_WRITE_DELAY_MS`,

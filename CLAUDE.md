@@ -8,7 +8,7 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 
 ## Zasada współpracy
 - Przed wykonaniem każdego zadania podaj użytkownikowi, jaki model i jaki poziom thinking będzie najodpowiedniejszy,
-  dopiero potem wykonuj. Przed zadaniem z kilku kroków tabela prac (D90): krok, co obejmuje, model i thinking –
+  dopiero potem wykonuj. **Przed każdym zadaniem tabela prac (D90)**: krok, co obejmuje, model i thinking –
   najtańszy, który wystarczy, z górką (o stopień wyżej) – oraz szacowany czas pracy Claude'a; na końcu razem i rekomendacja.
 - **Bez komendy użytkownika nie zaczynaj kolejnego etapu ani grupy** (D67). W grupie etapy idą bez pauzy, jeden PR
   i jedno wydanie na grupę.
@@ -28,13 +28,14 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - **Duże dokumenty czytaj Grepem po identyfikatorze** (`D84`, `T17`, `B12`, `N-PC-3`, wersja), nie w całości:
   `docs/decyzje.md`, `docs/przeglad/*`, `docs/archiwum/*`.
 - Wiedza o modułach jest w `.claude/rules/` i ładuje się sama przy pracy na plikach modułu: `silnik.md`, `import.md`,
-  `folder-danych.md`, `ictj.md`, `telefon.md`, `ui.md`, `testy.md`.
+  `folder-danych.md`, `ictj.md`, `telefon.md`, `ui.md`, `testy.md`, `wydanie.md`.
 - `docs/archiwum/` – zamknięte zapisy: dawny CLAUDE.md z mapą kodu wersji 0.1.0–1.15.4 i dawny dziennik postępu.
-  Nieaktualizowane – prawdą jest kod; zaglądaj tam Grepem, gdy potrzebny powód albo historia zmiany.
+  Nieaktualizowane – prawdą jest kod; zaglądaj tam Grepem, gdy potrzebny powód albo historia zmiany. Odwołania do sekcji
+  „CLAUDE.md …” w dokumentach sprzed 25.10.2026 prowadzą do `docs/archiwum/claude-md-do-1.15.4.md`.
 - Szerokie przeszukiwanie kodu (wiele plików, „gdzie jest X”) – agent `Explore` z `model: haiku`; wynik sprawdź w kodzie.
 - **Gdzie co zapisywać:** stan i wpisy etapów → `docs/postep.md`; zmiany dla użytkownika → `CHANGELOG.md`; decyzje →
   `docs/decyzje.md`; nowa reguła albo pułapka modułu → `.claude/rules/<moduł>.md`. Do CLAUDE.md nie dopisuj map kodu
-  ani historii wersji. Limity (CLAUDE.md ≤ 200 linii, `docs/postep.md` ≤ 400, plik reguł ≤ 200) sprawdza CI
+  ani historii wersji. Limity (CLAUDE.md ≤ 200 linii / 20 KB, `docs/postep.md` ≤ 400 / 60 KB, plik reguł ≤ 200 / 20 KB) sprawdza CI
   (`scripts/check-context.mjs`).
 
 ## ICTTJ – wzorce i granica
@@ -106,7 +107,9 @@ backups/  .history/  .presence/          kopie ZIP, poprzednie wersje, obecnoś�
   z resztą w ostatniej części.
 - Data operacji = data warszawska; godzina opcjonalna (import z mBanku nie ma godzin).
 - Zapis atomowy, historia `.history/`, konflikty chmury i scalanie trójstronne – jak ICTTJ. Bez szyfrowania.
-- Zmiana formatu: podbij `SCHEMA_VERSION`, krok migracji + test.
+- Nowe pole albo kolekcja – addytywnie, **bez** podbijania `SCHEMA_VERSION` (od 0.1.0 wszystkie zmiany tak szły; podbicie
+  zrobiłoby nowe wpisy tylko do odczytu na komputerze ze starszą wersją). Zmiana nieaddytywna: podbij `SCHEMA_VERSION`,
+  krok migracji + test.
 - Nigdy nie commituj danych użytkownika. Przykładowe pliki (CSV z mBanku, folder ICTTJ) tylko zanonimizowane,
   w `tests/fixtures/`.
 

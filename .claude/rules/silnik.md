@@ -2,8 +2,18 @@
 paths:
   - "src/shared/calc/**"
   - "src/shared/schema/**"
+  - "src/shared/operationsView.ts"
   - "src/renderer/store/fleet.ts"
   - "src/renderer/store/game.ts"
+  - "src/renderer/features/sensors/**"
+  - "tests/unit/fleet.test.ts"
+  - "tests/unit/household.test.ts"
+  - "tests/unit/repayments.test.ts"
+  - "tests/unit/share.test.ts"
+  - "tests/unit/plan*.test.ts"
+  - "tests/unit/goals.test.ts"
+  - "tests/unit/loans.test.ts"
+  - "tests/unit/numbers-agree.test.ts"
 ---
 
 # Silnik budżetu i obliczenia (`src/shared/calc`)
@@ -15,8 +25,16 @@ paths:
 - Daty warszawskie (`calc/dates.ts`); dni robocze z polskimi świętami (`isWorkingDay`) tylko w `addWorkingDays`.
 - Każda reguła ma test na przykładzie ze specyfikacji; każda poprawka – test, który bez niej pada.
 - Nowe zachowanie wchodzi od dnia przejścia zapisanego w danych (`settings.household.since`, `settings.household.assignFrom`,
-  `goal.activeFrom`) – historia sprzed przejścia liczy się jak dawniej; brak pola w starszych danych = zachowanie sprzed wersji albo jednorazowe
-  uzupełnienie dnia przejścia (`useHouseholdSinceSeed`).
+  `goal.activeFrom`) – historia sprzed przejścia liczy się jak dawniej. **Brak pola ≠ null:** `household.since` /
+  `household.assignFrom` – brak = zachowanie sprzed wersji albo jednorazowe uzupełnienie (`useHouseholdSinceSeed`),
+  null = od startu budżetu / zawsze; `openingIds` – brak = wszystkie operacje. Schemat: `nullable().optional()` – nie
+  zamieniaj jednego na drugie.
+- Przelew dwustronny (1.7.0): każda strona liczy się na swoim koncie i w swoim dniu – salda i obliczenia kont przez
+  `amountOn`, `dateOn`, `touchesAccount` (`calc/operations.ts`), nigdy przez `t.amount` / `t.accountId` wprost.
+- Wspólny zakup (1.5.0): `share` to tylko opis, prawdą są linie `splits` (jedna na osobę; starsza wersja czyta je jak
+  paragon) – dlatego `withBankAmount` przebudowuje tylko wspólne zakupy.
+- Nowe pole kwoty w groszach dopisz do `AMOUNT_FIELDS` (`shared/merge.ts`) – inaczej historia, konflikty i zmiany z
+  drugiego komputera pokażą surowe grosze i zignorują ukrycie kwot.
 - Rekordy pochodne ze stałym id (`fixedId`, `derivedId`, `monthPlanId`, `gameMonthId`).
 - Gra: dni zamrożone przez `advanceGame` nie zmieniają się po późniejszej edycji operacji; miesiące nowszej wersji
   pomijane. Zapisy w tle tylko „w użyciu” (`writesInBackground`).
@@ -26,6 +44,7 @@ paths:
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.
 - W oknie silnik liczony raz (`store/fleet.ts` `useFleet`) z kluczem z czytanych części (`KEY_SETTINGS`,
   `KEY_COLLECTIONS`, `useEngineParts`) – nowe pole czytane przez silnik dopisz do klucza, inaczej ekran nie odświeży się.
+  To samo czujniki: przeliczają się tylko przy zmianie pól z `SENSOR_FIELDS` (`features/sensors/inputs.ts`).
 - Zmiany wydajności mierz na syntetycznym folderze 30 tys. i 150 tys. operacji (metoda: archiwum postępu, „1.4.3”).
 
 ## Mapa `calc/`

@@ -6,9 +6,16 @@ paths:
   - "src/shared/merge.ts"
   - "src/shared/records.ts"
   - "src/shared/migrations/**"
+  - "src/shared/conflicts.ts"
+  - "src/shared/remoteChanges.ts"
+  - "src/shared/unsaved.ts"
+  - "src/shared/ids.ts"
   - "src/renderer/store/data.ts"
+  - "src/renderer/store/remote.ts"
   - "src/renderer/store/presence.ts"
   - "tests/fs/**"
+  - "tests/unit/data-store.test.ts"
+  - "tests/unit/merge.test.ts"
 ---
 
 # Folder danych, proces główny, dwa komputery
@@ -32,6 +39,10 @@ paths:
 - OneDrive „tylko online”: `threadpool.ts` importowany pierwszy w `index.ts` (`UV_THREADPOOL_SIZE` 32),
   `READ_CONCURRENCY` 24; postęp otwarcia z „Przerwij” (`ReadTracker`).
 - Widoki magazynu przyrostowe (`FileMap`) – testy porównują je z pełną przebudową (`FI_VERIFY_VIEWS`).
-- Zmiana formatu: `SCHEMA_VERSION` + krok w `migrations/` + test.
+- Folder ICTTJ nigdy nie jest folderem danych ani folderem kopii FI (`insideIctj` w `main/index.ts` – rozpoznaje po
+  `journal.json`).
+- Nowa kolekcja: układ w `paths.ts` (`COLLECTIONS` / `LAYOUTS`), `records.ts`, wpis w migracjach, etykiety w
+  Synchronizacji, historii i odzyskaniu z kopii.
+- Pola addytywne bez podbijania `SCHEMA_VERSION`; zmiana nieaddytywna: `SCHEMA_VERSION` + krok w `migrations/` + test.
 
 Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji) i `docs/decyzje.md`.

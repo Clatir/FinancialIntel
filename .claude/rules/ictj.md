@@ -9,6 +9,9 @@ paths:
   - "src/renderer/features/starmap/**"
   - "tests/fs/ictj.test.ts"
   - "tests/unit/dock.test.ts"
+  - "tests/unit/ictj-game-goals.test.ts"
+  - "tests/e2e/ictj.spec.ts"
+  - "src/renderer/features/settings/IctjTab.tsx"
 ---
 
 # ICTTJ: odczyt folderu, dokowanie, cele

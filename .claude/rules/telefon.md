@@ -10,6 +10,9 @@ paths:
   - "capacitor.config.json"
   - "scripts/mobile-aliases.mjs"
   - "scripts/altstore-source.mjs"
+  - "scripts/make-ios-assets.py"
+  - "src/shared/notifyPlan.ts"
+  - "tests/unit/notify-plan.test.ts"
 ---
 
 # iPhone (D92, od 1.13.0)
@@ -21,7 +24,8 @@ paths:
   `scripts/mobile-aliases.mjs` (build i projekt Vitest `mobile`); magazyn komputera bez zmian nad `MIRROR` (`/fi`).
 - Synchronizacja (`sync/`): Microsoft Graph (`graph.ts` – delta, upload z `ifMatch`), `engine.ts` (pull po id folderów,
   pełna lista po 410, push z kopią konfliktu `-telefon-<czas>`), `scheduler.ts` (30 s, 1,5 s po zmianie), `auth.ts`
-  (PKCE; 429 / 5xx nie wylogowuje). Lustro obejmuje tylko `.json`, bez `backups/` i `.history/`.
+  (PKCE; 429 / 5xx nie wylogowuje). Lustro obejmuje tylko `.json`, bez `backups/`, `.history/` i ukrytych folderów
+  poza `.presence/` (`mirrored` w `sync/engine.ts`).
 - Folder ICTTJ na telefonie (IP15, jeśli będzie): tylko pobieranie `payouts/` i `forecasts/`, nigdy zapis – granica
   z CLAUDE.md obowiązuje także tu.
 - Powiadomienia planowane na 7 dni (`shared/notifyPlan.ts`, `PLANNED_MAX` 60).

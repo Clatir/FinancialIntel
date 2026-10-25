@@ -6,6 +6,17 @@ paths:
   - "tests/fixtures/mbank/**"
   - "tests/unit/import*.test.ts"
   - "tests/unit/mbank.test.ts"
+  - "tests/unit/duplicates.test.ts"
+  - "tests/unit/officer.test.ts"
+  - "tests/unit/rules-audit.test.ts"
+  - "tests/unit/bank-files.test.ts"
+  - "tests/fs/bank-files.test.ts"
+  - "tests/e2e/import*.spec.ts"
+  - "tests/e2e/duplicates.spec.ts"
+  - "tests/e2e/learning.spec.ts"
+  - "src/renderer/store/bankFiles.ts"
+  - "src/renderer/store/officer.ts"
+  - "src/renderer/features/settings/ImportTab.tsx"
 ---
 
 # Import z mBanku
