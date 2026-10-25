@@ -151,10 +151,11 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
         ))}
       </select>
       {payer && (
-        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
+        <div className="flex flex-col gap-1.5 pt-1 text-[11.5px] text-muted">
           <span>Cel wpłaty:</span>
           <Segmented
             size="sm"
+            className="w-full"
             value={t.inflowKind ?? 'repay'}
             onChange={(inflowKind) => {
               if (inflowKind === 'repay') {
@@ -181,7 +182,7 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
         </div>
       )}
       {payer && (t.inflowKind === 'repay' || !t.inflowKind) && (
-        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
+        <div className="flex flex-wrap items-center gap-2 pt-2 text-[11.5px] text-muted">
           <span>{parts.length ? `Reszta (${memberName(payer, members)}) ponad to, co ma oddać:` : 'Reszta ponad to, co ma oddać:'}</span>
           <Segmented
             size="sm"
@@ -198,12 +199,12 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
         </div>
       )}
       {payer && t.inflowKind === 'income' && (
-        <div className="text-[11px] text-dim" data-testid="inflow-kind-note">
+        <div className="pt-1.5 text-[11px] text-dim" data-testid="inflow-kind-note">
           Niezależny przychód do budżetu od {memberName(payer, members)} – nie spłaca zakupów, dług domownika pozostaje bez zmian.
         </div>
       )}
       {payer && t.inflowKind === 'advance' && (
-        <div className="text-[11px] text-dim" data-testid="inflow-kind-note">
+        <div className="pt-1.5 text-[11px] text-dim" data-testid="inflow-kind-note">
           Zaliczka na przyszłe zakupy od {memberName(payer, members)} – zasila depozyt, nie spłaca dotychczasowych zakupów.
         </div>
       )}

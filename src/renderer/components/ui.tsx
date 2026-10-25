@@ -243,8 +243,9 @@ export function Segmented<T extends string>({
   size?: 'sm' | 'md'
   'aria-label'?: string
 }) {
+  const isFull = className?.includes('w-full')
   return (
-    <div role="radiogroup" aria-label={rest['aria-label']} className={cx('inline-flex border border-line-strong', className)}>
+    <div role="radiogroup" aria-label={rest['aria-label']} className={cx('border border-line-strong', isFull ? 'flex w-full' : 'inline-flex', className)}>
       {options.map((o, i) => {
         const active = o.value === value
         return (
@@ -257,8 +258,9 @@ export function Segmented<T extends string>({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cx(
-              'px-2.5 transition-colors duration-100',
-              size === 'sm' ? 'h-[22px] text-[11.5px]' : 'h-[24px]',
+              'px-2.5 transition-colors duration-100 flex items-center justify-center text-center',
+              isFull && 'flex-1',
+              size === 'sm' ? 'min-h-[22px] py-1 text-[11.5px] leading-tight' : 'min-h-[24px] py-1 leading-tight',
               i > 0 && 'border-l border-line-strong',
               active
                 ? (o.className ?? 'bg-accent-soft text-accent')

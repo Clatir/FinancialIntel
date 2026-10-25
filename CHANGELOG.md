@@ -1,5 +1,15 @@
 # Financial Intel – zmiany
 
+## 1.15.4
+
+Poprawki interfejsu panelu operacji i komponentu Segmented:
+
+- **Dopasowanie podświetlenia i ramek w wyborze celu wpłaty:**
+  - Elastyczna wysokość i centrowanie pionowe w komponencie `Segmented` (`min-h`) – wielolinijkowy tekst nie wystaje już poza obramowanie ani poza kolorowe tło aktywnego przycisku.
+  - Automatyczne równe proporcje kafelków (`flex-1`) przy rozciągnięciu do pełnej szerokości wiersza (`w-full`).
+  - Przebudowa sekcji „Cel wpłaty” w edytorze wpłaty od domownika na przejrzysty układ kolumnowy.
+  - Zwiększenie odstępu pionowego (spacing) pomiędzy przyciskami celu wpłaty a wyborem przychód / zaliczka.
+
 ## 1.15.3
 
 Rozliczenia z domownikami i automatyczne reguły tytułów:
