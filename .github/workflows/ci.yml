@@ -33,6 +33,9 @@ jobs:
       # Release notes of the current version (shown in the app after updating) must exist.
       - name: CHANGELOG.md has a section for this version
         run: node scripts/release-notes.mjs > /dev/null
+      # Files Claude Code loads on its own stay small (history → CHANGELOG.md / docs/archiwum/).
+      - name: Claude Code context files within limits
+        run: node scripts/check-context.mjs
 
   e2e:
     name: E2E (Linux, Xvfb)

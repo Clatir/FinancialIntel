@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./package-lock.json)",
+      "Read(./release/**)",
+      "Read(./release-next/**)"
+    ]
+  }
+}
