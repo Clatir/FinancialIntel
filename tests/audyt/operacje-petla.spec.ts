@@ -3,16 +3,19 @@
  * „Maximum update depth exceeded”) and the window goes blank when the game started more than ~105 days ago – with no
  * operation in the folder, on a second opening too. 100 days: fine; 110 days: the loop. Fails while the bug is there.
  */
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addDays, warsawNow } from '../../src/shared/calc/dates'
-import { shot, start, useState } from './lab'
+import { LAB, shot, start, useState } from './lab'
 
 const COLLS = ['transactions', 'containers', 'goals', 'months', 'dockings', 'loans', 'balances', 'scheduled', 'game', 'imports']
 
 for (const days of [100, 110]) {
   test(`Operacje przy grze od ${days} dni`, async () => {
+    test.skip(!existsSync(join(LAB, 'stany', 'rok', 'fi.json')), 'najpierw persona.spec.ts (stan „rok”)')
+    // P.1: a known bug of 1.15.4 – the 110 days' case fails while it is there (and passes once fixed: then drop this).
+    test.fail(days === 110, 'P.1 – znany błąd 1.15.4')
     const run = `operacje-petla-${days}`
     const { dataDir } = useState('rok', run)
     for (const c of COLLS) rmSync(join(dataDir, c), { recursive: true, force: true })

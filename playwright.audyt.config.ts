@@ -1,8 +1,10 @@
+import { join } from 'node:path'
 import { defineConfig } from '@playwright/test'
 
-// The functional audit (docs/audyt/plan.md, D97): the released app unpacked in C:\FI-audyt, run on folders of the lab.
+// The functional audit (docs/audyt/plan.md, D97): the released app unpacked in the lab, run on folders of the lab.
 // Never part of CI or `npm test`: `npx playwright test -c playwright.audyt.config.ts [file]`.
-process.env.FI_E2E_EXECUTABLE ??= 'C:\\FI-audyt\\wydanie\\1.15.4\\app\\Financial Intel.exe'
+const LAB = process.env.FI_AUDIT_LAB ?? 'C:\\FI-audyt'
+process.env.FI_E2E_EXECUTABLE ??= join(LAB, 'wydanie', '1.15.4', 'app', 'Financial Intel.exe')
 
 export default defineConfig({
   testDir: 'tests/audyt',
@@ -11,5 +13,5 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   // One folder per run: several runs of the audit go at once (one per area) and each cleans its own folder at start.
-  outputDir: `C:/FI-audyt/test-results/${process.env.FI_AUDIT_OUT ?? process.pid}`
+  outputDir: join(LAB, 'test-results', process.env.FI_AUDIT_OUT ?? String(process.pid))
 })

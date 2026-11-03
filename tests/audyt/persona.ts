@@ -233,6 +233,14 @@ const MERCHANTS: ReadonlyArray<{ name: string; short: string; p: number; min: nu
   { name: 'ALLEGRO', short: 'Allegro', p: 1 / 30, min: 50, max: 250, categoryId: cat(9, 2) }
 ]
 
+const FOOD = new Set([cat(1), cat(1, 1), cat(1, 2), cat(1, 3)])
+
+/** The name a row is known by: the shop of a card payment or a refund, the other side of a transfer, else the title. */
+export function rowName(e: Pick<BankEvent, 'op' | 'title' | 'who'>): string {
+  if (e.op.startsWith('ZAKUP') || e.op.startsWith('ZWROT') || !e.who.trim()) return e.title.split('/')[0]!.trim()
+  return e.who.trim()
+}
+
 /** The decisions of the persona's import, group by group (the user's categorization of a year of history). */
 const DECISIONS: GroupDecision[] = [
   ...MERCHANTS.map((m) => ({ token: m.name.split(' ')[0]!.toLowerCase().replace('.eu', ''), dir: 'out' as const, option: 'expense', categoryId: m.categoryId })),
@@ -304,7 +312,8 @@ export function buildPersona(anchor: string): Persona {
   for (let d = start; d < anchor; d = addDays(d, 1)) {
     const weekend = dow(d) === 0 || dow(d) === 6
     for (const m of MERCHANTS) {
-      const p = weekend && m.categoryId.startsWith(cat(1).slice(0, -3)) ? m.p * 1.3 : m.p
+      // More food at the weekends (Jedzenie and its subcategories only).
+      const p = weekend && FOOD.has(m.categoryId) ? m.p * 1.3 : m.p
       if (!r.chance(p)) continue
       const amount = -r.amount(m.min, m.max)
       const after: After = {}
@@ -639,7 +648,7 @@ export function listaCsv(events: readonly BankEvent[], from: string, to: string)
     '#Data operacji;#Opis operacji;#Kategoria;#Kwota'
   ]
   for (const e of [...events].sort((a, b) => b.date.localeCompare(a.date))) {
-    const name = e.op.startsWith('ZAKUP') ? e.title.split('/')[0]!.trim() : e.who.trim()
+    const name = rowName(e)
     const what = e.op.startsWith('ZAKUP') ? 'ZAKUP PRZY UŻYCIU KARTY W KRAJU' : e.op
     const desc = `${name}  ${what}${' '.repeat(40)}${e.pending ? 'transakcja nierozliczona' : ''}`
     lines.push(`${plDate(e.date)};${desc};${e.bankCategory ?? ''};${plAmount(e.amount)} PLN`)

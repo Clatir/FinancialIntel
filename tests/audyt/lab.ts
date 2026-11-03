@@ -6,7 +6,7 @@
  * windows are shown off every screen, without taking the focus.
  */
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { launch, type Launched } from '../e2e/app'
@@ -81,6 +81,11 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
         2
       )
     )
+  else if (opts.prefs) {
+    // A run continued (`fresh: false`) with other preferences: on top of the ones it has.
+    const c = JSON.parse(readFileSync(config, 'utf8')) as { prefs?: Record<string, unknown> }
+    writeFileSync(config, JSON.stringify({ ...c, prefs: { ...c.prefs, ...opts.prefs } }, null, 2))
+  }
   const dataDir = opts.dataDir ?? join(dir, 'dane')
   const env: Record<string, string> = {
     FI_DOWNLOADS_DIR: join(dir, 'pobrane'),
@@ -97,6 +102,8 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
   // The user's entries are read before and after every start; any change stops the run.
   env.PORTABLE_EXECUTABLE_FILE = process.env.FI_E2E_EXECUTABLE ?? ''
   const before = autostartEntries()
+  // Fail closed: an entry of the portable copy is the one the start would remove – never started then.
+  if (/Financial Intel \(portable\)/i.test(before)) throw new Error(`Masz wpis autostartu „Financial Intel (portable)” – laboratorium go nie uruchomi (start usunąłby ten wpis).\n${before}`)
   const launched = await launch({
     dataDir,
     userData,
@@ -106,17 +113,20 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
     hidden: true,
     args: ['--hidden', '--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows']
   })
-  await guard(launched.app)
-  const after = autostartEntries()
-  if (after !== before) {
+  try {
+    await guard(launched.app)
+    const after = autostartEntries()
+    if (after !== before) throw new Error(`Laboratorium zmieniło wpisy autostartu Financial Intel w rejestrze – przebieg przerwany.\nPrzed:\n${before}\nPo:\n${after}`)
+    await showOffScreen(launched.app)
+    await launched.page.waitForFunction(() => document.visibilityState === 'visible', null, { timeout: 30_000 })
+    // The captain moves the mouse over the window: this computer is „in use” (D86) – its background writes run (the
+    // game's frozen days, ICTTJ goals), as on a computer someone works at. `idle: true` – a computer left alone.
+    if (!opts.idle) await useWindow(launched.page)
+  } catch (e) {
+    // Never a released app left running with its tray icon and a lock on the run's user data.
     launched.app.process().kill()
-    throw new Error(`Laboratorium zmieniło wpisy autostartu Financial Intel w rejestrze – przebieg przerwany.\nPrzed:\n${before}\nPo:\n${after}`)
+    throw e
   }
-  await showOffScreen(launched.app)
-  await launched.page.waitForFunction(() => document.visibilityState === 'visible', null, { timeout: 30_000 })
-  // The captain moves the mouse over the window: this computer is „in use” (D86) – its background writes run (the game's
-  // frozen days, ICTTJ goals), as on a computer someone works at. `idle: true` – a computer left alone.
-  if (!opts.idle) await useWindow(launched.page)
   note(name, `start ${new Date().toISOString()} dane=${dataDir}`)
   return { ...launched, name, dir }
 }

@@ -22,6 +22,27 @@ wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odr
 Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w archiwum dziennika; iPhone – sekcje „1.13.0”, „1.14.0” i „1.15.0”
 w archiwum oraz `docs/iphone.md`.
 
+## Audyt funkcjonalny 1.15.4 (D97) – stan
+
+Plan: `docs/audyt/plan.md`; jak wykonywać: `docs/audyt/wykonanie.md`; gałąź `claude/audyt-1.15.4`. Bloki A–B jednym
+ciągiem na komendę z 03.11.2026. Laboratorium `C:\FI-audyt` (wydanie z GitHuba, SHA-256 zgodne), Node 24.21.0
+w `.tools`.
+
+| Grupa | Stan | Uwagi |
+| --- | --- | --- |
+| AU-1 Laboratorium i katalog | ✅ 03.11 | 587 punktów w `docs/audyt/punkty/` (Claude 527, Maszyna 48, Ty 12); `katalog.md` |
+| AU-2 Załoga testowa | ✅ persona „rok” (przegląd narzędzia w toku) | 14 mies., 929 wierszy przez import wydania; `C:\FI-audyt\stany` |
+| AU-3 Instrukcja maszyny | ✅ `docs/audyt/maszyna.md` | pakiet `C:\FI-vm-pakiet` – `tests/audyt/pakiet.spec.ts` |
+| AU-4 … AU-8 | ⏳ | wykonawcy równolegle według obszarów (raporty `docs/audyt/raport/<prefiks>.md`) |
+| AU-9, AU-10 (max), AU-11 | ⏳ | blok C i synteza – na komendę |
+
+**Incydent 03.11:** wydana aplikacja przy każdym starcie zapisuje autostart z `config.json` (przed oknem) – przebiegi
+laboratorium usunęły wpis „Financial Intel” w HKCU\…\Run użytkownika. Został starszy wpis `app.financialintel.desktop`
+(FI dalej startuje z Windows); aplikacja użytkownika odtwarza swój wpis przy następnym starcie. Laboratorium od tej chwili
+startuje jako portable (wpis „Financial Intel (portable)”) i sprawdza wpisy FI w rejestrze przed i po każdym starcie.
+Znaleziska z przygotowania: `docs/audyt/raport/0-przygotowanie.md` (P.1 Operacje przy grze > ~105 dni, P.3 wpłata
+„reszta jako zaliczka” nie spłaca długu).
+
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
 - Bez komendy użytkownika nie zaczynam kolejnego etapu ani grupy.

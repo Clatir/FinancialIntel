@@ -4,9 +4,10 @@
  * makes them); the user's later decisions are written onto the operations it made; a second start lets the app settle
  * (the game's frozen days, the ICTTJ goals). Run: `npx playwright test -c playwright.audyt.config.ts persona`.
  */
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import { DateTime } from 'luxon'
 import { ulid } from 'ulid'
 import { addDays, warsawNow } from '../../src/shared/calc/dates'
 import { recordRelPath, type Collection } from '../../src/shared/paths'
@@ -15,9 +16,46 @@ import { importDone } from '../e2e/app'
 import { records } from '../e2e/files'
 import { seedFolder } from '../e2e/seed'
 import { LAB, answerDialogs, note, recorded, shot, start, text } from './lab'
-import { ANNA, KASIA, MBANK, buildPersona, cp1250, fid, historiaCsv, listaCsv, type BankEvent, type GroupDecision, type ManualOp } from './persona'
+import { ANNA, KASIA, MBANK, buildPersona, cp1250, fid, historiaCsv, listaCsv, rowName, type BankEvent, type GroupDecision, type ManualOp } from './persona'
 
 const MACHINE = 'LAPTOP-KAPITANA'
+
+/** A Warsaw wall time as the UTC instant the app writes (never later than now). */
+function warsawToUtc(date: string, time: string): string {
+  const iso = DateTime.fromISO(`${date}T${time}`, { zone: 'Europe/Warsaw' }).toUTC().toISO({ suppressMilliseconds: false })!
+  return Date.parse(iso) > Date.now() ? new Date().toISOString() : iso
+}
+
+const STAMP = /"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)"/g
+
+/**
+ * Every timestamp of the folder's JSON files within [from, to] moved back by `days` – the import and the decisions after
+ * it made a week ago as one consistent past (operations, their bank rows, the import's batch, its log, the history):
+ * their order stays, so „changed after the import” still means what it means.
+ */
+function shiftStamps(dir: string, from: number, to: number, days: number): number {
+  let changed = 0
+  const walk = (d: string) => {
+    for (const name of readdirSync(d)) {
+      const p = join(d, name)
+      if (statSync(p).isDirectory()) {
+        if (name !== 'backups' && name !== 'game') walk(p)
+      } else if (name.endsWith('.json')) {
+        const text = readFileSync(p, 'utf8')
+        const next = text.replace(STAMP, (all, stamp: string) => {
+          const t = Date.parse(stamp)
+          return t >= from && t <= to ? `"${new Date(t - days * 86_400_000).toISOString()}"` : all
+        })
+        if (next !== text) {
+          writeFileSync(p, next)
+          changed++
+        }
+      }
+    }
+  }
+  walk(dir)
+  return changed
+}
 
 function put(root: string, rel: string, data: unknown): void {
   const file = join(root, rel)
@@ -33,7 +71,7 @@ function writeRecord(dir: string, collection: Collection, raw: Record<string, un
 }
 
 /** One group decision of the import: every group of the token's search and the money's direction gets it. */
-async function decide(page: Page, d: GroupDecision, log: string[]): Promise<void> {
+async function decide(page: Page, d: GroupDecision, log: string[], problems: string[]): Promise<void> {
   const search = page.getByTestId('import-search')
   await search.fill(d.token)
   await page.waitForTimeout(300)
@@ -62,7 +100,7 @@ async function decide(page: Page, d: GroupDecision, log: string[]): Promise<void
       else await g.getByTestId('import-group-category').selectOption(d.categoryId!, { timeout: 3000 })
     } catch (e) {
       skip.add(target.key)
-      log.push(`${d.token}/${d.dir} [${target.key}]: ${target.field} – ${(e as Error).message.split('\n')[0]}`)
+      problems.push(`decyzja ${d.token}/${d.dir} [${target.key}]: ${target.field} ${d.option} – ${(e as Error).message.split('\n')[0]}`)
     }
     await page.waitForTimeout(150)
   }
@@ -70,7 +108,7 @@ async function decide(page: Page, d: GroupDecision, log: string[]): Promise<void
 }
 
 const toTx = (m: ManualOp, id: string): Record<string, unknown> => {
-  const at = `${m.date}T${m.time ?? '20:00'}:00.000Z`
+  const at = warsawToUtc(m.date, m.time ?? '20:00')
   return {
     schemaVersion: 1,
     id,
@@ -105,6 +143,9 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
   for (const d of [dir, ictjDir]) rmSync(d, { recursive: true, force: true })
   mkdirSync(files, { recursive: true })
   const log: string[] = [`kotwica ${anchor}, start ${P.start}, historia do ${P.historyEnd}`]
+  /** What makes the state not the persona the plan describes: the generation fails on any of them. */
+  const problems: string[] = []
+  let importFrom = 0
 
   // ---- ICTTJ's folder: only what FI reads (payouts, forecasts) and its journal.json
   put(ictjDir, 'journal.json', { schemaVersion: 1, settings: {} })
@@ -176,10 +217,11 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
     await run.page.keyboard.press('Control+3')
     await expect(run.page.getByTestId('page-import')).toBeVisible({ timeout: 60_000 })
     await answerDialogs(run.app, { paths: [histFile] })
+    importFrom = Date.now()
     await run.page.getByTestId('import-pick').click()
     await expect(run.page.getByTestId('import-file')).toBeVisible({ timeout: 60_000 })
     log.push(`plik: ${(await text(run.page, '[data-testid="import-file"]')).replace(/\s+/g, ' ')}`)
-    for (const d of P.decisions) await decide(run.page, d, log)
+    for (const d of P.decisions) await decide(run.page, d, log, problems)
     await shot(run.page, 'AU2-rok-import-przed')
     for (const k of ['new', 'merge', 'known', 'excluded']) {
       const c = run.page.getByTestId(`import-count-${k}`)
@@ -189,6 +231,7 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
     await importDone(run.page, run.userData)
     log.push(`wynik: ${(await text(run.page, '[data-testid="import-done"]')).replace(/\s+/g, ' ')}`)
     log.push(`błędy okna: ${run.errors.length ? run.errors.join(' | ') : 'brak'}`)
+    problems.push(...run.errors.map((e) => `okno (import): ${e.slice(0, 200)}`))
   } finally {
     await run.app.close()
   }
@@ -197,17 +240,20 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
   const txs = await records(dir, 'transactions')
   const byRef = new Map<string, Record<string, unknown>>()
   const used = new Set<string>()
+  // A row's operation: the same day, amount and account, and its name in the bank's description; one candidate alone is
+  // taken without the name (the bank's cleaning may shorten it) – two or more without it are an error, never a guess.
   const find = (e: BankEvent) => {
-    const token = (e.op.startsWith('ZAKUP') || e.op.startsWith('ZWROT') ? e.title.split('/')[0]! : e.who).trim().split(/\s+/)[0]!.toUpperCase()
+    const token = rowName(e).split(/\s+/)[0]!.toUpperCase()
     const cands = txs.filter((t) => t.accountId === MBANK && t.date === e.date && t.amount === e.amount && !used.has(t.id as string))
-    const hit = cands.find((t) => String((t.bank as { description?: string } | null)?.description ?? '').toUpperCase().includes(token)) ?? cands[0]
+    const named = cands.filter((t) => String((t.bank as { description?: string } | null)?.description ?? '').toUpperCase().includes(token))
+    const hit = named[0] ?? (cands.length === 1 ? cands[0] : undefined)
     if (hit) used.add(hit.id as string)
     return hit
   }
   for (const e of P.history) {
     const t = find(e)
     if (t) byRef.set(e.ref, t)
-    else log.push(`brak operacji dla ${e.ref} ${e.date} ${e.amount}`)
+    else problems.push(`brak operacji dla ${e.ref} ${e.date} ${e.amount} (${rowName(e)})`)
   }
   const now = new Date().toISOString()
   const changed = new Set<Record<string, unknown>>()
@@ -301,14 +347,9 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
   for (const t of changed) writeRecord(dir, 'transactions', t)
   log.push(`decyzje po imporcie: ${changed.size} operacji`)
 
-  // The import made a week ago (an overdue import is the app's to tell, not „today's”).
-  const fiPath = join(dir, 'fi.json')
-  const fi = JSON.parse(readFileSync(fiPath, 'utf8'))
-  const importedAt = `${addDays(anchor, -7)}T17:30:00.000Z`
-  fi.settings.import.lastImport = { ...fi.settings.import.lastImport, [MBANK]: importedAt }
-  fi.settings.import.log = { [importedAt]: MBANK }
-  writeFileSync(fiPath, `${JSON.stringify(fi, null, 2)}\n`)
-  for (const b of await records(dir, 'imports')) writeRecord(dir, 'imports', { ...b, at: importedAt, savedAt: importedAt })
+  // The import and the decisions after it made a week ago, as one consistent past (an overdue import is the app's to
+  // tell): every timestamp written since the file was picked goes back 7 days – not the game's (frozen at the opening).
+  log.push(`przesunięte znaczniki czasu: ${shiftStamps(dir, importFrom, Date.now(), 7)} plików`)
 
   // ---- a second start: the app settles (frozen days of the game, ICTTJ goals); the bridge as the captain sees it
   run = await start('persona-rok', { dataDir: dir, ictjDir, machine: MACHINE, fresh: false })
@@ -319,6 +360,7 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
     log.push(`Mostek: ${(await text(run.page, '[data-testid="page-bridge"]')).replace(/\s+/g, ' ').slice(0, 1500)}`)
     log.push(`powiadomienia (zapis): ${JSON.stringify((await recorded(run.app)).toasts.map((t) => t.title))}`)
     log.push(`błędy okna: ${run.errors.length ? run.errors.join(' | ') : 'brak'}`)
+    problems.push(...run.errors.map((e) => `okno (drugi start): ${e.slice(0, 200)}`))
   } finally {
     await run.app.close()
   }
@@ -329,4 +371,7 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
   writeFileSync(join(LAB, 'stany', 'rok.persona.json'), `${JSON.stringify({ anchor: P.anchor, start: P.start, historyEnd: P.historyEnd, ictj: P.ictj, history: P.history, recent: P.recent, manual: P.manual }, null, 2)}\n`)
   note('persona-rok', log.join('\n'))
   console.log(log.join('\n'))
+  writeFileSync(join(LAB, 'stany', 'rok.problemy.log'), `${problems.join('\n')}\n`)
+  // A state that is not the persona of the plan is no reference: the run fails (the logs stay for the cause).
+  expect(problems).toEqual([])
 })

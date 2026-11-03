@@ -27,3 +27,6 @@ paths:
   `FI_FREEZE_QUIET_MS`, `FI_VERIFY_VIEWS`, `FI_PHONE_BROWSER`, `FI_CHROMIUM`; Windows CI: `FI_UPDATE_FROM` /
   `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Dane: `tests/fixtures/` tylko zanonimizowane albo syntetyczne, nigdy dane użytkownika.
+- **Pułapka (03.11.2026):** spakowana aplikacja (`FI_E2E_EXECUTABLE`) przy każdym starcie zapisuje autostart z
+  `config.json` przed oknem – na komputerze użytkownika usuwa jego wpis „Financial Intel” w HKCU\…\Run (usuwanie po
+  nazwie). Lokalnie uruchamiaj ją tylko z `PORTABLE_EXECUTABLE_FILE` (jak `tests/audyt/lab.ts`); CI to nie dotyczy.
