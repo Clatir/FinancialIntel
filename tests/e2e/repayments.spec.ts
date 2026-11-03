@@ -147,8 +147,11 @@ test('Wcześniejsza wpłata domownika finansuje późniejszy zakup (1.15.1): „
       balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(10000) }],
       months: [{ month: prev, salary: zl(4000), envelopes: { [FOOD]: zl(1500) } }],
       transactions: [
-        { id: PAY, date: '2026-10-05', accountId: ACC, amount: zl(100), kind: 'income', counterparty: 'Mama na zakupy', memberId: MAMA, covers: [] },
-        { id: BUY, date: '2026-10-10', accountId: ACC, amount: -zl(80), categoryId: GROCERIES, counterparty: 'Biedronka', refundable: true, memberId: MAMA }
+        // Both in the current month (Operations show it by default; fixed dates failed once the month was over): the
+        // inflow on its 1st, the purchase today – on the 1st itself the same day, the inflow still first (ledger order
+        // by id, PAY < BUY).
+        { id: PAY, date: `${month}-01`, accountId: ACC, amount: zl(100), kind: 'income', counterparty: 'Mama na zakupy', memberId: MAMA, covers: [] },
+        { id: BUY, date: today, accountId: ACC, amount: -zl(80), categoryId: GROCERIES, counterparty: 'Biedronka', refundable: true, memberId: MAMA }
       ]
     }
   })

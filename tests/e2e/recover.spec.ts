@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
@@ -10,11 +11,13 @@ const MBANK = '01KDEFACC00000000000000001'
 
 test('odzyskanie z kopii (1.6.0, F3): podgląd różnic, wybrane wpisy jako nowa wersja z „Cofnij”, cały folder do nowego obok', async () => {
   const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-recover-')), 'FinancialIntel')
+  // The 1st of the current month: Operations show the current month by default (fixed dates failed once it was over).
+  const first = `${warsawNow().month}-01`
   seedFolder(dataDir, {
     records: {
       transactions: [
-        { date: '2026-10-01', accountId: MBANK, amount: -zl(45.99), counterparty: 'Biedronka' },
-        { date: '2026-10-02', accountId: MBANK, amount: -zl(200), counterparty: 'Orlen' }
+        { date: first, accountId: MBANK, amount: -zl(45.99), counterparty: 'Biedronka' },
+        { date: first, accountId: MBANK, amount: -zl(200), counterparty: 'Orlen' }
       ]
     }
   })
