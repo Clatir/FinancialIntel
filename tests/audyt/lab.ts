@@ -106,6 +106,10 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
     FI_DOWNLOADS_DIR: join(dir, 'pobrane'),
     FI_DEFAULT_DATA_DIR: join(dir, 'OneDrive', 'FinancialIntel'),
     FI_ICTJ_LAUNCH: 'dry',
+    // The game's first freeze as in the release (3 min after the opening, 1 min of quiet) – e2e's `launch()` sets 0 for its
+    // tests; a point that needs the days frozen at once passes '0' in `opts.env`.
+    FI_FREEZE_AFTER_OPEN_MS: String(3 * 60_000),
+    FI_FREEZE_QUIET_MS: String(60_000),
     ...opts.env
   }
   // ICTTJ's own config.json (the hint „Użyj tego folderu”) always from the lab – never the user's
@@ -136,7 +140,7 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
     args: ['--hidden', '--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows']
   })
   try {
-    await guard(launched.app)
+    await guard(launched.app, join(dir, 'kosz'))
     const after = autostartEntries()
     if (after !== before) throw new Error(`Laboratorium zmieniło wpisy autostartu Financial Intel w rejestrze – przebieg przerwany.\nPrzed:\n${before}\nPo:\n${after}`)
     await showOffScreen(launched.app)
@@ -168,13 +172,24 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
  * The main process's ways out to the user's desktop, replaced by records (read back with `recorded`): notifications,
  * the start with Windows, opening of paths and links, Explorer. Windows are moved off every screen whenever shown.
  */
-async function guard(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ app: a, BrowserWindow, Notification, shell, screen, globalShortcut }) => {
-    type Rec = { toasts: Array<{ title: string; body: string; at: string }>; login: unknown[]; opened: string[]; shortcuts: string[] }
+async function guard(app: ElectronApplication, binDir: string): Promise<void> {
+  mkdirSync(binDir, { recursive: true })
+  await app.evaluate(({ app: a, BrowserWindow, Notification, shell, screen, globalShortcut }, bin) => {
+    type Rec = { toasts: Array<{ title: string; body: string; at: string }>; login: unknown[]; opened: string[]; shortcuts: string[]; trashed: string[] }
     const g = globalThis as unknown as { __audit?: Rec }
     if (g.__audit) return
-    const rec: Rec = { toasts: [], login: [], opened: [], shortcuts: [] }
+    const rec: Rec = { toasts: [], login: [], opened: [], shortcuts: [], trashed: [] }
     g.__audit = rec
+    // The Windows Recycle Bin of the user is never touched: a move to the Bin is a move into the run's own `kosz\`.
+    const get = (m: string) => ((process as unknown as { getBuiltinModule?: (n: string) => unknown }).getBuiltinModule?.(m) ?? process.mainModule!.require(m)) as never
+    const fs = get('node:fs') as typeof import('node:fs')
+    const path = get('node:path') as typeof import('node:path')
+    const trashItem = async (p: string) => {
+      rec.trashed.push(p)
+      fs.renameSync(p, path.join(bin, `${Date.now()}_${path.basename(p)}`))
+    }
+    ;(trashItem as unknown as { __lab: boolean }).__lab = true
+    shell.trashItem = trashItem
     // A global shortcut would take the keys of the user's programs: recorded, never registered.
     globalShortcut.register = ((acc: string) => {
       rec.shortcuts.push(acc)
@@ -214,7 +229,9 @@ async function guard(app: ElectronApplication): Promise<void> {
     proto.focus = function () {
       /* never takes the focus from the user's programs */
     }
-  })
+  }, binDir)
+  // The Bin's catch must hold: otherwise the run stops before anything could go to the user's Recycle Bin.
+  if (!(await app.evaluate(({ shell }) => !!(shell.trashItem as unknown as { __lab?: boolean }).__lab))) throw new Error('Przechwycenie Kosza nie zadziałało – przebieg przerwany.')
 }
 
 async function showOffScreen(app: ElectronApplication): Promise<void> {
@@ -241,6 +258,8 @@ export interface Recorded {
   login: unknown[]
   opened: string[]
   shortcuts: string[]
+  /** Paths the app moved to the Recycle Bin – moved into the run's `kosz\` instead. */
+  trashed: string[]
 }
 export async function recorded(app: ElectronApplication): Promise<Recorded> {
   return app.evaluate(() => (globalThis as unknown as { __audit: Recorded }).__audit)

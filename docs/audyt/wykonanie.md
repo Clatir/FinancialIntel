@@ -34,6 +34,10 @@ Instrukcja dla grup AU-4–AU-10 (Claude i jego agenci). Plan i zasady: `docs/au
   stosuje je przy starcie, zanim zadziała przechwycenie); w trakcie przebiegu ich zmiany są tylko zapisywane
   (`recorded(app).login`, `.shortcuts`). Trwałość skrótu i autostartu po ponownym uruchomieniu sprawdza maszyna.
   Zamknięcie, które się zawiesi, kończy całe drzewo procesów (`killTree`).
+- **Kosz Windows:** `start()` przechwytuje przeniesienie do Kosza – plik trafia do `przebiegi\<przebieg>\kosz\`
+  (`recorded(app).trashed`); Kosz użytkownika nigdy.
+- **Zamrażanie dni gry jak w wydaniu:** 3 min po otwarciu i 1 min ciszy (testy E2E mają 0). Punkt, który potrzebuje dni
+  zamrożonych od razu, podaje `env: { FI_FREEZE_AFTER_OPEN_MS: '0', FI_FREEZE_QUIET_MS: '0' }`.
 - **„W użyciu” (D86):** `start()` porusza myszą nad oknem – komputer jest w użyciu i robi zapisy w tle (zamrażanie dni
   gry, cele ICTTJ). `idle: true` – komputer zostawiony sam sobie (punkty o drugim komputerze, zasobniku).
 - **Stany szczególne** (punkt wymaga danych, których `rok` nie ma): zrób je na kopii (`useState('rok', przebieg)`, potem

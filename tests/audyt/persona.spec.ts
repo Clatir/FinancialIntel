@@ -353,7 +353,7 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
   log.push(`przesunięte znaczniki czasu: ${shiftStamps(dir, importFrom, Date.now(), 7)} plików`)
 
   // ---- a second start: the app settles (frozen days of the game, ICTTJ goals); the bridge as the captain sees it
-  run = await start('persona-rok', { dataDir: dir, ictjDir, machine: MACHINE, fresh: false })
+  run = await start('persona-rok', { dataDir: dir, ictjDir, machine: MACHINE, fresh: false, env: { FI_FREEZE_AFTER_OPEN_MS: '0', FI_FREEZE_QUIET_MS: '0' } })
   try {
     await expect(run.page.getByTestId('page-bridge')).toBeVisible({ timeout: 90_000 })
     await run.page.waitForTimeout(20_000)
