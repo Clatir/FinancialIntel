@@ -10,5 +10,6 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   workers: 1,
   reporter: [['list']],
-  outputDir: 'C:/FI-audyt/test-results'
+  // One folder per run: several runs of the audit go at once (one per area) and each cleans its own folder at start.
+  outputDir: `C:/FI-audyt/test-results/${process.env.FI_AUDIT_OUT ?? process.pid}`
 })

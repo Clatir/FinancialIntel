@@ -51,9 +51,17 @@ Instrukcja dla grup AU-4–AU-10 (Claude i jego agenci). Plan i zasady: `docs/au
 5. Przy okazji zapisuj spostrzeżenia spoza punktów (myląca etykieta, brak „Cofnij”, za dużo kroków) – to materiał
    do wniosków (AU-11), sekcja „Spostrzeżenia”.
 
+## Praca równoległa (kilka obszarów naraz)
+- Skrypty obszaru: `tests/audyt/<prefiks>-*.spec.ts` (np. `kr-kreator.spec.ts`); pomocnicze funkcje obszaru –
+  `tests/audyt/<prefiks>-pomoc.ts`. **Nie zmieniaj** `lab.ts`, `persona*.ts` ani plików innych obszarów – błąd w nich
+  zgłoś w raporcie.
+- Nazwy przebiegów (`start(nazwa)`, `useState(stan, nazwa)`) zaczynają się od prefiksu obszaru (`kr-…`, `op-…`).
+- Odczyty liczb: `reading('<prefiks>', …)` – plik `C:\FI-audyt\odczyty\<prefiks>.jsonl`.
+- Punkty „Kto: Maszyna” i „Kto: Ty” nie są wykonywane w laboratorium – w raporcie jedna linia „poza laboratorium”.
+
 ## Raport
-Plik `docs/audyt/raport/<plik punktów>.md` (np. `raport/1-start-mostek-wpis.md`), na górze data, wersja, stan danych
-i podsumowanie (liczba werdyktów). Każdy punkt:
+Plik `docs/audyt/raport/<prefiks>.md` (np. `raport/KR.md`), na górze data, wersja, stan danych i podsumowanie (liczba
+werdyktów). Każdy punkt:
 
 ```
 ### SW.12 – NIEZGODNE (S)
