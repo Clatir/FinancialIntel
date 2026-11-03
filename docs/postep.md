@@ -31,9 +31,17 @@ w `.tools`.
 | Grupa | Stan | Uwagi |
 | --- | --- | --- |
 | AU-1 Laboratorium i katalog | ✅ 03.11 | 587 punktów w `docs/audyt/punkty/` (Claude 527, Maszyna 48, Ty 12); `katalog.md` |
-| AU-2 Załoga testowa | ✅ persona „rok” (przegląd narzędzia w toku) | 14 mies., 929 wierszy przez import wydania; `C:\FI-audyt\stany` |
-| AU-3 Instrukcja maszyny | ✅ `docs/audyt/maszyna.md` | pakiet `C:\FI-vm-pakiet` – `tests/audyt/pakiet.spec.ts` |
-| AU-4 … AU-8 | ⏳ | wykonawcy równolegle według obszarów (raporty `docs/audyt/raport/<prefiks>.md`) |
+| AU-2 Załoga testowa | ✅ 03.11 | persona „rok” (14 mies. przez import wydania), `/code-review` high narzędzia – 10 uwag poprawionych; stan `start` z KR |
+| AU-3 Instrukcja maszyny | ✅ 03.11 | `docs/audyt/maszyna.md`, pakiet `C:\FI-vm-pakiet` (`pakiet.spec.ts`) – maszyna po stronie użytkownika |
+| AU-4 Codzienny rytm | ✅ 03.11 | KR, MO, SW, OP, ME, IM, SA – 5 wykonawców Opus · xhigh równolegle |
+| AU-5 Dowództwo, Wywiad | ✅ 03.11 | DW, WY, RY (Opus · xhigh) |
+| AU-6 Dane i dwa komputery | ✅ 03.11 | DA (Opus · xhigh) |
+| AU-7, AU-8 Interfejs, ustawienia, raporty | ✅ 03.11 | US, IN, RE i `docs/audyt/ty.md` (Sonnet · high) |
+
+**Wynik bloków A–B** (`docs/audyt/raport/README.md`): 401 punktów Claude'a – 234 ZGODNE, 67 liczb do wyroczni, 36 UWAG,
+66 NIEZGODNE (3 K, 3 W + P.1, 35 S, 25 N). K: IM.42 (usunięta operacja wraca przy imporcie drugiego formatu), DA.40
+(znikający folder – wpisy zapisane do odtworzonego pustego folderu), DA.43 (zamknięcie gubi zmianę kwoty bez pytania).
+Czas: AU-1–AU-3 ok. 2 h, AU-4–AU-8 ok. 2,5 h (równolegle 5–6 wykonawców); razem ok. 4,5 h zegara sesji.
 | AU-9, AU-10 (max), AU-11 | ⏳ | blok C i synteza – na komendę; **przed AU-9:** persona od nowa (`persona.spec.ts` – dni gry zamrażane po imporcie, nie przed nim; stan z 03.11 ma oceny z samych wpisów ręcznych – DW), potem pakiet maszyny (`pakiet.spec.ts`), jeśli maszyna jeszcze nie ruszyła |
 
 **Incydent 03.11:** wydana aplikacja przy każdym starcie zapisuje autostart z `config.json` (przed oknem) – przebiegi
