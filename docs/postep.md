@@ -34,7 +34,7 @@ w `.tools`.
 | AU-2 Załoga testowa | ✅ persona „rok” (przegląd narzędzia w toku) | 14 mies., 929 wierszy przez import wydania; `C:\FI-audyt\stany` |
 | AU-3 Instrukcja maszyny | ✅ `docs/audyt/maszyna.md` | pakiet `C:\FI-vm-pakiet` – `tests/audyt/pakiet.spec.ts` |
 | AU-4 … AU-8 | ⏳ | wykonawcy równolegle według obszarów (raporty `docs/audyt/raport/<prefiks>.md`) |
-| AU-9, AU-10 (max), AU-11 | ⏳ | blok C i synteza – na komendę |
+| AU-9, AU-10 (max), AU-11 | ⏳ | blok C i synteza – na komendę; **przed AU-9:** persona od nowa (`persona.spec.ts` – dni gry zamrażane po imporcie, nie przed nim; stan z 03.11 ma oceny z samych wpisów ręcznych – DW), potem pakiet maszyny (`pakiet.spec.ts`), jeśli maszyna jeszcze nie ruszyła |
 
 **Incydent 03.11:** wydana aplikacja przy każdym starcie zapisuje autostart z `config.json` (przed oknem) – przebiegi
 laboratorium usunęły wpis „Financial Intel” w HKCU\…\Run użytkownika. Został starszy wpis `app.financialintel.desktop`

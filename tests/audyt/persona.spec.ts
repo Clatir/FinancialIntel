@@ -209,8 +209,9 @@ test('persona: stan „rok” – 14 miesięcy przez import wydanej aplikacji', 
     writeRecord(dir, 'dockings', { schemaVersion: 1, id: fid(61, i + 1), createdAt: `${m.date}T10:10:00.000Z`, updatedAt: `${m.date}T10:10:00.000Z`, updatedBy: MACHINE, date: m.date, transactionId: manualIds[i], ictjEntryId: m.ictj.id, entryDate: m.ictj.date, pool: m.ictj.pool, split: null })
   })
 
-  // ---- the import through the released app
-  let run = await start('persona-rok', { dataDir: dir, ictjDir, machine: MACHINE })
+  // ---- the import through the released app – before the game freezes a day (DW, AU-5: frozen 27 s before the import,
+  // the days were rated on the typed operations alone); the second start below freezes them with the bank's history.
+  let run = await start('persona-rok', { dataDir: dir, ictjDir, machine: MACHINE, env: { FI_FREEZE_AFTER_OPEN_MS: '3600000' } })
   try {
     await expect(run.page.getByTestId('page-bridge')).toBeVisible({ timeout: 90_000 })
     await run.page.waitForTimeout(5000)
