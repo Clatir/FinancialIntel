@@ -25,7 +25,9 @@ test.beforeEach(async ({ page }) => {
     settings: (s) => ({ ...s, shipName: 'Sokół', budget: { ...s.budget, start } }),
     records: {
       balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],
-      months: [{ month: addMonths(month, -1), salary: zl(4000), envelopes: { [FOOD]: zl(1500), [AUTO]: zl(300) } }],
+      // The last month's loot already split (to the shields): days 1–7 of a month would add the report „Łupy z
+      // poprzedniego miesiąca” to Meldunki – their count must not depend on the day of the month.
+      months: [{ month: addMonths(month, -1), salary: zl(4000), envelopes: { [FOOD]: zl(1500), [AUTO]: zl(300) }, loot: { decidedAt: new Date().toISOString() } }],
       containers: [{ name: 'OC auta', amount: zl(1240), cycleMonths: 12, dueMonth: due.slice(0, 7), dueDay: Number(due.slice(8, 10)), categoryId: AUTO }],
       transactions: [
         { date: start, accountId: ACC, amount: -zl(42.5), categoryId: GROCERIES, counterparty: 'Biedronka' },
