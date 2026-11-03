@@ -102,8 +102,9 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
     writeFileSync(config, JSON.stringify({ ...c, prefs: { ...c.prefs, ...opts.prefs, quickShortcut: '' }, tray: { ...c.tray, launchAtLogin: false } }, null, 2))
   }
   const dataDir = opts.dataDir ?? join(dir, 'dane')
+  const downloads = join(dir, 'pobrane')
   const env: Record<string, string> = {
-    FI_DOWNLOADS_DIR: join(dir, 'pobrane'),
+    FI_DOWNLOADS_DIR: downloads,
     FI_DEFAULT_DATA_DIR: join(dir, 'OneDrive', 'FinancialIntel'),
     FI_ICTJ_LAUNCH: 'dry',
     // The game's first freeze as in the release (3 min after the opening, 1 min of quiet) – e2e's `launch()` sets 0 for its
@@ -121,7 +122,7 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
     mkdirSync(join(env.FI_ICTJ_APPDATA, 'ICT Trade Journal'), { recursive: true })
     writeFileSync(join(env.FI_ICTJ_APPDATA, 'ICT Trade Journal', 'config.json'), JSON.stringify({ dataDir: opts.ictjDir }, null, 2))
   }
-  mkdirSync(env.FI_DOWNLOADS_DIR, { recursive: true })
+  mkdirSync(downloads, { recursive: true })
   // The start with Windows: every start of the app writes its Run entry from config.json BEFORE any window – a removal by
   // name, whatever the path („Financial Intel” of the user's own installed app was removed so on 03.11.2026). As a
   // portable copy its entry is „Financial Intel (portable)” – one the user does not have; later calls are caught (guard).
