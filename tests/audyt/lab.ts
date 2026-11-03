@@ -56,6 +56,18 @@ export function autostartEntries(): string {
   }).join('\n--\n')
 }
 
+/** Ends the app with all its processes (Chromium's renderers, the GPU process) – a main process killed alone may leave them. */
+export function killTree(app: ElectronApplication): void {
+  const pid = app.process().pid
+  if (!pid) return
+  try {
+    if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+    else app.process().kill('SIGKILL')
+  } catch {
+    /* already gone */
+  }
+}
+
 /** A move of the mouse over the window – what makes the app count this computer as in use (D86). */
 export async function useWindow(page: Page): Promise<void> {
   await page.mouse.move(400, 300)
@@ -81,10 +93,13 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
         2
       )
     )
-  else if (opts.prefs) {
-    // A run continued (`fresh: false`) with other preferences: on top of the ones it has.
-    const c = JSON.parse(readFileSync(config, 'utf8')) as { prefs?: Record<string, unknown> }
-    writeFileSync(config, JSON.stringify({ ...c, prefs: { ...c.prefs, ...opts.prefs } }, null, 2))
+  else {
+    // A run continued (`fresh: false`): its preferences, with `opts.prefs` on top – but never the start with Windows or
+    // a global shortcut. Both are applied by the app at its start, before the guard: „Uruchamiaj z Windows” chosen in a
+    // run (the wizard) would write a real Run entry, a shortcut would take keys of the user's programs. Their changes
+    // within a run are only recorded (guard); the shortcut's persistence after a restart is the machine's to check.
+    const c = JSON.parse(readFileSync(config, 'utf8')) as { prefs?: Record<string, unknown>; tray?: Record<string, unknown> }
+    writeFileSync(config, JSON.stringify({ ...c, prefs: { ...c.prefs, ...opts.prefs, quickShortcut: '' }, tray: { ...c.tray, launchAtLogin: false } }, null, 2))
   }
   const dataDir = opts.dataDir ?? join(dir, 'dane')
   const env: Record<string, string> = {
@@ -124,8 +139,19 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
     if (!opts.idle) await useWindow(launched.page)
   } catch (e) {
     // Never a released app left running with its tray icon and a lock on the run's user data.
-    launched.app.process().kill()
+    killTree(launched.app)
     throw e
+  }
+  // A close that fails (the app held by its question about unsaved changes: e2e's guard kills the main process only) ends
+  // the whole tree of the app's processes.
+  const close = launched.app.close.bind(launched.app)
+  launched.app.close = async () => {
+    try {
+      await close()
+    } catch (e) {
+      killTree(launched.app)
+      throw e
+    }
   }
   note(name, `start ${new Date().toISOString()} dane=${dataDir}`)
   return { ...launched, name, dir }
@@ -136,12 +162,18 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
  * the start with Windows, opening of paths and links, Explorer. Windows are moved off every screen whenever shown.
  */
 async function guard(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ app: a, BrowserWindow, Notification, shell, screen }) => {
-    type Rec = { toasts: Array<{ title: string; body: string; at: string }>; login: unknown[]; opened: string[] }
+  await app.evaluate(({ app: a, BrowserWindow, Notification, shell, screen, globalShortcut }) => {
+    type Rec = { toasts: Array<{ title: string; body: string; at: string }>; login: unknown[]; opened: string[]; shortcuts: string[] }
     const g = globalThis as unknown as { __audit?: Rec }
     if (g.__audit) return
-    const rec: Rec = { toasts: [], login: [], opened: [] }
+    const rec: Rec = { toasts: [], login: [], opened: [], shortcuts: [] }
     g.__audit = rec
+    // A global shortcut would take the keys of the user's programs: recorded, never registered.
+    globalShortcut.register = ((acc: string) => {
+      rec.shortcuts.push(acc)
+      return true
+    }) as typeof globalShortcut.register
+    globalShortcut.unregister = (() => undefined) as typeof globalShortcut.unregister
     Notification.prototype.show = function (this: Electron.Notification) {
       rec.toasts.push({ title: this.title, body: this.body, at: new Date().toISOString() })
     }
@@ -196,9 +228,15 @@ export async function onScreen(app: ElectronApplication): Promise<number> {
   })
 }
 
-/** What the app tried to do on the desktop: notifications, start with Windows, opened paths and links. */
-export async function recorded(app: ElectronApplication): Promise<{ toasts: Array<{ title: string; body: string; at: string }>; login: unknown[]; opened: string[] }> {
-  return app.evaluate(() => (globalThis as unknown as { __audit: { toasts: Array<{ title: string; body: string; at: string }>; login: unknown[]; opened: string[] } }).__audit)
+/** What the app tried to do on the desktop: notifications, start with Windows, opened paths and links, global shortcuts. */
+export interface Recorded {
+  toasts: Array<{ title: string; body: string; at: string }>
+  login: unknown[]
+  opened: string[]
+  shortcuts: string[]
+}
+export async function recorded(app: ElectronApplication): Promise<Recorded> {
+  return app.evaluate(() => (globalThis as unknown as { __audit: Recorded }).__audit)
 }
 
 /** File dialogs answered by the audit: the next open dialog gets `paths`, the next save dialog `savePath`. */

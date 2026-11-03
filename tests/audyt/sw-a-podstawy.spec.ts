@@ -1,0 +1,220 @@
+/**
+ * SW.1, SW.4, SW.5, SW.6, SW.7, SW.21 – the window's start, the expense saved, the energy preview (daily, planned,
+ * outside the envelopes, another day), the account and its memory. Special state: an archived account „Stare konto”.
+ */
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { test } from '@playwright/test'
+import { reading, text } from './lab'
+import { ACC, CAT, added, bridge, brief, category, editFi, log, openQuick, openRok, ops, qread, snap, startOn, typeAmount, typeIn, waitHidden } from './sw-pomoc'
+
+const nowHm = () => new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' })
+
+async function accountsSaldo(page: import('@playwright/test').Page): Promise<string> {
+  await page.getByTestId('nav-settings').click()
+  await page.getByTestId('settings-tab-accounts').click()
+  await page.waitForTimeout(800)
+  const t = await text(page, 'main')
+  return (t.match(/saldo teraz [^\n]*/g) ?? []).join(' | ')
+}
+
+test('SW podstawy: 1, 4, 5, 6, 7, 21', async () => {
+  test.setTimeout(20 * 60_000)
+  const run = 'sw-a'
+  let r = await openRok(run, (d) =>
+    editFi(d, (fi) => {
+      fi.settings.accounts.push({ id: '01KSWACC000000000000000009', name: 'Stare konto', kind: 'bank', importFormat: null, archived: true })
+    })
+  )
+  const dataDir = r.dataDir
+  try {
+    let { app, page } = r
+    // ---- SW.1
+    const b0 = await bridge(page)
+    log(run, 'SW.1 mostek energia', b0.energy, 'przycisk:', await page.getByTestId('bridge-quick').innerText())
+    let q = await openQuick(app, page)
+    const r1 = await qread(q)
+    log(run, 'SW.1 okno (api)', r1, 'teraz', nowHm())
+    log(run, 'SW.1 placeholder Gdzie', await q.getByTestId('quick-counterparty').getAttribute('placeholder'))
+    log(run, 'SW.1 rodzaje', await q.locator('[role="radiogroup"][aria-label="Rodzaj"]').innerText())
+    log(run, 'SW.1 okno bez ramki / rozmiar', await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.webContents.getURL().includes('quick=1')).map((w) => ({ bounds: w.getBounds(), onTop: w.isAlwaysOnTop(), resizable: w.isResizable() }))))
+    await snap(q, 'SW.1')
+    reading('sw', 'SW.1', 'rok', { X: r1.header, mostek: b0.energy })
+    await q.keyboard.press('Escape')
+    log(run, 'SW.1 Esc ukryte', await waitHidden(app))
+    q = await openQuick(app, page, 'button')
+    log(run, 'SW.1 okno (przycisk Mostka)', (await qread(q)).header, 'okien szybkiego wpisu', await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+    await q.keyboard.press('Escape')
+    await waitHidden(app)
+    q = await openQuick(app, page, 'palette')
+    log(run, 'SW.1 okno (paleta)', (await qread(q)).header, 'okien', await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+    await q.keyboard.press('Escape')
+    await waitHidden(app)
+
+    // ---- SW.4 – Żabka 23,40, Jedzenie · kawa i przekąski, on Portfel XTB (the last account for SW.1's memory)
+    let before = await ops(dataDir)
+    const e4 = (await bridge(page)).energy
+    q = await openQuick(app, page)
+    await typeAmount(q, '23,40')
+    await typeIn(q, 'quick-counterparty', 'Żabka')
+    await category(q, CAT.coffee)
+    await q.getByTestId('quick-account').selectOption(ACC.xtb)
+    log(run, 'SW.4 przed Enter', await qread(q))
+    await q.getByTestId('quick-account').press('Enter')
+    let msg = ''
+    for (let i = 0; i < 20 && !msg; i++) {
+      msg = (await q.getByTestId('quick-message').count()) ? await q.getByTestId('quick-message').innerText() : ''
+      if (!msg) await q.waitForTimeout(50)
+    }
+    log(run, 'SW.4 stopka po Enter', msg)
+    await snap(q, 'SW.4-zapisano')
+    log(run, 'SW.4 okno ukryte', await waitHidden(app))
+    await page.waitForTimeout(1500)
+    const n4 = await added(dataDir, before)
+    log(run, 'SW.4 nowe operacje', n4.length, n4.map(brief))
+    log(run, 'SW.4 pliki 2026', readdirSync(`${dataDir}\\transactions\\2026`).filter((f) => f.startsWith('2026-11-03')))
+    const b4 = await bridge(page)
+    log(run, 'SW.4 mostek energia przed/po', e4, b4.energy, 'ostatnie', b4.recent)
+    reading('sw', 'SW.4', 'rok', { przed: e4, po: b4.energy, kwotaPlik: (n4[0]?.amount as number) ?? null })
+    await snap(page, 'SW.4-mostek')
+    await page.keyboard.press('Control+2')
+    await page.waitForTimeout(2500)
+    const rows = await page.getByTestId('operation-row').allInnerTexts()
+    log(run, 'SW.4 Operacje pierwsze wiersze', rows.slice(0, 3).map((x) => x.replace(/\s+/g, ' ')))
+    await page.getByTestId('operation-row').first().click()
+    await page.waitForTimeout(800)
+    log(run, 'SW.4 edytor', (await page.getByTestId('operation-editor').count()) ? (await page.getByTestId('operation-editor').innerText()).replace(/\s+/g, ' ').slice(0, 900) : '(brak edytora)')
+    await snap(page, 'SW.4-operacje')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Control+1')
+
+    // ---- SW.5 – 50,00 Jedzenie / bez kategorii / ponad energię, zapis 50,00 Jedzenie
+    before = await ops(dataDir)
+    const e5 = (await bridge(page)).energy
+    q = await openQuick(app, page)
+    log(run, 'SW.1/SW.21 konto po zapisie na Portfelu XTB', (await qread(q)).account)
+    await typeAmount(q, '50,00')
+    await category(q, CAT.food)
+    const p5a = await qread(q)
+    log(run, 'SW.5 Jedzenie 50', p5a.header, '|', p5a.preview)
+    await category(q, '')
+    const p5b = await qread(q)
+    log(run, 'SW.5 bez kategorii 50', p5b.preview)
+    await typeAmount(q, '500,00')
+    const p5c = await qread(q)
+    log(run, 'SW.5 bez kategorii 500', p5c.preview, 'klasa wyniku', await q.locator('[data-testid="quick-preview-energy"] span.num').last().getAttribute('class'))
+    await snap(q, 'SW.5-ponad-energie')
+    await typeAmount(q, '50,00')
+    await category(q, CAT.food)
+    await q.getByTestId('quick-category').press('Enter')
+    await waitHidden(app)
+    await page.waitForTimeout(1200)
+    const b5 = await bridge(page)
+    log(run, 'SW.5 mostek przed/po', e5, b5.energy, 'nowe', (await added(dataDir, before)).map(brief))
+    reading('sw', 'SW.5', 'rok', { X: p5a.preview, mostekPrzed: e5, mostekPo: b5.energy, podgladBezKat: p5b.preview, podglad500: p5c.preview })
+
+    // ---- SW.6 – Auto · paliwo (koperta planowa) i kategoria bez koperty (Subskrypcje i łączność)
+    before = await ops(dataDir)
+    const b6a = await bridge(page)
+    log(run, 'SW.6 przed: energia', b6a.energy, '| koperty', b6a.envelopes, '| stan', b6a.state.slice(0, 200))
+    q = await openQuick(app, page)
+    await typeAmount(q, '200,00')
+    await category(q, CAT.fuel)
+    log(run, 'SW.6 Auto 200', (await qread(q)).preview)
+    await typeAmount(q, '700,00')
+    const p6 = await qread(q)
+    log(run, 'SW.6 Auto 700', p6.preview, 'klasa', await q.locator('[data-testid="quick-preview"] span.num').last().getAttribute('class'))
+    await snap(q, 'SW.6-auto')
+    await q.getByTestId('quick-category').press('Enter')
+    await waitHidden(app)
+    await page.waitForTimeout(1200)
+    const b6b = await bridge(page)
+    log(run, 'SW.6 po Auto: energia', b6b.energy, '| koperty', b6b.envelopes, '| stan', b6b.state.slice(0, 200))
+    q = await openQuick(app, page)
+    await typeAmount(q, '100,00')
+    await category(q, CAT.streaming)
+    const p6b = await qread(q)
+    log(run, 'SW.6 Subskrypcje 100', p6b.preview)
+    await snap(q, 'SW.6-poza-kopertami')
+    await typeAmount(q, '9000,00')
+    log(run, 'SW.6 Subskrypcje 9000 (tylko podgląd)', (await qread(q)).preview)
+    await snap(q, 'SW.6-z-oslon')
+    await typeAmount(q, '100,00')
+    await q.getByTestId('quick-category').press('Enter')
+    await waitHidden(app)
+    await page.waitForTimeout(1200)
+    const b6c = await bridge(page)
+    log(run, 'SW.6 po Subskrypcjach: energia', b6c.energy, '| stan', b6c.state.slice(0, 200), '| nowe', (await added(dataDir, before)).map(brief))
+    reading('sw', 'SW.6', 'rok', { energiaPrzed: b6a.energy, energiaPoAuto: b6b.energy, energiaPoSub: b6c.energy, podgladAuto: p6.preview, podgladSub: p6b.preview, stanPrzed: b6a.state.slice(0, 120), stanPoAuto: b6b.state.slice(0, 120), stanPoSub: b6c.state.slice(0, 120), kopertyPrzed: b6a.envelopes, kopertyPo: b6c.envelopes })
+
+    // ---- SW.7 – 140,00 Jedzenie: wczoraj / poprzedni miesiąc / za 3 dni; zapis „wczoraj”
+    before = await ops(dataDir)
+    const e7 = (await bridge(page)).energy
+    q = await openQuick(app, page)
+    await typeAmount(q, '140,00')
+    await category(q, CAT.food)
+    log(run, 'SW.7 dziś', (await qread(q)).preview)
+    await q.getByTestId('quick-yesterday').click()
+    await q.waitForTimeout(200)
+    const p7 = await qread(q)
+    log(run, 'SW.7 wczoraj', p7.date, p7.time, '|', p7.preview, '| przycisk wczoraj', await q.getByTestId('quick-yesterday').count())
+    await snap(q, 'SW.7-wczoraj')
+    await typeIn(q, 'quick-date', '28.10')
+    log(run, 'SW.7 28.10', (await qread(q)).date, (await qread(q)).preview)
+    await typeIn(q, 'quick-date', '06.11')
+    const p7c = await qread(q)
+    log(run, 'SW.7 06.11', p7c.date, p7c.preview, '| znaczek', (await q.getByTestId('quick-future').count()) ? await q.getByTestId('quick-future').innerText() : '(brak)')
+    await snap(q, 'SW.7-przyszlosc')
+    await typeIn(q, 'quick-date', '02.11')
+    const p7d = await qread(q)
+    log(run, 'SW.7 02.11 przed zapisem', p7d.date, p7d.time, p7d.preview)
+    await q.getByTestId('quick-date').press('Enter')
+    await waitHidden(app)
+    await page.waitForTimeout(1200)
+    const b7 = await bridge(page)
+    log(run, 'SW.7 mostek przed/po', e7, b7.energy, 'nowe', (await added(dataDir, before)).map(brief))
+    reading('sw', 'SW.7', 'rok', { X: e7, podgladWczoraj: p7.preview, mostekPo: b7.energy })
+
+    // ---- SW.21 – konto: lista, zapis na Gotówce, pamięć, Ctrl+Enter
+    const s0 = await accountsSaldo(page)
+    log(run, 'SW.21 salda przed', s0)
+    await page.keyboard.press('Control+1')
+    before = await ops(dataDir)
+    q = await openQuick(app, page)
+    log(run, 'SW.21 lista kont', await q.getByTestId('quick-account').evaluate((s: HTMLSelectElement) => [...s.options].map((o) => o.textContent)), 'wybrane', (await qread(q)).account)
+    await typeAmount(q, '15,00')
+    await category(q, CAT.groceries)
+    await q.getByTestId('quick-account').selectOption(ACC.cash)
+    await q.getByTestId('quick-account').press('Enter')
+    await waitHidden(app)
+    await page.waitForTimeout(800)
+    q = await openQuick(app, page)
+    log(run, 'SW.21 kolejne otwarcie – konto', (await qread(q)).account)
+    await typeAmount(q, '5,00')
+    await category(q, CAT.groceries)
+    await q.getByTestId('quick-amount').press('Control+Enter')
+    await q.waitForTimeout(1200)
+    log(run, 'SW.21 po Ctrl+Enter – konto', (await qread(q)).account, (await qread(q)).message)
+    await q.keyboard.press('Escape')
+    await waitHidden(app)
+    await page.waitForTimeout(800)
+    log(run, 'SW.21 nowe', (await added(dataDir, before)).map(brief))
+    const s1 = await accountsSaldo(page)
+    log(run, 'SW.21 salda po', s1)
+    reading('sw', 'SW.21', 'rok', { przed: s0, po: s1 })
+    await page.keyboard.press('Control+1')
+
+    // ---- SW.4 – „Zakończ” (zamknięcie aplikacji) i ponowne uruchomienie na tym samym komputerze
+    await app.close()
+    r = await startOn(run, dataDir, join(r.dir, 'ictj'), { fresh: false })
+    app = r.app
+    page = r.page
+    const b8 = await bridge(page)
+    log(run, 'SW.4 po ponownym uruchomieniu – ostatnie', b8.recent)
+    q = await openQuick(app, page)
+    log(run, 'SW.21 konto po ponownym uruchomieniu', (await qread(q)).account)
+    await q.keyboard.press('Escape')
+  } finally {
+    await r.app.close()
+  }
+})

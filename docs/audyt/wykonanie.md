@@ -30,6 +30,10 @@ Instrukcja dla grup AU-4–AU-10 (Claude i jego agenci). Plan i zasady: `docs/au
   portable (`PORTABLE_EXECUTABLE_FILE` – wpis „Financial Intel (portable)”, którego nie masz) i czyta wpisy FI w rejestrze
   przed i po starcie: każda zmiana przerywa przebieg. Skutek dla audytu: aplikacja w laboratorium mówi o sobie jak wersja
   przenośna (Ustawienia → Aktualizacje) – teksty wersji instalowanej sprawdza maszyna.
+- **Przed każdym startem** `start()` zeruje w `config.json` przebiegu „Uruchamiaj z Windows” i globalny skrót (aplikacja
+  stosuje je przy starcie, zanim zadziała przechwycenie); w trakcie przebiegu ich zmiany są tylko zapisywane
+  (`recorded(app).login`, `.shortcuts`). Trwałość skrótu i autostartu po ponownym uruchomieniu sprawdza maszyna.
+  Zamknięcie, które się zawiesi, kończy całe drzewo procesów (`killTree`).
 - **„W użyciu” (D86):** `start()` porusza myszą nad oknem – komputer jest w użyciu i robi zapisy w tle (zamrażanie dni
   gry, cele ICTTJ). `idle: true` – komputer zostawiony sam sobie (punkty o drugim komputerze, zasobniku).
 - **Stany szczególne** (punkt wymaga danych, których `rok` nie ma): zrób je na kopii (`useState('rok', przebieg)`, potem
