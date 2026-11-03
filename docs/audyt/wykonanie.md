@@ -43,8 +43,9 @@ Instrukcja dla grup AU-4–AU-10 (Claude i jego agenci). Plan i zasady: `docs/au
 - **Stany szczególne** (punkt wymaga danych, których `rok` nie ma): zrób je na kopii (`useState('rok', przebieg)`, potem
   zmiana plików przed `start()`; nowe rekordy przez `seedFolder` z `tests/e2e/seed.ts` albo przez interfejs aplikacji)
   i opisz w raporcie, co dodałeś. Stan `pusty` – `start(nazwa, { usePreset: false })` albo pusty `dataDir`.
-- **Znane z przygotowania** (`raport/0-przygotowanie.md`): Operacje zawieszają okno przy grze dłuższej niż ok. 105 dni
-  (P.1) – persona ma grę od 60 dni, nie zmieniaj `game.start` wstecz poza punktem P.1.
+- **Znane z przygotowania** (`raport/0-przygotowanie.md`, poprawione w AU-11 – `raport/WERYFIKACJA-1.md`): okno
+  zawiesza się (P.1), gdy naraz czeka do zamrożenia ponad ok. 100 dni gry (zamrażanie po 2 dni w ponad 50 przebiegach),
+  nie od długości gry – nie przesuwaj `game.start` wstecz ani nie zostawiaj stanu bez zamrożonych dni poza punktem P.1.
 
 ## Jak oceniać
 1. Każdy punkt wykonujesz według „Jak sprawdzić” i oceniasz **dosłownie** według „Oczekiwany efekt” i „Nie przechodzi,

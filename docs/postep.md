@@ -12,8 +12,9 @@ komponentu `Segmented`) wydane 24–25.10 – 1.15.3 i 1.15.4 z sesji Antigravit
 iPhone (D92 / D93): 1.13.0–1.15.0 wydane (grupy iA–iC, PR #42–#44); przerwa po iC (D93) – „Przed grupą iD” niżej.
 1.11.0 i 1.12.0 wydała w tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0,
 decyzje D92 / D93, T305–T311.
-**Następny krok:** audyt funkcjonalny 1.15.4 przed iD (D97) – bloki A, B i C zrobione 03.11 (stan niżej); AU-11
-(synteza i wnioski) na komendę; maszyna wirtualna – pakiet gotowy, czeka na użytkownika. Potem
+**Następny krok:** audyt funkcjonalny 1.15.4 (D97) zakończony 03.11 – `docs/audyt/raport.md` (80 znalezisk: K 4, W 6,
+S 25, N 35), `docs/audyt/wnioski.md` (48 AP, plan grup N1–N5); od użytkownika: odpowiedzi na pytania z `wnioski.md`
+sekcja 7 (S4 i T163 przed N2), potem N1 (1.15.5) na komendę; maszyna wirtualna – pakiet gotowy, czeka. Potem
 przerwa po iC (D93) – od użytkownika: procent limitu tygodniowego (kolumna „Rzeczywiste”), odpowiedź
 do IP15 (czy folder danych ICTTJ jest na OneDrive – bez niej iD nie startuje), decyzje IP21 (kreator) i IP24 (zapisy w
 tle) przed iE, uwagi z telefonu do iA–iC; potem grupa iD (1.16.0) na komendę (D67). Przed każdym etapem tabela prac z
@@ -39,7 +40,7 @@ w `.tools`.
 | AU-7, AU-8 Interfejs, ustawienia, raporty | ✅ 03.11 | US, IN, RE i `docs/audyt/ty.md` (Sonnet · high) |
 | C-0 Persona od nowa | ✅ 03.11 | dni gry zamrażane po imporcie; pieniądze identyczne ze stanem A–B (`stany\rok-ab`); gra: wrzesień 13/27, październik 22/31 dni zgodnych (było 24/27, 31/31); pakiet maszyny od nowa |
 | AU-9, AU-10 Blok C (max) | ✅ 03.11 | wyrocznia (u2, 24 testy), 130 punktów (PM, LA, DO, MG, DM, RA, PR – 6 wykonawców Opus · max), przekrój 814 odczytów wobec wyroczni – wynik niżej |
-| AU-11 Synteza | ⏳ | na komendę; na start `/code-review` high wyroczni (zła wyrocznia = fałszywe zgodności; recenzent tylko zgłasza – poprawki wyroczni bez kodu aplikacji) |
+| AU-11 Synteza | ✅ 03.11 | przegląd kodu wyroczni (24 uwagi, werdykty bez zmian), `raport.md` (80 AF), weryfikacja 5 × Opus · xhigh + druga opinia Fable 5.1 (10 K / W), `wnioski.md` (48 AP, plan N1–N5, 12 pytań); bez raportu maszyny i listy „Tylko Ty” – dopiszą się później |
 
 **Wynik bloków A–B** (`docs/audyt/raport/README.md`): 401 punktów Claude'a – 234 ZGODNE, 67 liczb do wyroczni, 36 UWAG,
 66 NIEZGODNE (3 K, 3 W + P.1, 35 S, 25 N). K: IM.42 (usunięta operacja wraca przy imporcie drugiego formatu), DA.40
@@ -95,6 +96,32 @@ wyrocznia 36 + 30 min uzgodnień, wykonawcy 33–55 min, przekroje ok. 50 + 25 m
   laboratorium.
 - Maszyna: pakiet `C:\FI-vm-pakiet` z nową personą (15:19) – 48 punktów czeka na Twoje przygotowanie maszyny.
 
+### Przed AU-11 – synteza i wnioski (03.11.2026, komenda „Rozpocznij kroki 1.1 i 1.2”, druga opinia – Fable)
+Krok 1.1 (CI) zrobiony: daty E2E z bieżącego miesiąca (PR #48 do `main`, commit też na tej gałęzi), `tests/audyt/` poza
+typecheck CI, rdzeń laboratorium – `npm run typecheck:audyt`. Raportu maszyny ani listy „Tylko Ty” jeszcze nie ma – dojdą
+po Twojej stronie (AU-11 je wtedy dopisze).
+
+| Krok | Co obejmuje | Model i thinking (z górką; minimum) | Czas Claude'a |
+| --- | --- | --- | --- |
+| 0 | przegląd kodu wyroczni (jak `/code-review` high; recenzent tylko zgłasza, poprawki – wyrocznia bez kodu aplikacji) | Opus 5.5 · xhigh (min. high) | 0,5 h, równolegle |
+| 2 | konsolidacja `docs/audyt/raport.md`: AF-n, duplikaty, wagi, uwagi, zegar → maszyna | Opus 5.5 · high (min. medium) | 0,5–0,75 h, równolegle |
+| 3 | weryfikacja sceptyczna 6 K, 4 W, ok. 45 S – odtworzenie w wydaniu, potem przyczyna w kodzie; 5 weryfikatorów równolegle | Opus 5.5 · xhigh (min. high) | 1–1,5 h zegara |
+| 3b | druga opinia dla K i W o pieniądzach i danych (IM.42, DA.40, DA.43, DM.18, MG.8, MG.10, IM.23, IM.39) | Fable 5.1 | 0,5 h |
+| 4 | wnioski `docs/audyt/wnioski.md`: kryteria sukcesu, ścieżki kapitana, luki, porównanie z YNAB / Actual / Monarch / Copilot / Firefly III (badanie w sieci – Sonnet 5.5), AP-n | Opus 5.5 · xhigh (min. high) | 1–1,5 h |
+| 5 | plan dalej: grupy naprawcze i rozwojowe z modelem i czasem, pytania do Ciebie | Opus 5.5 · xhigh | 0,25 h |
+| Razem | rekomendacja: Opus 5.5 · xhigh, Fable 5.1 do drugiej opinii | | ok. 3–4 h zegara |
+
+**Wynik AU-11** (`docs/audyt/raport.md`, `docs/audyt/wnioski.md`, weryfikacje `docs/audyt/raport/WERYFIKACJA-1…5.md` i
+`WERYFIKACJA-FABLE.md`): 80 znalezisk po połączeniu duplikatów – **K 4** (IM.42 usunięta operacja wraca przy drugim
+formacie, DA.40 folder-widmo, MG.8 = MG.10 przeniesienie środków celu na koniec dnia – błąd reguły T129, IM.23 = P.3
+„reszta jako zaliczka” = całość – Fable podniósł z W), **W 6** (DA.43, MO.29 = DO.7, IM.39, KR.16 – Fable podniósł,
+IM.10, IM.25), S 25, N 35; odrzucone 4 (RE.5, DA.3, DM.11, PR.10 – zgodne z decyzjami, jako AP), do decyzji 6 + S4.
+Sprostowania z weryfikacji: P.1 to zaległość ponad ok. 100 niezamrożonych dni (nie długość gry – bez terminu w styczniu),
+S; DM.18 – warstwy dobre, tylko przychód, S; WY.20 – symulator zakłada powrót spóźnionej spłaty, nie pomija długu.
+Kryteria sukcesu: spełniony „trading oddzielony” (zero zapisów w ICTTJ), reszta częściowo. 48 propozycji AP; plan grup
+N1–N5 przed / między iD i iE (kolejka niżej) i 12 pytań (`wnioski.md` sekcja 7). Krok 1.1 (CI): PR #48 scalony, `main`
+zielony bez nowego wydania. Czas AU-11: ok. 2,25 h zegara (20:15–22:30), plan 3–4 h.
+
 **Incydent 03.11:** wydana aplikacja przy każdym starcie zapisuje autostart z `config.json` (przed oknem) – przebiegi
 laboratorium usunęły wpis „Financial Intel” w HKCU\…\Run użytkownika. Został starszy wpis `app.financialintel.desktop`
 (FI dalej startuje z Windows); aplikacja użytkownika odtwarza swój wpis przy następnym starcie. Laboratorium od tej chwili
@@ -118,6 +145,11 @@ prac” (razem ok. 63 h; ciąg M–V zmierzone ok. 17 h przy planie ok. 24–25 
 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| **N1** | Dane i import po audycie: folder danych przed zapisem, tożsamość wiersza banku, szkic przy „Zmień mimo to”, pożyczka przed regułą, „+ w tym za” (AP-1, 2, 6, 7, 8; AF-1 K, AF-2 K, AF-3 W, AF-9 W, AF-26 W, AF-27 W) | Opus 5.5 | xhigh (max w AP-6, AP-7) | 2,5–4 h (z górką 4,5 h) | 1.15.5 | komenda | ⏳ |
+| **N2** | Silnik pieniędzy po audycie: przeniesienie środków celu w chwili zapisu (zamiast T129), „reszta jako zaliczka” + naprawa danych, płatność sprzed startu, „Wycofaj dokowanie”, usuwanie kategorii, plan = silnik, dostawa według puli, wyrocznia jako regresja (AP-3, 4, 5, 9, 11, 12, 32) | Opus 5.5 | **max** | 3–4,5 h (z górką 5,5 h) | 1.15.6 | S4, T163 (`wnioski.md` sekcja 7) | ⏳ |
+| **N3** | Opłaty, energia, gra: jeden stan opłaty, energia dziś w granicach miesiąca, zamrażanie po przerwie, kadłub, Kurs = Mostek, trend poduszki (AP-10, 13, 14, 17, 18, 30, 31) | Opus 5.5 | xhigh (max w AP-13, AP-17) | 2,5–3,5 h (z górką 4 h) | 1.15.7 | RA.4, S6, pytania AP-14, AP-17 | ⏳ |
+| **N4** | Zasady interfejsu: komunikat przy każdym odrzuceniu, „Cofnij” wszędzie, teksty, odprawa z hierarchią (AP-15, 16, 22, 23) | Sonnet 5.5 | high (Opus high przy logice) | 2–3 h (z górką 3,5 h) | 1.15.8 | – | ⏳ (po iD albo przed) |
+| **N5** | Ścieżki i ergonomia: kreator, domownicy, szybki wpis, debriefing, dokowanie, konflikty, nowy komputer, eksport, Operacje (AP-19–21, 24–29, 33, 34, 36–38) | Opus 5.5 | high (xhigh przy silniku) | 3–4,5 h (z górką 5 h) | 1.15.9 | odpowiedzi z `wnioski.md` sekcja 5 | ⏳ (po iE albo przed) |
 | **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏳ czeka na odpowiedzi |
 | **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **xhigh** (D96; max tylko w krokach silnika pieniędzy albo granicy ICTTJ) | 5,5–7,5 h (z górką 8 h) | 1.17.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
 | | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |

@@ -134,3 +134,8 @@ liczą wydatki od 1. dnia – wyrocznia domknęła lukę analogią do T45).
 - CI gałęzi audytu jest czerwone od AU-2 (nie z powodu bloku C): typecheck obejmuje skrypty laboratorium `tests/audyt/`
   (typy DOM w `page.evaluate`), a dwa testy E2E aplikacji (`recover`, `repayments`) mają daty na sztywno z października
   2026 i od 1.11 padają (lista Operacji pokazuje bieżący miesiąc) – `main` padnie tak samo; propozycja w `docs/postep.md`.
+
+## AU-11 – synteza (03.11.2026)
+Skonsolidowany raport z werdyktami weryfikacji i drugą opinią Fable: `docs/audyt/raport.md` (80 znalezisk AF – K 4,
+W 6, S 25, N 35; wagi końcowe nadpisują wstępne z tego pliku); wnioski, propozycje AP i plan grup N1–N5:
+`docs/audyt/wnioski.md`; weryfikacje: `WERYFIKACJA-1…5.md`, `WERYFIKACJA-FABLE.md`.

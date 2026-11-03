@@ -248,3 +248,21 @@ Nowe testy: R-1, R-2/R-3, R-12, R-14, R-5/R-10 – razem 17, wszystkie przechodz
 Potwierdzone bez zmian: C15, C17, C19. C18 – tylko argument za wariantem (bez liczenia). Nowe testy: C1, C2, C6, C7,
 C11, C12, C23 – razem 24, wszystkie przechodzą.
 
+
+## Przegląd kodu wyroczni (AU-11, krok 0, 03.11.2026)
+
+Niezależny przegląd (Opus 5.5 · xhigh, bez kodu aplikacji poza schematami): `C:\FI-audyt\wyrocznia\przeglad.md` –
+24 uwagi: 1 wysoka, 4 średnie, 19 niskich. Silnik wyroczni uruchomiony na wszystkich 410 parach migawka–dzień z odczytów:
+suma warstw = salda kont każdego dnia, bez błędów wykonania.
+- **Wysoka (W1):** przy dokowaniu z zapisanym podziałem pieniądze celu sprawdzane są wobec obecnej archiwizacji celu,
+  a nie stanu z chwili dokowania (T128, T176) – to C24 z `LICZBY-C.md`: błąd wyroczni, odczyt `pr:38` (PR.1-25) jest
+  zgodny z aplikacją.
+- **Średnie (bez zmiany werdyktów audytu):** S1 naruszenie „ładunek” porównuje masy całych miesięcy 1. dnia, bez dnia
+  zmiany (fałszywe naruszenie przy kontenerze dodanym później w miesiącu); S2 osłony poniżej minimum bez doliczenia
+  pożyczonego domownikom tego dnia (T161); S3 zakup nocny, impuls i zwrot liczone na linię paragonu, nie na operację;
+  S4 `household.openingIds` pomijane.
+- Niskie: m.in. niedobór przelewu / korekty z kadłuba (T31), „do przypisania” nigdy nie zużywane (T304), parowanie ICTTJ
+  bez części warunków T224 / T162, problemy odczytu ICTTJ pomijane w uwagach, wartości persony wpisane na sztywno
+  (saldo pliku mBanku, dwa osiągnięcia).
+- Wyrocznia nie jest poprawiana w audycie (werdykty się nie zmieniają); przed użyciem jej do testów regresji po grupach
+  naprawczych – poprawić W1 i S1–S4.
