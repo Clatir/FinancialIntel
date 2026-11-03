@@ -108,8 +108,15 @@ export async function start(name: string, opts: StartOptions = {}): Promise<Run>
     FI_ICTJ_LAUNCH: 'dry',
     ...opts.env
   }
-  if (opts.ictjDir) env.FI_ICTJ_DIR = opts.ictjDir
-  else env.FI_ICTJ_APPDATA = join(dir, 'brak-ictj')
+  // ICTTJ's own config.json (the hint „Użyj tego folderu”) always from the lab – never the user's
+  // %APPDATA%\ICT Trade Journal: pointing at the run's ICTTJ fixture, or absent.
+  env.FI_ICTJ_APPDATA = join(dir, 'ictj-appdata')
+  rmSync(env.FI_ICTJ_APPDATA, { recursive: true, force: true })
+  if (opts.ictjDir) {
+    env.FI_ICTJ_DIR = opts.ictjDir
+    mkdirSync(join(env.FI_ICTJ_APPDATA, 'ICT Trade Journal'), { recursive: true })
+    writeFileSync(join(env.FI_ICTJ_APPDATA, 'ICT Trade Journal', 'config.json'), JSON.stringify({ dataDir: opts.ictjDir }, null, 2))
+  }
   mkdirSync(env.FI_DOWNLOADS_DIR, { recursive: true })
   // The start with Windows: every start of the app writes its Run entry from config.json BEFORE any window – a removal by
   // name, whatever the path („Financial Intel” of the user's own installed app was removed so on 03.11.2026). As a
