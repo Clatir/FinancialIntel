@@ -399,6 +399,12 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   folderze ICTTJ”) – dotąd prawie wszystkie grupy szły na max; (2) **tabela prac przed każdym etapem** (zamiast przed
   każdym zadaniem – zmienia D90): krok, zakres, model i thinking z górką, szacowany czas, razem i rekomendacja; przy
   pojedynczym zadaniu poza etapem wystarczy jedna linia z modelem i thinking.
+- **D97** (03.11.2026) Audyt funkcjonalny wydania 1.15.4 (`docs/audyt/plan.md`, wzór: odbiór Regulated Day): tylko
+  funkcje użytkowe aplikacji na komputerze; wersja na iPhone'a poza audytem; audyt przed grupą iD. Grupy w blokach
+  według modelu: najpierw Opus · xhigh, potem Sonnet, na końcu Opus · max; synteza i wnioski po bloku max (xhigh), bo
+  muszą widzieć wszystkie znaleziska. W trakcie audytu nic nie jest naprawiane. Jeden `/code-review` dla narzędzia
+  i generatora danych, commit po każdej grupie, jeden PR na końcu. Limit tygodniowy nie ogranicza audytu. Maszyna
+  wirtualna z Cowork – tak (AU-3). Tylko dane syntetyczne – bez kopii prawdziwego folderu. Bloki A i B jednym ciągiem.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.

@@ -12,7 +12,9 @@ komponentu `Segmented`) wydane 24–25.10 – 1.15.3 i 1.15.4 z sesji Antigravit
 iPhone (D92 / D93): 1.13.0–1.15.0 wydane (grupy iA–iC, PR #42–#44); przerwa po iC (D93) – „Przed grupą iD” niżej.
 1.11.0 i 1.12.0 wydała w tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0,
 decyzje D92 / D93, T305–T311.
-**Następny krok:** przerwa po iC (D93) – od użytkownika: procent limitu tygodniowego (kolumna „Rzeczywiste”), odpowiedź
+**Następny krok:** audyt funkcjonalny 1.15.4 przed iD (D97) – plan, bloki i grupy AU-1–AU-11 w
+`docs/audyt/plan.md`; start AU-1 na komendę, otwarte: maszyna wirtualna (AU-3) i zgoda na kopię folderu. Potem
+przerwa po iC (D93) – od użytkownika: procent limitu tygodniowego (kolumna „Rzeczywiste”), odpowiedź
 do IP15 (czy folder danych ICTTJ jest na OneDrive – bez niej iD nie startuje), decyzje IP21 (kreator) i IP24 (zapisy w
 tle) przed iE, uwagi z telefonu do iA–iC; potem grupa iD (1.16.0) na komendę (D67). Przed każdym etapem tabela prac z
 modelem oszczędnym z górką; thinking domyślnie xhigh, max tylko silnik pieniędzy i granica ICTTJ (D96). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
