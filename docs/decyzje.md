@@ -1012,7 +1012,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T128** Cele od chwili zmiany (D84 C1, B2): cel ma `activeFrom` (dodany w 1.4.2 albo później – bierze pieniądze od
   tej chwili), `past` (stan – kolejność, kwota, archiwizacja – sprzed każdej zmiany, z chwilą `until`) i `transfers`.
   Pieniądze idą do celów w stanie z chwili, gdy przyszły do FI (`cameIn`): utworzenie dokowania (nie jego ostatni zapis –
-  scalenie duplikatów czy synchronizacja nie przenoszą pieniędzy), bez dokowania utworzenie operacji, nigdy wcześniej niż
+  scalenie duplikatów czy synchronizacja nie przenoszą pieniędzy; dokowanie pary liczonej według puli – utworzenie jej
+  operacji, `countedFrom`, T363), bez dokowania utworzenie operacji, nigdy wcześniej niż
   początek jej dnia; łupy – chwila decyzji (`decidedAt`), dokowanie przy starcie – koniec dnia startu. Cel sprzed 1.4.2 bez
   historii działa jak wcześniej (`goalDecided`). Każda zmiana zostaje w historii, także kilka w krótkim czasie: kolejność
   jest wspólna dla wszystkich celów – stan wycięty z historii jednego celu remisowałby albo zamieniał go z innym (scalanie
@@ -1037,7 +1038,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   duplikatów (`bank-format`) łączy pary zaimportowane wcześniej, każdą w dniach importu drugiej strony.
 - **T135** Cykl opłaty okresowej (B55, B6): płatność zamyka cykl miesiąca terminu; przy cyklu ≥ 3 miesięcy także płatność
   w miesiącu przed terminem (np. 1. w poniedziałek) – gdy poprzedni cykl jest zamknięty (zapłacony albo sprzed śledzenia
-  opłaty: przed startem budżetu i jej `from`), inaczej to zaległa zapłata poprzedniego cyklu. Zapłacony cykl: bez rat,
+  opłaty: przed startem budżetu i jej `from`; płatności sprzed startu – sprzed pierwszej z nich, T345), inaczej to zaległa
+  zapłata poprzedniego cyklu. Zapłacony cykl: bez rat,
   zbiornik zbiera na następny, odprawa i Radar pokazują następny termin (`nextUnpaidOf`, `paidDue`).
 - **T136** Życie kontenera (B56): opłata okresowa dodana albo zmieniona na okresową w trakcie budżetu zbiera od bieżącego
   miesiąca (`from`); archiwizacja zapisuje `archivedAt` i liczy się do końca swojego miesiąca (zarchiwizowany sprzed 1.4.2
@@ -2610,7 +2612,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T340** Przeniesienie środków celu w swojej chwili (1.15.6, AP-3, AF-4 K – MG.8, MG.10; **zastępuje „na koniec dnia”
   z T129**): wpis `transfers` {at, to, amount} silnik liczy w chwili `at` wśród zdarzeń jej dnia warszawskiego – przed
   pierwszym zdarzeniem dnia (w kolejności silnika), które przyszło do FI później niż przeniesienie (`cameIn`: utworzenie
-  dokowania, inaczej operacji, nie wcześniej niż początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
+  dokowania – dokowania pary liczonej według puli: utworzenie jej operacji, T363 –, inaczej operacji, nie wcześniej niż
+  początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
   przelewu – jej utworzenie), zawsze po początku dnia (start, przełom miesiąca, termin łupów); gdy tego dnia nic
   później nie przyszło – po ostatnim zdarzeniu dnia, przed następnym dniem. Przenosi `min(kwota, stan celu)`; czego cel
   w tej chwili silnika jeszcze nie ma (wpływ sprzed przeniesienia, który kolejność dnia liczy później – operacje bez
@@ -2634,31 +2637,45 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   pulą bez zmienionego podziału: Cele – prosto do celów (najpierw cele z prognozy ICTTJ; miesiąc celu bez ceny – dzień
   wpisu, N46), Podatek – rezerwa na PIT-38 poza budżetem i bez przychodu (`taxOfDockings` z parami), zwrot z puli
   Podatek – z rezerwy, bez firewalla (T65), pozostałe pule – kolejnością dokowania. Chwila pieniędzy dla celów –
-  utworzenie operacji (T128), więc „Zadokuj” bez zmian celów niczego nie przesuwa; dokowanie operacji decyduje nad parą
-  (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`, klucz pamięci `engineParts`); dzień z parą dalej
-  czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego naruszenia „dopłata wbrew firewallowi”. Granica:
-  komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego wpisu – liczy parę jak dotąd zwykłą kolejnością,
-  aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery czytające ten sam folder ICTTJ liczą to samo. Bez
-  nowych pól w danych i bez migracji; zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
+  utworzenie operacji (T128), także po „Zadokuj” (`countedFrom`, T363), więc „Zadokuj” bez zmienionego podziału niczego
+  nie przesuwa; dokowanie operacji decyduje nad parą (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`,
+  klucz pamięci `engineParts`); dzień z parą dalej czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego
+  naruszenia „dopłata wbrew firewallowi”. Granica: komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego
+  wpisu – liczy parę jak dotąd zwykłą kolejnością, aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery
+  czytające ten sam folder ICTTJ liczą to samo. Bez migracji (jedyne nowe pole – `countedFrom` dokowania, T363);
+  zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
 - **T342** „Do zadokowania” na ekranach (1.15.6, AP-12; MG sp. 1, PR sp. 2, DO sp. 4): silnik zlicza pary liczone
-  według puli wpisu (`FleetState.toDock` – ile, wpływ, wypływ, część w celach; zdarzenie dziennika z `pending`). Stan
-  okrętu na Mostku – wiersz „Do zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu
-  i wypływu (dymek: jak liczone i że „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do
-  zadokowania) – dokąd poszła?” i w rozbiciu „Dostawa do zadokowania (według puli wpisu ICTTJ)”; Mapa gwiezdna – „w celach
-  … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed dziś (DO sp.
-  4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.”.
+  według puli wpisu (`FleetState.toDock` – ile, wpływ i wypływ liczone według puli – wpływ wpisany na Portfelu XTB bez
+  części domownika, B69 –, część wciąż w celach; zdarzenie dziennika z `pending`). Część w celach (przegląd N2 5):
+  pieniądze pary wychodzą z celu ostatnie (wydatek z celu i przeniesienie biorą najpierw jego inne pieniądze),
+  przeniesienie do innego celu zabiera je ze sobą, do osłon – wychodzą z celów; nigdy więcej, niż cele mają (wcześniej
+  wszystko, co para włożyła – „w celach 400 zł (w tym do zadokowania 1 000 zł)”). Stan okrętu na Mostku – wiersz „Do
+  zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu i wypływu (dymek: jak liczone i że
+  „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do zadokowania) – dokąd poszła?” i w rozbiciu
+  „Dostawa do zadokowania (według puli wpisu ICTTJ)” – także wpływ wpisany na Portfelu XTB (B69; wcześniej pominięty –
+  brany tylko rodzaj XTB), część domownika osobno („Domownicy – spłata i zaliczka”, nie w osłonach); Mapa gwiezdna –
+  „w celach … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed
+  dziś (DO sp. 4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten
+  podział.” (prawda także po zmianie celów – T363).
 - **T345** Opłata okresowa zapłacona przed startem (AP-5, AF-12, KR.16; stosuje T135 także przed startem, T45 / T220 bez
   zmian): połączona z kontenerem płatność sprzed startu budżetu nie przechodzi przez przebieg (pieniądze wyszły przed
   saldem otwarcia), ale zamyka swój cykl tak samo jak płatność w przebiegu – `paidBeforeStart` przed przebiegiem silnika
   (`paidCycleOf`: miesiąc terminu, przy cyklu ≥ 3 także miesiąc przed terminem, gdy poprzedni zamknięty; płatność w życiu
-  opłaty – `activeIn`; części paragonu jak w przebiegu, bez części celu i „do zwrotu”). W praktyce to płatności z miesiąca
-  startu (od jego 1. dnia łączy je kreator), przy cyklu ≥ 3 też z miesiąca przed nim, gdy były połączone wcześniej.
+  opłaty – `activeIn`; części paragonu jak w przebiegu, bez części celu i „do zwrotu” – `feePaymentDays`, tylko wydatek).
+  Przed startem opłata jest śledzona od pierwszej widzianej płatności (przegląd N2 4): cykl przed nią zamknięty (nie
+  śledzony – zapłata w miesiącu przed terminem jest wcześniejszą następnego), późniejszy – tylko zapłacony; spóźniona
+  zapłata zamyka poprzedni cykl (T135), nigdy następny (wcześniej każdy cykl sprzed startu był zamknięty: luty zapłacony
+  28.04 przy starcie 5.05 zamykał maj – bez odkładki, a płatność za maj z energii z alarmem „za mało w zbiorniku”). W
+  praktyce to płatności z miesiąca startu (od jego 1. dnia łączy je kreator), przy cyklu ≥ 3 też z miesiąca przed nim,
+  gdy były połączone wcześniej.
   Zapłacony cykl nie ma rat: miesiąc startu nie odkłada opłaty drugi raz (energia = pensja pomniejszona według T45 minus
   raty innych zbiorników), zbiornik zbiera na następny termin od miesiąca po zapłaconym cyklu, ma `paidDue` – odprawa
   i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
   kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
-  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności: kontenera – połączonych, propozycji – tego
-  odbiorcy od 1. dnia miesiąca (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
+  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności tą samą regułą co silnik (`startPaidDays` –
+  `feePaymentDays`, przegląd N2 3; wcześniej indeks Ładowni: każdy rodzaj z kontenerem, wydatek z celu i cały „do
+  zwrotu” – kreator 0 zł, silnik cała rata): kontenera – połączonych, propozycji – tego odbiorcy od 1. dnia miesiąca
+  (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
   kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone przed startem nie
   odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
   z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
@@ -2712,3 +2729,18 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
   dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
   przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
+- **T363** Dokowanie pary liczonej według puli (1.15.6, przegląd N2 1; uzupełnia T341 i T128): „Zadokuj” na parze do
+  zadokowania (wpis ICTTJ z operacją banku albo wpływem wpisanym na Portfelu XTB, bez dokowania – liczonej od razu według
+  puli wpisu) zapisuje w dokowaniu `countedFrom` = utworzenie operacji; silnik (`cameIn`) liczy takie dokowanie od tej
+  chwili, jak liczył parę, nie od utworzenia dokowania. Przeniesienie środków celu (T340) i zmiana celów (C1 – nowy cel,
+  kwota, priorytet, archiwizacja, synchronizacja celów ICTTJ) między wpływem a „Zadokuj” nie zmieniają już podziału:
+  okno proponuje podział, który warstwy mają (podgląd też z `countedFrom`), „Zadokuj” bez zmian niczego nie przesuwa,
+  zmieniony podział (`split`) liczy się od tej samej chwili. Wcześniej chwila dokowania: cel 500 / 1 000 zł, para Cele
+  1 000 zł o 9:00 (cel +500, osłony +500), o 10:00 całe 1 000 zł celu do osłon, „Zadokuj” o 11:00 – przeniesienie
+  przed wypłatą, cel 500 zł, osłony o 500 zł niżej, niż pokazywał Mostek. Dokowanie bez pola – sprzed 1.15.6, wpływu
+  z XTB bez wpisu (zwykłe dokowanie), operacji Portfela XTB tworzonej przez dokowanie – od swojego utworzenia jak dotąd
+  (T128), więc dawne dokowania się nie przeliczają; ponowne dokowanie zostawia pole i chwilę rekordu. Rozważone
+  i odrzucone: chwila operacji dla każdego dokowania z wpisem ICTTJ (bez pola) – przeliczyłaby dawne dokowania, gdy cel
+  zmienił się między importem a dokowaniem; samo ustawienie przeniesień T340 względem wpływu pary – zmiana celu (C1)
+  dalej zmieniałaby podział. Pole addytywne (`z.looseObject`), bez `SCHEMA_VERSION` – starsza wersja liczy takie
+  dokowanie od jego utworzenia; etykieta historii „Liczone od chwili”.

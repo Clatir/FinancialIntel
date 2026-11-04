@@ -444,6 +444,12 @@ export const dockingSchema = z.looseObject({
   ictjEntryId: z.string().max(100).nullable().default(null),
   /** The ICTTJ entry's own day (1.6.2, N46 – the month of an ICTTJ goal without a price); none = the operation's day. */
   entryDate: isoDate.nullable().optional().catch(undefined),
+  /**
+   * The moment its money counts from for the goals (1.15.6, T363 – the engine's `cameIn`): a pair counted by its entry's
+   * pool before the docking (T341) – its operation's arrival, so „Zadokuj” confirms the split the layers had; none = the
+   * docking's creation (T128).
+   */
+  countedFrom: isoDateTime.nullable().optional().catch(undefined),
   pool: z.enum(ICTJ_POOLS).nullable().default(null),
   /** A split chosen in the docking window; the rest of the amount goes to the shields. */
   split: z

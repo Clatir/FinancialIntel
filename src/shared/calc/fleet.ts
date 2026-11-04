@@ -347,20 +347,53 @@ export const followedFrom = (c: { from?: string | null }, start: string): string
 export type FeeOf = CycleOf & Pick<Container, 'archived' | 'from' | 'until'> & { archivedAt?: string | null }
 
 /**
- * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135): they never pass the
- * run – the money left before the opening balances – yet each closes its cycle as one in the run does (`paidCycleOf`:
- * the due month's; a cycle of 3 months or more – the next due's the month before it, the one before closed). Only a
- * payment in the fee's life is its tank's (B56). The engine and the start wizard count the same; `dates` – its payments'.
+ * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135, T345): they never
+ * pass the run – the money left before the opening balances – yet each closes its cycle as one in the run does
+ * (`paidCycleOf`: the due month's; a cycle of 3 months or more – the next due's the month before it, the one before
+ * closed). Before the start the fee is followed from its first payment seen: a cycle before it is closed (not followed),
+ * a later one only when paid – a late payment pays the cycle before (T135), never the next one. Only a payment in the
+ * fee's life is its tank's (B56). The engine and the start wizard count the same; `dates` – its payments'
+ * (`feePaymentDays`).
  */
 export function paidBeforeStart(c: FeeOf, dates: Iterable<string>, start: string): Set<string> {
-  const followed = followedFrom(c, start)
   const paid = new Set<string>()
+  let followed: string | null = null
   for (const date of [...dates].sort()) {
-    if (date >= start || !activeIn(c, monthOf(date))) continue
-    const cycle = paidCycleOf(c, monthOf(date), (due) => due < followed || paid.has(due))
+    const month = monthOf(date)
+    if (date >= start || !activeIn(c, month)) continue
+    followed ??= month
+    const since = followed
+    const cycle = paidCycleOf(c, month, (due) => due < since || paid.has(due))
     if (cycle) paid.add(cycle)
+    else {
+      // Late: the cycle before is paid now – a payment the month before the next due is that one's, early.
+      const { dueMonth, length } = cyclePosition(c, month)
+      paid.add(addMonths(dueMonth, -length))
+    }
   }
   return paid
+}
+
+/**
+ * The days a periodic fee's tank pays, before `before` (AP-5, T345): an expense's parts linked to the fee (the part's
+ * container, else the operation's) as the run counts them – not paid from a known goal (the goal's money, T131) nor to be
+ * refunded (the household's). The engine's pass before the start and the start wizard read the same – never the cargo
+ * hold's index of linked payments (any kind, a goal's and a refundable one too).
+ */
+export function feePaymentDays(transactions: readonly Transaction[], before: string, isFee: (containerId: string) => boolean, knownGoal: (goalId: string) => boolean): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const t of transactions) {
+    if (t.date >= before || t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
+    for (const p of partsOf(t)) {
+      const cid = p.containerId ?? t.containerId
+      const gid = p.goalId ?? t.goalId
+      if (p.refundable || p.amount >= 0 || !cid || !isFee(cid) || (gid && knownGoal(gid))) continue
+      const days = out.get(cid)
+      if (days) days.push(t.date)
+      else out.set(cid, [t.date])
+    }
+  }
+  return out
 }
 
 /** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
@@ -637,7 +670,8 @@ export interface FleetState {
   deposit: number
   /**
    * „Do zadokowania” (AP-12): the pairs of ICTTJ payouts not docked yet, in the layers by their entry's pool – how many,
-   * the money in and out (grosze, both positive) and what of it went to the goals.
+   * the money in and out the pool counts (grosze, both positive; an inflow typed on Portfel XTB without a household
+   * member's part) and what of it the goals still hold (never more than they hold – T342).
    */
   toDock: { count: number; inflow: number; outflow: number; goals: number }
   loot: { month: string | null; amount: number }
@@ -850,6 +884,11 @@ export function computeFleet(input: FleetInput): FleetState {
   const alarms: Alarm[] = []
   const log: FleetEvent[] = []
   const toDock: FleetState['toDock'] = { count: 0, inflow: 0, outflow: 0, goals: 0 }
+  /**
+   * The pairs' money in each goal (T342): what a pair not docked yet put in it, as long as the goal holds it – its money
+   * leaves a goal last (a spend or a move takes the goal's other money first); a transfer to another goal takes it along.
+   */
+  const pendingIn = new Map<string, number>()
 
   // The goals as they were that day (C1): added by then, not archived then, by the priority and target then – a change
   // of the list never moves money docked before it.
@@ -867,8 +906,11 @@ export function computeFleet(input: FleetInput): FleetState {
         allIn: g.source === 'ictj' && g.ictj != null && g.ictj.amount == null ? g.deadline : null
       }))
   const addGoal = (id: string, v: number, moves: Moves) => {
-    goalAmount.set(id, (goalAmount.get(id) ?? 0) + v)
+    const amount = (goalAmount.get(id) ?? 0) + v
+    goalAmount.set(id, amount)
     moves.goals = { ...moves.goals, [id]: (moves.goals?.[id] ?? 0) + v }
+    const pending = v < 0 ? pendingIn.get(id) : undefined
+    if (pending != null && pending > amount) pendingIn.set(id, Math.max(0, amount))
   }
   const addShields = (v: number, moves: Moves) => {
     shields += v
@@ -912,9 +954,11 @@ export function computeFleet(input: FleetInput): FleetState {
    * docking window shows them now.
    */
   // The docking's creation, never its last save: a later edit or a merge of duplicates moves no money docked before (C1).
+  // A pair counted by its entry's pool before its docking (T341) – from its operation's arrival, as it counted then
+  // (`countedFrom`, T363): „Zadokuj” without a changed split moves nothing, whatever the goals did since.
   const dayStarts = new Map<string, number>()
   const dayStart = (date: string) => dayStarts.get(date) ?? dayStarts.set(date, warsawStartOf(date).getTime()).get(date)!
-  const cameIn = (t: Transaction, d: Docking | undefined): number => Math.max(Date.parse(d?.createdAt ?? t.createdAt), dayStart(t.date))
+  const cameIn = (t: Transaction, d: Docking | undefined): number => Math.max(Date.parse(d?.countedFrom ?? d?.createdAt ?? t.createdAt), dayStart(t.date))
   const applySplit = (v: number, split: NonNullable<Docking['split']>, moves: Moves) => {
     // Fitted to the amount (B59): a goal gone since takes nothing – its part stays in the shields.
     const fit = fitSplit(v, { hull: split.hull, taxHold: split.taxHold, goals: Object.fromEntries(Object.entries(split.goals).filter(([id]) => knownGoal(id))) })
@@ -998,22 +1042,10 @@ export function computeFleet(input: FleetInput): FleetState {
   const paidCycles = new Map<string, Set<string>>()
   /** What each tank wanted at this month's turn (T29, C20) – the energy gave it, or less (`FleetState.tanks[].want`). */
   const wantedNow = new Map<string, number>()
-  // Paid before the start (AP-5): those cycles are paid too – the first salary never sets their fee aside again.
+  // Paid before the start (AP-5): those cycles are paid too – the first salary never sets their fee aside again. Each
+  // part as the run counts it (`feePaymentDays`): a goal's money is the goal's, a part to be refunded the household's.
   if (started && start) {
-    const paidOn = new Map<string, string[]>()
-    for (const t of txs) {
-      if (t.date >= start || t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
-      for (const p of partsOf(t)) {
-        // As the run counts a part (below): a goal's money is the goal's, a part to be refunded the household's.
-        const cid = p.containerId ?? t.containerId
-        const gid = p.goalId ?? t.goalId
-        if (p.refundable || p.amount >= 0 || !cid || !periodicIds.has(cid) || (gid && knownGoal(gid))) continue
-        const dates = paidOn.get(cid)
-        if (dates) dates.push(t.date)
-        else paidOn.set(cid, [t.date])
-      }
-    }
-    for (const [id, dates] of paidOn) {
+    for (const [id, dates] of feePaymentDays(txs, start, (id) => periodicIds.has(id), knownGoal)) {
       const paid = paidBeforeStart(containerById.get(id)!, dates, start)
       if (paid.size) paidCycles.set(id, paid)
     }
@@ -1255,9 +1287,10 @@ export function computeFleet(input: FleetInput): FleetState {
     if (!pair) return record({ date: on, kind: t.kind, amount: amt, txId: t.id, moves })
     record({ date: on, kind: t.kind, amount: amt, txId: t.id, pending: true, moves })
     toDock.count++
-    if (amt > 0) toDock.inflow += amt
+    // What the pool counts: an inflow typed on Portfel XTB (B69) less a household member's part of it (D80).
+    if (amt > 0) toDock.inflow += t.kind === 'income' ? amt - heldOf(household.byTx.get(t.id)) : amt
     else toDock.outflow -= amt
-    for (const v of Object.values(moves.goals ?? {})) if (v > 0) toDock.goals += v
+    for (const [id, v] of Object.entries(moves.goals ?? {})) if (v > 0) pendingIn.set(id, (pendingIn.get(id) ?? 0) + v)
   }
 
   if (started && start) {
@@ -1440,9 +1473,14 @@ export function computeFleet(input: FleetInput): FleetState {
       const move = Math.min(amount, goalAmount.get(m.g.id) ?? 0)
       if (move <= 0) return 0
       const moves: Moves = {}
+      const pending = pendingIn.get(m.g.id) ?? 0
       addGoal(m.g.id, -move, moves)
-      if (m.tr.to !== m.g.id && knownGoal(m.tr.to)) addGoal(m.tr.to, move, moves)
-      else addShields(move, moves)
+      if (m.tr.to !== m.g.id && knownGoal(m.tr.to)) {
+        addGoal(m.tr.to, move, moves)
+        // A pair's money the goal no longer holds goes along to the other goal (T342).
+        const along = pending - (pendingIn.get(m.g.id) ?? 0)
+        if (along > 0) pendingIn.set(m.tr.to, (pendingIn.get(m.tr.to) ?? 0) + along)
+      } else addShields(move, moves)
       record({ date: m.date, kind: 'goal', amount: move, moves })
       return move
     }
@@ -1574,6 +1612,7 @@ export function computeFleet(input: FleetInput): FleetState {
 
   const overTarget = targets.shields != null ? Math.max(0, shields - targets.shields) : 0
   const hullFull = targets.hull != null && hull >= targets.hull
+  toDock.goals = sum([...pendingIn.values()])
   /** The tank's cycle: this one, or – paid already – the next one (B6). */
   const tankCycle = (c: Container) => {
     const due = cyclePosition(c, month).dueMonth

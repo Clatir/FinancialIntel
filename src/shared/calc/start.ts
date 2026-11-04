@@ -3,10 +3,11 @@
  * targets of the layers from the salary and the costs, and the proposed split of the money at the start (the docking
  * order – D70).
  */
-import type { Transaction } from '../schema/records'
-import { monthOf } from './dates'
-import { activeIn, cyclePosition, dockAmount, paidBeforeStart, sinkingSchedule, tankWant, type AmountOf, type FeeOf } from './fleet'
+import type { Container, Transaction } from '../schema/records'
+import { firstDayOf, monthOf } from './dates'
+import { activeIn, cyclePosition, dockAmount, feePaymentDays, paidBeforeStart, sinkingSchedule, tankWant, type AmountOf, type FeeOf } from './fleet'
 import { amountOn, dateOn, sum } from './operations'
+import { unlinkedPayments } from './plan'
 
 /**
  * The opening balance at the start of `today` from the balance read in the bank now: the operations of today already in
@@ -48,6 +49,30 @@ export function startSplit(
 
 /** A periodic fee the start finds (a container, or a proposal chosen in the wizard) with the days of its payments. */
 export type StartTankItem = FeeOf & AmountOf & { key: string; paid: readonly string[] }
+
+/**
+ * The days each periodic fee was paid before the start, as the engine will count them (AP-5, T345 – `feePaymentDays`):
+ * a container's linked payments; a chosen proposal's – its payee's payments from the month's 1st not linked yet, which
+ * the start links to it (`linkPayments`). Container id or proposal key → days.
+ */
+export function startPaidDays(
+  transactions: readonly Transaction[],
+  start: string,
+  containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths'>>,
+  proposals: ReadonlyArray<{ key: string; label: string; cycleMonths: number }>,
+  knownGoal: (goalId: string) => boolean
+): Map<string, string[]> {
+  const fees = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
+  const found = feePaymentDays(transactions, start, (id) => fees.has(id), knownGoal)
+  const out = new Map([...fees].map((id) => [id, found.get(id) ?? []]))
+  const ids = new Set(containers.map((c) => c.id))
+  for (const p of proposals) {
+    if (p.cycleMonths <= 1) continue
+    const linked = unlinkedPayments(transactions, p.label, firstDayOf(monthOf(start)), ids).map((t) => ({ ...t, containerId: p.key }))
+    out.set(p.key, feePaymentDays(linked, start, (id) => id === p.key, knownGoal).get(p.key) ?? [])
+  }
+  return out
+}
 
 /**
  * The tanks of the start's month as the engine fills them (N9, N-PC-7, AP-5): each fee's installment (`tankWant` – with

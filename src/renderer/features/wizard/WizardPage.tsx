@@ -1,13 +1,12 @@
 import { cycleText } from '@shared/calc/cargoWatch'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { addDays, daysInMonth, firstDayOf, warsawNow } from '@shared/calc/dates'
+import { addDays, daysInMonth, warsawNow } from '@shared/calc/dates'
 import { balanceAt } from '@shared/calc/balances'
-import { paymentsIndex } from '@shared/calc/cargoStatus'
 import { startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
-import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments, unlinkedPayments } from '@shared/calc/plan'
-import { startSplit, startTanks, startTargets } from '@shared/calc/start'
+import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments } from '@shared/calc/plan'
+import { startPaidDays, startSplit, startTanks, startTargets } from '@shared/calc/start'
 import { plural } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
@@ -75,16 +74,13 @@ export function WizardPage() {
     // The engine's rule (B126): the start is today; the chosen proposals' payments get linked to their containers.
     return startMonthSpentOf(transactions, today, (t) => (!!t.containerId && periodic.has(t.containerId)) || chosenKeys.has(payeeKey(t)))
   }, [transactions, month, today, containers, chosen])
-  // The days each periodic fee was paid, as the engine will see them after the start (AP-5): a container's linked
-  // payments, a chosen proposal's of its payee from the month's 1st (linked to it at the start) – a cycle they paid is paid.
+  // The days each periodic fee was paid, as the engine will see them after the start (AP-5, T345 – its rule for a payment,
+  // `feePaymentDays`): a container's linked payments, a chosen proposal's of its payee from the month's 1st (linked to it
+  // at the start) – a cycle they paid is paid.
   const paidDays = useMemo(() => {
-    const out = new Map<string, string[]>()
-    const linked = paymentsIndex(transactions).byContainer
-    for (const c of containers) if (c.cycleMonths > 1) out.set(c.id, (linked.get(c.id) ?? []).map((p) => p.date))
-    const ids = new Set(containers.map((c) => c.id))
-    for (const p of chosen) if (p.cycleMonths > 1) out.set(p.key, unlinkedPayments(transactions, p.label, firstDayOf(month), ids).map((t) => t.date))
-    return out
-  }, [transactions, containers, chosen, month])
+    const goalIds = new Set(goalRecords.map((g) => g.id))
+    return startPaidDays(transactions, today, containers, chosen, (id) => goalIds.has(id))
+  }, [transactions, today, containers, chosen, goalRecords])
   // Operations dated after today by account (B127): not in the bank's balance now – the engine takes them on their day.
   const aheadBy = useMemo(() => {
     const out = new Map<string, number>()

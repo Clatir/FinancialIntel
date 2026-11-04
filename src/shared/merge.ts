@@ -295,6 +295,7 @@ const LABELS: Record<string, string> = {
   source: 'Źródło',
   'source.ictjEntryId': 'Źródło – wpis ICTTJ',
   entryDate: 'Data wpisu ICTTJ',
+  countedFrom: 'Liczone od chwili',
   ictjEntryId: 'Wpis ICTTJ',
   activeFrom: 'Od chwili',
   achievedAt: 'Osiągnięty',
