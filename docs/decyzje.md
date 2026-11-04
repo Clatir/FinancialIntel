@@ -2615,11 +2615,6 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Wcześniej plik tylko do odczytu zostawał na zawsze ze starym `lastSeen` (próba i heartbeat tylko odnotowywały albo
   połykały błąd) – drugi komputer po 11 min uznawał ten za niedziałający i oba robiły zapisy w tle naraz. Bez komunikatu
   w oknie: przyczynę trwałą naprawia sam zapis, chwilowa mija; zostaje wpis w logu.
-  zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
-  w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak
-  – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
-  czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
-  tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
 - **T340** Przeniesienie środków celu w swojej chwili (1.15.6, AP-3, AF-4 K – MG.8, MG.10; **zastępuje „na koniec dnia”
   z T129**): wpis `transfers` {at, to, amount} silnik liczy w chwili `at` wśród zdarzeń jej dnia warszawskiego – przed
   pierwszym zdarzeniem dnia (w kolejności silnika), które przyszło do FI później niż przeniesienie (`cameIn`: utworzenie
