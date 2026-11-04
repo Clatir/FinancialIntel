@@ -203,3 +203,28 @@ dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1
   kalibracja progów gry (D99 pkt 12) – za osobną zgodą.
 - **Czas:** 07:15–ok. 13:50 kod i dwa przeglądy (przerwa 14:00–14:20), 14:20–ok. 16:45 przegląd poprawek, poprawki,
   wydanie – plan 2,5–3,5 h pracy; zegar dłuższy przez scalenie z N2 i trzy rundy przeglądu.
+
+## N4 – Zasady interfejsu (1.15.8, 04.11.2026) – wydane 04.11 21:40, PR #53
+- **Zakres:** AP-15 komunikat przy każdej odmowie i przycięciu (T400–T402), AP-22 „Cofnij” wszędzie, AP-16 odprawa
+  z hierarchią, godzina odprawy, progi gry w Ustawieniach (T405–T409), AP-23 teksty – daty dd.mm.rrrr, bez kodów, błędy
+  po polsku, odmiana, „−” (T403, T404); po przeglądach: „Cofnij import” po odcisku treści (T415 zamiast T410), jedna
+  reguła „ta sama osoba” jak `memberOf` (T416), słowa pól szybkiego wpisu (T413, T417), żadne „Cofnij” reguł
+  i domowników nie nadpisuje późniejszych zmian (T418), poranny dotyk (T411), eksport i wyszukiwanie usuniętych (T412),
+  limit 20 nazw w banku (T414).
+- **Wykonawcy:** N4-a (AP-15, AP-22 – Sonnet high), N4-b (AP-16 – Opus high), N4-c (AP-23 – Sonnet high); poprawki
+  przeglądów – Opus xhigh; scalenie N3 z N2 do N4 – Opus max (10 konfliktów, m.in. księga domowników – bez zmian).
+- **Przegląd:** high całości (10 uwag), high na poprawkach (10 – m.in. „Cofnij import” mógł usunąć zmianę użytkownika
+  bez ostrzeżenia; przeprojektowane na odcisk treści), high na poprawkach i scaleniu z N3 (10 + 1 – m.in. ponowienie po
+  cofnięciu dublowało operacje, nazwa domownika, którą import przypisałby innej osobie) – wszystkie poprawione z testem,
+  który przed poprawką padał; trzecia runda sprawdzona przez koordynatora na diffie.
+- **Testy:** typecheck, `npm test` 1517 (pod obciążeniem pada tylko `folder-speed` ZIP64), build, E2E komputera 106/108
+  po scaleniu (lokalnie `ictj.spec`, `series.spec` – osobno zielony), telefonu 10/10, wyrocznia bez rozbieżności.
+- **Otwarte:** „Cofnij” poza regułami i domownikami (Ładownia, Radar, Operacje, Kategorie) może nadpisywać zmiany zrobione
+  po działaniu; paczki importu sprzed 1.15.8 ostrzegają w nadmiarze, dopóki nie wypadną z 10 ostatnich; chip „+ #tag
+  ostatnich dni” zasłania pole tagów w wąskim oknie; krótkie daty dd.mm (58 miejsc) zostają; „Ctrl K” przy wysokim
+  kontraście; telefon bez własnej godziny odprawy.
+- **CI:** trzy razy czerwone na `briefing-n4.spec` (pod Xvfb kursor nad oknem daje dotyk przy starcie, notifier bierze
+  jeden dotyk na 30 s) – po decyzji użytkownika (D101: zbadaj i popraw test) potwierdzone na gałęzi diagnostycznej,
+  poprawiony tylko test.
+- **Czas:** 12:09–ok. 13:50 kod (przed przerwą), 14:20–21:40 trzy rundy poprawek, scalenie z N3, CI, wydanie – plan
+  2–3 h pracy; zegar dłuższy przez rundy przeglądu, scalenie z N2/N3 i czerwone CI.

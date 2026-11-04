@@ -28,8 +28,8 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ✅ wydane 04.11 07:33 (wpis w archiwum `postep-od-1.15.4.md`) | #50 | ok. 5,5 h (01:53–07:33) |
 | N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis w archiwum `postep-od-1.15.4.md`) | #51 | ok. 8 h zegara (05:05–13:06) |
 | N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | ✅ wydane 04.11 18:02 (wpis w archiwum `postep-od-1.15.4.md`) | #52 | ok. 10,5 h zegara (07:15–18:02, z przerwą 14:00–14:20) |
-| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | 🔄 scalone z N3; przegląd 3 (11 uwag) w poprawce, potem PR | – | – |
-| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | 🔄 13 z 13 AP gotowe; integracja (N4, n5a, n5b) w toku | – | – |
+| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | ✅ wydane 04.11 21:40 (wpis w archiwum `postep-od-1.15.4.md`) | #53 | ok. 9 h zegara (12:09–21:40, z przerwą) |
+| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | 🔄 13 AP scalone; przegląd xhigh (11 uwag) w poprawce, potem PR | – | – |
 | R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
 | R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
 
@@ -42,11 +42,10 @@ podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` �
 notatki, dalej od pierwszej grupy niewydanej.
 
 - **N3 (1.15.7)** – ✅ wydane 04.11 18:02 (PR #52).
-- **N4 (1.15.8)** – gałąź `claude/1.15.8-interfejs` (drzewo `FI-wt\n4a`): przeglądy 1 i 2 poprawione (d877273, c1eace1 –
-  T410–T417), scalone N3 z N2 (56306cb, ea74a89) i `main` 1.15.7 (b849b1b), wersja i CHANGELOG (87b6518); przegląd 3
-  (11 uwag – `_notatki/n4-review3.md`) w poprawce; potem PR, CI, wydanie.
-- **N5 (1.15.9)** – gałąź integracji `claude/1.15.9-sciezki` (drzewo `FI-wt\n5`): n5d + n5e + n5f scalone (8b71968);
-  w toku scalenie N4, n5a, n5b; potem przegląd high całości, poprawki, wydanie.
+- **N4 (1.15.8)** – ✅ wydane 04.11 21:40 (PR #53).
+- **N5 (1.15.9)** – gałąź integracji `claude/1.15.9-sciezki` (drzewo `FI-wt\n5`): wszystkie gałęzie N5 i N4 scalone, wersja
+  i CHANGELOG (eab4d36); przegląd xhigh – 11 uwag (`_notatki/n5-review1.md`) w poprawce w `claude/1.15.9-fixa` (`FI-wt\n5b`)
+  i `claude/1.15.9-fixb` (`FI-wt\n5d`); potem scalenie, PR, CI, wydanie.
 - **R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
@@ -110,28 +109,6 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Meldunek „Zaliczki przy długu” | pyta tylko o dług nadal do oddania przez zaliczkę, także o zaliczki wybrane świadomie; „zostaw” raz na wpłatę | T352 |
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
-
-## N4 – Zasady interfejsu (1.15.8, 04.11.2026)
-- **Zakres:** AP-15 komunikat przy każdej odmowie i przycięciu (T400–T402), AP-22 „Cofnij” wszędzie, AP-16 odprawa
-  z hierarchią, godzina odprawy, progi gry w Ustawieniach (T405–T409), AP-23 teksty – daty dd.mm.rrrr, bez kodów, błędy
-  po polsku, odmiana, „−” (T403, T404); po przeglądach: „Cofnij import” po odcisku treści (T415 zamiast T410), jedna
-  reguła „ta sama osoba” jak `memberOf` (T416), słowa pól szybkiego wpisu (T413, T417), żadne „Cofnij” reguł
-  i domowników nie nadpisuje późniejszych zmian (T418), poranny dotyk (T411), eksport i wyszukiwanie usuniętych (T412),
-  limit 20 nazw w banku (T414).
-- **Wykonawcy:** N4-a (AP-15, AP-22 – Sonnet high), N4-b (AP-16 – Opus high), N4-c (AP-23 – Sonnet high); poprawki
-  przeglądów – Opus xhigh; scalenie N3 z N2 do N4 – Opus max (10 konfliktów, m.in. księga domowników – bez zmian).
-- **Przegląd:** high całości (10 uwag), high na poprawkach (10 – m.in. „Cofnij import” mógł usunąć zmianę użytkownika
-  bez ostrzeżenia; przeprojektowane na odcisk treści), high na poprawkach i scaleniu z N3 (10 + 1 – m.in. ponowienie po
-  cofnięciu dublowało operacje, nazwa domownika, którą import przypisałby innej osobie) – wszystkie poprawione z testem,
-  który przed poprawką padał; trzecia runda sprawdzona przez koordynatora na diffie.
-- **Testy:** typecheck, `npm test` 1517 (pod obciążeniem pada tylko `folder-speed` ZIP64), build, E2E komputera 106/108
-  po scaleniu (lokalnie `ictj.spec`, `series.spec` – osobno zielony), telefonu 10/10, wyrocznia bez rozbieżności.
-- **Otwarte:** „Cofnij” poza regułami i domownikami (Ładownia, Radar, Operacje, Kategorie) może nadpisywać zmiany zrobione
-  po działaniu; paczki importu sprzed 1.15.8 ostrzegają w nadmiarze, dopóki nie wypadną z 10 ostatnich; chip „+ #tag
-  ostatnich dni” zasłania pole tagów w wąskim oknie; krótkie daty dd.mm (58 miejsc) zostają; „Ctrl K” przy wysokim
-  kontraście; telefon bez własnej godziny odprawy.
-- **Czas:** 12:09–ok. 13:50 kod (przed przerwą), 14:20–18:45 trzy rundy poprawek, scalenie z N3, wydanie – plan 2–3 h
-  pracy; zegar dłuższy przez rundy przeglądu i scalenie z N2/N3.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
