@@ -114,13 +114,13 @@ describe('AP-5: opłata okresowa zapłacona przed startem (AF-12, T135)', () => 
       { key: 'warta', amount: zl(480), cycleMonths: 12, dueMonth: '2027-01', schedule: [], paid: ['2026-01-05'], ...life }
     ]
     expect(startTanks(items, '2026-11-03', {})).toEqual([
-      { key: 'pzu', installment: 0, planAmount: 0 },
+      { key: 'pzu', installment: 0, planAmount: 0, paid: true },
       // 9 × 40 = 360 zł behind the plan, spread over November – January: 40 + 120 zł.
-      { key: 'warta', installment: zl(160), planAmount: zl(360) }
+      { key: 'warta', installment: zl(160), planAmount: zl(360), paid: false }
     ])
     // „do planu” for WARTA: then its installment is the plan's.
-    expect(startTanks(items, '2026-11-03', { warta: zl(360) })[1]).toEqual({ key: 'warta', installment: zl(40), planAmount: zl(360) })
+    expect(startTanks(items, '2026-11-03', { warta: zl(360) })[1]).toEqual({ key: 'warta', installment: zl(40), planAmount: zl(360), paid: false })
     // A fee out of its life in the start's month (its `until` passed): the engine takes nothing – the wizard neither.
-    expect(startTanks([{ ...items[1]!, until: '2026-10' }], '2026-11-03', {})).toEqual([{ key: 'warta', installment: 0, planAmount: 0 }])
+    expect(startTanks([{ ...items[1]!, until: '2026-10' }], '2026-11-03', {})).toEqual([{ key: 'warta', installment: 0, planAmount: 0, paid: false }])
   })
 })

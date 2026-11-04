@@ -2499,7 +2499,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
   kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
   miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności: kontenera – połączonych, propozycji – tego
-  odbiorcy od 1. dnia miesiąca (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Płatność
+  odbiorcy od 1. dnia miesiąca (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
+  kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone przed startem nie
+  odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
   z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
   (energia wyższa o opłatę odkładaną drugi raz, zbiornik niższy); zamrożone dni gry zostają.
 - **T346** Plan miesiąca = silnik (AP-11, AF-44 / LA.8 = C17, AF-52 / C20 – D99 pkt 9, W5; doprecyzowuje T29, F15):

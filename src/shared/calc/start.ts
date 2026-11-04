@@ -52,16 +52,17 @@ export type StartTankItem = FeeOf & AmountOf & { key: string; paid: readonly str
 /**
  * The tanks of the start's month as the engine fills them (N9, N-PC-7, AP-5): each fee's installment (`tankWant` – with
  * the money set in its tank at the start, `tanks`) and what the plan wants in the tank for the months of its cycle
- * before the start (`planAmount` – „do planu”). A cycle its payments before the start paid (`paidBeforeStart`, T135)
- * wants neither: its tank collects for the next one; a fee out of its life that month neither.
+ * before the start (`planAmount` – „do planu”). A cycle its payments before the start paid (`paidBeforeStart`, T135 –
+ * `paid`) wants neither: its tank collects for the next one; a fee out of its life that month neither.
  */
-export function startTanks(items: readonly StartTankItem[], start: string, tanks: Readonly<Record<string, number>>): Array<{ key: string; installment: number; planAmount: number }> {
+export function startTanks(items: readonly StartTankItem[], start: string, tanks: Readonly<Record<string, number>>): Array<{ key: string; installment: number; planAmount: number; paid: boolean }> {
   const month = monthOf(start)
   return items.map((item) => {
-    if (!activeIn(item, month)) return { key: item.key, installment: 0, planAmount: 0 }
-    const paid = paidBeforeStart(item, item.paid, start)
+    if (!activeIn(item, month)) return { key: item.key, installment: 0, planAmount: 0, paid: false }
+    const paidDues = paidBeforeStart(item, item.paid, start)
     const pos = cyclePosition(item, month)
-    const planAmount = pos.index > 0 && !paid.has(pos.dueMonth) ? sum(sinkingSchedule(item.amount, pos.length).slice(0, pos.index)) : 0
-    return { key: item.key, installment: tankWant(item, month, tanks[item.key] ?? 0, paid), planAmount }
+    const paid = paidDues.has(pos.dueMonth)
+    const planAmount = pos.index > 0 && !paid ? sum(sinkingSchedule(item.amount, pos.length).slice(0, pos.index)) : 0
+    return { key: item.key, installment: tankWant(item, month, tanks[item.key] ?? 0, paidDues), planAmount, paid }
   })
 }

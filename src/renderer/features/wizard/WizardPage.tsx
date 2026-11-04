@@ -301,7 +301,10 @@ export function WizardPage() {
         </div>
         {tanksMonthly !== tanksLater && (
           <Note>
-            Odkładki w tym miesiącu: {zl(tanksMonthly)} – zbiorniki nadrabiają do terminów opłat; potem ok. {zl(tanksLater)} miesięcznie.
+            {/* Less than later with a cycle paid before the start (AP-5): no catching up – that fee is not set aside again. */}
+            Odkładki w tym miesiącu: {zl(tanksMonthly)} –{' '}
+            {tanksMonthly < tanksLater && [...tankPlan.values()].some((t) => t.paid) ? 'opłaty zapłacone przed startem nie odkładają się drugi raz' : 'zbiorniki nadrabiają do terminów opłat'}; potem ok.{' '}
+            {zl(tanksLater)} miesięcznie.
           </Note>
         )}
         <div className="flex justify-between" data-testid="wizard-unallocated">
