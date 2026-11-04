@@ -2691,3 +2691,33 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
   dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
   przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
+- **T380** Zamrażanie porcjami w osobnych zadaniach (1.15.7, AP-14, AF-6 / P.1): porcja (`DAYS_PER_PASS` = 2 dni,
+  `advancePortion` w `store/game.ts`) rusza z timera (`schedulePortion`, `setTimeout(…, 0)`), nigdy w ciele efektu –
+  zapis porcji zmienia rekordy, efekt rusza znowu, a wywołana od razu następna porcja szła w tym samym zadaniu (zustand
+  renderuje synchronicznie): zaległość ponad ok. 100 dni (50 porcji) przekraczała limit zagnieżdżonych aktualizacji
+  Reacta (#185) na otwartym ekranie. Między porcjami okno się odmalowuje; kolejność i wynik dni bez zmian (te same dni
+  w tej samej kolejności). Sprawdzenie zapisu w tle (`writesInBackground`, T301) – w chwili porcji.
+- **T381** Pytanie przed zamrożeniem dni bez danych z banku (1.15.7, AP-14, D99 pkt 5; DW sp. 1, DW.37; obok T163):
+  `importWait` (`calc/game.ts`) – aktywne konto mBanku (`importFormat` 'mbank'), już importowane, ostatni import ponad
+  `IMPORT_DUE_DAYS` (3) dni temu (próg odprawy „zaimportuj nowy plik”), i niezamrożony dzień do zamrożenia (do
+  przedwczoraj) od dnia po tym, co obejmują pliki konta (`coveredTo` + 1, bez niego – dzień po imporcie); konto nigdy
+  nieimportowane (budżet prowadzony ręcznie) i zarchiwizowane nie czekają. Komputer w użyciu (D86) – ten, który zamraża –
+  pyta oknem „Dni bez danych z banku” (nazwa konta, „ostatni import N dni temu”, zakres dni): „Zaimportuj najpierw”
+  (Import; pytanie zamknięte do końca życia okna, dni czekają) albo „Zamroź bez danych”; Dowództwo pokazuje czekanie
+  z „Importuj” i „Zamroź bez danych”. Dni od luki czekają (`advanceGame` `waitImport`, razem z `hold` z T163 – wcześniejszy
+  wygrywa) i misja tygodnia z nimi, gdy luka zaczyna się przed jej poniedziałkiem (wybór czyta 4 tygodnie przed nim).
+  Czekanie najwyżej 7 dni (`IMPORT_WAIT_DAYS`, jak T163) od pierwszego czekania na tym komputerze – potem dni zamarzają tak,
+  jak są. Odpowiedź i początek czekania – na komputerze (`localStorage` `fi.game.importWait`), po kluczu spóźnionych
+  importów (konto + czas importu): nowy import kończy czekanie, a następne spóźnienie to nowe pytanie; „Zamroź bez danych”
+  obowiązuje do następnego importu. Drugi komputer pyta sam. Bez nowych pól w folderze; zamrożone dni bez zmian.
+- **T382** „Nowa klasa” a nowe dane (1.15.7, AP-14, DW sp. 6, DW.20): dzień zamrażany z inną klasą niż dzień przed nim
+  (tak, jak go zamrożono) liczy ten dzień przed nim jeszcze raz z danymi tego dnia (jeden przebieg silnika więcej, tylko
+  przy zmianie klasy); gdy dane dają mu już nową klasę (albo dalej), zmiana przyszła z danymi – import historii po
+  zamrożeniu wcześniejszych dni – nie z okrętem. Dzień zapisuje to addytywnie w `GameDay.clsBefore` (tylko gdy różne od
+  zamrożonej klasy dnia przed); dziennik wachty pokazuje „Klasa: Zwiadowca → Niszczyciel (skutek nowych danych, nie
+  zmiana okrętu)” (`WatchEntry` `data`), ekran „Nowa klasa” (`celebrationsOf` – tylko `peak`) jej nie pokazuje. Zmiana
+  częściowo z danych (dzień przed według danych w klasie pośredniej) świętuje się jak dotąd. Dni sprzed 1.15.7 bez pola –
+  jak dotąd. Bez `SCHEMA_VERSION` (pole opcjonalne, starsza wersja je zachowuje – `z.looseObject`). Panel misji tygodnia
+  bez misji (DW sp. 2): „Pierwsza misja w tygodniu od …” tylko, gdy pierwszy pełny tydzień gry jest przed nami
+  (`missionAhead`), inaczej „Misja tygodnia zostanie wybrana po zamrożeniu dni” (przy czekaniu na import – „po imporcie
+  z banku (albo po „Zamroź bez danych”)”) – nigdy poniedziałek z przeszłości.

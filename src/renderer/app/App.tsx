@@ -29,6 +29,7 @@ import { ReportsPage } from '../features/reports/ReportsPage'
 import { InboxPage } from '../features/inbox/InboxPage'
 import { useInboxCount } from '../features/inbox/state'
 import { GameCelebrations } from '../features/command/Celebration'
+import { FreezeQuestion } from '../features/command/FreezeQuestion'
 import { useGameAdvance, useGameCelebrations } from '../store/game'
 import { DockingDialog } from '../features/dock/DockingDialog'
 import { initIctj, openIctj } from '../store/ictj'
@@ -325,6 +326,8 @@ function Window({ route, hideAmounts }: { route: Route; hideAmounts: boolean }) 
       <CommandPalette />
       <DockingDialog />
       <GameCelebrations />
+      {/* Days without the bank's data due to freeze (AP-14): asked before they freeze. */}
+      <FreezeQuestion />
       <TrayStatus />
       <BridgeDetachHost />
       <ShortcutsHelp />

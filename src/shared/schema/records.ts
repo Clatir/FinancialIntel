@@ -518,6 +518,11 @@ export const gameDaySchema = z.looseObject({
     .default([]),
   /** The ship's class at the day's end. */
   cls: z.string().max(20).nullable().default(null),
+  /**
+   * The day before's class as this day's data saw it (AP-14, 1.15.7): only when not the one it was frozen with – a change
+   * of the class that came with new data (history imported later), not with the ship; the watch log never celebrates it.
+   */
+  clsBefore: z.string().max(20).optional(),
   /** The cargo's monthly mass at the day's end (the next day sees a container added or raised by it). */
   cargo: grosze.nullable().default(null),
   /** The day's ICT flavour (D73): 'judas' (an impulse), 'turtle' (a returned product), 'sweep' (the energy exactly 0). */

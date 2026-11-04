@@ -9,6 +9,7 @@ import type { GameSettings } from '../schema/budget'
 import { SCHEMA_VERSION } from '../schema/common'
 import type { Settings } from '../schema/settings'
 import type { GameDay, GameMission, GameMonth, MonthPlan, Transaction } from '../schema/records'
+import { IMPORT_DUE_DAYS } from './briefing'
 import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, warsawStartOf, weekdayOf } from './dates'
 import { activeIn, cargoMass, computeFleet, envelopeOverrun, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
 import { categoryIndex, costOf, isCargoPayment, isConfirmedNight, ownSpent, partsOf, sum } from './operations'
@@ -146,6 +147,15 @@ export const sundayOf = (week: string): string => addDays(mondayOfWeek(week), 6)
 
 /** The first Monday of the missions: the game's first full week. */
 export const firstMissionMonday = (start: string): string => (weekdayOf(start) === 1 ? start : addDays(mondayOf(start), 7))
+
+/**
+ * A week without its mission yet (AP-14, DW sp. 2): the game's first full week still ahead – its Monday; null – this
+ * week's comes once the days before it are frozen (never a Monday of the past).
+ */
+export function missionAhead(start: string, today: string): string | null {
+  const first = firstMissionMonday(start)
+  return first > mondayOf(today) ? first : null
+}
 
 const allDays = (game: Iterable<GameMonth>): Map<string, GameDay> => {
   const out = new Map<string, GameDay>()
@@ -606,6 +616,58 @@ function newAchievements(input: GameInput, game: readonly GameMonth[], date: str
   return out
 }
 
+// ------------------------------------------------------------------ the days without the bank's data (AP-14)
+
+/** Days at most the freezing waits for an import (AP-14, as T163): then the days freeze as they stand. */
+export const IMPORT_WAIT_DAYS = 7
+
+export interface ImportWait {
+  /** The late imports (their accounts and times): a new import ends this wait – another one is another key. */
+  key: string
+  /** The first day without the bank's data (the day after the files of a late account cover). */
+  from: string
+  /** The days due to freeze without it, the first and the last (the day before yesterday). */
+  first: string
+  last: string
+  /** The late accounts: name and days since their last import. */
+  late: Array<{ name: string; days: number }>
+}
+
+/**
+ * Days due to freeze without the bank's data (AP-14, D99 pkt 5): an mBank account imported before, but more than
+ * `IMPORT_DUE_DAYS` ago (the briefing's „zaimportuj nowy plik”), and an unfrozen day due after what its files cover –
+ * frozen now, the day would be rated without its operations for good (T9). An account never imported waits for nothing
+ * (a budget kept by hand). Null – nothing to ask.
+ */
+export function importWait(input: Pick<GameInput, 'settings' | 'game'>, today: string, locked?: ReadonlySet<string>): ImportWait | null {
+  const start = input.settings.game.start
+  if (!start) return null
+  const imp = input.settings.import
+  const late = input.settings.accounts.flatMap((a) => {
+    const at = imp.lastImport[a.id]
+    if (a.archived || a.importFormat !== 'mbank' || !at) return []
+    const day = dateOf(at)
+    const days = daysBetween(day, today)
+    return days > IMPORT_DUE_DAYS ? [{ id: a.id, name: a.name, at, days, from: addDays(imp.coveredTo[a.id] ?? day, 1) }] : []
+  })
+  if (!late.length) return null
+  const from = late.map((x) => x.from).sort()[0]!
+  const last = addDays(today, -2)
+  const frozen = allDays(input.game)
+  let first: string | null = null
+  for (let d = later(from, start); d <= last; d = addDays(d, 1))
+    if (!frozen.has(d) && !locked?.has(monthOf(d))) {
+      first = d
+      break
+    }
+  if (!first) return null
+  const key = late
+    .map((x) => `${x.id}@${x.at}`)
+    .sort()
+    .join(',')
+  return { key, from, first, last, late: late.map((x) => ({ name: x.name, days: x.days })) }
+}
+
 // ------------------------------------------------------------------ advancing the game
 
 export type GameEvent =
@@ -634,9 +696,15 @@ export const gameStartFor = (now: Date | string): string => addDays(warsawNow(no
  */
 /**
  * `hold`: the first day not to freeze yet (B20 – a paired ICTTJ payout still to dock: its pool decides where the money
- * goes); it and the days after it wait.
+ * goes); it and the days after it wait. `waitImport`: the first day without the bank's data the window waits for
+ * (AP-14 – `importWait`, not answered „Zamroź bez danych”): it and the days after it wait, and so does this week's
+ * mission when it is before its Monday (chosen from the 4 weeks before it).
  */
-export function advanceGame(input: GameInput, now: Date | string, opts: { maxDays?: number; locked?: ReadonlySet<string>; hold?: string | null } = {}): GameChange {
+export function advanceGame(
+  input: GameInput,
+  now: Date | string,
+  opts: { maxDays?: number; locked?: ReadonlySet<string>; hold?: string | null; waitImport?: string | null } = {}
+): GameChange {
   const gs = input.settings.game
   const start = gs.start
   if (!start) return { months: [], events: [] }
@@ -654,6 +722,7 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
 
   const lastFreezable = addDays(today, -2)
   const frozen = allDays([...months.values()])
+  const stop = [opts.hold, opts.waitImport].filter((d): d is string => !!d).sort()[0] ?? null
   // Each day is a whole run of the engine (W16): at most `maxDays` a pass – the same days in the same order, in parts.
   let rated = 0
   let more = false
@@ -661,14 +730,20 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
     // A month this version may not write (a newer one wrote it): its days are that version's to freeze – passed over,
     // never a portion stuck on them.
     if (frozen.has(d) || opts.locked?.has(monthOf(d))) continue
-    if (opts.hold && d >= opts.hold) break
+    if (stop && d >= stop) break
     if (opts.maxDays != null && rated >= opts.maxDays) {
       more = true
       break
     }
     rated++
-    const r = rateDay(input, d, frozen.get(addDays(d, -1)) ?? null)
-    const day: GameDay = { status: r.status, frozenAt: stamp, violations: r.violations, cls: r.cls, cargo: r.cargo, tags: r.tags }
+    const before = frozen.get(addDays(d, -1)) ?? null
+    const r = rateDay(input, d, before)
+    // A class other than the day before was frozen with (AP-14, DW sp. 6): the day before as this day's data sees it –
+    // when the same data gives it this day's class already, the change came with the data (history imported after the
+    // day before froze), not with the ship. Kept only when it differs; an extra run of the engine only on such a day.
+    const prevDay = addDays(d, -1)
+    const clsBefore = before?.cls && r.cls && before.cls !== r.cls ? computeFleet({ ...input, now: warsawEndOf(prevDay), coversBefore: warsawStartOf(prevDay).toISOString() }).shipClass : null
+    const day: GameDay = { status: r.status, frozenAt: stamp, violations: r.violations, cls: r.cls, cargo: r.cargo, tags: r.tags, ...(clsBefore && clsBefore !== before?.cls ? { clsBefore } : {}) }
     frozen.set(d, day)
     update(monthOf(d), (g) => ({ ...g, days: { ...g.days, [d]: day } }))
     // The week's mission is judged when its Sunday freezes – before the rank, so a mission done counts at once.
@@ -691,9 +766,10 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
     }
   }
 
-  // This week's mission, from the game's first full week – once no day is left to freeze (it reads the frozen ones).
+  // This week's mission, from the game's first full week – once no day is left to freeze (it reads the frozen ones) and
+  // the 4 weeks before its Monday are not waiting for the bank's data (AP-14).
   const monday = mondayOf(today)
-  if (!more && monday >= firstMissionMonday(start)) {
+  if (!more && !(opts.waitImport && opts.waitImport < monday) && monday >= firstMissionMonday(start)) {
     const week = isoWeekOf(today)
     if (!missionOf(week)) {
       const last = missionOf(isoWeekOf(addDays(monday, -7)))?.mission.template ?? null
@@ -709,7 +785,8 @@ export function advanceGame(input: GameInput, now: Date | string, opts: { maxDay
 export type WatchEntry =
   | { kind: 'violation'; date: string; order: string; serious: boolean; amount: number | null; ref: string | null; note: string }
   | { kind: 'tag'; date: string; tag: string }
-  | { kind: 'class'; date: string; cls: ShipClass; from: ShipClass; up: boolean; peak: boolean }
+  /** `data` (AP-14): the change came with new data (history imported later), not with the ship – never celebrated. */
+  | { kind: 'class'; date: string; cls: ShipClass; from: ShipClass; up: boolean; peak: boolean; data?: boolean }
   | { kind: 'rank'; date: string; rank: Rank; change: 'up' | 'down' }
   | { kind: 'mission'; date: string; template: string; week: string; done: boolean | null; params: GameMission['params'] }
   | { kind: 'achievement'; date: string; id: AchievementId }
@@ -787,13 +864,17 @@ export function gameView(game: readonly GameMonth[], gs: GameSettings, today: st
     for (const tag of day.tags) log.push({ kind: 'tag', date: d, tag })
     if (day.cls && prevCls && day.cls !== prevCls && SHIP_ORDER(day.cls) >= 0 && SHIP_ORDER(prevCls) >= 0) {
       const up = SHIP_ORDER(day.cls) > SHIP_ORDER(prevCls)
+      // The day before as this day's data saw it (AP-14): when that is this class already (or past it), the ship did not
+      // move – the data did.
+      const seen = day.clsBefore && SHIP_ORDER(day.clsBefore) >= 0 ? day.clsBefore : prevCls
+      const data = seen !== prevCls && (up ? SHIP_ORDER(seen) >= SHIP_ORDER(day.cls) : SHIP_ORDER(seen) <= SHIP_ORDER(day.cls))
       // A peak (N64): above every class of the last 30 days – a range moving around a class's threshold celebrates once.
-      let peak = up
+      let peak = up && !data
       for (let back = 1; peak && back <= CLASS_PEAK_DAYS; back++) {
         const c = days.get(addDays(d, -back))?.cls
         if (c && SHIP_ORDER(c) >= SHIP_ORDER(day.cls)) peak = false
       }
-      log.push({ kind: 'class', date: d, cls: day.cls as ShipClass, from: prevCls as ShipClass, up, peak })
+      log.push({ kind: 'class', date: d, cls: day.cls as ShipClass, from: prevCls as ShipClass, up, peak, ...(data ? { data } : {}) })
     }
     if (day.cls) prevCls = day.cls
   }
