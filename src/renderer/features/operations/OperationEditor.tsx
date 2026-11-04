@@ -1,17 +1,16 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
 import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
-import { DEFAULT_SIGN, unlinkedBy, withKind } from '@shared/calc/kinds'
+import { DEFAULT_SIGN } from '@shared/calc/kinds'
 import { confirmedChanges, confirmedPeriodOf, type OperationEdit } from '@shared/calc/balances'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
 import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
-import { listOf, updateRecord, useData, useFolderLocked } from '../../store/data'
+import { listOf, useData, useFolderLocked } from '../../store/data'
 import { answerGuard, askGuard, useGuard } from '../../store/guard'
 import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
-import { toast } from '../../store/ui'
 import { AmountField, DateField, plnText, signedPln, TimeField } from '../../components/fields'
 import { Badge, Empty, Field, Segmented, TextArea, TextField, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -20,7 +19,7 @@ import { plDate } from '../../lib/format'
 import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
 import { AccountSelect, CategorySelect, useAccounts } from './pickers'
-import { deleteOperation, openOperation, rememberAccount, showBrand } from './state'
+import { changeKind as changeOperationKind, deleteOperation, openOperation, rememberAccount, showBrand, updateOperation } from './state'
 import { addOtherSide, joinTransfers, transferEdits, transferIssuesOf, type JoinIssue } from './transfers'
 import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
 import { OFFICER_SOURCE_LABEL, officerHint } from '@shared/import/officer'
@@ -77,7 +76,6 @@ export function OperationEditor({ id }: { id: string }) {
   const tagGoals = useData((s) => s.fi?.settings.intel.tagGoals)
   const loans = useRecordList('loans')
   const balances = useRecordList('balances')
-  const containers = useRecordList('containers')
   const members = useMembers()
   const knownTags = useKnownTags()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
@@ -97,36 +95,14 @@ export function OperationEditor({ id }: { id: string }) {
     if (changes.length) askGuard({ id, run, changes, bankAmount: null })
     else run()
   }
-  const update = (fn: (r: Transaction) => Transaction): boolean => {
-    // A new entry is the user's own first writing (no confirmed balance knows it yet as it is).
-    if (isDraft || fresh) return updateRecord('transactions', id, fn)
-    const next = fn(t)
-    const changes = confirmedChanges([[t, next]], balances)
-    // The bank's amount of either side.
-    const bank = (!!t.bank || !!t.counterBank) && next.amount !== t.amount
-    if (!changes.length && !bank) return updateRecord('transactions', id, fn)
-    askGuard({ id, run: () => void updateRecord('transactions', id, fn), changes, bankAmount: bank ? t.amount : null })
-    return false
-  }
+  // A new entry is the user's own first writing (no confirmed balance knows it yet as it is).
+  const update = (fn: (r: Transaction) => Transaction): boolean => updateOperation(id, fn, isDraft || fresh)
   const confirmed = confirmedPeriodOf(t, balances)
   const patch = (p: Partial<Transaction>) => update((r) => ({ ...r, ...p }))
-  /**
-   * Another kind (N-PC-4, T362): only an expense is paid from a goal or a container of the cargo – a change that unlinks
-   * one says so, with „Cofnij” (the operation as it was, while it still has the new kind).
-   */
+  // Another kind (N-PC-4, T362): an unlinked goal or container said once the change is written, with „Cofnij”.
   const changeKind = (k: TxKind) => {
     setZeroSign(null)
-    const before = t
-    const lost = unlinkedBy(before, withKind(before, k))
-    if (!update((r) => withKind(r, k)) || (!lost.goals.length && !lost.containers.length)) return
-    const names = [
-      ...lost.goals.map((g) => `cel „${fleet?.goals.find((x) => x.id === g)?.name ?? '?'}”`),
-      ...lost.containers.map((c) => `kontener „${containers.find((x) => x.id === c)?.name ?? '?'}”`)
-    ]
-    toast(`Rodzaj „${TX_KIND_LABEL[k]}” nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: ${names.join(', ')}.`, 'info', 8000, {
-      label: 'Cofnij',
-      run: () => void updateRecord('transactions', id, (r) => (r.kind === k ? { ...before } : r))
-    })
+    changeOperationKind(id, k, isDraft || fresh)
   }
   // F8: an expense without a category – what the officer knows of its brand (history, the import's rule, the chain).
   const officer =

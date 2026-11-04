@@ -62,7 +62,7 @@ paths:
 - Łączenie i duplikaty: `looseMatch` (kwota, ±3 dni, podobieństwo kontrahenta), także między kontami; decyzja
   użytkownika („Nie łącz”, `notDuplicates`, `notSimilar`) zawsze wygrywa. **Pułapka:** `notDuplicates` trzyma też
   „zostaw” innych meldunków (`back:`, `correction:`, `transfer:`, `transfer-lone:`) – pary panelu duplikatów tylko przez
-  `isDuplicatePairKey`.
+  `isDuplicatePairKey`; klucz nowego meldunku – z przedrostkiem dopisanym do `REPORT_KEY_PREFIXES` (`import/duplicates.ts`).
 - Tożsamość wiersza między formatami (B5) to miara, nie klucz – stosuj ją wszędzie, gdzie działa klucz: przy usuniętych
   (T320), na kontach tego samego numeru rachunku (T321), przy rozliczeniu (stary klucz w `altKeys`, T323). Kolejność
   przejść planu ma znaczenie: B5 tutaj bierze też wiersze `elsewhere` z B35 (kopia → `RowCopy`, „usuń duplikat”), a

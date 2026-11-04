@@ -168,6 +168,26 @@ export class PresenceKeeper {
   }
 
   /**
+   * This computer's presence cleared from the folder closed (przegląd N1 5 and N2). Another folder opened: `ms` at most –
+   * the app goes on, so does the removal in its turn. Quitting (`quitBy` – the end of the quit's drain, B43): waited for up
+   * to then (`ms` at least) – the process ends right after, a removal not waited for never runs and the presence stays
+   * (the other computer took this one for running up to PRESENCE_WINDOW_MS, while the log said the removal went on).
+   * Not done in time – the log says what happens. True = done (or failed) in time.
+   */
+  async clearAtClose(root: string, o: { ms: number; quitBy?: number }): Promise<boolean> {
+    const wait = o.quitBy == null ? o.ms : Math.max(o.ms, o.quitBy - Date.now())
+    if (await this.clearWithin(root, wait)) return true
+    const seconds = Math.round(wait / 1000)
+    this.log?.(
+      'warn',
+      o.quitBy == null
+        ? `zamykanie: usunięcie obecności trwa ponad ${seconds} s – idzie dalej w tle`
+        : `zamykanie: usunięcie obecności nie skończyło się w ${seconds} s – plik obecności zostaje, inne komputery biorą ten za uruchomiony do ${PRESENCE_WINDOW_MS / 60_000} min`
+    )
+    return false
+  }
+
+  /**
    * The heartbeat's write (T337): never rejects, never swallowed – a failure said in the log when it starts in a folder
    * (with its error) and when the presence is written there again, not at each retry in between (every minute, in the
    * tray every 5 – weeks of them would rotate the rest out of the log). Meanwhile the other computer takes this one for

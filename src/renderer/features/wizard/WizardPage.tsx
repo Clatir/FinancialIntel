@@ -1,4 +1,5 @@
 import { cycleText } from '@shared/calc/cargoWatch'
+import { amountIn } from '@shared/calc/fleet'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addDays, daysInMonth, firstDayOf, warsawNow } from '@shared/calc/dates'
 import { balanceAt } from '@shared/calc/balances'
@@ -135,7 +136,7 @@ export function WizardPage() {
     if (v == null) delete envelopes[id]
     else envelopes[id] = v
   }
-  const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => c.amount)) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
+  const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => amountIn(c, month))) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
   // The tanks of the first month as the engine fills them (N9, T29, N-PC-7): a fee due soon catches up unless funded at start.
   const tanksMonthly = sum([...tankPlan.values()].map((t) => t.installment))
   const tanksLater = sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map(monthlyShare)) + sum(chosen.filter((p) => p.cycleMonths > 1).map(monthlyShare))

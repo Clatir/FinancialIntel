@@ -45,12 +45,23 @@ export const duplicateKey = (ids: readonly string[]): string => [...ids].sort().
 export const rowKey = (accountId: string, bankKey: string): string => `row:${accountId}|${bankKey}`
 
 /**
- * Is a key of `settings.import.notDuplicates` a pair of the duplicates panel – „to nie duplikat” (`duplicateKey`,
- * `rowKey`)? The map keeps the other reports' „zostaw” too, none of them such a pair (przegląd N1 5): a correction said to
- * be no repeat (`correction:<id>` – B129), a transfer left as it is (`transfer:…`, `transfer-lone:<id>` – F10), an
- * operation back after its deletion and one brought back on purpose (`back:<id>` – T324).
+ * The other reports' „zostaw” kept in the same map (`settings.import.notDuplicates` – przegląd N1 5), each under its own
+ * prefix: a correction said to be no repeat (`correction:<id>` – B129), a transfer left as it is (`transfer:<keep>:<drop>`,
+ * `transfer-lone:<id>` – F10), an operation back after its deletion and one brought back on purpose (`back:<id>` – T324).
+ * A new report's key takes a prefix registered here (`tests/unit/n2-review-misc.test.ts` checks the builders).
  */
-export const isDuplicatePairKey = (key: string): boolean => key.startsWith('row:') || !key.includes(':')
+export const REPORT_KEY_PREFIXES = ['correction:', 'transfer:', 'transfer-lone:', 'back:'] as const
+
+/** The panel's key of a hand-typed operation and its copy (`duplicateKey`): two ids or more – nothing else. */
+const ID_PAIR = /^[^:|]+(?:\|[^:|]+)+$/
+
+/**
+ * Is a key of `settings.import.notDuplicates` a pair of the duplicates panel – „to nie duplikat” (`rowKey`,
+ * `duplicateKey`)? By what the panel writes, not by a key without a namespace (przegląd N2: a bare id of another report
+ * would have been forgotten with „zapomnij «to nie duplikat»” and counted); a registered report's key never. The keys
+ * stored so far keep their form.
+ */
+export const isDuplicatePairKey = (key: string): boolean => !REPORT_KEY_PREFIXES.some((p) => key.startsWith(p)) && (key.startsWith('row:') || ID_PAIR.test(key))
 
 /**
  * The duplicates among the operations (drafts left out by the caller); `dismissed` = groups the user said are none

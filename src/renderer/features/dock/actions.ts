@@ -8,7 +8,7 @@ import { dockingIdOf, undockingOf, walletOperationId } from '@shared/calc/undock
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteOrSay, NEWER_RECORD_MESSAGE, updateRecord, updateSettings, useData } from '../../store/data'
+import { addRecord, canWrite, deleteOrSay, listOf, NEWER_RECORD_MESSAGE, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
@@ -142,8 +142,13 @@ export function undockDelivery(d: Delivery): boolean {
   toast(`Wycofano dokowanie ${plnText(d.amount)} zł${what} – ${then}.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
-      // Docked again meanwhile (the same ids – B17): that docking stays.
+      // Docked again meanwhile – the same ids (B17), or another docking of its entry or its operation (one without a fixed
+      // id: an XTB inflow without an entry, one docked before B17 – przegląd N2): that docking stays and nothing comes
+      // back – else a second docking (and operation) for the same money.
       const now = useData.getState().records
+      const entries = new Set(dockings.flatMap((x) => (x.ictjEntryId ? [x.ictjEntryId] : [])))
+      const operations = new Set(dockings.map((x) => x.transactionId))
+      if (listOf(now.dockings ?? {}).some((x) => (x.ictjEntryId != null && entries.has(x.ictjEntryId)) || operations.has(x.transactionId))) return
       for (const t of ops) if (!now.transactions[t.id]) addRecord('transactions', t)
       for (const x of dockings) if (!now.dockings?.[x.id]) addRecord('dockings', x)
     }
