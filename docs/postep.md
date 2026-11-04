@@ -14,7 +14,7 @@ iPhone (D92 / D93): 1.13.0–1.15.0 wydane (grupy iA–iC, PR #42–#44); przerw
 decyzje D92 / D93, T305–T311.
 **Następny krok:** audyt 1.15.4 (D97) zakończony 03.11, odpowiedzi użytkownika 04.11 – D98 (iPhone wstrzymany), D99
 (wszystkie AP przyjęte, S4 – „zaliczka na przyszłość” może omijać dług). Grupy N1–N5 (1.15.5–1.15.9), potem R1–R2 – kolejka
-niżej; N1 na komendę. Otwarte: model gotówki (przed N5), karty kredytowe (przed AP-41), maszyna wirtualna, procent
+niżej; N1 na komendę. Otwarte: karty kredytowe (przed AP-41), maszyna wirtualna, procent
 limitu tygodniowego. iPhone (iD, iE, IP15, IP21, IP24) wstrzymany (D98) – „Przed grupą iD” niżej zostaje jako zapis na
 później. Przed każdym etapem tabela prac z modelem oszczędnym z górką; thinking domyślnie xhigh, max tylko silnik
 pieniędzy i granica ICTTJ (D96). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
@@ -145,7 +145,7 @@ prac” (razem ok. 63 h; ciąg M–V zmierzone ok. 17 h przy planie ok. 24–25 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **N1** | Dane i import po audycie: folder danych przed zapisem, tożsamość wiersza banku, szkic przy „Zmień mimo to”, pożyczka przed regułą, „+ w tym za” (AP-1, 2, 6, 7, 8; AF-1 K, AF-2 K, AF-3 W, AF-9 W, AF-26 W, AF-27 W) | Opus 5.5 | xhigh (max w AP-6, AP-7) | 2,5–4 h (z górką 4,5 h) | 1.15.5 | komenda | ⏳ |
-| **N2** | Silnik pieniędzy po audycie: przeniesienie środków celu w chwili zapisu (zamiast T129), „reszta jako zaliczka” + naprawa danych, płatność sprzed startu, „Wycofaj dokowanie”, usuwanie kategorii, plan = silnik, dostawa według puli, wyrocznia jako regresja (AP-3, 4, 5, 9, 11, 12, 32) | Opus 5.5 | **max** | 3–4,5 h (z górką 5,5 h) | 1.15.6 | S4, T163 (`wnioski.md` sekcja 7) | ⏳ |
+| **N2** | Silnik pieniędzy po audycie: przeniesienie środków celu w chwili zapisu (zamiast T129), „reszta jako zaliczka” + naprawa danych, płatność sprzed startu, „Wycofaj dokowanie”, usuwanie kategorii, plan = silnik, dostawa według puli, wyrocznia jako regresja (AP-3, 4, 5, 9, 11, 12, 32); nowa funkcja: wpłata od dowolnej osoby spłaca pożyczkę (D100) | Opus 5.5 | **max** | 3–4,5 h (z górką 5,5 h) | 1.15.6 | S4, T163 (`wnioski.md` sekcja 7) | ⏳ |
 | **N3** | Opłaty, energia, gra: jeden stan opłaty, energia dziś w granicach miesiąca, zamrażanie po przerwie, kadłub, Kurs = Mostek, trend poduszki (AP-10, 13, 14, 17, 18, 30, 31) | Opus 5.5 | xhigh (max w AP-13, AP-17) | 2,5–3,5 h (z górką 4 h) | 1.15.7 | RA.4, S6, pytania AP-14, AP-17 | ⏳ |
 | **N4** | Zasady interfejsu: komunikat przy każdym odrzuceniu, „Cofnij” wszędzie, teksty, odprawa z hierarchią (AP-15, 16, 22, 23) | Sonnet 5.5 | high (Opus high przy logice) | 2–3 h (z górką 3,5 h) | 1.15.8 | – | ⏳ (po iD albo przed) |
 | **N5** | Ścieżki i ergonomia: kreator, domownicy, szybki wpis, debriefing, dokowanie, konflikty, nowy komputer, eksport, Operacje (AP-19–21, 24–29, 33, 34, 36–38) | Opus 5.5 | high (xhigh przy silniku) | 3–4,5 h (z górką 5 h) | 1.15.9 | odpowiedzi z `wnioski.md` sekcja 5 | ⏳ (po iE albo przed) |

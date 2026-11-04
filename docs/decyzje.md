@@ -422,6 +422,12 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   OP.33, OP.40, T156 i pozostałe wiersze tabeli); (10) nieaktualne (D98); (12) kalibracja progów gry po N3, po 1–2
   miesiącach na poprawionej wersji, za osobną zgodą. Otwarte: (8) model gotówki – przed N5 (AP-33); (11) karty kredytowe
   – przed AP-41.
+- **D100** (04.11.2026) (1) Gotówka prowadzona na koncie „Gotówka” (pytanie 8 z D99): wypłata z bankomatu to przelew
+  mBank → Gotówka, zakupy gotówką – wydatki z konta Gotówka (AP-33). (2) Nowa funkcja (grupa N2): **każda wpłata – także od
+  innej osoby niż pożyczkobiorca (domownik albo ktoś spoza listy) – może spłacać pożyczkę udzieloną**: przy wpływie (szybki
+  wpis, Operacje, import – wiersz i grupa, reguła importu) wybór „spłata pożyczki …” z listy otwartych pożyczek, także
+  część wpłaty (reszta – jak dziś: spłata domownika, depozyt albo przychód); pożyczka maleje o spłatę, nadwyżka ponad dług
+  to przychód (T70); w wierszu pożyczki widać, kto zapłacił. Szczegóły techniczne – T-decyzja w N2.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
