@@ -68,18 +68,21 @@ export function targetsWhy(f: Pick<FleetState, 'shields' | 'hull' | 'costs' | 'p
   ]
 }
 
-/** The last delivery's split (a payout docked – D13): where its money went, layer by layer; null – none docked yet. */
-export function deliveryWhy(log: readonly FleetEvent[], goalName: (id: string) => string): { date: string; lines: WhyLine[] } | null {
+/**
+ * The last delivery's split (a payout docked – D13): where its money went, layer by layer; null – none docked yet.
+ * `pending` – one not docked yet (AP-12, PR sp. 2): counted by its ICTTJ entry's pool until „Zadokuj” confirms it.
+ */
+export function deliveryWhy(log: readonly FleetEvent[], goalName: (id: string) => string): { date: string; pending: boolean; lines: WhyLine[] } | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const e = log[i]!
     if (e.kind !== 'trading' || e.amount <= 0) continue
     const m = e.moves
-    const lines: WhyLine[] = [{ label: 'Dostawa', amount: e.amount }]
+    const lines: WhyLine[] = [{ label: e.pending ? 'Dostawa do zadokowania (według puli wpisu ICTTJ)' : 'Dostawa', amount: e.amount }]
     if (m.taxHold) lines.push({ label: 'Rezerwa na PIT-38', amount: m.taxHold })
     if (m.shields) lines.push({ label: 'Osłony', amount: m.shields })
     if (m.hull) lines.push({ label: 'Kadłub', amount: m.hull })
     for (const [id, v] of Object.entries(m.goals ?? {})) if (v) lines.push({ label: `Cel: ${goalName(id)}`, amount: v })
-    return { date: e.date, lines }
+    return { date: e.date, pending: !!e.pending, lines }
   }
   return null
 }

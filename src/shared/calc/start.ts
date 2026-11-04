@@ -4,7 +4,8 @@
  * order – D70).
  */
 import type { Transaction } from '../schema/records'
-import { dockAmount } from './fleet'
+import { monthOf } from './dates'
+import { activeIn, cyclePosition, dockAmount, paidBeforeStart, sinkingSchedule, tankWant, type AmountOf, type FeeOf } from './fleet'
 import { amountOn, dateOn, sum } from './operations'
 
 /**
@@ -43,4 +44,25 @@ export function startSplit(
   if (total <= 0) return { shields: total, hull: 0, goals: {}, free: 0 }
   const split = dockAmount(total, { shields: 0, hull: 0, goals: goals.map((g) => ({ id: g.id, amount: 0, target: g.target })) }, targets)
   return { shields: split.shields, hull: split.hull, goals: split.goals, free: split.free }
+}
+
+/** A periodic fee the start finds (a container, or a proposal chosen in the wizard) with the days of its payments. */
+export type StartTankItem = FeeOf & AmountOf & { key: string; paid: readonly string[] }
+
+/**
+ * The tanks of the start's month as the engine fills them (N9, N-PC-7, AP-5): each fee's installment (`tankWant` – with
+ * the money set in its tank at the start, `tanks`) and what the plan wants in the tank for the months of its cycle
+ * before the start (`planAmount` – „do planu”). A cycle its payments before the start paid (`paidBeforeStart`, T135 –
+ * `paid`) wants neither: its tank collects for the next one; a fee out of its life that month neither.
+ */
+export function startTanks(items: readonly StartTankItem[], start: string, tanks: Readonly<Record<string, number>>): Array<{ key: string; installment: number; planAmount: number; paid: boolean }> {
+  const month = monthOf(start)
+  return items.map((item) => {
+    if (!activeIn(item, month)) return { key: item.key, installment: 0, planAmount: 0, paid: false }
+    const paidDues = paidBeforeStart(item, item.paid, start)
+    const pos = cyclePosition(item, month)
+    const paid = paidDues.has(pos.dueMonth)
+    const planAmount = pos.index > 0 && !paid ? sum(sinkingSchedule(item.amount, pos.length).slice(0, pos.index)) : 0
+    return { key: item.key, installment: tankWant(item, month, tanks[item.key] ?? 0, paidDues), planAmount, paid }
+  })
 }

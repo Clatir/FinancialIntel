@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RecordEntry, Snapshot } from '@shared/api'
+import { amountIn } from '@shared/calc/fleet'
+import { loanState } from '@shared/calc/loans'
 import { createDefaultSettings } from '@shared/defaults'
 import { COLLECTIONS } from '@shared/paths'
 import { containerSchema, loanSchema, SCHEMA_VERSION, type Container, type Loan } from '@shared/schema'
@@ -98,5 +100,32 @@ describe('zamknięcie pożyczki z „Cofnij” (1.6.6, N35)', () => {
     ui.useUi.getState().toasts.at(-1)!.action!.run()
     expect(rec('containers', old.id).amount).toBe(60_000)
     expect(rec('containers', active.id)).toMatchObject({ archived: false, archivedAt: null })
+  })
+})
+
+describe('kontener raty z kwotami harmonogramu (AP-11, AF-51 – PR.9)', () => {
+  const ratesOf = (c: Container) => ['2026-11', '2026-12', '2027-01'].map((m) => amountIn(c, m))
+
+  it('nowa pożyczka 100 zł w 3 ratach: Ładownia i Plan 33,33 / 33,33 / 33,34 zł, razem 100,00 zł – jak Radar', () => {
+    load([], [])
+    const taken = radar.addLoan({ direction: 'taken', name: 'Kredyt R2', counterparty: 'BANK', amount: 10_000, total: 10_000, date: '2026-11-01', accountId: '01K7S000000000000000000B01', installments: 3, firstDue: '2026-11-10', withOperation: false })
+    const c = Object.values(data.useData.getState().records.containers).map((e) => e.record).find((x) => x.loanId === taken.id)!
+    expect(taken.schedule.map((s) => s.amount)).toEqual([3333, 3333, 3334])
+    expect(c).toMatchObject({ amount: 3334, past: [{ until: '2026-12', amount: 3333 }], from: '2026-11', until: '2027-01' })
+    expect(ratesOf(c)).toEqual([3333, 3333, 3334])
+  })
+
+  it('kontener dodany do pożyczki w trakcie spłaty: kwoty tego, co zostało z rat', () => {
+    const own = loanSchema.parse({ ...base, id: '01K7S000000000000000000A02', name: 'Kredyt R3', direction: 'taken', amount: 10_000, date: '2026-10-01', schedule: [
+      { id: '01K7S000000000000000000S01', date: '2026-10-10', amount: 3333 },
+      { id: '01K7S000000000000000000S02', date: '2026-11-10', amount: 3333 },
+      { id: '01K7S000000000000000000S03', date: '2026-12-10', amount: 3334 }
+    ] })
+    load([own], [])
+    // The first installment paid from the shields (no container then): November and December left.
+    const s = loanState(own, [], [], '2026-11-01')
+    const paid = { ...s, paid: 3333, open: 6667, next: { date: '2026-11-10', amount: 3333 }, left: s.left.slice(1) }
+    const c = radar.ensureLoanContainer(paid)!
+    expect(c).toMatchObject({ amount: 3334, past: [{ until: '2026-11', amount: 3333 }], from: '2026-11', until: '2026-12' })
   })
 })

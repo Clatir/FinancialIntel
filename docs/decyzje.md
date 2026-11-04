@@ -1020,6 +1020,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T129** Pieniądze celu (D84 C2, B30): archiwizacja celu z pieniędzmi pyta – osłony / inny cel / zostają; przeniesienie =
   wpis `transfers` {at, to, amount}, silnik na koniec dnia przenosi `min(kwota, stan)` (nigdy więcej, niż cel ma);
   „przenieś środki” na liście zarchiwizowanych także później (cele ICTTJ spoza scenariusza też); „Cofnij” przywraca cel.
+  **Od 1.15.6 „na koniec dnia” zastąpione przez T340** (w chwili `at` wśród zdarzeń dnia – AP-3, AF-4).
 - **T130** Scenariusz ICTTJ (D84 C3): scenariusz zapamiętany w `fi.json` przy pierwszym podłączeniu (ostatnio zmieniany
   w ICTTJ – `chosenForecast`); zmiana w Ustawieniach → ICTTJ dopiero po potwierdzeniu z listą celów do archiwizacji (ich
   pieniądze zostają).
@@ -1192,6 +1193,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   niezadokowaną nie zamarza (`pendingPairDays`, `advanceGame` `hold`, liczone z bieżących dostaw – także po pominięciu
   wpisu czy nowym odczycie ICTTJ) – najwyżej 7 dni, potem zamarza jak dotąd. Silnik
   do dokowania nadal liczy parę zwykłą kolejnością (pula dopiero z rekordem dokowania – wariant „pełniej” bez zmian).
+  **Od 1.15.6 zdanie o silniku zastąpione przez T341** (para liczona od razu według puli wpisu – D99 pkt 2, AP-12);
+  wstrzymanie zamrażania zostaje.
 - **T164** Dni robocze (F42, zmienia T63): bez sobót, niedziel i polskich świąt ustawowych – stałe (1.01, 6.01, 1.05,
   3.05, 15.08, 1.11, 11.11, 25–26.12; 24.12 od 2025), Wielkanoc i poniedziałek wielkanocny, Zielone Świątki (+49 dni),
   Boże Ciało (+60) – `isPolishHoliday` / `isWorkingDay` (`calc/dates.ts`), tylko w oknie pary i 3 dniach roboczych D72.
@@ -2578,3 +2581,113 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Wcześniej plik tylko do odczytu zostawał na zawsze ze starym `lastSeen` (próba i heartbeat tylko odnotowywały albo
   połykały błąd) – drugi komputer po 11 min uznawał ten za niedziałający i oba robiły zapisy w tle naraz. Bez komunikatu
   w oknie: przyczynę trwałą naprawia sam zapis, chwilowa mija; zostaje wpis w logu.
+  zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
+  w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak
+  – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
+  czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
+  tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
+- **T340** Przeniesienie środków celu w swojej chwili (1.15.6, AP-3, AF-4 K – MG.8, MG.10; **zastępuje „na koniec dnia”
+  z T129**): wpis `transfers` {at, to, amount} silnik liczy w chwili `at` wśród zdarzeń jej dnia warszawskiego – przed
+  pierwszym zdarzeniem dnia (w kolejności silnika), które przyszło do FI później niż przeniesienie (`cameIn`: utworzenie
+  dokowania, inaczej operacji, nie wcześniej niż początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
+  przelewu – jej utworzenie), zawsze po początku dnia (start, przełom miesiąca, termin łupów); gdy tego dnia nic
+  później nie przyszło – po ostatnim zdarzeniu dnia, przed następnym dniem. Przenosi `min(kwota, stan celu)`; czego cel
+  w tej chwili silnika jeszcze nie ma (wpływ sprzed przeniesienia, który kolejność dnia liczy później – operacje bez
+  godziny idą przed operacjami z godziną), przenosi na koniec dnia, nigdy więcej, niż cel ma. Skutek: wydatek z celu
+  wpisany po przeniesieniu płaci z celu tyle, ile pokazuje ekran (T131), dostawa tego dnia zaimportowana albo zadokowana
+  po przeniesieniu widzi cel po nim i dopełnia go tylko do jego kwoty (D13, spec „każdy do swojej kwoty”). Granica:
+  operacja z dnia wcześniejszego liczy się w swoim dniu (kolejność dni) – przeniesienie z późniejszego dnia nie zmienia
+  jej podziału. „Przenieś środki” ostrzega (bez blokady), gdy cel docelowy jest już pełny albo przeniesienie przekroczy
+  to, czego mu brakuje (`overTarget`, przycisk „tylko brakujące”); cel bez kwoty (cel ICTTJ bez ceny – N46) bez
+  ostrzeżenia. Rozważone i odrzucone: stały klucz przeniesienia wśród operacji (godzina albo utworzenie) – operacje
+  z godziną i bez niej mają w dniu inne porządki, a zadokowana później dostawa ma chwilę dokowania, nie operacji. Bez
+  migracji (stany liczone): dni z przeniesieniem i wydatkiem z celu albo dostawą tego samego dnia przeliczą się inaczej
+  (notatka wydania); zamrożone dni gry bez zmian.
+- **T341** Dostawa do zadokowania według puli wpisu (1.15.6, AP-12, AF-46, AF-48 – DO.5, DO sp. 1, MG sp. 1, PR sp. 2;
+  D99 pkt 2; **zastępuje zdanie T163 o silniku**): para wpisu ICTTJ z operacją banku jeszcze niezadokowana (lista dostaw
+  `deliveries` – stan „do zadokowania” z wpisem i operacją, bez dokowania; także para innej kwoty – B22, liczy się kwota
+  banku – i wpływ wpisany na Portfelu XTB – B69; bez wpisu pominiętego, sprzed startu, czekającego na import,
+  zadokowanego i wpływu z XTB bez wpisu) trafia do silnika jako `FleetInput.pendingPairs` (operacja → pula i dzień
+  wpisu, `pendingPairsOf`; okno liczy je z migawki ICTTJ tego komputera tymi samymi danymi co panel Dokowanie –
+  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama) i liczy się od razu tak, jak jej dokowanie z tą
+  pulą bez zmienionego podziału: Cele – prosto do celów (najpierw cele z prognozy ICTTJ; miesiąc celu bez ceny – dzień
+  wpisu, N46), Podatek – rezerwa na PIT-38 poza budżetem i bez przychodu (`taxOfDockings` z parami), zwrot z puli
+  Podatek – z rezerwy, bez firewalla (T65), pozostałe pule – kolejnością dokowania. Chwila pieniędzy dla celów –
+  utworzenie operacji (T128), więc „Zadokuj” bez zmian celów niczego nie przesuwa; dokowanie operacji decyduje nad parą
+  (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`, klucz pamięci `engineParts`); dzień z parą dalej
+  czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego naruszenia „dopłata wbrew firewallowi”. Granica:
+  komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego wpisu – liczy parę jak dotąd zwykłą kolejnością,
+  aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery czytające ten sam folder ICTTJ liczą to samo. Bez
+  nowych pól w danych i bez migracji; zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
+- **T342** „Do zadokowania” na ekranach (1.15.6, AP-12; MG sp. 1, PR sp. 2, DO sp. 4): silnik zlicza pary liczone
+  według puli wpisu (`FleetState.toDock` – ile, wpływ, wypływ, część w celach; zdarzenie dziennika z `pending`). Stan
+  okrętu na Mostku – wiersz „Do zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu
+  i wypływu (dymek: jak liczone i że „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do
+  zadokowania) – dokąd poszła?” i w rozbiciu „Dostawa do zadokowania (według puli wpisu ICTTJ)”; Mapa gwiezdna – „w celach
+  … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed dziś (DO sp.
+  4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.”.
+- **T345** Opłata okresowa zapłacona przed startem (AP-5, AF-12, KR.16; stosuje T135 także przed startem, T45 / T220 bez
+  zmian): połączona z kontenerem płatność sprzed startu budżetu nie przechodzi przez przebieg (pieniądze wyszły przed
+  saldem otwarcia), ale zamyka swój cykl tak samo jak płatność w przebiegu – `paidBeforeStart` przed przebiegiem silnika
+  (`paidCycleOf`: miesiąc terminu, przy cyklu ≥ 3 także miesiąc przed terminem, gdy poprzedni zamknięty; płatność w życiu
+  opłaty – `activeIn`; części paragonu jak w przebiegu, bez części celu i „do zwrotu”). W praktyce to płatności z miesiąca
+  startu (od jego 1. dnia łączy je kreator), przy cyklu ≥ 3 też z miesiąca przed nim, gdy były połączone wcześniej.
+  Zapłacony cykl nie ma rat: miesiąc startu nie odkłada opłaty drugi raz (energia = pensja pomniejszona według T45 minus
+  raty innych zbiorników), zbiornik zbiera na następny termin od miesiąca po zapłaconym cyklu, ma `paidDue` – odprawa
+  i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
+  kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
+  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności: kontenera – połączonych, propozycji – tego
+  odbiorcy od 1. dnia miesiąca (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
+  kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone przed startem nie
+  odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
+  z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
+  (energia wyższa o opłatę odkładaną drugi raz, zbiornik niższy); zamrożone dni gry zostają.
+- **T346** Plan miesiąca = silnik (AP-11, AF-44 / LA.8 = C17, AF-52 / C20 – D99 pkt 9, W5; doprecyzowuje T29, F15):
+  miesiąc po bieżącym liczy `monthAhead` od stanu silnika teraz – zbiorniki (kwoty, `paidDue`) i cele (kwoty) – miesiąc
+  po miesiącu regułą silnika: opłata z terminem w danym miesiącu, jeszcze niezapłacona, schodzi ze zbiornika w tym
+  miesiącu (bieżący – gdy `paidDue` jej nie zamknął); na przełomie miesiąca pensja z planu w mocy daje zbiornikom
+  `tankWant` (opłata dodana w trakcie cyklu nadrabia do terminu – 225 zł zamiast 75 zł), w kolejności kontenerów do
+  wyczerpania pensji, potem celom z terminem według priorytetu `goalInstallment` od kwoty po wcześniejszych ratach
+  („Kurs przechwycenia” stały, nie rosnący; przy założeniu pełnych osłon i kadłuba 1. dnia – podpis jak dotąd). Pensja
+  przyjęta w całości (pensji częściowej z pustych osłon plan nie przewiduje). Bez pensji (0 albo brak planu – C20):
+  nic nie pobrane, cele bez rat, następne miesiące nadrabiają. Podział pensji: przy odkładce pobrane i „wymagana”
+  (`required` – rata według T29, gdy pensja dała mniej), pod nimi żółta notka „Brak pensji: odkładki nie są pobierane –
+  zbiorniki będą za planem o X” albo „Pensja nie wystarcza na odkładki: X zamiast Y – …” (`split-tanks-short`).
+  Bieżący miesiąc z silnika: pobrane – dziennik, wymagana – `FleetState.tanks[].want` (rata zbiornika z przełomu
+  miesiąca, liczona także bez pensji; brak – silnik nie liczył tego miesiąca). „Rozdzielone” liczy pobrane. Miesiące
+  minione bez zmian (dziennik, bez „wymagana”). Bez nowego alarmu silnika na Mostku i w odprawie – C20 dotyczy planu.
+- **T347** Kontener raty pożyczki z kwotami harmonogramu (AP-11, AF-51 / PR.9; zmienia T72 „kwota pierwszej raty”):
+  `installmentAmounts` – `amount` = rata ostatniego miesiąca, wcześniejsze miesiące w historii kwot (`past`, F9 –
+  `amountIn`), każda do swojego miesiąca (100 zł w 3: 33,33 zł do grudnia, 33,34 zł w styczniu); kontener dodany
+  w trakcie spłaty (`ensureLoanContainer`) – z tego, co zostało z rat. Ładownia pokazuje kwotę i część miesięczną
+  bieżącego miesiąca (`amountIn`, `monthlyWeight` z miesiącem), masa ładunku i Plan – miesiąca, więc Ładownia, Plan
+  i Radar mówią to samo. Istniejące kontenery bez zmian (grosz w ostatnim miesiącu – bez migracji). Addytywnie (pole
+  `past` już jest), bez `SCHEMA_VERSION`.
+- **T360** „Wycofaj dokowanie” (AP-9, AF-7 / MO.29 / DO.7; realizuje D95 N-PC-2, uzupełnia B15, B17, B69): przycisk
+  w oknie zadokowanej dostawy (`docking-undock`) i „wycofaj” w jej wierszu na Mostku (`docking-row-undock`, obok
+  przycisku wiersza, nie w nim). Zabiera (`calc/undock.ts` `undockingOf`): dokowanie dostawy i nadmiarowe dokowania
+  tego samego wpisu ICTTJ (B17 – inaczej dostawa dalej byłaby zadokowana) oraz operacje Portfela XTB zrobione przez
+  dokowanie (`madeByDocking`: rodzaj XTB, bez wiersza banku, id `walletOperationId` wpisu, a sprzed B17 – ten sam
+  `createdAt` co dokowanie). Zostają: operacja z banku, wpływ wpisany ręcznie na Portfelu XTB (B69 – zostaje jako
+  wypłata XTB i paruje się z wpisem znowu; dawnej kategorii nie odtwarzamy – „Cofnij” dokowania jej nie zna po 6 s)
+  i operacja XTB z edytora. Dostawa wraca do „do zadokowania” (para z banku, Portfel XTB) albo „czeka na import”;
+  okno się zamyka, toast z „Cofnij” (8 s) dodaje z powrotem te same rekordy (pominięte, gdy w międzyczasie zadokowano
+  ponownie – te same id). Rekord nowszej wersji (B67) – odmowa w całości, bez wycofania po połowie. Folder ICTTJ tylko
+  czytany. Zamrożone dni gry bez zmian (jak przy edycji operacji). Bez zmian formatu.
+- **T361** Usuwanie kategorii (AP-9, AF-37 / US.6; realizuje D95 N-PC-7): „usuń” przy kategorii głównej i ikona kosza
+  przy podkategorii (Ustawienia → Kategorie); kategoria główna znika razem z podkategoriami. Tylko gdy nic jej nie używa
+  (`calc/categoryUse.ts` `categoryUses`, na kategorię z podkategoriami): operacje (także szkice) i części paragonów,
+  plany miesięcy (limit koperty – także 0 zł, łupy w kopercie, pokrycie z / do koperty), reguły importu, kontenery,
+  boje, zapisane widoki Operacji (filtr kategorii), zamrożone dni gry (naruszenie koperty). Szablony szybkiego wpisu
+  powstają z operacji – są w nich. W użyciu: odmowa z toastem „… jest w użyciu (2 operacje, 1 reguła importu) –
+  usunąć można tylko nieużywaną; zarchiwizuj ją…” i akcją „Archiwizuj”; systemowej („Gotówka”) – nigdy. „Cofnij”
+  (8 s) wstawia kategorie na ich miejsca w liście. Paczki importu (`imports/`) i historia `.history/` nie są
+  sprawdzane: wersja przywrócona stamtąd z usuniętą kategorią pokazuje „(usunięta kategoria)” (`categoryIndex.label`),
+  jak zmiana z drugiego komputera sprzed synchronizacji. Seed (`settings.seeded`) jej nie przywraca. Bez zmian formatu.
+- **T362** Zmiana rodzaju a cel i Ładownia (N-PC-4 z D95 – w 1.15.2 bez kodu): `withKind` zostawia `containerId`
+  tylko wydatkowi (jak `goalId`, T24) – na przelewie / pożyczce / XTB powiązanie było ukryte: silnik go nie czytał,
+  a Ładownia (`paymentsIndex`) brała taki przelew za zapłatę kontenera. Edytor operacji przy zmianie rodzaju, która
+  odpina cel albo kontener (operacji albo części paragonu – `unlinkedBy`), mówi to toastem „Rodzaj „Przelew własny”
+  nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
+  dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
+  przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).

@@ -158,7 +158,7 @@ describe('cele: zmiana liczy się od chwili zmiany (1.4.2, D84 C1, B2)', () => {
 })
 
 describe('cele: przeniesienie środków (D84 C2, B30)', () => {
-  it('środki zarchiwizowanego celu wracają do osłon na koniec dnia; nowe dostawy już do niego nie trafiają', () => {
+  it('środki zarchiwizowanego celu wracają do osłon w chwili przeniesienia (T340); nowe dostawy już do niego nie trafiają', () => {
     const a = fresh('Rower', zl(2000), 1)
     const out = transferGoal(changeGoal(a, { archived: true }, noon('2026-10-10')), 'shields', zl(1500), noon('2026-10-10'))
     const s = fleet([out], [toGoals('2026-10-05', zl(1500)), toGoals('2026-10-12', zl(300))])

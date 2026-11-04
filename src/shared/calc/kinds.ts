@@ -36,10 +36,34 @@ export function withKind(t: Transaction, kind: TxKind): Transaction {
     impulse: kind === 'expense' ? t.impulse : null,
     // The loan's link only on a loan's operation (an installment of a taken loan is its container's payment).
     loanId: kind === 'loan' ? t.loanId : null,
-    // Paid from a goal's money (T24, N1): an expense only; so is a return awaited (F34).
+    // Paid from a goal's money (T24, N1) or a container of the cargo (N-PC-4, T362): an expense only – on another kind
+    // the engine ignores the link, so it never stays hidden there (Ładownia took such a transfer for the fee paid); so
+    // is a return awaited (F34).
     goalId: kind === 'expense' ? t.goalId : null,
+    containerId: kind === 'expense' ? t.containerId : null,
     ...(kind === 'expense' ? {} : { awaitReturn: undefined }),
     ...(kind === 'correction' ? {} : { explained: undefined })
   }
 }
 
+
+/**
+ * What a change unlinked (N-PC-4, T362): the goals and containers of the cargo `before` paid from – on the operation or
+ * its receipt's lines – that `after` no longer does. The editor says it, with „Cofnij”.
+ */
+export function unlinkedBy(before: Transaction, after: Transaction): { goals: string[]; containers: string[] } {
+  const links = (t: Transaction) => {
+    const goals = new Set<string>()
+    const containers = new Set<string>()
+    if (t.goalId) goals.add(t.goalId)
+    if (t.containerId) containers.add(t.containerId)
+    for (const s of t.splits) {
+      if (s.goalId) goals.add(s.goalId)
+      if (s.containerId) containers.add(s.containerId)
+    }
+    return { goals, containers }
+  }
+  const was = links(before)
+  const now = links(after)
+  return { goals: [...was.goals].filter((id) => !now.goals.has(id)), containers: [...was.containers].filter((id) => !now.containers.has(id)) }
+}
