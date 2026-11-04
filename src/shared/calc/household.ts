@@ -339,8 +339,12 @@ export function inflowPlanOf(share: Pick<IncomeShare, 'advance' | 'inflowKind'>,
   return { repays: 'debt', rest: share.advance ? 'advance' : 'income' }
 }
 
-/** Does an operation name a purchase a member's part may pay back – any purchase, or this member's opening balance? */
-const namesFor = (t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'>, memberId: string): boolean =>
+/**
+ * Does an operation name a purchase a member's part may pay back – any purchase, or this member's opening balance (of the
+ * members named – `coversOpeningMembers` – when there are some)? The ledger's (`planOf`) and the editor's note of an
+ * explicit kind naming purchases (`MemberIncome`, przegląd N2 2.10 / 3.5).
+ */
+export const namesFor = (t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'>, memberId: string): boolean =>
   t.covers.length > 0 || (t.coversOpeningMembers?.length ? t.coversOpeningMembers.includes(memberId) : !!t.coversOpening)
 
 /**

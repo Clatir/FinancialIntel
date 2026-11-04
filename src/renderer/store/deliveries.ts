@@ -14,7 +14,15 @@ type Records = ReturnType<typeof useData.getState>['records']
 export const NO_SKIPPED: readonly string[] = []
 export const NO_COVERED: Readonly<Record<string, string>> = {}
 
-let memo: { tx: Records['transactions']; dk: Records['dockings']; skipped: readonly string[]; snap: IctjSnapshot; start: string | null; today: string; covered: Readonly<Record<string, string>>; list: Delivery[] } | null = null
+type Memo = { tx: Records['transactions']; dk: Records['dockings']; skipped: readonly string[]; snap: IctjSnapshot; start: string | null; today: string; covered: Readonly<Record<string, string>>; list: Delivery[] }
+
+/**
+ * The last lists by what they read, the latest first (przegląd N2 3.6): the docking's list and the engine's pairs may ask
+ * with another day or start for a while (the fleet's day, the game's now past midnight) – each keeps its own, neither
+ * evicts the other's (one slot made each count all the deliveries again at every call).
+ */
+const MEMOS = 2
+let memos: Memo[] = []
 
 /**
  * The last day the bank's files cover on the accounts the XTB money comes to (B18): the accounts with trading operations
@@ -38,8 +46,8 @@ function coveredToOf(transactions: readonly Transaction[], covered: Readonly<Rec
  * budget's start (null = not started), the day and the bank files' coverage are the same objects.
  */
 export function deliveriesFor(records: Pick<Records, 'transactions' | 'dockings'>, skipped: readonly string[], snap: IctjSnapshot, start: string | null, today: string, covered: Readonly<Record<string, string>>): Delivery[] {
-  if (memo && memo.tx === records.transactions && memo.dk === records.dockings && memo.skipped === skipped && memo.snap === snap && memo.start === start && memo.today === today && memo.covered === covered)
-    return memo.list
+  const hit = memos.find((m) => m.tx === records.transactions && m.dk === records.dockings && m.skipped === skipped && m.snap === snap && m.start === start && m.today === today && m.covered === covered)
+  if (hit) return hit.list
   const transactions = listOf(records.transactions)
   const list = deliveries({
     entries: snap.status === 'ok' ? snap.entries : [],
@@ -54,6 +62,6 @@ export function deliveriesFor(records: Pick<Records, 'transactions' | 'dockings'
     unreadEntries: snap.unread,
     coveredTo: coveredToOf(transactions, covered)
   })
-  memo = { tx: records.transactions, dk: records.dockings, skipped, snap, start, today, covered, list }
+  memos = [{ tx: records.transactions, dk: records.dockings, skipped, snap, start, today, covered, list }, ...memos].slice(0, MEMOS)
   return list
 }

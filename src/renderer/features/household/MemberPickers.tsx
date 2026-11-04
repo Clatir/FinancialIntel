@@ -3,7 +3,7 @@
  * is – the rest beyond their debt as income or their advance, the purchases it pays back – and what the ledger made of
  * it.
  */
-import { balanceOf, balanceText, incomeShares, memberName, payerOf } from '@shared/calc/household'
+import { balanceOf, balanceText, incomeShares, memberName, namesFor, payerOf } from '@shared/calc/household'
 import { assignsOn, keptCovers, moreSureCovers } from '@shared/calc/repayments'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, inflowOf, type HouseholdMember, type Split, type Transaction } from '@shared/schema'
@@ -108,14 +108,6 @@ export function FinancedNote({ t }: { t: Transaction }) {
 /** An explicit kind still naming purchases (AP-4 – a record of an older version): those it pays back all the same. */
 const NAMED_NOTE = ' – poza wskazanymi wcześniej zakupami: te spłaca.'
 
-/**
- * Does a member's money of an explicit kind name purchases it pays back all the same (AP-4, `inflowPlanOf` 'named')? As
- * the ledger reads it (`namesFor`): any purchase named, or this member's opening debt – of the members named
- * (`coversOpeningMembers`) when there are some (przegląd N2 2.10).
- */
-export const namesPurchases = (t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'>, memberId: string): boolean =>
-  t.covers.length > 0 || (t.coversOpeningMembers?.length ? t.coversOpeningMembers.includes(memberId) : !!t.coversOpening)
-
 const INCOME_REST = [
   { value: 'income', label: 'przychód' },
   { value: 'advance', label: 'zaliczka' }
@@ -139,8 +131,9 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const assignFrom = useData((s) => s.fi?.settings.household.assignFrom)
   const parts = t.splits
   const partsSum = parts.reduce((a, x) => a + x.amount, 0)
-  // An explicit kind naming purchases (AP-4: an older version's record) pays them back – `inflowPlanOf`.
-  const namedBefore = !!payer && namesPurchases(t, payer)
+  // An explicit kind naming purchases (AP-4: an older version's record) pays them back – `inflowPlanOf`, as the ledger
+  // reads it (`namesFor`, przegląd N2 2.10).
+  const namedBefore = !!payer && namesFor(t, payer)
   const rest = t.amount - partsSum
   // Who passes money through the sender (D81): a hint, one click each – never applied by itself.
   const through = payer ? members.filter((m) => !m.archived && m.via === payer && !parts.some((x) => x.memberId === m.id)) : []

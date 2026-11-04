@@ -12,7 +12,7 @@ import type { HouseholdMember } from '../schema/budget'
 import type { Docking, Loan, Transaction } from '../schema/records'
 import { monthOf } from './dates'
 import { heldOf, incomeShares, isMemberMoney, ledgerOrder, settleHousehold, type HouseholdLedger } from './household'
-import { loanBacksOf, type LoanBack } from './loans'
+import { loanBacksOf, loanParts, type LoanBack } from './loans'
 import { sum } from './operations'
 
 export interface IncomeContext {
@@ -41,14 +41,28 @@ export interface IncomeParts {
 
 const NONE: IncomeParts = { work: 0, trading: 0 }
 
-/** The context without the engine: the whole history's ledger, no settlements' start, no pools; the loans given, if any. */
-export const plainIncomeContext = (transactions: readonly Transaction[], loans: readonly Loan[] = []): IncomeContext => ({
+/**
+ * The context without the engine: the whole history's ledger, no settlements' start, no pools. `loans` – the loans the
+ * caller knows (none – a loan's part is income, T355); not passed – their debts unknown: a loan's part is never income
+ * (przegląd N2 3.3 – the defaults of the reports counted it as income again), as the engine docks one up to its debt.
+ */
+export const plainIncomeContext = (transactions: readonly Transaction[], loans?: readonly Loan[]): IncomeContext => ({
   ledger: settleHousehold(transactions),
   since: null,
   members: [],
   tax: new Map(),
-  loanBacks: loans.length ? loanBacksOf(loans, [...transactions].sort(ledgerOrder), '9999-12-31') : new Map()
+  loanBacks: !loans ? partsBack(transactions) : loans.length ? loanBacksOf(loans, [...transactions].sort(ledgerOrder), '9999-12-31') : new Map()
 })
+
+/** Each part of a loan repaying its debt whole – the loans unknown (`plainIncomeContext` without them). */
+function partsBack(transactions: readonly Transaction[]): Map<string, LoanBack[]> {
+  const out = new Map<string, LoanBack[]>()
+  for (const t of transactions) {
+    const parts = loanParts(t)
+    if (parts.length) out.set(t.id, parts.map((x) => ({ loanId: x.loanId, amount: x.amount, back: x.amount })))
+  }
+  return out
+}
 
 /** What of each operation went to the pool „Podatek” (a docking of the pool, or the tax part of a docking's split). */
 export function taxOfDockings(byTx: ReadonlyMap<string, Pick<Docking, 'pool' | 'split'>>, transactions: readonly Transaction[]): Map<string, number> {

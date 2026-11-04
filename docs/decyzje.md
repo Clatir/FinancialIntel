@@ -2793,7 +2793,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (przegląd 2 N2, AF-5 – stosuje T70; wcześniej spłata pożyczki nigdy nie była przychodem, a linia każdej pożyczki była
   odejmowana): spłata pożyczki udzielonej do wysokości długu nie jest przychodem, całością ani częścią; nadwyżka ponad dług
   (odsetki) jest – jak dokuje silnik, także sprzed startu (historia); linia pożyczki nieznanej albo wziętej – przychód, jak
-  w silniku; tagi (F17): to nie zwrot pieniędzy na wyprawie. Lista
+  w silniku; kontekst bez silnika (`plainIncomeContext` – domyślny raportów) bez podanych pożyczek nie zna długu: linia
+  pożyczki nie jest wtedy przychodem (przegląd 3 N2 – wcześniej domyślnie liczona jako przychód); tagi (F17): to nie zwrot
+  pieniędzy na wyprawie. Lista
   Operacji mówi „spłata pożyczki: X”; pożyczki z taką linią nie da się usunąć (linia stałaby się przychodem) – tylko
   zamknąć. Kopia z innego konta: linia pożyczki należy do decyzji (`copies.ts` – inna decyzja niż bez niej, operacja bez
   decyzji ją przejmuje). Addytywnie, bez `SCHEMA_VERSION`: starsza wersja czyta linię jako „mój przychód” (dokuje,
@@ -2838,7 +2840,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   reguła spłaty całością nie ustępuje pieniądzom domownika (użytkownik powiedział, że jego pieniądze spłacają pożyczkę);
   dawna reguła pożyczki bez `loanId` – jak dotąd (propozycja, ustępuje domownikowi). Uczy się tylko na życzenie:
   „zapamiętaj” przy decyzji ze spłatą pożyczki (całością albo częścią) wybranej w miejsce innej zaczyna wyłączone
-  (`remembersByDefault`, także decyzja zbiorcza), a decyzja bez spłaty pożyczki wybrana w miejsce takiej wraca do
+  (`remembersByDefault`, także decyzja zbiorcza), a decyzja bez spłaty pożyczki wybrana w miejsce takiej wraca do tego,
+  co użytkownik miał przed wyborem pożyczki (`rememberKept`, przegląd N2 3.1: jego własne „nie” zostaje), bez tego – do
   domyślnego włączonego (przegląd N2 2.9: „nie” było pożyczki, nie użytkownika). Edytor reguły w Ustawieniach oferuje dla wpływów „Zwrot pożyczki – X”
   otwartych pożyczek i jedną część pożyczki (części domowników reguła nie trzyma – nie pokazane). Audyt reguł bez zmian
   (reguły pożyczki poza „bez trafień” i „Zastosuj do historii”). Addytywnie: starsza wersja czyta regułę pożyczki jako
@@ -2890,7 +2893,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `containerId` nie są poprawiane (bez migracji).
 - **T363** Dokowanie pary liczonej według puli (1.15.6, przegląd N2 1; uzupełnia T341 i T128): „Zadokuj” na parze do
   zadokowania (wpis ICTTJ z operacją banku albo wpływem wpisanym na Portfelu XTB, bez dokowania – liczonej od razu według
-  puli wpisu) zapisuje w dokowaniu `countedFrom` = utworzenie operacji; silnik (`cameIn`) liczy takie dokowanie od tej
+  puli wpisu; tylko operacja rodzaju, który silnik tak liczy – `countsByPool`, ten sam warunek co `pairOf`, przegląd N2
+  3.2) zapisuje w dokowaniu `countedFrom` = utworzenie operacji; silnik (`cameIn`) liczy takie dokowanie od tej
   chwili, jak liczył parę, nie od utworzenia dokowania. Przeniesienie środków celu (T340) i zmiana celów (C1 – nowy cel,
   kwota, priorytet, archiwizacja, synchronizacja celów ICTTJ) między wpływem a „Zadokuj” nie zmieniają już podziału:
   okno proponuje podział, który warstwy mają (podgląd też z `countedFrom`), „Zadokuj” bez zmian niczego nie przesuwa,

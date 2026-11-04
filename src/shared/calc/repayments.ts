@@ -343,26 +343,45 @@ export function waitingForPurchase(
 /**
  * „Spłać” (AP-4, T352 – the inbox): a member's advances for the future that left their debt unpaid (not those kept) repay
  * only what is still owed because of them (`SkippedDebt.open` – review 2 of N2: never a debt a later repayment paid back,
- * the history is not settled again) – one by one in the ledger's order, each against the ledger with the ones before it
- * changed (`repayingAdvance`); each names the purchases it surely pays back (D91 b, as the import – `linkRepayments`) only
+ * the history is not settled again) – one by one in the ledger's order, each as the ledger with the ones before it changed
+ * reads it (`repayingAdvance`); each names the purchases it surely pays back (D91 b, as the import – `linkRepayments`) only
  * when the member repaid nothing after it (else they may be a later repayment's – its money waits to be assigned, D91 a).
  * The operations changed, in that order; none – nothing to repay.
  */
 export function repayingAdvancesOf(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, memberId: string, kept: Readonly<Record<string, unknown>>, today: string): Transaction[] {
-  let transactions = input.transactions
-  const changed = new Map<string, Transaction>()
-  const named = new Set<string>()
-  for (;;) {
+  const itemsOf = (transactions: readonly Transaction[]) => {
     const ledger = householdOf({ ...input, transactions }, today)
-    const item = skippedDebtsOf(ledger, ledger.members, kept)
-      .find((m) => m.memberId === memberId)
-      ?.items.find((i) => !changed.has(i.txId))
-    const t = item && transactions.find((x) => x.id === item.txId)
+    return skippedDebtsOf(ledger, ledger.members, kept).find((m) => m.memberId === memberId)?.items ?? []
+  }
+  let changed = new Map<string, Transaction>()
+  let named = new Set<string>()
+  /** An item's change (false – it changes nothing: the ones after it stay as they are). */
+  const change = (t: Transaction | undefined, item: { whole: boolean; repays: number; repaidLater: boolean }): boolean => {
     const next = t && repayingAdvance(t, memberId, item.whole ? undefined : item.repays)
-    if (!t || !next || next === t) break
+    if (!t || !next || next === t) return false
     changed.set(t.id, next)
     if (!item.repaidLater) named.add(t.id)
-    transactions = transactions.map((x) => (x.id === t.id ? next : x))
+    return true
+  }
+  // One ledger for them all (review 3 of N2 – one for each froze the window: 40 advances × 150 000 operations): its `open`s
+  // count the member's earlier such advances first, as repaid by them – what each repays once the ones before it changed.
+  const first = itemsOf(input.transactions)
+  const wanted = new Set(first.map((i) => i.txId))
+  const byId = new Map(input.transactions.filter((t) => wanted.has(t.id)).map((t) => [t.id, t]))
+  for (const item of first) if (!change(byId.get(item.txId), item)) break
+  let transactions = changed.size ? input.transactions.map((x) => changed.get(x.id) ?? x) : input.transactions
+  // A second one: nothing left owed because of them. Something is (an earlier change shifted a later one's `open`) – one by
+  // one again, each against the ledger with the ones before it changed.
+  if (changed.size && itemsOf(transactions).length) {
+    changed = new Map()
+    named = new Set()
+    transactions = input.transactions
+    for (;;) {
+      const item = itemsOf(transactions).find((i) => !changed.has(i.txId))
+      if (!item || !change(transactions.find((x) => x.id === item.txId), item)) break
+      const next = changed.get(item.txId)!
+      transactions = transactions.map((x) => (x.id === next.id ? next : x))
+    }
   }
   const links = linkRepayments({ ...input, transactions }, named, today)
   return [...changed.values()].map((t) => ({ ...t, ...links.get(t.id) }))
