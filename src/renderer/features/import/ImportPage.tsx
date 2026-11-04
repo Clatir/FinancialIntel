@@ -5,7 +5,6 @@ import { choiceOf, importThemes, joins, learnable, movesHere, realOf, removesCop
 import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
-import { opKindOf } from '@shared/import/reconcile'
 import { keywordMatcher } from '@shared/import/brands'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
@@ -27,7 +26,7 @@ import { UndoImportButton } from './RecentImports'
 import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
-import { bulkOptions, fits, hasCategory, type LoanPick, type Option } from './options'
+import { bulkOptions, bulkResultText, fits, hasCategory, offersNewMember, type LoanPick, type Option } from './options'
 import { countLabel } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
@@ -64,6 +63,7 @@ import {
   setSkip,
   skipSelected,
   themeStatus,
+  ownNamesWith,
   trashImportFile,
   useImport,
   useImportGroups,
@@ -75,6 +75,8 @@ import { useMachine } from '../../store/machine'
 
 const day = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`
 const fullDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
+
+const NO_NAMES: readonly string[] = []
 
 const SOURCE_LABEL: Record<DecisionSource, string> = { rule: 'reguła', builtin: 'rozpoznane', brand: 'sieć', keyword: 'słowo kluczowe', none: 'do decyzji' }
 const THEME_SOURCE: Record<DecisionSource, string> = { rule: 'Twoje reguły', builtin: 'rozpoznane', brand: 'sieci', keyword: 'słowa kluczowe', none: 'do decyzji' }
@@ -576,12 +578,14 @@ const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out
  * group their money – the rest beyond their debt as income for now, the question „zaliczka czy przychód?” still open
  * (N85: never remembered for the person until the user answers).
  */
-function NewMember({ g }: { g: ImportGroup }) {
+function NewMember({ g, choice }: { g: ImportGroup; choice: Choice }) {
   const members = useMembers()
   const readOnly = useFolderLocked()
+  const settingsNames = useData((s) => s.fi?.settings.import.ownNames ?? NO_NAMES)
+  const file = useImport((s) => s.file)
   const name = g.names[0] ?? g.label
-  if (readOnly || g.direction !== 'in' || opKindOf(g.rows[0]!.row.operation) !== 'transfer' || !name.trim()) return null
-  if (members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.trim().toUpperCase()))) return null
+  // A person outside the household only (AF-62): not the holder's own transfer, XTB or a loan's repayment.
+  if (readOnly || !offersNewMember(g, choice, members, ownNamesWith(settingsNames, file))) return null
   return (
     <button
       type="button"
@@ -745,7 +749,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
         )}
         {!own && !themeDecided && g.source !== 'rule' && <span className="truncate text-[11px] text-dim">{g.reason}</span>}
         {g.byTitle && <span className="text-[11px] text-dim">z tytułu przelewu – bez reguły</span>}
-        {!(choice.kind === 'income' && choice.household) && <NewMember g={g} />}
+        <NewMember g={g} choice={choice} />
       </div>
       {own && proposing && <RuleProposal g={g} choice={own} />}
       {choice.kind === 'expense' && !choice.categoryId && g.hint && (
@@ -928,8 +932,8 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
       note = err ? ` Słowo kluczowe: ${err}` : ` Słowo kluczowe „${keyword}” zapamiętane.`
     }
     setAsKeyword(false)
-    const { applied, unfit } = chooseSelected(groups, option, category, option === 'share' ? share : null)
-    toast((unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`) + note, unfit ? 'info' : 'success', 5000)
+    const { applied, unfit, kept } = chooseSelected(groups, option, category, option === 'share' ? share : null)
+    toast(bulkResultText(applied, unfit, kept) + note, unfit ? 'info' : 'success', kept ? 8000 : 5000)
   }
   return (
     <div className="sticky top-0 z-10 mb-1 flex flex-wrap items-center gap-2 border border-accent/50 bg-raised px-2 py-1.5 text-[12px]" data-testid="import-bulk">

@@ -20,7 +20,7 @@ import { api, errorMessage } from '../../lib/api'
 import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { fleetInputNow } from '../../store/fleet'
-import { choiceFor, fits, type Option } from './options'
+import { bulkKeeps, choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
 import { readDeletedBank } from './returned'
 
@@ -606,13 +606,24 @@ export function selectedRowKeys(groups: readonly ImportGroup[], selected = useIm
 
 /**
  * One decision for everything ticked: a ticked group takes it as its own (remembered), a row ticked apart as the
- * row's; where it does not fit the money (income for a purchase) nothing changes. Returns how many took it, and not.
+ * row's; where it does not fit the money (income for a purchase) nothing changes – nor where the group or the row is a
+ * loan, PIT-38, XTB or a member's money and the decision another kind (AP-6, `bulkKeeps`: counted as not fitting,
+ * `kept` of them). Returns how many took it, and not.
  */
-export function chooseSelected(groups: readonly ImportGroup[], option: Option, categoryId: string | null, share: Share | null = null): { applied: number; unfit: number } {
+export function chooseSelected(groups: readonly ImportGroup[], option: Option, categoryId: string | null, share: Share | null = null): { applied: number; unfit: number; kept: number } {
   const { selected, lastDecided, choices, accepted } = useImport.getState()
   const choice = choiceFor(option, { kind: 'expense', categoryId }, share)
   let applied = 0
   let unfit = 0
+  let kept = 0
+  // What a group shows now: its own decision, its theme's, else the proposal.
+  const shown = (g: ImportGroup): Choice => choices.groups[g.group] ?? choices.themes[g.theme] ?? g.proposed
+  const takes = (direction: ImportGroup['direction'], current: Choice): boolean => {
+    if (!fits(option, direction)) return false
+    if (!bulkKeeps(option, current)) return true
+    kept++
+    return false
+  }
   // One state for all (W32): copies made once, not one per group – each copy and each listener for every group.
   const nextGroups = { ...choices.groups }
   const remember = { ...choices.remember }
@@ -622,7 +633,7 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
   const rowGroup = new Map(groups.flatMap((g) => g.rows.map((p) => [p.key, g] as const)))
   for (const g of groups) {
     if (!selected.groups[g.group]) continue
-    if (fits(option, g.direction)) {
+    if (takes(g.direction, shown(g))) {
       nextGroups[g.group] = choice
       remember[g.group] = true
       delete implicit[g.group]
@@ -633,7 +644,7 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
   for (const key of Object.keys(selected.rows)) {
     const g = rowGroup.get(key)
     if (!g || selected.groups[g.group]) continue
-    if (fits(option, g.direction)) {
+    if (takes(g.direction, choices.rows[key] ?? shown(g))) {
       rows[key] = choice
       applied++
     } else unfit++
@@ -644,7 +655,7 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
     // A bulk decision proposes no keyword (D78): the one proposed for a group decided apart closes when it changes.
     ...(lastDecided && selected.groups[lastDecided] ? { lastDecided: null } : {})
   })
-  return { applied, unfit }
+  return { applied, unfit, kept }
 }
 
 export const setSkip = (keys: readonly string[], on: boolean) =>

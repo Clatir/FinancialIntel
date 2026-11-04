@@ -2368,3 +2368,21 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
   mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu, od razu
   na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je w „Na komputerze”.
+- **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
+  reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
+  rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy (każda
+  reguła poza regułą pożyczki), pieniądzom domownika (każda poza regułą wpływu z osobą i przelewem własnym) i XTB (każda
+  poza regułą XTB i przelewem własnym – portfel XTB). Zostaje regułą: słowo kluczowe z tytułu (o tej płatności – „ZA
+  PIZZĘ” od pożyczkobiorcy), reguła tego samego rodzaju (dawna reguła pożyczki / XTB – propozycja, N14), przelew własny
+  (rozpoznanie domownika i XTB tylko, gdy bank nie mówi „przelew własny”). PIT-38 nie ma rozpoznania po nazwie – chroni
+  go tylko decyzja zbiorcza (T326). Pożyczka zamknięta – reguła decyduje jak dotąd. Bez migracji: stare operacje
+  zapisane regułą wskazuje audyt reguł (T326).
+- **T326** Decyzja zbiorcza i reguły po AP-6 (AF-26, AF-62, AF-64; doprecyzowuje T90): „Decyzja dla zaznaczonych” nie
+  zmienia grupy ani operacji, która teraz (własna decyzja, tematu albo propozycja) jest pożyczką, PIT-38, XTB albo
+  pieniędzmi domownika, gdy decyzja jest innego rodzaju (`bulkKeeps`): ta sama pożyczka (bez rekordu – dowolna z Radaru),
+  ten sam domownik – tak; reszta liczona jako „nie pasuje” z powodem w komunikacie. „+ domownik” tylko przy wpływie
+  przelewem od osoby spoza listy z decyzją „wpływ (przychód)” – nigdy przy przelewie własnym (nazwy posiadacza), XTB,
+  zwrocie pożyczki ani pieniądzach domownika (`offersNewMember`). Audyt reguł: reguła innego rodzaju niż pożyczka, która
+  złapała wpływ od osoby z pożyczką z Radaru otwartą w dniu wpływu (`loanOn`: udzielona do tego dnia, niezamknięta przed
+  nim), zapisany jako rodzaj reguły – „N do poprawy” w „niespójne” (licznik razem z innymi), z listą operacji do otwarcia;
+  „bez trafień” = jego licznik (`inAuditView`, bez reguł pożyczki, PIT-38 i XTB).

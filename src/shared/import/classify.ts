@@ -1,8 +1,9 @@
 /**
  * What an imported row is for the budget (spec: „Import z mBanku”, steps 3–4): the rules learned from the user's
- * decisions first, then what the app recognizes by itself (XTB, own transfers, ATM, product returns, bank fees), then
- * a chain of the dictionary and a keyword of the name or the title (1.2.1, D75); the bank's category is only a hint,
- * never applied by itself (D68).
+ * decisions first – except a rule of another kind on the name of a borrower, a household member or XTB (AP-6,
+ * `ruleGivesWay`) –, then what the app recognizes by itself (a loan of the Radar, own transfers, members, XTB, ATM,
+ * product returns, bank fees), then a chain of the dictionary and a keyword of the name or the title (1.2.1, D75); the
+ * bank's category is only a hint, never applied by itself (D68).
  */
 import { fold } from '../fold'
 import { cleanBankName, counterpartyKey } from './names'
@@ -14,6 +15,7 @@ import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
 import { memberOf } from '../calc/household'
+import { warsawNow } from '../calc/dates'
 import type { MbankRow } from './mbank'
 
 export { counterpartyKey }
@@ -358,6 +360,36 @@ export function loanOf(counterparty: string, loans: ClassifyContext['loans']): N
   return open.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))[0] ?? null
 }
 
+/**
+ * The loan given to the person a transfer comes from that was open on its day (AP-6 – the rules' audit): given by then,
+ * not closed before it; the oldest when there are more.
+ */
+export function loanOn<L extends Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>>(counterparty: string, loans: readonly L[], date: string): L | null {
+  const open = loans.filter((l) => l.direction === 'given' && l.date <= date && (!l.closedAt || date <= warsawNow(l.closedAt).date) && nameIn(l.counterparty || l.name, counterparty))
+  return open.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))[0] ?? null
+}
+
+/**
+ * What the app recognizes by a row's name before a rule of another kind (AP-6, AF-26): a loan of the Radar (money back
+ * from the person it was given to – B34), a household member's money (D80), XTB (T37, B106). The place to extend when
+ * other money than the borrower's may repay a loan (D100): the recognition by name stays this one.
+ */
+export type Recognized = { kind: 'loan'; loanId: string } | { kind: 'member'; memberId: string } | { kind: 'trading' }
+
+/**
+ * Does a rule give way to the app's own recognition (AP-6, AF-26 – „Decyzja dla zaznaczonych” taught a rule of a product
+ * return on a borrower's name, and it took every later repayment by itself)? A rule of another kind on the same name
+ * does. A keyword of the title stays the rule's (it is about that payment: „ZA PIZZĘ” from a borrower), an own transfer
+ * too for a member's and XTB's name (the user's own money moved so – the wallet at XTB; B106); a rule of the same kind
+ * (a member named, a loan or XTB of before 1.5.1 – N14) is the rule's as before.
+ */
+export function ruleGivesWay(rule: Pick<ImportRule, 'kind' | 'memberId'>, recognized: Recognized | null, byTitle: boolean): boolean {
+  if (!recognized || byTitle) return false
+  if (recognized.kind === 'loan') return rule.kind !== 'loan'
+  if (recognized.kind === 'trading') return rule.kind !== 'trading' && rule.kind !== 'transfer'
+  return rule.kind !== 'transfer' && !(rule.kind === 'income' && rule.memberId)
+}
+
 const XTB = /\bxtb\b|x-trade brokers/i
 /** A payment operator alone as the counterparty (its shop in the title). */
 const PROCESSOR_ONLY = /^(payu|paypro|paypal|przelewy24|p24|dotpay|tpay|blue ?media|sumup|stripe)\b/i
@@ -472,12 +504,16 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const member = transferIn ? memberOf(row.counterparty, ctx.members) : null
   // Money back from the person a loan of the Radar was given to (B34): its repayment.
   const loan = transferIn ? loanOf(row.counterparty, ctx.loans) : null
+  const own = isOwnTransferRow(row, ctx.ownNames)
+  // Recognized by the name before a rule of another kind (AP-6), in the app's own order: an own transfer and a member's
+  // money before XTB (B106 – their title may name it).
+  const recognized: Recognized | null = loan ? { kind: 'loan', loanId: loan.id } : own ? null : member ? { kind: 'member', memberId: member.id } : isXtb(row) ? { kind: 'trading' } : null
   const rule = findRule(ctx.rules, target, direction, row.amount)
+  const byTitle = !!rule && rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
   // A rule of plain income naming no member (learned before the person became a member, or before 1.3.0) gives way to
   // the member: their money repays what they owe first.
-  if (rule && !(member && rule.kind === 'income' && !rule.memberId)) {
+  if (rule && !(member && rule.kind === 'income' && !rule.memberId) && !ruleGivesWay(rule, recognized, byTitle)) {
     const kind = rule.kind as TxKind
-    const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
     // A loan, the tax, XTB from a rule of before 1.5.1 (N14): proposed only – the user checks it for each operation.
     if (PER_OPERATION_KINDS.includes(kind))
       return out(
@@ -515,7 +551,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   }
   if (loan) return out(decision('loan', `zwrot pożyczki: ${loan.name}`, { loanId: loan.id }))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
-  if (isOwnTransferRow(row, ctx.ownNames)) {
+  if (own) {
     const descDigits = row.description.replace(/\D/g, '')
     const counterAccountId =
       ctx.accountNumbers && descDigits.length >= 10
@@ -536,7 +572,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
       })
     )
   }
-  if (isXtb(row)) return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
+  if (recognized?.kind === 'trading') return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
   if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
   if (/^(POS )?ZWROT/.test(op) && direction === 'in') {
