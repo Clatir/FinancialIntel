@@ -2496,9 +2496,30 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   startu (od jego 1. dnia łączy je kreator), przy cyklu ≥ 3 też z miesiąca przed nim, gdy były połączone wcześniej.
   Zapłacony cykl nie ma rat: miesiąc startu nie odkłada opłaty drugi raz (energia = pensja pomniejszona według T45 minus
   raty innych zbiorników), zbiornik zbiera na następny termin od miesiąca po zapłaconym cyklu, ma `paidDue` – odprawa
-  i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika
-  i kreatora: `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
+  i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
+  kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
   miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności: kontenera – połączonych, propozycji – tego
   odbiorcy od 1. dnia miesiąca (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Płatność
   z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
   (energia wyższa o opłatę odkładaną drugi raz, zbiornik niższy); zamrożone dni gry zostają.
+- **T346** Plan miesiąca = silnik (AP-11, AF-44 / LA.8 = C17, AF-52 / C20 – D99 pkt 9, W5; doprecyzowuje T29, F15):
+  miesiąc po bieżącym liczy `monthAhead` od stanu silnika teraz – zbiorniki (kwoty, `paidDue`) i cele (kwoty) – miesiąc
+  po miesiącu regułą silnika: opłata z terminem w danym miesiącu, jeszcze niezapłacona, schodzi ze zbiornika w tym
+  miesiącu (bieżący – gdy `paidDue` jej nie zamknął); na przełomie miesiąca pensja z planu w mocy daje zbiornikom
+  `tankWant` (opłata dodana w trakcie cyklu nadrabia do terminu – 225 zł zamiast 75 zł), w kolejności kontenerów do
+  wyczerpania pensji, potem celom z terminem według priorytetu `goalInstallment` od kwoty po wcześniejszych ratach
+  („Kurs przechwycenia” stały, nie rosnący; przy założeniu pełnych osłon i kadłuba 1. dnia – podpis jak dotąd). Pensja
+  przyjęta w całości (pensji częściowej z pustych osłon plan nie przewiduje). Bez pensji (0 albo brak planu – C20):
+  nic nie pobrane, cele bez rat, następne miesiące nadrabiają. Podział pensji: przy odkładce pobrane i „wymagana”
+  (`required` – rata według T29, gdy pensja dała mniej), pod nimi żółta notka „Brak pensji: odkładki nie są pobierane –
+  zbiorniki będą za planem o X” albo „Pensja nie wystarcza na odkładki: X zamiast Y – …” (`split-tanks-short`).
+  Bieżący miesiąc z silnika: pobrane – dziennik, wymagana – `FleetState.tanks[].want` (rata zbiornika z przełomu
+  miesiąca, liczona także bez pensji; brak – silnik nie liczył tego miesiąca). „Rozdzielone” liczy pobrane. Miesiące
+  minione bez zmian (dziennik, bez „wymagana”). Bez nowego alarmu silnika na Mostku i w odprawie – C20 dotyczy planu.
+- **T347** Kontener raty pożyczki z kwotami harmonogramu (AP-11, AF-51 / PR.9; zmienia T72 „kwota pierwszej raty”):
+  `installmentAmounts` – `amount` = rata ostatniego miesiąca, wcześniejsze miesiące w historii kwot (`past`, F9 –
+  `amountIn`), każda do swojego miesiąca (100 zł w 3: 33,33 zł do grudnia, 33,34 zł w styczniu); kontener dodany
+  w trakcie spłaty (`ensureLoanContainer`) – z tego, co zostało z rat. Ładownia pokazuje kwotę i część miesięczną
+  bieżącego miesiąca (`amountIn`, `monthlyWeight` z miesiącem), masa ładunku i Plan – miesiąca, więc Ładownia, Plan
+  i Radar mówią to samo. Istniejące kontenery bez zmian (grosz w ostatnim miesiącu – bez migracji). Addytywnie (pole
+  `past` już jest), bez `SCHEMA_VERSION`.

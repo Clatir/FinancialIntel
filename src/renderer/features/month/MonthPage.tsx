@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { glossaryOf } from '@shared/glossary'
-import { goalInstallment, ratedIn, type FleetState } from '@shared/calc/fleet'
-import { debriefing, envelopeExtraOf, lootApplied, lootDeadline, lootExtraOf, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
+import type { FleetState } from '@shared/calc/fleet'
+import { debriefing, envelopeExtraOf, lootApplied, lootDeadline, lootExtraOf, monthAhead, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { fuelSummary, rateText } from '@shared/calc/fuel'
 import { useMembers } from '../household/actions'
@@ -64,21 +64,23 @@ export function MonthPage() {
   const goalRecords = useRecordList('goals')
   const [year, setYear] = useState(false)
   // The tanks' and the goals' installments, the loot given to the month and the envelopes' extras as the engine took them
-  // (N11, F15, F28); a month ahead – the goals' installments of the plan (taken only with the shields and the hull full).
+  // (N11, F15, F28); a month ahead – as the engine will take them from its state now (AP-11: the tanks catching up within
+  // their cycles, nothing without a salary; the goals' only with the shields and the hull full).
   const split = useMemo(() => {
     if (!plan || !categories) return null
-    const ran = month <= current && !!fleet
-    const log = fleet?.log ?? []
     const byId = new Map(goalRecords.map((g) => [g.id, g]))
-    const items = ran
-      ? [...ratesOf(log, month)].map(([id, amount]) => ({ goalId: id, name: byId.get(id)?.name ?? '?', amount, deadline: byId.get(id)?.deadline ?? null }))
-      : goalRecords
-          .filter((g) => !g.archived && g.deadline && ratedIn(g.rates, month))
-          .map((g) => ({ goalId: g.id, name: g.name, amount: goalInstallment(g.target - (fleet?.goals.find((x) => x.id === g.id)?.amount ?? 0), month, g.deadline!), deadline: g.deadline }))
-          .filter((r) => r.amount > 0)
-    return salarySplit(plan, month, containers, categories, ran ? sinkingOf(log, month) : undefined, fleet ? lootExtraOf(log, month) : 0, {
-      rates: { items, planned: !ran },
-      extra: ran ? envelopeExtraOf(log, month, plans) : undefined
+    const rateItem = ([id, amount]: [string, number]) => ({ goalId: id, name: byId.get(id)?.name ?? '?', amount, deadline: byId.get(id)?.deadline ?? null })
+    if (fleet && month <= current)
+      return salarySplit(plan, month, containers, categories, sinkingOf(fleet.log, month), lootExtraOf(fleet.log, month), {
+        rates: { items: [...ratesOf(fleet.log, month)].map(rateItem), planned: false },
+        extra: envelopeExtraOf(fleet.log, month, plans),
+        // What each tank wanted at this month's turn (C20): without a salary the engine took nothing.
+        required: month === current ? new Map(fleet.tanks.flatMap((t) => (t.want != null ? [[t.containerId, t.want] as const] : []))) : undefined
+      })
+    const ahead = fleet ? monthAhead({ month, fleet, containers, plans, goals: goalRecords }) : null
+    return salarySplit(plan, month, containers, categories, ahead ? new Map([...ahead.tanks].map(([id, t]) => [id, t.amount])) : undefined, 0, {
+      rates: { items: ahead ? [...ahead.rates].map(rateItem) : [], planned: true },
+      required: ahead ? new Map([...ahead.tanks].map(([id, t]) => [id, t.want])) : undefined
     })
   }, [plan, month, containers, categories, current, fleet, goalRecords, plans])
   const briefMonth = month < current ? month : addMonths(current, -1)
@@ -240,8 +242,22 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
         />
         {open &&
           split.tanks.items.map((t) => (
-            <Row key={t.containerId} className="pl-3 text-[11.5px]" label={t.name} sub={`termin ${monthLabel(t.dueMonth)} · ${zl(t.due)}`} value={zl(t.amount)} />
+            <Row
+              key={t.containerId}
+              className="pl-3 text-[11.5px]"
+              label={t.name}
+              sub={`termin ${monthLabel(t.dueMonth)} · ${zl(t.due)}${t.required > t.amount ? ` · wymagana ${zl(t.required)}` : ''}`}
+              value={zl(t.amount)}
+              testId="split-tank"
+            />
           ))}
+        {/* The salary gives the tanks less than they want (C20): no salary – nothing; the tanks fall behind their plan. */}
+        {split.tanks.required > split.tanks.total && (
+          <p className="text-[11.5px] text-accent" data-testid="split-tanks-short" data-state={split.salary > 0 ? 'short' : 'no-salary'}>
+            {split.salary > 0 ? `Pensja nie wystarcza na odkładki: ${zl(split.tanks.total)} zamiast ${zl(split.tanks.required)}` : 'Brak pensji: odkładki nie są pobierane'} – zbiorniki będą
+            za planem o {zl(split.tanks.required - split.tanks.total)}.
+          </p>
+        )}
         {split.rates.items.length > 0 && (
           <>
             <Row

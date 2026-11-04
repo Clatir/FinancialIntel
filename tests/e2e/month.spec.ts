@@ -203,3 +203,45 @@ test('Plan miesiąca (1.4.2): zmiana minionego miesiąca nie zmienia bieżącego
     await app.close()
   }
 })
+
+test('Plan miesiąca = silnik (AP-11): odkładki kolejnych miesięcy z wyrównaniem, przy pensji 0 pobrane 0 i wymagana obok', async () => {
+  const { month } = warsawNow()
+  const [next, after] = [addMonths(month, 1), addMonths(month, 2)]
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-month-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start: `${month}-01`, initial: { shields: 0, hull: 0, goals: {} } } }),
+    records: {
+      balances: [{ date: `${month}-01`, accountId: ACC, kind: 'opening', amount: zl(60000) }],
+      // No salary next month (C20), then 4 000 zł again.
+      months: [
+        { month, salary: zl(4000), envelopes: {} },
+        { month: next, salary: 0, envelopes: {} },
+        { month: after, salary: zl(4000), envelopes: {} }
+      ],
+      // 1 200 zł a year due in 3 months, its tank empty at the start: 100 zł a month + 800 zł behind over 4 months.
+      containers: [{ name: 'OC', amount: zl(1200), cycleMonths: 12, dueMonth: addMonths(month, 3), dueDay: 15 }]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+4')
+    const tanks = page.getByTestId('split-tanks').locator('.num')
+    await expect(tanks).toHaveText('300,00 zł')
+    await expect(page.getByTestId('split-tanks-short')).toHaveCount(0)
+    // Next month without a salary: nothing taken, the installment wanted beside it (the plan said 100,00 zł before).
+    await page.getByTestId('month-next').click()
+    await expect(tanks).toHaveText('0,00 zł')
+    await expect(page.getByTestId('split-tanks-short')).toHaveAttribute('data-state', 'no-salary')
+    await expect(page.getByTestId('split-tanks-short')).toContainText('Brak pensji: odkładki nie są pobierane – zbiorniki będą za planem o 300,00 zł.')
+    await page.getByTestId('split-tanks').getByRole('button').click()
+    await expect(page.getByTestId('split-tank')).toContainText('wymagana 300,00 zł')
+    // The month after catches up: 100 + 700 zł behind over its 2 months left – as the engine will take it.
+    await page.getByTestId('month-next').click()
+    await expect(tanks).toHaveText('450,00 zł')
+    await expect(page.getByTestId('split-tanks-short')).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

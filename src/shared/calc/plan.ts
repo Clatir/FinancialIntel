@@ -5,10 +5,11 @@
  * (fleet.ts) applies what the records say.
  */
 import { envelopeKind, type Category, type EnvelopeKind } from '../schema/budget'
-import type { Container, MonthPlan, Transaction } from '../schema/records'
+import type { Container, Goal, MonthPlan, Transaction } from '../schema/records'
 import { counterpartyKey } from '../import/classify'
 import { addMonths, dayOfMonth, daysBetween, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween } from './dates'
-import { activeIn, amountIn, coverMoves, cyclePosition, monthlyWeight, rangeMonths, sinkingSchedule, type Alarm, type FleetEvent } from './fleet'
+import { activeIn, amountIn, coverMoves, cyclePosition, goalInstallment, monthlyWeight, rangeMonths, ratedIn, sinkingSchedule, tankWant, type Alarm, type FleetEvent, type FleetState } from './fleet'
+import { byPriority } from './goals'
 import { coveredMonths, firstFullOf, historyStart, monthsBefore } from './history'
 import { financedBy } from './household'
 import { categoryIndex, costOf, isCargoPayment, partsOf, sum } from './operations'
@@ -365,8 +366,12 @@ export interface SalarySplit {
   salary: number
   /** Fixed costs paid every month (containers of a 1-month cycle). */
   cargo: { items: Array<{ containerId: string; name: string; amount: number }>; total: number }
-  /** The month's installments of the periodic fees' tanks (actual for a month the engine ran, else the plan's). */
-  tanks: { items: Array<{ containerId: string; name: string; amount: number; dueMonth: string; due: number }>; total: number }
+  /**
+   * The month's installments of the periodic fees' tanks: what the energy gives them (the engine's – its log, or ahead of
+   * it `monthAhead`; without either the plan's) and what each wants (`required`, T29) – more when the salary lacks (C20:
+   * without a salary nothing is taken, the next installments catch up).
+   */
+  tanks: { items: Array<{ containerId: string; name: string; amount: number; required: number; dueMonth: string; due: number }>; total: number; required: number }
   /**
    * The goals' installments (F15 – „Kurs przechwycenia”): as the engine took them that month, else the plan's – these
    * only when the shields and the hull are full at the turn (`planned`).
@@ -388,8 +393,9 @@ export interface SalarySplit {
 
 /**
  * How a month's salary divides (spec, „Podział pensji”): the cargo, the tanks, the planned and the daily envelopes.
- * `sinking` = the tanks' installments the engine took that month (the log), else the plan's installments; `lootExtra` =
- * the loot of the month before the engine gave to this one (`lootExtraOf`) – the daily envelopes' too.
+ * `sinking` = the tanks' installments the engine takes that month (its log, or `monthAhead` for a month ahead of it),
+ * else the plan's installments; `lootExtra` = the loot of the month before the engine gave to this one (`lootExtraOf`) –
+ * the daily envelopes' too.
  */
 export function salarySplit(
   plan: Pick<MonthPlan, 'salary' | 'envelopes'>,
@@ -403,6 +409,8 @@ export function salarySplit(
     rates?: { items: SalarySplit['rates']['items']; planned: boolean }
     /** What the month adds to each envelope's limit (F28): the loot kept (`keptOf`) and the covers (`coverMoves`). */
     extra?: ReadonlyMap<string, number>
+    /** What each tank wants that month (T29 – the engine's `want`, `monthAhead`); none = what it takes. */
+    required?: ReadonlyMap<string, number>
   } = {}
 ): SalarySplit {
   const active = containers.filter((c) => activeIn(c, month))
@@ -413,7 +421,8 @@ export function salarySplit(
     .map((c) => {
       const pos = cyclePosition(c, month)
       const planned = sinkingSchedule(amountIn(c, month), pos.length)[pos.index] ?? 0
-      return { containerId: c.id, name: c.name, amount: sinking ? (sinking.get(c.id) ?? 0) : planned, dueMonth: pos.dueMonth, due: amountIn(c, pos.dueMonth) }
+      const amount = sinking ? (sinking.get(c.id) ?? 0) : planned
+      return { containerId: c.id, name: c.name, amount, required: Math.max(amount, more.required?.get(c.id) ?? amount), dueMonth: pos.dueMonth, due: amountIn(c, pos.dueMonth) }
     })
   const cats = categoryIndex(categories)
   const envelopes: SalarySplit['envelopes'] = { planned: { items: [], total: 0, extra: 0 }, daily: { items: [], total: 0, extra: 0 } }
@@ -427,7 +436,7 @@ export function salarySplit(
     envelopes[kind].extra += extra
   }
   const cargo = { items: cargoItems, total: sum(cargoItems.map((c) => c.amount)) }
-  const tanks = { items: tankItems, total: sum(tankItems.map((c) => c.amount)) }
+  const tanks = { items: tankItems, total: sum(tankItems.map((c) => c.amount)), required: sum(tankItems.map((c) => c.required)) }
   const rateItems = more.rates?.items ?? []
   const rates = { items: rateItems, total: sum(rateItems.map((r) => r.amount)), planned: more.rates?.planned ?? false }
   const allocated = cargo.total + tanks.total + rates.total + envelopes.planned.total + envelopes.daily.total
@@ -470,6 +479,70 @@ export function sinkingOf(log: readonly FleetEvent[], month: string): Map<string
   const out = new Map<string, number>()
   for (const e of logOfMonth(log, month)) if (e.kind === 'sinking') for (const [id, v] of Object.entries(e.moves.tanks ?? {})) out.set(id, (out.get(id) ?? 0) + v)
   return out
+}
+
+/** A month ahead of the engine's as it will run it (`monthAhead`). */
+export interface MonthAhead {
+  /** Each periodic fee's installment: what the salary will give (`amount`) and what its tank wants (`want`, T29). */
+  tanks: Map<string, { amount: number; want: number }>
+  /** The goals' installments from the salary (F15) – the engine takes them only with the shields and the hull full. */
+  rates: Map<string, number>
+}
+
+/**
+ * A month after the engine's (`fleet.month`) as the engine will run it (AP-11, T29, F15, C20) – the plan says what will
+ * happen: from the engine's tanks and goals now, month by month, each fee due and not paid yet paid from its tank in its
+ * due month, and at each month's turn the salary of the plan in force pays the tanks by the engine's rule (`tankWant` –
+ * a fee added late catches up within its cycle), then the goals of a deadline by priority (`goalInstallment`), while the
+ * salary lasts. Without a salary (0, no plan) nothing is taken – the tanks' wants as they are, the next months catch up.
+ * The goals' installments assume the shields and the hull full at every turn (the plan's caption says so).
+ */
+export function monthAhead(o: {
+  month: string
+  fleet: Pick<FleetState, 'month' | 'tanks' | 'goals'>
+  containers: readonly Container[]
+  plans: readonly MonthPlan[]
+  goals: readonly Goal[]
+}): MonthAhead {
+  const tank = new Map(o.fleet.tanks.map((t) => [t.containerId, t.amount]))
+  const paid = new Map<string, Set<string>>()
+  for (const t of o.fleet.tanks) if (t.paidDue) paid.set(t.containerId, new Set([t.paidDue]))
+  const saved = new Map(o.fleet.goals.map((g) => [g.id, g.amount]))
+  const fees = o.containers.filter((c) => c.cycleMonths > 1)
+  const rated = byPriority(o.goals.filter((g) => !g.archived && g.deadline))
+  // The fees due in `m` and not paid yet: paid on their day from their tanks (a tank short of it – empty after).
+  const payDue = (m: string) => {
+    for (const c of fees) if (activeIn(c, m) && cyclePosition(c, m).dueMonth === m && !paid.get(c.id)?.has(m)) tank.set(c.id, Math.max(0, (tank.get(c.id) ?? 0) - amountIn(c, m)))
+  }
+  payDue(o.fleet.month)
+  let ahead: MonthAhead = { tanks: new Map(), rates: new Map() }
+  for (const m of monthRange(addMonths(o.fleet.month, 1), o.month)) {
+    const salary = planFor(o.plans, m)?.salary ?? 0
+    let energy = Math.max(0, salary)
+    const tanks: MonthAhead['tanks'] = new Map()
+    for (const c of fees) {
+      if (!activeIn(c, m)) continue
+      const have = tank.get(c.id) ?? 0
+      const want = tankWant(c, m, have, paid.get(c.id))
+      const amount = Math.min(want, energy)
+      energy -= amount
+      tank.set(c.id, have + amount)
+      tanks.set(c.id, { amount, want })
+    }
+    // The goals after the tanks, from what the salary has left (none without a salary – the engine's turn).
+    const rates: MonthAhead['rates'] = new Map()
+    for (const g of rated) {
+      if (!ratedIn(g.rates, m)) continue
+      const take = Math.min(goalInstallment(g.target - (saved.get(g.id) ?? 0), m, g.deadline!), energy)
+      if (take <= 0) continue
+      energy -= take
+      saved.set(g.id, (saved.get(g.id) ?? 0) + take)
+      rates.set(g.id, take)
+    }
+    payDue(m)
+    ahead = { tanks, rates }
+  }
+  return ahead
 }
 
 // ------------------------------------------------------------------ the debriefing

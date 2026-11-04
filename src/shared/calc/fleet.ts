@@ -611,8 +611,12 @@ export interface FleetState {
   /** Every goal, archived too; `takes` = it takes money today (the loot's and an expense's choice – B13, N1). */
   goals: Array<{ id: string; name: string; amount: number; target: number; priority: number; takes: boolean }>
   energy: number
-  /** The periodic fees' tanks: `dueMonth` = the next payment still to make; `paidDue` = this cycle's due month when paid already (B6, B55). */
-  tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; paidDue: string | null; due: number }>
+  /**
+   * The periodic fees' tanks: `dueMonth` = the next payment still to make; `paidDue` = this cycle's due month when paid
+   * already (B6, B55); `want` = the installment it wanted at this month's turn (T29, `tankWant`) – the energy gave it or
+   * less (the log's `sinking`; without a salary nothing – C20); none = the engine did not run this month's turn.
+   */
+  tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; paidDue: string | null; due: number; want?: number }>
   taxHold: number
   /** The household members' advances held on the accounts (D80): a layer, never the ship's money. */
   deposit: number
@@ -958,6 +962,8 @@ export function computeFleet(input: FleetInput): FleetState {
   const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
   /** The cycles (due months) of each periodic fee paid already (B55). */
   const paidCycles = new Map<string, Set<string>>()
+  /** What each tank wanted at this month's turn (T29, C20) – the energy gave it, or less (`FleetState.tanks[].want`). */
+  const wantedNow = new Map<string, number>()
   // Paid before the start (AP-5): those cycles are paid too – the first salary never sets their fee aside again.
   if (started && start) {
     const paidOn = new Map<string, string[]>()
@@ -1003,13 +1009,16 @@ export function computeFleet(input: FleetInput): FleetState {
       if (pay.alarm === 'yellow') alarms.push({ kind: 'salary-from-hull', level: 'yellow', date, amount: pay.fromHull, ref: m })
       if (pay.alarm === 'red') alarms.push({ kind: 'salary-partial', level: 'red', date, amount: due - pay.paid, ref: m })
     }
-    if (!salaryOfMonth.has(m)) return
-    // The tanks of the periodic fees, from this month's energy.
+    const paid = salaryOfMonth.has(m)
+    // The tanks of the periodic fees, from this month's energy – none without a salary (C20: what each wanted is kept for
+    // this month's plan, beside the 0 taken).
     for (const c of containers) {
       if (c.cycleMonths <= 1 || !activeIn(c, m)) continue
       const tank = tanks.get(c.id) ?? 0
       // This cycle paid already (early – B55, before the start – AP-5): nothing more to collect for it.
       const want = tankWant(c, m, tank, paidCycles.get(c.id))
+      if (m === month) wantedNow.set(c.id, want)
+      if (!paid) continue
       const take = Math.min(want, Math.max(0, energy))
       if (!take) continue
       energy -= take
@@ -1018,7 +1027,7 @@ export function computeFleet(input: FleetInput): FleetState {
     }
     // The goals' installments from the salary (F15, D87): after the tanks, only with the shields and the hull full at the
     // turn – they come first (D13); each goal of a deadline with its option on this month, by the priority then.
-    if (!full) return
+    if (!paid || !full) return
     const at = dayStart(date)
     const rated = goalsAll
       .filter((g) => ratedIn(g.rates, m) && goalTakes(g, at))
@@ -1492,8 +1501,9 @@ export function computeFleet(input: FleetInput): FleetState {
       .filter((c) => c.cycleMonths > 1 && (activeIn(c, month) || (tanks.get(c.id) ?? 0) !== 0))
       .map((c) => {
         const cycle = tankCycle(c)
+        const want = wantedNow.get(c.id)
         // The payment it collects for at its amount then (F9: a raise from a month on).
-        return { containerId: c.id, name: c.name, amount: tanks.get(c.id) ?? 0, ...cycle, due: amountIn(c, cycle.dueMonth) }
+        return { containerId: c.id, name: c.name, amount: tanks.get(c.id) ?? 0, ...cycle, due: amountIn(c, cycle.dueMonth), ...(want != null ? { want } : {}) }
       }),
     taxHold,
     deposit,

@@ -41,8 +41,9 @@ paths:
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).
 - Pewne dopasowanie zwrotu (D91 b, T329): każda osoba wpłaty osobno (`repaymentSharesByMember`) – import i szybki wpis
   `linkRepayments`, edytor przy zmianie części `moreSureCovers` / `keptCovers`; wpłata ≥ cały dług osoby wiąże wszystkie.
-- Rata zbiornika (T29) tylko przez `tankWant` – silnik i kreator (`startTanks`) liczą jedną regułą; cykl zapłacony
-  (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny.
+- Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
+  (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Miesiąc przed
+  silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.
