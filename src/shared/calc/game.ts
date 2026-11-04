@@ -8,7 +8,8 @@
 import type { GameSettings } from '../schema/budget'
 import { SCHEMA_VERSION } from '../schema/common'
 import type { Settings } from '../schema/settings'
-import type { GameDay, GameMission, GameMonth, MonthPlan, Transaction } from '../schema/records'
+import type { Balance, GameDay, GameMission, GameMonth, MonthPlan, Transaction } from '../schema/records'
+import { dm } from '../format'
 import { IMPORT_DUE_DAYS } from './briefing'
 import { addDays, addMonths, daysBetween, daysInMonth, firstDayOf, isoWeekOf, mondayOf, mondayOfWeek, monthOf, warsawEndOf, warsawNow, warsawStamp, warsawStartOf, weekdayOf } from './dates'
 import { activeIn, cargoMass, computeFleet, envelopeOverrun, householdOf, type FleetInput, type FleetState, type ShipClass, SHIP_CLASSES } from './fleet'
@@ -62,7 +63,8 @@ export const TAG_LABEL: Record<string, string> = {
 export const MISSIONS = ['quiet', 'envelope', 'energy', 'impulse', 'killzone', 'house', 'import', 'balances', 'nospend'] as const
 export type MissionTemplate = (typeof MISSIONS)[number]
 export const MISSION_TITLE: Record<MissionTemplate, string> = {
-  quiet: 'Cisza w eterze',
+  // Not „Cisza w eterze” (AP-30): that is the achievement of 30 such days – one name, one thing.
+  quiet: 'Zaciemnienie',
   envelope: 'Koperta pod kontrolą',
   energy: 'Pełna energia',
   impulse: 'Zero impulsów',
@@ -95,6 +97,11 @@ export const ACHIEVEMENT_INFO: Record<AchievementId, { name: string; text: strin
 
 export const WEEKDAY_NAME = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const
 
+/** A killzone's hour of the week: „wtorek 20:00–21:00”. */
+export function killzoneSlot(weekday: number, hour: number): string {
+  return `${WEEKDAY_NAME[weekday - 1] ?? ''} ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00`
+}
+
 /** What a mission asks for (`label` names an envelope's category, `money` formats – the hidden amounts mask them). */
 export function missionText(m: Pick<GameMission, 'template' | 'params'>, label: (categoryId: string) => string, money: (grosze: number) => string): string {
   const p = m.params
@@ -109,7 +116,8 @@ export function missionText(m: Pick<GameMission, 'template' | 'params'>, label: 
     case 'impulse':
       return 'żaden zakup oznaczony jako impuls.'
     case 'killzone':
-      return `Twoja killzone wydatków – ${WEEKDAY_NAME[Number(p.weekday ?? 1) - 1] ?? ''} ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00: najwyżej ${money(Number(p.target ?? 0))} (połowa średniej).`
+      // Its own period said (AP-30, WY sp. 1): Wywiad's map shows the killzone of the period chosen there.
+      return `Twoja killzone wydatków z 4 tygodni przed misją – ${killzoneSlot(Number(p.weekday ?? 1), hour)}: najwyżej ${money(Number(p.target ?? 0))} (połowa średniej).`
     case 'house':
       return 'zmniejsz to, co domownicy mają oddać – rozlicz się z nimi.'
     case 'import':
@@ -124,6 +132,16 @@ export function missionText(m: Pick<GameMission, 'template' | 'params'>, label: 
 }
 
 export const missionTitle = (template: string): string => MISSION_TITLE[template as MissionTemplate] ?? template
+
+/**
+ * Wywiad's killzone map in words (AP-30, WY sp. 1): one „Twoja killzone” – the week's mission's, from the 4 weeks before
+ * it; the map's brightest field is the period's, said so, with the mission's hour beside it when it runs.
+ */
+export function killzoneNote(months: number, mission: Pick<GameMission, 'template' | 'params'> | null): string {
+  const period = `Najjaśniejsze pole (z obwódką) to killzone wydatków tego okresu (${months} mies.).`
+  if (mission?.template !== 'killzone') return period
+  return `${period} Misja tygodnia liczy swoją z 4 tygodni przed nią: ${killzoneSlot(Number(mission.params.weekday ?? 1), Number(mission.params.hour ?? 0))}.`
+}
 
 // ------------------------------------------------------------------ the data
 
@@ -313,6 +331,15 @@ export interface MissionPick {
 
 const dayCost = (txs: readonly Transaction[]) => sum(txs.map(costOf))
 
+/** What a day cost so far – more than 0: no day without expenses (the mission's and the watch log's rule). */
+export const costOn = (transactions: readonly Transaction[], date: string): number => dayCost(transactions.filter((t) => t.date === date))
+
+/**
+ * The day a balance was confirmed (AP-30, AF-31): its last confirmation's Warsaw day, not its balance's – a bank file's
+ * balance is of the file's last day (often last week's Sunday), confirmed on the day of the import.
+ */
+const confirmedOn = (b: Balance): string => dateOf(b.updatedAt)
+
 /** Costs of the envelopes' main categories in [from, to] as the envelopes count them (no cargo, goals, house), in one pass. */
 function envelopesSpent(input: GameInput, from: string, to: string): Map<string, number> {
   const cats = categoryIndex(input.settings.categories)
@@ -457,7 +484,7 @@ export function chooseMission(input: GameInput, monday: string, lastTemplate: st
       const last = seen.at(-1)
       return !last || daysBetween(dateOf(last), monday) > 4 ? { template: 'import', params: {} } : null
     },
-    balances: () => ((input.balances ?? []).some((b) => b.kind === 'confirmation' && b.date >= from && b.date <= to) ? null : { template: 'balances', params: {} }),
+    balances: () => ((input.balances ?? []).some((b) => b.kind === 'confirmation' && confirmedOn(b) >= from && confirmedOn(b) <= to) ? null : { template: 'balances', params: {} }),
     nospend: () => {
       let free = 0
       for (let d = from; d <= to; d = addDays(d, 1)) if (dayCost(txs.filter((t) => t.date === d)) <= 0) free++
@@ -523,17 +550,19 @@ export function missionStatus(input: GameInput, mission: Pick<GameMission, 'temp
     }
     case 'balances': {
       const accounts = input.settings.accounts.filter((a) => !a.archived)
-      const have = accounts.filter((a) => (input.balances ?? []).some((b) => b.kind === 'confirmation' && b.accountId === a.id && b.date >= monday && b.date <= to)).length
+      const have = accounts.filter((a) => (input.balances ?? []).some((b) => b.kind === 'confirmation' && b.accountId === a.id && confirmedOn(b) >= monday && confirmedOn(b) <= to)).length
       return { ok: accounts.length > 0 && have >= accounts.length, have, need: accounts.length }
     }
     case 'nospend': {
-      // Only the days over (N69): today while the week runs is apart – „+1, if today stays without spending”.
+      // Only the days over (N69): today while the week runs is apart – „+1, if today stays without spending” – unless
+      // the evening report confirmed it („Dziś bez wydatków”, AP-30): counted; an expense of today still takes it away.
       const days = allDays(game)
+      const confirmed = input.settings.game.noSpend
       let have = 0
       let pending = 0
       for (let d = monday; d <= to; d = addDays(d, 1)) {
         if (dayCost(txs.filter((t) => t.date === d)) > 0) continue
-        if (d === upTo && !days.has(d)) pending++
+        if (d === upTo && !days.has(d) && !confirmed[d]) pending++
         else have++
       }
       return { ok: have >= 2, have, need: 2, ...(pending ? { pending } : {}) }
@@ -572,6 +601,16 @@ export function promotionProgress(game: readonly GameMonth[], date: string, gs: 
   for (let d = from; d <= date; d = addDays(d, 1)) if (days.get(d)?.status === 'ok') ok++
   const missions = allMissions(game).filter(({ mission: m }) => m.done && m.evaluatedAt && sundayOf(m.week) >= from && sundayOf(m.week) <= date).length
   return { ok, bonus: missions * gs.missionDays, need: gs.promoteDays, from, to: date }
+}
+
+/**
+ * The way to the next rank in words (AP-30, DW.18): the days counted since the day after the last change – right after a
+ * promotion none yet, never „from tomorrow to the day before”; a threshold met (lowered meanwhile) waits for a day frozen.
+ */
+export function progressText(p: Pick<ReturnType<typeof promotionProgress>, 'ok' | 'bonus' | 'need' | 'from' | 'to'>): string {
+  const days = p.from > p.to ? `dni zgodne 0 (liczone od ${dm(p.from)})` : `dni zgodne ${p.ok} (od ${dm(p.from)} do ${dm(p.to)})`
+  const due = p.ok + p.bonus >= p.need ? ' – próg spełniony, awans przy zamrożeniu kolejnego dnia' : ''
+  return `${days}${p.bonus ? ` + misje ${p.bonus}` : ''}${due}`
 }
 
 function newAchievements(input: GameInput, game: readonly GameMonth[], date: string, r: DayRating, start: string): AchievementId[] {

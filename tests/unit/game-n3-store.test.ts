@@ -28,6 +28,8 @@ vi.setSystemTime(new Date('2026-11-04T11:00:00.000Z'))
 afterAll(() => vi.useRealTimers())
 const data = await import('../../src/renderer/store/data')
 const game = await import('../../src/renderer/store/game')
+const evening = await import('../../src/renderer/features/evening/state')
+const { useUi } = await import('../../src/renderer/store/ui')
 
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-01-01T00:00:00.000Z'
@@ -164,5 +166,24 @@ describe('AP-14: „Nowa klasa” – nie dla skutku importu (DW sp. 6)', () => 
     expect(game.celebrationsOf([month], gs, TODAY).filter((c) => c.kind === 'class')).toEqual([])
     const own = newGameMonthFor('2026-11', { '2026-11-01': day('scout'), '2026-11-02': day('destroyer') })
     expect(game.celebrationsOf([own], gs, TODAY)).toContainEqual(expect.objectContaining({ kind: 'class', cls: 'destroyer', from: 'scout' }))
+  })
+})
+
+describe('AP-30: „Dziś bez wydatków” przy wydatku z dziś ostrzega (RY sp. 1)', () => {
+  const lastToast = () => useUi.getState().toasts.at(-1)
+
+  it('wydatek z dziś: zapisane (raport zamknięty), ale toast mówi, że dzień się nie liczy', () => {
+    open(addDays(TODAY, -3), { transactions: [transactionSchema.parse({ ...base(), date: TODAY, accountId: MBANK_ACCOUNT_ID, amount: -zl(12), counterparty: 'Mokka' })] })
+    expect(evening.confirmNoSpend()).toBe(true)
+    expect(data.useData.getState().fi!.settings.game.noSpend[TODAY]).toBeTruthy()
+    expect(lastToast()).toMatchObject({ kind: 'info', text: 'Raport wachty zamknięty, ale dziś jest już wydatek 12,00 zł – dzień nie liczy się jako bez wydatków (misja, dziennik wachty).' })
+    expect(evening.noSpendWarning()).toBe(lastToast()!.text)
+  })
+
+  it('bez wydatku z dziś (wczorajszy się nie liczy): jak dotąd', () => {
+    open(addDays(TODAY, -3), { transactions: [transactionSchema.parse({ ...base(), date: addDays(TODAY, -1), accountId: MBANK_ACCOUNT_ID, amount: -zl(12), counterparty: 'Mokka' })] })
+    expect(evening.confirmNoSpend()).toBe(true)
+    expect(lastToast()).toMatchObject({ kind: 'success', text: 'Dziś bez wydatków – zapisane w dzienniku wachty.' })
+    expect(evening.noSpendWarning()).toBeNull()
   })
 })

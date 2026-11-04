@@ -41,7 +41,8 @@ paths:
 - Gra (1.15.7): porcja zamrażania (`DAYS_PER_PASS`) zawsze w osobnym zadaniu (`schedulePortion`, T380) – zapis w ciele
   efektu przy zaległości > 100 dni to #185. Dni bez danych z banku (`importWait`) czekają na pytanie najwyżej 7 dni
   (`waitImport`, T381), misja tygodnia z nimi; nowe wstrzymanie – opcja `advanceGame`, nigdy przeliczanie zamrożonych.
-  Zmiana klasy z nowych danych (`GameDay.clsBefore`, T382) nie jest świętowana.
+  Zmiana klasy z nowych danych (`GameDay.clsBefore`, T382) nie jest świętowana. Potwierdzenie salda w misji – po dniu
+  zapisu (`confirmedOn`), nie dacie salda (T383).
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).
 - Pewne dopasowanie zwrotu (D91 b, T329): każda osoba wpłaty osobno (`repaymentSharesByMember`) – import i szybki wpis
   `linkRepayments`, edytor przy zmianie części `moreSureCovers` / `keptCovers`; wpłata ≥ cały dług osoby wiąże wszystkie.

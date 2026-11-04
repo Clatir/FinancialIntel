@@ -10,6 +10,7 @@ import {
   missionStatus,
   missionText,
   missionTitle,
+  progressText,
   RANK_GENITIVE,
   RANK_LABEL,
   RANKS,
@@ -226,8 +227,8 @@ function RankPanel({ view }: { view: GameView }) {
               </span>
             </div>
             <Meter value={p.ok + p.bonus} max={p.need} />
-            <span className="text-[11px] text-dim">
-              dni zgodne {p.ok} (od {dm(p.from)} do {dm(p.to)}){p.bonus ? ` + misje ${p.bonus}` : ''}
+            <span className="text-[11px] text-dim" data-testid="command-progress-days">
+              {progressText(p)}
             </span>
           </div>
         ) : (

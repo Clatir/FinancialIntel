@@ -2721,3 +2721,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   bez misji (DW sp. 2): „Pierwsza misja w tygodniu od …” tylko, gdy pierwszy pełny tydzień gry jest przed nami
   (`missionAhead`), inaczej „Misja tygodnia zostanie wybrana po zamrożeniu dni” (przy czekaniu na import – „po imporcie
   z banku (albo po „Zamroź bez danych”)”) – nigdy poniedziałek z przeszłości.
+- **T383** Misje (1.15.7, AP-30, AF-31, AF-65, RY sp. 1, WY sp. 1; D84 C11 zgodnie): „Inwentaryzacja” liczy potwierdzenie
+  po dniu potwierdzenia – warszawski dzień ostatniego zapisu rekordu (`updatedAt`; `confirmBalance` trzyma jeden rekord
+  na saldo, ponowne potwierdzenie go zapisuje), nie po dacie salda (saldo z pliku banku ma datę ostatniego dnia pliku) –
+  w stanie misji i w wyborze słabego punktu. „Dzień bez wydatków”: dziś potwierdzone „Dziś bez wydatków” liczy się od
+  razu (nie „+1, jeśli dziś bez wydatków”); wydatek z dziś i tak go zabiera (`costOn`). „Dziś bez wydatków” przy wydatku
+  z dziś zapisuje (raport wachty zamknięty) i mówi toastem / powiadomieniem, że dzień się nie liczy (`noSpendWarning`).
+  Misja ciszy nocnej „Zaciemnienie” (dawniej „Cisza w eterze” – tak zostaje osiągnięcie 30 dni; lista misji D73 bez
+  innych zmian). Jedna „Twoja killzone”: misja – „z 4 tygodni przed misją”, Wywiad – „killzone wydatków tego okresu
+  (N mies.)” i godzina misji obok, gdy misja tygodnia to Killzone (`killzoneNote`).
+- **T384** Droga do awansu w Dowództwie (1.15.7, AP-30, DW.18, DW sp. 5): `progressText` – dzień po zmianie stopnia
+  „dni zgodne 0 (liczone od 02.11)” zamiast odwróconego „od 02.11 do 01.11”; próg spełniony bez awansu (obniżony w trakcie)
+  – „próg spełniony, awans przy zamrożeniu kolejnego dnia” (awans rozstrzyga zamrożenie dnia, jak dotąd).

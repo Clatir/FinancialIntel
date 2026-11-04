@@ -4,7 +4,7 @@
  * names a Monday of the past; the way to the next rank never counts „from tomorrow to the day before”.
  */
 import { describe, expect, it } from 'vitest'
-import { advanceGame, gameView, importWait, missionAhead, newGameMonth, rateDay, type GameInput } from '@shared/calc/game'
+import { advanceGame, gameView, importWait, missionAhead, newGameMonth, progressText, rateDay, type GameInput } from '@shared/calc/game'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type GameDay, type GameMonth, type Settings, type Transaction } from '@shared/schema'
 
@@ -139,12 +139,19 @@ describe('AP-14: „Nowa klasa” nie świętuje skutku importu (DW sp. 6)', () 
   })
 })
 
-describe('AP-14: panel misji bez daty z przeszłości (DW sp. 2)', () => {
+describe('AP-14 / AP-30: panel misji i droga do awansu – bez dat z przeszłości i odwróconych zakresów', () => {
   it('misja jeszcze nie wybrana: data pierwszego pełnego tygodnia tylko, gdy jest przed nami', () => {
     // The game from Wednesday 7.10: the first full week from Monday 12.10.
     expect(missionAhead('2026-10-07', '2026-10-08')).toBe('2026-10-12')
     expect(missionAhead('2026-10-07', '2026-10-12')).toBeNull()
     // Two months on (DW sp. 2: „Pierwsza misja w tygodniu od 07.09.2026”) – no date of the past.
     expect(missionAhead('2026-09-04', '2026-11-02')).toBeNull()
+  })
+
+  it('dzień po awansie: „dni zgodne 0 (liczone od 02.11)”, nie „od 02.11 do 01.11” (DW.18)', () => {
+    expect(progressText({ ok: 0, bonus: 0, need: 30, from: '2026-11-02', to: '2026-11-01' })).toBe('dni zgodne 0 (liczone od 02.11)')
+    expect(progressText({ ok: 26, bonus: 3, need: 30, from: '2026-10-07', to: '2026-11-01' })).toBe('dni zgodne 26 (od 07.10 do 01.11) + misje 3')
+    // The threshold lowered to 25 (DW sp. 5: „25 / 25” without a word): the promotion comes with a day frozen.
+    expect(progressText({ ok: 25, bonus: 0, need: 25, from: '2026-10-07', to: '2026-11-01' })).toBe('dni zgodne 25 (od 07.10 do 01.11) – próg spełniony, awans przy zamrożeniu kolejnego dnia')
   })
 })

@@ -6,7 +6,8 @@
  * the expeditions (F17), the personal inflation (F36), the captain's log.
  */
 import { useMemo, useState } from 'react'
-import { addDays, addMonths, monthOf, monthRange } from '@shared/calc/dates'
+import { addDays, addMonths, isoWeekOf, monthOf, monthRange } from '@shared/calc/dates'
+import { killzoneNote } from '@shared/calc/game'
 import { glossaryOf } from '@shared/glossary'
 import { openDays, scheduledDays } from '@shared/calc/scheduled'
 import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth } from '@shared/calc/intel'
@@ -15,6 +16,7 @@ import { sum } from '@shared/calc/operations'
 import { rangeText } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
+import { useGameRecords } from '../../store/game'
 import { useRecordList } from '../../store/records'
 import { plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
@@ -77,6 +79,9 @@ export function IntelPage() {
   const second = chosen === net ? accounts.points : net.points
   const months = useMemo(() => (month ? monthRange(addMonths(month, -(Number(period) - 1)), month) : []), [month, period])
   const killzones = useMemo(() => (today && months.length ? killzoneGrid(transactions, `${months[0]}-01`, today) : null), [transactions, months, today])
+  // The week's mission (AP-30): a killzone mission's hour said beside the period's – one „Twoja killzone”.
+  const game = useGameRecords()
+  const weekMission = useMemo(() => (today ? (game.flatMap((g) => g.missions).find((m) => m.week === isoWeekOf(today)) ?? null) : null), [game, today])
   const spending = useMemo(() => spendingByMonth(transactions, settings?.categories ?? [], months), [transactions, settings, months])
   const log = useMemo(() => (settings ? logAccuracy(transactions, settings.orders, months) : []), [transactions, settings, months])
   const [fvgMonth, setFvgMonth] = useState<string | null>(null)
@@ -174,7 +179,7 @@ export function IntelPage() {
                 <div className="flex flex-col gap-1.5 text-[12px]">
                   <KillzoneMap cells={killzones.cells} />
                   <span className="text-[11px] text-dim">
-                    Zakupy z godziną: {killzones.withTime}, bez godziny: {killzones.withoutTime}. Najjaśniejsze pole (z obwódką) to Twoja killzone wydatków.
+                    Zakupy z godziną: {killzones.withTime}, bez godziny: {killzones.withoutTime}. {killzoneNote(Number(period), weekMission)}
                   </span>
                 </div>
               )}
