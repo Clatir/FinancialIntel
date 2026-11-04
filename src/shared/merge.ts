@@ -1,6 +1,8 @@
 // adapted from ICTTJ src/shared/merge.ts @ 84a8339
 import { warsawStamp } from './calc/dates'
 import { formatPln } from './format'
+import { ICTJ_POOL_LABEL } from './ictj'
+import { TX_KIND_LABEL } from './schema/records'
 /**
  * Field-level differences and three-way merges of records (JSON values).
  * - Objects are compared key by key; arrays of objects with a string `id` (split lines, categories,
@@ -355,9 +357,107 @@ const LABELS: Record<string, string> = {
   'settings.import.accountNumbers': 'Numery rachunków',
   'settings.import.log': 'Dziennik importów',
   'settings.seeded': 'Ustawienia startowe',
-  // AP-27: every field of a record by a Polish name (the audit found „tags” and the id).
+  // AP-27 (T430): every field of every record by a Polish name – the audit found „tags”, the id and raw keys after a
+  // known prefix („Reguły importu – maxAmount”). A key of its own here names it under any prefix (`fieldLabelOf`).
   id: 'Identyfikator wpisu',
+  createdAt: 'Utworzono',
+  since: 'Od dnia',
+  updatedAt: 'Zapisano',
+  updatedBy: 'Zapisał komputer',
+  schemaVersion: 'Wersja formatu',
   tags: 'Tagi',
+  format: 'Format pliku',
+  key: 'Klucz wiersza',
+  bankName: 'Nazwa w banku',
+  category: 'Kategoria mBanku',
+  importedAt: 'Zaimportowano',
+  altKeys: 'Inne klucze wiersza',
+  description: 'Opis z banku',
+  pending: 'Nierozliczona',
+  operation: 'Rodzaj operacji',
+  forecastId: 'Scenariusz prognozy',
+  currency: 'Waluta',
+  version: 'Wersja',
+  parentId: 'Kategoria nadrzędna',
+  system: 'Kategoria systemowa',
+  envelope: 'Koperta',
+  importFormat: 'Format importu',
+  page: 'Ekran',
+  panels: 'Panele',
+  collapsed: 'Zwinięty',
+  height: 'Wysokość',
+  hidden: 'Ukryty',
+  columns: 'Kolumny',
+  shields: 'Osłony',
+  hull: 'Kadłub',
+  goals: 'Cele',
+  tanks: 'Zbiorniki ładowni',
+  match: 'Dopasowanie',
+  mode: 'Sposób',
+  maxAmount: 'Kwota najwyżej',
+  label: 'Nazwa',
+  household: 'Domownik',
+  loanAmount: 'Część pożyczki',
+  learned: 'Nauczona z decyzji',
+  hits: 'Użycia',
+  inflow: 'Reszta wpłaty',
+  opening: 'Saldo na start',
+  owed: 'Do oddania',
+  deposit: 'Zaliczka',
+  via: 'Przekazuje przez',
+  bankNames: 'Nazwy w banku',
+  members: 'Osoby',
+  lines: 'Osoby',
+  value: 'Udział',
+  filter: 'Filtr',
+  withPeriod: 'Z okresem',
+  ignored: 'Pominięte',
+  ok: 'Uznane za w porządku',
+  tagGoals: 'Cele tagów',
+  cpi: 'Inflacja GUS (CPI)',
+  days: 'Dni',
+  cls: 'Klasa dnia',
+  cargo: 'Ładownia',
+  missions: 'Misje',
+  template: 'Rodzaj misji',
+  week: 'Tydzień',
+  evaluatedAt: 'Oceniona',
+  params: 'Parametry',
+  promotions: 'Awanse',
+  at: 'Chwila',
+  rank: 'Stopień',
+  change: 'Zmiana',
+  day: 'Dzień',
+  achievements: 'Osiągnięcia',
+  savedAt: 'Zapisano operacje',
+  fileName: 'Plik z banku',
+  period: 'Okres',
+  counts: 'Liczby wierszy',
+  created: 'Dodane operacje',
+  updated: 'Zmienione operacje',
+  removed: 'Usunięte operacje',
+  rules: 'Reguły importu',
+  before: 'Przed importem',
+  after: 'Po imporcie',
+  lastImport: 'Ostatni import',
+  coveredTo: 'Zasięg plików z banku',
+  accountNumber: 'Numer rachunku',
+  inflows: 'Wpływy',
+  ownName: 'Własna nazwa',
+  confirmations: 'Potwierdzenia sald',
+  undoneAt: 'Cofnięty',
+  'settings.orders.quietHours.from': 'Rozkazy – cisza nocna od',
+  'settings.orders.quietHours.to': 'Rozkazy – cisza nocna do',
+  'settings.household.openingIds': 'Domownicy – operacje w saldzie na start',
+  'settings.household.assignFrom': 'Domownicy – zwroty wskazują zakupy od',
+  'settings.operationViews': 'Zapisane widoki Operacji',
+  'settings.cargo': 'Ładownia',
+  'settings.cargo.ignored': 'Ładownia – nie proponuj',
+  'settings.anomalies': 'Anomalie',
+  'settings.anomalies.ok': 'Anomalie – w porządku',
+  'settings.intel': 'Wywiad',
+  'settings.import.rules.updatedAt': 'Reguły importu – zmieniona',
+  'loot.decidedAt': 'Podział łupów – zdecydowano',
   'bank.format': 'Dane z banku – format pliku',
   'bank.source': 'Dane z banku – źródło',
   'bank.altKeys': 'Dane z banku – inne klucze wiersza',
@@ -366,6 +466,8 @@ const LABELS: Record<string, string> = {
   'counterBank.key': 'Dane z banku drugiego konta – klucz wiersza',
   awaitReturn: 'Czeka na zwrot',
   'awaitReturn.amount': 'Czeka na zwrot – kwota',
+  'awaitReturn.until': 'Czeka na zwrot – do',
+  'awaitReturn.closedAt': 'Czeka na zwrot – zamknięty',
   inflowKind: 'Rodzaj wpływu',
   coversOpeningMembers: 'Spłaca saldo na start – domownicy',
   priceIgnored: 'Nowa cena pominięta',
@@ -388,11 +490,18 @@ const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/
  * path (an envelope's category, a goal of the loot) by its name from `names`.
  */
 export function fieldLabel(path: Path, names?: ReadonlyMap<string, string>): string {
-  const base = fieldLabelOf(path)
-  const id = [...path].reverse().map((p) => (p.startsWith('#') ? p.slice(1) : p)).find((p) => ULID.test(p))
-  const name = id ? names?.get(id) : undefined
-  return name && !base.includes(name) ? `${base.replace(/ – [0-9A-HJKMNP-TV-Z]{26}$/, '')} – ${name}` : base
+  let base = fieldLabelOf(path)
+  if (!names) return base
+  // An id as a key of the path (an envelope's category, a goal of the loot): its name in its place.
+  base = base.replace(/(^| – )([0-9A-HJKMNP-TV-Z]{26})(?= – |$)/g, (whole, sep: string, id: string) => (names.get(id) ? `${sep}${names.get(id)}` : whole))
+  // A list item's id (the account of „Konta – nazwa”): its name at the end.
+  const item = [...path].reverse().flatMap((p) => (p.startsWith('#') && ULID.test(p.slice(1)) ? [p.slice(1)] : []))[0]
+  const name = item ? names.get(item) : undefined
+  return name && !base.includes(name) ? `${base} – ${name}` : base
 }
+
+/** „Kwota” → „kwota” after a prefix; an abbreviation („ICTTJ – …”, „PIT-38”) stays as it is. */
+const lowerFirst = (s: string): string => (/^\p{Lu}{2}/u.test(s) ? s : `${s.charAt(0).toLowerCase()}${s.slice(1)}`)
 
 function fieldLabelOf(path: Path): string {
   const named = path.filter((p) => !p.startsWith('#'))
@@ -400,9 +509,53 @@ function fieldLabelOf(path: Path): string {
   if (LABELS[key]) return LABELS[key]
   for (let i = named.length - 1; i > 0; i--) {
     const prefix = LABELS[named.slice(0, i).join('.')]
-    if (prefix) return `${prefix} – ${named.slice(i).join('.')}`
+    if (prefix) return [prefix, ...partsAfter(named.slice(i))].join(' – ')
   }
   return key || '(cały wpis)'
+}
+
+/**
+ * The parts of a path after a known prefix (AP-27): each by its own name (the longest known key first), a day or a
+ * month of a map („days.2026-11-03”) as the app writes dates; an id or a newer version's key as it is.
+ */
+function partsAfter(rest: readonly string[]): string[] {
+  const out: string[] = []
+  let i = 0
+  while (i < rest.length) {
+    let j = rest.length
+    while (j > i && !LABELS[rest.slice(i, j).join('.')]) j--
+    if (j > i) {
+      out.push(lowerFirst(LABELS[rest.slice(i, j).join('.')]!))
+      i = j
+      continue
+    }
+    const part = rest[i]!
+    out.push(ISO_DATE.test(part) || ISO_MONTH.test(part) ? (dateValueText(part) ?? part) : part)
+    i++
+  }
+  return out
+}
+
+/** Values of the enums by their Polish words (AP-27): the full key first, then the field's own key. */
+const lowerAll = (r: Readonly<Record<string, string>>): Record<string, string> => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, lowerFirst(v)]))
+const VALUE_LABELS: Record<string, Record<string, string>> = {
+  kind: { ...lowerAll(TX_KIND_LABEL), opening: 'saldo otwarcia', confirmation: 'potwierdzenie salda' },
+  'settings.accounts.kind': { bank: 'bank', wallet: 'portfel', cash: 'gotówka', other: 'inne' },
+  type: { fixed: 'stały', subscription: 'abonament', installment: 'rata' },
+  mode: { equal: 'po równo', percent: 'procenty', amounts: 'kwoty' },
+  'settings.import.rules.mode': { exact: 'nazwa kontrahenta', contains: 'nazwa zawiera', keyword: 'słowo w opisie', amount: 'kwota' },
+  inflowKind: { repay: 'spłata', income: 'przychód', advance: 'zaliczka' },
+  inflow: { ask: 'pytaj', advance: 'zaliczka', income: 'przychód' },
+  impulse: { plan: 'plan', impulse: 'impuls' },
+  direction: { in: 'wpływ', out: 'wydatek', given: 'pożyczona komuś', taken: 'pożyczona od kogoś' },
+  envelope: { daily: 'codzienna', planned: 'planowana' },
+  pool: lowerAll(ICTJ_POOL_LABEL)
+}
+
+function valueLabel(path: Path | undefined, v: string): string | undefined {
+  const named = (path ?? []).filter((p) => !p.startsWith('#'))
+  if (!named.length) return undefined
+  return VALUE_LABELS[named.join('.')]?.[v] ?? VALUE_LABELS[named[named.length - 1]!]?.[v]
 }
 
 /**
@@ -426,6 +579,11 @@ const AMOUNT_FIELDS = [
   'split.goals.*',
   'schedule.amount',
   'transfers.amount',
+  // AP-27: the amounts a conflict or the history showed in raw grosze.
+  'awaitReturn.amount',
+  'envelopeCovers.amount',
+  'removed.amount',
+  'removed.splits.amount',
   'past.target',
   'settings.layers.assumedCosts',
   'settings.orders.impulseThreshold',
@@ -482,12 +640,13 @@ export function formatValue(v: unknown, max = 80, opts: ValueText = {}): string 
   if (v === undefined) return '—'
   if (v === null || v === '') return 'puste'
   if (typeof v === 'number' && opts.path && isAmountPath(opts.path)) return opts.amount ? opts.amount(v) : `${formatPln(v)} zł`
-  if (typeof v === 'string') return opts.names?.get(v) ?? dateValueText(v) ?? cut(v)
+  if (typeof v === 'string') return opts.names?.get(v) ?? valueLabel(opts.path, v) ?? dateValueText(v) ?? cut(v)
   if (typeof v === 'number') return String(v).replace('.', ',')
   if (typeof v === 'boolean') return v ? 'tak' : 'nie'
   if (Array.isArray(v)) {
     if (v.length === 0) return 'puste'
-    if (v.every((x) => typeof x === 'string')) return cut(v.map((x) => opts.names?.get(x as string) ?? (x as string)).join(', '))
+    // Words, days, numbers (tags, the days of a reminder): the values themselves, each as the field writes it.
+    if (v.every((x) => typeof x === 'string' || typeof x === 'number' || typeof x === 'boolean')) return cut(v.map((x) => formatValue(x, max, opts)).join(', '))
     return `${v.length} ${v.length === 1 ? 'pozycja' : v.length < 5 ? 'pozycje' : 'pozycji'}`
   }
   if (isObject(v)) {

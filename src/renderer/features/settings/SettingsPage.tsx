@@ -75,13 +75,10 @@ export function SettingsPage() {
       <div className="min-w-0 flex-1 overflow-y-auto p-3">
         <div className="mx-auto flex max-w-[980px] flex-col gap-3">
           {/* On every tab (AP-28, US.31): Import z banku and ICTTJ hold the budget's settings beside this computer's. */}
-          {locked && (
-            <p className="text-[11.5px] text-accent" data-testid="settings-read-only" data-tab={budgetTab ? 'budget' : 'mixed'}>
-              {switching
-                ? 'Trwa otwieranie innego folderu – ustawień budżetu nie można teraz zmieniać.'
-                : budgetTab
-                  ? 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.'
-                  : 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać; ustawienia oznaczone „tylko ten komputer” działają.'}
+          {readOnly && (
+            <p className="text-[11.5px] text-accent" data-testid="settings-read-only" data-tab={budgetTab ? 'budget' : 'machine'}>
+              {switching ? 'Trwa otwieranie innego folderu – ustawień budżetu nie można teraz zmieniać.' : 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.'}
+              {!budgetTab && ' Ustawienia oznaczone „tylko ten komputer” działają jak zwykle.'}
             </p>
           )}
           <fieldset disabled={locked} className="contents">
@@ -290,7 +287,7 @@ function FolderTab() {
   }
   return (
     <>
-      <Panel title="Bieżący folder danych">
+      <Panel title="Bieżący folder danych" actions={<MachineOnly />}>
         <div className="flex flex-col gap-2">
           <div className="num text-[13px] break-all text-fg-strong" data-testid="settings-data-dir">
             {status?.dataDir}
@@ -388,7 +385,7 @@ function FolderTab() {
       >
         <p className="mb-2 text-[11.5px] text-muted">
           Raz dziennie – przy starcie i w tle, gdy aplikacja działa w zasobniku – ZIP danych bez historii zmian (zostaje 14 dziennych i 8
-          tygodniowych); przed każdym importem z banku (10 ostatnich) i przed migracją formatu zawsze. Folder:{' '}
+          tygodniowych); „Kopia teraz” – 5 ostatnich; przed każdym importem z banku (10 ostatnich) i przed migracją formatu zawsze. Folder kopii wybierasz na każdym komputerze osobno:{' '}
           <span className="num">{backups?.dir}</span>
         </p>
         {backups && <BackupAge files={[...backups.files, ...(backups.earlier ?? []).flatMap((e) => e.files)]} failure={backups.failure} />}
@@ -456,7 +453,7 @@ function FolderTab() {
         </div>
       </Panel>
       {recent.length > 1 && (
-        <Panel title="Ostatnio używane foldery">
+        <Panel title="Ostatnio używane foldery" actions={<MachineOnly />}>
           {recent
             .filter((d) => d !== status?.dataDir)
             .map((d) => (

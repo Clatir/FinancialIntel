@@ -50,3 +50,23 @@ export function quickTemplates(transactions: readonly Transaction[]): Templates 
   recentMemo.set(transactions, found)
   return found
 }
+
+/**
+ * The account of the newest entry typed by hand in the folder (AP-28, SW sp. 8): what a computer that never chose an
+ * account here proposes – the budget's last account, not the list's first; null = none typed on an account still open.
+ * An operation from the bank (`bank`) says nothing of the account a person types on.
+ */
+export function accountOfLastEntry(transactions: Iterable<Transaction>, open: ReadonlySet<string>): string | null {
+  let last: Transaction | null = null
+  for (const t of transactions) if (!t.bank && open.has(t.accountId) && (!last || newer(t, last))) last = t
+  return last?.accountId ?? null
+}
+
+/**
+ * The account a new entry starts on (the editor and the quick entry): the one used last on this computer; a computer
+ * that never chose one here – the account of the budget's newest entry typed by hand (AP-28), else the first open one.
+ */
+export function entryAccount(accounts: ReadonlyArray<{ id: string }>, mine: string | null, transactions: Iterable<Transaction>): string | null {
+  const open = new Set(accounts.map((a) => a.id))
+  return (mine && open.has(mine) ? mine : null) ?? accountOfLastEntry(transactions, open) ?? accounts[0]?.id ?? null
+}

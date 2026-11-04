@@ -50,8 +50,8 @@ const sameArgs = (a: readonly string[] | undefined, b: readonly string[]) => (a 
 /** The writes of the start with the system, in order; [] = nothing to write. */
 export function loginItemWrites(c: LoginContext): LoginWrite[] {
   if (!c.ownProfile) return []
-  if (c.windows) return [...c.items.filter((i) => i.name !== c.name).map((i) => ({ openAtLogin: false, ...i })), { openAtLogin: c.want, name: c.name, path: c.path, args: c.args }]
   const entry = { name: c.name, path: c.path, args: c.args }
+  // macOS: one login item of the app, no list to look at – written when switched, or kept on.
   if (!c.windows) return c.changed || c.want ? [{ openAtLogin: c.want, ...entry }] : []
   const mine = c.items.filter((i) => samePath(i.path, c.path, true))
   const own = mine.find((i) => i.name === c.name)

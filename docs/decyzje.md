@@ -2958,3 +2958,61 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wypłaty i zwroty ICTTJ, które tracą parę w banku (`pairsLost`: dostawy jak panel Dokowanie – `deliveriesFor` teraz,
   `deliveriesOfLists` ze zmianą; para przed, brak operacji po). Silnik ze zmianą liczy pary niezadokowane z dostaw po
   zmianie (`pendingPairsOf`), nie z obecnych. Tylko odczyt wyników silnika – reguły pieniędzy bez zmian.
+- **T430** Konflikty i historia czytelne (AP-27, DA sp. 3, DA.22, DA.23, DA.28, DA.30): karta konfliktu nazywa wpis tym, co
+  człowiek rozpoznaje (`conflicts.ts` `conflictSubject`) – operacja: kontrahent (inaczej tytuł, kategoria), data
+  dd.mm.rrrr, kwota ze znakiem i konto; plan i Dowództwo – miesiąc słownie; kontener, cel, pożyczka – nazwa i kwota;
+  saldo, boja, import, ustawienia – swoje; z oryginału, gdy nieczytelny – z kopii. Nazwa pliku z ULID tylko w dymku,
+  przy stronie „zapisał komputer X”, czasy jak w aplikacji. Różnice (karta, „Scal…”, Historia, Dziennik zmian, okno zmian
+  z drugiego komputera, odzyskanie): każde pole każdego schematu ma polską nazwę – `merge.ts` `LABELS`, a pole pod znanym
+  przedrostkiem składa się z nazw kluczy (`partsAfter`: „Reguły importu – kwota najwyżej”, dzień mapy jako data); test
+  przechodzi wszystkie ścieżki schematów zod i nie dopuszcza surowego klucza (klucz nowszej wersji zostaje, jak był).
+  Wartości: wyliczenia słowami (`VALUE_LABELS`: rodzaj operacji, saldo, sposób podziału, kierunek, pula…), tak / nie,
+  przecinek, daty i chwile po warszawsku, lista wartości jako wartości, obiekt jako jego pola po polsku – nigdy JSON;
+  obiekt tylko po jednej stronie rozpisany na pola (`readableChanges`), identyfikator wpisu nigdy nie jest różnicą ani
+  wyborem „Scal…” (scalona wersja ma id oryginału). Kwoty `awaitReturn`, `envelopeCovers`, usuniętych operacji importu –
+  w złotych. Historia: odrzucona strona konfliktu to „wersja niezachowana” (zamiast „odrzucona przy scalaniu”, DA.27).
+  Meldunki „podwójne korekty” mówią, że para liczy się tylko z dwóch komputerów (SA sp. 3). Tytuły wpisów z datą ISO
+  (`recordTitle`) – AP-23 (N4).
+- **T431** Konflikt rozstrzygany na wersjach, które okno pokazało (AP-27, AF-76, DA.28; rozszerza N17): „Scal…” trzyma
+  wersje, na których je otwarto (`opened`) – kopia albo oryginał zmienione w trakcie nie wchodzą po cichu: wybory zostają
+  na pokazanej treści, „Zapisz scalone” wyłączone, pasek „Kopia zmieniła się w trakcie scalania…” z „Scal od nowa”.
+  Proces główny przed każdą decyzją konfliktu czyta oba pliki z dysku jeszcze raz (`freshConflict` – watcher mógł nie
+  zdążyć): „Scal…” i „Zachowaj tę wersję” podają czasy plików, które okno pokazało, i strona zmieniona od tamtej chwili
+  odmawia (`ConflictChangedError` z bieżącym stanem dla okna) – nic nie jest zapisane ani przeniesione do Kosza;
+  „Zaakceptuj nowsze” (zbiorczo, bez wersji okna) też czyta pliki od nowa, więc odrzucona strona trafia do historii taka,
+  jaka jest na dysku, nigdy tylko do Kosza. „Zmieniona” – po treści: okno porównuje rekord bez znaczników zapisu
+  (`conflicts.ts` `changedSince` – zapis tego komputera tuż przed decyzją, `saveFirst`, który tylko odświeżył znaczniki,
+  zmianą nie jest; decyzja idzie z czasami plików, które okno zna po tym zapisie), proces główny – po skrócie treści
+  pliku przy czasie, który okno podało (okno za stanem procesu – odmowa). Odmowa jest w logu (strona i czasy).
+- **T432** Nowy komputer (AP-28, US.1, US.13, US.31, SW sp. 8): panele ustawień zapisanych w `config.json` mają jeden
+  znak „tylko ten komputer” (`MachineOnly` – rozmiar, prywatność kwot, szybki wpis, powiadomienia, dźwięki, ICTTJ: folder
+  i program, pliki z mBanku, bieżący i ostatnie foldery, zasobnik i start, aktualizacje, token). Pierwsze otwarcie
+  istniejącego budżetu (wystartowanego) na komputerze bez żadnego folderu w `config.json` zostawia w `localStorage`
+  (`fi.machineSetup`) prośbę: baner „Pierwsze otwarcie tego budżetu na tym komputerze…” z „Ustaw na tym komputerze” –
+  lista ICTTJ, skrót, start z Windows (z przełącznikiem), powiadomienia, token, każde ze stanem i „Ustaw…” do swojego
+  panelu; „Gotowe” albo × kończy, „Później” zostawia baner; pytanie o autostart nie pojawia się obok listy. Lista też
+  w Ustawieniach → Folder i kopie („Ustaw na tym komputerze…”). Folder tylko do odczytu – baner na każdej zakładce
+  Ustawień (na zakładkach komputera z dopiskiem, że ustawienia „tylko ten komputer” działają); pola budżetu wyłączone jak
+  dotąd. Scenariusz ICTTJ spoza listy: „nie ma w ICTTJ” tylko przy ICTTJ przeczytanym, inaczej „ICTTJ nie jest czytany na
+  tym komputerze” / „teraz niedostępny” (`missingForecastText`). Konto nowego wpisu (edytor i szybki wpis,
+  `calc/quick.ts` `entryAccount`): wybór tego komputera, a komputer bez wyboru – konto najnowszego wpisu ręcznego
+  w budżecie (bez operacji z banku), dopiero potem pierwsze konto. Format folderu bez zmian.
+- **T433** Start z Windows tylko z decyzji na tym komputerze (AP-28, incydent 03.11.2026 – `main/loginItem.ts`
+  `loginItemWrites`, czyste reguły z testem): profil inny niż własny aplikacji (`FI_USER_DATA` – testy, laboratorium)
+  nigdy nie pisze w kluczu Run; start aplikacji i późny odczyt `config.json` nigdy niczego nie usuwają – przy włączonym
+  ustawieniu dopisują tylko brakujący (albo z innymi argumentami) wpis tego exe; wyłączenie tutaj (Ustawienia, kreator,
+  baner, lista nowego komputera – `setTrayPrefs` z `launchAtLogin`) usuwa wyłącznie wpisy tego exe (`launchItems` Electrona
+  są po ścieżce exe) – wpis o tej samej nazwie innej kopii zostaje; stare wpisy tego exe pod inną nazwą (B52) – tylko przy
+  zmianie ustawienia, po zapisie własnego. macOS: zapis przy zmianie albo przy włączonym. Do sprawdzenia w maszynie: dwie
+  kopie (zainstalowana i przenośna) dzielą `config.json`, a wpisy mają różne nazwy – wyłączenie w jednej nie usuwa wpisu
+  drugiej.
+- **T434** „Co nowego” bez sieci, kopie po zmianie folderu kopii, zapis `config.json` ponawiany (AP-28, AF-40, IN.26,
+  DA.14, DA.11, US.33): okno ma wbudowane 15 najnowszych sekcji CHANGELOG (`electron.vite.config.mts` `__FI_CHANGELOG__`,
+  `releaseNotes.ts` `notesOf`) – panel „Co nowego w wersji X” pokazuje się z nich, gdy notatek z GitHuba nie ma
+  (aktualizacja spoza aplikacji, offline), po aktualizacji z wersji Y także wersje pośrednie (`justUpdated.from`).
+  Zmiana folderu kopii zapamiętuje poprzedni dla tego folderu danych (`config.json` `backupDirsBefore`, addytywnie,
+  najwyżej 8, `backupDirsAfter`): jego kopie zostają na liście pod nagłówkiem „Wcześniejszy folder kopii”, liczą się do
+  „Ostatnia kopia” i dają się odzyskać (`listedBackup` czyta tylko kopie z folderów listy); powrót do folderu zdejmuje go
+  z listy; nieudany zapis ustawienia cofa folder kopii. Tekst panelu mówi o 5 ostatnich kopiach ręcznych. Nieudany zapis
+  `config.json` (plik zajęty) ponawia się sam co 5 s z najnowszym stanem, aż się uda (`ConfigStore.retryLater`) –
+  komunikat w oknie to mówi.

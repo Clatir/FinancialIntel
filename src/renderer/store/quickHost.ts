@@ -4,7 +4,7 @@
  * owns the data folder's records.
  */
 import type { QuickData, QuickResult } from '@shared/api'
-import { quickTemplates } from '@shared/calc/quick'
+import { entryAccount, quickTemplates } from '@shared/calc/quick'
 import { hashTags, withoutHashTags, withTags } from '@shared/calc/tags'
 import { knownTagsOf, lastTagOf } from '../features/tags/state'
 import { daysInMonth, warsawNow } from '@shared/calc/dates'
@@ -50,7 +50,7 @@ export function quickData(): QuickData | null {
   return {
     categories,
     accounts,
-    accountId: accounts.find((a) => a.id === last)?.id ?? accounts[0]?.id ?? '',
+    accountId: entryAccount(accounts, last, listOf(s.records.transactions)) ?? '',
     energyLeft: fleet?.daily ? fleet.daily.left : null,
     monthEnergy: fleet?.started && fleet.salary != null ? fleet.energy : null,
     envelopesLeft: Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, e.left])),

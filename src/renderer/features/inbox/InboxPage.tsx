@@ -20,6 +20,9 @@ const zl = (g: number) => `${plnText(g)} zł`
 const HINT: Partial<Record<InboxKind, string>> = {
   uncategorized: 'Wydatek bez kategorii liczy się do energii dnia jako codzienny i nie trafia do żadnej koperty.',
   duplicates: 'Ta sama operacja wpisana ręcznie i z banku albo z dwóch komputerów – scalanie z jednym „Cofnij”.',
+  // AP-27 (SA sp. 3): the rule said where it is used – a repeat only from two computers.
+  corrections:
+    'To samo saldo potwierdzone na dwóch komputerach przed synchronizacją daje dwie korekty o tej samej kwocie. Zgłaszamy tylko pary z dwóch różnych komputerów – dwie korekty z jednego komputera to dwie Twoje decyzje.',
   returned:
     'Operacje z banku, które usunąłeś, a import pliku w drugim formacie (lista operacji ↔ historia rachunku) wpisał je znowu jako nowe (przed wersją 1.15.5). „Usuń” usuwa je znowu (z „Cofnij”), „zostaw” – zostają i nie będą zgłaszane.',
   transfers:

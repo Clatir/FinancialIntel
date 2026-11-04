@@ -63,6 +63,16 @@ export interface IctjSnapshot {
 
 export const EMPTY_ICTJ: IctjSnapshot = { dir: null, status: 'off', message: null, entries: [], forecasts: [], warnings: [], readAt: null }
 
+/**
+ * The chosen scenario not among the ones read (AP-28, US.13): missing in ICTTJ only when ICTTJ was read – with ICTTJ off
+ * on this computer or out of reach the scenario is still the budget's (fi.json), just not read here.
+ */
+export function missingForecastText(status: IctjStatus): string {
+  if (status === 'ok') return '(scenariusza nie ma w ICTTJ)'
+  if (status === 'off') return '(wybrany scenariusz – ICTTJ nie jest czytany na tym komputerze)'
+  return '(wybrany scenariusz – ICTTJ teraz niedostępny)'
+}
+
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/
 
 /** Canonical files of ICTTJ (`src/shared/paths.ts` there): copies of sync tools do not match and stay ICTTJ's business. */

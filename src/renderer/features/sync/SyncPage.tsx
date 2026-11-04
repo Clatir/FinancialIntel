@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSelection, type Selection } from '../../lib/selection'
 import type { ConflictEntry, HistoryEntry, HistoryKind, Problem } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
-import { conflictSubject, newerSide, newestResolutions } from '@shared/conflicts'
+import { changedSince, conflictSubject, newerSide, newestResolutions } from '@shared/conflicts'
 import { chooser, dateValueText, deepEqual, diffRecords, fieldLabel, formatValue, merge3, pathKey, readableChanges, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText, signedPln } from '../../components/fields'
 import { recordTitle } from '../../lib/recordTitle'
@@ -61,12 +61,12 @@ const shownValue = (path: readonly string[], v: unknown, names: ReadonlyMap<stri
 const momentText = (iso: string) => dateValueText(iso) ?? iso
 /** The record's own id is never a choice (AP-27): the merged version keeps the original's, at its path. */
 const isIdField = (f: MergeConflict) => f.path.length === 1 && f.path[0] === 'id'
-const sameVersions = (a: ConflictEntry, b: ConflictEntry) => a.canonical.mtimeMs === b.canonical.mtimeMs && a.copy.mtimeMs === b.copy.mtimeMs
-const CHANGED_TEXT = {
-  copy: 'Kopia zmieniła się w trakcie scalania (np. OneDrive przyniósł nowszą) – wybory dotyczą poprzedniej treści, więc nic nie zostało zapisane. Kliknij „Scal od nowa”.',
-  canonical: 'Oryginał zmienił się w trakcie scalania – wybory dotyczą poprzedniej treści, więc nic nie zostało zapisane. Kliknij „Scal od nowa”.',
-  both: 'Obie wersje zmieniły się w trakcie scalania – wybory dotyczą poprzedniej treści, więc nic nie zostało zapisane. Kliknij „Scal od nowa”.'
+const CHANGED_WHO = {
+  copy: 'Kopia zmieniła się w trakcie scalania (np. OneDrive przyniósł nowszą)',
+  canonical: 'Oryginał zmienił się w trakcie scalania',
+  both: 'Obie wersje zmieniły się w trakcie scalania'
 } as const
+const changedText = (side: keyof typeof CHANGED_WHO) => `${CHANGED_WHO[side]} – wybory dotyczą poprzedniej treści, więc „Zapisz scalone” nic nie zapisze. Kliknij „Scal od nowa”, żeby wybrać na nowej.`
 
 /**
  * „Scal” (N17): the two versions joined field by field – every field that differs is a choice, never taken silently: a
@@ -79,8 +79,9 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
   const readOnly = useFolderLocked()
   // The versions the merge was opened on (AP-27, DA.28): a side changed meanwhile (OneDrive, the other computer) is
   // never taken in silently – the choices stay on what was shown, saving refuses, „Scal od nowa” starts on the new ones.
-  const opened = c; const setOpened = (_c: ConflictEntry) => undefined
-  const changedSide = sameVersions(c, opened) ? null : c.copy.mtimeMs !== opened.copy.mtimeMs ? (c.canonical.mtimeMs !== opened.canonical.mtimeMs ? 'both' : 'copy') : 'canonical'
+  // `c` follows the folder (every change brings a new entry); `opened` stays what the choices are made on.
+  const [opened, setOpened] = useState(c)
+  const changedSide = changedSince(opened, c)
   useEffect(() => {
     let alive = true
     const now = opened
@@ -101,16 +102,22 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
     return () => {
       alive = false
     }
-  }, [opened.canonical.mtimeMs, opened.copy.mtimeMs])
+  }, [opened])
   if (!state) return <div className="mt-2 text-[11.5px] text-muted">Szukam wspólnej wersji w historii…</div>
   const save = async () => {
-    if (changedSide) return toast(CHANGED_TEXT[changedSide], 'error', 8000)
+    if (changedSide) return toast(changedText(changedSide), 'error', 8000)
     setBusy(true)
     try {
       await saveFirst('scalenie')
+      // After the flush (its change is in the window already): a side whose content moved on refuses here – the bar
+      // says it; one only stamped anew by this save goes on with the file as it is now. Main reads the files again and
+      // refuses what this window has not seen (OneDrive a moment ago).
+      const now = useData.getState().conflicts.find((x) => x.id === opened.id)
+      if (!now) return toast('Konflikt już nie istnieje (mógł zostać rozstrzygnięty na innym komputerze).', 'error', 6000)
+      const moved = changedSince(opened, now)
+      if (moved) return toast(changedText(moved), 'error', 8000)
       const { merged } = merge3(undefined, opened.canonical.record, opened.copy.record, chooser(state.choices))
-      // The versions the choices were made on: a side changed since (a save just now, OneDrive) – main refuses too.
-      await api.mergeConflict(opened.id, merged, { canonical: opened.canonical.mtimeMs, copy: opened.copy.mtimeMs })
+      await api.mergeConflict(opened.id, merged, { canonical: now.canonical.mtimeMs, copy: now.copy.mtimeMs })
       toast('Scalono obie wersje – każda z nich jest w historii wpisu.', 'success')
       onClose()
     } catch (e) {
@@ -127,7 +134,7 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
       </div>
       {changedSide && (
         <div className="flex items-center gap-2 border border-accent/50 px-2 py-1 text-[11.5px] text-accent" data-testid="conflict-merge-changed" data-side={changedSide}>
-          <span className="min-w-0 flex-1">{CHANGED_TEXT[changedSide]}</span>
+          <span className="min-w-0 flex-1">{changedText(changedSide)}</span>
           <button className="btn h-[22px] shrink-0" onClick={() => setOpened(c)} data-testid="conflict-merge-restart">
             Scal od nowa
           </button>
@@ -181,13 +188,16 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
   // Polish names of the fields and of what they point to; the record's id never (AP-27).
   const changes = useMemo(() => (c.canonical.record != null && c.copy.record != null ? readableChanges(diffRecords(c.canonical.record, c.copy.record)) : []), [c.canonical.record, c.copy.record])
   // Which record it is (AP-27): counterparty, date and amount – the file name only on hover.
-  const subject = conflictSubject(c, { amount: (g) => `${signedPln(g)} zł`, names })
+  const subject = conflictSubject(c, { amount: zl, signed: (g) => `${signedPln(g)} zł`, names })
   const resolve = async (keep: 'canonical' | 'copy') => {
     setBusy(true)
     try {
       // Unsaved local edits would be written over the version kept here (e.g. a kept copy of fi.json).
       await saveFirst('rozstrzygnięcie konfliktu')
-      await api.resolveConflict(c.id, keep)
+      // The versions this window knows after the flush (its own save is no surprise – AP-27): a file changed on the disk
+      // since (OneDrive, the watcher not there yet) refuses in main, and the card shows the new one.
+      const now = useData.getState().conflicts.find((x) => x.id === c.id) ?? c
+      await api.resolveConflict(c.id, keep, { canonical: now.canonical.mtimeMs, copy: now.copy.mtimeMs })
       toast('Konflikt rozstrzygnięty – odrzucona wersja jest w historii wpisu (i w Koszu).', 'success')
     } catch (e) {
       toast(errorMessage(e), 'error', 6000)

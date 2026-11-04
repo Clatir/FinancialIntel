@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react'
 import type { IctjProgram } from '@shared/api'
-import { chosenForecast } from '@shared/ictj'
+import { chosenForecast, missingForecastText } from '@shared/ictj'
 import { api, errorMessage } from '../../lib/api'
 import { countLabel } from '../../lib/format'
 import { updateSettings, useData, useFolderLocked } from '../../store/data'
@@ -121,7 +121,7 @@ export function IctjTab() {
                   {f.name} · {f.currency} · {countLabel(f.goals.filter((g) => g.enabled).length, 'cel', 'cele', 'celów')}
                 </option>
               ))}
-              {forecastId && !snap.forecasts.some((f) => f.id === forecastId) && <option value={forecastId}>(scenariusza nie ma w ICTTJ)</option>}
+              {forecastId && !snap.forecasts.some((f) => f.id === forecastId) && <option value={forecastId}>{missingForecastText(snap.status)}</option>}
             </select>
           </Field>
           {pending && current && (

@@ -4,6 +4,7 @@ import { effectOf, monthsEffectOf, noEffect, pairsLost, type Effect, type LostPa
 import { pendingPairsOf } from '@shared/calc/dock'
 import { budgetStartOf, computeFleet } from '@shared/calc/fleet'
 import { kindUndone, unlinkedBy, withKind } from '@shared/calc/kinds'
+import { entryAccount } from '@shared/calc/quick'
 import { confirmedChanges } from '@shared/calc/balances'
 import { newId } from '@shared/ids'
 import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, showsView, viewFilter, type OperationsFilter } from '@shared/operationsView'
@@ -290,11 +291,11 @@ export function selectOperation(id: string | null): void {
   useOperationsUi.setState({ selectedId: id })
 }
 
-const lastAccount = (): string => {
+const lastAccount = (): string | null => {
   try {
-    return localStorage.getItem(ACCOUNT_KEY) ?? MBANK_ACCOUNT_ID
+    return localStorage.getItem(ACCOUNT_KEY)
   } catch {
-    return MBANK_ACCOUNT_ID
+    return null
   }
 }
 
@@ -313,7 +314,7 @@ export function rememberAccount(id: string): void {
 export function newOperation(over: Partial<Transaction> = {}): string {
   const fi = useData.getState().fi
   const accounts = fi?.settings.accounts.filter((a) => !a.archived) ?? []
-  const account = accounts.find((a) => a.id === lastAccount())?.id ?? accounts[0]?.id ?? MBANK_ACCOUNT_ID
+  const account = entryAccount(accounts, lastAccount(), listOf(useData.getState().records.transactions)) ?? MBANK_ACCOUNT_ID
   const now = new Date().toISOString()
   const { date, time: clock } = warsawNow()
   // Written in the quiet hours, it is most likely a purchase of the day written down at night (N10): no time – a night

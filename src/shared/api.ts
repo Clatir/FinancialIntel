@@ -342,7 +342,8 @@ export interface FiApi {
   saveSettings(fi: SettingsFile): Promise<SettingsFile>
   /** The window shows this folder open (B31): main takes its writes from now on. */
   folderShown(generation: number): Promise<void>
-  resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<void>
+  /** `seen` = the sides' file times the choice was made on (AP-27): a side changed since refuses it, nothing moved. */
+  resolveConflict(conflictId: string, keep: 'canonical' | 'copy', seen?: { canonical: number; copy: number }): Promise<void>
   /** The conflict merged field by field (N17): both versions to the history, the merged one at the original's path. */
   /** `seen` = the sides' file times the merge was made from (N17): a side changed since refuses it. */
   mergeConflict(conflictId: string, merged: unknown, seen?: { canonical: number; copy: number }): Promise<void>
