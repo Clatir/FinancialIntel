@@ -51,7 +51,7 @@ const failed = (e: unknown) => toast(`Nie udało się zapisać: ${e instanceof E
 
 /** The costs linked to the cargo's containers (N72): one name in every report – monthly and periodic fees alike. */
 const CARGO_LABEL = 'Ładownia (kontenery i opłaty okresowe)'
-/** The net costs of operations dated after today (AP-36): apart, as Operacje and the balances see them. */
+/** The net costs of operations dated after today (AP-36): apart, as the balances and the engine see them. */
 const PLANNED_LABEL = 'Zaplanowane (operacje z datą po dziś – poza kosztami)'
 
 /** A gap of the plan (FVG) as on the screens (N33): a plus sign on the plus – unless the amounts are hidden. */

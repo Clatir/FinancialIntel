@@ -555,7 +555,7 @@ export interface Debriefing {
   paid: number | null
   /**
    * Net costs of the month up to the budget's day (AP-36, T421): the whole debriefing reads the operations dated up to
-   * today, as Operacje, the balances and the engine count them.
+   * today, as the balances and the engine count them.
    */
   costs: number
   /** Net costs of the month's operations dated after the budget's day – „zaplanowane”, apart from the rest (AP-36). */
