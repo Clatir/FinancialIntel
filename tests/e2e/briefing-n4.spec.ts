@@ -22,6 +22,8 @@ const clockPlus = (time: string, minutes: number) => {
 }
 
 test('odprawa z hierarchią, jedno powiadomienie przy starcie, godzina odprawy, rozkazy i progi tylko w Ustawieniach (AP-16)', async () => {
+  // The touch's throttle waited out (31 s) on top of the rest.
+  test.setTimeout(150_000)
   const { date: today, month, time } = warsawNow()
   const start = `${addMonths(month, -1)}-01`
   // An asteroid in 10 days (information – folded), the mBank never imported (the day's matter).
@@ -57,8 +59,10 @@ test('odprawa z hierarchią, jedno powiadomienie przy starcie, godzina odprawy, 
       ;(globalThis as unknown as { __notes: unknown[] }).__notes = []
     })
     await page.evaluate(() => localStorage.removeItem('fi.notify.sent'))
-    // The first touch of the window: the morning's opening. Before any click of this test – the notifier takes one touch
-    // in 30 s, so a click just before would swallow it (a fast machine: CI).
+    // The first touch of the window: the morning's opening. The notifier takes one touch in 30 s – a pointer resting over
+    // the window at its start (Xvfb: the cursor in the screen's corner, over the window) is one: the throttle waited out.
+    expect(await page.evaluate('document.visibilityState')).toBe('visible')
+    await page.waitForTimeout(31_000)
     await page.evaluate('window.dispatchEvent(new PointerEvent("pointerdown"))')
     await expect.poll(notes).toHaveLength(1)
     const [note] = await notes()
