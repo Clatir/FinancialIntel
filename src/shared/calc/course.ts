@@ -12,14 +12,15 @@
  * (the engine's red alarm, `paySalary`); „teraz” is the state the engine has now (`rangeNow` = Mostek), the month's rest
  * of buoys and repayments only in `rangeRest`; a layer full now is full this month.
  *
- * N3 integration (T390): the month's rest pays what its plan still spends (the envelopes, the fees due) from the month's
- * energy left – today's energy is never more (AP-13, T371) – and over it from the shields.
+ * N3 integration (T390, T391): the month's rest pays what its plan still spends (the envelopes, the fees due) from the
+ * month's energy left – today's energy is never more (AP-13, T371) – and over it from the shields; the hull counts as
+ * full from 99 % of its target (AP-17, T372), its docking and the goals' installments at 100 %.
  */
 import type { Settings } from '../schema/settings'
 import type { Goal, MonthPlan, Scheduled, Transaction } from '../schema/records'
 import type { CargoStatus } from './cargoStatus'
 import { addMonths, monthOf } from './dates'
-import { dockAmount, goalInstallment, paySalary, rangeMonths, ratedIn, shipClass, type DockTargets, type FleetState, type ShipClass } from './fleet'
+import { dockAmount, goalInstallment, hullCountsFull, paySalary, rangeMonths, ratedIn, shipClass, type DockTargets, type FleetState, type ShipClass } from './fleet'
 import { byPriority } from './goals'
 import type { IncomeStats } from './income'
 import { sum } from './operations'
@@ -135,7 +136,10 @@ export interface Course {
    */
   rest: { overEnergy: number; short: number }
   months: CourseMonth[]
-  /** The first month the shields and the hull end full – this month when full now (null = not in the course). */
+  /**
+   * The first month the shields and the hull end full – this month when full now (null = not in the course); the hull
+   * full from 99 % of its target (T372 – as the firewall and „wolne do decyzji” count it; T391).
+   */
   shieldsFull: string | null
   hullFull: string | null
   /** Each goal's month (null = not in the course; a goal full now – this month). */
@@ -275,9 +279,10 @@ export function course(input: CourseInput, kind: CourseKind): Course {
   // „Teraz” (AF-33): the engine's state now, the maneuver's purchase this month in it – without a maneuver Mostek's.
   spend(input.month)
   const turnNow = targetsOf(input.salaryOf(input.month))
-  // A layer or a goal full now is full this month (PR sp. 8): the course never names a later month for it.
+  // A layer or a goal full now is full this month (PR sp. 8): the course never names a later month for it. The hull from
+  // 99 % of its target (T372 – Mostek's „liczy się jako pełny”, the firewall's; T391).
   let shieldsFull: string | null = turnNow.shields != null && shields >= turnNow.shields ? input.month : null
-  let hullFull: string | null = turnNow.hull != null && hull >= turnNow.hull ? input.month : null
+  let hullFull: string | null = hullCountsFull(hull, turnNow.hull) ? input.month : null
   for (const g of goals) goalEta[g.id] = g.target > 0 && g.amount >= g.target ? input.month : null
   // Now the whole debt: an installment of this month or a late one is not paid yet (it leaves `debt` when it is).
   const rangeNow = rangeMonths(shields, hull, costs, input.debt)
@@ -338,7 +343,7 @@ export function course(input: CourseInput, kind: CourseKind): Course {
     const range = rangeMonths(shields, hull, costs, debtAt(month))
     for (const g of goals) if (goalEta[g.id] == null && g.target > 0 && g.amount >= g.target) goalEta[g.id] = month
     if (!shieldsFull && targets.shields != null && shields >= targets.shields) shieldsFull = month
-    if (!hullFull && targets.hull != null && hull >= targets.hull) hullFull = month
+    if (!hullFull && hullCountsFull(hull, targets.hull)) hullFull = month
     months.push({
       month,
       salary,

@@ -1,7 +1,8 @@
 /**
- * N3 (1.15.7) – one state, every screen (T390): a partial salary this month (AP-13 – today's energy capped by the
+ * N3 (1.15.7) – one state, every screen (T390, T391): a partial salary this month (AP-13 – today's energy capped by the
  * month's) with last month's rent unpaid (AP-10 – still due): Mostek, Plan miesiąca, odprawa, Ładownia, Radar and
- * Wywiad (the course's rest of the month from the month's energy, „teraz” = Mostek – AP-18) say the same.
+ * Wywiad (the course's rest of the month from the month's energy, „teraz” = Mostek – AP-18) say the same;
+ * the hull at 99,4 % of its target counts as full on Mostek and in the course alike (AP-17).
  */
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -78,6 +79,40 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
     const sim = page.getByTestId('intel-maneuver')
     await expect(sim.getByTestId('maneuver-range').locator('td').nth(1)).toHaveText('0,5 mies. · Zwiadowca')
     await expect(sim.getByTestId('maneuver-range-rest').locator('td').nth(1)).toHaveText('0,0 mies. · Zwiadowca')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('N3: kadłub 99,4 % celu – „liczy się jako pełny” na Mostku i „Kadłub pełny – teraz” w kursie i symulatorze', async () => {
+  const { date: today, month } = warsawNow()
+  const prev = addMonths(month, -1)
+  const start = `${prev}-01`
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-n3-hull-full-')), 'FinancialIntel')
+  // The hull 17 900 / 18 000 zł (6 × 3 000 zł of costs assumed), the shields 14 100 / 12 000 zł after this month's salary.
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start, initial: { shields: 0, hull: zl(17900), goals: {} } }, layers: { ...s.layers, assumedCosts: zl(3000) } }),
+    records: {
+      balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(40000) }],
+      months: [{ month: prev, salary: zl(4000), envelopes: { [FOOD]: zl(1500), [HOME]: zl(500) } }],
+      transactions: [
+        { date: `${prev}-05`, accountId: ACC, amount: -zl(1500), categoryId: GROCERIES, counterparty: 'Biedronka' },
+        { date: `${prev}-12`, accountId: ACC, amount: -zl(2500), categoryId: HOME, counterparty: 'IKEA' },
+        { date: today, accountId: ACC, amount: -zl(100), categoryId: GROCERIES, counterparty: 'Żabka' }
+      ]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('state-hull-tolerance')).toHaveText('brakuje 100,00 zł – do 1% celu liczy się jako pełny (firewall, wolne do decyzji)')
+    await page.keyboard.press('Control+9')
+    // Before: „Kadłub pełny —” – no income in the course fills the last 100 zł.
+    const hull = page.getByTestId('intel-course-hull-full').locator('td')
+    for (const i of [1, 2, 3]) await expect(hull.nth(i)).toHaveText('teraz')
+    await expect(page.getByTestId('intel-maneuver').locator('tr').filter({ hasText: 'Kadłub pełny' }).locator('td').nth(1)).toHaveText('teraz')
+    // The month's energy pays its rest: nothing said over it.
+    await expect(page.getByTestId('intel-course-rest')).toHaveCount(0)
     expect(errors).toEqual([])
   } finally {
     await app.close()

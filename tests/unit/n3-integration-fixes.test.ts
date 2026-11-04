@@ -1,11 +1,13 @@
 /**
- * N3 (1.15.7) – the seams between AP-10, AP-13 and AP-18 (T390):
+ * N3 (1.15.7) – the seams between AP-10, AP-13, AP-17 and AP-18 (T390, T391):
  * - the course's rest of this month pays what the month's plan still spends from the month's energy left – today's energy
- *   is never more (AP-13, T371) – and over it from the shields (T390).
+ *   is never more (AP-13, T371) – and over it from the shields (T390);
+ * - the course's „Kadłub pełny” counts the hull full from 99 % of its target, as the firewall and „wolne do decyzji”
+ *   (AP-17, T372); the goals' installments at the turn still want 100 % (T391).
  */
 import { describe, expect, it } from 'vitest'
 import { cargoStatuses } from '@shared/calc/cargoStatus'
-import { course, courseIncome, courseInputOf, restNeeds } from '@shared/calc/course'
+import { course, courseIncome, courseInputOf, restNeeds, type CourseInput } from '@shared/calc/course'
 import { computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, containerSchema, defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Container, type MonthPlan, type Settings, type Transaction } from '@shared/schema'
@@ -135,5 +137,33 @@ describe('N3 integracja: resztka miesiąca w kursie z energii miesiąca, nie wi�
     expect(restNeeds(fleet, [due(zl(1200))])).toBe(zl(300))
     expect(restNeeds(fleet, [due(zl(600)), due(zl(600))])).toBe(zl(300))
     expect(restNeeds(fleet, [{ ...due(zl(1200)), state: 'paid' }])).toBe(0)
+  })
+})
+
+describe('N3 integracja: „Kadłub pełny” w kursie od 99 % celu jak firewall, raty celów przy 100 % (AP-17 × AP-18, T391)', () => {
+  const input = (hull: number): CourseInput => ({
+    month: '2026-11',
+    shields: zl(15000),
+    hull,
+    goals: [{ id: 'G', name: 'Wakacje', amount: 0, target: zl(6000), deadline: '2027-06', rates: [{ from: '2026-12', until: null }] }],
+    salaryOf: () => zl(5000),
+    costs: zl(5000),
+    layers: { shieldSalaries: 3, hullMonths: 6 },
+    minShieldSalaries: 1,
+    income: { work: 0, trading: 0 },
+    extras: new Map(),
+    debt: 0
+  })
+
+  it('kadłub 29 850 / 30 000 zł (99,5 %): pełny „teraz”; rata celu z grudniowej pensji – nie (kadłub poniżej 100 %)', () => {
+    const c = course(input(zl(29850)), 'median')
+    // Before: „Kadłub pełny —” (no income fills it to 100 %), while Mostek says „liczy się jako pełny”.
+    expect(c.hullFull).toBe('2026-11')
+    expect(c.shieldsFull).toBe('2026-11')
+    expect(c.months[0]!.rates).toBe(0)
+    // 98,9 % – not full.
+    expect(course(input(zl(29670)), 'median').hullFull).toBeNull()
+    // Exactly full – the installment comes (T272: 100 % at the turn).
+    expect(course(input(zl(30000)), 'median').months[0]!.rates).toBeGreaterThan(0)
   })
 })

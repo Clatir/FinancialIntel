@@ -2917,3 +2917,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   podwójnie liczą raty zbiorników (energia już bez nich, średnia z opłatami okresowymi), a wpływów reszty miesiąca kurs
   nie zna; sama pula dzienna (jak porównanie T371) – pomija koperty planowe i czynsz, które biorą tę samą energię. Bez
   zmian formatu.
+- **T391** „Kadłub pełny” w kursie od 99 % celu (1.15.7, N3 – integracja AP-17 × AP-18, T372): data pełności kadłuba
+  w kursie i symulatorze (`Course.hullFull`, także „teraz” – T387) liczona `hullCountsFull`, jak Mostek („liczy się jako
+  pełny”), firewall i „wolne do decyzji”. Bez zmian: raty celów z pensji na przełomie miesiąca kursu (T272) wymagają
+  100 % kadłuba, dokowanie w kursie dopełnia go do 100 % (D13), osłony – bez tolerancji.

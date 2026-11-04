@@ -130,8 +130,8 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
           </table>
           <span className="text-[11px] text-dim">
             Pensja z osłon 1. dnia (brakuje – z kadłuba, a bez obu – pensja częściowa), koszty po średniej (nad pensję – z osłon, nigdy poniżej zera: reszta to „brakuje na koszty”), wpływy dokowane: osłony
-            → kadłub → cele; boje i spodziewane spłaty w swoich miesiącach. Resztka tego miesiąca: koperty i opłaty jeszcze do zapłaty z energii miesiąca, ponad nią – z osłon. Wpływy: mediana albo
-            średnia z 12 miesięcy (panel Przychody).
+            → kadłub → cele; boje i spodziewane spłaty w swoich miesiącach. Resztka tego miesiąca: koperty i opłaty jeszcze do zapłaty z energii miesiąca, ponad nią – z osłon. Kadłub od 99 % celu liczy się jako
+            pełny. Wpływy: mediana albo średnia z 12 miesięcy (panel Przychody).
           </span>
         </div>
       )}
