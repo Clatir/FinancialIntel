@@ -6,12 +6,24 @@
  * the income docked by the order (D13), the planned operations (F16) and the repayments expected in their months. Three
  * courses by the income: without the payouts from XTB, the median and the average of the last 12 months. Nothing is
  * stored; a maneuver is a changed input. Pure.
+ *
+ * AP-18 (AF-32, AF-33): the shields never end a month below zero – what the month lacks (the costs and the payments over
+ * the shields, the hull and its income) is its `short`, a salary the shields and the hull cannot pay whole its `partial`
+ * (the engine's red alarm, `paySalary`); „teraz” is the state the engine has now (`rangeNow` = Mostek), the month's rest
+ * of buoys and repayments only in `rangeRest`; a layer full now is full this month.
  */
-import { addMonths } from './dates'
-import { dockAmount, goalInstallment, paySalary, rangeMonths, ratedIn, shipClass, type DockTargets, type ShipClass } from './fleet'
+import type { Settings } from '../schema/settings'
+import type { Goal, MonthPlan, Scheduled, Transaction } from '../schema/records'
+import { addMonths, monthOf } from './dates'
+import { dockAmount, goalInstallment, paySalary, rangeMonths, ratedIn, shipClass, type DockTargets, type FleetState, type ShipClass } from './fleet'
+import { byPriority } from './goals'
 import type { IncomeStats } from './income'
+import { planFor } from './plan'
+import { openDays, scheduledWindow } from './scheduled'
 
 export const COURSE_MONTHS = 12
+/** The buoys the course reads: its 12 months after this one, whole. */
+const COURSE_DAYS = 400
 
 export type CourseKind = 'noXtb' | 'median' | 'average'
 export const COURSE_KINDS: readonly CourseKind[] = ['noXtb', 'median', 'average']
@@ -51,8 +63,11 @@ export interface CourseInput {
   installments?: ReadonlyArray<{ month: string; amount: number }>
   /** Months without trading income from the first one on (F35: „bez wypłat z XTB przez N miesięcy”). */
   noTradingMonths?: number
-  /** A goal's money spent in a month (F35: a purchase from a goal) – what it lacks the shields pay. */
-  fromGoals?: ReadonlyArray<{ month: string; goalId: string; amount: number }>
+  /**
+   * The maneuver's purchases (F35): from a goal's money (`goalId` – what it lacks the shields pay) or from the shields
+   * (null). Apart from `extras`: a purchase this month is in „teraz” after the maneuver, this month's buoys are not (AF-33).
+   */
+  purchases?: ReadonlyArray<{ month: string; goalId: string | null; amount: number }>
   horizon?: number
 }
 
@@ -61,13 +76,23 @@ export interface CourseMonth {
   salary: number
   /** The part of the salary the hull paid (the shields lacked – D14). */
   fromHull: number
+  /** The salary the shields and the hull could not pay (0 = whole): a partial salary, the engine's red alarm (AF-32). */
+  partial: number
   income: number
   /** The planned operations and the repayments of the month (signed). */
   extras: number
   /** The goals' installments from the salary (F15). */
   rates: number
-  /** The shields' lowest point of the month: after the salary, the costs and the planned payments, before the income. */
+  /**
+   * The shields' lowest point of the month: after the salary, the costs and the planned payments, before the income –
+   * never below zero.
+   */
   low: number
+  /**
+   * What the month lacks (AF-32): its costs and payments over the shields, the hull and its income – the shields end it
+   * at zero, never below (the money is not there; the next month starts from what is).
+   */
+  short: number
   shields: number
   hull: number
   goals: Record<string, number>
@@ -81,10 +106,15 @@ export interface Course {
   kind: CourseKind
   /** The income a month the course assumes. */
   income: number
-  /** The range now, after this month's planned operations (the maneuver's purchase now too). */
+  /**
+   * The range now (AF-33): the engine's state – Mostek's range without a maneuver; a maneuver's purchase this month and
+   * its costs count in it.
+   */
   rangeNow: number | null
+  /** The range after this month's rest: its open buoys and the repayments expected (a late one too) – the course's start. */
+  rangeRest: number | null
   months: CourseMonth[]
-  /** The first month the shields and the hull end full (null = not in the course). */
+  /** The first month the shields and the hull end full – this month when full now (null = not in the course). */
   shieldsFull: string | null
   hullFull: string | null
   /** Each goal's month (null = not in the course; a goal full now – this month). */
@@ -92,6 +122,9 @@ export interface Course {
   /** Months under the minimum of the shields, and months the hull paid the salary. */
   belowMin: string[]
   fromHull: string[]
+  /** Months of a partial salary (AF-32), and what the course's months lack together (`CourseMonth.short`). */
+  partial: string[]
+  short: number
 }
 
 /** The income a month of each course (F27): work alone, the medians, the averages of the last 12 months. */
@@ -100,13 +133,58 @@ export function courseIncome(stats: IncomeStats, kind: CourseKind): { work: numb
   return { work: stats.median.work ?? 0, trading: kind === 'noXtb' ? 0 : (stats.median.trading ?? 0) }
 }
 
+/**
+ * The course's input from the engine's state now and the records (Wywiad): the plans, the buoys, the loans. The layers,
+ * the average costs and the debt are the engine's – the course's „teraz” is Mostek's (AF-33). The income – `courseIncome`.
+ */
+export function courseInputOf(
+  fleet: FleetState,
+  r: { settings: Pick<Settings, 'layers' | 'orders'>; plans: readonly MonthPlan[]; goals: readonly Goal[]; scheduled: readonly Scheduled[]; transactions: readonly Transaction[] }
+): CourseInput | null {
+  if (!fleet.started) return null
+  const extras = new Map<string, number>()
+  const add = (month: string, v: number) => extras.set(month, (extras.get(month) ?? 0) + v)
+  // The buoys' open days of the course's year (a late one in this month), the repayments expected of the loans given.
+  for (const d of openDays(scheduledWindow(r.scheduled, r.transactions, fleet.today, COURSE_DAYS))) if (d.scheduled.amount != null) add(d.date < fleet.today ? fleet.month : monthOf(d.date), d.scheduled.amount)
+  const installments: Array<{ month: string; amount: number }> = []
+  for (const l of fleet.loans) {
+    if (l.loan.closedAt) continue
+    for (const i of l.left) {
+      if (l.loan.direction === 'given') add(i.date < fleet.today ? fleet.month : monthOf(i.date), i.amount)
+      else installments.push({ month: monthOf(i.date), amount: i.amount })
+    }
+  }
+  const records = new Map(r.goals.map((g) => [g.id, g]))
+  return {
+    month: fleet.month,
+    shields: fleet.shields.amount,
+    hull: fleet.hull.amount,
+    goals: byPriority(fleet.goals.filter((g) => g.takes).map((g) => ({ ...g, createdAt: records.get(g.id)?.createdAt ?? '' }))).map((g) => ({
+      id: g.id,
+      name: g.name,
+      amount: g.amount,
+      target: g.target,
+      deadline: records.get(g.id)?.deadline ?? null,
+      rates: records.get(g.id)?.rates ?? []
+    })),
+    salaryOf: (m: string) => planFor(r.plans, m)?.salary ?? null,
+    planMonths: r.plans.map((p) => p.month),
+    costs: fleet.costs.average,
+    layers: r.settings.layers,
+    minShieldSalaries: r.settings.orders.minShieldSalaries,
+    income: { work: 0, trading: 0 },
+    extras,
+    debt: fleet.debt,
+    installments
+  }
+}
+
 export function course(input: CourseInput, kind: CourseKind): Course {
   const horizon = input.horizon ?? COURSE_MONTHS
   let shields = input.shields
   let hull = input.hull
   const goals = input.goals.map((g) => ({ ...g }))
   const goalEta: Record<string, string | null> = {}
-  for (const g of goals) goalEta[g.id] = g.target > 0 && g.amount >= g.target ? input.month : null
   const costs = input.costs
   const drawShields = (v: number) => {
     const fromShields = Math.min(v, Math.max(0, shields))
@@ -126,32 +204,39 @@ export function course(input: CourseInput, kind: CourseKind): Course {
     for (const g of goals) g.amount += split.goals[g.id] ?? 0
   }
   const debtAt = (month: string) => Math.max(0, input.debt - (input.installments ?? []).filter((i) => i.month <= month).reduce((a, i) => a + i.amount, 0))
-  /** A purchase from a goal's money (F35): the goal pays what it holds, the shields the rest – as the engine's expense. */
-  const spendGoals = (month: string) => {
-    for (const x of input.fromGoals ?? []) {
+  /** The maneuver's purchases (F35): a goal pays what it holds, the shields the rest – as the engine's expense. */
+  const spend = (month: string) => {
+    for (const x of input.purchases ?? []) {
       if (x.month !== month) continue
-      const g = goals.find((y) => y.id === x.goalId)
+      const g = x.goalId == null ? undefined : goals.find((y) => y.id === x.goalId)
       const fromGoal = Math.min(x.amount, Math.max(0, g?.amount ?? 0))
       if (g) g.amount -= fromGoal
       if (x.amount > fromGoal) drawShields(x.amount - fromGoal)
     }
   }
-  // This month's rest: its planned operations and repayments still to come (its salary and costs are behind it).
-  const now = input.extras.get(input.month) ?? 0
-  if (now < 0) drawShields(-now)
-  else dock(now, targetsOf(input.salaryOf(input.month)))
-  spendGoals(input.month)
+  // „Teraz” (AF-33): the engine's state now, the maneuver's purchase this month in it – without a maneuver Mostek's.
+  spend(input.month)
+  const turnNow = targetsOf(input.salaryOf(input.month))
+  // A layer or a goal full now is full this month (PR sp. 8): the course never names a later month for it.
+  let shieldsFull: string | null = turnNow.shields != null && shields >= turnNow.shields ? input.month : null
+  let hullFull: string | null = turnNow.hull != null && hull >= turnNow.hull ? input.month : null
+  for (const g of goals) goalEta[g.id] = g.target > 0 && g.amount >= g.target ? input.month : null
   // Now the whole debt: an installment of this month or a late one is not paid yet (it leaves `debt` when it is).
   const rangeNow = rangeMonths(shields, hull, costs, input.debt)
+  // This month's rest: its planned operations and repayments still to come (its salary and costs are behind it).
+  // TODO(AP-13): with the engine's energy left in the month (a partial salary – „pensja częściowa”), the costs still to
+  // come over it would come from the shields here too; the course reads the layers now and leaves the energy to the month.
+  const now = input.extras.get(input.month) ?? 0
+  if (now < 0) drawShields(-now)
+  else dock(now, turnNow)
+  const rangeRest = rangeMonths(shields, hull, costs, input.debt)
   const months: CourseMonth[] = []
-  let shieldsFull: string | null = null
-  let hullFull: string | null = null
   for (let i = 1; i <= horizon; i++) {
     const month = addMonths(input.month, i)
     const salary = input.salaryOf(month) ?? 0
     const targets = targetsOf(salary)
     const full = targets.shields != null && targets.hull != null && shields >= targets.shields && hull >= targets.hull
-    // The turn: the salary from the shields, the hull when they lack (D14).
+    // The turn: the salary from the shields, the hull when they lack (D14); neither – a partial salary (red alarm).
     const pay = paySalary(salary, shields, hull)
     shields -= pay.fromShields
     hull -= pay.fromHull
@@ -168,19 +253,22 @@ export function course(input: CourseInput, kind: CourseKind): Course {
         rates += take
       }
     // The month's costs from the salary, over it from the shields; the planned payments out of the shields.
-    const spend = costs ?? salary
-    const fromEnergy = Math.min(spend, Math.max(0, energy))
+    const costsOfMonth = costs ?? salary
+    const fromEnergy = Math.min(costsOfMonth, Math.max(0, energy))
     energy -= fromEnergy
-    if (spend > fromEnergy) drawShields(spend - fromEnergy)
+    if (costsOfMonth > fromEnergy) drawShields(costsOfMonth - fromEnergy)
     const extras = input.extras.get(month) ?? 0
     if (extras < 0) drawShields(-extras)
-    spendGoals(month)
-    const low = shields
+    spend(month)
+    const low = Math.max(0, shields)
     // The income docked by the order (D13), the planned money in too; what the salary left – back to the shields.
     const trading = i <= (input.noTradingMonths ?? 0) ? 0 : input.income.trading
     const income = input.income.work + trading
     dock(income + Math.max(0, extras), targets)
     shields += energy
+    // What the month's income did not cover either (AF-32): lacking, not money of the shields – they end at zero.
+    const short = Math.max(0, -shields)
+    shields += short
     const min = salary > 0 ? Math.round(Math.min(input.minShieldSalaries, input.layers.shieldSalaries) * salary) : null
     const range = rangeMonths(shields, hull, costs, debtAt(month))
     for (const g of goals) if (goalEta[g.id] == null && g.target > 0 && g.amount >= g.target) goalEta[g.id] = month
@@ -190,10 +278,12 @@ export function course(input: CourseInput, kind: CourseKind): Course {
       month,
       salary,
       fromHull: pay.fromHull,
+      partial: salary - pay.paid,
       income,
       extras,
       rates,
       low,
+      short,
       shields,
       hull,
       goals: Object.fromEntries(goals.map((g) => [g.id, g.amount])),
@@ -206,12 +296,15 @@ export function course(input: CourseInput, kind: CourseKind): Course {
     kind,
     income: input.income.work + input.income.trading,
     rangeNow,
+    rangeRest,
     months,
     shieldsFull,
     hullFull,
     goalEta,
     belowMin: months.filter((m) => m.belowMin).map((m) => m.month),
-    fromHull: months.filter((m) => m.fromHull > 0).map((m) => m.month)
+    fromHull: months.filter((m) => m.fromHull > 0).map((m) => m.month),
+    partial: months.filter((m) => m.partial > 0).map((m) => m.month),
+    short: months.reduce((a, m) => a + m.short, 0)
   }
 }
 
@@ -255,11 +348,7 @@ export function maneuver(input: CourseInput, m: Maneuver): CourseInput {
     next.goals = [...input.goals, { id: MANEUVER_GOAL, name: m.goal.name || 'Nowy cel', amount: 0, target: m.goal.target, deadline: m.goal.deadline, rates: m.goal.rate && m.goal.deadline ? [{ from: addMonths(input.month, 1), until: null }] : [] }]
   if (m.purchase && m.purchase.amount > 0) {
     const { amount, month, from } = m.purchase
-    if (from === 'shields') {
-      const extras = new Map(input.extras)
-      extras.set(month, (extras.get(month) ?? 0) - amount)
-      next.extras = extras
-    } else next.fromGoals = [...(input.fromGoals ?? []), { month, goalId: from, amount }]
+    next.purchases = [...(input.purchases ?? []), { month, goalId: from === 'shields' ? null : from, amount }]
   }
   return next
 }

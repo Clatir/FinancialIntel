@@ -2820,3 +2820,84 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   kreator – `paidDays` propozycji): płatność 28.10 za termin 03.11 (start 04.11) jest tego terminu – stan „zapłacone”,
   przy opłacie okresowej ≥ 3 mies. cykl zapłacony (T135, T345), kreator i silnik nie odkładają jej drugi raz.
   Płatności sprzed startu nie przechodzą przez przebieg (jak dotąd), wcześniejsze tylko mówią o dniu płatności.
+- **T380** Zamrażanie porcjami w osobnych zadaniach (1.15.7, AP-14, AF-6 / P.1): porcja (`DAYS_PER_PASS` = 2 dni,
+  `advancePortion` w `store/game.ts`) rusza z timera (`schedulePortion`, `setTimeout(…, 0)`), nigdy w ciele efektu –
+  zapis porcji zmienia rekordy, efekt rusza znowu, a wywołana od razu następna porcja szła w tym samym zadaniu (zustand
+  renderuje synchronicznie): zaległość ponad ok. 100 dni (50 porcji) przekraczała limit zagnieżdżonych aktualizacji
+  Reacta (#185) na otwartym ekranie. Między porcjami okno się odmalowuje; kolejność i wynik dni bez zmian (te same dni
+  w tej samej kolejności). Sprawdzenie zapisu w tle (`writesInBackground`, T301) – w chwili porcji.
+- **T381** Pytanie przed zamrożeniem dni bez danych z banku (1.15.7, AP-14, D99 pkt 5; DW sp. 1, DW.37; obok T163):
+  `importWait` (`calc/game.ts`) – aktywne konto mBanku (`importFormat` 'mbank'), już importowane, ostatni import ponad
+  `IMPORT_DUE_DAYS` (3) dni temu (próg odprawy „zaimportuj nowy plik”), i niezamrożony dzień do zamrożenia (do
+  przedwczoraj) od dnia po tym, co obejmują pliki konta (`coveredTo` + 1, bez niego – dzień po imporcie); konto nigdy
+  nieimportowane (budżet prowadzony ręcznie) i zarchiwizowane nie czekają. Komputer w użyciu (D86) – ten, który zamraża –
+  pyta oknem „Dni bez danych z banku” (nazwa konta, „ostatni import N dni temu”, zakres dni): „Zaimportuj najpierw”
+  (Import; pytanie zamknięte do końca życia okna, dni czekają) albo „Zamroź bez danych”; Dowództwo pokazuje czekanie
+  z „Importuj” i „Zamroź bez danych”. Dni od luki czekają (`advanceGame` `waitImport`, razem z `hold` z T163 – wcześniejszy
+  wygrywa) i misja tygodnia z nimi, gdy luka zaczyna się przed jej poniedziałkiem (wybór czyta 4 tygodnie przed nim).
+  Czekanie najwyżej 7 dni (`IMPORT_WAIT_DAYS`, jak T163) od pierwszego czekania na tym komputerze – potem dni zamarzają tak,
+  jak są. Odpowiedź i początek czekania – na komputerze (`localStorage` `fi.game.importWait`), po kluczu spóźnionych
+  importów (konto + czas importu): nowy import kończy czekanie, a następne spóźnienie to nowe pytanie; „Zamroź bez danych”
+  obowiązuje do następnego importu. Drugi komputer pyta sam. Bez nowych pól w folderze; zamrożone dni bez zmian.
+- **T382** „Nowa klasa” a nowe dane (1.15.7, AP-14, DW sp. 6, DW.20): dzień zamrażany z inną klasą niż dzień przed nim
+  (tak, jak go zamrożono) liczy ten dzień przed nim jeszcze raz z danymi tego dnia (jeden przebieg silnika więcej, tylko
+  przy zmianie klasy); gdy dane dają mu już nową klasę (albo dalej), zmiana przyszła z danymi – import historii po
+  zamrożeniu wcześniejszych dni – nie z okrętem. Dzień zapisuje to addytywnie w `GameDay.clsBefore` (tylko gdy różne od
+  zamrożonej klasy dnia przed); dziennik wachty pokazuje „Klasa: Zwiadowca → Niszczyciel (skutek nowych danych, nie
+  zmiana okrętu)” (`WatchEntry` `data`), ekran „Nowa klasa” (`celebrationsOf` – tylko `peak`) jej nie pokazuje. Zmiana
+  częściowo z danych (dzień przed według danych w klasie pośredniej) świętuje się jak dotąd. Dni sprzed 1.15.7 bez pola –
+  jak dotąd. Bez `SCHEMA_VERSION` (pole opcjonalne, starsza wersja je zachowuje – `z.looseObject`). Panel misji tygodnia
+  bez misji (DW sp. 2): „Pierwsza misja w tygodniu od …” tylko, gdy pierwszy pełny tydzień gry jest przed nami
+  (`missionAhead`), inaczej „Misja tygodnia zostanie wybrana po zamrożeniu dni” (przy czekaniu na import – „po imporcie
+  z banku (albo po „Zamroź bez danych”)”) – nigdy poniedziałek z przeszłości.
+- **T383** Misje (1.15.7, AP-30, AF-31, AF-65, RY sp. 1, WY sp. 1; D84 C11 zgodnie): „Inwentaryzacja” liczy potwierdzenie
+  po dniu potwierdzenia – warszawski dzień ostatniego zapisu rekordu (`updatedAt`; `confirmBalance` trzyma jeden rekord
+  na saldo, ponowne potwierdzenie go zapisuje), nie po dacie salda (saldo z pliku banku ma datę ostatniego dnia pliku) –
+  w stanie misji i w wyborze słabego punktu. „Dzień bez wydatków”: dziś potwierdzone „Dziś bez wydatków” liczy się od
+  razu (nie „+1, jeśli dziś bez wydatków”); wydatek z dziś i tak go zabiera (`costOn`). „Dziś bez wydatków” przy wydatku
+  z dziś zapisuje (raport wachty zamknięty) i mówi toastem / powiadomieniem, że dzień się nie liczy (`noSpendWarning`).
+  Misja ciszy nocnej „Zaciemnienie” (dawniej „Cisza w eterze” – tak zostaje osiągnięcie 30 dni; lista misji D73 bez
+  innych zmian). Jedna „Twoja killzone”: misja – „z 4 tygodni przed misją”, Wywiad – „killzone wydatków tego okresu
+  (N mies.)” i godzina misji obok, gdy misja tygodnia to Killzone (`killzoneNote`).
+- **T384** Droga do awansu w Dowództwie (1.15.7, AP-30, DW.18, DW sp. 5): `progressText` – dzień po zmianie stopnia
+  „dni zgodne 0 (liczone od 02.11)” zamiast odwróconego „od 02.11 do 01.11”; próg spełniony bez awansu (obniżony w trakcie)
+  – „próg spełniony, awans przy zamrożeniu kolejnego dnia” (awans rozstrzyga zamrożenie dnia, jak dotąd).
+- **T385** Kurs na 12 miesięcy bez osłon poniżej zera (1.15.7, AP-18, AF-32, WY.19; obok T276): `course` płaci pensję
+  regułą silnika (`paySalary`), a gdy osłony i kadłub nie wystarczą – miesiąc ma pensję częściową (`CourseMonth.partial`
+  = pensja − wypłacone; czerwony alarm Mostka). Koszty po średniej i boje nadal ponad energię z osłon i kadłuba, wpływy
+  miesiąca dokują po nich (dołek w miesiącu pokryty wpływem nie jest brakiem); czego nie pokryje i wpływ – „brakuje”
+  (`short`), a osłony kończą miesiąc na zerze (następny liczy od tego, co jest – brak się nie kumuluje jak dług).
+  „Najniżej w miesiącu” (`low`) też od zera. Wynik: `partial` (miesiące) i `short` (suma 12 miesięcy); Wywiad – wiersze
+  „Pensja częściowa” i „Brakuje na koszty” (akcent) w kursie i w symulatorze, komórka miesiąca z brakiem w akcencie
+  z dymkiem. Haczyk AP-13: resztka bieżącego miesiąca nie liczy energii pozostałej (`TODO(AP-13)` w `course.ts`).
+- **T386** „Teraz” symulatora = Mostek (1.15.7, AP-18, AF-33, WY.20, PR.3): `Course.rangeNow` to zasięg stanu silnika
+  teraz (`rangeMonths` z osłon, kadłuba, średnich kosztów i długu silnika – `courseInputOf`, wspólne wejście kursu
+  z `fleet`), z zakupem manewru w tym miesiącu i zmianą kosztów; resztka miesiąca (otwarte boje, spodziewane spłaty
+  pożyczek udzielonych – zaległe w tym miesiącu) tylko w `rangeRest`, od którego rusza kurs. Zakup manewru to
+  `CourseInput.purchases` (z celu albo z osłon – `goalId` null), osobno od `extras`. Symulator: wiersz „Zasięg i klasa”
+  teraz / po manewrze z `rangeNow`, wiersz „Zasięg po resztce miesiąca” (z dymkiem) tylko, gdy różni się w którejś
+  kolumnie. Sprostowanie wyroczni (C19, R-15) – AP-32.
+- **T387** Daty pełności, „wyczyść manewr”, miesiąc wyczerpania (1.15.7, AP-18, PR sp. 8, WY sp. 3, WY.15): warstwa
+  (osłony, kadłub) albo cel pełne już teraz (cele warstw jak silnik – pensja planu tego miesiąca, średnie koszty; po
+  zakupie manewru w tym miesiącu) mają datę tego miesiąca, na ekranie „teraz” – także dokładnie pełne (dawniej następny
+  miesiąc albo „—”). „Wyczyść manewr” wraca do pustego formularza (`blankForm`: nazwa i termin celu, „rata z pensji”,
+  miesiące, cykl), widoczny przy każdej zmianie formularza; termin celu nie w formacie RRRR-MM – pole `aria-invalid`
+  i podpowiedź („cel liczy się bez terminu i bez raty”). Prognoza zasięgu: oba zdania nazywają miesiąc wyczerpania jedną
+  regułą – ostatni miesiąc, który zaczyna się z paliwem (`rangeForecast.emptyMonth`, `plansEmpty`); równa liczba
+  miesięcy kończy się na początku następnego.
+- **T388** „Osłony + kadłub i zasięg” na koniec miesiąca (1.15.7, AP-31, kryterium 2, WY.3, RY.23): `calc/cushion.ts`
+  `cushionTrend` – osłony + kadłub w ostatnim dniu miesiąca i zasięg tego dnia (jak Mostek tego dnia: średnie koszty
+  według reguły `costsFor` – 12 objętych miesięcy przed nim, poniżej 3 przyjęte koszty – i dług pożyczek wziętych z dniem
+  nie późniejszym), zmiana m/m kwoty (strzałka ↑ / ↓ / →, zieleń / czerwień jak kwoty) i zasięgu (w dziesiątych, po
+  obcięciu T218). Tylko miesiące zakończone: bieżący jest po wypłacie pensji do energii, a przed łupami – wobec końca
+  miesiąca zawsze by spadał. Miesiące przed startem budżetu pominięte, pierwszy bez zmiany („—”). Wywiad – panel
+  „Osłony i kadłub – 12 miesięcy” (najnowszy u góry, „rosną w N z M mies.”); Raporty → Debriefing – sekcja 12 miesięcy
+  do debriefowanego (także PDF); Plan miesiąca → debriefing – wiersz miesiąca; Przegląd roczny – zakończone miesiące
+  roku. Przy ukrytych kwotach zmiana kwoty bez znaku i strzałki (zasięg – jak dotąd – widoczny).
+- **T389** Stany końca miesiąca z logu silnika (1.15.7, AP-31, T4, „Wydajność”): osłony i kadłub to sumy `moves` logu
+  jednego przebiegu silnika (`fleet.log`) do końca każdego miesiąca – żadnego przebiegu na miesiąc (12 przebiegów to
+  ok. 1,8 s przy 30 tys. operacji); sumy w pamięci po logu (`WeakMap`), hak `useCushion` liczy raz na przebieg silnika
+  i rekordy, które czyta. Bezpiecznik: log, który nie sumuje się do stanu silnika teraz (ruch warstwy bez wpisu
+  w logu), przełącza na przebieg silnika na koniec każdego miesiąca (`engineAt`). Test: każdy koniec miesiąca =
+  `computeFleet` z `now` tego dnia (dostawy, łupy, wydatek ponad energię, pensja z kadłuba, pożyczki, konto dołączone
+  później). Nowy ruch warstwy w silniku – zawsze z wpisem w logu.

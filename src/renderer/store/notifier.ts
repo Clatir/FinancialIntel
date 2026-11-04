@@ -25,7 +25,7 @@ import { futureNow } from '../features/radar/future'
 import { newBankFilesNow, openBankFile } from './bankFiles'
 import { openSensor } from '../features/sensors/open'
 import { anomaliesNow, returnsNow } from '../features/sensors/state'
-import { confirmNoSpend, eveningNow, snoozeEvening } from '../features/evening/state'
+import { confirmNoSpend, eveningNow, noSpendWarning, snoozeEvening } from '../features/evening/state'
 
 const SENT_KEY = 'fi.notify.sent'
 
@@ -61,7 +61,7 @@ export function openTag(tag: string): void {
     const ok = tag === 'evening:nospend' ? confirmNoSpend() : (snoozeEvening(), true)
     // The window hidden: the answer as a notification (its toast is not seen).
     if (document.visibilityState !== 'visible')
-      void api.notify({ title: 'Raport wachty dnia', body: !ok ? 'Nie zapisano – otwórz okno aplikacji.' : tag === 'evening:nospend' ? 'Dziś bez wydatków – zapisane.' : 'Przypomnę za 30 minut.', tag: 'evening', silent: true })
+      void api.notify({ title: 'Raport wachty dnia', body: !ok ? 'Nie zapisano – otwórz okno aplikacji.' : tag === 'evening:nospend' ? (noSpendWarning() ?? 'Dziś bez wydatków – zapisane.') : 'Przypomnę za 30 minut.', tag: 'evening', silent: true })
     return
   }
   clickedAt = Date.now()

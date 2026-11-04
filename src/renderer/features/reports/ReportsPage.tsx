@@ -5,7 +5,7 @@
  * amounts (the hidden amounts are the screen's).
  */
 import { useMemo, useState, type ReactNode } from 'react'
-import { addDays, isoWeekOf, mondayOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
+import { addDays, addMonths, isoWeekOf, mondayOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
 import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekNumbers, yearNumbers, yearWealth } from '@shared/calc/intel'
 import { setReportTab, setWatchMonday, useReportsUi, watchMondayOf, type ReportTab } from './state'
@@ -30,6 +30,7 @@ import { Empty, Panel, Segmented, cx } from '../../components/ui'
 import { countLabel, dayLabel, monthLabel, plDate, WEEKDAY_PL } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { useBriefingItems } from '../bridge/BridgePage'
+import { cushionSection, useCushion } from '../intel/Cushion'
 
 const zl = (g: number) => `${plnText(g)} zł`
 /** The files: the real amounts (D73). */
@@ -262,6 +263,8 @@ function DebriefReport() {
   const [month, setMonth] = useState(() => (months[1] ?? months[0])!)
   const d = useDebrief(month)
   const b = d.brief
+  // AP-31: the shields and the hull at the end of the 12 months up to this one (a month running – up to the one before).
+  const cushion = useCushion(addMonths(month, 1))
   // The split as the engine made it (B10): the loot now, a late import included.
   const loot = lootApplied(fleet.log, month)
   const sections = (money: (g: number) => string, label: (id: string) => string): ReportSection[] => [
@@ -326,6 +329,7 @@ function DebriefReport() {
         ['Trafność (plan wśród oznaczonych)', d.log.plan.count + d.log.impulse.count ? `${Math.round((d.log.plan.count / (d.log.plan.count + d.log.impulse.count)) * 100)}%` : '—']
       ]
     },
+    cushionSection('Osłony i kadłub – 12 miesięcy', cushion, money, true),
     ...(loot
       ? [
           {
@@ -429,6 +433,8 @@ function YearReport() {
   }, [wealth, year, today, loans, transactions, containers, fleet.household])
   const achievements = (game?.input.game ?? []).flatMap((g) => g.achievements).filter((a) => (a.day ?? '').startsWith(year) && (ACHIEVEMENTS as readonly string[]).includes(a.id))
   const reached = goalsReachedIn(fleet.log, fleet.goals, year)
+  // AP-31: the year's months that ended – the shields and the hull at each one's end.
+  const cushion = useCushion(`${Number(year) + 1}-01`)
   const sections = (money: (g: number) => string): ReportSection[] => [
     {
       title: 'Rok w liczbach',
@@ -452,6 +458,7 @@ function YearReport() {
       // Why the months do not add up to the year's income (N66, T119).
       text: 'Trading netto liczony w każdym miesiącu osobno (dopłaty do XTB nie schodzą poniżej zera); przychody roku nettują dopłaty z całego roku. Pieniądze na kontach to suma sald – z pożyczonymi i depozytem domowników.'
     },
+    cushionSection('Osłony i kadłub na koniec miesięcy', cushion, money, false),
     { title: 'Kategorie', table: { head: ['Kategoria', 'Koszty'], rows: y.categories.slice(0, 12).map((c) => [c.id === 'cargo' ? CARGO_LABEL : c.id === '-' ? 'bez kategorii' : cats.label(c.id), money(c.cost)]), numeric: [1] } },
     {
       title: 'Cele i osiągnięcia',
