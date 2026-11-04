@@ -209,6 +209,25 @@ describe('window.fi na telefonie', () => {
     await h.close()
   })
 
+  it('fi.json znika z lustra (synchronizacja): okno wie od razu, zapis czeka; fi.json z powrotem – okno widzi powrót (AP-1, przegląd)', async () => {
+    await seedFolder()
+    const { h } = host()
+    const changes: ChangeSet[] = []
+    h.api.onChange((c) => changes.push(c))
+    const res = await h.api.loadCurrent()
+    await h.api.folderShown((res && res.ok ? res.snapshot : null)!.generation!)
+    const fi = await vfs.readFile(`${MIRROR}/fi.json`)
+    // Every change of the mirror comes in the data store's turn (`applyExternal`) and is read there – never behind it.
+    await h.applyExternal(['fi.json'], () => vfs.rm(`${MIRROR}/fi.json`))
+    expect(changes.at(-1)?.status).toMatchObject({ available: false, readOnly: true })
+    const t = { schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: CREATED, updatedAt: CREATED, date: '2026-10-21', accountId: MBANK_ACCOUNT_ID, amount: -700, note: '' }
+    await expect(h.api.saveRecord('transactions', t as never)).rejects.toThrow(/niedostępny/)
+    await h.applyExternal(['fi.json'], () => vfs.writeFile(`${MIRROR}/fi.json`, fi))
+    expect(changes.at(-1)?.status).toMatchObject({ available: true, readOnly: false })
+    await h.api.saveRecord('transactions', t as never)
+    await h.close()
+  })
+
   it('eksport listy (T311): plik do udostępniania iOS – CSV jako tekst, Excel jako ZIP; bez ścieżki „Zapisano …”', async () => {
     const shared: Array<{ name: string; data: Uint8Array; mime: string }> = []
     const h = new PhoneHost({
