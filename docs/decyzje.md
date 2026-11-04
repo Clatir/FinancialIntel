@@ -2386,3 +2386,24 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   złapała wpływ od osoby z pożyczką z Radaru otwartą w dniu wpływu (`loanOn`: udzielona do tego dnia, niezamknięta przed
   nim), zapisany jako rodzaj reguły – „N do poprawy” w „niespójne” (licznik razem z innymi), z listą operacji do otwarcia;
   „bez trafień” = jego licznik (`inAuditView`, bez reguł pożyczki, PIT-38 i XTB).
+- **T327** „+ w tym za X” w wierszu importu (AP-7, AF-27; D81): wiersz bez własnej decyzji pokazuje swoją część
+  rozkładu grupy (`RowShares`); zmiana robi z tego własną decyzję wiersza, która zostaje w trakcie wpisu – także linia
+  0 zł (porównanie z linią 0 zł, nie `sameChoice`, które linie 0 zł pomija – `rowSharesChoice`); do decyzji grupy wraca
+  „jak grupa” albo usunięcie wszystkich linii, gdy grupa nie ma swoich. Nowa linia (wiersz, grupa, temat) startuje od
+  tego, co X ma oddać – po zakupach pliku i po częściach X w innych wierszach – najwyżej tyle, ile zostało w pieniądzach
+  wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”. Własna część wiersza zostaje
+  wpisana jak wpisana (także ponad dług – świadomie, za ten przelew).
+- **T328** „w tym za X” grupy i tematu (AP-7, AF-27; D81): kwota decyzji wspólnej dla kilku wpłat to razem dla X, nie
+  na każdą wpłatę – rozkładana po kolei od najstarszej (każda wpłata najwyżej swoją kwotą), a wszystkie spłaty X z grup
+  i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy (`rowShares`). „Ma oddać” =
+  dług z księgi teraz plus części X zakupów, które ten import tworzy (zwrot towaru odejmuje), pomniejszone o jego zaliczkę
+  (`owedWithFile`); część zaliczki / przychodu (`inflowKind` inny niż spłata) – bez tego limitu. Podgląd mówi przy linii
+  grupy, z których wpłat poszła i dlaczego mniej niż wpisane („tyle X ma oddać” / „tyle zostało we wpłatach”); import
+  liczy to samo (`runImport` → `buildImport({ owed })`). Bez migracji: importy z „w tym za” w grupie kilku wpłat sprzed
+  1.15.5 mają zdublowane części – do poprawy w Operacjach.
+- **T329** Pewne dopasowanie przy podziale na osoby (AP-7, D91 b – D99; DM sp. 1–2): w edytorze Operacji dopisana albo
+  zmieniona część osoby („+ także za…”, „podziel na osoby”) wiąże sama pewny zakup tej osoby, gdy jej część nie wskazuje
+  jeszcze żadnego (to samo, co edytor proponował jako „Pasuje: …” – `moreSureCovers`, `repaymentSharesByMember`); część
+  usunięta zdejmuje wskazane zakupy tej osoby (`keptCovers`). Import i szybki wpis wiązały już każdą osobę osobno
+  (`linkRepayments`). Pewne jest też wpłata co najmniej równa wszystkim otwartym zakupom osoby (do 500) – spłaca wszystkie
+  (`matchCovers`; reszta jak dotąd: zaliczka albo przychód według osoby), zamiast „rozliczony” przy zakupach „do oddania”.

@@ -95,15 +95,22 @@ test('Zwrot domownika przypisany do zakupu (1.12.0, D91): pewne dopasowanie, „
     await page.keyboard.press('Control+Shift+M')
     await expect(report).toHaveCount(0)
 
-    // Tata's transfer with Mama's part (through another member): each part its own purchases – offered, one click each.
+    // Tata's transfer with Mama's part (through another member): each part's sure purchase named by itself (D91 b, AP-7 –
+    // as for one person): Tata's 60 zł is more than all he owes (Rossmann 40 – DM sp. 2), Mama's 20 zł – what is left of Lidl.
     await page.keyboard.press('Control+2')
     await memberIncome(page, '60', 'Tata', 'Tata przelew')
     await page.getByTestId('operation-income-split').click()
     await page.getByTestId('income-split-member').selectOption({ label: 'Mama' })
     await typeAmount(page, page.getByTestId('income-split-amount'), '20')
     const tata = page.locator('[data-testid="repayment-member"][data-member="Tata"]')
-    await tata.getByTestId('repayment-offer').click()
-    await mama.getByTestId('repayment-offer').click()
+    await expect.poll(async () => (await coversOf(dataDir, 'Tata przelew'))?.slice().sort()).toEqual([B, C].sort())
+    await expect(page.getByTestId('repayment-offer')).toHaveCount(0)
+    // Mama's part taken off: her purchase is no longer named by Tata's money; back – named again.
+    await page.getByTestId('income-split-remove').click()
+    await expect.poll(() => coversOf(dataDir, 'Tata przelew')).toEqual([C])
+    await page.getByTestId('operation-income-split').click()
+    await page.getByTestId('income-split-member').selectOption({ label: 'Mama' })
+    await typeAmount(page, page.getByTestId('income-split-amount'), '20')
     await expect.poll(async () => (await coversOf(dataDir, 'Tata przelew'))?.slice().sort()).toEqual([B, C].sort())
     await expect(mama.getByTestId('repayment-result')).toContainText('Lidl 20,00 zł')
     await expect(tata.getByTestId('repayment-result')).toContainText('Rossmann 40,00 zł')

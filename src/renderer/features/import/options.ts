@@ -1,5 +1,5 @@
 import { isOwnName } from '@shared/import/classify'
-import { opKindOf, type Choice, type ImportGroup } from '@shared/import/reconcile'
+import { opKindOf, sameChoice, type Choice, type ImportGroup } from '@shared/import/reconcile'
 import { HOUSE_MEMBER_ID, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
 
 /**
@@ -164,6 +164,21 @@ export function offersNewMember(
   if (g.direction !== 'in' || !name || !g.rows.length || opKindOf(g.rows[0]!.row.operation) !== 'transfer') return false
   if (choice.kind !== 'income' || choice.household || isOwnName(name, ownNames)) return false
   return !members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.toUpperCase()))
+}
+
+/** The lines of „w tym za” as one text – of 0 zł too (`sameChoice` leaves those out). */
+const linesKey = (xs: Choice['shares']): string => (xs ?? []).map((x) => `${x.memberId}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`).join(',')
+
+/**
+ * A row's decision after its „w tym za” changed (AF-27 – a new line of 0 zł was „the same as the group's”, so the row's
+ * decision was dropped at once): `shown` – what the row showed (`own` – its own decision, else its group's with the
+ * row's part of the group's spread). A row without its own decision gets one unless nothing changed; its own decision
+ * stays while it has lines, even of 0 zł being typed – back to the group's (null) only with no lines where the group
+ * has none either.
+ */
+export function rowSharesChoice(next: Choice, group: Choice, shown: Choice, own: boolean): Choice | null {
+  if (!own) return sameChoice(next, shown) && linesKey(next.shares) === linesKey(shown.shares) ? null : next
+  return !next.shares?.length && !group.shares?.length && sameChoice(next, group) ? null : next
 }
 
 /** What a bulk decision did (`chooseSelected`): why some were left as they were – the money's direction, or AP-6. */

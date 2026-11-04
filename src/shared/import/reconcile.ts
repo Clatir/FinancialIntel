@@ -16,7 +16,7 @@
  */
 import { addDays, daysBetween } from '../calc/dates'
 import { isTwoSided } from '../calc/operations'
-import { shareSplits, withBankAmount } from '../calc/share'
+import { shareAmounts, shareSplits, withBankAmount } from '../calc/share'
 import { fold } from '../fold'
 import { deepEqual } from '../merge'
 import { queryAmount } from '../operationsView'
@@ -1093,10 +1093,6 @@ export type ImportCounts = {
   copies: number
 }
 
-/**
- * The records an import writes; `makeId` gives new ids (ULIDs), `now` the time of the import. A household member's money
- * says whose it is: what it repays and what is their advance the ledger counts (`calc/household.ts`, D80).
- */
 /** What a rule says, from a decision (the import's learning, a rule edited in the settings – F22). */
 export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId' | 'inflowKind'> {
   return {
@@ -1112,6 +1108,169 @@ export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId
   }
 }
 
+// ------------------------------------------------------------------ other members' parts of a member's money (D81, AF-27)
+
+/** A household member's part of a row's money („w tym za…”). */
+export type SharePart = NonNullable<Choice['shares']>[number]
+
+/** Does the import make a new operation of the row (as `buildImport`): new, brought back, kept apart from a typed entry – not left out. */
+export const createsRow = (p: RowPlan, choices: ImportChoices): boolean =>
+  p.status === 'merge' ? !joins(p, choices) : p.status === 'new' ? !choices.skip[p.key] : p.status === 'deleted' && !!choices.restoreDeleted[p.key] && !choices.skip[p.key]
+
+/** A row's decision: its own, its group's (`from` `g:<group>`), its theme's (`t:<theme>`), else the proposal. */
+function rowDecision(p: RowPlan, choices: ImportChoices, themeOf: ReadonlyMap<string, string>): { c: Choice; from: string | null; own: boolean; group: string; theme: string | undefined } {
+  const planned = p.status === 'merge' ? p.planned : (p as PlannedRow)
+  const group = planned.group
+  const theme = themeOf.get(group)
+  const own = choices.rows[p.key]
+  if (own) return { c: own, from: null, own: true, group, theme }
+  const byGroup = group ? choices.groups[group] : undefined
+  if (byGroup) return { c: byGroup, from: `g:${group}`, own: false, group, theme }
+  const byTheme = theme ? choices.themes[theme] : undefined
+  if (byTheme) return { c: byTheme, from: `t:${theme}`, own: false, group, theme }
+  return { c: choiceOf(planned.decision), from: null, own: false, group, theme }
+}
+
+/** A member's money coming in (D80): the only decision with others' parts. */
+const memberMoneyIn = (c: Choice, p: RowPlan): boolean => c.kind === 'income' && c.household && p.row.amount > 0
+
+/** A part that repays what the member owes first (not their income or advance only – `inflowKind`). */
+const repaysPart = (x: SharePart): boolean => !x.inflowKind || x.inflowKind === 'repay'
+
+/** Where a group's or a theme's „w tym za” went: each line's amount typed and the rows it was given from (in their order). */
+export interface SpreadLine {
+  line: number
+  memberId: string
+  typed: number
+  given: Array<{ key: string; date: string; amount: number }>
+}
+
+export interface SharesSpread {
+  /** Each row's parts as the import writes them (none – no key). */
+  parts: Map<string, SharePart[]>
+  /** By the decision (`g:<group>`, `t:<theme>`): its lines spread over its rows. */
+  spread: Map<string, SpreadLine[]>
+  /**
+   * The member's money a decision of each group and theme (`g:…`, `t:…`) takes: the rows without their own decision (of a
+   * theme – also not of a group deciding them), and their sum.
+   */
+  rows: Map<string, { keys: string[]; sum: number }>
+  /** All the repayments of each member in the file's parts (at most each row's money). */
+  total: Map<string, number>
+}
+
+/**
+ * The other members' parts each row of a member's money carries (D81, AF-27 – „w tym za X”): a row's own decision as
+ * typed; a group's or a theme's spread over its rows in their order (the oldest first – „po kolei”): each row at most what
+ * is left of its money, the line at most its amount, and all the repayments of a member – at most what they owe (`owed`,
+ * `owedWithFile`: with the file's purchases) less what the rows' own decisions give them. No `owed` – no debt known: the
+ * amount typed only. A part beyond the debt only by a row's own decision (the user's, typed for that transfer).
+ */
+export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: ReadonlyMap<string, number>): SharesSpread {
+  const groups = importGroups(plan, choices.restoreDeleted)
+  const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
+  const out: SharesSpread = { parts: new Map(), spread: new Map(), rows: new Map(), total: new Map() }
+  const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v)
+  const sender = (c: Choice) => c.memberId ?? HOUSE_MEMBER_ID
+  const fresh = plan.rows.filter((p) => createsRow(p, choices)).sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
+  const shared: Array<{ p: RowPlan; c: Choice; from: string }> = []
+  const explicit = new Map<string, number>()
+  for (const p of fresh) {
+    const d = rowDecision(p, choices, themeOf)
+    if (!memberMoneyIn(d.c, p)) continue
+    // The rows a decision of the group – and of the theme, for a group without its own – would take.
+    if (!d.own)
+      for (const k of [`g:${d.group}`, ...(d.theme && d.from !== `g:${d.group}` ? [`t:${d.theme}`] : [])]) {
+        const r = out.rows.get(k) ?? out.rows.set(k, { keys: [], sum: 0 }).get(k)!
+        r.keys.push(p.key)
+        r.sum += p.row.amount
+      }
+    if (!d.c.shares?.length) continue
+    if (d.from) {
+      shared.push({ p, c: d.c, from: d.from })
+      continue
+    }
+    // The row's own: as typed (the ledger reads at most the row's money – `incomeShares`); its repayments count.
+    const parts = d.c.shares.filter((x) => x.amount > 0 && x.memberId !== sender(d.c))
+    let money = p.row.amount
+    for (const x of parts) {
+      const counted = Math.min(x.amount, money)
+      money -= counted
+      if (repaysPart(x)) {
+        add(explicit, x.memberId, counted)
+        add(out.total, x.memberId, counted)
+      }
+    }
+    if (parts.length) out.parts.set(p.key, parts.map((x) => ({ ...x })))
+  }
+  const left = new Map<string, number>()
+  const room = new Map<string, number>()
+  for (const { p, c, from } of shared) {
+    let money = p.row.amount
+    const parts: SharePart[] = []
+    const lines = out.spread.get(from) ?? out.spread.set(from, []).get(from)!
+    c.shares!.forEach((x, line) => {
+      if (x.memberId === sender(c)) return
+      let spread = lines.find((l) => l.line === line)
+      if (!spread) lines.push((spread = { line, memberId: x.memberId, typed: Math.max(0, x.amount), given: [] }))
+      const k = `${from}|${line}`
+      const typed = left.get(k) ?? Math.max(0, x.amount)
+      // A repayment never beyond the debt; a member's income or advance part (no repayment) – as typed.
+      const repays = repaysPart(x)
+      const cap = owed && repays ? (room.get(x.memberId) ?? Math.max(0, (owed.get(x.memberId) ?? 0) - (explicit.get(x.memberId) ?? 0))) : Infinity
+      const amount = Math.max(0, Math.min(typed, cap, money))
+      left.set(k, typed - amount)
+      if (owed && repays) room.set(x.memberId, cap - amount)
+      if (amount <= 0) return
+      money -= amount
+      parts.push({ ...x, amount })
+      spread.given.push({ key: p.key, date: p.row.date, amount })
+      if (repays) add(out.total, x.memberId, amount)
+    })
+    if (parts.length) out.parts.set(p.key, parts)
+  }
+  return out
+}
+
+/**
+ * What each member owes once the file is in, before its transfers (AF-27, D81 – the most a group's or a theme's
+ * „w tym za” gives them): their debt now (`balance` – the ledger's) and their parts of the purchases the import creates
+ * (a product return of theirs takes off), less the advance they hold (it pays the purchases first).
+ */
+export function owedWithFile(plan: ImportPlan, choices: ImportChoices, balance: (memberId: string) => { owed: number; deposit: number }, members: readonly string[]): Map<string, number> {
+  const groups = importGroups(plan, choices.restoreDeleted)
+  const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
+  const bought = new Map<string, number>()
+  const add = (id: string, v: number) => bought.set(id, (bought.get(id) ?? 0) + v)
+  for (const p of plan.rows) {
+    if (!createsRow(p, choices)) continue
+    const { c } = rowDecision(p, choices, themeOf)
+    if (c.kind !== 'expense') continue
+    // A purchase (out) adds to what they owe, its return (in) takes off – a gift is nobody's debt.
+    if (c.refundable) {
+      if (!c.gift) add(c.memberId ?? HOUSE_MEMBER_ID, -p.row.amount)
+    } else if (c.share) {
+      const sign = p.row.amount < 0 ? 1 : -1
+      const amounts = shareAmounts(Math.abs(p.row.amount), c.share)
+      c.share.lines.forEach((l, i) => {
+        if (l.memberId && !l.gift) add(l.memberId, sign * (amounts[i] ?? 0))
+      })
+    }
+  }
+  const out = new Map<string, number>()
+  for (const id of new Set([...members, ...bought.keys()])) {
+    const b = balance(id)
+    const more = bought.get(id) ?? 0
+    out.set(id, more >= 0 ? b.owed + Math.max(0, more - b.deposit) : Math.max(0, b.owed + more))
+  }
+  return out
+}
+
+/**
+ * The records an import writes; `makeId` gives new ids (ULIDs), `now` the time of the import. A household member's money
+ * says whose it is: what it repays and what is their advance the ledger counts (`calc/household.ts`, D80); the other
+ * members' parts of it – `rowShares` (`owed`: what each member owes with the file's purchases, `owedWithFile`).
+ */
 export function buildImport(
   plan: ImportPlan,
   choices: ImportChoices,
@@ -1121,10 +1280,13 @@ export function buildImport(
     rules: readonly ImportRule[]
     /** The budget's accounts (F10): a transfer to one of them is one operation for both sides; none given – any. */
     accounts?: readonly string[]
+    /** What each household member owes with the file's purchases (AF-27): a group's „w tym za” never beyond it. */
+    owed?: ReadonlyMap<string, number>
   }
 ): ImportResult {
   const groups = importGroups(plan, choices.restoreDeleted)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
+  const shares = rowShares(plan, choices, opts.owed).parts
   const ruleById = new Map(opts.rules.map((r) => [r.id, r]))
   const bankOf = (p: RowPlan): BankRow => ({
     format: 'mbank',
@@ -1251,12 +1413,10 @@ export function buildImport(
     const refundable = c.kind === 'expense' && c.refundable
     const household = c.kind === 'income' && !out && c.household
     const share = c.kind === 'expense' && !refundable && c.share ? c.share : null
-    const incomeSplits =
-      household && c.shares?.length
-        ? c.shares
-            .filter((x) => x.amount > 0 && x.memberId !== (c.memberId ?? HOUSE_MEMBER_ID))
-            .map((x) => ({ id: opts.makeId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, ...(x.inflowKind ? { inflowKind: x.inflowKind } : {}), note: '' }))
-        : []
+    // Other members' parts (D81): a group's or a theme's spread over its rows, never beyond what they owe (AF-27).
+    const incomeSplits = household
+      ? (shares.get(p.key) ?? []).map((x) => ({ id: opts.makeId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, ...(x.inflowKind ? { inflowKind: x.inflowKind } : {}), note: '' }))
+      : []
     // The rule's tags (F17 – „Netia → #ulga-internet”): when its decision stands.
     const ruleTags = planned.decision.ruleId && sameChoice(c, base) ? ruleById.get(planned.decision.ruleId)?.tags : undefined
     counts.created++

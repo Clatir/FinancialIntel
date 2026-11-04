@@ -128,3 +128,87 @@ test('AP-6: zwrot pożyczki z Radaru przed regułą „zwrot towaru”, decyzja 
     await app.close()
   }
 })
+
+test('AP-7: „+ w tym za Babcia” w wierszu zostaje i startuje od jej długu; w grupie rozkład po kolei – raz, z lekami', async () => {
+  const { date: today, month } = warsawNow()
+  const start = `${addMonths(month, -2)}-01`
+  const TATA = '01KN1STATA0000000000000001'
+  const BABCIA = '01KN1SBABC0000000000000002'
+  const LEKI = '01KN1SPZYCZKA0000000000003'
+  const dir = mkdtempSync(join(tmpdir(), 'fi-ap7-'))
+  const dataDir = join(dir, 'FinancialIntel')
+  const userData = join(dir, 'userData')
+  const earlier = addDays(today, -6)
+  const later = addDays(today, -3)
+  const file = join(dir, 'lista_operacji.csv')
+  writeFileSync(
+    file,
+    listaCsv([], { from: addDays(today, -8), to: addDays(today, -1) }, null, [
+      { date: later, amount: 300, name: 'PIOTR TESTOWY', title: 'OD TATY I BABCI' },
+      { date: earlier, amount: 200, name: 'PIOTR TESTOWY', title: 'ZWROT ZA KURS XTB' }
+    ])
+  )
+  const person = (id: string, name: string, over: object = {}) => ({ id, name, bankNames: [] as string[], inflow: 'advance', archived: false, via: null, opening: { owed: 0, deposit: 0 }, ...over })
+  seedFolder(dataDir, {
+    settings: (s) => ({
+      ...s,
+      budget: { ...s.budget, start },
+      household: { since: start, assignFrom: start, members: [...s.household.members, person(TATA, 'Tata', { bankNames: ['PIOTR TESTOWY'] }), person(BABCIA, 'Babcia', { via: TATA })] }
+    }),
+    records: {
+      balances: [{ date: start, accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(5000) }],
+      // „Leki dla Babci”: she owes them back (IM.25).
+      transactions: [{ id: LEKI, date: addDays(today, -10), accountId: MBANK_ACCOUNT_ID, amount: -zl(100), categoryId: '01KDEFCAT00000000000000500', counterparty: 'Apteka', refundable: true, memberId: BABCIA }]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir, userData })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+3')
+    await importFile(app, page, file)
+    await page.getByTestId('import-search').fill('piotr')
+    const tata = group(page, 'PIOTR TESTOWY')
+    await tata.getByTestId('import-group-toggle').click()
+    const laterRow = tata.locator('[data-testid="import-row"]', { hasText: 'OD TATY I BABCI' })
+    const earlierRow = tata.locator('[data-testid="import-row"]', { hasText: 'ZWROT ZA KURS XTB' })
+
+    // The row: „+ w tym za Babcia” with what she owes back – the line stays (IM.25: it vanished at once); „jak grupa” back.
+    await expect(laterRow.getByTestId('import-row-also-for-via')).toHaveText('+ w tym za Babcia (ma oddać 100,00 zł)')
+    await laterRow.getByTestId('import-row-also-for-via').click()
+    await expect(laterRow.getByTestId('import-row-also-for-amount')).toHaveValue('100,00')
+    await expect(laterRow.getByTestId('import-row-also-for-line')).toHaveCount(1)
+    await laterRow.getByTestId('import-row-reset').click()
+    await expect(laterRow.getByTestId('import-row-also-for-line')).toHaveCount(0)
+
+    // The group: from her debt too, spread over Tata's transfers in their order – once, from the earlier one.
+    await tata.getByTestId('import-group-also-for-via').click()
+    await expect(tata.getByTestId('import-group-also-for-amount')).toHaveValue('100,00')
+    await expect(tata.getByTestId('import-group-also-for-spread')).toHaveText(`z wpłaty ${earlier.slice(8, 10)}.${earlier.slice(5, 7)} 100,00 zł`)
+    // Decided, the group moved to „Gotowe” (shown closed): its rows again – the earlier one carries her part, the later none.
+    if (!(await tata.getByTestId('import-group-rows').isVisible())) await tata.getByTestId('import-group-toggle').click()
+    await expect(earlierRow.getByTestId('import-row-also-for-amount')).toHaveValue('100,00')
+    await expect(laterRow.getByTestId('import-row-also-for-line')).toHaveCount(0)
+    // More than she owes: still her debt only.
+    await tata.getByTestId('import-group-also-for-amount').click()
+    await tata.getByTestId('import-group-also-for-amount').fill('150')
+    await tata.getByTestId('import-group-also-for-amount').press('Enter')
+    await expect(tata.getByTestId('import-group-also-for-spread')).toContainText('100,00 z 150,00 zł (tyle Babcia ma oddać)')
+    await page.getByTestId('import-search').fill('')
+    await page.getByTestId('import-run').click()
+    await importDone(page, userData)
+    await expect
+      .poll(async () =>
+        (await records(dataDir, 'transactions'))
+          .filter((t) => t.counterparty === 'PIOTR TESTOWY')
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+          .map((t) => [t.date, (t.splits as Array<{ memberId: string; amount: number }>).map((x) => [x.memberId, x.amount]), t.covers])
+      )
+      .toEqual([
+        [earlier, [[BABCIA, zl(100)]], [LEKI]],
+        [later, [], []]
+      ])
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

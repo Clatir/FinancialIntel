@@ -9,7 +9,7 @@ import { warsawNow } from '@shared/calc/dates'
 import { householdBefore } from '@shared/calc/fleet'
 import { balanceOf, isOpeningItem, memberName, purchaseStatus, type HouseholdLedger, type OpenPurchase, type PurchaseState } from '@shared/calc/household'
 import { dm } from '@shared/format'
-import { assignsOn, choicesForRepayment, matchCovers, matchReturn, names, repaymentShares, waitingForPurchase, withNamed } from '@shared/calc/repayments'
+import { assignsOn, choicesForRepayment, matchCovers, matchReturn, names, repaymentShares, repaymentSharesByMember, waitingForPurchase, withNamed } from '@shared/calc/repayments'
 import type { Transaction } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
 import { fleetInputNow, useHousehold } from '../../store/fleet'
@@ -154,8 +154,8 @@ export function RepaymentPicker({ t, patch, before: given }: { t: Transaction; p
   const flows = ledger?.byTx.get(t.id) ?? []
   const toggle = (txId: string, on: boolean) => patch(withNamed(t, txId, on))
   const nameAll = (ids: readonly string[]) => patch(ids.reduce<Partial<Transaction>>((acc, id) => ({ ...acc, ...withNamed({ ...t, ...acc }, id, true) }), {}))
-  // One section per member (a transfer through another member carries several).
-  const byMember = [...new Map(shares.map((s) => [s.memberId, shares.filter((x) => x.memberId === s.memberId).reduce((a, x) => ({ ...x, amount: a.amount + x.amount }))])).values()]
+  // One section per member (a transfer through another member carries several) – as the editor names the sure ones (AP-7).
+  const byMember = repaymentSharesByMember(t)
   return (
     <div className="flex flex-col gap-1.5" data-testid="repayment-picker">
       {byMember.map((share) => {

@@ -4,8 +4,9 @@
  * quick entry and the payer chosen in the editor; else it waits to be assigned and the screens offer the options.
  *
  * Sure for a member's money: the amount of one open purchase of theirs (the only one of it), the sum of all their open
- * purchases, or the sum of the only set of 2–3 of their open purchases of the last `SET_DAYS` days. Sure for a product
- * return: the only open purchase of theirs from the same counterparty (several – the one of the same amount).
+ * purchases or more (AP-7), or the sum of the only set of 2–3 of their open purchases of the last `SET_DAYS` days – each
+ * member's part apart (a transfer through another member, a split). Sure for a product return: the only open purchase
+ * of theirs from the same counterparty (several – the one of the same amount).
  */
 import { addDays } from './dates'
 import { fold } from '../fold'
@@ -46,14 +47,18 @@ export interface CoverMatch {
 
 const byDate = (a: OpenPurchase, b: OpenPurchase) => a.date.localeCompare(b.date) || a.txId.localeCompare(b.txId)
 
-/** The purchases of `open` an amount of a member's money surely pays back (D91), and the options when none is sure. */
+/**
+ * The purchases of `open` an amount of a member's money surely pays back (D91), and the options when none is sure. An
+ * amount of at least all of them pays all of them (AP-7, DM sp. 2 – the money repays the debt first, D80 b: nothing else
+ * it could pay; the rest beyond is the member's advance or income).
+ */
 export function matchCovers(open: readonly OpenPurchase[], amount: number, date: string): CoverMatch {
   const items = open.filter((i) => i.amount > 0 && i.date <= date).sort(byDate)
   if (amount <= 0 || !items.length) return { sure: null, options: [] }
+  if (items.length <= MAX_COVERS && items.reduce((a, i) => a + i.amount, 0) <= amount) return { sure: items.map((i) => i.txId), options: [] }
   const same = items.filter((i) => i.amount === amount)
   if (same.length === 1) return { sure: [same[0]!.txId], options: [] }
   if (same.length > 1) return { sure: null, options: same.slice(0, MAX_OPTIONS).map((i) => [i.txId]) }
-  if (items.length > 1 && items.length <= MAX_COVERS && items.reduce((a, i) => a + i.amount, 0) === amount) return { sure: items.map((i) => i.txId), options: [] }
   // The sets of 2–3 recent purchases of exactly the amount: the only one is sure.
   const from = addDays(date, -SET_DAYS)
   const recent = items.filter((i) => i.date >= from).slice(-SET_ITEMS)
@@ -94,6 +99,16 @@ export function repaymentShares(t: Transaction): RepaymentShare[] {
   if (t.kind === 'income') return incomeShares(t).flatMap((s) => (s.memberId && !s.limit && s.inflowKind !== 'income' && s.inflowKind !== 'advance' ? [{ memberId: s.memberId, amount: s.amount, isReturn: false }] : []))
   if (t.kind !== 'expense' || t.amount <= 0) return []
   return partsOf(t).flatMap((p) => (p.refundable && !p.gift && p.amount > 0 ? [{ memberId: financerOf(p), amount: p.amount, isReturn: true }] : []))
+}
+
+/** The parts of an operation by member (a member of two lines – their sum): as the editor offers its purchases (D91). */
+export function repaymentSharesByMember(t: Transaction): RepaymentShare[] {
+  const out = new Map<string, RepaymentShare>()
+  for (const s of repaymentShares(t)) {
+    const prev = out.get(s.memberId)
+    out.set(s.memberId, prev ? { ...prev, amount: prev.amount + s.amount } : { ...s })
+  }
+  return [...out.values()]
 }
 
 /** The fields naming purchases (D91, N-PC-12): the operations' ids, the opening balance's debt apart (per-member in multi-member operations). */
@@ -199,6 +214,49 @@ export function linkRepayments(input: Pick<FleetInput, 'settings' | 'balances' |
     transactions = transactions.map((x) => (x.id === t.id ? { ...x, ...fields } : x))
   }
   return out
+}
+
+/**
+ * The purchases each member's part surely pays back, added to the ones an operation names (D91 b, AP-7 – „podziel na
+ * osoby”, „+ także za…” in the editor; the import and the quick entry name them all at once – `linkRepayments`): a
+ * member's part naming none of their purchases gets its sure match – the one the editor offers („Pasuje: …”). `before`
+ * – the ledger just before it, `ledger` – now (its later purchases). null – nothing to add.
+ */
+export function moreSureCovers(
+  t: Transaction,
+  before: HouseholdLedger,
+  ledger: HouseholdLedger | null,
+  purchaseOf: (txId: string) => Pick<Transaction, 'counterparty'> | undefined
+): CoverFields | null {
+  const add: string[] = []
+  for (const share of repaymentSharesByMember(t)) {
+    if (choicesForRepayment(before, ledger, t, share.memberId).some((c) => names(t, c.txId))) continue
+    const open = balanceOf(before, share.memberId).open.filter((o) => o.date <= t.date)
+    const m = share.isReturn ? matchReturn(open, share.amount, t.counterparty, purchaseOf) : matchCovers(open, share.amount, t.date)
+    for (const id of m.sure ?? []) if (!names(t, id) && !add.includes(id)) add.push(id)
+  }
+  if (!add.length) return null
+  let fields: CoverFields = { covers: t.covers, coversOpening: t.coversOpening, coversOpeningMembers: t.coversOpeningMembers }
+  for (const id of add) fields = { ...fields, ...withNamed({ ...t, ...fields }, id, true) }
+  return fields
+}
+
+/**
+ * The purchases an operation names of the members it still has a part of (AP-7): a part taken off in the editor takes
+ * its member's purchases off too – else they stay named, paid by nothing. A purchase whose member is unknown stays.
+ * null – nothing to take off.
+ */
+export function keptCovers(t: Transaction, before: HouseholdLedger, ledger: HouseholdLedger | null): CoverFields | null {
+  const members = new Set(repaymentShares(t).map((s) => s.memberId))
+  const ownersOf = (id: string): string[] => (before.purchases.get(id) ?? ledger?.purchases.get(id) ?? []).map((p) => p.memberId)
+  const covers = t.covers.filter((id) => {
+    const owners = ownersOf(id)
+    return !owners.length || owners.some((m) => members.has(m))
+  })
+  const byMember = t.coversOpeningMembers?.length ? t.coversOpeningMembers.filter((m) => members.has(m)) : null
+  const coversOpening = byMember ? (byMember.length ? true : undefined) : t.coversOpening && members.size ? true : undefined
+  if (covers.length === t.covers.length && coversOpening === (t.coversOpening ? true : undefined) && (byMember?.length ?? 0) === (t.coversOpeningMembers?.length ?? 0)) return null
+  return { covers, coversOpening, ...(t.coversOpeningMembers !== undefined ? { coversOpeningMembers: byMember?.length ? byMember : undefined } : {}) }
 }
 
 /**

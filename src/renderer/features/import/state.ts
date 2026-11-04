@@ -2,7 +2,27 @@ import { create } from 'zustand'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
-import { buildImport, importGroups, joins, keysOnly, planImport, sameChoice, type Choice, type DeletedRow, type ImportChoices, type ImportCounts, type ImportGroup, type ImportPlan, type ImportResult, type ImportTheme } from '@shared/import/reconcile'
+import {
+  buildImport,
+  importGroups,
+  joins,
+  keysOnly,
+  owedWithFile,
+  planImport,
+  rowShares,
+  sameChoice,
+  type Choice,
+  type DeletedRow,
+  type ImportChoices,
+  type ImportCounts,
+  type ImportGroup,
+  type ImportPlan,
+  type ImportResult,
+  type ImportTheme,
+  type SharePart,
+  type SharesSpread
+} from '@shared/import/reconcile'
+import { balanceOf, type HouseholdLedger } from '@shared/calc/household'
 import { returnedKey } from '@shared/import/deleted'
 import { warsawNow } from '@shared/calc/dates'
 import { linkRepayments } from '@shared/calc/repayments'
@@ -19,7 +39,7 @@ import { balanceSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type 
 import { api, errorMessage } from '../../lib/api'
 import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
-import { fleetInputNow } from '../../store/fleet'
+import { fleetInputNow, fleetNow } from '../../store/fleet'
 import { bulkKeeps, choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
 import { readDeletedBank } from './returned'
@@ -732,6 +752,59 @@ export function acceptHints(themes: readonly ImportTheme[]): number {
   return todo.length
 }
 
+/** The members' parts of the open file as the import writes them (AF-27), with what each member owes with its purchases. */
+export interface SharesView extends SharesSpread {
+  owed: Map<string, number>
+}
+
+let sharesMemo: { plan: ImportPlan; choices: ImportChoices; ledger: HouseholdLedger | null; members: readonly HouseholdMember[]; view: SharesView } | null = null
+
+/**
+ * The parts of other members each row of the file carries (D81 – „w tym za X”, AF-27: a group's spread over its rows,
+ * never beyond what they owe) and what each member owes once the file's purchases are in (`ledger` – the engine's now).
+ * Once per plan, decisions, ledger and members.
+ */
+export function sharesView(plan: ImportPlan | null, choices: ImportChoices, ledger: HouseholdLedger | null, members: readonly HouseholdMember[]): SharesView | null {
+  if (!plan) return null
+  const m = sharesMemo
+  if (m && m.plan === plan && m.choices === choices && m.ledger === ledger && m.members === members) return m.view
+  const owed = owedWithFile(plan, choices, (id) => (ledger ? balanceOf(ledger, id) : { owed: 0, deposit: 0 }), members.map((x) => x.id))
+  const view: SharesView = { ...rowShares(plan, choices, owed), owed }
+  sharesMemo = { plan, choices, ledger, members, view }
+  return view
+}
+
+const partsSum = (lines: readonly SharePart[]) => lines.reduce((a, x) => a + Math.max(0, x.amount), 0)
+
+/** What a member still owes back beyond the file's parts given by others than `from` (a decision's key, `g:` / `t:`). */
+export function owedLeftOfDecision(view: SharesView, from: string, memberId: string): number {
+  const given = (view.spread.get(from) ?? []).filter((l) => l.memberId === memberId).reduce((a, l) => a + l.given.reduce((s, g) => s + g.amount, 0), 0)
+  return Math.max(0, (view.owed.get(memberId) ?? 0) - ((view.total.get(memberId) ?? 0) - given))
+}
+
+/** …beyond the parts of the other rows than `key`. */
+export function owedLeftOfRow(view: SharesView, key: string, amount: number, memberId: string): number {
+  let mine = 0
+  let money = amount
+  for (const x of view.parts.get(key) ?? []) {
+    const v = Math.min(x.amount, money)
+    money -= v
+    if (x.memberId === memberId && (!x.inflowKind || x.inflowKind === 'repay')) mine += v
+  }
+  return Math.max(0, (view.owed.get(memberId) ?? 0) - ((view.total.get(memberId) ?? 0) - mine))
+}
+
+/**
+ * Where a new „w tym za X” starts (D81 – „z kwotą tego, co X ma oddać”, AF-27): what X still owes back, at most the money
+ * its rows have left beyond the other lines – of a group's or a theme's decision (`from`)…
+ */
+export const decisionStart = (view: SharesView, from: string, memberId: string, lines: readonly SharePart[]): number =>
+  Math.max(0, Math.min(owedLeftOfDecision(view, from, memberId), (view.rows.get(from)?.sum ?? 0) - partsSum(lines)))
+
+/** …or of one row (`key`, its `amount`). */
+export const rowStart = (view: SharesView, key: string, amount: number, memberId: string, lines: readonly SharePart[]): number =>
+  Math.max(0, Math.min(owedLeftOfRow(view, key, amount, memberId), amount - partsSum(lines)))
+
 /**
  * The household members' answers „zaliczka / przychód” of an import (N84): one per operation that comes in with the
  * user's own decision (its row's, its group's, its theme's) – not a proposal, not „+ domownik” alone (N85), not one left
@@ -841,7 +914,9 @@ export async function runImport(): Promise<void> {
     const now = new Date().toISOString()
     const acc = st.accountId
     const rulesBefore = s.fi.settings.import.rules
-    const result = withRepayments(buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore, accounts: s.fi.settings.accounts.map((a) => a.id) }))
+    // What each member owes with the file's purchases (AF-27): a group's „w tym za” never beyond it – as the preview showed.
+    const owed = sharesView(plan, cur.choices, fleetNow()?.household ?? null, s.fi.settings.household.members)?.owed
+    const result = withRepayments(buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore, accounts: s.fi.settings.accounts.map((a) => a.id), owed }))
     const txBefore = useData.getState().records.transactions
     // Nothing new (N13): no backup, no records – only the time of the import and what the file covers; the other
     // format's keys remembered only (AF-63) are nothing new either – written, but no backup and no import to take back.

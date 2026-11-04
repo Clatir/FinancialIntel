@@ -40,6 +40,9 @@ paths:
   ustępuje pożyczce, domownikowi i XTB (`ruleGivesWay`, T325); słowo z tytułu i przelew własny zostają regułą.
 - Decyzja zbiorcza nie zmienia pożyczki, PIT-38, XTB ani pieniędzy domownika decyzją innego rodzaju (`bulkKeeps`, T326);
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
+- „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X
+  ma oddać z zakupami pliku (`owedWithFile`, T328); ekran (`sharesView`) i `runImport` z tego samego. **Pułapka:**
+  `sameChoice` pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
 - Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą. Kategoria mBanku tylko jako podpowiedź (`hintFor`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.

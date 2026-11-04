@@ -18,7 +18,7 @@ import { Badge, Panel, ShowMore, cx } from '../../components/ui'
 import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
-import { DecisionFields, IMPORT_SHARE_MODES, IncomeSharesEditor } from './DecisionFields'
+import { DecisionFields, IMPORT_SHARE_MODES, RowShares } from './DecisionFields'
 import { DuplicatesNote, DuplicatesPanel } from './DuplicatesPanel'
 import { useLatestImport } from './batches'
 import { BankTelemetry } from './BankTelemetry'
@@ -664,12 +664,8 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
           ))}
         </select>
       ) : c.kind === 'income' && c.household && members.length > 1 ? (
-        <IncomeSharesEditor
-          choice={c}
-          members={members}
-          onChange={(next) => chooseRow(p.key, sameChoice(next, choice) ? null : next)}
-          testId="import-row"
-        />
+        // „w tym za” of this transfer (AF-27): its own decision stays while typed; else its part of the group's spread.
+        <RowShares p={p} choice={choice} mine={mine} />
       ) : (
         <span />
       )}
@@ -732,7 +728,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
         <span className={cx('num shrink-0 text-right', g.sum > 0 ? 'text-up' : 'text-fg-strong')}>{signedPln(g.sum)}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-12">
-        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} own={fileAccount} testId="import-group" />
+        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} own={fileAccount} sharesFrom={`g:${g.group}`} testId="import-group" />
         <Badge tone={implicit || (g.source === 'none' && !own && !themeDecided) ? 'warn' : 'default'} title={implicit ? 'Wybierz „reszta jako zaliczka” albo „reszta jako przychód” – odpowiedź zostanie zapamiętana dla tej osoby' : g.reason}>
           {badge}
         </Badge>
@@ -832,6 +828,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
             direction={t.direction}
             onChange={(c) => (common ? chooseThemeOverGroups(t, c) : chooseTheme(t.theme, c))}
             own={fileAccount}
+            sharesFrom={`t:${t.theme}`}
             testId="import-theme"
           />
         )}
