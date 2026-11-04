@@ -290,6 +290,8 @@ export interface FlushResult {
   newer: number
   /** The last write error of the others (null = none). */
   error: string | null
+  /** Edits of operations typed and waiting for „Zmień mimo to” (AP-8) – not on the disk until answered. */
+  asks?: number
 }
 
 export interface FiApi {

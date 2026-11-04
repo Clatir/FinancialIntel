@@ -2364,3 +2364,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Folder danych” („Folder-widmo …: n plików wpisów bez fi.json…”, „Pokaż folder” – `showGhostFolder` otwiera tylko folder z
   ostatniej listy); szukane raz po pokazaniu folderu (`store/ghosts.ts`). Komunikat ekranu wyboru przy 'partial' wspomina
   folder-widmo. Bez automatycznego przenoszenia wpisów.
+- **T319** Zmiana czekająca na „Zmień mimo to” i szkice (1.15.5, AP-8, AF-3, AF-11, SA.4): pytanie „Zmienić operację?” w
+  `store/guard.ts` (`askGuard`, `answerGuard`, jedno na operację – nowsze wpisanie zastępuje), pokazywane przez
+  `GuardDialog` okna (komputer i telefon), nie przez edytor – zostaje po opuszczeniu edytora; liczy się jako niezapisana
+  zmiana (`FlushResult.asks`, `unsavedReport`, `saveFirst`, Ctrl+S, pytanie przy zamknięciu „Niezapisana zmiana
+  operacji”); inny folder je czyści. Kreator: `startWizard` w trakcie tylko wraca (baner „Wróć do kreatora” z numerem
+  kroku); odpowiedzi jako szkic w `localStorage` komputera (`fi.wizard.draft:<folder>`, `v: 1`, po jednym na folder) –
+  wracają po restarcie, znikają po starcie budżetu i po „Przerwij kreator”. „Saldo w banku teraz” w Kontach – `useDraft`.

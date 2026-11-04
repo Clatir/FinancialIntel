@@ -4,11 +4,19 @@ import { FOLDER_UNAVAILABLE_MESSAGE, type FlushResult } from './api'
 export const SAVED: FlushResult = { saved: true, waiting: 0, newer: 0, error: null }
 
 /**
- * The question before closing with unsaved changes, by their real reason (B108): a decision about another computer's
- * change (no write saves those records before it), a failed write – the data folder gone among them (AP-1) –, or a
- * record a newer version of the app wrote (B67).
+ * The question before closing with unsaved changes, by their real reason (B108): an edit waiting for „Zmień mimo to”
+ * (AP-8), a decision about another computer's change (no write saves those records before it), a failed write – the
+ * data folder gone among them (AP-1) –, or a record a newer version of the app wrote (B67).
  */
 export function unsavedQuestion(r: FlushResult): { title: string; message: string; detail: string } {
+  // An edit typed and waiting for „Zmień mimo to” (AP-8, AF-3): its question is open in the window.
+  if ((r.asks ?? 0) > 0)
+    return {
+      title: 'Niezapisana zmiana operacji',
+      message: 'Zmiana operacji czeka na Twoją decyzję.',
+      detail:
+        'Wpisana zmiana zmienia potwierdzone saldo konta albo kwotę z banku i czeka w oknie „Zmienić operację?” na „Zmień mimo to”. „Anuluj” zostawia aplikację otwartą z tym pytaniem; „Zamknij mimo to” zostawia na dysku operację sprzed zmiany, a wpisana zmiana przepada.'
+    }
   if (r.waiting > 0)
     return {
       title: 'Zmiany z drugiego komputera',

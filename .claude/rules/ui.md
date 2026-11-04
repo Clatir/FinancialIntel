@@ -8,7 +8,10 @@ paths:
 - Pola kwot, dat, godzin, miesięcy i nazw zapisują po wyjściu z pola (`AmountField`, `DateField`, `TimeField`,
   `MonthField`, `NameInput`); teksty przez `useTextDraft` (Enter / Ctrl+Enter zatwierdza, Esc cofa). Akcja czytająca
   formularz woła najpierw `commitActiveField` (`store/ui.ts`, T34).
-- Szkice formularzy w pamięci okna (`store/drafts.ts` `useDraft`); zmiana folderu je czyści.
+- Szkice formularzy w pamięci okna (`store/drafts.ts` `useDraft`); zmiana folderu je czyści. **Pułapka (AP-8):** wpisana
+  wartość w `useState` komponentu ginie przy zmianie ekranu – pole, które coś wpisuje, to szkic; pytanie przed zmianą
+  („Zmień mimo to”) nie żyje w komponencie, tylko w sklepie i liczy się jako niezapisane (`store/guard.ts`, T319);
+  odpowiedzi kreatora – szkic w `localStorage` per folder.
 - „Zapisano.” tylko po zapisie na dysk (`writeNow`, T317); w folderze tylko do odczytu – powód (`status.readOnlyReason`).
 - Kwoty zawsze przez `plnText` / `signedPln` (maskowanie przy ukrytych kwotach – flaga ustawiana przy każdym renderze,
   nic nie jest memoizowane) i `formatPln`; liczebniki przez `plural` / `countLabel`.

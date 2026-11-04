@@ -1532,7 +1532,7 @@ function createWindow(): void {
         // The renderer keeps unsaved changes; closing now would lose them. The question says why (B108) – the window
         // is shown for it (closed from the tray), and a waiting decision's dialog is open in it already. The log says
         // it too: the question holds the main process until it is answered.
-        log('warn', `zamykanie: niezapisane zmiany (decyzje: ${result.waiting}, nowsza wersja: ${result.newer}, błąd: ${result.error ?? 'brak'})`)
+        log('warn', `zamykanie: niezapisane zmiany (decyzje: ${result.waiting}, „Zmień mimo to”: ${result.asks ?? 0}, nowsza wersja: ${result.newer}, błąd: ${result.error ?? 'brak'})`)
         if (!win.isVisible() || win.isMinimized()) showMainWindow()
         const choice = dialog.showMessageBoxSync(win, { type: 'warning', ...unsavedQuestion(result), buttons: ['Anuluj', 'Zamknij mimo to'], defaultId: 0, cancelId: 0 })
         if (choice === 0) {

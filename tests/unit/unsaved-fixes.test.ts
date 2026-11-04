@@ -1,5 +1,5 @@
-// AP-1 (1.15.5, grupa N1) in the window: the data folder gone – what waited goes once it is back, nothing says
-// „Zapisano.” before it is on the disk.
+// AP-1 and AP-8 (1.15.5, grupa N1) in the window: the data folder gone – what waited goes once it is back, nothing says
+// „Zapisano.” before it is on the disk; an edit waiting for „Zmień mimo to” and the wizard's answers count as changes.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FOLDER_UNAVAILABLE_MESSAGE, type FolderStatus, type QuickResult, type RecordEntry, type Snapshot } from '@shared/api'
 import { warsawNow } from '@shared/calc/dates'
@@ -24,8 +24,10 @@ const storage = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => void storage.set(k, v), removeItem: (k: string) => void storage.delete(k) })
 vi.stubGlobal('window', { fi: api })
 const store = await import('../../src/renderer/store/data')
+const guard = await import('../../src/renderer/store/guard')
 const { useUi } = await import('../../src/renderer/store/ui')
 const { quickAdd, quickData } = await import('../../src/renderer/store/quickHost')
+const wizard = await import('../../src/renderer/features/wizard/state')
 const { retriesBySelf } = await import('../../src/renderer/features/setup/retry')
 
 const ID = '01K6H3Z0W8Q4M2N5P7R9S1T3V5'
@@ -196,5 +198,50 @@ describe('folder danych niedostępny w oknie (AP-1)', () => {
     expect(retriesBySelf({ reason: 'not-data', problem: 'missing', remembered: false })).toBe(false)
     expect(retriesBySelf({ reason: 'not-data', problem: 'unavailable', remembered: true })).toBe(true)
     expect(retriesBySelf({ reason: 'not-data', problem: 'empty', remembered: true })).toBe(false)
+  })
+})
+
+describe('zmiana czekająca na „Zmień mimo to” i odpowiedzi kreatora (AP-8)', () => {
+  it('pytanie „Zmienić operację?” to niezapisana zmiana: zamknięcie, „zapisz przed…” i Ctrl+S mówią prawdę (AF-3)', async () => {
+    load()
+    const run = vi.fn()
+    guard.askGuard({ id: ID, changes: [{ accountId: MBANK_ACCOUNT_ID, date: '2026-03-20', delta: -1815 }], bankAmount: -8791, run })
+    const r = await store.flushForClose()
+    expect(r).toMatchObject({ saved: false, asks: 1 })
+    expect(unsavedQuestion(r).title).toBe('Niezapisana zmiana operacji')
+    await expect(store.saveFirst('import')).rejects.toThrow(/Zmień mimo to/)
+    await store.saveNow()
+    expect(toasts().some((t) => t.includes('Zapisano.'))).toBe(false)
+    // A newer typing of the same operation replaces the question; the answer makes the edit.
+    guard.askGuard({ id: ID, changes: [], bankAmount: -8791, run })
+    expect(guard.useGuard.getState().asks).toHaveLength(1)
+    guard.answerGuard(guard.useGuard.getState().asks[0]!.seq, true)
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(store.unsavedReport()).toMatchObject({ saved: true })
+    // Another folder shown: no question of the previous one's operations.
+    guard.askGuard({ id: ID, changes: [], bankAmount: null, run })
+    load()
+    expect(guard.guardsWaiting()).toBe(0)
+  })
+
+  it('kreator: powrót banerem albo paletą zachowuje odpowiedzi; po restarcie wraca z nimi; przerwany – szkic znika (AF-11)', () => {
+    load()
+    wizard.startWizard()
+    wizard.patchWizard({ balances: { [MBANK_ACCOUNT_ID]: 1_000_000 }, salary: 500_000, step: 2 })
+    // The banner „Kreator startu” / the palette while it runs: back to it, never from the start.
+    wizard.startWizard()
+    expect(wizard.useWizard.getState()).toMatchObject({ active: true, step: 2, salary: 500_000, balances: { [MBANK_ACCOUNT_ID]: 1_000_000 } })
+    // A restart: the window's memory gone, the folder shown again – the answers come back from this computer's draft.
+    wizard.useWizard.setState({ active: false, step: 0, salary: null, balances: {} })
+    store.useData.setState({ phase: 'boot' })
+    load()
+    expect(wizard.useWizard.getState()).toMatchObject({ active: true, step: 2, salary: 500_000, balances: { [MBANK_ACCOUNT_ID]: 1_000_000 } })
+    // Another folder: its own (none) – never this one's answers.
+    load({ dataDir: '/inny' })
+    expect(wizard.useWizard.getState()).toMatchObject({ active: false, salary: null })
+    load()
+    expect(wizard.useWizard.getState().salary).toBe(500_000)
+    wizard.cancelWizard()
+    expect(wizard.wizardDraftOf('/dane')).toBeNull()
   })
 })

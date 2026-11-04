@@ -17,6 +17,7 @@ import { CompactContext, cx } from '@renderer/components/ui'
 import { setAmountsHidden } from '@renderer/components/fields'
 import { Toasts } from '@renderer/components/Toasts'
 import { RemoteChangesDialog } from '@renderer/features/sync/RemoteChangesDialog'
+import { GuardDialog } from '@renderer/features/operations/OperationEditor'
 import { QuickApp } from '@renderer/features/quick/QuickApp'
 import { PAGES } from '@renderer/features/screens/pages'
 import { IconGear, IconInbox } from '@renderer/components/icons'
@@ -244,6 +245,7 @@ export function Shell() {
         <BottomNav tab={tab} page={route.page} />
         <QuickSheet />
         <RemoteChangesDialog />
+        <GuardDialog />
         <Toasts />
         {phase === 'ready' && <NoticePlanner />}
         {phase === 'ready' && <PhoneInboxWatcher />}

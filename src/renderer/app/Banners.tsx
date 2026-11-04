@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import { useData } from '../store/data'
 import { navigate, useUi } from '../store/ui'
-import { startWizard } from '../features/wizard/state'
+import { startWizard, useWizard, WIZARD_STEPS } from '../features/wizard/state'
 import { dismissUpdateNotice, downloadUpdate, restartToUpdate, useUpdate } from '../store/update'
 import { asksAutostart, installWhen, loadTrayPrefs, setTrayPrefs, useTray } from '../store/tray'
 import { openExternalSafe } from '../features/settings/UpdatesTab'
@@ -88,6 +88,8 @@ export function Banners() {
     return Object.values(s.records.balances ?? {}).some((e) => e.record.kind === 'opening' && e.record.date <= today)
   })
   const page = useUi((s) => s.route.page)
+  // The wizard under way (AF-11): the banner goes back to it, its answers kept.
+  const wizardStep = useWizard((w) => (w.active ? w.step : null))
   const tray = useTray((s) => s.prefs)
   useEffect(() => {
     void loadTrayPrefs()
@@ -114,10 +116,13 @@ export function Banners() {
     items.push({
       key: 'wizard',
       icon: <IconWarn size={14} className="shrink-0 text-accent" />,
-      text: fromOpening
-        ? 'Budżet liczy się na razie od salda otwarcia, bez planu: kreator startu ustawi od dziś salda, pensję, warstwy okrętu i koperty. Dowództwo zacznie się po kreatorze.'
-        : 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
-      actions: [{ label: 'Kreator startu', onClick: startWizard, accent: true, testId: 'banner-wizard-start' }]
+      text:
+        wizardStep != null
+          ? `Kreator startu jest w toku (krok ${wizardStep + 1} z ${WIZARD_STEPS.length}) – wpisane odpowiedzi czekają; wróć do niego, żeby uruchomić budżet.`
+          : fromOpening
+            ? 'Budżet liczy się na razie od salda otwarcia, bez planu: kreator startu ustawi od dziś salda, pensję, warstwy okrętu i koperty. Dowództwo zacznie się po kreatorze.'
+            : 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
+      actions: [{ label: wizardStep != null ? 'Wróć do kreatora' : 'Kreator startu', onClick: startWizard, accent: true, testId: 'banner-wizard-start' }]
     })
   // Another computer with the running budget (N100, D64): the start with Windows asked once – the wizard asked the first.
   if (asksAutostart(tray, !!budgetStart) && !status?.readOnly)

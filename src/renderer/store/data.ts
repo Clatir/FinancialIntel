@@ -8,6 +8,7 @@ import { chooser, deepEqual, merge3, pathKey, sameContentAs, type Path, type Sid
 import { changedPaths, decideRemote, decideRemoteRemoval, isoMs, newerChoice, newerFields, relatedPaths, type RemoteMode } from '@shared/remoteChanges'
 import { api, errorMessage, isNewerFileError } from '../lib/api'
 import { setRemoteDialog, useRemote, type PendingRemote } from './remote'
+import { clearGuards, guardsWaiting } from './guard'
 import { commitActiveField, toast } from './ui'
 
 type EntryMap<C extends Collection> = Record<string, RecordEntry<RecordTypes[C]>>
@@ -237,6 +238,8 @@ export function applySnapshot(snapshot: Snapshot): void {
   fieldEdits.clear()
   userEditedAt.clear()
   useRemote.setState({ pending: [], open: false })
+  // The previous folder's operations: no question about them stays (AP-8).
+  clearGuards()
   // A folder shown anew: the hold of a close that did not come is over (T301).
   clearTimeout(closeHold)
   closeHold = undefined
@@ -1205,7 +1208,9 @@ export function unsavedReport(): FlushResult {
     else if (newer.has(key)) newerCount++
     else error = failed.get(key) ?? error ?? 'zapis jeszcze trwa'
   }
-  return { saved: dirty.size === 0, waiting, newer: newerCount, error }
+  // Typed and waiting for „Zmień mimo to” (AP-8): not on the disk – a change not saved, with its own reason.
+  const asks = guardsWaiting()
+  return { saved: dirty.size === 0 && asks === 0, waiting, newer: newerCount, error, ...(asks ? { asks } : {}) }
 }
 
 /** A record's change not on the disk yet (AP-1): why – its last write's error, or its write on the way; null = saved. */
@@ -1264,6 +1269,8 @@ export async function saveFirst(what: string): Promise<void> {
 /** Why `what` waits for the unsaved changes (`saveFirst`); null = nothing holds it. Decisions waiting: their dialog opens. */
 function unsavedHold(what: string): string | null {
   const r = unsavedReport()
+  // An edit typed and waiting for „Zmień mimo to” (AP-8): its question is open – the step waits for the answer.
+  if (r.asks) return `${ASK_WAITING} – ${what} czeka na odpowiedź w otwartym pytaniu („Zmień mimo to” albo „Anuluj”).`
   if (r.waiting) {
     setRemoteDialog(true)
     return `Czekają zmiany z drugiego komputera (${r.waiting}) – ${what} czeka na Twoją decyzję w otwartym oknie.`
@@ -1286,6 +1293,9 @@ export async function unsavedNote(): Promise<string | null> {
   return r.newer ? 'części zmian ta wersja nie zapisze – te wpisy zapisała nowsza wersja aplikacji' : null
 }
 
+/** An edit of an operation typed and waiting for „Zmień mimo to” (AP-8), as the steps and Ctrl+S say it. */
+export const ASK_WAITING = 'Zmiana operacji czeka na Twoją decyzję („Zmień mimo to”) – nie jest jeszcze zapisana'
+
 /** Ctrl+S and the palette's „Zapisz teraz” (N62): one way – decisions about another computer's changes open their dialog. */
 export async function saveNow(): Promise<void> {
   // A read-only folder (a newer format, no right to write, the folder gone – AF-39): nothing was written, so no
@@ -1293,6 +1303,7 @@ export async function saveNow(): Promise<void> {
   const locked = !!get().status?.readOnly
   const saved = await flushSaves()
   const r = unsavedReport()
+  if (r.asks) return toast(`${ASK_WAITING}.`, 'info', 5000)
   if (locked && saved && !useRemote.getState().pending.length) return toast(get().status?.readOnlyReason ?? READ_ONLY_MESSAGE, 'error', 6000)
   if (useRemote.getState().pending.length) {
     setRemoteDialog(true)
