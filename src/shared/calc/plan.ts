@@ -829,6 +829,16 @@ export function lootApplied(log: readonly FleetEvent[], month: string): { date: 
 /** Until when the loot of `month` waits for a decision: the 7th of the next month (then it goes to the shields – D18). */
 export const lootDeadline = (month: string): string => `${addMonths(month, 1)}-07`
 
+/**
+ * The loot changed after its decision (B10, AP-24 – RY sp. 3: a late import of the month): what the decision split and
+ * what the engine split now – the plan's and the debriefing's line; null = the same (or no decision, nothing applied).
+ */
+export function lootChange(decision: MonthPlan['loot'] | null | undefined, applied: { amount: number } | null): { decided: number; now: number } | null {
+  if (!decision || !applied) return null
+  const decided = decision.shields + decision.nextMonth + sum(Object.values(decision.goals)) + sum(Object.values(decision.envelopes ?? {}))
+  return decided === applied.amount ? null : { decided, now: applied.amount }
+}
+
 // ------------------------------------------------------------------ the cargo's simulation
 
 /** A container's monthly weight now: a periodic fee by its monthly share (as the load line counts it – `monthlyWeight`). */

@@ -30,6 +30,12 @@ export const setWatchMonday = (monday: string): void => useReportsUi.setState({ 
 /** The week shown: the one chosen while it is still the same week due, else the week due now. */
 export const watchMondayOf = (watch: WatchChoice | null, due: string): string => (watch && watch.base === due ? watch.monday : due)
 
+/** The year's review (the January notification's click – AP-24): in January the year just closed is its default. */
+export function openYearReview(): void {
+  useReportsUi.setState({ tab: 'year' })
+  navigate({ page: 'reports' })
+}
+
 /** The watch report of the week due now (the notification's click). */
 export function openWatchReport(): void {
   useReportsUi.setState({ tab: 'watch', watch: null })

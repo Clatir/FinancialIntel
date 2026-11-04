@@ -4,7 +4,7 @@
  * forecast without any payout, the captain's log accuracy; and the reports – the watch report of a week and the year's
  * review. Pure.
  */
-import type { Balance, Transaction } from '../schema/records'
+import type { Balance, MonthPlan, Transaction } from '../schema/records'
 import type { Category, Orders } from '../schema/budget'
 import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthRange, mondayOf, weekdayOf } from './dates'
 import type { FleetEvent } from './fleet'
@@ -382,9 +382,45 @@ export function yearNumbers(transactions: readonly Transaction[], categories: re
 /** The watch report's hour on Sunday (D73): the notification and the report's default week. */
 export const WATCH_TIME = '18:00'
 
-/** The watch report's week: this one from Sunday 18:00, else the last whole one. */
+/**
+ * The watch report's week: this one from Sunday 18:00, else the last whole one. The one „current” week of the report
+ * (AP-24, RY sp. 2, AF-68): „bieżący” goes to it, „później ›” never past it – a week in progress is not reported.
+ */
 export function defaultWatchMonday(today: string, time: string): string {
   return weekdayOf(today) === 7 && time >= WATCH_TIME ? mondayOf(today) : addDays(mondayOf(today), -7)
+}
+
+/** The covers of overrun envelopes made in a week (AP-24, PM sp. 12 – F28): the watch report's, as the command's log says them. */
+export function weekCovers(plans: readonly Pick<MonthPlan, 'envelopeCovers'>[], monday: string, at: (iso: string) => string): Array<{ date: string; from: string; to: string; amount: number }> {
+  const sunday = addDays(monday, 6)
+  return plans
+    .flatMap((p) => (p.envelopeCovers ?? []).map((c) => ({ date: at(c.at), from: c.from, to: c.to, amount: c.amount, stamp: c.at })))
+    .filter((c) => c.date >= monday && c.date <= sunday)
+    .sort((a, b) => a.stamp.localeCompare(b.stamp))
+    .map(({ stamp: _stamp, ...c }) => c)
+}
+
+/**
+ * Where a year's review has history (AP-24, R-19, AF-34): from the data's first day (the first operation or opening
+ * balance) to today. `before` – the year's months before it (no history: never „0,00 zł”); `last` – the last month that
+ * has begun (a month ahead is not in the review); `startsOn` – the first day of the data, when it falls in the year (the
+ * money „at the start” is then that day's, not 31 December's) and whether an opening balance is that day's.
+ */
+export interface YearSpan {
+  before: string[]
+  months: string[]
+  startsOn: { date: string; opening: boolean } | null
+}
+
+export function yearSpan(transactions: readonly Pick<Transaction, 'date'>[], balances: readonly Pick<Balance, 'date' | 'kind'>[], year: string, today: string): YearSpan {
+  let first: string | null = null
+  for (const t of transactions) if (t.date <= today && (!first || t.date < first)) first = t.date
+  for (const b of balances) if (b.kind === 'opening' && b.date <= today && (!first || b.date < first)) first = b.date
+  const all = monthRange(`${year}-01`, `${year}-12`)
+  const last = monthOf(today)
+  const from = first ? monthOf(first) : last
+  const startsOn = first && first > `${year}-01-01` && first.startsWith(`${year}-`) ? { date: first, opening: balances.some((b) => b.kind === 'opening' && b.date === first) } : null
+  return { before: all.filter((m) => m < from), months: all.filter((m) => m >= from && m <= last), startsOn }
 }
 
 /** The wealth of a year's review: at the end of the day before 1 January and of 31 December (or today, this year). */
@@ -394,17 +430,34 @@ export function yearWealth(transactions: readonly Transaction[], balances: reado
   return { start: a!, end: b! }
 }
 
-/** The goals that reached their target in a year (the engine's log: the first day their money came to the target). */
-export function goalsReachedIn(log: readonly FleetEvent[], goals: ReadonlyArray<{ id: string; name: string; target: number }>, year: string): string[] {
+/**
+ * The goals that reached their target in a year (the engine's log: the first day their money came to the target) – and
+ * the ones marked achieved then (`achievedAt`, AP-24, RY sp. 5: archived since, too), in the order they got there.
+ * `day` – a moment's Warsaw day.
+ */
+export function goalsReachedIn(
+  log: readonly FleetEvent[],
+  goals: ReadonlyArray<{ id: string; name: string; target: number; achievedAt?: string | null }>,
+  year: string,
+  day: (iso: string) => string = (iso) => iso.slice(0, 10)
+): string[] {
   const amount = new Map<string, number>()
   const reached = new Map<string, string>()
+  const byId = new Map(goals.map((g) => [g.id, g]))
   for (const e of log) {
     for (const [id, v] of Object.entries(e.moves.goals ?? {})) {
       const now = (amount.get(id) ?? 0) + v
       amount.set(id, now)
-      const g = goals.find((x) => x.id === id)
+      const g = byId.get(id)
       if (g && g.target > 0 && now >= g.target && !reached.has(id)) reached.set(id, e.date)
     }
   }
-  return goals.filter((g) => reached.get(g.id)?.startsWith(year)).map((g) => g.name)
+  for (const g of goals) {
+    const marked = g.achievedAt ? day(g.achievedAt) : null
+    if (marked && (!reached.has(g.id) || marked < reached.get(g.id)!)) reached.set(g.id, marked)
+  }
+  return goals
+    .filter((g) => reached.get(g.id)?.startsWith(year))
+    .sort((a, b) => reached.get(a.id)!.localeCompare(reached.get(b.id)!))
+    .map((g) => g.name)
 }

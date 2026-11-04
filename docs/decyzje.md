@@ -3063,3 +3063,24 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `budget.start`), przed nim tylko sprawy folderu – także przy saldzie otwarcia z dawną historią. „Nowe dane gdzie
   indziej” na folderze z innymi plikami nie zakłada podfolderu bez słowa: komunikat i „Utwórz podfolder FinancialIntel”
   (jak „Otwórz istniejące”); podfolder z danymi FI otwiera się jak dotąd.
+- **T448** Raporty i plan na przełomie (1.15.9, N5 – AP-24, AF-68, RY sp. 2, 3, 6, PM sp. 3, 4, 5, 10, 12): jeden
+  „bieżący” tydzień raportu wachty – tydzień należny (`defaultWatchMonday`, od niedzieli 18:00 bieżący, wcześniej
+  poprzedni pełny); „później ›” nie przechodzi za niego (tydzień w toku nie jest raportowany), „Koperty na następny
+  tydzień” tylko przy nim. Raport wachty pokazuje pokrycia przekroczonych kopert z dni tygodnia (`weekCovers`, dzień
+  warszawski chwili pokrycia, tekst jak w dzienniku Dowództwa). Debriefing miesiąca w toku (Raporty): „Bilans paliwa –
+  miesiąc trwa – wynik po jego końcu”, bez stopy oszczędności. Łupy zmienione po decyzji (późny import) – jedna reguła
+  `lootChange` w Planie miesiąca i w Raportach → Debriefing („było / jest”, podział przeliczony). Plan miesiąca bieżącego
+  i przyszłego: debriefing podpisany „(ostatni zamknięty miesiąc)” z notką, że pokazany miesiąc trwa albo się nie zaczął.
+  „Pensja” zawsze pokazuje średnie koszty (przy pensji równej propozycji – „pensja równa propozycji”, bez przycisku).
+  „+ łupy z …” z dopiskiem „poza pensją – nie wchodzi do „Rozdzielone”” (PM sp. 3); w planie kampanii „rok wcześniej”
+  dla miesiąca sprzed pierwszej operacji – „— (przed historią)” (`YearCell.yearAgo` null), nie 0,00 zł.
+- **T449** Przegląd roczny (1.15.9, N5 – AP-24, R-19, AF-34, RY.24, RY sp. 5, RY.25): miesiące roku tylko z historią
+  (`yearSpan`: od pierwszego dnia danych – operacja albo saldo otwarcia – do bieżącego miesiąca); miesiące przed nim jednym
+  wierszem „styczeń … – sierpień …: brak historii”, przyszłe nie są w tabeli (sumy roku bez zmian). Pieniądze i siła
+  floty „na początku” w roku, w którym dane zaczynają się później niż 1 stycznia – z datą tego dnia: „saldo otwarcia
+  dd.mm.rrrr” (saldo otwarcia tego dnia) albo „początek historii dd.mm.rrrr” (kwota bez zmian – T81). Siła floty netto
+  „z należnościami, po odjęciu długu” (było „bez długu”). Cele osiągnięte w roku – z logu silnika i z `achievedAt`
+  (także zarchiwizowane później), w kolejności dojścia. Przypomnienie w styczniu: powiadomienie „Przegląd roczny” raz
+  (klucz `year:<rok>`) za rok zamknięty, gdy budżet w nim działał; własny przełącznik `NotifyPrefs.yearReview`
+  (config.json komputera, addytywnie, domyślnie włączony), kliknięcie – Raporty → Przegląd roczny (w styczniu rok
+  zamknięty); wiersz w tabeli powiadomień specyfikacji.
