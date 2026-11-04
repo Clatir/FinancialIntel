@@ -11,7 +11,7 @@ import { loanKey, type Choice, type NewRow, type SharePart } from '@shared/impor
 import { HOUSE_MEMBER_ID, inflowOf, SHARE_MODES, type HouseholdMember, type Share } from '@shared/schema'
 import { useRecordList } from '../../store/records'
 import { useFleet, useHousehold } from '../../store/fleet'
-import { useLoanChoices } from '../radar/loanChoices'
+import { loanToName, useLoanChoices } from '../radar/loanChoices'
 import { AmountField, plnText } from '../../components/fields'
 import { IconClose, IconPlus } from '../../components/icons'
 import { CategorySelect, useAccounts } from '../operations/pickers'
@@ -25,15 +25,25 @@ export const IMPORT_SHARE_MODES = SHARE_MODES.filter((m) => m !== 'amounts')
 
 /**
  * The note at a group's „w tym za” line (AF-27): where its amount went, and why less than typed (none – 0 zł typed); of a
- * loan's part (D100) – its debt said so.
+ * loan's part (D100) – its debt said so; a rule's loan part of each inflow (T358) – said so.
  */
 function spreadText(s: LineSpread, name: string, loan = false): string | null {
   if (s.typed <= 0) return null
   const total = s.given.reduce((a, g) => a + g.amount, 0)
   const where = s.given.map((g) => `${dm(g.date)} ${plnText(g.amount)} zł`).join(', ')
+  const each = s.each != null ? `z każdej wpłaty ${plnText(s.each)} zł` : null
   if (!s.given.length) return s.capped ? (loan ? 'pożyczka spłacona – bez części' : `${name} nie ma nic do oddania – bez części`) : 'bez części – brak pieniędzy we wpłatach'
-  if (total >= s.typed) return s.given.length > 1 ? `po kolei: ${where}` : `z wpłaty ${where}`
-  return `${plnText(total)} z ${plnText(s.typed)} zł (${s.capped ? (loan ? 'tyle zostało do spłaty' : `tyle ${name} ma oddać`) : 'tyle zostało we wpłatach'}): ${where}`
+  if (total >= s.typed) return each ? `${each}: ${where}` : s.given.length > 1 ? `po kolei: ${where}` : `z wpłaty ${where}`
+  return `${each ? `${each} – ` : ''}${plnText(total)} z ${plnText(s.typed)} zł (${s.capped ? (loan ? 'tyle zostało do spłaty' : `tyle ${name} ma oddać`) : 'tyle zostało we wpłatach'}): ${where}`
+}
+
+/**
+ * A line changed by the user: a rule's loan part of each inflow (`each`, T358) becomes the decision's own – of a group or a
+ * theme together for its rows (T328).
+ */
+export const changedLine = (x: SharePart, p: Partial<SharePart>): SharePart => {
+  const { each: _each, ...line } = x
+  return { ...line, ...p }
 }
 
 /**
@@ -75,10 +85,11 @@ export function IncomeSharesEditor({
   const unused = others.filter((m) => !shares.some((s) => !s.loanId && s.memberId === m.id))
   const viaMembers = unused.filter((m) => m.via === choice.memberId)
   const addLine = (m: HouseholdMember) => setShares([...shares, { memberId: m.id, amount: startOf?.(m.id, shares) ?? 0, advance: inflowOf(m) === 'advance' }])
-  // A loan's part (D100): the first open loan not named yet, at what it still owes – at most what the money has left.
+  // A loan's part (D100): the first open loan not named yet, at what it still owes – at most what the money has left; never
+  // a second line of one loan (przegląd N2 2.11).
+  const toName = loanToName(loans, shares)
   const addLoan = () => {
-    const l = openLoans.find((x) => !shares.some((s) => s.loanId === x.id)) ?? openLoans[0]!
-    setShares([...shares, { memberId: '', amount: startOf?.(loanKey(l.id), shares) ?? 0, advance: false, loanId: l.id }])
+    if (toName) setShares([...shares, { memberId: '', amount: startOf?.(loanKey(toName.id), shares) ?? 0, advance: false, loanId: toName.id }])
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-[11px]" data-testid={`${testId}-also-for`}>
@@ -91,7 +102,7 @@ export function IncomeSharesEditor({
               value={s.loanId}
               onChange={(e) => {
                 const loanId = e.currentTarget.value
-                setShares(shares.map((x, j) => (j === i ? { ...x, loanId } : x)))
+                setShares(shares.map((x, j) => (j === i ? changedLine(x, { loanId }) : x)))
               }}
               aria-label="Spłata której pożyczki"
               data-testid={`${testId}-loan-part-loan`}
@@ -107,7 +118,7 @@ export function IncomeSharesEditor({
               className="h-[22px] w-[88px] text-[11px]"
               value={s.amount || null}
               allowEmpty
-              onChange={(v) => setShares(shares.map((x, j) => (j === i ? { ...x, amount: Math.max(0, v ?? 0) } : x)))}
+              onChange={(v) => setShares(shares.map((x, j) => (j === i ? changedLine(x, { amount: Math.max(0, v ?? 0) }) : x)))}
               aria-label="Kwota spłaty pożyczki"
               data-testid={`${testId}-loan-part-amount`}
             />
@@ -115,13 +126,14 @@ export function IncomeSharesEditor({
               <IconClose size={11} />
             </button>
             {(() => {
-              // A group's or a theme's part: spread over its rows in their order, never beyond the loan's debt (T357).
+              // A group's or a theme's part: spread over its rows in their order, never beyond the loan's debt (T357) – a
+              // rule's of each inflow (T358) said so.
               const spread = spreadOf?.(i)
               const text = spread ? spreadText(spread, '', true) : null
               const loan = loans.find((l) => l.id === s.loanId)
               return (
                 <span className="text-dim" data-testid={`${testId}-loan-part-note`}>
-                  {text ?? (loan ? (loan.closed ? 'pożyczka zamknięta' : `zostało ${plnText(loan.open)} zł`) : '')}
+                  {text ?? (loan ? (loan.closed ? 'pożyczka zamknięta' : `${s.each && spreadOf ? 'z każdej wpłaty · ' : ''}zostało ${plnText(loan.open)} zł`) : '')}
                 </span>
               )
             })()}
@@ -194,7 +206,7 @@ export function IncomeSharesEditor({
           <IconPlus size={10} /> w tym za…
         </button>
       )}
-      {openLoans.length > 0 && shares.filter((s) => s.loanId).length < maxLoans && (
+      {toName && shares.filter((s) => s.loanId).length < maxLoans && (
         <button
           type="button"
           className="flex items-center gap-0.5 text-muted hover:text-fg-strong hover:underline"
@@ -273,7 +285,9 @@ export function RowShares({ p, choice, mine }: { p: NewRow; choice: Choice; mine
   const ledger = useHousehold()
   const states = useFleet()?.loans
   const loans = useLoanChoices([...(choice.shares ?? []), ...(mine?.shares ?? [])].flatMap((x) => (x.loanId ? [x.loanId] : [])))
-  const key = useSharesKey((v) => ({ parts: v.parts.get(p.key) ?? [], owed: Object.fromEntries(whoKeys(members, loans).map((id) => [id, owedLeftOfRow(v, p.key, p.row.amount, id)])) }))
+  // What the members owe – said at „+ w tym za X” of a member's money only (przegląd N2 2.13).
+  const owing = (mine ?? choice).household ? members : NO_MEMBERS
+  const key = useSharesKey((v) => ({ parts: v.parts.get(p.key) ?? [], owed: Object.fromEntries(owing.map((m) => [m.id, owedLeftOfRow(v, p.key, p.row.amount, m.id)])) }))
   const view = useMemo(() => (key ? (JSON.parse(key) as { parts: SharePart[]; owed: Record<string, number> }) : null), [key])
   const shown: Choice = mine ?? { ...choice, shares: view?.parts.length ? view.parts : undefined }
   return (
@@ -295,6 +309,44 @@ export function RowShares({ p, choice, mine }: { p: NewRow; choice: Choice; mine
           jak grupa
         </button>
       )}
+    </span>
+  )
+}
+
+const NO_MEMBERS: readonly HouseholdMember[] = []
+
+/**
+ * What an income row of the import shows of its parts (D81, D100; przegląd N2 2.13): its lines – a member's money among
+ * more members, a decision with lines (`RowShares`: the file's spread read on every change of the screen); while a loan
+ * given is open, only „+ w tym spłata pożyczki” (`RowLoanPart`: the spread read at the click – hundreds of salary rows
+ * read nothing); or nothing.
+ */
+export function rowPartsOf(c: Pick<Choice, 'kind' | 'household' | 'shares'>, amount: number, members: number, loanOpen: boolean): 'lines' | 'add' | null {
+  if (c.kind !== 'income' || amount <= 0) return null
+  if ((c.household && members > 1) || !!c.shares?.length) return 'lines'
+  return loanOpen ? 'add' : null
+}
+
+/** A row of money in without lines (`rowPartsOf` 'add'): „+ w tym spłata pożyczki” – a line of the row's own decision, as `RowShares` makes it. */
+export function RowLoanPart({ p, choice, mine }: { p: NewRow; choice: Choice; mine: Choice | undefined }) {
+  const members = useMembers()
+  const ledger = useHousehold()
+  const states = useFleet()?.loans
+  const loans = useLoanChoices()
+  const shown = mine ?? choice
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1">
+      <IncomeSharesEditor
+        choice={shown}
+        members={members}
+        loans={loans}
+        onChange={(next) => chooseRow(p.key, rowSharesChoice(next, choice, shown, !!mine))}
+        testId="import-row"
+        startOf={(who, lines) => {
+          const v = sharesNow(ledger, members, states)
+          return v ? rowStart(v, p.key, p.row.amount, who, lines) : 0
+        }}
+      />
     </span>
   )
 }

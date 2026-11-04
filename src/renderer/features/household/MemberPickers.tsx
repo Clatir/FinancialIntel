@@ -14,7 +14,7 @@ import { IconClose, IconPlus } from '../../components/icons'
 import { Segmented, cx } from '../../components/ui'
 import { rememberInflows, sureCoversOf, useMembers } from './actions'
 import { RepaymentPicker, useLedgerBefore } from './Repayments'
-import { useLoanChoices } from '../radar/loanChoices'
+import { loanToName, useLoanChoices } from '../radar/loanChoices'
 
 /** The members offered: the active ones and the one already chosen (archived or unknown – it stays as it was). */
 function useOffered(current: string | null) {
@@ -108,6 +108,14 @@ export function FinancedNote({ t }: { t: Transaction }) {
 /** An explicit kind still naming purchases (AP-4 – a record of an older version): those it pays back all the same. */
 const NAMED_NOTE = ' – poza wskazanymi wcześniej zakupami: te spłaca.'
 
+/**
+ * Does a member's money of an explicit kind name purchases it pays back all the same (AP-4, `inflowPlanOf` 'named')? As
+ * the ledger reads it (`namesFor`): any purchase named, or this member's opening debt – of the members named
+ * (`coversOpeningMembers`) when there are some (przegląd N2 2.10).
+ */
+export const namesPurchases = (t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'>, memberId: string): boolean =>
+  t.covers.length > 0 || (t.coversOpeningMembers?.length ? t.coversOpeningMembers.includes(memberId) : !!t.coversOpening)
+
 const INCOME_REST = [
   { value: 'income', label: 'przychód' },
   { value: 'advance', label: 'zaliczka' }
@@ -132,7 +140,7 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const parts = t.splits
   const partsSum = parts.reduce((a, x) => a + x.amount, 0)
   // An explicit kind naming purchases (AP-4: an older version's record) pays them back – `inflowPlanOf`.
-  const namedBefore = t.covers.length > 0 || !!t.coversOpening
+  const namedBefore = !!payer && namesPurchases(t, payer)
   const rest = t.amount - partsSum
   // Who passes money through the sender (D81): a hint, one click each – never applied by itself.
   const through = payer ? members.filter((m) => !m.archived && m.via === payer && !parts.some((x) => x.memberId === m.id)) : []
@@ -160,10 +168,10 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   // The loans given its parts may repay (D100): the open ones and the ones named – a part starts at what is open, at most
   // what the inflow has left.
   const loans = useLoanChoices(parts.flatMap((x) => (x.loanId ? [x.loanId] : [])))
-  const openLoans = loans.filter((l) => !l.closed)
+  // A new part – of an open loan not named yet only (przegląd N2 2.11).
+  const toName = loanToName(loans, parts)
   const addLoanPart = () => {
-    const l = openLoans.find((x) => !parts.some((y) => y.loanId === x.id)) ?? openLoans[0]
-    if (l) setParts([...parts, { id: newId(), amount: Math.max(0, Math.min(l.open, rest)), categoryId: null, refundable: false, memberId: null, advance: false, loanId: l.id, note: '' }])
+    if (toName) setParts([...parts, { id: newId(), amount: Math.max(0, Math.min(toName.open, rest)), categoryId: null, refundable: false, memberId: null, advance: false, loanId: toName.id, note: '' }])
   }
   // A line's „whose”: mine, a member's, a loan's (D100 – no member's money).
   const setWhose = (x: Split, value: string) => {
@@ -260,7 +268,7 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
         <button type="button" className="flex items-center gap-1 text-dim hover:text-fg-strong" onClick={() => addPart(members.find((m) => !m.archived && m.id !== payer) ?? null, 0)} data-testid="operation-income-split">
           <IconPlus size={11} /> podziel na osoby
         </button>
-        {openLoans.length > 0 && (
+        {toName && (
           <button
             type="button"
             className="flex items-center gap-1 text-dim hover:text-fg-strong"

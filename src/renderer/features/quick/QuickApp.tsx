@@ -70,6 +70,28 @@ function MemberPick({ data, value, onChange, none, testId, compact }: { data: Qu
   )
 }
 
+/** The loan a quick entry's part repays (D100, T359): its id and the amount typed – null: none typed. */
+export type QuickLoan = { loanId: string; amount: number | null }
+
+/**
+ * The part repaying a loan (D100, T359): its loan of the list and its amount – typed, else what the loan still owes, at
+ * most what the inflow has left beyond the others' parts.
+ */
+export function quickLoanPart(
+  loan: QuickLoan | null,
+  data: Pick<QuickData, 'loans' | 'members'> | null,
+  d: Pick<QuickDraft, 'kind' | 'household' | 'memberId' | 'amount'>,
+  shares: Readonly<Record<string, number>>
+): { loan: NonNullable<QuickData['loans']>[number]; amount: number } | null {
+  const l = loan && d.kind === 'income' ? (data?.loans ?? []).find((x) => x.id === loan.loanId) : undefined
+  if (!l || !data) return null
+  const others = d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).reduce((a, m) => a + shares[m.id]!, 0) : 0
+  return { loan: l, amount: loan!.amount ?? Math.min(l.open, Math.max(0, d.amount - others)) }
+}
+
+/** The part's amount typed: an emptied field – back to what the loan owes (null, przegląd N2 2.12), never 0 zł. */
+export const typedLoan = (x: QuickLoan | null, v: number | null): QuickLoan | null => (x ? { ...x, amount: v } : x)
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-2">
@@ -94,7 +116,7 @@ export function QuickApp() {
   const [shares, setShares] = useState<Record<string, number>>({})
   // The part repaying a loan given (D100, T359 – whoever sent it): its loan; its amount typed, else what the loan still
   // owes, at most what the inflow has left (null).
-  const [loan, setLoan] = useState<{ loanId: string; amount: number | null } | null>(null)
+  const [loan, setLoan] = useState<QuickLoan | null>(null)
   const loanRef = useRef(loan)
   loanRef.current = loan
   const [nightOk, setNightOk] = useState(false)
@@ -254,14 +276,11 @@ export function QuickApp() {
   const asks = d.kind !== 'income' && !!data && d.amount >= data.impulseThreshold && data.impulseThreshold > 0
   const hide = !!data?.hideAmounts
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
-  // The part repaying a loan (D100): its loan of the list and its amount – typed, else what the loan still owes, at most
-  // what the inflow has left beyond the others' parts.
-  const loanNow = useMemo(() => {
-    const l = loan && d.kind === 'income' ? (data?.loans ?? []).find((x) => x.id === loan.loanId) : undefined
-    if (!l || !data) return null
-    const others = d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).reduce((a, m) => a + shares[m.id]!, 0) : 0
-    return { loan: l, amount: loan!.amount ?? Math.min(l.open, Math.max(0, d.amount - others)) }
-  }, [loan, data, d.kind, d.household, d.memberId, d.amount, shares])
+  // The part repaying a loan (D100): its loan of the list and its amount (`quickLoanPart`).
+  const loanNow = useMemo(
+    () => quickLoanPart(loan, data, { kind: d.kind, household: d.household, memberId: d.memberId, amount: d.amount }, shares),
+    [loan, data, d.kind, d.household, d.memberId, d.amount, shares]
+  )
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
@@ -737,7 +756,7 @@ export function QuickApp() {
                     className="w-[110px]"
                     value={loanNow?.amount || null}
                     allowEmpty
-                    onChange={(v) => setLoan((x) => (x ? { ...x, amount: v ?? 0 } : x))}
+                    onChange={(v) => setLoan((x) => typedLoan(x, v))}
                     aria-label="Kwota spłaty pożyczki"
                     data-testid="quick-loan-amount"
                   />

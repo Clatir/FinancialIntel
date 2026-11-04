@@ -18,7 +18,7 @@ import { Badge, Panel, ShowMore, cx } from '../../components/ui'
 import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
-import { DecisionFields, IMPORT_SHARE_MODES, RowShares } from './DecisionFields'
+import { DecisionFields, IMPORT_SHARE_MODES, RowLoanPart, RowShares, rowPartsOf } from './DecisionFields'
 import { DuplicatesNote, DuplicatesPanel } from './DuplicatesPanel'
 import { useLatestImport } from './batches'
 import { BankTelemetry } from './BankTelemetry'
@@ -626,6 +626,8 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
   const accounts = useAccounts()
   const loans = useRecordList('loans')
   const c = mine ?? choice
+  // Its parts (D81, D100): its lines, „+ w tym spłata pożyczki” only, or none (`rowPartsOf`).
+  const parts = rowPartsOf(c, p.row.amount, members.length, loans.some((l) => l.direction === 'given' && !l.closedAt))
   // An operation's own decision of another kind than its group's (N87): said, with the way back to the group's.
   const otherKind = !!mine && mine.kind !== choice.kind
   const otherAccounts = accounts.filter((a) => a.id !== fileAccount && (!a.archived || a.id === c.counterAccountId))
@@ -673,10 +675,13 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
             </option>
           ))}
         </select>
-      ) : c.kind === 'income' && p.row.amount > 0 && ((c.household && members.length > 1) || loans.some((l) => l.direction === 'given' && !l.closedAt) || !!c.shares?.some((x) => x.loanId)) ? (
+      ) : parts === 'lines' ? (
         // „w tym za” of this transfer (AF-27) and its part repaying a loan (D100): its own decision stays while typed; else
         // its part of the group's spread.
         <RowShares p={p} choice={choice} mine={mine} />
+      ) : parts === 'add' ? (
+        // No lines while a loan given is open: „+ w tym spłata pożyczki” only, nothing read on a change (przegląd N2 2.13).
+        <RowLoanPart p={p} choice={choice} mine={mine} />
       ) : (
         <span />
       )}

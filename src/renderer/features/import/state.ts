@@ -898,6 +898,8 @@ export interface LineSpread {
   given: Array<{ date: string; amount: number }>
   /** Less than typed because the member owes no more (else: the rows' money ran out). */
   capped: boolean
+  /** A rule's loan part of each inflow (T358): that amount (`typed` – for all the rows). */
+  each?: number
 }
 
 /**
@@ -911,7 +913,12 @@ export function lineSpreads(view: SharesView, from: string): Record<number, Line
   for (const l of view.spread.get(from) ?? []) {
     const total = l.given.reduce((a, g) => a + g.amount, 0)
     // Whose (`SpreadLine.memberId`): a member's id or a loan's key (`loanKey`, D100) – its debt the loan's open amount.
-    out[l.line] = { typed: l.typed, given: l.given.map((g) => ({ date: g.date, amount: g.amount })), capped: total < l.typed && (view.total.get(l.memberId) ?? 0) >= (view.owed.get(l.memberId) ?? 0) }
+    out[l.line] = {
+      typed: l.typed,
+      given: l.given.map((g) => ({ date: g.date, amount: g.amount })),
+      capped: total < l.typed && (view.total.get(l.memberId) ?? 0) >= (view.owed.get(l.memberId) ?? 0),
+      ...(l.each != null ? { each: l.each } : {})
+    }
   }
   return out
 }
