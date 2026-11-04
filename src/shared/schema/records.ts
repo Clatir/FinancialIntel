@@ -507,6 +507,11 @@ export const balanceSchema = z.looseObject({
   kind: z.enum(['opening', 'confirmation']),
   amount: grosze,
   correctionId: ulidSchema.nullable().default(null),
+  /**
+   * A confirmation's last moment of confirming (1.15.7, T383 – „Inwentaryzacja”): `confirmBalance` stamps it, again too;
+   * an edit, a merge or a conflict's resolution never does. None = before it – its creation counts.
+   */
+  confirmedAt: isoDateTime.optional().catch(undefined),
   note: text
 })
 export type Balance = z.infer<typeof balanceSchema>

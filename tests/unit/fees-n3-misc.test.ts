@@ -59,12 +59,12 @@ describe('AP-10: „Pozostałe boje” sprzed ponad 30 dni mówią, co się z ni
   const TODAY = '2026-11-03'
   it('Mandat 03.10 (D−31) bez operacji – minęła; odhaczona albo z operacją MANDAT – zrobiona; przyszła i coroczna – brak stanu', () => {
     const fine = sched({ name: 'Mandat', date: '2026-10-03', amount: -zl(80) })
-    expect(pastStateOf(fine, [], TODAY)).toBe('lapsed')
-    expect(pastStateOf({ ...fine, done: { '2026-10-03': '' } }, [], TODAY)).toBe('done')
-    expect(pastStateOf(fine, [tx('2026-10-04', -zl(80), { counterparty: 'MANDAT STRAZ MIEJSKA' })], TODAY)).toBe('done')
-    expect(pastStateOf(sched({ name: 'Składka', date: '2026-10-20', amount: -zl(100) }), [], TODAY)).toBe('late')
-    expect(pastStateOf(sched({ name: 'Prezent', date: '2026-11-13', amount: -zl(200) }), [], TODAY)).toBeNull()
-    expect(pastStateOf(sched({ name: 'Urodziny', date: '2024-02-29', amount: -zl(300), yearly: true }), [], TODAY)).toBeNull()
+    expect(pastStateOf(fine, [], TODAY, [])).toBe('lapsed')
+    expect(pastStateOf({ ...fine, done: { '2026-10-03': '' } }, [], TODAY, [])).toBe('done')
+    expect(pastStateOf(fine, [tx('2026-10-04', -zl(80), { counterparty: 'MANDAT STRAZ MIEJSKA' })], TODAY, [])).toBe('done')
+    expect(pastStateOf(sched({ name: 'Składka', date: '2026-10-20', amount: -zl(100) }), [], TODAY, [])).toBe('late')
+    expect(pastStateOf(sched({ name: 'Prezent', date: '2026-11-13', amount: -zl(200) }), [], TODAY, [])).toBeNull()
+    expect(pastStateOf(sched({ name: 'Urodziny', date: '2024-02-29', amount: -zl(300), yearly: true }), [], TODAY, [])).toBeNull()
   })
 })
 

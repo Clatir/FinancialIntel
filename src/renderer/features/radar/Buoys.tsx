@@ -110,7 +110,7 @@ export function BuoysPanel({ days, today, readOnly }: { days: readonly Scheduled
             {later.map((s) => {
               const next = nextDayOf(s, today)
               // A one-off long past says what became of it (RA sp. 4): never read as a day ahead.
-              const past = next ? null : pastStateOf(s, transactions, today)
+              const past = next ? null : pastStateOf(s, transactions, today, list)
               return (
                 <div key={s.id} className="flex flex-col py-0.5" data-testid="buoy-later" data-name={s.name} data-state={past ?? 'ahead'}>
                   <div className="flex items-baseline gap-2">

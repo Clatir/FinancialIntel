@@ -16,6 +16,8 @@ export interface WhyLine {
   text?: string
   /** The result line (=). */
   total?: boolean
+  /** A note beside the sum, not added to it (today's refund of an earlier purchase – T370): shown in brackets. */
+  aside?: boolean
 }
 
 /** Why today's energy is less than the daily pool says (AP-13, T371): the note beside it on every screen. */
@@ -45,8 +47,8 @@ export function energyWhy(d: DailyState, month: string): WhyLine[] {
     { label: 'Przydział na dziś', amount: d.allowance },
     { label: 'Wydane dziś', amount: -d.spentToday }
   ]
-  // A refund of an earlier purchase (T370): the days after today share it.
-  if (d.returned) lines.push({ label: 'Zwroty dziś za wcześniejsze zakupy – nie do dziś, od jutra na pozostałe dni', amount: d.returned })
+  // A refund of an earlier purchase (T370): the days after today share it – beside the sum, not in it.
+  if (d.returned) lines.push({ label: 'Zwroty dziś za wcześniejsze zakupy – nie do dziś, od jutra na pozostałe dni', amount: d.returned, aside: true })
   if (d.cap) {
     lines.push({ label: 'Przydział po dzisiejszych wydatkach', amount: d.left })
     lines.push({ label: `Energia miesiąca (pensja do wydania) – ${CAP_REASON[d.cap.why]}`, amount: d.cap.month })

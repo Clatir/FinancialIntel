@@ -6,17 +6,15 @@
  * - the layers are the engine's – its log of moves added up to each month's end: one run of the engine for any number of
  *   months (none per month – „Wydajność”); a log that does not add up to the engine's state (a move it does not log)
  *   falls back to the engine run at each month's end (`engineAt`);
- * - the range by the engine's rule (`rangeMonths`) with that day's average costs (`costsFor` in `fleet.ts`: the 12 covered
- *   months before the month, the assumed costs under 3) and the debt of that day (`loanStates`, loans of that day and
- *   before) – Mostek's on that day.
+ * - the range by the engine's rule (`rangeMonths`) with that day's average costs (the engine's own `averageCosts`: the 12
+ *   covered months before the month, the assumed costs under 3) and the debt of that day (`loanStates`, loans of that day
+ *   and before) – Mostek's on that day.
  * Pure.
  */
 import type { Container, Loan, Transaction } from '../schema/records'
 import { addMonths, lastDayOf, monthOf } from './dates'
-import { rangeMonths, type FleetEvent, type FleetState } from './fleet'
-import { monthsBefore } from './history'
+import { averageCosts, rangeMonths, type FleetEvent, type FleetState } from './fleet'
 import { debtOf, loanStates } from './loans'
-import { sum } from './operations'
 import { costsByMonth } from './plan'
 
 export interface CushionPoint {
@@ -104,18 +102,6 @@ export function layersAtMonthEnds(fleet: Pick<FleetState, 'log' | 'shields' | 'h
   return out
 }
 
-/**
- * The engine's average costs in `month` (`costsFor` in `fleet.ts`, one rule): the covered months before it, at most 12;
- * under 3 of them the assumed costs, when set.
- */
-export function averageCostsIn(transactions: readonly Transaction[], covered: readonly string[], assumed: number | null, month: string): number | null {
-  const window = monthsBefore(covered, month, 12)
-  const costs = costsByMonth(transactions)
-  const average = window.length ? Math.round(sum(window.map((x) => costs.get(x) ?? 0)) / window.length) : null
-  if (window.length >= 3 || (assumed == null && average != null)) return average
-  return assumed
-}
-
 /** A range in tenths of a month, cut as `rangeText` cuts it (T218). */
 const tenths = (range: number) => Math.floor(range * 10)
 
@@ -127,6 +113,7 @@ export function cushionTrend(o: CushionInput): CushionPoint[] {
   if (!shown.length) return []
   const all = [addMonths(shown[0]!, -1), ...shown]
   const fromLog = layersAtMonthEnds(fleet, all)
+  const costs = costsByMonth(o.transactions)
   const points = new Map<string, Omit<CushionPoint, 'delta' | 'rangeDelta'> | null>()
   for (const month of all) {
     const date = lastDayOf(month)
@@ -141,7 +128,7 @@ export function cushionTrend(o: CushionInput): CushionPoint[] {
       // A loan of a later day was no debt yet then (its record names its day – D72).
       const loans = o.loans.filter((l) => l.date <= date)
       const debt = loans.length ? debtOf(loanStates(loans, o.transactions, o.containers, date)) : 0
-      range = rangeMonths(layers.shields, layers.hull, averageCostsIn(o.transactions, fleet.historyMonths, o.assumedCosts, month), debt)
+      range = rangeMonths(layers.shields, layers.hull, averageCosts(fleet.historyMonths, costs, o.assumedCosts, month).average, debt)
     } else if (o.engineAt) {
       const f = o.engineAt(date)
       if (!f.started) {

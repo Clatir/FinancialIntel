@@ -3,7 +3,7 @@ import { addMonths, warsawNow } from '@shared/calc/dates'
 import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
 import { copyOnMonths } from '@shared/calc/yearPlan'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
-import { addRecord, canWrite, monthTooNew, tooNewMonths, updateRecord, useData } from '../../store/data'
+import { addRecord, canWrite, deleteOrSay, monthTooNew, tooNewMonths, updateRecord, useData } from '../../store/data'
 import { commitActiveField, toast } from '../../store/ui'
 import { newId } from '@shared/ids'
 import { plnText } from '../../components/fields'
@@ -31,12 +31,13 @@ const sameEnvelopes = (a: Record<string, number>, b: Record<string, number>) => 
  * Change a month's own plan. A month living on an earlier plan gets its own first – a copy of the salary and the
  * envelopes in force – so the change does not reach other months (T46); a month gone by changed, the next month living
  * on the plan in force keeps it as its own first (B11): the current month and those after never change with it.
+ * false = nothing written (a read-only folder, the month's file or plan of a newer version – said by the store).
  */
-export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): void {
-  if (!canWrite()) return
+export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): boolean {
+  if (!canWrite()) return false
   const plans = allPlans()
   // The month's file a newer version of the app wrote, unreadable here (B67): no plan of this version made over it.
-  if (!plans.some((p) => p.month === month) && monthTooNew('months', month)) return
+  if (!plans.some((p) => p.month === month) && monthTooNew('months', month)) return false
   const now = new Date().toISOString()
   const own = plans.find((p) => p.month === month)
   const base = own ?? ownPlan(month, planFor(plans, month), now)
@@ -46,8 +47,7 @@ export function editPlan(month: string, fn: (p: MonthPlan) => MonthPlan): void {
     const inForce = planFor(plans, next)
     if (inForce && !tooNewMonths(useData.getState().problems, 'months').has(next)) addRecord('months', ownPlan(next, inForce, now))
   }
-  if (own) updateRecord('months', own.id, fn)
-  else addRecord('months', changed)
+  return own ? updateRecord('months', own.id, fn) : addRecord('months', changed)
 }
 
 export const setSalary = (month: string, salary: number) => editPlan(month, (p) => ({ ...p, salary }))
@@ -117,17 +117,31 @@ export function coverEnvelope(month: string, from: string, to: string, amount: n
 
 /**
  * „Dopełnij kadłub z osłon” (AP-17, D99 pkt 6 – T373): `amount` (what the hull lacks, at most the shields' surplus over
- * their target) moved now – an entry of this month's plan the engine counts at its moment; „Cofnij” takes it back.
+ * their target) moved now – an entry of this month's plan the engine counts at its moment; „Cofnij” takes it back, and
+ * the month's own plan it made (a copy of the plan in force – T46), when nothing else changed it meanwhile: the month
+ * follows the earlier plan again. false = nothing written (no toast of success).
  */
-export function topUpHull(amount: number): void {
-  if (!canWrite() || amount <= 0) return
+export function topUpHull(amount: number): boolean {
+  if (!canWrite() || amount <= 0) return false
   const id = newId()
   const month = warsawNow().month
-  editPlan(month, (p) => ({ ...p, hullTopUps: [...(p.hullTopUps ?? []), { id, amount, at: new Date().toISOString() }] }))
+  const made = !allPlans().some((p) => p.month === month)
+  if (!editPlan(month, (p) => ({ ...p, hullTopUps: [...(p.hullTopUps ?? []), { id, amount, at: new Date().toISOString() }] }))) return false
   toast(`Kadłub dopełniony z osłon: ${plnText(amount)} zł.`, 'success', 8000, {
     label: 'Cofnij',
-    run: () => editPlan(month, (p) => ({ ...p, hullTopUps: (p.hullTopUps ?? []).filter((u) => u.id !== id) }))
+    run: () => {
+      const plans = allPlans()
+      const own = plans.find((p) => p.month === month)
+      if (!own || !canWrite()) return
+      const inForce = planFor(plans.filter((p) => p !== own), month)
+      const left = (own.hullTopUps ?? []).filter((u) => u.id !== id)
+      // Only the copy the top-up made, nothing else in it: gone, as it came.
+      const bare = !left.length && !own.loot && !own.envelopeCovers.length && !own.note && own.salary === (inForce?.salary ?? 0) && sameEnvelopes(own.envelopes, inForce?.envelopes ?? {})
+      if (made && bare) deleteOrSay('months', own.id)
+      else editPlan(month, (p) => ({ ...p, hullTopUps: (p.hullTopUps ?? []).filter((u) => u.id !== id) }))
+    }
   })
+  return true
 }
 
 /**

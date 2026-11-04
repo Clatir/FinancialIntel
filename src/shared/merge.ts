@@ -290,6 +290,7 @@ const LABELS: Record<string, string> = {
   'split.goals': 'Podział dostawy – cele',
   transactionId: 'Operacja',
   correctionId: 'Korekta',
+  confirmedAt: 'Potwierdzone',
   explained: 'Korekta wyjaśniona',
   deadline: 'Termin',
   source: 'Źródło',

@@ -205,6 +205,26 @@ export function fleetNow(): FleetState | null {
   return s.fi ? fleetOf(s.fi, s.records, Date.now()) : null
 }
 
+type LayersTargets = Pick<FleetInput['settings']['layers'], 'shieldSalaries' | 'hullMonths' | 'assumedCosts'>
+let layersMemo: { base: FleetState; key: string; state: FleetState } | null = null
+
+/**
+ * The ship's state with other layers' targets (AP-17, T374 – the preview in Ustawienia and the toast of the change): the
+ * engine's input now, the whole history counted again from the start – once per targets while the records and the day
+ * stay (the preview of a typed value and its save on leaving the field share one run).
+ */
+export function fleetWithLayers(patch: Partial<LayersTargets>): FleetState | null {
+  const base = fleetNow()
+  const input = base ? fleetInputNow() : null
+  if (!base || !input) return null
+  const layers = { ...input.settings.layers, ...patch }
+  const key = JSON.stringify([layers.shieldSalaries, layers.hullMonths, layers.assumedCosts])
+  if (layersMemo && layersMemo.base === base && layersMemo.key === key) return layersMemo.state
+  const state = timed('silnik budżetu – podgląd celów warstw', () => computeFleet({ ...input, settings: { ...input.settings, layers } }))
+  layersMemo = { base, key, state }
+  return state
+}
+
 /** The household's ledger as the engine counts it (D80: from the budget's start, up to today) – per operation too. */
 export function useHousehold(): HouseholdLedger | null {
   return useFleet()?.household ?? null

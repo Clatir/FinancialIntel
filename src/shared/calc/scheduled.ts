@@ -172,10 +172,14 @@ export function remindStep(s: Pick<Scheduled, 'remind'>, days: number): number |
 /**
  * A one-off whose day is past (RA sp. 4 – „Pozostałe boje”, T378): done (an operation made from it or matched, ticked
  * off) or lapsed – its day more than `LAPSE_DAYS` past without one, off the radar; null – not past (or a yearly one).
+ * `list` – all the buoys: an operation made from another one, or matched to another one's day around it first (the
+ * radar's order – one operation, one day), is never its.
  */
-export function pastStateOf(s: Scheduled, transactions: readonly Transaction[], today: string): 'done' | 'late' | 'lapsed' | null {
+export function pastStateOf(s: Scheduled, transactions: readonly Transaction[], today: string, list: readonly Scheduled[]): 'done' | 'late' | 'lapsed' | null {
   if (s.yearly || s.date >= today) return null
-  const state = scheduledDays([s], transactions, today, s.date, s.date)[0]?.state
+  // The days that compete for its operations (±3 days of them): within twice the match's days of its own.
+  const all = [...list.filter((x) => x.id !== s.id), s]
+  const state = scheduledDays(all, transactions, today, addDays(s.date, -2 * MATCH_DAYS), addDays(s.date, 2 * MATCH_DAYS)).find((d) => d.scheduled.id === s.id)?.state
   return state === 'done' || state === 'late' || state === 'lapsed' ? state : null
 }
 

@@ -23,7 +23,7 @@ import { addMonths, monthOf } from './dates'
 import { dockAmount, goalInstallment, hullCountsFull, paySalary, rangeMonths, ratedIn, shipClass, type DockTargets, type FleetState, type ShipClass } from './fleet'
 import { byPriority } from './goals'
 import type { IncomeStats } from './income'
-import { sum } from './operations'
+import { categoryIndex, sum } from './operations'
 import { planFor } from './plan'
 import { openDays, scheduledWindow } from './scheduled'
 
@@ -188,12 +188,14 @@ export function restNeeds(fleet: Pick<FleetState, 'daily' | 'envelopes' | 'tanks
 /**
  * The course's input from the engine's state now and the records (Wywiad): the plans, the buoys, the loans. The layers,
  * the average costs and the debt are the engine's – the course's „teraz” is Mostek's (AF-33). The income – `courseIncome`.
- * `cargo` – the fees' state (`cargoStatuses`): the month's rest pays the ones still due from its energy (T390).
+ * `cargo` – the fees' state (`cargoStatuses`): the month's rest pays the ones still due from its energy (T390). A buoy
+ * of this month spent from a planned envelope (its category's) is in that envelope's rest already (`restNeeds`): only
+ * what it is over the rest is this month's extra (N3 review).
  */
 export function courseInputOf(
   fleet: FleetState,
   r: {
-    settings: Pick<Settings, 'layers' | 'orders'>
+    settings: Pick<Settings, 'layers' | 'orders' | 'categories'>
     plans: readonly MonthPlan[]
     goals: readonly Goal[]
     scheduled: readonly Scheduled[]
@@ -205,7 +207,20 @@ export function courseInputOf(
   const extras = new Map<string, number>()
   const add = (month: string, v: number) => extras.set(month, (extras.get(month) ?? 0) + v)
   // The buoys' open days of the course's year (a late one in this month), the repayments expected of the loans given.
-  for (const d of openDays(scheduledWindow(r.scheduled, r.transactions, fleet.today, COURSE_DAYS))) if (d.scheduled.amount != null) add(d.date < fleet.today ? fleet.month : monthOf(d.date), d.scheduled.amount)
+  // This month's money out of a planned envelope's category is spent from that envelope (as the engine counts its
+  // operation): its rest, counted by `restNeeds`, pays it first – the buoys of one envelope share it.
+  const cats = categoryIndex(r.settings.categories)
+  const planned = new Map(fleet.envelopes.filter((e) => e.kind === 'planned').map((e) => [e.categoryId, Math.max(0, e.left)]))
+  for (const d of openDays(scheduledWindow(r.scheduled, r.transactions, fleet.today, COURSE_DAYS))) {
+    const amount = d.scheduled.amount
+    if (amount == null) continue
+    const month = d.date < fleet.today ? fleet.month : monthOf(d.date)
+    const main = month === fleet.month && amount < 0 ? cats.mainOf(d.scheduled.categoryId)?.id : undefined
+    const rest = main ? (planned.get(main) ?? 0) : 0
+    const fromEnvelope = Math.min(rest, -amount)
+    if (main && fromEnvelope) planned.set(main, rest - fromEnvelope)
+    add(month, amount + fromEnvelope)
+  }
   const installments: Array<{ month: string; amount: number }> = []
   for (const l of fleet.loans) {
     if (l.loan.closedAt) continue

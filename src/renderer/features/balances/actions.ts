@@ -65,7 +65,8 @@ export function confirmBalance(accountId: string, amount: number, date: string, 
   }
   const recordId = derivedId(accountId, `confirmation:${key}`)
   const knownRecord = s.records.balances[recordId]?.record
-  const record: Balance = balanceSchema.parse({ ...(knownRecord ?? base), id: recordId, updatedAt: now, date, accountId, kind: 'confirmation', amount, correctionId: correctionId ?? knownRecord?.correctionId ?? null })
+  // Its moment of confirming (T383): „Inwentaryzacja” counts it – a confirmed again balance too.
+  const record: Balance = balanceSchema.parse({ ...(knownRecord ?? base), id: recordId, updatedAt: now, confirmedAt: now, date, accountId, kind: 'confirmation', amount, correctionId: correctionId ?? knownRecord?.correctionId ?? null })
   if (knownRecord) updateRecord('balances', recordId, () => record)
   else addRecord('balances', record)
   if (plan.kind === 'match') toast(`${accountName}: saldo zgodne z operacjami (${plnText(amount)} zł).`, 'success', 4000)
