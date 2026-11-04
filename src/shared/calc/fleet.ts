@@ -29,7 +29,7 @@ import { debtOf, loanBacksOf, loanStates, type LoanState } from './loans'
 import { coveredMonths, monthsBefore } from './history'
 import { accountAmounts, categoryIndex, costOf, isCargoPayment, isTwoSided, partsOf, splitEvenly, sum } from './operations'
 // The paid cycles by the fees' state rule (T393) – that module reads the calendar from this one: a cycle of functions only.
-import { feeDayOf, paidDuesOf, paymentDay, type FeeDuesOf, type Linked } from './cargoStatus'
+import { feeDayOf, paidDuesOf, paymentDay, paymentsIndex, type FeeDuesOf, type Linked } from './cargoStatus'
 
 // ------------------------------------------------------------------ the rules as small pure functions
 
@@ -411,8 +411,8 @@ const byDay = (a: Linked, b: Linked): number => (a.date < b.date ? -1 : a.date >
  * never pass the run – the money left before the opening balances – yet each pays its due as the hold counts it
  * (`paidDuesOf`, the engine's turn of the start the same): the due of its window, the next cycle's early only with the one
  * before paid; a late one the late due (the fee followed from its first payment seen – przegląd N2 4), never the next.
- * The start wizard reads it; `paid` – the payments the engine counts (`feePaymentDays`; a day alone: the fee's amount
- * then).
+ * The start wizard reads it; `paid` – the fee's payments (`paymentsIndex`, the one rule – T393; a day alone: the fee's
+ * amount then).
  */
 export function paidBeforeStart(c: FeeDuesOf, paid: Iterable<string | { date: string; amount: number }>, start: string): Set<string> {
   const linked: Linked[] = []
@@ -426,36 +426,6 @@ export function paidBeforeStart(c: FeeDuesOf, paid: Iterable<string | { date: st
 }
 
 const NO_CYCLES: ReadonlySet<string> = new Set()
-
-/**
- * The payments a periodic fee's cycles count, before `before`, by day (AP-5, B55, T345, T393): an expense's parts linked
- * to the fee (the part's container, else the operation's) as the run counts them – not paid from a known goal (the
- * goal's money, T131) nor to be refunded (the household's) –, one per operation (its parts' sum). The engine (its paid
- * cycles, before the start too) and the start wizard read the same – never the cargo hold's index of linked payments (any
- * kind, a goal's and a refundable one too).
- */
-export function feePaymentDays(transactions: readonly Transaction[], before: string, isFee: (containerId: string) => boolean, knownGoal: (goalId: string) => boolean): Map<string, Linked[]> {
-  const out = new Map<string, Linked[]>()
-  for (const t of transactions) {
-    if (t.date >= before || t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
-    let byFee: Map<string, number> | null = null
-    for (const p of partsOf(t)) {
-      const cid = p.containerId ?? t.containerId
-      const gid = p.goalId ?? t.goalId
-      if (p.refundable || p.amount >= 0 || !cid || !isFee(cid) || (gid && knownGoal(gid))) continue
-      byFee ??= new Map()
-      byFee.set(cid, (byFee.get(cid) ?? 0) - p.amount)
-    }
-    for (const [cid, amount] of byFee ?? []) {
-      const p: Linked = { id: t.id, date: t.date, amount, accountId: t.accountId }
-      const list = out.get(cid)
-      if (list) list.push(p)
-      else out.set(cid, [p])
-    }
-  }
-  for (const list of out.values()) list.sort(byDay)
-  return out
-}
 
 /** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
 const archivedMonth = (c: { archived: boolean; archivedAt?: string | null }): string | null => (c.archived && c.archivedAt ? warsawNow(c.archivedAt).month : null)
@@ -1155,11 +1125,12 @@ export function computeFleet(input: FleetInput): FleetState {
   /** What each tank wanted at this month's turn (T29, C20) – the energy gave it, or less (`FleetState.tanks[].want`). */
   const wantedNow = new Map<string, number>()
   /**
-   * Each periodic fee's payments its cycles count (B55, T345, T393), by day (`feePaymentDays`): an expense's parts linked
-   * to it as the run counts them – a known goal's money is the goal's (T131), a part to be refunded the household's –, one
-   * per operation; the ones before the budget's start too (AP-5: the first salary never sets a fee paid then aside again).
+   * Each periodic fee's payments its cycles count (B55, T345, T393), by day – the hold's own (`paymentsIndex`): an
+   * expense's parts linked to it, one per operation, from a goal and to be refunded too (the bill is paid – the money
+   * the goal's or the household's, the tank not drawn); the ones before the budget's start too (AP-5: the first salary
+   * never sets a fee paid then aside again). Later than today – none counted (`paidBefore`).
    */
-  const feePayments = feePaymentDays(txs, addDays(today, 1), (id) => periodicIds.has(id), knownGoal)
+  const feePayments = paymentsIndex(input.transactions).byContainer
   /** Each fee's last paid cycles: its payments then, its payment day – the same for its active dues whatever the month. */
   const paidMemo = new Map<string, { n: number; day: number; paid: ReadonlySet<string> }>()
   /**
@@ -1264,7 +1235,8 @@ export function computeFleet(input: FleetInput): FleetState {
     switch (t.kind) {
       case 'expense': {
         for (const p of partsOf(t)) {
-          // A household member's part: the ledger's (below).
+          // A household member's part: the ledger's (below) – a fee's bill it pays still pays the due (T393), its tank
+          // not drawn.
           if (p.refundable) continue
           const cid = p.containerId ?? t.containerId
           const container = cid ? containerById.get(cid) : undefined
@@ -1273,6 +1245,7 @@ export function computeFleet(input: FleetInput): FleetState {
           const periodic = container && container.cycleMonths > 1 && activeIn(container, monthOf(t.date)) ? container : undefined
           const gid = p.goalId ?? t.goalId
           const goal = gid && knownGoal(gid) ? gid : null
+          // A goal's money (T131): a fee's bill paid from it still pays the due (T393) – its tank not drawn.
           if (goal) {
             if (p.amount < 0) {
               const have = goalAmount.get(goal) ?? 0

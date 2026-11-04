@@ -70,10 +70,13 @@ paths:
   `useEngineParts`, `engineParts` w `game.ts`).
 - Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
   (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Cykle zapłacone
-  tylko z reguły Ładowni (`paidDuesOf`, T393 – na przełomie płatności sprzed niego), nigdy własną regułą; które płatności
-  się liczą – `feePaymentDays` (silnik i kreator – `startPaidDays`, T345). Miesiąc przed silnikiem – `monthAhead` od jego
-  stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok. Podpowiedź raty w Ładowni – `tankRate`
-  (T377: `want` silnika, cykl zapłacony bez raty), nigdy `sinkingInstallment` od pustego zbiornika.
+  tylko z reguły Ładowni (`paidDuesOf`, T393 – na przełomie płatności sprzed niego), nigdy własną regułą; która płatność
+  płaci opłatę – tylko `paymentsIndex` (Ładownia, silnik, kreator `startPaidDays`; T393 po scaleniu z N2: wydatek, także
+  z celu i do zwrotu, inny rodzaj nigdy), nigdy własny filtr. **Pułapka:** płatność z celu / do zwrotu zamyka cykl, ale
+  nie bierze ze zbiornika – pieniądze rusza przebieg (`runTx`: cel, księga domowników), cykl – `paymentsIndex`. Miesiąc
+  przed silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
+  Podpowiedź raty w Ładowni – `tankRate` (T377: `want` silnika, cykl zapłacony bez raty), nigdy `sinkingInstallment` od
+  pustego zbiornika.
 - Energia dziś (AP-13, od 1.15.7): ekrany, podglądy i Daily Bias czytają `daily.energy` – `daily.left`, nie więcej niż
   energia miesiąca (`cappedEnergy`, powód `daily.cap` – T371); `left` zostaje miarą przekroczenia dnia (alarm, gra).
   Zwrot ponad dzisiejsze zakupy swojej kategorii głównej (`returned`) nie wchodzi do dziś, od jutra jest w puli (T370).

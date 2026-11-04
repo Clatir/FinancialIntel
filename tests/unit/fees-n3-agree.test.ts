@@ -3,14 +3,16 @@ import { cargoStatuses, dueIn, paymentDay, paymentsIndex, type CargoStatus } fro
 import { addDays, addMonths, firstDayOf, monthOf } from '@shared/calc/dates'
 import { activeIn, amountIn, computeFleet, cyclePosition, layersSum, sinkingInstallment, type FleetState } from '@shared/calc/fleet'
 import { createDefaultSettings } from '@shared/defaults'
-import { balanceSchema, containerSchema, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Settings, type Transaction } from '@shared/schema'
+import { balanceSchema, containerSchema, defaultCategoryId, goalSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Settings, type Transaction } from '@shared/schema'
 
 /**
  * Przegląd N3 13 (T393) as a property: over generated payment histories of a fee – every month, every 2 months, a quarter,
  * a year, a schedule; paid on time, early, late, twice, in halves, not at all; settled outside the budget, added to the
  * hold after the start, due before the start's day – the engine and Ładownia agree. The engine's cycle paid today is the
  * due Ładownia shows paid (`paidDue`); at the month's turn the tank wants nothing for a cycle Ładownia showed paid then and
- * its installment for one it showed unpaid; „Zapłacone (dziś)” is the due a payment today pays.
+ * its installment for one it showed unpaid; „Zapłacone (dziś)” is the due a payment today pays. After the merge of N2
+ * with N3 (T393) the same with the payments made every way: from a goal's money, to be refunded (the whole purchase or a
+ * line of a receipt), an old transfer with a hidden container (T362) – one rule of which payment pays (`paymentsIndex`).
  */
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2025-01-01T00:00:00.000Z'
@@ -18,6 +20,29 @@ let seq = 0
 const nextId = () => `01K9N3P0000000000000${String(++seq).padStart(6, '0')}`
 const base = (at = AT) => ({ schemaVersion: SCHEMA_VERSION, id: nextId(), createdAt: at, updatedAt: at })
 const pay = (c: Container, date: string, amount: number): Transaction => transactionSchema.parse({ ...base(), date, accountId: MBANK_ACCOUNT_ID, amount: -amount, containerId: c.id })
+
+/** A goal the payments from a goal's money take (T131) – known to the engine. */
+const GOAL = goalSchema.parse({ ...base(), name: 'Remont', target: zl(100000), priority: 1 })
+const FOOD = defaultCategoryId(1)
+/** How a payment was made (T393 after N2): mine, from a goal, to be refunded (whole, a line of a receipt), an old transfer. */
+const WAYS = ['own', 'goal', 'refund', 'line', 'transfer'] as const
+type Way = (typeof WAYS)[number]
+function payBy(c: Container, date: string, amount: number, way: Way): Transaction {
+  if (way === 'own') return pay(c, date, amount)
+  const t = { ...base(), date, accountId: MBANK_ACCOUNT_ID, amount: -amount }
+  if (way === 'goal') return transactionSchema.parse({ ...t, containerId: c.id, goalId: GOAL.id })
+  if (way === 'refund') return transactionSchema.parse({ ...t, containerId: c.id, refundable: true, memberId: HOUSE_MEMBER_ID })
+  if (way === 'line') {
+    // A receipt: the fee's line to be refunded, a line of mine beside it (not the fee's).
+    const splits = [
+      { id: nextId(), amount: -amount, categoryId: FOOD, refundable: true, memberId: HOUSE_MEMBER_ID, containerId: c.id },
+      { id: nextId(), amount: -zl(10), categoryId: FOOD }
+    ]
+    return transactionSchema.parse({ ...t, amount: -amount - zl(10), categoryId: FOOD, splits })
+  }
+  return transactionSchema.parse({ ...t, kind: 'transfer', containerId: c.id })
+}
+const wayOf = (t: Transaction): Way => (t.kind === 'transfer' ? 'transfer' : t.goalId ? 'goal' : t.splits.length ? 'line' : t.refundable ? 'refund' : 'own')
 
 /** A small PRNG (mulberry32): the same histories on every run. */
 function rng(seed: number): () => number {
@@ -39,7 +64,7 @@ interface Case {
   name: string
 }
 
-function caseOf(seed: number): Case {
+function caseOf(seed: number, ways = false): Case {
   const r = rng(seed)
   const int = (lo: number, hi: number) => lo + Math.floor(r() * (hi - lo + 1))
   const kind = ['1', '2', '3', '12', 'schedule'][int(0, 4)]!
@@ -54,8 +79,10 @@ function caseOf(seed: number): Case {
   const from = created > start && cycleMonths > 1 && r() < 0.5 ? monthOf(created) : null
   const amount = zl(int(20, 1500))
   const draft = containerSchema.parse({ ...base(`${created}T10:00:00.000Z`), name: `Opłata ${seed}`, amount, cycleMonths, schedule, dueMonth, dueDay, from, accountId: MBANK_ACCOUNT_ID })
-  // The payments: from 8 months before the start (history linked from before it) to 20 months after.
+  // The payments: from 8 months before the start (history linked from before it) to 20 months after – every way of paying
+  // drawn too (`ways`): half mine, the rest from a goal, to be refunded (whole, a line) or an old transfer.
   const payments: Transaction[] = []
+  const pay = (c: Container, date: string, amount: number): Transaction => (ways ? payBy(c, date, amount, r() < 0.5 ? 'own' : WAYS[int(1, 4)]!) : payBy(c, date, amount, 'own'))
   const end = addMonths(monthOf(start), 20)
   const dues: string[] = []
   for (let due = cyclePosition(draft, addMonths(monthOf(start), -8)).dueMonth; due <= end; due = cycleMonths > 1 ? cyclePosition(draft, addMonths(due, 1)).dueMonth : addMonths(due, 1)) {
@@ -85,6 +112,7 @@ function fleetOf(k: Case, transactions: Transaction[], today: string): FleetStat
     settings,
     balances: [balanceSchema.parse({ ...base(), date: k.start, accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(50000) })],
     months: [monthPlanSchema.parse({ ...base(), month: monthOf(k.start), salary: zl(9000), envelopes: {} })],
+    goals: [GOAL],
     transactions,
     containers: [k.c],
     now: `${today}T12:00:00+01:00`
@@ -194,5 +222,30 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
     expect(tally.turns).toBeGreaterThan(800)
     expect(tally.early).toBeGreaterThan(700)
     expect(tally.payToday).toBeGreaterThan(400)
+  })
+
+  it('po scaleniu z N2 (T393): płatność z celu, do zwrotu (cała, linia paragonu), dawny przelew z kontenerem – 250 historii, silnik = Ładownia', () => {
+    const tally: Tally = { today: 0, turns: 0, early: 0, payToday: 0 }
+    const seen = new Map<Way, number>()
+    for (let seed = 1001; seed <= 1250; seed++) {
+      const k = caseOf(seed, true)
+      for (const t of k.payments) seen.set(wayOf(t), (seen.get(wayOf(t)) ?? 0) + 1)
+      for (const today of k.todays) {
+        const why = `${k.name} (sposoby zapłaty), dziś ${today}`
+        const known = k.payments.filter((t) => t.date <= today)
+        const f = fleetOf(k, known, today)
+        checkShown(k, cargoAt(k, known, today), why)
+        checkToday(k, f, known, today, tally, why)
+        checkTurn(k, f, known, today, tally, why)
+        checkPayToday(k, known, today, tally, why)
+        // A bill paid from a goal or by the household (and an old transfer) never draws the fee's tank (T131, D80, T393).
+        for (const t of known) if (wayOf(t) !== 'own') expect(f.log.some((e) => e.txId === t.id && (e.moves.tanks?.[k.c.id] ?? 0) < 0), `${why}: ${wayOf(t)} ${t.date} z zbiornika`).toBe(false)
+      }
+    }
+    expect(Math.min(...WAYS.map((w) => seen.get(w) ?? 0))).toBeGreaterThan(300)
+    expect(tally.today).toBeGreaterThan(250)
+    expect(tally.turns).toBeGreaterThan(400)
+    expect(tally.early).toBeGreaterThan(350)
+    expect(tally.payToday).toBeGreaterThan(200)
   })
 })

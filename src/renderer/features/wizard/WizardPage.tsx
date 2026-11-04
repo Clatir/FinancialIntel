@@ -74,13 +74,10 @@ export function WizardPage() {
     // The engine's rule (B126): the start is today; the chosen proposals' payments get linked to their containers.
     return startMonthSpentOf(transactions, today, (t) => (!!t.containerId && periodic.has(t.containerId)) || chosenKeys.has(payeeKey(t)))
   }, [transactions, month, today, containers, chosen])
-  // The payments of each periodic fee before the start, as the engine will count them (AP-5, T345 – its rule for a
-  // payment, `feePaymentDays`): a container's linked payments, a chosen proposal's of its payee from the 1st of the month
+  // The payments of each periodic fee before the start, as the engine and Ładownia will count them (AP-5, T345, T393 –
+  // one rule, `paymentsIndex`): a container's linked payments, a chosen proposal's of its payee from the 1st of the month
   // before (linked to it at the start – T379: paid the month before its due month, T135) – a cycle they paid is paid.
-  const paidDays = useMemo(() => {
-    const goalIds = new Set(goalRecords.map((g) => g.id))
-    return startPaidDays(transactions, today, containers, chosen, (id) => goalIds.has(id))
-  }, [transactions, today, containers, chosen, goalRecords])
+  const paidDays = useMemo(() => startPaidDays(transactions, today, containers, chosen), [transactions, today, containers, chosen])
   // Operations dated after today by account (B127): not in the bank's balance now – the engine takes them on their day.
   const aheadBy = useMemo(() => {
     const out = new Map<string, number>()

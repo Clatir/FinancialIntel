@@ -5,7 +5,8 @@
  * due without a payment). A due of an earlier month still unpaid stays (D99 pkt 3, T375) – overdue until a payment pays
  * it. The due: the day of the month its payments come on (its last linked payments since its day was set – T376), else
  * its own payment day. A loan's installments are the loan's (its own reminder – T70), an archived container is out of
- * the hold. Which due a payment pays is one rule (`feeDuesOf`, T393) – the engine's paid cycles too (`paidDuesOf`). Pure.
+ * the hold. Which payment pays a fee (`paymentsIndex`) and which due it pays (`feeDuesOf`) is one rule (T393) – the
+ * engine's paid cycles and the start wizard's too (`paidDuesOf`). Pure.
  */
 import type { Container, Transaction } from '../schema/records'
 import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, warsawNow } from './dates'
@@ -81,7 +82,7 @@ export interface Linked extends CargoPayment {
 }
 
 export interface PaymentsIndex {
-  /** The payments linked to each container, by date. */
+  /** The payments of each container (`paymentsIndex`), by date. */
   byContainer: Map<string, Linked[]>
   /** Each account's latest row from the bank (a folder from before 1.5.0 has no `coveredTo`). */
   lastBank: Map<string, string>
@@ -89,27 +90,33 @@ export interface PaymentsIndex {
 
 const indexes = new WeakMap<readonly Transaction[], PaymentsIndex>()
 
-/** Once per list of the store (its lists stay while the records do). */
+/**
+ * Once per list of the store (its lists stay while the records do). A container's payments – the one rule of which
+ * payment pays a fee (T393, T345): Ładownia, the Radar, the briefing, the hold's watch, the engine's paid cycles and the
+ * start wizard read only these. An expense's parts linked to the container (the part's own, else the operation's), one
+ * payment per operation – their sum, money out. A part paid from a goal or to be refunded by a household member pays it
+ * too – the bill is paid (the money is the goal's or the household's: the engine never draws the tank for it). Another kind
+ * with a container – an old transfer, loan or XTB operation from before T362 (`withKind`) – never.
+ */
 export function paymentsIndex(transactions: readonly Transaction[]): PaymentsIndex {
   let index = indexes.get(transactions)
   if (index) return index
   index = { byContainer: new Map(), lastBank: new Map() }
   for (const t of transactions) {
     if (t.bank && t.date > (index.lastBank.get(t.accountId) ?? '')) index.lastBank.set(t.accountId, t.date)
-    if (t.containerId) {
-      if (t.amount >= 0) continue
-      const p: Linked = { id: t.id, date: t.date, amount: -t.amount, accountId: t.accountId }
-      const list = index.byContainer.get(t.containerId)
+    if (t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
+    let byContainer: Map<string, number> | null = null
+    for (const part of partsOf(t)) {
+      if (!part.containerId) continue
+      byContainer ??= new Map()
+      byContainer.set(part.containerId, (byContainer.get(part.containerId) ?? 0) - part.amount)
+    }
+    for (const [containerId, amount] of byContainer ?? []) {
+      if (amount <= 0) continue
+      const p: Linked = { id: t.id, date: t.date, amount, accountId: t.accountId }
+      const list = index.byContainer.get(containerId)
       if (list) list.push(p)
-      else index.byContainer.set(t.containerId, [p])
-    } else if (t.splits.length > 0 && t.kind === 'expense') {
-      for (const part of partsOf(t)) {
-        if (!part.containerId || part.amount >= 0 || part.refundable) continue
-        const p: Linked = { id: t.id, date: t.date, amount: -part.amount, accountId: t.accountId }
-        const list = index.byContainer.get(part.containerId)
-        if (list) list.push(p)
-        else index.byContainer.set(part.containerId, [p])
-      }
+      else index.byContainer.set(containerId, [p])
     }
   }
   for (const list of index.byContainer.values()) list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))

@@ -2671,7 +2671,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zmian): połączona z kontenerem płatność sprzed startu budżetu nie przechodzi przez przebieg (pieniądze wyszły przed
   saldem otwarcia), ale zamyka swój cykl tak samo jak płatność w przebiegu – `paidBeforeStart` przed przebiegiem silnika
   (`paidCycleOf`: miesiąc terminu, przy cyklu ≥ 3 także miesiąc przed terminem, gdy poprzedni zamknięty; płatność w życiu
-  opłaty – `activeIn`; części paragonu jak w przebiegu, bez części celu i „do zwrotu” – `feePaymentDays`, tylko wydatek).
+  opłaty – `activeIn`; części paragonu jak w przebiegu, tylko wydatek – od 1.15.7 `paymentsIndex`, także z celu i „do
+  zwrotu”, T393).
   Przed startem opłata jest śledzona od pierwszej widzianej płatności (przegląd N2 4): cykl przed nią zamknięty (nie
   śledzony – zapłata w miesiącu przed terminem jest wcześniejszą następnego), późniejszy – tylko zapłacony; spóźniona
   zapłata zamyka poprzedni cykl (T135), nigdy następny (wcześniej każdy cykl sprzed startu był zamknięty: luty zapłacony
@@ -2682,13 +2683,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   raty innych zbiorników), zbiornik zbiera na następny termin od miesiąca po zapłaconym cyklu, ma `paidDue` – odprawa
   i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
   kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
-  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności tą samą regułą co silnik (`startPaidDays` –
-  `feePaymentDays`, przegląd N2 3; wcześniej indeks Ładowni: każdy rodzaj z kontenerem, wydatek z celu i cały „do
-  zwrotu” – kreator 0 zł, silnik cała rata): kontenera – połączonych, propozycji – tego odbiorcy od 1. dnia miesiąca
-  przed miesiącem startu (T379; połączy je start), z kwotami – cykle regułą Ładowni (`paidBeforeStart` → `paidDuesOf`,
-  T393; scalenie N2 z N3); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
-  kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone przed startem nie
-  odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
+  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z płatnościami tą samą regułą co silnik i Ładownia
+  (`startPaidDays` – `paymentsIndex`, T393; przegląd N2 3: wcześniej kreator brał indeks Ładowni, a silnik nie liczył
+  płatności z celu ani „do zwrotu” – kreator 0 zł, silnik cała rata): kontenera – połączonych, propozycji – tego
+  odbiorcy od 1. dnia miesiąca przed miesiącem startu (T379; połączy je start), z kwotami – cykle regułą Ładowni
+  (`paidBeforeStart` → `paidDuesOf`, T393; scalenie N2 z N3); opłata poza życiem w miesiącu startu – bez raty, jak
+  w silniku. Notka kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone
+  przed startem nie odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
   z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
   (energia wyższa o opłatę odkładaną drugi raz, zbiornik niższy); zamrożone dni gry zostają.
 - **T346** Plan miesiąca = silnik (AP-11, AF-44 / LA.8 = C17, AF-52 / C20 – D99 pkt 9, W5; doprecyzowuje T29, F15):
@@ -2886,7 +2887,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   także po pytaniu o potwierdzone saldo i „Zmień mimo to” (`features/operations/state.ts` `changeKind` /
   `updateOperation`; wcześniej wtedy bez komunikatu i bez „Cofnij”). Zmiana kategorii nie rusza celu ani kontenera (jak
   dotąd). Zmiana zbiorcza rodzaju (F11) – przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym
-  `containerId` nie są poprawiane (bez migracji).
+  `containerId` nie są poprawiane (bez migracji) – od 1.15.7 nie płacą terminu nigdzie, także w Ładowni (T393).
 - **T363** Dokowanie pary liczonej według puli (1.15.6, przegląd N2 1; uzupełnia T341 i T128): „Zadokuj” na parze do
   zadokowania (wpis ICTTJ z operacją banku albo wpływem wpisanym na Portfelu XTB, bez dokowania – liczonej od razu według
   puli wpisu; tylko operacja rodzaju, który silnik tak liczy – `countsByPool`, ten sam warunek co `pairOf`, przegląd N2
@@ -3149,8 +3150,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ÷ dni do końca miesiąca (z dziś); energia dziś = przydział − wydane dziś, nie więcej niż zostało energii miesiąca
   (T371); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera; `daily.left`, jak alarm i gra).
   Bez zmian reguły gry.
-- **T393** Jedna reguła płatności opłaty – Ładownia i silnik (1.15.7, przegląd N3 1–4, 13; zmienia T135 / T345 w silniku,
-  uzupełnia T375): który termin płaci płatność, decyduje jedna funkcja `feeDuesOf` (`calc/cargoStatus.ts`) – stan
+- **T393** Jedna reguła płatności opłaty – Ładownia i silnik (1.15.7, przegląd N3 1–4, 13, scalenie z N2; zmienia T135 /
+  T345 w silniku i przegląd N2 3, uzupełnia T375): który termin płaci płatność, decyduje jedna funkcja `feeDuesOf` (`calc/cargoStatus.ts`) – stan
   w Ładowni, Radar, odprawa i cykle zapłacone silnika (`paidDuesOf`: rata zbiornika `tankWant` na przełomie, `paidDue`),
   także kreator (`paidBeforeStart`). Okna T375 (miesięczna i co 2 miesiące – od 14 dni przed dniem płatności, ≥ 3 mies. –
   od 1. dnia miesiąca przed terminem); przed dniem terminu, gdy poprzedni niezapłacony – zaległa zapłata (T394), nie
@@ -3159,17 +3160,26 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zawsze). Przed startem opłata śledzona od pierwszej widzianej płatności (T345, przegląd N2 4): spóźniona zapłata
   płaci zaległy termin, nigdy następny. Na przełomie miesiąca (i w dniu startu) silnik liczy płatności sprzed przełomu
   z dniem płatności tego miesiąca – stan, jaki Ładownia pokazywała tego dnia (płatność 1. dnia jest po przełomie);
-  `paidDue` – płatności do dziś. Płatności cyklu w silniku: części wydatku z kontenerem jak w przebiegu (bez znanego celu
-  i „do zwrotu”, przegląd N2 3), jedna na operację, także sprzed startu i spoza życia opłaty (pieniądze takiej – jak
-  dotąd zwykły wydatek, B56). Ładownia nie czyta już zbiorników silnika (`tankPaid`). Wcześniej (`paidCycleOf`):
-  kwartalna 180 zł, listopad zapłacony 10.12, luty 20.01 – zaległa nie zamykała listopada, lutowa była „zaległą”, 1.02
-  zbiornik brał 180 zł z energii drugi raz (Ładownia – luty zapłacony); co 2 miesiące grudzień niezapłacony, płatność
-  05.02 – Ładownia grudzień (i luty „zapłacone” ze zbiornika silnika), silnik luty: jedna płatność dwa terminy, alarm
-  lutego nigdy; listopad „poza budżetem” albo kontener dodany w styczniu – silnik nadal brał 20.01 za zaległy listopad.
-  Zostaje: Ładownia liczy też płatność z celu, dawny przelew z kontenerem (T362) i zakup do zwrotu (indeks
-  `paymentsIndex`), silnik nie (przegląd N2 3) – dane spoza aplikacji albo sprzed T362. Bez zmian formatu i migracji:
-  warstwy liczone z rekordów – miesiące, w których cykl był zapłacony tylko w jednym miejscu, przeliczą się same;
-  zamrożone dni gry zostają.
+  `paidDue` – płatności do dziś. Która płatność płaci opłatę – też jedna reguła (`paymentsIndex`, po scaleniu N2 z N3):
+  części wydatku z kontenerem (linii, inaczej operacji), jedna płatność na operację – suma jej części z tym kontenerem
+  (wypływ), także sprzed startu i spoza życia opłaty (pieniądze takiej – jak dotąd zwykły wydatek, B56); czytają ją
+  Ładownia, Radar, odprawa, straż ładowni, silnik i kreator (`startPaidDays`). Opłata zapłacona z pieniędzy celu albo
+  zakupem do zwrotu (cały zakup albo linia paragonu) jest zapłacona – rachunek zapłacony: pieniądze są celu (T131) albo
+  domownika (D80), zbiornik nietknięty, cykl zamknięty (rata 0, zbiornik zbiera na następny termin – to, co już
+  uzbierał, zostaje na niego); zwrot domownika później to zwykły wpływ (spłata jego długu). Inny rodzaj z kontenerem
+  (dawny przelew, pożyczka, XTB sprzed T362) – nigdy, także w Ładowni. Ładownia nie czyta już zbiorników silnika
+  (`tankPaid`). Wcześniej (`paidCycleOf`): kwartalna 180 zł, listopad zapłacony 10.12, luty 20.01 – zaległa nie
+  zamykała listopada, lutowa była „zaległą”, 1.02 zbiornik brał 180 zł z energii drugi raz (Ładownia – luty zapłacony);
+  co 2 miesiące grudzień niezapłacony, płatność 05.02 – Ładownia grudzień (i luty „zapłacone” ze zbiornika silnika),
+  silnik luty: jedna płatność dwa terminy, alarm lutego nigdy; listopad „poza budżetem” albo kontener dodany w styczniu
+  – silnik nadal brał 20.01 za zaległy listopad.
+  Do scalenia z N2 płatności liczyły się różnie: Ładownia – też płatność z celu, cały zakup do zwrotu i dawny przelew
+  z kontenerem, silnik i kreator (przegląd N2 3) – żadnej z nich, linii paragonu do zwrotu – nikt (kwartalna 180 zł
+  zapłacona z celu 15.11: Ładownia „zapłacone”, silnik bez `paidDue` – plan i zbiornik liczyły zapłacony cykl jak
+  niezapłacony; przelew z ukrytym kontenerem – odwrotnie). Rozważone i odrzucone: płaci tylko część z moich pieniędzy
+  (jak przegląd N2 3) – Ładownia pokazywałaby rachunek zapłacony z celu albo przez domownika jako zaległy, Radar
+  i odprawa – asteroidę zapłaconego terminu. Bez zmian formatu i migracji: warstwy liczone z rekordów – miesiące,
+  w których cykl był zapłacony tylko w jednym miejscu, przeliczą się same; zamrożone dni gry zostają.
 - **T394** Termin sprzed startu, najstarsza zaległa, „Zapłacone (dziś)” (1.15.7, przegląd N3 5, 10; doprecyzowuje T375,
   T379): terminy budżetu liczą się od dnia startu, nie od miesiąca – termin sprzed niego bez płatności nie jest „po
   terminie” ani zaległy (bez alertu odprawy, pozycji Radaru i resztki kursu z osłon), zapłacony – „zapłacone” (T379);

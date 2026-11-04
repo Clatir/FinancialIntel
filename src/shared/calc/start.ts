@@ -4,9 +4,9 @@
  * order – D70).
  */
 import type { Container, Transaction } from '../schema/records'
-import type { Linked } from './cargoStatus'
+import { paymentsIndex, type Linked } from './cargoStatus'
 import { monthOf } from './dates'
-import { activeIn, cyclePosition, dockAmount, feePaymentDays, paidBeforeStart, sinkingSchedule, tankWant, type AmountOf, type FeeOf } from './fleet'
+import { activeIn, cyclePosition, dockAmount, paidBeforeStart, sinkingSchedule, tankWant, type AmountOf, type FeeOf } from './fleet'
 import { amountOn, dateOn, sum } from './operations'
 import { linkFromOf, unlinkedPayments } from './plan'
 
@@ -55,25 +55,25 @@ export function startSplit(
 export type StartTankItem = FeeOf & AmountOf & { key: string; dueDay?: number; dueAt?: string | null; paid: ReadonlyArray<string | { date: string; amount: number }> }
 
 /**
- * The payments of each periodic fee before the start, as the engine will count them (AP-5, T345 – `feePaymentDays`): a
- * container's linked payments; a chosen proposal's – its payee's payments not linked yet from the 1st of the month before
- * the start's (T379), which the start links to it (`linkPayments`). Container id or proposal key → payments by day.
+ * The payments of each periodic fee before the start, as the engine and Ładownia will count them (AP-5, T345, T393 – the
+ * one rule, `paymentsIndex`): a container's; a chosen proposal's – its payee's payments not linked yet from the 1st of the
+ * month before the start's (T379), which the start links to it (`linkPayments`). Container id or proposal key → payments
+ * by day.
  */
 export function startPaidDays(
   transactions: readonly Transaction[],
   start: string,
   containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths'>>,
-  proposals: ReadonlyArray<{ key: string; label: string; cycleMonths: number }>,
-  knownGoal: (goalId: string) => boolean
+  proposals: ReadonlyArray<{ key: string; label: string; cycleMonths: number }>
 ): Map<string, Linked[]> {
-  const fees = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
-  const found = feePaymentDays(transactions, start, (id) => fees.has(id), knownGoal)
-  const out = new Map([...fees].map((id) => [id, found.get(id) ?? []]))
+  const before = (list: readonly Linked[] | undefined): Linked[] => (list ?? []).filter((p) => p.date < start)
+  const linked = paymentsIndex(transactions).byContainer
+  const out = new Map<string, Linked[]>(containers.filter((c) => c.cycleMonths > 1).map((c) => [c.id, before(linked.get(c.id))] as const))
   const ids = new Set(containers.map((c) => c.id))
   for (const p of proposals) {
     if (p.cycleMonths <= 1) continue
-    const linked = unlinkedPayments(transactions, p.label, linkFromOf(start), ids).map((t) => ({ ...t, containerId: p.key }))
-    out.set(p.key, feePaymentDays(linked, start, (id) => id === p.key, knownGoal).get(p.key) ?? [])
+    const found = unlinkedPayments(transactions, p.label, linkFromOf(start), ids).map((t) => ({ ...t, containerId: p.key }))
+    out.set(p.key, before(paymentsIndex(found).byContainer.get(p.key)))
   }
   return out
 }
