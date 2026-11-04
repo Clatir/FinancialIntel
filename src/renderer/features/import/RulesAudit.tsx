@@ -5,7 +5,7 @@
  * up to an amount offered when the amounts split them).
  */
 import { useEffect, useMemo, useState } from 'react'
-import { feedAudit, finishAudit, inAuditView, inconsistentCount, startAudit, type RuleAudit } from '@shared/import/audit'
+import { advanceRulesKept, feedAudit, finishAudit, inAuditView, inconsistentCount, startAudit, type RuleAudit } from '@shared/import/audit'
 import { fold } from '@shared/fold'
 import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
@@ -21,7 +21,8 @@ import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, directionText, editRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, directionText, editRule, keepAdvanceRule, repayingRule, ruleDecisionText } from './rules'
+import { restNotOfRule } from './options'
 
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
@@ -39,11 +40,15 @@ export function useRuleAudit(): { audit: RuleAudit | null; progress: number } {
   const map = useData((s) => s.records.transactions)
   // The Radar's loans (AP-6): a rule on a borrower's name and the money it kept.
   const loans = useData((s) => s.records.loans ?? NO_LOANS)
+  // The rules of an advance for the future kept so (AP-4) – out of the review; only they (a text): another „zostaw” or „to
+  // nie duplikat” never starts the audit again (przegląd N2 2.14).
+  const kept = useData((s) => advanceRulesKept(s.fi?.settings.import.notDuplicates))
   const [state, setState] = useState<{ audit: RuleAudit | null; progress: number }>({ audit: null, progress: 0 })
   useEffect(() => {
     let stopped = false
     const txs = listOf(map).filter((t) => t.bank)
-    const run = startAudit(rules, aliases, listOf(loans))
+    const keys = new Set(kept ? kept.split('\n') : [])
+    const run = startAudit(rules, aliases, listOf(loans), (key) => keys.has(key))
     let i = 0
     const step = () => {
       if (stopped) return
@@ -59,14 +64,21 @@ export function useRuleAudit(): { audit: RuleAudit | null; progress: number } {
       stopped = true
       clearTimeout(timer)
     }
-  }, [rules, aliases, map, loans])
+  }, [rules, aliases, map, loans, kept])
   return state
 }
 
-/** Operations a rule would get – not with the per-operation kinds (N14). */
-const forRule = (o: string) => o === 'loan' || o.startsWith('loan:') || o === 'tax' || o === 'trading'
+/**
+ * Operations a rule would get – not with the per-operation kinds (N14), except the repayment of an open loan given of the
+ * Radar for money in (D100, T358 – the rule names it, valid while it is open).
+ */
+const forRule = (o: string, direction: 'in' | 'out' | null, repayable: ReadonlySet<string>) =>
+  o === 'loan' || (o.startsWith('loan:') && !(direction === 'in' && repayable.has(o.slice('loan:'.length)))) || o === 'tax' || o === 'trading'
 
 function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) {
+  const members = useMembers()
+  const loans = useData((s) => s.records.loans ?? NO_LOANS)
+  const repayable = useMemo(() => new Set(listOf(loans).flatMap((l) => (l.direction === 'given' && !l.closedAt ? [l.id] : []))), [loans])
   const [direction, setDirection] = useState<'in' | 'out' | null>(rule.direction === 'in' ? 'in' : rule.direction === 'out' ? 'out' : null)
   const [choice, setChoice] = useState<Choice>(() => choiceOfRule(rule))
   const [limit, setLimit] = useState<number | null>(rule.maxAmount ?? null)
@@ -84,7 +96,8 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
           <option value="in">wpływy</option>
           <option value="">oba kierunki</option>
         </select>
-        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={forRule} testId="import-rule-edit" />
+        {/* A member's money: the rest the person's setting gives only – the rule keeps none (AP-4, D80 b). */}
+        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={(o) => forRule(o, direction, repayable) || restNotOfRule(o, members)} testId="import-rule-edit" />
         {rule.mode === 'amount' && (
           <label className="flex items-center gap-1 text-muted">
             do kwoty
@@ -118,8 +131,26 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
   const other = audit.otherKind.get(rule.id) ?? []
   const borrower = audit.borrower.get(rule.id) ?? []
   const loans = [...new Set(borrower.map((b) => b.loan.name))]
+  const review = audit.review.some((r) => r.id === rule.id)
   return (
     <div className="flex flex-col gap-1 border-l-2 border-line-strong py-1 pl-2 text-[11.5px]" data-testid="import-rule-details">
+      {review && (
+        <>
+          {/* AP-4 (AF-8): „reszta jako zaliczka” of 1.15.3–1.15.5 learned such rules – the debt never went down. */}
+          <span className="text-accent" data-testid="import-rule-review-note">
+            Zaliczka na przyszłość: wpłaty tej osoby idą w całości do depozytu i nie spłacają tego, co ma oddać. Do wersji 1.15.5 tak zapisywał się też wybór „reszta jako zaliczka”. Spłata – wpłata najpierw
+            wyrówna dług, a reszta pójdzie jak w ustawieniu osoby (Ustawienia → Domownicy); zapisane już wpłaty zgłaszają Meldunki.
+          </span>
+          <span className="flex gap-2">
+            <button type="button" className="btn h-[24px]" disabled={readOnly} onClick={() => repayingRule(rule)} data-testid="import-rule-review-repay">
+              Zmień na spłatę
+            </button>
+            <button type="button" className="btn btn-ghost h-[24px]" disabled={readOnly} onClick={() => keepAdvanceRule(rule)} data-testid="import-rule-review-keep">
+              zostaw zaliczkę na przyszłość
+            </button>
+          </span>
+        </>
+      )}
       {borrower.length > 0 && (
         <>
           {/* AP-6: a rule on a borrower's name – the next imports recognize the loan first; these were kept by the rule. */}
@@ -168,7 +199,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
           ))}
         </>
       )}
-      {!differ.length && !other.length && !borrower.length && <span className="text-dim">Wszystkie operacje tej reguły są zgodne z nią.</span>}
+      {!differ.length && !other.length && !borrower.length && !review && <span className="text-dim">Wszystkie operacje tej reguły są zgodne z nią.</span>}
     </div>
   )
 }
@@ -201,6 +232,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
   useEffect(() => setLimit(RULES_PAGE), [query, show])
   const differCount = audit ? inconsistentCount(audit) : 0
   const borrowerOf = (r: ImportRule) => audit?.borrower.get(r.id)?.length ?? 0
+  const reviewOf = (r: ImportRule) => !!audit?.review.some((x) => x.id === r.id)
   return (
     <Panel title="Reguły importu">
       <p className="mb-2 text-[11.5px] text-muted">
@@ -234,6 +266,17 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                 {audit ? `${hitsOf(r)} op.` : '…'}
               </span>
               <span className="flex items-center gap-1">
+                {reviewOf(r) && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost h-[22px] px-1.5 text-[11px] text-accent"
+                    onClick={() => setOpen(open === r.id ? null : r.id)}
+                    title="Zaliczka na przyszłość – wpłaty nie spłacają długu (AP-4)"
+                    data-testid="import-rule-review"
+                  >
+                    do przeglądu
+                  </button>
+                )}
                 {borrowerOf(r) > 0 && (
                   <button
                     type="button"

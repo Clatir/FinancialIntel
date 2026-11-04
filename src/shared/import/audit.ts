@@ -41,6 +41,30 @@ export interface RuleAudit {
   mixed: MixedBrand[]
   /** Rules that catch nothing (a rule of a loan, the tax or XTB is a proposal only – left out). */
   idle: ImportRule[]
+  /**
+   * Rules of a member's money as an advance for the future (AP-4, AF-8): the option „reszta jako zaliczka” of 1.15.3–1.15.5
+   * learned them so – their money never repays the debt. To review („niespójne”) until changed or kept (`kept`).
+   */
+  review: ImportRule[]
+}
+
+/** A rule of a member's money as an advance for the future (AP-4): it may be one learned from „reszta jako zaliczka”. */
+export const advanceRule = (r: Pick<ImportRule, 'kind' | 'household' | 'inflowKind'>): boolean => r.kind === 'income' && r.household && r.inflowKind === 'advance'
+
+/** The key of a rule of an advance for the future kept so by the user (`settings.import.notDuplicates`, AP-4). */
+export const advanceRuleKey = (id: string): string => `advanceRule:${id}`
+
+const keptMemo = new WeakMap<object, string>()
+/**
+ * The rules of an advance kept so (`advanceRuleKey`) of `settings.import.notDuplicates` as one text – all the audit reads
+ * of it (przegląd N2 2.14: a pair of the duplicates panel or another report's „zostaw” leaves it the same, so the audit of
+ * all the bank's operations does not start again). Once per map.
+ */
+export function advanceRulesKept(map: Readonly<Record<string, unknown>> | undefined): string {
+  if (!map) return ''
+  let out = keptMemo.get(map)
+  if (out == null) keptMemo.set(map, (out = Object.keys(map).filter((k) => k.startsWith(advanceRuleKey('')) && !!map[k]).sort().join('\n')))
+  return out
 }
 
 /** An expense with what its rule of an expense says: category and financing (D80, D83). */
@@ -60,6 +84,8 @@ export interface AuditRun {
   rules: readonly ImportRule[]
   aliases: BrandAliases
   loans: readonly AuditLoan[]
+  /** The rules of an advance for the future the user kept so (AP-4: `advanceRuleKey`). */
+  kept: (key: string) => boolean
   hits: RuleAudit['hits']
   differ: RuleAudit['differ']
   otherKind: RuleAudit['otherKind']
@@ -73,10 +99,11 @@ function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   else map.set(key, [value])
 }
 
-export const startAudit = (rules: readonly ImportRule[], aliases: BrandAliases, loans: readonly AuditLoan[] = []): AuditRun => ({
+export const startAudit = (rules: readonly ImportRule[], aliases: BrandAliases, loans: readonly AuditLoan[] = [], kept: (key: string) => boolean = () => false): AuditRun => ({
   rules,
   aliases,
   loans: loans.filter((l) => l.direction === 'given'),
+  kept,
   hits: new Map(),
   differ: new Map(),
   otherKind: new Map(),
@@ -129,12 +156,14 @@ export function finishAudit(run: AuditRun): RuleAudit {
   mixed.sort((a, b) => sumN(b) - sumN(a) || a.label.localeCompare(b.label))
   const idle = run.rules.filter((r) => !run.hits.has(r.id) && !(PER_OPERATION_KINDS as readonly string[]).includes(r.kind))
   for (const list of run.borrower.values()) list.sort((a, b) => a.t.date.localeCompare(b.t.date) || a.t.id.localeCompare(b.t.id))
-  return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, borrower: run.borrower, mixed, idle }
+  // A keyword (the operation's „Zapamiętaj” – its own „zaliczka” beside „spłata zakupów”, 1.15.3) was chosen so.
+  const review = run.rules.filter((r) => advanceRule(r) && r.mode !== 'keyword' && !run.kept(advanceRuleKey(r.id)))
+  return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, borrower: run.borrower, mixed, idle, review }
 }
 
 /** The operations from the bank (`bank`) against the rules (`aliases` – the user's merged names, `loans` – the Radar's), at once. */
-export function auditRules(rules: readonly ImportRule[], transactions: readonly Transaction[], aliases: BrandAliases, loans: readonly AuditLoan[] = []): RuleAudit {
-  const run = startAudit(rules, aliases, loans)
+export function auditRules(rules: readonly ImportRule[], transactions: readonly Transaction[], aliases: BrandAliases, loans: readonly AuditLoan[] = [], kept?: (key: string) => boolean): RuleAudit {
+  const run = startAudit(rules, aliases, loans, kept)
   feedAudit(run, transactions)
   return finishAudit(run)
 }
@@ -147,12 +176,15 @@ export function inAuditView(r: Pick<ImportRule, 'id'>, audit: RuleAudit | null, 
   if (view === 'all') return true
   if (!audit) return false
   if (view === 'idle') return idleIdsOf(audit).has(r.id)
-  return (audit.differ.get(r.id)?.length ?? 0) > 0 || (audit.otherKind.get(r.id)?.length ?? 0) > 0 || (audit.borrower.get(r.id)?.length ?? 0) > 0
+  return (audit.differ.get(r.id)?.length ?? 0) > 0 || (audit.otherKind.get(r.id)?.length ?? 0) > 0 || (audit.borrower.get(r.id)?.length ?? 0) > 0 || audit.review.some((x) => x.id === r.id)
 }
 
-/** The operations „niespójne” counts: decided otherwise than their rule, and a borrower's money a rule keeps (AP-6). */
+/**
+ * What „niespójne” counts: the operations decided otherwise than their rule, a borrower's money a rule keeps (AP-6) and
+ * the rules of an advance for the future to review – one each (AP-4).
+ */
 export const inconsistentCount = (audit: RuleAudit): number =>
-  [...audit.differ.values()].reduce((s, xs) => s + xs.length, 0) + [...audit.borrower.values()].reduce((s, xs) => s + xs.length, 0)
+  [...audit.differ.values()].reduce((s, xs) => s + xs.length, 0) + [...audit.borrower.values()].reduce((s, xs) => s + xs.length, 0) + audit.review.length
 
 const idleIds = new WeakMap<RuleAudit, ReadonlySet<string>>()
 function idleIdsOf(audit: RuleAudit): ReadonlySet<string> {

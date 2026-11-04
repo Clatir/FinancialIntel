@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { addMonths, warsawNow } from '../../src/shared/calc/dates'
+import { addDays, addMonths, dayOfMonth, monthOf, warsawNow } from '../../src/shared/calc/dates'
 import { monthLabel } from '../../src/renderer/lib/format'
 import { launch } from './app'
 import { json, records } from './files'
@@ -198,6 +198,98 @@ test('Plan miesiąca (1.4.2): zmiana minionego miesiąca nie zmienia bieżącego
     await page.getByTestId('month-next').click()
     await expect(page.getByTestId('month-label')).toHaveText(monthLabel(month))
     await expect(salary).toHaveValue('4 000,00')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Plan miesiąca = silnik (AP-11): odkładki kolejnych miesięcy z wyrównaniem, przy pensji 0 pobrane 0 i wymagana obok', async () => {
+  const { month } = warsawNow()
+  const [next, after] = [addMonths(month, 1), addMonths(month, 2)]
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-month-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start: `${month}-01`, initial: { shields: 0, hull: 0, goals: {} } } }),
+    records: {
+      balances: [{ date: `${month}-01`, accountId: ACC, kind: 'opening', amount: zl(60000) }],
+      // No salary next month (C20), then 4 000 zł again.
+      months: [
+        { month, salary: zl(4000), envelopes: {} },
+        { month: next, salary: 0, envelopes: {} },
+        { month: after, salary: zl(4000), envelopes: {} }
+      ],
+      // 1 200 zł a year due in 3 months, its tank empty at the start: 100 zł a month + 800 zł behind over 4 months.
+      containers: [{ name: 'OC', amount: zl(1200), cycleMonths: 12, dueMonth: addMonths(month, 3), dueDay: 15 }]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+4')
+    const tanks = page.getByTestId('split-tanks').locator('.num')
+    await expect(tanks).toHaveText('300,00 zł')
+    await expect(page.getByTestId('split-tanks-short')).toHaveCount(0)
+    // Next month without a salary: nothing taken, the installment wanted beside it (the plan said 100,00 zł before).
+    await page.getByTestId('month-next').click()
+    await expect(tanks).toHaveText('0,00 zł')
+    await expect(page.getByTestId('split-tanks-short')).toHaveAttribute('data-state', 'no-salary')
+    await expect(page.getByTestId('split-tanks-short')).toContainText('Brak pensji: odkładki nie są pobierane – zbiorniki będą za planem o 300,00 zł.')
+    await page.getByTestId('split-tanks').getByRole('button').click()
+    await expect(page.getByTestId('split-tank')).toContainText('wymagana 300,00 zł')
+    // The month after catches up: 100 + 700 zł behind over its 2 months left – as the engine will take it.
+    await page.getByTestId('month-next').click()
+    await expect(tanks).toHaveText('450,00 zł')
+    await expect(page.getByTestId('split-tanks-short')).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Kreator startu (AP-5): opłata zapłacona wczoraj nie odkłada się drugi raz – kroki 4 i 6, Mostek bez asteroidy, Ładownia „zapłacona”', async () => {
+  const { date: today, month } = warsawNow()
+  const yesterday = addDays(today, -1)
+  test.skip(monthOf(yesterday) !== month, 'pierwszy dzień miesiąca – w tym miesiącu nie ma dnia przed startem')
+  const PZU = '01KSEEDN2C0000000000000001'
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-month-')), 'FinancialIntel')
+  // The OC of PZU, 1 240 zł a year due today, paid yesterday (KR.16) – the budget starts today.
+  seedFolder(dataDir, {
+    records: {
+      containers: [{ id: PZU, name: 'PZU SA', amount: zl(1240), cycleMonths: 12, dueMonth: month, dueDay: dayOfMonth(today), counterparty: 'PZU SA' }],
+      transactions: [{ date: yesterday, accountId: ACC, amount: -zl(1240), counterparty: 'PZU SA', containerId: PZU }]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.getByTestId('banner-wizard-start').click()
+    await page.getByTestId('wizard-balance').first().fill('25000')
+    await page.getByTestId('wizard-balance').first().press('Enter')
+    await page.getByTestId('wizard-balance').nth(1).fill('0')
+    await page.getByTestId('wizard-balance').nth(1).press('Enter')
+    await page.getByTestId('wizard-next').click()
+    await page.getByTestId('wizard-next').click()
+    const salary = page.getByTestId('wizard-salary')
+    await salary.click()
+    await salary.fill('4000')
+    await salary.press('Enter')
+    await page.getByTestId('wizard-next').click()
+    // Step 4: this month's tanks – nothing for the OC paid yesterday (it was 1 240,00 zł, „zbiorniki nadrabiają”).
+    await expect(page.getByText('Odkładki w tym miesiącu:')).toContainText('0,00 zł – opłaty zapłacone przed startem nie odkładają się drugi raz; potem ok. 103,33 zł miesięcznie.')
+    await page.getByTestId('wizard-next').click()
+    await page.getByTestId('wizard-next').click()
+    // Step 6: its tank has nothing to fill „do planu” (it offered 1 136,63 zł).
+    await expect(page.locator('[data-testid="wizard-split-tank"][data-name="PZU SA"]')).toBeVisible()
+    await expect(page.getByTestId('wizard-split-tank-plan')).toHaveCount(0)
+    await page.getByTestId('wizard-next').click()
+    await page.getByTestId('wizard-finish').click()
+    await expect(page.getByTestId('banner-wizard')).toHaveCount(0)
+    // The first month's energy is the salary whole, no asteroid „dziś”; Ładownia – paid, the tank for the next due.
+    await expect(page.getByTestId('state-energy')).toContainText(/4\s000,00 zł/)
+    await expect(page.locator('[data-testid="briefing-item"]').first()).toBeVisible()
+    await expect(page.locator('[data-testid="briefing-item"][data-kind="asteroid"]')).toHaveCount(0)
+    await page.getByTestId('nav-cargo').click()
+    await expect(page.locator('[data-testid="cargo-tank"][data-name="PZU SA"]').getByTestId('cargo-tank-paid')).toBeVisible()
     expect(errors).toEqual([])
   } finally {
     await app.close()

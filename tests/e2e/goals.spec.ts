@@ -73,11 +73,26 @@ test('Cele (1.4.2): wydatek z pieniędzy celu, archiwizacja z pytaniem o środki
     await expect(page.getByTestId('starmap-archived-row')).toContainText('2 100,00 zł')
     await page.getByTestId('starmap-archived-move').click()
     await page.getByTestId('starmap-money-goal').check()
+    // AP-3: more than the goal lacks (Rower 0 / 1 000 zł) – a warning, never a refusal.
+    await expect(page.getByTestId('starmap-money-over')).toContainText('brakuje 1 000,00 zł – reszta (1 100,00 zł) będzie ponad jego kwotę')
     await page.getByTestId('starmap-money-ok').click()
     await expect(goal('Rower').getByTestId('starmap-amount')).toHaveText('2 100,00 zł')
     await expect(page.getByTestId('starmap-archived-row')).toContainText('0,00 zł')
     await expect(page.getByTestId('starmap-archived-move')).toHaveCount(0)
     await expect.poll(async () => [(await trip()).archived, moved(await trip())]).toEqual([true, [[true, BIKE, zl(2100)]]])
+
+    // AP-3 (MG.10): bought from the goal the same day its money came – the goal pays what it shows, the shields the rest.
+    await page.keyboard.press('Control+2')
+    await page.keyboard.press('Control+n')
+    await amount.click()
+    await amount.fill('2500')
+    await amount.press('Enter')
+    await page.getByTestId('operation-counterparty').fill('Sklep rowerowy')
+    await page.getByTestId('operation-counterparty').press('Enter')
+    await page.getByTestId('operation-goal').selectOption({ label: 'Rower (2 100,00 zł)' })
+    await expect.poll(async () => (await records(dir, 'transactions')).filter((t) => t.counterparty === 'Sklep rowerowy').map((t) => [t.amount, t.goalId])).toEqual([[-zl(2500), BIKE]])
+    await page.keyboard.press('Control+6')
+    await expect(goal('Rower').getByTestId('starmap-amount')).toHaveText('0,00 zł')
     expect(errors).toEqual([])
   } finally {
     await app.close()

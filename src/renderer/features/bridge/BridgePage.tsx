@@ -49,11 +49,11 @@ const fmtRange = rangeText
 /** What the bridge's panels draw – in the main window and in their own windows (D45) alike, as plain JSON. */
 export type BridgeFleet = Pick<
   FleetState,
-  'today' | 'month' | 'plan' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'deposit' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
+  'today' | 'month' | 'plan' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'deposit' | 'toDock' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
 > & {
-  /** „Skąd ta liczba?” (F29): the layers' targets as set and the last delivery's split. */
+  /** „Skąd ta liczba?” (F29): the layers' targets as set and the last delivery's split (`pending` – not docked yet, AP-12). */
   layers: { shieldSalaries: number; hullMonths: number }
-  lastDelivery: { date: string; lines: WhyLine[] } | null
+  lastDelivery: { date: string; pending: boolean; lines: WhyLine[] } | null
 }
 
 const DEFAULT_LAYERS = { shieldSalaries: 3, hullMonths: 6 }
@@ -73,6 +73,7 @@ export const bridgeFleet = (f: FleetState, layers: { shieldSalaries: number; hul
   tanks: f.tanks,
   taxHold: f.taxHold,
   deposit: f.deposit,
+  toDock: f.toDock,
   loot: f.loot,
   costs: f.costs,
   range: f.range,
@@ -652,7 +653,7 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
         </button>
         {fleet.lastDelivery && (
           <button type="button" className={cx('hover:text-fg-strong', why === 'delivery' ? 'text-accent' : 'text-dim')} onClick={() => toggle('delivery')} aria-expanded={why === 'delivery'} title={glossaryOf('Dostawa')} data-testid="state-delivery-why">
-            ostatnia dostawa ({plDate(fleet.lastDelivery.date)}) – dokąd poszła?
+            ostatnia dostawa ({plDate(fleet.lastDelivery.date)}{fleet.lastDelivery.pending ? ', do zadokowania' : ''}) – dokąd poszła?
           </button>
         )}
       </div>
@@ -664,6 +665,22 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
       {fleet.deposit !== 0 && <Line metaphor="Depozyt domowników" name="ich zaliczki – nie do wydania na siebie" value={zl(fleet.deposit)} testId="state-deposit" />}
       {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" value={zl(fleet.loot.amount)} />}
       {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" value={zl(fleet.debt)} testId="state-debt" />}
+      {fleet.toDock.count > 0 && (
+        // The pairs of ICTTJ payouts not docked yet (AP-12): in the layers above already, by their entry's pool – said apart.
+        <Line
+          metaphor="Do zadokowania"
+          name={`${countLabel(fleet.toDock.count, 'wpis', 'wpisy', 'wpisów')} ICTTJ – już w warstwach według puli wpisu`}
+          hint="Wypłaty i zwroty z ICTTJ sparowane z bankiem, a jeszcze niezadokowane, liczą się od razu według puli wpisu: Cele – w celach, Podatek – w rezerwie na PIT-38 (zwrot z niej bez firewalla), reszta – kolejnością dokowania. „Zadokuj” na panelu Dokowanie potwierdza ten podział albo zapisuje zmieniony."
+          value={
+            <>
+              {fleet.toDock.inflow > 0 && <span className="text-up">+{zl(fleet.toDock.inflow)}</span>}
+              {fleet.toDock.inflow > 0 && fleet.toDock.outflow > 0 && ' '}
+              {fleet.toDock.outflow > 0 && <span>−{zl(fleet.toDock.outflow)}</span>}
+            </>
+          }
+          testId="state-to-dock"
+        />
+      )}
       <div className="grid grid-cols-3 gap-2 border-t border-line pt-2">
         <button type="button" className="flex flex-col text-left hover:text-accent" onClick={() => toggle('range')} aria-expanded={why === 'range'} title={glossaryOf('Zasięg')} data-testid="state-range-why">
           <span className="label">Zasięg</span>
@@ -714,12 +731,23 @@ function Receivables({ fleet }: { fleet: FleetState }) {
     <Panel title="Rozliczenia z domownikami" testId="bridge-receivables">
       <div className="flex flex-col gap-1 text-[12px]">
         {shown.map((m) => (
-          <div key={m.memberId} className="flex items-baseline gap-2" data-testid="bridge-member">
+          // Both at once (AF-16): an advance beside a debt is in the deposit too – the sum at the persons is the deposit.
+          <div key={m.memberId} className="flex items-baseline gap-x-2 flex-wrap" data-testid="bridge-member">
             <span className="text-fg-strong">{memberName(m.memberId, members)}</span>
-            <span className="text-[11px] text-dim">
-              {m.owed > 0 ? `ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${countLabel(daysBetween(m.since, fleet.today), 'dzień', 'dni', 'dni')})` : ''}` : 'zaliczka – czeka na wydatki'}
+            <span className="flex min-w-0 flex-1 flex-col">
+              {m.owed > 0 && (
+                <span className="flex items-baseline gap-2">
+                  <span className="text-[11px] text-dim">{`ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${countLabel(daysBetween(m.since, fleet.today), 'dzień', 'dni', 'dni')})` : ''}`}</span>
+                  <span className="num ml-auto text-fg-strong">{zl(m.owed)}</span>
+                </span>
+              )}
+              {m.deposit > 0 && (
+                <span className="flex items-baseline gap-2" data-testid="bridge-member-deposit">
+                  <span className="text-[11px] text-dim">zaliczka – czeka na wydatki</span>
+                  <span className="num ml-auto text-muted">{zl(m.deposit)}</span>
+                </span>
+              )}
             </span>
-            <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>
           </div>
         ))}
         <div className="flex items-baseline gap-2 border-t border-line/60 pt-1">

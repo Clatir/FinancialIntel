@@ -60,6 +60,12 @@ export const splitSchema = z.looseObject({
   containerId: ulidSchema.nullable().optional().catch(undefined),
   /** Paid from a goal's money on this line alone (N-PC-13). */
   goalId: ulidSchema.nullable().optional().catch(undefined),
+  /**
+   * A part of an income repaying a loan given (D100, T355 – its sender may be anyone, not the borrower only): no member's
+   * money (`memberId` null); back to the shields up to the loan's debt, the rest income (T70). Absent = none; an older
+   * version reads the line as income of mine.
+   */
+  loanId: ulidSchema.nullable().optional().catch(undefined),
   note: text,
   /** The line's own tags (1.10.0, F17) besides the operation's: one receipt for two trips. */
   tags: tagListSchema.optional().catch(undefined)
@@ -285,7 +291,10 @@ export const goalPastSchema = z.looseObject({
 })
 export type GoalPast = z.infer<typeof goalPastSchema>
 
-/** The goal's money moved out (1.4.2, D84 C2): at the end of the Warsaw day of `at`, to the shields or another goal. */
+/**
+ * The goal's money moved out (1.4.2, D84 C2): at its moment `at` among the events of its Warsaw day (AP-3, T340 – before
+ * 1.15.6 at the day's end), to the shields or another goal.
+ */
 export const goalTransferSchema = z.looseObject({
   at: isoDateTime,
   /** 'shields' or the id of a goal. */
@@ -441,6 +450,12 @@ export const dockingSchema = z.looseObject({
   ictjEntryId: z.string().max(100).nullable().default(null),
   /** The ICTTJ entry's own day (1.6.2, N46 – the month of an ICTTJ goal without a price); none = the operation's day. */
   entryDate: isoDate.nullable().optional().catch(undefined),
+  /**
+   * The moment its money counts from for the goals (1.15.6, T363 – the engine's `cameIn`): a pair counted by its entry's
+   * pool before the docking (T341) – its operation's arrival, so „Zadokuj” confirms the split the layers had; none = the
+   * docking's creation (T128).
+   */
+  countedFrom: isoDateTime.nullable().optional().catch(undefined),
   pool: z.enum(ICTJ_POOLS).nullable().default(null),
   /** A split chosen in the docking window; the rest of the amount goes to the shields. */
   split: z

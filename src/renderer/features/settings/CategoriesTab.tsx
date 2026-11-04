@@ -1,33 +1,10 @@
 import { newId } from '@shared/ids'
 import { envelopeKind, type Category, type EnvelopeKind } from '@shared/schema'
-import { canWrite, updateSettings } from '../../store/data'
-import { toast } from '../../store/ui'
-import { dropEnvelope, restoreEnvelope } from '../month/actions'
-import { IconPlus } from '../../components/icons'
+import { updateSettings, useFolderLocked } from '../../store/data'
+import { IconPlus, IconTrash } from '../../components/icons'
 import { NameInput, Panel, Segmented, cx } from '../../components/ui'
 import { useCategories } from '../operations/pickers'
-
-function patchCategory(id: string, p: Partial<Category>): void {
-  updateSettings((f) => ({ ...f, settings: { ...f.settings, categories: f.settings.categories.map((c) => (c.id === id ? { ...c, ...p } : c)) } }))
-}
-
-/**
- * A main category archived takes its envelope off this month's plan and the later ones (N8) – it would still count in
- * the sums and today's energy; „Cofnij” brings the category and its envelopes back.
- */
-function archiveMain(c: Category): void {
-  if (!canWrite()) return
-  patchCategory(c.id, { archived: true })
-  const taken = dropEnvelope(c.id)
-  if (taken.size)
-    toast(`Zarchiwizowano „${c.name}” – jej koperta zniknęła z planu tego miesiąca i kolejnych.`, 'info', 8000, {
-      label: 'Cofnij',
-      run: () => {
-        patchCategory(c.id, { archived: false })
-        restoreEnvelope(c.id, taken)
-      }
-    })
-}
+import { archiveMain, deleteCategory, patchCategory } from './categories'
 
 function addCategory(parentId: string | null, name: string): void {
   const c: Category = { id: newId(), name, parentId, envelope: parentId ? null : 'planned', system: null, archived: false }
@@ -47,11 +24,12 @@ const freeName = (taken: string[], base: string) => {
 
 /**
  * Ustawienia → Kategorie (D25, D68): main categories with subcategories. A main category's envelope (D16):
- * „codzienna” = part of today's energy, „planowa” = a monthly limit. Removing = archiving: old operations keep their
- * category.
+ * „codzienna” = part of today's energy, „planowa” = a monthly limit. Archiving hides a category (old operations keep
+ * it); „usuń” takes only one nothing uses (AP-9, N-PC-7).
  */
 export function CategoriesTab() {
   const cats = useCategories()
+  const readOnly = useFolderLocked()
   const mains = [...cats.mains.filter((c) => !c.archived), ...cats.mains.filter((c) => c.archived)]
   const mainNames = cats.mains.map((c) => c.name.toLowerCase())
   return (
@@ -65,8 +43,8 @@ export function CategoriesTab() {
     >
       <p className="mb-2 text-[11.5px] text-muted">
         Koperta kategorii głównej: <b className="text-fg">codzienna</b> – jej wydatki tworzą „energię dziś” (dzienny przydział), <b className="text-fg">planowa</b> –
-        własny limit miesięczny, nie rusza energii dnia. Usunięcie to archiwizacja: dawne operacje zachowują kategorię. Kategorie są wspólne dla wszystkich
-        komputerów.
+        własny limit miesięczny, nie rusza energii dnia. Archiwizacja ukrywa kategorię, a dawne operacje ją zachowują; usunąć można tylko kategorię, której
+        nic nie używa (operacje, plany miesięcy, reguły importu, Ładownia, boje, widoki). Kategorie są wspólne dla wszystkich komputerów.
       </p>
       {!cats.mains.some((c) => !c.archived && envelopeKind(c) === 'daily') && (
         <p className="mb-2 text-[11.5px] text-accent" data-testid="categories-no-daily-warning">
@@ -113,6 +91,18 @@ export function CategoriesTab() {
                     {main.archived ? 'przywróć' : 'archiwizuj'}
                   </button>
                 )}
+                {main.system == null && (
+                  <button
+                    type="button"
+                    className="btn h-[22px]"
+                    disabled={readOnly}
+                    onClick={() => deleteCategory(main.id)}
+                    title={subs.length ? 'Usuń kategorię z podkategoriami – tylko gdy nic ich nie używa' : 'Usuń kategorię – tylko gdy nic jej nie używa'}
+                    data-testid="category-delete"
+                  >
+                    usuń
+                  </button>
+                )}
               </div>
               {subs.length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 pl-4">
@@ -134,6 +124,17 @@ export function CategoriesTab() {
                         onClick={() => patchCategory(sub.id, { archived: !sub.archived })}
                       >
                         {sub.archived ? '↺' : '×'}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-dim hover:text-fg-strong disabled:opacity-50"
+                        disabled={readOnly}
+                        title="Usuń podkategorię – tylko gdy nic jej nie używa"
+                        aria-label={`Usuń podkategorię ${sub.name}`}
+                        onClick={() => deleteCategory(sub.id)}
+                        data-testid="subcategory-delete"
+                      >
+                        <IconTrash size={11} />
                       </button>
                     </span>
                   ))}

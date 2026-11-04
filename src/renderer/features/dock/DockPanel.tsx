@@ -5,12 +5,13 @@
 import type { Delivery } from '@shared/calc/dock'
 import { glossaryOf } from '@shared/glossary'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
+import { useFolderLocked } from '../../store/data'
 import { useIctj } from '../../store/ictj'
 import { navigate } from '../../store/ui'
 import { plnText } from '../../components/fields'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
-import { skipEntry } from './actions'
+import { skipEntry, undockDelivery } from './actions'
 import { openDocking, useDeliveries } from './state'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -71,31 +72,42 @@ export function DockPanel() {
 }
 
 function DeliveryRow({ d }: { d: Delivery }) {
+  const readOnly = useFolderLocked()
   const what = d.entry ? (d.entry.kind === 'withdrawal' ? 'Wypłata z ICTTJ' : 'Zwrot do masy') : 'Wpływ z XTB'
   const detail = d.entry ? ICTJ_POOL_LABEL[d.entry.pool] : d.missingEntry ? 'bez wpisu w ICTTJ' : ''
   return (
-    <button
-      className="flex items-baseline gap-2 border-b border-line/60 px-1 py-1 text-left last:border-b-0 hover:bg-hover"
-      onClick={() => openDocking(d.key)}
-      data-testid="docking-row"
-      data-state={d.state}
-    >
-      <span className="num w-[68px] shrink-0 text-[11px] text-muted">{plDate(d.date)}</span>
-      <span className="min-w-0 flex-1 truncate text-fg-strong">
-        {what}
-        {detail && <span className="text-muted"> · {detail}</span>}
-      </span>
-      {d.wallet && <Badge tone="warn" title="Brak pary w mBanku po 3 dniach roboczych">Portfel XTB?</Badge>}
-      {d.near && <Badge tone="warn" title="W banku jest wpływ z XTB o prawie tej samej kwocie – sprawdź i połącz">inna kwota</Badge>}
-      {d.mismatch && !d.near && <Badge tone="warn" title="Kwota w ICTTJ różni się od operacji w banku">rozbieżność</Badge>}
-      {d.poolChanged && <Badge tone="warn" title="Pula wpisu zmieniła się w ICTTJ po dokowaniu – zadokuj ponownie">pula zmieniona</Badge>}
-      {d.entryGone && <Badge tone="warn" title="Wpis tej wypłaty usunięto w ICTTJ – zadokuj ponownie">wpis usunięty</Badge>}
-      {d.extra.length > 0 && <Badge tone="warn" title="Ten wpis zadokowano dwa razy (np. na dwóch komputerach)">podwójnie</Badge>}
-      <span className={cx('text-[11px]', d.state === 'pending' ? 'text-accent' : 'text-dim')}>{STATE_LABEL[d.state]}</span>
-      <span className={cx('num w-[100px] text-right', d.direction === 'in' ? 'text-up' : 'text-fg')}>
-        {d.direction === 'in' ? '+' : '−'}
-        {zl(d.amount)}
-      </span>
-    </button>
+    <div className="flex items-baseline border-b border-line/60 last:border-b-0">
+      <button className="flex min-w-0 flex-1 items-baseline gap-2 px-1 py-1 text-left hover:bg-hover" onClick={() => openDocking(d.key)} data-testid="docking-row" data-state={d.state}>
+        <span className="num w-[68px] shrink-0 text-[11px] text-muted">{plDate(d.date)}</span>
+        <span className="min-w-0 flex-1 truncate text-fg-strong">
+          {what}
+          {detail && <span className="text-muted"> · {detail}</span>}
+        </span>
+        {d.wallet && <Badge tone="warn" title="Brak pary w mBanku po 3 dniach roboczych">Portfel XTB?</Badge>}
+        {d.near && <Badge tone="warn" title="W banku jest wpływ z XTB o prawie tej samej kwocie – sprawdź i połącz">inna kwota</Badge>}
+        {d.mismatch && !d.near && <Badge tone="warn" title="Kwota w ICTTJ różni się od operacji w banku">rozbieżność</Badge>}
+        {d.poolChanged && <Badge tone="warn" title="Pula wpisu zmieniła się w ICTTJ po dokowaniu – zadokuj ponownie">pula zmieniona</Badge>}
+        {d.entryGone && <Badge tone="warn" title="Wpis tej wypłaty usunięto w ICTTJ – zadokuj ponownie">wpis usunięty</Badge>}
+        {d.extra.length > 0 && <Badge tone="warn" title="Ten wpis zadokowano dwa razy (np. na dwóch komputerach)">podwójnie</Badge>}
+        <span className={cx('text-[11px]', d.state === 'pending' ? 'text-accent' : 'text-dim')}>{STATE_LABEL[d.state]}</span>
+        <span className={cx('num w-[100px] text-right', d.direction === 'in' ? 'text-up' : 'text-fg')}>
+          {d.direction === 'in' ? '+' : '−'}
+          {zl(d.amount)}
+        </span>
+      </button>
+      {/* „Wycofaj dokowanie” (AP-9): a docked delivery back to dock – a sibling of the row's button, never inside it. */}
+      {d.state === 'docked' && d.docking && (
+        <button
+          type="button"
+          className="shrink-0 px-1 text-[11px] text-dim hover:text-accent disabled:opacity-50"
+          disabled={readOnly}
+          onClick={() => undockDelivery(d)}
+          title="Wycofaj dokowanie – dostawa wraca do zadokowania („Cofnij” w powiadomieniu)"
+          data-testid="docking-row-undock"
+        >
+          wycofaj
+        </button>
+      )}
+    </div>
   )
 }

@@ -8,11 +8,13 @@ paths:
   - "src/renderer/features/sensors/**"
   - "tests/unit/fleet.test.ts"
   - "tests/unit/household.test.ts"
+  - "tests/unit/household-n2-*.test.ts"
   - "tests/unit/repayments.test.ts"
   - "tests/unit/share.test.ts"
   - "tests/unit/plan*.test.ts"
   - "tests/unit/goals.test.ts"
   - "tests/unit/loans.test.ts"
+  - "tests/unit/loans-n2-*.test.ts"
   - "tests/unit/numbers-agree.test.ts"
 ---
 
@@ -41,6 +43,35 @@ paths:
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).
 - Pewne dopasowanie zwrotu (D91 b, T329): każda osoba wpłaty osobno (`repaymentSharesByMember`) – import i szybki wpis
   `linkRepayments`, edytor przy zmianie części `moreSureCovers` / `keptCovers`; wpłata ≥ cały dług osoby wiąże wszystkie.
+- Przeniesienie środków celu (T340, od 1.15.6 – nie „na koniec dnia” T129): w chwili `at` wśród zdarzeń dnia, przed
+  pierwszym, które przyszło do FI później (`cameIn` – dokowanie, inaczej operacja; łupy – `decidedAt`, `Ev.at`); czego
+  cel wtedy nie ma – na koniec dnia (`short`). Kolejności operacji w dniu to nie zmienia; wydatek z celu i dostawa po
+  przeniesieniu widzą cel jak ekran.
+- Para do zadokowania (T341, od 1.15.6): silnik nie czyta ICTTJ – pary niezadokowane dostaje jako
+  `FleetInput.pendingPairs` (`pendingPairsOf` z `deliveries`; w oknie `store/fleet.ts` `pendingPairsFor` z listy panelu
+  Dokowanie – jedna pamięć `store/deliveries.ts`, gra przez `gameInputOf`) i liczy je jak dokowanie z pulą wpisu
+  (`dockByPool`, tylko rodzaje `countsByPool`); rekord dokowania decyduje nad parą – dokowanie pary liczonej według puli
+  liczy się od chwili jej operacji (`countedFrom` z `dockingOf` – ten sam `countsByPool`, T363), bez pola od swojego
+  utworzenia (T128). Nowe wejście silnika z ICTTJ dopisz do klucza (`keyOf`,
+  `useEngineParts`, `engineParts` w `game.ts`).
+- Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
+  (także płatnością sprzed startu – `paidBeforeStart` z dniami `feePaymentDays`, silnik i kreator `startPaidDays`, T345)
+  nie ma rat, zbiornik zbiera na następny. Miesiąc przed
+  silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
+- Wpłata domownika (AP-4, T350): `incomeShares` (czyje pieniądze) → `planOf` / `inflowPlanOf` (spłata długu / tylko
+  wskazane / bez spłaty; wskazane należą do części „spłata” tej osoby, gdy ją ma) → `repay` (które zakupy). Jawny
+  niezależny przychód i zaliczka na przyszłość omijają dług (D99 S4), ale wskazane zakupy spłacają (naprawa liczona przy
+  odczycie); omijające dług – `ledger.skipped` → meldunek o tym, co nadal jest do oddania przez nie (`SkippedDebt.open`),
+  „Spłać” spłaca tylko to (`repayingAdvancesOf`, T352). Nowy sposób wpłaty dopisz jako część albo plan tutaj, nie obok.
+  **Pułapka:** przy osobie dług i zaliczka naraz (`balanceText`, AF-16) – inaczej depozyt ≠ suma przy osobach.
+  **Pułapka:** zmiana dawnej wpłaty liczy się od jej dnia – nie może zabrać długu późniejszej spłacie ani zaliczki
+  późniejszemu zakupowi (przegląd 2 N2: dług 50 → 150 zł).
+- Spłata pożyczki częścią wpłaty (D100, T355–T356): linia wpływu `Split.loanId` bez domownika – część `incomeShares`
+  z `loanId`, poza księgą domowników. Spłaty pożyczki czytaj tylko przez `loanParts` / `forEachLoanOperation` /
+  `loanIdsOf` (stan, silnik `repayLoanParts`, wartość netto, statystyki, filtr), nigdy samo `t.loanId`; ile spłaty idzie
+  na dług (reszta – odsetki, przychód T70) – tylko `loanBacksOf` (silnik i statystyki, po kolei całej historii, także
+  w saldzie otwarcia konta). **Pułapka:** linia ma `memberId: null` – kod, który bierze takie części za „mój przychód”
+  (tagi), musi pominąć `loanId`.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

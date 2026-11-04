@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { warsawNow } from '@shared/calc/dates'
-import { balanceOf } from '@shared/calc/household'
+import { balanceOf, balanceText } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
 import { useFleet, useHousehold } from '../../store/fleet'
@@ -202,7 +202,8 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
         <span className="flex-1" />
         {b && (b.owed > 0 || b.deposit > 0) && (
           <span className={cx('num text-[11.5px]', b.owed > 0 ? 'text-accent' : 'text-muted')} data-testid="member-balance">
-            {b.owed > 0 ? `ma oddać ${plnText(b.owed)} zł` : `zaliczka ${plnText(b.deposit)} zł`}
+            {/* Both at once (AF-16). */}
+            {balanceText(b, plnText)}
           </span>
         )}
         {b && b.unassigned.length > 0 && (

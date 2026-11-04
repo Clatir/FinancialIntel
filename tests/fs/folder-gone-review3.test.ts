@@ -21,6 +21,7 @@ type Flags = string | number | undefined
 type Log = (level: 'info' | 'warn' | 'error', message: string, detail?: unknown) => void
 
 /** The presence the main process writes (`writeOwnPresence`) with the probe's tries: its check that new files can be made. */
+const CONTENT = () => ({ appVersion: '0.0.0', activeAt: null })
 const withPresence = (root: string, log?: Log) => ({ machineName: 'TEST-PC', log, presence: (attempts?: number) => writePresence(root, 'TEST-PC', '0.0.0', null, attempts) })
 
 const presenceFile = (root: string) => resolve(root, '.presence', 'TEST-PC.json')
@@ -150,7 +151,7 @@ describe('obecność otwarcia, które ustąpiło nowszemu (przegląd 3 AP-1, T31
   it('otwarcie X ustępuje nowszemu otwarciu X, którego próba zapisała już obecność: zostaje; usuwa ją dopiero zamknięcie X, gdy nikt go nie trzyma', async () => {
     const root = await folder()
     // As `openFolder` and `closeStore` in the main process use it.
-    const kept = new PresenceKeeper('TEST-PC', (a, b) => resolve(a).toLowerCase() === resolve(b).toLowerCase())
+    const kept = new PresenceKeeper('TEST-PC', (a, b) => resolve(a).toLowerCase() === resolve(b).toLowerCase(), CONTENT)
     const firstOpen = kept.keep(root)
     await new DataStore(root, withPresence(root)).open()
     // Opened again (a forced retry) before the first finished: its write probe writes the presence too.
@@ -179,7 +180,7 @@ describe('obecność otwarcia, które ustąpiło nowszemu (przegląd 3 AP-1, T31
   it('otwarcie innego folderu nie trzyma obecności w tym: nieudane otwarcie X usuwa swoją, choć Y się otwiera', async () => {
     const x = await folder()
     const y = await folder()
-    const kept = new PresenceKeeper('TEST-PC', (a, b) => resolve(a) === resolve(b))
+    const kept = new PresenceKeeper('TEST-PC', (a, b) => resolve(a) === resolve(b), CONTENT)
     const openX = kept.keep(x)
     await new DataStore(x, withPresence(x)).open()
     const openY = kept.keep(y)

@@ -53,3 +53,30 @@ test('opłaty stałe w miesiącu (1.6.0, F1): stan w Ładowni, „Kontener nieza
     await app.close()
   }
 })
+
+test('Kreator startu (przegląd N2, T347): rata pożyczki w Ładowni liczy się kwotą tego miesiąca, nie ostatniej raty', async () => {
+  const { month } = warsawNow()
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-fees-wizard-')), 'FinancialIntel')
+  // A loan's installments: 500 zł a month, the last (in 3 months) 3 000 zł – the months before it in the amount history.
+  seedFolder(dataDir, {
+    records: {
+      containers: [{ name: 'Rata: Auto', type: 'installment', amount: zl(3000), past: [{ until: addMonths(month, 2), amount: zl(500) }], cycleMonths: 1, dueMonth: month, dueDay: 28, from: month, until: addMonths(month, 3) }]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await page.getByTestId('banner-wizard-start').click()
+    await expect(page.getByTestId('page-wizard')).toBeVisible()
+    await page.getByTestId('wizard-next').click()
+    await page.getByTestId('wizard-next').click()
+    await page.getByTestId('wizard-salary').click()
+    await page.getByTestId('wizard-salary').fill('4000')
+    await page.getByTestId('wizard-salary').press('Enter')
+    await page.getByTestId('wizard-next').click()
+    // 4 000 zł − 500 zł this month (before: − 3 000 zł, the last installment).
+    await expect(page.getByTestId('wizard-unallocated')).toContainText('3 500,00')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

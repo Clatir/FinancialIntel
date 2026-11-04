@@ -25,13 +25,18 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | Grupa | Wersja | Gałąź | Stan | PR | Czas faktyczny |
 | --- | --- | --- | --- | --- | --- |
 | 0 – przygotowanie | – | `claude/audyt-1.15.4` | ✅ D101, porządek tego pliku, PR audytu scalony (bez wydania); poprawka E2E telefonu w nocy | #49 | 0,5 h |
-| N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | 🔄 kod i 4 rundy przeglądu gotowe; PR, CI, wydanie | – | ok. 5 h do PR |
-| N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | 🔄 od 05:05 równolegle: AP-3, AP-5, AP-9, AP-11, AP-12 gotowe (gałąź `claude/1.15.6-n2c`); AP-4 w toku (`claude/1.15.6-n2b`); potem D100, AP-32 | – | – |
-| N3 Opłaty, energia, gra | 1.15.7 | – | ⏳ | – | – |
+| N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ✅ wydane 04.11 07:33 (wpis w archiwum `postep-od-1.15.4.md`) | #50 | ok. 5,5 h (01:53–07:33) |
+| N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | 🔄 kod i przeglądy gotowe; PR, CI, wydanie | – | ok. 8 h zegara (05:05–13:00 do PR) |
+| N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | 🔄 kod zintegrowany, przegląd xhigh zrobiony; ostatnia poprawka – jedna reguła płatność ↔ cykl opłaty | – | – |
 | N4 Zasady interfejsu | 1.15.8 | – | ⏳ | – | – |
 | N5 Ścieżki i ergonomia | 1.15.9 | – | ⏳ | – | – |
 | R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
 | R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
+
+### Do Twojej decyzji
+- **Rekordy z atrybutem „tylko do odczytu”** (np. po przywróceniu kopii): zapis takiego rekordu pada (EPERM, 8 prób), nic nie
+  ginie. Propozycja: wykrywać przy otwarciu folderu i dać przycisk „Zdejmij blokadę” w Synchronizacji (jawnie, za
+  zgodą); alternatywy: zdejmować po cichu przy zapisie albo tylko czytelny komunikat. Bez Twojej zgody nic nie zmieniam.
 
 ### Do potwierdzenia (zasada wątpliwości, D101 pkt 4)
 Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybrany wariant rekomendowany; możesz go odwrócić.
@@ -48,54 +53,40 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N1 | Rozpoznanie a reguła | słowo z tytułu i reguła przelewu własnego mają pierwszeństwo; domownik będący pożyczkobiorcą – wygrywa pożyczka; pożyczka wygrywa z regułą tylko od dnia jej udzielenia | T325 |
 | N1 | „w tym za X” | część wiersza może przekroczyć dług, część grupy / tematu – nigdy (licząc zakupy i własne wpłaty X z pliku); wpłata ≥ cały dług spłaca wszystkie zakupy | T327–T329 |
 | N1 | Temat z jednakową decyzją kilku marek z „w tym za” | wiersz tematu bez edytora części: „w tym za – ustawione w markach”; zmiana w temacie trafia do każdej marki, kwoty marek bez zmian | T336 |
+| N2 | Ostrzeżenie przy przenoszeniu do celu | także gdy przeniesienie przekracza brakującą kwotę (nie tylko przy pełnym celu), z „tylko brakujące”; nigdy nie blokuje | T340 |
+| N2 | Para do zadokowania | liczona według puli także dla bliskich kwot (B22) i wpływów wpisanych na Portfelu XTB (B69); komputer bez odczytu ICTTJ i telefon liczą zwykłą kolejnością do dokowania | T341 |
+| N2 | Opłata zapłacona przed startem | w miesiącu startu odkłada 0 zł, następny cykl od kolejnego miesiąca; każda połączona płatność sprzed startu zamyka swój cykl | T345 |
+| N2 | Pensja 0 zł | alarm tylko w Planie (bez Mostka i odprawy); prognoza zakłada pełną pensję co miesiąc | T346 |
+| N2 | „Wycofaj dokowanie” i kategorie | bez okna potwierdzenia, tylko „Cofnij” 8 s; usunięcie kategorii głównej zabiera nieużywane podkategorie; koperta 0 zł liczy się jako „w użyciu” | T360, T361 |
+| N2 | Wpłata domownika | reguła nie zapisuje reszty – reszta zawsze z ustawienia osoby (istniejące reguły spłaty dla osób z ustawieniem „zaliczka” wysyłają resztę do depozytu); niezależny przychód wskazujący zakup też go spłaca; zmiana opcji tej samej osoby zachowuje linie „w tym za” i pożyczki | T350, T351 |
+| N2 | Meldunek „Zaliczki przy długu” | pyta tylko o dług nadal do oddania przez zaliczkę, także o zaliczki wybrane świadomie; „zostaw” raz na wpłatę | T352 |
+| N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
 
-## N1 – Dane i import (1.15.5, 04.11.2026)
-- **Zakres:** AP-1 (T314–T318), AP-8 (T319), AP-2 (T320–T324), AP-6 (T325, T326), AP-7 (T327–T329); po przeglądzie
-  T330–T332. Wykonawcy: N1-a (AP-1, AP-8) w osobnym drzewie równolegle z N1-b (AP-2), potem N1-c (AP-6, AP-7, max).
-- **Przegląd:** 4 rundy – xhigh na całości (15 uwag: 14 poprawionych, 1 odrzucona – telefon sam przekazuje stan folderu),
-  potem high na samych poprawkach (10, 7, 8 uwag – wszystkie poprawione; w 4. rundzie temat z „w tym za” uproszczony
-  zamiast kolejnej łaty, T336). Każda poprawka z testem, który przed nią padał. Najpoważniejsze: „Usuń” w meldunku „Wróciły po
-  usunięciu” mógł skasować prawdziwą operację połączoną z wierszem banku; kopia usuwana przy imporcie gubiła spłacane
-  zakupy; „w tym za X” nie liczył własnych wpłat X; próba zapisu przy otwarciu dawała „tylko do odczytu” przy chwilowej
-  blokadzie OneDrive; kopia przed migracją mogła założyć folder-widmo. Weryfikacja przez odtworzenie testem (druga opinia
-  Fable niepotrzebna). Poprawki – po 2–3 podagentów równolegle w osobnych drzewach (max dla rozliczeń, xhigh reszta).
-  Zasada na kolejne grupy: pełny przegląd + jeden na poprawkach; dalej tylko przy poważnych uwagach.
-- **Testy:** typecheck, `npm test` (ok. 1065), build, E2E komputera 78, telefonu 10/10. Lokalnie pada tylko `ictj.spec.ts`
-  (ICTTJ zainstalowany na tym komputerze); ZIP64 w `folder-speed` przekracza czas pod obciążeniem – pułapki w
-  `.claude/rules/testy.md`. Decyzje T314–T337.
-- **Krok 0:** CI audytu padało w nocy – szybki wpis telefonu w ciszy nocnej wymaga notatki (poprawiony pomocnik E2E).
-- **Otwarte:** KR.29 (przy starcie budżetu najpierw `fi.json` albo wycofanie przy częściowym błędzie); numer pliku
-  zapamiętany przy złym koncie po błędnym imporcie; panel duplikatów nie paruje kopii między kontami bez importu
-  naprawczego; PIT-38 bez rozpoznania po nazwie; edytor reguł pokazuje „w tym za”, którego reguły nie zachowują (AP-15,
-  N4).
-- **Czas:** 01:53–07:00 do PR, ok. 5 h (N1-b 42 min, N1-a 63 min, N1-c 65 min; 4 przeglądy 6–20 min; 4 rundy poprawek
-  20–34 min) – plan 2,5–4 h; przekroczenie z rund przeglądu.
-
-## Przed grupą N2 – Silnik pieniędzy (04.11.2026, start 05:05 równolegle z końcem N1)
-1. **Co trzeba wiedzieć.** Zakres (`docs/audyt/wnioski.md` sekcja 4): AP-3 przeniesienie środków celu w chwili zapisu –
-   nowa T zamiast „na koniec dnia” z T129 (AF-4 K); AP-12 dostawa „do zadokowania” od razu według puli wpisu ICTTJ (T163,
-   D99 pkt 2; AF-46, AF-48); AP-4 „reszta jako zaliczka” najpierw spłaca, reszta do depozytu, naprawa zapisanych wpłat
-   (AF-8 K, AF-16; jawna „zaliczka na przyszłość” może omijać dług – D99 pkt 1); D100 – każda wpłata, także od innej osoby,
-   może spłacać pożyczkę udzieloną, także częścią; AP-5 płatność sprzed startu zamyka cykl (AF-12 W); AP-11 plan = silnik
-   (AF-44, AF-51); AP-9 „Wycofaj dokowanie”, usuwanie kategorii, sprostowanie CHANGELOG 1.15.2 (AF-7 W, AF-37); AP-32
-   wyrocznia poprawiona i uruchomiona na migawkach audytu jako regresja. Notatka wydania: dni z przeniesieniami środków
-   celów przeliczą się inaczej (AP-3). Trzy strumienie równolegle: główne drzewo – rozliczenia (AP-4, potem D100); drzewo 2 –
-   warstwy i cele (AP-3, AP-12); drzewo 3 – opłaty i plan (AP-5, AP-11), potem AP-9. Na końcu AP-32 na scalonym kodzie.
-2. **Co musisz powiedzieć** – nic (D99, D100, D101).
-3. **Co przygotować** – nic.
-4. **Tabela prac:**
-
-| Krok | Co obejmuje | Model i thinking (z górką; minimum) | Czas Claude'a |
-| --- | --- | --- | --- |
-| N2-a | AP-3 przeniesienie środków celu w chwili zapisu, ostrzeżenie przy pełnym celu; AP-12 dostawy według puli | podagent Opus 5.5 · max (D96) – drzewo 2 | 1–1,5 h |
-| N2-b | AP-4 „reszta jako zaliczka” = spłata + depozyt, `optionOf`, naprawa danych i meldunek | podagent Opus 5.5 · max (D96) | 0,75–1,25 h |
-| N2-c | AP-5 płatność sprzed startu, kreator; AP-11 raty planu z funkcji silnika, rata pożyczki z harmonogramu | podagent Opus 5.5 · max (D96) – drzewo 3 | 0,75–1,25 h |
-| N2-d | D100 wpłata od dowolnej osoby spłaca pożyczkę (szybki wpis, Operacje, import, reguła), część wpłaty, „kto zapłacił” | podagent Opus 5.5 · max (D96), po N2-b | 1–1,5 h |
-| N2-e | AP-9 „Wycofaj dokowanie” z „Cofnij”, „Usuń” kategorię bez odwołań, N-PC-4 i N-PC-14 | podagent Opus 5.5 · xhigh (min. high), po N2-c | 0,5–0,75 h |
-| N2-f | AP-32 wyrocznia: poprawki z przeglądu, schematy spoza `src/`, migawki audytu jako regresja, test „ta sama liczba na każdym ekranie” | podagent Opus 5.5 · max (min. xhigh) | 0,75–1 h |
-| N2-g | scalenie, pełne testy, `/code-review` xhigh, poprawki, CHANGELOG 1.15.6, PR, CI, wydanie, wpis | koordynator; poprawki – podagenci | 1 h + CI |
-| Razem | rekomendacja: Opus 5.5 · max (D96) | | 3,5–5 h zegara (plan 3–4,5 h, z górką 5,5 h) |
+## N2 – Silnik pieniędzy (1.15.6, 04.11.2026)
+- **Zakres:** AP-3 przeniesienie środków celu w chwili zapisu (T340, zastępuje „na koniec dnia” z T129), AP-12 dostawy
+  według puli przed dokowaniem (T341, T342, T363), AP-5 płatność sprzed startu (T345), AP-11 plan = silnik (T346, T347),
+  AP-9 „Wycofaj dokowanie”, usuwanie kategorii, N-PC-4 i N-PC-14 (T360–T362), AP-4 „reszta jako zaliczka” najpierw spłaca
+  i naprawa przy odczycie (T350–T354), D100 wpłata od dowolnej osoby spłaca pożyczkę (T355–T359, T368), AP-32 wyrocznia
+  jako regresja (T367), AF-5 – odsetki od pożyczki jako przychód (T70, poprawka po przeglądzie), drobne po N1 (N2-h).
+- **Wykonawcy:** 3 strumienie równolegle w osobnych drzewach (warstwy i cele; opłaty i plan, potem AP-9; rozliczenia –
+  AP-4, potem D100), wszystkie Opus · max poza AP-9 i drobnymi (xhigh); scalenie konfliktów importu (max), AP-32 (max).
+- **Przegląd:** xhigh na części 1 (14 uwag) i części 2 (14 + AF-5) – wszystkie poprawione z testem, który przed
+  poprawką padał (1 częściowo odrzucona: fragment Ładowni nieosiągalny dla kontenera pożyczki); high na poprawkach – bez
+  pewnych błędów, 6 drobnych poprawionych. Najpoważniejsze: „Zadokuj” przesuwał pieniądze po przeniesieniu środków celu,
+  spóźniona płatność sprzed startu zamykała następny cykl, „Spłać” w meldunku rozliczał historię od nowa (dług 50 → 150 zł),
+  część pożyczki z reguły stawała się sumą grupy.
+- **Wyrocznia:** `npm run test:wyrocznia` (lokalnie, migawki `C:\FI-audyt`, ok. 2 min) – 412 przypadków, 28 963 kwoty,
+  2 852 porównania ekranów zgodne z aplikacją; znane: AF-15 (termin asteroidy w odprawie – naprawia N3), zbiornik po końcu
+  życia opłaty (bez różnicy w pieniądzach).
+- **Testy:** typecheck (także `typecheck:audyt`), `npm test` ok. 1265, build, E2E komputera 89 (lokalnie pada tylko
+  `ictj.spec.ts`), telefonu 10/10.
+- **Otwarte:** audyt reguł nie oznacza reguły z zamkniętą pożyczką; telefon pokazuje „pożyczka” zamiast nazwy; eksport
+  bez kolumny części pożyczki; edytor operacji nadal „depozyt na przyszłość”; zbiorcza decyzja tej samej osoby kasuje linie
+  „w tym za”; operacje z ukrytym `containerId` bez migracji; wyrocznia – pary przychodu w toku bez części domownika
+  i pożyczki (lab ich nie ma).
+- **Czas:** 05:05–ok. 13:00 do PR (strumienie 55–100 min, scalenia i przeglądy, 3 rundy poprawek) – plan 3–4,5 h pracy;
+  zegar dłuższy przez rundy przeglądu i scalenia równoległych gałęzi.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.

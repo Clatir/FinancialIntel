@@ -237,7 +237,8 @@ describe('odkładki (spec: OC 1 240 zł rocznie)', () => {
     const s = fleet({ ...input, now: '2027-09-10T12:00:00+02:00' })
     const installments = s.log.filter((e) => e.kind === 'sinking').map((e) => e.amount)
     expect(installments).toEqual([...Array(11).fill(10333), 10337])
-    expect(s.tanks).toEqual([{ containerId: oc.id, name: 'OC', amount: zl(1240), dueMonth: '2027-09', paidDue: null, due: zl(1240) }])
+    // `want`: the installment it wanted at this month's turn (T29) – the energy gave it all.
+    expect(s.tanks).toEqual([{ containerId: oc.id, name: 'OC', amount: zl(1240), dueMonth: '2027-09', paidDue: null, due: zl(1240), want: 10337 }])
     expect(s.energy).toBe(zl(4000) - 10337)
     const paid = fleet({ ...input, transactions: [tx('2027-09-15', -zl(1240), { containerId: oc.id, categoryId: oc.categoryId })], now: '2027-09-16T12:00:00+02:00' })
     expect(paid.tanks[0]?.amount).toBe(0)

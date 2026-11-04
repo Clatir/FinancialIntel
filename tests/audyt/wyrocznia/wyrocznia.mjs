@@ -59,8 +59,9 @@ L.push(`Przydział dziś ${pr.przydzialDzis.zl} = (${pr.kopertyCodzienne.zl} + �
 if (rep.lupy) L.push(`Łupy ${rep.lupy.miesiac}: A ${rep.lupy.wariantA_niewydanaEnergia.zl} · B ${rep.lupy.wariantB_niewydaneZKopert_dodatnie.zl} · decyzja do ${rep.lupy.terminDecyzji}, potem ${rep.lupy.bezDecyzji} · ${rep.lupy.stan}`)
 const z = rep.zasieg
 L.push(`Zasięg ${z.obciecie} (obcięcie) / ${z.zaokraglenie} (zaokr.) mies. – ${z.klasa}; z łupami w osłonach ${z.zLupamiWOslonach.obciecie}`)
+if (rep.doZadokowania.liczba) L.push(`Do zadokowania (T342): ${rep.doZadokowania.liczba} · wpływ ${rep.doZadokowania.wplyw.zl} · wypływ ${rep.doZadokowania.wyplyw.zl} · w celach ${rep.doZadokowania.wCelach.zl}`)
 L.push(`Masa ładunku ${rep.ladownia.masaMiesieczna.zl} = ${rep.ladownia.masaProcentPensji} pensji (linia ${rep.ladownia.liniaZanurzenia})`)
-for (const d of rep.domownicy.wariantA) L.push(`  domownik ${d.osoba}: ma oddać ${d.maOddac.zl}${d.najstarszyOtwartyZakup ? ` (od ${d.najstarszyOtwartyZakup.dzien}, ${d.najstarszyOtwartyZakup.dni} dni)` : ''} · zaliczka ${d.zaliczka.zl}`)
+for (const d of rep.domownicy.wariantD99) L.push(`  domownik ${d.osoba}: ma oddać ${d.maOddac.zl}${d.najstarszyOtwartyZakup ? ` (od ${d.najstarszyOtwartyZakup.dzien}, ${d.najstarszyOtwartyZakup.dni} dni)` : ''} · zaliczka ${d.zaliczka.zl}`)
 for (const l of rep.pozyczki) L.push(`  pożyczka ${l.nazwa} (${l.kierunek}): zostało ${l.zostalo.zl}, zaległe ${l.zalegle.liczba} = ${l.zalegle.kwota.zl}${l.zalegle.od ? ' od ' + l.zalegle.od : ''}`)
 if (rep.gra?.dni) {
   const g = rep.gra

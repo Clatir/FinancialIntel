@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { addWorkingDays, asPayout, PAIR_WORKING_DAYS, withDocking, type Delivery } from '@shared/calc/dock'
 import { byPriority } from '@shared/calc/goals'
 import { fitSplit } from '@shared/calc/fleet'
+import { undockingOf } from '@shared/calc/undock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
@@ -17,7 +18,7 @@ import { AmountField, plnText } from '../../components/fields'
 import { Badge, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { closeDocking, useDeliveries, useDocking } from './state'
-import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, walletOperation, type SplitDraft } from './actions'
+import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, undockDelivery, walletOperation, type SplitDraft } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -100,6 +101,8 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const until = e ? addWorkingDays(e.date, PAIR_WORKING_DAYS) : null
   const showTax = e?.pool === 'tax' || split.taxHold > 0
   const edit = (patch: Partial<SplitDraft>) => setDraft({ ...split, ...patch })
+  // „Wycofaj dokowanie” (AP-9): what it would remove – a docked delivery only.
+  const undo = undockingOf(d)
 
   const dock = () => {
     if (over) return
@@ -133,6 +136,19 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
             </button>
           )}
           {d.state === 'docked' && d.docking && <HistoryButton kind="dockings" id={d.docking.id} current={d.docking} small />}
+          {undo && (
+            <button
+              className="btn h-[26px]"
+              disabled={readOnly}
+              onClick={() => {
+                if (undockDelivery(d)) closeDocking()
+              }}
+              title={undo.transactions.length ? 'Usuwa dokowanie i jego operację na Portfelu XTB – dostawa wraca do zadokowania („Cofnij” w powiadomieniu)' : 'Usuwa dokowanie – operacja z banku zostaje i czeka na ponowne dokowanie („Cofnij” w powiadomieniu)'}
+              data-testid="docking-undock"
+            >
+              Wycofaj dokowanie
+            </button>
+          )}
           <span className="flex-1" />
           <button className="btn h-[26px]" onClick={closeDocking}>
             Anuluj
@@ -245,7 +261,15 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
               </Row>
             )}
             {over && <p className="text-down">Podział przekracza kwotę dostawy o {zl(-shields)}.</p>}
-            {!draft && <p className="text-[11px] text-dim">Propozycja według kolejności dokowania{e?.pool === 'goals' ? ' – pula Cele: prosto do celów, najpierw cele z prognozy ICTTJ' : e?.pool === 'tax' ? ' – pula Podatek: poza budżetem' : ''}.</p>}
+            {!draft && (
+              <p className="text-[11px] text-dim" data-testid="docking-proposal">
+                Propozycja według kolejności dokowania{e?.pool === 'goals' ? ' – pula Cele: prosto do celów, najpierw cele z prognozy ICTTJ' : e?.pool === 'tax' ? ' – pula Podatek: poza budżetem' : ''}
+                {/* The layers of the inflow's day (DO sp. 4): an earlier day's state, not today's. */}
+                {fleet && tx.date < fleet.today ? `, na stan warstw z dnia wpływu (${plDate(tx.date)})` : ''}.
+                {/* A pair not docked yet (AP-12): the engine counts it by the entry's pool already – the docking confirms it. */}
+                {d.state === 'pending' && e && d.transaction && !d.docking && ' Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.'}
+              </p>
+            )}
           </section>
         ) : (
           <section className={cx('border-l-2 pl-2', firewall ? 'border-down text-down' : 'border-up text-muted')} data-testid="docking-firewall">

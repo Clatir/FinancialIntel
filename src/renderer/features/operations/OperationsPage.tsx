@@ -27,6 +27,7 @@ import { operationRowText } from './rowText'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
 import { categorizeTicked, clearTicked, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickOperations, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
+import { useRecordList } from '../../store/records'
 import { SHARE_MODES } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
@@ -187,8 +188,9 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
   const marks = orders ? marksOf(t, orders, flags) : []
   const tone = amountTone(t)
   const members = useMembers()
+  const loans = useRecordList('loans')
   // The category, the accounts of a transfer (F10), the money on the list's account – as on the phone's cards.
-  const { name, category, shown: categoryShown, none, account, amount } = operationRowText(t, { categories: cats, accounts, members, view })
+  const { name, category, shown: categoryShown, none, account, amount } = operationRowText(t, { categories: cats, accounts, members, view, loans })
   // A member's purchase says in its one badge how much of it is paid back (D91): „domownik · oddane”.
   const repaid = marks.find((m) => m === 'owed' || m === 'partlyRepaid' || m === 'repaid')
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split', 'owed', 'partlyRepaid', 'repaid'].includes(m))

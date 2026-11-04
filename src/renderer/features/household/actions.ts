@@ -5,15 +5,16 @@
 import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
 import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
-import { linkRepayments, withNamed, type CoverFields } from '@shared/calc/repayments'
-import { balanceOf, memberName } from '@shared/calc/household'
+import { linkRepayments, repayingAdvancesOf, withNamed, type CoverFields } from '@shared/calc/repayments'
+import { balanceOf, memberName, skippedDebtsOf, skippedKey } from '@shared/calc/household'
 import { CASH_ACCOUNT_ID, inflowOf, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
-import { addRecord, canWrite, deleteRecords, updateRecord, updateSettings, useData, writesInBackground } from '../../store/data'
+import { sameContentAs } from '@shared/merge'
+import { addRecord, canWrite, deleteRecords, replaceRecords, updateRecord, updateSettings, useData, writesInBackground } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
-import { plDate } from '../../lib/format'
+import { countLabel, plDate } from '../../lib/format'
 import { toast } from '../../store/ui'
 import { usePresence } from '../../store/presence'
 
@@ -53,6 +54,55 @@ export function assignRepayment(paymentId: string, purchaseId: string, label: st
       run: () => void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
     })
   return ok
+}
+
+/**
+ * „Spłać” (AP-4, the inbox): a member's advances for the future that left their debt unpaid (not those kept) repay what
+ * is still owed because of them – no more (`repayingAdvancesOf`, review 2 of N2: a debt a later repayment paid back is
+ * not settled again); with „Cofnij”. False – nothing changed.
+ */
+export function repayAdvances(memberId: string): boolean {
+  const input = canWrite() ? fleetInputNow() : null
+  const s = useData.getState()
+  if (!input || !s.fi) return false
+  const after = repayingAdvancesOf(input, memberId, s.fi.settings.import.notDuplicates, warsawNow().date)
+  if (!after.length) return false
+  const was = after.map((t) => s.records.transactions[t.id]?.record).filter((t): t is Transaction => !!t)
+  if (!replaceRecords('transactions', after)) return false
+  toast(`${memberName(memberId, s.fi.settings.household.members)}: ${countLabel(after.length, 'wpłata spłaca', 'wpłaty spłacają', 'wpłat spłaca')} dług, reszta zostaje zaliczką.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      // Only the ones as it left them (a change since stays).
+      const current = useData.getState().records.transactions
+      replaceRecords(
+        'transactions',
+        was.filter((t) => sameContentAs(current[t.id]?.record, after.find((a) => a.id === t.id)))
+      )
+    }
+  })
+  return true
+}
+
+/**
+ * „zostaw” (AP-4, the inbox): a member's advances for the future the report asks of (`skippedDebtsOf`) stay so – not asked
+ * again; with „Cofnij”.
+ */
+export function keepAdvances(memberId: string): void {
+  const input = canWrite() ? fleetInputNow() : null
+  if (!input) return
+  const ledger = householdOf(input, warsawNow().date)
+  const keys = (skippedDebtsOf(ledger, ledger.members, {}).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
+  if (!keys.length) return
+  const at = new Date().toISOString()
+  const set = (on: boolean) =>
+    updateSettings((f) => {
+      const notDuplicates = { ...f.settings.import.notDuplicates }
+      for (const k of keys)
+        if (on) notDuplicates[k] ??= at
+        else if (notDuplicates[k] === at) delete notDuplicates[k]
+      return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates } } }
+    })
+  if (set(true)) toast('Zaliczki zostają – meldunek nie wróci dla tych wpłat.', 'info', 7000, { label: 'Cofnij', run: () => set(false) })
 }
 
 /**

@@ -3,7 +3,7 @@ import { addMonths, daysInMonth, monthsBetween, warsawNow } from '@shared/calc/d
 import { glossaryOf } from '@shared/glossary'
 import { paymentsIndex } from '@shared/calc/cargoStatus'
 import { cycleText, deadText, priceText, SHORT_MONTHS, type DeadContainer, type PriceChange } from '@shared/calc/cargoWatch'
-import { amountIn, cyclePosition, nextUnpaidOf, scheduleOf, sinkingInstallment, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
+import { amountIn, cyclePosition, monthlyWeight, nextUnpaidOf, scheduleOf, sinkingInstallment, sinkingSchedule, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
 import { monthlyShare, simulateCargo, sinkingOf, type CargoSimulation } from '@shared/calc/plan'
 import { dm, rangeText } from '@shared/format'
@@ -181,7 +181,8 @@ export function CargoPage() {
                         {cycleText(c)}
                       </span>
                       <StateBadge s={status.get(c.id)} />
-                      <span className="num w-[96px] text-right">{zl(c.amount)}</span>
+                      {/* This month's amount (F9) – a loan's installment as its schedule has it (AP-11, AF-51). */}
+                      <span className="num w-[96px] text-right">{zl(amountIn(c, month))}</span>
                       <span
                         className="num w-[86px] text-right text-[11px] text-muted"
                         title={(() => {
@@ -192,7 +193,7 @@ export function CargoPage() {
                             : 'Średnio miesięcznie (opłata okresowa: rata zbiornika, ostatnia z resztą groszy)'
                         })()}
                       >
-                        {zl(monthlyShare(c))}/m
+                        {zl(monthlyWeight(c, month))}/m
                         {(() => {
                           const tk = tankById.get(c.id)
                           const catchUp = !c.archived && !tk?.paidDue ? catchUpRateOf(c, month, tk?.amount ?? 0, sinkingTaken.get(c.id)) : null

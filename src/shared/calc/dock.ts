@@ -23,7 +23,7 @@ import type { IctjEntry } from '../ictj'
 import { XTB_WALLET_ACCOUNT_ID } from '../schema/budget'
 import type { Docking, Transaction } from '../schema/records'
 import { addDays, isWorkingDay } from './dates'
-import { computeFleet, dockingsByTx, type FleetInput, type FleetState, type Moves } from './fleet'
+import { computeFleet, dockingsByTx, type FleetInput, type FleetState, type Moves, type PendingPair } from './fleet'
 
 /** Working days an inflow may take after the ICTTJ entry (D72: Friday's withdrawal comes on Monday or Tuesday). */
 export const PAIR_WORKING_DAYS = 3
@@ -292,6 +292,18 @@ export function preStartTaxOf(o: Pick<DeliveriesInput, 'entries' | 'transactions
   if (!o.start || !o.entries.some((e) => e.pool === 'tax')) return out
   for (const d of deliveries({ ...o, today: o.start, ictjOn: true, coveredTo: null }))
     if (d.state === 'before-start' && d.transaction && d.entry?.pool === 'tax') out.set(d.transaction.id, Math.abs(d.transaction.amount))
+  return out
+}
+
+/**
+ * The pairs of ICTTJ payouts not docked yet (AP-12, T341): operation id → the entry's pool and day. The engine counts
+ * them by the pool at once (`FleetInput.pendingPairs`) – the docking confirms that or changes the split. A pair of nearly
+ * the amount (B22) too (the bank's amount counts, as docked); a skipped entry's operation is the budget's in the usual
+ * order (N45), one with a docking of its own keeps it.
+ */
+export function pendingPairsOf(list: readonly Delivery[]): Map<string, PendingPair> {
+  const out = new Map<string, PendingPair>()
+  for (const d of list) if (d.state === 'pending' && d.entry && d.transaction && !d.docking) out.set(d.transaction.id, { pool: d.entry.pool, entryDate: d.entry.date })
   return out
 }
 

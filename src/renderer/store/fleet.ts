@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { warsawNow } from '@shared/calc/dates'
-import { preStartTaxOf } from '@shared/calc/dock'
-import { budgetStartOf, computeFleet, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { pendingPairsOf, preStartTaxOf } from '@shared/calc/dock'
+import { budgetStartOf, computeFleet, type FleetInput, type FleetState, type PendingPair } from '@shared/calc/fleet'
 import type { HouseholdLedger } from '@shared/calc/household'
-import type { IctjEntry } from '@shared/ictj'
+import type { IctjEntry, IctjSnapshot } from '@shared/ictj'
 import { listOf, useData } from './data'
+import { deliveriesFor } from './deliveries'
 import { useIctj } from './ictj'
 import { timed } from '../lib/timing'
 
@@ -63,9 +64,12 @@ const partsOf = (fi: Fi, records: Records): unknown[] => [
   fi.settings.game.seriousEnvelopePct,
   ...KEY_COLLECTIONS.map((c) => records[c])
 ]
-// The pool „Podatek” paired before the start too (N38) – its map, the same object while its content is the same (a new
-// snapshot of ICTTJ with the same payouts runs nothing again).
-const keyOf = (fi: Fi, records: Records, date: string, entries: Entries): FleetKey => ({ date, parts: [...partsOf(fi, records), preStartTaxFor(fi, records, entries, date)] })
+// The pool „Podatek” paired before the start too (N38) and the pairs not docked yet (AP-12) – their maps, the same objects
+// while their content is the same (a new snapshot of ICTTJ with the same payouts runs nothing again).
+const keyOf = (fi: Fi, records: Records, date: string, snap: IctjSnapshot): FleetKey => ({
+  date,
+  parts: [...partsOf(fi, records), preStartTaxFor(fi, records, snap.entries, date), pendingPairsFor(fi, records, snap, date)]
+})
 const NO_PARTS: unknown[] = []
 const sameKey = (a: FleetKey, b: FleetKey) => a.date === b.date && a.parts.every((p, i) => p === b.parts[i])
 
@@ -88,25 +92,63 @@ function preStartTaxFor(fi: Fi, records: Records, entries: Entries, today: strin
   return map
 }
 
+const NO_PAIRS: ReadonlyMap<string, PendingPair> = new Map()
+/** The pairs of ICTTJ payouts not docked yet (AP-12), once per what they read. */
+let pairsMemo: { parts: readonly unknown[]; map: ReadonlyMap<string, PendingPair> } | null = null
+
+/**
+ * The ICTTJ payouts paired with an operation and not docked yet (AP-12, T341): the engine counts them by the entry's pool.
+ * The pairs of the docking's list – the very list, one memo (`store/deliveries.ts`, przegląd N2: the operations were
+ * scanned twice at every edit); the bank files' coverage decides only for an entry without a pair (Portfel XTB or
+ * waiting), so the pairs do not depend on it. ICTTJ not read on this computer – none (the usual order, as before).
+ */
+function pendingPairsFor(fi: Fi, records: Records, snap: IctjSnapshot, today: string): ReadonlyMap<string, PendingPair> {
+  const transactions = listOf(records.transactions)
+  const dockings = listOf(records.dockings)
+  const start = budgetStartOf(fi.settings, listOf(records.balances), today)
+  const skipped = fi.settings.ictj.skipped
+  const parts = [snap, transactions, dockings, start, skipped, today]
+  if (pairsMemo && pairsMemo.parts.every((p, i) => p === parts[i])) return pairsMemo.map
+  const fresh =
+    snap.status === 'ok' && snap.entries.length && start && start <= today
+      ? pendingPairsOf(deliveriesFor(records, skipped, snap, start, today, fi.settings.import.coveredTo))
+      : NO_PAIRS
+  const prev = pairsMemo?.map
+  const same = !!prev && prev.size === fresh.size && [...fresh].every(([id, p]) => prev.get(id)?.pool === p.pool && prev.get(id)?.entryDate === p.entryDate)
+  const map = same ? prev : fresh
+  pairsMemo = { parts, map }
+  return map
+}
+
 /** The engine's input; `now` – the moment (its date is what counts; the goals' moments take the time too). */
-const inputOf = (fi: Fi, records: Records, now: number, entries: Entries = useIctj.getState().snap.entries): FleetInput => ({
-  settings: fi.settings,
-  transactions: listOf(records.transactions),
-  preStartTax: preStartTaxFor(fi, records, entries, warsawNow(new Date(now)).date),
-  containers: listOf(records.containers),
-  goals: listOf(records.goals),
-  months: listOf(records.months),
-  dockings: listOf(records.dockings),
-  loans: listOf(records.loans),
-  balances: listOf(records.balances),
-  now: new Date(now)
-})
+const inputOf = (fi: Fi, records: Records, now: number, snap: IctjSnapshot = useIctj.getState().snap): FleetInput => {
+  const date = warsawNow(new Date(now)).date
+  return {
+    settings: fi.settings,
+    transactions: listOf(records.transactions),
+    preStartTax: preStartTaxFor(fi, records, snap.entries, date),
+    pendingPairs: pendingPairsFor(fi, records, snap, date),
+    containers: listOf(records.containers),
+    goals: listOf(records.goals),
+    months: listOf(records.months),
+    dockings: listOf(records.dockings),
+    loans: listOf(records.loans),
+    balances: listOf(records.balances),
+    now: new Date(now)
+  }
+}
+
+/** The pairs not docked yet as the engine counts them now (AP-12) – the game rates the days by them too. */
+export function pendingPairsNow(): ReadonlyMap<string, PendingPair> {
+  const s = useData.getState()
+  return s.fi ? pendingPairsFor(s.fi, s.records, useIctj.getState().snap, warsawNow().date) : NO_PAIRS
+}
 
 function fleetOf(fi: Fi, records: Records, now: number): FleetState {
-  const entries = useIctj.getState().snap.entries
-  const key = keyOf(fi, records, warsawNow(new Date(now)).date, entries)
+  const snap = useIctj.getState().snap
+  const key = keyOf(fi, records, warsawNow(new Date(now)).date, snap)
   if (memo && sameKey(memo.key, key)) return memo.state
-  const state = timed('silnik budżetu', () => computeFleet(inputOf(fi, records, now, entries)))
+  const state = timed('silnik budżetu', () => computeFleet(inputOf(fi, records, now, snap)))
   memo = { key, state }
   return state
 }
@@ -119,18 +161,18 @@ export function fleetInputNow(): FleetInput | null {
 
 /** The ship's state now (shared/calc/fleet.ts) from the records in memory; recomputed when what it reads or the day changes. */
 /**
- * What the engine reads, as one value that changes with it (a memo's key – W10): the records and the map of the pool
- * „Podatek” before the start (ICTTJ's payouts – the same array while nothing of it changed).
+ * What the engine reads, as one value that changes with it (a memo's key – W10): the records, the map of the pool
+ * „Podatek” before the start and the pairs not docked yet (ICTTJ's payouts – the same maps while nothing of them changed).
  */
 export function useEngineParts(): readonly unknown[] {
   const parts = useData(useShallow((s) => (s.fi ? partsOf(s.fi, s.records) : NO_PARTS)))
-  const entries = useIctj((s) => s.snap.entries)
+  const snap = useIctj((s) => s.snap)
   const today = useToday()
   const last = useRef<readonly unknown[]>(NO_PARTS)
   const next = useMemo(() => {
     const s = useData.getState()
-    return s.fi ? [...parts, preStartTaxFor(s.fi, s.records, entries, today)] : NO_PARTS
-  }, [parts, entries, today])
+    return s.fi ? [...parts, preStartTaxFor(s.fi, s.records, snap.entries, today), pendingPairsFor(s.fi, s.records, snap, today)] : NO_PARTS
+  }, [parts, snap, today])
   if (next.length !== last.current.length || next.some((p, i) => p !== last.current[i])) last.current = next
   return last.current
 }

@@ -21,11 +21,13 @@ type Log = (level: 'info' | 'warn' | 'error', message: string, detail?: unknown)
 const sameDir = (a: string, b: string) => resolve(a).toLowerCase() === resolve(b).toLowerCase()
 const presenceFile = (root: string) => resolve(root, '.presence', 'TEST-PC.json')
 const inPresence = (root: string, p: unknown) => typeof p === 'string' && resolve(p).startsWith(resolve(root, '.presence'))
-/** The presence the main process writes (`writeOwnPresence`) – through the keeper, as the main process does. */
+/** What the keeper writes as this computer's presence. */
+const CONTENT = () => ({ appVersion: '9.9.9', activeAt: null })
+/** The presence the main process writes – through the keeper, as the main process does. */
 const withPresence = (root: string, keeper: PresenceKeeper, log?: Log) => ({
   machineName: 'TEST-PC',
   log,
-  presence: (attempts?: number) => keeper.write(root, () => writePresence(root, 'TEST-PC', '9.9.9', null, attempts))
+  presence: (attempts?: number) => keeper.write(root, attempts)
 })
 const refusal = (code: string, extra: Record<string, unknown> = {}) => Object.assign(new Error(`${code}: operation not permitted`), { code, ...extra })
 
@@ -43,6 +45,18 @@ function gate(): { open: () => void; wait: () => Promise<void>; reached: Promise
       return opened
     }
   }
+}
+
+/**
+ * The presence file's replacement failing in the folders of the returned set (an error no retry waits for) – the
+ * heartbeat's write as the keeper does it, failing.
+ */
+function failingPresence(...roots: string[]): Set<string> {
+  const failing = new Set(roots)
+  const real = fsp.rename.bind(fsp)
+  vi.spyOn(fsp, 'rename').mockImplementation(((from: string, to: string) =>
+    [...failing].some((r) => resolve(to) === presenceFile(r)) ? Promise.reject(refusal('EIO')) : real(from, to)) as never)
+  return failing
 }
 
 afterEach(() => {
@@ -68,7 +82,7 @@ describe('plik obecności z atrybutem „tylko do odczytu” naprawiany (przegl�
       if (resolve(p) === target && mode & 0o200) readOnly = false
       return realChmod(p, mode)
     }) as never)
-    const keeper = new PresenceKeeper('TEST-PC', sameDir)
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
     const snap = await new DataStore(root, withPresence(root, keeper)).open()
     expect(snap.status).toMatchObject({ readOnly: false, readOnlyReason: null })
     // Before: only logged – the file kept the old heartbeat for good, the other computer took this one for stopped.
@@ -81,7 +95,7 @@ describe('plik obecności z atrybutem „tylko do odczytu” naprawiany (przegl�
     await writePresence(root, 'TEST-PC', '0.0.1-stara')
     await fsp.chmod(presenceFile(root), 0o444)
     try {
-      const keeper = new PresenceKeeper('TEST-PC', sameDir)
+      const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
       const snap = await new DataStore(root, withPresence(root, keeper)).open()
       expect(snap.status).toMatchObject({ readOnly: false, readOnlyReason: null })
       expect((await readJson(presenceFile(root))).appVersion).toBe('9.9.9')
@@ -111,22 +125,21 @@ describe('plik obecności z atrybutem „tylko do odczytu” naprawiany (przegl�
   it('heartbeat nie połyka błędu obecności: wpis w logu, gdy zaczyna się nie udawać, i gdy znów się udaje – nie przy każdej próbie', async () => {
     const root = await folder()
     const log = vi.fn<Log>()
-    const keeper = new PresenceKeeper('TEST-PC', sameDir, log)
-    let fail = true
-    const write = () => (fail ? Promise.reject(refusal('EBUSY')) : writePresence(root, 'TEST-PC', '9.9.9'))
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT, log)
+    const failing = failingPresence(root)
     // Never rejects – the heartbeat goes on to read the other computers.
-    await expect(keeper.beat(root, write)).resolves.toBeUndefined()
-    await keeper.beat(root, write)
-    await keeper.beat(root, write)
+    await expect(keeper.beat(root)).resolves.toBeUndefined()
+    await keeper.beat(root)
+    await keeper.beat(root)
     expect(log.mock.calls.filter(([level]) => level === 'warn')).toHaveLength(1)
-    expect(log).toHaveBeenCalledWith('warn', expect.stringContaining(root), expect.objectContaining({ code: 'EBUSY' }))
-    fail = false
-    await keeper.beat(root, write)
-    await keeper.beat(root, write)
+    expect(log).toHaveBeenCalledWith('warn', expect.stringContaining(root), expect.objectContaining({ code: 'EIO' }))
+    failing.clear()
+    await keeper.beat(root)
+    await keeper.beat(root)
     expect(log.mock.calls.filter(([level]) => level === 'info')).toHaveLength(1)
     expect(await exists(presenceFile(root))).toBe(true)
-    fail = true
-    await keeper.beat(root, write)
+    failing.add(root)
+    await keeper.beat(root)
     expect(log.mock.calls.filter(([level]) => level === 'warn')).toHaveLength(2)
   })
 })
@@ -146,16 +159,18 @@ describe('zapisy i usunięcia obecności w folderze po kolei (przegląd 4 AP-1, 
       await realRm(p, opts as never)
       order.push('rm done')
     }) as never)
-    const keeper = new PresenceKeeper('TEST-PC', sameDir)
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
     // The open that gave way clears (fire-and-forget) – no open of the folder keeps it yet.
     const clearing = keeper.clear(root)
     await slowRm.reached
     // The newer open of the same folder: kept, its write probe writes the presence.
     const release = keeper.keep(root)
-    const writing = keeper.write(root, async () => {
-      order.push('write')
-      await writePresence(root, 'TEST-PC', '9.9.9')
-    })
+    const realRename = fsp.rename.bind(fsp)
+    vi.spyOn(fsp, 'rename').mockImplementation(((from: string, to: string) => {
+      if (resolve(to) === presenceFile(root)) order.push('write')
+      return realRename(from, to)
+    }) as never)
+    const writing = keeper.write(root)
     // Before: the write ran at once, the late removal took its file.
     await new Promise((r) => setImmediate(r))
     slowRm.open()
@@ -168,7 +183,7 @@ describe('zapisy i usunięcia obecności w folderze po kolei (przegląd 4 AP-1, 
   it('usunięcie sprawdza trzymanie, gdy przychodzi jego kolej: folder otwierany od nowa w międzyczasie – obecność zostaje', async () => {
     const root = await folder()
     await writePresence(root, 'TEST-PC', '0.0.1-stara')
-    const keeper = new PresenceKeeper('TEST-PC', sameDir)
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
     const realRm = fsp.rm.bind(fsp)
     let removals = 0
     vi.spyOn(fsp, 'rm').mockImplementation(((p: string, opts?: object) => {
@@ -176,11 +191,13 @@ describe('zapisy i usunięcia obecności w folderze po kolei (przegląd 4 AP-1, 
       return realRm(p, opts as never)
     }) as never)
     const slowWrite = gate()
+    const realRename = fsp.rename.bind(fsp)
+    vi.spyOn(fsp, 'rename').mockImplementation((async (from: string, to: string) => {
+      if (resolve(to) === presenceFile(root)) await slowWrite.wait()
+      return realRename(from, to)
+    }) as never)
     // A heartbeat's write of the folder in flight.
-    const beating = keeper.write(root, async () => {
-      await slowWrite.wait()
-      await writePresence(root, 'TEST-PC', '9.9.9')
-    })
+    const beating = keeper.write(root)
     await slowWrite.reached
     // Asked while nothing keeps the folder (the closed store)…
     const clearing = keeper.clear(root)
@@ -199,14 +216,21 @@ describe('zapisy i usunięcia obecności w folderze po kolei (przegląd 4 AP-1, 
   it('inny folder nie czeka: zapis w Y idzie, choć usunięcie w X stoi', async () => {
     const x = await folder()
     const y = await folder()
-    const keeper = new PresenceKeeper('TEST-PC', sameDir)
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
     const stuck = gate()
-    const clearing = keeper.clear(x).then(() => undefined)
-    void keeper.write(x, () => stuck.wait())
-    await keeper.write(y, () => writePresence(y, 'TEST-PC', '9.9.9'))
+    const realRename = fsp.rename.bind(fsp)
+    vi.spyOn(fsp, 'rename').mockImplementation((async (from: string, to: string) => {
+      if (resolve(to) === presenceFile(x)) await stuck.wait()
+      return realRename(from, to)
+    }) as never)
+    const writingX = keeper.write(x)
+    await stuck.reached
+    const clearing = keeper.clear(x)
+    await keeper.write(y)
     expect(await exists(presenceFile(y))).toBe(true)
     stuck.open()
-    await clearing
+    await Promise.all([writingX, clearing])
+    expect(await exists(presenceFile(x))).toBe(false)
   })
 })
 
@@ -217,7 +241,7 @@ describe('tryb tylko do odczytu z kroku naszego zapisu, nie z pola błędu (prze
     const real = fsp.open.bind(fsp)
     vi.spyOn(fsp, 'open').mockImplementation(((p: string, flags?: Flags, mode?: number) =>
       inPresence(root, p) && flags === 'w' ? Promise.reject(refusal('EPERM')) : real(p, flags as never, mode)) as never)
-    const keeper = new PresenceKeeper('TEST-PC', sameDir)
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
     expect((await new DataStore(root, withPresence(root, keeper)).open()).status.readOnlyReason).toBe(FOLDER_NOT_WRITABLE_MESSAGE)
   })
 
@@ -226,7 +250,7 @@ describe('tryb tylko do odczytu z kroku naszego zapisu, nie z pola błędu (prze
     const real = fsp.mkdir.bind(fsp)
     vi.spyOn(fsp, 'mkdir').mockImplementation(((p: string, opts?: object) =>
       inPresence(root, p) ? Promise.reject(refusal('EACCES', { syscall: 'CreateDirectoryW' })) : real(p, opts as never)) as never)
-    const keeper = new PresenceKeeper('TEST-PC', sameDir)
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
     expect((await new DataStore(root, withPresence(root, keeper)).open()).status.readOnlyReason).toBe(FOLDER_NOT_WRITABLE_MESSAGE)
   })
 
@@ -238,7 +262,7 @@ describe('tryb tylko do odczytu z kroku naszego zapisu, nie z pola błędu (prze
     vi.spyOn(fsp, 'rename').mockImplementation(((from: string, to: string) =>
       resolve(to) === target ? Promise.reject(refusal('EPERM', { syscall: 'open' })) : real(from, to)) as never)
     const log = vi.fn<Log>()
-    const keeper = new PresenceKeeper('TEST-PC', sameDir)
+    const keeper = new PresenceKeeper('TEST-PC', sameDir, CONTENT)
     const snap = await new DataStore(root, withPresence(root, keeper, log)).open()
     expect(snap.status).toMatchObject({ readOnly: false, readOnlyReason: null })
     expect(log).toHaveBeenCalledWith('warn', expect.stringContaining('replace'), expect.objectContaining({ code: 'EPERM' }))

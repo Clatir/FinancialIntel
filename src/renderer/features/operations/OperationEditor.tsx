@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
 import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
-import { DEFAULT_SIGN, withKind } from '@shared/calc/kinds'
+import { DEFAULT_SIGN } from '@shared/calc/kinds'
 import { confirmedChanges, confirmedPeriodOf, type OperationEdit } from '@shared/calc/balances'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
 import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
-import { listOf, updateRecord, useData, useFolderLocked } from '../../store/data'
+import { listOf, useData, useFolderLocked } from '../../store/data'
 import { answerGuard, askGuard, useGuard } from '../../store/guard'
 import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
@@ -19,7 +19,7 @@ import { plDate } from '../../lib/format'
 import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
 import { AccountSelect, CategorySelect, useAccounts } from './pickers'
-import { deleteOperation, openOperation, rememberAccount, showBrand } from './state'
+import { changeKind as changeOperationKind, deleteOperation, openOperation, rememberAccount, showBrand, updateOperation } from './state'
 import { addOtherSide, joinTransfers, transferEdits, transferIssuesOf, type JoinIssue } from './transfers'
 import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
 import { OFFICER_SOURCE_LABEL, officerHint } from '@shared/import/officer'
@@ -95,19 +95,15 @@ export function OperationEditor({ id }: { id: string }) {
     if (changes.length) askGuard({ id, run, changes, bankAmount: null })
     else run()
   }
-  const update = (fn: (r: Transaction) => Transaction): boolean => {
-    // A new entry is the user's own first writing (no confirmed balance knows it yet as it is).
-    if (isDraft || fresh) return updateRecord('transactions', id, fn)
-    const next = fn(t)
-    const changes = confirmedChanges([[t, next]], balances)
-    // The bank's amount of either side.
-    const bank = (!!t.bank || !!t.counterBank) && next.amount !== t.amount
-    if (!changes.length && !bank) return updateRecord('transactions', id, fn)
-    askGuard({ id, run: () => void updateRecord('transactions', id, fn), changes, bankAmount: bank ? t.amount : null })
-    return false
-  }
+  // A new entry is the user's own first writing (no confirmed balance knows it yet as it is).
+  const update = (fn: (r: Transaction) => Transaction): boolean => updateOperation(id, fn, isDraft || fresh)
   const confirmed = confirmedPeriodOf(t, balances)
   const patch = (p: Partial<Transaction>) => update((r) => ({ ...r, ...p }))
+  // Another kind (N-PC-4, T362): an unlinked goal or container said once the change is written, with „Cofnij”.
+  const changeKind = (k: TxKind) => {
+    setZeroSign(null)
+    changeOperationKind(id, k, isDraft || fresh)
+  }
   // F8: an expense without a category – what the officer knows of its brand (history, the import's rule, the chain).
   const officer =
     t.kind === 'expense' && !t.categoryId && !t.splits.length && rules && !readOnly
@@ -165,10 +161,7 @@ export function OperationEditor({ id }: { id: string }) {
           <Segmented
             size="sm"
             value={MAIN_KINDS.includes(t.kind) ? t.kind : null}
-            onChange={(k) => {
-              setZeroSign(null)
-              update((r) => withKind(r, k))
-            }}
+            onChange={changeKind}
             options={MAIN_KINDS.map((k) => ({ value: k, label: k === 'trading' ? 'XTB' : TX_KIND_LABEL[k] }))}
             aria-label="Rodzaj operacji"
           />
@@ -177,9 +170,7 @@ export function OperationEditor({ id }: { id: string }) {
             value={OTHER_KINDS.includes(t.kind) ? t.kind : ''}
             onChange={(e) => {
               const k = e.currentTarget.value as TxKind | ''
-              if (!k) return
-              setZeroSign(null)
-              update((r) => withKind(r, k))
+              if (k) changeKind(k)
             }}
             aria-label="Inny rodzaj"
             data-testid="operation-kind-other"

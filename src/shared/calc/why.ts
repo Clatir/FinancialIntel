@@ -68,18 +68,30 @@ export function targetsWhy(f: Pick<FleetState, 'shields' | 'hull' | 'costs' | 'p
   ]
 }
 
-/** The last delivery's split (a payout docked – D13): where its money went, layer by layer; null – none docked yet. */
-export function deliveryWhy(log: readonly FleetEvent[], goalName: (id: string) => string): { date: string; lines: WhyLine[] } | null {
+/**
+ * The last delivery's split (a payout docked – D13): where its money went, layer by layer; null – none docked yet.
+ * `pending` – one not docked yet (AP-12, PR sp. 2): counted by its ICTTJ entry's pool until „Zadokuj” confirms it – an
+ * inflow typed on Portfel XTB too (B69), a household member's part of it apart (D80).
+ */
+export function deliveryWhy(log: readonly FleetEvent[], goalName: (id: string) => string): { date: string; pending: boolean; lines: WhyLine[] } | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const e = log[i]!
-    if (e.kind !== 'trading' || e.amount <= 0) continue
+    if ((e.kind !== 'trading' && !e.pending) || e.amount <= 0) continue
     const m = e.moves
-    const lines: WhyLine[] = [{ label: 'Dostawa', amount: e.amount }]
+    // A member's repayment (back to the shields) and advance: their money, not the pool's split; a loan's part (D100 –
+    // back to the shields up to its debt) neither (review 2 of N2).
+    const repaid = Math.max(0, -(m.house ?? 0))
+    const member = repaid + Math.max(0, m.deposit ?? 0)
+    const loanBack = Object.values(m.loans ?? {}).reduce((a, v) => a + Math.max(0, -v), 0)
+    const shields = (m.shields ?? 0) - repaid - loanBack
+    const lines: WhyLine[] = [{ label: e.pending ? 'Dostawa do zadokowania (według puli wpisu ICTTJ)' : 'Dostawa', amount: e.amount }]
+    if (member) lines.push({ label: 'Domownicy – spłata i zaliczka', amount: member })
+    if (loanBack) lines.push({ label: 'Spłata pożyczki (do osłon)', amount: loanBack })
     if (m.taxHold) lines.push({ label: 'Rezerwa na PIT-38', amount: m.taxHold })
-    if (m.shields) lines.push({ label: 'Osłony', amount: m.shields })
+    if (shields) lines.push({ label: 'Osłony', amount: shields })
     if (m.hull) lines.push({ label: 'Kadłub', amount: m.hull })
     for (const [id, v] of Object.entries(m.goals ?? {})) if (v) lines.push({ label: `Cel: ${goalName(id)}`, amount: v })
-    return { date: e.date, lines }
+    return { date: e.date, pending: !!e.pending, lines }
   }
   return null
 }
