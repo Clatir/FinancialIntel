@@ -2928,3 +2928,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   z kilku słów rozdwajała się). Bez migracji: tagi operacji zostają jak zapisane (pierwsza pisownia jest etykietą), klucze
   zapisane w ustawieniach przed 1.15.9 czytane przez `tagKey` jeszcze raz – cel wyprawy (`tagGoalOf`; `setTagGoal` usuwa
   dawny klucz tego tagu), filtr zapisanego widoku i filtr tego komputera (`filterOf`). Tag z samych „-” / „_” – żaden.
+- **T421** Miesiąc w toku liczony do dziś (AP-36, C16 – D99 (9); RE sp. 4): debriefing (`debriefing` – koszty netto,
+  koperty, „bez koperty”, ładownia, sfinansowane przez domowników), przegląd roczny (`yearNumbers(…, today)` – koszty,
+  przychody, kategorie, miesiące), bilans paliwa (`fuelMonths` / `fuelSummary(…, today)`) i „Wydatki w czasie” Wywiadu
+  czytają operacje z datą do dnia budżetu (`upToDay`, `calc/operations.ts` – ta sama lista, gdy żadna nie jest późniejsza),
+  jak salda, energia i warstwy („Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia”). Koszty
+  netto operacji z datą po dziś – osobno jako „Zaplanowane (operacje z datą po dziś – poza kosztami)”: `Debriefing.planned`
+  i `YearNumbers.planned` (kolumna „Zaplanowane” w tabeli miesięcy przeglądu, gdy jest), linia tylko przy kwocie ≠ 0.
+  Miesiąc zakończony – jak dawniej (nie ma w nim dat po dziś). Eksport „Miesiące” bierze koszty z debriefingu (do dziś),
+  przychody liczy sam (poza tą zmianą). Operacje pokazują listę okresu bez zmian (suma tego, co na liście).

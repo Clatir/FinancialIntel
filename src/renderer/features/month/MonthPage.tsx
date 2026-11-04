@@ -488,7 +488,7 @@ function Gap({ value }: { value: number }) {
  * (green / red – neutral while the amounts are hidden, B61). */
 function FuelLine({ month, fleet, running }: { month: string; fleet: FleetState; running: boolean }) {
   const transactions = useRecordList('transactions')
-  const s = useMemo(() => fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths), [transactions, fleet.incomeContext, month, fleet.historyMonths])
+  const s = useMemo(() => fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today), [transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today])
   const m = s.month
   if (!m || (!m.income && !m.costs)) return null
   return (

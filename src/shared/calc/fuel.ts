@@ -7,6 +7,7 @@
 import type { Transaction } from '../schema/records'
 import { addMonths } from './dates'
 import { incomeOfPeriod, type IncomeContext } from './income'
+import { upToDay } from './operations'
 import { costsByMonth, transactionsOfMonth } from './plan'
 
 export interface FuelMonth {
@@ -29,11 +30,15 @@ export interface FuelMonth {
 /** A balance in % of its income (one decimal); null – no income. */
 export const savingsRate = (balance: number, income: number): number | null => (income > 0 ? Math.round((balance / income) * 1000) / 10 : null)
 
-/** Each month's fuel balance (`months` in order). */
-export function fuelMonths(transactions: readonly Transaction[], ctx: IncomeContext, months: readonly string[]): FuelMonth[] {
-  const costs = costsByMonth(transactions)
+/**
+ * Each month's fuel balance (`months` in order). `today` – the budget's day (AP-36, T421): the month in progress counted
+ * up to it, as the debriefing's costs – an operation dated later is planned.
+ */
+export function fuelMonths(transactions: readonly Transaction[], ctx: IncomeContext, months: readonly string[], today?: string): FuelMonth[] {
+  const list = today ? upToDay(transactions, today) : transactions
+  const costs = costsByMonth(list)
   return months.map((month) => {
-    const income = incomeOfPeriod(transactionsOfMonth(transactions, month), ctx)
+    const income = incomeOfPeriod(transactionsOfMonth(list, month), ctx)
     const c = costs.get(month) ?? 0
     const balance = income.total - c
     const workBalance = income.work - c
@@ -65,9 +70,9 @@ export interface FuelSummary {
  * The month's savings rate with the medians of the months before it (`history` – the months the averages read, oldest
  * first; the debriefing's line: „Stopa oszczędności 23% (mediana 6 mies.: 18%)”).
  */
-export function fuelSummary(transactions: readonly Transaction[], ctx: IncomeContext, month: string, history: readonly string[]): FuelSummary {
+export function fuelSummary(transactions: readonly Transaction[], ctx: IncomeContext, month: string, history: readonly string[], today?: string): FuelSummary {
   const before = history.filter((m) => m < month).slice(-12)
-  const list = fuelMonths(transactions, ctx, [...before, month])
+  const list = fuelMonths(transactions, ctx, [...before, month], today)
   const current = list[list.length - 1] ?? null
   const past = list.slice(0, -1)
   const last = (n: number) => past.slice(-n)

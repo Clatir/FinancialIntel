@@ -22,8 +22,9 @@ export function FuelPanel({ fleet }: { fleet: FleetState }) {
     const have = new Set(covered)
     return fuelWindow(addMonths(fleet.month, -1)).filter((m) => have.has(m))
   }, [covered, fleet.month])
-  const rows = useMemo(() => fuelMonths(transactions, ctx, months).reverse(), [transactions, ctx, months])
-  const summary = useMemo(() => fuelSummary(transactions, ctx, fleet.month, covered), [transactions, ctx, fleet.month, covered])
+  // The month in progress up to today (AP-36), as the debriefing.
+  const rows = useMemo(() => fuelMonths(transactions, ctx, months, fleet.today).reverse(), [transactions, ctx, months, fleet.today])
+  const summary = useMemo(() => fuelSummary(transactions, ctx, fleet.month, covered, fleet.today), [transactions, ctx, fleet.month, covered, fleet.today])
   return (
     <Panel title="Bilans paliwa" hint={glossaryOf('Bilans paliwa')} testId="intel-fuel">
       {!rows.length ? (

@@ -51,6 +51,8 @@ const failed = (e: unknown) => toast(`Nie udało się zapisać: ${e instanceof E
 
 /** The costs linked to the cargo's containers (N72): one name in every report – monthly and periodic fees alike. */
 const CARGO_LABEL = 'Ładownia (kontenery i opłaty okresowe)'
+/** The net costs of operations dated after today (AP-36): apart, as Operacje and the balances see them. */
+const PLANNED_LABEL = 'Zaplanowane (operacje z datą po dziś – poza kosztami)'
 
 /** A gap of the plan (FVG) as on the screens (N33): a plus sign on the plus – unless the amounts are hidden. */
 const signed = (money: (g: number) => string, g: number): string => {
@@ -239,7 +241,7 @@ function useDebrief(month: string) {
     return {
       brief,
       log,
-      fuel: fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths),
+      fuel: fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today),
       plan: planFor(plans, month),
       game: {
         ok: days.filter((d) => d.status === 'ok').length,
@@ -270,6 +272,8 @@ function DebriefReport() {
       lines: [
         ['Pensja od siebie', b.salary == null ? '—' : money(b.salary)],
         ['Koszty netto', money(b.costs)],
+        // The month counted up to today (AP-36): operations dated later apart, never in the costs.
+        ...(b.planned ? ([[PLANNED_LABEL, money(b.planned)]] as Array<[string, string]>) : []),
         [CARGO_LABEL, money(b.cargo)],
         // The parts of the costs without an envelope (N25): the rows add up to the net costs with the envelopes below.
         ...(b.outside.length ? ([['Bez koperty', `${money(sum(b.outside.map((o) => o.spent)))} (${b.outside.map((o) => label(o.categoryId)).join(', ')})`]] as Array<[string, string]>) : []),
@@ -416,7 +420,7 @@ function YearReport() {
   const thisYear = fleet.today.slice(0, 4)
   // In January the review of the year just closed (spec).
   const [year, setYear] = useState(() => (fleet.today.slice(5, 7) === '01' ? String(Number(thisYear) - 1) : thisYear))
-  const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.incomeContext), [transactions, settings, year, fleet.incomeContext])
+  const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.incomeContext, fleet.today), [transactions, settings, year, fleet.incomeContext, fleet.today])
   const today = fleet.today
   const wealth = useMemo(() => yearWealth(transactions, balances, settings.accounts.map((a) => a.id), year, today), [transactions, balances, settings, year, today])
   // F24: „Siła floty netto” at both ends – the loans' open amounts and the household's balance beside the accounts.
@@ -434,6 +438,8 @@ function YearReport() {
       title: 'Rok w liczbach',
       lines: [
         ['Koszty netto', money(y.costs)],
+        // The year counted up to today (AP-36): operations dated later apart, never in the costs.
+        ...(y.planned ? ([[PLANNED_LABEL, money(y.planned)]] as Array<[string, string]>) : []),
         ['Sfinansowane przez domowników', financedText(y.financed, money, settings.household.members)],
         ['Przychody', money(y.income)],
         // The sum of the accounts' balances (T81, N63) – borrowed money and the household's advances in it.
@@ -448,7 +454,9 @@ function YearReport() {
     },
     {
       title: 'Miesiące',
-      table: { head: ['Miesiąc', 'Koszty', 'Przychody'], rows: y.months.map((m) => [monthLabel(m.month), money(m.costs), money(m.income)]), numeric: [1, 2] },
+      table: y.planned
+        ? { head: ['Miesiąc', 'Koszty', 'Przychody', 'Zaplanowane'], rows: y.months.map((m) => [monthLabel(m.month), money(m.costs), money(m.income), m.planned ? money(m.planned) : '—']), numeric: [1, 2, 3] }
+        : { head: ['Miesiąc', 'Koszty', 'Przychody'], rows: y.months.map((m) => [monthLabel(m.month), money(m.costs), money(m.income)]), numeric: [1, 2] },
       // Why the months do not add up to the year's income (N66, T119).
       text: 'Trading netto liczony w każdym miesiącu osobno (dopłaty do XTB nie schodzą poniżej zera); przychody roku nettują dopłaty z całego roku. Pieniądze na kontach to suma sald – z pożyczonymi i depozytem domowników.'
     },

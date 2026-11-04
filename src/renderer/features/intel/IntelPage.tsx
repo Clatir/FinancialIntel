@@ -11,7 +11,7 @@ import { glossaryOf } from '@shared/glossary'
 import { openDays, scheduledDays } from '@shared/calc/scheduled'
 import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth } from '@shared/calc/intel'
 import { debriefing } from '@shared/calc/plan'
-import { sum } from '@shared/calc/operations'
+import { sum, upToDay } from '@shared/calc/operations'
 import { rangeText } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -77,7 +77,8 @@ export function IntelPage() {
   const second = chosen === net ? accounts.points : net.points
   const months = useMemo(() => (month ? monthRange(addMonths(month, -(Number(period) - 1)), month) : []), [month, period])
   const killzones = useMemo(() => (today && months.length ? killzoneGrid(transactions, `${months[0]}-01`, today) : null), [transactions, months, today])
-  const spending = useMemo(() => spendingByMonth(transactions, settings?.categories ?? [], months), [transactions, settings, months])
+  // The month in progress up to today (AP-36), as the debriefing and the fuel balance beside it.
+  const spending = useMemo(() => spendingByMonth(today ? upToDay(transactions, today) : transactions, settings?.categories ?? [], months), [transactions, settings, months, today])
   const log = useMemo(() => (settings ? logAccuracy(transactions, settings.orders, months) : []), [transactions, settings, months])
   const [fvgMonth, setFvgMonth] = useState<string | null>(null)
   // The buoys' money by month for the range's variant (F16): their open days of two years, a late one this month.

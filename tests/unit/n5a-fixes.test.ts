@@ -3,7 +3,11 @@
  * each fix with a test that fails without it.
  */
 import { describe, expect, it } from 'vitest'
-import { categoryIndex } from '@shared/calc/operations'
+import { fuelMonths, fuelSummary } from '@shared/calc/fuel'
+import { plainIncomeContext } from '@shared/calc/income'
+import { yearNumbers } from '@shared/calc/intel'
+import { categoryIndex, upToDay } from '@shared/calc/operations'
+import { debriefing } from '@shared/calc/plan'
 import { hasTag, knownTags, tagGoalMatch, tagGoalOf, tagKey, tagSummaries, withTags } from '@shared/calc/tags'
 import { createDefaultSettings } from '@shared/defaults'
 import { filterOf, matchesFilter } from '@shared/operationsView'
@@ -51,5 +55,53 @@ describe('AP-21: „-” i „_” w tagu jak spacja (T291, AF-18)', () => {
     const ctx = { categories: categoryIndex(categories), accounts: settings.accounts, orders: settings.orders }
     const ops = [tx('2026-07-01', -zl(10), { tags: ['wakacje-chorwacja'] }), tx('2026-07-02', -zl(20), { tags: ['Wakacje Chorwacja'] }), tx('2026-07-03', -zl(30), { tags: ['remont'] })]
     expect(ops.filter((t) => matchesFilter(t, f, ctx)).map((t) => t.amount)).toEqual([-zl(10), -zl(20)])
+  })
+})
+
+// ------------------------------------------------------------------ AP-36
+
+describe('AP-36: koszty miesiąca w toku do dziś, operacje z przyszłą datą osobno – „zaplanowane” (C16)', () => {
+  const today = '2026-11-04'
+  const ops = () => [
+    tx('2026-11-02', -zl(60)),
+    tx('2026-11-03', -zl(42)),
+    // Dated after today: planned – a bill typed ahead, a product return expected.
+    tx('2026-11-10', -zl(50)),
+    tx('2026-11-12', zl(10)),
+    tx('2026-12-15', -zl(10)),
+    tx('2026-11-20', zl(3000), { kind: 'income', categoryId: null })
+  ]
+
+  it('debriefing miesiąca w toku: koszty 102,00 (nie 142,00), zaplanowane 40,00; koperty i bez koperty też do dziś', () => {
+    const d = debriefing('2026-11', { transactions: ops(), categories, plans: [], today })
+    expect(d.costs).toBe(zl(102))
+    expect(d.planned).toBe(zl(40))
+    expect(d.outside).toEqual([{ categoryId: FOOD, spent: zl(102) }])
+    // A month after today: nothing of it counted yet.
+    expect(debriefing('2026-12', { transactions: ops(), categories, plans: [], today })).toMatchObject({ costs: 0, planned: zl(10) })
+    // The month ended: as before – everything of it.
+    expect(debriefing('2026-11', { transactions: ops(), categories, plans: [], today: '2026-12-01' })).toMatchObject({ costs: zl(142), planned: 0 })
+  })
+
+  it('przegląd roczny: grudzień bez 10,00 zł w kosztach, zaplanowane osobno; przychód z przyszłą datą też nie wchodzi', () => {
+    const y = yearNumbers(ops(), categories, '2026', undefined, today)
+    expect(y.costs).toBe(zl(102))
+    expect(y.planned).toBe(zl(50))
+    expect(y.months.find((m) => m.month === '2026-12')).toEqual({ month: '2026-12', costs: 0, income: 0, planned: zl(10) })
+    expect(y.months.find((m) => m.month === '2026-11')).toMatchObject({ costs: zl(102), income: 0, planned: zl(40) })
+    expect(y.income).toBe(0)
+    // Without the day (an older caller): as before.
+    expect(yearNumbers(ops(), categories, '2026').costs).toBe(zl(152))
+  })
+
+  it('bilans paliwa miesiąca w toku – te same koszty co debriefing', () => {
+    const list = ops()
+    const [nov] = fuelMonths(list, plainIncomeContext(list), ['2026-11'], today)
+    expect(nov).toMatchObject({ costs: zl(102), income: 0, balance: -zl(102) })
+    expect(fuelSummary(list, plainIncomeContext(list), '2026-11', [], today).month?.costs).toBe(zl(102))
+    expect(upToDay(list, today).map((t) => t.date)).toEqual(['2026-11-02', '2026-11-03'])
+    // None later: the same list (the memos by list keep working).
+    const past = list.slice(0, 2)
+    expect(upToDay(past, today)).toBe(past)
   })
 })

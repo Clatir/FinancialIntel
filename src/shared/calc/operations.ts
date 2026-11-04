@@ -172,6 +172,20 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
 
 // ------------------------------------------------------------------ costs and income
 
+const upToMemo = new WeakMap<readonly Transaction[], { day: string; list: readonly Transaction[] }>()
+
+/**
+ * The operations dated up to `day` (AP-36, T421: the month in progress counted up to today – an operation dated later is
+ * planned, as the balances and the engine see it): the same list when none is later; once per list and day.
+ */
+export function upToDay(transactions: readonly Transaction[], day: string): readonly Transaction[] {
+  const m = upToMemo.get(transactions)
+  if (m && m.day === day) return m.list
+  const list = transactions.some((t) => t.date > day) ? transactions.filter((t) => t.date <= day) : transactions
+  upToMemo.set(transactions, { day, list })
+  return list
+}
+
 /**
  * Net cost of an operation (grosze, > 0 = a cost, < 0 = a product return): expenses minus product returns, without
  * own transfers, XTB top-ups, purchases a household member finances (D80) and PIT-38 (spec). An expense paid from a

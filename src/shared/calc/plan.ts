@@ -553,8 +553,13 @@ export interface Debriefing {
   salary: number | null
   /** What the engine paid as the salary (less in the budget's first month – the part spent before the start). */
   paid: number | null
-  /** Net costs of the month. */
+  /**
+   * Net costs of the month up to the budget's day (AP-36, T421): the whole debriefing reads the operations dated up to
+   * today, as Operacje, the balances and the engine count them.
+   */
   costs: number
+  /** Net costs of the month's operations dated after the budget's day – „zaplanowane”, apart from the rest (AP-36). */
+  planned: number
   /** The month has ended (today is past it): its result and its loot are final. */
   ended: boolean
   /**
@@ -658,7 +663,10 @@ export function debriefing(
 ): Debriefing {
   const plan = planFor(input.plans, month)
   const cats = categoryIndex(input.categories)
-  const txs = transactionsOfMonth(input.transactions, month)
+  const all = transactionsOfMonth(input.transactions, month)
+  // The month up to the budget's day (AP-36, T421): an operation dated later is planned – apart, never in the costs.
+  const later = month >= monthOf(input.today) ? all.filter((t) => t.date > input.today) : []
+  const txs = later.length ? all.filter((t) => t.date <= input.today) : all
   const costs = sum(txs.map(costOf))
   // Without the containers (an older caller): every linked payment is the cargo's.
   const { spent, cargo, uncategorized } = monthSpending(txs, cats, input.containers ? new Set(input.containers.map((c) => c.id)) : null)
@@ -719,6 +727,7 @@ export function debriefing(
     salary,
     paid: salaries.length ? sum(salaries.map((e) => e.amount)) : null,
     costs,
+    planned: sum(later.map(costOf)),
     ended,
     // Never „na plus” before the month's end (N65) nor with an unreturned energy exhaustion (N-PC-3).
     plus: !ended ? null : energy ? energy.result >= 0 && energy.exhausted === 0 : salary != null && salary > 0 ? costs <= salary : null,
