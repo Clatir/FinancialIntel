@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
 import { warsawNow } from '@shared/calc/dates'
-import { deliveries, pendingPairsOf, preStartTaxOf } from '@shared/calc/dock'
+import { pendingPairsOf, preStartTaxOf } from '@shared/calc/dock'
 import { budgetStartOf, computeFleet, type FleetInput, type FleetState, type PendingPair } from '@shared/calc/fleet'
 import type { HouseholdLedger } from '@shared/calc/household'
 import type { IctjEntry, IctjSnapshot } from '@shared/ictj'
 import { listOf, useData } from './data'
+import { deliveriesFor } from './deliveries'
 import { useIctj } from './ictj'
 import { timed } from '../lib/timing'
 
@@ -97,32 +98,20 @@ let pairsMemo: { parts: readonly unknown[]; map: ReadonlyMap<string, PendingPair
 
 /**
  * The ICTTJ payouts paired with an operation and not docked yet (AP-12, T341): the engine counts them by the entry's pool.
- * The pairs of the docking's list (`features/dock/state.ts` – the same ICTTJ snapshot, operations and dockings); ICTTJ
- * not read on this computer – none (the usual order, as before).
+ * The pairs of the docking's list – the very list, one memo (`store/deliveries.ts`, przegląd N2: the operations were
+ * scanned twice at every edit); the bank files' coverage decides only for an entry without a pair (Portfel XTB or
+ * waiting), so the pairs do not depend on it. ICTTJ not read on this computer – none (the usual order, as before).
  */
 function pendingPairsFor(fi: Fi, records: Records, snap: IctjSnapshot, today: string): ReadonlyMap<string, PendingPair> {
   const transactions = listOf(records.transactions)
   const dockings = listOf(records.dockings)
   const start = budgetStartOf(fi.settings, listOf(records.balances), today)
-  const parts = [snap, transactions, dockings, start, fi.settings.ictj.skipped, today]
+  const skipped = fi.settings.ictj.skipped
+  const parts = [snap, transactions, dockings, start, skipped, today]
   if (pairsMemo && pairsMemo.parts.every((p, i) => p === parts[i])) return pairsMemo.map
   const fresh =
     snap.status === 'ok' && snap.entries.length && start && start <= today
-      ? pendingPairsOf(
-          deliveries({
-            entries: snap.entries,
-            transactions,
-            dockings,
-            start,
-            today,
-            skipped: fi.settings.ictj.skipped,
-            ictjOn: true,
-            entriesComplete: snap.complete !== false,
-            unreadEntries: snap.unread,
-            // The bank's file decides only for an entry without a pair (Portfel XTB or waiting) – no pair either way.
-            coveredTo: null
-          })
-        )
+      ? pendingPairsOf(deliveriesFor(records, skipped, snap, start, today, fi.settings.import.coveredTo))
       : NO_PAIRS
   const prev = pairsMemo?.map
   const same = !!prev && prev.size === fresh.size && [...fresh].every(([id, p]) => prev.get(id)?.pool === p.pool && prev.get(id)?.entryDate === p.entryDate)

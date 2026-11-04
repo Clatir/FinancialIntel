@@ -2396,7 +2396,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   komentarz: operacja wołająca kolejkę zakleszczyłaby folder); zamknięcie folderu (zmiana folderu, wyjście) czeka na
   usunięcie obecności najwyżej 5 s (`PRESENCE_CLEAR_MS`, `clearWithin`; wcześniej bez limitu za wszystkimi zapisami
   obecności folderu – wolny OneDrive wstrzymywał wyjście i otwarcie następnego folderu), potem usunięcie idzie dalej
-  w swojej kolejce i sprawdza trzymanie w swojej kolei – obecność nowszego otwarcia zostaje. Krok zapisu niesie sam błąd:
+  w swojej kolejce i sprawdza trzymanie w swojej kolei – obecność nowszego otwarcia zostaje. Po przeglądzie N2 wyjście
+  z aplikacji czeka na usunięcie w limicie wyjścia (`clearAtClose` z `quitBy` – koniec `QUIT_DRAIN_MS` po zapisach,
+  najmniej 5 s): proces kończy się zaraz potem, więc usunięcie „dalej w tle” nigdy się nie odbywało, plik zostawał,
+  a drugi komputer brał ten za uruchomiony do 11 min, choć log mówił, że usunięcie trwa; nieskończone w limicie – log
+  mówi, że plik obecności zostaje. Zmiana folderu – jak wyżej. Krok zapisu niesie sam błąd:
   `writeFileAtomic` odrzuca `AtomicWriteError { step, cause }` z kodem i komunikatem błędu fs, `atomicFailure` /
   `atomicStep` znajdują go także w błędzie opakowanym (`cause`) – wcześniej krok w `WeakMap` po obiekcie błędu i
   opakowanie go gubiło (folder naprawdę tylko do odczytu nierozpoznany). Telefon (lustro folderu) i testy bez
@@ -2465,7 +2469,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Ustawienia → Import („Pary oznaczone „to nie duplikat”: N”, „pokazuj znowu”) liczą i zapominają tylko pary panelu
   duplikatów (`isDuplicatePairKey` w `shared/import/duplicates.ts` – klucz `row:…` albo id pary): klucze `back:<id>`,
   a także `correction:` (B129), `transfer:` i `transfer-lone:` (F10) zostają – wcześniej liczone jako pary, a „pokazuj
-  znowu” przywracało meldunki operacji zostawionych i przywróconych świadomie oraz przelewów „zostaw tak”.
+  znowu” przywracało meldunki operacji zostawionych i przywróconych świadomie oraz przelewów „zostaw tak”. Po przeglądzie
+  N2 para panelu rozpoznana po tym, co panel zapisuje (`row:…` albo co najmniej dwa id połączone `|`), nie po kluczu bez
+  dwukropka; przedrostki innych meldunków w rejestrze `REPORT_KEY_PREFIXES` (nowy meldunek dopisuje tam swój) – goły id
+  przyszłego meldunku nie jest już parą. Zapisane klucze bez zmian.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
   rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
@@ -2633,7 +2640,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   banku – i wpływ wpisany na Portfelu XTB – B69; bez wpisu pominiętego, sprzed startu, czekającego na import,
   zadokowanego i wpływu z XTB bez wpisu) trafia do silnika jako `FleetInput.pendingPairs` (operacja → pula i dzień
   wpisu, `pendingPairsOf`; okno liczy je z migawki ICTTJ tego komputera tymi samymi danymi co panel Dokowanie –
-  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama) i liczy się od razu tak, jak jej dokowanie z tą
+  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama; po przeglądzie N2 z tej samej listy co panel –
+  jedna pamięć `store/deliveries.ts`, jedno przejście po operacjach) i liczy się od razu tak, jak jej dokowanie z tą
   pulą bez zmienionego podziału: Cele – prosto do celów (najpierw cele z prognozy ICTTJ; miesiąc celu bez ceny – dzień
   wpisu, N46), Podatek – rezerwa na PIT-38 poza budżetem i bez przychodu (`taxOfDockings` z parami), zwrot z puli
   Podatek – z rezerwy, bez firewalla (T65), pozostałe pule – kolejnością dokowania. Chwila pieniędzy dla celów –
@@ -2700,7 +2708,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w trakcie spłaty (`ensureLoanContainer`) – z tego, co zostało z rat. Ładownia pokazuje kwotę i część miesięczną
   bieżącego miesiąca (`amountIn`, `monthlyWeight` z miesiącem), masa ładunku i Plan – miesiąca, więc Ładownia, Plan
   i Radar mówią to samo. Istniejące kontenery bez zmian (grosz w ostatnim miesiącu – bez migracji). Addytywnie (pole
-  `past` już jest), bez `SCHEMA_VERSION`.
+  `past` już jest), bez `SCHEMA_VERSION`. Po przeglądzie N2: „Kwota” zmieniona w Ładowni liczy się od tego miesiąca
+  także przy historii sięgającej dalej (`pastAfterChange` kończy ją przed tym miesiącem, poprzedni zostaje przy swojej
+  racie – wcześniej historia zostawała, a zmiana działała dopiero po ostatnim jej wpisie); kreator startu liczy Ładownię
+  pierwszego miesiąca kwotą tego miesiąca (`amountIn`), nie ostatniej raty. „Termin … – kwota” i „Zapłacone (…)”
+  w Ładowni kontenera raty nie dotyczą (`cargoStatuses` pomija kontenery pożyczki – bez zmian).
 - **T360** „Wycofaj dokowanie” (AP-9, AF-7 / MO.29 / DO.7; realizuje D95 N-PC-2, uzupełnia B15, B17, B69): przycisk
   w oknie zadokowanej dostawy (`docking-undock`) i „wycofaj” w jej wierszu na Mostku (`docking-row-undock`, obok
   przycisku wiersza, nie w nim). Zabiera (`calc/undock.ts` `undockingOf`): dokowanie dostawy i nadmiarowe dokowania
@@ -2710,7 +2722,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wypłata XTB i paruje się z wpisem znowu; dawnej kategorii nie odtwarzamy – „Cofnij” dokowania jej nie zna po 6 s)
   i operacja XTB z edytora. Dostawa wraca do „do zadokowania” (para z banku, Portfel XTB) albo „czeka na import”;
   okno się zamyka, toast z „Cofnij” (8 s) dodaje z powrotem te same rekordy (pominięte, gdy w międzyczasie zadokowano
-  ponownie – te same id). Rekord nowszej wersji (B67) – odmowa w całości, bez wycofania po połowie. Folder ICTTJ tylko
+  ponownie – te same id, a po przeglądzie N2 także inne dokowanie tego wpisu albo tej operacji: dokowanie bez stałego id –
+  wpływ z XTB bez wpisu, sprzed B17 – dodawało się obok nowego, dwa rekordy na jedną operację). Rekord nowszej wersji (B67) – odmowa w całości, bez wycofania po połowie. Folder ICTTJ tylko
   czytany. Zamrożone dni gry bez zmian (jak przy edycji operacji). Bez zmian formatu.
 - **T361** Usuwanie kategorii (AP-9, AF-37 / US.6; realizuje D95 N-PC-7): „usuń” przy kategorii głównej i ikona kosza
   przy podkategorii (Ustawienia → Kategorie); kategoria główna znika razem z podkategoriami. Tylko gdy nic jej nie używa
@@ -2722,13 +2735,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (8 s) wstawia kategorie na ich miejsca w liście. Paczki importu (`imports/`) i historia `.history/` nie są
   sprawdzane: wersja przywrócona stamtąd z usuniętą kategorią pokazuje „(usunięta kategoria)” (`categoryIndex.label`),
   jak zmiana z drugiego komputera sprzed synchronizacji. Seed (`settings.seeded`) jej nie przywraca. Bez zmian formatu.
+  Po przeglądzie N2 w użyciu także w decyzjach otwartego pliku importu (motywy, grupy, wiersze – „1 decyzja otwartego
+  importu”): wcześniej usuwała się, a import zapisywał operacje z kategorią spoza drzewa.
 - **T362** Zmiana rodzaju a cel i Ładownia (N-PC-4 z D95 – w 1.15.2 bez kodu): `withKind` zostawia `containerId`
   tylko wydatkowi (jak `goalId`, T24) – na przelewie / pożyczce / XTB powiązanie było ukryte: silnik go nie czytał,
   a Ładownia (`paymentsIndex`) brała taki przelew za zapłatę kontenera. Edytor operacji przy zmianie rodzaju, która
   odpina cel albo kontener (operacji albo części paragonu – `unlinkedBy`), mówi to toastem „Rodzaj „Przelew własny”
-  nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
-  dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
-  przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
+  nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (pola, które zmiana
+  ustawiła, wracają, dopóki operacja ma nowy rodzaj – `kindUndone`; pole zmienione od tej pory zostaje, po przeglądzie N2:
+  wcześniej cały rekord sprzed zmiany cofał też kwotę czy kontrahenta wpisane w ciągu 8 s). Toast po zapisie zmiany –
+  także po pytaniu o potwierdzone saldo i „Zmień mimo to” (`features/operations/state.ts` `changeKind` /
+  `updateOperation`; wcześniej wtedy bez komunikatu i bez „Cofnij”). Zmiana kategorii nie rusza celu ani kontenera (jak
+  dotąd). Zmiana zbiorcza rodzaju (F11) – przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym
+  `containerId` nie są poprawiane (bez migracji).
 - **T363** Dokowanie pary liczonej według puli (1.15.6, przegląd N2 1; uzupełnia T341 i T128): „Zadokuj” na parze do
   zadokowania (wpis ICTTJ z operacją banku albo wpływem wpisanym na Portfelu XTB, bez dokowania – liczonej od razu według
   puli wpisu) zapisuje w dokowaniu `countedFrom` = utworzenie operacji; silnik (`cameIn`) liczy takie dokowanie od tej

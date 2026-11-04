@@ -5,13 +5,15 @@
  *   made of the operations, so they are in;
  * - month plans: an envelope's limit, the loot kept in an envelope (F28), a cover from or to it;
  * - import rules, containers of the cargo, buoys (scheduled), saved views of Operacje (their category filter);
- * - the game's frozen days (a violation of an envelope names its category).
+ * - the game's frozen days (a violation of an envelope names its category);
+ * - the decisions of an import in progress (its open file – przegląd N2): else the import writes operations with the
+ *   category gone.
  * A main category is checked with its subcategories (they go with it).
  */
 import type { ImportRule, OperationView } from '../schema/budget'
 import type { Container, GameMonth, MonthPlan, Scheduled, Transaction } from '../schema/records'
 
-export type CategoryUseKind = 'operations' | 'parts' | 'plans' | 'rules' | 'containers' | 'scheduled' | 'views' | 'game'
+export type CategoryUseKind = 'operations' | 'parts' | 'plans' | 'rules' | 'import' | 'containers' | 'scheduled' | 'views' | 'game'
 
 export interface CategoryUse {
   kind: CategoryUseKind
@@ -27,10 +29,12 @@ export interface CategoryUseInput {
   game: readonly GameMonth[]
   rules: readonly ImportRule[]
   views: readonly OperationView[]
+  /** The decisions of the import in progress (its themes, groups and rows); none = no import open. */
+  importing?: ReadonlyArray<{ categoryId: string | null }>
 }
 
 /** The order the uses are told in. */
-export const CATEGORY_USE_ORDER: readonly CategoryUseKind[] = ['operations', 'parts', 'plans', 'rules', 'containers', 'scheduled', 'views', 'game']
+export const CATEGORY_USE_ORDER: readonly CategoryUseKind[] = ['operations', 'parts', 'plans', 'rules', 'import', 'containers', 'scheduled', 'views', 'game']
 
 const inPlan = (p: MonthPlan, ids: ReadonlySet<string>): boolean =>
   Object.keys(p.envelopes).some((k) => ids.has(k)) ||
@@ -54,6 +58,7 @@ export function categoryUses(ids: ReadonlySet<string>, o: CategoryUseInput): Cat
   }
   for (const p of o.months) if (inPlan(p, ids)) add('plans')
   for (const r of o.rules) if (r.categoryId && ids.has(r.categoryId)) add('rules')
+  for (const c of o.importing ?? []) if (c.categoryId && ids.has(c.categoryId)) add('import')
   for (const c of o.containers) if (c.categoryId && ids.has(c.categoryId)) add('containers')
   for (const s of o.scheduled) if (s.categoryId && ids.has(s.categoryId)) add('scheduled')
   for (const v of o.views) if (inView(v, ids)) add('views')

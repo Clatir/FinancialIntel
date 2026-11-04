@@ -46,10 +46,11 @@ paths:
   cel wtedy nie ma – na koniec dnia (`short`). Kolejności operacji w dniu to nie zmienia; wydatek z celu i dostawa po
   przeniesieniu widzą cel jak ekran.
 - Para do zadokowania (T341, od 1.15.6): silnik nie czyta ICTTJ – pary niezadokowane dostaje jako
-  `FleetInput.pendingPairs` (`pendingPairsOf` z `deliveries`; w oknie `store/fleet.ts` `pendingPairsFor`, gra przez
-  `gameInputOf`) i liczy je jak dokowanie z pulą wpisu (`dockByPool`); rekord dokowania decyduje nad parą – dokowanie
-  pary liczy się od chwili jej operacji (`countedFrom` z `dockingOf`, T363), bez pola od swojego utworzenia (T128). Nowe
-  wejście silnika z ICTTJ dopisz do klucza (`keyOf`, `useEngineParts`, `engineParts` w `game.ts`).
+  `FleetInput.pendingPairs` (`pendingPairsOf` z `deliveries`; w oknie `store/fleet.ts` `pendingPairsFor` z listy panelu
+  Dokowanie – jedna pamięć `store/deliveries.ts`, gra przez `gameInputOf`) i liczy je jak dokowanie z pulą wpisu
+  (`dockByPool`); rekord dokowania decyduje nad parą – dokowanie pary liczy się od chwili jej operacji (`countedFrom`
+  z `dockingOf`, T363), bez pola od swojego utworzenia (T128). Nowe wejście silnika z ICTTJ dopisz do klucza (`keyOf`,
+  `useEngineParts`, `engineParts` w `game.ts`).
 - Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
   (także płatnością sprzed startu – `paidBeforeStart` z dniami `feePaymentDays`, silnik i kreator `startPaidDays`, T345)
   nie ma rat, zbiornik zbiera na następny. Miesiąc przed
