@@ -217,7 +217,7 @@ export function IntelPage() {
                 <span className="text-fg-strong" data-testid="intel-range-text">
                   {forecast.emptyIn == null
                     ? 'Brak średnich kosztów – prognoza po pierwszym pełnym miesiącu.'
-                    : `Bez żadnej wypłaty paliwa starczy na ${rangeText(forecast.emptyIn)} (${monthLabel(addMonths(fleet.month, Math.floor(forecast.emptyIn)))}).`}
+                    : `Bez żadnej wypłaty paliwa starczy na ${rangeText(forecast.emptyIn)} (${monthLabel(forecast.emptyMonth!)}).`}
                 </span>
                 {forecast.plansEmpty !== undefined && (
                   <span className="text-[11.5px] text-muted" data-testid="intel-range-plans">

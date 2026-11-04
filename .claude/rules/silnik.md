@@ -43,6 +43,9 @@ paths:
   (`waitImport`, T381), misja tygodnia z nimi; nowe wstrzymanie – opcja `advanceGame`, nigdy przeliczanie zamrożonych.
   Zmiana klasy z nowych danych (`GameDay.clsBefore`, T382) nie jest świętowana. Potwierdzenie salda w misji – po dniu
   zapisu (`confirmedOn`), nie dacie salda (T383).
+- Kurs i symulator (1.15.7, T385–T387): osłony w kursie nigdy poniżej zera – czego brak, to `short`, pensja bez
+  pieniędzy `partial`; „teraz” symulatora = stan silnika (`rangeNow` z `courseInputOf`), boje i spłaty reszty miesiąca
+  tylko w `rangeRest`; warstwa pełna teraz – data tego miesiąca.
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).
 - Pewne dopasowanie zwrotu (D91 b, T329): każda osoba wpłaty osobno (`repaymentSharesByMember`) – import i szybki wpis
   `linkRepayments`, edytor przy zmianie części `moreSureCovers` / `keptCovers`; wpłata ≥ cały dług osoby wiąże wszystkie.

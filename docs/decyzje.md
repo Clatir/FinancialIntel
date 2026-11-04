@@ -2733,3 +2733,26 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T384** Droga do awansu w Dowództwie (1.15.7, AP-30, DW.18, DW sp. 5): `progressText` – dzień po zmianie stopnia
   „dni zgodne 0 (liczone od 02.11)” zamiast odwróconego „od 02.11 do 01.11”; próg spełniony bez awansu (obniżony w trakcie)
   – „próg spełniony, awans przy zamrożeniu kolejnego dnia” (awans rozstrzyga zamrożenie dnia, jak dotąd).
+- **T385** Kurs na 12 miesięcy bez osłon poniżej zera (1.15.7, AP-18, AF-32, WY.19; obok T276): `course` płaci pensję
+  regułą silnika (`paySalary`), a gdy osłony i kadłub nie wystarczą – miesiąc ma pensję częściową (`CourseMonth.partial`
+  = pensja − wypłacone; czerwony alarm Mostka). Koszty po średniej i boje nadal ponad energię z osłon i kadłuba, wpływy
+  miesiąca dokują po nich (dołek w miesiącu pokryty wpływem nie jest brakiem); czego nie pokryje i wpływ – „brakuje”
+  (`short`), a osłony kończą miesiąc na zerze (następny liczy od tego, co jest – brak się nie kumuluje jak dług).
+  „Najniżej w miesiącu” (`low`) też od zera. Wynik: `partial` (miesiące) i `short` (suma 12 miesięcy); Wywiad – wiersze
+  „Pensja częściowa” i „Brakuje na koszty” (akcent) w kursie i w symulatorze, komórka miesiąca z brakiem w akcencie
+  z dymkiem. Haczyk AP-13: resztka bieżącego miesiąca nie liczy energii pozostałej (`TODO(AP-13)` w `course.ts`).
+- **T386** „Teraz” symulatora = Mostek (1.15.7, AP-18, AF-33, WY.20, PR.3): `Course.rangeNow` to zasięg stanu silnika
+  teraz (`rangeMonths` z osłon, kadłuba, średnich kosztów i długu silnika – `courseInputOf`, wspólne wejście kursu
+  z `fleet`), z zakupem manewru w tym miesiącu i zmianą kosztów; resztka miesiąca (otwarte boje, spodziewane spłaty
+  pożyczek udzielonych – zaległe w tym miesiącu) tylko w `rangeRest`, od którego rusza kurs. Zakup manewru to
+  `CourseInput.purchases` (z celu albo z osłon – `goalId` null), osobno od `extras`. Symulator: wiersz „Zasięg i klasa”
+  teraz / po manewrze z `rangeNow`, wiersz „Zasięg po resztce miesiąca” (z dymkiem) tylko, gdy różni się w którejś
+  kolumnie. Sprostowanie wyroczni (C19, R-15) – AP-32.
+- **T387** Daty pełności, „wyczyść manewr”, miesiąc wyczerpania (1.15.7, AP-18, PR sp. 8, WY sp. 3, WY.15): warstwa
+  (osłony, kadłub) albo cel pełne już teraz (cele warstw jak silnik – pensja planu tego miesiąca, średnie koszty; po
+  zakupie manewru w tym miesiącu) mają datę tego miesiąca, na ekranie „teraz” – także dokładnie pełne (dawniej następny
+  miesiąc albo „—”). „Wyczyść manewr” wraca do pustego formularza (`blankForm`: nazwa i termin celu, „rata z pensji”,
+  miesiące, cykl), widoczny przy każdej zmianie formularza; termin celu nie w formacie RRRR-MM – pole `aria-invalid`
+  i podpowiedź („cel liczy się bez terminu i bez raty”). Prognoza zasięgu: oba zdania nazywają miesiąc wyczerpania jedną
+  regułą – ostatni miesiąc, który zaczyna się z paliwem (`rangeForecast.emptyMonth`, `plansEmpty`); równa liczba
+  miesięcy kończy się na początku następnego.

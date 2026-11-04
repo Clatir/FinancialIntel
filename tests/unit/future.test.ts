@@ -401,7 +401,8 @@ describe('kurs na 12 miesięcy i symulator manewrów (1.8.0, F27, F35)', () => {
       ['2027-01', zl(6500), zl(9500), zl(15000), zl(1000)],
       ['2027-02', zl(6500), zl(9500), zl(15000), zl(2500)]
     ])
-    expect(c.shieldsFull).toBe('2026-11')
+    // 9 000 of 3 × 3 000 – full now, so this month (AP-18, PR sp. 8 – before: the next one).
+    expect(c.shieldsFull).toBe('2026-10')
     expect(c.hullFull).toBe('2027-01')
     expect(c.goalEta.G).toBe('2027-05')
     expect(c.belowMin).toEqual([])
