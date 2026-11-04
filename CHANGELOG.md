@@ -1,5 +1,74 @@
 # Financial Intel – zmiany
 
+## 1.15.9
+
+Poprawki po audycie – ścieżki i ergonomia: kreator i pierwszy miesiąc, domownicy, szybki wpis, dokowanie, konflikty,
+nowy komputer, eksport, Operacje i klawiatura:
+
+- **Konto Gotówka:** wypłata z bankomatu w imporcie to przelew z mBanku na konto „Gotówka” – nie koszt. Zakupy za gotówkę
+  dopisujesz z konta Gotówka (szybki wpis, Operacje), więc saldo gotówki rośnie przy wypłacie i maleje przy zakupach. Bez
+  konta Gotówka import proponuje je założyć albo przywrócić z archiwum (z „Cofnij”). Dawne wypłaty zapisane jako wydatek
+  „Gotówka” zostają bez zmian; ujemne saldo Gotówki wyrównasz jednym potwierdzeniem salda (Ustawienia → Konta).
+- **Kreator i pierwszy miesiąc:** krok „Podział środków” pokazuje pierwszą pensję do energii, zaliczki domowników i osłony
+  po starcie – takie same jak na Mostku, a podział liczy się od środków na początek dnia. Propozycje kopert mieszczą się
+  w pensji; bez historii kreator przypomina o kopertach codziennych. „Uruchom budżet” zapisuje start w całości albo
+  wcale: gdy folder nie przyjmie zmian, odpowiedzi zostają, a ponowne kliknięcie dokończy start; przycisk mówi, czego
+  brakuje. Rachunek co 2 miesiące o zmiennej kwocie (np. prąd) jest proponowany do Ładowni, a anulowana subskrypcja już
+  nie. Cele z prognozy ICTTJ układają się według terminów, meldunki z dawnej historii pojawiają się dopiero po
+  uruchomieniu budżetu, a przerwanie kreatora wymienia też folder ICTTJ i zrobiony import. Nowe dane w folderze z innymi
+  plikami: aplikacja najpierw pyta o podfolder FinancialIntel.
+- **Domownicy:** „plan czy impuls?” pyta tylko o Twoją część zakupu – nie o zakupy domowników, czynsz, raty i inne opłaty
+  z ładowni ani o wypłatę z bankomatu; dziennik kapitański liczy plan i impulsy kwotą Twojej części, a Wywiad pokazuje
+  treść wpisów dziennika z tą kwotą. Przy domowniku „pytaj” wybierasz w szybkim wpisie, czy reszta wpłaty to przychód,
+  czy zaliczka – nic nie jest zaznaczone z góry; „Za domownika” bez wybranej osoby nie pokazuje cudzego imienia. „Pokaż
+  zakupy” przy „X: do oddania” pokazuje zakupy tej osoby, które czekają na oddanie. Spłata salda na start: Radar
+  i Meldunki nazywają je saldem na start, a osoba bez długu jest „rozliczona”; notka ciszy nocnej przy zakupie domownika
+  nie mówi już o naruszeniu.
+- **Szybki wpis:** „plan” i „impuls” klawiszem Alt+P / Alt+I z każdego pola – typowy wpis to 11 klawiszy zamiast 21. Tagi
+  z „#” w nazwie i notatce widać przed zapisem, tag usuwa wyraźny przycisk „×”, a „-” i „_” w tagu liczą się jak spacja
+  („#wakacje-chorwacja” i „Wakacje Chorwacja” to jedna wyprawa – także cel wyprawy i zapisane widoki). Szybki wpis i nowa
+  operacja proponują konto operacji ostatnio wpisanej ręcznie w folderze, także na drugim komputerze – dokowanie, korekta
+  salda ani płatność z Ładowni czy boi go nie zmieniają.
+- **Nazwy z banku** są czytelniejsze: bankomat bez „DATA TRANSAKCJI”, podpowiedzi i Namierzone cele bez samych wielkich
+  liter, a nazwa wpisana ręcznie ma pierwszeństwo. W Namierzonych celach połączysz dwie nazwy tego samego sprzedawcy,
+  z „Cofnij”.
+- **Dokowanie:** wypłata z ICTTJ z pierwszych dni budżetu czeka na import zamiast trafiać do „sprzed startu”; gdy okno
+  pary minęło, aplikacja prosi o nowszy plik z mBanku zamiast podawać datę, która już minęła. Po zapisaniu nowego podziału
+  toast mówi „Zmieniono podział”, z kwotą z banku; dostawa ma jedną datę – dzień pieniędzy w banku. „Ostatnia dostawa”
+  pojawia się dopiero po dokowaniu, a zadokowane dostawy widać także przy wyłączonym ICTTJ. Słowo „firewall” pojawia się
+  tylko przy dopłacie wbrew rozkazowi; dopłata do XTB widoczna tylko w mBanku czeka w Meldunkach na potwierdzenie.
+  Ostrzeżenia folderu ICTTJ mówią, który plik jest brany, a wpis z nieznaną pulą nie jest liczony jako pominięty.
+- **Konflikty i historia:** karta konfliktu mówi, której operacji dotyczy (kontrahent, data, kwota, konto) i który komputer
+  zapisał każdą wersję. Różnice w konfliktach, historii, dzienniku zmian i odzyskaniu – wszystkie pola po polsku, wartości
+  słowami, daty jak w aplikacji, bez JSON-u. „Scal…” i „Zachowaj tę wersję” odmawiają, gdy kopia zmieni się w trakcie –
+  nic nie ginie, „Scal od nowa” pokazuje nową treść.
+- **Nowy komputer:** po pierwszym otwarciu budżetu na nowym komputerze lista „Ustaw na tym komputerze”; ustawienia tego
+  komputera mają znak „tylko ten komputer”. Folder tylko do odczytu – komunikat na każdej zakładce Ustawień. „Co nowego”
+  działa bez internetu, także po aktualizacji spoza aplikacji. Po zmianie folderu kopii wcześniejsze kopie zostają na
+  liście i dają się odzyskać. Uruchomienie aplikacji nie zmienia już startu z Windows – zmienia go tylko przełącznik na
+  tym komputerze; zajęty plik ustawień komputera – zapis ponawia się sam. Wyłączony ICTTJ nie mówi już, że scenariusza
+  „nie ma w ICTTJ”, a Meldunki wyjaśniają, kiedy zgłaszają podwójne korekty salda.
+- **Debriefing, plan i przegląd roczny:** debriefing miesiąca w toku mówi „miesiąc trwa”, a Raporty mówią, gdy łupy
+  przeliczył późny import. Koszty bieżącego miesiąca (debriefing, przegląd roczny, bilans paliwa, Wywiad) liczone do
+  dziś; operacje z datą w przyszłości widać osobno jako „Zaplanowane”. Raport wachty ma jeden bieżący tydzień i pokazuje
+  pokrycia przekroczonych kopert. Plan miesiąca podpisuje debriefing ostatniego zamkniętego miesiąca, a „Pensja” zawsze
+  pokazuje średnie koszty. Przegląd roczny pokazuje „brak historii” dla miesięcy sprzed danych, saldo otwarcia z datą,
+  wszystkie osiągnięte cele i „po odjęciu długu”; w styczniu przychodzi przypomnienie o przeglądzie.
+- **Eksport:** arkusz „Części” w Excelu i plik „Części – CSV” – każda część paragonu i wspólnego zakupu z własną kwotą
+  i kategorią, więc kategorie roku zsumujesz w Excelu. W Excelu daty i godziny są prawdziwymi datami (filtr dat, tabela
+  przestawna). Okres eksportu zapamiętany na tym komputerze („do dziś” przesuwa się z dniem). „Miesiące”: nowe kolumny
+  „Energia miesiąca” i „Sfinansowane przez domowników”.
+- **Operacje, import i klawiatura:** przy pasku sum Operacji dopisek o przelewach własnych poza Wpływami i Wydatkami;
+  Przychody – dopisek przy „12 mies.”, gdy był miesiąc z dopłatą do XTB. Wspólny zakup w procentach: edytor operacji nie
+  zapisze podziału innego niż 100 % (jak szybki wpis), przycisk „dopełnij ostatniej do 100 %”. Podgląd zmiany
+  zaznaczonych operacji pokazuje też łupy i koperty miesiąca, z którego operacje wychodzą, cele i wypłaty z ICTTJ, które
+  stracą parę w banku. Fokus klawiatury nie ucieka z okien ani z palety i po zamknięciu wraca na miejsce. Ctrl+N nie
+  czyści wyszukiwania; w wydatku od kwoty do kategorii są dwa Taby. Lista Operacji pamięta „całą historię” i okres
+  „od – do”, a „mój filtr” przywraca swój okres. Import: „(jak grupa)” w każdym wierszu, opłaty banku zawsze w „Opłaty
+  banku”, podpowiedzi mBanku osobno dla każdej kategorii banku, szukanie po rodzaju operacji (np. „bankomat”). Para
+  przelewów dopasowana tylko po kwocie nie jest zaznaczona z góry; ten sam wiersz banku zapisany dwa razy nie jest już
+  zgłaszany jako podwójne obciążenie.
+
 ## 1.15.8
 
 Poprawki po audycie – zasady interfejsu: nic nie dzieje się po cichu, „Cofnij” wszędzie, czytelne teksty, odprawa
