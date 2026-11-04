@@ -25,9 +25,9 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | Grupa | Wersja | Gałąź | Stan | PR | Czas faktyczny |
 | --- | --- | --- | --- | --- | --- |
 | 0 – przygotowanie | – | `claude/audyt-1.15.4` | ✅ D101, porządek tego pliku, PR audytu scalony (bez wydania); poprawka E2E telefonu w nocy | #49 | 0,5 h |
-| N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | 🔄 kod i 4 rundy przeglądu gotowe; PR, CI, wydanie | – | ok. 5 h do PR |
+| N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ✅ wydane 04.11 07:33 (wpis w archiwum `postep-od-1.15.4.md`) | #50 | ok. 5,5 h (01:53–07:33) |
 | N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | 🔄 od 05:05 równolegle: AP-3, AP-5, AP-9, AP-11, AP-12 gotowe (gałąź `claude/1.15.6-n2c`); AP-4 w toku (`claude/1.15.6-n2b`); potem D100, AP-32 | – | – |
-| N3 Opłaty, energia, gra | 1.15.7 | – | ⏳ | – | – |
+| N3 Opłaty, energia, gra | 1.15.7 | – | 🔄 od 07:15 równolegle: AP-13 + AP-17 (`claude/1.15.7-n3a`), AP-14 + AP-30 (`claude/1.15.7-n3c`) | – | – |
 | N4 Zasady interfejsu | 1.15.8 | – | ⏳ | – | – |
 | N5 Ścieżki i ergonomia | 1.15.9 | – | ⏳ | – | – |
 | R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
@@ -49,28 +49,6 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N1 | „w tym za X” | część wiersza może przekroczyć dług, część grupy / tematu – nigdy (licząc zakupy i własne wpłaty X z pliku); wpłata ≥ cały dług spłaca wszystkie zakupy | T327–T329 |
 | N1 | Temat z jednakową decyzją kilku marek z „w tym za” | wiersz tematu bez edytora części: „w tym za – ustawione w markach”; zmiana w temacie trafia do każdej marki, kwoty marek bez zmian | T336 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
-
-## N1 – Dane i import (1.15.5, 04.11.2026)
-- **Zakres:** AP-1 (T314–T318), AP-8 (T319), AP-2 (T320–T324), AP-6 (T325, T326), AP-7 (T327–T329); po przeglądzie
-  T330–T332. Wykonawcy: N1-a (AP-1, AP-8) w osobnym drzewie równolegle z N1-b (AP-2), potem N1-c (AP-6, AP-7, max).
-- **Przegląd:** 4 rundy – xhigh na całości (15 uwag: 14 poprawionych, 1 odrzucona – telefon sam przekazuje stan folderu),
-  potem high na samych poprawkach (10, 7, 8 uwag – wszystkie poprawione; w 4. rundzie temat z „w tym za” uproszczony
-  zamiast kolejnej łaty, T336). Każda poprawka z testem, który przed nią padał. Najpoważniejsze: „Usuń” w meldunku „Wróciły po
-  usunięciu” mógł skasować prawdziwą operację połączoną z wierszem banku; kopia usuwana przy imporcie gubiła spłacane
-  zakupy; „w tym za X” nie liczył własnych wpłat X; próba zapisu przy otwarciu dawała „tylko do odczytu” przy chwilowej
-  blokadzie OneDrive; kopia przed migracją mogła założyć folder-widmo. Weryfikacja przez odtworzenie testem (druga opinia
-  Fable niepotrzebna). Poprawki – po 2–3 podagentów równolegle w osobnych drzewach (max dla rozliczeń, xhigh reszta).
-  Zasada na kolejne grupy: pełny przegląd + jeden na poprawkach; dalej tylko przy poważnych uwagach.
-- **Testy:** typecheck, `npm test` (ok. 1065), build, E2E komputera 78, telefonu 10/10. Lokalnie pada tylko `ictj.spec.ts`
-  (ICTTJ zainstalowany na tym komputerze); ZIP64 w `folder-speed` przekracza czas pod obciążeniem – pułapki w
-  `.claude/rules/testy.md`. Decyzje T314–T337.
-- **Krok 0:** CI audytu padało w nocy – szybki wpis telefonu w ciszy nocnej wymaga notatki (poprawiony pomocnik E2E).
-- **Otwarte:** KR.29 (przy starcie budżetu najpierw `fi.json` albo wycofanie przy częściowym błędzie); numer pliku
-  zapamiętany przy złym koncie po błędnym imporcie; panel duplikatów nie paruje kopii między kontami bez importu
-  naprawczego; PIT-38 bez rozpoznania po nazwie; edytor reguł pokazuje „w tym za”, którego reguły nie zachowują (AP-15,
-  N4).
-- **Czas:** 01:53–07:00 do PR, ok. 5 h (N1-b 42 min, N1-a 63 min, N1-c 65 min; 4 przeglądy 6–20 min; 4 rundy poprawek
-  20–34 min) – plan 2,5–4 h; przekroczenie z rund przeglądu.
 
 ## Przed grupą N2 – Silnik pieniędzy (04.11.2026, start 05:05 równolegle z końcem N1)
 1. **Co trzeba wiedzieć.** Zakres (`docs/audyt/wnioski.md` sekcja 4): AP-3 przeniesienie środków celu w chwili zapisu –
