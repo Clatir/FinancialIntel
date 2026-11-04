@@ -14,7 +14,7 @@ export async function xlsxBuffer(sheets: XlsxSheet[]): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
-/** Write an XLSX file atomically. */
+/** Write an XLSX file atomically (a file the user named – no data folder's file). */
 export async function writeXlsx(file: string, sheets: XlsxSheet[]): Promise<void> {
-  await writeFileAtomic(file, await xlsxBuffer(sheets))
+  await writeFileAtomic(file, await xlsxBuffer(sheets), null)
 }

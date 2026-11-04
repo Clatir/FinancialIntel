@@ -102,7 +102,7 @@ describe('kopia ZIP przy plikach zapisywanych w trakcie (ICTTJ 1.17.2)', () => {
     const churn = (async () => {
       while (!stop) {
         n++
-        await writeFileAtomic(rec, `{"n":${n},"pad":"${'x'.repeat(n % 50)}"}\n`)
+        await writeFileAtomic(rec, `{"n":${n},"pad":"${'x'.repeat(n % 50)}"}\n`, root)
         await new Promise((r) => setTimeout(r, 2))
       }
     })()
@@ -155,7 +155,7 @@ describe('zapis atomowy sprząta po błędzie', () => {
     // A directory in place of the target makes the final rename fail.
     await fs.mkdir(join(dir, 'cel.json'))
     await fs.writeFile(join(dir, 'cel.json', 'x'), 'x')
-    await expect(writeFileAtomic(join(dir, 'cel.json'), '{}')).rejects.toBeTruthy()
+    await expect(writeFileAtomic(join(dir, 'cel.json'), '{}', null)).rejects.toBeTruthy()
     expect((await fs.readdir(dir)).filter((n) => n.includes('.tmp-'))).toEqual([])
   })
 })

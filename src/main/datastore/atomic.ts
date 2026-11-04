@@ -70,14 +70,29 @@ export async function mkdirWithin(root: string, dir: string): Promise<void> {
   }
 }
 
+/** `root` when `path` is it or lies in it, else null: what a write of `path` passes as its `within` (AP-1). */
+export function dataRootOf(root: string, path: string): string | null {
+  const rel = relative(resolve(root), resolve(path))
+  return !rel || (rel.split(/[\\/]/)[0] !== '..' && !isAbsolute(rel)) ? root : null
+}
+
 /**
- * Atomic write: write to a temp file in the same directory, fsync, then rename over the target.
- * A crash leaves either the old or the new file, never a truncated one. `within` – the data folder the target lies in:
- * missing directories are made only below it, never the folder itself (AP-1).
+ * The directory of a file about to be written. `within` – the data folder the file lies in: directories made only below
+ * it, never the folder itself (AP-1, T314); null – no data folder's file (this computer's settings, a file the user saved
+ * elsewhere, a folder of backups set on this computer): made as needed. Required of every writer, so none forgets it.
  */
-export async function writeFileAtomic(target: string, data: string | Uint8Array, within?: string): Promise<void> {
+export async function mkdirFor(target: string, within: string | null): Promise<void> {
   if (within) await mkdirWithin(within, dirname(target))
   else await fs.mkdir(dirname(target), { recursive: true })
+}
+
+/**
+ * Atomic write: write to a temp file in the same directory, fsync, then rename over the target.
+ * A crash leaves either the old or the new file, never a truncated one. `within` – the data folder the target lies in,
+ * null when none (`mkdirFor`).
+ */
+export async function writeFileAtomic(target: string, data: string | Uint8Array, within: string | null): Promise<void> {
+  await mkdirFor(target, within)
   const tmp = tempPathFor(target)
   const handle = await fs.open(tmp, 'w')
   try {

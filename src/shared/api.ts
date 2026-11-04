@@ -277,13 +277,13 @@ export const FOLDER_UNAVAILABLE_MESSAGE =
 export const OPEN_ABORTED_MESSAGE =
   'Przerwano wczytywanie folderu – nic w nim nie zostało zmienione. Jeśli pliki pobiera OneDrive, ustaw na folderze „Zawsze zachowuj na tym urządzeniu”, poczekaj na zielone ptaszki i spróbuj ponownie.'
 
-/** What a flush before closing left unsaved and why (B108): closing tells the user the real reason. */
 /** A folder of FI's records without fi.json (AP-1): where, and how many records' files it holds. */
 export interface GhostFolder {
   dir: string
   files: number
 }
 
+/** What a flush before closing left unsaved and why (B108): closing tells the user the real reason. */
 export interface FlushResult {
   saved: boolean
   /** Unsaved records held by a decision about another computer's change – only that decision saves them. */

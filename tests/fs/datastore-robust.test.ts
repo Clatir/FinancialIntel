@@ -54,7 +54,7 @@ describe('folder danych: odporność (1.4.2)', () => {
     const store = await freshStore()
     const other = sampleTransaction({ date: '2026-03-17' })
     const rel = recordRelPath('transactions', other)
-    await writeFileAtomic(join(store.root, ...rel.split('/')), serializeRecord('transactions', other))
+    await writeFileAtomic(join(store.root, ...rel.split('/')), serializeRecord('transactions', other), store.root)
     const spy = failReads(`${other.id}.json`)
     await store.refresh([rel])
     let snap = await store.snapshot()
@@ -92,7 +92,7 @@ describe('folder danych: odporność (1.4.2)', () => {
     const from = join(store.root, ...recordRelPath('transactions', moved).split('/'))
     const theirs = { ...moved, date: '2026-03-25', note: 'z laptopa', updatedAt: '2026-03-20T10:00:00.000Z' }
     await fs.rm(from)
-    await writeFileAtomic(join(store.root, ...recordRelPath('transactions', theirs).split('/')), serializeRecord('transactions', theirs))
+    await writeFileAtomic(join(store.root, ...recordRelPath('transactions', theirs).split('/')), serializeRecord('transactions', theirs), store.root)
     await store.saveRecord('transactions', { ...moved, note: 'tu' })
     const names = (await fs.readdir(join(store.root, 'transactions', '2026'))).filter((n) => n.includes(moved.id)).sort()
     expect(names).toHaveLength(2)
@@ -106,7 +106,7 @@ describe('folder danych: odporność (1.4.2)', () => {
     await store.saveRecord('transactions', t)
     const rel = recordRelPath('transactions', t)
     // Another computer's version comes (new stamps), its read fails for a moment.
-    await writeFileAtomic(join(store.root, ...rel.split('/')), serializeRecord('transactions', { ...t, note: 'z laptopa', updatedAt: '2026-03-20T10:00:00.000Z' }))
+    await writeFileAtomic(join(store.root, ...rel.split('/')), serializeRecord('transactions', { ...t, note: 'z laptopa', updatedAt: '2026-03-20T10:00:00.000Z' }), store.root)
     const spy = failReads(`${t.id}.json`)
     await store.refresh([rel])
     expect((await store.snapshot()).records.transactions.map((e) => e.record.note)).toEqual([''])

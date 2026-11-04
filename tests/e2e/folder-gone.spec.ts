@@ -1,12 +1,12 @@
 // AP-1 (1.15.5, grupa N1): the data folder gone while the app runs (renamed from outside – DA.40, DA.41).
-import { existsSync, mkdtempSync, readFileSync, renameSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
 import { warsawNow } from '../../src/shared/calc/dates'
 import { launch, withMainLog } from './app'
 import { records } from './files'
-import { seedFolder, zl } from './seed'
+import { seedFolder, writeRecords, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
 
@@ -86,4 +86,29 @@ test('folder danych znika w trakcie pracy: baner „niedostępny”, nic nie pow
     expect(log).toContain('folder danych znów dostępny')
     expect(log.split(/\r?\n/).filter((l) => l.includes('zamykanie: niezapisane zmiany'))).toHaveLength(1)
   })
+})
+
+test('folder z powrotem zauważony przez inne odświeżenie niż sprawdzanie w spoczynku: obserwowany od nowa – zmiany z drugiego komputera od razu (AP-1, przegląd)', async () => {
+  const { date: today } = warsawNow()
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-gone-')), 'FinancialIntel')
+  seedFolder(dataDir, { records: { transactions: [{ date: today, accountId: MBANK, amount: -zl(28.6), counterparty: 'Lody Grycan' }] } })
+  const away = `${dataDir}-odlaczony`
+  // The idle check never comes in this test: the folder's going and return seen by other refreshes (Synchronizacja).
+  const { app, page } = await launch({ dataDir, env: { FI_FOLDER_CHECK_MS: '600000' } })
+  try {
+    await page.keyboard.press('Control+2')
+    await expect(page.getByTestId('operation-row').filter({ hasText: 'Lody Grycan' })).toBeVisible()
+    await renameRetrying(dataDir, away)
+    await page.evaluate('window.fi.rescan()')
+    await expect(page.getByTestId('banner-ro')).toContainText('Folder danych jest niedostępny', { timeout: 10_000 })
+    // A copy put in its old place (the folder renamed away stays there – a watcher may still follow it).
+    cpSync(away, dataDir, { recursive: true })
+    await page.evaluate('window.fi.rescan()')
+    await expect(page.getByTestId('banner-ro')).toHaveCount(0, { timeout: 10_000 })
+    // Another computer's operation: seen by the watcher of the folder there now, not at the next poll in minutes.
+    writeRecords(dataDir, 'transactions', [{ date: today, accountId: MBANK, amount: -zl(12), counterparty: 'Z drugiego komputera' }])
+    await expect(page.getByTestId('operation-row').filter({ hasText: 'Z drugiego komputera' })).toBeVisible({ timeout: 8_000 })
+  } finally {
+    await app.close()
+  }
 })

@@ -64,7 +64,7 @@ describe('folder danych: tworzenie, zapis, odczyt', () => {
     const t = sampleTransaction()
     const rel = recordRelPath('transactions', t as unknown as Record<string, unknown>)
     const { id: _id, ...noId } = t as unknown as Record<string, unknown>
-    await writeFileAtomic(join(store.root, ...rel.split('/')), JSON.stringify(noId))
+    await writeFileAtomic(join(store.root, ...rel.split('/')), JSON.stringify(noId), store.root)
     const again = new DataStore(store.root, { machineName: 'INNY' })
     const snap = await again.open()
     expect(snap.records.transactions.map((e) => e.record.id)).toEqual([t.id])
@@ -184,8 +184,8 @@ describe('zapis atomowy', () => {
   it('nie zostawia plików tymczasowych i zastępuje istniejący plik', async () => {
     const dir = tempDir()
     const target = join(dir, 'a', 'b.json')
-    await writeFileAtomic(target, '{"v":1}')
-    await writeFileAtomic(target, '{"v":2}')
+    await writeFileAtomic(target, '{"v":1}', null)
+    await writeFileAtomic(target, '{"v":2}', null)
     expect(await fs.readFile(target, 'utf8')).toBe('{"v":2}')
     expect((await fs.readdir(join(dir, 'a'))).filter((f) => f.includes('.tmp-'))).toEqual([])
   })
