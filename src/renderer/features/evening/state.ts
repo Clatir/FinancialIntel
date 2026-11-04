@@ -3,9 +3,11 @@
  * it) and „Przypomnij za 30 min” (this computer's). The notifier, the tray's menu and Operacje use them.
  */
 import { addDays, warsawNow } from '@shared/calc/dates'
+import { costOn } from '@shared/calc/game'
 import { eveningState, type EveningState } from '@shared/notify'
 import { listOf, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
+import { plnText } from '../../components/fields'
 
 const SNOOZE_KEY = 'fi.evening.snooze'
 /** „Przypomnij za 30 min”. */
@@ -58,6 +60,16 @@ export function reopenEvening(): boolean {
   return true
 }
 
+/**
+ * Today's expense when „Dziś bez wydatków” is said over it (AP-30, RY sp. 1): the evening report closes, but the day gets
+ * no mark and no mission's day – said so, never a silent „na zero”. Null – today has no expense.
+ */
+export function noSpendWarning(): string | null {
+  const { date: today } = warsawNow()
+  const cost = costOn(listOf(useData.getState().records.transactions), today)
+  return cost > 0 ? `Raport wachty zamknięty, ale dziś jest już wydatek ${plnText(cost)} zł – dzień nie liczy się jako bez wydatków (misja, dziennik wachty).` : null
+}
+
 /** „Dziś bez wydatków”: today confirmed (the watch log marks it, no evening reminder); „Cofnij” takes it back. */
 export function confirmNoSpend(): boolean {
   const { date: today } = warsawNow()
@@ -66,8 +78,9 @@ export function confirmNoSpend(): boolean {
     const kept = Object.fromEntries(Object.entries(f.settings.game.noSpend).filter(([d]) => d >= cut))
     return { ...f, settings: { ...f.settings, game: { ...f.settings.game, noSpend: { ...kept, [today]: new Date().toISOString() } } } }
   })
+  const warning = ok ? noSpendWarning() : null
   if (ok)
-    toast('Dziś bez wydatków – zapisane w dzienniku wachty.', 'success', 6000, {
+    toast(warning ?? 'Dziś bez wydatków – zapisane w dzienniku wachty.', warning ? 'info' : 'success', warning ? 10_000 : 6000, {
       label: 'Cofnij',
       run: () =>
         void updateSettings((f) => {

@@ -51,10 +51,21 @@ export function quickData(): QuickData | null {
     categories,
     accounts,
     accountId: accounts.find((a) => a.id === last)?.id ?? accounts[0]?.id ?? '',
-    energyLeft: fleet?.daily ? fleet.daily.left : null,
+    energyLeft: fleet?.daily ? fleet.daily.energy : null,
     monthEnergy: fleet?.started && fleet.salary != null ? fleet.energy : null,
     envelopesLeft: Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, e.left])),
-    daily: fleet?.daily ? { today: fleet.today, limit: fleet.daily.limit, spentBefore: fleet.daily.spentBefore, spentToday: fleet.daily.spentToday, days: daysInMonth(fleet.month) } : null,
+    // As the engine counts today's energy (N3, AP-13): the month's energy caps it, today's refunds of earlier purchases.
+    daily: fleet?.daily
+      ? {
+          today: fleet.today,
+          limit: fleet.daily.limit,
+          spentBefore: fleet.daily.spentBefore,
+          spentToday: fleet.daily.spentToday,
+          days: daysInMonth(fleet.month),
+          returned: fleet.daily.returnedBy,
+          month: fleet.started ? { energy: fleet.energy, spends: fleet.salary != null } : null
+        }
+      : null,
     quietHours: fi.settings.orders.quietHours,
     impulseThreshold: fi.settings.orders.impulseThreshold,
     lastByBrand,

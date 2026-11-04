@@ -3,11 +3,16 @@ import { addDays, addMonths, dayOfMonth, daysInMonth, diffDays, monthOf } from '
 import { kw } from './kwoty.mjs'
 import { aliveIn, amountIn, goalAt, isDueMonth, lifeOf, monthlyWeight } from './silnik.mjs'
 
+/**
+ * Płatności kontenera (T393 po scaleniu N2 z N3): części wydatku z kontenerem, jedna na operację, także z celu i „do
+ * zwrotu”; inny rodzaj nigdy – te same co silnika ({ id, date, amount > 0 }, po dniu).
+ */
+export const platnosciKontenera = (r, c) => r.feePays?.get(c.id) ?? []
+
 /** Dzień płatności kontenera w miesiącu m (T208): środkowy (dolny) z ostatnich 6 płatności przed miesiącem, bez nich dueDay. */
 export function payDayOf(r, c, m) {
-  const pays = r.ops
-    .filter((t) => t.containerId === c.id && t.date < `${m}-01`)
-    .sort((a, b) => (a.date < b.date ? -1 : 1))
+  const pays = platnosciKontenera(r, c)
+    .filter((t) => t.date < `${m}-01`)
     .slice(-6)
   let day = c.dueDay ?? 1
   if (pays.length) {
@@ -27,7 +32,7 @@ export function duePaid(r, c, due) {
   if ((c.cycleMonths ?? 1) > 1) return !!r.paidCycles?.get(c.id)?.has(m)
   const from = addDays(due, -14)
   const to = addDays(payDayOf(r, c, addMonths(m, 1)), -14)
-  return r.ops.some((t) => t.containerId === c.id && t.date >= from && t.date < to)
+  return platnosciKontenera(r, c).some((t) => t.date >= from && t.date < to)
 }
 
 const norm = (s) =>

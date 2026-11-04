@@ -3,7 +3,7 @@ import { addDays, addMonths, addWorkingDays, dayNum, dayOfMonth, daysInMonth, di
 import { kw, median, round1, sum, trunc1, zl } from './kwoty.mjs'
 import { aliveIn, amountIn, classifyOwn, cycleOf, goalAt, goalInstallment, isDueMonth, monthlyWeight, opOrder, partsOf, runFleet, startOf, tankInstallment } from './silnik.mjs'
 import { missionsModel, playGame, rangeOf, shipClass, MISSION_NAMES } from './gra.mjs'
-import { radarOf, payDayOf, duePaid } from './radar.mjs'
+import { radarOf, payDayOf, duePaid, platnosciKontenera } from './radar.mjs'
 
 export const WERSJA = '2026-11-04 u3'
 
@@ -634,7 +634,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
         }
       }
     }
-    const paidNow = r.ops.filter((t) => t.containerId === c.id && monthOf(t.date) === curMonth)
+    const paidNow = platnosciKontenera(r, c).filter((t) => monthOf(t.date) === curMonth)
     const covered = S.import?.coveredTo?.[c.accountId] ?? null
     let stanZaplaty = null
     if (alive && isDueMonth(c, curMonth)) {
@@ -657,7 +657,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
       stanZbiornika: tank == null ? null : kw(tank),
       najblizszaPlatnosc: nextDue,
       stanZaplatyWMiesiacu: stanZaplaty,
-      platnosciWMiesiacu: paidNow.map((t) => ({ dzien: t.date, kwota: kw(-t.amount) }))
+      platnosciWMiesiacu: paidNow.map((t) => ({ dzien: t.date, kwota: kw(t.amount) }))
     }
   })
   const masa = sum([...r.containers.values()].filter((c) => aliveIn(c, curMonth, bsm)).map((c) => monthlyWeight(c, curMonth)))
@@ -665,7 +665,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
   const sygnaly = []
   for (const c of r.containers.values()) {
     if (c.loanId || !aliveIn(c, curMonth, bsm) || (c.cycleMonths ?? 1) !== 1) continue
-    const pays = r.ops.filter((t) => t.containerId === c.id).sort((a, b) => (a.date < b.date ? -1 : 1))
+    const pays = platnosciKontenera(r, c)
     if (!pays.length) continue
     const covered = S.import?.coveredTo?.[c.accountId] ?? today
     const days = pays.slice(-6).map((t) => dayOfMonth(t.date)).sort((a, b) => a - b)
@@ -679,7 +679,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     const paidFor = (due) => pays.some((t) => t.date >= addDays(due, -14) && t.date < addDays(due, 17))
     if (last2.length === 2 && last2.every((d) => !paidFor(d))) sygnaly.push({ kontener: c.name, sygnal: 'cichy kontener – brak płatności w dwóch ostatnich terminach (T285)', terminy: last2, ostatniaPlatnosc: pays[pays.length - 1].date })
     const cyc = {}
-    for (const t of pays) cyc[monthOf(t.date)] = (cyc[monthOf(t.date)] ?? 0) - t.amount
+    for (const t of pays) cyc[monthOf(t.date)] = (cyc[monthOf(t.date)] ?? 0) + t.amount
     const months2 = Object.keys(cyc).sort().filter((m) => m < curMonth).slice(-2)
     if (months2.length === 2) {
       const [a1, a2] = months2.map((m) => cyc[m])

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { briefing } from '@shared/calc/briefing'
-import { cargoStatuses } from '@shared/calc/cargoStatus'
+import { cargoDays, cargoStatuses, plannedDues } from '@shared/calc/cargoStatus'
 import { computeFleet, layersSum, rangeMonths, type FleetInput, type FleetState, type PendingPair } from '@shared/calc/fleet'
 import { radar } from '@shared/calc/radar'
 import { createDefaultSettings } from '@shared/defaults'
@@ -294,16 +294,23 @@ describe('ten sam stan – ta sama liczba na każdym ekranie (AP-32)', () => {
     expect({ count: rows.length, inflow: moving.filter((r) => r.amount > 0).reduce((a, r) => a + r.amount, 0), outflow: moving.filter((r) => r.amount < 0).reduce((a, r) => a - r.amount, 0) }).toEqual({ count: bar.count, inflow: bar.inflow, outflow: bar.outflow })
   })
 
-  // AF-15 (S, N3 – AP-10): odprawa liczy termin z dnia kontenera (`nextUnpaidOf`, dueDay 10), Ładownia i Radar z dnia
-  // płatności z historii (T208 – 25.); gdy N3 to naprawi, ten test zacznie przechodzić – zdejmij `fails`.
-  it.fails('termin asteroidy: odprawa = Radar = Ładownia (AF-15 – otwarte, N3 AP-10)', () => {
-    const { app, input } = both(sc)
-    const containers = input.containers ?? []
-    const settings = input.settings as Settings
-    const cargo = cargoStatuses({ containers, transactions: input.transactions, today: app.today, tanks: app.tanks, coveredTo: settings.import.coveredTo })
-    const onRadar = radar({ today: app.today, plans: input.months ?? [], containers, tanks: app.tanks, loans: app.loans, money: (g) => String(g), cargo }).find((x) => x.kind === 'asteroid' && x.ref === fee.id)
-    const inBriefing = briefing({ fleet: app, containers, imports: [], label: () => '', cargo }).find((x) => x.kind === 'asteroid')
-    expect(onRadar?.date).toBe(cargo.find((x) => x.containerId === fee.id)?.due)
-    expect(inBriefing?.key.split(':')[2]).toBe(onRadar?.date)
+  // AF-15 (S, naprawione w N3 – AP-10, T376): odprawa liczyła termin z dnia kontenera (`nextUnpaidOf`, dueDay 10 – 04.11
+  // „za 6 dni”), Ładownia i Radar z dnia płatności z historii (T208 – 25.). Od N3 wszystkie trzy z jednego stanu opłaty
+  // (`cargoStatuses` od startu budżetu, dzień `cargoDays`, `nextDueOf`) – tak, jak podaje je okno (`features/cargo/status.ts`).
+  it('termin asteroidy: odprawa = Radar = Ładownia (AF-15 – naprawione w N3, AP-10)', () => {
+    for (const now of ['2026-11-04T09:00:00.000Z', '2026-11-15T09:00:00.000Z']) {
+      const { app, input } = both({ ...sc, now })
+      const containers = input.containers ?? []
+      const settings = input.settings as Settings
+      const cargo = cargoStatuses({ containers, transactions: input.transactions, today: app.today, coveredTo: settings.import.coveredTo, start: app.start })
+      const payDays = cargoDays({ containers, transactions: input.transactions, today: app.today })
+      const planned = plannedDues({ containers, transactions: input.transactions, today: app.today, start: app.start })
+      const onRadar = radar({ today: app.today, plans: input.months ?? [], containers, tanks: app.tanks, loans: app.loans, money: (g) => String(g), cargo, payDays, planned }).find((x) => x.kind === 'asteroid' && x.ref === fee.id)
+      const inBriefing = briefing({ fleet: app, containers, imports: [], label: () => '', cargo, payDays, planned }).find((x) => x.kind === 'asteroid')
+      expect(onRadar?.date).toBe('2026-11-25')
+      expect(onRadar?.date).toBe(cargo.find((x) => x.containerId === fee.id)?.due)
+      // The briefing within its 14 days only: on 04.11 none (before: 10.11, „za 6 dni”), on 15.11 the Radar's day.
+      expect(inBriefing?.key.split(':')[2] ?? null, now).toBe(now.startsWith('2026-11-04') ? null : onRadar?.date)
+    }
   })
 })

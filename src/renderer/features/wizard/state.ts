@@ -225,7 +225,8 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
     }
   }))
   editPlan(month, (p) => ({ ...p, salary: o.salary, envelopes: { ...o.envelopes } }))
-  // After the start: a container links this month's payments of its counterparty (the cargo, not an envelope).
+  // After the start: a container links its counterparty's payments from the month before this one (T379 – the cargo, not
+  // an envelope; a fee paid early for this month's due is paid).
   let addedProposalTanks = false
   for (const p of Object.values(w.cargo)) {
     const id = addContainer(draftFromPayment(p))

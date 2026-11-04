@@ -1,5 +1,55 @@
 # Financial Intel – zmiany
 
+## 1.15.7
+
+Poprawki po audycie – opłaty, energia, kadłub, kurs i gra:
+
+- **Opłaty – jeden stan w całej aplikacji:** niezapłacona opłata zostaje „po terminie” w kolejnych miesiącach, aż do
+  zapłaty – w Ładowni, na Radarze i w odprawie, także czynsz płacony 28.–31. dnia. Odprawa podaje ten sam termin co
+  Ładownia i Radar, a data wpisana w polu „Płatność” wygrywa z historią płatności. Ładownia i odkładki liczą zapłatę tak
+  samo: spóźniona zamyka zaległy termin, wcześniejsza – następny (przy opłacie co 2 miesiące płatność przed dniem terminu
+  zamyka najpierw zaległy); zbiornik nie odkłada drugi raz opłaty pokazanej jako zapłacona, także po „Zapłacone poza
+  budżetem” i przy kontenerze dodanym później. Termin sprzed dnia startu budżetu nie jest „po terminie”, a „Zapłacone
+  (dziś)” stoi przy terminie, który ta płatność naprawdę zamknie. Opłata zapłacona wydatkiem wpisanym z wyprzedzeniem
+  liczy się jako zapłacona dopiero w dniu tej płatności – do tego czasu Ładownia pokazuje „zaplanowane”, Radar
+  i odprawa nie przypominają o niej drugi raz, a prognoza sald liczy ją raz (także wpisaną na kolejny miesiąc). Kreator startu liczy rachunki o zmiennej kwocie (np. woda co 2 miesiące)
+  tak jak budżet po starcie.
+- **Opłata zapłacona z celu albo zakupem do zwrotu** zamyka termin także w odkładkach – zbiornik zostaje nietknięty
+  (zebrane czeka na następny termin), zwrot domownika to zwykła spłata długu. Dawny przelew z kontenerem nie płaci opłaty
+  nigdzie.
+- Opłata zapłacona miesiąc przed terminem nie daje już fałszywej „nowej ceny” (+100 %). Podpowiedź raty odkładki liczy
+  stan zbiornika, a debriefing pokazuje „Za mało w zbiorniku”. Boja nie zamyka się operacją o tej samej kwocie i innej
+  nazwie ani operacją innej boi; dawne boje mówią „minęła bez operacji”. Kreator łączy płatności z miesiąca przed startem
+  (opłata zapłacona 28.10 za termin 03.11).
+- **Energia dziś w granicach miesiąca:** nie jest większa niż to, co zostało z pensji w miesiącu – przy pensji częściowej
+  Mostek pokazuje 0,00 zł z dopiskiem „pensja częściowa”; Daily Bias, odprawa, powiadomienia i Dowództwo mówią to samo
+  (naruszenie – dopiero wydatki ponad przydział). Zwrot towaru kupionego wcześniej nie podnosi energii dziś – od jutra
+  rozkłada się na pozostałe dni (zwrot tego samego dnia dalej znosi zakup), a „Skąd ta liczba?” pokazuje go w nawiasie
+  obok sumy. „Pokryj z koperty…” pokazuje, jak zmieni się energia dziś.
+- **Kadłub:** kadłub, któremu brakuje mniej niż 1 % celu, liczy się jako pełny (także w kursie) – dopłata do XTB z wolnego
+  do decyzji nie łamie firewalla. Nowy przycisk „Dopełnij kadłub z osłon” na Mostku, z „Cofnij” (usuwa też plan miesiąca,
+  jeśli przycisk go założył i nic się w nim od tego czasu nie zmieniło – także na drugim komputerze; gdy planu już nie
+  ma, nic nie robi). Ustawienia → Warstwy i rozkazy: podgląd skutku zmiany celu osłon i kadłuba przed zapisem,
+  po zmianie „Cofnij”. Wyłączony firewall widać w Ustawieniach, na Mostku i w odprawie przy dopłacie do XTB; zwrot puli
+  „Podatek” przy pustej rezerwie nie jest dopłatą do XTB.
+- **Kurs i symulator manewrów:** kurs na 12 miesięcy nie pokazuje osłon poniżej zera – gdy zabraknie pieniędzy, widać
+  miesiące z pensją częściową i ile brakuje na koszty. Resztka miesiąca liczy się z energii miesiąca: koperty i opłaty
+  ponad nią idą z osłon. W symulatorze „teraz” to ten sam zasięg co na Mostku, a boje i spodziewane spłaty tego miesiąca
+  są w osobnym wierszu „Zasięg po resztce miesiąca” (boja z kategorią koperty planowej liczy się raz). Warstwa albo cel
+  już pełne mają „teraz” zamiast następnego miesiąca. „Wyczyść manewr” czyści cały formularz, błędny termin celu jest
+  oznaczony, a prognoza zasięgu podaje w obu zdaniach ten sam miesiąc wyczerpania paliwa.
+- **Nowe: trend poduszki** – osłony + kadłub i zasięg na koniec każdego miesiąca ze strzałką zmiany: w Wywiadzie
+  (12 miesięcy), w debriefingu i w przeglądzie rocznym.
+- **Gra:** po przerwie gra pyta przed zamrożeniem dni bez importu z banku – „Zaimportuj najpierw” albo „Zamroź bez
+  danych”; bez odpowiedzi dni czekają najwyżej 7 dni. Długa zaległość dni (po kilku miesiącach przerwy) nie zawiesza już
+  okna – dni zamarzają porcjami w tle. Ekran „Nowa klasa” nie pojawia się, gdy klasa urosła tylko przez import historii
+  (w dzienniku wachty z dopiskiem). Panel misji nie podaje daty z przeszłości, a droga do awansu po awansie mówi „dni
+  zgodne 0 (liczone od …)”. „Inwentaryzacja” zalicza saldo z pliku mBanku w tygodniu importu i liczy chwilę potwierdzenia
+  salda – edycja ani scalenie starego potwierdzenia jej nie zaliczają (potwierdzenia sprzed aktualizacji liczą się jak
+  dotąd). „Dziś bez wydatków” od razu zalicza dzień w misji „Dzień bez wydatków”, a przy wydatku z dziś ostrzega, że
+  dzień się nie liczy. Misja ciszy nocnej nazywa się „Zaciemnienie” (osiągnięcie zostaje „Cisza w eterze”); killzone
+  misji i Wywiadu z podanym okresem.
+
 ## 1.15.6
 
 Poprawki po audycie – silnik pieniędzy, rozliczenia z domownikami i pożyczki:

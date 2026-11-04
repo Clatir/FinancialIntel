@@ -230,15 +230,21 @@ export function spendingByMonth(transactions: readonly Transaction[], categories
 /**
  * The fuel without any payout (spec): the shields and the hull less the debt, spent at the average costs month by month.
  * With the buoys (F16 – `plans`: month → their money, signed): the variant „z bojami” beside – the planned expenses
- * out of it, the planned income into it, each in its month (`withPlans`; `plansEmpty` – its month of no fuel).
+ * out of it, the planned income into it, each in its month (`withPlans`).
+ *
+ * Both lines name the month the fuel runs out in by one rule (WY.15, AP-18): the last month that starts with fuel –
+ * `emptyMonth` without the buoys, `plansEmpty` with them (null – beyond the forecast); a point is a month's start.
  */
 export function rangeForecast(o: { shields: number; hull: number; debt: number; costs: number | null; month: string; horizon?: number; plans?: ReadonlyMap<string, number> }): {
   points: Array<{ month: string; fuel: number; withPlans?: number }>
   emptyIn: number | null
+  emptyMonth: string | null
   plansEmpty?: string | null
 } {
   const start = Math.max(0, o.shields + o.hull - o.debt)
-  if (!o.costs || o.costs <= 0) return { points: [{ month: o.month, fuel: start }], emptyIn: null }
+  if (!o.costs || o.costs <= 0) return { points: [{ month: o.month, fuel: start }], emptyIn: null, emptyMonth: null }
+  // The last month starting with fuel: whole grosze, so an exact number of months ends at the start of the next one.
+  const emptyMonth = addMonths(o.month, start > 0 ? Math.floor((start - 1) / o.costs) : 0)
   const horizon = o.horizon ?? 24
   const withPlans = !!o.plans?.size
   const points: Array<{ month: string; fuel: number; withPlans?: number }> = []
@@ -250,7 +256,7 @@ export function rangeForecast(o: { shields: number; hull: number; debt: number; 
     if (withPlans) {
       planned += o.plans!.get(month) ?? 0
       const v = Math.max(0, start - i * o.costs + planned)
-      if (!v && !plansEmpty) plansEmpty = month
+      if (!v && !plansEmpty) plansEmpty = addMonths(o.month, Math.max(0, i - 1))
       points.push({ month, fuel, withPlans: v })
       if (!fuel && !v) break
     } else {
@@ -258,7 +264,7 @@ export function rangeForecast(o: { shields: number; hull: number; debt: number; 
       if (!fuel) break
     }
   }
-  return withPlans ? { points, emptyIn: start / o.costs, plansEmpty } : { points, emptyIn: start / o.costs }
+  return withPlans ? { points, emptyIn: start / o.costs, emptyMonth, plansEmpty } : { points, emptyIn: start / o.costs, emptyMonth }
 }
 
 // ------------------------------------------------------------------ the captain's log

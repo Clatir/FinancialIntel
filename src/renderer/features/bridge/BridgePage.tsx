@@ -4,13 +4,13 @@ import { BIAS_LABEL, briefing, confirmationsOf, dailyBias, silverBullet, type Br
 import { daysBetween, isoWeekOf } from '@shared/calc/dates'
 import { financersText, memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
-import { SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
+import { HULL_TOLERANCE_PCT, hullCountsFull, SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
 import { amountTone, newestOperations, noNarrowing } from '@shared/operationsView'
 import { shortcutLabel } from '@shared/machine'
 import { plural, rangeText } from '@shared/format'
 import type { DetachEvent } from '@shared/api'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useMachine } from '../../store/machine'
 import { useHostedDetach, useDetach, type DetachSpec } from '../../store/detach'
@@ -27,10 +27,11 @@ import { useCategories } from '../operations/pickers'
 import { newOperation, openOperation, openRefundables, selectOperation, showFilter } from '../operations/state'
 import { EnvelopeBars, monthElapsed } from '../month/EnvelopeBars'
 import { IncomePanel } from '../month/IncomePanel'
+import { topUpHull } from '../month/actions'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
-import { useCargoStatuses, useCargoWatch } from '../cargo/status'
+import { useCargoDays, useCargoPlanned, useCargoStatuses, useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
 import { useFuture } from '../radar/future'
@@ -39,7 +40,7 @@ import { useGameRecords } from '../../store/game'
 import { useMembers } from '../household/actions'
 import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
-import { deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
+import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
 import { glossaryOf } from '@shared/glossary'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
@@ -54,14 +55,17 @@ export type BridgeFleet = Pick<
   /** „Skąd ta liczba?” (F29): the layers' targets as set and the last delivery's split (`pending` – not docked yet, AP-12). */
   layers: { shieldSalaries: number; hullMonths: number }
   lastDelivery: { date: string; pending: boolean; lines: WhyLine[] } | null
+  /** The firewall order on (D23): off – the top-ups of XTB go unchecked, the ship's state says so (AP-17, DW.12). */
+  firewall: boolean
 }
 
 const DEFAULT_LAYERS = { shieldSalaries: 3, hullMonths: 6 }
 
-export const bridgeFleet = (f: FleetState, layers: { shieldSalaries: number; hullMonths: number } = DEFAULT_LAYERS): BridgeFleet => ({
+export const bridgeFleet = (f: FleetState, layers: { shieldSalaries: number; hullMonths: number } = DEFAULT_LAYERS, firewall = true): BridgeFleet => ({
   month: f.month,
   plan: f.plan,
   layers: { shieldSalaries: layers.shieldSalaries, hullMonths: layers.hullMonths },
+  firewall,
   lastDelivery: deliveryWhy(f.log, (id) => f.goals.find((g) => g.id === id)?.name ?? 'cel'),
   today: f.today,
   started: f.started,
@@ -155,7 +159,8 @@ const DETACHED_PANELS: Record<string, BridgePanel> = { Odprawa: 'briefing', 'Sta
 function useBridgeSpecs(fleet: FleetState | null, items: BriefingItem[]): Record<BridgePanel, DetachSpec> | null {
   const cats = useCategories()
   const layers = useData((s) => s.fi?.settings.layers)
-  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers) : null), [fleet, layers])
+  const firewall = useData((s) => s.fi?.settings.orders.firewall ?? true)
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers, firewall) : null), [fleet, layers, firewall])
   const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
   return useMemo(() => {
     if (!view) return null
@@ -336,8 +341,10 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   const members = useMembers()
   const items = useBriefingItems(fleet)
   const layers = useData((s) => s.fi?.settings.layers)
-  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers) : null), [fleet, layers])
+  const firewall = useData((s) => s.fi?.settings.orders.firewall ?? true)
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers, firewall) : null), [fleet, layers, firewall])
   const specs = useBridgeSpecs(fleet, items)
+  const readOnly = useFolderLocked()
   // The 10 newest in one pass (W29): the bridge renders every minute – never a sort of the whole history.
   const recent = useMemo(() => newestOperations(transactions, 10), [transactions])
   if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
@@ -352,7 +359,8 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   const briefingPanel = <BriefingPanel fleet={view} items={items} detach={specs.briefing} />
   const statePanel = fleet.started && (
     <Panel title="Stan okrętu" testId="bridge-state" detach={specs.state}>
-      <ShipState fleet={view} onOpen={openTarget} />
+      {/* „Dopełnij kadłub z osłon” (AP-17) only here – a detached window leads the main one, it writes nothing. */}
+      <ShipState fleet={view} onOpen={openTarget} onTopUp={readOnly ? undefined : topUpHull} />
     </Panel>
   )
   const envelopesPanel = (
@@ -427,8 +435,8 @@ function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
     const bias = dailyBias(fleet)
     const d = fleet.daily
     const parts = [`Odprawa, ${dayLabel(fleet.today)}.`]
-    // Over the day it is said so (N27) – never „0 złotych”.
-    if (d && !hidden) parts.push(d.left < 0 ? `Energia na dziś przekroczona o ${spokenPln(-d.left)}.` : `Energia na dziś: ${spokenPln(d.left)}.`)
+    // Over the day it is said so (N27) – never „0 złotych”; capped by the month's energy – with its reason (AP-13).
+    if (d && !hidden) parts.push(d.energy < 0 ? `Energia na dziś przekroczona o ${spokenPln(-d.energy)}.` : `Energia na dziś: ${spokenPln(d.energy)}${d.cap ? `, ${CAP_REASON[d.cap.why]}` : ''}.`)
     if (bias) parts.push(`Daily Bias: ${BIAS_LABEL[bias]}.`)
     for (const i of items) parts.push(i.text.replaceAll(`${AMOUNT_MASK} zł`, 'kwota ukryta').replace(/zł/g, 'złotych'))
     if (!items.length) parts.push('Bez alarmów.')
@@ -473,9 +481,15 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
         <div className="flex items-baseline gap-3">
           <div className="flex flex-col">
             <span className="label">Energia dziś</span>
-            <span className={cx('num text-[24px] leading-tight', d && d.left < 0 ? 'text-down' : 'text-fg-strong')} data-testid="bridge-energy">
-              {d ? zl(d.left) : '—'}
+            <span className={cx('num text-[24px] leading-tight', d && d.energy < 0 ? 'text-down' : 'text-fg-strong')} data-testid="bridge-energy">
+              {d ? zl(d.energy) : '—'}
             </span>
+            {/* Less than the daily pool says (AP-13, T371): the month's energy – and why it is short. */}
+            {d?.cap && (
+              <span className="text-[11px] text-accent" data-testid="bridge-energy-cap" data-why={d.cap.why}>
+                {capNote(d.cap, zl)}
+              </span>
+            )}
             {d ? (
               <button type="button" className="self-start text-[11px] text-dim hover:text-fg-strong" onClick={() => setWhy(!why)} aria-expanded={why} title={glossaryOf('Energia')} data-testid="bridge-energy-why">
                 przydział {zl(d.allowance)} · podstawowy {zl(d.base)} · <span className="text-accent">{why ? 'zwiń' : 'skąd ta liczba?'}</span>
@@ -528,6 +542,9 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
   const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
   const game = useGameRecords()
   const cargo = useCargoStatuses()
+  const days = useCargoDays()
+  // The dues a payment written ahead pays (T398): no asteroid of them – as on the Radar.
+  const planned = useCargoPlanned()
   // The cargo hold's watch (F9, F23); the new files of mBank in the downloads (F14).
   const watch = useCargoWatch()
   const bankFiles = useNewBankFiles()
@@ -556,15 +573,18 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
       mission,
       members: fi.settings.household.members,
       cargo,
+      payDays: days,
+      planned,
       scheduled: future.reminders,
       accounts: future.accounts,
       watch,
       bankFiles,
       anomalies,
-      returns
+      returns,
+      firewallOff: !fi.settings.orders.firewall
     })
     // `hidden`: the amounts of the texts mask on a change.
-  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, future, watch, bankFiles, anomalies, returns])
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, days, planned, future, watch, bankFiles, anomalies, returns])
 }
 
 /** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */
@@ -576,7 +596,7 @@ function SilverBullet({ fleet, items }: { fleet: BridgeFleet; items: BriefingIte
     <div className="flex flex-col gap-0.5 border-l-2 border-accent pl-2 text-[11.5px]" data-testid="briefing-silver-bullet">
       <span className="label text-accent">Silver Bullet · 10:00–11:00 NY</span>
       <span>
-        {d ? `Energia dziś ${zl(d.left)}.` : 'Bez planu tego miesiąca.'} {bias ? `Daily Bias: ${BIAS_LABEL[bias]}.` : ''} {first ? first.text : 'Bez alarmów.'}
+        {d ? `Energia dziś ${zl(d.energy)}${d.cap ? ` (${CAP_REASON[d.cap.why]})` : ''}.` : 'Bez planu tego miesiąca.'} {bias ? `Daily Bias: ${BIAS_LABEL[bias]}.` : ''} {first ? first.text : 'Bez alarmów.'}
       </span>
     </div>
   )
@@ -625,27 +645,62 @@ function Line({ metaphor, name, value, children, hint, testId }: { metaphor: str
   )
 }
 
-function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTarget) => void }) {
+/**
+ * The ship's state. `onTopUp` – „Dopełnij kadłub z osłon” (AP-17, T373): the main window's, not a folder only to read;
+ * a detached window shows no button (its clicks lead the main window, it writes nothing).
+ */
+function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t: BridgeTarget) => void; onTopUp?: (amount: number) => void }) {
   const s = fleet.shields
+  const hull = fleet.hull
   // „Skąd ta liczba?” (F29): one breakdown open at a time.
   const [why, setWhy] = useState<'range' | 'targets' | 'delivery' | null>(null)
   const toggle = (w: 'range' | 'targets' | 'delivery') => setWhy(why === w ? null : w)
   const goals = sum(fleet.goals.map((g) => g.amount))
   const tanks = sum(fleet.tanks.map((t) => t.amount))
+  // What the hull lacks of its target, and what of it the shields' surplus over their target gives (AP-17, T373).
+  const lack = hull.target != null ? Math.max(0, hull.target - hull.amount) : 0
+  const topUp = s.target != null ? Math.min(lack, s.over) : 0
   return (
     <div className="flex flex-col gap-2 text-[12px]">
       <Line metaphor="Osłony" name="bufor na pensje" hint={glossaryOf('Osłony')} value={<>{zl(s.amount)}{s.target != null && <span className="text-dim"> / {zl(s.target)}</span>}</>} testId="state-shields">
         <Meter value={s.amount} max={s.target} mark={s.min != null && s.target ? s.min / s.target : undefined} />
-        {s.free > 0 && <span className="text-[11px] text-muted">wolne do decyzji: {zl(s.free)}</span>}
+        {s.free > 0 && (
+          <span className="text-[11px] text-muted" data-testid="state-shields-free">
+            wolne do decyzji: {zl(s.free)}
+          </span>
+        )}
         {s.free === 0 && s.over > 0 && (
           <span className="text-[11px] text-muted" data-testid="state-shields-over">
-            ponad cel osłon: {zl(s.over)} – {fleet.hull.target == null ? 'cel kadłuba jeszcze nieznany (za krótka historia kosztów)' : 'kadłub niepełny'}, nie do dopłaty XTB
+            ponad cel osłon: {zl(s.over)} – {hull.target == null ? 'cel kadłuba jeszcze nieznany (za krótka historia kosztów)' : 'kadłub niepełny'}
+            {fleet.firewall ? ', nie do dopłaty XTB' : ''}
+          </span>
+        )}
+        {/* DW.12 (AP-17): with the order off nothing checks a top-up – said where the money free to decide is. */}
+        {!fleet.firewall && (
+          <span className="text-[11px] text-accent" data-testid="state-firewall-off">
+            Firewall wyłączony – dopłaty do XTB bez sprawdzania osłon i kadłuba (Ustawienia → Warstwy i rozkazy).
           </span>
         )}
       </Line>
       <Line metaphor="Energia" name="pensja miesiąca do wydania" hint={glossaryOf('Energia')} value={zl(fleet.energy)} testId="state-energy" />
-      <Line metaphor="Kadłub" name="fundusz awaryjny" hint={glossaryOf('Kadłub')} value={<>{zl(fleet.hull.amount)}{fleet.hull.target != null && <span className="text-dim"> / {zl(fleet.hull.target)}</span>}</>} testId="state-hull">
-        <Meter value={fleet.hull.amount} max={fleet.hull.target} />
+      <Line metaphor="Kadłub" name="fundusz awaryjny" hint={glossaryOf('Kadłub')} value={<>{zl(hull.amount)}{hull.target != null && <span className="text-dim"> / {zl(hull.target)}</span>}</>} testId="state-hull">
+        <Meter value={hull.amount} max={hull.target} />
+        {/* Within 1 % of its target (T372): full for the firewall and „wolne do decyzji”. */}
+        {lack > 0 && hullCountsFull(hull.amount, hull.target) && (
+          <span className="text-[11px] text-muted" data-testid="state-hull-tolerance">
+            brakuje {zl(lack)} – do {HULL_TOLERANCE_PCT}% celu liczy się jako pełny (firewall, wolne do decyzji)
+          </span>
+        )}
+        {onTopUp && topUp > 0 && (
+          <button
+            className="btn h-[22px] self-start"
+            onClick={() => onTopUp(topUp)}
+            title="Przenosi nadwyżkę osłon ponad ich cel do kadłuba – tyle, ile mu brakuje do celu (cel rośnie ze średnimi kosztami). Z „Cofnij”."
+            data-testid="state-hull-topup"
+          >
+            Dopełnij kadłub z osłon: {zl(topUp)}
+          </button>
+        )}
       </Line>
       <div className="flex flex-wrap gap-x-3 text-[11px]">
         <button type="button" className={cx('hover:text-fg-strong', why === 'targets' ? 'text-accent' : 'text-dim')} onClick={() => toggle('targets')} aria-expanded={why === 'targets'} data-testid="state-targets-why">
@@ -708,14 +763,14 @@ function ShipState({ fleet, onOpen }: { fleet: BridgeFleet; onOpen: (t: BridgeTa
   )
 }
 
-/** „Skąd ta liczba?” (F29): a number taken apart – lines one adds up, the result last. */
+/** „Skąd ta liczba?” (F29): a number taken apart – lines one adds up, the result last; a note beside them in brackets. */
 function WhyList({ lines, testId }: { lines: readonly WhyLine[]; testId: string }) {
   return (
     <div className="flex flex-col border-l-2 border-line-strong pl-2 text-[11.5px]" data-testid={testId}>
       {lines.map((l, i) => (
-        <div key={i} className={cx('flex items-baseline gap-2', l.total ? 'mt-0.5 border-t border-line pt-0.5 text-fg-strong' : 'text-muted')} data-testid="why-line">
+        <div key={i} className={cx('flex items-baseline gap-2', l.total ? 'mt-0.5 border-t border-line pt-0.5 text-fg-strong' : l.aside ? 'text-dim' : 'text-muted')} data-testid="why-line" data-aside={l.aside ? '' : undefined}>
           <span className="min-w-0 flex-1">{l.label}</span>
-          <span className={cx('num', l.total ? 'text-fg-strong' : 'text-fg')}>{l.amount == null ? (l.text ?? '—') : zl(l.amount)}</span>
+          <span className={cx('num', l.total ? 'text-fg-strong' : l.aside ? 'text-dim' : 'text-fg')}>{l.amount == null ? (l.text ?? '—') : l.aside ? `(${zl(l.amount)})` : zl(l.amount)}</span>
         </div>
       ))}
     </div>

@@ -1,6 +1,6 @@
-import { firstDayOf, monthOf, warsawNow } from '@shared/calc/dates'
+import { addDays, monthOf, warsawNow } from '@shared/calc/dates'
 import { pastAfterChange } from '@shared/calc/cargoWatch'
-import { unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
+import { linkFromOf, unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
 import { newId } from '@shared/ids'
 import { containerSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Container, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
@@ -67,9 +67,9 @@ export function addContainer(draft: ContainerDraft): string | null {
   return record.id
 }
 
-/** Where linking starts: the budget's first month (its envelopes count the whole month); null = no budget yet. */
+/** Where linking starts (T379): the month before the budget's first month (`linkFromOf`); null = no budget yet. */
 function linkFrom(start = useData.getState().fi?.settings.budget.start ?? null): string | null {
-  return start ? firstDayOf(monthOf(start)) : null
+  return start ? linkFromOf(start) : null
 }
 
 /** The payments of the container's counterparty not linked yet (in the budget's time; one of a deleted container is not – B58). */
@@ -108,7 +108,10 @@ export const patchContainer = (id: string, p: Partial<Container>) =>
     // A new amount counts from this month (F9): the months before keep the old one.
     if ('amount' in p && p.amount !== c.amount && !('past' in p)) next = { ...next, past: pastAfterChange(c, warsawNow().month) }
     const massChanged = MASS_FIELDS.some((k) => k in next && !same(next[k], c[k]))
-    const stamped = massChanged ? { ...next, amountAt: new Date().toISOString() } : next
+    // Its payment day set by hand (T376): a decision – the payments before it no longer say its day.
+    const dayChanged = ('dueDay' in p && p.dueDay !== c.dueDay) || ('dueMonth' in p && p.dueMonth !== c.dueMonth)
+    const now = new Date().toISOString()
+    const stamped = { ...next, ...(massChanged ? { amountAt: now } : {}), ...(dayChanged ? { dueAt: now } : {}) }
     return c.cycleMonths <= 1 && stamped.cycleMonths > 1 ? fromNow(stamped) : stamped
   })
 
@@ -145,6 +148,17 @@ export function clearPast(c: Container): void {
   if (!canWrite() || !c.past.length) return
   patchContainer(c.id, { past: [] })
   toast(`${c.name}: ${plnText(c.amount)} zł we wszystkich miesiącach.`, 'success', 8000, { label: 'Cofnij', run: () => patchContainer(c.id, { past: c.past }) })
+}
+
+/**
+ * „Zapłacone poza budżetem” (AP-10, T375): a due of an earlier month still unpaid – and the ones before it – settled
+ * outside the budget (`aliveAt` the day after it, as „Nadal płacę”): no more „po terminie”; „Cofnij” takes it back.
+ */
+export function settleDue(c: Container, due: string): void {
+  if (!canWrite()) return
+  const after = addDays(due, 1)
+  patchContainer(c.id, { aliveAt: c.aliveAt && c.aliveAt > after ? c.aliveAt : after })
+  toast(`${c.name}: termin ${plDate(due)} zapłacony poza budżetem.`, 'info', 6000, { label: 'Cofnij', run: () => patchContainer(c.id, { aliveAt: c.aliveAt }) })
 }
 
 /** „Nadal płacę” (F9): the payments missing so far never make it look cancelled. */
@@ -200,7 +214,7 @@ export async function deleteContainer(c: Container): Promise<boolean> {
  * today, linked to the container, with its amount, account and category; „Cofnij” takes it back. An operation of an
  * imported account is matched with the bank's row by the next import (a hand-typed entry).
  */
-export function payContainer(c: Container): string | null {
+export function payContainer(c: Container, amount: number = c.amount): string | null {
   if (!canWrite()) return null
   const accounts = useData.getState().fi?.settings.accounts ?? []
   const accountId = accounts.some((a) => a.id === c.accountId && !a.archived) ? c.accountId! : MBANK_ACCOUNT_ID
@@ -212,14 +226,14 @@ export function payContainer(c: Container): string | null {
     updatedAt: now,
     date: warsawNow().date,
     accountId,
-    amount: -c.amount,
+    amount: -amount,
     kind: 'expense',
     categoryId: c.categoryId,
     counterparty: c.counterparty.trim() || c.name,
     containerId: c.id
   })
   addRecord('transactions', record)
-  toast(`Zapisano płatność: ${c.name} ${plnText(c.amount)} zł (dziś).`, 'success', 6000, { label: 'Cofnij', run: () => deleteOrSay('transactions', record.id) })
+  toast(`Zapisano płatność: ${c.name} ${plnText(amount)} zł (dziś).`, 'success', 6000, { label: 'Cofnij', run: () => deleteOrSay('transactions', record.id) })
   return record.id
 }
 

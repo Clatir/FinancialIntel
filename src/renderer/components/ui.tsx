@@ -60,6 +60,11 @@ interface NumberFieldProps {
    */
   commitOnBlur?: boolean
   onReject?: (v: number | null) => void
+  /**
+   * The value typed and not saved yet (`commitOnBlur` – a preview of what it would do, AP-17): the number the field
+   * would take, null for one it would refuse – and null once the field is left.
+   */
+  onDraft?: (v: number | null) => void
   'aria-label'?: string
   'data-testid'?: string
 }
@@ -68,7 +73,7 @@ interface NumberFieldProps {
 const stepPlaces = (step: number) => Math.min(10, (String(step).split('.')[1] ?? '').length)
 
 export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(function NumberField(
-  { value, onChange, decimals, step, placeholder, className, readOnly, id, autoFocus, isValid, typographicMinus, commitOnBlur, onReject, ...aria },
+  { value, onChange, decimals, step, placeholder, className, readOnly, id, autoFocus, isValid, typographicMinus, commitOnBlur, onReject, onDraft, ...aria },
   ref
 ) {
   const [draft, setDraft] = useState<string | null>(null)
@@ -99,9 +104,10 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
       onChange={(e) => {
         const t = e.currentTarget.value
         setDraft(t)
-        if (commitOnBlur) return
         const parsed = parseNumberInput(t)
-        if (parsed !== undefined && fits(parsed) && (!isValid || isValid(parsed))) onChange(parsed)
+        const ok = parsed !== undefined && fits(parsed) && (!isValid || isValid(parsed))
+        if (commitOnBlur) return onDraft?.(ok ? (parsed ?? null) : null)
+        if (ok) onChange(parsed ?? null)
       }}
       onBlur={() => {
         if (commitOnBlur && draft != null && !readOnly) {
@@ -111,6 +117,7 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
           } else onReject?.(parsed ?? null)
         }
         setDraft(null)
+        onDraft?.(null)
       }}
       onKeyDown={(e) => {
         if (readOnly || !step || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) {

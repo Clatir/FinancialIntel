@@ -29,6 +29,7 @@ import { ReportsPage } from '../features/reports/ReportsPage'
 import { InboxPage } from '../features/inbox/InboxPage'
 import { useInboxCount } from '../features/inbox/state'
 import { GameCelebrations } from '../features/command/Celebration'
+import { FreezeQuestion } from '../features/command/FreezeQuestion'
 import { useGameAdvance, useGameCelebrations } from '../store/game'
 import { DockingDialog } from '../features/dock/DockingDialog'
 import { initIctj, openIctj } from '../store/ictj'
@@ -38,6 +39,7 @@ import { initNotifier } from '../store/notifier'
 import { useFleet } from '../store/fleet'
 import { api } from '../lib/api'
 import { plnText, setAmountsHidden } from '../components/fields'
+import { capNote } from '@shared/calc/why'
 import { Toasts } from '../components/Toasts'
 import { IconExternal, IconGear, IconInbox, IconSync } from '../components/icons'
 import { cx } from '../components/ui'
@@ -249,9 +251,12 @@ function Page({ route }: { route: Route }) {
 function TrayStatus() {
   const fleet = useFleet()
   useMachine((s) => s.prefs.hideAmounts)
-  // F29: where today's number comes from, in a line – the allowance less today's spending.
+  // F29: where today's number comes from, in a line – the allowance less today's spending; less than that, the month's
+  // energy and why (AP-13, T371).
   const d = fleet?.daily
-  const text = d ? `Energia dziś: ${plnText(d.left)} zł${d.spentToday ? ` (przydział ${plnText(d.allowance)} − dziś ${plnText(d.spentToday)})` : ''}` : null
+  const text = d
+    ? `Energia dziś: ${plnText(d.energy)} zł${d.cap ? ` (${capNote(d.cap, (g) => `${plnText(g)} zł`)})` : d.spentToday ? ` (przydział ${plnText(d.allowance)} − dziś ${plnText(d.spentToday)})` : ''}`
+    : null
   useEffect(() => {
     void api.setTrayStatus(text)
   }, [text])
@@ -325,6 +330,8 @@ function Window({ route, hideAmounts }: { route: Route; hideAmounts: boolean }) 
       <CommandPalette />
       <DockingDialog />
       <GameCelebrations />
+      {/* Days without the bank's data due to freeze (AP-14): asked before they freeze. */}
+      <FreezeQuestion />
       <TrayStatus />
       <BridgeDetachHost />
       <ShortcutsHelp />

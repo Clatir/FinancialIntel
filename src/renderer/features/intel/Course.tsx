@@ -4,75 +4,55 @@
  * is stored, „Zastosuj” only where it is an ordinary edit – the salary of a month on).
  */
 import { useMemo, useState } from 'react'
-import { addMonths, monthOf } from '@shared/calc/dates'
-import { course, COURSE_KINDS, COURSE_LABEL, courseIncome, maneuver, MANEUVER_GOAL, type Course, type CourseInput, type CourseKind, type Maneuver } from '@shared/calc/course'
+import { addMonths } from '@shared/calc/dates'
+import { course, COURSE_KINDS, COURSE_LABEL, courseIncome, courseInputOf, maneuver, MANEUVER_GOAL, type Course, type CourseInput, type CourseKind, type Maneuver } from '@shared/calc/course'
 import { SHIP_CLASS_LABEL, shipClass, type FleetState } from '@shared/calc/fleet'
-import { planFor } from '@shared/calc/plan'
-import { openDays, scheduledWindow } from '@shared/calc/scheduled'
+import { CAP_REASON } from '@shared/calc/why'
 import { rangeText } from '@shared/format'
-import { byPriority } from '@shared/calc/goals'
 import { AmountField, plnText } from '../../components/fields'
 import { Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { monthLabel } from '../../lib/format'
+import { useCargoStatuses } from '../cargo/status'
 import { setSalary } from '../month/actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
 const mm = (m: string | null) => (m ? `${m.slice(5, 7)}.${m.slice(0, 4)}` : '—')
-/** The buoys the course reads: its 12 months after this one, whole. */
-const COURSE_DAYS = 400
-
-/** The course's input from the engine's state now and the records: the plans, the buoys, the loans. */
+/** A month of the course: this month – „teraz” (a layer or a goal full now, PR sp. 8). */
+const eta = (m: string | null, now: string) => (m === now ? 'teraz' : mm(m))
+const monthsText = (v: readonly string[]) => (v.length ? v.map(mm).join(', ') : 'nie')
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
+/**
+ * The course's input from the engine's state now and the records (`courseInputOf`): the plans, the buoys, the loans – and
+ * the fees still due this month (AP-10's state, as Ładownia has it): the month's rest pays them from its energy (T390).
+ */
 export function useCourseInput(fleet: FleetState | null): CourseInput | null {
   const settings = useData((s) => s.fi?.settings ?? null)
   const plans = useRecordList('months')
   const goals = useRecordList('goals')
   const scheduled = useRecordList('scheduled')
   const transactions = useRecordList('transactions')
-  return useMemo(() => {
-    if (!fleet?.started || !settings) return null
-    const extras = new Map<string, number>()
-    const add = (month: string, v: number) => extras.set(month, (extras.get(month) ?? 0) + v)
-    // The buoys' open days of the course's year (a late one in this month), the repayments expected of the loans given.
-    for (const d of openDays(scheduledWindow(scheduled, transactions, fleet.today, COURSE_DAYS))) if (d.scheduled.amount != null) add(d.date < fleet.today ? fleet.month : monthOf(d.date), d.scheduled.amount)
-    const installments: Array<{ month: string; amount: number }> = []
-    for (const l of fleet.loans) {
-      if (l.loan.closedAt) continue
-      for (const i of l.left) {
-        if (l.loan.direction === 'given') add(i.date < fleet.today ? fleet.month : monthOf(i.date), i.amount)
-        else installments.push({ month: monthOf(i.date), amount: i.amount })
-      }
-    }
-    const records = new Map(goals.map((g) => [g.id, g]))
-    return {
-      month: fleet.month,
-      shields: fleet.shields.amount,
-      hull: fleet.hull.amount,
-      goals: byPriority(fleet.goals.filter((g) => g.takes).map((g) => ({ ...g, createdAt: records.get(g.id)?.createdAt ?? '' }))).map((g) => ({
-        id: g.id,
-        name: g.name,
-        amount: g.amount,
-        target: g.target,
-        deadline: records.get(g.id)?.deadline ?? null,
-        rates: records.get(g.id)?.rates ?? []
-      })),
-      salaryOf: (m: string) => planFor(plans, m)?.salary ?? null,
-      planMonths: plans.map((p) => p.month),
-      costs: fleet.costs.average,
-      layers: settings.layers,
-      minShieldSalaries: settings.orders.minShieldSalaries,
-      income: { work: 0, trading: 0 },
-      extras,
-      debt: fleet.debt,
-      installments
-    }
-  }, [fleet, settings, plans, goals, scheduled, transactions])
+  const cargo = useCargoStatuses()
+  return useMemo(() => (fleet && settings ? courseInputOf(fleet, { settings, plans, goals, scheduled, transactions, cargo }) : null), [fleet, settings, plans, goals, scheduled, transactions, cargo])
+}
+
+/**
+ * This month's rest over its energy (T390): „Resztka miesiąca: koperty i opłaty 3 500,00 zł ponad energię miesiąca
+ * (pensja częściowa) – z osłon, brakuje 3 500,00 zł.”; null – the month's energy pays it.
+ */
+function restText(c: Course, fleet: FleetState): string | null {
+  if (!c.rest.overEnergy) return null
+  const why = fleet.daily?.cap ? ` (${CAP_REASON[fleet.daily.cap.why]})` : ''
+  const lack = c.rest.short ? `, brakuje ${zl(c.rest.short)}` : ''
+  return `Resztka miesiąca: koperty i opłaty ${zl(c.rest.overEnergy)} ponad energię miesiąca${why} – z osłon${lack}.`
 }
 
 export function CoursePanel({ fleet, input }: { fleet: FleetState; input: CourseInput | null }) {
   const courses = useMemo(() => (input ? COURSE_KINDS.map((k) => course({ ...input, income: courseIncome(fleet.incomeStats, k) }, k)) : []), [input, fleet.incomeStats])
+  // The month's rest is the same in each course (the income starts next month).
+  const rest = courses[0] ? restText(courses[0], fleet) : null
   return (
     <Panel title="Kurs na 12 miesięcy" testId="intel-course">
       {!input ? (
@@ -92,17 +72,32 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
               </tr>
             </thead>
             <tbody>
-              <SummaryRow label="Osłony pełne" values={courses.map((c) => mm(c.shieldsFull))} />
-              <SummaryRow label="Kadłub pełny" values={courses.map((c) => mm(c.hullFull))} />
+              <SummaryRow label="Osłony pełne" values={courses.map((c) => eta(c.shieldsFull, input.month))} testId="intel-course-shields-full" />
+              <SummaryRow label="Kadłub pełny" values={courses.map((c) => eta(c.hullFull, input.month))} testId="intel-course-hull-full" />
               {input.goals
                 .filter((g) => g.target > 0)
                 .map((g) => (
-                  <SummaryRow key={g.id} label={`Cel: ${g.name}`} values={courses.map((c) => (c.goalEta[g.id] ? mm(c.goalEta[g.id]!) : 'poza kursem'))} late={courses.map((c) => !!g.deadline && (c.goalEta[g.id] ?? '9999-99') > g.deadline)} />
+                  <SummaryRow key={g.id} label={`Cel: ${g.name}`} values={courses.map((c) => (c.goalEta[g.id] ? eta(c.goalEta[g.id]!, input.month) : 'poza kursem'))} late={courses.map((c) => !!g.deadline && (c.goalEta[g.id] ?? '9999-99') > g.deadline)} />
                 ))}
-              <SummaryRow label="Poniżej minimum osłon" values={courses.map((c) => (c.belowMin.length ? c.belowMin.map(mm).join(', ') : 'nie'))} late={courses.map((c) => c.belowMin.length > 0)} testId="intel-course-below" />
-              <SummaryRow label="Pensja z kadłuba" values={courses.map((c) => (c.fromHull.length ? c.fromHull.map(mm).join(', ') : 'nie'))} late={courses.map((c) => c.fromHull.length > 0)} />
+              <SummaryRow label="Poniżej minimum osłon" values={courses.map((c) => monthsText(c.belowMin))} late={courses.map((c) => c.belowMin.length > 0)} testId="intel-course-below" />
+              <SummaryRow label="Pensja z kadłuba" values={courses.map((c) => monthsText(c.fromHull))} late={courses.map((c) => c.fromHull.length > 0)} />
+              {/* AF-32: neither the shields nor the hull pay the salary whole – Mostek's „Pensja częściowa” (red alarm). */}
+              <SummaryRow label="Pensja częściowa" values={courses.map((c) => monthsText(c.partial))} late={courses.map((c) => c.partial.length > 0)} testId="intel-course-partial" />
+              <SummaryRow
+                label="Brakuje na koszty"
+                values={courses.map((c) => (c.short ? zl(c.short) : 'nie'))}
+                late={courses.map((c) => c.short > 0)}
+                title="Koszty po średniej i płatności ponad osłony, kadłub i wpływy miesiąca – razem w resztce tego miesiąca (koperty i opłaty ponad energię miesiąca) i w 12 kolejnych; osłony nie schodzą poniżej zera"
+                testId="intel-course-short"
+              />
             </tbody>
           </table>
+          {/* The month's rest over its energy (AP-13 – T390): Mostek's „Energia dziś … – pensja częściowa” in the course. */}
+          {rest && (
+            <span className="text-[11.5px] text-accent" data-testid="intel-course-rest">
+              {rest}
+            </span>
+          )}
           <table className="w-full text-[11.5px]" data-testid="intel-course-months">
             <thead>
               <tr className="text-dim">
@@ -120,8 +115,11 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
                   <td className="py-0.5 text-muted">{monthLabel(m.month).slice(0, 3)} {m.month.slice(2, 4)}</td>
                   {courses.map((c) => {
                     const x = c.months[i]!
+                    const tip = [`Najniżej w miesiącu ${zl(x.low)}${x.belowMin ? ' – poniżej minimum osłon' : ''}`]
+                    if (x.partial) tip.push(`Pensja częściowa – brakuje ${zl(x.partial)}`)
+                    if (x.short) tip.push(`Brakuje ${zl(x.short)} na koszty i płatności miesiąca`)
                     return (
-                      <td key={c.kind} className={cx('num text-right', x.belowMin && 'text-accent')} title={x.belowMin ? `Najniżej w miesiącu ${zl(x.low)} – poniżej minimum osłon` : `Najniżej w miesiącu ${zl(x.low)}`}>
+                      <td key={c.kind} className={cx('num text-right', (x.belowMin || x.short > 0) && 'text-accent')} title={tip.join('. ')} data-short={x.short || undefined}>
                         {plnText(x.shields)} · <span className="text-muted">{plnText(x.hull)}</span>
                       </td>
                     )
@@ -131,7 +129,9 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
             </tbody>
           </table>
           <span className="text-[11px] text-dim">
-            Pensja z osłon 1. dnia, koszty po średniej (nad pensję – z osłon), wpływy dokowane: osłony → kadłub → cele; boje i spodziewane spłaty w swoich miesiącach. Wpływy: mediana albo średnia z 12 miesięcy (panel Przychody).
+            Pensja z osłon 1. dnia (brakuje – z kadłuba, a bez obu – pensja częściowa), koszty po średniej (nad pensję – z osłon, nigdy poniżej zera: reszta to „brakuje na koszty”), wpływy dokowane: osłony
+            → kadłub → cele; boje i spodziewane spłaty w swoich miesiącach. Resztka tego miesiąca: koperty i opłaty jeszcze do zapłaty z energii miesiąca, ponad nią – z osłon. Kadłub od 99 % celu liczy się jako
+            pełny. Wpływy: mediana albo średnia z 12 miesięcy (panel Przychody).
           </span>
         </div>
       )}
@@ -139,10 +139,12 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
   )
 }
 
-function SummaryRow({ label, values, late, testId }: { label: string; values: string[]; late?: boolean[]; testId?: string }) {
+function SummaryRow({ label, values, late, title, testId }: { label: string; values: string[]; late?: boolean[]; title?: string; testId?: string }) {
   return (
     <tr className="border-t border-line/50" data-testid={testId}>
-      <td className="py-0.5 text-muted">{label}</td>
+      <td className="py-0.5 text-muted" title={title}>
+        {label}
+      </td>
       {values.map((v, i) => (
         <td key={i} className={cx('num text-right', late?.[i] ? 'text-accent' : 'text-fg-strong')}>
           {v}
@@ -168,33 +170,48 @@ interface Form {
   containerCycle: number
 }
 
+/** The form as it opens – and as „wyczyść manewr” leaves it (WY sp. 3: every field, the goal's name and term too). */
+const blankForm = (month: string): Form => ({
+  salary: null,
+  salaryFrom: addMonths(month, 1),
+  purchase: null,
+  purchaseMonth: month,
+  purchaseFrom: 'shields',
+  noXtb: null,
+  costsPct: null,
+  goalName: '',
+  goalTarget: null,
+  goalDeadline: '',
+  goalRate: false,
+  container: null,
+  containerCycle: 1
+})
+
+/** Anything typed or chosen beyond the blank form. */
+const formChanged = (f: Form, blank: Form) => (Object.keys(blank) as Array<keyof Form>).some((k) => f[k] !== blank[k])
+
 /** The form's maneuver (F35): only what is typed. */
 const maneuverOf = (f: Form): Maneuver => ({
   salary: f.salary ? { amount: f.salary, from: f.salaryFrom } : null,
   purchase: f.purchase ? { amount: f.purchase, month: f.purchaseMonth, from: f.purchaseFrom } : null,
   noXtbMonths: f.noXtb || null,
   costsPct: f.costsPct || null,
-  goal: f.goalTarget ? { name: f.goalName, target: f.goalTarget, deadline: /^\d{4}-(0[1-9]|1[0-2])$/.test(f.goalDeadline) ? f.goalDeadline : null, rate: f.goalRate } : null,
+  goal: f.goalTarget ? { name: f.goalName, target: f.goalTarget, deadline: MONTH_RE.test(f.goalDeadline) ? f.goalDeadline : null, rate: f.goalRate } : null,
   container: f.container ? { amount: f.container, cycleMonths: f.containerCycle } : null
 })
 
-const summaryOf = (c: Course) => ({
-  range: c.rangeNow,
-  shieldsFull: c.shieldsFull,
-  hullFull: c.hullFull,
-  below: c.belowMin,
-  fromHull: c.fromHull
-})
+const rangeClass = (r: number | null) => (r == null ? '—' : `${rangeText(r)} · ${classOf(r)}`)
 
 const classOf = (range: number | null) => (range == null ? '—' : SHIP_CLASS_LABEL[shipClass(range)])
 
 export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: CourseInput | null }) {
-  const next = addMonths(fleet.month, 1)
   const [kind, setKind] = useState<CourseKind>('median')
-  const [f, setF] = useState<Form>({ salary: null, salaryFrom: next, purchase: null, purchaseMonth: fleet.month, purchaseFrom: 'shields', noXtb: null, costsPct: null, goalName: '', goalTarget: null, goalDeadline: '', goalRate: false, container: null, containerCycle: 1 })
+  const [f, setF] = useState<Form>(() => blankForm(fleet.month))
   const set = (p: Partial<Form>) => setF((x) => ({ ...x, ...p }))
   const m = useMemo(() => maneuverOf(f), [f])
-  const changed = Object.values(m).some((v) => v != null)
+  const changed = formChanged(f, blankForm(fleet.month))
+  // A term typed that is not a month (WY sp. 3, „2027-13”): said at the field – the goal counts without a term.
+  const badDeadline = f.goalDeadline !== '' && !MONTH_RE.test(f.goalDeadline)
   const [before, after] = useMemo(() => {
     if (!input) return [null, null]
     const base = { ...input, income: courseIncome(fleet.incomeStats, kind) }
@@ -241,12 +258,20 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
               <span className="text-muted">%</span>
             </div>
           </Field>
-          <Field label="Nowy cel" labelWidth={130}>
+          <Field label="Nowy cel" labelWidth={130} hint={badDeadline ? 'Termin jako RRRR-MM (np. 2027-06) – inaczej cel liczy się bez terminu i bez raty.' : undefined}>
             <div className="flex flex-wrap items-center gap-2">
-              <input className="input h-[24px] w-[110px]" value={f.goalName} maxLength={80} placeholder="nazwa" onChange={(e) => set({ goalName: e.currentTarget.value })} aria-label="Nazwa nowego celu" />
+              <input className="input h-[24px] w-[110px]" value={f.goalName} maxLength={80} placeholder="nazwa" onChange={(e) => set({ goalName: e.currentTarget.value })} aria-label="Nazwa nowego celu" data-testid="maneuver-goal-name" />
               <AmountField className="h-[24px] w-[100px]" value={f.goalTarget} allowEmpty onChange={(goalTarget) => set({ goalTarget })} aria-label="Kwota nowego celu" data-testid="maneuver-goal" />
-              <input className="input num h-[24px] w-[76px]" value={f.goalDeadline} placeholder="RRRR-MM" onChange={(e) => set({ goalDeadline: e.currentTarget.value.trim() })} aria-label="Termin nowego celu" />
-              <Toggle checked={f.goalRate} onChange={(goalRate) => set({ goalRate })} label="rata z pensji" />
+              <input
+                className="input num h-[24px] w-[76px]"
+                value={f.goalDeadline}
+                placeholder="RRRR-MM"
+                onChange={(e) => set({ goalDeadline: e.currentTarget.value.trim() })}
+                aria-label="Termin nowego celu"
+                aria-invalid={badDeadline}
+                data-testid="maneuver-goal-deadline"
+              />
+              <Toggle checked={f.goalRate} onChange={(goalRate) => set({ goalRate })} label="rata z pensji" data-testid="maneuver-goal-rate" />
             </div>
           </Field>
           <Field label="Nowy kontener" labelWidth={130}>
@@ -261,19 +286,36 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
             <thead>
               <tr className="text-dim">
                 <th className="py-0.5 text-left font-normal" />
-                <th className="text-right font-normal">teraz</th>
+                <th className="text-right font-normal" title="Stan teraz – zasięg jak na Mostku; daty z kursu bez manewru">
+                  teraz
+                </th>
                 <th className="text-right font-normal">po manewrze</th>
               </tr>
             </thead>
             <tbody>
-              <Compare label="Zasięg i klasa" a={summaryOf(before).range} b={summaryOf(after).range} text={(r) => (r == null ? '—' : `${rangeText(r)} · ${classOf(r)}`)} worse={(a, b) => (b ?? 0) < (a ?? 0)} testId="maneuver-range" />
-              <Compare label="Osłony pełne" a={before.shieldsFull} b={after.shieldsFull} text={mm} worse={(a, b) => (b ?? '9999') > (a ?? '9999')} />
-              <Compare label="Kadłub pełny" a={before.hullFull} b={after.hullFull} text={mm} worse={(a, b) => (b ?? '9999') > (a ?? '9999')} />
+              {/* AF-33: „teraz” is the engine's range now – Mostek's; the month's rest (its plan over the month's energy – T390,
+                  the buoys, the repayments) apart. */}
+              <Compare label="Zasięg i klasa" a={before.rangeNow} b={after.rangeNow} text={rangeClass} worse={(a, b) => (b ?? 0) < (a ?? 0)} testId="maneuver-range" />
+              {(rangeClass(before.rangeRest) !== rangeClass(before.rangeNow) || rangeClass(after.rangeRest) !== rangeClass(after.rangeNow)) && (
+                <Compare
+                  label="Zasięg po resztce miesiąca"
+                  title="Po kopertach i opłatach tego miesiąca ponad energię miesiąca (z osłon), otwartych bojach i spodziewanych spłatach pożyczek udzielonych (zaległa – w tym miesiącu); od tego stanu liczy się kurs"
+                  a={before.rangeRest}
+                  b={after.rangeRest}
+                  text={rangeClass}
+                  worse={(a, b) => (b ?? 0) < (a ?? 0)}
+                  testId="maneuver-range-rest"
+                />
+              )}
+              <Compare label="Osłony pełne" a={before.shieldsFull} b={after.shieldsFull} text={(v) => eta(v, input.month)} worse={(a, b) => (b ?? '9999') > (a ?? '9999')} testId="maneuver-shields-full" />
+              <Compare label="Kadłub pełny" a={before.hullFull} b={after.hullFull} text={(v) => eta(v, input.month)} worse={(a, b) => (b ?? '9999') > (a ?? '9999')} />
               {[...input.goals, ...(m.goal ? [{ id: MANEUVER_GOAL, name: m.goal.name || 'nowy cel' }] : [])].map((g) => (
-                <Compare key={g.id} label={`Cel: ${g.name}`} a={before.goalEta[g.id] ?? null} b={after.goalEta[g.id] ?? null} text={(v) => (v ? mm(v) : 'poza kursem')} worse={(a, b) => (b ?? '9999') > (a ?? '9999')} />
+                <Compare key={g.id} label={`Cel: ${g.name}`} a={before.goalEta[g.id] ?? null} b={after.goalEta[g.id] ?? null} text={(v) => (v ? eta(v, input.month) : 'poza kursem')} worse={(a, b) => (b ?? '9999') > (a ?? '9999')} />
               ))}
-              <Compare label="Poniżej minimum osłon" a={before.belowMin} b={after.belowMin} text={(v) => (v.length ? v.map(mm).join(', ') : 'nie')} worse={(a, b) => b.length > a.length} testId="maneuver-below" />
-              <Compare label="Pensja z kadłuba" a={before.fromHull} b={after.fromHull} text={(v) => (v.length ? v.map(mm).join(', ') : 'nie')} worse={(a, b) => b.length > a.length} />
+              <Compare label="Poniżej minimum osłon" a={before.belowMin} b={after.belowMin} text={monthsText} worse={(a, b) => b.length > a.length} testId="maneuver-below" />
+              <Compare label="Pensja z kadłuba" a={before.fromHull} b={after.fromHull} text={monthsText} worse={(a, b) => b.length > a.length} />
+              <Compare label="Pensja częściowa" a={before.partial} b={after.partial} text={monthsText} worse={(a, b) => b.length > a.length} testId="maneuver-partial" />
+              <Compare label="Brakuje na koszty" a={before.short} b={after.short} text={(v) => (v ? zl(v) : 'nie')} worse={(a, b) => b > a} testId="maneuver-short" />
             </tbody>
           </table>
           <div className="flex items-center gap-2">
@@ -290,7 +332,7 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
               </button>
             )}
             {changed && (
-              <button className="whitespace-nowrap text-[11.5px] text-muted hover:text-fg-strong" onClick={() => setF((x) => ({ ...x, salary: null, purchase: null, noXtb: null, costsPct: null, goalTarget: null, container: null }))}>
+              <button className="whitespace-nowrap text-[11.5px] text-muted hover:text-fg-strong" onClick={() => setF(blankForm(fleet.month))} data-testid="maneuver-clear">
                 wyczyść manewr
               </button>
             )}
@@ -314,12 +356,14 @@ function MonthSelect({ value, months, onChange, label }: { value: string; months
   )
 }
 
-function Compare<T>({ label, a, b, text, worse, testId }: { label: string; a: T; b: T; text: (v: T) => string; worse: (a: T, b: T) => boolean; testId?: string }) {
+function Compare<T>({ label, title, a, b, text, worse, testId }: { label: string; title?: string; a: T; b: T; text: (v: T) => string; worse: (a: T, b: T) => boolean; testId?: string }) {
   const ta = text(a)
   const tb = text(b)
   return (
     <tr className="border-t border-line/50" data-testid={testId}>
-      <td className="py-0.5 text-muted">{label}</td>
+      <td className="py-0.5 text-muted" title={title}>
+        {label}
+      </td>
       <td className="num text-right">{ta}</td>
       <td className={cx('num text-right', tb !== ta && (worse(a, b) ? 'text-accent' : 'text-fg-strong'))}>{tb}</td>
     </tr>

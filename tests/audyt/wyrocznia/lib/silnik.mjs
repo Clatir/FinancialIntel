@@ -15,6 +15,8 @@ import {
   warsawDayStart
 } from './daty.mjs'
 import { splitEvenly } from './kwoty.mjs'
+// T393: terminy opłat i cykle zapłacone – jedna reguła z Ładownią (moduł czyta kalendarz stąd: cykl samych funkcji)
+import { cykleZaplacone, dzienPlatnosci, terminyOplaty } from './oplaty.mjs'
 
 export const HOUSE_MEMBER_ID = '01KDEFMEM00000000000000001'
 
@@ -96,13 +98,14 @@ export function sidesOf(t) {
 /**
  * Klasyfikacja własnej części wydatku. Zwraca rodzaj: 'cargo' (płatność kontenera), 'goal' (z pieniędzy celu),
  * 'daily' (koperta codzienna albo bez kategorii – T30), 'planned' (kategoria planowa), 'outside' (kategoria poza
- * kopertami).
+ * kopertami). Część z celem i kontenerem naraz (T131: wykluczają się – dane spoza aplikacji) płaci cel: rachunek
+ * opłaty zapłacony z pieniędzy celu, zbiornik nietknięty (T393 po scaleniu N2 z N3; cykl zamyka płatność opłaty).
  */
 export function classifyOwn(t, p, ctx) {
-  const contId = p.containerId ?? t.containerId ?? null
-  if (contId && ctx.containers.has(contId)) return { kind: 'cargo', containerId: contId }
   const goalId = p.goalId ?? t.goalId ?? null
   if (goalId && ctx.goals.has(goalId)) return { kind: 'goal', goalId }
+  const contId = p.containerId ?? t.containerId ?? null
+  if (contId && ctx.containers.has(contId)) return { kind: 'cargo', containerId: contId }
   const main = ctx.cats.mainOf(p.categoryId)
   if (main === null) return { kind: 'daily', main: null }
   if (main === undefined) return { kind: 'daily', main: null, unknownCategory: p.categoryId }
@@ -648,28 +651,33 @@ export function runFleet(input, opt) {
   const hullTargetAt = new Map()
 
   // ---------------------------------------------------------------- przepływy
-  const paidCycles = new Map()
-  // T135: cykl sprzed śledzenia opłaty (przed startem budżetu i przed jej `from`) jest zamknięty
-  const trackFrom = (c) => {
-    const f = c.from ?? bsm
-    return f > bsm ? f : bsm
+  // T393 (po scaleniu N2 z N3): płatności kontenera – jedna reguła Ładowni, Radaru, silnika i kreatora: części wydatku
+  // z kontenerem (linii, inaczej operacji), jedna płatność na operację – suma jej części z tym kontenerem (wypływ);
+  // także z pieniędzy celu i „do zwrotu” (rachunek zapłacony – pieniądze celu albo domownika, zbiornik nietknięty),
+  // sprzed startu i spoza życia opłaty; inny rodzaj z kontenerem (dawny przelew – T362) nigdy. Cykle zapłacone opłaty
+  // okresowej liczy z nich reguła stanu Ładowni (`oplaty.mjs`)
+  const feePays = new Map()
+  for (const t of ops) {
+    if (t.kind !== 'expense') continue
+    const perFee = new Map()
+    for (const p of partsOf(t)) {
+      const cid = p.containerId ?? t.containerId ?? null
+      if (cid && containers.has(cid)) perFee.set(cid, (perFee.get(cid) ?? 0) - p.amount)
+    }
+    for (const [cid, amount] of perFee) {
+      if (amount <= 0) continue
+      if (!feePays.has(cid)) feePays.set(cid, [])
+      feePays.get(cid).push({ id: t.id, date: t.date, amount })
+    }
   }
-  const prevDueOf = (c, m) => {
-    let x = addMonths(m, -1)
-    let guard = 0
-    while (!isDueMonth(c, x) && guard++ < 120) x = addMonths(x, -1)
-    return x
-  }
-  const cycleClosed = (c, due) => !!paidCycles.get(c.id)?.has(due) || due < trackFrom(c)
+  for (const list of feePays.values()) list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))
+  /** Cykle opłaty zapłacone płatnościami sprzed dnia `before` – stan Ładowni miesiąca m (T393). */
+  const paidBefore = (c, before, m) => cykleZaplacone(c, feePays.get(c.id) ?? [], before, m, budgetStart)
+  /** Termin, który zapłaciła płatność z dnia `date` (do logu) – po płatnościach do tego dnia (T393, T394). */
   const closeCycleFor = (c, date) => {
-    const X = monthOf(date)
-    let due
-    if (isDueMonth(c, X)) due = X
-    else if ((c.cycleMonths ?? 1) >= 3 && isDueMonth(c, addMonths(X, 1))) due = cycleClosed(c, prevDueOf(c, addMonths(X, 1))) ? addMonths(X, 1) : prevDueOf(c, addMonths(X, 1))
-    else due = prevDueOf(c, X)
-    if (!paidCycles.has(c.id)) paidCycles.set(c.id, new Set())
-    paidCycles.get(c.id).add(due)
-    return due
+    const known = (feePays.get(c.id) ?? []).filter((p) => p.date <= date)
+    const m = monthOf(date)
+    return terminyOplaty(c, known, { start: budgetStart, miesiac: m, dzien: dzienPlatnosci(c, known, m) }).find((x) => x.platnosci.some((p) => p.date === date))?.m ?? null
   }
   const takeChain = (x) => {
     const fromS = Math.min(x, Math.max(st.S, 0))
@@ -897,8 +905,9 @@ export function runFleet(input, opt) {
       if ((c.cycleMonths ?? 1) <= 1 || !aliveIn(c, m, bsm)) continue
       const tank = st.T.get(c.id) ?? 0
       const cyc0 = cycleOf(c, m)
-      if (paidCycles.get(c.id)?.has(cyc0.due)) {
-        // u2 (C2): cykl już zapłacony (T135) – bez rat, zbiornik zbiera na następny
+      if (paidBefore(c, d, m).has(cyc0.due)) {
+        // u2 (C2): cykl już zapłacony (T135) – bez rat, zbiornik zbiera na następny; zapłacony w stanie Ładowni w dniu
+        // przełomu – płatności sprzed niego (T393)
         rec.tanks[c.id] = 0
         rec.tankDetails[c.id] = { nominal: 0, share: 0, installment: 0, due: cyc0.due, pos: cyc0.pos, length: cyc0.length, paidCycle: true }
         continue
@@ -1361,21 +1370,20 @@ export function runFleet(input, opt) {
   })()
   const init = S0.budget?.initial ?? null
 
-  // T345 (AP-5): płatność połączona z opłatą okresową sprzed startu zamyka swój cykl jak płatność w przebiegu (miesiąc
-  // terminu, przy cyklu ≥ 3 także miesiąc przed nim przy zamkniętym poprzednim; w życiu opłaty; części paragonu bez celu
-  // i „do zwrotu”); T70 / T355: spłaty i raty pożyczek sprzed startu w stanie pożyczek
+  // T70 / T355: spłaty i raty pożyczek sprzed startu w stanie pożyczek
   for (const t of ops) {
     if (t.date >= budgetStart) break
     loanStateOnly(t)
-    if (t.kind !== 'expense') continue
-    for (const p of partsOf(t)) {
-      if (p.refundable || -p.amount <= 0) continue
-      const k = classifyOwn(t, p, ctx)
-      if (k.kind !== 'cargo') continue
-      const c = containers.get(k.containerId)
-      if ((c.cycleMonths ?? 1) <= 1 || !aliveIn(c, monthOf(t.date), bsm)) continue
-      const due = closeCycleFor(c, t.date)
-      log.push({ date: t.date, type: 'cykl zamknięty przed startem (T345)', containerId: c.id, due })
+  }
+  // T345, T393: płatność opłaty okresowej sprzed startu nie przechodzi przez przebieg, ale jest płatnością opłaty
+  // (`feePays`) – cykl, który zapłaciła, liczy reguła stanu Ładowni (opłata śledzona od pierwszej widzianej płatności,
+  // spóźniona płaci zaległy termin, nigdy następny); tu tylko wpis do logu
+  for (const [cid, list] of feePays) {
+    const c = containers.get(cid)
+    if ((c.cycleMonths ?? 1) <= 1) continue
+    for (const p of list) {
+      if (p.date >= budgetStart) break
+      log.push({ date: p.date, type: 'cykl zamknięty przed startem (T345)', containerId: cid, due: closeCycleFor(c, p.date) })
     }
   }
 
@@ -1598,7 +1606,10 @@ export function runFleet(input, opt) {
     inputBalances: input.balances,
     householdSince,
     limitsAt,
-    paidCycles,
+    // T393: cykle zapłacone płatnościami do dziś – terminy zapłacone w Ładowni (Radar: duePaid)
+    paidCycles: new Map([...containers.values()].filter((c) => (c.cycleMonths ?? 1) > 1).map((c) => [c.id, paidBefore(c, addDays(today, 1), monthOf(today))])),
+    // T393: płatności każdego kontenera ({ id, date, amount > 0 }, po dniu) – Ładownia i Radar czytają tylko je
+    feePays,
     pendingPairs,
     // T342: pary liczone według puli wpisu (bez rekordu dokowania) – ile, wpływ, wypływ, część w celach
     toDock: {

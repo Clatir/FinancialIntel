@@ -41,7 +41,10 @@ sprzeczne, liczy oba warianty i zapisuje sprzeczność (lista na końcu).
     miesięcy / 12; rachunek zmienny = 75. percentyl roku w górę do zł (T286, T284); kwota w miesiącu według historii kwot
     (T283); masa ładunku = suma wag miesięcznych / pensja, linia 40 %. **Od 1.15.6:** płatność sprzed startu zamyka swój cykl
     (T345); plan następnych miesięcy od stanu silnika teraz, bez pensji nic pobrane, wymagana obok (T346); rata pożyczki
-    z harmonogramu w historii kwot (T347); kontener z `from` null – bez dolnej granicy (schemat).
+    z harmonogramu w historii kwot (T347); kontener z `from` null – bez dolnej granicy (schemat). **Od 1.15.7:** który
+    termin płaci płatność – jedna reguła stanu Ładowni (okna T375, zaległa najpierw, terminy budżetu od dnia startu –
+    T393, T394); płatności opłaty – części wydatku z kontenerem, jedna na operację, także z celu i „do zwrotu” (rachunek
+    zapłacony, zbiornik nietknięty), inny rodzaj z kontenerem nigdy (T393 po scaleniu N2 z N3, T362).
 11. **Łupy:** = niewydana energia (T28; spec: „niewydane z kopert”); decyzja do 7. dnia: cele → zapas kopert planowych →
     następny miesiąc → reszta do osłon; bez decyzji do osłon 8. dnia (D18, T52, T278); późna zmiana danych: cele
     i następny miesiąc zostają, zmienia się reszta (T139).

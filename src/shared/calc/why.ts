@@ -5,7 +5,7 @@
  */
 import { rangeText } from '../format'
 import { daysInMonth } from './dates'
-import type { DailyAllowance, FleetEvent, FleetState } from './fleet'
+import type { DailyState, FleetEvent, FleetState } from './fleet'
 
 export interface WhyLine {
   /** What it is, in words. */
@@ -16,26 +16,45 @@ export interface WhyLine {
   text?: string
   /** The result line (=). */
   total?: boolean
+  /** A note beside the sum, not added to it (today's refund of an earlier purchase – T370): shown in brackets. */
+  aside?: boolean
 }
+
+/** Why today's energy is less than the daily pool says (AP-13, T371): the note beside it on every screen. */
+export const CAP_REASON: Record<NonNullable<DailyState['cap']>['why'], string> = {
+  partial: 'pensja częściowa',
+  none: 'bez pensji w tym miesiącu',
+  spent: 'nie więcej niż zostało w miesiącu'
+}
+
+/** „pensja częściowa – energia miesiąca 0,00 zł” (T371): `zl` formats the amount (the hidden amounts mask it). */
+export const capNote = (cap: NonNullable<DailyState['cap']>, zl: (grosze: number) => string): string => `${CAP_REASON[cap.why]} – energia miesiąca ${zl(cap.month)}`
 
 /**
  * Today's energy (D16): the daily envelopes of the month less what they took before today, over the days left – the
- * allowance; less today's spending – the energy now. The allowance against the plain share (limit / days of the month)
- * shows what the days before carried over (+ saved, − overspent).
+ * allowance; less today's spending – the energy now, never more than the month's energy left (AP-13, T371). The allowance
+ * against the plain share (limit / days of the month) shows what the days before carried over (+ saved, − overspent).
  */
-export function energyWhy(d: DailyAllowance & { limit: number; spentBefore: number; spentToday: number }, month: string): WhyLine[] {
+export function energyWhy(d: DailyState, month: string): WhyLine[] {
   const days = daysInMonth(month)
   const carried = d.allowance - d.base
-  return [
+  const lines: WhyLine[] = [
     { label: 'Koperty codzienne w tym miesiącu (plan i łupy)', amount: d.limit },
     { label: 'Wydane z nich do wczoraj', amount: -d.spentBefore },
     { label: `Zostało na ${d.daysLeft} ${d.daysLeft === 1 ? 'dzień' : 'dni'} (z dzisiejszym)`, amount: d.limit - d.spentBefore },
     { label: `Podstawowy przydział (limit / ${days} dni)`, amount: d.base },
     { label: carried >= 0 ? 'Zaoszczędzone wcześniej – na każdy dzień' : 'Przekroczone wcześniej – mniej na każdy dzień', amount: carried },
     { label: 'Przydział na dziś', amount: d.allowance },
-    { label: 'Wydane dziś', amount: -d.spentToday },
-    { label: 'Energia dziś', amount: d.left, total: true }
+    { label: 'Wydane dziś', amount: -d.spentToday }
   ]
+  // A refund of an earlier purchase (T370): the days after today share it – beside the sum, not in it.
+  if (d.returned) lines.push({ label: 'Zwroty dziś za wcześniejsze zakupy – nie do dziś, od jutra na pozostałe dni', amount: d.returned, aside: true })
+  if (d.cap) {
+    lines.push({ label: 'Przydział po dzisiejszych wydatkach', amount: d.left })
+    lines.push({ label: `Energia miesiąca (pensja do wydania) – ${CAP_REASON[d.cap.why]}`, amount: d.cap.month })
+  }
+  lines.push({ label: 'Energia dziś', amount: d.energy, total: true })
+  return lines
 }
 
 /** The range (zasięg): the shields and the hull less the debt, over the average monthly costs. */

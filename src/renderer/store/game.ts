@@ -7,8 +7,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
-import { advanceGame, coversOf, gameStartFor, gameView, rateDay, type DayRating, type GameInput, type GameView } from '@shared/calc/game'
-import { daysBetween, warsawNow } from '@shared/calc/dates'
+import { advanceGame, coversOf, gameStartFor, gameView, importWait, IMPORT_WAIT_DAYS, rateDay, type DayRating, type GameInput, type GameView, type ImportWait } from '@shared/calc/game'
+import { addDays, daysBetween, warsawNow } from '@shared/calc/dates'
 import { pendingPairDays } from '@shared/calc/dock'
 import { useDeliveries } from '../features/dock/state'
 import type { RecordEntry } from '@shared/api'
@@ -45,8 +45,11 @@ const GAME_COLLECTIONS = ['transactions', 'containers', 'goals', 'months', 'dock
 const lockedKey = (s: DataState): string => [...tooNewMonths(s.problems, 'game')].join(',')
 const gameParts = (s: DataState): unknown[] => (s.fi ? [...GAME_SETTINGS.map((k) => s.fi!.settings[k]), ...GAME_COLLECTIONS.map((c) => s.records[c]), lockedKey(s)] : [])
 
-/** Days rated in one pass (W16): each is a whole run of the engine – a long backlog goes in portions, the window between them. */
-const DAYS_PER_PASS = 2
+/**
+ * Days rated in one pass (W16): each is a whole run of the engine – a long backlog goes in portions, each in its own task
+ * (AF-6), the window painted between them.
+ */
+export const DAYS_PER_PASS = 2
 /** A day of a payout still to dock waits this long (B20). */
 const HOLD_DAYS = 7
 
@@ -88,28 +91,118 @@ export function useGameAdvance(): void {
   // deliveries' own inputs (a skipped entry, ICTTJ read again, the bank's file) count too.
   const deliveries = useDeliveries()
   const hold = useMemo(() => pendingPairDays(deliveries).find((d) => daysBetween(d, today) <= HOLD_DAYS) ?? null, [deliveries, today])
-  useEffect(() => {
-    const state = useData.getState()
-    const { fi, records } = state
-    // Checked again as it runs (T301): changes being written since the render hold it – it runs once they are written.
-    if (!ready || !fi || !writesInBackground(state)) return
-    if (!fi.settings.game.start) {
-      // The game starts from zero (spec): the first full day after the budget runs with this version – once the start
-      // wizard ran (N23): a budget the engine counts from an opening balance alone has no salary and no plan to judge by.
-      if (fi.settings.budget.start && fleetNow()?.started)
-        updateSettings((f) => (f.settings.game.start ? f : { ...f, settings: { ...f.settings, game: { ...f.settings.game, start: gameStartFor(new Date()) } } }), { background: true })
-      return
-    }
-    // A portion; its months saved change the records, and the next portion runs after the window painted. Months a
-    // newer version wrote are not this one's to write: passed over (a portion would never get past them) – those whose
-    // file this version cannot even read too (B67): never made again here over that file.
-    const locked = new Set([...Object.values(records.game ?? {}).flatMap((e) => (e.readOnly ? [e.record.month] : [])), ...tooNewMonths(useData.getState().problems, 'game')])
-    const change = timed('gra: ocena dni', () => advanceGame(gameInputOf(fi, records), new Date(), { maxDays: DAYS_PER_PASS, locked, hold }))
-    if (!change.months.length) return
-    const fresh = change.months.filter((m) => !records.game[m.id])
-    if (fresh.length) addRecords('game', fresh)
-    for (const m of change.months) if (records.game[m.id]) updateRecord('game', m.id, () => m, { background: true })
-  }, [parts, ready, today, hold])
+  // The answer to the question about the days without the bank's data (AP-14) runs the next portion.
+  const answered = useFreezeAsk((s) => s.answered)
+  useEffect(() => (ready ? schedulePortion(hold) : undefined), [parts, ready, today, hold, answered])
+  // Another folder shown: its own question – none of the folder before (the first portion comes once it settled).
+  const openedAt = useData((s) => s.openedAt)
+  useEffect(() => useFreezeAsk.setState({ ask: null, dismissed: null }), [openedAt])
+}
+
+/**
+ * The next portion in a task of its own (AF-6): its months saved change the records and the effect runs again – called
+ * from the effect at once, the next portion's write came in the same task (zustand's update renders synchronously), and
+ * a backlog of more than 100 days (50 portions) passed React's limit of nested updates (#185) on any screen.
+ */
+export function schedulePortion(hold: string | null): () => void {
+  const t = setTimeout(() => advancePortion(hold), 0)
+  return () => clearTimeout(t)
+}
+
+/** One portion of the game's advance (at most `DAYS_PER_PASS` days); true – months written. */
+export function advancePortion(hold: string | null, now: Date = new Date()): boolean {
+  const state = useData.getState()
+  const { fi, records } = state
+  // Checked again as it runs (T301): changes being written since the render hold it – it runs once they are written.
+  if (!fi || !writesInBackground(state)) return false
+  if (!fi.settings.game.start) {
+    // The game starts from zero (spec): the first full day after the budget runs with this version – once the start
+    // wizard ran (N23): a budget the engine counts from an opening balance alone has no salary and no plan to judge by.
+    if (fi.settings.budget.start && fleetNow()?.started)
+      updateSettings((f) => (f.settings.game.start ? f : { ...f, settings: { ...f.settings, game: { ...f.settings.game, start: gameStartFor(now) } } }), { background: true })
+    return false
+  }
+  // Months a newer version wrote are not this one's to write: passed over (a portion would never get past them) – those
+  // whose file this version cannot even read too (B67): never made again here over that file.
+  const locked = new Set([...Object.values(records.game ?? {}).flatMap((e) => (e.readOnly ? [e.record.month] : [])), ...tooNewMonths(state.problems, 'game')])
+  const input = gameInputOf(fi, records)
+  const waitImport = importWaitNow(input, now, locked)
+  const change = timed('gra: ocena dni', () => advanceGame(input, now, { maxDays: DAYS_PER_PASS, locked, hold, waitImport }))
+  if (!change.months.length) return false
+  const fresh = change.months.filter((m) => !records.game[m.id])
+  if (fresh.length) addRecords('game', fresh)
+  for (const m of change.months) if (records.game[m.id]) updateRecord('game', m.id, () => m, { background: true })
+  return true
+}
+
+// ------------------------------------------------------------------ the days without the bank's data (AP-14)
+
+/** The question before freezing days without the bank's data, as the window shows it (`until` – the wait's last day). */
+export type FreezeAsk = ImportWait & { until: string }
+
+export const useFreezeAsk = create<{ ask: FreezeAsk | null; dismissed: string | null; answered: number }>(() => ({ ask: null, dismissed: null, answered: 0 }))
+
+const WAIT_KEY = 'fi.game.importWait'
+/** This computer's answers (D86: the computer in use asks): wait key → since when it waits, „Zamroź bez danych”. */
+type WaitMemo = Record<string, { since: string; freeze?: boolean }>
+/** Without the storage the answers live as long as the window. */
+let memoInMemory: WaitMemo = {}
+
+function readWaits(): WaitMemo {
+  try {
+    const raw = localStorage.getItem(WAIT_KEY)
+    return raw ? (JSON.parse(raw) as WaitMemo) : memoInMemory
+  } catch {
+    return memoInMemory
+  }
+}
+
+function writeWaits(memo: WaitMemo): void {
+  // The newest few: a wait ends with an import, an old key never comes back.
+  memoInMemory = Object.fromEntries(Object.entries(memo).slice(-20))
+  try {
+    localStorage.setItem(WAIT_KEY, JSON.stringify(memoInMemory))
+  } catch {
+    /* storage unavailable: the answers live as long as the window */
+  }
+}
+
+const sameAsk = (a: FreezeAsk | null, b: FreezeAsk | null): boolean =>
+  a === b || (!!a && !!b && a.key === b.key && a.first === b.first && a.last === b.last && a.until === b.until && JSON.stringify(a.late) === JSON.stringify(b.late))
+
+/**
+ * The first day the freezing waits for the bank's data (AP-14, D99 pkt 5) – the question shown meanwhile; null: nothing
+ * to wait for, answered „Zamroź bez danych” for these imports, or waited `IMPORT_WAIT_DAYS` already (then the days
+ * freeze as they stand, as T163).
+ */
+function importWaitNow(input: GameInput, now: Date, locked: ReadonlySet<string>): string | null {
+  const today = warsawNow(now).date
+  const wait = importWait(input, today, locked)
+  let ask: FreezeAsk | null = null
+  if (wait) {
+    const memo = readWaits()
+    let mine = memo[wait.key]
+    if (!mine) writeWaits({ ...memo, [wait.key]: (mine = { since: today }) })
+    const until = addDays(mine.since, IMPORT_WAIT_DAYS - 1)
+    if (!mine.freeze && today <= until) ask = { ...wait, until }
+  }
+  if (!sameAsk(useFreezeAsk.getState().ask, ask)) useFreezeAsk.setState({ ask })
+  return ask ? ask.from : null
+}
+
+/** „Zamroź bez danych”: the days of these late imports freeze now (this computer; a new import is a new question). */
+export function freezeWithoutImport(): void {
+  const ask = useFreezeAsk.getState().ask
+  if (!ask) return
+  const memo = readWaits()
+  writeWaits({ ...memo, [ask.key]: { since: memo[ask.key]?.since ?? warsawNow().date, freeze: true } })
+  useFreezeAsk.setState((s) => ({ ask: null, answered: s.answered + 1 }))
+}
+
+/** „Zaimportuj najpierw” (or the dialog closed): no question again while the window lives – the days keep waiting. */
+export function dismissFreezeAsk(): void {
+  const ask = useFreezeAsk.getState().ask
+  if (ask) useFreezeAsk.setState({ dismissed: ask.key })
 }
 
 const NO_GAME: Record<string, RecordEntry<GameMonth>> = {}

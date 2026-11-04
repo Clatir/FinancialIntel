@@ -200,7 +200,8 @@ zdarzeniach 13 000 → 14 000 → 13 200 → 6 700 → 8 150 → 1 650 → −4 
 ## Poprawki po uzgodnieniu
 
 **u1 (03.11.2026, pole `wersja`: „2026-11-03 u1”).** Uzgodnienie odczytów bloków A–B
-(`C:FI-audytwyroczniaozbieznosci-ab.md`, odpowiedzi: `C:FI-audytwyroczniaodpowiedzi-ab.md`). Wartości stanów
+(`C:FI-audytwyrocznia
+ozbieznosci-ab.md`, odpowiedzi: `C:FI-audytwyroczniaodpowiedzi-ab.md`). Wartości stanów
 `rok` i `start` w tabelach wyżej – bez zmian poza Radarem i wpisem ICTTJ 31.10 w `start`.
 
 | Pozycja | Co | Dlaczego (źródło) |
@@ -225,7 +226,8 @@ zdarzeniach 13 000 → 14 000 → 13 200 → 6 700 → 8 150 → 1 650 → −4 
 Bez zmian (potwierdzone albo luka bez nowego pola): R-11 (S4 – wariant B już w JSON), R-15, R-18.
 Nowe testy: R-1, R-2/R-3, R-12, R-14, R-5/R-10 – razem 17, wszystkie przechodzą.
 
-**u2 (03.11.2026, „2026-11-03 u2”).** Uzgodnienie bloku C (`C:FI-audytwyroczniaozbieznosci-c.md`, odpowiedzi:
+**u2 (03.11.2026, „2026-11-03 u2”).** Uzgodnienie bloku C (`C:FI-audytwyrocznia
+ozbieznosci-c.md`, odpowiedzi:
 `C:FI-audytwyroczniaodpowiedzi-c.md`). Stany `rok` i `start` – główne liczby bez zmian.
 
 | Pozycja | Co | Dlaczego (źródło) |
@@ -289,7 +291,8 @@ aplikacji czyta tylko regresja (`regresja.test.ts`, `tests/unit/wyrocznia-ap32.t
 | PR sp. 9 | kolejność potwierdzona (D99 pkt 9): wydatek ponad energię – osłony, potem kadłub, potem deficyt; na zwykłej kwocie aplikacja liczy tak samo (test) | T28, T32 |
 | T340 | przeniesienie środków celu w chwili `at` – przed pierwszym zdarzeniem dnia, które przyszło później (`cameIn`: dokowanie / operacja, decyzja łupów); czego cel wtedy nie miał – na koniec dnia | T340 (AP-3) |
 | T341, T342, C13 | pary ICTTJ liczone przed przebiegiem (`pairIctj`: okno T63 / T164, „inna kwota” T162, Portfel XTB T224); niezadokowana para = dokowanie z pulą wpisu; „Do zadokowania” (ile, wpływ, wypływ, w celach); para z puli Podatek poza przychodem | T341, T342 (AP-12) |
-| T345 | płatność opłaty okresowej sprzed startu zamyka swój cykl | T345 (AP-5) |
+| T345 | płatność opłaty okresowej sprzed startu zamyka swój cykl (od 1.15.7 regułą T393: opłata śledzona od pierwszej płatności, spóźniona płaci zaległy termin) | T345 (AP-5) |
+| T393, T394 | terminy opłat i cykle zapłacone – jedna reguła stanu Ładowni (`lib/oplaty.mjs`: okna T375, zaległa najpierw, druga płatność okna, terminy budżetu od dnia startu, `createdAt`, `aliveAt`); płatności kontenera (`feePays`) – części wydatku z kontenerem, jedna na operację, także z celu i „do zwrotu” (zbiornik nietknięty), inny rodzaj nigdy – te same dla silnika, Ładowni i Radaru (scalenie N2 z N3); część z celem i kontenerem naraz – płaci cel (T131) | T393, T394 (AP-10), T131 |
 | T346 | `planNaprzod` – 3 miesiące od stanu teraz: pobrane i wymagane odkładki, raty celów; bez pensji nic pobrane | T346, C20 (AP-11) |
 | T350, T352, T354 | główny wariant domowników **D99** (A – spec i B – 1.15.3 obok): „spłata” najpierw spłaca, jawny przychód / zaliczka spłacają tylko wskazane zakupy tej osoby, bez wskazania omijają dług (`zaliczkiPrzyDlugu`); obok części „spłata” tej osoby w tej samej operacji wskazane są tamtej części, jawna omija dług (przegląd 2 N2 – zaliczka rozbita przez „Spłać”); Marek (14.09, zaliczka → EVENTIM) 300,00 zł od 24.09, depozyt 4 737,20 zł | D99 pkt 1 (AP-4) |
 | T355, T356 | linia wpływu z `loanId` – spłata pożyczki udzielonej do wysokości długu, nadwyżka dokuje; spłaty sprzed startu i w saldzie otwarcia konta w stanie pożyczki (po kolei dni); „kto zapłacił”; w statystykach do wysokości długu poza przychodem, nadwyżka ponad dług (odsetki) – przychód, całością i częścią (`loanExtra`, T70 – AF-5, przegląd 2 N2); linia pożyczki nieznanej / wziętej – przychód | D100, T70 |
@@ -306,7 +309,8 @@ depozyt = zaliczki przy osobach, „mają oddać” = suma przy osobach, termin 
 pasek Operacji); kopia schematów (pola wyroczni po jej odczycie = po parsowaniu aplikacji). Wynik:
 `C:\FI-audyt\wyrocznia\u3\regresja.json`. Znane rozbieżności – lista `KNOWN` z powodem (błąd aplikacji naprawiany w
 późniejszej grupie); zniknięcie znanej też zatrzymuje test. Szybka część w `npm test`: `tests/unit/wyrocznia-ap32.test.ts`
-(scenariusze reguł N2 – wyrocznia = silnik; ekrany – AF-15 jako `it.fails`).
+(scenariusze reguł N2 – wyrocznia = silnik; ekrany – AF-15 od scalenia z N3 zwykłym testem: stan opłat od startu budżetu
+i dni `cargoDays`, jak okno).
 
 **Wynik 04.11.2026 (gałąź `claude/1.15.6-n2b`):** 412 przypadków, 28 963 liczb pieniędzy, 2 852 porównań ekranów,
 9,75 mln pól schematów, ok. 2 min (sama regresja) – liczby pieniędzy wyroczni = aplikacji we wszystkich przypadkach. Rozbieżności: termin
@@ -320,3 +324,12 @@ pożyczki ponad dług to przychód w statystykach, T70 / AF-5) i T350 (wskazane 
 tej osoby); wynik regresji ten sam (412 przypadków, 28 963 liczb, tylko AF-15). Nadwyżka jest w 5 migawkach (DM.18-4,
 DM.19 – „Pożyczka dla Oli”, 1 050 z 1 000 zł), ale w miesiącu migawki, poza średnimi pełnych miesięcy – AF-5 sprawdza
 scenariusz w `npm test` (`wyrocznia-ap32`) i `wyrocznia-u3`.
+
+**Scalenie N2 z N3 (04.11.2026, gałąź `claude/1.15.7-oplaty`):** jedna wyrocznia – reguła terminów opłat i cykli
+zapłaconych z `lib/oplaty.mjs` (T393, T394; zamiast `paidCycles` / `trackFrom` / `closeCycleFor` z u3), płatności kontenera
+z tekstu T393 po scaleniu (`feePays`: wydatek, także z celu i „do zwrotu”, inny rodzaj nigdy – te same dla silnika,
+Ładowni i Radaru wyroczni), część z celem i kontenerem płaci cel (T131). Ekrany regresji jak okno (stan opłat od startu
+budżetu, dni `cargoDays`). Wynik: 412 przypadków, 28 963 liczb pieniędzy, 2 852 porównań ekranów, 9,75 mln pól schematów
+– wszystkie zgodne, `KNOWN` pusta (AF-15 naprawione w N3, AP-10); ok. 7 min przy obciążonym komputerze. Bez pokrycia na
+migawkach (dane 1.15.4 ich nie mają): płatność opłaty z celu, do zwrotu i dawny przelew z kontenerem – scenariusze
+w `wyrocznia.test.mjs` i `npm test` (`fees-n3-paid-by`, właściwość `fees-n3-agree`).

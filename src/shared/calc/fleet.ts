@@ -28,6 +28,8 @@ import { goalAt, goalDecided, goalTakes } from './goals'
 import { debtOf, loanBacksOf, loanStates, type LoanState } from './loans'
 import { coveredMonths, monthsBefore } from './history'
 import { accountAmounts, categoryIndex, costOf, isCargoPayment, isTwoSided, partsOf, splitEvenly, sum } from './operations'
+// The paid cycles by the fees' state rule (T393) – that module reads the calendar from this one: a cycle of functions only.
+import { byPaymentDay, feeDayOf, paidDuesOf, paymentDay, paymentsIndex, type FeeDuesOf, type Linked } from './cargoStatus'
 
 // ------------------------------------------------------------------ the rules as small pure functions
 
@@ -271,17 +273,70 @@ export function dailyAllowance(o: { limit: number; spentBefore: number; spentTod
 }
 
 /**
- * Today's energy after a purchase of `amount` (N3 – the quick entry's preview, as the engine counts it): one of today
- * takes it all today; one of an earlier day of this month lowers the allowance of the days left; another month or a day
- * ahead leaves today's energy as it is (null).
+ * Today's energy as shown (AP-13, D99 pkt 4 – T371): the allowance less today's spending (T295), never more than the
+ * month's energy left (`month`; null – no cap: the layers do not run). Over the day (below 0) it stays as it is – the
+ * month's energy is never below 0.
  */
-export function energyAfter(d: { today: string; limit: number; spentBefore: number; spentToday: number; days: number }, date: string, amount: number): { before: number; after: number } | null {
+export const cappedEnergy = (left: number, month: number | null | undefined): number => (month != null && month < left ? month : left)
+
+/** The parts of today's energy (the engine's `daily`, the quick entry's – N3): what its preview counts with. */
+export interface EnergyPreview {
+  today: string
+  limit: number
+  spentBefore: number
+  spentToday: number
+  days: number
+  /**
+   * The month's energy left (AP-13, T371) – today's is never more; absent / null: no cap. `spends` – a purchase takes it
+   * (the month's salary paid; without one the shields pay and the month's energy stays).
+   */
+  month?: { energy: number; spends: boolean } | null
+  /** Today's refunds of earlier purchases by main category ('' – none, T370): a purchase of its category today takes them first. */
+  returned?: Readonly<Record<string, number>>
+}
+
+/**
+ * Today's energy after a purchase (N3, AP-13 – the quick entry's preview, as the engine counts it): `daily` – its parts
+ * of the daily pool by main category ('' – none; a number – one part, no refund of today taken into account), `other` –
+ * its parts of the month's energy beyond the pool (a planned envelope, a category without one). One of today takes its
+ * daily part today – less what a refund of an earlier purchase of its category returned today (T370); one of an earlier
+ * day of this month lowers the allowance of the days left; both take the month's energy, and today's is never more
+ * (T371). Another month or a day ahead leaves today's energy as it is (null).
+ */
+export function energyAfter(d: EnergyPreview, date: string, daily: number | ReadonlyMap<string, number>, other = 0): { before: number; after: number } | null {
   if (date > d.today || date.slice(0, 7) !== d.today.slice(0, 7)) return null
   const base = { limit: d.limit, spentBefore: d.spentBefore, spentToday: d.spentToday, day: dayOfMonth(d.today), daysInMonth: d.days }
-  const before = dailyAllowance(base).left
-  const after = date === d.today ? dailyAllowance({ ...base, spentToday: d.spentToday + amount }).left : dailyAllowance({ ...base, spentBefore: d.spentBefore + amount }).left
-  return { before, after }
+  let total = 0
+  let today = 0
+  for (const [key, v] of typeof daily === 'number' ? [[null, daily] as const] : daily) {
+    total += v
+    today += key == null ? v : Math.max(0, v - (d.returned?.[key] ?? 0))
+  }
+  const left = date === d.today ? dailyAllowance({ ...base, spentToday: d.spentToday + today }).left : dailyAllowance({ ...base, spentBefore: d.spentBefore + total }).left
+  const month = d.month ? (d.month.spends ? Math.max(0, d.month.energy - total - other) : d.month.energy) : null
+  return { before: cappedEnergy(dailyAllowance(base).left, d.month?.energy), after: cappedEnergy(left, month) }
 }
+
+/**
+ * Today's energy after the daily pool's limit changes by `delta` (AP-13, PM sp. 6 – „Pokryj z koperty…”: a daily
+ * envelope's limit moved to a planned one shrinks the pool): its spending as it is, the month's energy as it is (a cover
+ * moves no money). null – no plan of the month.
+ */
+export function energyAfterLimit(f: Pick<FleetState, 'daily' | 'energy' | 'started'>, delta: number): { before: number; after: number } | null {
+  const d = f.daily
+  if (!d) return null
+  const allowance = Math.max(0, Math.floor((d.limit + delta - d.spentBefore) / d.daysLeft))
+  return { before: d.energy, after: f.started ? cappedEnergy(allowance - d.spentToday, f.energy) : allowance - d.spentToday }
+}
+
+/** What the hull may lack and still count as full (AP-17, D99 – T372): 1 % of its target. */
+export const HULL_TOLERANCE_PCT = 1
+
+/**
+ * The hull full for the firewall and „wolne do decyzji” (AP-17, T372): from 99 % of its target – it follows the average
+ * costs, so after a month's turn it ends a few złoty short until the next delivery. null = the target unknown.
+ */
+export const hullCountsFull = (hull: number, target: number | null): boolean => target != null && hull * 100 >= target * (100 - HULL_TOLERANCE_PCT)
 
 /**
  * Range (zasięg): how many months the shields and the hull last at the average net costs. A taken loan's debt still to
@@ -290,6 +345,19 @@ export function energyAfter(d: { today: string; limit: number; spentBefore: numb
 export function rangeMonths(shields: number, hull: number, monthlyCosts: number | null, debt = 0): number | null {
   if (monthlyCosts == null || monthlyCosts <= 0) return null
   return Math.max(0, shields + hull - debt) / monthlyCosts
+}
+
+/**
+ * The average monthly costs in `month` (T27 – one rule: the engine's state, the hull's target, the range at each month's
+ * end – T388): the covered months before it, at most 12, at their costs (`costsByMonth`); under 3 of them the assumed
+ * costs, when set.
+ */
+export function averageCosts(covered: readonly string[], costsByMonth: ReadonlyMap<string, number>, assumed: number | null, month: string): { average: number | null; months: number; source: 'history' | 'assumed' | null } {
+  const window = monthsBefore(covered, month, 12)
+  const average = window.length ? Math.round(sum(window.map((x) => costsByMonth.get(x) ?? 0)) / window.length) : null
+  if (window.length >= 3 || (assumed == null && average != null)) return { average, months: window.length, source: 'history' }
+  if (assumed != null) return { average: assumed, months: window.length, source: 'assumed' }
+  return { average: null, months: 0, source: null }
 }
 
 export const SHIP_CLASSES = ['scout', 'corvette', 'frigate', 'destroyer', 'cruiser', 'flagship'] as const
@@ -329,17 +397,6 @@ export function nextUnpaidOf(c: CycleOf & Pick<Container, 'dueDay'>, today: stri
   return paidDue && date.slice(0, 7) === paidDue ? nextPaymentOf(c, addDays(date, 1)) : date
 }
 
-/**
- * The cycle (its due month) a payment of a periodic fee in `month` closes (B55): the due month's, or – a cycle of 3
- * months or more – the next due month's when paid the month before it (early: the 1st on a Monday), only while the cycle
- * before is closed (`closed` – paid, or before the fee was followed): else it is that cycle's, late. null = paid late.
- */
-export function paidCycleOf(c: CycleOf, month: string, closed: (dueMonth: string) => boolean = () => true): string | null {
-  const { dueMonth: due, length } = cyclePosition(c, month)
-  if (due === month) return due
-  return length >= 3 && addMonths(month, 1) === due && closed(addMonths(due, -length)) ? due : null
-}
-
 /** The month a periodic fee is followed from (T135): the budget's start, or its `from` when later (T136). */
 export const followedFrom = (c: { from?: string | null }, start: string): string => [monthOf(start), c.from ?? ''].sort().at(-1)!
 
@@ -347,54 +404,26 @@ export const followedFrom = (c: { from?: string | null }, start: string): string
 export type FeeOf = CycleOf & Pick<Container, 'archived' | 'from' | 'until'> & { archivedAt?: string | null }
 
 /**
- * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135, T345): they never
- * pass the run – the money left before the opening balances – yet each closes its cycle as one in the run does
- * (`paidCycleOf`: the due month's; a cycle of 3 months or more – the next due's the month before it, the one before
- * closed). Before the start the fee is followed from its first payment seen: a cycle before it is closed (not followed),
- * a later one only when paid – a late payment pays the cycle before (T135), never the next one. Only a payment in the
- * fee's life is its tank's (B56). The engine and the start wizard count the same; `dates` – its payments'
- * (`feePaymentDays`).
+ * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135, T345, T393): they
+ * never pass the run – the money left before the opening balances – yet each pays its due as the hold counts it
+ * (`paidDuesOf`, the engine's turn of the start the same): the due of its window, the next cycle's early only with the one
+ * before paid; a late one the late due (the fee followed from its first payment seen – przegląd N2 4), never the next.
+ * The start wizard reads it; `paid` – the fee's payments (`paymentsIndex`, the one rule – T393; a day alone: the fee's
+ * amount then).
  */
-export function paidBeforeStart(c: FeeOf, dates: Iterable<string>, start: string): Set<string> {
-  const paid = new Set<string>()
-  let followed: string | null = null
-  for (const date of [...dates].sort()) {
-    const month = monthOf(date)
-    if (date >= start || !activeIn(c, month)) continue
-    followed ??= month
-    const since = followed
-    const cycle = paidCycleOf(c, month, (due) => due < since || paid.has(due))
-    if (cycle) paid.add(cycle)
-    else {
-      // Late: the cycle before is paid now – a payment the month before the next due is that one's, early.
-      const { dueMonth, length } = cyclePosition(c, month)
-      paid.add(addMonths(dueMonth, -length))
-    }
+export function paidBeforeStart(c: FeeDuesOf, paid: Iterable<string | { date: string; amount: number }>, start: string): Set<string> {
+  const linked: Linked[] = []
+  for (const p of paid) {
+    const date = typeof p === 'string' ? p : p.date
+    if (date < start) linked.push({ id: String(linked.length).padStart(6, '0'), date, amount: typeof p === 'string' ? amountIn(c, monthOf(date)) : p.amount, accountId: '' })
   }
-  return paid
+  // The hold's order of one day's payments (`paymentsIndex` – one comparator, T393).
+  linked.sort(byPaymentDay)
+  const month = monthOf(start)
+  return paidDuesOf(c, linked, feeDayOf(c, linked, month), { start, month })
 }
 
-/**
- * The days a periodic fee's tank pays, before `before` (AP-5, T345): an expense's parts linked to the fee (the part's
- * container, else the operation's) as the run counts them – not paid from a known goal (the goal's money, T131) nor to be
- * refunded (the household's). The engine's pass before the start and the start wizard read the same – never the cargo
- * hold's index of linked payments (any kind, a goal's and a refundable one too).
- */
-export function feePaymentDays(transactions: readonly Transaction[], before: string, isFee: (containerId: string) => boolean, knownGoal: (goalId: string) => boolean): Map<string, string[]> {
-  const out = new Map<string, string[]>()
-  for (const t of transactions) {
-    if (t.date >= before || t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
-    for (const p of partsOf(t)) {
-      const cid = p.containerId ?? t.containerId
-      const gid = p.goalId ?? t.goalId
-      if (p.refundable || p.amount >= 0 || !cid || !isFee(cid) || (gid && knownGoal(gid))) continue
-      const days = out.get(cid)
-      if (days) days.push(t.date)
-      else out.set(cid, [t.date])
-    }
-  }
-  return out
-}
+const NO_CYCLES: ReadonlySet<string> = new Set()
 
 /** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
 const archivedMonth = (c: { archived: boolean; archivedAt?: string | null }): string | null => (c.archived && c.archivedAt ? warsawNow(c.archivedAt).month : null)
@@ -626,15 +655,21 @@ export interface FleetEvent {
   date: string
   /**
    * 'goal' = a goal's money moved out (to the shields or another goal – 1.4.2); 'tank' = a tank's rest back to the
-   * shields after its fee's life (1.4.2); 'rate' = a goal's installment from the salary (1.8.0, F15).
+   * shields after its fee's life (1.4.2); 'rate' = a goal's installment from the salary (1.8.0, F15); 'hull' = the hull
+   * topped up from the shields above their target (1.15.7, AP-17 – „Dopełnij kadłub z osłon”).
    */
-  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'rate' | 'month-end' | 'loot' | 'goal' | 'tank' | TxKind
+  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'rate' | 'month-end' | 'loot' | 'goal' | 'tank' | 'hull' | TxKind
   amount: number
   txId?: string
   /** 'loot': the month whose loot it splits (1.4.2, B10). */
   ref?: string
   /** An operation counted by its ICTTJ payout's pool before its docking (AP-12) – „do zadokowania”. */
   pending?: true
+  /**
+   * A return of the pool „Podatek” to the trading account (its tax hold's money – the shields when it is empty): never a
+   * top-up the firewall checks (T374), whatever the hold had.
+   */
+  tax?: true
   moves: Moves
 }
 
@@ -659,7 +694,8 @@ export interface FleetState {
   total: number
   /**
    * `over` = above their target; `free` = „wolne do decyzji” – the part above the target only with a full hull (N21: the
-   * docking order fills the hull first, and the firewall lets a top-up of XTB only from there).
+   * docking order fills the hull first, and the firewall lets a top-up of XTB only from there) – full from 99 % of its
+   * target (AP-17, T372).
    */
   shields: { amount: number; target: number | null; free: number; over: number; min: number | null }
   hull: { amount: number; target: number | null }
@@ -668,8 +704,9 @@ export interface FleetState {
   energy: number
   /**
    * The periodic fees' tanks: `dueMonth` = the next payment still to make; `paidDue` = this cycle's due month when paid
-   * already (B6, B55); `want` = the installment it wanted at this month's turn (T29, `tankWant`) – the energy gave it or
-   * less (the log's `sinking`; without a salary nothing – C20); none = the engine did not run this month's turn.
+   * already (B6, B55) – its due paid in Ładownia by the same payments (T393); `want` = the installment it wanted at this
+   * month's turn (T29, `tankWant`) – the energy gave it or less (the log's `sinking`; without a salary nothing – C20);
+   * none = the engine did not run this month's turn.
    */
   tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; paidDue: string | null; due: number; want?: number }>
   taxHold: number
@@ -713,9 +750,36 @@ export interface FleetState {
   /** This month's salary as paid. */
   salary: SalaryPayment | null
   envelopes: EnvelopeState[]
-  daily: (DailyAllowance & { limit: number; spentBefore: number; spentToday: number }) | null
+  daily: DailyState | null
   alarms: Alarm[]
   log: FleetEvent[]
+}
+
+/**
+ * Today's energy (D16, T30, T295; AP-13): `left` – the allowance less today's spending (below 0 = over the day: the
+ * engine's alarm and the game's violation); `energy` – what every screen shows as „Energia dziś”: `left`, never more than
+ * the month's energy left (T371) – `cap` says by how much and why.
+ */
+export interface DailyState extends DailyAllowance {
+  limit: number
+  /** Spent from the daily pool before today (refunds of those days netted). */
+  spentBefore: number
+  /** Spent today – each main category's purchases less its refunds of today, never below 0 (T370). */
+  spentToday: number
+  /**
+   * What today's refunds of earlier purchases returned (AP-13, D99 pkt 4 – T370): beyond the day's purchases of their
+   * category – not today's energy; from tomorrow on in the days' pool (spent before), spread over the days left.
+   */
+  returned: number
+  /** …by main category ('' – none): a purchase of its category today takes it first (the quick entry's preview). */
+  returnedBy: Record<string, number>
+  /** Today's energy as shown (AP-13, T371). */
+  energy: number
+  /**
+   * The month's energy left capped today's (T371): its amount and why it is short – 'partial' a partial salary (D14),
+   * 'none' no salary paid this month, 'spent' the planned envelopes, the cargo and the rest took it. null = not capped.
+   */
+  cap: { month: number; why: 'partial' | 'none' | 'spent' } | null
 }
 
 /**
@@ -838,14 +902,7 @@ export function computeFleet(input: FleetInput): FleetState {
   const loanBacks = loanBacksOf(input.loans ?? [], sortedOps(input.transactions), today)
   const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax, loanBacks }
   const incomeMonths = incomeByMonth(txs, incomeContext)
-  const costsFor = (m: string): FleetState['costs'] => {
-    const window = monthsBefore(covered, m, 12)
-    const h = { average: window.length ? Math.round(sum(window.map((x) => costsByMonth.get(x) ?? 0)) / window.length) : null, months: window.length }
-    const assumed = settings.layers.assumedCosts
-    if (h.months >= 3 || (assumed == null && h.average != null)) return { average: h.average, months: h.months, source: 'history' }
-    if (assumed != null) return { average: assumed, months: h.months, source: 'assumed' }
-    return { average: null, months: 0, source: null }
-  }
+  const costsFor = (m: string): FleetState['costs'] => averageCosts(covered, costsByMonth, settings.layers.assumedCosts, m)
   const costsCache = new Map<string, FleetState['costs']>()
   const costsAt = (m: string) => costsCache.get(m) ?? costsCache.set(m, costsFor(m)).get(m)!
   const planFor = (m: string): MonthPlan | null => {
@@ -1063,17 +1120,35 @@ export function computeFleet(input: FleetInput): FleetState {
   // salary already (T45), the start pays only the rest.
   // A periodic fee is its tank's, never the salary's.
   const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
-  /** The cycles (due months) of each periodic fee paid already (B55). */
-  const paidCycles = new Map<string, Set<string>>()
   /** What each tank wanted at this month's turn (T29, C20) – the energy gave it, or less (`FleetState.tanks[].want`). */
   const wantedNow = new Map<string, number>()
-  // Paid before the start (AP-5): those cycles are paid too – the first salary never sets their fee aside again. Each
-  // part as the run counts it (`feePaymentDays`): a goal's money is the goal's, a part to be refunded the household's.
-  if (started && start) {
-    for (const [id, dates] of feePaymentDays(txs, start, (id) => periodicIds.has(id), knownGoal)) {
-      const paid = paidBeforeStart(containerById.get(id)!, dates, start)
-      if (paid.size) paidCycles.set(id, paid)
-    }
+  /**
+   * Each periodic fee's payments its cycles count (B55, T345, T393), by day – the hold's own (`paymentsIndex`): an
+   * expense's parts linked to it, one per operation, from a goal and to be refunded too (the bill is paid – the money
+   * the goal's or the household's, the tank not drawn); the ones before the budget's start too (AP-5: the first salary
+   * never sets a fee paid then aside again). Later than today – none counted (`paidBefore`).
+   */
+  const feePayments = paymentsIndex(input.transactions).byContainer
+  /** Each fee's last paid cycles: its payments then, its payment day – the same for its active dues whatever the month. */
+  const paidMemo = new Map<string, { n: number; day: number; paid: ReadonlySet<string> }>()
+  /**
+   * The cycles (due months) of a periodic fee its payments before `before` paid (B55, T393): the dues Ładownia showed paid
+   * then – the hold's one rule (`paidDuesOf`) for the month `m`, on its payment day then; a cycle paid wants nothing more.
+   * The budget's dues from its first day – none before it runs (this month's only, as Ładownia).
+   */
+  const paidBefore = (c: Container, before: string, m: string): ReadonlySet<string> => {
+    const list = feePayments.get(c.id)
+    if (!list) return NO_CYCLES
+    let n = 0
+    while (n < list.length && list[n]!.date < before) n++
+    if (!n) return NO_CYCLES
+    const known = n === list.length ? list : list.slice(0, n)
+    const day = paymentDay(c, known, m).day
+    const memo = paidMemo.get(c.id)
+    if (memo && memo.n === n && memo.day === day) return memo.paid
+    const paid = paidDuesOf(c, known, day, { start: started ? start : null, month: m })
+    paidMemo.set(c.id, { n, day, paid })
+    return paid
   }
   const startMonthSpent = start ? startMonthSpentOf(txs, start, (t) => !!t.containerId && periodicIds.has(t.containerId)) : 0
   const payMonth = (m: string, date: string) => {
@@ -1106,8 +1181,9 @@ export function computeFleet(input: FleetInput): FleetState {
     for (const c of containers) {
       if (c.cycleMonths <= 1 || !activeIn(c, m)) continue
       const tank = tanks.get(c.id) ?? 0
-      // This cycle paid already (early – B55, before the start – AP-5): nothing more to collect for it.
-      const want = tankWant(c, m, tank, paidCycles.get(c.id))
+      // This cycle paid already (early – B55, before the start – AP-5) as Ładownia showed it then (T393): nothing more to
+      // collect for it.
+      const want = tankWant(c, m, tank, paidBefore(c, date, m))
       if (m === month) wantedNow.set(c.id, want)
       if (!paid) continue
       const take = Math.min(want, Math.max(0, energy))
@@ -1153,10 +1229,12 @@ export function computeFleet(input: FleetInput): FleetState {
     const amt = t.amount
     // Paired with an ICTTJ payout, not docked yet (AP-12): counted by the entry's pool at once – the docking confirms it.
     const pair = pairOf(t)
+    let taxReturn = false
     switch (t.kind) {
       case 'expense': {
         for (const p of partsOf(t)) {
-          // A household member's part: the ledger's (below).
+          // A household member's part: the ledger's (below) – a fee's bill it pays still pays the due (T393), its tank
+          // not drawn.
           if (p.refundable) continue
           const cid = p.containerId ?? t.containerId
           const container = cid ? containerById.get(cid) : undefined
@@ -1165,6 +1243,7 @@ export function computeFleet(input: FleetInput): FleetState {
           const periodic = container && container.cycleMonths > 1 && activeIn(container, monthOf(t.date)) ? container : undefined
           const gid = p.goalId ?? t.goalId
           const goal = gid && knownGoal(gid) ? gid : null
+          // A goal's money (T131): a fee's bill paid from it still pays the due (T393) – its tank not drawn.
           if (goal) {
             if (p.amount < 0) {
               const have = goalAmount.get(goal) ?? 0
@@ -1174,10 +1253,7 @@ export function computeFleet(input: FleetInput): FleetState {
             } else addGoal(goal, p.amount, moves)
           } else if (periodic) {
             if (p.amount < 0) {
-              // The cycle before closed – paid, or before the fee was followed (the budget's start, its `from`).
-              const followed = start ? followedFrom(periodic, start) : ''
-              const cycle = paidCycleOf(periodic, monthOf(t.date), (due) => due < followed || !!paidCycles.get(periodic.id)?.has(due))
-              if (cycle) paidCycles.set(periodic.id, (paidCycles.get(periodic.id) ?? new Set()).add(cycle))
+              // The cycle it pays: the hold's rule, read at each turn and today (`paidBefore`, T393).
               const tank = tanks.get(periodic.id) ?? 0
               const fromTank = Math.min(-p.amount, Math.max(0, tank))
               tanks.set(periodic.id, tank - fromTank)
@@ -1225,15 +1301,17 @@ export function computeFleet(input: FleetInput): FleetState {
           // The tax money going back to the trading capital (an ICTTJ return of the pool „Podatek”): out of the tax
           // hold, not the budget's money – no firewall.
           if (pool === 'tax') {
+            taxReturn = true
             const fromHold = Math.min(-amt, Math.max(0, taxHold))
             taxHold -= fromHold
             if (fromHold) moves.taxHold = -fromHold
             if (-amt > fromHold) drawShields(-amt - fromHold, moves)
             break
           }
-          // A top-up of the trading account: only from „wolne do decyzji” with full shields and hull (D23, firewall).
+          // A top-up of the trading account: only from „wolne do decyzji” with full shields and hull (D23, firewall) – the
+          // hull from 99 % of its target (AP-17, T372).
           const tg = targetsAt(t.date)
-          const allowed = tg.shields != null && tg.hull != null && shields + amt >= tg.shields && hull >= tg.hull
+          const allowed = tg.shields != null && tg.hull != null && shields + amt >= tg.shields && hullCountsFull(hull, tg.hull)
           if (!allowed && settings.orders.firewall) alarms.push({ kind: 'firewall', level: 'red', date: t.date, amount: -amt, txId: t.id })
           drawShields(-amt, moves)
         }
@@ -1307,8 +1385,9 @@ export function computeFleet(input: FleetInput): FleetState {
         addShields(amt, moves)
         break
     }
-    if (!pair) return record({ date: on, kind: t.kind, amount: amt, txId: t.id, moves })
-    record({ date: on, kind: t.kind, amount: amt, txId: t.id, pending: true, moves })
+    const tax = taxReturn ? { tax: true as const } : {}
+    if (!pair) return record({ date: on, kind: t.kind, amount: amt, txId: t.id, ...tax, moves })
+    record({ date: on, kind: t.kind, amount: amt, txId: t.id, pending: true, ...tax, moves })
     toDock.count++
     // What the pool counts: an inflow typed on Portfel XTB (B69) less a household member's part of it (D80) and what of
     // it repays a loan (D100 – back to the shields; its excess docks with the rest – review 2 of N2).
@@ -1482,36 +1561,74 @@ export function computeFleet(input: FleetInput): FleetState {
     // the events of its day – before the first one (in the engine's order) that came to FI after it (`cameIn`: an
     // operation's docking, else the operation; a loot's decision), after the day's start; nothing of its day after it –
     // after the day's last. What the goal does not hold then (money that came before it, counted later in the day's
-    // order) moves at the day's end; never more than the goal holds.
-    const transfers = goalsAll
-      .flatMap((g) => (g.transfers ?? []).map((tr, i) => ({ g, tr, i, date: warsawNow(tr.at).date, at: Date.parse(tr.at) })))
+    // order) moves at the day's end; never more than the goal holds. The hull topped up from the shields (AP-17, T373)
+    // the same way: a top-up of XTB entered after it sees the hull full.
+    const goalMove = (g: Goal, to: string, date: string, amount: number): number => {
+      const move = Math.min(amount, goalAmount.get(g.id) ?? 0)
+      if (move <= 0) return 0
+      const moves: Moves = {}
+      const pending = pendingIn.get(g.id) ?? 0
+      addGoal(g.id, -move, moves)
+      if (to !== g.id && knownGoal(to)) {
+        addGoal(to, move, moves)
+        // A pair's money the goal no longer holds goes along to the other goal (T342).
+        const along = pending - (pendingIn.get(g.id) ?? 0)
+        if (along > 0) pendingIn.set(to, (pendingIn.get(to) ?? 0) + along)
+      } else addShields(move, moves)
+      record({ date, kind: 'goal', amount: move, moves })
+      return move
+    }
+    /**
+     * „Dopełnij kadłub z osłon” (AP-17, D99 – T373): up to `amount` from the shields above their target to what the hull
+     * lacks then – never more than either, nothing with a target unknown (a later change of the targets or of the day's
+     * operations moves only what is there).
+     */
+    const hullTopUp = (date: string, amount: number): number => {
+      const tg = targetsAt(date)
+      if (tg.shields == null || tg.hull == null) return 0
+      const move = Math.min(amount, shields - tg.shields, tg.hull - hull)
+      if (move <= 0) return 0
+      const moves: Moves = { hull: move }
+      hull += move
+      addShields(-move, moves)
+      record({ date, kind: 'hull', amount: move, moves })
+      return move
+    }
+    /** A move at its moment: `key`, `i` – its place among the moves of the same moment (a goal and its transfer's index). */
+    interface Move {
+      date: string
+      at: number
+      key: string
+      i: number
+      amount: number
+      run: (amount: number) => number
+    }
+    const transfers: Move[] = [
+      ...goalsAll.flatMap((g) =>
+        (g.transfers ?? []).map((tr, i) => {
+          const date = warsawNow(tr.at).date
+          return { date, at: Date.parse(tr.at), key: g.id, i, amount: tr.amount, run: (v: number) => goalMove(g, tr.to, date, v) }
+        })
+      ),
+      ...plans.flatMap((p) =>
+        (p.hullTopUps ?? []).map((u) => {
+          const date = warsawNow(u.at).date
+          return { date, at: Date.parse(u.at), key: u.id, i: 0, amount: u.amount, run: (v: number) => hullTopUp(date, v) }
+        })
+      )
+    ]
       .filter((m) => m.date >= start && m.date <= today)
-      .sort((a, b) => order(a.date, b.date) || a.at - b.at || order(a.g.id, b.g.id) || a.i - b.i)
-    type GoalMove = (typeof transfers)[number]
+      .sort((a, b) => order(a.date, b.date) || a.at - b.at || order(a.key, b.key) || a.i - b.i)
     let nextMove = 0
     /** The day of the events run last: its transfers wait for its later events. */
     let moveDay: string | null = null
-    /** The parts of `moveDay`'s transfers the goal did not hold at their moment: moved at the day's end. */
-    let short: Array<{ m: GoalMove; rest: number }> = []
-    const moveOut = (m: GoalMove, amount: number): number => {
-      const move = Math.min(amount, goalAmount.get(m.g.id) ?? 0)
-      if (move <= 0) return 0
-      const moves: Moves = {}
-      const pending = pendingIn.get(m.g.id) ?? 0
-      addGoal(m.g.id, -move, moves)
-      if (m.tr.to !== m.g.id && knownGoal(m.tr.to)) {
-        addGoal(m.tr.to, move, moves)
-        // A pair's money the goal no longer holds goes along to the other goal (T342).
-        const along = pending - (pendingIn.get(m.g.id) ?? 0)
-        if (along > 0) pendingIn.set(m.tr.to, (pendingIn.get(m.tr.to) ?? 0) + along)
-      } else addShields(move, moves)
-      record({ date: m.date, kind: 'goal', amount: move, moves })
-      return move
-    }
+    /** The parts of `moveDay`'s moves not made at their moment (the goal did not hold them, the shields had no surplus): at the day's end. */
+    let short: Array<{ m: Move; rest: number }> = []
+    const moveOut = (m: Move, amount: number): number => m.run(amount)
     /** The next transfer whole – its day has nothing after it. */
     const moveNext = () => {
       const m = transfers[nextMove++]!
-      moveOut(m, m.tr.amount)
+      moveOut(m, m.amount)
     }
     /** The end of `moveDay`: the parts its transfers could not move at their moment, then those after its last event. */
     const endMoveDay = () => {
@@ -1534,8 +1651,8 @@ export function computeFleet(input: FleetInput): FleetState {
     const movesBefore = (date: string, at: number) => {
       while (nextMove < transfers.length && transfers[nextMove]!.date === date && transfers[nextMove]!.at < at) {
         const m = transfers[nextMove++]!
-        const moved = moveOut(m, m.tr.amount)
-        if (moved < m.tr.amount) short.push({ m, rest: m.tr.amount - moved })
+        const moved = moveOut(m, m.amount)
+        if (moved < m.amount) short.push({ m, rest: m.amount - moved })
       }
     }
     const runEvent = (e: Ev) => {
@@ -1580,7 +1697,8 @@ export function computeFleet(input: FleetInput): FleetState {
   if (plan) {
     const spentBy = new Map<string, { before: number; today: number }>()
     let dailyBefore = 0
-    let dailyToday = 0
+    /** Today's daily spending by main category ('' – none): its refunds net its purchases first (T370). */
+    const todayBy = new Map<string, number>()
     for (const t of txs) {
       if (monthOf(t.date) !== month || t.kind !== 'expense' || t.goalId || isCargoPayment(t, containerIds)) continue
       for (const p of partsOf(t)) {
@@ -1596,9 +1714,22 @@ export function computeFleet(input: FleetInput): FleetState {
         }
         // Spending without a category counts against today's energy: most likely a daily purchase.
         if (kind === 'daily') {
-          if (t.date === today) dailyToday += cost
+          if (t.date === today) todayBy.set(main?.id ?? '', (todayBy.get(main?.id ?? '') ?? 0) + cost)
           else dailyBefore += cost
         }
+      }
+    }
+    // A refund of an earlier purchase (AP-13, D99 pkt 4 – T370): today's refunds of a category return its purchases of
+    // today first (goods taken back the same day); what they return beyond them is not today's energy – from tomorrow it
+    // is spent before (less), so the days left share it.
+    let dailyToday = 0
+    let returned = 0
+    const returnedBy: Record<string, number> = {}
+    for (const [key, v] of todayBy) {
+      if (v >= 0) dailyToday += v
+      else {
+        returned -= v
+        returnedBy[key] = -v
       }
     }
     let dailyLimit = dailyExtra.get(month) ?? 0
@@ -1621,7 +1752,12 @@ export function computeFleet(input: FleetInput): FleetState {
       if (over?.over) alarms.push({ kind: 'envelope-over', level: over.serious ? 'red' : 'yellow', date: today, amount: spent - limit, ref: main.id })
     }
     const d = dailyAllowance({ limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, day: dayOfMonth(today), daysInMonth: daysInMonth(month) })
-    daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday }
+    // Never more than the month's energy left (AP-13, D99 pkt 4 – T371): a partial salary, none, or the month's energy
+    // taken by the planned envelopes and the cargo leave less for today than the daily pool says. The layers run only.
+    const shown = started ? cappedEnergy(d.left, energy) : d.left
+    const paid = salaryOfMonth.get(month)
+    const cap: DailyState['cap'] = shown < d.left ? { month: energy, why: !paid ? 'none' : paid.alarm === 'red' ? 'partial' : 'spent' } : null
+    daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, returned, returnedBy, energy: shown, cap }
     if (d.left < 0) alarms.push({ kind: 'daily-over', level: 'yellow', date: today, amount: -d.left })
   }
 
@@ -1635,12 +1771,13 @@ export function computeFleet(input: FleetInput): FleetState {
   if (salary != null && income.average != null && salary > income.average) alarms.push({ kind: 'salary-above-income', level: 'yellow', date: today, amount: salary - income.average })
 
   const overTarget = targets.shields != null ? Math.max(0, shields - targets.shields) : 0
-  const hullFull = targets.hull != null && hull >= targets.hull
+  // „Wolne do decyzji” with the hull from 99 % of its target (AP-17, T372) – as the firewall lets a top-up of XTB.
+  const hullFull = hullCountsFull(hull, targets.hull)
   toDock.goals = sum([...pendingIn.values()])
-  /** The tank's cycle: this one, or – paid already – the next one (B6). */
+  /** The tank's cycle: this one, or – paid already by today's payments, as Ładownia shows it (T393) – the next one (B6). */
   const tankCycle = (c: Container) => {
     const due = cyclePosition(c, month).dueMonth
-    return paidCycles.get(c.id)?.has(due) ? { dueMonth: cyclePosition(c, addMonths(due, 1)).dueMonth, paidDue: due } : { dueMonth: due, paidDue: null }
+    return paidBefore(c, addDays(today, 1), month).has(due) ? { dueMonth: cyclePosition(c, addMonths(due, 1)).dueMonth, paidDue: due } : { dueMonth: due, paidDue: null }
   }
   return {
     today,

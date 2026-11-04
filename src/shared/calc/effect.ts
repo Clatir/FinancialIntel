@@ -10,7 +10,7 @@ export interface Change {
 }
 
 export interface Effect {
-  /** Today's energy after today's spending (`daily.left`); null – no plan of the month, or no change. */
+  /** Today's energy as shown (`daily.energy` – AP-13); null – no plan of the month, or no change. */
   energy: Change | null
   shields: Change | null
   /** The envelopes of this month whose rest changes. */
@@ -37,7 +37,7 @@ export function effectOf(before: FleetState, after: FleetState): Effect {
   // An account the change brings in (an operation moved onto one without any yet).
   for (const a of after.accounts) if (!before.accounts.some((b) => b.id === a.id) && a.balance) accounts.push({ id: a.id, name: a.name, before: 0, after: a.balance })
   return {
-    energy: before.daily && after.daily ? change(before.daily.left, after.daily.left) : null,
+    energy: before.daily && after.daily ? change(before.daily.energy, after.daily.energy) : null,
     shields: before.started && after.started ? change(before.shields.amount, after.shields.amount) : null,
     envelopes,
     accounts
@@ -46,3 +46,28 @@ export function effectOf(before: FleetState, after: FleetState): Effect {
 
 /** Does the change move nothing the captain sees? */
 export const noEffect = (e: Effect): boolean => !e.energy && !e.shields && !e.envelopes.length && !e.accounts.length
+
+/** A line of `layersEffect`: an amount before and after (null – unknown, a target without its salary or costs). */
+export interface LayersLine {
+  label: string
+  before: number | null
+  after: number | null
+}
+
+/**
+ * What a change of the layers' targets does (AP-17, MO sp. 4 – the history counts again from the start with them): the
+ * shields and the hull with their targets, the goals, the month's energy and „wolne do decyzji” – the lines that change.
+ */
+export function layersEffect(before: FleetState, after: FleetState): LayersLine[] {
+  const goals = (f: FleetState) => f.goals.reduce((a, g) => a + g.amount, 0)
+  const lines: LayersLine[] = [
+    { label: 'Osłony', before: before.shields.amount, after: after.shields.amount },
+    { label: 'Cel osłon', before: before.shields.target, after: after.shields.target },
+    { label: 'Kadłub', before: before.hull.amount, after: after.hull.amount },
+    { label: 'Cel kadłuba', before: before.hull.target, after: after.hull.target },
+    { label: 'Cele (razem)', before: goals(before), after: goals(after) },
+    { label: 'Energia miesiąca', before: before.energy, after: after.energy },
+    { label: 'Wolne do decyzji', before: before.shields.free, after: after.shields.free }
+  ]
+  return lines.filter((l) => l.before !== l.after)
+}

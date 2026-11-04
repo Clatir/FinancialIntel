@@ -258,6 +258,11 @@ export const containerSchema = z.looseObject({
    */
   amountAt: isoDateTime.optional().catch(undefined),
   /**
+   * When its payment day was last set by hand (1.15.7, T376): the payments before it no longer say its day – none =
+   * never set (its day comes from its payments, T208).
+   */
+  dueAt: isoDateTime.optional().catch(undefined),
+  /**
    * Its earlier amounts (1.9.0, F9): each up to its month, `amount` from the month after the last one – a raise counts
    * from its month, the months before keep the old amount. Empty = `amount` always.
    */
@@ -389,6 +394,17 @@ export const envelopeCoverSchema = z.looseObject({
 })
 export type EnvelopeCover = z.infer<typeof envelopeCoverSchema>
 
+/**
+ * „Dopełnij kadłub z osłon” (1.15.7, AP-17 – T373): at `at` up to `amount` moved from the shields above their target to
+ * what the hull lacks then (the engine never moves more than either). An older version ignores it.
+ */
+export const hullTopUpSchema = z.looseObject({
+  id: ulidSchema,
+  amount: grosze.min(1),
+  at: isoDateTime
+})
+export type HullTopUp = z.infer<typeof hullTopUpSchema>
+
 export const monthPlanSchema = z.looseObject({
   ...recordBase,
   month: isoMonth,
@@ -399,6 +415,8 @@ export const monthPlanSchema = z.looseObject({
   loot: lootSchema.nullable().default(null),
   /** The month's overruns covered from other envelopes (1.8.0, F28); an older version ignores them. */
   envelopeCovers: lenientList(envelopeCoverSchema).catch([]).default([]),
+  /** The hull topped up from the shields this month (1.15.7, AP-17); absent = none – files without it stay as they are. */
+  hullTopUps: lenientList(hullTopUpSchema).optional().catch(undefined),
   note: text
 })
 export type MonthPlan = z.infer<typeof monthPlanSchema>
@@ -501,6 +519,12 @@ export const balanceSchema = z.looseObject({
   kind: z.enum(['opening', 'confirmation']),
   amount: grosze,
   correctionId: ulidSchema.nullable().default(null),
+  /**
+   * A confirmation's last moment of confirming (1.15.7, T383 – „Inwentaryzacja”): `confirmBalance` and the import stamp
+   * it, again too; an edit, a merge or a conflict's resolution never does. None = written before 1.15.7 – its balance's
+   * day counts, as that version counted it.
+   */
+  confirmedAt: isoDateTime.optional().catch(undefined),
   note: text
 })
 export type Balance = z.infer<typeof balanceSchema>
@@ -530,6 +554,11 @@ export const gameDaySchema = z.looseObject({
     .default([]),
   /** The ship's class at the day's end. */
   cls: z.string().max(20).nullable().default(null),
+  /**
+   * The day before's class as this day's data saw it (AP-14, 1.15.7): only when not the one it was frozen with – a change
+   * of the class that came with new data (history imported later), not with the ship; the watch log never celebrates it.
+   */
+  clsBefore: z.string().max(20).optional(),
   /** The cargo's monthly mass at the day's end (the next day sees a container added or raised by it). */
   cargo: grosze.nullable().default(null),
   /** The day's ICT flavour (D73): 'judas' (an impulse), 'turtle' (a returned product), 'sweep' (the energy exactly 0). */

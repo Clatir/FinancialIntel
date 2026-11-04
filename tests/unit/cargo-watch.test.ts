@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { briefing } from '@shared/calc/briefing'
 import { addMonths } from '@shared/calc/dates'
-import { cargoStatuses } from '@shared/calc/cargoStatus'
+import { cargoStatuses, dueWindow } from '@shared/calc/cargoStatus'
 import { cycleText, deadContainers, pastAfterChange, priceChanges, priceText, deadText } from '@shared/calc/cargoWatch'
-import { amountIn, computeFleet, cyclePosition, layersSum, monthlyWeight, nextPaymentOf, paidCycleOf, paymentsPerYear, scheduleOf, sinkingInstallment, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { amountIn, computeFleet, cyclePosition, layersSum, monthlyWeight, nextPaymentOf, paymentsPerYear, scheduleOf, sinkingInstallment, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { recurringPayments, salarySplit, simulateCargo, sinkingOf } from '@shared/calc/plan'
 import { lastPaymentOf, radar } from '@shared/calc/radar'
 import { createDefaultSettings } from '@shared/defaults'
@@ -61,10 +61,10 @@ describe('harmonogram płatności (1.9.0, F23)', () => {
     expect(nextPaymentOf(tax, '2026-05-15')).toBe('2026-05-15')
     expect(nextPaymentOf(tax, '2026-05-16')).toBe('2026-09-15')
     expect(nextPaymentOf(tax, '2026-11-20')).toBe('2027-03-15')
-    // A payment early (the month before its due) closes a cycle of 3 months and more only.
-    expect(paidCycleOf(tax, '2026-08')).toBe('2026-09')
-    expect(paidCycleOf(tax, '2026-04')).toBeNull()
-    expect(paidCycleOf(tax, '2026-05')).toBe('2026-05')
+    // A payment early (the month before its due) counts for a cycle of 3 months and more only (T135, T375): September's
+    // window from 1 August, May's (2 months) from 14 days before its day.
+    expect(dueWindow(tax, '2026-09', 15)).toEqual({ month: '2026-09', date: '2026-09-15', from: '2026-08-01', early: '2026-09-01' })
+    expect(dueWindow(tax, '2026-05', 15)).toEqual({ month: '2026-05', date: '2026-05-15', from: '2026-05-01', early: '2026-05-15' })
   })
 
   it('harmonogram tylko opłaty okresowej, 2–11 miesięcy; inaczej liczy się jej cykl', () => {
@@ -114,8 +114,8 @@ describe('harmonogram płatności (1.9.0, F23)', () => {
     // Its end: the last payment of its life.
     expect(lastPaymentOf({ ...c, until: '2027-08' }, '2026-11-20')).toBe('2027-05-15')
     // Due in its schedule's month only (F1).
-    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-03-10', tanks: [], coveredTo: {} }).map((s) => [s.due, s.state])).toEqual([['2027-03-15', 'waiting']])
-    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-04-10', tanks: [], coveredTo: {} })).toEqual([])
+    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-03-10', coveredTo: {} }).map((s) => [s.due, s.state])).toEqual([['2027-03-15', 'waiting']])
+    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-04-10', coveredTo: {} })).toEqual([])
   })
 })
 

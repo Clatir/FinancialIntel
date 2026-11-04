@@ -6,10 +6,11 @@
 import { useMemo, type ReactNode } from 'react'
 import {
   ACHIEVEMENT_INFO,
-  firstMissionMonday,
+  missionAhead,
   missionStatus,
   missionText,
   missionTitle,
+  progressText,
   RANK_GENITIVE,
   RANK_LABEL,
   RANKS,
@@ -26,7 +27,7 @@ import { rangeGapText, rangeText } from '@shared/format'
 import type { GameSettings } from '@shared/schema'
 import { updateSettings, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
-import { useGame } from '../../store/game'
+import { freezeWithoutImport, useFreezeAsk, useGame } from '../../store/game'
 import { navigate } from '../../store/ui'
 import { plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
@@ -35,6 +36,7 @@ import { Badge, Empty, Field, NumberField, Panel, cx } from '../../components/ui
 import { countLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { OrdersFields } from '../settings/MachineTabs'
+import { freezeRange } from './FreezeQuestion'
 
 const zl = (g: number) => `${plnText(g)} zł`
 const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
@@ -74,6 +76,8 @@ export function CommandPage() {
   // Once per day and change (N68: the days not frozen yet run the engine) – before any early return (the hooks' order).
   const day = fleet?.today ?? null
   const status = useMemo(() => (game?.view.mission && day ? missionStatus(game.input, game.view.mission, day) : null), [game, day])
+  // The freezing waiting for the bank's data (AP-14): said here, with its answer, also after the question was closed.
+  const ask = useFreezeAsk((s) => s.ask)
   if (!game || !fleet || !settings) return <Empty>Wczytywanie…</Empty>
   const { view, today, input } = game
   const label = (id: string) => cats.label(id)
@@ -83,6 +87,21 @@ export function CommandPage() {
         <h1 className="text-[15px] font-medium text-fg-strong">Dowództwo</h1>
         <span className="text-[12px] text-muted">{view.start ? (view.waiting ? `gra od ${plDate(view.start)}` : `gra od ${plDate(view.start)} · ocenione do ${view.lastFrozen ? plDate(view.lastFrozen) : '—'}`) : 'gra wystartuje, gdy budżet działa'}</span>
       </div>
+      {ask && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/40 bg-accent-soft px-4 py-1.5 text-[12px]" data-testid="command-freeze-wait">
+          <span className="text-fg-strong">Zamrażanie czeka na import z banku</span>
+          <span className="text-muted">
+            {freezeRange(ask)} – najwyżej do {plDate(ask.until)}
+          </span>
+          <span className="flex-1" />
+          <button className="btn h-[22px]" onClick={() => navigate({ page: 'import' })}>
+            Importuj
+          </button>
+          <button className="btn btn-ghost h-[22px]" disabled={readOnly} onClick={freezeWithoutImport} data-testid="command-freeze-anyway">
+            Zamroź bez danych
+          </button>
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="command" tracks={['minmax(360px,1fr)', 'minmax(360px,1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
@@ -112,10 +131,8 @@ export function CommandPage() {
                     <span className="text-[11px] text-dim">Rozliczenie po zamrożeniu niedzieli; wykonana skraca drogę do awansu o {countLabel(settings.game.missionDays, 'dzień', 'dni', 'dni')}.</span>
                   </>
                 ) : (
-                  <span className="text-muted">
-                    {view.start
-                      ? `Pierwsza misja w tygodniu od ${plDate(firstMissionMonday(view.start))} (pierwszy pełny tydzień gry).`
-                      : 'Misje ruszą razem z grą.'}
+                  <span className="text-muted" data-testid="command-mission-none">
+                    {missionWaitText(view.start, fleet.today, !!ask)}
                   </span>
                 )}
                 {view.missions.filter((m) => m.evaluatedAt).length > 0 && (
@@ -175,6 +192,14 @@ export function CommandPage() {
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
+/** A week without its mission yet (AP-14, DW sp. 2): the first full week ahead – its date; else when it comes. */
+function missionWaitText(start: string | null, today: string, waitsForImport: boolean): string {
+  if (!start) return 'Misje ruszą razem z grą.'
+  const ahead = missionAhead(start, today)
+  if (ahead) return `Pierwsza misja w tygodniu od ${plDate(ahead)} (pierwszy pełny tydzień gry).`
+  return waitsForImport ? 'Misja tygodnia zostanie wybrana po imporcie z banku (albo po „Zamroź bez danych”).' : 'Misja tygodnia zostanie wybrana po zamrożeniu dni.'
+}
+
 function RankPanel({ view }: { view: GameView }) {
   // A rank of a newer version (B90): its name, no way to the next one from here.
   const next = view.rankNewer ? undefined : RANKS[RANKS.indexOf(view.rank) + 1]
@@ -202,8 +227,8 @@ function RankPanel({ view }: { view: GameView }) {
               </span>
             </div>
             <Meter value={p.ok + p.bonus} max={p.need} />
-            <span className="text-[11px] text-dim">
-              dni zgodne {p.ok} (od {dm(p.from)} do {dm(p.to)}){p.bonus ? ` + misje ${p.bonus}` : ''}
+            <span className="text-[11px] text-dim" data-testid="command-progress-days">
+              {progressText(p)}
             </span>
           </div>
         ) : (
@@ -331,7 +356,8 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
       text = TAG_LABEL[e.tag] ?? e.tag
       break
     case 'class':
-      text = `Klasa: ${SHIP_CLASS_LABEL[e.from]} → ${SHIP_CLASS_LABEL[e.cls]}${e.up && !e.peak ? ' (powtórnie w ciągu 30 dni)' : ''}`
+      // A change that came with new data (AP-14) is said so – never celebrated.
+      text = `Klasa: ${SHIP_CLASS_LABEL[e.from]} → ${SHIP_CLASS_LABEL[e.cls]}${e.data ? ' (skutek nowych danych, nie zmiana okrętu)' : e.up && !e.peak ? ' (powtórnie w ciągu 30 dni)' : ''}`
       mark = e.up ? 'bg-fg-strong' : 'bg-line-strong'
       break
     case 'rank':
@@ -381,10 +407,12 @@ function OrdersPanel({ game, orders, shieldSalaries, readOnly }: { game: GameSet
   return (
     <Panel title="Rozkazy i progi" testId="command-orders">
       <div className="flex flex-col gap-1 text-[12px]">
-        {/* What the game judges (N29): the day's spending against today's energy – not the plain base. */}
-        <Order label="Dzienny przydział energii (wydatków dnia)" value="wydatki dnia ≤ energia dziś" />
-        <span className="text-[11px] text-dim">
-          Energia dziś = koperty codzienne, które zostały, ÷ dni do końca miesiąca (z dziś); podstawa – koperty codzienne ÷ dni miesiąca.
+        {/* What the game judges (N29): the day's spending against its allowance – not the plain base; today's energy as
+            shown is capped by the month's (AP-13, T371), the violation stays the allowance's (`daily.left` – T392). */}
+        <Order label="Dzienny przydział energii (wydatków dnia)" value="wydatki dnia ≤ przydział dnia" />
+        <span className="text-[11px] text-dim" data-testid="command-orders-daily">
+          Przydział dnia = koperty codzienne, które zostały, ÷ dni do końca miesiąca (z dziś); podstawa – koperty codzienne ÷ dni miesiąca. Energia dziś = przydział − wydane dziś, ale nie więcej niż
+          zostało energii miesiąca (przy pensji częściowej mniej, nawet 0,00 zł); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera).
         </span>
         {/* The minimum the engine applies (B84): never above the shields' target. */}
         {orders.minShieldSalaries > shieldSalaries && (

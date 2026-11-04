@@ -2671,7 +2671,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zmian): połączona z kontenerem płatność sprzed startu budżetu nie przechodzi przez przebieg (pieniądze wyszły przed
   saldem otwarcia), ale zamyka swój cykl tak samo jak płatność w przebiegu – `paidBeforeStart` przed przebiegiem silnika
   (`paidCycleOf`: miesiąc terminu, przy cyklu ≥ 3 także miesiąc przed terminem, gdy poprzedni zamknięty; płatność w życiu
-  opłaty – `activeIn`; części paragonu jak w przebiegu, bez części celu i „do zwrotu” – `feePaymentDays`, tylko wydatek).
+  opłaty – `activeIn`; części paragonu jak w przebiegu, tylko wydatek – od 1.15.7 `paymentsIndex`, także z celu i „do
+  zwrotu”, T393).
   Przed startem opłata jest śledzona od pierwszej widzianej płatności (przegląd N2 4): cykl przed nią zamknięty (nie
   śledzony – zapłata w miesiącu przed terminem jest wcześniejszą następnego), późniejszy – tylko zapłacony; spóźniona
   zapłata zamyka poprzedni cykl (T135), nigdy następny (wcześniej każdy cykl sprzed startu był zamknięty: luty zapłacony
@@ -2682,12 +2683,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   raty innych zbiorników), zbiornik zbiera na następny termin od miesiąca po zapłaconym cyklu, ma `paidDue` – odprawa
   i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
   kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
-  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności tą samą regułą co silnik (`startPaidDays` –
-  `feePaymentDays`, przegląd N2 3; wcześniej indeks Ładowni: każdy rodzaj z kontenerem, wydatek z celu i cały „do
-  zwrotu” – kreator 0 zł, silnik cała rata): kontenera – połączonych, propozycji – tego odbiorcy od 1. dnia miesiąca
-  (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
-  kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone przed startem nie
-  odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
+  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z płatnościami tą samą regułą co silnik i Ładownia
+  (`startPaidDays` – `paymentsIndex`, T393; przegląd N2 3: wcześniej kreator brał indeks Ładowni, a silnik nie liczył
+  płatności z celu ani „do zwrotu” – kreator 0 zł, silnik cała rata): kontenera – połączonych, propozycji – tego
+  odbiorcy od 1. dnia miesiąca przed miesiącem startu (T379; połączy je start), z kwotami – cykle regułą Ładowni
+  (`paidBeforeStart` → `paidDuesOf`, T393; scalenie N2 z N3); opłata poza życiem w miesiącu startu – bez raty, jak
+  w silniku. Notka kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone
+  przed startem nie odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
   z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
   (energia wyższa o opłatę odkładaną drugi raz, zbiornik niższy); zamrożone dni gry zostają.
 - **T346** Plan miesiąca = silnik (AP-11, AF-44 / LA.8 = C17, AF-52 / C20 – D99 pkt 9, W5; doprecyzowuje T29, F15):
@@ -2885,7 +2887,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   także po pytaniu o potwierdzone saldo i „Zmień mimo to” (`features/operations/state.ts` `changeKind` /
   `updateOperation`; wcześniej wtedy bez komunikatu i bez „Cofnij”). Zmiana kategorii nie rusza celu ani kontenera (jak
   dotąd). Zmiana zbiorcza rodzaju (F11) – przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym
-  `containerId` nie są poprawiane (bez migracji).
+  `containerId` nie są poprawiane (bez migracji) – od 1.15.7 nie płacą terminu nigdzie, także w Ładowni (T393).
 - **T363** Dokowanie pary liczonej według puli (1.15.6, przegląd N2 1; uzupełnia T341 i T128): „Zadokuj” na parze do
   zadokowania (wpis ICTTJ z operacją banku albo wpływem wpisanym na Portfelu XTB, bez dokowania – liczonej od razu według
   puli wpisu; tylko operacja rodzaju, który silnik tak liczy – `countsByPool`, ten sam warunek co `pairOf`, przegląd N2
@@ -2912,7 +2914,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ekranie”, kopia schematów = parsowanie aplikacji; ok. 2 min, poza CI (migawek nie ma w repozytorium). Znane rozbieżności
   – lista `KNOWN` z powodem i grupą naprawy; znana, która zniknęła, też zatrzymuje test. Szybka część w `npm test` (CI):
   `tests/unit/wyrocznia-ap32.test.ts` – scenariusze reguł N2 (wyrocznia = silnik) i ekrany; otwarty błąd jako `it.fails`
-  (AF-15 – termin asteroidy w odprawie, N3 AP-10). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
+  (AF-15 – termin asteroidy w odprawie; naprawiony w N3 – AP-10, T376: po scaleniu N2 z N3 zwykły test, ekrany ze stanem
+  opłat i dniami jak okno, `KNOWN` bez niego). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
   wyroczni – nigdy dopasowanie wyroczni do wyniku.
 - **T368** Reguła uczy się części pożyczki tylko jako kwoty każdej wpłaty (przegląd N2 2.3; doprecyzowuje T358, T328):
   `loanAmount` reguły to część każdej wpłaty, linia grupy albo tematu – kwota razem dla jej wpłat (po kolei). Nauka
@@ -2923,3 +2926,325 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zapisywało 600 zł na każdą przyszłą wpłatę (do 3× więcej). Rozważone i odrzucone: kwota podzielona przez liczbę wpłat
   albo to, co rozkład dał każdej – „po kolei” daje wpłatom różne kwoty, żadna nie jest tym, co użytkownik wpisał. Edytor
   reguły w Ustawieniach – jedna wpłata (`rows` 1): kwota jak wpisana.
+- **T370** Zwrot wcześniejszego zakupu nie do energii dziś (1.15.7, AP-13 – MO sp. 6; realizuje D99 pkt 4, doprecyzowuje
+  T30 / T295): dzisiejsze części puli dziennej (koperty codzienne i bez kategorii) liczone osobno na kategorię główną (bez
+  kategorii – jedna grupa); zwrot (dodatni wydatek) najpierw pomniejsza dzisiejsze zakupy swojej kategorii (towar oddany
+  tego samego dnia), a to, co zwraca ponad nie (`daily.returned`, `returnedBy`), nie wchodzi do „wydane dziś” – od jutra
+  jest w wydanych wcześniej (mniej), więc rozkłada się na kolejne dni (dziś bez udziału). Wydane dziś nigdy poniżej 0,
+  kolejność w dniu bez znaczenia; suma miesiąca, koperty, debriefing i łupy bez zmian; energia miesiąca dostaje zwrot od
+  razu (pieniądze na koncie, N-PC-3 bez zmian). Rozważone i odrzucone: (a) każdy dzisiejszy zwrot na kolejne dni – zwrot
+  towaru kupionego dziś dawałby przekroczenie dnia, zamrażane w grze; (b) dopasowanie po kontrahencie – inna nazwa tego
+  samego sklepu (wpis ręczny i bank) robiłaby z dzisiejszego zwrotu dawny; (c) cała pula jako jedna grupa – zwrot butów
+  pokrywałby dzisiejszą kawę. Gra: dzień ze zwrotem dawnego zakupu i wydatkami ponad przydział łamie przydział (przedtem
+  zwrot to zasłaniał); dni zamrożone bez zmian. „Skąd ta liczba?” (przegląd N3): wiersz zwrotu stoi obok sumy, w nawiasie
+  (`WhyLine.aside`) – nie jest w niej: przydział na dziś − wydane dziś = energia dziś. Bez zmian formatu.
+- **T371** Energia dziś nie większa niż energia miesiąca (1.15.7, AP-13 – S6, PM sp. 1, PM.3, MO sp. 5, PM sp. 6;
+  realizuje D99 pkt 4, potwierdza T295): `daily.energy` = `min(daily.left, energia miesiąca)` (`cappedEnergy`), gdy warstwy
+  się liczą (`started`); `daily.left` (przydział − wydane dziś, T295) zostaje miarą przekroczenia dnia – alarm
+  `daily-over`, naruszenie gry i jego kwota (energia miesiąca nigdy < 0, więc energia dziś < 0 dokładnie wtedy, gdy
+  `left` < 0); znacznik gry „Liquidity sweep” liczy dalej z `left`. Powód (`daily.cap`): `partial` – pensja częściowa
+  (D14), `none` – bez wypłaconej pensji w tym miesiącu (plan 0 zł), `spent` – pensja wypłacona, energię wzięły koperty
+  planowe, ładownia, odkładki, raty celów. `energy` czytają: Mostek (z dopiskiem „pensja częściowa – energia miesiąca
+  0,00 zł”), Plan miesiąca, „Skąd ta liczba?” (wiersze „Przydział po dzisiejszych wydatkach” i „Energia miesiąca …
+  – powód”), odsłuch, Silver Bullet, dymek zasobnika, Raporty, powiadomienia (odprawa; „na wyczerpaniu” z powodem),
+  Daily Bias (MO sp. 5: Bearish przy 0 zł miesiąca, nie Neutral), podgląd zmian zbiorczych (F11). Podgląd szybkiego wpisu
+  (`energyAfter`) liczy tak samo: zakup bierze energię miesiąca (przy wypłaconej pensji), więc także zakup z koperty
+  planowej albo spoza kopert może obniżyć energię dziś – podgląd to mówi; zakup kategorii z dzisiejszym zwrotem dawnego
+  zakupu najpierw bierze ten zwrot (T370). „Pokryj z koperty…” (PM sp. 6) mówi skutek dla energii dziś
+  (`energyAfterLimit`: koperta codzienna oddaje limit puli dziennej, planowa – bez zmian); domyślna koperta źródłowa
+  jak dotąd (największy zapas). Przed startem budżetu bez ograniczenia. Bez zmian formatu.
+- **T372** Kadłub od 99 % celu pełny dla firewalla i „wolnego do decyzji” (1.15.7, AP-17 – MO sp. 3, DW sp. 4, DW.12,
+  MO.22 b; realizuje D99 pkt 6): `hullCountsFull` – kadłub × 100 ≥ cel × 99 w groszach (`HULL_TOLERANCE_PCT` = 1). Dopłata
+  do XTB bez alarmu, gdy osłony po niej ≥ cel i kadłub ≥ 99 % celu; „wolne do decyzji” = cała nadwyżka osłon ponad cel
+  przy takim kadłubie (bez odejmowania brakującego ułamka). Bez zmian: dokowanie dopełnia kadłub do 100 % (D13), raty
+  celów z pensji (T272) wymagają 100 % na przełomie miesiąca, osiągnięcie „Pancerny kadłub” – 100 %. Mostek przy kadłubie
+  w 99–100 % celu: „brakuje X – do 1% celu liczy się jako pełny (firewall, wolne do decyzji)”. Zamrożone dni gry bez
+  zmian (alarm firewall znika z dni jeszcze niezamrożonych). Bez zmian formatu.
+- **T373** „Dopełnij kadłub z osłon” (1.15.7, AP-17; realizuje D99 pkt 6 – propozycja jednym kliknięciem): przycisk na
+  Mostku pod kadłubem (`state-hull-topup`), gdy kadłub < cel i osłony > cel – kwota min(brak kadłuba, nadwyżka osłon).
+  Zapis: wpis `{id, amount, at}` w `hullTopUps` planu bieżącego miesiąca (`months/RRRR-MM.json`, jak `envelopeCovers`;
+  miesiąc bez własnego planu dostaje kopię planu w mocy – T46), toast z „Cofnij” (8 s) zabiera wpis, a kopię planu,
+  którą dopełnienie założyło (bez innych zmian w niej – przegląd N3), całą: miesiąc znowu żyje planem w mocy; zapis
+  odrzucony (plik miesiąca z nowszej wersji, plan tylko do odczytu, folder tylko do odczytu) – bez toastu. Silnik liczy go
+  w chwili `at` jak przeniesienie środków celu (T340 – ta sama kolejka: przed pierwszym zdarzeniem dnia, które przyszło
+  do FI później; czego wtedy nie przeniósł – na koniec dnia) i przenosi min(kwota, osłony − cel osłon, cel kadłuba −
+  kadłub): nigdy osłon poniżej celu ani kadłuba ponad cel, przy nieznanym celu nic – późniejsza zmiana celów albo operacji
+  przenosi tylko to, co wtedy jest. Dopłata do XTB, która przyszła do FI po dopełnieniu (wpis, import), widzi kadłub
+  pełny; wcześniejsza – nie (alarm zostaje). Zdarzenie silnika `hull` (osłony −, kadłub +) nie jest decyzją gry. Okno
+  odłączone i folder tylko do odczytu – bez przycisku. Addytywnie: pole opcjonalne (plany bez niego zostają w pliku bez
+  zmian), wpis błędny pomijany (`lenientList`), starsza wersja pole pomija (jej warstwy bez dopełnienia), bez
+  `SCHEMA_VERSION`; kwota w `AMOUNT_FIELDS`. Rozważone i odrzucone: dopełnianie samo przy każdym wzroście celu (spec
+  „Dokowanie” – nadwyżka płynie tylko przy dostawie; D99 wybrało propozycję); zapis w `fi.json` – zdarzenie z chwilą
+  należy do miesiąca, jak pokrycie koperty. Przegląd 2 N3 (7): „Cofnij” usuwa plik planu, który dopełnienie założyło,
+  tylko gdy jest on nadal dokładnie tym, co dopełnienie zapisało (treść bez znaczników zapisu – `sameContentAs`, także
+  pola nieznane tej wersji z `looseObject`, zmiany z drugiego komputera) i żadna zmiana z drugiego komputera nie czeka
+  przy nim na decyzję; inaczej zabiera tylko wpis, plik zostaje (wcześniej: porównanie kilku znanych pól – pole nowszej
+  wersji albo czekająca zmiana z drugiego komputera ginęły z plikiem). Przegląd 3 N3 (4): bez planu miesiąca (usunięty na
+  drugim komputerze, miesiąc z powrotem na planie w mocy) albo bez wpisu dopełnienia w planie „Cofnij” nic nie robi – nie
+  zakłada nowej kopii planu w mocy (T46), nic nie zapisuje.
+- **T374** Podgląd zmiany celów warstw, firewall wyłączony (1.15.7, AP-17 – MO sp. 4, DW.12): Ustawienia → Warstwy
+  i rozkazy – wpisany cel osłon albo kadłuba, zanim pole się zapisze (`NumberField.onDraft`; po 300 ms bez pisania –
+  silnik raz na wpisane cele, zapis po wyjściu z pola używa tego przebiegu, `fleetWithLayers` – przegląd N3), pokazuje
+  „Po zmianie”: osłony, cel osłon, kadłub, cel kadłuba, cele razem, energię miesiąca i wolne do decyzji przed → po (`layersEffect`,
+  silnik z nowymi celami od startu budżetu); zapisana zmiana celu osłon, kadłuba albo przyjętych kosztów – toast „Cele
+  warstw zmienione: …” z „Cofnij” (poprzednie wartości). Firewall wyłączony: pod przełącznikiem (Ustawienia i Dowództwo)
+  „Firewall wyłączony – dopłaty do XTB nie są sprawdzane…”, w stanie okrętu na Mostku „Firewall wyłączony – dopłaty do
+  XTB bez sprawdzania osłon i kadłuba” (bez „nie do dopłaty XTB”), w odprawie dzisiejsza dopłata do XTB – informacja
+  „Firewall wyłączony: dopłata do XTB X zł bez sprawdzania osłon i kadłuba.” (zwrot puli Podatek – nie, także przy pustej
+  rezerwie na PIT-38: zdarzenie silnika `tax`, przegląd N3). Bez zmian formatu. Przegląd 2 N3 (6): w trakcie pisania
+  „Po zmianie” zostaje dla celów ustalonych ostatnio (300 ms bez pisania), aż ustalą się nowe – nie znika przy każdym
+  klawiszu; wpisane cele równe zapisanym (pole opuszczone, wartość, której pole nie przyjmie) – bez podglądu. Przegląd 3
+  N3 (6): od pierwszego klawisza (także zaraz po zapisie) ramka stoi i mówi „Po zmianie – liczę…”, liczby celów ustalonych
+  wcześniej przygaszone pod nią – nigdy jako skutek wpisanej wartości.
+- **T375** Jeden stan opłaty i zaległość do zapłaty (1.15.7, AP-10 – AF-50 / RA.4, AF-80, AF-45 / LA.10, LA sp. 1, 6;
+  realizuje D99 pkt 3 i rekomendację F1 / T208 wobec D86 / D4 z sekcji 5 wniosków; zmienia T208 „tylko w bieżącym
+  miesiącu” i okno 14 dni dla opłat okresowych): płatności przypisuje do terminów jedna funkcja `feeDues`
+  (`calc/cargoStatus.ts`) – stan w Ładowni, Radar, odprawa, powiadomienia, salda naprzód i straż ładowni (`cyclesPaid`,
+  `deadContainers` – `dueWindow`) liczą to samo. Okno terminu: opłata miesięczna i co 2 miesiące od 14 dni przed dniem
+  płatności do 14 dni przed następnym (jak T208); opłata okresowa ≥ 3 mies. od 1. dnia miesiąca przed miesiącem
+  terminu (T135 – jak silnik `paidCycleOf`). Płatność z okna przed dniem terminu (opłata okresowa – przed miesiącem
+  terminu) idzie najpierw do poprzedniego terminu, gdy ten jest niezapłacony („zaległa zapłata poprzedniego cyklu”,
+  T135); druga płatność okna (gdy późniejsze same pokrywają kwotę terminu minus tolerancja ceny 5 %, min. 2 zł;
+  rachunek zmienny – każda) spłaca najstarszy niezapłacony termin wcześniej. Niezapłacony termin wcześniejszego
+  miesiąca zostaje (`carried`) – „po terminie” 3 dni po dniu płatności, w okresie łaski albo bez pliku banku „czeka na
+  import” – aż do zapłaty; liczony od miesiąca startu budżetu (`FleetState.start`), `from` kontenera i miesiąca jego
+  dodania (`createdAt`), w życiu kontenera; „Zapłacone poza budżetem” (`settleDue`) ustawia `aliveAt` na dzień po
+  terminie (jak „Nadal płacę”) – ten termin i starsze znikają. Termin 28.–31. dnia dostaje „po terminie” w następnym
+  miesiącu (AF-80). Bez startu budżetu – tylko termin tego miesiąca (jak dotąd). Odprawa: pozycja `cargo` raz na
+  termin (klucz bez zmian); Radar: pozycja zaległa w swoim dniu (`fixed` / `asteroid`, `overdue`), notatka „czeka na
+  import” albo „po terminie N dni” (RA sp. 2 – także w 3 dniach łaski; `importPending` liczony od dnia po terminie);
+  salda naprzód liczą ją dziś. Ładownia: znaczek wiersza – najstarsza zaległa „po terminie · dd.mm”; w edytorze blok
+  „Zaległe” (`container-late`) z „Zapłacone (kwota, dziś)” tylko, gdy płatność dziś zamknie ten termin (`payToday`),
+  i „Zapłacone poza budżetem”; „Zapłacone” bieżącego terminu – gdy płatność dziś jest jego (inaczej „Płatność dziś
+  zamknie najpierw zaległą opłatę”). Odkładki: notka „Opłata za … niezapłacona – zbiornik trzyma na nią pieniądze”
+  (LA sp. 6 – silnik bez zmian: zbiornik trzyma pieniądze niezapłaconego cyklu, następny cykl dozbiera po zapłacie,
+  T29). Kwota i zapłata cyklu z płatności (LA.10: „zapłacone 22.10”, lista „Zapłacone”). Bez zmian formatu i migracji.
+- **T376** Dzień płatności opłaty (1.15.7, AP-10 – AF-15 / MO.11, MO.15, R-20; W2 – pole „Płatność”, LA sp. 8;
+  doprecyzowuje T208): dzień z historii płatności (`paymentDay`) liczy się z płatności od chwili ustawienia dnia ręcznie
+  – nowe pole kontenera `dueAt` (ISO, addytywnie, bez `SCHEMA_VERSION`; zapisuje je zmiana `dueDay` / `dueMonth`
+  w edytorze); bez płatności po niej – dzień kontenera („ustawiony”). Ten sam dzień dla terminów naprzód: `cargoDays`
+  → Radar (`RadarInput.payDays`, asteroidy i opłaty miesięczne kolejnych miesięcy), odprawa (`BriefingInput.payDays`)
+  i Ładownia; najbliższy termin do zapłaty – `nextDueOf` (ten miesiąc ze stanu, zapłacony – następny, cykl zapłacony
+  przez silnik – pominięty). Odprawa bierze asteroidę z tego stanu, nie z dnia kontenera. Pole „Płatność” zapisanego
+  kontenera pokazuje najbliższy niezapłacony termin (nie pierwszą datę sprzed roku), podpowiedź: dzień i jego źródło
+  („z historii płatności (zmień datę, gdy bank pobiera innego dnia)”); nowy kontener – data wpisana jak dotąd.
+- **T377** Podpowiedź raty zbiornika (1.15.7, AP-10 – AF-43 / LA.3, PR sp. 7, LA sp. 2): `tankRate` (`calc/plan.ts`) –
+  rata miesiąca jak w silniku: `want` z przełomu miesiąca (`FleetState.tanks[].want`, T29, zbiornik sprzed raty), bez
+  niego `tankWant` od stanu zbiornika sprzed raty (`amount` − pobrane w miesiącu); cykl zapłacony (`paidDue`) – 0, bez
+  wyrównania; „wyrównanie” tylko, gdy rata różni się od raty harmonogramu tego miesiąca cyklu o więcej niż 1 gr –
+  ostatnia rata z resztą groszy (103,37 zł) i rata harmonogramu F23 (75,00 zł) nie są wyrównaniem. Edytor (pole „Cykl”)
+  i wiersz Ładowni („(…)”, dymek) czytają to samo; nowy kontener (szkic) – pusty zbiornik, jak dotąd (225 zł przy
+  opłacie dodanej w trakcie cyklu).
+- **T378** Debriefing i boje (1.15.7, AP-10 – LA sp. 5, RA sp. 1, RA sp. 4): debriefing miesiąca ma `tanksShort`
+  (alarmy `sinking-short` miesiąca na opłatę, suma) – wiersz „Za mało w zbiorniku (odkładce) X – brak zapłacony
+  z energii” (`debrief-tank-short`). Boja zamyka się operacją z banku o tej samej kwocie tylko z podobną nazwą: podobną
+  według importu (`looseMatch` `similar`) albo ze słowem nazwy boi (lub jej odbiorcy) w nazwie / tytule operacji – to
+  samo słowo ≥ 4 liter albo te same pierwsze 5 liter („komina” – KOMINIARZ), bez słów płatności i miesięcy („opłata”,
+  „przelew”, „listopad”); operacja bez nazwy (wpisana ręcznie, z wyprzedzeniem – T282) – dokładną kwotą jak dotąd;
+  bliska kwota – tylko z podobną nazwą (jak dotąd). „Pozostałe boje”: boja jednorazowa po dniu mówi, co z nią
+  (`pastStateOf`: „zrobiona”, „po terminie”, „minęła bez operacji – po 30 dniach zniknęła z radaru”) – z listą wszystkich
+  boi: operacja zrobiona z innej boi albo dopasowana do jej dnia (kolejność radaru – jedna operacja, jeden dzień) nie jest
+  jej (przegląd N3).
+- **T379** Łączenie płatności od miesiąca przed startem (1.15.7, AP-10 – otwarte z N2, T345): `linkFromOf` – kontener
+  łączy płatności odbiorcy od 1. dnia miesiąca przed miesiącem startu budżetu (dodanie kontenera, „Połącz płatności”,
+  kreator – `paidDays` propozycji): płatność 28.10 za termin 03.11 (start 04.11) jest tego terminu – stan „zapłacone”,
+  przy opłacie okresowej ≥ 3 mies. cykl zapłacony (T135, T345), kreator i silnik nie odkładają jej drugi raz.
+  Płatności sprzed startu nie przechodzą przez przebieg (jak dotąd), wcześniejsze tylko mówią o dniu płatności.
+- **T380** Zamrażanie porcjami w osobnych zadaniach (1.15.7, AP-14, AF-6 / P.1): porcja (`DAYS_PER_PASS` = 2 dni,
+  `advancePortion` w `store/game.ts`) rusza z timera (`schedulePortion`, `setTimeout(…, 0)`), nigdy w ciele efektu –
+  zapis porcji zmienia rekordy, efekt rusza znowu, a wywołana od razu następna porcja szła w tym samym zadaniu (zustand
+  renderuje synchronicznie): zaległość ponad ok. 100 dni (50 porcji) przekraczała limit zagnieżdżonych aktualizacji
+  Reacta (#185) na otwartym ekranie. Między porcjami okno się odmalowuje; kolejność i wynik dni bez zmian (te same dni
+  w tej samej kolejności). Sprawdzenie zapisu w tle (`writesInBackground`, T301) – w chwili porcji.
+- **T381** Pytanie przed zamrożeniem dni bez danych z banku (1.15.7, AP-14, D99 pkt 5; DW sp. 1, DW.37; obok T163):
+  `importWait` (`calc/game.ts`) – aktywne konto mBanku (`importFormat` 'mbank'), już importowane, ostatni import ponad
+  `IMPORT_DUE_DAYS` (3) dni temu (próg odprawy „zaimportuj nowy plik”), i niezamrożony dzień do zamrożenia (do
+  przedwczoraj) od dnia po tym, co obejmują pliki konta (`coveredTo` + 1, bez niego – dzień po imporcie); konto nigdy
+  nieimportowane (budżet prowadzony ręcznie) i zarchiwizowane nie czekają. Komputer w użyciu (D86) – ten, który zamraża –
+  pyta oknem „Dni bez danych z banku” (nazwa konta, „ostatni import N dni temu”, zakres dni): „Zaimportuj najpierw”
+  (Import; pytanie zamknięte do końca życia okna, dni czekają) albo „Zamroź bez danych”; Dowództwo pokazuje czekanie
+  z „Importuj” i „Zamroź bez danych”. Dni od luki czekają (`advanceGame` `waitImport`, razem z `hold` z T163 – wcześniejszy
+  wygrywa) i misja tygodnia z nimi, gdy luka zaczyna się przed jej poniedziałkiem (wybór czyta 4 tygodnie przed nim).
+  Czekanie najwyżej 7 dni (`IMPORT_WAIT_DAYS`, jak T163) od pierwszego czekania na tym komputerze – potem dni zamarzają tak,
+  jak są. Odpowiedź i początek czekania – na komputerze (`localStorage` `fi.game.importWait`), po kluczu spóźnionych
+  importów (konto + czas importu): nowy import kończy czekanie, a następne spóźnienie to nowe pytanie; „Zamroź bez danych”
+  obowiązuje do następnego importu. Drugi komputer pyta sam. Bez nowych pól w folderze; zamrożone dni bez zmian.
+- **T382** „Nowa klasa” a nowe dane (1.15.7, AP-14, DW sp. 6, DW.20): dzień zamrażany z inną klasą niż dzień przed nim
+  (tak, jak go zamrożono) liczy ten dzień przed nim jeszcze raz z danymi tego dnia (jeden przebieg silnika więcej, tylko
+  przy zmianie klasy); gdy dane dają mu już nową klasę (albo dalej), zmiana przyszła z danymi – import historii po
+  zamrożeniu wcześniejszych dni – nie z okrętem. Dzień zapisuje to addytywnie w `GameDay.clsBefore` (tylko gdy różne od
+  zamrożonej klasy dnia przed); dziennik wachty pokazuje „Klasa: Zwiadowca → Niszczyciel (skutek nowych danych, nie
+  zmiana okrętu)” (`WatchEntry` `data`), ekran „Nowa klasa” (`celebrationsOf` – tylko `peak`) jej nie pokazuje. Zmiana
+  częściowo z danych (dzień przed według danych w klasie pośredniej) świętuje się jak dotąd. Dni sprzed 1.15.7 bez pola –
+  jak dotąd. Bez `SCHEMA_VERSION` (pole opcjonalne, starsza wersja je zachowuje – `z.looseObject`). Panel misji tygodnia
+  bez misji (DW sp. 2): „Pierwsza misja w tygodniu od …” tylko, gdy pierwszy pełny tydzień gry jest przed nami
+  (`missionAhead`), inaczej „Misja tygodnia zostanie wybrana po zamrożeniu dni” (przy czekaniu na import – „po imporcie
+  z banku (albo po „Zamroź bez danych”)”) – nigdy poniedziałek z przeszłości.
+- **T383** Misje (1.15.7, AP-30, AF-31, AF-65, RY sp. 1, WY sp. 1; D84 C11 zgodnie): „Inwentaryzacja” liczy potwierdzenie
+  po dniu potwierdzenia – warszawski dzień chwili potwierdzenia (`confirmedAt` salda: `confirmBalance` trzyma jeden rekord
+  na saldo i ustawia ją przy każdym, także ponownym, potwierdzeniu; rekord bez niej – dzień utworzenia, `createdAt`),
+  nigdy ostatni zapis rekordu (`updatedAt` – edycja, scalanie, rozwiązanie konfliktu to nie potwierdzenie; przegląd N3;
+  pole addytywne, bez `SCHEMA_VERSION`), nie po dacie salda (saldo z pliku banku ma datę ostatniego dnia pliku) –
+  w stanie misji i w wyborze słabego punktu. „Dzień bez wydatków”: dziś potwierdzone „Dziś bez wydatków” liczy się od
+  razu (nie „+1, jeśli dziś bez wydatków”); wydatek z dziś i tak go zabiera (`costOn`). „Dziś bez wydatków” przy wydatku
+  z dziś zapisuje (raport wachty zamknięty) i mówi toastem / powiadomieniem, że dzień się nie liczy (`noSpendWarning`).
+  Misja ciszy nocnej „Zaciemnienie” (dawniej „Cisza w eterze” – tak zostaje osiągnięcie 30 dni; lista misji D73 bez
+  innych zmian). Jedna „Twoja killzone”: misja – „z 4 tygodni przed misją”, Wywiad – „killzone wydatków tego okresu
+  (N mies.)” i godzina misji obok, gdy misja tygodnia to Killzone (`killzoneNote`). Przegląd 2 N3 (5): rekord bez
+  `confirmedAt` (zapisany przed 1.15.7) liczy się dniem salda (`date`), jak liczyła go wersja, która go zapisała – tydzień
+  niezamrożony nie zmienia wyniku misji przez samą aktualizację (dzień utworzenia zaliczał po aktualizacji import
+  z poniedziałku z saldem z niedzieli, którego 1.15.6 nie liczyła; ponowne potwierdzenie pod 1.15.6 – jak wtedy, po dacie
+  salda); każde nowe potwierdzenie ma `confirmedAt` – także zapisane przy imporcie z salda pliku banku. Przegląd 3 N3 (5,
+  mieszane wersje): dzień potwierdzenia = późniejszy z dnia `confirmedAt` i dnia salda – 1.15.6 liczy dzień salda,
+  a potwierdzając ponownie zapisuje tylko `updatedAt` (dzień salda jest w id rekordu), więc ponowne potwierdzenie pod
+  1.15.6 nie zalicza tygodnia także tam (oba komputery zgodne); `updatedAt` nie liczy się nigdy (scalanie i rozwiązanie
+  konfliktu też go zapisują). Saldo dnia późniejszego niż chwila potwierdzenia liczy się w tygodniu salda, jak w 1.15.6 –
+  ten komputer nigdy nie liczy potwierdzenia wcześniej niż komputer ze starszą wersją.
+- **T384** Droga do awansu w Dowództwie (1.15.7, AP-30, DW.18, DW sp. 5): `progressText` – dzień po zmianie stopnia
+  „dni zgodne 0 (liczone od 02.11)” zamiast odwróconego „od 02.11 do 01.11”; próg spełniony bez awansu (obniżony w trakcie)
+  – „próg spełniony, awans przy zamrożeniu kolejnego dnia” (awans rozstrzyga zamrożenie dnia, jak dotąd).
+- **T385** Kurs na 12 miesięcy bez osłon poniżej zera (1.15.7, AP-18, AF-32, WY.19; obok T276): `course` płaci pensję
+  regułą silnika (`paySalary`), a gdy osłony i kadłub nie wystarczą – miesiąc ma pensję częściową (`CourseMonth.partial`
+  = pensja − wypłacone; czerwony alarm Mostka). Koszty po średniej i boje nadal ponad energię z osłon i kadłuba, wpływy
+  miesiąca dokują po nich (dołek w miesiącu pokryty wpływem nie jest brakiem); czego nie pokryje i wpływ – „brakuje”
+  (`short`), a osłony kończą miesiąc na zerze (następny liczy od tego, co jest – brak się nie kumuluje jak dług).
+  „Najniżej w miesiącu” (`low`) też od zera. Wynik: `partial` (miesiące) i `short` (suma 12 miesięcy); Wywiad – wiersze
+  „Pensja częściowa” i „Brakuje na koszty” (akcent) w kursie i w symulatorze, komórka miesiąca z brakiem w akcencie
+  z dymkiem. Haczyk AP-13: resztka bieżącego miesiąca nie liczy energii pozostałej (`TODO(AP-13)` w `course.ts`).
+- **T386** „Teraz” symulatora = Mostek (1.15.7, AP-18, AF-33, WY.20, PR.3): `Course.rangeNow` to zasięg stanu silnika
+  teraz (`rangeMonths` z osłon, kadłuba, średnich kosztów i długu silnika – `courseInputOf`, wspólne wejście kursu
+  z `fleet`), z zakupem manewru w tym miesiącu i zmianą kosztów; resztka miesiąca (otwarte boje, spodziewane spłaty
+  pożyczek udzielonych – zaległe w tym miesiącu) tylko w `rangeRest`, od którego rusza kurs. Zakup manewru to
+  `CourseInput.purchases` (z celu albo z osłon – `goalId` null), osobno od `extras`. Symulator: wiersz „Zasięg i klasa”
+  teraz / po manewrze z `rangeNow`, wiersz „Zasięg po resztce miesiąca” (z dymkiem) tylko, gdy różni się w którejś
+  kolumnie. Sprostowanie wyroczni (C19, R-15) – AP-32.
+- **T387** Daty pełności, „wyczyść manewr”, miesiąc wyczerpania (1.15.7, AP-18, PR sp. 8, WY sp. 3, WY.15): warstwa
+  (osłony, kadłub) albo cel pełne już teraz (cele warstw jak silnik – pensja planu tego miesiąca, średnie koszty; po
+  zakupie manewru w tym miesiącu) mają datę tego miesiąca, na ekranie „teraz” – także dokładnie pełne (dawniej następny
+  miesiąc albo „—”). „Wyczyść manewr” wraca do pustego formularza (`blankForm`: nazwa i termin celu, „rata z pensji”,
+  miesiące, cykl), widoczny przy każdej zmianie formularza; termin celu nie w formacie RRRR-MM – pole `aria-invalid`
+  i podpowiedź („cel liczy się bez terminu i bez raty”). Prognoza zasięgu: oba zdania nazywają miesiąc wyczerpania jedną
+  regułą – ostatni miesiąc, który zaczyna się z paliwem (`rangeForecast.emptyMonth`, `plansEmpty`); równa liczba
+  miesięcy kończy się na początku następnego.
+- **T388** „Osłony + kadłub i zasięg” na koniec miesiąca (1.15.7, AP-31, kryterium 2, WY.3, RY.23): `calc/cushion.ts`
+  `cushionTrend` – osłony + kadłub w ostatnim dniu miesiąca i zasięg tego dnia (jak Mostek tego dnia: średnie koszty
+  silnika jedną funkcją `averageCosts` (`fleet.ts`, przegląd N3) – 12 objętych miesięcy przed nim, poniżej 3 przyjęte
+  koszty – i dług pożyczek wziętych z dniem
+  nie późniejszym), zmiana m/m kwoty (strzałka ↑ / ↓ / →, zieleń / czerwień jak kwoty) i zasięgu (w dziesiątych, po
+  obcięciu T218). Tylko miesiące zakończone: bieżący jest po wypłacie pensji do energii, a przed łupami – wobec końca
+  miesiąca zawsze by spadał. Miesiące przed startem budżetu pominięte, pierwszy bez zmiany („—”). Wywiad – panel
+  „Osłony i kadłub – 12 miesięcy” (najnowszy u góry, „rosną w N z M mies.”); Raporty → Debriefing – sekcja 12 miesięcy
+  do debriefowanego (także PDF); Plan miesiąca → debriefing – wiersz miesiąca; Przegląd roczny – zakończone miesiące
+  roku. Przy ukrytych kwotach zmiana kwoty bez znaku i strzałki (zasięg – jak dotąd – widoczny).
+- **T389** Stany końca miesiąca z logu silnika (1.15.7, AP-31, T4, „Wydajność”): osłony i kadłub to sumy `moves` logu
+  jednego przebiegu silnika (`fleet.log`) do końca każdego miesiąca – żadnego przebiegu na miesiąc (12 przebiegów to
+  ok. 1,8 s przy 30 tys. operacji); sumy w pamięci po logu (`WeakMap`), hak `useCushion` liczy raz na przebieg silnika
+  i rekordy, które czyta. Bezpiecznik: log, który nie sumuje się do stanu silnika teraz (ruch warstwy bez wpisu
+  w logu), przełącza na przebieg silnika na koniec każdego miesiąca (`engineAt`). Test: każdy koniec miesiąca =
+  `computeFleet` z `now` tego dnia (dostawy, łupy, wydatek ponad energię, pensja z kadłuba, pożyczki, konto dołączone
+  później). Nowy ruch warstwy w silniku – zawsze z wpisem w logu.
+- **T390** Resztka miesiąca w kursie z energii miesiąca (1.15.7, N3 – integracja AP-13 × AP-18; zamyka haczyk T385
+  `TODO(AP-13)`): `courseInputOf` daje kursowi energię miesiąca (`CourseInput.energy`): `left` – energia miesiąca silnika
+  (ta, którą T371 ogranicza energię dziś), `needs` – co plan miesiąca jeszcze z niej wyda (`restNeeds`): reszta puli
+  dziennej na dni do końca miesiąca z dziś (limit kopert codziennych minus wydane; zwrot dawnego zakupu wraca do puli –
+  T370), reszta kopert planowych i opłaty jeszcze do zapłaty ze stanu AP-10 (`cargoStatuses`, także zaległe – `carried`):
+  miesięczna w całości, okresowa – czego brakuje w jej zbiorniku (dwa terminy jednego zbiornika dzielą to, co ma).
+  Resztka miesiąca: `needs` ponad `left` z osłon (kadłub, gdy brak – jak „energia wyczerpana” silnika), potem boje
+  i spłaty – boja tego miesiąca (wydatek) z kategorią koperty planowej bierze najpierw resztę tej koperty (jest już
+  w `needs`; jej operacja weźmie z koperty, jak w silniku; boje jednej koperty dzielą resztę), z osłon tylko to, co ponad
+  nią (przegląd N3); czego brakuje – `Course.rest.short`: osłony kończą resztkę na zerze (jak miesiąc kursu – T385), „Brakuje na
+  koszty” (`Course.short`) liczy ją razem z miesiącami. Co energia zostawi – zostaje w miesiącu (łupy, decyzja kapitana –
+  D18, jak dotąd). Zwykły miesiąc (plan w pensji) bez zmian; pensja częściowa, bez pensji albo energia wydana – kurs
+  rusza od osłon po tej resztce. „Teraz” symulatora (`rangeNow`) dalej = Mostek (T386), „Zasięg po resztce miesiąca”
+  liczy ją; Wywiad: „Resztka miesiąca: koperty i opłaty X ponad energię miesiąca (pensja częściowa) – z osłon, brakuje
+  Y.” (`intel-course-rest`, powód z `daily.cap`). Rozważone i odrzucone: koszty po średniej minus wydane w miesiącu –
+  podwójnie liczą raty zbiorników (energia już bez nich, średnia z opłatami okresowymi), a wpływów reszty miesiąca kurs
+  nie zna; sama pula dzienna (jak porównanie T371) – pomija koperty planowe i czynsz, które biorą tę samą energię. Bez
+  zmian formatu.
+- **T391** „Kadłub pełny” w kursie od 99 % celu (1.15.7, N3 – integracja AP-17 × AP-18, T372): data pełności kadłuba
+  w kursie i symulatorze (`Course.hullFull`, także „teraz” – T387) liczona `hullCountsFull`, jak Mostek („liczy się jako
+  pełny”), firewall i „wolne do decyzji”. Bez zmian: raty celów z pensji na przełomie miesiąca kursu (T272) wymagają
+  100 % kadłuba, dokowanie w kursie dopełnia go do 100 % (D13), osłony – bez tolerancji.
+- **T392** Dowództwo – rozkaz dziennego przydziału przy energii ograniczonej (1.15.7, N3 – integracja AP-13 × gra):
+  „wydatki dnia ≤ przydział dnia” (było „≤ energia dziś”) i opis: przydział dnia = koperty codzienne, które zostały,
+  ÷ dni do końca miesiąca (z dziś); energia dziś = przydział − wydane dziś, nie więcej niż zostało energii miesiąca
+  (T371); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera; `daily.left`, jak alarm i gra).
+  Bez zmian reguły gry.
+- **T393** Jedna reguła płatności opłaty – Ładownia i silnik (1.15.7, przegląd N3 1–4, 13, scalenie z N2; zmienia T135 /
+  T345 w silniku i przegląd N2 3, uzupełnia T375): który termin płaci płatność, decyduje jedna funkcja `feeDuesOf` (`calc/cargoStatus.ts`) – stan
+  w Ładowni, Radar, odprawa i cykle zapłacone silnika (`paidDuesOf`: rata zbiornika `tankWant` na przełomie, `paidDue`),
+  także kreator (`paidBeforeStart`). Okna T375 (miesięczna i co 2 miesiące – od 14 dni przed dniem płatności, ≥ 3 mies. –
+  od 1. dnia miesiąca przed terminem); przed dniem terminu, gdy poprzedni niezapłacony – zaległa zapłata (T394), nie
+  następny cykl; druga płatność okna – najstarszy niezapłacony; terminy budżetu od dnia startu, od miesiąca dodania
+  kontenera (`createdAt`), w życiu opłaty, nie sprzed „Zapłacone poza budżetem” / „Nadal płacę” (`aliveAt`; ten miesiąc
+  zawsze). Przed startem opłata śledzona od pierwszej widzianej płatności (T345, przegląd N2 4): spóźniona zapłata
+  płaci zaległy termin, nigdy następny. Na przełomie miesiąca (i w dniu startu) silnik liczy płatności sprzed przełomu
+  z dniem płatności tego miesiąca – stan, jaki Ładownia pokazywała tego dnia (płatność 1. dnia jest po przełomie);
+  `paidDue` – płatności do dziś. Która płatność płaci opłatę – też jedna reguła (`paymentsIndex`, po scaleniu N2 z N3):
+  części wydatku z kontenerem (linii, inaczej operacji), jedna płatność na operację – suma jej części z tym kontenerem
+  (wypływ), także sprzed startu i spoza życia opłaty (pieniądze takiej – jak dotąd zwykły wydatek, B56); czytają ją
+  Ładownia, Radar, odprawa, straż ładowni, silnik i kreator (`startPaidDays`). Opłata zapłacona z pieniędzy celu albo
+  zakupem do zwrotu (cały zakup albo linia paragonu) jest zapłacona – rachunek zapłacony: pieniądze są celu (T131) albo
+  domownika (D80), zbiornik nietknięty, cykl zamknięty (rata 0, zbiornik zbiera na następny termin – to, co już
+  uzbierał, zostaje na niego); zwrot domownika później to zwykły wpływ (spłata jego długu). Inny rodzaj z kontenerem
+  (dawny przelew, pożyczka, XTB sprzed T362) – nigdy, także w Ładowni. Ładownia nie czyta już zbiorników silnika
+  (`tankPaid`). Wcześniej (`paidCycleOf`): kwartalna 180 zł, listopad zapłacony 10.12, luty 20.01 – zaległa nie
+  zamykała listopada, lutowa była „zaległą”, 1.02 zbiornik brał 180 zł z energii drugi raz (Ładownia – luty zapłacony);
+  co 2 miesiące grudzień niezapłacony, płatność 05.02 – Ładownia grudzień (i luty „zapłacone” ze zbiornika silnika),
+  silnik luty: jedna płatność dwa terminy, alarm lutego nigdy; listopad „poza budżetem” albo kontener dodany w styczniu
+  – silnik nadal brał 20.01 za zaległy listopad.
+  Do scalenia z N2 płatności liczyły się różnie: Ładownia – też płatność z celu, cały zakup do zwrotu i dawny przelew
+  z kontenerem, silnik i kreator (przegląd N2 3) – żadnej z nich, linii paragonu do zwrotu – nikt (kwartalna 180 zł
+  zapłacona z celu 15.11: Ładownia „zapłacone”, silnik bez `paidDue` – plan i zbiornik liczyły zapłacony cykl jak
+  niezapłacony; przelew z ukrytym kontenerem – odwrotnie). Rozważone i odrzucone: płaci tylko część z moich pieniędzy
+  (jak przegląd N2 3) – Ładownia pokazywałaby rachunek zapłacony z celu albo przez domownika jako zaległy, Radar
+  i odprawa – asteroidę zapłaconego terminu. Bez zmian formatu i migracji: warstwy liczone z rekordów – miesiące,
+  w których cykl był zapłacony tylko w jednym miejscu, przeliczą się same; zamrożone dni gry zostają. Przegląd 2 N3 (1):
+  kreator liczy opłatę kontenera w całości (`startTankItems` – kwoty, kalendarz, życie, rachunek zmienny `variable` F23,
+  `createdAt`, `aliveAt`), jak silnik i Ładownia; wcześniej bez `variable` – rachunek co 2 miesiące zapłacony raz dwoma
+  przelewami, potem kilka dni przed dniem terminu: kreator był cykl w tyle (lipiec niezapłacony, rata 300 zł i „do planu”
+  150 zł), silnik i Ładownia – lipiec zapłacony. Test własności „silnik = Ładownia = kreator” – też rachunki zmienne
+  i płatności z wyprzedzeniem (T398).
+- **T394** Termin sprzed startu, najstarsza zaległa, „Zapłacone (dziś)” (1.15.7, przegląd N3 5, 10; doprecyzowuje T375,
+  T379): terminy budżetu liczą się od dnia startu, nie od miesiąca – termin sprzed niego bez płatności nie jest „po
+  terminie” ani zaległy (bez alertu odprawy, pozycji Radaru i resztki kursu z osłon), zapłacony – „zapłacone” (T379);
+  płatność po starcie płaci tylko terminy budżetu (01.10 przy starcie 20.09 i terminie 3. – październik, nie wrzesień).
+  Płatność przed dniem terminu przy niezapłaconym poprzednim płaci najstarszy niezapłacony termin (wrzesień i październik
+  zaległe, płatność 01.11 – wrzesień; wcześniej październik, a wrzesień zostawał na zawsze); poprzedni zapłacony –
+  płatność jest wcześniejszą następnego (T135), choćby starszy był zaległy. Płatności przydzielane po kolei (stan każdego
+  dnia zostaje): druga płatność okna płaci najstarszy niezapłacony termin w chwili, gdy przyszła. „Zapłacone (kwota,
+  dziś)” (`payToday`) – termin, który płatność dziś tej kwoty zostawia zapłaconym (także przez drugą płatność okna, gdy
+  termin okna już zapłacony); „Płatność dziś zamknie najpierw zaległą opłatę (termin …)” – ten termin.
+- **T398** Płatność wpisana z wyprzedzeniem płaci termin w swoim dniu (1.15.7, przegląd 2 N3 2, przegląd 3 N3 1–3, 9;
+  doprecyzowuje T375, T393, B127): płatność opłaty z datą po dziś (wydatek wpisany naprzód) nie płaci terminu przed swoim
+  dniem – stan w Ładowni, Radarze, odprawie i resztce kursu (`cargoStatuses` – płatności do dziś) jak silnik (`paidBefore`
+  do dziś, `paidDue`, przełom miesiąca); w jej dniu – zapłacony w obu. Zaplanowany jest wyłącznie termin, któremu tę
+  płatność daje ta sama reguła (`feeDuesOf` ze wszystkimi płatnościami opłaty, terminy do końca okna Radaru –
+  `AHEAD_DAYS` = `RADAR_DAYS`, 90 dni; `plannedDues`, `CargoStatus.planned` – jej pierwsza taka płatność); termin
+  zamknięty dopiero wcześniejszą płatnością, którą ona przesuwa (druga płatność okna oddaje wcześniejszą zaległemu – T375),
+  nie jest zaplanowany – zostaje „po terminie” do jej dnia. Ładownia: w wierszu „zaplanowane dd.mm” (bez akcentu „po
+  terminie”), w edytorze „Zaplanowana płatność: kwota (dd.mm) – zapłaci termin dd.mm w swoim dniu.”, w „Zaległe” –
+  „zaplanowana płatność dd.mm (kwota) zamknie go w swoim dniu”. „Zapłacone (kwota, dziś)” (`payToday`) stoi przy
+  najstarszym terminie ani zapłaconym, ani zaplanowanym, który płatność dziś zostawi zapłaconym albo zaplanowanym –
+  z płatnościami wpisanymi naprzód po niej (zaległy październik zaplanowany płatnością 13.11 z okna listopada: przy
+  listopadzie – dzisiejsza zamknie październik, 13.11 listopad); płatność dziś, która zamknęłaby termin tylko przesunięciem
+  przez płatność wpisaną naprzód – bez przycisku. Termin zaplanowany – w tym albo kolejnym miesiącu okna Radaru – nie jest
+  pozycją Radaru, asteroidą odprawy ani najbliższym terminem do zapłaty w Ładowni (`nextDueOf` – następny); salda naprzód
+  liczą wtedy samą operację, raz; odprawa bez alertu „Kontener niezaładowany” dla zaplanowanego; resztka miesiąca w kursie
+  (T390) liczy go do zapłaty z energii (silnik jeszcze jej nie wziął). Płatność dalej niż okno Radaru – żadnego terminu.
+  Wcześniej (do przeglądu 2 N3) Ładownia, Radar i odprawa pokazywały „zapłacone” od chwili wpisania, a silnik liczył cykl
+  dopiero w dniu płatności; po przeglądzie 2 – płatność zaplanowana tylko dla terminów tego miesiąca i zaległych (termin
+  kolejnego miesiąca – pozycja Radaru obok operacji, salda naprzód liczyły go dwa razy; tak było od 1.8.0), z zapasową
+  płatnością dnia przy przesunięciu i „Zapłacone (dziś)” przy terminie już zaplanowanym (przycisk ukryty). Rozważone
+  i odrzucone: płatność naprzód płaci od razu także w silniku – zbiornik przestałby zbierać na pieniądze, które jeszcze są
+  na koncie, a data operacji wpisanej naprzód bywa zmieniana. Bez zmian formatu.
+- **T399** Wydajność stanu opłat i boi (1.15.7, przegląd 2 N3 3, 4, 8, 9; obok T375, T378): „Zapłacone (dziś)”
+  (`payToday`) i płatności zaplanowane (T398) liczone tylko dla opłaty z pokazanym terminem do zapłaty – opłata zapłacona
+  nie przelicza całej historii drugi raz; stan opłat w oknie (`features/cargo/status.ts`) przeliczany przy zmianie
+  rekordów, dnia, startu i plików z banku, nie przy każdym przebiegu silnika (stan nie czyta zbiorników od T393 –
+  `CargoInput.tanks` usunięte). „Pozostałe boje” – stan boi jednorazowych po dniu raz na listę boi, operacji i dzień
+  (`pastStates`, pamięć po liście), każda tymi samymi dniami co dotąd (boje z dniem w ±6 dni jej dnia, operacje zrobione
+  z każdej boi), nie przebieg po wszystkich bojach dla każdej z nich przy każdym odmalowaniu. Jedna kolejność płatności
+  jednego dnia (`byPaymentDay` – indeks Ładowni i płatności sprzed startu w silniku). Wynik bez zmian (test równości ze
+  stanem liczonym jak dotąd). Przegląd 3 N3 (7, 8): `pastStateOf` tylko czyta `pastStates` (jedna droga – ta, której
+  używa panel); dopasowanie dni okna nie kopiuje zbioru operacji zrobionych z boi (własny zbiór dopasowanych w oknie).

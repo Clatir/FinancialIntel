@@ -253,7 +253,7 @@ describe('osobista inflacja koszyka (1.10.0, F36)', () => {
 
 describe('„Skąd ta liczba?” i słowniczek (1.10.0, F29)', () => {
   it('energia dziś: koperty codzienne, wydane do wczoraj, dni, podstawowy przydział, przeniesione, wydane dziś', () => {
-    const lines = energyWhy({ limit: zl(3100), spentBefore: zl(1000), spentToday: zl(30), base: zl(100), allowance: zl(175), left: zl(145), daysLeft: 12 }, '2026-10')
+    const lines = energyWhy({ limit: zl(3100), spentBefore: zl(1000), spentToday: zl(30), base: zl(100), allowance: zl(175), left: zl(145), daysLeft: 12, returned: 0, returnedBy: {}, energy: zl(145), cap: null }, '2026-10')
     expect(lines.map((l) => [l.label, l.amount])).toEqual([
       ['Koperty codzienne w tym miesiącu (plan i łupy)', zl(3100)],
       ['Wydane z nich do wczoraj', -zl(1000)],

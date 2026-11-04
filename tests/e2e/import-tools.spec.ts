@@ -166,6 +166,9 @@ test('Telemetria z banku: historia rachunku zgodna – saldo potwierdzone samo; 
     await importDone(page, userData)
     await expect(page.getByTestId('bank-telemetry-match')).toContainText('Saldo potwierdzone')
     await expect.poll(async () => (await records(dataDir, 'balances')).filter((b) => b.kind === 'confirmation').map((b) => [b.date, b.amount])).toEqual([['2026-09-05', zl(1000 - 12.5 - 40 - 7.99)]])
+    // Its moment of confirming (T383, przegląd 2 N3): „Inwentaryzacja” counts the day of the import, not the file's last day.
+    const confirmed = (await records(dataDir, 'balances')).find((b) => b.kind === 'confirmation')!
+    expect(confirmed.confirmedAt).toBe(confirmed.createdAt)
 
     // A purchase typed by hand on 04.09 that the bank has not: the difference, from that day, with the operation.
     await page.keyboard.press('Control+2')

@@ -4,7 +4,7 @@
  * than the radar's 90 days, and the form of a new one (kept while another screen is looked at).
  */
 import { useState } from 'react'
-import { nextDayOf, type ScheduledDay } from '@shared/calc/scheduled'
+import { LAPSE_DAYS, nextDayOf, pastStates, type ScheduledDay } from '@shared/calc/scheduled'
 import { dm } from '@shared/calc/briefing'
 import type { Scheduled } from '@shared/schema'
 import { AmountField, DateField, plnText } from '../../components/fields'
@@ -44,12 +44,15 @@ function formOf(s: Scheduled): NewScheduled & { kind: Direction } {
 
 export function BuoysPanel({ days, today, readOnly }: { days: readonly ScheduledDay[]; today: string; readOnly: boolean }) {
   const list = useRecordList('scheduled')
+  const transactions = useRecordList('transactions')
   const [editing, setEditing] = useState<string | null>(null)
   const open = days.filter((d) => d.state === 'ahead' || d.state === 'today' || d.state === 'late').sort((a, b) => Number(b.state === 'late') - Number(a.state === 'late') || a.date.localeCompare(b.date))
   const done = days.filter((d) => d.state === 'done' && d.days >= -30).sort((a, b) => b.date.localeCompare(a.date))
   // The buoys with no open day in the window: further than 90 days, a one-off long past.
   const shown = new Set(open.map((d) => d.scheduled.id))
   const later = list.filter((s) => !shown.has(s.id)).sort((a, b) => (nextDayOf(a, today) ?? '9999').localeCompare(nextDayOf(b, today) ?? '9999'))
+  // What became of the one-offs long past (RA sp. 4): once per buoys, operations and day – never per row (przegląd 2 N3).
+  const pastOf = pastStates(list, transactions, today)
   return (
     <Panel title={open.length ? `Boje nawigacyjne (${open.length})` : 'Boje nawigacyjne'} name="Boje nawigacyjne" testId="radar-buoys">
       <div className="flex flex-col text-[12px]">
@@ -108,11 +111,18 @@ export function BuoysPanel({ days, today, readOnly }: { days: readonly Scheduled
             <summary className="cursor-pointer text-muted select-none">Pozostałe boje ({later.length})</summary>
             {later.map((s) => {
               const next = nextDayOf(s, today)
+              // A one-off long past says what became of it (RA sp. 4): never read as a day ahead.
+              const past = next ? null : (pastOf.get(s.id) ?? null)
               return (
-                <div key={s.id} className="flex flex-col py-0.5" data-testid="buoy-later" data-name={s.name}>
+                <div key={s.id} className="flex flex-col py-0.5" data-testid="buoy-later" data-name={s.name} data-state={past ?? 'ahead'}>
                   <div className="flex items-baseline gap-2">
                     <span className="num w-[70px] shrink-0 text-dim">{next ? plDate(next) : plDate(s.date)}</span>
                     <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                    {past && (
+                      <span className="text-[11px] text-dim" data-testid="buoy-later-state">
+                        {past === 'done' ? 'zrobiona' : past === 'late' ? 'po terminie' : `minęła bez operacji – po ${LAPSE_DAYS} dniach zniknęła z radaru`}
+                      </span>
+                    )}
                     <span className="num text-muted">{amountText(s)}</span>
                     {!readOnly && (
                       <button className="text-muted hover:text-fg-strong" onClick={() => setEditing((x) => (x === s.id ? null : s.id))}>

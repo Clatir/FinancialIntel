@@ -7,6 +7,7 @@ import { briefing, dm, type BriefingInput } from './calc/briefing'
 import { WATCH_TIME } from './calc/intel'
 import { dayOfMonth, daysBetween, inClockWindow, monthOf, warsawNow, weekdayOf } from './calc/dates'
 import { envelopeOverrun, SERIOUS_ENVELOPE_PCT, type FleetState } from './calc/fleet'
+import { CAP_REASON } from './calc/why'
 import { ICTJ_POOL_LABEL } from './ictj'
 import { plural } from './format'
 import type { NotifyPrefs } from './machine'
@@ -100,7 +101,7 @@ export function dueNotices(o: NotifyInput): Notice[] {
       key: `briefing:${today}`,
       tag: 'briefing',
       title: 'Odprawa poranna',
-      body: [d ? `Energia dziś: ${o.money(d.left)}.` : 'Bez planu tego miesiąca.', alarms ? `Alarmy: ${alarms}.` : 'Bez alarmów.'].join(' ')
+      body: [d ? `Energia dziś: ${o.money(d.energy)}.` : 'Bez planu tego miesiąca.', alarms ? `Alarmy: ${alarms}.` : 'Bez alarmów.'].join(' ')
     })
   }
   // The evening report (F13): not when the day is done; put off – again from its time, under a new key.
@@ -111,8 +112,9 @@ export function dueNotices(o: NotifyInput): Notice[] {
   if (d) {
     if (d.left < 0) {
       if (p.overrun) out.push({ key: `overrun:daily:${today}`, tag: 'overrun', alarm: true, title: 'Przydział dnia przekroczony', body: `Ponad przydział o ${o.money(-d.left)} – kolejne dni dostaną mniej.` })
-    } else if (p.low && d.allowance > 0 && d.left < d.allowance * 0.2)
-      out.push({ key: `low:daily:${today}`, tag: 'low', title: 'Energia dziś na wyczerpaniu', body: `Zostało ${o.money(d.left)} z ${o.money(d.allowance)}.` })
+    } else if (p.low && d.allowance > 0 && d.energy < d.allowance * 0.2)
+      // Low because the month's energy is (AP-13, T371): its reason beside.
+      out.push({ key: `low:daily:${today}`, tag: 'low', title: 'Energia dziś na wyczerpaniu', body: `Zostało ${o.money(d.energy)} z ${o.money(d.allowance)}${d.cap ? ` – ${CAP_REASON[d.cap.why]}` : ''}.` })
   }
   for (const e of f.envelopes) {
     const name = o.label(e.categoryId)

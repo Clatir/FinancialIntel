@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { paymentsIndex } from '@shared/calc/cargoStatus'
 import { deliveries, pendingPairsOf, previewDocking, type DeliveriesInput } from '@shared/calc/dock'
-import { computeFleet, feePaymentDays, layersSum, paidBeforeStart, type FleetInput, type FleetState, type PendingPair } from '@shared/calc/fleet'
+import { computeFleet, layersSum, paidBeforeStart, type FleetInput, type FleetState, type PendingPair } from '@shared/calc/fleet'
 import { transferGoal } from '@shared/calc/goals'
 import { sinkingOf } from '@shared/calc/plan'
 import { startPaidDays, startTanks } from '@shared/calc/start'
@@ -206,7 +206,7 @@ function feeShip(o: { start: string; now: string; containers: Container[]; trans
   return state
 }
 
-describe('przegląd N2 3: kreator czyta płatności opłaty jak silnik przed startem (T345)', () => {
+describe('przegląd N2 3 i scalenie z N3: kreator, silnik i Ładownia czytają płatności opłaty jedną regułą (T345, T393)', () => {
   // Quarterly fees of 300 zł due on the 5th of November, each paid on 5 November; the budget starts on the 10th.
   const fee = (name: string) => container({ name, amount: zl(300), cycleMonths: 3, dueMonth: '2026-11', dueDay: 5, counterparty: name })
   const water = fee('Wodociągi')
@@ -216,39 +216,41 @@ describe('przegląd N2 3: kreator czyta płatności opłaty jak silnik przed sta
   const savings = goal('Remont', zl(5000), 1)
   const paid = (c: Container, over: Partial<Transaction>) => tx('2026-11-05', -zl(300), '2026-11-05T10:00:00.000Z', { kind: 'expense', categoryId: FOOD, containerId: c.id, counterparty: c.name, ...over })
   const transactions = [
-    // From a goal's money (T131: a goal and a container exclude each other – data from elsewhere): the goal's, not the tank's.
+    // From a goal's money (T131: a goal and a container exclude each other – data from elsewhere): the goal's, not the
+    // tank's – the bill is paid all the same (T393).
     paid(water, { goalId: savings.id }),
     // A transfer still linked from before T362 (`withKind` kept it): no fee's payment.
     paid(waste, { kind: 'transfer', categoryId: null }),
-    // A purchase for the household (to be refunded): the household's money.
+    // A purchase for the household (to be refunded): the household's money – the bill paid (T393).
     paid(gas, { refundable: true }),
     paid(power, {})
   ]
   const containers = [water, waste, gas, power]
 
-  it('wydatek z celu, dawny przelew z kontenerem, zakup do zwrotu – nie zamykają cyklu ani w silniku, ani w kreatorze', () => {
+  it('wydatek z celu i zakup do zwrotu zamykają cykl, dawny przelew z kontenerem nie – w silniku, kreatorze i Ładowni', () => {
     const s = feeShip({ start: '2026-11-10', now: '2026-11-10T12:00:00+01:00', containers, goals: [savings], transactions })
     const sinking = sinkingOf(s.log, '2026-11')
-    expect(containers.map((c) => sinking.get(c.id) ?? 0)).toEqual([zl(300), zl(300), zl(300), 0])
-    // The wizard: the days of the same rule (`feePaymentDays`) – the first month's installments the engine's.
-    const known = (id: string) => id === savings.id
-    const days = startPaidDays(transactions, '2026-11-10', containers, [], known)
-    expect(containers.map((c) => days.get(c.id))).toEqual([[], [], [], ['2026-11-05']])
+    expect(containers.map((c) => sinking.get(c.id) ?? 0)).toEqual([0, zl(300), 0, 0])
+    expect(containers.map((c) => s.tanks.find((t) => t.containerId === c.id)?.paidDue)).toEqual(['2026-11', null, '2026-11', '2026-11'])
+    // The wizard: the payments of the same rule (`paymentsIndex`) – the first month's installments the engine's.
+    const days = startPaidDays(transactions, '2026-11-10', containers, [])
+    expect(containers.map((c) => days.get(c.id)?.map((p) => p.date))).toEqual([['2026-11-05'], [], ['2026-11-05'], ['2026-11-05']])
     const life = { archived: false, from: null, until: null }
     const items = containers.map((c) => ({ key: c.id, amount: c.amount, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, schedule: c.schedule, ...life, paid: days.get(c.id) ?? [] }))
-    expect(startTanks(items, '2026-11-10', {}).map((x) => x.installment)).toEqual([zl(300), zl(300), zl(300), 0])
-    // Before: the Ładownia's index of linked payments (any kind, a goal's and a refundable one too) – all four paid, 0 zł.
-    expect(containers.map((c) => paymentsIndex(transactions).byContainer.get(c.id)?.map((p) => p.date))).toEqual([['2026-11-05'], ['2026-11-05'], ['2026-11-05'], ['2026-11-05']])
-    expect(feePaymentDays(transactions, '2026-11-10', (id) => containers.some((c) => c.id === id), known)).toEqual(new Map([[power.id, ['2026-11-05']]]))
+    expect(startTanks(items, '2026-11-10', {}).map((x) => x.installment)).toEqual([0, zl(300), 0, 0])
+    // Ładownia – the same payments: the old transfer pays nothing there either (before: each kind with a container).
+    expect(containers.map((c) => paymentsIndex(transactions).byContainer.get(c.id)?.map((p) => p.date))).toEqual([['2026-11-05'], undefined, ['2026-11-05'], ['2026-11-05']])
   })
 
-  it('propozycja z kroku 4: płatności odbiorcy od 1. dnia miesiąca, które start połączy – tą samą regułą', () => {
+  it('propozycja z kroku 4: płatności odbiorcy od 1. dnia miesiąca przed startem, które start połączy – tą samą regułą', () => {
     // A proposal (not a container yet): its payee's payment of 5 November from a goal's money, another of 6 November.
     const fromGoal = tx('2026-11-05', -zl(300), '2026-11-05T10:00:00.000Z', { kind: 'expense', categoryId: FOOD, counterparty: 'PGNiG', goalId: savings.id })
     const own = tx('2026-11-06', -zl(300), '2026-11-06T10:00:00.000Z', { kind: 'expense', categoryId: FOOD, counterparty: 'PGNiG' })
+    // Of the month before the start's (T379): linked at the start too.
+    const october = tx('2026-10-28', -zl(300), '2026-10-28T10:00:00.000Z', { kind: 'expense', categoryId: FOOD, counterparty: 'PGNiG' })
     const proposal = { key: 'pgnig', label: 'PGNiG', cycleMonths: 3 }
-    expect(startPaidDays([fromGoal], '2026-11-10', [], [proposal], (id) => id === savings.id).get('pgnig')).toEqual([])
-    expect(startPaidDays([fromGoal, own], '2026-11-10', [], [proposal], (id) => id === savings.id).get('pgnig')).toEqual(['2026-11-06'])
+    expect(startPaidDays([fromGoal], '2026-11-10', [], [proposal]).get('pgnig')?.map((p) => p.date)).toEqual(['2026-11-05'])
+    expect(startPaidDays([october, fromGoal, own], '2026-11-10', [], [proposal]).get('pgnig')?.map((p) => p.date)).toEqual(['2026-10-28', '2026-11-05', '2026-11-06'])
   })
 })
 
