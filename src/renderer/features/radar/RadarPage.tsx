@@ -24,7 +24,7 @@ import { Badge, CompactContext, Empty, Field, LimitHint, NumberField, Panel, Seg
 import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
-import { isOpeningItem, memberName } from '@shared/calc/household'
+import { isOpeningItem, memberName, openText } from '@shared/calc/household'
 import { openOperation, openRefundables } from '../operations/state'
 import { closeReturn, useReturns } from '../sensors/state'
 import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, type NewLoan } from './actions'
@@ -115,7 +115,7 @@ export function RadarPage() {
                       <div key={m.memberId} className="flex flex-col" data-testid="radar-member">
                         <div className="flex items-baseline gap-2">
                           <span className="text-muted">{memberName(m.memberId, members)}</span>
-                          <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : m.deposit > 0 ? 'zaliczka (depozyt)' : 'bez długu'}</span>
+                          <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : m.deposit > 0 ? 'zaliczka (depozyt)' : 'rozliczony'}</span>
                           {(m.owed > 0 || m.deposit > 0) && <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>}
                         </div>
                         {m.since && m.owed > 0 && (
@@ -125,13 +125,14 @@ export function RadarPage() {
                           </span>
                         )}
                         {waiting > 0 && (
-                          <button type="button" className="self-start text-left text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'inbox' })} title="Meldunki: wskaż, które zakupy spłaca ten zwrot" data-testid="radar-member-unassigned">
-                            zwrot do przypisania: {zl(waiting)} – wskaż zakupy w Meldunkach
+                          <button type="button" className="self-start text-left text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'inbox' })} title="Meldunki: wskaż, co spłaca ten zwrot" data-testid="radar-member-unassigned">
+                            zwrot do przypisania: {zl(waiting)} – wskaż w Meldunkach, co spłaca
                           </button>
                         )}
                         {m.open.length > 0 && (
                           <details className="text-[11.5px] text-dim" data-testid="radar-member-open">
-                            <summary className="cursor-pointer select-none hover:text-fg-strong">{countLabel(m.open.length, 'zakup do oddania', 'zakupy do oddania', 'zakupów do oddania')}</summary>
+                            {/* The balance at the settlements' start apart (SW sp. 9); paid off – the items wait for the money's assignment. */}
+                            <summary className="cursor-pointer select-none hover:text-fg-strong">{m.owed > 0 ? `do oddania: ${openText(m.open)}` : `czeka na przypisanie zwrotu: ${openText(m.open)}`}</summary>
                             {m.open.map((o) => {
                               const t = transactions[o.txId]?.record
                               return (
@@ -165,7 +166,7 @@ export function RadarPage() {
                     </span>
                   </div>
                 )}
-                <button className="self-start text-[11.5px] text-accent hover:underline" onClick={openRefundables}>
+                <button className="self-start text-[11.5px] text-accent hover:underline" onClick={() => openRefundables()}>
                   wydatki domowników ›
                 </button>
               </div>

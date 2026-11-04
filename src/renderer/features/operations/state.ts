@@ -4,7 +4,7 @@ import { effectOf, type Effect } from '@shared/calc/effect'
 import { computeFleet } from '@shared/calc/fleet'
 import { withKind } from '@shared/calc/kinds'
 import { newId } from '@shared/ids'
-import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, showsView, viewFilter, type OperationsFilter } from '@shared/operationsView'
+import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, refundablesFilter, showsView, viewFilter, type OperationsFilter } from '@shared/operationsView'
 import type { BrandAliases } from '@shared/import/aliases'
 import { shareOf, withShare } from '@shared/calc/share'
 import { stripDeletedCovers } from '@shared/calc/repayments'
@@ -370,9 +370,12 @@ export function showBrand(t: Transaction, aliases?: BrandAliases): void {
   showFilter({ period: { kind: 'all' }, ...noNarrowing(), brands: [brandKeyOf(t, aliases)] })
 }
 
-/** Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80). */
-export function openRefundables(): void {
-  showFilter({ period: { kind: 'all' }, ...noNarrowing(), marks: ['refundable'] })
+/**
+ * Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80); one
+ * member's – their purchases still to be paid back (AP-19, AF-58).
+ */
+export function openRefundables(memberId?: string | null): void {
+  showFilter({ period: { kind: 'all' }, ...noNarrowing(), ...refundablesFilter(memberId) })
   navigate({ page: 'operations' })
 }
 

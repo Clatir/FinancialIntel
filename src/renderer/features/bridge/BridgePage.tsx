@@ -127,7 +127,8 @@ function openTarget(t: BridgeTarget, key?: string): void {
     if (id) focusRecord('container', id, { page: 'cargo' })
     else navigate({ page: 'cargo' })
   }
-  else if (t === 'house') openRefundables()
+  // „X: do oddania …” (AP-19, AF-58): that member's purchases still to be paid back (`house:<member>:<since>`).
+  else if (t === 'house') openRefundables(key?.split(':')[1] ?? null)
   else if (t === 'mission') navigate({ page: 'command' })
   else if (t === 'alarm') openAlarm(key)
   // The matters older than 30 days (AP-16): only in Meldunki.
@@ -842,7 +843,7 @@ function Receivables({ fleet }: { fleet: FleetState }) {
             <span className="num ml-auto">{zl(r.total - r.house)}</span>
           </div>
         )}
-        <button className="self-start text-[11.5px] text-accent hover:underline" onClick={openRefundables}>
+        <button className="self-start text-[11.5px] text-accent hover:underline" onClick={() => openRefundables()}>
           wydatki domowników ›
         </button>
         <p className="text-[11px] text-dim">Wpłata domownika najpierw wyrównuje to, co ma oddać; reszta to jego zaliczka albo przychód (Ustawienia → Domownicy).</p>

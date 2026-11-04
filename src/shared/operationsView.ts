@@ -160,6 +160,13 @@ type Narrowing = Pick<OperationsFilter, (typeof LIST_KEYS)[number] | 'query' | '
  * must show one (a jump to an operation, a new entry, the inbox – B77, B88) clears them; the period and the order are
  * the caller's.
  */
+/**
+ * The household members' purchases to look at (D80): all of them, of the whole history – or one member's still to be
+ * paid back (AP-19, AF-58: „Pokaż zakupy” at „X: do oddania”, the bridge's line of them – never everybody's, the paid too).
+ */
+export const refundablesFilter = (memberId?: string | null): Pick<OperationsFilter, 'members' | 'marks'> =>
+  memberId ? { members: [memberId], marks: ['refundable', 'owed', 'partlyRepaid'] } : { members: [], marks: ['refundable'] }
+
 export const noNarrowing = (): Narrowing => ({
   accounts: [],
   kinds: [],

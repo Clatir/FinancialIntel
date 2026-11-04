@@ -29,6 +29,7 @@
  *   goes back to the shields.
  */
 import { fold } from '../fold'
+import { plural } from '../format'
 import { HOUSE_MEMBER_ID, type HouseholdMember, type MemberOpening } from '../schema/budget'
 import type { Transaction } from '../schema/records'
 import { financedOf, financerOf, partsOf, sum } from './operations'
@@ -211,6 +212,16 @@ export const settlesHousehold = (t: Transaction): boolean =>
 /** The open item of a member's opening balance (it has no operation): `OpenPurchase.txId`. */
 export const OPENING_TX = 'opening:'
 export const isOpeningItem = (txId: string): boolean => txId.startsWith(OPENING_TX)
+
+/**
+ * What a member's open list is, in words (SW sp. 9, T439): their purchases – and the balance at the settlements' start
+ * apart, never counted as „1 zakup” (there is no purchase to point at). '' – nothing open.
+ */
+export function openText(open: readonly Pick<OpenPurchase, 'txId'>[]): string {
+  const n = open.filter((o) => !isOpeningItem(o.txId)).length
+  const purchases = n ? `${n} ${plural(n, 'zakup', 'zakupy', 'zakupów')}` : ''
+  return [purchases, open.some((o) => isOpeningItem(o.txId)) ? 'saldo na start rozliczeń' : ''].filter(Boolean).join(' i ')
+}
 
 /**
  * The household member a counterparty is (D80 a): all words of one of their bank names in it, in any order – a name of

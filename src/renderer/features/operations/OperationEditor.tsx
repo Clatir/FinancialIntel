@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
-import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
+import { asksImpulse, isNight, isTwoSided, nightVerdict, sum } from '@shared/calc/operations'
 import { DEFAULT_SIGN, unlinkedBy, withKind } from '@shared/calc/kinds'
 import { confirmedChanges, confirmedPeriodOf, type OperationEdit } from '@shared/calc/balances'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
@@ -366,8 +366,9 @@ export function OperationEditor({ id }: { id: string }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
-                    <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" />
+                    <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Czyj zakup'}</span>
+                    {/* A product return (DM sp. 6): whose purchase comes back – never „Zwrot dla … finansuje: X”. */}
+                    <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" back={!outgoing} />
                     {firstMember && (
                       <button
                         type="button"
@@ -518,8 +519,11 @@ export function OperationEditor({ id }: { id: string }) {
             )}
             {night && t.logNote.trim() !== '' && (
               <div className="flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="operation-night-status">
-                {t.impulse === 'plan' || t.explained || t.containerId != null ? (
+                {nightVerdict(t) === 'justified' ? (
                   <span className="text-muted">Wydatek w ciszy nocnej uzasadniony (plan) – wpis w dzienniku wyjaśnia zakup bez naruszenia w grze.</span>
+                ) : nightVerdict(t) === 'member' ? (
+                  // AF-23: a household member's purchase is not mine – the game counts no violation of it.
+                  <span className="text-muted">Zakup domownika w ciszy nocnej – to nie Twój wydatek, w grze bez naruszenia.</span>
                 ) : (
                   <>
                     <span className="text-accent">Potwierdzony zakup w ciszy nocnej – liczy się jako naruszenie w grze.</span>

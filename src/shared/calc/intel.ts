@@ -10,7 +10,7 @@ import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthR
 import type { FleetEvent } from './fleet'
 import { financedBy } from './household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from './income'
-import { accountAmounts, asksImpulse, categoryIndex, costOf, partsOf, sum } from './operations'
+import { accountAmounts, asksImpulse, categoryIndex, costOf, ownSpent, partsOf, sum } from './operations'
 
 // ------------------------------------------------------------------ the wealth curve
 
@@ -277,18 +277,25 @@ export interface LogMonth {
   unmarked: number
 }
 
-/** „Plan czy impuls” month by month (spec): how many impulses, for how much. */
+/**
+ * „Plan czy impuls” month by month (spec): how many impulses, for how much – my own part of each purchase (R-17, D99 pkt 9
+ * – T439: as „sfinansowane przez domowników” is apart; a household member's purchase is no impulse of mine, as in the
+ * game).
+ */
 export function logAccuracy(transactions: readonly Transaction[], orders: Pick<Orders, 'impulseThreshold'>, months: readonly string[]): LogMonth[] {
   return months.map((month) => {
     const out: LogMonth = { month, plan: { count: 0, amount: 0 }, impulse: { count: 0, amount: 0 }, unmarked: 0 }
     for (const t of transactions) {
       if (monthOf(t.date) !== month || t.kind !== 'expense' || t.amount >= 0) continue
+      const own = ownSpent(t)
       if (t.impulse === 'plan') {
+        if (!own) continue
         out.plan.count++
-        out.plan.amount -= t.amount
+        out.plan.amount += own
       } else if (t.impulse === 'impulse') {
+        if (!own) continue
         out.impulse.count++
-        out.impulse.amount -= t.amount
+        out.impulse.amount += own
       } else if (asksImpulse(t, orders)) out.unmarked++
     }
     return out

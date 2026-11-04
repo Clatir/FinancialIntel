@@ -38,7 +38,8 @@ export function FinancerSelect({
   gift,
   onChange,
   compact,
-  testId
+  testId,
+  back = false
 }: {
   refundable: boolean
   memberId: string | null
@@ -46,6 +47,8 @@ export function FinancerSelect({
   onChange: (p: Financer) => void
   compact?: boolean
   testId: string
+  /** A product return (money in): whose purchase comes back – the options say „zwrot dla”, not „finansuje” (DM sp. 6). */
+  back?: boolean
 }) {
   const current = refundable ? (memberId ?? HOUSE_MEMBER_ID) : null
   const offered = useOffered(current)
@@ -61,15 +64,15 @@ export function FinancerSelect({
       title="Wydatek, który finansuje domownik: nie zjada energii i nie jest Twoim kosztem – najpierw z jego zaliczki, resztę pożyczają osłony (ma oddać); prezent – nikt nic nie jest winien, resztę pokrywają osłony"
       data-testid={testId}
     >
-      <option value="">{compact ? 'ja' : '— ja (mój wydatek) —'}</option>
+      <option value="">{compact ? 'ja' : back ? '— ja (mój zakup) —' : '— ja (mój wydatek) —'}</option>
       {offered.map((m) => (
         <option key={m.id} value={`pay:${m.id}`}>
-          {compact ? m.name : `finansuje: ${m.name}`}
+          {compact ? m.name : back ? `zakup: ${m.name}` : `finansuje: ${m.name}`}
         </option>
       ))}
       {offered.map((m) => (
         <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
-          {compact ? `${m.name} – prezent` : `prezent od: ${m.name}`}
+          {compact ? `${m.name} – prezent` : back ? `prezent od: ${m.name} (zwrot do osłon)` : `prezent od: ${m.name}`}
         </option>
       ))}
     </select>
@@ -130,6 +133,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   // Who passes money through the sender (D81): a hint, one click each – never applied by itself.
   const through = payer ? members.filter((m) => !m.archived && m.via === payer && !parts.some((x) => x.memberId === m.id)) : []
   const shareMembers = [...new Set(incomeShares({ ...t, amount: Math.max(t.amount, partsSum) }).map((x) => x.memberId).filter((x): x is string => !!x))]
+  // The sender „pytaj” with a rest beyond what they owe (AP-19, SW sp. 3): asked, not answered beforehand.
+  const askRest = !!payer && inflowOf(members.find((m) => m.id === payer)) === 'ask' && flows.some((f) => f.memberId === payer && (f.income > 0 || f.advance > 0))
   const setMember = (id: string) => {
     const m = members.find((x) => x.id === id)
     const inflow = inflowOf(m)
@@ -197,7 +202,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
           <span>{parts.length ? `Reszta (${memberName(payer, members)}) ponad to, co ma oddać:` : 'Reszta ponad to, co ma oddać:'}</span>
           <Segmented
             size="sm"
-            value={t.memberId && t.advance ? 'advance' : 'income'}
+            // A member „pytaj” (D80 b, AP-19): no answer shown beforehand – the first click answers and is remembered.
+            value={askRest ? null : t.memberId && t.advance ? 'advance' : 'income'}
             onChange={(v) => {
               const advance = v === 'advance'
               patch({ memberId: payer, repaid: 0, advance })
@@ -207,6 +213,11 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
             options={[...INCOME_REST]}
             aria-label="Reszta wpłaty domownika"
           />
+          {askRest && (
+            <span className="text-accent" data-testid="operation-inflow-ask">
+              {memberName(payer, members)} – pytaj: wybierz (do wyboru liczona jako przychód)
+            </span>
+          )}
         </div>
       )}
       {payer && t.inflowKind === 'income' && (

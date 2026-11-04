@@ -62,8 +62,8 @@ describe('lista operacji', () => {
     expect(isNight({ kind: 'expense', amount: -100, time: '04:59' }, settings.orders)).toBe(true)
     expect(isNight({ kind: 'expense', amount: -100, time: '05:00' }, settings.orders)).toBe(false)
     expect(isNight({ kind: 'expense', amount: -100, time: null }, settings.orders)).toBe(false)
-    expect(asksImpulse({ kind: 'expense', amount: -20000 }, settings.orders)).toBe(true)
-    expect(asksImpulse({ kind: 'expense', amount: -19999 }, settings.orders)).toBe(false)
+    expect(asksImpulse({ kind: 'expense', amount: -20000, categoryId: null, refundable: false, splits: [] }, settings.orders)).toBe(true)
+    expect(asksImpulse({ kind: 'expense', amount: -19999, categoryId: null, refundable: false, splits: [] }, settings.orders)).toBe(false)
     expect(needsLog(tx('2026-10-01', -25000, { impulse: 'plan' }), settings.orders)).toBe(false)
   })
 

@@ -3,6 +3,16 @@ import type { QuickTemplate } from '../api'
 import { counterpartyKey } from '../import/names'
 import type { Transaction } from '../schema/records'
 
+/**
+ * The rest of a household member's money beyond what they owe, still to be called income or their advance (D80 b, AP-19 –
+ * SW sp. 3, T439): a member „pytaj” is asked – no answer is given beforehand, so the quick entry does not save until
+ * it is chosen; 0 – nothing to ask (an answer remembered, chosen in the window, or all of it repays what they owe).
+ */
+export function restToChoose(amount: number, member: { owed: number; inflow: string } | undefined, chosen: boolean): number {
+  if (!member || member.inflow !== 'ask' || chosen) return 0
+  return Math.max(0, amount - Math.max(0, member.owed))
+}
+
 /** The templates a pair keeps (F7): the latest ones, newest first. */
 export const QUICK_TEMPLATES = 5
 

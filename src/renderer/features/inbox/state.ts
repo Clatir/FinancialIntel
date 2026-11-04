@@ -154,7 +154,8 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
     showFilter({ period: from ? { kind: 'range', from, to: null } : { kind: 'all' }, ...noNarrowing(), marks: ['uncategorized'] })
     navigate({ page: 'operations' })
   } else if (item.kind === 'duplicates') navigate({ page: 'import' })
-  else if (item.kind === 'refunds') openRefundables()
+  // One member's purchases still to be paid back (AP-19, AF-58) – never everybody's of the whole history.
+  else if (item.kind === 'refunds') openRefundables(item.ref)
   else if (item.kind === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (item.kind === 'transfers') {
     // One report (the pairs together – the inbox's list of them first).

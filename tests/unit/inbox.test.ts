@@ -119,7 +119,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(text('duplicates')).toEqual(['2 możliwe duplikaty – ta sama operacja dwa razy.'])
     expect(text('returned')).toEqual(['mBank: „ZABKA Z1234” z 25.09.2026, 31.95 zł – usunięta przez Ciebie 26.09.2026, wróciła z importem listy operacji i znowu liczy się w saldzie.'])
     // A member's money waiting to be assigned (D91): its operation's editor.
-    expect(items.filter((i) => i.kind === 'repayments').map((i) => [i.ref, i.text, i.action])).toEqual([['p', 'Babcia: zwrot 30.00 zł z 05.10 – wskaż, które zakupy spłaca (do oddania: 1 zakup).', 'Przypisz']])
+    expect(items.filter((i) => i.kind === 'repayments').map((i) => [i.ref, i.text, i.action])).toEqual([['p', 'Babcia: zwrot 30.00 zł z 05.10 – wskaż, co spłaca (do oddania: 1 zakup).', 'Przypisz']])
     expect(items.filter((i) => i.kind === 'firewall').map((i) => [i.ref, i.text, i.action])).toEqual([['F1', 'Dopłata do XTB 200.00 zł z 16.10 wbrew rozkazowi firewall (osłony albo kadłub niepełne) – potwierdź, że to Twoja decyzja.', 'Potwierdź']])
     expect(text('transfers')).toEqual([
       '1 przelew między kontami zapisany jako dwie osobne operacje (sprzed 1.7.0) – połączenie w jedną operację nie zmienia żadnego salda.',

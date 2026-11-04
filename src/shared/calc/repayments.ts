@@ -291,7 +291,10 @@ export function choicesForRepayment(before: HouseholdLedger, ledger: HouseholdLe
 }
 
 export interface WaitingRepayment extends Unassigned {
-  /** True when assigning this payment to the purchase pulls from prior-month booked income (`f.income > 0` and `pay.date.slice(0, 7) < purchase.date.slice(0, 7)`). */
+  /**
+   * True when assigning this payment to the purchase pulls from booked income of a closed month (`f.income > 0`, the
+   * payment's month before `month` – the current one; DM sp. 7: every closed month, not only one before the purchase's).
+   */
   fromPriorIncome?: boolean
 }
 
@@ -303,7 +306,8 @@ export function waitingForPurchase(
   ledger: HouseholdLedger,
   purchase: Transaction,
   p: PurchaseState,
-  txOf: (txId: string) => Transaction | undefined
+  txOf: (txId: string) => Transaction | undefined,
+  month: string = purchase.date.slice(0, 7)
 ): WaitingRepayment[] {
   const openNow = Math.max(0, p.lent - p.paid)
   const namedDeposit = Math.max(0, p.by.reduce((a, b) => a + b.amount, 0) - p.paid)
@@ -327,7 +331,7 @@ export function waitingForPurchase(
     const creditNow = unassigned.find((u) => u.txId === txId)?.amount ?? 0
     const avail = openNow > 0 ? creditNow + f.income + freeAdvance : freeAdvance
     if (avail > 0) {
-      const fromPriorIncome = openNow > 0 && f.income > 0 && creditNow + freeAdvance < Math.min(openNow, avail) && pay.date.slice(0, 7) < purchase.date.slice(0, 7)
+      const fromPriorIncome = openNow > 0 && f.income > 0 && creditNow + freeAdvance < Math.min(openNow, avail) && pay.date.slice(0, 7) < month
       out.set(txId, { txId, date: pay.date, amount: avail, ...(fromPriorIncome ? { fromPriorIncome: true } : {}) })
     }
   }

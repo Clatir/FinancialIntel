@@ -11,7 +11,7 @@ import { daysBetween, warsawNow } from './dates'
 import { againstFirewall, deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
 import type { Alarm } from './fleet'
-import { isOpeningItem, type MemberBalance } from './household'
+import { isOpeningItem, openText, type MemberBalance } from './household'
 import type { TransferIssue } from './transfers'
 import { deadText, priceText, type DeadContainer, type PriceChange } from './cargoWatch'
 import { anomalyText, type Anomaly } from './anomalies'
@@ -265,15 +265,22 @@ export function inboxItems(o: InboxInput): InboxItem[] {
   // The radar of anomalies (F31): each until „w porządku” – its operation to look at (a category: its month in Operacje).
   for (const a of o.anomalies ?? []) out.push({ kind: 'anomalies', key: `anomalies:${a.key}`, ref: a.key, text: anomalyText(a, zl), action: a.txIds.length ? 'Pokaż operację' : 'Pokaż w Operacjach' })
   // A member's money repaid but not assigned to a purchase (D91): which purchases it pays back – its operation's editor.
+  // The balance at the settlements' start is no purchase (SW sp. 9): said apart; a member whose debt the money paid off
+  // is said settled – as the bridge and the radar have it.
   for (const m of o.members)
-    for (const u of m.unassigned)
+    for (const u of m.unassigned) {
+      const open = openText(m.open)
       out.push({
         kind: 'repayments',
         key: `repayments:${u.txId}:${m.memberId}`,
         ref: u.txId,
-        text: `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} – wskaż, które zakupy spłaca${m.open.length ? ` (do oddania: ${m.open.length} ${plural(m.open.length, 'zakup', 'zakupy', 'zakupów')})` : ''}.`,
+        text:
+          m.owed > 0
+            ? `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} – wskaż, co spłaca${open ? ` (do oddania: ${open})` : ''}.`
+            : `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} wyrównał dług – wskaż, co spłaca${open ? `: ${open}` : ''}.`,
         action: 'Przypisz'
       })
+    }
   for (const m of o.members) {
     if (m.owed <= 0) continue
     const days = m.since ? Math.max(0, daysBetween(m.since, o.today)) : null

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { QuickData, QuickResult, QuickTemplate } from '@shared/api'
 import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
 import { energyAfter } from '@shared/calc/fleet'
+import { impulseAmount } from '@shared/calc/operations'
 import { dm } from '@shared/calc/briefing'
 import { OFFICER_SOURCE_LABEL, officerHint, type OfficerSource } from '@shared/import/officer'
 import { newId } from '@shared/ids'
@@ -10,6 +11,7 @@ import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
 import { TagsField } from '../../components/TagsField'
 import { tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
+import { restToChoose } from '@shared/calc/quick'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -256,7 +258,22 @@ export function QuickApp() {
   const set = (p: Partial<QuickDraft>) => setD((x) => ({ ...x, ...p }))
   const cats = useMemo(() => new Map((data?.categories ?? []).map((c) => [c.id, c])), [data])
   const night = d.kind !== 'income' && !!d.time && !!data && inClockWindow(d.time, data.quietHours.from, data.quietHours.to)
-  const asks = d.kind !== 'income' && !!data && d.amount >= data.impulseThreshold && data.impulseThreshold > 0
+  // The lines of the draft as saved: a shared purchase's people, a split receipt's parts, or the purchase itself.
+  const parts = useMemo((): Line[] => {
+    if (d.kind === 'income') return []
+    return share
+      ? shareAmounts(d.amount, share).map((amount, i) => ({ amount, categoryId: d.categoryId, refundable: share.lines[i]!.memberId != null, memberId: share.lines[i]!.memberId, gift: share.lines[i]!.gift }))
+      : lines.length > 1
+        ? lines
+        : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift }]
+  }, [d, lines, share])
+  // „Plan czy impuls?” of my own part only (AP-19): never a household member's purchase, never an ATM withdrawal.
+  const asks = d.kind !== 'income' && !!data && data.impulseThreshold > 0 && impulseAmount(parts.map((p) => ({ ...p, amount: -p.amount }))) >= data.impulseThreshold
+  // A member's money (D80 b): the sender's part beyond what they owe – a member „pytaj” chooses it here (AP-19, SW sp. 3).
+  const payer = d.kind === 'income' && d.household ? data?.members.find((x) => x.id === d.memberId) : undefined
+  const payerOwn = payer ? d.amount - (data?.members ?? []).filter((x) => x.via === payer.id).reduce((a, x) => a + (shares[x.id] ?? 0), 0) : 0
+  const askRest = restToChoose(payerOwn, payer, !!d.advanceChosen)
+  const restOpen = payer?.inflow === 'ask' && !d.advanceChosen
   const hide = !!data?.hideAmounts
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
 
@@ -269,14 +286,15 @@ export function QuickApp() {
       // Others' money in it first (D81), then the sender's: what each owes first, the rest their advance or income.
       const others = data.members.filter((x) => x.via === m.id && (shares[x.id] ?? 0) > 0)
       const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0)
-      const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean) => {
+      const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean | null) => {
         const back = Math.min(amount, who.owed)
         const rest = amount - back
-        return `${who.name}${back ? ` – wyrównuje ${money(back)} (ma oddać ${money(who.owed)})` : ''}${rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'}` : ''}.`
+        const as = advance == null ? '– przychód czy zaliczka? Wybierz wyżej' : advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'
+        return `${who.name}${back ? ` – wyrównuje ${money(back)} (ma oddać ${money(who.owed)})` : ''}${rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${as}` : ''}.`
       }
       return (
         <div className="flex flex-col">
-          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : <span data-testid="quick-preview-member">Od: {line(m, own, d.advance)}</span>}
+          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : <span data-testid="quick-preview-member">Od: {line(m, own, restOpen ? null : d.advance)}</span>}
           {others.map((x) => (
             <span key={x.id} data-testid="quick-preview-share">
               W tym za: {line(x, shares[x.id]!, x.inflow === 'advance')}
@@ -285,11 +303,6 @@ export function QuickApp() {
         </div>
       )
     }
-    const parts: Line[] = share
-      ? shareAmounts(d.amount, share).map((amount, i) => ({ amount, categoryId: d.categoryId, refundable: share.lines[i]!.memberId != null, memberId: share.lines[i]!.memberId, gift: share.lines[i]!.gift }))
-      : lines.length > 1
-        ? lines
-        : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift }]
     let daily = 0
     /** The daily parts by main category ('' – none): today's refund of an earlier purchase of it is taken first (T370). */
     const dailyBy = new Map<string, number>()
@@ -363,8 +376,10 @@ export function QuickApp() {
         </div>
       )
     }
+    // A purchase for a member with none chosen yet (SW.12): said so – never the first member's name and advance.
+    if (d.kind === 'refundable' && !share && lines.length <= 1 && !d.memberId) out.push(<div key="member:none" data-testid="quick-preview-financed">Za domownika: wybierz, kto finansuje zakup.</div>)
     // Financed by household members (D80): not my energy – their advance first, the rest the shields lend (a gift – pay, D83).
-    for (const [id, { amount: v, gift }] of financed) {
+    else for (const [id, { amount: v, gift }] of financed) {
       const m = data.members.find((x) => x.id === id)
       const fromDeposit = Math.min(v, m?.deposit ?? 0)
       out.push(
@@ -376,7 +391,7 @@ export function QuickApp() {
       )
     }
     return out
-  }, [data, d, lines, share, cats, money, shares])
+  }, [data, d, parts, cats, money, shares, restOpen])
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
@@ -384,6 +399,8 @@ export function QuickApp() {
     if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
     if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
     if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
+    // A member „pytaj” (D80 b, AP-19): the rest beyond what they owe is chosen – never saved as income unasked.
+    if (askRest > 0) return setMsg({ ok: false, text: `Wybierz, czym jest reszta ${money(askRest)} ponad to, co ${payer!.name} ma oddać: przychód czy zaliczka.` })
     if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
     sending.current = true
@@ -393,7 +410,7 @@ export function QuickApp() {
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
     const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
     void api.quickAdd({ ...d, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
-  }, [busy, data, d, lines, share, night, nightOk, shares])
+  }, [busy, data, d, lines, share, night, nightOk, shares, askRest, payer, money])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -685,7 +702,8 @@ export function QuickApp() {
                 {d.household && d.memberId && (
                   <Segmented
                     size="sm"
-                    value={d.advance ? 'advance' : 'income'}
+                    // A member „pytaj” (AP-19, SW sp. 3): no answer given beforehand – the user chooses.
+                    value={restOpen ? null : d.advance ? 'advance' : 'income'}
                     onChange={(v) => set({ advance: v === 'advance', advanceChosen: true })}
                     options={[
                       { value: 'income', label: 'przychód' },

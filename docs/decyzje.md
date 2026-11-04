@@ -3061,3 +3061,23 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   komputery piszą jeden plik; „Cofnij”) – pieniędzy, alarmu ani naruszenia w grze nie zmienia. Dopłata z wpisem ICTTJ
   potwierdza się jak dotąd w oknie dokowania. Telefon meldunku nie pokazuje (dokowanie tylko na komputerze). Bez zmian
   formatu (rekord dokowania jak dotąd).
+- **T439** Domownicy w grze, dzienniku i listach (1.15.9, N5 – AP-19: AF-22, AF-23, AF-58, OP sp. 1, SW sp. 3, SW.12,
+  SW sp. 9, DM sp. 6, 7; R-17 – D99 pkt 9; D80 b, D91 bez zmian): (1) „plan czy impuls?” od mojej części zakupu bez
+  tego, co z definicji zaplanowane: `impulseAmount` – linie własne (nie domownika, finansowane ani prezent), bez
+  płatności ładowni (kontener: czynsz, rata) i kategorii systemowej „Gotówka” (bankomat); `asksImpulse` liczy z tego
+  wszędzie – „?” na liście, edytor, Wywiad, Raporty, szybki wpis (części wspólnego zakupu i paragonu); zakup z celu nadal
+  pyta; (2) dziennik kapitański (Wywiad, Raport wachty) – kwota własna (`ownSpent`; przykład audytu: plan 1 060,98 zł
+  z częścią domownika 300 zł = 760,98 zł), oznaczony zakup samego domownika się nie liczy (jak w grze); (3) notka ciszy
+  nocnej przy zakupie domownika – „to nie Twój wydatek, w grze bez naruszenia” (`nightVerdict`, jak `game.ts`);
+  (4) domownik „pytaj” bez wartości domyślnej: szybki wpis nie zaznacza „przychód / zaliczka”, podgląd pyta, zapis
+  odmawia przy reszcie ponad dług („Wybierz, czym jest reszta X ponad to, co … ma oddać”; `restToChoose`); edytor Operacji
+  (zapis od razu) – bez zaznaczenia i z dopiskiem „pytaj: wybierz (do wyboru liczona jako przychód)”; pierwszy wybór
+  zapamiętany jak dotąd; (5) „Pokaż zakupy” przy „X: do oddania” (Meldunki) i linia odprawy – zakupy tej osoby do
+  oddania z całej historii (`refundablesFilter`: osoba + „do oddania” / „częściowo oddane”); „wydatki domowników ›” –
+  wszystkie jak dotąd; (6) saldo na start rozliczeń nigdy jako „1 zakup” (`openText`): Meldunki „wskaż, co spłaca
+  (do oddania: saldo na start rozliczeń)”, przy długu wyrównanym „zwrot … wyrównał dług – wskaż, co spłaca: …”; Radar
+  „rozliczony” zamiast „bez długu”, lista „do oddania: …” / „czeka na przypisanie zwrotu: …”; odprawa „zwrot czeka na
+  przypisanie (Meldunki)” – reguła księgi (D91 a) bez zmian; (7) dopisek „zmieni przychód zamkniętego miesiąca” przy
+  każdej wpłacie z miesiąca przed bieżącym (`waitingForPurchase(…, month)`, dotąd – tylko sprzed miesiąca zakupu),
+  miesiąc słownie; (8) szybki wpis „Za domownika” bez wybranej osoby – „wybierz, kto finansuje zakup”, nie imię i
+  zaliczka pierwszej osoby; (9) zwrot towaru w edytorze – „Czyj zakup: zakup: X” zamiast „Zwrot dla: finansuje: X”.

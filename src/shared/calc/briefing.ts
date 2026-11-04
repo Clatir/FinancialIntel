@@ -391,7 +391,7 @@ export function briefing(o: BriefingInput): BriefingItem[] {
       const through = via ? ` – przekazuje przez: ${memberName(via, o.members)}` : ''
       // Their money waiting to be assigned to a purchase (D91): the purchases still say „do oddania”.
       const waiting = m.unassigned.reduce((a, u) => a + u.amount, 0)
-      const assign = waiting ? `; zwrot ${zl(waiting)} czeka na przypisanie do zakupów` : ''
+      const assign = waiting ? `; zwrot ${zl(waiting)} czeka na przypisanie (Meldunki)` : ''
       items.push({ level: 'info', kind: 'house', key: `house:${m.memberId}:${m.since}`, text: `${memberName(m.memberId, o.members)}: do oddania ${zl(m.owed)} – ${oldest} z ${dm(m.since)} (${days} dni)${through}${assign}.` })
     }
   }
