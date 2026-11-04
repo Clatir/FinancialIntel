@@ -12,13 +12,12 @@ komponentu `Segmented`) wydane 24–25.10 – 1.15.3 i 1.15.4 z sesji Antigravit
 iPhone (D92 / D93): 1.13.0–1.15.0 wydane (grupy iA–iC, PR #42–#44); przerwa po iC (D93) – „Przed grupą iD” niżej.
 1.11.0 i 1.12.0 wydała w tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0,
 decyzje D92 / D93, T305–T311.
-**Następny krok:** audyt funkcjonalny 1.15.4 (D97) zakończony 03.11 – `docs/audyt/raport.md` (80 znalezisk: K 4, W 6,
-S 25, N 35), `docs/audyt/wnioski.md` (48 AP, plan grup N1–N5); od użytkownika: odpowiedzi na pytania z `wnioski.md`
-sekcja 7 (S4 i T163 przed N2), potem N1 (1.15.5) na komendę; maszyna wirtualna – pakiet gotowy, czeka. Potem
-przerwa po iC (D93) – od użytkownika: procent limitu tygodniowego (kolumna „Rzeczywiste”), odpowiedź
-do IP15 (czy folder danych ICTTJ jest na OneDrive – bez niej iD nie startuje), decyzje IP21 (kreator) i IP24 (zapisy w
-tle) przed iE, uwagi z telefonu do iA–iC; potem grupa iD (1.16.0) na komendę (D67). Przed każdym etapem tabela prac z
-modelem oszczędnym z górką; thinking domyślnie xhigh, max tylko silnik pieniędzy i granica ICTTJ (D96). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
+**Następny krok:** audyt 1.15.4 (D97) zakończony 03.11, odpowiedzi użytkownika 04.11 – D98 (iPhone wstrzymany), D99
+(wszystkie AP przyjęte, S4 – „zaliczka na przyszłość” może omijać dług). Grupy N1–N5 (1.15.5–1.15.9), potem R1–R2 – kolejka
+niżej; N1 na komendę. Otwarte: model gotówki (przed N5), karty kredytowe (przed AP-41), maszyna wirtualna, procent
+limitu tygodniowego. iPhone (iD, iE, IP15, IP21, IP24) wstrzymany (D98) – „Przed grupą iD” niżej zostaje jako zapis na
+później. Przed każdym etapem tabela prac z modelem oszczędnym z górką; thinking domyślnie xhigh, max tylko silnik
+pieniędzy i granica ICTTJ (D96). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
 wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
 Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w archiwum dziennika; iPhone – sekcje „1.13.0”, „1.14.0” i „1.15.0”
 w archiwum oraz `docs/iphone.md`.
@@ -150,8 +149,10 @@ prac” (razem ok. 63 h; ciąg M–V zmierzone ok. 17 h przy planie ok. 24–25 
 | **N3** | Opłaty, energia, gra: jeden stan opłaty, energia dziś w granicach miesiąca, zamrażanie po przerwie, kadłub, Kurs = Mostek, trend poduszki (AP-10, 13, 14, 17, 18, 30, 31) | Opus 5.5 | xhigh (max w AP-13, AP-17) | 2,5–3,5 h (z górką 4 h) | 1.15.7 | RA.4, S6, pytania AP-14, AP-17 | ⏳ |
 | **N4** | Zasady interfejsu: komunikat przy każdym odrzuceniu, „Cofnij” wszędzie, teksty, odprawa z hierarchią (AP-15, 16, 22, 23) | Sonnet 5.5 | high (Opus high przy logice) | 2–3 h (z górką 3,5 h) | 1.15.8 | – | ⏳ (po iD albo przed) |
 | **N5** | Ścieżki i ergonomia: kreator, domownicy, szybki wpis, debriefing, dokowanie, konflikty, nowy komputer, eksport, Operacje (AP-19–21, 24–29, 33, 34, 36–38) | Opus 5.5 | high (xhigh przy silniku) | 3–4,5 h (z górką 5 h) | 1.15.9 | odpowiedzi z `wnioski.md` sekcja 5 | ⏳ (po iE albo przed) |
-| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏳ czeka na odpowiedzi |
-| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **xhigh** (D96; max tylko w krokach silnika pieniędzy albo granicy ICTTJ) | 5,5–7,5 h (z górką 8 h) | 1.17.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
+| **R1** | Rozwojowe 1: import w Web Workerze (AP-35, po pomiarze w maszynie), kalendarz miesiąca na Radarze (AP-42), dowolny CSV – drugi bank (AP-43), reguły I / LUB i dla wpisów ręcznych (AP-45), opis formatu folderu (AP-47) | Opus 5.5 | xhigh (high przy UI) | 3–4,5 h (z górką 5 h) | 1.16.0 | komenda | ⏳ |
+| **R2** | Rozwojowe 2: plan spłaty długów i karta kredytowa (AP-41 – po pytaniu o karty), prognoza wieloletnia bez IKE / IKZE / PPK (AP-44), Sankey miesiąca (AP-46), kwota w walucie (AP-48) | Opus 5.5 | **max** (karta i plan spłaty – silnik) / xhigh | 3–5 h (z górką 6 h) | 1.17.0 | odpowiedź o kartach | ⏳ |
+| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | później | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏸ wstrzymane (D98) |
+| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **xhigh** (D96; max tylko w krokach silnika pieniędzy albo granicy ICTTJ) | 5,5–7,5 h (z górką 8 h) | później | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏸ wstrzymane (D98) |
 | | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |
 
 **iPhone – limit tygodniowy (D93).** Plan Max 20x, odnowienie w niedzielę o 18:00; 21.10.2026 zużyte 55 %. Podstawa:

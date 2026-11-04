@@ -152,6 +152,7 @@ node scripts/check-context.mjs   # limity CLAUDE.md, docs/postep.md, .claude/rul
 ## Etapy
 - Zakończone: E0–E8 (E9 wypada – D74), wersje 1.2.1–1.12.0, przegląd po 1.4.1, grupy E–V, iPhone iA–iC
   (1.13.0–1.15.0), 1.15.1–1.15.4. Lista z zakresem: archiwum, sekcja „Etapy”.
-- Otwarte: iPhone iD (1.16.0) i iE (1.17.0) – zakres w `docs/plan.md`, stan i pytania w `docs/postep.md`.
+- Otwarte: po audycie 1.15.4 (D97, D99) grupy naprawcze N1–N5 (1.15.5–1.15.9) i rozwojowe R1–R2 (1.16.0, 1.17.0) –
+  zakres w `docs/audyt/wnioski.md`, stan w `docs/postep.md`. iPhone iD i iE wstrzymane (D98).
 - Odrzucone (D88): F32 flota rezerwowa, F38 paragony i gwarancje, F39 ulgi PIT-37 / PIT-36, F41 wpisy z telefonu,
   F43 archiwizacja starych lat.

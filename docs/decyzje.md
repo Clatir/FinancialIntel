@@ -405,6 +405,23 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   muszą widzieć wszystkie znaleziska. W trakcie audytu nic nie jest naprawiane. Jeden `/code-review` dla narzędzia
   i generatora danych, commit po każdej grupie, jeden PR na końcu. Limit tygodniowy nie ogranicza audytu. Maszyna
   wirtualna z Cowork – tak (AU-3). Tylko dane syntetyczne – bez kopii prawdziwego folderu. Bloki A i B jednym ciągiem.
+- **D98** (04.11.2026) Wersja na iPhone'a wstrzymana bez terminu: grupy iD i iE (dawne 1.16.0, 1.17.0) oraz usprawnienia
+  tylko dla telefonu (AP-39 widżet, AP-40 Face ID) czekają na osobną decyzję; wydane 1.13.0–1.15.0 zostają bez zmian.
+  Po audycie najpierw komputer: grupy naprawcze N1–N5 (1.15.5–1.15.9), potem rozwojowe.
+- **D99** (04.11.2026) Wnioski audytu 1.15.4 (`docs/audyt/wnioski.md`) przyjęte: wszystkie usprawnienia AP-1…AP-48
+  (poza AP-39 i AP-40 – D98) według rekomendacji z sekcji 4, w tym AP-17 jako propozycja „Dopełnij kadłub z osłon”
+  jednym kliknięciem i tolerancja 1 % firewalla; AP-41 i AP-44 też wchodzą (na końcu, rozwojowo; prognoza wieloletnia bez
+  IKE / IKZE / PPK – F32 odrzucone, D88). Pytania z sekcji 7: (1) S4 – jawna „zaliczka na przyszłość” **może omijać dług
+  osoby** (zostaje zachowanie 1.15.3); „reszta jako zaliczka” nadal najpierw spłaca, a reszta idzie do depozytu
+  (AF-8 – błąd etykiety i działania); (2) T163 – dostawa liczona od razu według puli wpisu ICTTJ; (3) RA.4 – niezapłacona
+  opłata zostaje „po terminie” także w kolejnych miesiącach, aż do zapłaty; (4) S6 – energia dziś nie większa niż energia
+  pozostała w miesiącu, zwrot dawnego zakupu rozłożony na kolejne dni; (5) po przerwie pytanie przed zamrożeniem dni bez
+  importu; (6) tolerancja 1 % i propozycja dopełnienia kadłuba; (7) rozkazy tylko w Ustawieniach (D84 C9, w Dowództwie
+  odczyt), godzina odprawy jako opcja, domyślnie przy pierwszym otwarciu; (9) wszystkie rekomendacje z tabeli sekcji 5
+  (S1, S2, S3, S5, S7–S10, C14, C16, C20, C21, R-3, R-7 / R-8, R-9, R-16, R-17, R-19, T47, Z6, Z12, D91 b, T286, T291,
+  OP.33, OP.40, T156 i pozostałe wiersze tabeli); (10) nieaktualne (D98); (12) kalibracja progów gry po N3, po 1–2
+  miesiącach na poprawionej wersji, za osobną zgodą. Otwarte: (8) model gotówki – przed N5 (AP-33); (11) karty kredytowe
+  – przed AP-41.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
