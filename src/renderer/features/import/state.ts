@@ -20,7 +20,8 @@ import {
   type ImportResult,
   type ImportTheme,
   type SharePart,
-  type SharesSpread
+  type SharesSpread,
+  type SpreadLine
 } from '@shared/import/reconcile'
 import { balanceOf, type HouseholdLedger } from '@shared/calc/household'
 import { returnedKey } from '@shared/import/deleted'
@@ -776,10 +777,57 @@ export function sharesView(plan: ImportPlan | null, choices: ImportChoices, ledg
 
 const partsSum = (lines: readonly SharePart[]) => lines.reduce((a, x) => a + Math.max(0, x.amount), 0)
 
-/** What a member still owes back beyond the file's parts given by others than `from` (a decision's key, `g:` / `t:`). */
-export function owedLeftOfDecision(view: SharesView, from: string, memberId: string): number {
-  const given = (view.spread.get(from) ?? []).filter((l) => l.memberId === memberId).reduce((a, l) => a + l.given.reduce((s, g) => s + g.amount, 0), 0)
+/**
+ * The import's decision a „w tym za” is of (AF-27): its key (`g:<group>`, `t:<theme>`) – or the keys of a theme's groups
+ * when the theme shows their common decision (N78: a change there replaces them all – `chooseThemeOverGroups`).
+ */
+export type DecisionKeys = string | readonly string[]
+const keysOf = (from: DecisionKeys): readonly string[] => (typeof from === 'string' ? [from] : from)
+
+/** What a theme's row shows (N78): its own decision, its groups' common one (each decided alike), theirs that differ, or none. */
+export type ThemeShows = 'theme' | 'same' | 'mixed' | 'open'
+export function themeShows(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<ImportChoices, 'themes' | 'groups'>): ThemeShows {
+  if (c.themes[t.theme]) return 'theme'
+  const own = t.groups.map((g) => c.groups[g.group])
+  if (!own.every(Boolean)) return 'open'
+  return own.every((x) => sameChoice(x!, own[0]!)) ? 'same' : 'mixed'
+}
+
+/** The decision a theme row's „w tym za” is of: its groups' when it shows their common one, else its own. */
+export const themeSharesFrom = (t: Pick<ImportTheme, 'theme' | 'groups'>, shows: ThemeShows): DecisionKeys =>
+  shows === 'same' ? t.groups.map((g) => `g:${g.group}`) : `t:${t.theme}`
+
+/** What a member still owes back beyond their own money of the file and its parts given by others than `from` (the decision). */
+export function owedLeftOfDecision(view: SharesView, from: DecisionKeys, memberId: string): number {
+  let given = 0
+  for (const k of keysOf(from)) for (const l of view.spread.get(k) ?? []) if (l.memberId === memberId) given += l.given.reduce((s, g) => s + g.amount, 0)
   return Math.max(0, (view.owed.get(memberId) ?? 0) - ((view.total.get(memberId) ?? 0) - given))
+}
+
+/**
+ * A decision's „w tym za” lines spread over its rows (AF-27), by the line shown: of one decision as they are; of a
+ * theme's groups (their common decision shown) added up line by line – the same lines in the same order (`sameChoice`;
+ * lines of 0 zł aside), each group's amount typed for its own rows, so the typed ones add up too.
+ */
+export function decisionSpread(view: SharesView, from: DecisionKeys, choice: Pick<Choice, 'memberId' | 'shares'>): Map<number, SpreadLine> {
+  const keys = keysOf(from)
+  if (keys.length === 1) return new Map((view.spread.get(keys[0]!) ?? []).map((l) => [l.line, l]))
+  // The shown lines with an amount (the sender's own never spreads), in order: a group's n-th such line is the n-th.
+  const sender = choice.memberId ?? HOUSE_MEMBER_ID
+  const shown = (choice.shares ?? []).flatMap((x, i) => (x.amount > 0 && x.memberId !== sender ? [i] : []))
+  const out = new Map<number, SpreadLine>()
+  for (const k of keys)
+    (view.spread.get(k) ?? [])
+      .filter((l) => l.typed > 0)
+      .sort((a, b) => a.line - b.line)
+      .forEach((l, n) => {
+        const line = shown[n]
+        if (line == null) return
+        const sum = out.get(line)
+        out.set(line, sum ? { ...sum, typed: sum.typed + l.typed, given: [...sum.given, ...l.given] } : { ...l, line, given: [...l.given] })
+      })
+  for (const l of out.values()) l.given.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  return out
 }
 
 /** …beyond the parts of the other rows than `key`. */
@@ -798,8 +846,8 @@ export function owedLeftOfRow(view: SharesView, key: string, amount: number, mem
  * Where a new „w tym za X” starts (D81 – „z kwotą tego, co X ma oddać”, AF-27): what X still owes back, at most the money
  * its rows have left beyond the other lines – of a group's or a theme's decision (`from`)…
  */
-export const decisionStart = (view: SharesView, from: string, memberId: string, lines: readonly SharePart[]): number =>
-  Math.max(0, Math.min(owedLeftOfDecision(view, from, memberId), (view.rows.get(from)?.sum ?? 0) - partsSum(lines)))
+export const decisionStart = (view: SharesView, from: DecisionKeys, memberId: string, lines: readonly SharePart[]): number =>
+  Math.max(0, Math.min(owedLeftOfDecision(view, from, memberId), keysOf(from).reduce((a, k) => a + (view.rows.get(k)?.sum ?? 0), 0) - partsSum(lines)))
 
 /** …or of one row (`key`, its `amount`). */
 export const rowStart = (view: SharesView, key: string, amount: number, memberId: string, lines: readonly SharePart[]): number =>

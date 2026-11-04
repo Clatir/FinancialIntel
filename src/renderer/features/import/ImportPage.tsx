@@ -1,7 +1,7 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useShallow } from 'zustand/shallow'
 import type { DecisionSource } from '@shared/import/classify'
-import { choiceOf, importThemes, joins, learnable, movesHere, realOf, removesCopy, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { choiceOf, importThemes, joins, learnable, movesHere, realOf, removesCopy, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
 import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
@@ -62,6 +62,8 @@ import {
   setRestoreDeleted,
   setSkip,
   skipSelected,
+  themeSharesFrom,
+  themeShows,
   themeStatus,
   ownNamesWith,
   trashImportFile,
@@ -453,11 +455,17 @@ function MatchesPanel() {
             <span className="label">Kopie na innym koncie ({withCopy.length})</span>
             <p className="text-[11px] text-dim">
               Te operacje są już na tym koncie ({otherFormat}), a ich kopie z wcześniejszego importu tego pliku – na innym koncie, więc liczą się dwa razy.
-              Zaznaczone kopie usunę (ich kategoria i notatki przejdą na operację tutaj; „Cofnij import” je przywróci). Kopia z inną decyzją nie jest zaznaczona –
-              sprawdź ją.
+              Zaznaczone kopie usunę (ich kategoria, notatki i spłacane zakupy przejdą na operację tutaj; „Cofnij import” je przywróci). Kopia z inną decyzją
+              albo spłacająca inne zakupy nie jest zaznaczona – sprawdź ją.
             </p>
             {withCopy.map((p) => (
-              <label key={p.key} className="flex items-center gap-2" data-testid="import-copy" data-blocked={p.copy!.blocked ?? undefined}>
+              <label
+                key={p.key}
+                className="flex items-center gap-2"
+                data-testid="import-copy"
+                data-blocked={p.copy!.blocked ?? undefined}
+                data-other-covers={p.copy!.otherCovers || undefined}
+              >
                 <input
                   type="checkbox"
                   checked={removesCopy(p, choices)}
@@ -468,6 +476,7 @@ function MatchesPanel() {
                 <span className="min-w-0 flex-1 truncate">
                   {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· kopia na: {accountName(p.copy!.tx.accountId)}</span>
                   {p.copy!.conflict && <span className="ml-1 text-accent">· inna decyzja w kopii</span>}
+                  {p.copy!.otherCovers && <span className="ml-1 text-accent">· kopia spłaca inne zakupy niż operacja tutaj</span>}
                   {p.copy!.blocked && <span className="ml-1 text-accent">· {COPY_BLOCKED[p.copy!.blocked]}</span>}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
@@ -777,12 +786,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
   const accepted = useImport((s) => !!s.accepted.themes[t.theme])
   const fileAccount = useImport((s) => s.accountId)
   // Every group decided on its own (N78): their one decision, or „różne” – never the theme's empty proposal.
-  const groupsDecided = useImport((s) => {
-    if (s.choices.themes[t.theme]) return 'theme'
-    const own = t.groups.map((g) => s.choices.groups[g.group])
-    if (!own.every(Boolean)) return 'open'
-    return own.every((c) => sameChoice(c!, own[0]!)) ? 'same' : 'mixed'
-  })
+  const groupsDecided = useImport((s) => themeShows(t, s.choices))
   const common = useImport((s) => (groupsDecided === 'same' ? s.choices.groups[t.groups[0]!.group] : undefined))
   // A keyword of a title (N79): about those payments – no rule of the brands, whatever „zapamiętaj” said.
   const byTitle = t.groups.every((g) => g.byTitle)
@@ -828,7 +832,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
             direction={t.direction}
             onChange={(c) => (common ? chooseThemeOverGroups(t, c) : chooseTheme(t.theme, c))}
             own={fileAccount}
-            sharesFrom={`t:${t.theme}`}
+            sharesFrom={themeSharesFrom(t, groupsDecided)}
             testId="import-theme"
           />
         )}

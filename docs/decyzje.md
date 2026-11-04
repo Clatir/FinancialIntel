@@ -2389,8 +2389,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   kluczu (B35), którego operacja jest tu w drugim formacie, to `known` z kopią (`RowCopy`) – „usuń duplikat” zamiast
   „przenieś” (`ImportChoices.removeCopies`): zaznaczony, gdy kopia przyszła tam z importu i nie ma innej decyzji
   (`conflicting`); nigdy, gdy zadokowana (`ClassifyContext.docked`), spłacana wpłatą domownika (`covers`) albo tylko do
-  odczytu. Usunięta kopia oddaje operacji tutaj kategorię i notatki (`takeUserData`), jest w paczce importu („Cofnij
-  import” ją przywraca), licznik `copies`. Wspólne „jedna operacja i jej kopie” (`userContent`, `conflicting`,
+  odczytu. Usunięta kopia oddaje operacji tutaj kategorię i notatki (`takeUserData`), a przy tej samej decyzji, gdy
+  operacja tutaj nic nie wskazuje, też to, co spłaca (`covers`, dług startowy, `repaid` – przegląd N1; także panel
+  duplikatów); kopia spłacająca inne zakupy niż operacja tutaj nie jest zaznaczona („kopia spłaca inne zakupy niż
+  operacja tutaj”, `coversOtherwise`). Usunięta jest w paczce importu („Cofnij import” ją przywraca), licznik `copies`. Wspólne „jedna operacja i jej kopie” (`userContent`, `conflicting`,
   `mergeDuplicate`, `takeUserData`) przeniesione z `duplicates.ts` do `shared/import/copies.ts` (bez cyklu importów).
 - **T322** Konto importu po numerze rachunku (AP-2, IM sp. 2): plik otwiera się na koncie, na które trafiał jego numer
   (`accountForNumber`: otwarte konta z tym numerem – z kilku to z importem mBanku, potem wybrane wcześniej); numer nieznany
@@ -2410,8 +2412,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je w „Na komputerze”.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
-  rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy (każda
-  reguła poza regułą pożyczki), pieniądzom domownika (każda poza regułą wpływu z osobą i przelewem własnym) i XTB (każda
+  rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
+  przelewu (każda reguła poza regułą pożyczki; przelew sprzed dnia pożyczki – reguła, jak w audycie `loanOn`, przegląd
+  N1; bez reguły jak dotąd – każda otwarta, B34), pieniądzom domownika (każda poza regułą wpływu z osobą i przelewem własnym) i XTB (każda
   poza regułą XTB i przelewem własnym – portfel XTB). Zostaje regułą: słowo kluczowe z tytułu (o tej płatności – „ZA
   PIZZĘ” od pożyczkobiorcy), reguła tego samego rodzaju (dawna reguła pożyczki / XTB – propozycja, N14), przelew własny
   (rozpoznanie domownika i XTB tylko, gdy bank nie mówi „przelew własny”). PIT-38 nie ma rozpoznania po nazwie – chroni
@@ -2425,17 +2428,22 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zwrocie pożyczki ani pieniądzach domownika (`offersNewMember`). Audyt reguł: reguła innego rodzaju niż pożyczka, która
   złapała wpływ od osoby z pożyczką z Radaru otwartą w dniu wpływu (`loanOn`: udzielona do tego dnia, niezamknięta przed
   nim), zapisany jako rodzaj reguły – „N do poprawy” w „niespójne” (licznik razem z innymi), z listą operacji do otwarcia;
+  słowo z tytułu nie (zostaje regułą – `ruleGivesWay`, przegląd N1);
   „bez trafień” = jego licznik (`inAuditView`, bez reguł pożyczki, PIT-38 i XTB).
 - **T327** „+ w tym za X” w wierszu importu (AP-7, AF-27; D81): wiersz bez własnej decyzji pokazuje swoją część
   rozkładu grupy (`RowShares`); zmiana robi z tego własną decyzję wiersza, która zostaje w trakcie wpisu – także linia
   0 zł (porównanie z linią 0 zł, nie `sameChoice`, które linie 0 zł pomija – `rowSharesChoice`); do decyzji grupy wraca
   „jak grupa” albo usunięcie wszystkich linii, gdy grupa nie ma swoich. Nowa linia (wiersz, grupa, temat) startuje od
-  tego, co X ma oddać – po zakupach pliku i po częściach X w innych wierszach – najwyżej tyle, ile zostało w pieniądzach
-  wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”. Własna część wiersza zostaje
-  wpisana jak wpisana (także ponad dług – świadomie, za ten przelew).
+  tego, co X ma oddać – po zakupach pliku, po własnych wpłatach X w pliku i po częściach X w innych wierszach – najwyżej
+  tyle, ile zostało w pieniądzach wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”.
+  Temat, który pokazuje wspólną decyzję swoich marek (N78), liczy start i rozkład przy linii z ich wierszy i ich linii
+  (kwoty marek razem – `themeSharesFrom`, `decisionSpread`; przegląd N1); zmiana tam robi decyzję tematu. Własna część
+  wiersza zostaje wpisana jak wpisana (także ponad dług – świadomie, za ten przelew).
 - **T328** „w tym za X” grupy i tematu (AP-7, AF-27; D81): kwota decyzji wspólnej dla kilku wpłat to razem dla X, nie
   na każdą wpłatę – rozkładana po kolei od najstarszej (każda wpłata najwyżej swoją kwotą), a wszystkie spłaty X z grup
-  i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy (`rowShares`). „Ma oddać” =
+  i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy i o własne wpłaty X w pliku,
+  które spłacają (D80: najpierw, bez względu na dzień; wpłata X, której grupa albo temat daje części innym, liczy się
+  cała, dopóki jej części nie są znane – po kolei; przegląd N1) (`rowShares`). „Ma oddać” =
   dług z księgi teraz plus części X zakupów, które ten import tworzy (zwrot towaru odejmuje), pomniejszone o jego zaliczkę
   (`owedWithFile`); część zaliczki / przychodu (`inflowKind` inny niż spłata) – bez tego limitu. Podgląd mówi przy linii
   grupy, z których wpłat poszła i dlaczego mniej niż wpisane („tyle X ma oddać” / „tyle zostało we wpłatach”); import

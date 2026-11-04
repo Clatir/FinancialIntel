@@ -504,10 +504,13 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const member = transferIn ? memberOf(row.counterparty, ctx.members) : null
   // Money back from the person a loan of the Radar was given to (B34): its repayment.
   const loan = transferIn ? loanOf(row.counterparty, ctx.loans) : null
+  // Over a rule only from the day the loan was given (as the rules' audit – `loanOn`): the person's money before it is
+  // no repayment of it, the rule keeps it as before 1.15.5.
+  const lent = loan && loan.date <= row.date ? loan : null
   const own = isOwnTransferRow(row, ctx.ownNames)
   // Recognized by the name before a rule of another kind (AP-6), in the app's own order: an own transfer and a member's
   // money before XTB (B106 – their title may name it).
-  const recognized: Recognized | null = loan ? { kind: 'loan', loanId: loan.id } : own ? null : member ? { kind: 'member', memberId: member.id } : isXtb(row) ? { kind: 'trading' } : null
+  const recognized: Recognized | null = lent ? { kind: 'loan', loanId: lent.id } : own ? null : member ? { kind: 'member', memberId: member.id } : isXtb(row) ? { kind: 'trading' } : null
   const rule = findRule(ctx.rules, target, direction, row.amount)
   const byTitle = !!rule && rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
   // A rule of plain income naming no member (learned before the person became a member, or before 1.3.0) gives way to
@@ -549,7 +552,9 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
       })
     )
   }
-  if (loan) return out(decision('loan', `zwrot pożyczki: ${loan.name}`, { loanId: loan.id }))
+  // A rule that gave way (to what was recognized) – the loan only from its day; no rule – any open loan (B34).
+  const repayment = rule ? lent : loan
+  if (repayment) return out(decision('loan', `zwrot pożyczki: ${repayment.name}`, { loanId: repayment.id }))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
   if (own) {
     const descDigits = row.description.replace(/\D/g, '')

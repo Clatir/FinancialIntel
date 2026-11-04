@@ -57,6 +57,25 @@ export const conflicting = (keep: Transaction, copies: readonly Transaction[]): 
 }
 
 /**
+ * What a member's money says it pays back, as one text (D91: `covers`, the opening's debt – also per member; D20:
+ * `repaid` of before 1.3.0); '' = nothing named. Not of `decision`: a copy naming purchases decides no other kind.
+ */
+function assignmentOf(t: Transaction): string {
+  if (!t.covers.length && !t.coversOpening && !t.coversOpeningMembers?.length && !t.repaid) return ''
+  return [[...t.covers].sort().join(','), t.coversOpening ? 'o' : '', [...(t.coversOpeningMembers ?? [])].sort().join(','), t.repaid].join('|')
+}
+
+/**
+ * Does a copy pay back other purchases than the kept one, which names its own (AF-9 review: removed, the copy's would
+ * be paid back no more – the user decides)? Named by the copy only, they go to the kept one (`takeUserData`).
+ */
+export const coversOtherwise = (keep: Transaction, copy: Transaction): boolean => {
+  const mine = assignmentOf(keep)
+  const theirs = assignmentOf(copy)
+  return mine !== '' && theirs !== '' && theirs !== mine
+}
+
+/**
  * The kept operation with what only the copies had: the bank's data (date, amount, row – a hand-typed one takes
  * them from its copy), the user's fields it lacks (category, notes, log, time, container… – `takeUserData`).
  */
@@ -78,14 +97,16 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
 
 /**
  * The kept operation with the user's fields only the copies had (category and the whole decision when it has none,
- * notes, log, time, container…); its bank's rows as they are – a copy removed by the import's repair (AF-9).
+ * what a member's money pays back when it names nothing, notes, log, time, container…); its bank's rows as they are – a
+ * copy removed by the import's repair (AF-9).
  */
 export function takeUserData(keep: Transaction, copies: readonly Transaction[], now: string): Transaction {
   let out: Transaction = { ...keep }
   for (const c of copies) {
+    const mine = decision(out)
     // Undecided (an expense without a category – a quick entry): the copy's whole decision, whatever its kind (XTB, an
     // own transfer, a loan…), so a docking moved onto it stays right.
-    if (decision(out) == null && decision(c) != null)
+    if (mine == null && decision(c) != null)
       out = {
         ...out,
         kind: c.kind,
@@ -96,6 +117,7 @@ export function takeUserData(keep: Transaction, copies: readonly Transaction[], 
         advance: c.advance,
         covers: c.covers,
         coversOpening: c.coversOpening,
+        coversOpeningMembers: c.coversOpeningMembers,
         repaid: c.repaid,
         counterAccountId: c.counterAccountId,
         // A transfer in one operation stays one (F10): its other side's row and day with it.
@@ -106,6 +128,10 @@ export function takeUserData(keep: Transaction, copies: readonly Transaction[], 
         goalId: c.goalId,
         loanId: c.loanId
       }
+    // The same decision (a member's money, a product return of theirs): the purchases only the copy names stay paid back
+    // by it (D91 – a removed copy never takes their repayment away).
+    else if (mine != null && mine === decision(c) && !assignmentOf(out) && assignmentOf(c))
+      out = { ...out, covers: c.covers, coversOpening: c.coversOpening, coversOpeningMembers: c.coversOpeningMembers, repaid: c.repaid }
     out = {
       ...out,
       note: out.note.trim() ? out.note : c.note,

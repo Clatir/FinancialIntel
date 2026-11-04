@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FolderStatus, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
-import { importGroups, type Choice } from '@shared/import/reconcile'
+import { importGroups, importThemes, type Choice } from '@shared/import/reconcile'
 import { COLLECTIONS } from '@shared/paths'
 import { balanceOf } from '@shared/calc/household'
 import { defaultCategoryId, loanSchema, SCHEMA_VERSION, transactionSchema, type SettingsFile } from '@shared/schema'
@@ -188,5 +188,38 @@ describe('„w tym za” w imporcie – AP-7 (AF-27)', () => {
     const ledger = fleet.fleetNow()!.household
     expect(balanceOf(ledger, BABCIA)).toMatchObject({ owed: 0, deposit: 0 })
     expect(balanceOf(ledger, TATA)).toMatchObject({ deposit: 40000 })
+  })
+
+  it('przegląd N1, 12: temat z decyzją swoich marek (N78) – „w tym za” tematu startuje od długu, przy linii rozkład z marek', async () => {
+    openFamily()
+    // Tata's money under two of his names in the bank: two brands of one theme.
+    await state.loadImportFile('lista.csv', bytes(listaCsv([], PERIOD, null, [...TATA_IN, { date: '2026-10-30', amount: 50, name: 'TESTOWY PIOTR', title: 'NA ZAKUPY' }])))
+    const big = groupOf('PIOTR TESTOWY')
+    const small = groupOf('TESTOWY PIOTR')
+    expect(small.theme).toBe(big.theme)
+    const theme = () => importThemes(groups()).find((t) => t.theme === big.theme)!
+    const keysNow = () => state.themeSharesFrom(theme(), state.themeShows(theme(), state.useImport.getState().choices))
+    expect(keysNow()).toBe(`t:${big.theme}`)
+    // Both brands decided alike: the theme shows their decision, a change there replaces theirs (chooseThemeOverGroups).
+    state.decideGroup(big.group, { ...big.proposed })
+    state.decideGroup(small.group, { ...small.proposed })
+    expect(state.themeShows(theme(), state.useImport.getState().choices)).toBe('same')
+    const keys = keysNow()
+    expect([...keys].sort()).toEqual([`g:${big.group}`, `g:${small.group}`].sort())
+    // Its own key has no rows then (each takes its brand's decision): a new line started at 0 zł there.
+    expect(state.decisionStart(view(), `t:${big.theme}`, BABCIA, [])).toBe(0)
+    expect(state.decisionStart(view(), keys, BABCIA, [])).toBe(10000)
+    expect(state.owedLeftOfDecision(view(), keys, BABCIA)).toBe(10000)
+    // „w tym za Babcia 100” in each brand's decision: the theme's line says where the brands' parts went (typed together).
+    const shares = [{ memberId: BABCIA, amount: 10000, advance: true }]
+    state.decideGroup(big.group, { ...big.proposed, shares })
+    state.decideGroup(small.group, { ...small.proposed, shares })
+    const earlier = big.rows.find((p) => p.row.date === '2026-10-29')!
+    expect([...state.decisionSpread(view(), keysNow(), { ...big.proposed, shares })]).toEqual([[0, { line: 0, memberId: BABCIA, typed: 20000, given: [{ key: earlier.key, date: '2026-10-29', amount: 10000 }] }]])
+    expect(state.owedLeftOfDecision(view(), keysNow(), BABCIA)).toBe(10000)
+    // The theme decides them all now: its own key, its line spread over all the rows.
+    state.chooseThemeOverGroups(theme(), { ...big.proposed, shares })
+    expect(keysNow()).toBe(`t:${big.theme}`)
+    expect([...state.decisionSpread(view(), keysNow(), { ...big.proposed, shares })].map(([line, l]) => [line, l.typed, l.given.map((x) => x.amount)])).toEqual([[0, 10000, [10000]]])
   })
 })

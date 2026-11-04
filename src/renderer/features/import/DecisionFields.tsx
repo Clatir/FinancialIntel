@@ -16,7 +16,7 @@ import { useMembers } from '../household/actions'
 import { ShareEditor } from '../household/ShareEditor'
 import { Segmented } from '../../components/ui'
 import { choiceFor, optionOf, optionsFor, rowSharesChoice, type Option } from './options'
-import { chooseRow, decisionStart, owedLeftOfDecision, owedLeftOfRow, rowStart, sharesView, useImport, type SharesView } from './state'
+import { chooseRow, decisionSpread, decisionStart, owedLeftOfDecision, owedLeftOfRow, rowStart, sharesView, useImport, type DecisionKeys, type SharesView } from './state'
 
 /** A shared purchase's split for the import (D83): equally or by percents – each row has its own amount. */
 export const IMPORT_SHARE_MODES = SHARE_MODES.filter((m) => m !== 'amounts')
@@ -159,17 +159,18 @@ function sharesNow(ledger: ReturnType<typeof useHousehold>, members: readonly Ho
 }
 
 /**
- * „w tym za” of a group's or a theme's decision in the import (`from` – `g:<group>`, `t:<theme>`; AF-27): a new line
- * starts at what the member owes back (D81), each line says how it is spread over the rows – never beyond the debt.
+ * „w tym za” of a group's or a theme's decision in the import (`from` – `g:<group>`, `t:<theme>`, a theme's groups' when
+ * it shows their common decision; AF-27): a new line starts at what the member owes back (D81), each line says how it is
+ * spread over the rows – never beyond the debt.
  */
-function DecisionShares({ from, choice, members, onChange, testId }: { from: string; choice: Choice; members: readonly HouseholdMember[]; onChange: (c: Choice) => void; testId: string }) {
+function DecisionShares({ from, choice, members, onChange, testId }: { from: DecisionKeys; choice: Choice; members: readonly HouseholdMember[]; onChange: (c: Choice) => void; testId: string }) {
   const ledger = useHousehold()
   const key = useSharesKey((v) => ({
     owed: Object.fromEntries(members.map((m) => [m.id, owedLeftOfDecision(v, from, m.id)])),
     spread: Object.fromEntries(
-      (v.spread.get(from) ?? []).map((l) => {
+      [...decisionSpread(v, from, choice)].map(([line, l]) => {
         const total = l.given.reduce((a, g) => a + g.amount, 0)
-        return [l.line, { typed: l.typed, given: l.given.map((g) => ({ date: g.date, amount: g.amount })), capped: total < l.typed && (v.total.get(l.memberId) ?? 0) >= (v.owed.get(l.memberId) ?? 0) }]
+        return [line, { typed: l.typed, given: l.given.map((g) => ({ date: g.date, amount: g.amount })), capped: total < l.typed && (v.total.get(l.memberId) ?? 0) >= (v.owed.get(l.memberId) ?? 0) }]
       })
     )
   }))
@@ -240,8 +241,8 @@ export function DecisionFields({
   exclude?: (o: Option) => boolean
   /** The file's account: an own transfer goes to / comes from the others (F10). */
   own?: string
-  /** The import's decision this is (`g:<group>`, `t:<theme>` – AF-27): its „w tym za” spread over its rows. */
-  sharesFrom?: string
+  /** The import's decision this is (`g:<group>`, `t:<theme>`, a theme's groups' – AF-27): its „w tym za” spread over its rows. */
+  sharesFrom?: DecisionKeys
 }) {
   const members = useMembers()
   const loans = useRecordList('loans')

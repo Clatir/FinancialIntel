@@ -193,6 +193,15 @@ test('AP-7: „+ w tym za Babcia” w wierszu zostaje i startuje od jej długu; 
     await tata.getByTestId('import-group-also-for-amount').fill('150')
     await tata.getByTestId('import-group-also-for-amount').press('Enter')
     await expect(tata.getByTestId('import-group-also-for-spread')).toContainText('100,00 z 150,00 zł (tyle Babcia ma oddać)')
+    // The theme shows its brand's decision (N78): the line's spread there too, and a new line there starts at her debt
+    // (review of N1: its own key had no rows – no spread, 0 zł); the change makes it the theme's decision.
+    const theme = page.locator('[data-testid="import-theme"]', { has: tata })
+    await expect(theme.getByTestId('import-theme-also-for-spread')).toContainText('100,00 z 150,00 zł (tyle Babcia ma oddać)')
+    await tata.getByTestId('import-group-also-for-remove').click()
+    await expect(theme.getByTestId('import-theme-also-for-via')).toHaveText('+ w tym za Babcia (ma oddać 100,00 zł)')
+    await theme.getByTestId('import-theme-also-for-via').click()
+    await expect(theme.getByTestId('import-theme-also-for-amount')).toHaveValue('100,00')
+    await expect(theme.getByTestId('import-theme-also-for-spread')).toHaveText(`z wpłaty ${earlier.slice(8, 10)}.${earlier.slice(5, 7)} 100,00 zł`)
     await page.getByTestId('import-search').fill('')
     await page.getByTestId('import-run').click()
     await importDone(page, userData)

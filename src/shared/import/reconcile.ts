@@ -24,7 +24,7 @@ import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
-import { conflicting, takeUserData } from './copies'
+import { conflicting, coversOtherwise, takeUserData } from './copies'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
@@ -256,13 +256,16 @@ export type RowPlan =
  * The copy of a row on another account (AF-9): this account's file imported there by mistake before (B35), while the row
  * is here already in the other format (B5) – a duplicate, never moved here beside its original. Removed when the user
  * says so (`ImportChoices.removeCopies`; by default when it was imported there and decides nothing else than the
- * operation here), what only it had (category, notes) going to the operation here. `blocked` – never removed: docked,
- * paid back by a member's money (`covers`) or written by a newer version (read only).
+ * operation here), what only it had (category, notes, the purchases a member's money pays back) going to the operation
+ * here. `otherCovers` – it pays back other purchases than the operation here, which names its own: not ticked (removed,
+ * the operation here keeps its own). `blocked` – never removed: docked, paid back by a member's money (`covers`) or
+ * written by a newer version (read only).
  */
 export interface RowCopy {
   tx: Transaction
   remove: boolean
   conflict: boolean
+  otherCovers: boolean
   blocked: 'docked' | 'covered' | 'locked' | null
 }
 
@@ -540,9 +543,11 @@ export function planImport(
     return pairs.sort((a, b) => a.days - b.days || a.i - b.i)
   }
   const copyOf = (copy: Transaction, here: Transaction, imported: boolean): RowCopy => {
-    const blocked = locked(copy) || locked(realOf(here)) ? 'locked' : ctx.docked?.has(copy.id) ? 'docked' : coveredOf(existing).has(copy.id) ? 'covered' : null
-    const conflict = conflicting(realOf(here), [copy])
-    return { tx: copy, remove: imported && !blocked && !conflict, conflict, blocked }
+    const real = realOf(here)
+    const blocked = locked(copy) || locked(real) ? 'locked' : ctx.docked?.has(copy.id) ? 'docked' : coveredOf(existing).has(copy.id) ? 'covered' : null
+    const conflict = conflicting(real, [copy])
+    const otherCovers = coversOtherwise(real, copy)
+    return { tx: copy, remove: imported && !blocked && !conflict && !otherCovers, conflict, otherCovers, blocked }
   }
   const other = new Map<string, Transaction[]>()
   for (const [date, list] of budget.booked) {
@@ -1134,8 +1139,8 @@ function rowDecision(p: RowPlan, choices: ImportChoices, themeOf: ReadonlyMap<st
 /** A member's money coming in (D80): the only decision with others' parts. */
 const memberMoneyIn = (c: Choice, p: RowPlan): boolean => c.kind === 'income' && c.household && p.row.amount > 0
 
-/** A part that repays what the member owes first (not their income or advance only – `inflowKind`). */
-const repaysPart = (x: SharePart): boolean => !x.inflowKind || x.inflowKind === 'repay'
+/** A part – or a sender's own money – that repays what the member owes first (not their income or advance only – `inflowKind`). */
+const repaysPart = (x: Pick<SharePart, 'inflowKind'>): boolean => !x.inflowKind || x.inflowKind === 'repay'
 
 /** Where a group's or a theme's „w tym za” went: each line's amount typed and the rows it was given from (in their order). */
 export interface SpreadLine {
@@ -1155,7 +1160,7 @@ export interface SharesSpread {
    * theme – also not of a group deciding them), and their sum.
    */
   rows: Map<string, { keys: string[]; sum: number }>
-  /** All the repayments of each member in the file's parts (at most each row's money). */
+  /** All the repayments of each member in the file: their own money that repays and their parts (at most each row's money). */
   total: Map<string, number>
 }
 
@@ -1163,8 +1168,11 @@ export interface SharesSpread {
  * The other members' parts each row of a member's money carries (D81, AF-27 – „w tym za X”): a row's own decision as
  * typed; a group's or a theme's spread over its rows in their order (the oldest first – „po kolei”): each row at most what
  * is left of its money, the line at most its amount, and all the repayments of a member – at most what they owe (`owed`,
- * `owedWithFile`: with the file's purchases) less what the rows' own decisions give them. No `owed` – no debt known: the
- * amount typed only. A part beyond the debt only by a row's own decision (the user's, typed for that transfer).
+ * `owedWithFile`: with the file's purchases) less their own money of the file that repays (D80: it pays what they owe
+ * first, whatever its day) and what the rows' own decisions give them. A transfer of theirs whose group or theme gives
+ * others parts counts whole until its parts are known (in the rows' order): never more for them than they owe. No `owed`
+ * – no debt known: the amount typed only. A part beyond the debt only by a row's own decision (the user's, typed for that
+ * transfer).
  */
 export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: ReadonlyMap<string, number>): SharesSpread {
   const groups = importGroups(plan, choices.restoreDeleted)
@@ -1175,6 +1183,8 @@ export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: Reado
   const fresh = plan.rows.filter((p) => createsRow(p, choices)).sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
   const shared: Array<{ p: RowPlan; c: Choice; from: string }> = []
   const explicit = new Map<string, number>()
+  // Each member's own money of the file that repays (the sender's, beyond the parts of others in it).
+  const paid = new Map<string, number>()
   for (const p of fresh) {
     const d = rowDecision(p, choices, themeOf)
     if (!memberMoneyIn(d.c, p)) continue
@@ -1185,8 +1195,17 @@ export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: Reado
         r.keys.push(p.key)
         r.sum += p.row.amount
       }
-    if (!d.c.shares?.length) continue
+    const own = repaysPart(d.c)
+    if (!d.c.shares?.length) {
+      if (own) {
+        add(paid, sender(d.c), p.row.amount)
+        add(out.total, sender(d.c), p.row.amount)
+      }
+      continue
+    }
     if (d.from) {
+      // Its parts come below: the sender's money counted whole until then.
+      if (own) add(paid, sender(d.c), p.row.amount)
       shared.push({ p, c: d.c, from: d.from })
       continue
     }
@@ -1202,9 +1221,14 @@ export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: Reado
       }
     }
     if (parts.length) out.parts.set(p.key, parts.map((x) => ({ ...x })))
+    if (own && money > 0) {
+      add(paid, sender(d.c), money)
+      add(out.total, sender(d.c), money)
+    }
   }
   const left = new Map<string, number>()
-  const room = new Map<string, number>()
+  // The groups' and themes' repayments given each member so far.
+  const given = new Map<string, number>()
   for (const { p, c, from } of shared) {
     let money = p.row.amount
     const parts: SharePart[] = []
@@ -1217,17 +1241,25 @@ export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: Reado
       const typed = left.get(k) ?? Math.max(0, x.amount)
       // A repayment never beyond the debt; a member's income or advance part (no repayment) – as typed.
       const repays = repaysPart(x)
-      const cap = owed && repays ? (room.get(x.memberId) ?? Math.max(0, (owed.get(x.memberId) ?? 0) - (explicit.get(x.memberId) ?? 0))) : Infinity
+      const id = x.memberId
+      const cap = owed && repays ? Math.max(0, (owed.get(id) ?? 0) - (explicit.get(id) ?? 0) - (paid.get(id) ?? 0) - (given.get(id) ?? 0)) : Infinity
       const amount = Math.max(0, Math.min(typed, cap, money))
       left.set(k, typed - amount)
-      if (owed && repays) room.set(x.memberId, cap - amount)
       if (amount <= 0) return
       money -= amount
       parts.push({ ...x, amount })
       spread.given.push({ key: p.key, date: p.row.date, amount })
-      if (repays) add(out.total, x.memberId, amount)
+      if (repays) {
+        add(given, id, amount)
+        add(out.total, id, amount)
+      }
     })
     if (parts.length) out.parts.set(p.key, parts)
+    // The sender's own money is what the parts left of it: the rest of what was counted whole is theirs no more.
+    if (repaysPart(c)) {
+      add(paid, sender(c), money - p.row.amount)
+      if (money > 0) add(out.total, sender(c), money)
+    }
   }
   return out
 }
