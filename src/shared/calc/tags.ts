@@ -36,7 +36,7 @@ export const MAX_TAG_LENGTH = 40
  */
 export function tagsLost(list: readonly string[], text: string): { cut: number; over: number } {
   const raw = text.includes(',') ? text.split(',') : text.includes('#') ? text.split('#') : [text]
-  const tidy = (s: string) => s.trim().replace(/^#+/, '').replace(/s+/g, ' ').trim()
+  const tidy = (s: string) => s.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim()
   const have = new Set(list.map(tagKey))
   let cut = 0
   let fresh = 0

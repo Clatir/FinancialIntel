@@ -34,6 +34,23 @@ const templateOf = (t: Transaction): QuickTemplate => ({
   advance: t.kind === 'income' && !!t.memberId && t.advance
 })
 
+const accountMemo = new WeakMap<readonly Transaction[], string | null>()
+
+/**
+ * The account used last in the folder (AP-20, SW sp. 8): the account of the operation typed by hand latest (its
+ * creation – on any computer of the folder), so the second computer proposes it too. An imported one and an empty draft
+ * say nothing. null – none typed.
+ */
+export function lastAccountOf(transactions: readonly Transaction[]): string | null {
+  const hit = accountMemo.get(transactions)
+  if (hit !== undefined) return hit
+  let last: Transaction | null = null
+  for (const t of transactions) if (!t.bank && t.amount !== 0 && (!last || newer(t, last))) last = t
+  const id = last?.accountId ?? null
+  accountMemo.set(transactions, id)
+  return id
+}
+
 /**
  * The operations typed by hand (F7): the last one („Powtórz ostatni”) and the latest counterparty + category pairs of
  * purchases (the templates), newest first. One line only – a split receipt or a shared purchase is no template. One pass

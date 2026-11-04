@@ -431,15 +431,17 @@ export function OperationsPage() {
   const all = useMemo(() => listOf(records), [records])
   // The marks „nietypowa” and „czeka na zwrot” (F31, F34).
   const flags = useMarkFlags()
+  const keptId = useOperationsUi((s) => s.keptId)
   const rows = useMemo(() => {
     if (!fi) return []
     const ctx = { categories: cats, accounts, orders: fi.settings.orders, aliases: fi.settings.import.aliases, flags }
-    // A new entry being written always shows, whatever the filters; the list in the order chosen (F18).
+    // A new entry being written always shows, whatever the filters – and once written while the filter stays (AP-34:
+    // Ctrl+N keeps the search); the list in the order chosen (F18).
     return sortOperations(
-      all.filter((t) => drafts[t.id] || matchesFilter(t, deferred, ctx)),
+      all.filter((t) => drafts[t.id] || t.id === keptId || matchesFilter(t, deferred, ctx)),
       deferred.sort
     )
-  }, [all, deferred, cats, accounts, fi, drafts, flags])
+  }, [all, deferred, cats, accounts, fi, drafts, flags, keptId])
   const sums = useMemo(() => sumOperations(rows), [rows])
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW, overscan: 20 })
   const selectedIndex = rows.findIndex((t) => t.id === selectedId)

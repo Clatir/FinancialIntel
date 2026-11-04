@@ -7,6 +7,7 @@
  */
 import type { BrandAliases } from './aliases'
 import { findRule, ruleTargetOf } from './classify'
+import { operationName, readableName } from './names'
 import { defaultCategoryId, type ImportRule, type Transaction } from '../schema'
 
 export interface OfficerData {
@@ -55,15 +56,19 @@ export function officerData(transactions: readonly Transaction[], aliases: Brand
     READ
   )
   const lastByBrand: Record<string, string> = {}
-  const uses = new Map<string, { name: string; n: number }>()
+  // The chain's name, else the latest name typed by hand, else the bank's latest one as a person writes it (AP-20).
+  const uses = new Map<string, { name: string; typed: boolean; n: number }>()
   for (const t of txs) {
     const { target, brand } = officerTarget(t, aliases)
     if (!target.brand && !target.key) continue
     if (t.categoryId) for (const k of [target.brand, target.key]) if (k && !lastByBrand[k]) lastByBrand[k] = t.categoryId
     const key = target.brand || target.key
+    const typed = !t.bank && !!t.counterparty.trim()
     const u = uses.get(key)
-    if (u) u.n++
-    else uses.set(key, { name: brand.brand?.label ?? t.counterparty.trim(), n: 1 })
+    if (u) {
+      u.n++
+      if (typed && !u.typed && !brand.brand) Object.assign(u, { name: t.counterparty.trim(), typed: true })
+    } else uses.set(key, { name: brand.brand?.label ?? (typed ? t.counterparty.trim() : readableName(operationName(t))), typed, n: 1 })
   }
   return {
     lastByBrand,

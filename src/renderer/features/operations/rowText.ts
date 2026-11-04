@@ -1,6 +1,7 @@
 import { incomeShares, memberName } from '@shared/calc/household'
 import { amountOn, isTwoSided, touchesAccount, type CategoryIndex } from '@shared/calc/operations'
 import { shareOf } from '@shared/calc/share'
+import { operationName } from '@shared/import/names'
 import { TX_KIND_LABEL, type Account, type HouseholdMember, type Transaction } from '@shared/schema'
 import { plural } from '../../lib/format'
 import { shareNames } from '../household/ShareEditor'
@@ -50,7 +51,8 @@ export function operationRowText(t: Transaction, o: RowContext): RowText {
   const nameOf = (id: string | null) => o.accounts.find((a) => a.id === id)?.name ?? '?'
   const account = isTwoSided(t) ? (t.amount < 0 ? `${nameOf(t.accountId)} → ${nameOf(t.counterAccountId)}` : `${nameOf(t.counterAccountId)} → ${nameOf(t.accountId)}`) : nameOf(t.accountId)
   return {
-    name: t.counterparty || t.title || TX_KIND_LABEL[t.kind],
+    // An ATM's withdrawal is named by its title without the bank's „DATA TRANSAKCJI: …” (AP-20, OP sp. 10).
+    name: operationName(t) || TX_KIND_LABEL[t.kind],
     category,
     shown,
     none,

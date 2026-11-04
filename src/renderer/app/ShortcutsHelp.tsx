@@ -1,8 +1,9 @@
 // adapted from ICTTJ src/renderer/app/ShortcutsHelp.tsx @ 84a8339
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { shortcutLabel } from '@shared/machine'
 import { GLOSSARY, ICT_GLOSSARY } from '@shared/glossary'
 import { IconClose } from '../components/icons'
+import { useFocusTrap } from '../components/trap'
 import { Kbd } from '../components/ui'
 import { PAGES } from '../features/screens/pages'
 import { api } from '../lib/api'
@@ -85,7 +86,7 @@ export function ShortcutsHelp() {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60" onMouseDown={() => setOpen(false)} data-testid="shortcuts">
-      <div className="w-[860px] animate-pop-in border border-line-strong bg-panel" onMouseDown={(e) => e.stopPropagation()}>
+      <HelpBox>
         <div className="flex h-[34px] items-center border-b border-line px-3">
           <span className="label flex-1">Skróty klawiszowe i słowniczek</span>
           <button className="btn btn-ghost h-[24px] px-1.5" onClick={() => setOpen(false)} aria-label="Zamknij">
@@ -130,7 +131,18 @@ export function ShortcutsHelp() {
             </div>
           </div>
         </div>
-      </div>
+      </HelpBox>
+    </div>
+  )
+}
+
+/** The help's box (AP-34, IN.28): the focus inside while it is open, back where it was after. */
+function HelpBox({ children }: { children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null)
+  useFocusTrap(box)
+  return (
+    <div ref={box} tabIndex={-1} role="dialog" aria-modal aria-label="Skróty klawiszowe" className="w-[860px] animate-pop-in border border-line-strong bg-panel outline-none" onMouseDown={(e) => e.stopPropagation()}>
+      {children}
     </div>
   )
 }

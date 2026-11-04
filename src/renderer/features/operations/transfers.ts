@@ -14,6 +14,12 @@ import { deleteManyWithUndo } from '../history/actions'
 
 export type JoinIssue = Extract<TransferIssue, { kind: 'pair' | 'double' }>
 
+/**
+ * A pair ticked when the window of pairs opens (AP-34, ME sp. 2): one of whose sides names the other account; a pair by
+ * the amount and the day only waits for the user's tick – joined by mistake, two moves would be one.
+ */
+export const pairTickedFirst = (p: { keep: { counterAccountId: string | null }; drop: { counterAccountId: string | null } }): boolean => !!p.keep.counterAccountId || !!p.drop.counterAccountId
+
 /** The key a report of a transfer is said „zostaw tak” under (the import's list of „no duplicates”). */
 export const transferKey = (issue: TransferIssue): string => (issue.kind === 'lone' ? `transfer-lone:${issue.tx.id}` : `transfer:${issue.keep.id}:${issue.drop.id}`)
 

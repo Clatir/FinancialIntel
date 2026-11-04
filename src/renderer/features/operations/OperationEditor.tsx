@@ -157,6 +157,50 @@ export function OperationEditor({ id }: { id: string }) {
   const night = isNight(t, orders)
   const showLog = asksImpulse(t, orders) || t.impulse != null || night || !!t.logNote
   const account = accounts.find((a) => a.id === t.accountId)
+  // An expense: the amount, the counterparty and the category first (AP-34, OP sp. 8 – from the amount to the category in
+  // two Tabs, not seven); the day, the account and the title after them. Other kinds as before.
+  const expense = t.kind === 'expense'
+  const whenAndWhere = (
+    <>
+      <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
+        <div className="flex items-center gap-2">
+          <DateField className="w-[110px]" value={t.date} notAfter={fleet?.today} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
+          <TimeField className="w-[70px]" value={t.time} allowEmpty onChange={(time) => patch({ time })} aria-label="Godzina" data-testid="operation-time" />
+          {night && (
+            <Badge tone="warn" title={`Cisza nocna ${orders.quietHours.from}–${orders.quietHours.to}`} data-testid="operation-night">
+              noc
+            </Badge>
+          )}
+          {fleet && t.date > fleet.today && (
+            <Badge tone="warn" title="Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia" data-testid="operation-future">
+              w przyszłości
+            </Badge>
+          )}
+        </div>
+      </Field>
+      <Field label="Konto">
+        <AccountSelect
+          className="w-[200px]"
+          value={t.accountId}
+          onChange={(accountId) => {
+            if (!accountId) return
+            rememberAccount(accountId)
+            // The other side's account made this one: a transfer outside the budget (its other side's bank row goes).
+            patch(t.counterAccountId === accountId ? { accountId, counterAccountId: null, counterBank: undefined, counterDate: undefined } : { accountId })
+          }}
+          data-testid="operation-account"
+        />
+      </Field>
+    </>
+  )
+  const titleField = (
+    <Field label="Tytuł">
+      <div className="flex flex-col gap-1.5">
+        <TextField commit value={t.title} onChange={(title) => patch({ title })} placeholder="np. przelew, zwrot, opis…" maxLength={1000} data-testid="operation-title" />
+        <TitleRuleAction t={t} patch={patch} />
+      </div>
+    </Field>
+  )
 
   return (
     <div className="flex min-h-0 flex-col gap-2.5 p-3 text-[12px]" data-testid="operation-editor">
@@ -240,35 +284,7 @@ export function OperationEditor({ id }: { id: string }) {
             </p>
           )}
         </Field>
-        <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
-          <div className="flex items-center gap-2">
-            <DateField className="w-[110px]" value={t.date} notAfter={fleet?.today} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
-            <TimeField className="w-[70px]" value={t.time} allowEmpty onChange={(time) => patch({ time })} aria-label="Godzina" data-testid="operation-time" />
-            {night && (
-              <Badge tone="warn" title={`Cisza nocna ${orders.quietHours.from}–${orders.quietHours.to}`} data-testid="operation-night">
-                noc
-              </Badge>
-            )}
-            {fleet && t.date > fleet.today && (
-              <Badge tone="warn" title="Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia" data-testid="operation-future">
-                w przyszłości
-              </Badge>
-            )}
-          </div>
-        </Field>
-        <Field label="Konto">
-          <AccountSelect
-            className="w-[200px]"
-            value={t.accountId}
-            onChange={(accountId) => {
-              if (!accountId) return
-              rememberAccount(accountId)
-              // The other side's account made this one: a transfer outside the budget (its other side's bank row goes).
-              patch(t.counterAccountId === accountId ? { accountId, counterAccountId: null, counterBank: undefined, counterDate: undefined } : { accountId })
-            }}
-            data-testid="operation-account"
-          />
-        </Field>
+        {!expense && whenAndWhere}
         <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'} hint={isDraft ? undefined : <BrandYearLine t={t} />}>
           <div className="flex min-w-0 items-center gap-2">
             <TextField commit className="min-w-0 flex-1" value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
@@ -286,12 +302,7 @@ export function OperationEditor({ id }: { id: string }) {
             )}
           </div>
         </Field>
-        <Field label="Tytuł">
-          <div className="flex flex-col gap-1.5">
-            <TextField commit value={t.title} onChange={(title) => patch({ title })} placeholder="np. przelew, zwrot, opis…" maxLength={1000} data-testid="operation-title" />
-            <TitleRuleAction t={t} patch={patch} />
-          </div>
-        </Field>
+        {!expense && titleField}
 
         {t.kind === 'expense' && (
           <Section title="Kategoria">
@@ -420,6 +431,12 @@ export function OperationEditor({ id }: { id: string }) {
             <AnomalyNote t={t} />
             {outgoing && <AwaitReturnBox t={t} readOnly={readOnly} />}
           </Section>
+        )}
+        {expense && (
+          <>
+            {whenAndWhere}
+            {titleField}
+          </>
         )}
 
         {t.kind === 'income' && t.amount >= 0 && <MemberIncome t={t} patch={patch} />}

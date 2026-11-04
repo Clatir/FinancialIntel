@@ -68,7 +68,10 @@ test('przelew jedną operacją (F10), zmiana zaznaczonych z podglądem (F11), os
     await expect(dialog.getByTestId('inbox-pair')).toHaveCount(2)
     const unnamed = dialog.locator('[data-testid="inbox-pair"][data-unnamed="1"]')
     await expect(unnamed).toContainText('Lokata zewnętrzna')
-    await unnamed.getByTestId('inbox-pair-tick').uncheck()
+    // A pair by the amount and the day only is not ticked by itself (AP-34, ME sp. 2); the named one is.
+    await expect(unnamed.getByTestId('inbox-pair-tick')).not.toBeChecked()
+    await expect(dialog.locator('[data-testid="inbox-pair"]:not([data-unnamed])').getByTestId('inbox-pair-tick')).toBeChecked()
+    await expect(dialog.getByTestId('inbox-pairs-join')).toHaveText('Połącz zaznaczone (1)')
     await dialog.getByTestId('inbox-pairs-join').click()
     const transfers = async () => (await records(dir, 'transactions')).filter((t) => t.kind === 'transfer' && t.counterparty !== 'Lokata zewnętrzna' && t.counterparty !== 'Zwrot z lokaty')
     await expect.poll(async () => (await transfers()).map((t) => [t.accountId, t.amount, t.bothSides, t.counterAccountId, t.counterDate])).toEqual([[MBANK, -zl(200), true, WALLET, addDays(start, 3)]])

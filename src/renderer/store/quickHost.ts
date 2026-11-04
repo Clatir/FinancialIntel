@@ -4,7 +4,7 @@
  * owns the data folder's records.
  */
 import type { QuickData, QuickResult } from '@shared/api'
-import { quickTemplates } from '@shared/calc/quick'
+import { lastAccountOf, quickTemplates } from '@shared/calc/quick'
 import { hashTags, withoutHashTags, withTags } from '@shared/calc/tags'
 import { knownTagsOf, lastTagOf } from '../features/tags/state'
 import { daysInMonth, warsawNow } from '@shared/calc/dates'
@@ -45,11 +45,13 @@ export function quickData(): QuickData | null {
   const accounts = fi.settings.accounts.filter((a) => !a.archived).map((a) => ({ id: a.id, name: a.name }))
   const fleet = fleetNow()
   const { lastByBrand, counterparties } = officerNow()
-  const last = lastAccount()
+  // The account used last in the folder (AP-20: the second computer too), else on this computer, else the first.
+  const inFolder = lastAccountOf(listOf(s.records.transactions))
+  const local = lastAccount()
   return {
     categories,
     accounts,
-    accountId: accounts.find((a) => a.id === last)?.id ?? accounts[0]?.id ?? '',
+    accountId: (accounts.find((a) => a.id === inFolder) ?? accounts.find((a) => a.id === local))?.id ?? accounts[0]?.id ?? '',
     energyLeft: fleet?.daily ? fleet.daily.energy : null,
     monthEnergy: fleet?.started && fleet.salary != null ? fleet.energy : null,
     envelopesLeft: Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, e.left])),

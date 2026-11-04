@@ -2,6 +2,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { IconClose } from './icons'
+import { useFocusTrap } from './trap'
 
 /** The dialogs open now, the last on top: Esc closes only that one (a history opened from a dialog – N18). */
 const open: object[] = []
@@ -28,6 +29,9 @@ export function Modal({
   // The latest onClose, while the dialog keeps its place on the stack through re-renders.
   const close = useRef(onClose)
   close.current = onClose
+  // The focus inside while it is open, back on the opener after (AP-34, IN.28).
+  const box = useRef<HTMLDivElement>(null)
+  useFocusTrap(box)
   useEffect(() => {
     const me = {}
     open.push(me)
@@ -46,7 +50,9 @@ export function Modal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60" onMouseDown={() => onClose?.()} data-testid={testId}>
       <div
-        className="flex max-h-[88vh] animate-pop-in flex-col border border-line-strong bg-panel"
+        ref={box}
+        tabIndex={-1}
+        className="flex max-h-[88vh] animate-pop-in flex-col border border-line-strong bg-panel outline-none"
         style={{ width: `min(${width}px, 94vw)` }}
         onMouseDown={(e) => e.stopPropagation()}
         role="dialog"

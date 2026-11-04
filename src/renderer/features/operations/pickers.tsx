@@ -58,21 +58,27 @@ export function useAccounts(): Account[] {
   return useData((s) => s.fi?.settings.accounts ?? NO_ACCOUNTS)
 }
 
+/** The choice of „(jak grupa)” in a select (AP-34): no category id is ever this. */
+const GROUP_VALUE = '\u0001group'
+
 /**
  * A category: the main ones with their subcategories under them (an archived one only when it is the current value).
- * `''` = without a category.
+ * `''` = without a category. `group` – an import's row (AP-34, IM.8): „(jak grupa)” first, chosen while the row follows
+ * its group (`group.on`); picking it gives the row back to the group (`group.pick`).
  */
 export function CategorySelect({
   value,
   onChange,
   className,
   emptyLabel = '— bez kategorii —',
+  group,
   ...rest
 }: {
   value: string | null
   onChange: (id: string | null) => void
   className?: string
   emptyLabel?: string
+  group?: { label: string; on: boolean; pick: () => void }
   'aria-label'?: string
   'data-testid'?: string
 }) {
@@ -80,11 +86,16 @@ export function CategorySelect({
   return (
     <select
       className={cx('input', className)}
-      value={value ?? ''}
-      onChange={(e) => onChange(e.currentTarget.value || null)}
+      value={group?.on ? GROUP_VALUE : (value ?? '')}
+      onChange={(e) => {
+        const v = e.currentTarget.value
+        if (v === GROUP_VALUE) group?.pick()
+        else onChange(v || null)
+      }}
       aria-label={rest['aria-label'] ?? 'Kategoria'}
       data-testid={rest['data-testid']}
     >
+      {group && <option value={GROUP_VALUE}>{group.label}</option>}
       <option value="">{emptyLabel}</option>
       {categoryOptions(cats, value)}
       {value && !cats.byId.has(value) && <option value={value}>(usunięta kategoria)</option>}
