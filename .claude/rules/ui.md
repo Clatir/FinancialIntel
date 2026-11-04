@@ -31,7 +31,8 @@ paths:
   – `LimitHint` (pola z `maxLength`), wyłączony przycisk podaje powód obok. Esc w polu = cofnięcie wpisu; w szybkim wpisie
   Esc = „×” (szkic zostaje).
 - **Cofnij i potwierdzenia (AP-22, T401):** usunięcie, rozłączenie i zrzut mają toast „Cofnij” (min. 8 s); działanie
-  nieodwracalne z aplikacji (Kosz, token, przerwanie kreatora) – `ConfirmButton`, nigdy własny dwuklik.
+  nieodwracalne z aplikacji (Kosz, token, przerwanie kreatora) – `ConfirmButton`, nigdy własny dwuklik. „Cofnij” cofa tylko
+  to, co nadal jest jak zostawiło je działanie – zmienione od tego czasu zostaje ze słowem (`undoKept`, T418).
 - **Teksty (AP-23, T403):** daty tylko `plDate` / `plDateTime` (dd.mm.rrrr – nigdy ISO ani `toLocaleString`), liczby z
   przecinkiem i minusem „−” (`decimalText`, `percentText`; stopa oszczędności `rateText` zawsze z jednym miejscem),
   liczebniki `countLabel` / `salariesText`, imiesłów zgodny z rzeczownikiem. Kody decyzji (D…, T…, B…, F…, AF-…) i „spec”

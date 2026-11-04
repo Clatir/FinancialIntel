@@ -15,7 +15,7 @@ import { addRecord, canWrite, deleteRecords, replaceRecords, updateRecord, updat
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
 import { countLabel, plDate } from '../../lib/format'
-import { toast } from '../../store/ui'
+import { toast, undoKept } from '../../store/ui'
 import { usePresence } from '../../store/presence'
 
 const NO_MEMBERS: HouseholdMember[] = []
@@ -46,12 +46,18 @@ export function sureCoversOf(t: Transaction): CoverFields | null {
 export function assignRepayment(paymentId: string, purchaseId: string, label: string): boolean {
   const before = useData.getState().records.transactions[paymentId]?.record
   if (!before) return false
+  const fields = (t: Transaction | undefined) => ({ covers: t?.covers, coversOpening: t?.coversOpening, coversOpeningMembers: t?.coversOpeningMembers })
   const was = { covers: before.covers, coversOpening: before.coversOpening, coversOpeningMembers: before.coversOpeningMembers }
   const ok = updateRecord('transactions', paymentId, (r) => ({ ...r, ...withNamed(r, purchaseId, true) }))
+  const set = fields(useData.getState().records.transactions[paymentId]?.record)
   if (ok)
     toast(`Zwrot przypisany: ${label}.`, 'success', 5000, {
       label: 'Cofnij',
-      run: () => void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
+      run: () => {
+        // Only while still as it named them (a change since stays – review 3 of N4).
+        if (!sameContentAs(fields(useData.getState().records.transactions[paymentId]?.record), set)) return undoKept(0, 1)
+        void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
+      }
     })
   return ok
 }
@@ -75,12 +81,11 @@ export function repayAdvances(memberId: string): boolean {
   toast(`${memberName(memberId, s.fi.settings.household.members)}: ${countLabel(after.length, 'wpłata spłaca', 'wpłaty spłacają', 'wpłat spłaca')} dług, reszta zostaje zaliczką.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
-      // Only the ones as it left them (a change since stays).
+      // Only the ones as it left them (a change since stays – and is said, AP-15).
       const current = useData.getState().records.transactions
-      replaceRecords(
-        'transactions',
-        was.filter((t) => sameContentAs(current[t.id]?.record, after.find((a) => a.id === t.id)))
-      )
+      const back = was.filter((t) => sameContentAs(current[t.id]?.record, after.find((a) => a.id === t.id)))
+      replaceRecords('transactions', back)
+      undoKept(back.length, was.length - back.length, 'wpłaty')
     }
   })
   return true
@@ -94,7 +99,9 @@ export function keepAdvances(memberId: string): void {
   const input = canWrite() ? fleetInputNow() : null
   if (!input) return
   const ledger = householdOf(input, warsawNow().date)
-  const keys = (skippedDebtsOf(ledger, ledger.members, {}).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
+  // As the inbox reads them: the advances kept already (here or on the other computer) are no question (review 3 of N4).
+  const kept = useData.getState().fi?.settings.import.notDuplicates ?? {}
+  const keys = (skippedDebtsOf(ledger, ledger.members, kept).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
   if (!keys.length) return noAdvancesLeft(memberId)
   const at = new Date().toISOString()
   const set = (on: boolean) =>
@@ -153,7 +160,13 @@ export function repayInCash(purchase: Pick<Transaction, 'id' | 'date' | 'counter
   if (!addRecord('transactions', record)) return null
   toast(`Oddane gotówką (${who}): ${formatPln(amount)} zł.`, 'success', 6000, {
     label: 'Cofnij',
-    run: () => void deleteRecords('transactions', [record.id])
+    run: () => {
+      // Deleted only while as it wrote it (an edit since stays – review 3 of N4).
+      const now = useData.getState().records.transactions[record.id]?.record
+      if (!now) return
+      if (!sameContentAs(now, record)) return undoKept(0, 1)
+      void deleteRecords('transactions', [record.id])
+    }
   })
   return record.id
 }
@@ -212,10 +225,15 @@ export function addBankName(memberId: string, name: string): boolean {
   const ms = membersNow()
   const m = ms.find((x) => x.id === memberId)
   const v = name.trim().slice(0, 120)
-  if (!m || !v || m.bankNames.some((x) => sameBankName(x, v))) return true
+  if (!m || !v) return true
+  const own = m.bankNames.find((x) => sameBankName(x, v))
+  if (own) {
+    toast(own === v ? `${m.name} ma już nazwę „${v}”.` : `${m.name} ma już nazwę „${own}” – „${v}” to dla importu ta sama.`, 'info', 5000)
+    return true
+  }
   const holder = bankNameHolder(ms, v, memberId)
   if (holder) {
-    toast(`Nazwę „${v}” ma już ${holder.name} – jedna nazwa w banku nie może wskazywać dwóch osób.`, 'error', 6000)
+    toast(`Import nie odróżni „${v}” od nazwy, którą ma ${holder.name} – jedna nazwa w banku nie może wskazywać dwóch osób.`, 'error', 7000)
     return false
   }
   if (m.bankNames.length >= MAX_BANK_NAMES) {
@@ -236,15 +254,18 @@ export function removeBankName(memberId: string, name: string): void {
   const at = m ? m.bankNames.indexOf(name) : -1
   if (!m || at < 0) return
   patchMember(memberId, { bankNames: m.bankNames.filter((x) => x !== name) })
-  toast(`Nazwa „${name}” nie wskazuje już ${m.name}.`, 'info', 8000, { label: 'Cofnij', run: () => bankNameBack(memberId, name, at) })
+  toast(`Nazwa „${name}” nie wskazuje już ${m.name}.`, 'info', 8000, { label: 'Cofnij', run: () => bankNameBack(memberId, m.name, name, at) })
 }
 
-function bankNameBack(memberId: string, name: string, at: number): void {
+function bankNameBack(memberId: string, who: string, name: string, at: number): void {
   const ms = membersNow()
   const m = ms.find((x) => x.id === memberId)
-  if (!m || m.bankNames.some((x) => sameBankName(x, name))) return
+  // Never in silence (AP-15): the member gone, the name there again.
+  if (!m) return toast(`${who} nie ma już wśród domowników – nazwa „${name}” nie wróciła.`, 'info', 6000)
+  const own = m.bankNames.find((x) => sameBankName(x, name))
+  if (own) return toast(`${m.name} ma już nazwę „${own}” – nic do przywrócenia.`, 'info', 5000)
   const holder = bankNameHolder(ms, name, memberId)
-  if (holder) return toast(`Nazwa „${name}” wskazuje teraz ${holder.name} – zostaje tam, ${m.name} jej nie odzyskuje.`, 'info', 6000)
+  if (holder) return toast(`Import nie odróżni „${name}” od nazwy, którą ma teraz ${holder.name} – zostaje tam, ${m.name} jej nie odzyskuje.`, 'info', 7000)
   if (m.bankNames.length >= MAX_BANK_NAMES) return toast(`Najwyżej ${MAX_BANK_NAMES} nazw w banku na domownika – nazwa „${name}” nie wróciła.`, 'error', 6000)
   const names = [...m.bankNames]
   names.splice(Math.min(at, names.length), 0, name)
@@ -300,9 +321,31 @@ export function setHouseholdSince(since: string | null): void {
   }))
   if (!changed.length) return
   const shown = changed.slice(0, 3).map((m) => `${m.name}: ${openingText(openings!.get(m.id)!)} (było ${openingText(m.opening)})`)
+  const set = useData.getState().fi!.settings.household
   toast(`Saldo na start rozliczeń przeliczone – ${shown.join(', ')}${changed.length > 3 ? ` i ${changed.length - 3} innych` : ''}.`, 'info', 8000, {
     label: 'Cofnij',
-    run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, household: before } }))
+    run: () => {
+      // Only what is still as it set it: the start, its operations, each member's balance on it (members added or
+      // changed since stay – review 3 of N4).
+      let kept = 0
+      updateSettings((f) => {
+        const h = f.settings.household
+        const same = h.since === set.since && sameContentAs(h.openingIds, set.openingIds)
+        if (!same) kept++
+        const members = h.members.map((m) => {
+          const was = before.members.find((x) => x.id === m.id)
+          const now = set.members.find((x) => x.id === m.id)
+          if (!was || !now || sameOpening(was.opening, now.opening)) return m
+          if (!sameOpening(m.opening, now.opening)) {
+            kept++
+            return m
+          }
+          return { ...m, opening: was.opening }
+        })
+        return { ...f, settings: { ...f.settings, household: { ...h, ...(same ? { since: before.since, openingIds: before.openingIds } : {}), members } } }
+      })
+      if (kept) toast('Część rozliczeń zmieniła się od tego czasu – zostaje, jak jest; reszta cofnięta.', 'info', 7000)
+    }
   })
 }
 
@@ -322,7 +365,11 @@ export function setAssignFrom(assignFrom: string | null): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom } } }))
   toast(assignFrom ? `Zwroty od ${plDate(assignFrom)} spłacają tylko wskazane zakupy.` : 'Wszystkie zwroty spłacają tylko wskazane zakupy – dawne bez wskazania czekają na przypisanie.', 'info', 6000, {
     label: 'Cofnij',
-    run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom: before } } }))
+    run: () => {
+      // Only while still as it set it (review 3 of N4).
+      if (useData.getState().fi?.settings.household.assignFrom !== assignFrom) return undoKept(0, 1)
+      updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom: before } } }))
+    }
   })
 }
 

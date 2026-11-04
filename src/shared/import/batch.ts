@@ -140,6 +140,25 @@ export const sameContent = (a: Transaction, b: Transaction): boolean => contentH
 
 const newer = (a: ImportBatch, b: ImportBatch) => a.at > b.at || (a.at === b.at && a.id > b.id)
 
+/** The bank's rows of operations: their keys, in both formats and of both sides of a transfer. */
+function rowKeys(t: Transaction): string[] {
+  return [t.bank, t.counterBank].flatMap((b) => (b ? [b.key, ...(b.altKeys ?? [])] : []))
+}
+
+/**
+ * Why the undo's „Cofnij” must not bring `batch` back now (T415, review 3 of N4): `later` – an import stands that ran
+ * after it (the same file again, another one – here or on the other computer; its operations are on top of where this
+ * one's would be); `rows` – the bank's rows of the operations it would add are in the budget again (brought in some
+ * other way). Either would double the bank's rows; null – it can come back.
+ */
+export function redoRefusal(batch: ImportBatch, batches: readonly ImportBatch[], deleted: readonly Transaction[], current: readonly Transaction[]): 'later' | 'rows' | null {
+  const top = latestImport(batches.filter((b) => b.id !== batch.id))
+  if (top && newer(top, batch)) return 'later'
+  const back = new Set(deleted.map((t) => t.id))
+  const there = new Set(current.filter((t) => !back.has(t.id)).flatMap(rowKeys))
+  return deleted.some((t) => rowKeys(t).some((k) => there.has(k))) ? 'rows' : null
+}
+
 /** The latest import that stands (null = none): the only one that can be taken back. */
 export function latestImport(batches: readonly ImportBatch[]): ImportBatch | null {
   let out: ImportBatch | null = null

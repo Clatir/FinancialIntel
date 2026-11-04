@@ -3,11 +3,11 @@
  * brings it again as it was.
  */
 import { useMemo } from 'react'
-import { latestImport, redoneAs, sameContent, settingsRedone, settingsUndone, undoPlan, type UndoPlan } from '@shared/import/batch'
+import { latestImport, redoneAs, redoRefusal, sameContent, settingsRedone, settingsUndone, undoPlan, type UndoPlan } from '@shared/import/batch'
 import type { Balance, ImportBatch, Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { countLabel } from '../../lib/format'
-import { addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateRecord, updateSettings, useData } from '../../store/data'
+import { addRecords, deleteRecords, flushSaves, listOf, READ_ONLY_MESSAGE, replaceRecords, saveFirst, SWITCHING_MESSAGE, unsavedNote, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
 const byTime = (a: ImportBatch, b: ImportBatch) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id)
@@ -126,7 +126,15 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
  */
 async function redoImport(u: Undone): Promise<void> {
   const s = useData.getState()
-  if (s.status?.readOnly || s.switching || !s.fi) return
+  // Never a click that does nothing in silence (AP-15): why the import does not come back.
+  if (s.switching || s.status?.readOnly || !s.fi) return toast(`${s.switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE} Import nie wrócił do budżetu.`, 'error', 8000)
+  const batch = s.records.imports[u.batch.id]?.record
+  if (!batch) return toast('Tego importu nie ma już na liście ostatnich importów – nie wróci; jego wiersze wczyta ponowny import pliku.', 'error', 8000)
+  if (!batch.undoneAt) return toast('Ten import jest już w budżecie.', 'info', 5000)
+  // Its operations next to the same bank's rows brought in again would double them (T415): refused, said.
+  const refusal = redoRefusal(batch, listOf(s.records.imports), u.deleted, listOf(s.records.transactions))
+  if (refusal === 'later') return toast('Po cofnięciu był kolejny import – ten już nie wróci (zdublowałby operacje). Cofnij najpierw późniejszy albo wczytaj plik ponownie.', 'error', 10000)
+  if (refusal === 'rows') return toast('Wiersze tego importu są znowu w budżecie (wczytane innym importem) – nie wróci, by nie zdublować operacji.', 'error', 10000)
   const cur = (id: string) => s.records.transactions[id]?.record
   const has = (id: string) => !!cur(id)
   addRecords(

@@ -37,7 +37,8 @@ paths:
 - „Cofnij import” (`shared/import/batch.ts`, okno `features/import/batches.ts`): „zmienione później przez Ciebie” =
   treść inna niż odcisk z paczki (`createdHashes`, `contentHash`, T415). **Pułapka:** zmiany użytkownika nie rozpoznawaj
   po czasie (`updatedAt` kontra chwila paczki) – zapis w trakcie `flushSaves`, zapis bez paczki i zegary komputerów to
-  psują; porównuj treść. „Cofnij” cofnięcia nie nadpisuje zmian zrobionych po cofnięciu (`redoneAs`).
+  psują; porównuj treść. „Cofnij” cofnięcia nie nadpisuje zmian zrobionych po cofnięciu (`redoneAs`) i odmawia, gdy
+  wiersze banku są znowu w budżecie (`redoRefusal` – nigdy dubli).
 - Konto importu po numerze rachunku pliku (`accountForNumber`, T322); jedna operacja i jej kopie – `copies.ts`.
   **Pułapka:** `conflicting` nie porównuje `covers` – usuwana kopia oddaje spłacane zakupy przez `takeUserData` (ta sama
   decyzja albo pieniądze tych samych domowników – `takesCovers`), a kopia, której zakupów operacja tutaj nie przejmie,
