@@ -383,6 +383,17 @@ export const envelopeCoverSchema = z.looseObject({
 })
 export type EnvelopeCover = z.infer<typeof envelopeCoverSchema>
 
+/**
+ * „Dopełnij kadłub z osłon” (1.15.7, AP-17 – T373): at `at` up to `amount` moved from the shields above their target to
+ * what the hull lacks then (the engine never moves more than either). An older version ignores it.
+ */
+export const hullTopUpSchema = z.looseObject({
+  id: ulidSchema,
+  amount: grosze.min(1),
+  at: isoDateTime
+})
+export type HullTopUp = z.infer<typeof hullTopUpSchema>
+
 export const monthPlanSchema = z.looseObject({
   ...recordBase,
   month: isoMonth,
@@ -393,6 +404,8 @@ export const monthPlanSchema = z.looseObject({
   loot: lootSchema.nullable().default(null),
   /** The month's overruns covered from other envelopes (1.8.0, F28); an older version ignores them. */
   envelopeCovers: lenientList(envelopeCoverSchema).catch([]).default([]),
+  /** The hull topped up from the shields this month (1.15.7, AP-17); absent = none – files without it stay as they are. */
+  hullTopUps: lenientList(hullTopUpSchema).optional().catch(undefined),
   note: text
 })
 export type MonthPlan = z.infer<typeof monthPlanSchema>

@@ -116,6 +116,21 @@ export function coverEnvelope(month: string, from: string, to: string, amount: n
 }
 
 /**
+ * „Dopełnij kadłub z osłon” (AP-17, D99 pkt 6 – T373): `amount` (what the hull lacks, at most the shields' surplus over
+ * their target) moved now – an entry of this month's plan the engine counts at its moment; „Cofnij” takes it back.
+ */
+export function topUpHull(amount: number): void {
+  if (!canWrite() || amount <= 0) return
+  const id = newId()
+  const month = warsawNow().month
+  editPlan(month, (p) => ({ ...p, hullTopUps: [...(p.hullTopUps ?? []), { id, amount, at: new Date().toISOString() }] }))
+  toast(`Kadłub dopełniony z osłon: ${plnText(amount)} zł.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => editPlan(month, (p) => ({ ...p, hullTopUps: (p.hullTopUps ?? []).filter((u) => u.id !== id) }))
+  })
+}
+
+/**
  * „Kopiuj dalej” in the year's plan (F37): the row's value of `month` set in it and in each later month of the year with
  * its own plan – the months without one take it from the last earlier plan anyway. „Cofnij” sets back each month's value
  * from before (a month that got its own plan keeps it, with the old value).

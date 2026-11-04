@@ -46,3 +46,28 @@ export function effectOf(before: FleetState, after: FleetState): Effect {
 
 /** Does the change move nothing the captain sees? */
 export const noEffect = (e: Effect): boolean => !e.energy && !e.shields && !e.envelopes.length && !e.accounts.length
+
+/** A line of `layersEffect`: an amount before and after (null – unknown, a target without its salary or costs). */
+export interface LayersLine {
+  label: string
+  before: number | null
+  after: number | null
+}
+
+/**
+ * What a change of the layers' targets does (AP-17, MO sp. 4 – the history counts again from the start with them): the
+ * shields and the hull with their targets, the goals, the month's energy and „wolne do decyzji” – the lines that change.
+ */
+export function layersEffect(before: FleetState, after: FleetState): LayersLine[] {
+  const goals = (f: FleetState) => f.goals.reduce((a, g) => a + g.amount, 0)
+  const lines: LayersLine[] = [
+    { label: 'Osłony', before: before.shields.amount, after: after.shields.amount },
+    { label: 'Cel osłon', before: before.shields.target, after: after.shields.target },
+    { label: 'Kadłub', before: before.hull.amount, after: after.hull.amount },
+    { label: 'Cel kadłuba', before: before.hull.target, after: after.hull.target },
+    { label: 'Cele (razem)', before: goals(before), after: goals(after) },
+    { label: 'Energia miesiąca', before: before.energy, after: after.energy },
+    { label: 'Wolne do decyzji', before: before.shields.free, after: after.shields.free }
+  ]
+  return lines.filter((l) => l.before !== l.after)
+}

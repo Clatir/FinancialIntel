@@ -1,23 +1,57 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { computeFleet, type FleetState } from '@shared/calc/fleet'
+import { layersEffect, type LayersLine } from '@shared/calc/effect'
 import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel, type NotifyPrefs } from '@shared/machine'
 import { eveningAt } from '@shared/notify'
-import type { Orders } from '@shared/schema'
+import type { LayersSettings, Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { playSound } from '../../lib/sounds'
 import { updateSettings, useData, useFolderLocked } from '../../store/data'
+import { fleetInputNow, fleetNow, useFleet } from '../../store/fleet'
 import { setMachinePrefs, useMachine } from '../../store/machine'
-import { AmountField, TimeField } from '../../components/fields'
+import { AmountField, plnText, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
 import { Field, NumberField, Panel, Toggle } from '../../components/ui'
 import { toast } from '../../store/ui'
+
+type LayersPatch = Partial<Pick<LayersSettings, 'shieldSalaries' | 'hullMonths' | 'assumedCosts'>>
+
+/** The ship's state with other layers' targets (AP-17): the engine's input now, the history counted again from the start. */
+function fleetWithLayers(patch: LayersPatch): FleetState | null {
+  const input = fleetInputNow()
+  return input ? computeFleet({ ...input, settings: { ...input.settings, layers: { ...input.settings.layers, ...patch } } }) : null
+}
+
+/** „Osłony 13 000,00 → 6 500,00 zł” – a line of the layers' effect (the hidden amounts mask it). */
+const effectText = (l: LayersLine) => `${l.label} ${l.before == null ? '—' : plnText(l.before)} → ${l.after == null ? '—' : `${plnText(l.after)} zł`}`
 
 /** Ustawienia → Warstwy i rozkazy (fi.json – the same on every computer): the layers' targets and the orders. */
 export function LayersTab() {
   const fi = useData((s) => s.fi)
   const readOnly = useFolderLocked()
+  // The targets typed and not saved yet (AP-17, MO sp. 4): what they would do, before leaving the field.
+  const [draft, setDraft] = useState<{ shieldSalaries?: number | null; hullMonths?: number | null }>({})
   if (!fi) return null
   const { layers, orders } = fi.settings
-  const setLayers = (p: Partial<typeof layers>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, layers: { ...f.settings.layers, ...p } } }))
+  /**
+   * A change of the layers' targets (AP-17): the whole history counts again with them – what it did, with „Cofnij”
+   * (the targets before).
+   */
+  const setLayers = (p: LayersPatch) => {
+    const before = fleetNow()
+    const after = before?.started ? fleetWithLayers(p) : null
+    const was: LayersPatch = {}
+    if ('shieldSalaries' in p) was.shieldSalaries = layers.shieldSalaries
+    if ('hullMonths' in p) was.hullMonths = layers.hullMonths
+    if ('assumedCosts' in p) was.assumedCosts = layers.assumedCosts
+    updateSettings((f) => ({ ...f, settings: { ...f.settings, layers: { ...f.settings.layers, ...p } } }))
+    const lines = before && after ? layersEffect(before, after).filter((l) => !l.label.startsWith('Cel ')) : []
+    if (lines.length)
+      toast(`Cele warstw zmienione: ${lines.map(effectText).join(', ')}.`, 'info', 10000, {
+        label: 'Cofnij',
+        run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, layers: { ...f.settings.layers, ...was } } }))
+      })
+  }
   return (
     <fieldset disabled={readOnly} className="flex flex-col gap-3">
       <Panel title="Warstwy okrętu">
@@ -32,22 +66,65 @@ export function LayersTab() {
               isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries}
               onChange={(v) => v != null && setLayers({ shieldSalaries: v })}
               onReject={(v) => toast(v != null && v >= 1 && v < orders.minShieldSalaries ? `Cel osłon nie może być mniejszy niż minimalne osłony (${orders.minShieldSalaries} pensji) – najpierw zmniejsz minimum.` : 'Cel osłon to od 1 do 24 pensji – zostaje poprzedni.', 'error', 6000)}
+              onDraft={(v) => setDraft((d) => ({ ...d, shieldSalaries: v }))}
               aria-label="Osłony w pensjach"
               data-testid="layers-shields"
             />
           </Field>
           <Field label="Kadłub – cel" labelWidth={200} hint="Fundusz awaryjny: tyle miesięcy średnich kosztów netto (D12).">
-            <NumberField className="w-[80px]" value={layers.hullMonths} decimals={0} step={1} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 36} onChange={(v) => v != null && setLayers({ hullMonths: v })} aria-label="Kadłub w miesiącach" data-testid="layers-hull" />
+            <NumberField
+              className="w-[80px]"
+              value={layers.hullMonths}
+              decimals={0}
+              step={1}
+              commitOnBlur
+              isValid={(v) => v != null && v >= 1 && v <= 36}
+              onChange={(v) => v != null && setLayers({ hullMonths: v })}
+              onDraft={(v) => setDraft((d) => ({ ...d, hullMonths: v }))}
+              aria-label="Kadłub w miesiącach"
+              data-testid="layers-hull"
+            />
           </Field>
           <Field label="Przyjęte średnie koszty" labelWidth={200} hint="Dopóki historia ma mniej niż 3 pełne miesiące (puste = tylko z historii).">
             <AmountField className="w-[120px]" value={layers.assumedCosts} allowEmpty onChange={(assumedCosts) => setLayers({ assumedCosts })} aria-label="Przyjęte koszty" />
           </Field>
+          <LayersPreview shieldSalaries={draft.shieldSalaries ?? layers.shieldSalaries} hullMonths={draft.hullMonths ?? layers.hullMonths} saved={layers} />
         </div>
       </Panel>
       <Panel title="Rozkazy">
         <OrdersFields labelWidth={200} />
       </Panel>
     </fieldset>
+  )
+}
+
+/**
+ * A preview of the layers' targets typed and not saved yet (AP-17, MO sp. 4): the shields, the hull, the goals and
+ * „wolne do decyzji” now against the state with them – the history counts again from the budget's start.
+ */
+function LayersPreview({ shieldSalaries, hullMonths, saved }: { shieldSalaries: number; hullMonths: number; saved: LayersSettings }) {
+  const fleet = useFleet()
+  const changed = shieldSalaries !== saved.shieldSalaries || hullMonths !== saved.hullMonths
+  // `fleet` – the records (or the day) changed under the preview: counted again.
+  const after = useMemo(() => (changed && fleet?.started ? fleetWithLayers({ shieldSalaries, hullMonths }) : null), [changed, fleet, shieldSalaries, hullMonths])
+  if (!fleet || !after) return null
+  const lines = layersEffect(fleet, after)
+  return (
+    <div className="flex flex-col border-l-2 border-accent pl-2 text-[11.5px]" data-testid="layers-preview">
+      <span className="text-muted">Po zmianie (zapisze się po wyjściu z pola – cała historia policzy się od startu z nowymi celami):</span>
+      {!lines.length ? (
+        <span className="text-dim">bez zmian w warstwach</span>
+      ) : (
+        lines.map((l) => (
+          <div key={l.label} className="flex items-baseline gap-2" data-testid="layers-preview-line">
+            <span className="min-w-0 flex-1 text-muted">{l.label}</span>
+            <span className="num">{l.before == null ? '—' : `${plnText(l.before)} zł`}</span>
+            <span className="text-dim">→</span>
+            <span className="num text-fg-strong">{l.after == null ? '—' : `${plnText(l.after)} zł`}</span>
+          </div>
+        ))
+      )}
+    </div>
   )
 }
 
@@ -93,7 +170,15 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
       <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty (D41); 0 albo puste – dziennik nie pyta.">
         <AmountField className="w-[120px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
       </Field>
-      <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (D23)" />
+      <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (D23)" data-testid="orders-firewall" />
+      {/* DW.12 (AP-17): switched off, nothing checks a top-up – said here, on the bridge and in the briefing. */}
+      {orders.firewall ? (
+        <p className="text-[11px] text-muted">Kadłub od 99 % celu liczy się jako pełny – cel rośnie ze średnimi kosztami.</p>
+      ) : (
+        <p className="text-[11.5px] text-accent" data-testid="orders-firewall-off">
+          Firewall wyłączony – dopłaty do XTB nie są sprawdzane: bez czerwonego alarmu i bez naruszenia w grze, choćby osłony albo kadłub nie były pełne.
+        </p>
+      )}
     </div>
   )
 }

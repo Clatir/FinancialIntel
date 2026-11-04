@@ -143,6 +143,8 @@ export interface BriefingInput {
   anomalies?: readonly Anomaly[]
   /** The purchases awaiting a return (F34, `awaitedReturns`): a late one is said. */
   returns?: readonly AwaitedReturn[]
+  /** The firewall order switched off (AP-17, DW.12): today's top-ups of XTB are said to go unchecked. */
+  firewallOff?: boolean
 }
 
 /** An anomaly is said in the briefing this many days after its day (it stays in the inbox and Operacje). */
@@ -258,6 +260,12 @@ export function briefing(o: BriefingInput): BriefingItem[] {
   for (const [key, a] of summed) {
     items.push({ level: a.level, kind: 'alarm', key: `alarm:${key}:${f.month}`, text: alarmText(a, o.label, zl) })
   }
+  // The firewall switched off (AP-17, DW.12): a top-up of XTB today is not checked – said so, once per operation (a
+  // return of the pool „Podatek” comes from the reserve: never the firewall's).
+  if (o.firewallOff)
+    for (const e of f.log)
+      if (e.kind === 'trading' && e.amount < 0 && e.date === f.today && e.txId && !e.moves.taxHold)
+        items.push({ level: 'info', kind: 'alarm', key: `alarm:firewall:off:${e.txId}:${f.month}`, text: `Firewall wyłączony: dopłata do XTB ${zl(-e.amount)} bez sprawdzania osłon i kadłuba.` })
   for (const c of o.containers) {
     if (c.cycleMonths <= 1) continue
     const tankOf = f.tanks.find((t) => t.containerId === c.id)

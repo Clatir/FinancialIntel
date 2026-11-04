@@ -327,6 +327,15 @@ export function energyAfterLimit(f: Pick<FleetState, 'daily' | 'energy' | 'start
   return { before: d.energy, after: f.started ? cappedEnergy(allowance - d.spentToday, f.energy) : allowance - d.spentToday }
 }
 
+/** What the hull may lack and still count as full (AP-17, D99 – T372): 1 % of its target. */
+export const HULL_TOLERANCE_PCT = 1
+
+/**
+ * The hull full for the firewall and „wolne do decyzji” (AP-17, T372): from 99 % of its target – it follows the average
+ * costs, so after a month's turn it ends a few złoty short until the next delivery. null = the target unknown.
+ */
+export const hullCountsFull = (hull: number, target: number | null): boolean => target != null && hull * 100 >= target * (100 - HULL_TOLERANCE_PCT)
+
 /**
  * Range (zasięg): how many months the shields and the hull last at the average net costs. A taken loan's debt still to
  * pay comes off first (D72: the shields less the debt); more debt than money = 0.
@@ -630,9 +639,10 @@ export interface FleetEvent {
   date: string
   /**
    * 'goal' = a goal's money moved out (to the shields or another goal – 1.4.2); 'tank' = a tank's rest back to the
-   * shields after its fee's life (1.4.2); 'rate' = a goal's installment from the salary (1.8.0, F15).
+   * shields after its fee's life (1.4.2); 'rate' = a goal's installment from the salary (1.8.0, F15); 'hull' = the hull
+   * topped up from the shields above their target (1.15.7, AP-17 – „Dopełnij kadłub z osłon”).
    */
-  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'rate' | 'month-end' | 'loot' | 'goal' | 'tank' | TxKind
+  kind: 'start' | 'account' | 'household' | 'salary' | 'sinking' | 'rate' | 'month-end' | 'loot' | 'goal' | 'tank' | 'hull' | TxKind
   amount: number
   txId?: string
   /** 'loot': the month whose loot it splits (1.4.2, B10). */
@@ -663,7 +673,8 @@ export interface FleetState {
   total: number
   /**
    * `over` = above their target; `free` = „wolne do decyzji” – the part above the target only with a full hull (N21: the
-   * docking order fills the hull first, and the firewall lets a top-up of XTB only from there).
+   * docking order fills the hull first, and the firewall lets a top-up of XTB only from there) – full from 99 % of its
+   * target (AP-17, T372).
    */
   shields: { amount: number; target: number | null; free: number; over: number; min: number | null }
   hull: { amount: number; target: number | null }
@@ -1245,9 +1256,10 @@ export function computeFleet(input: FleetInput): FleetState {
             if (-amt > fromHold) drawShields(-amt - fromHold, moves)
             break
           }
-          // A top-up of the trading account: only from „wolne do decyzji” with full shields and hull (D23, firewall).
+          // A top-up of the trading account: only from „wolne do decyzji” with full shields and hull (D23, firewall) – the
+          // hull from 99 % of its target (AP-17, T372).
           const tg = targetsAt(t.date)
-          const allowed = tg.shields != null && tg.hull != null && shields + amt >= tg.shields && hull >= tg.hull
+          const allowed = tg.shields != null && tg.hull != null && shields + amt >= tg.shields && hullCountsFull(hull, tg.hull)
           if (!allowed && settings.orders.firewall) alarms.push({ kind: 'firewall', level: 'red', date: t.date, amount: -amt, txId: t.id })
           drawShields(-amt, moves)
         }
@@ -1496,31 +1508,69 @@ export function computeFleet(input: FleetInput): FleetState {
     // the events of its day – before the first one (in the engine's order) that came to FI after it (`cameIn`: an
     // operation's docking, else the operation; a loot's decision), after the day's start; nothing of its day after it –
     // after the day's last. What the goal does not hold then (money that came before it, counted later in the day's
-    // order) moves at the day's end; never more than the goal holds.
-    const transfers = goalsAll
-      .flatMap((g) => (g.transfers ?? []).map((tr, i) => ({ g, tr, i, date: warsawNow(tr.at).date, at: Date.parse(tr.at) })))
+    // order) moves at the day's end; never more than the goal holds. The hull topped up from the shields (AP-17, T373)
+    // the same way: a top-up of XTB entered after it sees the hull full.
+    const goalMove = (g: Goal, to: string, date: string, amount: number): number => {
+      const move = Math.min(amount, goalAmount.get(g.id) ?? 0)
+      if (move <= 0) return 0
+      const moves: Moves = {}
+      addGoal(g.id, -move, moves)
+      if (to !== g.id && knownGoal(to)) addGoal(to, move, moves)
+      else addShields(move, moves)
+      record({ date, kind: 'goal', amount: move, moves })
+      return move
+    }
+    /**
+     * „Dopełnij kadłub z osłon” (AP-17, D99 – T373): up to `amount` from the shields above their target to what the hull
+     * lacks then – never more than either, nothing with a target unknown (a later change of the targets or of the day's
+     * operations moves only what is there).
+     */
+    const hullTopUp = (date: string, amount: number): number => {
+      const tg = targetsAt(date)
+      if (tg.shields == null || tg.hull == null) return 0
+      const move = Math.min(amount, shields - tg.shields, tg.hull - hull)
+      if (move <= 0) return 0
+      const moves: Moves = { hull: move }
+      hull += move
+      addShields(-move, moves)
+      record({ date, kind: 'hull', amount: move, moves })
+      return move
+    }
+    /** A move at its moment: `key`, `i` – its place among the moves of the same moment (a goal and its transfer's index). */
+    interface Move {
+      date: string
+      at: number
+      key: string
+      i: number
+      amount: number
+      run: (amount: number) => number
+    }
+    const transfers: Move[] = [
+      ...goalsAll.flatMap((g) =>
+        (g.transfers ?? []).map((tr, i) => {
+          const date = warsawNow(tr.at).date
+          return { date, at: Date.parse(tr.at), key: g.id, i, amount: tr.amount, run: (v: number) => goalMove(g, tr.to, date, v) }
+        })
+      ),
+      ...plans.flatMap((p) =>
+        (p.hullTopUps ?? []).map((u) => {
+          const date = warsawNow(u.at).date
+          return { date, at: Date.parse(u.at), key: u.id, i: 0, amount: u.amount, run: (v: number) => hullTopUp(date, v) }
+        })
+      )
+    ]
       .filter((m) => m.date >= start && m.date <= today)
-      .sort((a, b) => order(a.date, b.date) || a.at - b.at || order(a.g.id, b.g.id) || a.i - b.i)
-    type GoalMove = (typeof transfers)[number]
+      .sort((a, b) => order(a.date, b.date) || a.at - b.at || order(a.key, b.key) || a.i - b.i)
     let nextMove = 0
     /** The day of the events run last: its transfers wait for its later events. */
     let moveDay: string | null = null
-    /** The parts of `moveDay`'s transfers the goal did not hold at their moment: moved at the day's end. */
-    let short: Array<{ m: GoalMove; rest: number }> = []
-    const moveOut = (m: GoalMove, amount: number): number => {
-      const move = Math.min(amount, goalAmount.get(m.g.id) ?? 0)
-      if (move <= 0) return 0
-      const moves: Moves = {}
-      addGoal(m.g.id, -move, moves)
-      if (m.tr.to !== m.g.id && knownGoal(m.tr.to)) addGoal(m.tr.to, move, moves)
-      else addShields(move, moves)
-      record({ date: m.date, kind: 'goal', amount: move, moves })
-      return move
-    }
+    /** The parts of `moveDay`'s moves not made at their moment (the goal did not hold them, the shields had no surplus): at the day's end. */
+    let short: Array<{ m: Move; rest: number }> = []
+    const moveOut = (m: Move, amount: number): number => m.run(amount)
     /** The next transfer whole – its day has nothing after it. */
     const moveNext = () => {
       const m = transfers[nextMove++]!
-      moveOut(m, m.tr.amount)
+      moveOut(m, m.amount)
     }
     /** The end of `moveDay`: the parts its transfers could not move at their moment, then those after its last event. */
     const endMoveDay = () => {
@@ -1543,8 +1593,8 @@ export function computeFleet(input: FleetInput): FleetState {
     const movesBefore = (date: string, at: number) => {
       while (nextMove < transfers.length && transfers[nextMove]!.date === date && transfers[nextMove]!.at < at) {
         const m = transfers[nextMove++]!
-        const moved = moveOut(m, m.tr.amount)
-        if (moved < m.tr.amount) short.push({ m, rest: m.tr.amount - moved })
+        const moved = moveOut(m, m.amount)
+        if (moved < m.amount) short.push({ m, rest: m.amount - moved })
       }
     }
     const runEvent = (e: Ev) => {
@@ -1663,7 +1713,8 @@ export function computeFleet(input: FleetInput): FleetState {
   if (salary != null && income.average != null && salary > income.average) alarms.push({ kind: 'salary-above-income', level: 'yellow', date: today, amount: salary - income.average })
 
   const overTarget = targets.shields != null ? Math.max(0, shields - targets.shields) : 0
-  const hullFull = targets.hull != null && hull >= targets.hull
+  // „Wolne do decyzji” with the hull from 99 % of its target (AP-17, T372) – as the firewall lets a top-up of XTB.
+  const hullFull = hullCountsFull(hull, targets.hull)
   /** The tank's cycle: this one, or – paid already – the next one (B6). */
   const tankCycle = (c: Container) => {
     const due = cyclePosition(c, month).dueMonth

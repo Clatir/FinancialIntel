@@ -2717,3 +2717,33 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zakupu najpierw bierze ten zwrot (T370). „Pokryj z koperty…” (PM sp. 6) mówi skutek dla energii dziś
   (`energyAfterLimit`: koperta codzienna oddaje limit puli dziennej, planowa – bez zmian); domyślna koperta źródłowa
   jak dotąd (największy zapas). Przed startem budżetu bez ograniczenia. Bez zmian formatu.
+- **T372** Kadłub od 99 % celu pełny dla firewalla i „wolnego do decyzji” (1.15.7, AP-17 – MO sp. 3, DW sp. 4, DW.12,
+  MO.22 b; realizuje D99 pkt 6): `hullCountsFull` – kadłub × 100 ≥ cel × 99 w groszach (`HULL_TOLERANCE_PCT` = 1). Dopłata
+  do XTB bez alarmu, gdy osłony po niej ≥ cel i kadłub ≥ 99 % celu; „wolne do decyzji” = cała nadwyżka osłon ponad cel
+  przy takim kadłubie (bez odejmowania brakującego ułamka). Bez zmian: dokowanie dopełnia kadłub do 100 % (D13), raty
+  celów z pensji (T272) wymagają 100 % na przełomie miesiąca, osiągnięcie „Pancerny kadłub” – 100 %. Mostek przy kadłubie
+  w 99–100 % celu: „brakuje X – do 1% celu liczy się jako pełny (firewall, wolne do decyzji)”. Zamrożone dni gry bez
+  zmian (alarm firewall znika z dni jeszcze niezamrożonych). Bez zmian formatu.
+- **T373** „Dopełnij kadłub z osłon” (1.15.7, AP-17; realizuje D99 pkt 6 – propozycja jednym kliknięciem): przycisk na
+  Mostku pod kadłubem (`state-hull-topup`), gdy kadłub < cel i osłony > cel – kwota min(brak kadłuba, nadwyżka osłon).
+  Zapis: wpis `{id, amount, at}` w `hullTopUps` planu bieżącego miesiąca (`months/RRRR-MM.json`, jak `envelopeCovers`;
+  miesiąc bez własnego planu dostaje kopię planu w mocy – T46), toast z „Cofnij” (8 s) zabiera wpis. Silnik liczy go
+  w chwili `at` jak przeniesienie środków celu (T340 – ta sama kolejka: przed pierwszym zdarzeniem dnia, które przyszło
+  do FI później; czego wtedy nie przeniósł – na koniec dnia) i przenosi min(kwota, osłony − cel osłon, cel kadłuba −
+  kadłub): nigdy osłon poniżej celu ani kadłuba ponad cel, przy nieznanym celu nic – późniejsza zmiana celów albo operacji
+  przenosi tylko to, co wtedy jest. Dopłata do XTB, która przyszła do FI po dopełnieniu (wpis, import), widzi kadłub
+  pełny; wcześniejsza – nie (alarm zostaje). Zdarzenie silnika `hull` (osłony −, kadłub +) nie jest decyzją gry. Okno
+  odłączone i folder tylko do odczytu – bez przycisku. Addytywnie: pole opcjonalne (plany bez niego zostają w pliku bez
+  zmian), wpis błędny pomijany (`lenientList`), starsza wersja pole pomija (jej warstwy bez dopełnienia), bez
+  `SCHEMA_VERSION`; kwota w `AMOUNT_FIELDS`. Rozważone i odrzucone: dopełnianie samo przy każdym wzroście celu (spec
+  „Dokowanie” – nadwyżka płynie tylko przy dostawie; D99 wybrało propozycję); zapis w `fi.json` – zdarzenie z chwilą
+  należy do miesiąca, jak pokrycie koperty.
+- **T374** Podgląd zmiany celów warstw, firewall wyłączony (1.15.7, AP-17 – MO sp. 4, DW.12): Ustawienia → Warstwy
+  i rozkazy – wpisany cel osłon albo kadłuba, zanim pole się zapisze (`NumberField.onDraft`), pokazuje „Po zmianie”:
+  osłony, cel osłon, kadłub, cel kadłuba, cele razem, energię miesiąca i wolne do decyzji przed → po (`layersEffect`,
+  silnik z nowymi celami od startu budżetu); zapisana zmiana celu osłon, kadłuba albo przyjętych kosztów – toast „Cele
+  warstw zmienione: …” z „Cofnij” (poprzednie wartości). Firewall wyłączony: pod przełącznikiem (Ustawienia i Dowództwo)
+  „Firewall wyłączony – dopłaty do XTB nie są sprawdzane…”, w stanie okrętu na Mostku „Firewall wyłączony – dopłaty do
+  XTB bez sprawdzania osłon i kadłuba” (bez „nie do dopłaty XTB”), w odprawie dzisiejsza dopłata do XTB – informacja
+  „Firewall wyłączony: dopłata do XTB X zł bez sprawdzania osłon i kadłuba.” (zwrot puli Podatek – nie). Bez zmian
+  formatu.

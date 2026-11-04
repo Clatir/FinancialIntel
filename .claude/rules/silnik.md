@@ -57,6 +57,9 @@ paths:
   energia miesiąca (`cappedEnergy`, powód `daily.cap` – T371); `left` zostaje miarą przekroczenia dnia (alarm, gra).
   Zwrot ponad dzisiejsze zakupy swojej kategorii głównej (`returned`) nie wchodzi do dziś, od jutra jest w puli (T370).
   Podgląd szybkiego wpisu – `energyAfter` (z `month`, `returned`), „Pokryj z koperty…” – `energyAfterLimit`.
+- Kadłub pełny dla firewalla i „wolnego do decyzji” od 99 % celu (`hullCountsFull`, T372) – dokowanie dalej do 100 %,
+  raty celów (T272) przy 100 %. „Dopełnij kadłub z osłon” (T373): wpis `hullTopUps` planu miesiąca, silnik w jego chwili
+  (kolejka przeniesień T340), nigdy więcej niż nadwyżka osłon i brak kadłuba.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

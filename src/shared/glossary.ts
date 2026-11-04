@@ -18,7 +18,7 @@ export const GLOSSARY = [
   { term: 'Radar', meaning: 'Co przed budżetem w 90 dniach: pensje, opłaty, raty, boje, PIT-38.' },
   { term: 'Boja', meaning: 'Zaplanowany wydatek, wpływ albo termin na Radarze.' },
   { term: 'Asteroida', meaning: 'Zbliżająca się opłata okresowa, którą pokryje jej zbiornik.' },
-  { term: 'Firewall', meaning: 'Zasilenie konta XTB tylko z nadwyżki ponad pełne osłony i kadłub.' },
+  { term: 'Firewall', meaning: 'Zasilenie konta XTB tylko z nadwyżki ponad pełne osłony i kadłub (kadłub od 99 % celu liczy się jako pełny).' },
   { term: 'Depozyt', meaning: 'Pieniądze domowników trzymane na kontach budżetu – ich, nie moje.' },
   { term: 'Wyprawa', meaning: 'Tag: koszt wyjazdu albo projektu przez wiele kategorii.' },
   { term: 'Bilans paliwa', meaning: 'Przychód miesiąca minus koszty netto; stopa oszczędności – ten bilans w % przychodu.' }
