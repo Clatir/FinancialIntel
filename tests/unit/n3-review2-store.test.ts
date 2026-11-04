@@ -2,7 +2,8 @@
  * N3 (1.15.7) – the group's second review in the window's store:
  * - 7: „Cofnij” of „Dopełnij kadłub z osłon” takes the month's plan file the top-up made only while it is still just that
  *   – a field another computer or a newer version wrote in it meanwhile (kept by `looseObject`), a change of another
- *   computer waiting for a decision: only the top-up's entry goes, the file stays (T373).
+ *   computer waiting for a decision: only the top-up's entry goes, the file stays (T373);
+ * - przegląd 3 N3 (4): the month's plan gone meanwhile, or the entry no longer in it – „Cofnij” makes and writes nothing.
  */
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import type { Snapshot } from '@shared/api'
@@ -116,5 +117,54 @@ describe('7: „Cofnij” dopełnienia kadłuba usuwa założony plan miesiąca 
     expect(own()).toMatchObject({ salary: zl(4000), hullTopUps: [] })
     expect(useRemote.getState().pending.map((p) => p.id)).toEqual([PLAN])
     expect(api.deleteRecord).not.toHaveBeenCalled()
+  })
+})
+
+/** This month's plan deleted on another computer (the folder's watcher brings the removal). */
+function removed(): void {
+  data.applyChange({ upserts: [], removals: [{ collection: 'months', id: PLAN }], fi: null, problems: [], conflicts: [], status: data.useData.getState().status!, origin: 'external' })
+}
+
+describe('przegląd 3 N3 (4): „Cofnij” bez planu miesiąca albo bez swojego wpisu – nic nie tworzy, nic nie zapisuje (T373)', () => {
+  it('plan założony przez dopełnienie usunięty na drugim komputerze – „Cofnij” nie zakłada nowej kopii planu w mocy', async () => {
+    open()
+    month.topUpHull(zl(150))
+    await data.writeNow('months', PLAN)
+    removed()
+    expect(own()).toBeUndefined()
+    api.saveRecord.mockClear()
+    // Before: `editPlan` made a new copy of the plan in force – the month pinned to it (T46), unasked.
+    undo()
+    expect(own()).toBeUndefined()
+    await vi.waitFor(() => expect(data.hasUnsaved()).toBe(false))
+    expect(api.saveRecord).not.toHaveBeenCalled()
+  })
+
+  it('własny plan sprzed dopełnienia usunięty w międzyczasie (miesiąc znowu na planie w mocy) – też nic', async () => {
+    open()
+    // The month's own plan (its salary set) before the top-up.
+    month.setSalary(NOW.month, zl(4500))
+    await data.writeNow('months', PLAN)
+    month.topUpHull(zl(150))
+    await data.writeNow('months', PLAN)
+    removed()
+    api.saveRecord.mockClear()
+    undo()
+    expect(own()).toBeUndefined()
+    expect(api.saveRecord).not.toHaveBeenCalled()
+  })
+
+  it('wpis dopełnienia zdjęty już na drugim komputerze – plan zostaje, jak jest, bez zapisu', async () => {
+    open()
+    month.setSalary(NOW.month, zl(4500))
+    await data.writeNow('months', PLAN)
+    month.topUpHull(zl(150))
+    await data.writeNow('months', PLAN)
+    arrives({ ...own()!, updatedAt: '2026-11-04T11:00:05.000Z', updatedBy: 'LAPTOP', hullTopUps: [] })
+    api.saveRecord.mockClear()
+    undo()
+    expect(own()).toMatchObject({ salary: zl(4500), hullTopUps: [] })
+    expect(data.hasUnsaved()).toBe(false)
+    expect(api.saveRecord).not.toHaveBeenCalled()
   })
 })

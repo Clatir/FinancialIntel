@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { cargoStatuses, dueIn, feeDuesOf, paymentDay, paymentsIndex, type CargoStatus } from '@shared/calc/cargoStatus'
+import { AHEAD_DAYS, cargoStatuses, dueIn, feeDuesOf, paymentDay, paymentsIndex, plannedDues, type CargoStatus } from '@shared/calc/cargoStatus'
 import { addDays, addMonths, firstDayOf, monthOf } from '@shared/calc/dates'
 import { activeIn, amountIn, computeFleet, cyclePosition, layersSum, sinkingInstallment, type FleetState } from '@shared/calc/fleet'
 import { startPaidDays, startTankItems, startTanks } from '@shared/calc/start'
+import { briefing } from '@shared/calc/briefing'
+import { radar } from '@shared/calc/radar'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, containerSchema, defaultCategoryId, goalSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Settings, type Transaction } from '@shared/schema'
 
@@ -181,41 +183,59 @@ function checkTurn(k: Case, f: FleetState, transactions: Transaction[], today: s
   expect(tank.want, `${why}: turn ${turn}, Ładownia ${shownOn} ${s?.state}, tank ${inTank}`).toBe(s?.state === 'paid' ? 0 : sinkingInstallment(k.c, month, inTank))
 }
 
+/** Paid, or paid by a payment written ahead (T398): closed once the payments of the folder come – the outlook's. */
+const closed = (s: CargoStatus | undefined) => !!s && (s.state === 'paid' || !!s.planned)
+
 /**
- * „Zapłacone (dziś)” (T375): a payment today pays the due it is shown at (the oldest one it leaves paid); none shown – it
- * pays no due shown unpaid. The engine follows the state after it.
+ * „Zapłacone (dziś)” (T375, T398): a payment today closes the due it is shown at (the oldest one neither paid nor planned
+ * it leaves closed – the payments written ahead in, przegląd 3 N3); none shown – it closes no due shown open. The engine
+ * follows the state after it.
  */
 function checkPayToday(k: Case, transactions: Transaction[], today: string, tally: Tally, why: string) {
   const shown = cargoAt(k, transactions, today)
   const target = shown.find((s) => s.payToday)
   const after = [...transactions, pay(k.c, today, target?.amount ?? amountIn(k.c, monthOf(today)))]
   const now = cargoAt(k, after, today)
+  const open = (s: CargoStatus) => !closed(s)
   if (target) {
     tally.payToday++
-    expect(target.state, `${why}: „Zapłacone” at a due paid`).not.toBe('paid')
-    const paid = now.find((s) => s.due === target.due)
-    expect(target.carried ? paid : paid?.state, `${why}: „Zapłacone” ${target.due}`).toBe(target.carried ? undefined : 'paid')
-    // The late ones before it stay as they were.
-    for (const s of shown) if (s.due < target.due && s.state !== 'paid') expect(now.some((x) => x.due === s.due && x.state !== 'paid'), `${why}: ${s.due} before ${target.due}`).toBe(true)
-  } else for (const s of shown) if (s.state !== 'paid') expect(now.some((x) => x.due === s.due && x.state !== 'paid'), `${why}: ${s.due} paid, no „Zapłacone” shown`).toBe(true)
+    expect(open(target), `${why}: „Zapłacone” at a due closed`).toBe(true)
+    const then = now.find((s) => s.due === target.due)
+    // A late one paid by it is no longer shown; this month's is – paid, or paid by the payment written ahead it frees.
+    expect(target.carried ? !then || closed(then) : closed(then), `${why}: „Zapłacone” ${target.due}`).toBe(true)
+    // The open ones before it stay as they were.
+    for (const s of shown) if (s.due < target.due && open(s)) expect(now.some((x) => x.due === s.due && open(x)), `${why}: ${s.due} before ${target.due}`).toBe(true)
+  } else for (const s of shown) if (open(s)) expect(now.some((x) => x.due === s.due && open(x)), `${why}: ${s.due} closed, no „Zapłacone” shown`).toBe(true)
   const f = fleetOf(k, after, today)
   checkToday(k, f, after, today, tally, `${why} + zapłata dziś`)
 }
 
 /**
- * „Zapłacone (dziś)” as the full count gives it (przegląd 2 N3 3 – counted now only for a fee with a due still to pay):
- * the payment of today after the ones up to today, its due the oldest one it leaves paid.
+ * „Zapłacone (dziś)” as the full count gives it (przegląd 2 N3 3 – counted now only for a fee with a due still to pay;
+ * przegląd 3 N3 – the payments written ahead counted in, up to the Radar's window): the oldest due neither paid (up to
+ * today) nor planned (holding a payment dated after today) that a payment of today leaves paid or planned.
  */
 function checkPayTodayRef(k: Case, transactions: Transaction[], today: string, why: string) {
   const month = monthOf(today)
   const start = k.start <= today ? k.start : null
-  const linked = (paymentsIndex(transactions).byContainer.get(k.c.id) ?? []).filter((p) => p.date <= today)
-  const day = paymentDay(k.c, linked, month).day
-  const f = { start, month }
-  const now = feeDuesOf(k.c, linked, day, f).dues
-  const after = feeDuesOf(k.c, [...linked, { id: '', date: today, amount: amountIn(k.c, month), accountId: '' }], day, f).dues
-  const paidAfter = new Set(after.slice(0, -1).filter((d) => d.payments.length).map((d) => d.month))
-  const ref = now.slice(0, -1).find((d) => !d.payments.length && paidAfter.has(d.month))?.month ?? null
+  const all = paymentsIndex(transactions).byContainer.get(k.c.id) ?? []
+  const upTo = all.filter((p) => p.date <= today)
+  const ahead = all.filter((p) => p.date > today)
+  const day = paymentDay(k.c, upTo, month).day
+  const follow = { start, month }
+  const view = { start, month, until: monthOf(addDays(today, AHEAD_DAYS)) }
+  const payment = { id: '', date: today, amount: amountIn(k.c, month), accountId: '' }
+  type Dues = ReturnType<typeof feeDuesOf>['dues']
+  const closed = (dues: Dues, outlook: Dues | null) => {
+    const out = new Set<string>()
+    for (const d of dues.slice(0, -1)) if (d.payments.length) out.add(d.month)
+    for (const d of outlook?.slice(0, -1) ?? []) if (d.payments.some((p) => p.date > today)) out.add(d.month)
+    return out
+  }
+  const dues = feeDuesOf(k.c, upTo, day, follow).dues
+  const before = closed(dues, ahead.length ? feeDuesOf(k.c, all, day, view).dues : null)
+  const after = closed(feeDuesOf(k.c, [...upTo, payment], day, follow).dues, ahead.length ? feeDuesOf(k.c, [...upTo, payment, ...ahead], day, view).dues : null)
+  const ref = dues.slice(0, -1).find((d) => !before.has(d.month) && after.has(d.month))?.month ?? null
   for (const s of cargoAt(k, transactions, today)) expect(s.payToday, `${why}: „Zapłacone (dziś)” ${s.due}`).toBe(ref === monthOf(s.due))
 }
 
@@ -284,6 +304,7 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
     const tally: Tally = { today: 0, turns: 0, early: 0, payToday: 0 }
     let variable = 0
     let planned = 0
+    let aheadDues = 0
     let wizard = 0
     for (let seed = 2001; seed <= 2300; seed++) {
       const k = caseOf(seed, { variable: true })
@@ -300,17 +321,28 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
         checkTurn(k, f, known, today, tally, why)
         checkPayToday(k, known, today, tally, why)
         checkPayTodayRef(k, known, today, why)
-        // A due a payment written ahead pays (T398): not paid before that day – on it paid, as the engine has it then.
+        // A due a payment written ahead pays (T398): not paid before its day; once all of them came (this month's last
+        // one), paid – as the engine has it then.
+        const last = known.at(-1)
         for (const s of shown) {
           if (!s.planned) continue
           planned++
           expect(s.state, `${why}: zaplanowane ${s.due}`).not.toBe('paid')
           expect(s.planned.date > today, `${why}: zaplanowane ${s.due} na ${s.planned.date}`).toBe(true)
-          if (monthOf(s.planned.date) !== monthOf(today)) continue
-          const then = cargoAt(k, known, s.planned.date)
-          expect(then.some((x) => x.due === s.due && x.state !== 'paid'), `${why}: ${s.due} w dniu ${s.planned.date}`).toBe(false)
-          checkToday(k, fleetOf(k, known, s.planned.date), known, s.planned.date, tally, `${why} → ${s.planned.date}`)
+          if (!last || monthOf(last.date) !== monthOf(today)) continue
+          const then = cargoAt(k, known, last.date)
+          expect(then.some((x) => x.due === s.due && x.state !== 'paid'), `${why}: ${s.due} w dniu ${last.date}`).toBe(false)
+          checkToday(k, fleetOf(k, known, last.date), known, last.date, tally, `${why} → ${last.date}`)
         }
+        // The Radar and the briefing (T398, przegląd 3 N3 2): a due a payment written ahead pays – of any month of the
+        // window – is no item (the balances ahead count that payment, once); the briefing's asteroid is the Radar's.
+        const plannedNow = plannedDues({ containers: [k.c], transactions: known, today, start: k.start }).get(k.c.id)
+        const payDays = new Map([[k.c.id, dayFor(k, known.filter((t) => t.date <= today), monthOf(today))]])
+        const items = radar({ today, plans: [], containers: [k.c], tanks: f.tanks, loans: [], money: String, cargo: shown, payDays, planned: plannedNow ? new Map([[k.c.id, plannedNow]]) : undefined })
+        for (const i of items) if (i.ref === k.c.id && (i.kind === 'fixed' || i.kind === 'asteroid')) expect(plannedNow?.has(monthOf(i.date)) ?? false, `${why}: Radar ${i.key}`).toBe(false)
+        const brief = briefing({ fleet: f, containers: [k.c], imports: [], label: () => '', cargo: shown, payDays, planned: plannedNow ? new Map([[k.c.id, plannedNow]]) : undefined })
+        for (const b of brief.filter((x) => x.kind === 'asteroid')) expect(b.key.split(':')[2], `${why}: odprawa = Radar`).toBe(items.filter((i) => i.kind === 'asteroid' && i.date >= today).map((i) => i.date).sort()[0])
+        if (plannedNow) aheadDues += plannedNow.size
       }
       // The start wizard (T393, przegląd 2 N3 1): a fee of the hold at the start wants the installment the engine takes then.
       if (k.c.cycleMonths <= 1 || monthOf(k.c.createdAt) > monthOf(k.start) || k.c.from || !activeIn(k.c, monthOf(k.start))) continue
@@ -324,6 +356,7 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
     }
     expect(variable).toBeGreaterThan(180)
     expect(planned).toBeGreaterThan(60)
+    expect(aheadDues).toBeGreaterThan(planned)
     expect(wizard).toBeGreaterThan(120)
     expect(tally.today).toBeGreaterThan(350)
     expect(tally.turns).toBeGreaterThan(550)

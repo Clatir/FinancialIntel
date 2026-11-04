@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { briefing } from '@shared/calc/briefing'
-import { cargoDays, cargoStatuses } from '@shared/calc/cargoStatus'
+import { cargoDays, cargoStatuses, plannedDues } from '@shared/calc/cargoStatus'
 import { computeFleet, layersSum, rangeMonths, type FleetInput, type FleetState, type PendingPair } from '@shared/calc/fleet'
 import { radar } from '@shared/calc/radar'
 import { createDefaultSettings } from '@shared/defaults'
@@ -304,8 +304,9 @@ describe('ten sam stan – ta sama liczba na każdym ekranie (AP-32)', () => {
       const settings = input.settings as Settings
       const cargo = cargoStatuses({ containers, transactions: input.transactions, today: app.today, coveredTo: settings.import.coveredTo, start: app.start })
       const payDays = cargoDays({ containers, transactions: input.transactions, today: app.today })
-      const onRadar = radar({ today: app.today, plans: input.months ?? [], containers, tanks: app.tanks, loans: app.loans, money: (g) => String(g), cargo, payDays }).find((x) => x.kind === 'asteroid' && x.ref === fee.id)
-      const inBriefing = briefing({ fleet: app, containers, imports: [], label: () => '', cargo, payDays }).find((x) => x.kind === 'asteroid')
+      const planned = plannedDues({ containers, transactions: input.transactions, today: app.today, start: app.start })
+      const onRadar = radar({ today: app.today, plans: input.months ?? [], containers, tanks: app.tanks, loans: app.loans, money: (g) => String(g), cargo, payDays, planned }).find((x) => x.kind === 'asteroid' && x.ref === fee.id)
+      const inBriefing = briefing({ fleet: app, containers, imports: [], label: () => '', cargo, payDays, planned }).find((x) => x.kind === 'asteroid')
       expect(onRadar?.date).toBe('2026-11-25')
       expect(onRadar?.date).toBe(cargo.find((x) => x.containerId === fee.id)?.due)
       // The briefing within its 14 days only: on 04.11 none (before: 10.11, „za 6 dni”), on 15.11 the Radar's day.

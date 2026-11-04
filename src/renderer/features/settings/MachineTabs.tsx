@@ -10,7 +10,7 @@ import { fleetNow, fleetWithLayers, useFleet } from '../../store/fleet'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { AmountField, plnText, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
-import { Field, NumberField, Panel, Toggle } from '../../components/ui'
+import { cx, Field, NumberField, Panel, Toggle } from '../../components/ui'
 import { toast } from '../../store/ui'
 
 type LayersPatch = Partial<Pick<LayersSettings, 'shieldSalaries' | 'hullMonths' | 'assumedCosts'>>
@@ -106,32 +106,39 @@ function LayersPreview({ shieldSalaries, hullMonths, saved }: { shieldSalaries: 
     const t = setTimeout(() => setSettled({ shieldSalaries, hullMonths }), PREVIEW_SETTLE_MS)
     return () => clearTimeout(t)
   }, [shieldSalaries, hullMonths])
-  // While a key is typed the preview of the targets settled last stays (przegląd 2 N3 – it never blinks out and back on
-  // each key); the targets typed as saved (the field left, a value it refuses, the saved one typed again) – none.
+  // The targets typed and not counted yet: the box stays from the first key on (przegląd 2–3 N3 – never out and back) and
+  // says „liczę…”, the numbers of the targets settled last dimmed below it – never shown as the change's; the targets
+  // typed as saved (the field left, a value it refuses, the saved one typed again) – none.
   const pending = settled.shieldSalaries !== shieldSalaries || settled.hullMonths !== hullMonths
   const typedSaved = shieldSalaries === saved.shieldSalaries && hullMonths === saved.hullMonths
-  const changed = !typedSaved && (settled.shieldSalaries !== saved.shieldSalaries || settled.hullMonths !== saved.hullMonths)
+  const settledSaved = settled.shieldSalaries === saved.shieldSalaries && settled.hullMonths === saved.hullMonths
   // `fleet` – the records (or the day) changed under the preview: counted again (one run per targets – `fleetWithLayers`).
   const after = useMemo(
-    () => (changed && fleet?.started ? fleetWithLayers({ shieldSalaries: settled.shieldSalaries, hullMonths: settled.hullMonths }) : null),
-    [changed, fleet, settled.shieldSalaries, settled.hullMonths]
+    () => (!typedSaved && !settledSaved && fleet?.started ? fleetWithLayers({ shieldSalaries: settled.shieldSalaries, hullMonths: settled.hullMonths }) : null),
+    [typedSaved, settledSaved, fleet, settled.shieldSalaries, settled.hullMonths]
   )
-  if (!fleet || !after) return null
-  const lines = layersEffect(fleet, after)
+  if (!fleet?.started || typedSaved) return null
+  const lines = after ? layersEffect(fleet, after) : null
   return (
     <div className="flex flex-col border-l-2 border-accent pl-2 text-[11.5px]" data-testid="layers-preview" data-pending={pending ? 'yes' : undefined}>
-      <span className="text-muted">Po zmianie (zapisze się po wyjściu z pola – cała historia policzy się od startu z nowymi celami):</span>
-      {!lines.length ? (
-        <span className="text-dim">bez zmian w warstwach</span>
-      ) : (
-        lines.map((l) => (
-          <div key={l.label} className="flex items-baseline gap-2" data-testid="layers-preview-line">
-            <span className="min-w-0 flex-1 text-muted">{l.label}</span>
-            <span className="num">{l.before == null ? '—' : `${plnText(l.before)} zł`}</span>
-            <span className="text-dim">→</span>
-            <span className="num text-fg-strong">{l.after == null ? '—' : `${plnText(l.after)} zł`}</span>
-          </div>
-        ))
+      <span className="text-muted" data-testid="layers-preview-head">
+        {pending ? 'Po zmianie – liczę…' : 'Po zmianie (zapisze się po wyjściu z pola – cała historia policzy się od startu z nowymi celami):'}
+      </span>
+      {lines && (
+        <div className={cx('flex flex-col', pending && 'opacity-50')}>
+          {!lines.length ? (
+            <span className="text-dim">bez zmian w warstwach</span>
+          ) : (
+            lines.map((l) => (
+              <div key={l.label} className="flex items-baseline gap-2" data-testid="layers-preview-line">
+                <span className="min-w-0 flex-1 text-muted">{l.label}</span>
+                <span className="num">{l.before == null ? '—' : `${plnText(l.before)} zł`}</span>
+                <span className="text-dim">→</span>
+                <span className="num text-fg-strong">{l.after == null ? '—' : `${plnText(l.after)} zł`}</span>
+              </div>
+            ))
+          )}
+        </div>
       )}
     </div>
   )

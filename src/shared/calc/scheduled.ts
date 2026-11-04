@@ -103,18 +103,19 @@ function usedOf(list: readonly Scheduled[]): Set<string> {
 
 /**
  * `scheduledDays` of the buoys `list` with the operations `made` of all of them (`usedOf` – a buoy without a day in the
- * window still keeps its operation from the others): the days in [from, to] come only from those in `list`.
+ * window still keeps its operation from the others; read only): the days in [from, to] come only from those in `list`.
  */
 function daysOf(list: readonly Scheduled[], made: ReadonlySet<string>, transactions: readonly Transaction[], today: string, from: string, to: string): ScheduledDay[] {
   const { byDay: index, ids } = indexOf(transactions)
-  const used = new Set(made)
+  // The operations matched in this window – beside the ones made from the buoys, never a copy of those (przegląd 3 N3).
+  const matched = new Set<string>()
   const out: ScheduledDay[] = []
   // A one-off is done by any of its days (its day moved after it was done still is).
   const doneOf = (s: Scheduled, date: string): string | null | undefined => {
     if (!s.yearly) {
       const v = Object.values(s.done)
-      const made = v.find((x) => x && ids.has(x))
-      return made ?? (v.includes('') ? null : undefined)
+      const op = v.find((x) => x && ids.has(x))
+      return op ?? (v.includes('') ? null : undefined)
     }
     const v = s.done[date]
     return v === undefined ? undefined : v === '' ? null : ids.has(v) ? v : undefined
@@ -140,7 +141,7 @@ function daysOf(list: readonly Scheduled[], made: ReadonlySet<string>, transacti
     let best: { t: Transaction; rank: number } | null = null
     for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
       for (const t of index.get(addDays(day.date, d)) ?? []) {
-        if (used.has(t.id) || !MATCHABLE.has(t.kind) || s.notMatched.includes(t.id) || (s.accountId && t.accountId !== s.accountId)) continue
+        if (made.has(t.id) || matched.has(t.id) || !MATCHABLE.has(t.kind) || s.notMatched.includes(t.id) || (s.accountId && t.accountId !== s.accountId)) continue
         const name = t.counterparty || t.title
         const m = looseMatch(own, { amount: t.amount, date: t.date, name })
         // Its name too (RA sp. 1, T378): the amount alone never closes a buoy with an operation of another name (ZALANDO
@@ -153,7 +154,7 @@ function daysOf(list: readonly Scheduled[], made: ReadonlySet<string>, transacti
         if (!best || rank < best.rank || (rank === best.rank && t.id < best.t.id)) best = { t, rank }
       }
     if (!best) continue
-    used.add(best.t.id)
+    matched.add(best.t.id)
     day.state = 'done'
     day.txId = best.t.id
     day.matched = true
@@ -194,14 +195,12 @@ function pastAmong(s: Scheduled, near: readonly Scheduled[], made: ReadonlySet<s
  * A one-off whose day is past (RA sp. 4 – „Pozostałe boje”, T378): done (an operation made from it or matched, ticked
  * off) or lapsed – its day more than `LAPSE_DAYS` past without one, off the radar; null – not past (or a yearly one).
  * `list` – all the buoys: an operation made from another one, or matched to another one's day around it first (the
- * radar's order – one operation, one day), is never its. One of `list` – from `pastStates` (once per list).
+ * radar's order – one operation, one day), is never its. Read from `pastStates` – the panel's own count (przegląd 3 N3):
+ * a version of it not in `list` (edited, not saved yet) in place of the list's.
  */
 export function pastStateOf(s: Scheduled, transactions: readonly Transaction[], today: string, list: readonly Scheduled[]): PastState | null {
-  if (s.yearly || s.date >= today) return null
-  if (list.includes(s)) return pastStates(list, transactions, today).get(s.id) ?? null
-  // The days that compete for its operations (±3 days of them): within twice the match's days of its own.
-  const all = [...list.filter((x) => x.id !== s.id), s]
-  return pastAmong(s, all, usedOf(all), transactions, today)
+  const among = list.includes(s) ? list : [...list.filter((x) => x.id !== s.id), s]
+  return pastStates(among, transactions, today).get(s.id) ?? null
 }
 
 const pastMemo = new WeakMap<readonly Scheduled[], { transactions: readonly Transaction[]; today: string; states: Map<string, PastState> }>()

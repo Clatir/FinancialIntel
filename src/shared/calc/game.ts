@@ -338,10 +338,16 @@ export const costOn = (transactions: readonly Transaction[], date: string): numb
  * The day a balance was confirmed (AP-30, AF-31): its last confirmation's Warsaw day, not its balance's – a bank file's
  * balance is of the file's last day (often last week's Sunday), confirmed on the day of the import. The moment every
  * confirmation stamps from 1.15.7 on (`confirmedAt` – `confirmBalance`, the import's), never its last write (an edit, a
- * merge, a conflict resolved are no confirmation – T383). A record without it was written before (przegląd 2 N3): its
- * balance's day, as that version counted it – a week not frozen yet never changes its mission by the update alone.
+ * merge, a conflict resolved are no confirmation – T383). An older version (1.15.6) counts the balance's day and, confirming
+ * again, writes only `updatedAt` (the day is in the record's id) – the same as a merge, so never read: the later of the
+ * two days it knows, the moment and the balance's (przegląd 2–3 N3) – a record without the moment (written before) on its
+ * balance's day, as that version counts it: a week not frozen never changes by the update alone, nor is it counted here
+ * earlier than on a computer still on that version.
  */
-const confirmedOn = (b: Balance): string => (b.confirmedAt ? dateOf(b.confirmedAt) : b.date)
+const confirmedOn = (b: Balance): string => {
+  const at = b.confirmedAt ? dateOf(b.confirmedAt) : ''
+  return at > b.date ? at : b.date
+}
 
 /** Costs of the envelopes' main categories in [from, to] as the envelopes count them (no cargo, goals, house), in one pass. */
 function envelopesSpent(input: GameInput, from: string, to: string): Map<string, number> {

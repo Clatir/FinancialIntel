@@ -44,7 +44,7 @@ import {
   updatePrice,
   type ContainerDraft
 } from './actions'
-import { useCargoDays, useCargoStatuses, useCargoWatch } from './status'
+import { useCargoDays, useCargoPlanned, useCargoStatuses, useCargoWatch } from './status'
 import type { CargoStatus } from '@shared/calc/cargoStatus'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
@@ -502,8 +502,10 @@ function ContainerEditor({
   const taken = fleet ? sinkingOf(fleet.log, month).get(c.id) : undefined
   // Its payment day as its state counts it (T208, T376) and its next due still to pay – the Radar's and the briefing's.
   const days = useCargoDays()
+  // A due a payment written ahead pays (T398) is not the next to pay – as on the Radar and in the briefing.
+  const planned = useCargoPlanned().get(c.id)
   const due: DueOf = {
-    next: nextDueOf(c, fleet?.today ?? warsawNow().date, { day: status?.day ?? days.get(c.id), paidDue: tank?.paidDue, status }),
+    next: nextDueOf(c, fleet?.today ?? warsawNow().date, { day: status?.day ?? days.get(c.id), paidDue: tank?.paidDue, status, planned }),
     day: status?.day ?? days.get(c.id) ?? c.dueDay,
     dayFrom: status?.dayFrom ?? ((days.get(c.id) ?? c.dueDay) !== c.dueDay ? 'history' : 'set')
   }
@@ -682,7 +684,7 @@ function LateDues({ c, late }: { c: Container; late: readonly CargoStatus[] }) {
                   : `Termin ${dm(s.due)} minął – płatność może jeszcze dojść (${zl(s.amount)}).`}
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            {s.payToday && !s.planned && (
+            {s.payToday && (
               <button type="button" className="btn h-[22px]" onClick={() => payContainer(c, s.amount)} data-testid="container-late-paid">
                 Zapłacone ({zl(s.amount)}, dziś)
               </button>
