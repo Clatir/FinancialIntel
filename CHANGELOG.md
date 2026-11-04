@@ -13,16 +13,21 @@ z hierarchią:
   Komunikat o skróconych albo pominiętych tagach nie myli się już przy tagach z literą „s”, z podwójnymi spacjami ani przy
   tagu równym już dodanemu.
 - **„Cofnij” wszędzie:** przy usunięciu reguły, rozłączeniu nazwy, zrzucie z ładowni i zamknięciu zgłoszenia; toasty
-  z „Cofnij” trwają dłużej. Kosz, token i przerwanie kreatora pytają o potwierdzenie, a kreator pokazuje, co zostaje
+  z „Cofnij” trwają dłużej. „Cofnij” przy regułach importu i domownikach (zmiana reguły, „spłata”, reguła kwotowa,
+  „Zastosuj do historii”, łączenie nazw, „Spłać”, zwrot gotówką, przypisanie zwrotu, dzień zwrotów, start rozliczeń) nie
+  nadpisuje zmian zrobionych później – zostają, a komunikat mówi ile. Kosz, token i przerwanie kreatora pytają o potwierdzenie, a kreator pokazuje, co zostaje
   w folderze.
 - **„Cofnij import” ostrzega o każdej Twojej zmianie** w operacjach importu – także zapisanej w trakcie cofania, na
   komputerze z innym zegarem albo po późniejszych importach, które te operacje rozliczyły – i nie liczy jako Twoich zmian
   zapisów samej aplikacji ani importu tego samego okresu w drugim formacie. „Cofnij” po cofnięciu importu nie nadpisuje
-  i nie usuwa operacji zmienionych po cofnięciu – zostają z Twoimi zmianami, a komunikat mówi, ile ich jest. Lista
-  importów ostrzega, że następny usunie najstarszy.
+  i nie usuwa operacji zmienionych po cofnięciu – zostają z Twoimi zmianami, a komunikat mówi, ile ich jest – i nie
+  dubluje operacji: gdy po cofnięciu był kolejny import albo te wiersze banku są już w budżecie, import nie wraca
+  i aplikacja mówi dlaczego (tak samo przy folderze tylko do odczytu). Lista importów ostrzega, że następny usunie
+  najstarszy.
 - **Domownicy – nazwy w banku:** „Cofnij” usunięcia nazwy przywraca tylko tę nazwę (nazwy dopisane w międzyczasie zostają).
-  Nazwy, którą ma już inny domownik – także zapisanej bez polskich znaków albo z innym szykiem słów – nie da się dopisać
-  drugiej osobie (z komunikatem), a „+ domownik” przy imporcie dla takiej nazwy wybiera istniejącego domownika. Domownik
+  Domownikowi nie da się dopisać nazwy w banku, którą import przypisałby innej osobie – także bez polskich znaków,
+  w innym szyku albo zawierającej jej nazwę („JAN KOWALSKI SENIOR” przy „JAN KOWALSKI”) – z komunikatem, a „+ domownik”
+  przy imporcie nie pojawia się dla takiej nazwy. Domownik
   ma najwyżej 20 nazw w banku – kolejna jest odmówiona (wcześniej mogła zniknąć cała lista).
 - **Odprawa z hierarchią:** najpierw alarmy, potem sprawy dnia, reszta zwinięta pod „Pokaż wszystkie”; sprawy starsze
   niż 30 dni tylko w Meldunkach, jedna pozycja na sprawę, poważne naruszenia na czerwono (także w Dowództwie). Odsłuch

@@ -67,8 +67,8 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N4 | Poranny dotyk | okno zostawione na noc przechodzi na Mostek przy pierwszym dotyku po co najmniej 30 min bez dotyku | T411 |
 | N4 | Teksty | zoom do siatki 10 %; inflacja i drill bez wymuszonego jednego miejsca po przecinku; cisza nocna „od = do” przyjmowana z komunikatem (wyłączona) | T403, T404 |
 | N4 | Szybki wpis – słowa pól | informacja o przyjętej, ale zmienionej wartości dopisana do „Zapisano” (okno czeka 4 s), tylko z tego samego działania | T413, T417 |
-| N4 | Nazwy w banku | nazwa zajęta przez innego domownika nie wraca po „Cofnij” (komunikat) i nie da się jej dopisać; „+ domownik” przy takiej nazwie przypisuje tę osobę; nazwy częściowo wspólne nie są odmawiane; najwyżej 20 nazw | T414, T416 |
-| N4 | „Cofnij import” i eksport | operacja przywrócona przez cofnięcie i zmieniona przez Ciebie zostaje po „Cofnij”; pusty Excel – „Brak operacji i miesięcy w okresie.” | T412, T415 |
+| N4 | Nazwy w banku | nazwa, którą import przypisałby innemu domownikowi (także zawierająca jego nazwę – „JAN KOWALSKI SENIOR” przy „JAN KOWALSKI”), nie wraca po „Cofnij” i nie da się jej dopisać (komunikat); „+ domownik” nie pojawia się dla takiej nazwy; najwyżej 20 nazw | T414, T416 |
+| N4 | „Cofnij import” i eksport | operacja przywrócona przez cofnięcie i zmieniona przez Ciebie zostaje po „Cofnij”; ponowienie cofniętego importu po późniejszym imporcie odmawiane w całości (nie część wierszy); pusty Excel – „Brak operacji i miesięcy w okresie.” | T412, T415 |
 | N4 | Meldunek „Zaliczki przy długu” | „Spłać” / „zostaw” na nieaktualnym meldunku – komunikat „nic do zmiany” | T400 |
 | N3 | Opłata zapłacona z celu albo zakupem do zwrotu | zapłacona w Ładowni i silniku – cykl zamknięty, zbiornik nietknięty (zebrane zostaje na następny termin), zwrot domownika to spłata długu; dawny przelew z ukrytym kontenerem nie płaci nigdzie | T393 |
 | N3 | Zaległe opłaty | liczone od startu budżetu albo miesiąca dodania kontenera – po aktualizacji stare luki w historii pojawią się od razu („Zapłacone poza budżetem” je czyści); opłata ustawiona jako miesięczna, a płacona co 2 miesiące, pokaże pominięte miesiące; płatność przed dniem następnego terminu idzie najpierw na zaległy | T375, T376 |
@@ -101,6 +101,28 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Meldunek „Zaliczki przy długu” | pyta tylko o dług nadal do oddania przez zaliczkę, także o zaliczki wybrane świadomie; „zostaw” raz na wpłatę | T352 |
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
+
+## N4 – Zasady interfejsu (1.15.8, 04.11.2026)
+- **Zakres:** AP-15 komunikat przy każdej odmowie i przycięciu (T400–T402), AP-22 „Cofnij” wszędzie, AP-16 odprawa
+  z hierarchią, godzina odprawy, progi gry w Ustawieniach (T405–T409), AP-23 teksty – daty dd.mm.rrrr, bez kodów, błędy
+  po polsku, odmiana, „−” (T403, T404); po przeglądach: „Cofnij import” po odcisku treści (T415 zamiast T410), jedna
+  reguła „ta sama osoba” jak `memberOf` (T416), słowa pól szybkiego wpisu (T413, T417), żadne „Cofnij” reguł
+  i domowników nie nadpisuje późniejszych zmian (T418), poranny dotyk (T411), eksport i wyszukiwanie usuniętych (T412),
+  limit 20 nazw w banku (T414).
+- **Wykonawcy:** N4-a (AP-15, AP-22 – Sonnet high), N4-b (AP-16 – Opus high), N4-c (AP-23 – Sonnet high); poprawki
+  przeglądów – Opus xhigh; scalenie N3 z N2 do N4 – Opus max (10 konfliktów, m.in. księga domowników – bez zmian).
+- **Przegląd:** high całości (10 uwag), high na poprawkach (10 – m.in. „Cofnij import” mógł usunąć zmianę użytkownika
+  bez ostrzeżenia; przeprojektowane na odcisk treści), high na poprawkach i scaleniu z N3 (10 + 1 – m.in. ponowienie po
+  cofnięciu dublowało operacje, nazwa domownika, którą import przypisałby innej osobie) – wszystkie poprawione z testem,
+  który przed poprawką padał; trzecia runda sprawdzona przez koordynatora na diffie.
+- **Testy:** typecheck, `npm test` 1517 (pod obciążeniem pada tylko `folder-speed` ZIP64), build, E2E komputera 106/108
+  po scaleniu (lokalnie `ictj.spec`, `series.spec` – osobno zielony), telefonu 10/10, wyrocznia bez rozbieżności.
+- **Otwarte:** „Cofnij” poza regułami i domownikami (Ładownia, Radar, Operacje, Kategorie) może nadpisywać zmiany zrobione
+  po działaniu; paczki importu sprzed 1.15.8 ostrzegają w nadmiarze, dopóki nie wypadną z 10 ostatnich; chip „+ #tag
+  ostatnich dni” zasłania pole tagów w wąskim oknie; krótkie daty dd.mm (58 miejsc) zostają; „Ctrl K” przy wysokim
+  kontraście; telefon bez własnej godziny odprawy.
+- **Czas:** 12:09–ok. 13:50 kod (przed przerwą), 14:20–18:45 trzy rundy poprawek, scalenie z N3, wydanie – plan 2–3 h
+  pracy; zegar dłuższy przez rundy przeglądu i scalenie z N2/N3.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
