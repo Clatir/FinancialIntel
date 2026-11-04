@@ -1,28 +1,70 @@
 # Financial Intel – postęp
 
-Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy, ich wpisy i pomiary:
-`docs/archiwum/postep-do-1.15.md` (Grep po wersji, grupie albo identyfikatorze). Po wydaniu wpisy etapu przenoś do
-archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI). Odwołania „`docs/postep.md` „…”” w starszych dokumentach
-i komentarzach (sekcje do 1.15.1) prowadzą do tego archiwum.
+Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy, ich wpisy i pomiary: do 1.15.4 –
+`docs/archiwum/postep-do-1.15.md`, audyt 1.15.4 i grupy po nim – `docs/archiwum/postep-od-1.15.4.md` (Grep po wersji,
+grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
+Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.15.4 wydane** (25.10.2026). 1.15.2 (audyt funkcjonalny PC – pakiety A, B, C; N-PC-1 do N-PC-20, D95,
-T313), 1.15.3 (niezależne wpłaty domowników, reguły tytuł + kontrahent) i 1.15.4 (poprawki panelu operacji i
-komponentu `Segmented`) wydane 24–25.10 – 1.15.3 i 1.15.4 z sesji Antigravity bez wpisu w dzienniku, zakres w
-`CHANGELOG.md`. 1.15.1 wydane (PR #46 – wcześniejsza wpłata domownika finansuje późniejszy zakup, D94, T312).
-iPhone (D92 / D93): 1.13.0–1.15.0 wydane (grupy iA–iC, PR #42–#44); przerwa po iC (D93) – „Przed grupą iD” niżej.
-1.11.0 i 1.12.0 wydała w tym czasie równoległa sesja, więc iPhone ma numery przesunięte: wersje iA–iE 1.13.0–1.17.0,
-decyzje D92 / D93, T305–T311.
-**Następny krok:** przerwa po iC (D93) – od użytkownika: procent limitu tygodniowego (kolumna „Rzeczywiste”), odpowiedź
-do IP15 (czy folder danych ICTTJ jest na OneDrive – bez niej iD nie startuje), decyzje IP21 (kreator) i IP24 (zapisy w
-tle) przed iE, uwagi z telefonu do iA–iC; potem grupa iD (1.16.0) na komendę (D67). Przed każdym etapem tabela prac z
-modelem oszczędnym z górką; thinking domyślnie xhigh, max tylko silnik pieniędzy i granica ICTTJ (D96). Flota rezerwowa (F32), paragony i gwarancje (F38), ulgi PIT-37 / PIT-36 (F39),
-wpisy z telefonu przez skrót iOS (F41) i archiwizacja starych lat (F43) – odrzucone (D88).
-Do sprawdzenia w aplikacji: 1.5.0–1.12.0 – listy w archiwum dziennika; iPhone – sekcje „1.13.0”, „1.14.0” i „1.15.0”
-w archiwum oraz `docs/iphone.md`.
+**Stan:** **1.15.4 wydane** (25.10.2026). Audyt funkcjonalny 1.15.4 (D97) zakończony 03.11 – 80 znalezisk, 48 AP,
+plan N1–N5 (`docs/audyt/raport.md`, `docs/audyt/wnioski.md`; przebieg w archiwum). Odpowiedzi 04.11: D98 (iPhone
+wstrzymany), D99 (wnioski przyjęte, S4), D100 (konto Gotówka, wpłata od dowolnej osoby spłaca pożyczkę), D101 (ciąg
+N1–R2 bez pauz, bez kart kredytowych, wydanie po każdej grupie, zasada wątpliwości).
+**Następny krok:** ciąg N1 → N2 → N3 → N4 → N5 → R1 → R2 (D101) w toku – stan w tabeli niżej; po wznowieniu kontynuuj od
+pierwszej grupy bez ✅. Otwarte poza ciągiem: raport maszyny wirtualnej i lista „Tylko Ty” (`docs/audyt/ty.md`) – dopiszą się
+do wniosków, gdy będą; kalibracja progów gry po N3 (D99 pkt 12, za osobną zgodą). iPhone (iD, iE, AP-39, AP-40)
+wstrzymany (D98) – „Przed grupą iD” niżej zostaje jako zapis na później. Odrzucone (D88): F32, F38, F39, F41, F43.
+
+## Ciąg N1–R2 (D101) – stan
+
+Koordynator: sesja główna (Opus 5.5 · xhigh) – „Przed grupą”, zlecenia, `/code-review`, PR, CI, scalenie (D71), wydanie,
+wpisy. Wykonawcy: podagenci z modelem i thinking według D96 (tabela prac każdej grupy). Każda grupa: kod z testami, które
+bez poprawki padają → pełne testy → `/code-review` (N1, N2 – xhigh, reszta – high) → poprawki → CHANGELOG i wersja → PR →
+CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa bez pauzy. Po grupach silnika (N2, N3) wyrocznia
+(AP-32) na migawkach audytu jako regresja.
+
+| Grupa | Wersja | Gałąź | Stan | PR | Czas faktyczny |
+| --- | --- | --- | --- | --- | --- |
+| 0 – przygotowanie | – | `claude/audyt-1.15.4` | ⏳ D101, porządek tego pliku, PR audytu do `main` (bez wydania) | – | – |
+| N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ⏳ | – | – |
+| N2 Silnik pieniędzy | 1.15.6 | – | ⏳ | – | – |
+| N3 Opłaty, energia, gra | 1.15.7 | – | ⏳ | – | – |
+| N4 Zasady interfejsu | 1.15.8 | – | ⏳ | – | – |
+| N5 Ścieżki i ergonomia | 1.15.9 | – | ⏳ | – | – |
+| R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
+| R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
+
+### Do potwierdzenia (zasada wątpliwości, D101 pkt 4)
+Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybrany wariant rekomendowany; możesz go odwrócić.
+
+| Grupa | Sprawa | Wybrany wariant | Gdzie |
+| --- | --- | --- | --- |
+| – | – | – | – |
+
+## Przed grupą N1 – Dane i import (04.11.2026)
+1. **Co trzeba wiedzieć.** Zakres: AP-1 (folder danych przed zapisem, bez folderu-widma – AF-2 K, AF-42, AF-14, AF-39,
+   AF-41, AF-75), AP-2 (jedna tożsamość wiersza banku między formatami i kontami – AF-1 K, AF-9 W, AF-28, AF-63), AP-8
+   (zmiana czekająca na „Zmień mimo to” jako szkic – AF-3 W, AF-11), AP-6 (pożyczka, PIT-38, XTB i domownik przed regułą
+   i decyzją zbiorczą – AF-26 W, AF-62, AF-64), AP-7 („+ w tym za X” w imporcie – AF-27 W); opisy w `docs/audyt/wnioski.md`
+   sekcja 4, dowody w `docs/audyt/raport.md`. Najpierw PR audytu (dokumenty i laboratorium `tests/audyt/`, bez zmiany
+   wersji) do `main`; gałąź N1 wychodzi z gałęzi audytu. AP-1 i AP-8 (folder danych, edytory) idą równolegle w osobnym
+   drzewie roboczym; AP-2, potem AP-6 i AP-7 (ten sam moduł importu) – po kolei.
+2. **Co musisz powiedzieć** – nic (D101).
+3. **Co przygotować** – nic.
+4. **Tabela prac:**
+
+| Krok | Co obejmuje | Model i thinking (z górką; minimum) | Czas Claude'a |
+| --- | --- | --- | --- |
+| N1-a | AP-1 folder danych przed zapisem, baner „Folder niedostępny”, „Zapisano.” po zapisie; AP-8 szkic przy „Zmień mimo to”, kreator i saldo banku jako szkic | podagent Opus 5.5 · xhigh (min. high); osobne drzewo, równolegle | 1–1,5 h |
+| N1-b | AP-2 operacje usunięte z opisem i parowane miarą B5, B5 po wszystkich kontach rachunku, „usuń duplikat”, konto po numerze rachunku, meldunek | podagent Opus 5.5 · xhigh (min. high) | 0,75–1,25 h |
+| N1-c | AP-6 pożyczka, PIT-38, XTB i domownik przed regułą, „niespójne” reguły; AP-7 „+ w tym za X” w imporcie | podagent Opus 5.5 · max (min. xhigh) – rozliczenia (D96) | 0,75–1,25 h, po N1-b |
+| N1-d | pełne testy, `/code-review` xhigh, poprawki z testem | koordynator; poprawki – podagent Opus 5.5 · xhigh | 0,5 h |
+| N1-e | CHANGELOG 1.15.5, wersja, PR, CI, scalenie, wydanie, wpis | koordynator (wystarczy Sonnet 5.5) | 0,25 h + CI |
+| Razem | rekomendacja: Opus 5.5 · xhigh, max w N1-c | | 2,5–4 h (z górką 4,5 h) + CI ok. 40 min |
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
-- Bez komendy użytkownika nie zaczynam kolejnego etapu ani grupy.
+- Bez komendy użytkownika nie zaczynam kolejnego etapu ani grupy. Wyjątek: ciąg N1–R2 – komenda z 04.11.2026 obejmuje
+  wszystkie grupy, bez pauz między nimi (D101).
 - Etapy, które mogą iść jednym ciągiem, są zgrupowane: w grupie bez pauzy między etapami (każdy etap i tak kończy się
   testami, `/code-review` high, commitem i wpisem tutaj), jeden PR i jedno wydanie na grupę, potem pauza.
 - Wpis etapu: zakres, decyzje (D… / T…), testy, czas faktyczny, rzeczy otwarte – zwięźle; mapa kodu nie jest
@@ -36,31 +78,17 @@ prac” (razem ok. 63 h; ciąg M–V zmierzone ok. 17 h przy planie ok. 24–25 
 
 | Grupa | Etapy | Model | Thinking | Czas Claude'a | Wydanie | Co potrzebne przed startem | Stan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | 1.16.0 | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏳ czeka na odpowiedzi |
-| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **xhigh** (D96; max tylko w krokach silnika pieniędzy albo granicy ICTTJ) | 5,5–7,5 h (z górką 8 h) | 1.17.0 | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏳ |
+| **N1** | Dane i import po audycie: folder danych przed zapisem, tożsamość wiersza banku, szkic przy „Zmień mimo to”, pożyczka przed regułą, „+ w tym za” (AP-1, 2, 6, 7, 8; AF-1 K, AF-2 K, AF-3 W, AF-9 W, AF-26 W, AF-27 W) | Opus 5.5 | xhigh (max w AP-6, AP-7) | 2,5–4 h (z górką 4,5 h) | 1.15.5 | D101 | ⏳ |
+| **N2** | Silnik pieniędzy po audycie: przeniesienie środków celu w chwili zapisu (zamiast T129), „reszta jako zaliczka” + naprawa danych, płatność sprzed startu, „Wycofaj dokowanie”, usuwanie kategorii, plan = silnik, dostawa według puli, wyrocznia jako regresja (AP-3, 4, 5, 9, 11, 12, 32); nowa funkcja: wpłata od dowolnej osoby spłaca pożyczkę (D100) | Opus 5.5 | **max** | 3–4,5 h (z górką 5,5 h) | 1.15.6 | – (S4, T163 – D99) | ⏳ |
+| **N3** | Opłaty, energia, gra: jeden stan opłaty, energia dziś w granicach miesiąca, zamrażanie po przerwie, kadłub, Kurs = Mostek, trend poduszki (AP-10, 13, 14, 17, 18, 30, 31) | Opus 5.5 | xhigh (max w AP-13, AP-17) | 2,5–3,5 h (z górką 4 h) | 1.15.7 | – (D99) | ⏳ |
+| **N4** | Zasady interfejsu: komunikat przy każdym odrzuceniu, „Cofnij” wszędzie, teksty, odprawa z hierarchią (AP-15, 16, 22, 23) | Sonnet 5.5 | high (Opus high przy logice) | 2–3 h (z górką 3,5 h) | 1.15.8 | – | ⏳ |
+| **N5** | Ścieżki i ergonomia: kreator, domownicy, szybki wpis, debriefing, dokowanie, konflikty, nowy komputer, eksport, Operacje (AP-19–21, 24–29, 33, 34, 36–38) | Opus 5.5 | high (xhigh przy silniku) | 3–4,5 h (z górką 5 h) | 1.15.9 | – (D99, D100) | ⏳ |
+| **R1** | Rozwojowe 1: import w Web Workerze (AP-35, po pomiarze w maszynie), kalendarz miesiąca na Radarze (AP-42), dowolny CSV – drugi bank (AP-43), reguły I / LUB i dla wpisów ręcznych (AP-45), opis formatu folderu (AP-47) | Opus 5.5 | xhigh (high przy UI) | 3–4,5 h (z górką 5 h) | 1.16.0 | D101 | ⏳ |
+| **R2** | Rozwojowe 2: plan spłaty pożyczek (AP-41, bez karty kredytowej – D101), prognoza wieloletnia bez IKE / IKZE / PPK (AP-44), Sankey miesiąca (AP-46), kwota w walucie (AP-48) | Opus 5.5 | **max** (plan spłaty – silnik) / xhigh | 3–5 h (z górką 6 h) | 1.17.0 | – (D101) | ⏳ |
+| **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | później | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏸ wstrzymane (D98) |
+| **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **xhigh** (D96; max tylko w krokach silnika pieniędzy albo granicy ICTTJ) | 5,5–7,5 h (z górką 8 h) | później | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏸ wstrzymane (D98) |
 | | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |
 
-**iPhone – limit tygodniowy (D93).** Plan Max 20x, odnowienie w niedzielę o 18:00; 21.10.2026 zużyte 55 %. Podstawa:
-od odnowienia 18.10 o 18:00 grupy E–V i 1.10.1 (ok. 33 h pracy Claude'a – zegar z tabeli, Opus 5.5 · max, przegląd
-`/code-review` high, mutacje, E2E) i koniec przeglądu ultracode zużyły ok. 55 %, czyli ok. 1,4–1,7 % na godzinę pracy.
-Grupy FI kończyły się w ok. 0,7 czasu planu. „Oczekiwane” = 0,7 środka planu × 1,55 %/h (+ zapas na CI macOS w iA),
-„z górką” = górna granica „z górką” × 1,7 %/h. Rzeczywiste zużycie wpisuję po każdej grupie (użytkownik podaje %).
-
-| Grupa | Oczekiwane | Z górką | Narastająco z górką | Rzeczywiste |
-| --- | --- | --- | --- | --- |
-| iA | ok. 11 % | 20 % | 75 % | – |
-| iB | ok. 2,5 % | 5 % | 80 % | – |
-| iC | ok. 6 % | 12 % | 92 % | – |
-| iD | ok. 2,5 % (bez IP15 ok. 1 %) | 3,5 % | rzeczywiste po iC + 3,5 % | – |
-| iE | ok. 7 % | 13,5 % | po odnowieniu | – |
-| **Razem** | **ok. 29 %** | **ok. 54 %** | | |
-
-iD przeliczone z czasu w „Przed grupą iD” (21.10, po iC: grupy iA–iC trwały 0,15–0,3 planu); iE – w „Przed grupą iE”.
-Po podaniu procentu po iC przeliczam zużycie na godzinę pracy i obie grupy.
-
-**Porządek kontekstu (25.10.2026):** CLAUDE.md skrócony ze 124 KB do kompasu, wiedza modułów w `.claude/rules/`,
-dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1,4–1,7 % limitu na godzinę pracy
-(Opus 5.5 · max, wyżej) – po kolejnej grupie porównaj z nowym zużyciem.
 
 ## Przed grupą iD – iPhone: Ładownia i gwiazdy (21.10.2026)
 

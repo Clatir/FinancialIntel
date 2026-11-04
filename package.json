@@ -19,6 +19,7 @@
     "prestart": "node scripts/check-node.mjs",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.mobile.json",
+    "typecheck:audyt": "tsc --noEmit -p tsconfig.audyt.json",
     "pretest": "node scripts/check-node.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

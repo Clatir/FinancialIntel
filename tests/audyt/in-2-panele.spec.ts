@@ -1,0 +1,336 @@
+/** IN.9 – IN.11, IN.13 – IN.15: panele, układy, okna odłączone, ściągawka, okna modalne, Esc/Enter w polach (state rok). */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { test, type Page } from '@playwright/test'
+import { start } from './lab'
+import { configOf, dataDirOf, fiOf, goSettings, mute, quickWin, restart, run, say, snap, text, toasts, typed, userDataOf } from './us-pomoc'
+
+const panelState = async (page: Page) => ({
+  paneli: await page.getByTestId('panel-collapse').count(),
+  zwiniete: await page.getByTitle('Rozwiń panel').count(),
+  ukryte: (await page.getByTestId('layout-menu').innerText().catch(() => '')).replace(/\s+/g, ' ')
+})
+
+test('IN.9 panele', async () => {
+  const N = 'in-panele'
+  const r = await run(N)
+  const { app, page } = r
+  try {
+    await page.keyboard.press('Control+1')
+    await page.getByTestId('page-bridge').waitFor()
+    say('IN.9 start', await panelState(page))
+    await page.getByTestId('panel-collapse').first().click()
+    await page.waitForTimeout(400)
+    say('IN.9 po „Zwiń panel”', await panelState(page))
+    await page.getByTitle('Rozwiń panel').first().click()
+    await page.waitForTimeout(400)
+    say('IN.9 po „Rozwiń”', await panelState(page))
+    const header = page.getByTitle('Dwuklik – zwiń / rozwiń').first()
+    await header.dblclick()
+    await page.waitForTimeout(400)
+    say('IN.9 dwuklik tytułu', await panelState(page))
+    await header.dblclick().catch(async () => page.getByTitle('Dwuklik – zwiń / rozwiń').first().dblclick())
+    await page.waitForTimeout(400)
+    await page.getByTestId('panel-maximize').first().click()
+    await page.waitForTimeout(500)
+    await snap(page, 'IN.9-powiekszony')
+    say('IN.9 powiększony – przycisk', await page.getByTitle('Przywróć rozmiar (Esc)').count())
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(400)
+    say('IN.9 po Esc', { przywroc: await page.getByTitle('Przywróć rozmiar (Esc)').count(), ekran: await page.getByTestId('page-bridge').count() })
+    await page.getByTestId('panel-hide').first().click()
+    await page.waitForTimeout(500)
+    say('IN.9 po „Ukryj panel…”', await panelState(page))
+    await page.getByTestId('layout-menu').click()
+    await page.waitForTimeout(400)
+    say('IN.9 menu Układ', await text(page, '[data-testid="layout-menu-body"]'))
+    await snap(page, 'IN.9-uklad')
+    const unchecked = page.locator('[data-testid="layout-panel"]:not(:checked)').first()
+    await unchecked.check()
+    await page.waitForTimeout(500)
+    say('IN.9 po przywróceniu', await panelState(page))
+    await page.keyboard.press('Escape')
+    // resize
+    const handle = page.getByTestId('panel-resize').first()
+    const box0 = await handle.evaluate((e) => (e.parentElement?.getBoundingClientRect().height ?? 0))
+    await handle.focus()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowDown')
+    await page.waitForTimeout(300)
+    const box1 = await handle.evaluate((e) => (e.parentElement?.getBoundingClientRect().height ?? 0))
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.waitForTimeout(300)
+    const box2 = await handle.evaluate((e) => (e.parentElement?.getBoundingClientRect().height ?? 0))
+    await page.keyboard.press('Home')
+    await page.waitForTimeout(300)
+    const box3 = await handle.evaluate((e) => (e.parentElement?.getBoundingClientRect().height ?? 0))
+    await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(300)
+    const box4 = await handle.evaluate((e) => (e.parentElement?.getBoundingClientRect().height ?? 0))
+    say('IN.9 wysokość panelu: start / 2×↓ / Shift+↓ / Home / ↑', [box0, box1, box2, box3, box4])
+    // drag
+    const bb = (await handle.boundingBox())!
+    await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2 + 60, { steps: 6 })
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+    say('IN.9 po przeciągnięciu +60 px', await handle.evaluate((e) => e.parentElement?.getBoundingClientRect().height))
+    // persist: collapse the first, hide the second, resize third → restart
+    await page.getByTestId('panel-collapse').first().click()
+    await page.getByTestId('panel-hide').nth(1).click()
+    await page.waitForTimeout(800)
+    say('IN.9 przed restartem', await panelState(page))
+    say('IN.9 config.json – klucze', Object.keys(configOf(N)))
+  } finally {
+    await app.close()
+  }
+  const r2 = await restart(N)
+  try {
+    await r2.page.keyboard.press('Control+1')
+    await r2.page.waitForTimeout(1200)
+    say('IN.9 po restarcie', await panelState(r2.page))
+  } finally {
+    await r2.app.close()
+  }
+})
+
+test('IN.10 zapisane układy', async () => {
+  const N = 'in-uklady'
+  const r = await run(N)
+  const { app, page } = r
+  try {
+    await page.keyboard.press('Control+1')
+    await page.getByTestId('page-bridge').waitFor()
+    const open = async () => {
+      await page.getByTestId('layout-menu').click()
+      await page.waitForTimeout(400)
+    }
+    await open()
+    await page.getByTestId('layout-preset-name').fill('Duży wykres')
+    await page.getByTestId('layout-preset-save').click()
+    await page.waitForTimeout(600)
+    say('IN.10 zapisano „Duży wykres”', { toasts: await toasts(page), lista: await page.getByTestId('layout-preset').allInnerTexts() })
+    await snap(page, 'IN.10-menu')
+    await page.keyboard.press('Escape')
+    await page.getByTestId('panel-hide').first().click()
+    await page.waitForTimeout(400)
+    await open()
+    say('IN.10 po ukryciu panelu', await text(page, '[data-testid="layout-menu-body"]'))
+    await page.getByTestId('layout-preset-apply').first().click()
+    await page.waitForTimeout(600)
+    say('IN.10 „Użyj tego układu”', { toasts: await toasts(page), ukryte: (await page.getByTestId('layout-menu').innerText()).replace(/\s+/g, ' ') })
+    await open()
+    await page.getByTitle('Zmień nazwę').first().click()
+    await page.getByLabel('Nowa nazwa układu').fill('Mały wykres')
+    await page.getByTitle('Zapisz nazwę').click()
+    await page.waitForTimeout(500)
+    say('IN.10 po zmianie nazwy', { toasts: await toasts(page), lista: await page.getByTestId('layout-preset').allInnerTexts() })
+    await page.keyboard.press('Escape')
+    await page.getByTestId('panel-hide').first().click()
+    await open()
+    await page.getByTitle('Zapisz w nim bieżący układ').first().click({ force: true }).catch(() => undefined)
+    await page.waitForTimeout(500)
+    say('IN.10 „Nadpisz”', { toasts: await toasts(page), disabled: await page.getByTitle('Zapisz w nim bieżący układ').first().isDisabled().catch(() => '?') })
+    say('IN.10 fi.json – układy', JSON.stringify(fiOf(N).settings.layouts ?? fiOf(N).settings).slice(0, 0) + Object.keys(fiOf(N).settings).join(','))
+    await page.getByTestId('layout-reset-page').click()
+    await page.waitForTimeout(500)
+    say('IN.10 „Domyślny układ tej strony”', { toasts: await toasts(page), ukryte: (await page.getByTestId('layout-menu').innerText()).replace(/\s+/g, ' ') })
+    await page.getByTestId('layout-reset-all').click()
+    await page.waitForTimeout(500)
+    say('IN.10 „… wszystkich stron”', await toasts(page))
+    await page.getByTestId('layout-preset-delete').first().click()
+    await page.waitForTimeout(500)
+    say('IN.10 „Usuń układ”', { toasts: await toasts(page), lista: await page.getByTestId('layout-preset').count() })
+    await page.keyboard.press('Escape')
+    // preset pages names
+    await page.keyboard.press('Control+2')
+    await page.waitForTimeout(600)
+    await page.getByTestId('layout-menu').click()
+    say('IN.10 menu na Operacjach', await text(page, '[data-testid="layout-menu-body"]'))
+    await page.keyboard.press('Escape')
+    // recreate one for the laptop
+    await page.keyboard.press('Control+1')
+    await page.waitForTimeout(500)
+    await open()
+    await page.getByTestId('layout-preset-name').fill('Duży wykres')
+    await page.getByTestId('layout-preset-save').click()
+    await page.waitForTimeout(800)
+    say('IN.10 fi.json ma układy?', JSON.stringify(fiOf(N)).includes('Duży wykres'))
+  } finally {
+    await app.close()
+  }
+  const l = await start('in-uklady-laptop', { dataDir: dataDirOf(N), machine: 'LAPTOP' })
+  try {
+    l.page.setDefaultTimeout(15_000)
+    await l.page.getByTestId('page-bridge').waitFor({ timeout: 120_000 })
+    await l.page.waitForTimeout(1200)
+    await l.page.getByTestId('layout-menu').click()
+    await l.page.waitForTimeout(500)
+    say('IN.10 LAPTOP widzi układy', await l.page.getByTestId('layout-preset').allInnerTexts())
+  } finally {
+    await l.app.close()
+  }
+})
+
+test('IN.11 panele odłączone', async () => {
+  const N = 'in-odlaczone'
+  const r = await run(N)
+  const { app, page } = r
+  try {
+    await page.keyboard.press('Control+1')
+    await page.getByTestId('page-bridge').waitFor()
+    const detach = page.getByTestId('panel-detach')
+    say('IN.11 przyciski „odłącz”', await detach.count())
+    const titles: string[] = []
+    await detach.first().click()
+    await page.waitForTimeout(2500)
+    const wins = () => app.windows().filter((w) => w.url().includes('detach'))
+    say('IN.11 okna odłączone po 1', wins().length)
+    const d1 = wins()[0]!
+    await mute(app)
+    titles.push(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.getTitle())).then((t) => t.join(' / ')))
+    say('IN.11 tytuły okien', titles)
+    say('IN.11 treść okna', (await text(d1, 'body')).replace(/\n/g, ' | ').slice(0, 400))
+    say('IN.11 w głównym', await text(page, '[data-testid="panel-detached-note"]').catch(() => '(brak notatki)'))
+    await snap(d1, 'IN.11-odlaczony')
+    // second and third panel
+    await page.getByTestId('panel-detach').first().click()
+    await page.waitForTimeout(2000)
+    await page.getByTestId('panel-detach').first().click()
+    await page.waitForTimeout(2000)
+    say('IN.11 okna po 3', wins().length)
+    // change in main: add an expense while another screen
+    const before = (await text(d1, 'body')).replace(/\n/g, ' | ').slice(0, 300)
+    await page.keyboard.press('Control+n')
+    await page.getByTestId('operation-editor').waitFor()
+    await typed(page, 'operation-amount', '10', 'Tab')
+    await page.getByTestId('operation-counterparty').fill('Odlaczony-test')
+    await page.getByTestId('operation-counterparty').press('Enter')
+    await page.waitForTimeout(2500)
+    const after = (await text(d1, 'body')).replace(/\n/g, ' | ').slice(0, 300)
+    say('IN.11 okno odłączone przed/po wydatku (główne na Operacjach)', { before, after, zmiana: before !== after })
+    // click in the detached window
+    const clickable = d1.locator('button, a, [role="button"]').first()
+    say('IN.11 klikalne w odłączonym', await d1.locator('button, a, [role="button"]').evaluateAll((els) => els.slice(0, 6).map((e) => (e.textContent ?? '').trim().slice(0, 30))))
+    await d1.getByTestId('detached-fullscreen').click().catch(() => undefined)
+    await page.waitForTimeout(600)
+    await page.keyboard.press('Control+Shift+Digit4')
+    await page.waitForTimeout(800)
+    say('IN.11 Ctrl+$ – okno odłączone', (await text(d1, 'body')).replace(/\n/g, ' | ').slice(0, 300))
+    await page.keyboard.press('Control+Shift+Digit4')
+    await page.keyboard.press('Control+1')
+    await page.waitForTimeout(600)
+    say('IN.11 notatka w głównym po powrocie na Mostek', await page.getByTestId('panel-detached-note').allInnerTexts())
+    await page.getByTestId('panel-attach').first().click()
+    await page.waitForTimeout(1500)
+    say('IN.11 po „Przywróć tutaj”', { okna: wins().length, notatek: await page.getByTestId('panel-detached-note').count() })
+    await d1.getByTestId('detached-attach').click().catch(() => undefined)
+    await page.waitForTimeout(1500)
+    say('IN.11 po zamknięciu odłączonego (Przywróć do aplikacji)', { okna: wins().length, notatek: await page.getByTestId('panel-detached-note').count() })
+    await snap(page, 'IN.11-glowne')
+  } finally {
+    await app.close()
+  }
+})
+
+test('IN.13 – IN.15', async () => {
+  const N = 'in-modalne'
+  const r = await run(N)
+  const { app, page } = r
+  try {
+    // IN.13
+    await page.keyboard.press('F1')
+    await page.getByTestId('shortcuts').waitFor()
+    say('IN.13 F1', await text(page, '[data-testid="shortcuts"]'))
+    await snap(page, 'IN.13-sciagawka')
+    await page.keyboard.press('Escape')
+    await page.getByTestId('nav-help').click()
+    say('IN.13 „? skróty”', await page.getByTestId('shortcuts').count())
+    await page.keyboard.press('Escape')
+    say('IN.13 po Esc', { ściągawka: await page.getByTestId('shortcuts').count(), fokus: await page.evaluate(() => document.activeElement?.tagName + ':' + (document.activeElement?.textContent ?? '').slice(0, 20)) })
+    say('IN.13 hinty paneli', await page.getByTestId('panel-hint').evaluateAll((els) => els.slice(0, 8).map((e) => e.getAttribute('title'))))
+    // IN.14: confirmations
+    await goSettings(page, 'ictj')
+    await page.keyboard.press('Control+2')
+    await page.waitForTimeout(1000)
+    await page.getByTestId('operation-row').first().click()
+    await page.waitForTimeout(500)
+    const del = page.getByRole('button', { name: /Usuń|Do Kosza/ }).first()
+    say('IN.14 przycisk usunięcia w edytorze', await del.count())
+    if (await del.count()) {
+      await del.click()
+      await page.waitForTimeout(500)
+      say('IN.14 okno potwierdzenia', await text(page, '[role="dialog"]').catch(() => '(brak dialogu)'))
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(400)
+      say('IN.14 po Esc', { dialog: await page.locator('[role="dialog"]').count(), wierszy: await page.getByTestId('operation-row').count() })
+      await del.click()
+      await page.waitForTimeout(400)
+      await page.mouse.click(3, 3)
+      await page.waitForTimeout(400)
+      say('IN.14 klik obok', { dialog: await page.locator('[role="dialog"]').count() })
+      if (await page.locator('[role="dialog"]').count()) await page.keyboard.press('Escape')
+    }
+    // stack: Historia from a dialog? Open the history of an opening balance from Settings
+    await goSettings(page, 'accounts')
+    await page.getByRole('button', { name: /historia/i }).first().click()
+    await page.waitForTimeout(600)
+    say('IN.14 okno Historia', await page.locator('[role="dialog"]').count())
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(400)
+    say('IN.14 po Esc z Historii', { dialog: await page.locator('[role="dialog"]').count(), ekran: await page.getByTestId('settings-tab-accounts').count() })
+
+    // IN.15: Esc and Enter in fields
+    await page.keyboard.press('Control+2')
+    await page.waitForTimeout(1000)
+    const rowsBefore = await page.getByTestId('operation-row').first().innerText()
+    await page.getByTestId('operation-row').first().click()
+    await page.waitForTimeout(500)
+    const probe = async (label: string, tid: string, val: string, readBack: () => Promise<string>) => {
+      const f = page.getByTestId(tid)
+      const old = await f.inputValue()
+      await f.click()
+      await f.press('Control+a')
+      await f.pressSequentially(val)
+      await f.press('Escape')
+      await page.waitForTimeout(500)
+      const afterEsc = await f.inputValue()
+      await f.click()
+      await f.press('Control+a')
+      await f.pressSequentially(val)
+      await f.press('Enter')
+      await page.waitForTimeout(700)
+      const afterEnter = await f.inputValue()
+      say(`IN.15 ${label}`, { przed: old, poEsc: afterEsc, poEnter: afterEnter, ekran: await page.getByTestId('page-operations').count() })
+    }
+    await probe('kwota', 'operation-amount', '7,77', async () => '')
+    await probe('data', 'operation-date', '01.11.2026', async () => '')
+    await probe('godzina', 'operation-time', '10:11', async () => '')
+    await probe('kontrahent', 'operation-counterparty', 'EscEnter-Test', async () => '')
+    await probe('notatka', 'operation-note', 'notatka-test', async () => '')
+    say('IN.15 wiersz po', await page.getByTestId('operation-row').first().innerText())
+    // Plan miesiąca (envelope), Ładownia (container amount), Mapa (goal amount)
+    await page.keyboard.press('Control+4')
+    await page.waitForTimeout(1000)
+    const monthFields = page.locator('[data-testid="page-month"] input')
+    say('IN.15 Plan – pola', await monthFields.evaluateAll((els) => els.slice(0, 8).map((e) => `${e.getAttribute('data-testid') ?? e.getAttribute('aria-label')}=${(e as HTMLInputElement).value}`)))
+    const m1 = monthFields.nth(1)
+    const mv = await m1.inputValue()
+    await m1.click()
+    await m1.press('Control+a')
+    await m1.pressSequentially('1')
+    await m1.press('Escape')
+    await page.waitForTimeout(500)
+    say('IN.15 Plan: Esc', { przed: mv, po: await m1.inputValue() })
+    await m1.click()
+    await m1.press('Control+a')
+    await m1.pressSequentially('1')
+    await m1.press('Enter')
+    await page.waitForTimeout(700)
+    say('IN.15 Plan: Enter', { po: await m1.inputValue(), przed: mv })
+    await snap(page, 'IN.15-plan')
+  } finally {
+    await app.close()
+  }
+})

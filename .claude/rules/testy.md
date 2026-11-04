@@ -27,3 +27,10 @@ paths:
   `FI_FREEZE_QUIET_MS`, `FI_VERIFY_VIEWS`, `FI_PHONE_BROWSER`, `FI_CHROMIUM`; Windows CI: `FI_UPDATE_FROM` /
   `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Dane: `tests/fixtures/` tylko zanonimizowane albo syntetyczne, nigdy dane użytkownika.
+- **Pułapka (03.11.2026):** spakowana aplikacja (`FI_E2E_EXECUTABLE`) przy każdym starcie zapisuje autostart z
+  `config.json` przed oknem – na komputerze użytkownika usuwa jego wpis „Financial Intel” w HKCU\…\Run (usuwanie po
+  nazwie). Lokalnie uruchamiaj ją tylko z `PORTABLE_EXECUTABLE_FILE` (jak `tests/audyt/lab.ts`); CI to nie dotyczy.
+- **Pułapka (03.11.2026):** daty na sztywno w E2E (`'2026-10-05'`) to bomba zegarowa – lista Operacji pokazuje bieżący
+  miesiąc, więc po jego końcu wierszy nie widać (`recover.spec.ts`, `repayments.spec.ts` padają od 1.11.2026). Daty
+  w testach licz względem `warsawNow()` (`addDays`, `addMonths`). Skrypty laboratorium `tests/audyt/` są w zasięgu
+  `tsconfig.node.json` i psują `npm run typecheck` (typy DOM w `page.evaluate`) – do wyłączenia (`docs/postep.md`).

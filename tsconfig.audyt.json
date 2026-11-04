@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": [
+    "playwright.audyt.config.ts",
+    "tests/audyt/lab.ts",
+    "tests/audyt/persona.ts",
+    "tests/audyt/persona.spec.ts",
+    "tests/audyt/pakiet.spec.ts",
+    "tests/audyt/smoke.spec.ts"
+  ]
+}
