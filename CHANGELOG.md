@@ -11,8 +11,8 @@ Poprawki po audycie – opłaty, energia, kadłub, kurs i gra:
   zamyka najpierw zaległy); zbiornik nie odkłada drugi raz opłaty pokazanej jako zapłacona, także po „Zapłacone poza
   budżetem” i przy kontenerze dodanym później. Termin sprzed dnia startu budżetu nie jest „po terminie”, a „Zapłacone
   (dziś)” stoi przy terminie, który ta płatność naprawdę zamknie. Opłata zapłacona wydatkiem wpisanym z wyprzedzeniem
-  liczy się jako zapłacona dopiero w dniu tej płatności – do tego czasu Ładownia pokazuje „zaplanowane”, a Radar
-  i odprawa nie przypominają o niej drugi raz. Kreator startu liczy rachunki o zmiennej kwocie (np. woda co 2 miesiące)
+  liczy się jako zapłacona dopiero w dniu tej płatności – do tego czasu Ładownia pokazuje „zaplanowane”, Radar
+  i odprawa nie przypominają o niej drugi raz, a prognoza sald liczy ją raz (także wpisaną na kolejny miesiąc). Kreator startu liczy rachunki o zmiennej kwocie (np. woda co 2 miesiące)
   tak jak budżet po starcie.
 - **Opłata zapłacona z celu albo zakupem do zwrotu** zamyka termin także w odkładkach – zbiornik zostaje nietknięty
   (zebrane czeka na następny termin), zwrot domownika to zwykła spłata długu. Dawny przelew z kontenerem nie płaci opłaty
@@ -28,7 +28,8 @@ Poprawki po audycie – opłaty, energia, kadłub, kurs i gra:
   obok sumy. „Pokryj z koperty…” pokazuje, jak zmieni się energia dziś.
 - **Kadłub:** kadłub, któremu brakuje mniej niż 1 % celu, liczy się jako pełny (także w kursie) – dopłata do XTB z wolnego
   do decyzji nie łamie firewalla. Nowy przycisk „Dopełnij kadłub z osłon” na Mostku, z „Cofnij” (usuwa też plan miesiąca,
-  jeśli przycisk go założył i nic się w nim od tego czasu nie zmieniło – także na drugim komputerze). Ustawienia → Warstwy i rozkazy: podgląd skutku zmiany celu osłon i kadłuba przed zapisem,
+  jeśli przycisk go założył i nic się w nim od tego czasu nie zmieniło – także na drugim komputerze; gdy planu już nie
+  ma, nic nie robi). Ustawienia → Warstwy i rozkazy: podgląd skutku zmiany celu osłon i kadłuba przed zapisem,
   po zmianie „Cofnij”. Wyłączony firewall widać w Ustawieniach, na Mostku i w odprawie przy dopłacie do XTB; zwrot puli
   „Podatek” przy pustej rezerwie nie jest dopłatą do XTB.
 - **Kurs i symulator manewrów:** kurs na 12 miesięcy nie pokazuje osłon poniżej zera – gdy zabraknie pieniędzy, widać
