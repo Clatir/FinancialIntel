@@ -2467,11 +2467,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   tego, co X ma oddać – po zakupach pliku, po własnych wpłatach X w pliku i po częściach X w innych wierszach – najwyżej
   tyle, ile zostało w pieniądzach wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”.
   Temat, który pokazuje wspólną decyzję swoich marek (N78), liczy start i rozkład przy linii z ich wierszy i ich linii
-  (kwoty marek razem – `themeSharesFrom`, `decisionSpread`; przegląd N1) i pokazuje linię innego domownika jako kwotę
-  marek razem (`sharesTogether`: dwie marki po 100 zł = 200 zł – kwota tematu jest dla wszystkich jego wierszy, T328);
-  zmiana tam robi decyzję tematu z tą kwotą – suma dla X zostaje (przegląd N1 2: wcześniej kwota jednej marki, więc
-  zmiana po cichu zmniejszała ją o połowę). Własna część wiersza zostaje wpisana jak wpisana (także ponad dług –
-  świadomie, za ten przelew).
+  (`themeSharesFrom`, `decisionSpread`; przegląd N1) i pokazuje linię innego domownika jako to, co marki razem mu dały
+  (`themeCommon` – suma ich rozkładu: dwie marki po 100 zł = 200 zł, ale marka, której wiersze mają własne decyzje albo
+  której wpłatom zabrakło pieniędzy, daje mniej; linie 0 zł pominięte; przy linii – z których wpłat poszło); zmiana tam
+  robi decyzję tematu z tą kwotą (kwota tematu jest dla wszystkich jego wierszy, T328) – X nigdy nie dostaje więcej, niż
+  marki dały (przegląd N1 2: wcześniej kwota jednej marki – zmiana zmniejszała sumę o połowę; przegląd N1 3: potem kwota
+  marki razy ich liczba – zmiana dawała X pieniądze, których nikt za niego nie wysłał). Własna część wiersza zostaje
+  wpisana jak wpisana (także ponad dług – świadomie, za ten przelew).
 - **T328** „w tym za X” grupy i tematu (AP-7, AF-27; D81): kwota decyzji wspólnej dla kilku wpłat to razem dla X, nie
   na każdą wpłatę – rozkładana po kolei od najstarszej (każda wpłata najwyżej swoją kwotą), a wszystkie spłaty X z grup
   i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy i o własne wpłaty X w pliku,
@@ -2505,29 +2507,28 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `SCHEMA_VERSION`.
 - **T332** Koszt meldunku „Wróciły po usunięciu” (przegląd N1; doprecyzowuje T324): operacja wraca tylko z importem po
   usunięciu, więc usunięte czytane 10 s po otwarciu folderu tylko wtedy, gdy ostatnie sprawdzenie tego komputera coś
-  zgłosiło albo od niego zmienił się którykolwiek import folderu (`settings.import.lastImport` wszystkich kont, także
-  z drugiego komputera – porównane, czy są takie same, nigdy „później niż”: zegar drugiego komputera może się spóźniać,
-  przegląd N1 2). Stan w `localStorage` komputera (`fi.returned.checked:<folder>` – importy folderu, z którymi nie było
-  nic do zgłoszenia, `importsMark`; brak albo starsza postać – czytaj; nieudany odczyt historii go kasuje). Import na tym
-  komputerze czyta usunięte sam i dopisuje do sprawdzenia swój import (konto → czas, `checkedWithImport`) – import
-  drugiego komputera, który przyszedł w tym czasie, zostaje zmianą. Ekran Meldunków i import czytają jak dotąd.
-  `returnedOf` przy każdej zmianie operacji ogląda tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów
-  kandydatów.
+  zgłosiło albo od niego zmienił się którykolwiek import folderu (`settings.import.lastImport` wszystkich kont i dziennik
+  importów `settings.import.log`, także z drugiego komputera – porównane, czy są takie same, nigdy „później niż”: zegar
+  drugiego komputera może się spóźniać, przegląd N1 2; dziennik ma klucz na każdy import i scalenie `fi.json` zachowuje
+  klucze obu komputerów, a ostatni import konta – tylko jeden czas, przegląd N1 3). Stan w `localStorage` komputera
+  (`fi.returned.checked:<folder>` – importy folderu, z którymi nie było nic do zgłoszenia, `importsMark`; brak albo
+  starsza postać – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam; gdy importy
+  folderu do jego zapisu są takie jak przy tym odczycie, sprawdzenie bierze importy folderu po zapisie
+  (`checkedWithImport` – odczytane, nigdy dopisane tutaj; przegląd N1 3: czas tego komputera wpisany przy koncie zakrywał
+  import drugiego komputera na tym koncie scalony pod tym czasem), inaczej czytane przy następnym otwarciu. Ekran
+  Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda tylko operacje kwoty usuniętej,
+  dni i format liczy tylko dla importów kandydatów.
 - **T333** Kopia z innego konta a zakupy, które spłaca (przegląd N1 2; doprecyzowuje T321): usuwana kopia (AF-9) nigdy po
   cichu nie zabiera spłaty zakupów domownika (D91). Operacja tutaj, która nic nie wskazuje, przejmuje to, co kopia spłaca
   (`covers`, dług startowy, `repaid`), przy tej samej decyzji albo przy innej, gdy jej pieniądze spłacają każdego
   domownika, którego spłacają pieniądze kopii (`takesCovers` – np. ta sama wpłata Mamy z częścią „w tym za Tata”; także
   panel duplikatów). Gdy nie przejmie – wskazuje inne zakupy (`coversOtherwise`), ma inną decyzję bez pieniędzy tych
   osób (zwykły wpływ) albo jej pieniądze nie są ich spłatą (ich przychód, zaliczka) – kopia nie jest zaznaczona,
-  a podgląd mówi „usunięta – spłacane przez nią zakupy znów do oddania” (`RowCopy.dropsCovers`); zaznaczona mimo to –
+  a podgląd mówi „po usunięciu spłacane przez nią zakupy będą znów do oddania” (`RowCopy.dropsCovers`, `copyNotes` –
+  zaznaczona czy nie; przegląd N1 3: wcześniej „usunięta – …” przy kopii, której import nie usuwa); zaznaczona mimo to –
   operacja tutaj zostaje ze swoją decyzją, te zakupy znów do oddania (jak przy `otherCovers`). Kopia, której pieniądze
   nikogo nie spłacają, nic nie gubi. Podpis planu (B38, `planSignature`) obejmuje przy kopii też to, czy jest zaznaczona
   domyślnie, ma inną decyzję i czy gubi zakupy – zmiana między podglądem a importem zatrzymuje import („sprawdź podgląd”).
-  zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
-  w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak
-  – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
-  czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
-  tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
 - **T334** Powrót folderu dopiero po jego przeczytaniu (przegląd 2 AP-1; doprecyzowuje T315): odświeżenie, które znalazło
   `fi.json`, ale folderu nie przeczytało (EBUSY – OneDrive dopiero sprowadza pliki), zostawia go niedostępnym (`available`
   z powrotem false w `refreshInQueue`) – sprawdzanie w spoczynku widzi różnicę i za kilka sekund próbuje znowu;

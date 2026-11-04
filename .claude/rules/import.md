@@ -32,7 +32,8 @@ paths:
 - Usunięte operacje z banku: `shared/import/deleted.ts` (`deletedBankRows` – klucze z `altKeys`, `DeletedRow` z formatem;
   `returnedOf` – meldunek „Wróciły po usunięciu”, tylko `madeByItsImport`), w oknie `features/import/returned.ts`
   (T320, T324, T330–T332). **Pułapka:** czasów z różnych komputerów (`lastImport`, `importedAt`) nie porównuj „później
-  niż” – zegary się różnią; porównuj, czy się zmieniły (`importsMark`, T332).
+  niż” – zegary się różnią; porównuj, czy się zmieniły (`importsMark`, T332) – z dziennikiem `log` (klucz na import;
+  scalenie `fi.json` zostawia przy koncie jeden czas) i tylko z tym, co jest w folderze, nigdy z czasem dopisanym tutaj.
 - Konto importu po numerze rachunku pliku (`accountForNumber`, T322); jedna operacja i jej kopie – `copies.ts`.
   **Pułapka:** `conflicting` nie porównuje `covers` – usuwana kopia oddaje spłacane zakupy przez `takeUserData` (ta sama
   decyzja albo pieniądze tych samych domowników – `takesCovers`), a kopia, której zakupów operacja tutaj nie przejmie,
@@ -49,8 +50,9 @@ paths:
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
 - „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X
   ma oddać z zakupami pliku, bez jego własnych wpłat pliku (`owedWithFile`, T328); ekran (`sharesView`) i `runImport`
-  z tego samego. Temat z decyzją swoich marek (N78) czyta ich klucze (`themeSharesFrom`) i pokazuje ich linie razem
-  (`sharesTogether` – zmiana tam nie zmienia sumy). **Pułapka:** `sameChoice`
+  z tego samego. Temat z decyzją swoich marek (N78) czyta ich klucze (`themeSharesFrom`) i pokazuje (`themeCommon` – to
+  samo na ekranie i w testach) linie jako to, co marki dały razem z rozkładu, nie kwotę razy liczbę marek – zmiana tam
+  nigdy nie daje więcej (T327). **Pułapka:** `sameChoice`
   pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
 - Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą. Kategoria mBanku tylko jako podpowiedź (`hintFor`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –

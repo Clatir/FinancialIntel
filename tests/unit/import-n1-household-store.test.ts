@@ -210,12 +210,14 @@ describe('„w tym za” w imporcie – AP-7 (AF-27)', () => {
     expect(state.decisionStart(view(), `t:${big.theme}`, BABCIA, [])).toBe(0)
     expect(state.decisionStart(view(), keys, BABCIA, [])).toBe(10000)
     expect(state.owedLeftOfDecision(view(), keys, BABCIA)).toBe(10000)
-    // „w tym za Babcia 100” in each brand's decision: the theme's line says where the brands' parts went (typed together).
+    // „w tym za Babcia 100” in each brand's decision: the theme's line says where the brands' parts went – what they gave
+    // together (review N1 3: Babcia owes 100 zł, the second brand gives nothing – not 2 × 100 zł).
     const shares = [{ memberId: BABCIA, amount: 10000, advance: true }]
     state.decideGroup(big.group, { ...big.proposed, shares })
     state.decideGroup(small.group, { ...small.proposed, shares })
     const earlier = big.rows.find((p) => p.row.date === '2026-10-29')!
-    expect([...state.decisionSpread(view(), keysNow(), { ...big.proposed, shares })]).toEqual([[0, { line: 0, memberId: BABCIA, typed: 20000, given: [{ key: earlier.key, date: '2026-10-29', amount: 10000 }] }]])
+    expect([...state.decisionSpread(view(), keysNow(), { ...big.proposed, shares })]).toEqual([[0, { line: 0, memberId: BABCIA, typed: 10000, given: [{ key: earlier.key, date: '2026-10-29', amount: 10000 }] }]])
+    expect(state.themeCommon(theme(), state.useImport.getState().choices, view)?.shares).toEqual([{ memberId: BABCIA, amount: 10000, advance: true }])
     expect(state.owedLeftOfDecision(view(), keysNow(), BABCIA)).toBe(10000)
     // The theme decides them all now: its own key, its line spread over all the rows.
     state.chooseThemeOverGroups(theme(), { ...big.proposed, shares })

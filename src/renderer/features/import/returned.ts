@@ -30,23 +30,25 @@ const NONE: DeletedBank = { keys: new Set(), rows: [] }
 let last: { inputs: readonly unknown[]; out: Returned[] } | null = null
 const NO_DISMISSED: Readonly<Record<string, unknown>> = {}
 
-/** The imports of a folder as one text: each account's last import (`settings.import.lastImport`, any computer), by account. */
-const markOf = (imports: Readonly<Record<string, string>>): string => JSON.stringify(Object.keys(imports).sort().map((k) => [k, imports[k]]))
+/** A record as one text, by key. */
+const pairs = (m: Readonly<Record<string, string>>) => Object.keys(m).sort().map((k) => [k, m[k]])
+
+/** Once per import settings (the side menu's counter reads it at every change of the data). */
+const marks = new WeakMap<object, string>()
 
 /**
- * The imports of the folder open now as this computer's check keeps them (T332): compared as they are, never by time –
- * another computer's clock may be behind this one's (review N1 2: its later import had an earlier time and was missed).
+ * The imports of the folder open now as this computer's check keeps them (T332), compared as they are, never by time –
+ * another computer's clock may be behind this one's (review N1 2): each account's last import (`lastImport`) and the
+ * imports' log (`log` – a key per import, of any computer). The log tells every import apart: a merge of fi.json keeps
+ * the keys of both computers, while an account's last import keeps one time (review N1 3: another computer's import on
+ * the same account, its time replaced by this one's, looked like none).
  */
-export const importsMark = (fi: SettingsFile | null | undefined): string => markOf(fi?.settings.import.lastImport ?? {})
-
-/** The imports a mark says (null – not one: a value of before, read as no check). */
-function importsOf(mark: string): Record<string, string> | null {
-  try {
-    const v: unknown = JSON.parse(mark)
-    return Array.isArray(v) && v.every((x) => Array.isArray(x) && x.length === 2 && typeof x[0] === 'string' && typeof x[1] === 'string') ? Object.fromEntries(v as Array<[string, string]>) : null
-  } catch {
-    return null
-  }
+export function importsMark(fi: SettingsFile | null | undefined): string {
+  const imp = fi?.settings.import
+  if (!imp) return JSON.stringify([[], []])
+  let mark = marks.get(imp)
+  if (mark == null) marks.set(imp, (mark = JSON.stringify([pairs(imp.lastImport), pairs(imp.log)])))
+  return mark
 }
 
 /** This computer's last check of a folder (T332): the folder's imports then (`importsMark`), when nothing was to report. */
@@ -117,14 +119,15 @@ export async function readDeletedBank(): Promise<DeletedBank> {
 
 /**
  * An import of this computer done with the deleted ones just read (`runImport`, T332): nothing came back with it – a
- * check that found nothing to report holds with this import too (its account's last import at `at`); another
- * computer's import arrived meanwhile stays a change – read at the next opening.
+ * check that found nothing to report holds with this import too, when the folder's imports were as checked until it
+ * wrote its own (`before` – `importsMark` just before): kept as the folder has them now, never one made up here (review
+ * N1 3: the check's account moved to this import's time hid another computer's import of it). Another computer's import
+ * arrived meanwhile – read at the next opening.
  */
-export function checkedWithImport(accountId: string, at: string): void {
-  const dir = useData.getState().status?.dataDir ?? null
-  const seen = dir ? checkedThrough(dir) : null
-  const imports = seen == null ? null : importsOf(seen)
-  if (dir && imports) remember(dir, markOf({ ...imports, [accountId]: at }))
+export function checkedWithImport(before: string): void {
+  const s = useData.getState()
+  const dir = s.status?.dataDir ?? null
+  if (dir && checkedThrough(dir) === before) remember(dir, importsMark(s.fi))
 }
 
 /**
