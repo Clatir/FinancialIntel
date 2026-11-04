@@ -81,12 +81,13 @@ export function Banners() {
   const problems = useData((s) => s.problems.filter((p) => p.kind !== 'unknown-file').length)
   const updates = useUpdateBanners()
   const budgetStart = useData((s) => (s.fi ? s.fi.settings.budget.start : undefined))
-  // The engine already counts from an opening balance (N23, T25 – `budgetStartOf`: one dated today or before): the wizard
-  // is still to run, the banner says what it adds. Looked at only before the start.
+  // The engine already counts from an opening balance (N23, T25 – `budgetStartOf`: one dated today or before, not one of a
+  // start the folder refused – `byStart`, T446): the wizard is still to run, the banner says what it adds. Looked at only
+  // before the start.
   const fromOpening = useData((s) => {
     if (!s.fi || s.fi.settings.budget.start) return false
     const today = warsawNow().date
-    return Object.values(s.records.balances ?? {}).some((e) => e.record.kind === 'opening' && e.record.date <= today)
+    return Object.values(s.records.balances ?? {}).some((e) => e.record.kind === 'opening' && e.record.date <= today && !e.record.byStart)
   })
   const page = useUi((s) => s.route.page)
   // The wizard under way (AF-11): the banner goes back to it, its answers kept.

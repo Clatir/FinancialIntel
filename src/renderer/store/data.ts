@@ -1077,9 +1077,14 @@ export function deleteOrSay(collection: Collection, id: string): void {
  * Many records deleted with one call (W1: an import's, duplicates): gone from memory at once; those the disk refused come
  * back. Returns the ids deleted and the first error. `reason` 'undo': taken back with their import (F4 – T39); 'drop': old
  * batches of `imports`, no version in the history; 'import': the import's own (pending ones gone from the bank, copies
- * on another account – T331), no deletion of the user's.
+ * on another account – T331), no deletion of the user's. `expected` – id → the content mark of the only version to
+ * delete (KR.29, T446): the main process reads the file again; one saying something else comes back (`changed`).
  */
-export async function deleteRecords(collection: Collection, ids: readonly string[], opts: { reason?: 'undo' | 'drop' | 'import' } = {}): Promise<{ deleted: string[]; error: string | null }> {
+export async function deleteRecords(
+  collection: Collection,
+  ids: readonly string[],
+  opts: { reason?: 'undo' | 'drop' | 'import'; expected?: Readonly<Record<string, string>> } = {}
+): Promise<{ deleted: string[]; error: string | null; changed: string[] }> {
   const s = get()
   const entries = new Map(ids.map((id) => [id, mapOf(s, collection)[id]]))
   const drafts = ids.filter((id) => s.drafts[id])
@@ -1100,10 +1105,11 @@ export async function deleteRecords(collection: Collection, ids: readonly string
   return deleting(async () => {
     await Promise.all(keys.map((k) => settled(inFlight.get(k))))
     const onDisk = ids.filter((id) => !drafts.includes(id))
-    if (!onDisk.length) return { deleted: [...ids], error: null }
-    let results: Array<{ id: string; error?: string }>
+    if (!onDisk.length) return { deleted: [...ids], error: null, changed: [] }
+    const expected = opts.expected ? Object.fromEntries(onDisk.flatMap((id) => (opts.expected![id] != null ? [[id, opts.expected![id]!]] : []))) : undefined
+    let results: Array<{ id: string; error?: string; changed?: true }>
     try {
-      results = await api.deleteRecords(collection, onDisk, opts.reason)
+      results = await (expected ? api.deleteRecords(collection, onDisk, opts.reason, expected) : api.deleteRecords(collection, onDisk, opts.reason))
     } catch (e) {
       results = onDisk.map((id) => ({ id, error: errorMessage(e) }))
     }
@@ -1125,7 +1131,8 @@ export async function deleteRecords(collection: Collection, ids: readonly string
       })
     for (const id of back) if (unsaved.has(keyOf(collection, id))) scheduleSave(collection, id)
     const failedIds = new Set(refused.map((r) => r.id))
-    return { deleted: ids.filter((id) => !failedIds.has(id)), error: refused[0]?.error ?? null }
+    const changed = refused.filter((r) => r.changed).map((r) => r.id)
+    return { deleted: ids.filter((id) => !failedIds.has(id)), error: (refused.find((r) => !r.changed) ?? refused[0])?.error ?? null, changed }
   })
 }
 

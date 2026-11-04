@@ -25,6 +25,8 @@ paths:
 - Zapis atomowy, historia `.history/`, konflikt chmury → kopia `-KOMPUTER.json` i scalanie trójstronne (`merge.ts`,
   `resolveConflict`, `mergeConflict`).
 - Wpis albo plik nowszej wersji → tylko do odczytu (`NewerFileError`, `SettingsFileError` 'too-new'); nigdy nie nadpisuj.
+- Usunięcie tylko wersji znanej oknu (wycofanie startu kreatora – T446): `deleteRecords(…, expected)` z `contentMark` – proces
+  główny czyta plik od nowa w chwili usuwania, inna treść zostaje (`ChangedSinceError` → `changed`); bez `expected` jak dotąd.
 - **Zapis nigdy nie zakłada folderu danych** (AP-1, T314): każdy zapis pod korzeniem idzie przez
   `writeFileAtomic(…, within)` / `writeZipFile(…, within)` / `mkdirWithin` (nowy zapis do folderu – też obecność, historia,
   ZIP w `backups/`); `within` obowiązkowy, `null` tylko poza folderem danych; zwykłe `fs.mkdir(…, { recursive: true })` pod

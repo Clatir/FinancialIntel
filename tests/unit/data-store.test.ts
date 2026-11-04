@@ -399,7 +399,7 @@ describe('zapis i usuwanie paczkami (1.4.3, przegląd grupy F)', () => {
     api.deleteRecords.mockResolvedValue([{ id: t.id, error: 'EBUSY: plik zajęty' }])
     store.updateRecord('transactions', t.id, (r) => ({ ...r, note: 'zmiana przed usunięciem' }))
     const res = await store.deleteRecords('transactions', [t.id])
-    expect(res).toEqual({ deleted: [], error: 'EBUSY: plik zajęty' })
+    expect(res).toEqual({ deleted: [], error: 'EBUSY: plik zajęty', changed: [] })
     expect(current()?.note).toBe('zmiana przed usunięciem')
     await vi.advanceTimersByTimeAsync(2100)
     expect(api.saveRecord.mock.calls.at(-1)?.[1].note).toBe('zmiana przed usunięciem')
@@ -796,7 +796,7 @@ describe('zamykanie okna: zapis w rundach, zapisy w tle wstrzymane (1.10.1, T301
     answer()
     await expect(closing).resolves.toEqual({ saved: true, waiting: 0, newer: 0, error: null })
     expect(api.saveRecord.mock.calls.map((c) => c[1].note)).toEqual(['zmiana przed usunięciem'])
-    await expect(deleting).resolves.toEqual({ deleted: [], error: 'EBUSY: plik zajęty' })
+    await expect(deleting).resolves.toEqual({ deleted: [], error: 'EBUSY: plik zajęty', changed: [] })
     await vi.advanceTimersByTimeAsync(10_000)
   })
 

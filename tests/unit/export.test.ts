@@ -56,12 +56,12 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
   it('miesiące: pensja, koszty, wpływy, na plus', () => {
     const plans = [monthPlanSchema.parse({ ...base(), month: '2026-10', salary: zl(3000) })]
     const rows = monthRows({ transactions: [tx('2026-10-05', -zl(500)), tx('2026-10-06', zl(4000), { kind: 'income', categoryId: null })], categories: s.categories, plans, log: [], today: '2026-11-02' }, ['2026-10'])
-    expect(rows).toEqual([{ month: '2026-10', salary: zl(3000), costs: zl(500), income: zl(4000), plus: true, inProgress: false, loot: null, balance: zl(3500), rate: 87.5, energy: null, financed: 0, planned: 0 }])
+    expect(rows).toEqual([{ month: '2026-10', salary: zl(3000), costs: zl(500), income: zl(4000), plus: true, inProgress: false, loot: null, balance: zl(3500), rate: 87.5, energy: null, financed: 0, planned: 0, plannedIncome: 0 }])
     // A household member's money is no income (D80: their advance here).
     const member = s.household.members[0]!.id
     const advance = tx('2026-10-07', zl(300), { kind: 'income', categoryId: null, memberId: member, advance: true })
     expect(monthRows({ transactions: [advance], categories: s.categories, plans, log: [], today: '2026-10-20' }, ['2026-10'])[0]!.income).toBe(0)
-    expect(monthsCsv(rows).split('\r\n')[1]).toBe('2026-10;3000,00;500,00;4000,00;tak;;3500,00;87,5;;0,00;0,00')
+    expect(monthsCsv(rows).split('\r\n')[1]).toBe('2026-10;3000,00;500,00;4000,00;tak;;3500,00;87,5;;0,00;0,00;0,00')
     // F25: the fuel balance and the savings rate (3 500 of 4 000 zł) – the energy and the financed after them (AP-29).
     expect(monthsCsv(rows).split('\r\n')[0]!.includes(';Bilans (zł);Stopa oszczędności (%);')).toBe(true)
     expect(monthsSheet(rows).rows[0]!.slice(6, 8)).toEqual([3500, 87.5])

@@ -526,6 +526,12 @@ export const balanceSchema = z.looseObject({
    * day counts, as that version counted it.
    */
   confirmedAt: isoDateTime.optional().catch(undefined),
+  /**
+   * An opening written by „Uruchom budżet” before fi.json (1.15.9, KR.29 – T446, przegląd 2 N5): with `budget.start` the
+   * start's money; without it (a start the folder refused, its opening not taken back) it starts nothing – `budgetStartOf`
+   * skips it, as the bridge's banner. A change of the opening by hand (`setOpening`) makes it the user's: the mark goes.
+   */
+  byStart: z.literal(true).optional().catch(undefined),
   note: text
 })
 export type Balance = z.infer<typeof balanceSchema>
