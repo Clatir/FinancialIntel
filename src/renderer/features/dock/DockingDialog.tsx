@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { addWorkingDays, asPayout, PAIR_WORKING_DAYS, withDocking, type Delivery } from '@shared/calc/dock'
 import { byPriority } from '@shared/calc/goals'
 import { fitSplit } from '@shared/calc/fleet'
+import { undockingOf } from '@shared/calc/undock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
@@ -17,7 +18,7 @@ import { AmountField, plnText } from '../../components/fields'
 import { Badge, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { closeDocking, useDeliveries, useDocking } from './state'
-import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, walletOperation, type SplitDraft } from './actions'
+import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, undockDelivery, walletOperation, type SplitDraft } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -100,6 +101,8 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const until = e ? addWorkingDays(e.date, PAIR_WORKING_DAYS) : null
   const showTax = e?.pool === 'tax' || split.taxHold > 0
   const edit = (patch: Partial<SplitDraft>) => setDraft({ ...split, ...patch })
+  // „Wycofaj dokowanie” (AP-9): what it would remove – a docked delivery only.
+  const undo = undockingOf(d)
 
   const dock = () => {
     if (over) return
@@ -133,6 +136,19 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
             </button>
           )}
           {d.state === 'docked' && d.docking && <HistoryButton kind="dockings" id={d.docking.id} current={d.docking} small />}
+          {undo && (
+            <button
+              className="btn h-[26px]"
+              disabled={readOnly}
+              onClick={() => {
+                if (undockDelivery(d)) closeDocking()
+              }}
+              title={undo.transactions.length ? 'Usuwa dokowanie i jego operację na Portfelu XTB – dostawa wraca do zadokowania („Cofnij” w powiadomieniu)' : 'Usuwa dokowanie – operacja z banku zostaje i czeka na ponowne dokowanie („Cofnij” w powiadomieniu)'}
+              data-testid="docking-undock"
+            >
+              Wycofaj dokowanie
+            </button>
+          )}
           <span className="flex-1" />
           <button className="btn h-[26px]" onClick={closeDocking}>
             Anuluj

@@ -2525,3 +2525,31 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   bieżącego miesiąca (`amountIn`, `monthlyWeight` z miesiącem), masa ładunku i Plan – miesiąca, więc Ładownia, Plan
   i Radar mówią to samo. Istniejące kontenery bez zmian (grosz w ostatnim miesiącu – bez migracji). Addytywnie (pole
   `past` już jest), bez `SCHEMA_VERSION`.
+- **T360** „Wycofaj dokowanie” (AP-9, AF-7 / MO.29 / DO.7; realizuje D95 N-PC-2, uzupełnia B15, B17, B69): przycisk
+  w oknie zadokowanej dostawy (`docking-undock`) i „wycofaj” w jej wierszu na Mostku (`docking-row-undock`, obok
+  przycisku wiersza, nie w nim). Zabiera (`calc/undock.ts` `undockingOf`): dokowanie dostawy i nadmiarowe dokowania
+  tego samego wpisu ICTTJ (B17 – inaczej dostawa dalej byłaby zadokowana) oraz operacje Portfela XTB zrobione przez
+  dokowanie (`madeByDocking`: rodzaj XTB, bez wiersza banku, id `walletOperationId` wpisu, a sprzed B17 – ten sam
+  `createdAt` co dokowanie). Zostają: operacja z banku, wpływ wpisany ręcznie na Portfelu XTB (B69 – zostaje jako
+  wypłata XTB i paruje się z wpisem znowu; dawnej kategorii nie odtwarzamy – „Cofnij” dokowania jej nie zna po 6 s)
+  i operacja XTB z edytora. Dostawa wraca do „do zadokowania” (para z banku, Portfel XTB) albo „czeka na import”;
+  okno się zamyka, toast z „Cofnij” (8 s) dodaje z powrotem te same rekordy (pominięte, gdy w międzyczasie zadokowano
+  ponownie – te same id). Rekord nowszej wersji (B67) – odmowa w całości, bez wycofania po połowie. Folder ICTTJ tylko
+  czytany. Zamrożone dni gry bez zmian (jak przy edycji operacji). Bez zmian formatu.
+- **T361** Usuwanie kategorii (AP-9, AF-37 / US.6; realizuje D95 N-PC-7): „usuń” przy kategorii głównej i ikona kosza
+  przy podkategorii (Ustawienia → Kategorie); kategoria główna znika razem z podkategoriami. Tylko gdy nic jej nie używa
+  (`calc/categoryUse.ts` `categoryUses`, na kategorię z podkategoriami): operacje (także szkice) i części paragonów,
+  plany miesięcy (limit koperty – także 0 zł, łupy w kopercie, pokrycie z / do koperty), reguły importu, kontenery,
+  boje, zapisane widoki Operacji (filtr kategorii), zamrożone dni gry (naruszenie koperty). Szablony szybkiego wpisu
+  powstają z operacji – są w nich. W użyciu: odmowa z toastem „… jest w użyciu (2 operacje, 1 reguła importu) –
+  usunąć można tylko nieużywaną; zarchiwizuj ją…” i akcją „Archiwizuj”; systemowej („Gotówka”) – nigdy. „Cofnij”
+  (8 s) wstawia kategorie na ich miejsca w liście. Paczki importu (`imports/`) i historia `.history/` nie są
+  sprawdzane: wersja przywrócona stamtąd z usuniętą kategorią pokazuje „(usunięta kategoria)” (`categoryIndex.label`),
+  jak zmiana z drugiego komputera sprzed synchronizacji. Seed (`settings.seeded`) jej nie przywraca. Bez zmian formatu.
+- **T362** Zmiana rodzaju a cel i Ładownia (N-PC-4 z D95 – w 1.15.2 bez kodu): `withKind` zostawia `containerId`
+  tylko wydatkowi (jak `goalId`, T24) – na przelewie / pożyczce / XTB powiązanie było ukryte: silnik go nie czytał,
+  a Ładownia (`paymentsIndex`) brała taki przelew za zapłatę kontenera. Edytor operacji przy zmianie rodzaju, która
+  odpina cel albo kontener (operacji albo części paragonu – `unlinkedBy`), mówi to toastem „Rodzaj „Przelew własny”
+  nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
+  dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
+  przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
