@@ -100,7 +100,8 @@ export function plannedNotices(o: PlanInput): PlannedNotice[] {
     out.push({ key: n.key, at: warsawAt(n.date, n.time), title: n.title, body: n.body, tag: n.tag })
   }
   const last = addDays(o.today, o.days - 1)
-  const briefingAt = morningAt(quiet, BRIEFING_FROM)
+  // Its hour when one is set (D99 pkt 7, AP-16), else the morning's.
+  const briefingAt = morningAt(quiet, p.briefingTime ?? BRIEFING_FROM)
   for (let d = o.today; d <= last; d = addDays(d, 1)) {
     // The morning briefing after the quiet hours (the first opening after them shows it in the app too – one key).
     if (p.briefing) add({ key: `briefing:${d}`, date: d, time: briefingAt, tag: 'briefing', title: 'Odprawa poranna', body: 'Energia dnia, alarmy i odprawa – Mostek.' })

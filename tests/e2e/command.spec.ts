@@ -59,7 +59,11 @@ test('Dowództwo: dni zamrożone w tle, naruszenie poważne, awans z ekranem, mi
     await expect(page.getByTestId('command-today')).toContainText('naruszenie')
     await expect(page.getByTestId('command-today')).toContainText('Zakup w ciszy nocnej')
 
-    // The game's thresholds are the folder's (fi.json).
+    // A serious violation in red, with its mark (DW sp. 3, AP-16).
+    await expect(page.locator('[data-testid="command-today-violation"][data-serious="true"]').filter({ hasText: 'Zakup w ciszy nocnej' })).toContainText('poważne')
+
+    // The game's thresholds are the folder's (fi.json) – changed in Ustawienia, read in Dowództwo (D84 C9, AP-16).
+    await page.getByTestId('command-orders-edit').click()
     await page.getByTestId('game-promote-days').fill('25')
     await page.getByTestId('game-promote-days').press('Tab')
     await expect.poll(async () => JSON.parse(await readFile(join(dir, 'fi.json'), 'utf8')).settings.game.promoteDays).toBe(25)
