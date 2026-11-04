@@ -73,6 +73,10 @@ paths:
   w saldzie otwarcia konta). **Pułapka:** linia ma `memberId: null` – kod, który bierze takie części za „mój przychód”
   (tagi), musi pominąć `loanId`.
 
+- Miesiąc w toku liczony do dziś (AP-36, T421): debriefing, przegląd roczny, bilans paliwa i „Wydatki w czasie” czytają
+  operacje do dnia budżetu (`upToDay`), późniejsze – osobno `planned` („Zaplanowane”); nowe zestawienie miesiąca w toku
+  tak samo – jak salda i silnik.
+
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.
 - W oknie silnik liczony raz (`store/fleet.ts` `useFleet`) z kluczem z czytanych części (`KEY_SETTINGS`,
