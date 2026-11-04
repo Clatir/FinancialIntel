@@ -11,7 +11,7 @@ import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
 import { TagsField } from '../../components/TagsField'
 import { hashTags, tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
-import { restToChoose } from '@shared/calc/quick'
+import { restToChoose, senderOwn } from '@shared/calc/quick'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -313,9 +313,15 @@ export function QuickApp() {
   }, [d, lines, share])
   // „Plan czy impuls?” of my own part only (AP-19): never a household member's purchase, never an ATM withdrawal.
   const asks = d.kind !== 'income' && !!data && data.impulseThreshold > 0 && impulseAmount(parts.map((p) => ({ ...p, amount: -p.amount }))) >= data.impulseThreshold
-  // A member's money (D80 b): the sender's part beyond what they owe – a member „pytaj” chooses it here (AP-19, SW sp. 3).
+  // The part repaying a loan (D100): its loan of the list and its amount (`quickLoanPart`).
+  const loanNow = useMemo(
+    () => quickLoanPart(loan, data, { kind: d.kind, household: d.household, memberId: d.memberId, amount: d.amount }, shares),
+    [loan, data, d.kind, d.household, d.memberId, d.amount, shares]
+  )
+  // A member's money (D80 b): the sender's part beyond what they owe – a member „pytaj” chooses it here (AP-19, SW sp. 3);
+  // their own part without the others' parts and the loan's (D100 – `senderOwn`, as the preview and the saved lines).
   const payer = d.kind === 'income' && d.household ? data?.members.find((x) => x.id === d.memberId) : undefined
-  const payerOwn = payer ? d.amount - (data?.members ?? []).filter((x) => x.via === payer.id).reduce((a, x) => a + (shares[x.id] ?? 0), 0) : 0
+  const payerOwn = payer ? senderOwn(d.amount, payer.id, data?.members ?? [], shares, loanNow?.amount ?? 0) : 0
   const askRest = restToChoose(payerOwn, payer, !!d.advanceChosen)
   const restOpen = payer?.inflow === 'ask' && !d.advanceChosen
   const hide = !!data?.hideAmounts
@@ -325,11 +331,6 @@ export function QuickApp() {
     return withTags([], [...hashTags(d.counterparty), ...hashTags(d.note)]).filter((x) => !have.has(tagKey(x)))
   }, [d.counterparty, d.note, d.tags])
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
-  // The part repaying a loan (D100): its loan of the list and its amount (`quickLoanPart`).
-  const loanNow = useMemo(
-    () => quickLoanPart(loan, data, { kind: d.kind, household: d.household, memberId: d.memberId, amount: d.amount }, shares),
-    [loan, data, d.kind, d.household, d.memberId, d.amount, shares]
-  )
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
@@ -355,7 +356,7 @@ export function QuickApp() {
       }
       // Others' money in it first (D81), then the sender's: what each owes first, the rest their advance or income.
       const others = data.members.filter((x) => x.via === m.id && (shares[x.id] ?? 0) > 0)
-      const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0) - toLoan
+      const own = senderOwn(d.amount, m.id, data.members, shares, toLoan)
       const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean | null) => {
         const back = Math.min(amount, who.owed)
         const rest = amount - back

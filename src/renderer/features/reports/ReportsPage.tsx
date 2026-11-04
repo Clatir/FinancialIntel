@@ -564,19 +564,17 @@ function ExportPanel() {
     setPeriod(next)
     storeExportPeriod(next.from, next.to, fleet.today)
   }
-  const setFrom = (v: string) => choose({ from: v, to })
-  const setTo = (v: string) => choose({ from, to: v })
   const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members)
   // The operations' lines (AP-29) in the order of „Operacje” – the same operations, so „Nr operacji” is its row.
   const parts = () => partRowsOf(operationsOfPeriod(transactions, from, to), settings.categories, settings.accounts, settings.household.members)
   const months = () =>
     monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
-  // „Od” after „do” swap with a word (AP-15, AF-36): a range read backwards is no empty file with „Zapisano”.
+  // „Od” after „do” swap with a word (AP-15, AF-36): a range read backwards is no empty file with „Zapisano”. Both ends
+  // at once (AP-29 keeps the period): one after the other, the second would write the first one's end as it was.
   const setEnds = (nextFrom: string, nextTo: string) => {
     const r = orderRange(nextFrom, nextTo)
-    setFrom(r.from!)
-    setTo(r.to!)
+    choose({ from: r.from!, to: r.to! })
     if (r.swapped) toast(swappedText('daty', plDate(r.from!), plDate(r.to!)), 'info', 6000)
   }
   // Nothing in the period: said, no empty file (RE sp. 5). The rows counted once – the same ones written.

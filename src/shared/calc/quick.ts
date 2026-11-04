@@ -14,6 +14,15 @@ export function restToChoose(amount: number, member: { owed: number; inflow: str
   return Math.max(0, amount - Math.max(0, member.owed))
 }
 
+/**
+ * The sender's own part of a member's inflow in the quick entry (D81, D100): the amount less the others' parts in it
+ * („w tym za …” – `shares`) and the part repaying a loan (`loan`) – as the operation's lines save it. What they owe comes
+ * out of it first, a member „pytaj” chooses what is left (`restToChoose`). Below 0 – the parts are over the amount.
+ */
+export function senderOwn(amount: number, senderId: string, members: ReadonlyArray<{ id: string; via?: string | null }>, shares: Readonly<Record<string, number>>, loan: number): number {
+  return amount - members.filter((m) => m.via === senderId).reduce((a, m) => a + Math.max(0, shares[m.id] ?? 0), 0) - Math.max(0, loan)
+}
+
 /** The templates a pair keeps (F7): the latest ones, newest first. */
 export const QUICK_TEMPLATES = 5
 

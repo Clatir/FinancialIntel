@@ -111,3 +111,42 @@ test('AP-19: domownik „pytaj” wybiera resztę, zakup za domownika bez „pla
     await app.close()
   }
 })
+
+// N5 integration 2 (AP-19 × D100): a member „pytaj” whose whole inflow repays a loan – nothing left to choose.
+test('AP-19 × D100: domownik „pytaj” spłaca całą wpłatą pożyczkę – bez pytania o resztę', async () => {
+  const { month } = warsawNow()
+  const start = `${addMonths(month, -1)}-01`
+  const LOAN = '01KN5P0ZYCZKA0000000000001'
+  const mama = { id: MAMA, name: 'Mama', bankNames: [], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-n5-household-loan-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start }, household: { since: start, members: [...s.household.members, mama] } }),
+    records: {
+      balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],
+      loans: [{ id: LOAN, name: 'Pożyczka dla Mamy', direction: 'given', counterparty: 'MAMA', amount: zl(100), date: start }],
+      transactions: [{ date: start, accountId: ACC, kind: 'loan', amount: -zl(100), loanId: LOAN, counterparty: 'MAMA' }]
+    }
+  })
+  const { app, page, dataDir: dir, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    const quick = await quickWindow(app, page)
+    await quick.getByRole('radio', { name: 'Wpływ' }).click()
+    await quick.getByTestId('quick-amount').fill('100')
+    await quick.getByTestId('quick-amount').press('Tab')
+    await quick.getByTestId('quick-time').fill('12:00')
+    await quick.getByTestId('quick-time').press('Tab')
+    await quick.getByTestId('quick-payer').selectOption({ label: 'Mama' })
+    await quick.getByTestId('quick-loan').selectOption({ label: 'Pożyczka dla Mamy (zostało 100,00 zł)' })
+    await expect(quick.getByTestId('quick-loan-amount')).toHaveValue('100,00')
+    // Her own part is 0 zł: no „przychód czy zaliczka?” (before: the 100 zł of the loan's part was asked about too).
+    await expect(quick.getByTestId('quick-preview-member')).toHaveCount(0)
+    await quick.getByTestId('quick-save').click()
+    await expect
+      .poll(async () => (await records(dir, 'transactions')).filter((t) => t.kind === 'income').map((t) => [t.memberId, t.amount, (t.splits as Array<{ loanId?: string; amount: number }>).map((x) => [x.loanId ?? null, x.amount])]))
+      .toEqual([[MAMA, zl(100), [[LOAN, zl(100)]]]])
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

@@ -3406,6 +3406,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   jak salda, energia i warstwy („Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia”). Koszty
   netto operacji z datą po dziś – osobno jako „Zaplanowane (operacje z datą po dziś – poza kosztami)”: `Debriefing.planned`
   i `YearNumbers.planned` (kolumna „Zaplanowane” w tabeli miesięcy przeglądu, gdy jest), linia tylko przy kwocie ≠ 0.
+  Dopisek (integracja 2 N5): tabela miesięcy przeglądu ma tylko miesiące z historią (T449), więc kolumna – gdy ma ją
+  któryś z pokazanych miesięcy; zaplanowane późniejszych miesięcy – w linii roku.
   Miesiąc zakończony – jak dawniej (nie ma w nim dat po dziś). Eksport „Miesiące” bierze koszty z debriefingu (do dziś),
   przychody liczy sam (poza tą zmianą). Operacje pokazują listę okresu bez zmian (suma tego, co na liście).
 - **T422** Wypłata z bankomatu na konto „Gotówka” (AP-33, D100 (1); zmienia spec „Konta budżetu” i „Przypadki
@@ -3477,7 +3479,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wyborem „Scal…” (scalona wersja ma id oryginału). Kwoty `awaitReturn`, `envelopeCovers`, usuniętych operacji importu –
   w złotych. Historia: odrzucona strona konfliktu to „wersja niezachowana” (zamiast „odrzucona przy scalaniu”, DA.27).
   Meldunki „podwójne korekty” mówią, że para liczy się tylko z dwóch komputerów (SA sp. 3). Tytuły wpisów z datą ISO
-  (`recordTitle`) – AP-23 (N4).
+  (`recordTitle`) – AP-23 (N4). Dopisek (integracja 2 N5): daty i chwile w różnicach jak wszędzie w aplikacji
+  (T403) – dzień `plDate`, chwila `plDateTime` (czas komputera; w Polsce – warszawski), liczby z minusem „−” i bez
+  zaokrągleń, lista obiektów liczona `countLabel` („22 pozycje”).
 - **T431** Konflikt rozstrzygany na wersjach, które okno pokazało (AP-27, AF-76, DA.28; rozszerza N17): „Scal…” trzyma
   wersje, na których je otwarto (`opened`) – kopia albo oryginał zmienione w trakcie nie wchodzą po cichu: wybory zostają
   na pokazanej treści, „Zapisz scalone” wyłączone, pasek „Kopia zmieniła się w trakcie scalania…” z „Scal od nowa”.
@@ -3501,7 +3505,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   dotąd. Scenariusz ICTTJ spoza listy: „nie ma w ICTTJ” tylko przy ICTTJ przeczytanym, inaczej „ICTTJ nie jest czytany na
   tym komputerze” / „teraz niedostępny” (`missingForecastText`). Konto nowego wpisu (edytor i szybki wpis,
   `calc/quick.ts` `entryAccount`): wybór tego komputera, a komputer bez wyboru – konto najnowszego wpisu ręcznego
-  w budżecie (bez operacji z banku), dopiero potem pierwsze konto. Format folderu bez zmian.
+  w budżecie (bez operacji z banku), dopiero potem pierwsze konto. Format folderu bez zmian. Dopisek (integracja 2
+  N5): jedna reguła z T441 (4) – `entryAccount` bierze najpierw konto ostatniego wpisu ręcznego w folderze
+  (`lastAccountOf`, `typedByHand`; z kont otwartych – zamknięte pomija), potem wybór tego komputera, potem pierwsze
+  konto; nowy komputer dostaje więc konto z folderu jak tu, a drugi komputer – konto ostatniego wpisu w budżecie, nie
+  swój dawny wybór (AP-20: „ostatnie konto zapamiętane w folderze”, SW sp. 8).
 - **T433** Start z Windows tylko z decyzji na tym komputerze (AP-28, incydent 03.11.2026 – `main/loginItem.ts`
   `loginItemWrites`, czyste reguły z testem): profil inny niż własny aplikacji (`FI_USER_DATA` – testy, laboratorium)
   nigdy nie pisze w kluczu Run; start aplikacji i późny odczyt `config.json` nigdy niczego nie usuwają – przy włączonym
@@ -3569,7 +3577,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   z częścią domownika 300 zł = 760,98 zł), oznaczony zakup samego domownika się nie liczy (jak w grze); (3) notka ciszy
   nocnej przy zakupie domownika – „to nie Twój wydatek, w grze bez naruszenia” (`nightVerdict`, jak `game.ts`);
   (4) domownik „pytaj” bez wartości domyślnej: szybki wpis nie zaznacza „przychód / zaliczka”, podgląd pyta, zapis
-  odmawia przy reszcie ponad dług („Wybierz, czym jest reszta X ponad to, co … ma oddać”; `restToChoose`); edytor Operacji
+  odmawia przy reszcie ponad dług („Wybierz, czym jest reszta X ponad to, co … ma oddać”; `restToChoose`; reszta po
+  częściach innych osób i części spłaty pożyczki – D100, `senderOwn`, integracja 2 N5); edytor Operacji
   (zapis od razu) – bez zaznaczenia i z dopiskiem „pytaj: wybierz (do wyboru liczona jako przychód)”; pierwszy wybór
   zapamiętany jak dotąd; (5) „Pokaż zakupy” przy „X: do oddania” (Meldunki) i linia odprawy – zakupy tej osoby do
   oddania z całej historii (`refundablesFilter`: osoba + „do oddania” / „częściowo oddane”); „wydatki domowników ›” –

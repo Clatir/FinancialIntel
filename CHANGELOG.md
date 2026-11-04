@@ -40,7 +40,7 @@ z hierarchią:
 - **Pomoc (F1)** ma słowniczek „Terminy ICT”, a każda linia „Stanu okrętu” ma objaśnienie.
 - **Eksport i Synchronizacja:** pusty eksport mówi „Brak operacji w okresie”, a „Excel (operacje + miesiące)” działa także
   dla okresu bez operacji – z arkuszem miesięcy. Wyszukiwanie usuniętych wpisów znajduje daty wpisane jako 01.10.2026
-  i jako 2026-10-01.
+  i w zapisie rok-miesiąc-dzień.
 
 ## 1.15.7
 

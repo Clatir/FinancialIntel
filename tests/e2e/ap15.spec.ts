@@ -173,6 +173,9 @@ test('AP-15 okno główne: kwoty od-do zamienione, liczby poza zakresem, Esc cof
     await from.fill(`${Number(date.slice(0, 4)) + 1}-01-10`)
     await from.press('Tab')
     await expect(page.getByRole('status').filter({ hasText: '„Od” było po „do”' })).toBeVisible()
+    // Both ends swapped at once (the period kept since AP-29): „od” is the former „do” – today.
+    await expect(from).toHaveValue(`${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`)
+    await expect(page.getByTestId('export-to')).toHaveValue(`10.01.${Number(date.slice(0, 4)) + 1}`)
     // Now from the 10th of January to the 10th (a year later): no operation in it.
     await from.click()
     await from.fill(`${Number(date.slice(0, 4)) + 1}-01-05`)

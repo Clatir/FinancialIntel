@@ -9,7 +9,7 @@ import { openText, repaidMarks, settleHousehold, type MemberBalance } from '@sha
 import { inboxItems, type InboxInput } from '@shared/calc/inbox'
 import { logAccuracy } from '@shared/calc/intel'
 import { asksImpulse, categoryIndex, impulseAmount, nightVerdict, partsOf } from '@shared/calc/operations'
-import { restToChoose } from '@shared/calc/quick'
+import { restToChoose, senderOwn } from '@shared/calc/quick'
 import { purchaseOf } from '@shared/calc/household'
 import { waitingForPurchase } from '@shared/calc/repayments'
 import { createDefaultSettings } from '@shared/defaults'
@@ -103,6 +103,18 @@ describe('SW sp. 3: domownik „pytaj” bez wartości domyślnej (szybki wpis)'
     expect(restToChoose(zl(150), { owed: zl(100), inflow: 'income' }, false)).toBe(0)
     expect(restToChoose(zl(80), { owed: zl(100), inflow: 'ask' }, false)).toBe(0)
     expect(restToChoose(zl(80), undefined, false)).toBe(0)
+  })
+  it('integracja 2 N5 (AP-19 × D100): reszta do wyboru po częściach innych osób i części spłaty pożyczki – jak linie wpłaty', () => {
+    const members = [{ id: 'MAMA', via: null }, { id: 'SYN', via: 'MAMA' }, { id: 'OBCY', via: null }]
+    // 1 000 zł from Mama („pytaj”, owes 200 zł): 300 zł of it her son's, 400 zł repays a loan – her own 300 zł: 200 zł
+    // repays her debt, 100 zł to choose.
+    const own = senderOwn(zl(1000), 'MAMA', members, { SYN: zl(300), OBCY: zl(50) }, zl(400))
+    expect(own).toBe(zl(300))
+    expect(restToChoose(own, { owed: zl(200), inflow: 'ask' }, false)).toBe(zl(100))
+    // All of it the loan's: nothing to choose (before: the whole 1 000 zł asked about).
+    expect(restToChoose(senderOwn(zl(1000), 'MAMA', members, {}, zl(1000)), { owed: 0, inflow: 'ask' }, false)).toBe(0)
+    // The parts over the amount: below 0 – refused on saving, nothing asked.
+    expect(senderOwn(zl(100), 'MAMA', members, { SYN: zl(80) }, zl(50))).toBe(-zl(30))
   })
 })
 

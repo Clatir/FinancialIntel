@@ -363,3 +363,27 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
     expect(tally.payToday).toBeGreaterThan(250)
   })
 })
+
+describe('integracja 2 N5: kreator (AP-25) = silnik na starcie – folder z płatnościami wpisanymi z wyprzedzeniem (T398)', () => {
+  it('300 historii: rata zbiornika kreatora z operacjami całego folderu (jak WizardPage) = `want` silnika w dniu startu', () => {
+    let wizard = 0
+    let ahead = 0
+    for (let seed = 3001; seed <= 3300; seed++) {
+      const k = caseOf(seed, { variable: true })
+      if (k.c.cycleMonths <= 1 || monthOf(k.c.createdAt) > monthOf(k.start) || k.c.from || !activeIn(k.c, monthOf(k.start))) continue
+      // The folder at the start: the payments of the next 0–45 days are in it already (written ahead – B127, T398).
+      const r = rng(seed + 11)
+      const known = k.payments.filter((t) => t.date <= addDays(k.start, Math.floor(r() * 46)))
+      const tank = fleetOf(k, known, k.start).tanks.find((t) => t.containerId === k.c.id)
+      if (tank?.want == null) continue
+      wizard++
+      if (known.some((t) => t.date >= k.start)) ahead++
+      // WizardPage gives the start all the folder's operations (`startPaidDays` reads the ones before its day).
+      const days = startPaidDays(known, k.start, [k.c], [])
+      const items = startTankItems([k.c], []).map((item) => ({ ...item, paid: days.get(item.key) ?? [] }))
+      expect(startTanks(items, k.start, {})[0]!.installment, `${k.name}: kreator z płatnościami po starcie`).toBe(tank.want)
+    }
+    expect(wizard).toBeGreaterThan(120)
+    expect(ahead).toBeGreaterThan(25)
+  })
+})
