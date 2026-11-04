@@ -24,7 +24,7 @@ import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
-import { conflicting, coversOtherwise, takeUserData } from './copies'
+import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
@@ -258,14 +258,16 @@ export type RowPlan =
  * says so (`ImportChoices.removeCopies`; by default when it was imported there and decides nothing else than the
  * operation here), what only it had (category, notes, the purchases a member's money pays back) going to the operation
  * here. `otherCovers` – it pays back other purchases than the operation here, which names its own: not ticked (removed,
- * the operation here keeps its own). `blocked` – never removed: docked, paid back by a member's money (`covers`) or
- * written by a newer version (read only).
+ * the operation here keeps its own). `dropsCovers` – removed, the purchases it pays back would be paid back no more (the
+ * operation here names others, or its money repays no member of theirs – `copies.ts`): not ticked, said (review N1 2).
+ * `blocked` – never removed: docked, paid back by a member's money (`covers`) or written by a newer version (read only).
  */
 export interface RowCopy {
   tx: Transaction
   remove: boolean
   conflict: boolean
   otherCovers: boolean
+  dropsCovers: boolean
   blocked: 'docked' | 'covered' | 'locked' | null
 }
 
@@ -547,7 +549,8 @@ export function planImport(
     const blocked = locked(copy) || locked(real) ? 'locked' : ctx.docked?.has(copy.id) ? 'docked' : coveredOf(existing).has(copy.id) ? 'covered' : null
     const conflict = conflicting(real, [copy])
     const otherCovers = coversOtherwise(real, copy)
-    return { tx: copy, remove: imported && !blocked && !conflict && !otherCovers, conflict, otherCovers, blocked }
+    const drops = dropsCovers(real, copy)
+    return { tx: copy, remove: imported && !blocked && !conflict && !otherCovers && !drops, conflict, otherCovers, dropsCovers: drops, blocked }
   }
   const other = new Map<string, Transaction[]>()
   for (const [date, list] of budget.booked) {

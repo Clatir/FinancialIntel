@@ -15,7 +15,6 @@ import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
 import { memberOf } from '../calc/household'
-import { warsawNow } from '../calc/dates'
 import type { MbankRow } from './mbank'
 
 export { counterpartyKey }
@@ -354,18 +353,14 @@ function nameIn(name: string, counterparty: string): boolean {
   return parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))
 }
 
-/** The open loan given to the person a transfer comes from (B34): the oldest when there are more. */
-export function loanOf(counterparty: string, loans: ClassifyContext['loans']): NonNullable<ClassifyContext['loans']>[number] | null {
-  const open = (loans ?? []).filter((l) => l.direction === 'given' && !l.closedAt && nameIn(l.counterparty || l.name, counterparty))
-  return open.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))[0] ?? null
-}
-
 /**
- * The loan given to the person a transfer comes from that was open on its day (AP-6 – the rules' audit): given by then,
- * not closed before it; the oldest when there are more.
+ * The loan of the Radar a transfer from the person repays (B34): given to them by the transfer's day – a loan exists
+ * only from the day it was given, the person's money before it is no repayment of it – and open now (a closed one takes
+ * no more money back); the oldest when there are more. The import (`classifyRow`) and the rules' audit read the same
+ * (review N1 2: the audit reports only what the import gives way to now).
  */
-export function loanOn<L extends Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>>(counterparty: string, loans: readonly L[], date: string): L | null {
-  const open = loans.filter((l) => l.direction === 'given' && l.date <= date && (!l.closedAt || date <= warsawNow(l.closedAt).date) && nameIn(l.counterparty || l.name, counterparty))
+export function loanFor<L extends Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>>(counterparty: string, loans: readonly L[] | undefined, date: string): L | null {
+  const open = (loans ?? []).filter((l) => l.direction === 'given' && !l.closedAt && l.date <= date && nameIn(l.counterparty || l.name, counterparty))
   return open.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))[0] ?? null
 }
 
@@ -502,11 +497,9 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   // A household member's money (D80): by their names in the bank.
   const transferIn = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op)
   const member = transferIn ? memberOf(row.counterparty, ctx.members) : null
-  // Money back from the person a loan of the Radar was given to (B34): its repayment.
-  const loan = transferIn ? loanOf(row.counterparty, ctx.loans) : null
-  // Over a rule only from the day the loan was given (as the rules' audit – `loanOn`): the person's money before it is
-  // no repayment of it, the rule keeps it as before 1.15.5.
-  const lent = loan && loan.date <= row.date ? loan : null
+  // Money back from the person a loan of the Radar was given to (B34): its repayment – only from the day it was given,
+  // with a rule or without (`loanFor`, as the rules' audit): the person's money before it is no repayment of it.
+  const lent = transferIn ? loanFor(row.counterparty, ctx.loans, row.date) : null
   const own = isOwnTransferRow(row, ctx.ownNames)
   // Recognized by the name before a rule of another kind (AP-6), in the app's own order: an own transfer and a member's
   // money before XTB (B106 – their title may name it).
@@ -523,7 +516,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
         decision(kind, 'Twoja reguła – pożyczkę, podatek i XTB sprawdź przy każdej operacji', {
           ruleId: rule.id,
           byTitle,
-          loanId: kind === 'loan' ? (loan?.id ?? null) : null
+          loanId: kind === 'loan' ? (lent?.id ?? null) : null
         })
       )
     // A member's purchase (D80) – its product return is theirs too (B40); a shared purchase (D83) is split the same way.
@@ -552,9 +545,8 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
       })
     )
   }
-  // A rule that gave way (to what was recognized) – the loan only from its day; no rule – any open loan (B34).
-  const repayment = rule ? lent : loan
-  if (repayment) return out(decision('loan', `zwrot pożyczki: ${repayment.name}`, { loanId: repayment.id }))
+  // No rule, or a rule that gave way to what was recognized: the loan's repayment (B34) – from its day only.
+  if (lent) return out(decision('loan', `zwrot pożyczki: ${lent.name}`, { loanId: lent.id }))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
   if (own) {
     const descDigits = row.description.replace(/\D/g, '')

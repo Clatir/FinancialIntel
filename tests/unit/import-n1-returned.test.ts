@@ -218,24 +218,30 @@ describe('przegląd N1 – meldunek w oknie', () => {
 
   it('usunięte czytane po otwarciu folderu tylko, gdy jest po co: po imporcie od ostatniego sprawdzenia albo z meldunkami', async () => {
     const { back, gone, all } = cameBack()
+    // The folder's imports as the check keeps them, the account's last one at `time` (T332, review N1 2: compared as they
+    // are, not by time).
+    const at = (time: string) => {
+      const fi = data.useData.getState().fi!
+      return returned.importsMark({ ...fi, settings: { ...fi.settings, import: { ...fi.settings.import, lastImport: { [MBANK_ACCOUNT_ID]: time } } } })
+    }
     // Nothing come back: read once, then not at the next opening – until an import (another computer's too).
     const dir = open({ transactions: all.filter((t) => t !== back), lastImport: { [MBANK_ACCOUNT_ID]: T3 } })
-    expect(returned.deletedReadDue(dir, T3)).toBe(true)
+    expect(returned.deletedReadDue(dir, at(T3))).toBe(true)
     api.historyDeleted.mockImplementation(async () => historyOf([gone], T2))
     await returned.readDeletedBank()
-    expect(returned.deletedReadDue(dir, T3)).toBe(false)
-    expect(returned.deletedReadDue(dir, '2026-11-01T10:00:00.000Z')).toBe(true)
+    expect(returned.deletedReadDue(dir, at(T3))).toBe(false)
+    expect(returned.deletedReadDue(dir, at('2026-11-01T10:00:00.000Z'))).toBe(true)
     // One come back: read at every opening while it waits.
     const other = open({ transactions: all, lastImport: { [MBANK_ACCOUNT_ID]: T3 } })
     await returned.readDeletedBank()
-    expect(returned.deletedReadDue(other, T3)).toBe(true)
+    expect(returned.deletedReadDue(other, at(T3))).toBe(true)
     // The history not read: as never checked.
     open({ dir, transactions: all.filter((t) => t !== back), lastImport: { [MBANK_ACCOUNT_ID]: T3 } })
     api.historyDeleted.mockImplementation(async () => {
       throw new Error('EBUSY')
     })
     await returned.readDeletedBank()
-    expect(returned.deletedReadDue(dir, T3)).toBe(true)
+    expect(returned.deletedReadDue(dir, at(T3))).toBe(true)
   })
 
   /** A list with a pending purchase, then a list of the same days without it (gone from the bank): removed by the import. */
@@ -251,7 +257,7 @@ describe('przegląd N1 – meldunek w oknie', () => {
     expect(operations().map((t) => t.counterparty).sort()).toEqual(['SLUSARZ KOWAL', 'ZABKA Z1234'])
     return kiosk.id
   }
-  const latestImport = () => data.useData.getState().fi!.settings.import.lastImport[MBANK_ACCOUNT_ID]!
+  const imports = () => returned.importsMark(data.useData.getState().fi)
 
   it('import usuwa nierozliczoną, której bank już nie pokazuje: jako usuniętą przez import (T331)', async () => {
     open()
@@ -262,6 +268,6 @@ describe('przegląd N1 – meldunek w oknie', () => {
   it('import z tego komputera (z usuniętymi przeczytanymi): sprawdzenie przesunięte na jego czas – bez czytania przy następnym otwarciu (T332)', async () => {
     const dir = open()
     await vanishedImport()
-    expect(returned.deletedReadDue(dir, latestImport())).toBe(false)
+    expect(returned.deletedReadDue(dir, imports())).toBe(false)
   })
 })

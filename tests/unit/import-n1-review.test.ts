@@ -56,7 +56,7 @@ const ctx = (rules: ImportRule[] = [], over: Partial<ClassifyContext> = {}): Cla
 })
 const tomasz = (date: string, amount = 500, title = 'CZYNSZ') => transfer(date, amount, 'TOMASZ KOLEGA', title)
 
-describe('przegląd N1, 1: pożyczka przed regułą innego rodzaju dopiero od dnia jej udzielenia (jak audyt – loanOn)', () => {
+describe('przegląd N1, 1: pożyczka przed regułą innego rodzaju dopiero od dnia jej udzielenia (jak audyt – loanFor)', () => {
   const rent = rule({ kind: 'income', categoryId: null })
 
   it('przelew pożyczkobiorcy sprzed pożyczki – reguła (jak przed 1.15.5); od dnia pożyczki – zwrot pożyczki', () => {
@@ -79,8 +79,9 @@ describe('przegląd N1, 1: pożyczka przed regułą innego rodzaju dopiero od dn
     expect(classifyRow(tomasz('2026-10-15'), withMember([rule({})])).decision).toMatchObject({ kind: 'loan', loanId: LOAN })
   })
 
-  it('bez reguły – jak dotąd (B34): pożyczka otwarta, z dowolnego dnia', () => {
-    expect(classifyRow(tomasz('2026-09-15'), ctx()).decision).toMatchObject({ kind: 'loan', loanId: LOAN })
+  it('bez reguły (B34): pożyczka otwarta – też dopiero od dnia jej udzielenia (przegląd N1 2)', () => {
+    expect(classifyRow(tomasz('2026-09-15'), ctx()).decision).toMatchObject({ kind: 'income', loanId: null })
+    expect(classifyRow(tomasz('2026-10-15'), ctx()).decision).toMatchObject({ kind: 'loan', loanId: LOAN })
   })
 })
 

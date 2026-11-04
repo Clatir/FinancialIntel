@@ -8,7 +8,7 @@ import { shareOf, withShare } from '../calc/share'
 import { deepEqual } from '../merge'
 import type { BrandAliases } from './aliases'
 import { keywordMatches } from './brands'
-import { findRule, loanOn, PER_OPERATION_KINDS, ruleGivesWay } from './classify'
+import { findRule, loanFor, PER_OPERATION_KINDS, ruleGivesWay } from './classify'
 import { officerTarget } from './officer'
 
 /** A loan as the audit reads it (the Radar's given loans – AP-6). */
@@ -32,9 +32,9 @@ export interface RuleAudit {
   otherKind: Map<string, Transaction[]>
   /**
    * A rule on a borrower's name (AP-6, AF-26 – learned from a one-click mistake): the money that came from the person
-   * while a loan of the Radar given to them was open, decided by the rule as another kind than the loan's – to check
-   * and fix by hand (the next imports recognize the loan first; a keyword of the title stays the rule's – not here). Its
-   * operations and the loan, the oldest first.
+   * since a loan of the Radar open now was given to them, decided by the rule as another kind than the loan's – to check
+   * and fix by hand (the next imports recognize the loan first; a keyword of the title, a loan closed since stay the
+   * rule's – not here). Its operations and the loan, the oldest first.
    */
   borrower: Map<string, Array<{ t: Transaction; loan: AuditLoan }>>
   /** Brands with expenses of two and more categories. */
@@ -95,10 +95,11 @@ export function feedAudit(run: AuditRun, transactions: readonly Transaction[]): 
     const split = t.splits.length > 0 && !shareOf(t)
     if (rule) {
       push(run.hits, rule.id, t.id)
-      // Money from a borrower while their loan was open, kept by a rule as its own kind (AP-6): to fix by hand – a rule
-      // the import gives way to the loan now (`ruleGivesWay`; a keyword of the title stays the rule's, T325).
+      // Money from a borrower kept by a rule as its own kind (AP-6): to fix by hand – a rule the import gives way to the
+      // loan now: the loan it reads (`loanFor` – given by the day of the money and open now; a closed one keeps the
+      // rule's decision) and `ruleGivesWay` (a keyword of the title stays the rule's, T325).
       if (direction === 'in' && rule.kind === t.kind && run.loans.length) {
-        const loan = loanOn(t.bank.counterparty || t.counterparty, run.loans, t.date)
+        const loan = loanFor(t.bank.counterparty || t.counterparty, run.loans, t.date)
         const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
         if (loan && ruleGivesWay(rule, { kind: 'loan', loanId: loan.id }, byTitle)) push(run.borrower, rule.id, { t, loan })
       }

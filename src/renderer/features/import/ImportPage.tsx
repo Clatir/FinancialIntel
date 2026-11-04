@@ -62,6 +62,7 @@ import {
   setRestoreDeleted,
   setSkip,
   skipSelected,
+  sharesTogether,
   themeSharesFrom,
   themeShows,
   themeStatus,
@@ -456,7 +457,7 @@ function MatchesPanel() {
             <p className="text-[11px] text-dim">
               Te operacje są już na tym koncie ({otherFormat}), a ich kopie z wcześniejszego importu tego pliku – na innym koncie, więc liczą się dwa razy.
               Zaznaczone kopie usunę (ich kategoria, notatki i spłacane zakupy przejdą na operację tutaj; „Cofnij import” je przywróci). Kopia z inną decyzją
-              albo spłacająca inne zakupy nie jest zaznaczona – sprawdź ją.
+              albo ze spłacanymi zakupami, których operacja tutaj nie przejmie, nie jest zaznaczona – sprawdź ją.
             </p>
             {withCopy.map((p) => (
               <label
@@ -465,6 +466,7 @@ function MatchesPanel() {
                 data-testid="import-copy"
                 data-blocked={p.copy!.blocked ?? undefined}
                 data-other-covers={p.copy!.otherCovers || undefined}
+                data-drops-covers={p.copy!.dropsCovers || undefined}
               >
                 <input
                   type="checkbox"
@@ -477,6 +479,8 @@ function MatchesPanel() {
                   {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· kopia na: {accountName(p.copy!.tx.accountId)}</span>
                   {p.copy!.conflict && <span className="ml-1 text-accent">· inna decyzja w kopii</span>}
                   {p.copy!.otherCovers && <span className="ml-1 text-accent">· kopia spłaca inne zakupy niż operacja tutaj</span>}
+                  {/* Review N1 2: removed, the purchases it pays back would be due again – the operation here does not repay them. */}
+                  {p.copy!.dropsCovers && !p.copy!.otherCovers && <span className="ml-1 text-accent">· usunięta – spłacane przez nią zakupy znów do oddania</span>}
                   {p.copy!.blocked && <span className="ml-1 text-accent">· {COPY_BLOCKED[p.copy!.blocked]}</span>}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
@@ -787,7 +791,9 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
   const fileAccount = useImport((s) => s.accountId)
   // Every group decided on its own (N78): their one decision, or „różne” – never the theme's empty proposal.
   const groupsDecided = useImport((s) => themeShows(t, s.choices))
-  const common = useImport((s) => (groupsDecided === 'same' ? s.choices.groups[t.groups[0]!.group] : undefined))
+  const first = useImport((s) => (groupsDecided === 'same' ? s.choices.groups[t.groups[0]!.group] : undefined))
+  // Their „w tym za” lines together (`sharesTogether`): a change here makes the theme's decision of what it shows.
+  const common = useMemo(() => (first ? sharesTogether(first, t.groups.length) : undefined), [first, t.groups.length])
   // A keyword of a title (N79): about those payments – no rule of the brands, whatever „zapamiętaj” said.
   const byTitle = t.groups.every((g) => g.byTitle)
   const shown = t.groups.filter((g) => found.has(g.group))

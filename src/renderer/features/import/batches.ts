@@ -133,8 +133,9 @@ async function redoImport(u: Undone): Promise<void> {
     'balances',
     u.confirmations.filter((b) => !s.records.balances[b.id])
   )
+  // The import's own deletions again (vanished pending ones, copies on another account – T331): no deletion of the user's.
   const again = u.readded.filter(has)
-  const removal = again.length ? await deleteRecords('transactions', again) : null
+  const removal = again.length ? await deleteRecords('transactions', again, { reason: 'import' }) : null
   updateSettings((f) => ({ ...f, settings: settingsRedone(f.settings, u.batch) }))
   updateRecord('imports', u.batch.id, (b) => ({ ...b, undoneAt: null }))
   await flushSaves()
