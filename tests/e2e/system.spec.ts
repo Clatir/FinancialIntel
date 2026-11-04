@@ -51,6 +51,14 @@ test('folder danych (1.5.3, B53): zapamiętany pusty – tylko ponowna próba al
     const page = second.page
     await expect(page.getByTestId('setup-message')).toContainText('podfolder')
     await expect(page.getByTestId('retry-folder')).toHaveCount(0)
+    // „Nowe dane gdzie indziej” on a folder of other files (AP-25, AF-53): the question first – no subfolder made by itself.
+    const papers = join(base, 'Papiery')
+    mkdirSync(papers)
+    writeFileSync(join(papers, 'notatki.txt'), 'x')
+    const asked = await page.evaluate((d) => (globalThis as unknown as { fi: { openDataDir: (d: string, c: boolean) => Promise<{ ok: boolean; problem?: string; subfolder?: string; message?: string }> } }).fi.openDataDir(d, true), papers)
+    expect(asked).toMatchObject({ ok: false, problem: 'other', subfolder: join(papers, 'FinancialIntel') })
+    expect(asked.message).toContain('inne pliki')
+    expect(existsSync(join(papers, 'FinancialIntel'))).toBe(false)
     await page.getByTestId('create-subfolder').click()
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     expect(existsSync(join(other, 'FinancialIntel', 'fi.json'))).toBe(true)

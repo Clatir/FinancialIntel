@@ -6,7 +6,7 @@ import { useMemo } from 'react'
 import { doubleCorrections, openingOf } from '@shared/calc/balances'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { memberName } from '@shared/calc/household'
-import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
+import { inboxItems, inboxStarted, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
 import { noNarrowing } from '@shared/operationsView'
 import { listOf, updateSettings, useData } from '../../store/data'
 import { useGhosts } from '../../store/ghosts'
@@ -41,7 +41,10 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const drafts = useData((s) => s.drafts)
   const accounts = useData((s) => s.fi?.settings.accounts)
   const members = useData((s) => s.fi?.settings.household.members)
-  const from = fleet?.started ? fleet.start : null
+  // The budget's reports from the wizard's start on (AP-25, ME sp. 3) – not from an opening balance alone.
+  const budgetStart = useData((s) => s.fi?.settings.budget.start ?? null)
+  const started = inboxStarted(!!fleet?.started, budgetStart)
+  const from = started ? fleet!.start : null
   const uncategorized = useMemo(() => uncategorizedOf(listOf(transactions), from, drafts), [transactions, from, drafts])
   // A balance confirmed twice on two computers before the sync (B129) – not the pairs said to be two corrections.
   const dismissed = useData((s) => s.fi?.settings.import.notDuplicates)
@@ -77,7 +80,7 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   if (!fleet) return []
   return inboxItems({
     today: fleet.today,
-    started: fleet.started,
+    started,
     deliveries,
     conflicts,
     problems,

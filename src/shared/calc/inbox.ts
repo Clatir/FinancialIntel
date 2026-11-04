@@ -128,6 +128,13 @@ export interface InboxInput {
   cargo?: { prices: readonly PriceChange[]; dead: readonly DeadContainer[]; containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths' | 'schedule'>> }
 }
 
+/**
+ * The budget's reports wait for its start by the wizard (AP-25, ME sp. 3): a folder with an opening balance and the old
+ * history runs the engine already, but its tasks (uncategorized, balances, duplicates…) come once the budget starts –
+ * before it, only the data folder reports. `budgetStart` – `settings.budget.start`.
+ */
+export const inboxStarted = (engineStarted: boolean, budgetStart: string | null | undefined): boolean => engineStarted && !!budgetStart
+
 const dmy = plDate
 const zlotych = (g: number) => `${formatPln(g)} zł`
 

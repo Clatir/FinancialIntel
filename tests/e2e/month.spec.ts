@@ -67,12 +67,16 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await expect(page.getByTestId('wizard-split-hull')).toHaveValue('14 879,94')
     await expect(page.getByTestId('wizard-split-goal-input')).toHaveValue('1 000,00')
     await expect(page.getByTestId('wizard-split-shields')).toContainText('9 120,06')
+    // The start's day (AP-25, AF-10): the first salary goes from the shields to the energy – the bridge's shields.
+    await expect(page.getByTestId('wizard-effect-salary')).toContainText('2 500,00')
+    await expect(page.getByTestId('wizard-effect-shields')).toHaveText('6 620,06 zł')
     await page.getByTestId('wizard-next').click()
     // 7. The ship.
     await page.getByTestId('wizard-ship').fill('Sokół')
     await page.getByTestId('wizard-finish').click()
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await expect(page.getByTestId('banner-wizard')).toHaveCount(0)
+    await expect(page.getByTestId('bridge-state')).toContainText('6 620,06')
 
     await expect.poll(async () => (await json(join(dataDir, 'fi.json'))).settings.budget.start).toBe(today)
     const fi = await json(join(dataDir, 'fi.json'))

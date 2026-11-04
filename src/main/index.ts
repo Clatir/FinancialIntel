@@ -667,10 +667,22 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       return { ok: false, reason: 'not-data', problem: 'ictj', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
     }
     // A folder of other files gets a FinancialIntel subfolder – not the proposal itself (already named so) and not a
-    // folder of FI data whose fi.json has not arrived yet.
+    // folder of FI data whose fi.json has not arrived yet. Its data there opens; new data – only after the question
+    // (AP-25, AF-53: never a subfolder made without a word – the button „Utwórz podfolder FinancialIntel”).
     if (kind === 'other' && createIfEmpty && basename(dir) !== DATA_FOLDER_NAME) {
-      target = join(dir, DATA_FOLDER_NAME)
-      kind = await untilAborted(DataStore.inspect(target), signal)
+      const sub = join(dir, DATA_FOLDER_NAME)
+      const subKind = await untilAborted(DataStore.inspect(sub), signal)
+      if (subKind === 'missing' || subKind === 'empty')
+        return {
+          ok: false,
+          reason: 'not-data',
+          dir,
+          problem: kind,
+          subfolder: sub,
+          message: `W tym folderze są inne pliki – nowe dane Financial Intel nie powstaną obok nich. Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
+        }
+      target = sub
+      kind = subKind
     }
     if (kind === 'partial' || (kind === 'other' && createIfEmpty)) {
       return {

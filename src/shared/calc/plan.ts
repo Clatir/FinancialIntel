@@ -21,7 +21,7 @@ export const ENVELOPE_MONTHS = 3
 /** The salary is proposed in whole hundreds of złoty, up (D70). */
 const SALARY_STEP = 100_00
 /** Envelopes in tens of złoty (D70). */
-const ENVELOPE_STEP = 10_00
+export const ENVELOPE_STEP = 10_00
 
 /** The first month the history covers in whole (`calc/history.ts`: where the bank's history starts – B25). */
 export function firstFullMonth(transactions: readonly Pick<Transaction, 'date' | 'kind' | 'bank'>[]): string | null {
@@ -215,6 +215,8 @@ const MONTH_DAYS = 30.44
 const CYCLE_SLACK_DAYS = 12
 /** The cycles of the history's fees besides the monthly and the yearly one (F23). */
 const MID_CYCLES = [2, 3, 6] as const
+/** A bill of a varying amount besides the monthly one (AP-25, AF-13): every 2 months – the electricity, the gas. */
+const VARIABLE_MID_CYCLES: ReadonlySet<number> = new Set([2])
 /** A variable bill's amounts lie within this share of their median (F23): electricity 150–260 zł – a shop's do not. */
 const VARIABLE_SPREAD = 0.6
 /** The payments of a bill (a variable one, a schedule's) come within this many days of their usual day of the month. */
@@ -244,6 +246,12 @@ function onItsDay(dates: readonly string[], slack = BILL_DAY_SLACK): number | nu
   const days = dates.map(dayOfMonth).sort((a, b) => a - b)
   const day = days[(days.length - 1) >> 1]
   return day != null && days.every((d) => Math.abs(d - day) <= slack) ? day : null
+}
+
+/** Months of the year (sorted) that make one run across the new year – November to July: 1–7 and 11–12. */
+function cyclicRun(months: readonly number[]): boolean {
+  const gaps = months.map((m, i) => (i ? m - months[i - 1]! : m + 12 - months[months.length - 1]!))
+  return gaps.filter((g) => g !== 1).length <= 1
 }
 
 type Detected = Pick<RecurringPayment, 'amount' | 'cycleMonths' | 'schedule' | 'variable' | 'dueMonth' | 'dueDay' | 'payments' | 'last'>
@@ -288,8 +296,16 @@ function detectCycle(sorted: readonly Transaction[], month: string, window: read
     const want = n * MONTH_DAYS
     let run = 1
     for (let i = sorted.length - 1; i > 0 && Math.abs(daysBetween(sorted[i - 1]!.date, sorted[i]!.date) - want) <= CYCLE_SLACK_DAYS; i--) run++
-    if (run < 3 || daysBetween(last.date, start) > want + CYCLE_SLACK_DAYS || !steady(amountsOf(sorted.slice(-run)))) continue
-    return found(n, run, -last.amount)
+    if (run < 3 || daysBetween(last.date, start) > want + CYCLE_SLACK_DAYS) continue
+    const runOf = sorted.slice(-run)
+    if (steady(amountsOf(runOf))) return found(n, run, -last.amount)
+    // A bill of a varying amount every 2 months (AF-13, KR.19 – the electricity, 150–230 zł): on its day of the month,
+    // its amount the 75th percentile of a year up to whole złoty, as a monthly one.
+    const day = VARIABLE_MID_CYCLES.has(n) ? onItsDay(runOf.map((t) => t.date)) : null
+    if (day != null && within(amountsOf(runOf), VARIABLE_SPREAD)) {
+      const year = sorted.filter((t) => t.date >= firstDayOf(addMonths(month, -12)))
+      return found(n, run, Math.ceil(p75(amountsOf(year)) / 100) * 100, { variable: true, dueDay: day })
+    }
   }
   // Once a year: two or three steady payments, each 11–13 months after the one before (no shop visited monthly).
   const gaps = sorted.slice(1).map((t, i) => monthsBetween(monthOf(sorted[i]!.date), monthOf(t.date)))
@@ -301,6 +317,9 @@ function detectCycle(sorted: readonly Transaction[], month: string, window: read
   const year = sorted.filter((t) => t.date >= yearFrom)
   const months = [...new Set(year.map((t) => Number(t.date.slice(5, 7))))].sort((a, b) => a - b)
   if (year.length < 3 || year.length > 11 || months.length !== year.length || !steady(amountsOf(year))) return null
+  // Months one after another (AF-13, KR.19 – a subscription paid every month and cancelled in July): a monthly fee that
+  // stopped or began, never a schedule of months.
+  if (cyclicRun(months)) return null
   const day = onItsDay(year.map((t) => t.date))
   if (day == null) return null
   // Its longest gap between payments: the next one not missed yet.
