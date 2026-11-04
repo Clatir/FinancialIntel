@@ -1652,7 +1652,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   to decyzja użytkownika (reguła nadawcy jak każda), reszta ponad należność – pytanie „zaliczka czy przychód?” (temat „do
   decyzji”, także po nowym planie z innym kluczem grupy); odpowiedź zapamiętana dla osoby tylko z decyzji użytkownika,
   głosami operacji bez pominiętych. Temat: „różne – patrz marki”, gdy marki zdecydowano różnie; jednakowe decyzje marek
-  pokazane jako decyzja tematu – jej zmiana je zastępuje. Słowo kluczowe z paska zbiorczego dla każdej decyzji ze słowem
+  pokazane jako decyzja tematu – jej zmiana je zastępuje (z „w tym za” kilku marek – trafia do każdej marki, T336).
+  Słowo kluczowe z paska zbiorczego dla każdej decyzji ze słowem
   (wydatek, wpływ, przelew, domownik), kierunek z zaznaczonych, do których decyzja pasuje; żaden nie pasuje – słowo
   niezapisane. Wyszukiwarka po kategorii, którą grupa dostaje (nie propozycji), bez powodu propozycji; „Przyjmij pewne” i
   „Przyjmij podpowiedzi” w wyszukiwaniu tylko na znalezionych. Własna decyzja operacji inna niż wydatek widoczna z „jak
@@ -2466,14 +2467,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „jak grupa” albo usunięcie wszystkich linii, gdy grupa nie ma swoich. Nowa linia (wiersz, grupa, temat) startuje od
   tego, co X ma oddać – po zakupach pliku, po własnych wpłatach X w pliku i po częściach X w innych wierszach – najwyżej
   tyle, ile zostało w pieniądzach wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”.
-  Temat, który pokazuje wspólną decyzję swoich marek (N78), liczy start i rozkład przy linii z ich wierszy i ich linii
-  (`themeSharesFrom`, `decisionSpread`; przegląd N1) i pokazuje linię innego domownika jako to, co marki razem mu dały
-  (`themeCommon` – suma ich rozkładu: dwie marki po 100 zł = 200 zł, ale marka, której wiersze mają własne decyzje albo
-  której wpłatom zabrakło pieniędzy, daje mniej; linie 0 zł pominięte; przy linii – z których wpłat poszło); zmiana tam
-  robi decyzję tematu z tą kwotą (kwota tematu jest dla wszystkich jego wierszy, T328) – X nigdy nie dostaje więcej, niż
-  marki dały (przegląd N1 2: wcześniej kwota jednej marki – zmiana zmniejszała sumę o połowę; przegląd N1 3: potem kwota
-  marki razy ich liczba – zmiana dawała X pieniądze, których nikt za niego nie wysłał). Własna część wiersza zostaje
-  wpisana jak wpisana (także ponad dług – świadomie, za ten przelew).
+  Temat, który pokazuje wspólną decyzję swoich marek bez linii z kwotą (N78), liczy start nowej linii z ich wierszy
+  (`themeSharesFrom`; przegląd N1), a linia wpisana tam to decyzja tematu (razem dla X, T328); linie marek z kwotą
+  zostają w markach – T336. Własna część wiersza zostaje wpisana jak wpisana (także ponad dług – świadomie, za ten
+  przelew).
 - **T328** „w tym za X” grupy i tematu (AP-7, AF-27; D81): kwota decyzji wspólnej dla kilku wpłat to razem dla X, nie
   na każdą wpłatę – rozkładana po kolei od najstarszej (każda wpłata najwyżej swoją kwotą), a wszystkie spłaty X z grup
   i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy i o własne wpłaty X w pliku,
@@ -2481,9 +2478,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   cała, dopóki jej części nie są znane – po kolei; przegląd N1) (`rowShares`). „Ma oddać” =
   dług z księgi teraz plus części X zakupów, które ten import tworzy (zwrot towaru odejmuje), pomniejszone o jego zaliczkę
   (`owedWithFile`); część zaliczki / przychodu (`inflowKind` inny niż spłata) – bez tego limitu. Podgląd mówi przy linii
-  grupy, z których wpłat poszła i dlaczego mniej niż wpisane („tyle X ma oddać” / „tyle zostało we wpłatach”); import
-  liczy to samo (`runImport` → `buildImport({ owed })`). Bez migracji: importy z „w tym za” w grupie kilku wpłat sprzed
-  1.15.5 mają zdublowane części – do poprawy w Operacjach.
+  jednej decyzji – grupy, tematu z własną decyzją, tematu jednej marki (`lineSpreads`) – z których wpłat poszła i dlaczego
+  mniej niż wpisane („tyle X ma oddać” / „tyle zostało we wpłatach”, „X nie ma nic do oddania”); linii kilku decyzji
+  razem nie składa (T336); import liczy to samo (`runImport` → `buildImport({ owed })`). Bez migracji: importy
+  z „w tym za” w grupie kilku wpłat sprzed 1.15.5 mają zdublowane części – do poprawy w Operacjach.
 - **T329** Pewne dopasowanie przy podziale na osoby (AP-7, D91 b – D99; DM sp. 1–2): w edytorze Operacji dopisana albo
   zmieniona część osoby („+ także za…”, „podziel na osoby”) wiąże sama pewny zakup tej osoby, gdy jej część nie wskazuje
   jeszcze żadnego (to samo, co edytor proponował jako „Pasuje: …” – `moreSureCovers`, `repaymentSharesByMember`); część
@@ -2547,3 +2545,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w spoczynku i w kolejce jedna próba bez czekania. Wcześniej plik tymczasowy raz (jeden chwilowy EPERM na `.presence/`
   dawał tryb tylko do odczytu), a zamiana zawsze 8 razy (ok. 1,4 s co 5 s w spoczynku i w kolejce magazynu). Zwykłe
   zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy.
+- **T336** Temat z jednakową decyzją marek z „w tym za” (przegląd N1 4; doprecyzowuje T235 – N78, T327, T328): gdy
+  kilka marek tematu ma tę samą decyzję z liniami „w tym za” z kwotą (`themeShows` 'brands'), wiersz tematu pokazuje ich
+  decyzję bez edytora linii – „w tym za – ustawione w markach”; linie, kwoty i uwagi rozkładu są przy każdej marce (jej
+  klucz, `lineSpreads`). Zmiana w temacie (np. cel wpłaty) trafia do decyzji każdej marki jako jej własna, a linie marki
+  zostają jak wpisane (także 0 zł); inny rodzaj zdejmuje linie w każdej marce, jak ta zmiana w marce (`chooseThemeRow`).
+  Nigdy jedna decyzja tematu z kwotą policzoną z marek: kwota tematu jest dla wszystkich jego wierszy razem (T328), kwota
+  marki – dla jej wierszy, więc żadna jedna kwota nie jest tym, co wpisała każda marka (przegląd N1 2: kwota jednej marki
+  – suma o połowę mniejsza; N1 3: kwota razy liczba marek – X dostawał pieniądze, których nikt za niego nie wysłał; N1 4:
+  to, co marki dają teraz – zmiana obok, np. kategorii, zapisywała kwotę obciętą do długu, a gdy dług potem rósł, X
+  dostawał mniej, niż marki wpisały, albo nic). Jedna marka albo marki bez linii z kwotą – jak dotąd: zmiana w temacie to
+  decyzja tematu (te same wiersze i kwoty). Wiersz tematu nie czyta rozkładu (`themeCommon` – decyzja pierwszej marki,
+  bez sumowania), uwagi przy linii zawsze z jednej decyzji – kilku kluczy razem nikt nie składa.

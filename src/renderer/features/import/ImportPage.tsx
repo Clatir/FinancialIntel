@@ -9,7 +9,7 @@ import { keywordMatcher } from '@shared/import/brands'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { useWizard } from '../wizard/state'
-import { useFleet, useHousehold } from '../../store/fleet'
+import { useFleet } from '../../store/fleet'
 import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { IconChevronDown, IconChevronRight, IconImport, IconSearch } from '../../components/icons'
@@ -37,7 +37,7 @@ import {
   chooseRow,
   chooseSelected,
   chooseTheme,
-  chooseThemeOverGroups,
+  chooseThemeRow,
   clearGroup,
   clearImportSelection,
   closeImport,
@@ -63,7 +63,6 @@ import {
   setRestoreDeleted,
   setSkip,
   skipSelected,
-  sharesView,
   themeCommon,
   themeSharesFrom,
   themeShows,
@@ -786,15 +785,9 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
   const fileAccount = useImport((s) => s.accountId)
   // Every group decided on its own (N78): their one decision, or „różne” – never the theme's empty proposal.
   const groupsDecided = useImport((s) => themeShows(t, s.choices))
-  const members = useMembers()
-  const ledger = useHousehold()
-  // Their decision with „w tym za” what they gave together (`themeCommon`, review N1 3): a change here makes the theme's
-  // decision of what it shows. As one text (a new object at every call).
-  const commonKey = useImport((s) => {
-    const c = themeCommon(t, s.choices, () => sharesView(s.plan, s.choices, ledger, members))
-    return c ? JSON.stringify(c) : ''
-  })
-  const common = useMemo(() => (commonKey ? (JSON.parse(commonKey) as Choice) : undefined), [commonKey])
+  // Their one decision as the first group has it (a reference, nothing summed – T336): with „w tym za” of several brands
+  // ('brands') the lines are each brand's – said here, a change here goes to each brand (`chooseThemeRow`).
+  const common = useImport((s) => themeCommon(t, s.choices))
   // A keyword of a title (N79): about those payments – no rule of the brands, whatever „zapamiętaj” said.
   const byTitle = t.groups.every((g) => g.byTitle)
   const shown = t.groups.filter((g) => found.has(g.group))
@@ -837,9 +830,10 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
           <DecisionFields
             choice={common ?? choice}
             direction={t.direction}
-            onChange={(c) => (common ? chooseThemeOverGroups(t, c) : chooseTheme(t.theme, c))}
+            onChange={(c) => chooseThemeRow(t, c)}
             own={fileAccount}
             sharesFrom={themeSharesFrom(t, groupsDecided)}
+            sharesInBrands={groupsDecided === 'brands'}
             testId="import-theme"
           />
         )}
@@ -850,7 +844,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
                 ? 'podpowiedź mBanku'
                 : 'przyjęte'
               : 'Twoja decyzja'
-            : groupsDecided === 'same' || groupsDecided === 'mixed'
+            : groupsDecided === 'same' || groupsDecided === 'brands' || groupsDecided === 'mixed'
               ? 'Twoje decyzje marek'
               : THEME_SOURCE[t.source]}
         </Badge>
