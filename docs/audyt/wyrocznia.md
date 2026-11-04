@@ -291,8 +291,8 @@ aplikacji czyta tylko regresja (`regresja.test.ts`, `tests/unit/wyrocznia-ap32.t
 | T341, T342, C13 | pary ICTTJ liczone przed przebiegiem (`pairIctj`: okno T63 / T164, „inna kwota” T162, Portfel XTB T224); niezadokowana para = dokowanie z pulą wpisu; „Do zadokowania” (ile, wpływ, wypływ, w celach); para z puli Podatek poza przychodem | T341, T342 (AP-12) |
 | T345 | płatność opłaty okresowej sprzed startu zamyka swój cykl | T345 (AP-5) |
 | T346 | `planNaprzod` – 3 miesiące od stanu teraz: pobrane i wymagane odkładki, raty celów; bez pensji nic pobrane | T346, C20 (AP-11) |
-| T350, T352, T354 | główny wariant domowników **D99** (A – spec i B – 1.15.3 obok): „spłata” najpierw spłaca, jawny przychód / zaliczka spłacają tylko wskazane zakupy tej osoby, bez wskazania omijają dług (`zaliczkiPrzyDlugu`); Marek (14.09, zaliczka → EVENTIM) 300,00 zł od 24.09, depozyt 4 737,20 zł | D99 pkt 1 (AP-4) |
-| T355, T356 | linia wpływu z `loanId` – spłata pożyczki udzielonej do wysokości długu, nadwyżka dokuje; spłaty sprzed startu w stanie pożyczki; „kto zapłacił”; poza przychodem w statystykach | D100 |
+| T350, T352, T354 | główny wariant domowników **D99** (A – spec i B – 1.15.3 obok): „spłata” najpierw spłaca, jawny przychód / zaliczka spłacają tylko wskazane zakupy tej osoby, bez wskazania omijają dług (`zaliczkiPrzyDlugu`); obok części „spłata” tej osoby w tej samej operacji wskazane są tamtej części, jawna omija dług (przegląd 2 N2 – zaliczka rozbita przez „Spłać”); Marek (14.09, zaliczka → EVENTIM) 300,00 zł od 24.09, depozyt 4 737,20 zł | D99 pkt 1 (AP-4) |
+| T355, T356 | linia wpływu z `loanId` – spłata pożyczki udzielonej do wysokości długu, nadwyżka dokuje; spłaty sprzed startu i w saldzie otwarcia konta w stanie pożyczki (po kolei dni); „kto zapłacił”; w statystykach do wysokości długu poza przychodem, nadwyżka ponad dług (odsetki) – przychód, całością i częścią (`loanExtra`, T70 – AF-5, przegląd 2 N2); linia pożyczki nieznanej / wziętej – przychód | D100, T70 |
 | S8, C21 | przydział dziś nie poniżej zera (`przydzialDzisNieUjemny`, `energiaDzis`); „Razem” przychodów jako suma zaokrąglonych części | D99 pkt 9 |
 
 **Regresja.** `npm run test:wyrocznia` (`vitest.wyrocznia.config.mts`, tylko lokalnie – migawki są w laboratorium,
@@ -314,3 +314,9 @@ asteroidy „Woda” – odprawa 15.11 (dzień kontenera), Radar i Ładownia 14.
 błąd aplikacji, naprawa w N3 (AP-10); zbiornik „OC motocykla” po końcu życia (LA.11-4) – wyrocznia 0,00 zł, aplikacja go
 nie pokazuje (te same pieniądze – porównanie czyta brak jako 0). Bez pokrycia na migawkach (nowe w N2, dane 1.15.4 ich
 nie mają): T345 z dniem startu po płatności, T355 – sprawdzane scenariuszami w `npm test`.
+
+**Przegląd 2 N2 (04.11.2026, gałąź `claude/1.15.6-silnik`):** wyrocznia z tekstu T355 (zmienionego – nadwyżka spłaty
+pożyczki ponad dług to przychód w statystykach, T70 / AF-5) i T350 (wskazane zakupy części „spłata” obok jawnej zaliczki
+tej osoby); wynik regresji ten sam (412 przypadków, 28 963 liczb, tylko AF-15). Nadwyżka jest w 5 migawkach (DM.18-4,
+DM.19 – „Pożyczka dla Oli”, 1 050 z 1 000 zł), ale w miesiącu migawki, poza średnimi pełnych miesięcy – AF-5 sprawdza
+scenariusz w `npm test` (`wyrocznia-ap32`) i `wyrocznia-u3`.

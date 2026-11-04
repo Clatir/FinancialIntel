@@ -57,15 +57,20 @@ paths:
   (także płatnością sprzed startu – `paidBeforeStart` z dniami `feePaymentDays`, silnik i kreator `startPaidDays`, T345)
   nie ma rat, zbiornik zbiera na następny. Miesiąc przed
   silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
-- Wpłata domownika (AP-4, T350): `incomeShares` (czyje pieniądze) → `inflowPlanOf` (spłata długu / tylko wskazane / bez
-  spłaty) → `repay` (które zakupy). Jawny niezależny przychód i zaliczka na przyszłość omijają dług (D99 S4), ale
-  wskazane zakupy spłacają (naprawa liczona przy odczycie); omijające dług – `ledger.skipped` → meldunek (T352). Nowy
-  sposób wpłaty dopisz jako część albo plan tutaj, nie obok. **Pułapka:** przy osobie dług i zaliczka naraz
-  (`balanceText`, AF-16) – inaczej depozyt ≠ suma przy osobach.
+- Wpłata domownika (AP-4, T350): `incomeShares` (czyje pieniądze) → `planOf` / `inflowPlanOf` (spłata długu / tylko
+  wskazane / bez spłaty; wskazane należą do części „spłata” tej osoby, gdy ją ma) → `repay` (które zakupy). Jawny
+  niezależny przychód i zaliczka na przyszłość omijają dług (D99 S4), ale wskazane zakupy spłacają (naprawa liczona przy
+  odczycie); omijające dług – `ledger.skipped` → meldunek o tym, co nadal jest do oddania przez nie (`SkippedDebt.open`),
+  „Spłać” spłaca tylko to (`repayingAdvancesOf`, T352). Nowy sposób wpłaty dopisz jako część albo plan tutaj, nie obok.
+  **Pułapka:** przy osobie dług i zaliczka naraz (`balanceText`, AF-16) – inaczej depozyt ≠ suma przy osobach.
+  **Pułapka:** zmiana dawnej wpłaty liczy się od jej dnia – nie może zabrać długu późniejszej spłacie ani zaliczki
+  późniejszemu zakupowi (przegląd 2 N2: dług 50 → 150 zł).
 - Spłata pożyczki częścią wpłaty (D100, T355–T356): linia wpływu `Split.loanId` bez domownika – część `incomeShares`
   z `loanId`, poza księgą domowników. Spłaty pożyczki czytaj tylko przez `loanParts` / `forEachLoanOperation` /
-  `loanIdsOf` (stan, silnik `repayLoanParts`, wartość netto, statystyki, filtr), nigdy samo `t.loanId`. **Pułapka:** linia
-  ma `memberId: null` – kod, który bierze takie części za „mój przychód” (statystyki, tagi), musi pominąć `loanId`.
+  `loanIdsOf` (stan, silnik `repayLoanParts`, wartość netto, statystyki, filtr), nigdy samo `t.loanId`; ile spłaty idzie
+  na dług (reszta – odsetki, przychód T70) – tylko `loanBacksOf` (silnik i statystyki, po kolei całej historii, także
+  w saldzie otwarcia konta). **Pułapka:** linia ma `memberId: null` – kod, który bierze takie części za „mój przychód”
+  (tagi), musi pominąć `loanId`.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

@@ -147,6 +147,15 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(text('balances')).toEqual(['mBank: saldo potwierdzone 39 dni temu – sprawdź z bankiem.', 'Portfel XTB: saldo bez potwierdzenia od salda otwarcia z 01.09.2026 (48 dni) – sprawdź z bankiem.'])
   })
 
+  it('zaliczki przy długu: „Spłać” spłaci mniej niż mogłyby (przegląd 2 N2) – meldunek mówi ile', () => {
+    const text = (repays: number, owed: number) =>
+      inboxItems(input({ advances: [{ memberId: 'M1', owed: zl(owed), repays: zl(repays), items: [{ txId: 'A1', date: '2026-10-06', amount: zl(100) }] }] })).find((i) => i.kind === 'advances')?.text
+    expect(text(50, 150)).toBe('Babcia: wpłata jako zaliczka na przyszłość nie spłaciła długu (06.10 100.00 zł) – ma oddać 150.00 zł; ta wpłata spłaci z tego 50.00 zł. Spłacić?')
+    // All they could – the advance's 100 zł, the debt's 40 zł: as before.
+    expect(text(100, 150)).toBe('Babcia: wpłata jako zaliczka na przyszłość nie spłaciła długu (06.10 100.00 zł) – ma oddać 150.00 zł. Spłacić?')
+    expect(text(40, 40)).toBe('Babcia: wpłata jako zaliczka na przyszłość nie spłaciła długu (06.10 100.00 zł) – ma oddać 40.00 zł. Spłacić?')
+  })
+
   it('saldo: do 30 dni po potwierdzeniu bez meldunku; konto bez salda otwarcia i potwierdzenia – też nie', () => {
     const at = (last: string | null, opened: string | null) => inboxItems(input({ confirmations: [{ accountId: MBANK_ACCOUNT_ID, name: 'mBank', last, opened }] })).length
     expect(at('2026-09-19', '2026-01-01')).toBe(0)

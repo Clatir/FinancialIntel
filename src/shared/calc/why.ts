@@ -78,12 +78,15 @@ export function deliveryWhy(log: readonly FleetEvent[], goalName: (id: string) =
     const e = log[i]!
     if ((e.kind !== 'trading' && !e.pending) || e.amount <= 0) continue
     const m = e.moves
-    // A member's repayment (back to the shields) and advance: their money, not the pool's split.
+    // A member's repayment (back to the shields) and advance: their money, not the pool's split; a loan's part (D100 –
+    // back to the shields up to its debt) neither (review 2 of N2).
     const repaid = Math.max(0, -(m.house ?? 0))
     const member = repaid + Math.max(0, m.deposit ?? 0)
-    const shields = (m.shields ?? 0) - repaid
+    const loanBack = Object.values(m.loans ?? {}).reduce((a, v) => a + Math.max(0, -v), 0)
+    const shields = (m.shields ?? 0) - repaid - loanBack
     const lines: WhyLine[] = [{ label: e.pending ? 'Dostawa do zadokowania (według puli wpisu ICTTJ)' : 'Dostawa', amount: e.amount }]
     if (member) lines.push({ label: 'Domownicy – spłata i zaliczka', amount: member })
+    if (loanBack) lines.push({ label: 'Spłata pożyczki (do osłon)', amount: loanBack })
     if (m.taxHold) lines.push({ label: 'Rezerwa na PIT-38', amount: m.taxHold })
     if (shields) lines.push({ label: 'Osłony', amount: shields })
     if (m.hull) lines.push({ label: 'Kadłub', amount: m.hull })

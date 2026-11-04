@@ -120,7 +120,7 @@ describe('AP-4: jawna „zaliczka na przyszłość” bez wskazanego zakupu omij
     const money = ahead('2026-10-12', 100, MAREK)
     const s = fleet([eventim, money], null)
     expect(balanceOf(s.household, MAREK)).toMatchObject({ owed: zl(360), deposit: zl(100), since: '2026-10-02' })
-    expect(s.household.skipped).toEqual([{ txId: money.id, memberId: MAREK, date: '2026-10-12', amount: zl(100), owed: zl(360) }])
+    expect(s.household.skipped).toEqual([{ txId: money.id, memberId: MAREK, date: '2026-10-12', amount: zl(100), owed: zl(360), open: zl(100), whole: true, repaidLater: false }])
   })
 
   it('bez długu w dniu wpłaty – nic do zgłoszenia; niezależny przychód nigdy', () => {
@@ -138,7 +138,7 @@ describe('AP-4: jawna „zaliczka na przyszłość” bez wskazanego zakupu omij
     const ledger = settleHousehold([forMarek, forTata, money], EXPLICIT)
     expect(balanceOf(ledger, MAREK)).toMatchObject({ owed: 0, deposit: 0 })
     expect(balanceOf(ledger, TATA)).toMatchObject({ owed: zl(100), deposit: zl(300) })
-    expect(ledger.skipped).toEqual([{ txId: money.id, memberId: TATA, date: '2026-10-05', amount: zl(300), owed: zl(100) }])
+    expect(ledger.skipped).toEqual([{ txId: money.id, memberId: TATA, date: '2026-10-05', amount: zl(300), owed: zl(100), open: zl(100), whole: true, repaidLater: false }])
   })
 
   it('lista od startu rozliczeń: zaliczka sprzed dnia startu (saldo na start) nie wraca', () => {
@@ -167,15 +167,28 @@ describe('AP-4: pomocnicze – meldunek, „Spłać”, saldo osoby (AF-16)', ()
     expect(balanceText({ owed: 0, deposit: 0 }, zl2)).toBe('rozliczony')
   })
 
-  it('meldunek: osoba, która ma oddać teraz – jej wpłaty po kolei (dwie części jednej operacji razem), bez zostawionych', () => {
+  it('meldunek: osoba, która ma oddać teraz – jej wpłaty po kolei (dwie części jednej operacji razem), bez zostawionych i bez tych, przez które nic już nie jest do oddania', () => {
+    const at = (txId: string, memberId: string, date: string, amount: number, owed: number, open: number, over: { whole?: boolean; repaidLater?: boolean } = {}) => ({ txId, memberId, date, amount: zl(amount), owed: zl(owed), open: zl(open), whole: over.whole ?? true, repaidLater: over.repaidLater ?? false })
     const skipped = [
-      { txId: 'A', memberId: MAREK, date: '2026-10-05', amount: zl(100), owed: zl(360) },
-      { txId: 'A', memberId: MAREK, date: '2026-10-05', amount: zl(20), owed: zl(360) },
-      { txId: 'B', memberId: MAREK, date: '2026-10-09', amount: zl(50), owed: zl(360) },
-      { txId: 'C', memberId: TATA, date: '2026-10-06', amount: zl(30), owed: zl(10) }
+      at('A', MAREK, '2026-10-05', 100, 360, 100),
+      at('A', MAREK, '2026-10-05', 20, 360, 20),
+      at('B', MAREK, '2026-10-09', 50, 360, 30, { whole: false, repaidLater: true }),
+      // Its debt repaid later by another repayment (review 2 of N2): nothing owed because of it.
+      at('D', MAREK, '2026-10-11', 40, 360, 0, { repaidLater: true }),
+      at('C', TATA, '2026-10-06', 30, 10, 10)
     ]
     const members = [{ memberId: MAREK, owed: zl(360) }, { memberId: TATA, owed: 0 }]
-    expect(skippedDebtsOf({ skipped }, members, {})).toEqual([{ memberId: MAREK, owed: zl(360), items: [{ txId: 'A', date: '2026-10-05', amount: zl(120) }, { txId: 'B', date: '2026-10-09', amount: zl(50) }] }])
+    expect(skippedDebtsOf({ skipped }, members, {})).toEqual([
+      {
+        memberId: MAREK,
+        owed: zl(360),
+        repays: zl(150),
+        items: [
+          { txId: 'A', date: '2026-10-05', amount: zl(120), repays: zl(120), whole: true, repaidLater: false },
+          { txId: 'B', date: '2026-10-09', amount: zl(50), repays: zl(30), whole: false, repaidLater: true }
+        ]
+      }
+    ])
     expect(skippedDebtsOf({ skipped }, members, { [skippedKey({ txId: 'B', memberId: MAREK })]: AT })[0]!.items.map((i) => i.txId)).toEqual(['A'])
   })
 

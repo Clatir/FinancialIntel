@@ -149,8 +149,19 @@ describe('AP-4: naprawa zapisanych wpłat – meldunek „nie spłaciły długu 
     const blind = income('2026-10-25', 10000, { inflowKind: 'advance', advance: true })
     const whole = income('2026-10-28', 36000, { inflowKind: 'advance', advance: true })
     open([blind, whole])
-    // 100 zł skipped 360 zł of debt, the next 360 zł skipped it too (the tickets still open, 460 zł in the deposit).
-    expect(skippedDebtsOf(ledger(), fleet.fleetNow()!.receivables.members, {})).toEqual([{ memberId: MAREK, owed: 36000, items: [{ txId: blind.id, date: '2026-10-25', amount: 10000 }, { txId: whole.id, date: '2026-10-28', amount: 36000 }] }])
+    // 100 zł skipped 360 zł of debt, the next 360 zł skipped it too (the tickets still open, 460 zł in the deposit); the
+    // first repays 100 zł of it, the second what is left – 260 zł (review 2 of N2), each its whole part.
+    expect(skippedDebtsOf(ledger(), fleet.fleetNow()!.receivables.members, {})).toEqual([
+      {
+        memberId: MAREK,
+        owed: 36000,
+        repays: 36000,
+        items: [
+          { txId: blind.id, date: '2026-10-25', amount: 10000, repays: 10000, whole: true, repaidLater: false },
+          { txId: whole.id, date: '2026-10-28', amount: 36000, repays: 26000, whole: true, repaidLater: false }
+        ]
+      }
+    ])
     expect(balanceOf(ledger(), MAREK)).toMatchObject({ owed: 36000, deposit: 46000 })
     expect(actions.repayAdvances(MAREK)).toBe(true)
     const now = () => data.useData.getState().records.transactions

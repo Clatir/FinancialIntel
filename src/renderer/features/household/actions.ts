@@ -5,8 +5,8 @@
 import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
 import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
-import { linkRepayments, withNamed, type CoverFields } from '@shared/calc/repayments'
-import { balanceOf, memberName, repayingAdvance, skippedKey } from '@shared/calc/household'
+import { linkRepayments, repayingAdvancesOf, withNamed, type CoverFields } from '@shared/calc/repayments'
+import { balanceOf, memberName, skippedDebtsOf, skippedKey } from '@shared/calc/household'
 import { CASH_ACCOUNT_ID, inflowOf, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
@@ -57,26 +57,18 @@ export function assignRepayment(paymentId: string, purchaseId: string, label: st
 }
 
 /**
- * „Spłać” (AP-4, the inbox): a member's advances for the future that left their debt unpaid (`skipped` of the ledger now,
- * not those kept) repay it from now on – „spłata, reszta jako zaliczka” (`repayingAdvance`) – each naming the purchases it
- * surely pays back (D91 b, as the import – `linkRepayments`); with „Cofnij”. False – nothing changed.
+ * „Spłać” (AP-4, the inbox): a member's advances for the future that left their debt unpaid (not those kept) repay what
+ * is still owed because of them – no more (`repayingAdvancesOf`, review 2 of N2: a debt a later repayment paid back is
+ * not settled again); with „Cofnij”. False – nothing changed.
  */
 export function repayAdvances(memberId: string): boolean {
   const input = canWrite() ? fleetInputNow() : null
   const s = useData.getState()
   if (!input || !s.fi) return false
-  const today = warsawNow().date
-  const kept = s.fi.settings.import.notDuplicates
-  const ids = new Set(householdOf(input, today).skipped.filter((x) => x.memberId === memberId && !kept[skippedKey(x)]).map((x) => x.txId))
-  const before = [...ids].map((id) => s.records.transactions[id]?.record).filter((t): t is Transaction => !!t)
-  const changed = before.map((t) => repayingAdvance(t, memberId)).filter((t, i) => t !== before[i])
-  if (!changed.length) return false
-  // Each the purchases it surely pays back, in the ledger's order – the ones before it changed too (as the import).
-  const transactions = input.transactions.map((t) => changed.find((c) => c.id === t.id) ?? t)
-  const links = linkRepayments({ ...input, transactions }, new Set(changed.map((t) => t.id)), today)
-  const after = changed.map((t) => ({ ...t, ...links.get(t.id) }))
+  const after = repayingAdvancesOf(input, memberId, s.fi.settings.import.notDuplicates, warsawNow().date)
+  if (!after.length) return false
+  const was = after.map((t) => s.records.transactions[t.id]?.record).filter((t): t is Transaction => !!t)
   if (!replaceRecords('transactions', after)) return false
-  const was = before.filter((t) => after.some((a) => a.id === t.id))
   toast(`${memberName(memberId, s.fi.settings.household.members)}: ${countLabel(after.length, 'wpłata spłaca', 'wpłaty spłacają', 'wpłat spłaca')} dług, reszta zostaje zaliczką.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
@@ -91,13 +83,15 @@ export function repayAdvances(memberId: string): boolean {
   return true
 }
 
-/** „zostaw” (AP-4, the inbox): a member's advances for the future that skipped the debt stay so – not asked again; with „Cofnij”. */
+/**
+ * „zostaw” (AP-4, the inbox): a member's advances for the future the report asks of (`skippedDebtsOf`) stay so – not asked
+ * again; with „Cofnij”.
+ */
 export function keepAdvances(memberId: string): void {
   const input = canWrite() ? fleetInputNow() : null
   if (!input) return
-  const keys = householdOf(input, warsawNow().date)
-    .skipped.filter((x) => x.memberId === memberId)
-    .map(skippedKey)
+  const ledger = householdOf(input, warsawNow().date)
+  const keys = (skippedDebtsOf(ledger, ledger.members, {}).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
   if (!keys.length) return
   const at = new Date().toISOString()
   const set = (on: boolean) =>

@@ -30,8 +30,9 @@
  *   goes back to the shields.
  */
 import { fold } from '../fold'
+import { newId } from '../ids'
 import { HOUSE_MEMBER_ID, type HouseholdMember, type MemberOpening } from '../schema/budget'
-import type { Transaction } from '../schema/records'
+import type { Split, Transaction } from '../schema/records'
 import { financedOf, financerOf, partsOf, sum } from './operations'
 
 /** One member's share of an operation (grosze, all ≥ 0). */
@@ -147,6 +148,17 @@ export interface SkippedDebt {
   date: string
   amount: number
   owed: number
+  /**
+   * What of that debt is still owed because of it now (review 2 of N2) – what „Spłać” repays: never what a later repayment
+   * paid back, nor what its money paid of later purchases (repaid then, they would be owed instead): the least of the part,
+   * the debt then less what the member repaid after it, their free advance after it at its lowest and what they owe now –
+   * their earlier such advances first.
+   */
+  open: number
+  /** `open` repays all the part could then (the debt then, else all of it) – „Spłać” changes the whole part. */
+  whole: boolean
+  /** The member repaid something after it (their money, a product return): „Spłać” names no purchase for it then. */
+  repaidLater: boolean
 }
 
 /** „zostaw” for one (`settings.import.notDuplicates` – its key, AP-4): kept as the advance it is, never asked again. */
@@ -158,22 +170,36 @@ export interface SkippedDebts {
   memberId: string
   /** What they owe now. */
   owed: number
-  /** Their operations, the oldest first (two parts of one operation – together). */
-  items: Array<{ txId: string; date: string; amount: number }>
+  /** What „Spłać” repays of it – what is still owed because of these advances (review 2 of N2). */
+  repays: number
+  /**
+   * Their operations, the oldest first (two parts of one operation – together): the advance, what of it repays (`open`),
+   * whether its whole part changes and whether the member repaid something after it.
+   */
+  items: Array<{ txId: string; date: string; amount: number; repays: number; whole: boolean; repaidLater: boolean }>
 }
 
-/** The inbox's question (AP-4): each member who owes now, with their advances that skipped the debt – not those kept. */
+/**
+ * The inbox's question (AP-4): each member who owes now, with their advances that skipped the debt and leave some of it
+ * owed still (`SkippedDebt.open` – review 2 of N2: a debt repaid later, an advance spent on later purchases – none) – not
+ * those kept.
+ */
 export function skippedDebtsOf(ledger: Pick<HouseholdLedger, 'skipped'>, members: ReadonlyArray<Pick<MemberBalance, 'memberId' | 'owed'>>, kept: Readonly<Record<string, unknown>>): SkippedDebts[] {
   const out = new Map<string, SkippedDebts>()
   for (const s of ledger.skipped) {
-    if (kept[skippedKey(s)]) continue
+    if (kept[skippedKey(s)] || s.open <= 0) continue
     const owed = members.find((m) => m.memberId === s.memberId)?.owed ?? 0
     if (owed <= 0) continue
     let entry = out.get(s.memberId)
-    if (!entry) out.set(s.memberId, (entry = { memberId: s.memberId, owed, items: [] }))
+    if (!entry) out.set(s.memberId, (entry = { memberId: s.memberId, owed, repays: 0, items: [] }))
+    entry.repays += s.open
     const prev = entry.items.find((i) => i.txId === s.txId)
-    if (prev) prev.amount += s.amount
-    else entry.items.push({ txId: s.txId, date: s.date, amount: s.amount })
+    if (prev) {
+      prev.amount += s.amount
+      prev.repays += s.open
+      prev.whole &&= s.whole
+      prev.repaidLater ||= s.repaidLater
+    } else entry.items.push({ txId: s.txId, date: s.date, amount: s.amount, repays: s.open, whole: s.whole, repaidLater: s.repaidLater })
   }
   return [...out.values()]
 }
@@ -181,17 +207,42 @@ export function skippedDebtsOf(ledger: Pick<HouseholdLedger, 'skipped'>, members
 /**
  * An operation whose member's advance for the future repays the debt from now on (AP-4 – the inbox's „Spłać”): their
  * parts (their own money, their lines of a split) as „spłata, reszta jako zaliczka” – `inflowKind: 'repay'`, the rest
- * still their advance. The same operation when nothing of theirs is such an advance.
+ * still their advance. Only `upTo` of them (review 2 of N2 – what is still owed because of it, `SkippedDebt.open`): their
+ * parts in the ledger's order – the lines, then the rest of the amount – repay while it lasts, the one where it ends in
+ * two: its „spłata” and the advance (the rest of the amount: a line „spłata” of what is left of it). The same operation
+ * when nothing of theirs is such an advance.
  */
-export function repayingAdvance(t: Transaction, memberId: string): Transaction {
+export function repayingAdvance(t: Transaction, memberId: string, upTo?: number, makeId: () => string = newId): Transaction {
+  const isAdvance = (s: Pick<Split, 'memberId' | 'inflowKind' | 'loanId'>) => s.memberId === memberId && !s.loanId && s.inflowKind === 'advance'
   const own = t.memberId === memberId && t.inflowKind === 'advance'
-  const lines = t.splits.some((s) => s.memberId === memberId && s.inflowKind === 'advance')
+  const lines = t.splits.some(isAdvance)
   if (!own && !lines) return t
-  return {
-    ...t,
-    ...(own ? { inflowKind: 'repay' as const, advance: true } : {}),
-    ...(lines ? { splits: t.splits.map((s) => (s.memberId === memberId && s.inflowKind === 'advance' ? { ...s, inflowKind: 'repay' as const, advance: true } : s)) } : {})
+  const repaying = { inflowKind: 'repay' as const, advance: true }
+  if (upTo == null)
+    return { ...t, ...(own ? repaying : {}), ...(lines ? { splits: t.splits.map((s) => (isAdvance(s) ? { ...s, ...repaying } : s)) } : {}) }
+  const shares = incomeShares(t)
+  let left = upTo
+  const splits: Split[] = []
+  for (const [i, s] of t.splits.entries()) {
+    // The line as the ledger reads it (cut at the amount – `incomeShares`).
+    const amount = shares.find((x) => x.line === i)?.amount ?? 0
+    if (!isAdvance(s) || left <= 0 || amount <= 0) splits.push(s)
+    else if (amount <= left) {
+      splits.push({ ...s, ...repaying })
+      left -= amount
+    } else {
+      splits.push({ ...s, id: makeId(), amount: left, ...repaying }, { ...s, amount: s.amount - left })
+      left = 0
+    }
   }
+  const rest = own ? (shares.find((x) => x.line === undefined)?.amount ?? 0) : 0
+  if (left > 0 && rest > 0 && left >= rest) return { ...t, ...repaying, splits }
+  if (left > 0 && rest > 0) {
+    splits.push({ id: makeId(), amount: left, categoryId: null, refundable: false, memberId, advance: true, inflowKind: 'repay', note: '' })
+    left = 0
+  }
+  // Nothing of theirs to repay with (a line cut at the amount): as it is.
+  return left === upTo ? t : { ...t, splits }
 }
 
 export interface HouseholdLedger {
@@ -293,6 +344,17 @@ const namesFor = (t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeni
   t.covers.length > 0 || (t.coversOpeningMembers?.length ? t.coversOpeningMembers.includes(memberId) : !!t.coversOpening)
 
 /**
+ * A member's part's plan as the ledger reads it (`inflowPlanOf`): the purchases the operation names are an explicit kind's
+ * (`named`) only when the member has no part of it repaying their debt – else they are that part's and the explicit one
+ * skips the debt (review 2 of N2: „Spłać” of a part of an advance – its „spłata” and the advance – named later, the
+ * advance would repay beyond it). `shares` – the operation's (`incomeShares`). The ledger and the copies (`copies.ts`).
+ */
+export function planOf(t: Pick<Transaction, 'covers' | 'coversOpening' | 'coversOpeningMembers'>, share: IncomeShare & { memberId: string }, shares: readonly IncomeShare[]): InflowPlan {
+  const repaysToo = shares.some((s) => s.memberId === share.memberId && !s.loanId && s.inflowKind !== 'income' && s.inflowKind !== 'advance')
+  return inflowPlanOf(share, namesFor(t, share.memberId) && !repaysToo)
+}
+
+/**
  * Does the operation touch a member's balance (a financed part, a member's income)? Without a split or a mark – most
  * operations – no line to read (W27).
  */
@@ -352,6 +414,8 @@ interface State {
   queue: OpenPurchase[]
   /** Repaid, not assigned (D91): `owed` = the queue's sum − this list's. */
   credit: Unassigned[]
+  /** All their money that repaid what they owed so far (`SkippedDebt.open` – what was repaid after an advance). */
+  repaid: number
 }
 
 const flowOf = (memberId: string): MemberFlow => ({ memberId, fromDeposit: 0, lent: 0, repaid: 0, advance: 0, income: 0, gift: 0, paidFor: [], unassigned: 0 })
@@ -507,10 +571,20 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
   const cached = memo.get(transactions)?.get(key)
   if (cached) return cached
   const states = new Map<string, State>()
-  const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, earmarked: 0, queue: [], credit: [] }).get(id)!
+  const stateOf = (id: string) => states.get(id) ?? states.set(id, { owed: 0, deposit: 0, earmarked: 0, queue: [], credit: [], repaid: 0 }).get(id)!
   const purchases = new Map<string, PurchaseState[]>()
   // Cleared with the balances (a start of the settlements, of the budget): what was owed then is in the openings.
   const skipped: SkippedDebt[] = []
+  // Each one's member's money repaid until it, and their free advance (not reserved – D94) at its lowest since (review 2
+  // of N2): what it may still repay without changing a later operation (`SkippedDebt.open`).
+  const tracks = new Map<string, Array<{ s: SkippedDebt; repaidAt: number; minFree: number }>>()
+  const clearSkipped = () => {
+    skipped.length = 0
+    tracks.clear()
+  }
+  const touch = (memberId: string, st: State) => {
+    for (const tr of tracks.get(memberId) ?? []) tr.minFree = Math.min(tr.minFree, st.deposit - st.earmarked)
+  }
   const purchaseState = (txId: string, memberId: string, date: string): PurchaseState => {
     const list = purchases.get(txId) ?? purchases.set(txId, []).get(txId)!
     let p = list.find((x) => x.memberId === memberId)
@@ -523,12 +597,12 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
   const begin = () => {
     states.clear()
     purchases.clear()
-    skipped.length = 0
+    clearSkipped()
     for (const m of opened) {
       const { owed, deposit, since } = m.opening!
       // Dated by its oldest purchase when known (N41): a debt from June is not „from the settlements' start”.
       const date = since && since < from! ? since : from!
-      states.set(m.id, { owed, deposit, earmarked: 0, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date, amount: owed }] : [], credit: [] })
+      states.set(m.id, { owed, deposit, earmarked: 0, queue: owed ? [{ txId: `${OPENING_TX}${m.id}`, date, amount: owed }] : [], credit: [], repaid: 0 })
       if (owed) purchaseState(`${OPENING_TX}${m.id}`, m.id, date).lent = owed
     }
   }
@@ -611,6 +685,7 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
           const fromDeposit = usedReserved + fromGeneral
           st.deposit -= fromDeposit
           f.fromDeposit += fromDeposit
+          touch(id, st)
           // Their gift (D83): what their advance does not cover the shields pay – nobody owes it.
           if (p.gift) {
             f.gift += -p.amount - fromDeposit
@@ -648,18 +723,21 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
           )
           st.deposit += p.amount - back
           st.earmarked += reserved
+          st.repaid += back
           f.repaid += back
           f.advance += p.amount - back
+          touch(id, st)
         }
       }
     } else {
       // Each member's part (D81: one transfer may carry the money of several); a part without a member is income.
-      for (const share of incomeShares(t)) {
+      const shares = incomeShares(t)
+      for (const share of shares) {
         if (!share.memberId) continue
         const memberId = share.memberId
         const st = stateOf(memberId)
         const f = flow(memberId)
-        const plan = inflowPlanOf(share, namesFor(t, memberId))
+        const plan = planOf(t, { ...share, memberId }, shares)
         const owedBefore = st.owed
         // Before 1.3.0 an income said how much of it repays (`repaid`); the rest was income.
         const { paid: back, reserved } =
@@ -676,15 +754,22 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
                 plan.repays === 'named'
               )
         // An explicit advance for the future that paid back nothing while they owed (AP-4): the inbox asks.
-        if (share.inflowKind === 'advance' && owedBefore > 0 && back === 0 && reserved === 0) skipped.push({ txId: t.id, memberId, date: t.date, amount: share.amount, owed: owedBefore })
+        if (share.inflowKind === 'advance' && owedBefore > 0 && back === 0 && reserved === 0) {
+          const s: SkippedDebt = { txId: t.id, memberId, date: t.date, amount: share.amount, owed: owedBefore, open: 0, whole: false, repaidLater: false }
+          skipped.push(s)
+          const list = tracks.get(memberId) ?? tracks.set(memberId, []).get(memberId)!
+          list.push({ s, repaidAt: st.repaid, minFree: Infinity })
+        }
         const rest = share.amount - back
         // A future purchase named holds its part as their advance whatever the rest is (1.15.1).
         const advance = plan.rest === 'advance' ? rest : reserved
+        st.repaid += back
         f.repaid += back
         f.advance += advance
         f.income += rest - advance
         st.deposit += advance
         st.earmarked += reserved
+        touch(memberId, st)
       }
     }
     if (flows.size) byTx.set(t.id, [...flows.values()])
@@ -694,7 +779,7 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
       cleared = true
       states.clear()
       purchases.clear()
-      skipped.length = 0
+      clearSkipped()
     }
     if (!started && t.date >= from!) start()
     if (!isLate(t)) run(t)
@@ -705,7 +790,20 @@ export function settleHousehold(transactions: readonly Transaction[], opts: Ledg
     else {
       states.clear()
       purchases.clear()
-      skipped.length = 0
+      clearSkipped()
+    }
+  }
+  // What each advance that skipped the debt leaves owed still (review 2 of N2), the member's earlier ones first – repaid
+  // by them, a later one would find that much less owed and less of their advance.
+  for (const [memberId, list] of tracks) {
+    const st = states.get(memberId)
+    let before = 0
+    for (const { s, repaidAt, minFree } of list) {
+      const later = (st?.repaid ?? 0) - repaidAt
+      s.repaidLater = later > 0
+      s.open = Math.max(0, Math.min(s.amount, s.owed - before - later, minFree - before, (st?.owed ?? 0) - before))
+      s.whole = s.open >= Math.min(s.amount, s.owed - before)
+      before += s.open
     }
   }
   const members: MemberBalance[] = [...states].map(([memberId, st]) => ({

@@ -128,7 +128,7 @@ export interface InboxInput {
    * zaliczka” of 1.15.3–1.15.5 saved them so; D99 S4 lets one skip it): one report a member while they owe – „Spłać”
    * or „zostaw”. Those said „zostaw” left out by the caller.
    */
-  advances?: ReadonlyArray<{ memberId: string; owed: number; items: ReadonlyArray<{ txId: string; date: string; amount: number }> }>
+  advances?: ReadonlyArray<{ memberId: string; owed: number; repays?: number; items: ReadonlyArray<{ txId: string; date: string; amount: number }> }>
   /**
    * Folders of FI's records without fi.json among this computer's data folders of before (AP-1): a „folder-widmo” a write
    * of 1.15.4 or older made while the data folder was away – its records are in no budget.
@@ -246,11 +246,13 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     if (a.owed <= 0 || !a.items.length) continue
     const n = a.items.length
     const list = a.items.slice(0, ADVANCES_SHOWN).map((x) => `${dm(x.date)} ${zl(x.amount)}`).join(', ') + (n > ADVANCES_SHOWN ? ` i ${n - ADVANCES_SHOWN} więcej` : '')
+    // „Spłać” repays what is still owed because of them (review 2 of N2) – said when less than they and the debt could.
+    const partly = a.repays != null && a.repays < Math.min(a.owed, a.items.reduce((s, x) => s + x.amount, 0))
     out.push({
       kind: 'advances',
       key: `advances:${a.memberId}`,
       ref: a.memberId,
-      text: `${o.memberName(a.memberId)}: ${n === 1 ? 'wpłata' : `${n} ${plural(n, 'wpłata', 'wpłaty', 'wpłat')}`} jako zaliczka na przyszłość nie ${n === 1 ? 'spłaciła' : plural(n, 'spłaciła', 'spłaciły', 'spłaciło')} długu (${list}) – ma oddać ${zl(a.owed)}. Spłacić?`,
+      text: `${o.memberName(a.memberId)}: ${n === 1 ? 'wpłata' : `${n} ${plural(n, 'wpłata', 'wpłaty', 'wpłat')}`} jako zaliczka na przyszłość nie ${n === 1 ? 'spłaciła' : plural(n, 'spłaciła', 'spłaciły', 'spłaciło')} długu (${list}) – ma oddać ${zl(a.owed)}${partly ? `; ${n === 1 ? 'ta wpłata spłaci' : 'te wpłaty spłacą'} z tego ${zl(a.repays!)}` : ''}. Spłacić?`,
       action: 'Spłać'
     })
   }

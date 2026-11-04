@@ -82,7 +82,8 @@ describe('D100: wpłata od innej osoby niż pożyczkobiorca spłaca pożyczkę u
       expect(f.receivables.loans).toEqual({ [jan.id]: zl(600) })
       // Back to the shields – never docked as income (the shields full: income would go to the hull).
       expect(movesOf(f, back)).toEqual({ loans: { [jan.id]: -zl(400) }, shields: zl(400) })
-      expect(incomeParts(back, plainIncomeContext([back])).work).toBe(0)
+      expect(incomeParts(back, f.incomeContext).work).toBe(0)
+      expect(incomeParts(back, plainIncomeContext([lent, back], [jan])).work).toBe(0)
     }
     // The borrower's own repayment stays his: the row says „kto zapłacił” only when someone else paid too.
     const own = tx('2026-10-12', zl(100), { kind: 'loan', loanId: jan.id, counterparty: 'KOWALSKI JAN UL. LIPOWA 5' })
@@ -155,7 +156,7 @@ describe('D100: wpłata od innej osoby niż pożyczkobiorca spłaca pożyczkę u
     const jan = loan()
     const lent = tx('2026-10-01', -zl(1000), { kind: 'loan', loanId: jan.id })
     const mixed = tx('2026-10-10', zl(500), { kind: 'income', counterparty: 'EWA KOWALSKA', tags: ['wyjazd'], splits: [loanLine(200, jan.id)] })
-    expect(incomeParts(mixed, plainIncomeContext([mixed])).work).toBe(zl(300))
+    expect(incomeParts(mixed, plainIncomeContext([lent, mixed], [jan])).work).toBe(zl(300))
     // A trip's money back is mine only (F17): 300 zł, not 500 zł.
     const trip = tagSummaries([mixed], categoryIndex(createDefaultSettings(AT).settings.categories)).find((x) => x.key === 'wyjazd')!
     expect(trip.spent).toBe(-zl(300))

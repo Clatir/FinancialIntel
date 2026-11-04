@@ -1,11 +1,11 @@
 // Testy wyroczni u3 (AP-32, 04.11.2026): poprawki z przeglądu jej kodu (W1, S1–S4, N1, PR sp. 9) i reguły grupy N2
-// (T340, T341, T345, T346, T350, T352, T355) – na przykładach z decyzji.
+// (T340, T341, T345, T346, T350, T352, T355; po przeglądzie 2 N2 także T70 – nadwyżka spłaty jako przychód) – na przykładach z decyzji.
 //   node --test tests/audyt/wyrocznia/
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { runFleet } from './lib/silnik.mjs'
 import { cargoMassAt, rateDay } from './lib/gra.mjs'
-import { monthsAhead } from './lib/raport.mjs'
+import { incomeStats, monthsAhead } from './lib/raport.mjs'
 import { fromWarsaw } from './lib/daty.mjs'
 import { normalizeInput } from './lib/dane.mjs'
 
@@ -208,6 +208,43 @@ test('u3 T355 / T356 (D100): część wpływu spłacająca pożyczkę udzieloną
   const r = runFleet(inp, { today: '2026-04-10' })
   const ls = r.loansState.get(LOAN)
   assert.deepEqual([ls.received, ls.extraIncome, ls.payments[0].payer], [20000, 10000, 'EWA KOWALSKA'])
+  assert.equal(r.layersSum, r.accountsTotal)
+})
+
+test('u3 T70 / T355 (AF-5, przegląd 2 N2): nadwyżka spłaty pożyczki udzielonej ponad dług – przychód w statystykach, całością i częścią', () => {
+  const LOAN = id('L')
+  const whole = tx({ date: '2026-03-10', kind: 'loan', amount: 15000, loanId: LOAN, counterparty: 'TOMEK' })
+  const part = tx({ date: '2026-04-10', kind: 'income', amount: 50000, counterparty: 'EWA KOWALSKA', splits: [{ id: id('S'), amount: 30000, memberId: null, loanId: LOAN }] })
+  const inp = input({
+    settings: { budget: { start: '2026-03-01', initial: { shields: 0, hull: 0, goals: {} } } },
+    balances: [opening('2026-03-01', MB, 2000000)],
+    months: [plan('2026-03', 400000)],
+    loans: [{ id: LOAN, name: 'Tomek', direction: 'given', counterparty: 'TOMEK', amount: 20000, date: '2026-02-01', accountId: MB, createdAt: T0, updatedAt: T0 }],
+    transactions: [whole, part]
+  })
+  const r = runFleet(inp, { today: '2026-05-10' })
+  // 200 zł: 150 zł w marcu (cała do długu), z części 300 zł w kwietniu 50 zł do długu, 250 zł odsetek – przychód z resztą wpłaty
+  assert.deepEqual([r.loanExtra.get(whole.id) ?? 0, r.loanExtra.get(part.id)], [0, 25000])
+  const s = incomeStats(r, inp, '2026-05')
+  assert.deepEqual(Object.fromEntries(s.rows.map((x) => [x.miesiac, x.praca])), { '2026-03': 0, '2026-04': 20000 + 25000 })
+})
+
+test('u3 T350 / T352 (przegląd 2 N2): jawna zaliczka obok części „spłata” tej osoby – wskazany zakup jest części „spłata”', () => {
+  const M = id('M')
+  const buy = tx({ date: '2026-09-10', amount: -10000, categoryId: JEDZ, refundable: true, memberId: M })
+  // zaliczka rozbita przez „Spłać”: 40 zł „spłata”, reszta 60 zł zaliczką; wskazany później zakup (np. „Przypisz”)
+  const split = tx({ date: '2026-09-12', kind: 'income', amount: 10000, memberId: M, inflowKind: 'advance', advance: true, covers: [buy.id], splits: [{ id: id('S'), amount: 4000, memberId: M, advance: true, inflowKind: 'repay' }] })
+  const later = tx({ date: '2026-09-15', kind: 'income', amount: 6000, memberId: M, inflowKind: 'repay', covers: [buy.id] })
+  const inp = input({
+    settings: { budget: { start: '2026-09-01', initial: { shields: 0, hull: 0, goals: {} } }, household: { since: null, assignFrom: null, members: [{ id: M, name: 'Marek', inflow: 'income' }] } },
+    balances: [opening('2026-09-01', MB, 2000000)],
+    months: [plan('2026-09', 400000)],
+    transactions: [buy, split, later]
+  })
+  const r = runFleet(inp, { today: '2026-09-30' })
+  const m = r.household.get(M)
+  // późniejsza spłata 60 zł spłaca resztę zakupu – nie staje się przychodem
+  assert.deepEqual([r.household.owedNet(m), m.deposit, m.inflowIncome], [0, 6000, 0])
   assert.equal(r.layersSum, r.accountsTotal)
 })
 

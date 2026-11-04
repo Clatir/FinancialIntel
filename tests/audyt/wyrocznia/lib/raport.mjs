@@ -204,11 +204,14 @@ function incomeMonths(r, input, taxTx = new Set()) {
       let x = 0
       for (const p of partsOf(t)) {
         if (p.memberId != null || p.amount <= 0) continue
-        // T355: spłata pożyczki (udzielonej) częścią wpłaty nigdy nie jest przychodem; linia pożyczki nieznanej / wziętej – przychód
+        // T355: spłata pożyczki (udzielonej) częścią wpłaty nie jest przychodem do wysokości długu (nadwyżka – niżej);
+        // linia pożyczki nieznanej / wziętej – przychód
         if (p.loanId && r.loansState.has(p.loanId) && input.loans.find((l) => l.id === p.loanId)?.direction === 'given') continue
         x += p.amount
       }
       x += hhIncome.get(t.id) ?? 0
+      // T70, T355 (AF-5): nadwyżka spłaty ponad dług (odsetki) – przychód
+      x += r.loanExtra?.get(t.id) ?? 0
       if (x) praca.set(m, (praca.get(m) ?? 0) + x)
     } else if (t.kind === 'trading') {
       const dk = r.dockByTx.get(t.id)
@@ -218,8 +221,11 @@ function incomeMonths(r, input, taxTx = new Set()) {
       let x = t.amount
       if (dk?.split?.taxHold) x -= Math.sign(t.amount) * Math.min(Math.abs(t.amount), dk.split.taxHold)
       trading.set(m, (trading.get(m) ?? 0) + x)
+    } else if (t.kind === 'loan') {
+      // pożyczki (rodzaj „Pożyczka”) – poza przychodem, poza nadwyżką spłaty udzielonej ponad dług (T70, T355 – AF-5)
+      const x = r.loanExtra?.get(t.id) ?? 0
+      if (x) praca.set(m, (praca.get(m) ?? 0) + x)
     }
-    // pożyczki (rodzaj „Pożyczka”) – poza przychodem, także nadwyżka (T355); T70 mówi „nadwyżka = przychód” – AF-5, otwarte
   }
   return { praca, trading }
 }

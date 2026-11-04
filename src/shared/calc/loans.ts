@@ -123,6 +123,44 @@ export function forEachLoanOperation(
   }
 }
 
+/** One repayment of a loan given (T70, T355 – whole or a part of an inflow): its money and what of it repays the debt. */
+export interface LoanBack {
+  loanId: string
+  amount: number
+  /** Back to the shields (up to what is owed); the rest of `amount` – interest – is income. */
+  back: number
+}
+
+/**
+ * What of each repayment of a loan given repays its debt (T70, T355; review 2 of N2): over the whole history up to `today`
+ * in the engine's order (`sorted`), each up to the loan's amount less what was repaid before it – before the budget's start
+ * and inside an account's opening balance too (repaid, though not in the run); the rest – interest – is income: the engine
+ * docks it, the income statistics count it (AF-5). By operation, its repayments in `loanParts`' order (whole – one); a
+ * loan unknown or taken – none (its part is income, its own operations move the shields only).
+ */
+export function loanBacksOf(loans: readonly Loan[], sorted: readonly Transaction[], today: string): Map<string, LoanBack[]> {
+  const out = new Map<string, LoanBack[]>()
+  const byId = new Map(loans.map((l) => [l.id, l]))
+  if (![...byId.values()].some((l) => l.direction === 'given')) return out
+  const repaid = new Map<string, number>()
+  const add = (t: Transaction, loanId: string, amount: number) => {
+    const loan = byId.get(loanId)
+    if (loan?.direction !== 'given' || amount <= 0) return
+    const before = repaid.get(loanId) ?? 0
+    const back = Math.min(amount, Math.max(0, loan.amount - before))
+    repaid.set(loanId, before + back)
+    const list = out.get(t.id) ?? out.set(t.id, []).get(t.id)!
+    list.push({ loanId, amount, back })
+  }
+  for (const t of sorted) {
+    if (t.date > today) continue
+    if (t.kind === 'loan') {
+      if (t.loanId) add(t, t.loanId, t.amount)
+    } else for (const x of loanParts(t)) add(t, x.loanId, x.amount)
+  }
+  return out
+}
+
 export function loanState(loan: Loan, transactions: readonly Transaction[], containers: readonly Container[], today: string): LoanState {
   return stateOf(loan, flowsByLoan([loan], transactions, containers, today).get(loan.id)!, today)
 }
@@ -151,25 +189,31 @@ function stateOf(loan: Loan, flows: Flows, today: string): LoanState {
 export interface LoanPayer {
   name: string
   amount: number
-  /** The loan's own person (the loan's counterparty – all its words in the sender's name, as `loanFor` reads it). */
+  /**
+   * The loan's own person: all the words of the loan's counterparty (its name when it has none) in the sender's name, as
+   * `loanFor` reads it; a repayment naming nobody (the Radar's own „Spłata” copies the loan's counterparty – none when it
+   * has none); a loan without its person's name – its own repayments too (review 2: nobody to tell them apart from).
+   */
   borrower: boolean
 }
 
 /**
  * Who paid a loan given (D100, T356 – the Radar's row „kto zapłacił”): each payer once, in the order they first paid,
  * with their sum – a household member by their name (their inflow, or their name in the bank), anyone else by the name
- * the operation has.
+ * the operation has (the borrower's repayment naming nobody – by the loan's counterparty, else „pożyczkobiorca”).
  */
 export function loanPayers(s: Pick<LoanState, 'loan' | 'payments'>, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name' | 'bankNames'>> = []): LoanPayer[] {
-  const person = s.loan.counterparty || s.loan.name
+  const person = s.loan.counterparty.trim()
+  const borrower = (p: LoanPayment): boolean =>
+    (!p.memberId && !p.counterparty.trim()) || nameIn(person || s.loan.name, p.counterparty) || (!person && !p.part)
   const out = new Map<string, LoanPayer>()
   for (const p of s.payments) {
     const member = p.memberId ? null : memberOf(p.counterparty, members)
-    const name = p.memberId ? memberName(p.memberId, members) : (member?.name ?? (p.counterparty.trim() || 'bez nazwy'))
+    const name = p.memberId ? memberName(p.memberId, members) : (member?.name ?? (p.counterparty.trim() || person || 'pożyczkobiorca'))
     const key = p.memberId ? `m:${p.memberId}` : member ? `m:${member.id}` : `n:${name.toLowerCase()}`
     const prev = out.get(key)
     if (prev) prev.amount += p.amount
-    else out.set(key, { name, amount: p.amount, borrower: nameIn(person, p.counterparty) })
+    else out.set(key, { name, amount: p.amount, borrower: borrower(p) })
   }
   return [...out.values()]
 }

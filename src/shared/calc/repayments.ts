@@ -11,7 +11,7 @@
 import { addDays } from './dates'
 import { fold } from '../fold'
 import type { Split, Transaction } from '../schema/records'
-import { householdBefore, type FleetInput } from './fleet'
+import { householdBefore, householdOf, type FleetInput } from './fleet'
 import {
   assignsOn,
   balanceOf,
@@ -19,7 +19,9 @@ import {
   isOpeningItem,
   ledgerOrder,
   OPENING_TX,
+  repayingAdvance,
   settlesHousehold,
+  skippedDebtsOf,
   type HouseholdLedger,
   type OpenPurchase,
   type PurchaseState,
@@ -336,6 +338,34 @@ export function waitingForPurchase(
     }
   }
   return [...out.values()].sort((a, b) => Number(!!a.fromPriorIncome) - Number(!!b.fromPriorIncome) || byDate(a, b))
+}
+
+/**
+ * „Spłać” (AP-4, T352 – the inbox): a member's advances for the future that left their debt unpaid (not those kept) repay
+ * only what is still owed because of them (`SkippedDebt.open` – review 2 of N2: never a debt a later repayment paid back,
+ * the history is not settled again) – one by one in the ledger's order, each against the ledger with the ones before it
+ * changed (`repayingAdvance`); each names the purchases it surely pays back (D91 b, as the import – `linkRepayments`) only
+ * when the member repaid nothing after it (else they may be a later repayment's – its money waits to be assigned, D91 a).
+ * The operations changed, in that order; none – nothing to repay.
+ */
+export function repayingAdvancesOf(input: Pick<FleetInput, 'settings' | 'balances' | 'transactions'>, memberId: string, kept: Readonly<Record<string, unknown>>, today: string): Transaction[] {
+  let transactions = input.transactions
+  const changed = new Map<string, Transaction>()
+  const named = new Set<string>()
+  for (;;) {
+    const ledger = householdOf({ ...input, transactions }, today)
+    const item = skippedDebtsOf(ledger, ledger.members, kept)
+      .find((m) => m.memberId === memberId)
+      ?.items.find((i) => !changed.has(i.txId))
+    const t = item && transactions.find((x) => x.id === item.txId)
+    const next = t && repayingAdvance(t, memberId, item.whole ? undefined : item.repays)
+    if (!t || !next || next === t) break
+    changed.set(t.id, next)
+    if (!item.repaidLater) named.add(t.id)
+    transactions = transactions.map((x) => (x.id === t.id ? next : x))
+  }
+  const links = linkRepayments({ ...input, transactions }, named, today)
+  return [...changed.values()].map((t) => ({ ...t, ...links.get(t.id) }))
 }
 
 /**

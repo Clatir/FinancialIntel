@@ -29,6 +29,7 @@ import {
   type Transaction
 } from '@shared/schema'
 import { normalizeInput } from '../audyt/wyrocznia/lib/dane.mjs'
+import { incomeStats } from '../audyt/wyrocznia/lib/raport.mjs'
 import { runFleet } from '../audyt/wyrocznia/lib/silnik.mjs'
 
 const AT = '2026-01-01T00:00:00.000Z'
@@ -197,6 +198,48 @@ describe('wyrocznia a silnik na regułach N2 (AP-32)', () => {
       now: '2026-04-10T20:00:00.000Z'
     })
     expectSame(r)
+  })
+
+  it('T350 / T352 (przegląd 2 N2): zaliczka rozbita przez „Spłać” – wskazany zakup jest części „spłata”, reszta zaliczką; późniejsza spłata bez zmian', () => {
+    const marek = { id: nextId(), name: 'Marek', bankNames: [], inflow: 'income' as const, archived: false, via: null, opening: { owed: 0, deposit: 0 } }
+    const buy = tx('2026-09-10', -zl(100), { categoryId: FOOD, refundable: true, memberId: marek.id })
+    const line = { id: nextId(), amount: zl(40), categoryId: null, refundable: false, memberId: marek.id, advance: true, inflowKind: 'repay' as const, note: '' }
+    const r = both({
+      ...start('2026-09-01', zl(20000)),
+      settings: { budget: { start: '2026-09-01', initial: { shields: 0, hull: 0, goals: {} } }, household: { members: [marek], assignFrom: null } },
+      months: [plan('2026-09', zl(4000))],
+      transactions: [
+        buy,
+        tx('2026-09-12', zl(100), { kind: 'income', memberId: marek.id, inflowKind: 'advance', advance: true, covers: [buy.id], splits: [line] }),
+        tx('2026-09-15', zl(60), { kind: 'income', memberId: marek.id, inflowKind: 'repay', covers: [buy.id] })
+      ],
+      now: '2026-09-30T20:00:00.000Z'
+    })
+    expectSame(r)
+    expect(r.app.receivables.members.find((m) => m.memberId === marek.id)).toMatchObject({ owed: 0, deposit: zl(60) })
+  })
+
+  it('T70 / T355 (AF-5, przegląd 2 N2): nadwyżka spłaty pożyczki udzielonej ponad dług – przychód w statystykach, całością i częścią wpłaty', () => {
+    const loan = loanSchema.parse({ ...base(), name: 'Tomek', direction: 'given', counterparty: 'TOMEK', amount: zl(1000), date: '2026-01-15', accountId: MBANK_ACCOUNT_ID })
+    const r = both({
+      ...start('2026-02-01', zl(20000)),
+      months: [plan('2026-02', zl(4000))],
+      loans: [loan],
+      transactions: [
+        // Before the start: 600 zł of the debt. In the run: 500 zł – 400 zł back, 100 zł of interest; a part of 300 zł of a
+        // transfer of 800 zł when nothing is owed – all of it interest, the transfer's rest its income.
+        tx('2026-01-20', zl(600), { kind: 'loan', loanId: loan.id, counterparty: 'TOMEK' }),
+        tx('2026-02-10', zl(500), { kind: 'loan', loanId: loan.id, counterparty: 'TOMEK' }),
+        tx('2026-03-10', zl(800), { kind: 'income', counterparty: 'EWA KOWALSKA', splits: [{ id: nextId(), amount: zl(300), loanId: loan.id }] }),
+        tx('2026-03-12', zl(1000), { kind: 'income', counterparty: 'PRACA' })
+      ],
+      now: '2026-04-10T20:00:00.000Z'
+    })
+    expectSame(r)
+    const o = incomeStats(r.oracle, r.input, '2026-04', new Set())
+    expect(r.app.incomeStats.months.map((m) => [m.month, m.work])).toEqual(o.rows.map((x: any) => [x.miesiac, x.praca]))
+    expect(Object.fromEntries(r.app.incomeStats.months.map((m) => [m.month, m.work]))).toMatchObject({ '2026-02': zl(100), '2026-03': zl(1800) })
+    expect(r.app.incomeStats.windows[3].total).toBe(o.s3.razemZCzesci)
   })
 
   it('PR sp. 9 / T28, T32 (D99 pkt 9): wydatek ponad energię najpierw z osłon, kadłub dopiero po nich (zwykła kwota)', () => {

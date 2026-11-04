@@ -2551,10 +2551,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   dni i format liczy tylko dla importów kandydatów.
 - **T333** Kopia z innego konta a zakupy, które spłaca (przegląd N1 2; doprecyzowuje T321): usuwana kopia (AF-9) nigdy po
   cichu nie zabiera spłaty zakupów domownika (D91). Operacja tutaj, która nic nie wskazuje, przejmuje to, co kopia spłaca
-  (`covers`, dług startowy, `repaid`), przy tej samej decyzji albo przy innej, gdy jej pieniądze spłacają każdego
+  (`covers`, dług startowy, `repaid`), przy tej samej decyzji albo przy innej, gdy jej pieniądze są spłatą każdego
   domownika, którego spłacają pieniądze kopii (`takesCovers` – np. ta sama wpłata Mamy z częścią „w tym za Tata”; także
-  panel duplikatów). Gdy nie przejmie – wskazuje inne zakupy (`coversOtherwise`), ma inną decyzję bez pieniędzy tych
-  osób (zwykły wpływ) albo jej pieniądze nie są ich spłatą (ich przychód, zaliczka) – kopia nie jest zaznaczona,
+  panel duplikatów; po przeglądzie 2 N2 pieniądze kopii spłacają według planu księgi – `planOf`, także jawna zaliczka albo
+  przychód, które wskazują zakupy (AP-4, T350): wcześniej taka kopia 1.15.3–1.15.5 „nikogo nie spłacała”, nie była
+  zaznaczona, a zakup po usunięciu był znów do oddania). Gdy nie przejmie – wskazuje inne zakupy (`coversOtherwise`), ma
+  inną decyzję bez pieniędzy tych osób (zwykły wpływ) albo jej pieniądze nie spłacają ich tak, jak pieniądze kopii (spłatę
+  kopii – ich przychód albo zaliczka tutaj, które spłaciłyby je tylko wbrew temu, co mówią; jawną zaliczkę kopii ze
+  wskazanymi – spłata albo ta sama zaliczka tutaj wystarczy) – kopia nie jest zaznaczona,
   a podgląd mówi „po usunięciu spłacane przez nią zakupy będą znów do oddania” (`RowCopy.dropsCovers`, `copyNotes` –
   zaznaczona czy nie; przegląd N1 3: wcześniej „usunięta – …” przy kopii, której import nie usuwa); zaznaczona mimo to –
   operacja tutaj zostaje ze swoją decyzją, te zakupy znów do oddania (jak przy `otherCovers`). Kopia, której pieniądze
@@ -2654,14 +2658,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
 - **T342** „Do zadokowania” na ekranach (1.15.6, AP-12; MG sp. 1, PR sp. 2, DO sp. 4): silnik zlicza pary liczone
   według puli wpisu (`FleetState.toDock` – ile, wpływ i wypływ liczone według puli – wpływ wpisany na Portfelu XTB bez
-  części domownika, B69 –, część wciąż w celach; zdarzenie dziennika z `pending`). Część w celach (przegląd N2 5):
+  części domownika, B69, i bez tego, co jego część spłaty pożyczki oddała osłonom, D100 – nadwyżka ponad dług dokuje
+  z resztą (przegląd 2 N2: wcześniej „wpływ” liczył też część pożyczki, o tyle więcej, niż dokuje silnik) –, część wciąż
+  w celach; zdarzenie dziennika z `pending`). Część w celach (przegląd N2 5):
   pieniądze pary wychodzą z celu ostatnie (wydatek z celu i przeniesienie biorą najpierw jego inne pieniądze),
   przeniesienie do innego celu zabiera je ze sobą, do osłon – wychodzą z celów; nigdy więcej, niż cele mają (wcześniej
   wszystko, co para włożyła – „w celach 400 zł (w tym do zadokowania 1 000 zł)”). Stan okrętu na Mostku – wiersz „Do
   zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu i wypływu (dymek: jak liczone i że
   „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do zadokowania) – dokąd poszła?” i w rozbiciu
   „Dostawa do zadokowania (według puli wpisu ICTTJ)” – także wpływ wpisany na Portfelu XTB (B69; wcześniej pominięty –
-  brany tylko rodzaj XTB), część domownika osobno („Domownicy – spłata i zaliczka”, nie w osłonach); Mapa gwiezdna –
+  brany tylko rodzaj XTB), część domownika osobno („Domownicy – spłata i zaliczka”, nie w osłonach), część spłaty
+  pożyczki też („Spłata pożyczki (do osłon)” – przegląd 2 N2; wcześniej w „Osłony”, jakby z puli); Mapa gwiezdna –
   „w celach … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed
   dziś (DO sp. 4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten
   podział.” (prawda także po zmianie celów – T363).
@@ -2721,8 +2728,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Zapisane `inflowKind: 'advance'` z wskazanym zakupem (opcja „reszta jako zaliczka” 1.15.3–1.15.5 i wskazanie z wersji
   sprzed 1.15.3) spłacają go deterministycznie, bez przepisywania rekordów – każdy komputer liczy to samo; `inflowKind:
   'income'` ze wskazanym tak samo (ten sam sprzeczny zapis starszej wersji: wskazanie zakupu = ta wpłata go spłaca).
-  `repaymentShares` i `repayers` (`copies.ts`) bez zmian – edytor nie proponuje jawnym rodzajom nowych zakupów. Addytywnie,
-  bez `SCHEMA_VERSION`.
+  Po przeglądzie 2 N2 plan części czyta jedno `planOf`: wskazane zakupy są jawnego rodzaju (`named`) tylko wtedy, gdy ta
+  osoba nie ma w tej samej operacji części „spłata” – inaczej należą do niej, a część jawna omija dług (zaliczka rozbita
+  przez „Spłać” na „spłatę” i zaliczkę – T352: wskazany później zakup, np. „Przypisz” z meldunku, spłaciłaby też
+  zaliczka). `repaymentShares` bez zmian – edytor nie proponuje jawnym rodzajom nowych zakupów; spłacający w kopiach
+  (`repayersOf`, `copies.ts`) jak księga (`planOf` – także jawny rodzaj ze wskazanymi; spłaty kopii nie zastąpi jawny
+  rodzaj operacji tutaj – T333). Addytywnie, bez `SCHEMA_VERSION`.
 - **T351** „reszta jako zaliczka” w imporcie = spłata, reszta do depozytu (AP-4, AF-8, IM.23, IM sp. 4): opcja
   `household:<osoba>:advance` daje `inflowKind: 'repay'` i `advance: true` (wcześniej `inflowKind: 'advance'` – reguła
   uczyła się „całość jako zaliczka”); jawne rodzaje to osobne opcje `:all-income` i `:all-advance`; `optionOf`
@@ -2737,9 +2748,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   marce; inny rodzaj albo inna osoba – bez linii (`choiceFor`, jak dotąd).
 - **T352** Meldunek „Zaliczki przy długu” (AP-4, naprawa danych): silnik zbiera `HouseholdLedger.skipped` – części
   `inflowKind: 'advance'`, które przy długu osoby nic nie spłaciły ani nie zarezerwowały (od ostatniego startu sald);
-  meldunek na osobę, dopóki ma oddać (`skippedDebtsOf`). „Spłać” to jawna akcja z „Cofnij”: części tej osoby →
-  „spłata, reszta jako zaliczka” (`repayingAdvance`), pewne zakupy wskazane jak w imporcie (`linkRepayments`), reszta
-  czeka na przypisanie (D91 a); „Cofnij” przywraca tylko wpisy niezmienione od tamtej pory. „zostaw” – klucz
+  meldunek na osobę, dopóki ma oddać (`skippedDebtsOf`) i tylko o tym, co z tamtego długu jest nadal do oddania przez nią
+  (przegląd 2 N2 – `SkippedDebt.open`): najmniej z części, długu wtedy minus to, co osoba spłaciła po niej, jej wolnej
+  zaliczki od tej chwili w najniższym punkcie i długu teraz, po kolei jej takich wpłat (wcześniejsza pierwsza); dług
+  spłacony później inną wpłatą albo zaliczka zużyta na późniejsze zakupy – nic (wcześniej: zaliczka 100 zł przy długu
+  100 zł, potem spłata 100 zł, zakup 150 zł – „ma oddać 50 zł. Spłacić?”, a „Spłać” spłacała dług z dnia zaliczki, spłata
+  stawała się przychodem 100 zł, zakup cały do oddania: dług 50 → 150 zł). Gdy spłaci mniej, niż mogłyby wpłaty i dług,
+  meldunek mówi ile („… – ma oddać 150,00 zł; ta wpłata spłaci z tego 50,00 zł. Spłacić?”). „Spłać” to jawna akcja
+  z „Cofnij” (`repayingAdvancesOf`, po kolei, każda wobec księgi ze zmienionymi wcześniejszymi) i spłaca tylko to: część,
+  która spłaci wszystko, co mogła wtedy – „spłata, reszta jako zaliczka” (`repayingAdvance`); inaczej linia „spłata” tej
+  kwoty tej osoby, reszta zostaje jawną zaliczką (wskazane zakupy są wtedy części „spłata” – T350); pewne zakupy wskazane
+  jak w imporcie (`linkRepayments`) tylko, gdy osoba nic nie spłaciła po tej wpłacie (inaczej mogłyby być zakupami
+  późniejszej spłaty) – reszta czeka na przypisanie (D91 a); „Cofnij” przywraca tylko wpisy niezmienione od tamtej pory.
+  „zostaw” (wpłaty z meldunku) – klucz
   `advanceKept:<operacja>:<osoba>` w `settings.import.notDuplicates` (z „Cofnij”); kolejna taka wpłata – pyta znowu (jawna
   zaliczka wolno omijać dług – D99 S4, meldunek tylko pyta). Klucze AP-4 nie są parami „to nie duplikat”
   (`isDuplicatePairKey`).
@@ -2759,9 +2780,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`repaymentShares`, `repayers` pomijają ją jawnie), reszta wpłaty jak dotąd – spłata domownika, depozyt albo przychód.
   Jedno czytanie spłat pożyczki – `loanParts` / `forEachLoanOperation` (stan pożyczki, wartość netto F24, filtr Operacji
   `loanIdsOf`); silnik (`fleet.ts` `repayLoanParts`): do osłon do wysokości długu (kwota pożyczki − spłacone, spłaty
-  sprzed startu też – jak spłata całością), nadwyżka dokuje jako przychód z resztą wpłaty (T70). Linia pożyczki nieznanej
-  albo wziętej – przychód (tak czyta ją starsza wersja). Statystyki przychodów: spłata pożyczki nigdy nie jest przychodem,
-  całością ani częścią (z nadwyżką – jak rodzaj „Pożyczka”); tagi (F17): to nie zwrot pieniędzy na wyprawie. Lista
+  sprzed startu też – jak spłata całością), nadwyżka dokuje jako przychód z resztą wpłaty (T70). Ile każdej spłaty idzie
+  na dług, liczy jedno `loanBacksOf` (`calc/loans.ts`): po kolei operacji przez całą historię do dziś – także spłaty
+  w saldzie otwarcia konta po starcie budżetu (nie w przebiegu, ale spłacone; przegląd 2 N2: wcześniej tylko sprzed
+  startu, więc późniejsza spłata wracała do osłon cała zamiast w części jako nadwyżka) – silnik i statystyki czytają tę
+  samą liczbę. Linia pożyczki nieznanej albo wziętej – przychód (tak czyta ją starsza wersja). Statystyki przychodów
+  (przegląd 2 N2, AF-5 – stosuje T70; wcześniej spłata pożyczki nigdy nie była przychodem, a linia każdej pożyczki była
+  odejmowana): spłata pożyczki udzielonej do wysokości długu nie jest przychodem, całością ani częścią; nadwyżka ponad dług
+  (odsetki) jest – jak dokuje silnik, także sprzed startu (historia); linia pożyczki nieznanej albo wziętej – przychód, jak
+  w silniku; tagi (F17): to nie zwrot pieniędzy na wyprawie. Lista
   Operacji mówi „spłata pożyczki: X”; pożyczki z taką linią nie da się usunąć (linia stałaby się przychodem) – tylko
   zamknąć. Kopia z innego konta: linia pożyczki należy do decyzji (`copies.ts` – inna decyzja niż bez niej, operacja bez
   decyzji ją przejmuje). Addytywnie, bez `SCHEMA_VERSION`: starsza wersja czyta linię jako „mój przychód” (dokuje,
@@ -2771,7 +2798,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wpłaty: domownik po imieniu (jego wpłata albo jego nazwa w banku – `memberOf`), reszta po nazwie z operacji. Wiersz
   pożyczki na Radarze: „kto zapłacił: Mama 200,00 zł · EWA KOWALSKA 250,00 zł”, gdy zapłacił ktoś inny niż
   pożyczkobiorca (pożyczkobiorca – wszystkie słowa kontrahenta pożyczki w nazwie nadawcy, jak `loanFor`, wspólne `nameIn`);
-  same spłaty pożyczkobiorcy – bez tej linii (mówi to „oddane … z …”).
+  same spłaty pożyczkobiorcy – bez tej linii (mówi to „oddane … z …”). Po przeglądzie 2 N2 pożyczkobiorcy jest też spłata
+  bez nadawcy (własna „Spłata” Radaru kopiuje kontrahenta pożyczki – pusty, gdy go nie ma), a przy pożyczce bez
+  kontrahenta – jej własne spłaty (rodzaj „Pożyczka”, np. „Zwrot pożyczki” z banku: nikogo nie da się od nich odróżnić),
+  część wpłaty – nadawcy (wcześniej każda pożyczka bez kontrahenta miała „kto zapłacił: bez nazwy …”); jego spłata bez
+  nazwy – po kontrahencie pożyczki, inaczej „pożyczkobiorca”.
 - **T357** Spłata pożyczki częścią w imporcie (D100 (2); doprecyzowuje T327, T328): linia „w tym spłata pożyczki” decyzji
   wpływu – pieniędzy domownika albo zwykłego przychodu (`SharePart.loanId`, `memberId` '') – w wierszu, grupie i temacie.
   W `rowShares` pożyczka stoi za domownika pod kluczem `loan:<id>` (`loanKey`, porównania linii po `shareWho`): jej dług

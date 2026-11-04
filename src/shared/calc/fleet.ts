@@ -25,7 +25,7 @@ import { openingsOf } from './balances'
 import { balanceOf, heldOf, ledgerOrder, settleHousehold, settlesHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
 import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type IncomeStats } from './income'
 import { goalAt, goalDecided, goalTakes } from './goals'
-import { debtOf, loanParts, loanStates, type LoanState } from './loans'
+import { debtOf, loanBacksOf, loanStates, type LoanState } from './loans'
 import { coveredMonths, monthsBefore } from './history'
 import { accountAmounts, categoryIndex, costOf, isCargoPayment, isTwoSided, partsOf, splitEvenly, sum } from './operations'
 
@@ -824,7 +824,12 @@ export function computeFleet(input: FleetInput): FleetState {
   const tax = taxOfDockings(pools, txs)
   // The pool „Podatek” before the start (N38): paired, never docked – no income either.
   for (const [id, v] of input.preStartTax ?? []) if (!tax.has(id)) tax.set(id, v)
-  const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax }
+  // What of each repayment of a loan given (its record – whole or a part of an inflow, D100) repays the debt (T70, T355):
+  // in the operations' order over the whole history – before the start and inside an account's opening balance too, not
+  // run but repaid (review 2 of N2: one after the start inside it was missing) – the same count as `calc/loans.ts`; the
+  // run and the income statistics read the same (AF-5: the excess is income in both).
+  const loanBacks = loanBacksOf(input.loans ?? [], sortedOps(input.transactions), today)
+  const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax, loanBacks }
   const incomeMonths = incomeByMonth(txs, incomeContext)
   const costsFor = (m: string): FleetState['costs'] => {
     const window = monthsBefore(covered, m, 12)
@@ -874,11 +879,6 @@ export function computeFleet(input: FleetInput): FleetState {
   const loanOpen = new Map<string, number>()
   /** What loan operations without their record brought in beyond repaying a receivable (B57): money out repays it first. */
   const borrowedNoRecord = new Map<string, number>()
-  // Repayments of the loans given (their records), from before the start too – the same count as `calc/loans.ts`.
-  const givenBack = new Map<string, number>()
-  for (const t of txs) if (t.kind === 'loan' && t.amount > 0 && t.loanId && start && t.date < start && loansById.get(t.loanId)?.direction === 'given') givenBack.set(t.loanId, (givenBack.get(t.loanId) ?? 0) + t.amount)
-  // …and the parts of inflows repaying one (D100, T355), as a whole repayment.
-  if (start) for (const t of txs) if (t.date < start) for (const x of loanParts(t)) if (loansById.get(x.loanId)?.direction === 'given') givenBack.set(x.loanId, (givenBack.get(x.loanId) ?? 0) + x.amount)
   const salaryOfMonth = new Map<string, SalaryPayment>()
   const dailyExtra = new Map<string, number>()
   /** The loot kept in the planned envelopes (F28): month → category → grosze. */
@@ -1037,22 +1037,17 @@ export function computeFleet(input: FleetInput): FleetState {
   }
   /**
    * The parts of an inflow repaying a loan given (D100, T355 – whoever sent them), as its whole repayment (T70): back to
-   * the shields up to what is owed; returns how much – the rest of the part is income (it docks with the inflow's rest).
-   * A part of a loan unknown or taken is income (as an older version reads it).
+   * the shields up to what is owed (`loanBacks`); returns how much – the rest of the part is income (it docks with the
+   * inflow's rest). A part of a loan unknown or taken is income (as an older version reads it).
    */
   const repayLoanParts = (t: Transaction, moves: Moves): number => {
     let back = 0
-    for (const x of loanParts(t)) {
-      const loan = loansById.get(x.loanId)
-      if (loan?.direction !== 'given') continue
-      const owed = Math.max(0, loan.amount - (givenBack.get(loan.id) ?? 0))
-      const v = Math.min(x.amount, owed)
-      if (!v) continue
-      givenBack.set(loan.id, (givenBack.get(loan.id) ?? 0) + v)
-      loanOpen.set(loan.id, (loanOpen.get(loan.id) ?? 0) - v)
-      moves.loans = { ...moves.loans, [loan.id]: (moves.loans?.[loan.id] ?? 0) - v }
-      addShields(v, moves)
-      back += v
+    for (const x of loanBacks.get(t.id) ?? []) {
+      if (!x.back) continue
+      loanOpen.set(x.loanId, (loanOpen.get(x.loanId) ?? 0) - x.back)
+      moves.loans = { ...moves.loans, [x.loanId]: (moves.loans?.[x.loanId] ?? 0) - x.back }
+      addShields(x.back, moves)
+      back += x.back
     }
     return back
   }
@@ -1284,9 +1279,7 @@ export function computeFleet(input: FleetInput): FleetState {
         } else {
           // A repayment comes back to the shields up to what is owed – the loan record knows its amount (lent before
           // the start or without its operation too); more than that (interest) is income.
-          const owed = Math.max(0, loan.amount - (givenBack.get(loan.id) ?? 0))
-          const back = Math.min(amt, owed)
-          givenBack.set(loan.id, (givenBack.get(loan.id) ?? 0) + back)
+          const back = loanBacks.get(t.id)?.[0]?.back ?? 0
           loanOpen.set(key, (loanOpen.get(key) ?? 0) - back)
           if (back) {
             moves.loans = { [key]: -back }
@@ -1310,8 +1303,9 @@ export function computeFleet(input: FleetInput): FleetState {
     if (!pair) return record({ date: on, kind: t.kind, amount: amt, txId: t.id, moves })
     record({ date: on, kind: t.kind, amount: amt, txId: t.id, pending: true, moves })
     toDock.count++
-    // What the pool counts: an inflow typed on Portfel XTB (B69) less a household member's part of it (D80).
-    if (amt > 0) toDock.inflow += t.kind === 'income' ? amt - heldOf(household.byTx.get(t.id)) : amt
+    // What the pool counts: an inflow typed on Portfel XTB (B69) less a household member's part of it (D80) and what of
+    // it repays a loan (D100 – back to the shields; its excess docks with the rest – review 2 of N2).
+    if (amt > 0) toDock.inflow += t.kind === 'income' ? amt - heldOf(household.byTx.get(t.id)) - sum((loanBacks.get(t.id) ?? []).map((x) => x.back)) : amt
     else toDock.outflow -= amt
     for (const [id, v] of Object.entries(moves.goals ?? {})) if (v > 0) pendingIn.set(id, (pendingIn.get(id) ?? 0) + v)
   }

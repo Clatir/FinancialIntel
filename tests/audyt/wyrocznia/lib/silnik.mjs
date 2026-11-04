@@ -375,9 +375,12 @@ class Household {
     const coversOpening = !!t.coversOpening && (!t.coversOpeningMembers || t.coversOpeningMembers.includes(m.id))
     const coversAll = [...(coversOpening ? [`opening:${m.id}`] : []), ...(covers ?? [])]
     const names = coversOpening || (covers ?? []).some((id) => memberPartOf(this.txById.get(id) ?? {}, m.id, this.firstId) > 0)
+    // T350 (przegląd 2 N2): wskazane zakupy należą do części „spłata” tej osoby w tej samej operacji, gdy ją ma (rozbita
+    // zaliczka po „Spłać” – T352) – jawna część obok niej omija dług
+    const repaysToo = explicit && t.kind === 'income' && partsOf(t).some((p) => p.amount > 0 && !p.loanId && (p.memberId ?? null) === m.id && p.inflowKind !== 'advance' && p.inflowKind !== 'income')
     let mode
     if (this.variant === 'B') mode = explicit ? inflowKind : 'repay'
-    else if (this.variant === 'D99') mode = !explicit ? 'repay' : names ? 'named' : inflowKind
+    else if (this.variant === 'D99') mode = !explicit ? 'repay' : names && !repaysToo ? 'named' : inflowKind
     else mode = 'repay'
     const owedBefore = this.owedNet(m)
     // D94 (u2, C23): wskazane późniejsze zakupy tej osoby – rezerwacja (celowa zaliczka w depozycie, także przy advance: false)
@@ -635,6 +638,12 @@ export function runFleet(input, opt) {
   const log = []
   const loot = new Map() // miesiąc → { amount, decided, toShields, at }
   const loansState = new Map(input.loans.map((l) => [l.id, { paid: 0, lent: 0, received: 0, extraIncome: 0, payments: [] }]))
+  // T70, T355 (przegląd 2 N2, AF-5): nadwyżka spłaty pożyczki udzielonej ponad dług (odsetki) z każdej operacji – przychód
+  // także w statystykach przychodów (całą wpłatą i częścią wpłaty, w biegu i poza nim)
+  const loanExtra = new Map()
+  const addExtra = (t, x) => {
+    if (x > 0) loanExtra.set(t.id, (loanExtra.get(t.id) ?? 0) + x)
+  }
   const deliveries = []
   const hullTargetAt = new Map()
 
@@ -1010,6 +1019,7 @@ export function runFleet(input, opt) {
           const back = Math.min(t.amount, Math.max(0, loan.amount - ls.received))
           ls.received += back
           ls.extraIncome += t.amount - back
+          addExtra(t, t.amount - back)
           ls.payments.push({ date: t.date, amount: t.amount, payer: payerOf(t), txId: t.id, beforeRun: true })
         } else ls.lent += -t.amount
       } else if (t.amount < 0) {
@@ -1026,6 +1036,7 @@ export function runFleet(input, opt) {
         const back = Math.min(p.amount, Math.max(0, loan.amount - ls.received))
         ls.received += back
         ls.extraIncome += p.amount - back
+        addExtra(t, p.amount - back)
         ls.payments.push({ date: t.date, amount: p.amount, payer: payerOf(t), txId: t.id, part: true, beforeRun: true })
       }
       return
@@ -1097,6 +1108,7 @@ export function runFleet(input, opt) {
     dayCtx.decisionsSH += back
     if (amount - back > 0) {
       ls.extraIncome += amount - back
+      addExtra(t, amount - back)
       const o = dock(amount - back, t.date, cameIn, { txId: t.id, source: 'nadwyżka spłaty pożyczki' })
       deliveries.push(o)
       dayCtx.decisionsSH += o.toShields + o.toHull
@@ -1564,6 +1576,7 @@ export function runFleet(input, opt) {
     deliveries,
     household: hh,
     loansState,
+    loanExtra,
     balances,
     accountsTotal,
     layersSum: layersSum(),
