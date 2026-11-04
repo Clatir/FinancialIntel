@@ -74,6 +74,7 @@ export function LayersTab() {
               decimals={0}
               step={1}
               commitOnBlur
+              range={[1, 36]}
               isValid={(v) => v != null && v >= 1 && v <= 36}
               onChange={(v) => v != null && setLayers({ hullMonths: v })}
               onDraft={(v) => setDraft((d) => ({ ...d, hullMonths: v }))}

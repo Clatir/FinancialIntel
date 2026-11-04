@@ -84,7 +84,7 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
           <option value="in">wpływy</option>
           <option value="">oba kierunki</option>
         </select>
-        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={forRule} testId="import-rule-edit" />
+        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={forRule} noShares testId="import-rule-edit" />
         {rule.mode === 'amount' && (
           <label className="flex items-center gap-1 text-muted">
             do kwoty

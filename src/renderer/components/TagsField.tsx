@@ -4,7 +4,8 @@
  * Backspace in the empty field takes the last off. The tags of the history are suggested as one types.
  */
 import { useId, useState } from 'react'
-import { parseTags, tagKey, withTags, MAX_TAGS } from '@shared/calc/tags'
+import { parseTags, tagKey, tagsLost, withTags, MAX_TAGS, MAX_TAG_LENGTH } from '@shared/calc/tags'
+import { toast } from '../store/ui'
 import { cx } from './ui'
 
 export function TagsField({
@@ -33,6 +34,10 @@ export function TagsField({
   const add = () => {
     const more = parseTags(text)
     setText('')
+    // What cannot be kept is said (AP-15): a tag cut to 40 characters, one beyond the 20.
+    const lost = tagsLost(value, text)
+    if (lost.cut) toast(`Tag dłuższy niż ${MAX_TAG_LENGTH} znaków został skrócony.`, 'info', 5000)
+    if (lost.over) toast(`Najwyżej ${MAX_TAGS} tagów – ${lost.over === 1 ? 'jeden tag nie został dodany' : `pominięto ${lost.over}`}.`, 'info', 5000)
     if (!more.length) return
     const next = withTags(value, more)
     if (next.length !== value.length || next.some((t, i) => t !== value[i])) onChange(next)
@@ -72,6 +77,11 @@ export function TagsField({
           aria-label="Tagi"
           data-testid={`${testId}-input`}
         />
+      )}
+      {!disabled && full && (
+        <span className="text-[11px] text-dim" data-testid={`${testId}-full`}>
+          najwyżej {MAX_TAGS} tagów – usuń któryś, by dodać nowy
+        </span>
       )}
       {!disabled && !full && (
         <datalist id={listId}>

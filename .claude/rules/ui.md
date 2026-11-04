@@ -25,3 +25,7 @@ paths:
 - Skróty: Ctrl+1…0 ekrany, Ctrl+N nowa operacja (każdy ekran), Ctrl+S zapis, Ctrl+$ ukrycie kwot, Ctrl+Shift+M meldunki,
   Ctrl+Plus / Minus / Shift+0 rozmiar; ściągawka F1.
 - Ekrany komputera są używane też na telefonie – układ przez `CompactContext` / `Columns`, bez osobnych kopii ekranów.
+- **Nic po cichu (AP-15, T400):** odmowa i przycięcie mają komunikat przy polu (w oknie szybkiego wpisu toasty idą do stopki).
+  `NumberField` mówi sam (`range`), kwoty `amountRefusal`, zakres „od / do” – `orderRange` (zamiana ze słowem), limit długości
+  – `LimitHint` (pola z `maxLength`), wyłączony przycisk podaje powód obok. Esc w polu = cofnięcie wpisu; w szybkim wpisie
+  Esc = „×” (szkic zostaje).

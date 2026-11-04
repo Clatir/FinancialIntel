@@ -9,10 +9,11 @@ import { operationRowsOf, operationsCsv, operationsSheet } from '@shared/export/
 import { warsawNow } from '@shared/calc/dates'
 import { fold } from '@shared/fold'
 import type { Transaction } from '@shared/schema'
-import { AmountField } from '../../components/fields'
+import { AmountField, formatPln } from '../../components/fields'
 import { Popover } from '../../components/Popover'
 import { cx } from '../../components/ui'
 import { api } from '../../lib/api'
+import { orderRange, swappedText } from '../../lib/guards'
 import { countLabel, plural } from '../../lib/format'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
@@ -114,6 +115,13 @@ function tagOptions(known: readonly string[], picked: readonly string[]): Array<
   return [...options, ...picked.filter((k) => !have.has(k)).map((k) => ({ value: k, label: `#${k}` }))]
 }
 
+/** The amount filter's ends (AP-15, AF-21): crossed ones swap places – with a word, never one end dropped silently. */
+export function setAmountRange(min: number | null, max: number | null): void {
+  const r = orderRange(min, max)
+  setFilter({ amountMin: r.from, amountMax: r.to })
+  if (r.swapped) toast(swappedText('kwoty', `${formatPln(r.from!)} zł`, `${formatPln(r.to!)} zł`), 'info', 6000)
+}
+
 /** „Więcej filtrów” (F18): what the bar's menus do not cover. */
 export function MoreFilters({ filter }: { filter: OperationsFilter }) {
   const accounts = useAccounts()
@@ -147,9 +155,9 @@ export function MoreFilters({ filter }: { filter: OperationsFilter }) {
           <Section title="Kwota (bez znaku)" testId="operations-more-amount">
             <div className="flex items-center gap-1.5">
               od
-              <AmountField className="w-[90px]" value={filter.amountMin} allowEmpty placeholder="—" onChange={(amountMin) => setFilter({ amountMin, amountMax: filter.amountMax != null && amountMin != null && filter.amountMax < amountMin ? null : filter.amountMax })} aria-label="Kwota od" data-testid="operations-amount-min" />
+              <AmountField className="w-[90px]" value={filter.amountMin} allowEmpty placeholder="—" onChange={(amountMin) => setAmountRange(amountMin, filter.amountMax)} aria-label="Kwota od" data-testid="operations-amount-min" />
               do
-              <AmountField className="w-[90px]" value={filter.amountMax} allowEmpty placeholder="—" onChange={(amountMax) => setFilter({ amountMax, amountMin: filter.amountMin != null && amountMax != null && amountMax < filter.amountMin ? null : filter.amountMin })} aria-label="Kwota do" data-testid="operations-amount-max" />
+              <AmountField className="w-[90px]" value={filter.amountMax} allowEmpty placeholder="—" onChange={(amountMax) => setAmountRange(filter.amountMin, amountMax)} aria-label="Kwota do" data-testid="operations-amount-max" />
               zł
             </div>
           </Section>

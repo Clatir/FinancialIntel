@@ -227,14 +227,14 @@ export function WizardPage() {
       )}
       <Field label="Osłony (bufor na pensje) – cel w pensjach" labelWidth={170} hint={targets.shields != null ? `Cel osłon: ${zl(targets.shields)}.` : undefined}>
         {/* Never under the minimum of the orders (B84): the shields would stay below it for good. */}
-        <NumberField className="w-[70px]" value={w.shieldSalaries} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries} onChange={(v) => v != null && patchWizard({ shieldSalaries: v })} aria-label="Osłony w pensjach" />
+        <NumberField className="w-[70px]" value={w.shieldSalaries} decimals={0} step={1} range={[Math.max(1, orders.minShieldSalaries), 24]} isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries} onChange={(v) => v != null && patchWizard({ shieldSalaries: v })} aria-label="Osłony w pensjach" />
       </Field>
       <Field
         label="Kadłub (fundusz awaryjny) – cel w miesiącach"
         labelWidth={170}
         hint={targets.hull != null ? `Cel kadłuba: ${zl(targets.hull)} (średnie koszty ${zl(usedCosts ?? 0)} × ${w.hullMonths}).` : 'Kadłub potrzebuje średnich kosztów.'}
       >
-        <NumberField className="w-[70px]" value={w.hullMonths} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 36} onChange={(v) => v != null && patchWizard({ hullMonths: v })} aria-label="Kadłub w miesiącach" />
+        <NumberField className="w-[70px]" value={w.hullMonths} decimals={0} step={1} range={[1, 36]} isValid={(v) => v != null && v >= 1 && v <= 36} onChange={(v) => v != null && patchWizard({ hullMonths: v })} aria-label="Kadłub w miesiącach" />
       </Field>
       {costs.months < 3 && (
         <Field label="Średnie koszty miesięczne" labelWidth={170} hint="Historia ma mniej niż 3 pełne miesiące: przyjęta kwota posłuży do celu kadłuba i zasięgu, dopóki historia nie urośnie.">
@@ -410,7 +410,7 @@ export function WizardPage() {
         <NumberField className="w-[70px]" value={orders.minShieldSalaries} decimals={1} step={0.5} isValid={(v) => v != null && v >= 0 && v <= 24 && v <= w.shieldSalaries} onChange={(v) => v != null && setOrders({ minShieldSalaries: v })} />
       </Field>
       <Field label="Linia zanurzenia (% pensji)" labelWidth={170}>
-        <NumberField className="w-[70px]" value={orders.cargoLimitPct} decimals={0} step={5} isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} />
+        <NumberField className="w-[70px]" value={orders.cargoLimitPct} decimals={0} step={5} range={[1, 100]} isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} />
       </Field>
       <Field label="Cisza nocna" labelWidth={170}>
         <span className="num text-fg">

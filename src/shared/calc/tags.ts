@@ -16,7 +16,7 @@ export const MAX_TAGS = 20
 export const LAST_TAG_DAYS = 7
 
 /** A tag as typed, tidied: no „#”, single spaces, at most 40 characters ('' – none). */
-export const tagLabel = (s: string): string => s.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, 40)
+export const tagLabel = (s: string): string => s.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LENGTH)
 
 /** The tag's identity: „#Wakacje  Chorwacja” = „wakacje chorwacja” (no case, no Polish marks). */
 export const tagKey = (s: string): string => fold(tagLabel(s))
@@ -25,6 +25,31 @@ export const tagKey = (s: string): string => fold(tagLabel(s))
 export function parseTags(text: string): string[] {
   const raw = text.includes(',') ? text.split(',') : text.includes('#') ? text.split('#') : [text]
   return withTags([], raw)
+}
+
+/** The longest tag. */
+export const MAX_TAG_LENGTH = 40
+
+/**
+ * What adding the tags typed in `text` to `list` cannot keep (AP-15, OP.27): tags cut to `MAX_TAG_LENGTH` characters
+ * and new tags beyond `MAX_TAGS` – so the field says it, not a tag silently shorter or missing.
+ */
+export function tagsLost(list: readonly string[], text: string): { cut: number; over: number } {
+  const raw = text.includes(',') ? text.split(',') : text.includes('#') ? text.split('#') : [text]
+  const tidy = (s: string) => s.trim().replace(/^#+/, '').replace(/s+/g, ' ').trim()
+  const have = new Set(list.map(tagKey))
+  let cut = 0
+  let fresh = 0
+  for (const t of raw) {
+    const label = tidy(t)
+    if (!label) continue
+    if (label.length > MAX_TAG_LENGTH) cut++
+    const key = tagKey(label)
+    if (have.has(key)) continue
+    have.add(key)
+    fresh++
+  }
+  return { cut, over: Math.max(0, list.length + fresh - MAX_TAGS) }
 }
 
 /** `list` with `more` added – each tag once (the first spelling stays), at most `MAX_TAGS`. */

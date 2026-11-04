@@ -2937,3 +2937,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ÷ dni do końca miesiąca (z dziś); energia dziś = przydział − wydane dziś, nie więcej niż zostało energii miesiąca
   (T371); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera; `daily.left`, jak alarm i gra).
   Bez zmian reguły gry.
+- **T400** Nic nie zmienia się po cichu (1.15.8, N4, AP-15): każda odmowa i każde przycięcie mówi to przy polu – co zostaje
+  i dlaczego. Pole kwoty `amountRefusal` (nieprawidłowa / pusta / ujemna; „1.200” i „12,345” z podpowiedzią), `NumberField`
+  domyślnie sam mówi („Dozwolone: od … do …”, „Tu tylko liczby całkowite”, `range`; `onReject` nadpisuje), w trybie
+  natychmiastowym i `commitOnBlur`; Esc w polu liczbowym cofa wpis (pole zapisujące przy każdym klawiszu wraca do wartości
+  z chwili wejścia). Zakres „od” po „do” (kwoty filtra Operacji, daty eksportu) – zamiana ze słowem (`orderRange`), nie
+  skasowanie końca. Pusty eksport: „Brak operacji w okresie.” i brak pliku. Limity długości: licznik od 80 % (`LimitHint`,
+  w `TextField` / `TextArea` / `NameInput` z `maxLength`), przy limicie „dalszy tekst jest obcinany”; tagi: skrócony do 40
+  znaków i pominięty ponad 20 (`tagsLost`) z komunikatem, pełne pole mówi „najwyżej 20 tagów”. Zapis 0 zł – ostrzeżenie w
+  edytorze operacji; wyłączony przycisk (nowy kontener, przeniesienie środków celu) podaje powód. Edytor reguły importu nie
+  pokazuje „w tym za” (reguła go nie zapamiętuje). Szybki wpis nie ma toastów – każdy toast pól trafia do stopki
+  (`QuickApp`), Esc to „×” (wpisywana kwota zostaje w szkicu), a Enter po odmowie pola nie zapisuje starej wartości;
+  archiwizowany domownik czyści wybór „Finansuje” (nie podstawia pierwszego z listy). Bez zmian formatu danych.

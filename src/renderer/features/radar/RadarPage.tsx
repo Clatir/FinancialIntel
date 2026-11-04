@@ -20,7 +20,7 @@ import { useFleet } from '../../store/fleet'
 import { navigate, toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
-import { Badge, CompactContext, Empty, Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
+import { Badge, CompactContext, Empty, Field, LimitHint, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
@@ -465,9 +465,11 @@ function NewLoanPanel({ today }: { today: string }) {
         />
         <Field label="Nazwa" labelWidth={130}>
           <input className="input h-[24px] w-full" value={o.name} maxLength={80} onChange={(e) => set({ name: e.currentTarget.value })} placeholder={taken ? 'np. Kredyt na laptop' : 'np. Pożyczka dla Ani'} data-testid="loan-name" />
+          <LimitHint length={o.name.length} max={80} />
         </Field>
         <Field label={taken ? 'Pożyczkodawca' : 'Komu pożyczasz'} labelWidth={130} hint="Jak w wyciągu z banku – import połączy przelewy.">
           <input className="input h-[24px] w-full" value={o.counterparty} maxLength={200} onChange={(e) => set({ counterparty: e.currentTarget.value })} data-testid="loan-counterparty" />
+          <LimitHint length={o.counterparty.length} max={200} />
         </Field>
         <Field label="Kwota" labelWidth={130}>
           <AmountField className="h-[24px] w-[120px]" value={o.amount || null} allowEmpty onChange={(v) => set({ amount: v ?? 0 })} aria-label="Kwota pożyczki" data-testid="loan-amount" />
@@ -485,7 +487,7 @@ function NewLoanPanel({ today }: { today: string }) {
         </Field>
         <Field label="Raty" labelWidth={130} hint="Co miesiąc od pierwszej raty; 1 = jednorazowa spłata.">
           <div className="flex items-center gap-2">
-            <NumberField className="h-[24px] w-[60px]" value={o.installments} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 120} onChange={(v) => v != null && set({ installments: v })} aria-label="Liczba rat" data-testid="loan-installments" />
+            <NumberField className="h-[24px] w-[60px]" value={o.installments} decimals={0} step={1} range={[1, 120]} isValid={(v) => v != null && v >= 1 && v <= 120} onChange={(v) => v != null && set({ installments: v })} aria-label="Liczba rat" data-testid="loan-installments" />
             <span className="text-muted">pierwsza</span>
             <DateField className="h-[24px] w-[100px]" value={o.firstDue} onChange={(firstDue) => set({ firstDue })} aria-label="Pierwsza rata" />
           </div>

@@ -24,6 +24,7 @@ import { useGameView } from '../../store/game'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { api } from '../../lib/api'
+import { orderRange, swappedText } from '../../lib/guards'
 import { DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
 import { Empty, Panel, Segmented, cx } from '../../components/ui'
@@ -48,6 +49,8 @@ const TABS: Array<{ value: Tab; label: string }> = [
 const saved = (path: string | null) => {
   if (path) toast(`Zapisano: ${path}`, 'success', 6000)
 }
+const NO_OPERATIONS = 'Brak operacji w okresie.'
+const NO_MONTHS = 'Brak miesięcy w okresie.'
 const failed = (e: unknown) => toast(`Nie udało się zapisać: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
 
 /** The costs linked to the cargo's containers (N72): one name in every report – monthly and periodic fees alike. */
@@ -512,6 +515,15 @@ function ExportPanel() {
   const months = () =>
     monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
+  // „Od” after „do” swap with a word (AP-15, AF-36): a range read backwards is no empty file with „Zapisano”.
+  const setEnds = (nextFrom: string, nextTo: string) => {
+    const r = orderRange(nextFrom, nextTo)
+    setFrom(r.from!)
+    setTo(r.to!)
+    if (r.swapped) toast(swappedText('daty', plDate(r.from!), plDate(r.to!)), 'info', 6000)
+  }
+  // Nothing in the period: said, no empty file (RE sp. 5).
+  const save = (rows: number, none: string, write: () => Promise<string | null>) => (rows === 0 ? toast(none, 'info', 5000) : write().then(saved, failed))
   const csv = { name: 'CSV', extensions: ['csv'] }
   return (
     <Columns id="reports-export" tracks={['minmax(420px,1fr)']} className="grid items-start">
@@ -519,18 +531,18 @@ function ExportPanel() {
         <div className="flex flex-col gap-2 text-[12px]">
           <div className="flex items-center gap-2">
             <span className="text-muted">Okres</span>
-            <DateField className="h-[24px] w-[100px]" value={from} onChange={setFrom} aria-label="Od" data-testid="export-from" />
+            <DateField className="h-[24px] w-[100px]" value={from} onChange={(d) => setEnds(d, to)} aria-label="Od" data-testid="export-from" />
             <span className="text-muted">–</span>
-            <DateField className="h-[24px] w-[100px]" value={to} onChange={setTo} aria-label="Do" data-testid="export-to" />
+            <DateField className="h-[24px] w-[100px]" value={to} onChange={(d) => setEnds(from, d)} aria-label="Do" data-testid="export-to" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="btn h-[26px]" onClick={() => api.saveTextFile(name('operacje', 'csv'), operationsCsv(ops()), csv).then(saved, failed)} data-testid="export-operations-csv">
+            <button className="btn h-[26px]" onClick={() => save(ops().length, NO_OPERATIONS, () => api.saveTextFile(name('operacje', 'csv'), operationsCsv(ops()), csv))} data-testid="export-operations-csv">
               Operacje – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(months()), csv).then(saved, failed)} data-testid="export-months-csv">
+            <button className="btn h-[26px]" onClick={() => save(months().length, NO_MONTHS, () => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(months()), csv))} data-testid="export-months-csv">
               Miesiące – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => api.saveXlsx(name('budzet', 'xlsx'), [operationsSheet(ops()), monthsSheet(months())]).then(saved, failed)} data-testid="export-xlsx">
+            <button className="btn h-[26px]" onClick={() => save(ops().length, NO_OPERATIONS, () => api.saveXlsx(name('budzet', 'xlsx'), [operationsSheet(ops()), monthsSheet(months())]))} data-testid="export-xlsx">
               Excel (operacje + miesiące)
             </button>
             <button className="btn h-[26px]" onClick={() => api.exportZip().then(saved, failed)} data-testid="export-zip">

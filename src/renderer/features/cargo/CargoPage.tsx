@@ -455,6 +455,12 @@ function NewContainer({ draft, setDraft, sim, limitPct, onAdded }: { draft: Cont
           <SimulationLine sim={sim} verb="po dodaniu" />
         </div>
       )}
+      {/* The button is off: said why (AP-15, AF-79). */}
+      {(!draft.name.trim() || draft.amount <= 0) && (
+        <p className="mt-2 text-[11.5px] text-accent" data-testid="cargo-new-hint">
+          {!draft.name.trim() && draft.amount <= 0 ? 'Podaj nazwę i kwotę większą od 0,00 zł.' : !draft.name.trim() ? 'Podaj nazwę kontenera.' : 'Podaj kwotę większą od 0,00 zł – kontener bez kwoty niczego nie odkłada.'}
+        </p>
+      )}
       <div className="mt-2 flex items-center gap-2">
         {over && !confirmOver ? (
           <button className="btn btn-accent h-[24px]" disabled={!draft.name.trim() || draft.amount <= 0} onClick={() => setConfirmOver(true)} data-testid="cargo-new-save">

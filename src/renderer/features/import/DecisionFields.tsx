@@ -220,7 +220,8 @@ export function DecisionFields({
   exclude,
   own,
   sharesFrom,
-  sharesInBrands
+  sharesInBrands,
+  noShares
 }: {
   choice: Choice
   direction: 'in' | 'out'
@@ -234,6 +235,8 @@ export function DecisionFields({
   sharesFrom?: DecisionKeys
   /** Its „w tym za” are its brands' own (a theme showing their common decision – `themeShows` 'brands', T336): said, not edited. */
   sharesInBrands?: boolean
+  /** A rule's editor (AP-15): a rule does not keep „w tym za” – it is said, not offered and lost. */
+  noShares?: boolean
 }) {
   const members = useMembers()
   const loans = useRecordList('loans')
@@ -301,7 +304,11 @@ export function DecisionFields({
         choice.kind === 'income' &&
         choice.household &&
         members.length > 1 &&
-        (sharesInBrands ? (
+        (noShares ? (
+          <span className="text-[11px] text-muted" data-testid={`${testId}-no-shares`}>
+            „w tym za” – reguła tego nie zapamiętuje, ustawisz przy imporcie
+          </span>
+        ) : sharesInBrands ? (
           <span className="text-[11px] text-muted" title="Każda marka ma swoje „w tym za” – kwotę i rozkład zmienisz przy marce" data-testid={`${testId}-also-for-brands`}>
             w tym za – ustawione w markach
           </span>

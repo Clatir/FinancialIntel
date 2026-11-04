@@ -233,6 +233,12 @@ export function OperationEditor({ id }: { id: string }) {
             />
             <span className="text-muted">zł</span>
           </div>
+          {/* 0 zł is saved (a note, a bank's line), but not silently (AP-15, AF-25): it moves no balance and no energy. */}
+          {!isDraft && t.amount === 0 && (
+            <p className="mt-0.5 text-[11px] text-accent" data-testid="operation-zero">
+              Kwota 0,00 zł – operacja nie zmienia sald ani energii.
+            </p>
+          )}
         </Field>
         <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
           <div className="flex items-center gap-2">

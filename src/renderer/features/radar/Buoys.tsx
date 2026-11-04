@@ -8,7 +8,7 @@ import { LAPSE_DAYS, nextDayOf, pastStateOf, type ScheduledDay } from '@shared/c
 import { dm } from '@shared/calc/briefing'
 import type { Scheduled } from '@shared/schema'
 import { AmountField, DateField, plnText } from '../../components/fields'
-import { Badge, Empty, Field, Panel, Segmented, Toggle, cx } from '../../components/ui'
+import { Badge, Empty, Field, LimitHint, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { useDraft } from '../../store/drafts'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
@@ -194,6 +194,7 @@ function BuoyFields({ o, set }: { o: Form; set: (p: Partial<Form>) => void }) {
       />
       <Field label="Nazwa" labelWidth={110}>
         <input className="input h-[24px] w-full" value={o.name} maxLength={80} onChange={(e) => set({ name: e.currentTarget.value })} placeholder={o.kind === 'term' ? 'np. Wymiana dowodu' : o.kind === 'in' ? 'np. Zwrot PIT-37' : 'np. Wesele Kasi'} data-testid="buoy-name" />
+        <LimitHint length={o.name.length} max={80} />
       </Field>
       <Field label="Dzień" labelWidth={110}>
         <div className="flex items-center gap-3">
@@ -217,6 +218,7 @@ function BuoyFields({ o, set }: { o: Form; set: (p: Partial<Form>) => void }) {
       {o.kind !== 'term' && (
         <Field label="Kontrahent" labelWidth={110} hint="Jak w wyciągu – operacja z banku dopasuje się łatwiej (kwota i ±3 dni).">
           <input className="input h-[24px] w-full" value={o.counterparty} maxLength={300} onChange={(e) => set({ counterparty: e.currentTarget.value })} data-testid="buoy-counterparty" />
+          <LimitHint length={o.counterparty.length} max={300} />
         </Field>
       )}
       <Field label="Przypomnij" labelWidth={110} hint="Dni przed terminem, po przecinku (odprawa i powiadomienia).">
