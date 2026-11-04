@@ -366,10 +366,10 @@ export interface FiApi {
   openLogs(): Promise<void>
   /**
    * Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows); `loginEntry` = the
-   * system starts this copy now (its entry), null = not known (T433).
+   * system starts this copy now (its entry), null = not known; `loginDisabled` = its entry turned off in Task Manager (T433).
    */
-  trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null }>
-  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null }>
+  trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null; loginDisabled?: boolean }>
+  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null; loginDisabled?: boolean }>
   rescan(): Promise<void>
   /** ZIP of the whole data folder (without backups). */
   exportZip(): Promise<string | null>

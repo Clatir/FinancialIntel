@@ -29,6 +29,8 @@ export interface LoginWrite {
   name: string
   path: string
   args: string[]
+  /** Windows: true = the startup approval set again (an entry turned off in Task Manager, switched on here). */
+  enabled?: boolean
 }
 
 export interface LoginContext {
@@ -62,6 +64,16 @@ export function loginEntryOf(c: { ownProfile: boolean; windows: boolean; path: s
   return c.items.some((i) => samePath(i.path, c.path, true) && i.enabled !== false)
 }
 
+/**
+ * An entry of this exe is there but turned off in Task Manager (przegląd 4 N5): the system does not start the copy –
+ * the switch says why, and switching on writes it enabled again (`loginItemWrites`).
+ */
+export function loginEntryDisabled(c: { ownProfile: boolean; windows: boolean; path: string; items: readonly LaunchItem[] }): boolean {
+  if (!c.ownProfile || !c.windows) return false
+  const mine = c.items.filter((i) => samePath(i.path, c.path, true))
+  return mine.length > 0 && mine.every((i) => i.enabled === false)
+}
+
 /** The writes of the start with the system, in order; [] = nothing to write. */
 export function loginItemWrites(c: LoginContext): LoginWrite[] {
   if (!c.ownProfile) return []
@@ -73,7 +85,9 @@ export function loginItemWrites(c: LoginContext): LoginWrite[] {
   // Entries of this exe under other names (before 1.5.3 named after a temporary folder – B52): they would start it twice.
   const stale = mine.filter((i) => i.name !== c.name).map((i): LoginWrite => ({ openAtLogin: false, name: i.name, path: i.path, args: i.args }))
   if (!c.want) return c.changed ? [...(own ? [{ openAtLogin: false, ...entry }] : []), ...stale] : []
-  // Ours first: a failed write never leaves the computer without any entry of this exe.
-  const write = !own || !sameArgs(own.args, c.args) ? [{ openAtLogin: true, ...entry }] : []
+  // Ours first: a failed write never leaves the computer without any entry of this exe. Turned off in Task Manager and
+  // switched on here: written enabled again (przegląd 4 N5) – a start leaves the user's Task Manager choice alone.
+  const reEnable = c.changed && own?.enabled === false
+  const write = !own || !sameArgs(own.args, c.args) || reEnable ? [{ openAtLogin: true, ...entry, ...(reEnable ? { enabled: true } : {}) }] : []
   return [...write, ...(c.changed ? stale : [])]
 }

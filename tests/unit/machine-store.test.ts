@@ -184,3 +184,11 @@ describe('przełącznik startu z Windows pokazuje stan systemu (przegląd 3 N5, 
     expect(trayStore.autostartOf(trayStore.useTray.getState().prefs!).on).toBe(true)
   })
 })
+
+describe('wpis startu wyłączony w Menedżerze zadań (przegląd 4 N5)', () => {
+  it('ustawienie „tak”, wpis wyłączony w Menedżerze zadań: przełącznik „wyłączony” z notką, gdzie go włączyć; ustawienie „nie” – bez notki', () => {
+    const view = (launchAtLogin: boolean) => ({ closeToTray: true, launchAtLogin, notified: true, autostartAsked: true, loginSupported: true, loginEntry: false, loginDisabled: true })
+    expect(trayStore.autostartOf(view(true))).toMatchObject({ on: false, note: expect.stringMatching(/wyłączony w Menedżerze zadań.*Aplikacje autostartu/) })
+    expect(trayStore.autostartOf(view(false))).toEqual({ on: false, note: null })
+  })
+})

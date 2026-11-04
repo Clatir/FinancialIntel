@@ -3,7 +3,7 @@ import type { TrayPrefs } from '@shared/api'
 import { api } from '../lib/api'
 import { configSaveFailed } from './machine'
 
-export type TrayView = TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null }
+export type TrayView = TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null; loginDisabled?: boolean }
 
 /** This computer's tray and start with Windows (config.json) – for every screen that words something by them. */
 export const useTray = create<{ prefs: TrayView | null }>(() => ({ prefs: null }))
@@ -36,6 +36,9 @@ export function refreshTrayPrefs(): Promise<void> {
  */
 export function autostartOf(p: TrayView): { on: boolean; note: string | null } {
   const system = p.loginEntry
+  // Turned off in Task Manager (przegląd 4 N5): switching on here enables it again – if the system still refuses, there.
+  if (system === false && p.loginDisabled && p.launchAtLogin)
+    return { on: false, note: 'Wpis startu tej kopii jest wyłączony w Menedżerze zadań – włącz go przełącznikiem tutaj albo tam (Menedżer zadań → Aplikacje autostartu).' }
   if (system == null || system === p.launchAtLogin) return { on: p.launchAtLogin, note: null }
   return system
     ? { on: true, note: 'Windows uruchamia tę kopię przy starcie (jest jej wpis w systemie), choć zapisane ustawienie mówi „nie” – przełącznik pokazuje stan systemu; wyłącz, żeby usunąć wpis.' }

@@ -3599,7 +3599,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`refreshTrayPrefs`) i po każdej zmianie; inny niż `config.json` – stan systemu z notką („Windows uruchamia tę kopię…
   przełącznik pokazuje stan systemu; wyłącz, żeby usunąć wpis” albo odwrotnie), a przełączenie zapisuje wpis według
   wyboru. Profil testowy i wersja niespakowana – stan nieznany, przełącznik według `config.json`. Baner „Uruchamiać z
-  Windows?” nie pyta komputera, który już startuje z Windows. Start dalej niczego nie usuwa.
+  Windows?” nie pyta komputera, który już startuje z Windows. Start dalej niczego nie usuwa. Dopisek (przegląd 4 N5): wpis
+  wyłączony w Menedżerze zadań (`enabled: false` – `loginEntryDisabled`) – przełącznik „wyłączony”, a włączenie tutaj
+  zapisuje wpis z `enabled: true` (zgoda na start w systemie, `setLoginItemSettings`); przy ustawieniu „tak” notka
+  „Wpis startu tej kopii jest wyłączony w Menedżerze zadań – włącz go przełącznikiem tutaj albo tam”, gdyby system go nie
+  włączył. Start aplikacji wyboru z Menedżera zadań nie zmienia.
 - **T434** „Co nowego” bez sieci, kopie po zmianie folderu kopii, zapis `config.json` ponawiany (AP-28, AF-40, IN.26,
   DA.14, DA.11, US.33): okno ma wbudowane 15 najnowszych sekcji CHANGELOG (`electron.vite.config.mts` `__FI_CHANGELOG__`,
   `releaseNotes.ts` `notesOf`) – panel „Co nowego w wersji X” pokazuje się z nich, gdy notatek z GitHuba nie ma

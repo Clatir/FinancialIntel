@@ -7,7 +7,7 @@
  */
 import { Menu, Notification, Tray, app, nativeImage } from 'electron'
 import type { TrayPrefs } from '@shared/api'
-import { loginEntryOf, loginItemWrites } from './loginItem'
+import { loginEntryDisabled, loginEntryOf, loginItemWrites } from './loginItem'
 import icon from '../../resources/icon.png?asset'
 
 /** Argument of the login start: the window stays hidden (in the tray). */
@@ -105,17 +105,22 @@ export class AppTray {
 /** The name of the entry in Windows' Run key: one per kind of the app, the same in every version (B52). */
 export const loginItemName = (portable: boolean): string => (portable ? 'Financial Intel (portable)' : 'Financial Intel')
 
-/** This copy's start with the system as the system has it now (`loginEntryOf`); null = not known (not packaged, a test profile). */
-export function loginEntry(): boolean | null {
-  if (!app.isPackaged || (process.platform !== 'win32' && process.platform !== 'darwin')) return null
+/**
+ * This copy's start with the system as the system has it now (`loginEntryOf`; null = not known – not packaged, a test
+ * profile) and whether its entry is turned off in Task Manager (`loginEntryDisabled`).
+ */
+export function loginState(): { loginEntry: boolean | null; loginDisabled: boolean } {
+  const unknown = { loginEntry: null, loginDisabled: false }
+  if (!app.isPackaged || (process.platform !== 'win32' && process.platform !== 'darwin')) return unknown
   try {
     const path = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
     const windows = process.platform === 'win32'
     const ownProfile = !process.env.FI_USER_DATA
     const settings = ownProfile ? app.getLoginItemSettings(windows ? { path, args: [HIDDEN_ARG] } : undefined) : null
-    return loginEntryOf({ ownProfile, windows, path, items: settings?.launchItems ?? [], openAtLogin: settings?.openAtLogin })
+    const items = settings?.launchItems ?? []
+    return { loginEntry: loginEntryOf({ ownProfile, windows, path, items, openAtLogin: settings?.openAtLogin }), loginDisabled: loginEntryDisabled({ ownProfile, windows, path, items }) }
   } catch {
-    return null
+    return unknown
   }
 }
 

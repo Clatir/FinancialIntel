@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loginEntryOf, loginItemWrites, type LaunchItem, type LoginContext } from '../../src/main/loginItem'
+import { loginEntryDisabled, loginEntryOf, loginItemWrites, type LaunchItem, type LoginContext } from '../../src/main/loginItem'
 
 // The Run key is never touched here: the rules decide the writes, the test reads them (AP-28, incident of 03.11.2026).
 const INSTALLED = 'C:\\Users\\Kapitan\\AppData\\Local\\Programs\\Financial Intel\\Financial Intel.exe'
@@ -73,5 +73,35 @@ describe('stan wpisu w systemie tej kopii (przegląd 3 N5, T433)', () => {
     expect(loginEntryOf({ ...base, path: LAB, items: [own] })).toBe(false)
     expect(loginEntryOf({ ...base, ownProfile: false, items: [own] })).toBeNull()
     expect(loginEntryOf({ ...base, windows: false, openAtLogin: true })).toBe(true)
+  })
+})
+
+describe('wpis wyłączony w Menedżerze zadań (przegląd 4 N5)', () => {
+  /** An atrapa of Electron's login settings: the Run key with its startup approval (`enabled`), by the entry's name. */
+  function system(items: LaunchItem[]) {
+    let run = items
+    return {
+      getLoginItemSettings: () => ({ launchItems: run }),
+      setLoginItemSettings: (w: { openAtLogin: boolean; name: string; path: string; args: string[]; enabled?: boolean }) => {
+        run = run.filter((i) => i.name !== w.name)
+        // Electron: `enabled` defaults to true – a write without it leaves the approval as it was only when nothing is written.
+        if (w.openAtLogin) run.push({ name: w.name, path: w.path, args: w.args, enabled: w.enabled ?? true })
+      }
+    }
+  }
+  const state = (s: ReturnType<typeof system>) => ({ ownProfile: true, windows: true, path: INSTALLED, items: s.getLoginItemSettings().launchItems })
+
+  it('przełącznik „włącz” zapisuje wpis włączony – przełącznik pokazuje „włączony”; start nie zmienia wyboru z Menedżera zadań', () => {
+    const s = system([{ ...own, enabled: false }])
+    expect(loginEntryOf(state(s))).toBe(false)
+    expect(loginEntryDisabled(state(s))).toBe(true)
+    // A start with the setting on: the user's choice in Task Manager stays.
+    expect(loginItemWrites(ctx({ want: true, changed: false, items: s.getLoginItemSettings().launchItems }))).toEqual([])
+    // Switched on here: before, nothing was written (the entry there, its arguments the same) and the switch flipped back.
+    const writes = loginItemWrites(ctx({ want: true, changed: true, items: s.getLoginItemSettings().launchItems }))
+    expect(writes).toEqual([{ openAtLogin: true, ...own, enabled: true }])
+    for (const w of writes) s.setLoginItemSettings(w)
+    expect(loginEntryOf(state(s))).toBe(true)
+    expect(loginEntryDisabled(state(s))).toBe(false)
   })
 })
