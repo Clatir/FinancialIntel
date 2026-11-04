@@ -549,7 +549,7 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
     // The closing to the tray stays this computer's choice (N100): the wizard asks only about the start with Windows.
     await setTrayPrefs({ launchAtLogin: w.autostart })
   } catch {
-    /* the tray settings stay as they were */
+    /* applied at once in the system; a refused write of config.json is retried by itself (T433) – said by the tray store */
   }
   const note = await unsavedNote()
   useWizard.setState(initial())
