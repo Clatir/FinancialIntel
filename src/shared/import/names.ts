@@ -39,6 +39,44 @@ export function cleanBankName(name: string, opts: { town?: boolean } = {}): stri
   return s.replace(/\s+/g, ' ').replace(/[\s,;:/-]+$/, '').trim() || name.trim()
 }
 
+/**
+ * What a list shows as an operation's name (AP-20, OP sp. 10, WY.13): its counterparty, else its title without what the
+ * bank adds to it – an ATM's withdrawal has the machine in its title („BANKOMAT EURONET 0412 /TESTOWO DATA TRANSAKCJI:
+ * 2026-08-29” → „BANKOMAT EURONET 0412”); a title typed by hand is as written. '' – neither.
+ */
+export const operationName = (t: { counterparty: string; title: string; bank?: unknown }): string =>
+  t.counterparty.trim() || (t.bank && t.title.trim() ? cleanBankName(t.title, { town: true }) : t.title.trim())
+
+/** Short words of a name kept small after its first word („Apteka Dbam o Zdrowie”, „Bar pod Lipą”). */
+const SMALL_WORDS = new Set(['i', 'w', 'z', 'o', 'u', 'a', 'na', 'do', 'od', 'za', 'ze', 'we', 'po', 'pod', 'nad', 'przy', 'dla'])
+const VOWEL = /[aeiouyąęó]/i
+
+/**
+ * A bank's name in capitals as a person writes it (AP-20, SW sp. 7): „KEBAB ROMA” → „Kebab Roma”, „APTEKA DBAM O ZDROWIE”
+ * → „Apteka Dbam o Zdrowie”, „ŻABKA Z1234” → „Żabka Z1234”; a short word without a vowel stays (KFC, BP, XTB), a word
+ * with digits too. A name with any small letter is as written. For what is shown only – never a key.
+ */
+export function readableName(name: string): string {
+  const s = name.trim()
+  if (!/\p{Lu}/u.test(s) || /\p{Ll}/u.test(s)) return s
+  let first = true
+  return s
+    .split(/(\s+)/)
+    .map((w) => {
+      if (!w || /^\s+$/.test(w)) return w
+      const at = first
+      first = false
+      const lower = w.toLocaleLowerCase('pl')
+      if (!at && SMALL_WORDS.has(lower)) return lower
+      if (/\d/.test(w)) return w
+      const letters = w.replace(/[^\p{L}]/gu, '')
+      if (letters.length <= 3 && !VOWEL.test(letters)) return w
+      // „COCA-COLA” → „Coca-Cola”, „L'OREAL” → „L'oreal”: each part after a hyphen, a dot or a slash.
+      return lower.replace(/(^|[-./])(\p{L})/gu, (_, sep: string, ch: string) => sep + ch.toLocaleUpperCase('pl'))
+    })
+    .join('')
+}
+
 /** A folded name without its legal forms (spaces where they were). */
 export function withoutLegalForms(folded: string): string {
   let s = folded

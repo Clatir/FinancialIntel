@@ -649,9 +649,11 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
         <CategorySelect
           className={cx('h-[22px] py-0 text-[11px]', mine && 'border-accent/60')}
           value={c.categoryId}
-          // The empty choice is what it does (B98): „bez kategorii” when the group has one, the group's own otherwise.
-          emptyLabel={mine || choice.categoryId ? '— bez kategorii —' : '(jak grupa)'}
+          // „(jak grupa)” first, whatever the group's category (AP-34, IM.8): the way back to the group's decision; „bez
+          // kategorii” is always none (B98).
+          group={{ label: choice.categoryId ? `(jak grupa: ${cats.label(choice.categoryId)})` : '(jak grupa)', on: !mine, pick: () => chooseRow(p.key, null) }}
           onChange={(categoryId) => chooseRow(p.key, categoryId === choice.categoryId ? null : { ...c, categoryId })}
+          data-testid="import-row-category"
         />
       ) : c.kind === 'transfer' && otherAccounts.length > 0 ? (
         <select

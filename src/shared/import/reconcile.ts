@@ -23,7 +23,7 @@ import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
+import { classifyRow, counterpartyKey, isAtmOperation, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
@@ -800,6 +800,16 @@ export function opKindOf(operation: string): OpKind {
 }
 
 /**
+ * The words the import's search finds a type of operation by (AP-34, IM sp. 9): the bank writes it inflected
+ * („WYPŁATA W BANKOMACIE” – no „bankomat” in it), one searches by its name.
+ */
+function kindWords(operation: string): string {
+  if (isAtmOperation(operation)) return 'bankomat wypłata gotówka gotówki'
+  const kind = opKindOf(operation)
+  return kind === 'card' ? 'karta kartą zakup' : kind === 'transfer' ? 'przelew' : kind === 'fee' ? 'opłata opłaty banku prowizja' : ''
+}
+
+/**
  * Is a group's theme its proposal: a recognized one – or a household member's money still to be asked about (D80 b):
  * never in one theme with strangers' money, whose decision would take the member away.
  */
@@ -882,7 +892,10 @@ export function importGroups(plan: ImportPlan | null, restored: Readonly<Record<
       if (p.hint) hints.set(`${p.hint}|${p.row.category}`, (hints.get(`${p.hint}|${p.row.category}`) ?? 0) + 1)
     }
     const most = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null
-    const [hint, bankCategory] = (most(hints)?.split('|') ?? [null, '']) as [string | null, string]
+    // A bank's fee is never a hint's (AP-34, IM.19): mBank names its category („Opłaty i odsetki”), the theme is „Opłaty
+    // banku” – the fee waits there without a category, never with the courses of one bank's category.
+    const fee = opKindOf(first.row.operation) === 'fee'
+    const [hint, bankCategory] = (fee ? [null, ''] : (most(hints)?.split('|') ?? [null, ''])) as [string | null, string]
     const source = weakest.decision.source
     const dates = rows.map((p) => p.row.date).sort()
     out.push({
@@ -903,7 +916,13 @@ export function importGroups(plan: ImportPlan | null, restored: Readonly<Record<
       byTitle: first.decision.byTitle,
       hint,
       bankCategory,
-      theme: byProposal(source, first.decision) ? `${first.direction}|=${proposalSig(first.decision)}` : hint ? `${first.direction}|hint:${hint}` : `${first.direction}|op:${opKindOf(first.row.operation)}`
+      // A hint's theme is one category of the bank (AP-34, IM sp. 5): „Edukacja” and „Opłaty i odsetki” hinting the same
+      // category are two themes – „Przyjmij podpowiedzi” never gives one category to what the bank tells apart.
+      theme: byProposal(source, first.decision)
+        ? `${first.direction}|=${proposalSig(first.decision)}`
+        : hint
+          ? `${first.direction}|hint:${hint}|${bankCategory}`
+          : `${first.direction}|op:${opKindOf(first.row.operation)}`
     })
   }
   return out.sort((a, b) => b.rows.length - a.rows.length || a.label.localeCompare(b.label))
@@ -958,7 +977,8 @@ export function searchGroups(groups: readonly ImportGroup[], query: string, labe
     const rows = g.rows.filter((p) => {
       if (amount != null && Math.abs(p.row.amount) === amount) return true
       const d = p.row.date
-      return has(`${groupText} \u0001 ${fold([p.row.description, p.row.title, p.row.category, `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`].join(' \u0001 '))}`)
+      // The type of operation too (AP-34, IM sp. 9): as written and by its name – „bankomat” finds „WYPŁATA W BANKOMACIE”.
+      return has(`${groupText} \u0001 ${fold([p.row.description, p.row.title, p.row.category, p.row.operation, kindWords(p.row.operation), `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`].join(' \u0001 '))}`)
     })
     if (rows.length) out.set(g.group, rows.length === g.rows.length ? 'all' : rows)
   }

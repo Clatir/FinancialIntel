@@ -3025,3 +3025,54 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i rozkazy) cofa wpis – `NumberField` z AP-15 wystarczył, dopisany test E2E; (2) cisza nocna „od” = „do” zostaje
   przyjęta (to sposób na wyłączenie ciszy), ale pole mówi to wprost („ta sama godzina – cisza nocna wyłączona”);
   (3) `clampZoom` zaokrągla do siatki 10 % (ręcznie wpisane 1,23 czyta się jako 120 %, nie „123%”).
+- **T440** Szybki wpis – mniej klawiszy (1.15.9, N5 – AP-20, SW.36, SW sp. 5, 6): „Plan czy impuls” klawiszem z każdego
+  pola okna – Alt+P plan, Alt+I impuls (sam Alt: AltGr = Ctrl+Alt pisze polskie litery; `e.code`, więc niezależnie od
+  układu); sekcja dziennika zostaje na swoim miejscu, przy pytaniu podpowiedź „Alt+P / Alt+I”. Typowy wpis „Orlen 250
+  z planem” to 11 klawiszy zamiast 21 (licznik w `tests/e2e/ap20.spec.ts`, ≤ 12). Klawisz wciśnięty, zanim kwota dobiła
+  do progu, nic nie zapisuje: okno wysyła `impulse` tylko, gdy dziennik pyta (`asks`) – także gdy kwotę potem obniżono.
+  Tagi z „#” w nazwie i notatce widać przed zapisem jako przygaszone chipy obok pola tagów (`quick-tag-hash`; tag już
+  w polu nie powtarza się); chip pola tagów ma wyraźne „×” w osobnym polu za linią (ikona zamknięcia, dymek „Usuń tag
+  #…”). Przy okazji: `tagsLost` liczył tag z literą „s” jako nowy (`/s+/` zamiast `/\s+/`) – poprawione.
+- **T441** Kontrahenci, ostatnie konto i dziennik (1.15.9, N5 – AP-20, SW sp. 7, 8, 11, OP sp. 10, WY.13): (1) nazwa
+  operacji na liście, w Namierzonych celach i w dzienniku Wywiadu – `operationName`: kontrahent, a bez niego tytuł; tytuł
+  z banku bez dopisków banku (`cleanBankName` z miastem: „BANKOMAT EURONET 0412 /TESTOWO DATA TRANSAKCJI: …” →
+  „BANKOMAT EURONET 0412”), tytuł wpisany ręcznie bez zmian; dane i klucze bez zmian. (2) Same wielkie litery banku
+  jak pisze człowiek (`readableName`: „KEBAB ROMA” → „Kebab Roma”, „APTEKA DBAM O ZDROWIE” → „Apteka Dbam o Zdrowie”,
+  krótkie słowo bez samogłoski i słowo z cyfrą zostają – KFC, Z1234) – tylko w podpowiedziach szybkiego wpisu i
+  w Namierzonych celach; lista Operacji i edytor pokazują nazwę banku tak, jak przyszła (szukanie, „Zapamiętaj”).
+  Nazwa marki: sieć ze słownika, inaczej ostatnia wpisana ręcznie, inaczej ostatnia z banku. (3) Aliasy: „połącz
+  nazwy…” w Namierzonych celach – „[nazwa] to ten sam sprzedawca co [nazwa]” robi to samo co „Połącz nazwy” importu
+  (`mergeNames`, D78: jedna marka w Wywiadzie, Operacjach, u oficera i w kolejnych importach), toast z „Cofnij”,
+  rozłączenie jak dotąd w Ustawieniach → Import z banku. Bez łączenia samoczynnego („Mokka” w „KAWIARNIA MOKKA”) –
+  zgadywanie łączyłoby różne sklepy. (4) Ostatnie konto „w folderze” bez nowego pola: konto operacji wpisanej ręcznie
+  najpóźniej (`createdAt`, z każdego komputera folderu; import i pusty szkic się nie liczą – `lastAccountOf`), potem
+  zapamiętane na tym komputerze, potem pierwsze; to samo dla Ctrl+N. Nie w `fi.json`: zapis przy każdym wpisie to
+  scalanie `fi.json` między komputerami bez potrzeby, a rekordy już to wiedzą. (5) Wywiad → Dziennik kapitański:
+  „Wpisy dziennika” – treść wpisów okresu (12 najnowszych, data, kontrahent, plan / impuls, kwota; klik otwiera
+  operację; `logEntries`).
+- **T442** Fokus w oknach i palecie (1.15.9, N5 – AP-34, IN.28, AF-74, IN sp. 2): `components/trap.ts` (`useFocusTrap`)
+  w `Modal`, palecie komend i ściądze F1 (teraz `role="dialog"`): po otwarciu fokus wchodzi do okna (ramka okna z
+  `tabIndex=-1`, żeby Enter niczego nie kliknął; pole z `autoFocus` – palety – zostaje), Tab i Shift+Tab krążą po
+  elementach okna, fokus wypchnięty pod nakładkę wraca do okna; tylko wierzchnie okno trzyma fokus (stos jak Esc w
+  `Modal`). Po zamknięciu fokus wraca na element sprzed otwarcia (czytany przy pierwszym renderze), chyba że działanie
+  okna samo go gdzieś postawiło.
+- **T443** Operacje – Ctrl+N, okres i kolejność pól (1.15.9, N5 – AP-34, IN.3, IN sp. 3, 4, OP sp. 8, 9, AF-56; zmienia
+  B77 w części „bez filtrów”): (1) Ctrl+N nie czyści wyszukiwania; nowa operacja zostaje na liście także po zapisie
+  (`keptId`), dopóki filtr się nie zmieni; pozostałe filtry zdejmowane jak dotąd (widok, B88), okres – miesiąc nowej
+  operacji jak dotąd. (2) Okres listy pamięta ten komputer, gdy to „cała historia” albo „od – do”; wybrany miesiąc nie
+  (lista startuje na bieżącym, B81 – miesiąc to „gdzie patrzę teraz”). (3) „Mój filtr” wraca też do swojego okresu
+  (zapamiętanego albo bieżącego miesiąca), nie zostaje przy okresie widoku z Meldunków / Mostka. (4) Edytor wydatku:
+  Kwota → Kontrahent → Kategoria, potem Data i godzina, Konto, Tytuł – od kwoty do kategorii dwa Taby (szkic), trzy
+  z „wszystkie”; dawniej siedem. Inne rodzaje bez zmian kolejności.
+- **T444** Import i pary przelewów (1.15.9, N5 – AP-34, IM.8, IM.19, IM sp. 5, 9, ME sp. 2, AF-59, AF-61): (1) w wierszu
+  grupy pierwsza opcja kategorii to „(jak grupa: X)” (albo „(jak grupa)”), wybrana, dopóki wiersz nie ma własnej
+  decyzji – jej wybór oddaje wiersz grupie; „— bez kategorii —” to zawsze brak kategorii (B98). (2) Opłata banku (rodzaj
+  operacji `fee`) nigdy w temacie podpowiedzi mBanku – zawsze „Opłaty banku” bez kategorii, także gdy plik podaje
+  kategorię („Opłaty i odsetki”). (3) Temat podpowiedzi to jedna kategoria banku (klucz tematu z kategorią banku):
+  „Edukacja” i „Opłaty i odsetki”, choć dają tę samą kategorię, to dwa tematy – „Przyjmij podpowiedzi” nie łączy
+  tego, co bank rozróżnia. (4) Szukanie importu także po rodzaju operacji – jak go pisze bank i po nazwie (bank odmienia:
+  „WYPŁATA W BANKOMACIE” nie zawiera „bankomat”; `kindWords`: bankomat, karta, przelew, opłata / prowizja).
+  (5) Okno par przelewów sprzed 1.7.0: para, której żadna strona nie wskazuje konta (po samej kwocie i dniu), jest
+  niezaznaczona (`pairTickedFirst`) – zaznacza ją użytkownik; „zaznacz wszystkie” jak dotąd. (6) ME.8: ten sam wiersz
+  banku zapisany w dwóch operacjach (ten sam klucz albo klucz drugiego formatu z `altKeys`) to duplikat do scalenia,
+  nie sygnał „Dwa obciążenia z banku” – meldunki już sobie nie przeczą.

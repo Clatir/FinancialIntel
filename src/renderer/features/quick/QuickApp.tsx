@@ -9,7 +9,7 @@ import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
 import { TagsField } from '../../components/TagsField'
-import { tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
+import { hashTags, tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -258,6 +258,11 @@ export function QuickApp() {
   const night = d.kind !== 'income' && !!d.time && !!data && inClockWindow(d.time, data.quietHours.from, data.quietHours.to)
   const asks = d.kind !== 'income' && !!data && d.amount >= data.impulseThreshold && data.impulseThreshold > 0
   const hide = !!data?.hideAmounts
+  // The „#słowo” of the name and the note not in the tags yet (AP-20): the window shows them before saving.
+  const hashed = useMemo(() => {
+    const have = new Set((d.tags ?? []).map(tagKey))
+    return withTags([], [...hashTags(d.counterparty), ...hashTags(d.note)]).filter((x) => !have.has(tagKey(x)))
+  }, [d.counterparty, d.note, d.tags])
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
 
   // Today's energy (or the envelope) after this operation, before saving.
@@ -392,8 +397,9 @@ export function QuickApp() {
     setMsg(null)
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
     const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
-    void api.quickAdd({ ...d, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
-  }, [busy, data, d, lines, share, night, nightOk, shares])
+    // „Plan czy impuls” only where the log asks (Alt+P / Alt+I may be pressed before the amount is known – AP-20).
+    void api.quickAdd({ ...d, impulse: asks ? d.impulse : null, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
+  }, [busy, data, d, lines, share, night, nightOk, shares, asks])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -411,6 +417,14 @@ export function QuickApp() {
       void api.quickClose()
     }
     const onKey = (e: KeyboardEvent) => {
+      // „Plan czy impuls” from any field (AP-20, SW.36): Alt+P / Alt+I – no Tab to the log at the form's end. Alt alone:
+      // AltGr (Ctrl+Alt) writes Polish letters.
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyP' || e.code === 'KeyI')) {
+        e.preventDefault()
+        const impulse = e.code === 'KeyP' ? 'plan' : 'impulse'
+        setD((x) => (x.kind === 'income' ? x : { ...x, impulse }))
+        return
+      }
       if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
         e.preventDefault()
         // Ctrl+Enter: saved, and the window stays for the next one (F7); Enter saves and closes (D70).
@@ -716,8 +730,14 @@ export function QuickApp() {
           </Row>
           {/* F17: a trip's, a project's tags – „#słowo” in the name or the note adds one too; the last one in a click. */}
           <Row label="Tagi">
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <TagsField className="flex-1" value={d.tags ?? []} onChange={(tags) => set({ tags })} known={data.knownTags ?? []} compact testId="quick-tags" />
+              {/* „#słowo” typed in the name or the note (AP-20, SW sp. 5): shown before saving – it is saved as a tag too. */}
+              {hashed.map((tag) => (
+                <span key={tag} className="chip h-[20px] shrink-0 px-1.5 text-[11px] text-muted" title="Z „#” w nazwie albo notatce – zapisze się jako tag; usuń „#” z tekstu, by go nie dodawać" data-testid="quick-tag-hash" data-tag={tag}>
+                  #{tag}
+                </span>
+              ))}
               {data.lastTag && !(d.tags ?? []).some((x) => tagKey(x) === tagKey(data.lastTag!)) && (
                 <button type="button" className="chip h-[20px] shrink-0 px-1.5 text-[11px]" title="Tag ostatnich dni" onClick={() => set({ tags: withTags(d.tags ?? [], [data.lastTag!]) })} data-testid="quick-tag-last">
                   + #{data.lastTag}
@@ -729,7 +749,7 @@ export function QuickApp() {
             <div className={cx('flex flex-col gap-1 border-l-2 pl-2', night ? 'border-accent' : 'border-line-strong')} data-testid="quick-log">
               <span className="label">Dziennik kapitański</span>
               {asks && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" data-testid="quick-impulse" data-state={d.impulse ?? 'none'}>
                   <span className="text-[11.5px] text-accent">Plan czy impuls?</span>
                   <Segmented
                     size="sm"
@@ -741,6 +761,9 @@ export function QuickApp() {
                     ]}
                     aria-label="Plan czy impuls"
                   />
+                  <span className="text-[11px] text-dim" data-testid="quick-impulse-keys">
+                    Alt+P / Alt+I
+                  </span>
                 </div>
               )}
               <input className="input" value={d.logNote} onChange={(e) => set({ logNote: e.currentTarget.value })} maxLength={500} placeholder={night ? 'Zakup w ciszy nocnej – dlaczego teraz?' : 'Krótko: skąd ten zakup?'} data-testid="quick-log-note" />

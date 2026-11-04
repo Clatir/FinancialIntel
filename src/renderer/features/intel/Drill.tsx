@@ -4,7 +4,7 @@
  * overruns); the counterparty's year in the operation's editor („Rozpoznanie celu”).
  */
 import { Fragment, useMemo, useState } from 'react'
-import { brandStats, brandYearOf, brandYears, isOver, monthComparison, type BrandYears } from '@shared/calc/drill'
+import { brandStats, brandYearOf, brandYears, isOver, monthComparison, type BrandStat, type BrandYears } from '@shared/calc/drill'
 import { addMonths, monthRange } from '@shared/calc/dates'
 import type { SpendingRow } from '@shared/calc/intel'
 import { noNarrowing } from '@shared/operationsView'
@@ -13,9 +13,10 @@ import type { Transaction } from '@shared/schema'
 import { plnText } from '../../components/fields'
 import { Empty, Panel, cx } from '../../components/ui'
 import { monthLabel, plDate, plural } from '../../lib/format'
-import { listOf, useData } from '../../store/data'
+import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
-import { navigate } from '../../store/ui'
+import { navigate, toast } from '../../store/ui'
+import { mergeNames } from '../import/rules'
 import { showFilter } from '../operations/state'
 import { useCategories } from '../operations/pickers'
 
@@ -218,12 +219,71 @@ export function TargetsPanel({ from, to, aliases }: { from: string; to: string; 
               {all ? 'pokaż 10' : `pokaż więcej (${Math.min(100, stats.length)})`}
             </button>
           )}
+          <MergeNames stats={stats.slice(0, 100)} />
           <span className="pt-1 text-[11px] text-dim">
             Marki z połączonymi nazwami importu; w nawiasie udział w wydatkach kategorii. Trend – wobec tak samo długiego okresu wcześniej. Opłaty ładowni pominięte.
           </span>
         </div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * Two names of one counterparty made one (AP-20, SW sp. 7, WY.13: „Mokka” typed and „KAWIARNIA MOKKA” of the bank): the
+ * names merged as in the import (D78) – one brand here, in Operacje, for the officer and in the next imports; „Cofnij”.
+ */
+function MergeNames({ stats }: { stats: readonly BrandStat[] }) {
+  const locked = useFolderLocked()
+  const [open, setOpen] = useState(false)
+  const [from, setFrom] = useState('')
+  const [into, setInto] = useState('')
+  if (stats.length < 2 || locked) return null
+  if (!open)
+    return (
+      <button type="button" className="self-start pt-1 text-[11px] text-accent hover:underline" onClick={() => setOpen(true)} title="Dwie nazwy tego samego sprzedawcy – jedna marka" data-testid="intel-targets-merge-open">
+        połącz nazwy…
+      </button>
+    )
+  const a = stats.find((s) => s.key === from)
+  const b = stats.find((s) => s.key === into)
+  const pick = (value: string, onChange: (v: string) => void, label: string, testId: string, skip?: string) => (
+    <select className="input h-[22px] max-w-[180px] py-0 text-[11px]" value={value} onChange={(e) => onChange(e.currentTarget.value)} aria-label={label} data-testid={testId}>
+      <option value="">— wybierz —</option>
+      {stats
+        .filter((s) => s.key !== skip)
+        .map((s) => (
+          <option key={s.key} value={s.key}>
+            {s.name}
+          </option>
+        ))}
+    </select>
+  )
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]" data-testid="intel-targets-merge">
+      {pick(from, setFrom, 'Nazwa do połączenia', 'intel-targets-merge-from')}
+      <span className="text-muted">to ten sam sprzedawca co</span>
+      {pick(into, setInto, 'Połącz z', 'intel-targets-merge-into', from)}
+      <button
+        type="button"
+        className="btn h-[22px]"
+        disabled={!a || !b || a.key === b.key}
+        onClick={() => {
+          if (!a || !b) return
+          const undo = mergeNames([{ into: { key: b.key, label: b.name }, from: [{ key: a.key, label: a.name }] }])
+          if (undo) toast(`Połączono „${a.name}” z „${b.name}” – jedna marka w Wywiadzie, Operacjach i imporcie.`, 'success', 8000, { label: 'Cofnij', run: undo })
+          setFrom('')
+          setInto('')
+          setOpen(false)
+        }}
+        data-testid="intel-targets-merge-go"
+      >
+        Połącz
+      </button>
+      <button type="button" className="btn btn-ghost h-[22px]" onClick={() => setOpen(false)}>
+        Anuluj
+      </button>
+    </div>
   )
 }
 

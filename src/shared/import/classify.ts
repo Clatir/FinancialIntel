@@ -162,6 +162,9 @@ function ruleIndexOf(rules: readonly ImportRule[], direction: Direction): RuleIn
 /** An ATM withdrawal (by the type of operation). */
 const ATM = /WYPŁATA (W|Z) BANKOMA|WYPLATA (W|Z) BANKOMA|WYPŁATA GOTÓWKI|WYPLATA GOTOWKI|BLIK WYPŁATA|BLIK WYPLATA/
 
+/** A cash withdrawal (an ATM, BLIK's cash) by the type of operation. */
+export const isAtmOperation = (operation: string): boolean => ATM.test(operation)
+
 /**
  * What the rule of an operation is looked up and remembered by: an imported row, or an operation in Operacje. A person
  * paid or paying by phone (BLIK P2P) and an ATM in a shop („BANKOMAT ŻABKA”) are no chain of the dictionary; the
