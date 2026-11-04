@@ -3103,9 +3103,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zgadywanie łączyłoby różne sklepy. (4) Ostatnie konto „w folderze” bez nowego pola: konto operacji wpisanej ręcznie
   najpóźniej (`createdAt`, z każdego komputera folderu; import i pusty szkic się nie liczą – `lastAccountOf`), potem
   zapamiętane na tym komputerze, potem pierwsze; to samo dla Ctrl+N. Nie w `fi.json`: zapis przy każdym wpisie to
-  scalanie `fi.json` między komputerami bez potrzeby, a rekordy już to wiedzą. (5) Wywiad → Dziennik kapitański:
-  „Wpisy dziennika” – treść wpisów okresu (12 najnowszych, data, kontrahent, plan / impuls, kwota; klik otwiera
-  operację; `logEntries`).
+  scalanie `fi.json` między komputerami bez potrzeby, a rekordy już to wiedzą. Dopisek (integracja N5): „wpisana
+  ręcznie” to `typedByHand` – rekord nie ma znaku pochodzenia, więc operacje zapisane przez samą aplikację rozpoznają
+  rodzaj i znane pola: z banku (`bank`); rodzaj inny niż wydatek i wpływ (korekta potwierdzenia salda, operacja Portfela
+  XTB z dokowania, przelew – „Zaplanuj przelew własny”, pożyczka, PIT-38); płatność kontenera (`containerId` –
+  „Zapłacone” w Ładowni, rata pożyczki); zwrot gotówką domownika (tytuł „Zwrot gotówką: …”, `CASH_REPAY_TITLE`);
+  „Wykonaj teraz” boi (operacje z `done` boi); pusty szkic. Kreator, reguły i import nie zakładają operacji bez `bank`.
+  Wydatek wpisany w edytorze i powiązany z kontenerem też się nie liczy – rzadki, a pomyłka w drugą stronę (konto
+  z dokowania) gorsza; nowego pola pochodzenia nie ma – stare rekordy i tak by go nie miały. (5) Wywiad → Dziennik
+  kapitański: „Wpisy dziennika” – treść wpisów okresu (12 najnowszych, data, kontrahent, plan / impuls, kwota; klik
+  otwiera operację; `logEntries`). Dopisek (integracja N5): kwota to część własna (`ownSpent`), jak w licznikach
+  dziennika (R-17, T439); zakup bez części własnej (samego domownika) nie trafia na listę.
 - **T442** Fokus w oknach i palecie (1.15.9, N5 – AP-34, IN.28, AF-74, IN sp. 2): `components/trap.ts` (`useFocusTrap`)
   w `Modal`, palecie komend i ściądze F1 (teraz `role="dialog"`): po otwarciu fokus wchodzi do okna (ramka okna z
   `tabIndex=-1`, żeby Enter niczego nie kliknął; pole z `autoFocus` – palety – zostaje), Tab i Shift+Tab krążą po

@@ -1,7 +1,8 @@
 /** The quick entry's templates (F7): what „Powtórz ostatni” and the template buttons fill. Pure. */
 import type { QuickTemplate } from '../api'
 import { counterpartyKey } from '../import/names'
-import type { Transaction } from '../schema/records'
+import type { Scheduled, Transaction } from '../schema/records'
+import { CASH_REPAY_TITLE } from './household'
 
 /**
  * The rest of a household member's money beyond what they owe, still to be called income or their advance (D80 b, AP-19 –
@@ -34,20 +35,41 @@ const templateOf = (t: Transaction): QuickTemplate => ({
   advance: t.kind === 'income' && !!t.memberId && t.advance
 })
 
-const accountMemo = new WeakMap<readonly Transaction[], string | null>()
+const NO_IDS: ReadonlySet<string> = new Set()
 
 /**
- * The account used last in the folder (AP-20, SW sp. 8): the account of the operation typed by hand latest (its
- * creation – on any computer of the folder), so the second computer proposes it too. An imported one and an empty draft
- * say nothing. null – none typed.
+ * An operation the user typed (AP-20, SW sp. 8 – T441): a purchase or an income of the quick entry or the editor, with its
+ * amount. No record says who made it, so the ones the app writes itself are told by their kind and known fields: the
+ * bank's (`bank` – an import, a hand-typed one joined with its row too); a balance's correction, the Portfel XTB
+ * operation of a docking, a transfer („Zaplanuj przelew własny”, a join), a loan's operations and a tax – not a purchase
+ * nor an income (`correction`, `trading`, `transfer`, `loan`, `tax`); a cargo payment („Zapłacone”, a loan's installment –
+ * `containerId`); a member's repayment in cash (`CASH_REPAY_TITLE`); a buoy's „Wykonaj teraz” (`byBuoy` – the operations
+ * of the buoys' days done). An empty draft says nothing either.
  */
-export function lastAccountOf(transactions: readonly Transaction[]): string | null {
+export function typedByHand(t: Transaction, byBuoy: ReadonlySet<string> = NO_IDS): boolean {
+  if (t.bank || t.amount === 0 || (t.kind !== 'expense' && t.kind !== 'income') || t.containerId != null) return false
+  if (t.kind === 'income' && t.title.startsWith(CASH_REPAY_TITLE)) return false
+  return !byBuoy.has(t.id)
+}
+
+type BuoyDays = Pick<Scheduled, 'done'>
+const NO_BUOYS: readonly BuoyDays[] = []
+const accountMemo = new WeakMap<readonly Transaction[], { scheduled: readonly BuoyDays[]; id: string | null }>()
+
+/**
+ * The account used last in the folder (AP-20, SW sp. 8): the account of the operation typed by hand latest
+ * (`typedByHand`; its creation – on any computer of the folder), so the second computer proposes it too. `scheduled` –
+ * the buoys, whose „Wykonaj teraz” operations do not count. null – none typed.
+ */
+export function lastAccountOf(transactions: readonly Transaction[], scheduled: readonly BuoyDays[] = NO_BUOYS): string | null {
   const hit = accountMemo.get(transactions)
-  if (hit !== undefined) return hit
+  if (hit && hit.scheduled === scheduled) return hit.id
+  const byBuoy = new Set<string>()
+  for (const b of scheduled) for (const id of Object.values(b.done)) if (id) byBuoy.add(id)
   let last: Transaction | null = null
-  for (const t of transactions) if (!t.bank && t.amount !== 0 && (!last || newer(t, last))) last = t
+  for (const t of transactions) if (typedByHand(t, byBuoy) && (!last || newer(t, last))) last = t
   const id = last?.accountId ?? null
-  accountMemo.set(transactions, id)
+  accountMemo.set(transactions, { scheduled, id })
   return id
 }
 

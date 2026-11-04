@@ -46,7 +46,7 @@ export function quickData(): QuickData | null {
   const fleet = fleetNow()
   const { lastByBrand, counterparties } = officerNow()
   // The account used last in the folder (AP-20: the second computer too), else on this computer, else the first.
-  const inFolder = lastAccountOf(listOf(s.records.transactions))
+  const inFolder = lastAccountOf(listOf(s.records.transactions), listOf(s.records.scheduled))
   const local = lastAccount()
   return {
     categories,

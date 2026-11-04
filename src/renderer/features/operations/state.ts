@@ -332,7 +332,7 @@ export function newOperation(over: Partial<Transaction> = {}): string {
   const state = useData.getState()
   const fi = state.fi
   const accounts = fi?.settings.accounts.filter((a) => !a.archived) ?? []
-  const inFolder = lastAccountOf(listOf(state.records.transactions))
+  const inFolder = lastAccountOf(listOf(state.records.transactions), listOf(state.records.scheduled))
   const account = (accounts.find((a) => a.id === inFolder) ?? accounts.find((a) => a.id === lastAccount()))?.id ?? accounts[0]?.id ?? MBANK_ACCOUNT_ID
   const now = new Date().toISOString()
   const { date, time: clock } = warsawNow()

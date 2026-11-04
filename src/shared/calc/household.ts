@@ -34,6 +34,12 @@ import { HOUSE_MEMBER_ID, type HouseholdMember, type MemberOpening } from '../sc
 import type { Transaction } from '../schema/records'
 import { financedOf, financerOf, partsOf, sum } from './operations'
 
+/**
+ * The title of a member's repayment in cash the app writes („Oddane gotówką” at a purchase – N-PC-11): what tells it from an
+ * income typed by hand (AP-20, T441 – `typedByHand`).
+ */
+export const CASH_REPAY_TITLE = 'Zwrot gotówką: '
+
 /** One member's share of an operation (grosze, all ≥ 0). */
 export interface MemberFlow {
   memberId: string

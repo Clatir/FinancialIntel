@@ -308,7 +308,7 @@ export interface LogEntry {
   date: string
   /** The operation's name (its counterparty, else its title). */
   name: string
-  /** Money out, grosze > 0. */
+  /** My own part of it (grosze > 0) – as the log's counts have it (R-17, `ownSpent`). */
   amount: number
   impulse: 'plan' | 'impulse' | null
   /** What the captain wrote („wyprzedaż”, why at night). */
@@ -317,13 +317,16 @@ export interface LogEntry {
 
 /**
  * The captain's log as written (AP-20, SW sp. 11): the purchases of `from`–`to` with a word in their log, the newest
- * first – what the Wywiad's counts are made of. At most `limit`; `total` – all of them.
+ * first – what the Wywiad's counts are made of: my own part of each, a purchase with none of mine (a household member's
+ * alone) not at all, as in `logAccuracy` (R-17, T439, T441). At most `limit`; `total` – all of them.
  */
 export function logEntries(transactions: readonly Transaction[], from: string, to: string, limit = 50): { entries: LogEntry[]; total: number } {
   const all: LogEntry[] = []
   for (const t of transactions) {
     if (t.kind !== 'expense' || t.date < from || t.date > to || !t.logNote.trim()) continue
-    all.push({ id: t.id, date: t.date, name: operationName(t), amount: -t.amount, impulse: t.impulse ?? null, note: t.logNote.trim() })
+    const own = ownSpent(t)
+    if (!own) continue
+    all.push({ id: t.id, date: t.date, name: operationName(t), amount: own, impulse: t.impulse ?? null, note: t.logNote.trim() })
   }
   all.sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
   return { entries: all.slice(0, limit), total: all.length }

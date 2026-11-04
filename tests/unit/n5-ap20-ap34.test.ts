@@ -3,7 +3,8 @@ import { anomalies } from '@shared/calc/anomalies'
 import { brandStats } from '@shared/calc/drill'
 import { logEntries } from '@shared/calc/intel'
 import { categoryIndex } from '@shared/calc/operations'
-import { lastAccountOf } from '@shared/calc/quick'
+import { CASH_REPAY_TITLE } from '@shared/calc/household'
+import { lastAccountOf, typedByHand } from '@shared/calc/quick'
 import { tagsLost } from '@shared/calc/tags'
 import { createDefaultSettings } from '@shared/defaults'
 import type { MbankRow } from '@shared/import/mbank'
@@ -68,6 +69,27 @@ describe('AP-20: ostatnie konto z folderu (SW sp. 8)', () => {
     expect(lastAccountOf([older, newest, imported, draft])).toBe(XTB_WALLET_ACCOUNT_ID)
     expect(lastAccountOf([imported])).toBeNull()
   })
+
+  it('operacje zapisane przez samą aplikację nic nie mówią (integracja N5): dokowanie, korekta salda, przelew, pożyczka, ładownia, zwrot gotówką, boja', () => {
+    const typed = tx({ accountId: MBANK_ACCOUNT_ID, createdAt: '2026-10-01T10:00:00.000Z' })
+    const at = (day: number) => `2026-10-${String(day).padStart(2, '0')}T10:00:00.000Z`
+    // As the app writes them: `walletOperation`, a balance's confirmation, „Zaplanuj przelew własny”, a loan, „Zapłacone”
+    // in the cargo hold, „Oddane gotówką”, a buoy's „Wykonaj teraz”.
+    const docking = tx({ accountId: XTB_WALLET_ACCOUNT_ID, kind: 'trading', amount: 50000, counterparty: 'XTB', title: 'Wypłata z ICTTJ', createdAt: at(2) })
+    const correction = tx({ accountId: CASH_ACCOUNT_ID, kind: 'correction', amount: -1200, counterparty: 'Korekta salda', createdAt: at(3) })
+    const transfer = tx({ accountId: CASH_ACCOUNT_ID, kind: 'transfer', counterAccountId: MBANK_ACCOUNT_ID, bothSides: true, createdAt: at(4) })
+    const loan = tx({ accountId: CASH_ACCOUNT_ID, kind: 'loan', amount: -100000, createdAt: at(5) })
+    const cargo = tx({ accountId: XTB_WALLET_ACCOUNT_ID, containerId: nextId(), createdAt: at(6) })
+    const cash = tx({ accountId: CASH_ACCOUNT_ID, kind: 'income', amount: 5000, memberId: null, title: `${CASH_REPAY_TITLE}Apteka`, createdAt: at(7) })
+    const buoy = tx({ accountId: XTB_WALLET_ACCOUNT_ID, counterparty: 'Czynsz', title: 'Czynsz', createdAt: at(8) })
+    const all = [typed, docking, correction, transfer, loan, cargo, cash, buoy]
+    const buoys = [{ done: { '2026-10-08': buoy.id, '2026-09-08': '' } }]
+    expect(lastAccountOf(all, buoys)).toBe(MBANK_ACCOUNT_ID)
+    expect(all.filter((t) => typedByHand(t, new Set([buoy.id])))).toEqual([typed])
+    // An income typed by hand (a member's money of the quick entry) and a purchase are the user's.
+    const income = tx({ accountId: CASH_ACCOUNT_ID, kind: 'income', amount: 7000, title: '', createdAt: at(9) })
+    expect(lastAccountOf([...all, income], buoys)).toBe(CASH_ACCOUNT_ID)
+  })
 })
 
 describe('AP-20: treść dziennika w Wywiadzie (SW sp. 11)', () => {
@@ -83,6 +105,24 @@ describe('AP-20: treść dziennika w Wywiadzie (SW sp. 11)', () => {
       ['Allegro', 'wyprzedaż', 'impulse', 25000]
     ])
     expect(logEntries([a, b], '2026-10-01', '2026-10-31', 1)).toMatchObject({ total: 2, entries: [{ name: 'Orlen' }] })
+  })
+
+  it('kwota części własnej jak w licznikach dziennika (R-17); zakup samego domownika – poza listą (integracja N5)', () => {
+    const shared = tx({
+      counterparty: 'Ikea',
+      amount: -25000,
+      impulse: 'impulse',
+      logNote: 'na wyprzedaży',
+      date: '2026-10-11',
+      splits: [
+        { id: nextId(), amount: -10000, categoryId: FOOD, refundable: false, memberId: null, advance: false, note: '' },
+        { id: nextId(), amount: -15000, categoryId: FOOD, refundable: true, memberId: null, advance: false, note: '' }
+      ]
+    })
+    const members = tx({ counterparty: 'Kiosk', amount: -9000, impulse: 'plan', logNote: 'dla mamy', date: '2026-10-12', refundable: true })
+    const { entries, total } = logEntries([shared, members], '2026-10-01', '2026-10-31')
+    expect(total).toBe(1)
+    expect(entries.map((e) => [e.name, e.impulse, e.amount])).toEqual([['Ikea', 'impulse', 10000]])
   })
 })
 

@@ -156,17 +156,17 @@ export const LIST_KEYS = ['accounts', 'kinds', 'categories', 'marks', 'members',
 type Narrowing = Pick<OperationsFilter, (typeof LIST_KEYS)[number] | 'query' | 'amountMin' | 'amountMax'>
 
 /**
- * Every part of the filter that can hide an operation – F18's too (the amounts, the brands, the members…): a view that
- * must show one (a jump to an operation, a new entry, the inbox – B77, B88) clears them; the period and the order are
- * the caller's.
- */
-/**
  * The household members' purchases to look at (D80): all of them, of the whole history – or one member's still to be
  * paid back (AP-19, AF-58: „Pokaż zakupy” at „X: do oddania”, the bridge's line of them – never everybody's, the paid too).
  */
 export const refundablesFilter = (memberId?: string | null): Pick<OperationsFilter, 'members' | 'marks'> =>
   memberId ? { members: [memberId], marks: ['refundable', 'owed', 'partlyRepaid'] } : { members: [], marks: ['refundable'] }
 
+/**
+ * Every part of the filter that can hide an operation – F18's too (the amounts, the brands, the members…): a view that
+ * must show one (a jump to an operation, a new entry, the inbox – B77, B88) clears them; the period and the order are
+ * the caller's.
+ */
 export const noNarrowing = (): Narrowing => ({
   accounts: [],
   kinds: [],
