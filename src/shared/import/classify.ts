@@ -539,8 +539,10 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
         inflowKind: household ? (rule.inflowKind ?? 'repay') : undefined,
         gift: refundable && !!rule.gift,
         share: kind === 'expense' && !refundable ? (rule.share ?? null) : null,
-        // What the member's money beyond their debt is, as the member's setting says (D80 b; „ask” = income, D20).
-        advance: household && (rule.inflowKind === 'advance' || (!rule.inflowKind && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance')),
+        // What the member's money beyond their debt is, as the member's setting says (D80 b; „ask” = income, D20) – a rule
+        // of „spłata” too (AP-4: a rule learned from „spłata, reszta jako zaliczka” of 1.15.3+ gave the rest as income);
+        // an explicit advance for the future – all of it.
+        advance: household && (rule.inflowKind === 'advance' || (rule.inflowKind !== 'income' && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance')),
         counterAccountId: kind === 'transfer' ? rule.counterAccountId : null
       })
     )

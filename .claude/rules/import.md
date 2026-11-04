@@ -54,6 +54,10 @@ paths:
   samo na ekranie i w testach) linie jako to, co marki dały razem z rozkładu, nie kwotę razy liczbę marek – zmiana tam
   nigdy nie daje więcej (T327). **Pułapka:** `sameChoice`
   pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
+- Wpłata domownika (AP-4, T351): opcje `household:<osoba>:income|advance|all-income|all-advance`, jedna nazwa wyboru
+  (`MEMBER_MONEY_TEXT` – lista, temat, podgląd, reguła). „spłata, reszta jako …” = `inflowKind: 'repay'` + `advance`.
+  Reguła reszty nie zapamiętuje – „spłata” bierze ją z ustawienia osoby (D80 b, `restNotOfRule` w edytorze reguły).
+  **Pułapka:** opcja „reszta jako zaliczka” nigdy `inflowKind: 'advance'` (AF-8 – reguła uczyła się omijać dług).
 - Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą. Kategoria mBanku tylko jako podpowiedź (`hintFor`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.

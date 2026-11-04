@@ -912,7 +912,9 @@ export function inflowVotes(groups: readonly ImportGroup[], c: ImportChoices): A
     for (const p of g.rows) {
       if (c.skip[p.key]) continue
       const own = c.rows[p.key] ?? (c.groups[g.group] ? (c.implicit?.[g.group] ? undefined : c.groups[g.group]) : c.themes[g.theme])
-      if (own && own.kind === 'income' && own.household) out.push({ kind: 'income', memberId: own.memberId ?? HOUSE_MEMBER_ID, advance: own.advance })
+      // The question is the rest beyond their debt (D80 b): an explicit independent income or advance for the future
+      // answers nothing of it (AP-4 – it skips the debt).
+      if (own && own.kind === 'income' && own.household && (own.inflowKind ?? 'repay') === 'repay') out.push({ kind: 'income', memberId: own.memberId ?? HOUSE_MEMBER_ID, advance: own.advance })
     }
   return out
 }

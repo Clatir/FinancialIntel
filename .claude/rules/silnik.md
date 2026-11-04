@@ -8,6 +8,7 @@ paths:
   - "src/renderer/features/sensors/**"
   - "tests/unit/fleet.test.ts"
   - "tests/unit/household.test.ts"
+  - "tests/unit/household-n2-*.test.ts"
   - "tests/unit/repayments.test.ts"
   - "tests/unit/share.test.ts"
   - "tests/unit/plan*.test.ts"
@@ -41,6 +42,11 @@ paths:
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).
 - Pewne dopasowanie zwrotu (D91 b, T329): każda osoba wpłaty osobno (`repaymentSharesByMember`) – import i szybki wpis
   `linkRepayments`, edytor przy zmianie części `moreSureCovers` / `keptCovers`; wpłata ≥ cały dług osoby wiąże wszystkie.
+- Wpłata domownika (AP-4, T350): `incomeShares` (czyje pieniądze) → `inflowPlanOf` (spłata długu / tylko wskazane / bez
+  spłaty) → `repay` (które zakupy). Jawny niezależny przychód i zaliczka na przyszłość omijają dług (D99 S4), ale
+  wskazane zakupy spłacają (naprawa liczona przy odczycie); omijające dług – `ledger.skipped` → meldunek (T352). Nowy
+  sposób wpłaty (D100 – spłata pożyczki) dopisz jako część albo plan tutaj, nie obok. **Pułapka:** przy osobie dług
+  i zaliczka naraz (`balanceText`, AF-16) – inaczej depozyt ≠ suma przy osobach.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

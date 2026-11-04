@@ -118,6 +118,13 @@ export function RadarPage() {
                           <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : m.deposit > 0 ? 'zaliczka (depozyt)' : 'bez długu'}</span>
                           {(m.owed > 0 || m.deposit > 0) && <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>}
                         </div>
+                        {/* Both at once (AF-16): their advance beside the debt – in the deposit too. */}
+                        {m.owed > 0 && m.deposit > 0 && (
+                          <div className="flex items-baseline gap-2" data-testid="radar-member-deposit">
+                            <span className="text-[11px] text-dim">zaliczka (depozyt)</span>
+                            <span className="num ml-auto text-muted">{zl(m.deposit)}</span>
+                          </div>
+                        )}
                         {m.since && m.owed > 0 && (
                           <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
                             {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({countLabel(days ?? 0, 'dzień', 'dni', 'dni')})

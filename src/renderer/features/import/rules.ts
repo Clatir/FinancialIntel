@@ -3,7 +3,7 @@ import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
 import { findRule, ruleTargetOf, upsertRule, upsertRules, type LearnedRule } from '@shared/import/classify'
 import { cleanBankName } from '@shared/import/names'
 import { newId } from '@shared/ids'
-import { importRuleSchema, TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
+import { HOUSE_MEMBER_ID, importRuleSchema, inflowOf, TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
 import { ruleDecisionOf, type Choice } from '@shared/import/reconcile'
 import { sameContentAs } from '@shared/merge'
 import { memberName } from '@shared/calc/household'
@@ -13,6 +13,9 @@ import { shareNames } from '../household/ShareEditor'
 import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, canWrite, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { countLabel } from '../../lib/format'
+import { advanceRuleKey } from '@shared/import/audit'
+import { SKIPPED_KEY } from '@shared/calc/household'
+import { MEMBER_MONEY_TEXT } from './options'
 
 const NO_ALIASES: BrandAliases = {}
 /** The names the user merged (1.2.2): an operation's brand is looked up and remembered through them. */
@@ -105,7 +108,9 @@ export function ruleDecisionText(
   }
   if (r.kind === 'income') {
     if (!r.household) return 'wpływ (przychód)'
-    const kindText = (r as ImportRule).inflowKind === 'income' ? ' – niezależny przychód' : (r as ImportRule).inflowKind === 'advance' ? ' – zaliczka' : ''
+    // The import's names (AP-4); a rule of „spłata” – the rest beyond the debt as the person's setting says (D80 b).
+    const kind = (r as ImportRule).inflowKind
+    const kindText = kind === 'income' ? ` – ${MEMBER_MONEY_TEXT['all-income']}` : kind === 'advance' ? ` – ${MEMBER_MONEY_TEXT['all-advance']}` : ''
     return `od domownika: ${memberName(r.memberId, members)}${kindText}`
   }
   if (r.kind === 'transfer') {
@@ -126,14 +131,17 @@ function setRules(next: (rules: ImportRule[]) => ImportRule[]): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next(f.settings.import.rules) } } }))
 }
 
-/** A rule's decision as the import's (the rule's editor – F22). */
-export const choiceOfRule = (r: ImportRule): Choice => ({
+/**
+ * A rule's decision as the import's (the rule's editor – F22). A member's money of „spłata”: the rest the person's
+ * setting gives at each import (D80 b, AP-4 – the rule keeps none), as `classifyRow` reads it.
+ */
+export const choiceOfRule = (r: ImportRule, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'inflow'>> = membersNow()): Choice => ({
   kind: r.kind as TxKind,
   categoryId: r.categoryId,
   refundable: r.refundable,
   household: r.household,
   memberId: r.memberId,
-  advance: r.inflowKind === 'advance',
+  advance: r.inflowKind === 'advance' || (r.household && r.inflowKind !== 'income' && inflowOf(members.find((m) => m.id === (r.memberId ?? HOUSE_MEMBER_ID))) === 'advance'),
   inflowKind: r.inflowKind ?? 'repay',
   gift: r.gift,
   share: r.share ?? null,
@@ -160,6 +168,29 @@ export function editRule(id: string, patch: { direction: 'in' | 'out' | null; ch
   }
   setRules((rules) => rules.map((r) => (r.id === id ? next : r)))
   toast(`Reguła „${rule.label || rule.match}” zmieniona.`, 'success', 6000, { label: 'Cofnij', run: () => setRules((rules) => rules.map((r) => (r.id === id ? rule : r))) })
+}
+
+/**
+ * A rule of an advance for the future to review (AP-4): „spłata” from now on – their money repays the debt first, the
+ * rest as the person's setting says (D80 b); with „Cofnij” (`editRule`).
+ */
+export function repayingRule(rule: ImportRule): void {
+  const direction = rule.direction === 'in' ? 'in' : rule.direction === 'out' ? 'out' : null
+  editRule(rule.id, { direction, choice: { ...choiceOfRule(rule), inflowKind: 'repay' }, maxAmount: rule.maxAmount, tags: rule.tags })
+}
+
+/** A rule of an advance for the future kept so (AP-4): never to review again – with „Cofnij”. */
+export function keepAdvanceRule(rule: Pick<ImportRule, 'id' | 'label' | 'match'>): void {
+  if (!canWrite()) return
+  const key = advanceRuleKey(rule.id)
+  const set = (on: boolean) =>
+    updateSettings((f) => {
+      const notDuplicates = { ...f.settings.import.notDuplicates }
+      if (on) notDuplicates[key] = new Date().toISOString()
+      else delete notDuplicates[key]
+      return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates } } }
+    })
+  if (set(true)) toast(`Reguła „${rule.label || rule.match}” zostaje zaliczką na przyszłość.`, 'info', 6000, { label: 'Cofnij', run: () => set(false) })
 }
 
 /**
@@ -345,8 +376,11 @@ export function clearDismissedSimilar(): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: {} } } }))
 }
 
-/** Is a key of `notDuplicates` a pair of the duplicates panel (not a correction said to be no repeat – B129)? */
-export const isDuplicatePairKey = (key: string): boolean => !key.startsWith('correction:')
+/**
+ * Is a key of `notDuplicates` a pair of the duplicates panel – not a correction said to be no repeat (B129), nor a rule
+ * or a member's money kept as an advance for the future (AP-4)?
+ */
+export const isDuplicatePairKey = (key: string): boolean => !key.startsWith('correction:') && !key.startsWith(advanceRuleKey('')) && !key.startsWith(SKIPPED_KEY)
 
 /** „to nie duplikat” forgotten (N74): the duplicates panel shows those pairs again – with „Cofnij”. */
 export function clearNotDuplicates(): void {

@@ -1,16 +1,62 @@
 import { isOwnName } from '@shared/import/classify'
 import { opKindOf, sameChoice, type Choice, type ImportGroup } from '@shared/import/reconcile'
-import { HOUSE_MEMBER_ID, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
+import { HOUSE_MEMBER_ID, inflowOf, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
 
 /**
  * What a theme, a group or a row becomes, as offered by the direction of the money: 'expense', 'refund', 'income',
  * 'transfer' (an own account outside the budget), `transfer:<account>` (another account of the budget – one operation
  * for both sides, F10), 'trading', 'loan', 'tax', and the household's per member (D80) – `refundable:<member>` (they
  * finance it; money in – a product return of their purchase, B40), `gift:<member>` (their gift, D83), 'share' (several
- * people, D83), `household:<member>:income|advance` (their money; the rest beyond their debt is income or their
- * advance), `loan:<loan>` (a loan of the Radar – B34: its repayment, its money).
+ * people, D83), `household:<member>:<MemberMoney>` (their money: it repays their debt, the rest income or their advance –
+ * or, chosen so, all of it independent income or an advance for the future – AP-4), `loan:<loan>` (a loan of the Radar
+ * – B34: its repayment, its money).
  */
 export type Option = string
+
+/**
+ * What a member's money is, as the import's list offers it (AP-4): `income` / `advance` – it repays what they owe first,
+ * the rest income or their advance (D80 b); `all-income` / `all-advance` – all of it independent income or an advance for
+ * the future, the debt skipped (1.15.3, D99 S4).
+ */
+export type MemberMoney = 'income' | 'advance' | 'all-income' | 'all-advance'
+export const MEMBER_MONEY: readonly MemberMoney[] = ['income', 'advance', 'all-income', 'all-advance']
+
+/**
+ * One name for each choice everywhere in the import (AP-4, IM sp. 4: the list said „reszta jako zaliczka”, the switch
+ * beside it „zaliczka”, and it worked as „całość jako zaliczka” – AF-8): the list, the theme, the preview.
+ */
+export const MEMBER_MONEY_TEXT: Record<MemberMoney, string> = {
+  income: 'spłata, reszta jako przychód',
+  advance: 'spłata, reszta jako zaliczka',
+  'all-income': 'niezależny przychód (bez spłaty)',
+  'all-advance': 'zaliczka na przyszłość (bez spłaty)'
+}
+
+/** The choice of a member's money a decision is (`inflowKind` first: 'repay' or none – by `advance`). */
+export const memberMoneyOf = (c: Pick<Choice, 'advance' | 'inflowKind'>): MemberMoney =>
+  c.inflowKind === 'income' ? 'all-income' : c.inflowKind === 'advance' ? 'all-advance' : c.advance ? 'advance' : 'income'
+
+/**
+ * An option a rule's editor leaves out (AP-4): a member's money of „spłata” with the rest other than the person's
+ * setting – a rule keeps no rest, the setting says it at each import (D80 b), so the label would not be what it does.
+ */
+export function restNotOfRule(option: Option, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'inflow'>>): boolean {
+  if (!option.startsWith('household:')) return false
+  const [, memberId, how] = option.split(':')
+  if (how !== 'income' && how !== 'advance') return false
+  return (how === 'advance') !== (inflowOf(members.find((m) => m.id === memberId)) === 'advance')
+}
+
+/**
+ * The note at a member's money of an explicit kind while they owe (D99 S4: it may skip the debt – said, AP-4); null –
+ * nothing to say.
+ */
+export function skipsDebtText(c: Choice, owed: number, name: string, money: (grosze: number) => string): string | null {
+  if (c.kind !== 'income' || !c.household || owed <= 0) return null
+  const kind = memberMoneyOf(c)
+  if (kind !== 'all-income' && kind !== 'all-advance') return null
+  return `${name} ma oddać ${money(owed)} zł – ${kind === 'all-advance' ? 'zaliczka na przyszłość' : 'niezależny przychód'} tego nie spłaci`
+}
 
 type Member = Pick<HouseholdMember, 'id' | 'name' | 'archived'>
 /** An account of the budget a transfer may go to or come from (F10). */
@@ -46,10 +92,7 @@ const financed = (m: Member) => ({ value: `refundable:${m.id}`, label: `Finansuj
 const gifted = (m: Member) => ({ value: `gift:${m.id}`, label: `Prezent od: ${m.name}` })
 const returned = (m: Member) => ({ value: `refundable:${m.id}`, label: `Zwrot towaru – dla: ${m.name}` })
 const shared = (direction: 'in' | 'out') => ({ value: 'share', label: direction === 'out' ? 'Wspólnie – kilka osób płaci' : 'Zwrot towaru – wspólnego zakupu' })
-const fromMember = (m: Member) => [
-  { value: `household:${m.id}:income`, label: `Od domownika: ${m.name} – reszta jako przychód` },
-  { value: `household:${m.id}:advance`, label: `Od domownika: ${m.name} – reszta jako zaliczka` }
-]
+const fromMember = (m: Member) => MEMBER_MONEY.map((k) => ({ value: `household:${m.id}:${k}`, label: `Od domownika: ${m.name} – ${MEMBER_MONEY_TEXT[k]}` }))
 
 /**
  * The loans of the Radar a loan's operation of this direction may be (B34): a given one – lent more (out) or paid back
@@ -120,7 +163,8 @@ export function optionOf(c: Choice, direction: 'in' | 'out'): Option {
     if (c.share) return 'share'
     return direction === 'in' ? 'refund' : 'expense'
   }
-  if (c.kind === 'income') return c.household ? `household:${memberOfChoice(c)}:${c.advance || c.inflowKind === 'advance' ? 'advance' : 'income'}` : 'income'
+  // A member's money: „reszta jako zaliczka” and „zaliczka na przyszłość” apart (AP-4 – they were one option).
+  if (c.kind === 'income') return c.household ? `household:${memberOfChoice(c)}:${memberMoneyOf(c)}` : 'income'
   if (c.kind === 'loan') return c.loanId ? `loan:${c.loanId}` : 'loan'
   if (c.kind === 'transfer') return c.counterAccountId ? `transfer:${c.counterAccountId}` : 'transfer'
   if (c.kind === 'trading' || c.kind === 'tax') return c.kind
@@ -203,9 +247,12 @@ export function choiceFor(option: Option, prev: Pick<Choice, 'kind' | 'categoryI
   if (option.startsWith('refundable:')) return { ...base, refundable: true, memberId: option.slice('refundable:'.length) || null, categoryId: category }
   if (option.startsWith('gift:')) return { ...base, refundable: true, gift: true, memberId: option.slice('gift:'.length) || null, categoryId: category }
   if (option.startsWith('household:')) {
-    const [, memberId, rest] = option.split(':')
-    const advance = rest === 'advance'
-    return { ...base, kind: 'income', household: true, memberId: memberId || null, advance, ...(advance ? { inflowKind: 'advance' } : {}) }
+    const [, memberId, how] = option.split(':')
+    // „spłata, reszta jako zaliczka” repays first (AP-4, AF-8: it was saved as an advance for the future – the debt
+    // skipped, the rule learned so); only the explicit kinds skip it (D99 S4). `advance` for an older version too: it
+    // reads the rest by it.
+    const inflowKind = how === 'all-income' ? 'income' : how === 'all-advance' ? 'advance' : 'repay'
+    return { ...base, kind: 'income', household: true, memberId: memberId || null, advance: how === 'advance' || how === 'all-advance', inflowKind }
   }
   if (option.startsWith('loan:')) return { ...base, kind: 'loan', loanId: option.slice('loan:'.length) || null }
   if (option.startsWith('transfer:')) return { ...base, kind: 'transfer', counterAccountId: option.slice('transfer:'.length) || null }

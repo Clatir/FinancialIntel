@@ -2547,3 +2547,38 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w spoczynku i w kolejce jedna próba bez czekania. Wcześniej plik tymczasowy raz (jeden chwilowy EPERM na `.presence/`
   dawał tryb tylko do odczytu), a zamiana zawsze 8 razy (ok. 1,4 s co 5 s w spoczynku i w kolejce magazynu). Zwykłe
   zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy.
+- **T350** Jeden plan części wpłaty domownika i naprawa zapisanych „zaliczek” przy odczycie (AP-4, AF-8 K, MG sp. 6; D99 S4):
+  `incomeShares` mówi, czyje są pieniądze, `inflowPlanOf` – co robią: `debt` (spłata długu – wskazane, inaczej jak
+  `assignFrom`; reszta wg `advance`), `named` (jawny niezależny przychód albo zaliczka na przyszłość, które mimo to wskazują
+  zakupy – `covers`, dług startowy: spłacają tylko wskazane, także późniejsze jako rezerwacja D94, nigdy najstarsze, nic nie
+  czeka na przypisanie; reszta – ich przychód / zaliczka), `none` (jawny rodzaj bez wskazanych – omija dług, jak 1.15.3).
+  Zapisane `inflowKind: 'advance'` z wskazanym zakupem (opcja „reszta jako zaliczka” 1.15.3–1.15.5 i wskazanie z wersji
+  sprzed 1.15.3) spłacają go deterministycznie, bez przepisywania rekordów – każdy komputer liczy to samo; `inflowKind:
+  'income'` ze wskazanym tak samo (ten sam sprzeczny zapis starszej wersji: wskazanie zakupu = ta wpłata go spłaca).
+  `repaymentShares` i `repayers` (`copies.ts`) bez zmian – edytor nie proponuje jawnym rodzajom nowych zakupów. Addytywnie,
+  bez `SCHEMA_VERSION`.
+- **T351** „reszta jako zaliczka” w imporcie = spłata, reszta do depozytu (AP-4, AF-8, IM.23, IM sp. 4): opcja
+  `household:<osoba>:advance` daje `inflowKind: 'repay'` i `advance: true` (wcześniej `inflowKind: 'advance'` – reguła
+  uczyła się „całość jako zaliczka”); jawne rodzaje to osobne opcje `:all-income` i `:all-advance`; `optionOf`
+  (`memberMoneyOf`) rozróżnia wszystkie cztery. Jedna nazwa wyboru w imporcie (`MEMBER_MONEY_TEXT`: „spłata, reszta jako
+  przychód / zaliczka”, „niezależny przychód (bez spłaty)”, „zaliczka na przyszłość (bez spłaty)”) – lista, temat, podgląd,
+  tekst reguły; przełącznik „spłata / niezależny przychód / zaliczka” obok listy usunięty. Jawny rodzaj przy długu osoby –
+  uwaga w imporcie (`skipsDebtText`). Reguła „spłata” (`'repay'` albo brak) bierze resztę z ustawienia osoby (D80 b; od
+  1.15.3 dawała zawsze przychód) – reguła reszty nie zapamiętuje, więc jej edytor pokazuje tylko resztę z ustawienia osoby
+  (`restNotOfRule`, `choiceOfRule`). Na „zaliczka czy przychód?” odpowiada tylko wybór „spłata” (`inflowVotes`).
+- **T352** Meldunek „Zaliczki przy długu” (AP-4, naprawa danych): silnik zbiera `HouseholdLedger.skipped` – części
+  `inflowKind: 'advance'`, które przy długu osoby nic nie spłaciły ani nie zarezerwowały (od ostatniego startu sald);
+  meldunek na osobę, dopóki ma oddać (`skippedDebtsOf`). „Spłać” to jawna akcja z „Cofnij”: części tej osoby →
+  „spłata, reszta jako zaliczka” (`repayingAdvance`), pewne zakupy wskazane jak w imporcie (`linkRepayments`), reszta
+  czeka na przypisanie (D91 a); „Cofnij” przywraca tylko wpisy niezmienione od tamtej pory. „zostaw” – klucz
+  `advanceKept:<operacja>:<osoba>` w `settings.import.notDuplicates` (z „Cofnij”); kolejna taka wpłata – pyta znowu (jawna
+  zaliczka wolno omijać dług – D99 S4, meldunek tylko pyta). Klucze AP-4 nie są parami „to nie duplikat”
+  (`isDuplicatePairKey`).
+- **T353** Reguły z „zaliczką na przyszłość” do przeglądu (AP-4): audyt reguł (`review`) – reguły wpłaty domownika
+  z `inflowKind: 'advance'`, poza słowami kluczowymi z Operacji (tam „zaliczka” obok „spłata zakupów” była wyborem
+  jawnym), w „niespójne” po jednej, z „do przeglądu”: „Zmień na spłatę” (`repayingRule` – reguła „spłata”, reszta
+  z ustawienia osoby; `editRule` z „Cofnij”) albo „zostaw zaliczkę na przyszłość” (klucz `advanceRule:<reguła>`). Do tego
+  czasu import z taką regułą pokazuje jej jawną nazwę i uwagę o długu. Bez migracji reguł.
+- **T354** Saldo osoby w obie strony (AF-16, AP-4): Mostek, Radar, Ustawienia → Domownicy i edytor wpłaty pokazują naraz
+  „ma oddać” i „zaliczka” (`balanceText`), gdy osoba ma oba (jawna zaliczka może omijać dług – D99 S4; rezerwacja D94) –
+  depozyt domowników to suma tego, co widać przy osobach.

@@ -3,10 +3,11 @@
  * purchase – D83, a loan of the Radar – B34) and the category.
  */
 import { useMemo } from 'react'
+import { balanceOf, memberName } from '@shared/calc/household'
 import { startShare } from '@shared/calc/share'
 import { dm } from '@shared/format'
 import type { Choice, NewRow, SharePart } from '@shared/import/reconcile'
-import { inflowOf, SHARE_MODES, type HouseholdMember, type Share } from '@shared/schema'
+import { HOUSE_MEMBER_ID, inflowOf, SHARE_MODES, type HouseholdMember, type Share } from '@shared/schema'
 import { useRecordList } from '../../store/records'
 import { useHousehold } from '../../store/fleet'
 import { AmountField, plnText } from '../../components/fields'
@@ -14,8 +15,7 @@ import { IconClose, IconPlus } from '../../components/icons'
 import { CategorySelect, useAccounts } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { ShareEditor } from '../household/ShareEditor'
-import { Segmented } from '../../components/ui'
-import { choiceFor, optionOf, optionsFor, rowSharesChoice, type Option } from './options'
+import { choiceFor, optionOf, optionsFor, rowSharesChoice, skipsDebtText, type Option } from './options'
 import { chooseRow, decisionSpread, decisionStart, owedLeftOfDecision, owedLeftOfRow, rowStart, sharesView, useImport, type DecisionKeys, type SharesView } from './state'
 
 /** A shared purchase's split for the import (D83): equally or by percents – each row has its own amount. */
@@ -224,6 +224,19 @@ export function RowShares({ p, choice, mine }: { p: NewRow; choice: Choice; mine
   )
 }
 
+/** A member's money of an explicit kind while they owe (D99 S4 – it may skip the debt): what it leaves unpaid (AP-4). */
+function SkipsDebt({ choice, testId }: { choice: Choice; testId: string }) {
+  const members = useMembers()
+  const ledger = useHousehold()
+  const memberId = choice.kind === 'income' && choice.household ? (choice.memberId ?? HOUSE_MEMBER_ID) : null
+  const text = memberId && ledger ? skipsDebtText(choice, balanceOf(ledger, memberId).owed, memberName(memberId, members), plnText) : null
+  return text ? (
+    <span className="text-[11px] text-accent" data-testid={`${testId}-skips-debt`}>
+      {text}
+    </span>
+  ) : null
+}
+
 export function DecisionFields({
   choice,
   direction,
@@ -267,20 +280,8 @@ export function DecisionFields({
             </option>
           ))}
       </select>
-      {direction === 'in' && choice.kind === 'income' && choice.household && (
-        <Segmented
-          size="sm"
-          value={choice.inflowKind ?? (choice.advance ? 'advance' : 'repay')}
-          onChange={(inflowKind) => onChange({ ...choice, inflowKind, advance: inflowKind === 'advance' })}
-          options={[
-            { value: 'repay', label: 'spłata' },
-            { value: 'income', label: 'niezależny przychód' },
-            { value: 'advance', label: 'zaliczka' }
-          ]}
-          aria-label="Cel wpłaty domownika"
-          data-testid={`${testId}-inflow-kind`}
-        />
-      )}
+      {/* One name for a member's money – the list's (AP-4, IM sp. 4); an explicit kind skipping their debt says so (D99 S4). */}
+      {direction === 'in' && <SkipsDebt choice={choice} testId={testId} />}
       {choice.kind === 'transfer' && otherAccounts.length > 0 && (
         <select
           className="input h-[24px] w-[195px] py-0 text-[11.5px]"

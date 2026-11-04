@@ -3,7 +3,7 @@
  * is – the rest beyond their debt as income or their advance, the purchases it pays back – and what the ledger made of
  * it.
  */
-import { balanceOf, incomeShares, memberName, payerOf } from '@shared/calc/household'
+import { balanceOf, balanceText, incomeShares, memberName, payerOf } from '@shared/calc/household'
 import { assignsOn, keptCovers, moreSureCovers } from '@shared/calc/repayments'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, inflowOf, type HouseholdMember, type Split, type Transaction } from '@shared/schema'
@@ -104,6 +104,9 @@ export function FinancedNote({ t }: { t: Transaction }) {
 }
 
 
+/** An explicit kind still naming purchases (AP-4 – a record of an older version): those it pays back all the same. */
+const NAMED_NOTE = ' – poza wskazanymi wcześniej zakupami: te spłaca.'
+
 const INCOME_REST = [
   { value: 'income', label: 'przychód' },
   { value: 'advance', label: 'zaliczka' }
@@ -126,6 +129,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const assignFrom = useData((s) => s.fi?.settings.household.assignFrom)
   const parts = t.splits
   const partsSum = parts.reduce((a, x) => a + x.amount, 0)
+  // An explicit kind naming purchases (AP-4: an older version's record) pays them back – `inflowPlanOf`.
+  const namedBefore = t.covers.length > 0 || !!t.coversOpening
   const rest = t.amount - partsSum
   // Who passes money through the sender (D81): a hint, one click each – never applied by itself.
   const through = payer ? members.filter((m) => !m.archived && m.via === payer && !parts.some((x) => x.memberId === m.id)) : []
@@ -211,12 +216,12 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
       )}
       {payer && t.inflowKind === 'income' && (
         <div className="pt-1.5 text-[11px] text-dim" data-testid="inflow-kind-note">
-          Niezależny przychód do budżetu od {memberName(payer, members)} – nie spłaca zakupów, dług domownika pozostaje bez zmian.
+          Niezależny przychód do budżetu od {memberName(payer, members)} – nie spłaca zakupów, dług domownika pozostaje bez zmian{namedBefore ? NAMED_NOTE : '.'}
         </div>
       )}
       {payer && t.inflowKind === 'advance' && (
         <div className="pt-1.5 text-[11px] text-dim" data-testid="inflow-kind-note">
-          Zaliczka na przyszłe zakupy od {memberName(payer, members)} – zasila depozyt, nie spłaca dotychczasowych zakupów.
+          Zaliczka na przyszłe zakupy od {memberName(payer, members)} – zasila depozyt, nie spłaca dotychczasowych zakupów{namedBefore ? NAMED_NOTE : '.'}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
@@ -305,7 +310,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
           const balance = balanceOf(ledger, id)
           return (
             <div key={id} className="text-[11px] text-dim" data-testid="operation-member-balance">
-              {memberName(id, members)} teraz: {balance.owed ? `ma oddać ${plnText(balance.owed)} zł` : balance.deposit ? `zaliczka ${plnText(balance.deposit)} zł` : 'rozliczony'}
+              {/* Both at once (AF-16). */}
+              {memberName(id, members)} teraz: {balanceText(balance, plnText)}
             </div>
           )
         })}
