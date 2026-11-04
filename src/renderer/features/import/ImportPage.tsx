@@ -9,7 +9,7 @@ import { keywordMatcher } from '@shared/import/brands'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { useWizard } from '../wizard/state'
-import { useFleet } from '../../store/fleet'
+import { useFleet, useHousehold } from '../../store/fleet'
 import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { IconChevronDown, IconChevronRight, IconImport, IconSearch } from '../../components/icons'
@@ -41,6 +41,7 @@ import {
   clearGroup,
   clearImportSelection,
   closeImport,
+  copyNotes,
   decideGroup,
   decideNewMember,
   dropImportFile,
@@ -62,7 +63,8 @@ import {
   setRestoreDeleted,
   setSkip,
   skipSelected,
-  sharesTogether,
+  sharesView,
+  themeCommon,
   themeSharesFrom,
   themeShows,
   themeStatus,
@@ -323,13 +325,6 @@ function Summary() {
 /** Rows of a long list shown at once (W17): the rest by „pokaż kolejne”. */
 const PAGE = 100
 
-/** Why a copy on another account stays (AF-9, `RowCopy.blocked`). */
-const COPY_BLOCKED = {
-  docked: 'zadokowana – zostaje (usuń ją sam po przeniesieniu dokowania)',
-  covered: 'spłaca ją wpłata domownika – zostaje',
-  locked: 'zapisana przez nowszą wersję aplikacji – zostaje'
-} as const
-
 function MatchesPanel() {
   const { plan, choices, file } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices, file: s.file })))
   // Each list its own page, from the first one again with another file.
@@ -477,11 +472,11 @@ function MatchesPanel() {
                 />
                 <span className="min-w-0 flex-1 truncate">
                   {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· kopia na: {accountName(p.copy!.tx.accountId)}</span>
-                  {p.copy!.conflict && <span className="ml-1 text-accent">· inna decyzja w kopii</span>}
-                  {p.copy!.otherCovers && <span className="ml-1 text-accent">· kopia spłaca inne zakupy niż operacja tutaj</span>}
-                  {/* Review N1 2: removed, the purchases it pays back would be due again – the operation here does not repay them. */}
-                  {p.copy!.dropsCovers && !p.copy!.otherCovers && <span className="ml-1 text-accent">· usunięta – spłacane przez nią zakupy znów do oddania</span>}
-                  {p.copy!.blocked && <span className="ml-1 text-accent">· {COPY_BLOCKED[p.copy!.blocked]}</span>}
+                  {copyNotes(p.copy!).map((note) => (
+                    <span key={note} className="ml-1 text-accent">
+                      · {note}
+                    </span>
+                  ))}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -791,9 +786,15 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
   const fileAccount = useImport((s) => s.accountId)
   // Every group decided on its own (N78): their one decision, or „różne” – never the theme's empty proposal.
   const groupsDecided = useImport((s) => themeShows(t, s.choices))
-  const first = useImport((s) => (groupsDecided === 'same' ? s.choices.groups[t.groups[0]!.group] : undefined))
-  // Their „w tym za” lines together (`sharesTogether`): a change here makes the theme's decision of what it shows.
-  const common = useMemo(() => (first ? sharesTogether(first, t.groups.length) : undefined), [first, t.groups.length])
+  const members = useMembers()
+  const ledger = useHousehold()
+  // Their decision with „w tym za” what they gave together (`themeCommon`, review N1 3): a change here makes the theme's
+  // decision of what it shows. As one text (a new object at every call).
+  const commonKey = useImport((s) => {
+    const c = themeCommon(t, s.choices, () => sharesView(s.plan, s.choices, ledger, members))
+    return c ? JSON.stringify(c) : ''
+  })
+  const common = useMemo(() => (commonKey ? (JSON.parse(commonKey) as Choice) : undefined), [commonKey])
   // A keyword of a title (N79): about those payments – no rule of the brands, whatever „zapamiętaj” said.
   const byTitle = t.groups.every((g) => g.byTitle)
   const shown = t.groups.filter((g) => found.has(g.group))

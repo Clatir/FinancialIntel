@@ -44,7 +44,7 @@ import { toast } from '../../store/ui'
 import { fleetInputNow, fleetNow } from '../../store/fleet'
 import { bulkKeeps, choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
-import { checkedWithImport, readDeletedBank } from './returned'
+import { checkedWithImport, importsMark, readDeletedBank } from './returned'
 
 export interface ImportDone {
   counts: ImportCounts
@@ -221,6 +221,27 @@ export function planSignature(plan: ImportPlan | null): string {
     return `${p.status}:${p.key}:${what}`
   })
   return [...rows, ...plan.vanished.map((t) => `-${t.id}`)].join('|')
+}
+
+/** Why a copy on another account stays (AF-9, `RowCopy.blocked`). */
+const COPY_BLOCKED = {
+  docked: 'zadokowana – zostaje (usuń ją sam po przeniesieniu dokowania)',
+  covered: 'spłaca ją wpłata domownika – zostaje',
+  locked: 'zapisana przez nowszą wersję aplikacji – zostaje'
+} as const
+
+/**
+ * The preview's notes at a copy on another account (AF-9): why it is not ticked, what removing it does, why it stays.
+ * One whose purchases the operation here would not take back is not ticked (review N1 2) – its note says what removing it
+ * would do, whether ticked or not (review N1 3: before, „usunięta – …” at a copy not removed).
+ */
+export function copyNotes(copy: Pick<RowCopy, 'conflict' | 'otherCovers' | 'dropsCovers' | 'blocked'>): string[] {
+  const out: string[] = []
+  if (copy.conflict) out.push('inna decyzja w kopii')
+  if (copy.otherCovers) out.push('kopia spłaca inne zakupy niż operacja tutaj')
+  else if (copy.dropsCovers) out.push('po usunięciu spłacane przez nią zakupy będą znów do oddania')
+  if (copy.blocked) out.push(COPY_BLOCKED[copy.blocked])
+  return out
 }
 
 /**
@@ -561,8 +582,8 @@ export function chooseTheme(theme: string, choice: Choice, remember?: boolean, a
 }
 
 /**
- * A decision for a theme whose brands were each decided the same (shown as the theme's – their „w tym za” together,
- * `sharesTogether`): theirs give way – the theme decides them all, as the screen shows.
+ * A decision for a theme whose brands were each decided the same (shown as the theme's – their „w tym za” what they gave
+ * together, `themeCommon`): theirs give way – the theme decides them all, as the screen shows.
  */
 export function chooseThemeOverGroups(t: ImportTheme, choice: Choice): void {
   patchChoices((c) => {
@@ -801,23 +822,23 @@ export const themeSharesFrom = (t: Pick<ImportTheme, 'theme' | 'groups'>, shows:
   shows === 'same' ? t.groups.map((g) => `g:${g.group}`) : `t:${t.theme}`
 
 /**
- * `groups` groups' common decision (each one `choice` – `sameChoice`) as their theme's row shows it (N78): each other
- * member's „w tym za” line is what the groups give together – a theme's amount is for all its rows (T328), so a change
- * there (`chooseThemeOverGroups`) keeps the total, and the line is what its spread says typed (`decisionSpread`; review
- * N1 2: before, one group's amount – a change halved what two groups gave).
+ * The decision a theme's row shows when each of its groups decided alike (N78 – `themeShows` 'same'; none otherwise): of
+ * one group as it is; of more, their lines with an amount (lines of 0 zł aside – `sameChoice`), each other member's at
+ * what the groups gave together (their spread – `decisionSpread`), the sender's own as it is (it never spreads). A change
+ * there (`chooseThemeOverGroups`) makes the theme's decision of it – one amount for all its rows (T328): never more than
+ * the groups gave (review N1 3: each group's amount times their number counted a group whose rows had their own
+ * decisions, or whose money ran out, as giving it all – a change there credited the member with money nobody sent; review
+ * N1 2: one group's amount – a change halved what two gave).
  */
-export function sharesTogether(choice: Choice, groups: number): Choice {
-  if (groups < 2 || !choice.shares?.some((x) => x.amount > 0)) return choice
-  const sender = choice.memberId ?? HOUSE_MEMBER_ID
-  // Decided alike: the groups' lines with an amount are the same – together their number times each (the sender's own
-  // never spreads).
-  return { ...choice, shares: choice.shares.map((x) => (x.amount > 0 && x.memberId !== sender ? { ...x, amount: x.amount * groups } : x)) }
-}
-
-/** The groups' common decision a theme's row shows (`themeShows` 'same', `sharesTogether`); none when it shows another. */
-export function themeCommon(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<ImportChoices, 'themes' | 'groups'>): Choice | undefined {
+export function themeCommon(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<ImportChoices, 'themes' | 'groups'>, view: () => SharesView | null): Choice | undefined {
   if (themeShows(t, c) !== 'same') return undefined
-  return sharesTogether(c.groups[t.groups[0]!.group]!, t.groups.length)
+  const first = c.groups[t.groups[0]!.group]!
+  if (t.groups.length < 2 || !first.shares?.some((x) => x.amount > 0)) return first
+  const lines = first.shares.filter((x) => x.amount > 0)
+  const v = view()
+  const spread = v ? decisionSpread(v, themeSharesFrom(t, 'same'), { ...first, shares: lines }) : null
+  const sender = first.memberId ?? HOUSE_MEMBER_ID
+  return { ...first, shares: lines.map((x, i) => (x.memberId === sender ? x : { ...x, amount: spread?.get(i)?.typed ?? 0 })) }
 }
 
 /** What a member still owes back beyond their own money of the file and its parts given by others than `from` (the decision). */
@@ -829,15 +850,16 @@ export function owedLeftOfDecision(view: SharesView, from: DecisionKeys, memberI
 
 /**
  * A decision's „w tym za” lines spread over its rows (AF-27), by the line shown: of one decision as they are; of a
- * theme's groups (their common decision shown) added up line by line – the same lines in the same order (`sameChoice`;
- * lines of 0 zł aside), each group's amount typed for its own rows, so the typed ones add up too.
+ * theme's groups (their common decision shown – `themeCommon`, lines of 0 zł aside) added up line by line – each group's
+ * n-th line typed is the n-th line of another member (the same lines in the same order, `sameChoice`), and the line is
+ * what they gave together, as shown (review N1 3: not what each typed – a change there would give that).
  */
 export function decisionSpread(view: SharesView, from: DecisionKeys, choice: Pick<Choice, 'memberId' | 'shares'>): Map<number, SpreadLine> {
   const keys = keysOf(from)
   if (keys.length === 1) return new Map((view.spread.get(keys[0]!) ?? []).map((l) => [l.line, l]))
-  // The shown lines with an amount (the sender's own never spreads), in order: a group's n-th such line is the n-th.
+  // The shown lines of other members (the sender's own never spreads), in order: a group's n-th line typed is the n-th.
   const sender = choice.memberId ?? HOUSE_MEMBER_ID
-  const shown = (choice.shares ?? []).flatMap((x, i) => (x.amount > 0 && x.memberId !== sender ? [i] : []))
+  const shown = (choice.shares ?? []).flatMap((x, i) => (x.memberId !== sender ? [i] : []))
   const out = new Map<number, SpreadLine>()
   for (const k of keys)
     (view.spread.get(k) ?? [])
@@ -847,9 +869,12 @@ export function decisionSpread(view: SharesView, from: DecisionKeys, choice: Pic
         const line = shown[n]
         if (line == null) return
         const sum = out.get(line)
-        out.set(line, sum ? { ...sum, typed: sum.typed + l.typed, given: [...sum.given, ...l.given] } : { ...l, line, given: [...l.given] })
+        out.set(line, sum ? { ...sum, given: [...sum.given, ...l.given] } : { ...l, line, given: [...l.given] })
       })
-  for (const l of out.values()) l.given.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  for (const l of out.values()) {
+    l.given.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    l.typed = l.given.reduce((a, g) => a + g.amount, 0)
+  }
   return out
 }
 
@@ -1016,6 +1041,8 @@ export async function runImport(): Promise<void> {
     // A row of an operation deleted in the other format brought back on purpose („importuj mimo to”, AF-1): never
     // reported as one that came back after its deletion.
     const restored = plan.rows.flatMap((p) => (p.status === 'deleted' && p.other && cur.choices.restoreDeleted[p.key] && createdKey.has(p.key) ? [returnedKey(createdKey.get(p.key)!)] : []))
+    // The folder's imports until this one (T332): the check holds with it only when they are as checked.
+    const imports = importsMark(useData.getState().fi)
     updateSettings((f) => ({
       ...f,
       settings: {
@@ -1039,7 +1066,7 @@ export async function runImport(): Promise<void> {
       }
     }))
     // Run with the deleted ones just read: nothing came back with it – no reading of the history at the next opening (T332).
-    checkedWithImport(acc, now)
+    checkedWithImport(imports)
     // A household member's money the user decided here (zaliczka / przychód): asked once, remembered for them (D80 b) –
     // one answer per operation (N84).
     rememberInflows(inflowVotes(groupsOf(plan, cur.choices.restoreDeleted), cur.choices))
