@@ -209,6 +209,7 @@ const LABELS: Record<string, string> = {
   'splits.refundable': 'Podział – finansuje domownik',
   'splits.memberId': 'Podział – domownik',
   'splits.advance': 'Podział – reszta jako zaliczka',
+  'splits.loanId': 'Podział – spłata pożyczki',
   counterparty: 'Kontrahent',
   title: 'Tytuł',
   impulse: 'Plan czy impuls',
@@ -408,7 +409,8 @@ const AMOUNT_FIELDS = [
   'settings.budget.initial.tanks.*',
   'settings.household.members.opening.owed',
   'settings.household.members.opening.deposit',
-  'settings.import.rules.maxAmount'
+  'settings.import.rules.maxAmount',
+  'settings.import.rules.loanAmount'
 ].map((f) => f.split('.'))
 
 /** Is the field at `path` an amount in grosze (B7)? Items of lists (`#id`, `[n]`) do not count as keys. */

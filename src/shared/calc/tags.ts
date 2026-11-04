@@ -105,13 +105,14 @@ export interface TagSummary {
 
 /**
  * An income's money back of mine (F17): a household member's money in it – their repayment, their advance, their part
- * of a transfer (D80, D81) – is theirs, never less spent on a trip; each own line with its tags and category.
+ * of a transfer (D80, D81) – is theirs, never less spent on a trip, nor a loan's repayment in it (D100); each own line
+ * with its tags and category.
  */
 function incomeParts(t: Transaction): ReturnType<typeof taggedParts> {
   const own = tagsOf(t)
   const out: ReturnType<typeof taggedParts> = []
   for (const x of incomeShares(t)) {
-    if (x.memberId != null) continue
+    if (x.memberId != null || x.loanId) continue
     // A line's money – its category and tags beside the operation's; the rest of the amount – the operation's.
     const line = x.line != null ? t.splits[x.line] : undefined
     const labels = withTags(own, line?.tags ?? [])

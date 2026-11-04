@@ -177,8 +177,9 @@ export async function deleteLoan(loan: Loan): Promise<void> {
     .map((e) => e.record)
     .filter((c) => c.loanId === loan.id)
   const own = new Set(containers.map((c) => c.id))
-  // Its operations – its own and the installments paid by its container (the import links them by the payee).
-  if (Object.values(s.records.transactions).some((e) => e.record.loanId === loan.id || (e.record.containerId != null && own.has(e.record.containerId)))) {
+  // Its operations – its own, the installments paid by its container (the import links them by the payee) and the
+  // inflows with a part repaying it (D100: deleted, it would be their income).
+  if (Object.values(s.records.transactions).some((e) => e.record.loanId === loan.id || e.record.splits.some((x) => x.loanId === loan.id) || (e.record.containerId != null && own.has(e.record.containerId)))) {
     toast('Ta pożyczka ma operacje – zamknij ją zamiast usuwać.', 'error', 5000)
     return
   }

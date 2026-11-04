@@ -46,10 +46,11 @@ function paidUpTo(p: Paid | undefined, date: string): number {
 export function netAdjustments(dates: readonly string[], o: NetInput): number[] {
   const states = loanStates(o.loans, o.transactions, o.containers, o.today)
   const direction = new Map(o.loans.map((l) => [l.id, l.direction]))
-  // Each loan's payments by day (as its state counts them): a given loan's repayments come in, a taken loan's go out.
+  // Each loan's payments by day (as its state counts them): a given loan's repayments come in (a part of an inflow too –
+  // D100), a taken loan's go out.
   const payments = new Map<string, Array<{ date: string; amount: number }>>()
-  forEachLoanOperation(o.loans, o.transactions, o.containers, o.today, (id, t) => {
-    const paid = direction.get(id) === 'given' ? Math.max(0, t.amount) : Math.max(0, -t.amount)
+  forEachLoanOperation(o.loans, o.transactions, o.containers, o.today, (id, t, amount) => {
+    const paid = direction.get(id) === 'given' ? Math.max(0, amount) : Math.max(0, -amount)
     if (!paid) return
     const list = payments.get(id) ?? []
     list.push({ date: t.date, amount: paid })

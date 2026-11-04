@@ -236,12 +236,17 @@ export interface IncomeShare {
   limit?: number
   /** The line of the split it is (its index); none – the rest of the amount. */
   line?: number
+  /**
+   * A part repaying a loan given (D100, T355 – `Split.loanId`): no member's money (`memberId` null – the ledger never
+   * reads it), the loan's (`calc/loans.ts` `loanParts`, the engine – back to the shields up to its debt).
+   */
+  loanId?: string
 }
 
 /**
  * Whose money an income is, by parts (D81): its split – a part's member, null = mine – and the rest of the amount the
- * sender's (`payerOf`); unsplit, all of it the sender's. Parts summing to more than the amount (a file edited by hand)
- * are cut at it.
+ * sender's (`payerOf`); unsplit, all of it the sender's. A part repaying a loan (D100) is the loan's, whoever sent it.
+ * Parts summing to more than the amount (a file edited by hand) are cut at it.
  */
 export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'advance' | 'splits'> & { inflowKind?: 'repay' | 'income' | 'advance' }): IncomeShare[] {
   const payer = payerOf(t)
@@ -254,7 +259,7 @@ export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId'
   for (const [line, s] of t.splits.entries()) {
     const amount = Math.min(s.amount, left)
     if (amount <= 0) continue
-    out.push({ memberId: s.memberId ?? null, amount, advance: !!s.memberId && !!s.advance, inflowKind: s.inflowKind, line })
+    out.push(s.loanId ? { memberId: null, amount, advance: false, line, loanId: s.loanId } : { memberId: s.memberId ?? null, amount, advance: !!s.memberId && !!s.advance, inflowKind: s.inflowKind, line })
     left -= amount
   }
   if (left > 0) out.push(own(left))
@@ -271,6 +276,7 @@ export function incomeShares(t: Pick<Transaction, 'kind' | 'amount' | 'memberId'
  *   never the oldest, nothing waits to be assigned; the rest is its income or advance;
  * - `repays: 'none'` – an explicit independent income or advance for the future naming nothing (1.15.3): it skips what
  *   they owe (D99 S4).
+ * A part repaying a loan given (D100) is no member's money – `incomeShares` gives it apart (`loanId`), never planned here.
  */
 export interface InflowPlan {
   repays: 'debt' | 'named' | 'none'
@@ -296,6 +302,14 @@ export const settlesHousehold = (t: Transaction): boolean =>
 /** The open item of a member's opening balance (it has no operation): `OpenPurchase.txId`. */
 export const OPENING_TX = 'opening:'
 export const isOpeningItem = (txId: string): boolean => txId.startsWith(OPENING_TX)
+
+/** All words of a person's name in a counterparty, in any order – a name of one word only when it is the whole counterparty. */
+export function nameIn(name: string, counterparty: string): boolean {
+  const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
+  if (!parts.length) return false
+  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
+  return parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))
+}
 
 /**
  * The household member a counterparty is (D80 a): all words of one of their bank names in it, in any order – a name of

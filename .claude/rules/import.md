@@ -58,7 +58,13 @@ paths:
   (`MEMBER_MONEY_TEXT` – lista, temat, podgląd, reguła). „spłata, reszta jako …” = `inflowKind: 'repay'` + `advance`.
   Reguła reszty nie zapamiętuje – „spłata” bierze ją z ustawienia osoby (D80 b, `restNotOfRule` w edytorze reguły).
   **Pułapka:** opcja „reszta jako zaliczka” nigdy `inflowKind: 'advance'` (AF-8 – reguła uczyła się omijać dług).
-- Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą. Kategoria mBanku tylko jako podpowiedź (`hintFor`).
+- Spłata pożyczki częścią (D100, T357): linia „w tym” z `loanId` (`memberId` '') przy każdym wpływie (domownika i
+  zwykłym); w `rowShares` pożyczka to klucz `loanKey` – dług z `owedWithFile(…, loans)`, spłaty całością pliku jak własne
+  pieniądze. `sharesView` wszędzie z `fleet.loans` (jedna pamięć). **Pułapka:** linie porównuj po `shareWho`, nie
+  `memberId`; bez pożyczki w `owed` część grupy = 0 (zamknięta – słusznie).
+- Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą – poza spłatą pożyczki z Radaru (T358: `loanId`,
+  `loanAmount`; tylko otwarta od swojego dnia – `ruleLoanFor`; „zapamiętaj” domyślnie wyłączone – `remembersByDefault`).
+  Kategoria mBanku tylko jako podpowiedź (`hintFor`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.
 - Łączenie i duplikaty: `looseMatch` (kwota, ±3 dni, podobieństwo kontrahenta), także między kontami; decyzja

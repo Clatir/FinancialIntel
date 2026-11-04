@@ -2,7 +2,8 @@
  * Income for the statistics (D81, 1.4.0): what came in as mine, month by month, in two lines – work and other income,
  * and trading (the withdrawals from the trading account less the top-ups of it). Never income: own transfers, what a
  * household member pays back or pays ahead (`calc/household.ts`), a member's money before the settlements' start (it
- * cannot be told apart any more), and the money of the ICTTJ pool „Podatek” (the PIT-38 reserve, outside the budget).
+ * cannot be told apart any more), a loan's repayment – whole (kind 'loan') or a part of an inflow (D100, T355) – and
+ * the money of the ICTTJ pool „Podatek” (the PIT-38 reserve, outside the budget).
  * The panel „Przychody” (averages of 3, 6 and 12 months, the median) and the engine's income average (the salary
  * warning) read the same numbers.
  */
@@ -10,6 +11,7 @@ import type { HouseholdMember } from '../schema/budget'
 import type { Docking, Transaction } from '../schema/records'
 import { monthOf } from './dates'
 import { heldOf, incomeShares, isMemberMoney, settleHousehold, type HouseholdLedger } from './household'
+import { loanParts } from './loans'
 import { sum } from './operations'
 
 export interface IncomeContext {
@@ -59,7 +61,9 @@ export function incomeParts(t: Transaction, ctx: IncomeContext): IncomeParts {
     // The members' parts the ledger did not settle (an account's operation inside its opening balance) are theirs.
     const flows = ctx.ledger.byTx.get(t.id)
     const kept = flows ? heldOf(flows) : sum(incomeShares(t).filter((x) => x.memberId).map((x) => x.amount))
-    return { work: Math.max(0, t.amount - kept - tax), trading: 0 }
+    // A part repaying a loan (D100) – never income, as a whole repayment (its excess too).
+    const loans = sum(loanParts(t).map((x) => x.amount))
+    return { work: Math.max(0, t.amount - kept - loans - tax), trading: 0 }
   }
   if (t.kind === 'trading') {
     // The tax pool's money (a withdrawal into it, its return to the trading capital) is not the budget's.

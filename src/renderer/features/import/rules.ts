@@ -13,6 +13,7 @@ import { shareNames } from '../household/ShareEditor'
 import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, canWrite, replaceRecords, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { countLabel } from '../../lib/format'
+import { plnText } from '../../components/fields'
 import { advanceRuleKey } from '@shared/import/audit'
 import { SKIPPED_KEY } from '@shared/calc/household'
 import { MEMBER_MONEY_TEXT } from './options'
@@ -97,11 +98,16 @@ export const keywordOfSearch = (query: string): string | null => {
  * category – marked when archived since (N86: such a rule asks for a new one) –, whose money, the own transfer's account.
  */
 export function ruleDecisionText(
-  r: Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'>,
+  r: Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'> & Partial<Pick<ImportRule, 'loanId' | 'loanAmount'>>,
   catLabel: (id: string | null) => string,
   members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = membersNow()
 ): string {
   const settings = useData.getState().fi?.settings
+  // The loan it repays (D100, T358): whole, or a part of each income – a closed one said (the rule gives way then).
+  const loan = r.loanId ? useData.getState().records.loans[r.loanId]?.record : undefined
+  const loanName = r.loanId ? `${loan?.name ?? 'pożyczka spoza Radaru'}${loan?.closedAt ? ' (zamknięta)' : ''}` : ''
+  if (r.kind === 'loan' && r.loanId) return `zwrot pożyczki: ${loanName}`
+  if (r.kind === 'income' && r.loanId && r.loanAmount) return `${ruleDecisionText({ ...r, loanId: undefined, loanAmount: undefined }, catLabel, members)} · w tym spłata pożyczki: ${loanName} ${plnText(r.loanAmount)} zł`
   if (r.kind === 'expense') {
     const archived = !!r.categoryId && !!settings?.categories.find((c) => c.id === r.categoryId)?.archived
     return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}${archived ? ' (zarchiwizowana)' : ''}`
@@ -145,7 +151,10 @@ export const choiceOfRule = (r: ImportRule, members: ReadonlyArray<Pick<Househol
   inflowKind: r.inflowKind ?? 'repay',
   gift: r.gift,
   share: r.share ?? null,
-  counterAccountId: r.counterAccountId
+  counterAccountId: r.counterAccountId,
+  // The loan it repays (D100, T358): whole (kind 'loan'), or its part of each income.
+  loanId: r.kind === 'loan' ? (r.loanId ?? null) : null,
+  ...(r.kind === 'income' && r.loanId && r.loanAmount ? { shares: [{ memberId: '', amount: r.loanAmount, advance: false, loanId: r.loanId }] } : {})
 })
 
 /**

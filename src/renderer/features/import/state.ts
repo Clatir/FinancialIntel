@@ -9,8 +9,10 @@ import {
   keysOnly,
   owedWithFile,
   planImport,
+  remembersByDefault,
   rowShares,
   sameChoice,
+  shareWho,
   type Choice,
   type DeletedRow,
   type ImportChoices,
@@ -25,6 +27,7 @@ import {
   type SpreadLine
 } from '@shared/import/reconcile'
 import { balanceOf, type HouseholdLedger } from '@shared/calc/household'
+import type { LoanState } from '@shared/calc/loans'
 import { returnedKey } from '@shared/import/deleted'
 import { warsawNow } from '@shared/calc/dates'
 import { linkRepayments } from '@shared/calc/repayments'
@@ -514,7 +517,8 @@ export function chooseGroup(group: string, choice: Choice, remember?: boolean): 
   patchChoices((c) => {
     const implicit = { ...c.implicit }
     delete implicit[group]
-    return { ...c, groups: { ...c.groups, [group]: choice }, remember: { ...c.remember, [group]: remember ?? (wasHint ? true : (c.remember[group] ?? true)) }, implicit }
+    // A loan's repayment (D100, T358): a rule of it only when asked – „zapamiętaj” starts off.
+    return { ...c, groups: { ...c.groups, [group]: choice }, remember: { ...c.remember, [group]: remember ?? (wasHint ? true : remembersByDefault(choice, c.groups[group], c.remember[group])) }, implicit }
   })
   unaccept('groups', group)
 }
@@ -576,7 +580,7 @@ export function clearGroup(group: string): void {
 export function chooseTheme(theme: string, choice: Choice, remember?: boolean, accepted = false): void {
   // The user's own choice after an accepted hint (B97): remembered by default.
   const wasHint = !accepted && !!useImport.getState().accepted.themes[theme]
-  patchChoices((c) => ({ ...c, themes: { ...c.themes, [theme]: choice }, rememberThemes: { ...c.rememberThemes, [theme]: remember ?? (wasHint ? true : (c.rememberThemes[theme] ?? true)) } }))
+  patchChoices((c) => ({ ...c, themes: { ...c.themes, [theme]: choice }, rememberThemes: { ...c.rememberThemes, [theme]: remember ?? (wasHint ? true : remembersByDefault(choice, c.themes[theme], c.rememberThemes[theme])) } }))
   if (accepted) useImport.setState((s) => ({ accepted: { ...s.accepted, themes: { ...s.accepted.themes, [theme]: true } } }))
   else unaccept('themes', theme)
 }
@@ -680,7 +684,8 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
     if (!selected.groups[g.group]) continue
     if (takes(g.direction, shown(g))) {
       nextGroups[g.group] = choice
-      remember[g.group] = true
+      // A loan's repayment (D100): no rule of it unless asked.
+      remember[g.group] = remembersByDefault(choice, shown(g), true)
       delete implicit[g.group]
       delete acceptedGroups[g.group]
       applied++
@@ -782,20 +787,39 @@ export interface SharesView extends SharesSpread {
   owed: Map<string, number>
 }
 
-let sharesMemo: { plan: ImportPlan; choices: ImportChoices; ledger: HouseholdLedger | null; members: readonly HouseholdMember[]; view: SharesView } | null = null
+/** The engine's loans (`FleetState.loans`): their open amounts cap the loans' parts of the file (D100). */
+export type LoanStates = readonly Pick<LoanState, 'loan' | 'open'>[] | null | undefined
+
+let sharesMemo: { plan: ImportPlan; choices: ImportChoices; ledger: HouseholdLedger | null; members: readonly HouseholdMember[]; loans: LoanStates; view: SharesView } | null = null
+
+const openMemo = new WeakMap<object, Map<string, number>>()
+/** The loans given open now by id (D100) – once per engine's list. */
+function openLoans(states: LoanStates): Map<string, number> | undefined {
+  if (!states) return undefined
+  let out = openMemo.get(states)
+  if (!out) openMemo.set(states, (out = new Map(states.filter((s) => s.loan.direction === 'given' && s.loan.closedAt == null).map((s) => [s.loan.id, s.open]))))
+  return out
+}
 
 /**
  * The parts of other members each row of the file carries (D81 – „w tym za X”, AF-27: a group's spread over its rows,
- * never beyond what they owe) and what each member owes once the file's purchases are in (`ledger` – the engine's now).
- * Once per plan, decisions, ledger and members.
+ * never beyond what they owe) and of the loans given (D100 – never beyond what each owes, `loans` – the engine's), and
+ * what each member owes once the file's purchases are in (`ledger` – the engine's now). Once per plan, decisions, ledger,
+ * members and loans.
  */
-export function sharesView(plan: ImportPlan | null, choices: ImportChoices, ledger: HouseholdLedger | null, members: readonly HouseholdMember[]): SharesView | null {
+export function sharesView(plan: ImportPlan | null, choices: ImportChoices, ledger: HouseholdLedger | null, members: readonly HouseholdMember[], loans?: LoanStates): SharesView | null {
   if (!plan) return null
   const m = sharesMemo
-  if (m && m.plan === plan && m.choices === choices && m.ledger === ledger && m.members === members) return m.view
-  const owed = owedWithFile(plan, choices, (id) => (ledger ? balanceOf(ledger, id) : { owed: 0, deposit: 0 }), members.map((x) => x.id))
+  if (m && m.plan === plan && m.choices === choices && m.ledger === ledger && m.members === members && m.loans === loans) return m.view
+  const owed = owedWithFile(
+    plan,
+    choices,
+    (id) => (ledger ? balanceOf(ledger, id) : { owed: 0, deposit: 0 }),
+    members.map((x) => x.id),
+    openLoans(loans)
+  )
   const view: SharesView = { ...rowShares(plan, choices, owed), owed }
-  sharesMemo = { plan, choices, ledger, members, view }
+  sharesMemo = { plan, choices, ledger, members, loans, view }
   return view
 }
 
@@ -838,7 +862,7 @@ export function themeCommon(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<Im
   const v = view()
   const spread = v ? decisionSpread(v, themeSharesFrom(t, 'same'), { ...first, shares: lines }) : null
   const sender = first.memberId ?? HOUSE_MEMBER_ID
-  return { ...first, shares: lines.map((x, i) => (x.memberId === sender ? x : { ...x, amount: spread?.get(i)?.typed ?? 0 })) }
+  return { ...first, shares: lines.map((x, i) => (!x.loanId && x.memberId === sender ? x : { ...x, amount: spread?.get(i)?.typed ?? 0 })) }
 }
 
 /** What a member still owes back beyond their own money of the file and its parts given by others than `from` (the decision). */
@@ -857,9 +881,10 @@ export function owedLeftOfDecision(view: SharesView, from: DecisionKeys, memberI
 export function decisionSpread(view: SharesView, from: DecisionKeys, choice: Pick<Choice, 'memberId' | 'shares'>): Map<number, SpreadLine> {
   const keys = keysOf(from)
   if (keys.length === 1) return new Map((view.spread.get(keys[0]!) ?? []).map((l) => [l.line, l]))
-  // The shown lines of other members (the sender's own never spreads), in order: a group's n-th line typed is the n-th.
+  // The shown lines of other members and of loans (D100; the sender's own never spreads), in order: a group's n-th line
+  // typed is the n-th.
   const sender = choice.memberId ?? HOUSE_MEMBER_ID
-  const shown = (choice.shares ?? []).flatMap((x, i) => (x.memberId !== sender ? [i] : []))
+  const shown = (choice.shares ?? []).flatMap((x, i) => (x.loanId || x.memberId !== sender ? [i] : []))
   const out = new Map<number, SpreadLine>()
   for (const k of keys)
     (view.spread.get(k) ?? [])
@@ -878,14 +903,14 @@ export function decisionSpread(view: SharesView, from: DecisionKeys, choice: Pic
   return out
 }
 
-/** …beyond the parts of the other rows than `key`. */
+/** …beyond the parts of the other rows than `key` (`memberId` – a member's id or a loan's key, `loanKey`). */
 export function owedLeftOfRow(view: SharesView, key: string, amount: number, memberId: string): number {
   let mine = 0
   let money = amount
   for (const x of view.parts.get(key) ?? []) {
     const v = Math.min(x.amount, money)
     money -= v
-    if (x.memberId === memberId && (!x.inflowKind || x.inflowKind === 'repay')) mine += v
+    if (shareWho(x) === memberId && (!x.inflowKind || x.inflowKind === 'repay')) mine += v
   }
   return Math.max(0, (view.owed.get(memberId) ?? 0) - ((view.total.get(memberId) ?? 0) - mine))
 }
@@ -1012,8 +1037,10 @@ export async function runImport(): Promise<void> {
     const now = new Date().toISOString()
     const acc = st.accountId
     const rulesBefore = s.fi.settings.import.rules
-    // What each member owes with the file's purchases (AF-27): a group's „w tym za” never beyond it – as the preview showed.
-    const owed = sharesView(plan, cur.choices, fleetNow()?.household ?? null, s.fi.settings.household.members)?.owed
+    // What each member owes with the file's purchases (AF-27): a group's „w tym za” never beyond it – as the preview showed;
+    // a loan's part never beyond its debt (D100).
+    const fleet = fleetNow()
+    const owed = sharesView(plan, cur.choices, fleet?.household ?? null, s.fi.settings.household.members, fleet?.loans)?.owed
     const result = withRepayments(buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore, accounts: s.fi.settings.accounts.map((a) => a.id), owed }))
     const txBefore = useData.getState().records.transactions
     // Nothing new (N13): no backup, no records – only the time of the import and what the file covers; the other

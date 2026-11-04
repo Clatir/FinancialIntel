@@ -67,11 +67,17 @@ export function useRuleAudit(): { audit: RuleAudit | null; progress: number } {
   return state
 }
 
-/** Operations a rule would get – not with the per-operation kinds (N14). */
-const forRule = (o: string) => o === 'loan' || o.startsWith('loan:') || o === 'tax' || o === 'trading'
+/**
+ * Operations a rule would get – not with the per-operation kinds (N14), except the repayment of an open loan given of the
+ * Radar for money in (D100, T358 – the rule names it, valid while it is open).
+ */
+const forRule = (o: string, direction: 'in' | 'out' | null, repayable: ReadonlySet<string>) =>
+  o === 'loan' || (o.startsWith('loan:') && !(direction === 'in' && repayable.has(o.slice('loan:'.length)))) || o === 'tax' || o === 'trading'
 
 function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) {
   const members = useMembers()
+  const loans = useData((s) => s.records.loans ?? NO_LOANS)
+  const repayable = useMemo(() => new Set(listOf(loans).flatMap((l) => (l.direction === 'given' && !l.closedAt ? [l.id] : []))), [loans])
   const [direction, setDirection] = useState<'in' | 'out' | null>(rule.direction === 'in' ? 'in' : rule.direction === 'out' ? 'out' : null)
   const [choice, setChoice] = useState<Choice>(() => choiceOfRule(rule))
   const [limit, setLimit] = useState<number | null>(rule.maxAmount ?? null)
@@ -90,7 +96,7 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
           <option value="">oba kierunki</option>
         </select>
         {/* A member's money: the rest the person's setting gives only – the rule keeps none (AP-4, D80 b). */}
-        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={(o) => forRule(o) || restNotOfRule(o, members)} testId="import-rule-edit" />
+        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={(o) => forRule(o, direction, repayable) || restNotOfRule(o, members)} testId="import-rule-edit" />
         {rule.mode === 'amount' && (
           <label className="flex items-center gap-1 text-muted">
             do kwoty

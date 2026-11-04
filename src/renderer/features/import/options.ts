@@ -1,5 +1,5 @@
 import { isOwnName } from '@shared/import/classify'
-import { opKindOf, sameChoice, type Choice, type ImportGroup } from '@shared/import/reconcile'
+import { opKindOf, sameChoice, shareWho, type Choice, type ImportGroup } from '@shared/import/reconcile'
 import { HOUSE_MEMBER_ID, inflowOf, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
 
 /**
@@ -187,6 +187,9 @@ export function fits(option: Option, direction: 'in' | 'out'): boolean {
  * loan (one without its record – any loan of the Radar), the same member. Anything else it changes as before.
  */
 export function bulkKeeps(option: Option, current: Choice): boolean {
+  // A part repaying a loan (D100): any other decision would drop it – only the whole repayment of its loan takes it.
+  const loans = (current.shares ?? []).filter((x) => x.loanId && x.amount > 0)
+  if (current.kind === 'income' && loans.length) return !loans.some((x) => option === `loan:${x.loanId}`)
   if (current.kind === 'tax' || current.kind === 'trading') return option !== current.kind
   if (current.kind === 'loan') return current.loanId ? option !== `loan:${current.loanId}` : !(option === 'loan' || option.startsWith('loan:'))
   if (current.kind === 'income' && current.household) return !option.startsWith(`household:${memberOfChoice(current)}:`)
@@ -207,11 +210,13 @@ export function offersNewMember(
   const name = (g.names[0] ?? g.label).trim()
   if (g.direction !== 'in' || !name || !g.rows.length || opKindOf(g.rows[0]!.row.operation) !== 'transfer') return false
   if (choice.kind !== 'income' || choice.household || isOwnName(name, ownNames)) return false
+  // Their money repaying a loan (D100): a loan's repayment – no new member of it.
+  if (choice.shares?.some((x) => x.loanId)) return false
   return !members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.toUpperCase()))
 }
 
-/** The lines of „w tym za” as one text – of 0 zł too (`sameChoice` leaves those out). */
-const linesKey = (xs: Choice['shares']): string => (xs ?? []).map((x) => `${x.memberId}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`).join(',')
+/** The lines of „w tym za” as one text – of 0 zł too (`sameChoice` leaves those out); a loan's part by its loan (D100). */
+const linesKey = (xs: Choice['shares']): string => (xs ?? []).map((x) => `${shareWho(x)}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`).join(',')
 
 /**
  * A row's decision after its „w tym za” changed (AF-27 – a new line of 0 zł was „the same as the group's”, so the row's

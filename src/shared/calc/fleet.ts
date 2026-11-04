@@ -25,7 +25,7 @@ import { openingsOf } from './balances'
 import { balanceOf, heldOf, ledgerOrder, settleHousehold, settlesHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
 import { incomeByMonth, incomeStats, taxOfDockings, type IncomeContext, type IncomeStats } from './income'
 import { goalAt, goalDecided, goalTakes } from './goals'
-import { debtOf, loanStates, type LoanState } from './loans'
+import { debtOf, loanParts, loanStates, type LoanState } from './loans'
 import { coveredMonths, monthsBefore } from './history'
 import { accountAmounts, categoryIndex, costOf, isCargoPayment, isTwoSided, partsOf, splitEvenly, sum } from './operations'
 
@@ -775,6 +775,8 @@ export function computeFleet(input: FleetInput): FleetState {
   // Repayments of the loans given (their records), from before the start too – the same count as `calc/loans.ts`.
   const givenBack = new Map<string, number>()
   for (const t of txs) if (t.kind === 'loan' && t.amount > 0 && t.loanId && start && t.date < start && loansById.get(t.loanId)?.direction === 'given') givenBack.set(t.loanId, (givenBack.get(t.loanId) ?? 0) + t.amount)
+  // …and the parts of inflows repaying one (D100, T355), as a whole repayment.
+  if (start) for (const t of txs) if (t.date < start) for (const x of loanParts(t)) if (loansById.get(x.loanId)?.direction === 'given') givenBack.set(x.loanId, (givenBack.get(x.loanId) ?? 0) + x.amount)
   const salaryOfMonth = new Map<string, SalaryPayment>()
   const dailyExtra = new Map<string, number>()
   /** The loot kept in the planned envelopes (F28): month → category → grosze. */
@@ -920,6 +922,27 @@ export function computeFleet(input: FleetInput): FleetState {
       else if (f.gift < 0) addShields(-f.gift, moves)
     }
   }
+  /**
+   * The parts of an inflow repaying a loan given (D100, T355 – whoever sent them), as its whole repayment (T70): back to
+   * the shields up to what is owed; returns how much – the rest of the part is income (it docks with the inflow's rest).
+   * A part of a loan unknown or taken is income (as an older version reads it).
+   */
+  const repayLoanParts = (t: Transaction, moves: Moves): number => {
+    let back = 0
+    for (const x of loanParts(t)) {
+      const loan = loansById.get(x.loanId)
+      if (loan?.direction !== 'given') continue
+      const owed = Math.max(0, loan.amount - (givenBack.get(loan.id) ?? 0))
+      const v = Math.min(x.amount, owed)
+      if (!v) continue
+      givenBack.set(loan.id, (givenBack.get(loan.id) ?? 0) + v)
+      loanOpen.set(loan.id, (loanOpen.get(loan.id) ?? 0) - v)
+      moves.loans = { ...moves.loans, [loan.id]: (moves.loans?.[loan.id] ?? 0) - v }
+      addShields(v, moves)
+      back += v
+    }
+    return back
+  }
 
   // The budget's first month started before the budget did: what it spent until the start came out of that month's
   // salary already (T45), the start pays only the rest.
@@ -1039,10 +1062,10 @@ export function computeFleet(input: FleetInput): FleetState {
           break
         }
         // A household member's money (D80, D81 – by parts): it repays what they owe (back to the shields), then it is
-        // their advance or income – only income docks (a part of no member too).
+        // their advance or income – only income docks (a part of no member too); a part repaying a loan (D100) – the loan's.
         const flows = household.byTx.get(t.id)
         settle(flows, moves)
-        const rest = amt - heldOf(flows)
+        const rest = amt - heldOf(flows) - repayLoanParts(t, moves)
         const d = dockingByTx.get(t.id)
         if (!rest) break
         if (d?.split) applySplit(rest, d.split, moves)
