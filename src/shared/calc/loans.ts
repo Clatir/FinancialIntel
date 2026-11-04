@@ -7,9 +7,13 @@
  *   the repayment, and the range counts the shields less the debt still to pay;
  * - what a household member owes (the purchases they finance – `calc/household.ts`, D80) is recalled 30 days after
  *   their oldest purchase still owed.
+ * - a loan given is repaid by its operations of kind 'loan' and by the parts of any inflow naming it (D100, T355 –
+ *   `Split.loanId`, whoever sent it): both read here (`forEachLoanOperation`), each with who paid (`payments`, T356).
  */
+import type { HouseholdMember } from '../schema/budget'
 import type { Container, Loan, Transaction } from '../schema/records'
 import { addMonths, daysBetween, daysInMonth } from './dates'
+import { incomeShares, memberName, memberOf, nameIn } from './household'
 import { splitEvenly, sum } from './operations'
 
 /** An installment unpaid this many days after its date is overdue (D72). */
@@ -34,42 +38,127 @@ export interface LoanState {
   next: { date: string; amount: number } | null
   /** Installments not covered yet, in order (what is left of each). */
   left: Array<{ date: string; amount: number }>
+  /** A given loan's repayments, oldest first, each with who sent it (D100, T356); a taken loan – none. */
+  payments: LoanPayment[]
+}
+
+/** One repayment of a loan given (D100): its operation – whole, or a part of an inflow – and who sent it. */
+export interface LoanPayment {
+  txId: string
+  date: string
+  amount: number
+  /** The household member whose inflow it was (an income's `memberId`), else null. */
+  memberId: string | null
+  /** The operation's counterparty: the sender as the bank (or the user) wrote it. */
+  counterparty: string
+  /** A part of an inflow (`Split.loanId`), not a whole operation of the loan. */
+  part: boolean
 }
 
 interface Flows {
   out: number
   in: number
+  payments: LoanPayment[]
 }
+
+const NO_PARTS: ReadonlyArray<{ loanId: string; amount: number }> = []
+
+/**
+ * The parts of an inflow repaying loans (D100, T355 – `Split.loanId`): as `incomeShares` cuts them at its money, in the
+ * lines' order. Whose the rest is – the household's (`calc/household.ts`).
+ */
+export function loanParts(t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'advance' | 'inflowKind' | 'splits'>): ReadonlyArray<{ loanId: string; amount: number }> {
+  if (t.kind !== 'income' || t.amount <= 0 || !t.splits.some((s) => s.loanId)) return NO_PARTS
+  return incomeShares(t).flatMap((s) => (s.loanId ? [{ loanId: s.loanId, amount: s.amount }] : []))
+}
+
+/** The loans an operation pays into – a loan's own operation, the parts of an inflow (D100): for the filters. */
+export const loanIdsOf = (t: Pick<Transaction, 'kind' | 'amount' | 'memberId' | 'repaid' | 'advance' | 'inflowKind' | 'splits' | 'loanId'>): string[] => [
+  ...(t.loanId ? [t.loanId] : []),
+  ...loanParts(t).map((x) => x.loanId)
+]
 
 /**
  * The money of the loans' operations, by loan, in one pass over the operations (W27): out of the budget (< 0) and into
- * it (> 0) – the loan's own operations, and the payments of its container (an installment of a taken loan is the
- * cargo's).
+ * it (> 0) – the loan's own operations, the payments of its container (an installment of a taken loan is the cargo's)
+ * and the parts of inflows repaying a given one (D100); a given loan's money in with who sent it.
  */
 function flowsByLoan(loans: readonly Loan[], transactions: readonly Transaction[], containers: readonly Container[], today: string): Map<string, Flows> {
   const flows = new Map<string, Flows>()
-  for (const l of loans) flows.set(l.id, { out: 0, in: 0 })
-  forEachLoanOperation(loans, transactions, containers, today, (id, t) => {
+  for (const l of loans) flows.set(l.id, { out: 0, in: 0, payments: [] })
+  const given = new Set(loans.filter((l) => l.direction === 'given').map((l) => l.id))
+  forEachLoanOperation(loans, transactions, containers, today, (id, t, amount) => {
     const f = flows.get(id)!
-    if (t.amount < 0) f.out += -t.amount
-    else f.in += t.amount
+    if (amount < 0) f.out += -amount
+    else if (amount > 0) {
+      f.in += amount
+      if (given.has(id)) f.payments.push({ txId: t.id, date: t.date, amount, memberId: t.kind === 'income' ? t.memberId : null, counterparty: t.counterparty, part: t.kind === 'income' })
+    }
   })
   return flows
 }
 
 /**
- * Each operation of the loans up to `today` with its loan: the loan's own operations and its container's payments (an
- * installment of a taken loan is the cargo's) – the one reading of them, for the loans' states and the net worth (F24).
+ * Each operation of the loans up to `today` with its loan and its money (signed): the loan's own operations, its
+ * container's payments (an installment of a taken loan is the cargo's) and the parts of inflows repaying a given one
+ * (D100, `loanParts` – each part apart) – the one reading of them, for the loans' states and the net worth (F24).
  */
-export function forEachLoanOperation(loans: readonly Loan[], transactions: readonly Transaction[], containers: readonly Container[], today: string, each: (loanId: string, t: Transaction) => void): void {
+export function forEachLoanOperation(
+  loans: readonly Loan[],
+  transactions: readonly Transaction[],
+  containers: readonly Container[],
+  today: string,
+  each: (loanId: string, t: Transaction, amount: number) => void
+): void {
   const known = new Set(loans.map((l) => l.id))
+  const given = new Set(loans.filter((l) => l.direction === 'given').map((l) => l.id))
   const loanOfContainer = new Map<string, string>()
   for (const c of containers) if (c.loanId != null && known.has(c.loanId)) loanOfContainer.set(c.id, c.loanId)
   for (const t of transactions) {
     if (t.date > today) continue
     const id = t.kind === 'loan' ? t.loanId : t.kind === 'expense' && t.containerId != null ? loanOfContainer.get(t.containerId) : undefined
-    if (id != null && known.has(id)) each(id, t)
+    if (id != null && known.has(id)) each(id, t, t.amount)
+    // A part of an inflow (D100): of a given loan only – of another one the engine docks it as income (as an older version).
+    for (const x of loanParts(t)) if (given.has(x.loanId)) each(x.loanId, t, x.amount)
   }
+}
+
+/** One repayment of a loan given (T70, T355 – whole or a part of an inflow): its money and what of it repays the debt. */
+export interface LoanBack {
+  loanId: string
+  amount: number
+  /** Back to the shields (up to what is owed); the rest of `amount` – interest – is income. */
+  back: number
+}
+
+/**
+ * What of each repayment of a loan given repays its debt (T70, T355; review 2 of N2): over the whole history up to `today`
+ * in the engine's order (`sorted`), each up to the loan's amount less what was repaid before it – before the budget's start
+ * and inside an account's opening balance too (repaid, though not in the run); the rest – interest – is income: the engine
+ * docks it, the income statistics count it (AF-5). By operation, its repayments in `loanParts`' order (whole – one); a
+ * loan unknown or taken – none (its part is income, its own operations move the shields only).
+ */
+export function loanBacksOf(loans: readonly Loan[], sorted: readonly Transaction[], today: string): Map<string, LoanBack[]> {
+  const out = new Map<string, LoanBack[]>()
+  const byId = new Map(loans.map((l) => [l.id, l]))
+  if (![...byId.values()].some((l) => l.direction === 'given')) return out
+  const repaid = new Map<string, number>()
+  const add = (t: Transaction, loanId: string, amount: number) => {
+    const loan = byId.get(loanId)
+    if (loan?.direction !== 'given' || amount <= 0) return
+    const before = repaid.get(loanId) ?? 0
+    const back = Math.min(amount, Math.max(0, loan.amount - before))
+    repaid.set(loanId, before + back)
+    const list = out.get(t.id) ?? out.set(t.id, []).get(t.id)!
+    list.push({ loanId, amount, back })
+  }
+  for (const t of sorted) {
+    if (t.date > today) continue
+    if (t.kind === 'loan') {
+      if (t.loanId) add(t, t.loanId, t.amount)
+    } else for (const x of loanParts(t)) add(t, x.loanId, x.amount)
+  }
+  return out
 }
 
 export function loanState(loan: Loan, transactions: readonly Transaction[], containers: readonly Container[], today: string): LoanState {
@@ -92,13 +181,85 @@ function stateOf(loan: Loan, flows: Flows, today: string): LoanState {
   }
   const due = left.filter((s) => daysBetween(s.date, today) >= OVERDUE_DAYS)
   const overdue = due.length ? { date: due[0]!.date, last: due.at(-1)!.date, amount: sum(due.map((s) => s.amount)), days: daysBetween(due[0]!.date, today) } : null
-  return { loan, total, paid, open, overdue, next: left[0] ?? null, left }
+  const payments = [...flows.payments].sort((a, b) => a.date.localeCompare(b.date) || a.txId.localeCompare(b.txId))
+  return { loan, total, paid, open, overdue, next: left[0] ?? null, left, payments }
+}
+
+/** A payer of a loan given (D100, T356): their name, what they paid together, whether they are the borrower. */
+export interface LoanPayer {
+  name: string
+  amount: number
+  /**
+   * The loan's own person: all the words of the loan's counterparty (its name when it has none) in the sender's name, as
+   * `loanFor` reads it; a repayment naming nobody (the Radar's own „Spłata” copies the loan's counterparty – none when it
+   * has none); a loan without its person's name – its own repayments too (review 2: nobody to tell them apart from).
+   */
+  borrower: boolean
+}
+
+/**
+ * Who paid a loan given (D100, T356 – the Radar's row „kto zapłacił”): each payer once, in the order they first paid,
+ * with their sum – a household member by their name (their inflow, or their name in the bank), anyone else by the name
+ * the operation has (the borrower's repayment naming nobody – by the loan's counterparty, else „pożyczkobiorca”).
+ */
+export function loanPayers(s: Pick<LoanState, 'loan' | 'payments'>, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name' | 'bankNames'>> = []): LoanPayer[] {
+  const person = s.loan.counterparty.trim()
+  const borrower = (p: LoanPayment): boolean =>
+    (!p.memberId && !p.counterparty.trim()) || nameIn(person || s.loan.name, p.counterparty) || (!person && !p.part)
+  const out = new Map<string, LoanPayer>()
+  for (const p of s.payments) {
+    const member = p.memberId ? null : memberOf(p.counterparty, members)
+    const name = p.memberId ? memberName(p.memberId, members) : (member?.name ?? (p.counterparty.trim() || person || 'pożyczkobiorca'))
+    const key = p.memberId ? `m:${p.memberId}` : member ? `m:${member.id}` : `n:${name.toLowerCase()}`
+    const prev = out.get(key)
+    if (prev) prev.amount += p.amount
+    else out.set(key, { name, amount: p.amount, borrower: borrower(p) })
+  }
+  return [...out.values()]
 }
 
 export function loanStates(loans: readonly Loan[], transactions: readonly Transaction[], containers: readonly Container[], today: string): LoanState[] {
   if (!loans.length) return []
   const flows = flowsByLoan(loans, transactions, containers, today)
   return loans.map((l) => stateOf(l, flows.get(l.id)!, today))
+}
+
+/** A loan given an inflow's part may repay (D100): its name and what is still open (the engine's state). */
+export interface LoanChoice {
+  id: string
+  name: string
+  /** Open now (closed – 0). */
+  open: number
+  /** Closed already: offered only because something names it (it stays as it was). */
+  closed: boolean
+  /** Open without one operation's repayment of it – what it owed for that operation (the editor of a saved one). */
+  openWithout: (txId: string) => number
+}
+
+/**
+ * The loans given an inflow's part may repay (D100, T359 – the quick entry, the editor, the import): the open ones of
+ * the Radar, oldest first, and the ones named already (`keep` – a closed one stays as it was).
+ */
+export function loanChoices(
+  loans: readonly Pick<Loan, 'id' | 'name' | 'direction' | 'date' | 'closedAt'>[],
+  states: readonly Pick<LoanState, 'loan' | 'open' | 'total' | 'paid' | 'payments'>[] | null | undefined,
+  keep: readonly string[] = []
+): LoanChoice[] {
+  const byId = new Map((states ?? []).map((s) => [s.loan.id, s]))
+  return loans
+    .filter((l) => l.direction === 'given' && (!l.closedAt || keep.includes(l.id)))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    .map((l) => {
+      const s = byId.get(l.id)
+      const closed = l.closedAt != null
+      return {
+        id: l.id,
+        name: l.name,
+        open: s?.open ?? 0,
+        closed,
+        openWithout: (txId: string) => (closed || !s ? 0 : Math.max(0, s.total - s.paid + sum(s.payments.filter((p) => p.txId === txId).map((p) => p.amount))))
+      }
+    })
 }
 
 /** The debt of the taken loans still to pay (the range counts the shields less it – D72). */

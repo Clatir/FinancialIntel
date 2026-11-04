@@ -2,14 +2,17 @@
  * Income for the statistics (D81, 1.4.0): what came in as mine, month by month, in two lines – work and other income,
  * and trading (the withdrawals from the trading account less the top-ups of it). Never income: own transfers, what a
  * household member pays back or pays ahead (`calc/household.ts`), a member's money before the settlements' start (it
- * cannot be told apart any more), and the money of the ICTTJ pool „Podatek” (the PIT-38 reserve, outside the budget).
+ * cannot be told apart any more), a loan's repayment up to its debt – whole (kind 'loan') or a part of an inflow (D100,
+ * T355; beyond the debt – interest – it is income, as the engine docks it: T70, AF-5; a part of a loan unknown or taken
+ * is income) – and the money of the ICTTJ pool „Podatek” (the PIT-38 reserve, outside the budget).
  * The panel „Przychody” (averages of 3, 6 and 12 months, the median) and the engine's income average (the salary
  * warning) read the same numbers.
  */
 import type { HouseholdMember } from '../schema/budget'
-import type { Docking, Transaction } from '../schema/records'
+import type { Docking, Loan, Transaction } from '../schema/records'
 import { monthOf } from './dates'
-import { heldOf, incomeShares, isMemberMoney, settleHousehold, type HouseholdLedger } from './household'
+import { heldOf, incomeShares, isMemberMoney, ledgerOrder, settleHousehold, type HouseholdLedger } from './household'
+import { loanBacksOf, loanParts, type LoanBack } from './loans'
 import { sum } from './operations'
 
 export interface IncomeContext {
@@ -21,6 +24,12 @@ export interface IncomeContext {
   members: ReadonlyArray<Pick<HouseholdMember, 'bankNames'>>
   /** Of each operation, what went to the ICTTJ pool „Podatek” (grosze, ≥ 0). */
   tax: ReadonlyMap<string, number>
+  /**
+   * Of each operation, its repayments of loans given and what of each repays the debt (the engine's `loanBacksOf`): the
+   * rest of their money – interest – is income (T70, AF-5). None = no loan known: a loan's part is income, a loan's own
+   * operation never.
+   */
+  loanBacks?: ReadonlyMap<string, readonly LoanBack[]>
 }
 
 export interface IncomeParts {
@@ -32,8 +41,28 @@ export interface IncomeParts {
 
 const NONE: IncomeParts = { work: 0, trading: 0 }
 
-/** The context without the engine: the whole history's ledger, no settlements' start, no pools. */
-export const plainIncomeContext = (transactions: readonly Transaction[]): IncomeContext => ({ ledger: settleHousehold(transactions), since: null, members: [], tax: new Map() })
+/**
+ * The context without the engine: the whole history's ledger, no settlements' start, no pools. `loans` – the loans the
+ * caller knows (none – a loan's part is income, T355); not passed – their debts unknown: a loan's part is never income
+ * (przegląd N2 3.3 – the defaults of the reports counted it as income again), as the engine docks one up to its debt.
+ */
+export const plainIncomeContext = (transactions: readonly Transaction[], loans?: readonly Loan[]): IncomeContext => ({
+  ledger: settleHousehold(transactions),
+  since: null,
+  members: [],
+  tax: new Map(),
+  loanBacks: !loans ? partsBack(transactions) : loans.length ? loanBacksOf(loans, [...transactions].sort(ledgerOrder), '9999-12-31') : new Map()
+})
+
+/** Each part of a loan repaying its debt whole – the loans unknown (`plainIncomeContext` without them). */
+function partsBack(transactions: readonly Transaction[]): Map<string, LoanBack[]> {
+  const out = new Map<string, LoanBack[]>()
+  for (const t of transactions) {
+    const parts = loanParts(t)
+    if (parts.length) out.set(t.id, parts.map((x) => ({ loanId: x.loanId, amount: x.amount, back: x.amount })))
+  }
+  return out
+}
 
 /** What of each operation went to the pool „Podatek” (a docking of the pool, or the tax part of a docking's split). */
 export function taxOfDockings(byTx: ReadonlyMap<string, Pick<Docking, 'pool' | 'split'>>, transactions: readonly Transaction[]): Map<string, number> {
@@ -59,7 +88,15 @@ export function incomeParts(t: Transaction, ctx: IncomeContext): IncomeParts {
     // The members' parts the ledger did not settle (an account's operation inside its opening balance) are theirs.
     const flows = ctx.ledger.byTx.get(t.id)
     const kept = flows ? heldOf(flows) : sum(incomeShares(t).filter((x) => x.memberId).map((x) => x.amount))
-    return { work: Math.max(0, t.amount - kept - tax), trading: 0 }
+    // A part repaying a loan given (D100) – not income up to its debt; beyond it (interest) and a part of a loan unknown or
+    // taken it is, as the engine docks it (T70, T355, AF-5).
+    const loans = sum((ctx.loanBacks?.get(t.id) ?? []).map((x) => x.back))
+    return { work: Math.max(0, t.amount - kept - loans - tax), trading: 0 }
+  }
+  if (t.kind === 'loan') {
+    // A loan given repaid beyond its debt (interest – T70, AF-5) is income; the rest of a loan's money never.
+    const x = t.amount > 0 ? ctx.loanBacks?.get(t.id)?.[0] : undefined
+    return x ? { work: Math.max(0, x.amount - x.back), trading: 0 } : NONE
   }
   if (t.kind === 'trading') {
     // The tax pool's money (a withdrawal into it, its return to the trading capital) is not the budget's.

@@ -70,6 +70,28 @@ function MemberPick({ data, value, onChange, none, testId, compact }: { data: Qu
   )
 }
 
+/** The loan a quick entry's part repays (D100, T359): its id and the amount typed – null: none typed. */
+export type QuickLoan = { loanId: string; amount: number | null }
+
+/**
+ * The part repaying a loan (D100, T359): its loan of the list and its amount – typed, else what the loan still owes, at
+ * most what the inflow has left beyond the others' parts.
+ */
+export function quickLoanPart(
+  loan: QuickLoan | null,
+  data: Pick<QuickData, 'loans' | 'members'> | null,
+  d: Pick<QuickDraft, 'kind' | 'household' | 'memberId' | 'amount'>,
+  shares: Readonly<Record<string, number>>
+): { loan: NonNullable<QuickData['loans']>[number]; amount: number } | null {
+  const l = loan && d.kind === 'income' ? (data?.loans ?? []).find((x) => x.id === loan.loanId) : undefined
+  if (!l || !data) return null
+  const others = d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).reduce((a, m) => a + shares[m.id]!, 0) : 0
+  return { loan: l, amount: loan!.amount ?? Math.min(l.open, Math.max(0, d.amount - others)) }
+}
+
+/** The part's amount typed: an emptied field – back to what the loan owes (null, przegląd N2 2.12), never 0 zł. */
+export const typedLoan = (x: QuickLoan | null, v: number | null): QuickLoan | null => (x ? { ...x, amount: v } : x)
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-2">
@@ -92,6 +114,11 @@ export function QuickApp() {
   const [share, setShare] = useState<Share | null>(null)
   // Others' money in a member's transfer (D81, „w tym za …”), by member.
   const [shares, setShares] = useState<Record<string, number>>({})
+  // The part repaying a loan given (D100, T359 – whoever sent it): its loan; its amount typed, else what the loan still
+  // owes, at most what the inflow has left (null).
+  const [loan, setLoan] = useState<QuickLoan | null>(null)
+  const loanRef = useRef(loan)
+  loanRef.current = loan
   const [nightOk, setNightOk] = useState(false)
   // Sending, or saved and closing (B51): no second save until the window opens again.
   const [busy, setBusy] = useState(false)
@@ -139,6 +166,7 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setLoan(null)
         setNightOk(false)
         setOfficer(null)
       } else if (fresh && !fresh.accounts.some((a) => a.id === k.d.accountId)) setD((x) => ({ ...x, accountId: fresh.accountId }))
@@ -163,6 +191,7 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setLoan(null)
         setNightOk(false)
         setOfficer(null)
         kept.current.at = 0
@@ -179,6 +208,7 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setLoan(null)
         // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
         // opened again meanwhile.
         if (closing.current) clearTimeout(closing.current)
@@ -220,7 +250,10 @@ export function QuickApp() {
         setShare((sh) => (sh && sh.lines.some((l) => !member(l.memberId)) ? null : sh))
         setShares((xs) => Object.fromEntries(Object.entries(xs).filter(([id]) => member(id))))
       }
-      const changed = [account && 'kont', category && 'kategorii', people && 'domowników'].filter((x): x is string => !!x)
+      // A loan closed or gone meanwhile (D100): its part is chosen again.
+      const loanGone = !!loanRef.current && !(fresh.loans ?? []).some((l) => l.id === loanRef.current!.loanId)
+      if (loanGone) setLoan(null)
+      const changed = [account && 'kont', category && 'kategorii', people && 'domowników', loanGone && 'pożyczek'].filter((x): x is string => !!x)
       if (changed.length) setMsg({ ok: false, text: `Lista ${changed.length > 1 ? `${changed.slice(0, -1).join(', ')} i ${changed.at(-1)}` : changed[0]} się zmieniła – sprawdź wybór.` })
     })
     // Ctrl+$ in the main window (B61): the preview's and the window's amounts change at once, not at the next opening.
@@ -243,16 +276,37 @@ export function QuickApp() {
   const asks = d.kind !== 'income' && !!data && d.amount >= data.impulseThreshold && data.impulseThreshold > 0
   const hide = !!data?.hideAmounts
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
+  // The part repaying a loan (D100): its loan of the list and its amount (`quickLoanPart`).
+  const loanNow = useMemo(
+    () => quickLoanPart(loan, data, { kind: d.kind, household: d.household, memberId: d.memberId, amount: d.amount }, shares),
+    [loan, data, d.kind, d.household, d.memberId, d.amount, shares]
+  )
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
     if (!data || d.amount <= 0) return null
     if (d.kind === 'income') {
       const m = d.household ? data.members.find((x) => x.id === d.memberId) : undefined
-      if (!m) return <span>Wpływ – dokuje w warstwach okrętu.</span>
+      // A loan's part (D100): back to the shields up to what it owes, beyond it income (T70).
+      const toLoan = loanNow?.amount ?? 0
+      const loanLine = loanNow && toLoan > 0 && (
+        <span data-testid="quick-preview-loan">
+          Spłata pożyczki {loanNow.loan.name}: {money(Math.min(toLoan, loanNow.loan.open))} wraca do osłon (zostało {money(loanNow.loan.open)} → {money(Math.max(0, loanNow.loan.open - toLoan))})
+          {toLoan > loanNow.loan.open ? `; ponad dług ${money(toLoan - loanNow.loan.open)} jako przychód (dokuje)` : ''}.
+        </span>
+      )
+      if (!m) {
+        const rest = d.amount - toLoan
+        return (
+          <div className="flex flex-col">
+            {rest < 0 ? <span className="text-down">Spłata pożyczki przekracza kwotę.</span> : loanLine}
+            {rest > 0 && <span>{toLoan ? `Reszta ${money(rest)} – wpływ, dokuje w warstwach okrętu.` : 'Wpływ – dokuje w warstwach okrętu.'}</span>}
+          </div>
+        )
+      }
       // Others' money in it first (D81), then the sender's: what each owes first, the rest their advance or income.
       const others = data.members.filter((x) => x.via === m.id && (shares[x.id] ?? 0) > 0)
-      const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0)
+      const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0) - toLoan
       const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean) => {
         const back = Math.min(amount, who.owed)
         const rest = amount - back
@@ -260,12 +314,13 @@ export function QuickApp() {
       }
       return (
         <div className="flex flex-col">
-          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : <span data-testid="quick-preview-member">Od: {line(m, own, d.advance)}</span>}
+          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : own > 0 || !toLoan ? <span data-testid="quick-preview-member">Od: {line(m, own, d.advance)}</span> : null}
           {others.map((x) => (
             <span key={x.id} data-testid="quick-preview-share">
               W tym za: {line(x, shares[x.id]!, x.inflow === 'advance')}
             </span>
           ))}
+          {own >= 0 && loanLine}
         </div>
       )
     }
@@ -360,7 +415,7 @@ export function QuickApp() {
       )
     }
     return out
-  }, [data, d, lines, share, cats, money, shares])
+  }, [data, d, lines, share, cats, money, shares, loanNow])
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
@@ -370,14 +425,18 @@ export function QuickApp() {
     if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
     if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
     if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
+    // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
+    const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
+    // A loan's part (D100): with an amount, within the inflow beside the others' parts.
+    if (d.kind === 'income' && loan && (loanNow?.amount ?? 0) <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę spłaty pożyczki.' })
+    if (loanNow && parts.reduce((a, x) => a + x.amount, 0) + loanNow.amount > d.amount) return setMsg({ ok: false, text: 'Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.' })
     sending.current = true
     next.current = andNext
     setBusy(true)
     setMsg(null)
-    // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
-    const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
-    void api.quickAdd({ ...d, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
-  }, [busy, data, d, lines, share, night, nightOk, shares])
+    const loanPart = loanNow ? { loanId: loanNow.loan.id, amount: loanNow.amount } : null
+    void api.quickAdd({ ...d, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts, loanPart } satisfies QuickDraft)
+  }, [busy, data, d, lines, share, night, nightOk, shares, loan, loanNow])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -414,6 +473,7 @@ export function QuickApp() {
     setLines([])
     setShare(null)
     setShares({})
+    setLoan(null)
     setNightOk(false)
     setOfficer(null)
     setRestored(false)
@@ -427,6 +487,7 @@ export function QuickApp() {
     setLines([])
     setShare(null)
     setShares({})
+    setLoan(null)
     setOfficer(null)
     setRestored(false)
     setD((x) => fromTemplate(withAmount ? t : { ...t, amount: x.amount }, data, { ...blank(data), accountId: x.accountId || data.accountId }))
@@ -679,6 +740,40 @@ export function QuickApp() {
                   </div>
                 </Row>
               ))}
+          {/* D100: any inflow – whoever sent it – may repay a loan given, all of it or a part; the rest as above. */}
+          {d.kind === 'income' && (data.loans?.length ?? 0) > 0 && (
+            <Row label="Spłata pożyczki">
+              <div className="flex items-center gap-1.5">
+                <select
+                  className="input min-w-0 flex-1"
+                  value={loan?.loanId ?? ''}
+                  onChange={(e) => {
+                    const id = e.currentTarget.value
+                    setLoan(id ? { loanId: id, amount: null } : null)
+                  }}
+                  aria-label="Spłata pożyczki"
+                  data-testid="quick-loan"
+                >
+                  <option value="">— nie —</option>
+                  {data.loans!.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} (zostało {money(l.open)})
+                    </option>
+                  ))}
+                </select>
+                {loan && (
+                  <AmountField
+                    className="w-[110px]"
+                    value={loanNow?.amount || null}
+                    allowEmpty
+                    onChange={(v) => setLoan((x) => typedLoan(x, v))}
+                    aria-label="Kwota spłaty pożyczki"
+                    data-testid="quick-loan-amount"
+                  />
+                )}
+              </div>
+            </Row>
+          )}
           <Row label="Notatka">
             <input className="input" value={d.note} onChange={(e) => set({ note: e.currentTarget.value })} maxLength={500} data-testid="quick-note" />
           </Row>

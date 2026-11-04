@@ -278,10 +278,12 @@ test('AP-7, przegląd N1 4: temat dwóch marek z „w tym za” – linie zostaj
     // Each brand's line says where its 100 zł went: the second one gives nothing – Babcia owes no more.
     await expect(big.getByTestId('import-group-also-for-spread')).toHaveText(`z wpłaty ${earlier.slice(8, 10)}.${earlier.slice(5, 7)} 100,00 zł`)
     await expect(small.getByTestId('import-group-also-for-spread')).toHaveText('Babcia nie ma nic do oddania – bez części')
-    // A change on the theme's row (Tata's money repays): each brand takes it, its 100 zł as typed (review N1 4, 2).
-    await theme.getByRole('radio', { name: 'spłata' }).first().click()
+    // A change on the theme's row (Tata's money repays, the rest as income – in the list since AP-4): each brand takes it,
+    // its 100 zł as typed (review N1 4, 2).
+    await expect(theme.getByTestId('import-theme-kind')).toHaveValue(`household:${TATA}:advance`)
+    await theme.getByTestId('import-theme-kind').selectOption(`household:${TATA}:income`)
     for (const g of [big, small]) {
-      await expect(g.getByRole('radio', { name: 'spłata' })).toHaveAttribute('aria-checked', 'true')
+      await expect(g.getByTestId('import-group-kind')).toHaveValue(`household:${TATA}:income`)
       await expect(g.getByTestId('import-group-also-for-amount')).toHaveValue('100,00')
     }
     await expect(theme.getByTestId('import-theme-also-for-brands')).toBeVisible()

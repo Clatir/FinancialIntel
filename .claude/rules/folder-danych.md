@@ -42,7 +42,8 @@ paths:
   naprawia sam – T337). Każdy zapis i usunięcie obecności w main – przez `PresenceKeeper` (`write` / `clear` / `beat`, po
   kolei w folderze; usunięcie sprawdza trzymanie w swojej kolejce), nigdy `writePresence` / `clearPresence` wprost;
   kolejka uruchamia tylko własne zapisy keepera (treść z `content`) – nie dawaj jej operacji wołającego (czekałaby na
-  siebie). Zamknięcie czeka na usunięcie najwyżej `PRESENCE_CLEAR_MS` (`clearWithin`), dalej idzie w tle. Błąd
+  siebie). Zamknięcie czeka na usunięcie (`clearAtClose`): zmiana folderu najwyżej `PRESENCE_CLEAR_MS`, dalej idzie w tle;
+  wyjście z aplikacji – w limicie wyjścia (`quitBy`; proces kończy się zaraz potem, usunięcie w tle by nie doszło). Błąd
   heartbeatu nie jest połykany – w logu na początku i końcu serii, seria per folder (zamknięcie ją kończy).
 - Usuwanie: plik z wersją w historii usuwany od razu, bez niej – do Kosza; `removeRecord` odmawia przy drugiej kopii id.
 - Kopie ZIP: dzienne (14) i tygodniowe (8), przed importem (10), przed migracją; pełna kontrola folderu przed kopią
