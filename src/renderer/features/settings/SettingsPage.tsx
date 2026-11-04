@@ -359,7 +359,8 @@ function FolderTab() {
       >
         <p className="mb-2 text-[11.5px] text-muted">
           Raz dziennie – przy starcie i w tle, gdy aplikacja działa w zasobniku – ZIP danych bez historii zmian (zostaje 14 dziennych i 8
-          tygodniowych); przed każdym importem z banku (10 ostatnich) i przed migracją formatu zawsze. Folder:{' '}
+          tygodniowych); „Kopia teraz” – 5 ostatnich ręcznych (szósta usuwa najstarszą); przed każdym importem z banku (10 ostatnich) i przed migracją formatu
+          zawsze. Folder:{' '}
           <span className="num">{backups?.dir}</span>
         </p>
         {backups && <BackupAge files={backups.files} failure={backups.failure} />}

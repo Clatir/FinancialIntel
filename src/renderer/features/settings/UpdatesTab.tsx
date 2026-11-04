@@ -7,6 +7,7 @@ import { checkForUpdates, downloadUpdate, restartToUpdate, setUpdatePrefs, setUp
 import { toast } from '../../store/ui'
 import { installWhen, useTray } from '../../store/tray'
 import { IconExternal, IconSync } from '../../components/icons'
+import { ConfirmButton } from '../../components/ConfirmButton'
 import { Badge, Field, Panel, Toggle, cx } from '../../components/ui'
 
 /** GitHub's page for a new fine-grained token (only this repository, Contents: read-only). */
@@ -51,9 +52,15 @@ function TokenPanel({ s }: { s: UpdateState }) {
             Zapisz i sprawdź
           </button>
           {s.token.present && (
-            <button className="btn btn-ghost" onClick={() => void setUpdateToken(null)} data-testid="update-token-remove">
+            <ConfirmButton
+              className="btn btn-ghost"
+              confirmLabel="Usuń token"
+              message="Token jest zapisany tylko na tym komputerze – nowy trzeba utworzyć na GitHubie."
+              onConfirm={() => void setUpdateToken(null)}
+              testId="update-token-remove"
+            >
               Usuń token
-            </button>
+            </ConfirmButton>
           )}
           <button className="btn btn-ghost" onClick={() => openExternalSafe(NEW_TOKEN_PAGE)}>
             <IconExternal size={13} /> Utwórz token na GitHubie

@@ -187,7 +187,16 @@ export function unignoreProposals(keys: readonly string[]): void {
 }
 
 /** Dropped from the hold (or brought back): it still counts until this month's end – the months before stay as they were (B56). */
-export const archiveContainer = (c: Container, archived: boolean) => patchContainer(c.id, { archived, archivedAt: archived ? new Date().toISOString() : null })
+export function archiveContainer(c: Container, archived: boolean): void {
+  if (!canWrite()) return
+  patchContainer(c.id, { archived, archivedAt: archived ? new Date().toISOString() : null })
+  // The dump with „Cofnij” (AP-22, AF-77), and the mass said (LA sp. 7, T136): this month it still counts.
+  if (archived)
+    toast(`„${c.name}” zrzucony z ładowni – w masie liczy się do końca miesiąca.`, 'info', 8000, {
+      label: 'Cofnij',
+      run: () => void patchContainer(c.id, { archived: c.archived, archivedAt: c.archivedAt ?? null })
+    })
+}
 
 /**
  * Deleted with its payments let go (B58): they are ordinary expenses again – of the energy, the envelopes and the

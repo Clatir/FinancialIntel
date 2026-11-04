@@ -9,6 +9,7 @@ import { Panel } from '../../components/ui'
 import { useFolderLocked } from '../../store/data'
 import { plDate } from '../../lib/format'
 import { useAccounts } from '../operations/pickers'
+import { KEEP_IMPORTS } from '@shared/import/batch'
 import { undoImport, undoPreview, useImportBatches, useLatestImport } from './batches'
 
 const when = (iso: string) => new Date(iso).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
@@ -112,6 +113,12 @@ export function RecentImports() {
         importem, reguły też.
       </p>
       {batches.length === 0 && <span className="text-[11.5px] text-dim">Brak – pojawią się po pierwszym imporcie.</span>}
+      {/* The rotation (AP-22, DA sp. 5): the eleventh import takes the oldest one's „Cofnij import” with it. */}
+      {batches.length >= KEEP_IMPORTS && (
+        <p className="mb-2 text-[11.5px] text-accent" data-testid="recent-imports-full">
+          Lista jest pełna ({KEEP_IMPORTS} importów): następny import usunie z niej najstarszy – jego „Cofnij import” przepadnie.
+        </p>
+      )}
       <div className="flex flex-col" data-testid="recent-imports">
         {batches.map((b) => (
           <div key={b.id} className="grid grid-cols-[136px_minmax(0,1fr)_minmax(0,1.2fr)_auto] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="recent-import">

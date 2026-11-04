@@ -4,6 +4,7 @@ import { balanceOf } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
 import { useFleet, useHousehold } from '../../store/fleet'
+import { toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
@@ -217,7 +218,12 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
         {m.bankNames.map((n) => (
           <span key={n} className="flex items-center gap-1 border border-line px-1.5 py-[1px]" data-testid="member-bank-name">
             {n}
-            <button type="button" className="text-dim hover:text-down" onClick={() => patchMember(m.id, { bankNames: m.bankNames.filter((x) => x !== n) })} aria-label={`Usuń ${n}`}>
+            <button type="button" className="text-dim hover:text-down" onClick={() => {
+                const before = m.bankNames
+                patchMember(m.id, { bankNames: before.filter((x) => x !== n) })
+                // AP-22: a name taken off is brought back by „Cofnij”.
+                toast(`Nazwa „${n}” nie wskazuje już ${m.name}.`, 'info', 8000, { label: 'Cofnij', run: () => patchMember(m.id, { bankNames: before }) })
+              }} aria-label={`Usuń ${n}`}>
               ×
             </button>
           </span>

@@ -13,6 +13,7 @@ import { api, errorMessage } from '../../lib/api'
 import { saveFirst, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
+import { ConfirmButton } from '../../components/ConfirmButton'
 import { Badge, Panel, cx } from '../../components/ui'
 import { ChangeLogPanel } from './ChangeLog'
 
@@ -236,12 +237,6 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
  * neither goes to the bin; a broken one does, after a second click.
  */
 function ProblemAction({ p, locked }: { p: Problem; locked: boolean }) {
-  const [sure, setSure] = useState(false)
-  useEffect(() => {
-    if (!sure) return
-    const t = setTimeout(() => setSure(false), 4000)
-    return () => clearTimeout(t)
-  }, [sure])
   if (p.unreadable)
     return (
       <button className="btn h-[22px]" onClick={() => api.rescan().then(() => toast('Folder przeczytany ponownie.', 'success'), (e) => toast(errorMessage(e), 'error'))} data-testid="problem-reread">
@@ -255,18 +250,17 @@ function ProblemAction({ p, locked }: { p: Problem; locked: boolean }) {
       </span>
     )
   return (
-    <button
-      className={cx('btn h-[22px]', sure ? 'border-down/60 text-down' : 'hover:text-down')}
+    <ConfirmButton
+      className="btn h-[22px] hover:text-down"
       disabled={locked}
-      onClick={() => {
-        if (!sure) return setSure(true)
-        setSure(false)
-        void api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))
-      }}
-      data-testid="problem-trash"
+      confirmLabel="Do Kosza na pewno"
+      onConfirm={() => void api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))}
+      testId="problem-trash"
     >
-      <IconTrash size={12} /> {sure ? 'Do Kosza na pewno' : 'Do Kosza'}
-    </button>
+      <span className="flex items-center gap-1">
+        <IconTrash size={12} /> Do Kosza
+      </span>
+    </ConfirmButton>
   )
 }
 

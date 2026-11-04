@@ -28,7 +28,14 @@ export function useLatestImport(): ImportBatch | null {
 export function undoPreview(batch: ImportBatch): UndoPlan {
   const s = useData.getState()
   const docked = new Set(listOf(s.records.dockings).map((d) => d.transactionId))
-  return undoPlan(batch, { tx: (id) => s.records.transactions[id]?.record, docked, rules: s.fi?.settings.import.rules ?? [], balance: (id) => s.records.balances[id] })
+  // What a later import changed or removed – and what its undo wrote back – is not the user's work (IM.30, IM.31).
+  const touched = new Set<string>()
+  for (const b of listOf(s.records.imports)) {
+    if (b.id === batch.id || b.at <= batch.at) continue
+    for (const u of b.updated) touched.add(u.after.id)
+    for (const t of b.removed) touched.add(t.id)
+  }
+  return undoPlan(batch, { tx: (id) => s.records.transactions[id]?.record, docked, rules: s.fi?.settings.import.rules ?? [], balance: (id) => s.records.balances[id], touched })
 }
 
 /** What taking an import back changed, as it was before (its „Cofnij”). */
@@ -137,7 +144,9 @@ async function redoImport(u: Undone): Promise<void> {
   const again = u.readded.filter(has)
   const removal = again.length ? await deleteRecords('transactions', again, { reason: 'import' }) : null
   updateSettings((f) => ({ ...f, settings: settingsRedone(f.settings, u.batch) }))
-  updateRecord('imports', u.batch.id, (b) => ({ ...b, undoneAt: null }))
+  // The records written back are the import's own, not the user's changes: its writing time is now (IM.30).
+  const rewritten = new Date().toISOString()
+  updateRecord('imports', u.batch.id, (b) => ({ ...b, undoneAt: null, savedAt: rewritten }))
   await flushSaves()
   if (removal?.error) toast(`Import znowu w budżecie, ale części plików nie dało się usunąć: ${removal.error}`, 'error', 8000)
   else toast('Import znowu w budżecie.', 'success')

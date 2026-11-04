@@ -123,6 +123,29 @@ export function deleteRule(id: string): void {
   setRules((rules) => rules.filter((r) => r.id !== id))
 }
 
+/**
+ * A rule deleted by hand (the rules' lists – AP-22, AF-29): with „Cofnij”, which puts it back where it was (not twice,
+ * when it came back some other way meanwhile).
+ */
+export function removeRule(id: string): void {
+  if (!canWrite()) return
+  const rules = useData.getState().fi?.settings.import.rules ?? []
+  const at = rules.findIndex((r) => r.id === id)
+  const rule = rules[at]
+  if (!rule) return
+  deleteRule(id)
+  toast(`Reguła „${rule.label || rule.match}” usunięta.`, 'info', 8000, {
+    label: 'Cofnij',
+    run: () =>
+      setRules((now) => {
+        if (now.some((r) => r.id === id)) return now
+        const next = [...now]
+        next.splice(Math.min(at, next.length), 0, rule)
+        return next
+      })
+  })
+}
+
 function setRules(next: (rules: ImportRule[]) => ImportRule[]): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next(f.settings.import.rules) } } }))
 }
@@ -315,13 +338,15 @@ export function mergeNames(merges: ReadonlyArray<{ into: BrandName; from: readon
   return changeAliases((a) => merges.reduce<Record<string, BrandAlias>>((acc, m) => withMerged(acc, m.into, m.from, now), { ...a }))
 }
 
-/** A merged name back on its own (Ustawienia → Import z banku). */
+/** A merged name back on its own (Ustawienia → Import z banku – AP-22, AF-60: with „Cofnij”). */
 export const unmergeName = (key: string): void => {
-  changeAliases((a) => {
+  const label = aliasesNow()[key]?.label || key
+  const undo = changeAliases((a) => {
     const next = { ...a }
     delete next[key]
     return next
   })
+  if (undo) toast(`Rozłączono „${label}” – wraca do własnej grupy.`, 'success', 8000, { label: 'Cofnij', run: undo })
 }
 
 /** Every merged name back on its own; returns an undo. */
@@ -343,7 +368,13 @@ export function dismissSimilar(key: string): void {
 
 /** The pairs said to be two offered again. */
 export function clearDismissedSimilar(): void {
-  updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: {} } } }))
+  const before = useData.getState().fi?.settings.import.notSimilar ?? {}
+  if (!updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: {} } } }))) return
+  if (Object.keys(before).length)
+    toast('Pary „to nie to samo” będą znowu proponowane.', 'info', 7000, {
+      label: 'Cofnij',
+      run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: { ...before, ...f.settings.import.notSimilar } } } }))
+    })
 }
 
 /**

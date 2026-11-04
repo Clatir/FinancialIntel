@@ -14,6 +14,7 @@ import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { IconChevronDown, IconChevronRight, IconImport, IconSearch } from '../../components/icons'
 import { Columns } from '../../components/layout'
+import { ConfirmButton } from '../../components/ConfirmButton'
 import { Badge, Panel, ShowMore, cx } from '../../components/ui'
 import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
@@ -1206,9 +1207,15 @@ function TrashFile() {
   return (
     <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted" data-testid="import-trash">
       <span>Plik „{name}” zawiera numer konta i operacje – po imporcie nie jest potrzebny.</span>
-      <button type="button" className="btn h-[22px]" onClick={() => void trashImportFile()} data-testid="import-trash-file">
+      <ConfirmButton
+        className="btn h-[22px]"
+        confirmLabel="Przenieś do Kosza"
+        message={`„${name}” trafi do Kosza Windows – z aplikacji nie wrócisz go.`}
+        onConfirm={() => void trashImportFile()}
+        testId="import-trash-file"
+      >
         Przenieś plik do Kosza
-      </button>
+      </ConfirmButton>
     </div>
   )
 }

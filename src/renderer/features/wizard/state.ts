@@ -47,6 +47,8 @@ export interface WizardState {
   orders: Orders | null
   shortcut: string
   autostart: boolean
+  /** What the wizard has already written into the folder (members, goals): it stays when the wizard is broken off (AP-22). */
+  traces: string[]
 }
 
 const initial = (): WizardState => ({
@@ -65,7 +67,8 @@ const initial = (): WizardState => ({
   shipName: '',
   orders: null,
   shortcut: DEFAULT_QUICK_SHORTCUT,
-  autostart: true
+  autostart: true,
+  traces: []
 })
 
 export const useWizard = create<WizardState>(() => initial())
@@ -170,6 +173,13 @@ export function startWizard(): void {
 }
 
 export const patchWizard = (p: Partial<WizardState>) => useWizard.setState(p)
+
+/** Something the wizard wrote at once (a member, a goal): said when it is broken off, for it stays in the folder. */
+export const noteTrace = (text: string): void => useWizard.setState((w) => (w.traces.includes(text) ? w : { traces: [...w.traces, text] }))
+
+/** The question when the wizard is broken off (AP-22, KR.30): what is lost and what stays. */
+export const cancelWizardText = (traces: readonly string[]): string =>
+  `Odpowiedzi kreatora (salda, plan, wybór kontenerów) przepadną, budżet się nie uruchomi.${traces.length ? ` Zostaje w folderze: ${traces.join(', ')} – usuniesz to w Ustawieniach albo na Mapie gwiezdnej.` : ''}`
 
 export function cancelWizard(): void {
   useWizard.setState(initial())

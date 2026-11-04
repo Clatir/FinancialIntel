@@ -25,7 +25,8 @@ import { plDate } from '../../lib/format'
 import { useAccounts, useCategories } from '../operations/pickers'
 import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
-import { cancelWizard, finishWizard, patchWizard, useWizard, WIZARD_STEPS } from './state'
+import { ConfirmButton } from '../../components/ConfirmButton'
+import { cancelWizard, cancelWizardText, finishWizard, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const HULL_MONTHS = 12
@@ -448,9 +449,11 @@ export function WizardPage() {
           </button>
         ))}
         <div className="flex-1" />
-        <button className="m-3 text-[11.5px] text-dim hover:text-fg-strong" onClick={cancelWizard}>
-          Przerwij kreator
-        </button>
+        <div className="m-3 flex flex-col gap-1.5">
+          <ConfirmButton className="text-left text-[11.5px] text-dim hover:text-fg-strong" confirmLabel="Przerwij kreator" message={cancelWizardText(w.traces)} onConfirm={cancelWizard} testId="wizard-cancel">
+            Przerwij kreator
+          </ConfirmButton>
+        </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-auto">
@@ -506,7 +509,7 @@ function WizardHouseholdSection({ readOnly }: { readOnly: boolean }) {
   const [name, setName] = useState('')
   const add = () => {
     if (readOnly || !name.trim()) return
-    addMember(name)
+    if (addMember(name)) noteTrace(`domownik „${name.trim()}”`)
     setName('')
   }
   return (
@@ -579,6 +582,7 @@ function IctjGoalsStep({ goals }: { goals: Goal[] }) {
   const add = () => {
     if (readOnly || !name.trim() || !target || target <= 0) return
     addGoal({ name, target, deadline: null })
+    noteTrace(`cel „${name.trim()}”`)
     setName('')
     setTarget(null)
   }

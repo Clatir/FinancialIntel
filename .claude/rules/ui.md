@@ -29,3 +29,5 @@ paths:
   `NumberField` mówi sam (`range`), kwoty `amountRefusal`, zakres „od / do” – `orderRange` (zamiana ze słowem), limit długości
   – `LimitHint` (pola z `maxLength`), wyłączony przycisk podaje powód obok. Esc w polu = cofnięcie wpisu; w szybkim wpisie
   Esc = „×” (szkic zostaje).
+- **Cofnij i potwierdzenia (AP-22, T401):** usunięcie, rozłączenie i zrzut mają toast „Cofnij” (min. 8 s); działanie
+  nieodwracalne z aplikacji (Kosz, token, przerwanie kreatora) – `ConfirmButton`, nigdy własny dwuklik.

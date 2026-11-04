@@ -21,7 +21,7 @@ import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, directionText, editRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, directionText, editRule, removeRule, ruleDecisionText } from './rules'
 
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
@@ -258,7 +258,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                 <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px]" disabled={readOnly} onClick={() => setEditing(editing === r.id ? null : r.id)} data-testid="import-rule-edit">
                   zmień
                 </button>
-                <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" disabled={readOnly} onClick={() => deleteRule(r.id)} data-testid="import-rule-delete">
+                <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" disabled={readOnly} onClick={() => removeRule(r.id)} data-testid="import-rule-delete">
                   usuń
                 </button>
               </span>

@@ -2949,3 +2949,16 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   pokazuje „w tym za” (reguła go nie zapamiętuje). Szybki wpis nie ma toastów – każdy toast pól trafia do stopki
   (`QuickApp`), Esc to „×” (wpisywana kwota zostaje w szkicu), a Enter po odmowie pola nie zapisuje starej wartości;
   archiwizowany domownik czyści wybór „Finansuje” (nie podstawia pierwszego z listy). Bez zmian formatu danych.
+- **T401** Jeden wzorzec potwierdzenia i „Cofnij” (1.15.8, N4, AP-22): usunięcie, rozłączenie i zrzut, które aplikacja cofa
+  (reguły importu i słowa kluczowe `removeRule`, rozłączenie nazwy `unmergeName`, „to nie to samo” `clearDismissedSimilar`,
+  „to nie powtórzenie” `dismissCorrection`, „Zrzuć z ładowni” `archiveContainer`, nazwa domownika w banku) – toast z „Cofnij”;
+  działania nieodwracalne z aplikacji (Kosz Windows po imporcie i dla uszkodzonego pliku, token aktualizacji, przerwanie
+  kreatora) – jedno pytanie w tym samym miejscu, `ConfirmButton` („Usuń na pewno” / własny napis + „Anuluj”, Esc wycofuje, fokus
+  na potwierdzeniu; `DeleteButton` jest na nim). Pytanie przy przerwaniu kreatora mówi, co przepada, i wymienia ślady, które
+  kreator już zapisał w folderze (domownicy, cele – `WizardState.traces`). Zmiana scenariusza ICTTJ zostaje baner z
+  objaśnieniem (stan oczekujący, nie przycisk). Toast z „Cofnij” trwa co najmniej 8 s (`UNDO_MIN_MS`, AF-7).
+- **T402** „Cofnij import” (1.15.8, N4, AP-22): okno liczy „zmienione później przez Ciebie” tylko dla operacji, których nie
+  dotknął późniejszy import (jego zmiany i usunięcia – `undoPlan(…, { touched })`), a „Cofnij” cofnięcia importu ustawia mu
+  nowe `savedAt` (zapisy z powrotem nie są pracą użytkownika). Lista „Ostatnie importy” przy dziesięciu paczkach mówi, że
+  następny import usunie najstarszą (razem z jej „Cofnij import”); Ustawienia → Folder i kopie mówią o 5 ręcznych kopiach.
+  Bez zmian formatu danych.

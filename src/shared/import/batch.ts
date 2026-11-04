@@ -135,7 +135,14 @@ export interface UndoPlan {
  */
 export function undoPlan(
   batch: ImportBatch,
-  now: { tx: (id: string) => Transaction | undefined; docked?: ReadonlySet<string>; rules: readonly ImportRule[]; balance?: (id: string) => unknown }
+  now: {
+    tx: (id: string) => Transaction | undefined
+    docked?: ReadonlySet<string>
+    rules: readonly ImportRule[]
+    balance?: (id: string) => unknown
+    /** Operations a later import touched (its changes, its undo): a write that is not the user's (AP-22, IM.30, IM.31). */
+    touched?: ReadonlySet<string>
+  }
 ): UndoPlan {
   const remove: string[] = []
   let changed = 0
@@ -148,7 +155,7 @@ export function undoPlan(
       continue
     }
     remove.push(id)
-    if (t.updatedAt > batch.savedAt) changed++
+    if (t.updatedAt > batch.savedAt && !now.touched?.has(id)) changed++
     if (now.docked?.has(id)) docked++
   }
   const restore: Transaction[] = []

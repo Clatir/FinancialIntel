@@ -109,7 +109,17 @@ const correctionKey = (id: string) => `correction:${id}`
 
 /** „To nie powtórzenie”: the two corrections are both real – the report goes for good. */
 export function dismissCorrection(id: string): void {
-  updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates: { ...f.settings.import.notDuplicates, [correctionKey(id)]: new Date().toISOString() } } } }))
+  const key = correctionKey(id)
+  if (!updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates: { ...f.settings.import.notDuplicates, [key]: new Date().toISOString() } } } }))) return
+  // Like „to w porządku” and „zostaje” (AP-22, ME sp. 1): said, with „Cofnij” – the report comes back.
+  toast('Korekty zostają – nie będzie zgłaszana.', 'info', 7000, {
+    label: 'Cofnij',
+    run: () =>
+      void updateSettings((f) => {
+        const { [key]: _gone, ...rest } = f.settings.import.notDuplicates
+        return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates: rest } } }
+      })
+  })
 }
 
 /** How many reports wait (the side menu: the duplicates as last counted). */
