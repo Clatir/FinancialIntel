@@ -5,8 +5,10 @@
  * the side menu counts the reports, the inbox lists them.
  */
 import { formatPln, plDate, plural } from '../format'
+import { derivedId } from '../ids'
 import { isUncategorized, uncategorizedAmount } from '../operationsView'
-import type { Container, Transaction } from '../schema/records'
+import { SCHEMA_VERSION } from '../schema/common'
+import { dockingSchema, type Container, type Docking, type Transaction } from '../schema/records'
 import { daysBetween, warsawNow } from './dates'
 import { againstFirewall, deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
@@ -85,6 +87,17 @@ export function topUpsToConfirm(
   return alarms
     .filter((a) => a.kind === 'firewall' && a.txId && !withEntry.has(a.txId) && !confirmed(a.txId) && daysBetween(a.date, today) <= TOPUP_CONFIRM_DAYS)
     .map((a) => ({ txId: a.txId!, date: a.date, amount: a.amount }))
+}
+
+/**
+ * „Potwierdź” of such a top-up (DO sp. 12, T438): the docking record of its operation – no ICTTJ entry, pool or split;
+ * one id per operation (two computers write one file). Counted from the operation's arrival (`countedFrom`, as a pair's
+ * docking – T363; przegląd N5 5): the engine's moment of the operation (`cameIn`) stays its own, so a goal's transfer or
+ * a hull top-up of its day made between the operation and the click keeps its place after it (T340, T373) – the
+ * confirmation changes no money, no alarm and no day of the game.
+ */
+export function topUpConfirmation(t: Pick<Transaction, 'id' | 'date' | 'createdAt'>, now: string): Docking {
+  return dockingSchema.parse({ schemaVersion: SCHEMA_VERSION, id: derivedId(t.id, `topup:${t.id}`), createdAt: now, updatedAt: now, date: t.date, transactionId: t.id, ictjEntryId: null, pool: null, split: null, countedFrom: t.createdAt })
 }
 
 /** The advances of a member a report lists by name (AP-4); the rest – their number. */

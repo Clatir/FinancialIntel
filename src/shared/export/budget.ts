@@ -8,7 +8,7 @@ import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
 import { financersText, incomeShares, memberName } from '../calc/household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
-import { amountOn, categoryIndex, isTwoSided, sum, touchesAccount } from '../calc/operations'
+import { amountOn, categoryIndex, isTwoSided, sum, touchesAccount, upToDay } from '../calc/operations'
 import { tagsText } from '../calc/tags'
 import { savingsRate } from '../calc/fuel'
 import { debriefing, transactionsOfMonth } from '../calc/plan'
@@ -269,6 +269,11 @@ export interface MonthRow {
   energy: number | null
   /** „Sfinansowane przez domowników” (D80, AP-29): what household members financed in the month, together. */
   financed: number
+  /**
+   * Net costs of the month's operations dated after the budget's day – „zaplanowane”, apart from the costs, the income and
+   * the balance (AP-36, T421 – the debriefing's `planned`); 0 in a month that has ended.
+   */
+  planned: number
 }
 
 export function monthRows(
@@ -276,10 +281,13 @@ export function monthRows(
   months: readonly string[]
 ): MonthRow[] {
   const ctx = input.income ?? plainIncomeContext(input.transactions)
-  // The month's operations from the list's index by month (W30): never the whole history for each month.
+  // The month in progress up to the budget's day (AP-36, T421 – przegląd N5 8): the income of the same operations as the
+  // debriefing's costs, as „Bilans paliwa” counts them (`fuelMonths`) – one period for the balance and the rate; what is
+  // dated later is planned, apart. The month's operations from the list's index by month (W30).
+  const upTo = upToDay(input.transactions, input.today)
   return months.map((month) => {
     const d = debriefing(month, input)
-    const income = incomeOfPeriod(transactionsOfMonth(input.transactions, month), ctx).total
+    const income = incomeOfPeriod(transactionsOfMonth(upTo, month), ctx).total
     return {
       month,
       salary: d.salary,
@@ -291,14 +299,16 @@ export function monthRows(
       balance: income - d.costs,
       rate: savingsRate(income - d.costs, income),
       energy: d.energy?.budget ?? null,
-      financed: sum(d.financed.map((f) => f.amount))
+      financed: sum(d.financed.map((f) => f.amount)),
+      planned: d.planned
     }
   })
 }
 
 // The income as D81 counts it – „Przychody” everywhere it means that (N24).
-// The energy and the financed at the end (AP-29): the columns before them where they were.
-const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)', 'Bilans (zł)', 'Stopa oszczędności (%)', 'Energia miesiąca (zł)', 'Sfinansowane przez domowników (zł)'] as const
+// The energy and the financed at the end (AP-29), the planned after them (przegląd N5 8): the columns before them where
+// they were.
+const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)', 'Bilans (zł)', 'Stopa oszczędności (%)', 'Energia miesiąca (zł)', 'Sfinansowane przez domowników (zł)', 'Zaplanowane – data po dziś (zł)'] as const
 // One place after the comma (T294): „55,0”, as the screens write the rate.
 const rateCell = (rate: number | null) => (rate == null ? '' : rate.toFixed(1).replace('.', ','))
 const plusText = (r: Pick<MonthRow, 'plus' | 'inProgress'>) => (r.inProgress ? 'w toku' : r.plus == null ? '' : r.plus ? 'tak' : 'nie')
@@ -316,7 +326,8 @@ export function monthsCsv(rows: readonly MonthRow[]): string {
       plnCell(r.balance),
       rateCell(r.rate),
       r.energy == null ? '' : plnCell(r.energy),
-      plnCell(r.financed)
+      plnCell(r.financed),
+      plnCell(r.planned)
     ])
   )
 }
@@ -335,9 +346,10 @@ export function monthsSheet(rows: readonly MonthRow[]): XlsxSheet {
       { header: 'Bilans (zł)', kind: 'money', width: 13 },
       { header: 'Stopa oszczędności (%)', kind: 'rate', width: 12 },
       { header: 'Energia miesiąca (zł)', kind: 'money', width: 14 },
-      { header: 'Sfinansowane przez domowników (zł)', kind: 'money', width: 16 }
+      { header: 'Sfinansowane przez domowników (zł)', kind: 'money', width: 16 },
+      { header: 'Zaplanowane – data po dziś (zł)', kind: 'money', width: 16 }
     ],
-    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100, r.balance / 100, r.rate, r.energy == null ? null : r.energy / 100, r.financed / 100])
+    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100, r.balance / 100, r.rate, r.energy == null ? null : r.energy / 100, r.financed / 100, r.planned / 100])
   }
 }
 

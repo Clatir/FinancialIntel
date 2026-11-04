@@ -4,6 +4,7 @@
  * and the envelopes of the months the operations leave or come to (AP-38) – the debriefing of the engine's log before and
  * after; the ICTTJ payouts losing their pair in the bank – the deliveries before and after. Read only: no money rule here.
  */
+import { plDate } from '../format'
 import type { Category } from '../schema/budget'
 import type { Container, MonthPlan, Transaction } from '../schema/records'
 import { addMonths, firstDayOf, monthOf } from './dates'
@@ -151,4 +152,12 @@ export interface LostPair {
 export function pairsLost(before: readonly Delivery[], after: readonly Delivery[]): LostPair[] {
   const next = new Map(after.map((d) => [d.key, d]))
   return before.flatMap((d) => (d.entry && d.transaction && !next.get(d.key)?.transaction ? [{ date: d.entry.date, amount: d.amount, direction: d.direction }] : []))
+}
+
+/**
+ * The preview's line of such an entry – named as the docking window names it (N43, AP-23; przegląd N5 10): a withdrawal
+ * „Wypłata z ICTTJ”, a return „Zwrot do masy w ICTTJ”. `zl` – the amount as shown (hidden amounts – `plnText`).
+ */
+export function lostPairText(p: LostPair, zl: (grosze: number) => string): string {
+  return `${p.direction === 'in' ? 'Wypłata z ICTTJ' : 'Zwrot do masy w ICTTJ'} z ${plDate(p.date)} (${zl(p.amount)}) straci parę w banku – Dokowanie pokaże ją bez pary.`
 }
