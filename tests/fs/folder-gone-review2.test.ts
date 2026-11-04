@@ -9,7 +9,8 @@ import { writePresence } from '../../src/main/datastore/presence'
 import { DataStore, FOLDER_NOT_WRITABLE_MESSAGE } from '../../src/main/datastore/store'
 import { CREATED, exists, tempDir } from './helpers'
 
-const failure = (code: string, path: unknown) => Object.assign(new Error(`${code}: '${String(path)}'`), { code })
+/** An error as Node's fs gives it: its code and the call that failed (`syscall` – the write probe tells making a file from replacing one). */
+const failure = (code: string, path: unknown, syscall = 'open') => Object.assign(new Error(`${code}: ${syscall} '${String(path)}'`), { code, syscall })
 
 async function folder(): Promise<string> {
   const root = join(tempDir(), 'dane')
@@ -34,7 +35,7 @@ function noCreate(root: string): void {
     below(p) && typeof flags === 'string' && /[wa]/.test(flags) ? Promise.reject(failure('EPERM', p)) : real.open(p, flags as never, mode)) as never)
   vi.spyOn(fsp, 'writeFile').mockImplementation(((p: string, data: never, opts?: never) =>
     below(p) && flagOf(opts) !== 'r+' ? Promise.reject(failure('EPERM', p)) : real.writeFile(p, data, opts)) as never)
-  vi.spyOn(fsp, 'mkdir').mockImplementation(((p: string, opts?: never) => (below(p) ? Promise.reject(failure('EPERM', p)) : real.mkdir(p, opts))) as never)
+  vi.spyOn(fsp, 'mkdir').mockImplementation(((p: string, opts?: never) => (below(p) ? Promise.reject(failure('EPERM', p, 'mkdir')) : real.mkdir(p, opts))) as never)
 }
 
 afterEach(() => {

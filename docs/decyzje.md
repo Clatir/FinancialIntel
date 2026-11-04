@@ -2365,8 +2365,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `writeOwnPresence` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
   więc folder, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie uprawnienia), jest tylko do odczytu
   z powodem i bez migracji, której nie da się dokończyć (wcześniej: bez banera, każdy zapis z własnym błędem, migracja
-  przerywała otwarcie). Otwarcie nieudane albo ustępujące nowszemu po próbie usuwa tę obecność (`openFolder`,
-  `finally`), chyba że ten folder jest otwarty. Telefon (lustro folderu) i testy bez `presence` – tylko `fi.json`.
+  przerywała otwarcie). Po przeglądzie 3: z zapisu obecności o trybie tylko do odczytu decyduje tylko odmowa założenia
+  nowego pliku – katalogu `.presence/` albo pliku tymczasowego (EPERM / EACCES / EROFS z `mkdir` / `open`, po próbach
+  jak `fi.json` – T335; nowej nazwy nikt nie trzyma). Plik obecności, którego nie da się zastąpić (atrybut „tylko do
+  odczytu” po przywróceniu kopii, blokada dłuższa niż próby), i każdy inny błąd obecności to tylko wpis w logu („write
+  probe: presence not written”) – folder przyjmuje zapisy, obecność zapisze heartbeat (wcześniej taki jeden plik dawał
+  tryb tylko do odczytu przy każdym otwarciu, bez wyjścia). Przyjęte: uprawnienia odbierające zakładanie plików tylko
+  w `.presence/` (nie w reszcie folderu) dałyby tryb tylko do odczytu – OneDrive uprawnień katalogów nie przenosi.
+  Otwarcie nieudane albo ustępujące nowszemu po próbie usuwa tę obecność (`openFolder`, `finally`), chyba że ten folder
+  jest otwarty albo otwiera go nowsze otwarcie (przegląd 3: `PresenceKeeper` w `main/datastore/presence.ts` – folder
+  otwarty i foldery otwarć w toku trzymają obecność; tak samo zamknięcie magazynu i heartbeat magazynu sprzed zmiany;
+  wcześniej spóźnione usunięcie zdejmowało obecność zapisaną już przez próbę nowszego otwarcia tego folderu i drugi
+  komputer do końca tego otwarcia, także w trakcie migracji, nie widział tego komputera). Telefon (lustro folderu)
+  i testy bez `presence` – tylko `fi.json`.
   W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
   podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
 - **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
@@ -2530,5 +2541,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   przy odświeżeniu w kolejce, dopóki blokada trwa – raz. Wcześniej `withRetry` 8 razy (EPERM / EACCES są w nim
   chwilowe): w folderze naprawdę tylko do odczytu ok. 1,4 s przy otwarciu, co 5 s w spoczynku i przy każdym odświeżeniu
   w kolejce magazynu (zapisy czekały). Blokada dłuższa niż próby przy otwarciu daje baner na kilka sekund – zdejmuje go
-  następne sprawdzenie w spoczynku. Zapis obecności w próbie bez dodatkowego ponawiania: nowego pliku antywirus nie
-  trzyma, zamianę ponawia sam zapis.
+  następne sprawdzenie w spoczynku. Po przeglądzie 3 tyle samo prób ma każdy krok zapisu obecności w próbie
+  (`writeFileAtomic(…, attempts)`: katalog, plik tymczasowy, zamiana): przy otwarciu i powrocie ok. 0,1 s na krok,
+  w spoczynku i w kolejce jedna próba bez czekania. Wcześniej plik tymczasowy raz (jeden chwilowy EPERM na `.presence/`
+  dawał tryb tylko do odczytu), a zamiana zawsze 8 razy (ok. 1,4 s co 5 s w spoczynku i w kolejce magazynu). Zwykłe
+  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy.

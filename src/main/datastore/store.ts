@@ -154,15 +154,19 @@ export interface DataStoreOptions {
    */
   onStatus?: (change: ChangeSet) => void
   /**
-   * This computer's presence written in the folder (the main process's heartbeat write – T316): the write probe's check
-   * that new files can be made (temp + rename in `.presence/`), at the open and while the folder takes no writes – no
-   * file of the probe's own. Without it (the phone's mirror, tests) only fi.json is tried.
+   * This computer's presence written in the folder (the main process's heartbeat write – T316), each step tried
+   * `attempts` times: the write probe's check that new files can be made (temp + rename in `.presence/`), at the open and
+   * while the folder takes no writes – no file of the probe's own. Without it (the phone's mirror, tests) only fi.json is
+   * tried.
    */
-  presence?: () => Promise<void>
+  presence?: (attempts: number) => Promise<void>
 }
 
-/** The write probe's tries of fi.json at the open and at the folder's return (T316): a lock for a moment; idle – one. */
+/** The write probe's tries of each step at the open and at the folder's return (T316): a lock for a moment; idle – one. */
 const PROBE_ATTEMPTS = 4
+
+/** A write refused (the write probe, T316): no right to write, the attribute „tylko do odczytu”, a drive read-only. */
+const refusedWrite = (e: unknown): boolean => ['EPERM', 'EACCES', 'EROFS'].includes((e as NodeJS.ErrnoException).code ?? '')
 
 /**
  * 'partial' = FI's folders without fi.json (OneDrive has not synced it yet – never initialize over it);
@@ -392,7 +396,8 @@ export class DataStore {
   loadStats: LoadStats | null = null
   private readonly opts: Required<Omit<DataStoreOptions, 'backupDir' | 'log' | 'onStatus' | 'presence'>> & { backupDir: string | null }
   private readonly onStatus?: (change: ChangeSet) => void
-  private readonly presence?: () => Promise<void>
+  private readonly presence?: (attempts: number) => Promise<void>
+  private readonly log?: DataStoreOptions['log']
   fi!: SettingsFile
   private folderReadOnlyReason: string | null = null
   /** The folder takes no writes (AF-14 – the write probe at the open, tried again while so): why; null = it does. */
@@ -420,6 +425,7 @@ export class DataStore {
     }
     this.onStatus = opts.onStatus
     this.presence = opts.presence
+    this.log = opts.log
     this.history = new RecordHistory(root, this.opts.machineName, this.opts.now, (e) => opts.log?.('warn', 'history snapshot failed', e))
   }
 
@@ -599,9 +605,11 @@ export class DataStore {
    * for writing and closed, nothing written: no right to write (permissions, a share or a drive read-only) refuses it.
    * Then new files (every write is temp + rename): this computer's presence written – a write the open makes anyway, so
    * the probe makes no file of its own (on OneDrive each would go to its online recycle bin) and none can be left behind.
-   * fi.json's open is tried `attempts` times – at the open and the return a few (an antivirus or OneDrive holding it a
-   * moment is no read-only folder), idle once (a folder read-only for real, every few seconds – T335); the presence
-   * write retries its rename as every write. Null = it takes writes; else why not. Any other failure (the folder gone,
+   * Every step is tried `attempts` times – at the open and the return a few (an antivirus or OneDrive holding a file a
+   * moment is no read-only folder, ~0.1 s), idle once, no waiting (a folder read-only for real, every few seconds – T335).
+   * Of the presence only a new file refused is the folder's (`.presence/` or the temp file not made – a name nobody holds);
+   * its one file not replaced (the attribute „tylko do odczytu”, a lock held long) or any other failure is logged, never
+   * read-only – the heartbeat writes it again. Null = it takes writes; else why not. Any other failure (the folder gone,
    * a file held for long) is no read-only folder – the write itself says it.
    */
   private async writeProbe(attempts = 1): Promise<string | null> {
@@ -611,12 +619,17 @@ export class DataStore {
       const handle = await withRetry(() => fs.open(fi, 'r+'), attempts)
       // Its close says nothing about the folder.
       await handle.close().catch(() => undefined)
-      await this.presence?.()
-      return null
     } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code
-      return code === 'EPERM' || code === 'EACCES' || code === 'EROFS' ? FOLDER_NOT_WRITABLE_MESSAGE : null
+      return refusedWrite(e) ? FOLDER_NOT_WRITABLE_MESSAGE : null
     }
+    try {
+      await this.presence?.(attempts)
+    } catch (e) {
+      const syscall = (e as NodeJS.ErrnoException).syscall
+      if (refusedWrite(e) && (syscall === 'open' || syscall === 'mkdir')) return FOLDER_NOT_WRITABLE_MESSAGE
+      this.log?.('warn', 'write probe: presence not written', e)
+    }
+    return null
   }
 
   /**

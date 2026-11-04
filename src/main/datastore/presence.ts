@@ -24,14 +24,49 @@ export function safeMachineName(name: string): string {
   return name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64) || 'KOMPUTER'
 }
 
-export async function writePresence(root: string, machine: string, appVersion: string, activeAt: string | null = null): Promise<void> {
+/** `attempts` – the write probe's tries of each step (`writeFileAtomic`, T335); the heartbeat's write as every write. */
+export async function writePresence(root: string, machine: string, appVersion: string, activeAt: string | null = null, attempts?: number): Promise<void> {
   const file = join(root, PRESENCE_DIR, `${safeMachineName(machine)}.json`)
   // The data folder gone: no presence – never a new empty folder in its old place for it (AP-1, DA.40).
-  await writeFileAtomic(file, `${JSON.stringify({ machine, lastSeen: new Date().toISOString(), appVersion, activeAt }, null, 2)}\n`, root)
+  await writeFileAtomic(file, `${JSON.stringify({ machine, lastSeen: new Date().toISOString(), appVersion, activeAt }, null, 2)}\n`, root, attempts)
 }
 
 export async function clearPresence(root: string, machine: string): Promise<void> {
   await fs.rm(join(root, PRESENCE_DIR, `${safeMachineName(machine)}.json`), { force: true })
+}
+
+/**
+ * The folders that keep this computer's presence (T316, przegląd 3): the folder open and each folder an open in progress
+ * has – its write probe may have written the presence there already. Cleared from a folder only when none keeps it: an
+ * open that failed or gave way never removes the presence a newer open of the same folder wrote.
+ */
+export class PresenceKeeper {
+  private readonly roots: string[] = []
+
+  constructor(
+    private readonly machine: string,
+    private readonly same: (a: string, b: string) => boolean
+  ) {}
+
+  /** `root` kept until the returned release (called once or more). */
+  keep(root: string): () => void {
+    this.roots.push(root)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.roots.splice(this.roots.indexOf(root), 1)
+    }
+  }
+
+  kept(root: string): boolean {
+    return this.roots.some((r) => this.same(r, root))
+  }
+
+  /** This computer's presence cleared from `root` – unless the folder open or an open of it in progress keeps it. */
+  async clear(root: string): Promise<void> {
+    if (!this.kept(root)) await clearPresence(root, this.machine)
+  }
 }
 
 export async function readOtherMachines(root: string, machine: string, now = Date.now()): Promise<MachinePresence[]> {

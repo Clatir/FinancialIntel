@@ -89,12 +89,14 @@ export async function mkdirFor(target: string, within: string | null): Promise<v
 /**
  * Atomic write: write to a temp file in the same directory, fsync, then rename over the target.
  * A crash leaves either the old or the new file, never a truncated one. `within` – the data folder the target lies in,
- * null when none (`mkdirFor`).
+ * null when none (`mkdirFor`). `attempts` – given (the write probe's presence, T335): each step a lock may refuse for a
+ * moment – the directory, the temp file, the replacement – tried that many times; by default the directory and the temp
+ * file once, the replacement 8 times.
  */
-export async function writeFileAtomic(target: string, data: string | Uint8Array, within: string | null): Promise<void> {
-  await mkdirFor(target, within)
+export async function writeFileAtomic(target: string, data: string | Uint8Array, within: string | null, attempts?: number): Promise<void> {
+  await withRetry(() => mkdirFor(target, within), attempts ?? 1)
   const tmp = tempPathFor(target)
-  const handle = await fs.open(tmp, 'w')
+  const handle = await withRetry(() => fs.open(tmp, 'w'), attempts ?? 1)
   try {
     try {
       await handle.writeFile(data)
@@ -102,7 +104,7 @@ export async function writeFileAtomic(target: string, data: string | Uint8Array,
     } finally {
       await handle.close()
     }
-    await withRetry(() => fs.rename(tmp, target))
+    await withRetry(() => fs.rename(tmp, target), attempts)
   } catch (e) {
     // e.g. disk full or the target locked for too long: never leave a half-written temp file behind.
     await fs.rm(tmp, { force: true }).catch(() => undefined)

@@ -16,7 +16,7 @@ import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type Update
 import { ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
-import { IN_USE_MS, clearPresence, readOtherMachines, writePresence } from './datastore/presence'
+import { IN_USE_MS, PresenceKeeper, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
 import { importBackup, listBackups, manualBackup, runBackups, type DataSource } from './datastore/backup'
 import { readBackupZip, unpackBackup, type BackupData } from './datastore/restore'
@@ -64,6 +64,12 @@ let refreshes: RefreshQueue | null = null
 const FOCUS_REFRESH_MS = 60_000
 let lastFocusRefresh = 0
 let presenceTimer: NodeJS.Timeout | null = null
+/**
+ * The folders this computer's presence stays in (T316, przegląd 3): the open one (`storePresence`) and each one an open in
+ * progress has – a failed or superseded open, a closed store and the heartbeat of the store before never clear it there.
+ */
+const presenceKept = new PresenceKeeper(machineName, (a, b) => sameDir(a, b))
+let storePresence: (() => void) | null = null
 /** This computer's presence file written last; in the tray (not in use) it is written this seldom (N20). */
 let presenceWrittenAt = 0
 const TRAY_PRESENCE_MS = 5 * 60_000
@@ -448,19 +454,22 @@ async function closeStore(): Promise<void> {
   if (folderTimer) clearInterval(folderTimer)
   folderTimer = null
   store = null
+  storePresence?.()
+  storePresence = null
   if (!closing) return
   // The writes the window sent before closing finish first (a rescan ahead of them in the queue takes seconds – B43).
   const drained = await Promise.race([closing.idle().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), QUIT_DRAIN_MS).unref?.())])
   if (!drained) log('warn', `zamykanie: zapisy trwały ponad ${QUIT_DRAIN_MS / 1000} s`)
-  await clearPresence(closing.root, machineName).catch(() => undefined)
+  // The same folder opening again keeps it (its write probe may have written it meanwhile).
+  await presenceKept.clear(closing.root).catch(() => undefined)
 }
 
 /**
  * This computer's presence in `root`, as the heartbeat writes it – also the write probe's check that new files can be
- * made at a folder's open (`DataStoreOptions.presence`, T316).
+ * made at a folder's open (`DataStoreOptions.presence`, with the probe's `attempts` – T316, T335).
  */
-function writeOwnPresence(root: string): Promise<void> {
-  return writePresence(root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null)
+function writeOwnPresence(root: string, attempts?: number): Promise<void> {
+  return writePresence(root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null, attempts)
 }
 
 async function heartbeat(force = false): Promise<void> {
@@ -474,8 +483,8 @@ async function heartbeat(force = false): Promise<void> {
       await writeOwnPresence(s.root).catch(() => undefined)
     }
     // Another folder opened meanwhile (B116): nothing of the closed one goes on – its presence cleared stays cleared; the
-    // same folder opened again keeps the presence its new store wrote.
-    if (s !== store) return void (store?.root === s.root ? undefined : await clearPresence(s.root, machineName).catch(() => undefined))
+    // same folder open again or opening keeps the presence its new store or its write probe wrote.
+    if (s !== store) return void (await presenceKept.clear(s.root).catch(() => undefined))
     const others = await readOtherMachines(s.root, machineName)
     if (s !== store) return
     if (JSON.stringify(others) !== JSON.stringify(s.otherMachines)) {
@@ -617,6 +626,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
   const t0 = Date.now()
   let step: OpenStep = 'inspect'
   let next: DataStore | null = null
+  let unkeep: (() => void) | null = null
   const progress = (): OpenProgress => {
     const p = step === 'machines' || step === 'inspect' ? null : next?.progress()
     return {
@@ -721,9 +731,11 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
         log('warn', `folder danych niedostępny przy zapisie: ${target}`)
         sendFrom(created, change)
       },
-      presence: () => writeOwnPresence(target)
+      presence: (attempts) => writeOwnPresence(target, attempts)
     })
     next = created
+    // Its write probe writes this computer's presence there: no other open's or store's clearing removes it meanwhile.
+    unkeep = presenceKept.keep(target)
     step = 'list'
     // Open the new folder first: if it fails or is stopped, the current one stays open and keeps saving. Once read
     // (before a migration) it no longer stops: „Przerwij” would promise an untouched folder.
@@ -741,6 +753,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     if (generation !== openGeneration) return superseded()
     const opened = next
     store = opened
+    storePresence = presenceKept.keep(opened.root)
     // Another folder: its own backups – the failures of the one before are not its (the same folder keeps them).
     if (backupFailure?.dir !== opened.backupsDir) backupSucceeded()
     snapshot.generation = ++storeGeneration
@@ -810,9 +823,11 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
   } finally {
     clearInterval(ticker)
     if (opening === controller) opening = null
-    // Failed or given way after its write probe (T316): no presence of this computer left in a folder it has not open.
+    // Failed or given way after its write probe (T316): no presence of this computer left in a folder it has not open –
+    // but none taken from the folder open or from a newer open of the same folder (its probe may have written it already).
+    unkeep?.()
     const probed = next?.root
-    if (probed && store !== next && store?.root !== probed) void clearPresence(probed, machineName).catch(() => undefined)
+    if (probed && store !== next) void presenceKept.clear(probed).catch(() => undefined)
   }
 }
 
