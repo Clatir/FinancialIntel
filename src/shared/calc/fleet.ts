@@ -458,12 +458,11 @@ export function dockingsByTx(dockings: readonly Docking[]): Map<string, Docking>
 
 /**
  * The budget's first day: the start wizard's (`settings.budget.start`), else the earliest opening balance – each
- * account's latest one up to `today` (none = all). An opening a start of the wizard wrote (`byStart`) starts nothing
- * without `budget.start` (KR.29, T446 – przegląd 2 N5): a start the folder refused never runs the layers from its money.
+ * account's latest one up to `today` (none = all).
  */
 export function budgetStartOf(settings: Pick<Settings, 'budget'>, balances: readonly Balance[] = [], today?: string): string | null {
   if (settings.budget.start) return settings.budget.start
-  return [...openingsOf(balances, today).values()].filter((o) => !o.byStart).map((o) => o.date).sort()[0] ?? null
+  return [...openingsOf(balances, today).values()].map((o) => o.date).sort()[0] ?? null
 }
 
 /**

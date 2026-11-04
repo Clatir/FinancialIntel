@@ -36,45 +36,6 @@ const isObject = (v: unknown): v is Record<string, unknown> => v != null && type
 const isIdArray = (v: unknown): v is Array<{ id: string }> =>
   Array.isArray(v) && v.every((x) => isObject(x) && typeof x.id === 'string')
 
-/** JSON with the keys sorted and no undefined values: one text per content, whatever the key order. */
-function canonicalText(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonicalText).join(',')}]`
-  if (isObject(v))
-    return `{${Object.keys(v)
-      .filter((k) => v[k] !== undefined)
-      .sort()
-      .map((k) => `${JSON.stringify(k)}:${canonicalText(v[k])}`)
-      .join(',')}}`
-  return JSON.stringify(v) ?? 'null'
-}
-
-/**
- * A record's content as a short mark (KR.29 – the records of „Uruchom budżet”, T446): the same in the window and in the
- * main process, on every computer, for the same content – the save stamps aside (`BOOKKEEPING`); any other change of any
- * field is another mark. A 53-bit hash (cyrb53) – enough to tell the versions of one record apart.
- */
-export function contentMark(record: unknown): string {
-  const text = canonicalText(isObject(record) ? Object.fromEntries(Object.entries(record).filter(([k]) => !BOOKKEEPING.has(k))) : record)
-  let h1 = 0xdeadbeef
-  let h2 = 0x41c6ce57
-  for (let i = 0; i < text.length; i++) {
-    const ch = text.charCodeAt(i)
-    h1 = Math.imul(h1 ^ ch, 2654435761)
-    h2 = Math.imul(h2 ^ ch, 1597334677)
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
-}
-
-/** The marks sent with a deletion (`deleteRecords`' `expected`), as the main process takes them: id → mark, texts only. */
-export function marksOf(v: unknown): Record<string, string> | undefined {
-  if (!isObject(v)) return undefined
-  const out: Record<string, string> = {}
-  for (const [id, mark] of Object.entries(v)) if (typeof mark === 'string') out[id] = mark
-  return out
-}
-
 export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
   if (typeof a !== typeof b || a == null || b == null) return a === b || (a == null && b == null)
@@ -335,7 +296,6 @@ const LABELS: Record<string, string> = {
   transactionId: 'Operacja',
   correctionId: 'Korekta',
   confirmedAt: 'Potwierdzone',
-  byStart: 'Zapisane przez start kreatora',
   explained: 'Korekta wyjaśniona',
   deadline: 'Termin',
   source: 'Źródło',

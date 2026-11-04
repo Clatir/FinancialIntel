@@ -32,8 +32,10 @@ paths:
   `household.assignFrom` – brak = zachowanie sprzed wersji albo jednorazowe uzupełnienie (`useHouseholdSinceSeed`),
   null = od startu budżetu / zawsze; `openingIds` – brak = wszystkie operacje. Schemat: `nullable().optional()` – nie
   zamieniaj jednego na drugie.
-- Saldo otwarcia zapisane przez start kreatora (`byStart`, T446) bez `budget.start` nie uruchamia warstw (`budgetStartOf` je
-  pomija – start odrzucony przez folder nie liczy budżetu); ręczna zmiana salda (`setOpening`) zdejmuje znacznik.
+- Start budżetu (T446): najpierw `fi.json` z `budget.start`, salda otwarcia, plan i kontenery startu dopiero po nim (okno
+  dostaje start razem z nimi – `writeStart`); na dysku `budget.start` bez sald to stan chwilowy (także saldo, którego zapis
+  padł): zapisy w tle czekają, aż rekordy startu są na dysku (`writesInBackground`). **Pułapka:** nowy zapis w tle z wyniku
+  silnika – tylko za `writesInBackground`, inaczej zapisze budżet liczony bez sald startu.
 - Przelew dwustronny (1.7.0): każda strona liczy się na swoim koncie i w swoim dniu – salda i obliczenia kont przez
   `amountOn`, `dateOn`, `touchesAccount` (`calc/operations.ts`), nigdy przez `t.amount` / `t.accountId` wprost.
 - Wspólny zakup (1.5.0): `share` to tylko opis, prawdą są linie `splits` (jedna na osobę; starsza wersja czyta je jak

@@ -6,14 +6,11 @@ import { openingFromNow } from '@shared/calc/start'
 import { openingOf } from '@shared/calc/balances'
 import { counterpartyKey } from '@shared/import/classify'
 import type { RecurringPayment } from '@shared/calc/plan'
-import type { Orders } from '@shared/schema'
+import type { Orders, SettingsFile } from '@shared/schema'
 import { DEFAULT_QUICK_SHORTCUT } from '@shared/machine'
-import type { RecordEntry } from '@shared/api'
-import { contentMark } from '@shared/merge'
+import { newId } from '@shared/ids'
 import { api, errorMessage } from '../../lib/api'
-import { monthLabel } from '../../lib/format'
-import { deleteRecords, listOf, saveFirst, takeBackSettings, unsavedNote, unsavedOf, unsavedReport, updateSettings, useData, writeNow, type RecordMaps } from '../../store/data'
-import { useRemote } from '../../store/remote'
+import { listOf, saveFirst, unsavedNote, useData, writeStart } from '../../store/data'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { setTrayPrefs } from '../../store/tray'
 import { navigate, toast } from '../../store/ui'
@@ -54,45 +51,6 @@ export interface WizardState {
   autostart: boolean
   /** What the wizard has already written into the folder (members, goals): it stays when the wizard is broken off (AP-22). */
   traces: string[]
-  /**
-   * The new records of „Uruchom budżet” while the budget is not running (KR.29, T446 – przegląd 2 N5): the start's own until
-   * fi.json is written; after a refusal those the folder could not take back yet. Only their ids and the marks of what the
-   * start wrote – the draft on this computer is written at every answer. They keep the wizard from ending in silence:
-   * „Przerwij kreator” or the next refusal takes them back, the next start uses them.
-   */
-  startWrites: StartWrite[]
-  /**
-   * The containers a refused start left in the folder that stand for proposals of step 4 (the proposal moved to its
-   * container – T446): their payments are linked once the budget starts, as the new ones' (T379). Ids only.
-   */
-  startContainers: string[]
-}
-
-/** What „Uruchom budżet” writes before fi.json – new records only (AF-14, KR.29): the openings, the plan, the containers. */
-const START_COLLECTIONS = ['balances', 'months', 'containers'] as const
-type StartCollection = (typeof START_COLLECTIONS)[number]
-type AnyRecord = Record<string, unknown>
-
-/** A new record of the start: its id and the mark (`contentMark`) of what the start wrote – the only version taken back. */
-export interface StartWrite {
-  collection: StartCollection
-  id: string
-  mark: string
-  /** A container made of a proposal of step 4: the proposal – among the answers again when the container is taken back. */
-  proposal?: RecurringPayment
-}
-
-const isRecord = (v: unknown): v is AnyRecord => typeof v === 'object' && v !== null && !Array.isArray(v)
-
-/** One kept with the answers on this computer (the draft), as this version reads it. */
-function isStartWrite(v: unknown): v is StartWrite {
-  return (
-    isRecord(v) &&
-    (START_COLLECTIONS as readonly unknown[]).includes(v.collection) &&
-    typeof v.id === 'string' &&
-    typeof v.mark === 'string' &&
-    (v.proposal === undefined || (isRecord(v.proposal) && typeof v.proposal.key === 'string'))
-  )
 }
 
 const initial = (): WizardState => ({
@@ -112,9 +70,7 @@ const initial = (): WizardState => ({
   orders: null,
   shortcut: DEFAULT_QUICK_SHORTCUT,
   autostart: true,
-  traces: [],
-  startWrites: [],
-  startContainers: []
+  traces: []
 })
 
 export const useWizard = create<WizardState>(() => initial())
@@ -141,10 +97,7 @@ export function wizardDraftOf(dir: string): WizardState | null {
     if (!raw) return null
     const kept = JSON.parse(raw) as { v?: unknown; state?: unknown }
     if (kept.v !== 1 || !kept.state || typeof kept.state !== 'object') return null
-    const read = { ...initial(), ...(kept.state as Partial<WizardState>), active: true }
-    // A draft without the start's records or with a list this version cannot read: none.
-    const known = Array.isArray(read.startWrites) && read.startWrites.every(isStartWrite) ? read : { ...read, startWrites: [] }
-    const state = Array.isArray(known.startContainers) && known.startContainers.every((id) => typeof id === 'string') ? known : { ...known, startContainers: [] }
+    const state = { ...initial(), ...(kept.state as Partial<WizardState>), active: true }
     return Number.isInteger(state.step) && state.step >= 0 && state.step < WIZARD_STEPS.length ? state : { ...state, step: 0 }
   } catch {
     return null
@@ -236,111 +189,20 @@ export function noteImportTrace(before: string | null, after: string | null): vo
 }
 
 /**
- * The question when the wizard is broken off (AP-22, KR.30): what is lost and what stays – and where it goes away.
- * `started` – the records of a start the folder refused still in it (`startWriteLabels`): „Przerwij” takes them back.
+ * The question when the wizard is broken off (AP-22, KR.30): what is lost and what stays – and where it goes away. The
+ * answers are all that is lost: „Uruchom budżet” writes nothing of the start before the folder took fi.json (T446).
  */
-export function cancelWizardText(traces: readonly string[], started: readonly string[] = []): string {
+export function cancelWizardText(traces: readonly string[]): string {
   const where = ['w Ustawieniach', 'na Mapie gwiezdnej', ...(traces.includes(IMPORT_TRACE) ? ['w Imporcie („Cofnij import”)'] : [])]
   const whereText = `${where.slice(0, -1).join(', ')} albo ${where.at(-1)}`
-  const left = started.length ? ` Zapisane już w folderze rekordy nieudanego startu (${started.join(', ')}) kreator usunie – zmienione od tego czasu zostaną, jak są.` : ''
-  return `Odpowiedzi kreatora (salda, plan, wybór kontenerów) przepadną, budżet się nie uruchomi.${left}${traces.length ? ` Zostaje w folderze: ${traces.join(', ')} – usuniesz to ${whereText}.` : ''}`
+  return `Odpowiedzi kreatora (salda, plan, wybór kontenerów) przepadną, budżet się nie uruchomi.${traces.length ? ` Zostaje w folderze: ${traces.join(', ')} – usuniesz to ${whereText}.` : ''}`
 }
 
-/**
- * Broken off (AP-22): the answers go – and the records of a start the folder refused, those still as the start wrote them
- * (T446). One that cannot be taken back now (a newer version's, a decision about another computer's change waiting, the
- * folder refusing) keeps the wizard as it is: said, „Przerwij kreator” once more takes it back – never a silent end.
- */
-export async function cancelWizard(): Promise<void> {
-  const writes = useWizard.getState().startWrites
-  if (writes.length) {
-    const r = await withdrawStart(writes)
-    if (r.blocked.length) {
-      useWizard.setState({ startWrites: r.blocked.map((b) => b.w) })
-      toast(`Kreator nie został przerwany – ${blockedText(r.blocked, 'spróbuj ponownie za chwilę')}${r.changed.length ? ` ${changedText(r.changed)}` : ''}`, 'error', 12_000)
-      return
-    }
-    toast(`Kreator przerwany. ${r.changed.length ? changedText(r.changed) : 'Rekordy nieudanego startu usunięte z folderu.'}`, 'info', 10_000)
-  }
+export function cancelWizard(): void {
   useWizard.setState(initial())
   dropDraft(shownDir())
   navigate({ page: 'bridge' })
 }
-
-/** A record of the start that cannot be taken back now, with why (it stays tracked). */
-interface Blocked {
-  w: StartWrite
-  why: string
-}
-
-interface Withdrawn {
-  /** Taken back (or gone already). */
-  done: StartWrite[]
-  /** Not what the start wrote any more – in the window, on the disk, or a container with payments linked: it stays, the user's. */
-  changed: StartWrite[]
-  blocked: Blocked[]
-}
-
-/** The containers with a payment linked to them (a part of a receipt too): in use, never taken back with a start. */
-function containersInUse(transactions: RecordMaps['transactions']): Set<string> {
-  const out = new Set<string>()
-  for (const t of listOf(transactions)) {
-    if (t.containerId) out.add(t.containerId)
-    for (const s of t.splits) if (s.containerId) out.add(s.containerId)
-  }
-  return out
-}
-
-/**
- * The new records of a start the folder refused taken back (KR.29, T446 – przegląd 2 N5): each only while it is what the
- * start wrote – in the window (its content's mark) and on the disk (`deleteRecords` with `expected`: the main process
- * reads the file again at the deletion – a version another computer wrote a moment ago is never deleted unseen). Any
- * other – it stays and is named: changed since (the user's now), or not to take back now (a newer version wrote it, a
- * decision about another computer's change waits, the folder refused – tracked further).
- */
-async function withdrawStart(writes: readonly StartWrite[]): Promise<Withdrawn> {
-  const { records } = useData.getState()
-  const waiting = new Set(useRemote.getState().pending.map((p) => `${p.collection}:${p.id}`))
-  const inUse = containersInUse(records.transactions)
-  const out: Withdrawn = { done: [], changed: [], blocked: [] }
-  const ask = new Map<StartCollection, StartWrite[]>()
-  for (const w of writes) {
-    const entry = (records[w.collection] as Record<string, RecordEntry<AnyRecord> | undefined>)[w.id]
-    if (!entry) out.done.push(w)
-    else if (entry.readOnly) out.blocked.push({ w, why: 'zapisała go nowsza wersja aplikacji' })
-    else if (waiting.has(`${w.collection}:${w.id}`)) out.blocked.push({ w, why: 'czeka na Twoją decyzję o zmianie z drugiego komputera' })
-    else if (contentMark(entry.record) !== w.mark || (w.collection === 'containers' && inUse.has(w.id))) out.changed.push(w)
-    else ask.set(w.collection, [...(ask.get(w.collection) ?? []), w])
-  }
-  // To the history as taken back – „Usunięte wpisy” can bring one back.
-  for (const [c, list] of ask) {
-    const r = await deleteRecords(c, list.map((w) => w.id), { reason: 'undo', expected: Object.fromEntries(list.map((w) => [w.id, w.mark])) })
-    const deleted = new Set(r.deleted)
-    const changed = new Set(r.changed)
-    for (const w of list) {
-      if (deleted.has(w.id)) out.done.push(w)
-      else if (changed.has(w.id)) out.changed.push(w)
-      else out.blocked.push({ w, why: r.error ?? 'folder nie pozwolił usunąć pliku' })
-    }
-  }
-  return out
-}
-
-/** The name of a record of the start for the texts: „saldo otwarcia „mBank””, „plan miesiąca (listopad 2026)”, „kontener „Netflix””. */
-function labelOf(w: StartWrite): string {
-  const { fi, records } = useData.getState()
-  const r = (records[w.collection] as Record<string, RecordEntry<AnyRecord> | undefined>)[w.id]?.record
-  if (w.collection === 'balances') return `saldo otwarcia „${fi?.settings.accounts.find((a) => a.id === r?.accountId)?.name ?? 'konto'}”`
-  if (w.collection === 'months') return r ? `plan miesiąca (${monthLabel(String(r.month))})` : 'plan miesiąca'
-  return `kontener „${String(r?.name ?? w.proposal?.label ?? '')}”`
-}
-
-/** The records of a start still in the folder, by name (the question of „Przerwij kreator”). */
-export const startWriteLabels = (writes: readonly StartWrite[]): string[] => writes.map(labelOf)
-
-const changedText = (list: readonly StartWrite[]) => `Zostają w folderze, bo zmieniły się od zapisu startu: ${list.map(labelOf).join(', ')}.`
-const blockedText = (list: readonly Blocked[], again: string) => `nie da się teraz wycofać: ${list.map((b) => `${labelOf(b.w)} (${b.why})`).join(', ')} – ${again}.`
-const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`
 
 /** What „Uruchom budżet” still needs (AF-14): only what is missing – never the whole list when the steps are filled in. */
 export function finishBlockers(o: { missing: readonly string[]; salary: number | null; overSplit: boolean }): string[] {
@@ -351,8 +213,10 @@ export function finishBlockers(o: { missing: readonly string[]; salary: number |
   ]
 }
 
-/** How long the start waits for fi.json on the disk before it counts it as written later (a slow folder). */
+/** How long the start waits for fi.json on the disk before it says the folder is slow (and waits on – T446). */
 const START_WRITE_MS = 15_000
+/** A slow folder at „Uruchom budżet” (T446): the start waits for fi.json – nothing of it is written before the folder took it. */
+export const SLOW_START_TEXT = 'Folder zapisuje wolno – start czeka, aż przyjmie ustawienia budżetu; salda otwarcia, plan i kontenery zapiszą się zaraz po nich.'
 
 /** The wizard's answers kept for the folder shown again (a start the folder refused – they must outlive a restart). */
 function keepShownDraft(): void {
@@ -368,45 +232,13 @@ function notStarted(text: string): false {
   return false
 }
 
-/**
- * A start the folder refused after its new records (KR.29, T446 – przegląd 2 N5): they are taken back first (`withdrawStart`
- * – only what is still what the start wrote), then it is said with what stays and why. A proposal whose container stays is
- * that container in the answers – the next try uses it, never a second; one whose container went is the proposal again.
- */
-async function refusedStart(reason: string, made: Readonly<Record<string, string>>): Promise<false> {
-  const writes = useWizard.getState().startWrites
-  const r = await withdrawStart(writes)
-  const { containers } = useData.getState().records
-  const stays = Object.entries(made).filter(([, id]) => containers[id])
-  const back = r.done.filter((x) => x.collection === 'containers' && x.proposal)
-  useWizard.setState((x) => {
-    const cargo = { ...x.cargo }
-    const tanks = { ...(x.tanks ?? {}) }
-    const move = (from: string, to: string) => {
-      if (tanks[from] == null) return
-      tanks[to] = tanks[from]!
-      delete tanks[from]
-    }
-    const kept = new Set(x.startContainers)
-    for (const [key, id] of stays) {
-      delete cargo[key]
-      move(key, id)
-      kept.add(id)
-    }
-    for (const c of back) {
-      cargo[c.proposal!.key] = c.proposal!
-      move(c.id, c.proposal!.key)
-      kept.delete(c.id)
-    }
-    return { cargo, tanks, startWrites: r.blocked.map((b) => b.w), startContainers: [...kept] }
-  })
-  if (!r.changed.length && !r.blocked.length) return notStarted(`${reason} Zapisane już salda otwarcia, plan i kontenery wycofano – w folderze nie ma nic ze startu, „Uruchom budżet” zapisze je od nowa.`)
-  const said = [
-    ...(r.changed.length ? [changedText(r.changed)] : []),
-    ...(r.blocked.length ? [capital(blockedText(r.blocked, 'kreator je pamięta, „Przerwij kreator” albo ponowny start spróbuje jeszcze raz'))] : []),
-    ...(r.done.length ? ['Resztę rekordów startu wycofano.'] : [])
-  ]
-  return notStarted(`${reason} ${said.join(' ')}`)
+/** What the last steps give „Uruchom budżet”: the first month's salary and envelopes, the split of the money at the start. */
+interface StartInput {
+  salary: number
+  hull: number
+  goals: Record<string, number>
+  tanks?: Record<string, number>
+  envelopes: Record<string, number>
 }
 
 /**
@@ -414,15 +246,15 @@ async function refusedStart(reason: string, made: Readonly<Record<string, string
  * settings (the ship, the layers, the orders, the start and its split), this month's plan, the chosen containers, the
  * shortcut and the start with Windows (D64: the wizard asks about it).
  *
- * Whole or not at all (AF-14, KR.29 – przegląd 2 N5): what waited from before is written first (a folder that refuses it
- * refuses the start – nothing of it written); then the start's new records (the openings of accounts without one, marked
- * `byStart`; the month's plan when it has none; the containers of the proposals) and only when they are on the disk
- * fi.json with `budget.start` – the mark of a running budget. A folder that refuses them or fi.json: the settings taken
- * back in the window, the new records taken back (`refusedStart`), the answers kept. What was there before – an opening or
- * a plan typed over, the payments linked to the chosen containers (T379) – changes only once fi.json is written, so a
- * refusal never has anything of the user's to put back.
+ * fi.json first (AF-14, KR.29 – T446, przegląd 3 N5): what waited from before is written first (a folder that refuses it
+ * refuses the start – nothing of it written), then fi.json with `budget.start` – the mark of a running budget – and the
+ * folder's answer awaited (a slow folder: said, and awaited on – `writeStart`). Refused: nothing of the start is in the
+ * folder nor in the window, nothing to take back; the answers stay, the next „Uruchom budżet” starts afresh. Taken: the
+ * window gets the start together with its records – the openings, the month's plan, the chosen containers with their
+ * payments linked (T379) – written as every change (a write refused is said below and retried by itself); until they are
+ * on the disk no background write starts (the game, ICTTJ's goals, the settlements' start).
  */
-export async function finishWizard(o: { salary: number; hull: number; goals: Record<string, number>; tanks?: Record<string, number>; envelopes: Record<string, number> }): Promise<boolean> {
+export async function finishWizard(o: StartInput): Promise<boolean> {
   const s0 = useData.getState()
   if (!s0.fi || s0.status?.readOnly || s0.switching) {
     toast(s0.switching ? 'Trwa otwieranie innego folderu – budżetu nie można teraz uruchomić.' : `${s0.status?.readOnlyReason ?? 'Folder jest tylko do odczytu.'} Budżetu nie można uruchomić.`, 'error', 8000)
@@ -445,50 +277,40 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
   }
   const s = useData.getState()
   if (!s.fi || s.status?.readOnly || s.switching) return notStarted(s.status?.readOnlyReason ?? 'folder jest tylko do odczytu.')
-  const txs = listOf(s.records.transactions)
-  // 2. The start's new records, on the disk before the settings; the changes of what is there wait for fi.json (`later`).
-  const before = s.records
-  const later: Array<() => void> = []
-  const openings = listOf(s.records.balances)
-  for (const [accountId, now] of Object.entries(w.balances)) {
-    if (now == null) continue
-    const amount = openingFromNow(accountId, now, today, txs)
-    if (openingOf(accountId, openings)) later.push(() => setOpening(accountId, amount, today))
-    else setOpening(accountId, amount, today, { byStart: true })
-  }
-  const setPlan = () => void editPlan(month, (p) => ({ ...p, salary: o.salary, envelopes: { ...o.envelopes } }))
-  if (listOf(s.records.months).some((p) => p.month === month)) later.push(setPlan)
-  else setPlan()
-  const initialTanks: Record<string, number> = {}
-  for (const [k, v] of Object.entries(o.tanks ?? {})) if (v > 0 && s.records.containers[k]) initialTanks[k] = v
-  // A chosen proposal becomes a container (its payments linked once fi.json is written – step 4). One of its payee already
-  // there (a start the folder refused before, whose container it could not take back) is that one – never a second.
+  // A chosen proposal becomes a container – its id known before fi.json, which keeps its tank (N-PC-7). One of its payee
+  // there already (made in Ładownia meanwhile) is that one – never a second.
   const containers = listOf(s.records.containers)
-  const made: Record<string, string> = {}
-  for (const p of Object.values(w.cargo)) {
-    const id = containers.find((c) => !c.archived && counterpartyKey(c.counterparty) === p.key)?.id ?? addContainer(draftFromPayment(p))
-    if (!id) continue
-    made[p.key] = id
-    const tank = o.tanks?.[p.key] ?? 0
-    if (tank > 0) initialTanks[id] = tank
-  }
-  // What the start made, with the answers (also in the draft: ids and marks) – a refusal takes back only these.
-  const after = useData.getState().records
-  const proposals = new Map(Object.entries(made).flatMap(([key, id]) => (w.cargo[key] ? [[id, w.cargo[key]!] as const] : [])))
-  const madeNow = START_COLLECTIONS.flatMap((c) =>
-    Object.entries(after[c] as Record<string, RecordEntry<AnyRecord>>)
-      .filter(([id]) => !(before[c] as Record<string, unknown>)[id])
-      .map(([id, e]): StartWrite => ({ collection: c, id, mark: contentMark(e.record), ...(proposals.get(id) ? { proposal: proposals.get(id)! } : {}) }))
+  const made = new Map(Object.values(w.cargo).map((p) => [p.key, containers.find((c) => !c.archived && counterpartyKey(c.counterparty) === p.key)?.id ?? newId()]))
+  const tanks: Record<string, number> = {}
+  for (const [k, v] of Object.entries(o.tanks ?? {})) if (v > 0 && s.records.containers[k]) tanks[k] = v
+  for (const [key, id] of made) if ((o.tanks?.[key] ?? 0) > 0) tanks[id] = o.tanks![key]!
+  // 2. fi.json with the start; 3. once the folder took it – the start's records, with it in the window.
+  const refused = await writeStart(
+    (f) => startSettings(f, w, o, today, tanks),
+    () => startRecords(w, o, today, month, made),
+    START_WRITE_MS,
+    () => toast(SLOW_START_TEXT, 'info', 12_000)
   )
-  useWizard.setState({ startWrites: [...useWizard.getState().startWrites, ...madeNow] })
+  if (refused) return notStarted(`nie udało się zapisać ustawień w folderze (${refused}). Nic ze startu nie trafiło do folderu – odpowiedzi kreatora zostają, ponowne „Uruchom budżet” zacznie od nowa.`)
+  await setMachinePrefs({ quickShortcut: w.shortcut })
   try {
-    await saveFirst('start budżetu')
-  } catch (e) {
-    const r = unsavedReport()
-    return refusedStart(r.error ? `nie udało się zapisać rekordów startu w folderze (${r.error}).` : errorMessage(e), made)
+    // The closing to the tray stays this computer's choice (N100): the wizard asks only about the start with Windows.
+    await setTrayPrefs({ launchAtLogin: w.autostart })
+  } catch {
+    /* applied at once in the system; a refused write of config.json is retried by itself (T433) – said by the tray store */
   }
-  // 3. The mark of a running budget.
-  const ok = updateSettings((f) => ({
+  const note = await unsavedNote()
+  useWizard.setState(initial())
+  dropDraft(shownDir())
+  navigate({ page: 'bridge' })
+  playSound('docking')
+  toast(note ? `Budżet uruchomiony – ${note}.` : 'Okręt wypłynął: budżet działa od dziś.', note ? 'info' : 'success', note ? 9000 : 5000)
+  return true
+}
+
+/** fi.json of the running budget: the ship, the layers' targets, the orders, the start and its split. */
+function startSettings(f: SettingsFile, w: WizardState, o: StartInput, today: string, tanks: Record<string, number>): SettingsFile {
+  return {
     ...f,
     settings: {
       ...f.settings,
@@ -505,39 +327,26 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
           shields: 0,
           hull: o.hull,
           goals: Object.fromEntries(Object.entries(o.goals).filter(([, v]) => v > 0)),
-          ...(Object.keys(initialTanks).length ? { tanks: { ...initialTanks } } : {})
+          ...(Object.keys(tanks).length ? { tanks: { ...tanks } } : {})
         }
       }
     }
-  }))
-  const marked = useData.getState().fi
-  if (!ok || !marked) return refusedStart(useData.getState().status?.readOnlyReason ?? 'folder jest tylko do odczytu.', made)
-  if (!(await writeNow('fi', 'fi', START_WRITE_MS))) {
-    const reason = unsavedOf('fi', 'fi') ?? 'zapis jeszcze trwa'
-    // Refused by the folder: taken back – the window shows what the folder has, and so the start's records. On its way
-    // still (a slow folder): it is written later, as every change, and said so below.
-    if (takeBackSettings(marked)) return refusedStart(`nie udało się zapisać ustawień w folderze (${reason}).`, made)
   }
-  // 4. The budget runs: what was there before changes now – the openings and the plan typed over, the payments of the
-  // chosen containers linked from the month before the start (T379 – the cargo, not an envelope; a fee paid early for this
-  // month's due is paid). Never taken back: a write the folder refuses is said below and retried by itself.
-  for (const run of later) run()
-  for (const id of new Set([...Object.values(made), ...useWizard.getState().startContainers])) {
-    const c = useData.getState().records.containers[id]?.record
-    if (c && !c.archived) linkPayments(c.id, c.counterparty, true, today)
+}
+
+/**
+ * The start's records, once fi.json is on the disk (T446): the openings at the start of today (an opening typed before the
+ * wizard changes), this month's plan, the chosen containers with their payments linked from the month before the start
+ * (T379 – the cargo, not an envelope; a fee paid early for this month's due is paid).
+ */
+function startRecords(w: WizardState, o: StartInput, today: string, month: string, made: ReadonlyMap<string, string>): void {
+  const txs = listOf(useData.getState().records.transactions)
+  for (const [accountId, now] of Object.entries(w.balances)) if (now != null) setOpening(accountId, openingFromNow(accountId, now, today, txs), today)
+  editPlan(month, (p) => ({ ...p, salary: o.salary, envelopes: { ...o.envelopes } }))
+  for (const p of Object.values(w.cargo)) {
+    const id = made.get(p.key)!
+    const there = useData.getState().records.containers[id]?.record
+    if (there) linkPayments(there.id, there.counterparty, true)
+    else addContainer(draftFromPayment(p), id)
   }
-  await setMachinePrefs({ quickShortcut: w.shortcut })
-  try {
-    // The closing to the tray stays this computer's choice (N100): the wizard asks only about the start with Windows.
-    await setTrayPrefs({ launchAtLogin: w.autostart })
-  } catch {
-    /* applied at once in the system; a refused write of config.json is retried by itself (T433) – said by the tray store */
-  }
-  const note = await unsavedNote()
-  useWizard.setState(initial())
-  dropDraft(shownDir())
-  navigate({ page: 'bridge' })
-  playSound('docking')
-  toast(note ? `Budżet uruchomiony – ${note}.` : 'Okręt wypłynął: budżet działa od dziś.', note ? 'info' : 'success', note ? 9000 : 5000)
-  return true
 }

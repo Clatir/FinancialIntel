@@ -118,12 +118,7 @@ export function normalizeDocking(d) {
   return x
 }
 export const normalizeLoan = (l) => fill(l, LOAN_DEFAULTS)
-/** Saldo: `byStart` (T446 – saldo zapisane przez start kreatora) tylko jako `true`, inna wartość = brak pola. */
-export function normalizeBalance(b) {
-  const x = fill(b, BALANCE_DEFAULTS)
-  if (x && typeof x === 'object' && x.byStart !== true) delete x.byStart
-  return x
-}
+export const normalizeBalance = (b) => fill(b, BALANCE_DEFAULTS)
 export const normalizeScheduled = (s) => fill(s, SCHEDULED_DEFAULTS)
 
 /** Ustawienia (fi.json `settings`) – tylko części czytane przez wyrocznię; reszta bez zmian. */
@@ -159,6 +154,6 @@ export const CHECKED_FIELDS = {
   month: [...Object.keys(MONTH_DEFAULTS), 'salary'],
   docking: [...Object.keys(DOCKING_DEFAULTS), 'transactionId', 'entryDate'],
   loan: [...Object.keys(LOAN_DEFAULTS), 'direction', 'amount', 'date'],
-  balance: ['date', 'accountId', 'kind', 'amount', 'byStart'],
+  balance: ['date', 'accountId', 'kind', 'amount'],
   scheduled: [...Object.keys(SCHEDULED_DEFAULTS), 'date']
 }

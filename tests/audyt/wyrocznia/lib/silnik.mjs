@@ -485,15 +485,12 @@ class Household {
 
 // ------------------------------------------------------------------ silnik
 
-/**
- * Start warstw (T25): `budget.start`, inaczej najwcześniejsze saldo otwarcia (do dziś) – przegląd N15. Saldo otwarcia
- * zapisane przez start kreatora (`byStart`, T446 – przegląd 2 N5) bez `budget.start` nie uruchamia warstw.
- */
+/** Start warstw (T25): `budget.start`, inaczej najwcześniejsze saldo otwarcia (do dziś) – przegląd N15. */
 export function startOf(input, today) {
   const s = input.settings?.budget?.start
   if (s) return s
   let first = null
-  for (const b of input.balances ?? []) if (b.kind === 'opening' && !b.byStart && b.date <= today && (first == null || b.date < first)) first = b.date
+  for (const b of input.balances ?? []) if (b.kind === 'opening' && b.date <= today && (first == null || b.date < first)) first = b.date
   return first
 }
 

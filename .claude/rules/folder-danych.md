@@ -25,8 +25,11 @@ paths:
 - Zapis atomowy, historia `.history/`, konflikt chmury → kopia `-KOMPUTER.json` i scalanie trójstronne (`merge.ts`,
   `resolveConflict`, `mergeConflict`).
 - Wpis albo plik nowszej wersji → tylko do odczytu (`NewerFileError`, `SettingsFileError` 'too-new'); nigdy nie nadpisuj.
-- Usunięcie tylko wersji znanej oknu (wycofanie startu kreatora – T446): `deleteRecords(…, expected)` z `contentMark` – proces
-  główny czyta plik od nowa w chwili usuwania, inna treść zostaje (`ChangedSinceError` → `changed`); bez `expected` jak dotąd.
+- Start budżetu (T446): `writeStart` – `fi.json` z `budget.start` pierwszy (następny zapis `fi.json`, po 15 s komunikat,
+  czeka dalej), do okna dopiero z odpowiedzią folderu i od razu z rekordami startu (zwykły autozapis z ponowieniem); odmowa
+  nie zmienia niczego ani w folderze, ani w oknie – nic się nie wycofuje. Zapis wszystkiego czeka na ten zapis (w drodze
+  jak każdy zapis `fi.json`), zapisy w tle – na rekordy startu na dysku (`startKeys`). **Pułapka:** `records` w
+  `writeStart` robi tylko zmiany w pamięci – nigdy `flushSaves` / `saveFirst` / `unsavedNote` (czekałby na siebie).
 - **Zapis nigdy nie zakłada folderu danych** (AP-1, T314): każdy zapis pod korzeniem idzie przez
   `writeFileAtomic(…, within)` / `writeZipFile(…, within)` / `mkdirWithin` (nowy zapis do folderu – też obecność, historia,
   ZIP w `backups/`); `within` obowiązkowy, `null` tylko poza folderem danych; zwykłe `fs.mkdir(…, { recursive: true })` pod

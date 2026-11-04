@@ -3778,60 +3778,48 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Osłony po starcie” poniżej minimum z rozkazów – kwota kolorem akcentu (`data-state="below-min"`, jak w kursie)
   z ostrzeżeniem pod spodem; na czerwono tylko kwota poniżej zera – zieleń i czerwień tylko dla kwot na plus i minus
   (zmienia „na czerwono i z ostrzeżeniem poniżej minimum”).
-- **T446** Start budżetu w całości albo wcale (1.15.9, N5 – KR.29 / AF-14, część „zapis częściowy”; rozszerza T51):
+- **T446** Start budżetu w całości albo wcale (1.15.9, N5 – KR.29 / AF-14, część „zapis częściowy”; rozszerza T51;
+  przegląd 3 N5 – najpierw `fi.json`, zastępuje wycofanie startu z przeglądów 1 i 2):
   `finishWizard` najpierw zapisuje wszystko, co czekało (`saveFirst` – członek, cel, inna zmiana; folder, który tego nie
-  przyjmuje, nie dostaje niczego ze startu), potem rekordy startu (salda otwarcia, plan miesiąca, wybrane kontenery
-  z połączonymi płatnościami – `addContainer(…, { start })`), i dopiero gdy są na dysku – `fi.json` z `budget.start`
-  (znacznik działającego budżetu, `writeNow` do 15 s). `fi.json` odrzucony: ustawienia cofnięte w oknie
-  (`takeBackSettings` – tylko gdy ostatni zapis padł, żaden nie jest w drodze, nic nie zmieniło `fi.json` po starcie),
-  odpowiedzi zostają (także szkic na tym komputerze), toast „Budżet nie wystartował – …” z powodem; zapis jeszcze w drodze
-  (wolny folder) – jak dotąd, ponawiany. Ponowienie jest bezpieczne: saldo otwarcia i plan aktualizowane, propozycja,
-  która już ma kontener tego odbiorcy, używa go (bez drugiego), wybór propozycji przechodzi na kontener (zbiornik pod
-  jego id). Przycisk „Uruchom budżet” podaje obok tylko to, czego brakuje (`finishBlockers` – nazwy kont bez salda,
-  pensja, podział ponad środki), w folderze tylko do odczytu – powód folderu, a gdy zapisy teraz padają – że start
-  poczeka. Wykrywanie i zdejmowanie atrybutu „tylko do odczytu” z plików – czeka na decyzję użytkownika (bez zmian).
-  Dopisek (przegląd N5 2 – zmienia zdania „Ponowienie jest bezpieczne…” i „wybór propozycji przechodzi na kontener”):
-  start odrzucony po swoich rekordach (zapis rekordów albo `fi.json`) od razu je wycofuje (`refusedStart` →
-  `withdrawStart`, `features/wizard/state.ts`) – folder nie zostaje z saldem otwarcia z dziś, od którego silnik ruszyłby
-  bez startu (T25), z planem miesiąca, kontenerem ani płatnością połączoną z kontenerem; tekst „przepadną” przy
-  „Przerwij kreator” mówi prawdę. Pewność jak „Cofnij” (T418): rekord założony przez start znika tylko taki, jaki start
-  go zostawił (do historii jako cofnięty – „Usunięte wpisy” go przywrócą); rekord zmieniony przez start (saldo otwarcia
-  albo plan sprzed kreatora, płatność połączona z kontenerem) dostaje z powrotem tylko pola, które start zmienił, póki są
-  takie, jak je zostawił; zmieniony od tego czasu, zapisany przez nowszą wersję albo czekający na decyzję o zmianie
-  z drugiego komputera zostaje, jak jest (ze słowem). Co start zapisał, kreator pamięta z odpowiedziami
-  (`WizardState.startWrites` – rekord przed startem i po nim, także w szkicu na tym komputerze), dopóki budżet nie działa.
-  Czego folder nie dał wycofać (plik zajęty), zostaje w nich razem z płatnościami swojego kontenera: komunikat to nazywa,
-  pytanie „Przerwij kreator” wymienia („rekordy nieudanego startu (…) kreator usunie – zmienione od tego czasu zostaną,
-  jak są”), „Przerwij” wycofuje je tą samą regułą (folder dalej odmawia – kreator zostaje, ze słowem), następny start
-  ich używa (kontener tego odbiorcy z płatnościami, saldo i plan aktualizowane). Propozycja, której kontener zostaje, jest
-  w odpowiedziach tym kontenerem (zbiornik pod jego id – jak dotąd); której kontener poszedł – znów propozycją.
-  Rozważone i odrzucone: tylko „Przerwij” wymienia i usuwa (do tego czasu silnik liczyłby budżet od salda otwarcia
-  startu, którego nie było); zapis wielu plików naraz w jednym kroku – folder (OneDrive) tego nie ma.
-  Dopisek (przegląd 2 N5 2, 3, 8, 9 – upraszcza mechanizm poprzedniego dopisku, zastępuje jego zdania o polach zmienionych
-  przez start i o tym, co kreator pamięta): przed `fi.json` start zapisuje już tylko nowe rekordy – salda otwarcia kont
-  bez salda (ze znacznikiem `byStart`), plan miesiąca, gdy go nie ma, kontenery propozycji (bez połączenia płatności);
-  to, co było w folderze (saldo otwarcia albo plan sprzed kreatora, płatności połączone z wybranymi kontenerami – T379),
-  zmienia dopiero po zapisie `fi.json`, więc odmowa nie ma niczego do przywracania. Wycofanie to tylko usunięcie nowego
-  rekordu i tylko wtedy, gdy plik na dysku jest dokładnie tym, co start zapisał: kreator pamięta id i znacznik treści
-  (`contentMark`, `shared/merge.ts` – bez stempli zapisu; w szkicu na tym komputerze tylko to, przy kontenerze jeszcze
-  propozycja z kroku 4), okno porównuje swoją wersję, a proces główny czyta plik od nowa w chwili usuwania
-  (`deleteRecords` z `expected` → `removeRecord`: inna treść – `ChangedSinceError`, nic nie usunięte, do historii nic ze
-  starszego odczytu). Każdy inny przypadek zostaje i jest nazwany: zmieniony od zapisu startu (w oknie, na dysku, kontener
-  z połączoną płatnością) – „Zostają w folderze, bo zmieniły się od zapisu startu: …”, odtąd użytkownika, kreator go nie
-  śledzi; zapisany przez nowszą wersję aplikacji, czekający na decyzję o zmianie z drugiego komputera albo plik, którego
-  folder nie dał usunąć – „nie da się teraz wycofać: … (powód)”: kreator go pamięta, „Przerwij kreator” nie kończy się po
-  cichu (kreator zostaje, ze słowem), ponowna odmowa i „Przerwij” próbują znowu. Drugi start liczy „nowe” od stanu sprzed
-  siebie: rekord pierwszego startu, który został w folderze, jest dla niego zastany (zmienia go dopiero po `fi.json`);
-  kontener, który został i zastępuje w odpowiedziach swoją propozycję, dostaje połączone płatności przy udanym starcie
-  jak nowy (`startContainers` – same id).
-  Zabezpieczenie silnika: saldo otwarcia ze znacznikiem `byStart` bez `budget.start` nie uruchamia warstw (`budgetStartOf`,
-  baner N23 tak samo; z `budget.start` – pieniądze startu); zmiana salda ręcznie (`setOpening`) zdejmuje znacznik – saldo
-  staje się zwykłym (T25). Pole addytywne (`z.literal(true)`, bez `SCHEMA_VERSION`; starsza wersja liczy je jak każde saldo
-  otwarcia; wyrocznia zna regułę – `startOf`). Rozważone i odrzucone: przywracanie pól zmienionych przez start z kontrolą
-  wersji (osobny zapis warunkowy w procesie głównym, rekordy w szkicu) – zmiany zastanych po `fi.json` zamykają tę klasę
-  prościej; połączenie płatności przed `fi.json` i odłączanie przy odmowie – zapis nie do sprawdzenia na dysku. Koszt:
-  między zapisem `fi.json` a zapisem tych zmian (milisekundy, przy wolnym folderze do 15 s) okno liczy budżet jeszcze bez
-  nich; odrzucony zapis zmian po starcie – komunikat jak przy każdej zmianie, ponawiany.
+  przyjmuje, nie dostaje niczego ze startu), potem **`fi.json` z `budget.start`** i resztą ustawień startu (statek,
+  warstwy, rozkazy, podział środków – zbiornik kontenera z propozycji pod id nadanym przed zapisem) jako następny zapis
+  `fi.json` (`writeStart`, `store/data.ts`) i czeka na odpowiedź folderu – do 15 s, dłużej z toastem „Folder zapisuje wolno
+  – start czeka…” i czekaniem dalej. Okno dostaje start dopiero po odpowiedzi folderu, od razu razem z rekordami startu –
+  ani folder, ani okno nie mają `budget.start` bez nich (silnik, gra, powiadomienia nie widzą stanu pośredniego). Odmowa:
+  w oknie i w folderze nie zmienia się nic – nie ma czego wycofywać ani cofać; odpowiedzi zostają (także szkic na tym
+  komputerze), toast „Budżet nie wystartował – nie udało się zapisać ustawień w folderze (powód). Nic ze startu nie
+  trafiło do folderu – …”, ponowne „Uruchom budżet” zaczyna od nowa (bez drugiego kontenera). Przyjęty: rekordy startu –
+  salda otwarcia (zastane saldo otwarcia zmienione), plan miesiąca, wybrane kontenery z połączonymi płatnościami (T379;
+  propozycja, której odbiorca ma już kontener, używa go) – zwykłym zapisem aplikacji: zapis odrzucony – toast „Budżet
+  uruchomiony – część zmian nie zapisała się jeszcze w folderze (…)”, autozapis ponawia sam. Zmiana `fi.json` w oknie
+  w trakcie zapisu (edycja, wersja z drugiego komputera) zostaje – start nałożony na nią, zapisany razem z nią. „Przerwij
+  kreator” jak w N4: odpowiedzi przepadają, ślady (domownicy, cele, folder ICTTJ, import) zostają i są wymienione – tekst
+  mówi prawdę, bo przed przyjętym `fi.json` nic ze startu nie jest zapisane. Przycisk „Uruchom budżet” podaje obok tylko to,
+  czego brakuje (`finishBlockers` – nazwy kont bez salda, pensja, podział ponad środki), w folderze tylko do odczytu – powód
+  folderu, a gdy zapisy teraz padają – że start poczeka. Wykrywanie i zdejmowanie atrybutu „tylko do odczytu” z plików –
+  czeka na decyzję użytkownika (bez zmian).
+  Zabezpieczenie silnika w chwili między zapisami (`budget.start` na dysku, salda jeszcze nie albo ich zapis padł): do
+  zapisu na dysku wszystkich rekordów startu na tym komputerze żaden zapis w tle nie rusza (`startKeys` w `writeStart`,
+  `writesInBackground` false) – gra nie ustawia swojego startu ani nie zamraża dni, cele ICTTJ i start rozliczeń domowników
+  nie liczą się z budżetu, którego folder nie ma w całości. Zapis wszystkiego (zamknięcie okna, zmiana folderu, Ctrl+S)
+  czeka na zapis `fi.json` startu w drodze i zapisuje rekordy, które przyszły z jego odpowiedzią – okno zamknięte w trakcie
+  nie zostawia `fi.json` bez nich. Rekord, którego folder nie przyjął, a użytkownik zamknął okno „bez zapisu” po pytaniu
+  o niezapisane zmiany, przepada jak każda niezapisana zmiana (saldo otwarcia – Ustawienia → Konta, plan – Plan miesiąca).
+  Drugi komputer, który zobaczy `fi.json` przed saldami, dostaje je chwilę później przez OneDrive jak każdą zmianę; do tego
+  czasu liczy budżet bez nich tylko na ekranie: zapisy w tle robi tylko komputer „w użyciu” (D86), pierwsze zamrożenie dni
+  czeka po otwarciu folderu i po każdej zmianie z drugiego komputera (B33, T199), a pierwszy dzień gry to dzień po starcie,
+  zamrażany najwcześniej dwa dni później.
+  Zastąpione (przeglądy N5 1–3): rekordy startu przed `fi.json` i ich wycofanie przy odmowie (`refusedStart`,
+  `withdrawStart`, `WizardState.startWrites` / `startContainers` w szkicu, znacznik salda `byStart` w `budgetStartOf`,
+  banerze N23 i wyroczni, usunięcie warunkowe `deleteRecords(…, expected)` z `contentMark` i `ChangedSinceError` w procesie
+  głównym), a także cofanie `fi.json` w oknie po odmowie (`takeBackSettings`). Każda runda przeglądu znajdowała w wycofaniu
+  nowe przypadki – odczyt z pamięci zamiast pliku, błąd `stat` jako brak pliku, starsza wersja ignorująca `byStart`, ponowny
+  zapis nieaktualnej wersji po odmowie, salda `byStart` w warstwach, błąd przypisany innemu rekordowi. Odwrócona kolejność
+  zamyka tę klasę: przy odmowie nie ma czego wycofywać, a stan pośredni (`budget.start` przed saldami) niczego nie zapisuje
+  w tle. Pole `byStart` nie zostało wydane – usunięte ze schematu bez śladu (bez `SCHEMA_VERSION`). Rozważone i odrzucone:
+  `fi.json` najpierw w oknie i zapis `writeNow` (okno liczyłoby budżet bez sald przez czas zapisu, a odmowa wymagała
+  cofania); trwały znacznik „start w toku” (w folderze albo w szkicu) – po restarcie bez rekordów nie ma czego dokończyć;
+  zapis wielu plików naraz w jednym kroku – folder (OneDrive) tego nie ma.
 - **T447** Propozycje z historii i pierwsze dni (1.15.9, N5 – AP-25, AF-13, KR.19, KR sp. 9, ME sp. 3, AF-53; rozszerza
   T286): rachunek o zmiennej kwocie także co 2 miesiące (`VARIABLE_MID_CYCLES`) – co najmniej 3 ostatnie płatności w
   odstępie cyklu (±12 dni), kwoty ±60% mediany, w swoim dniu miesiąca (±6 dni), kwota = 75. percentyl roku w górę do

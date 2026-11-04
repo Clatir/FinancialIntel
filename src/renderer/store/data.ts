@@ -208,6 +208,8 @@ const withMap = (s: DataState, c: Collection, map: AnyMap): Pick<DataState, 'rec
 
 function bumpPending(delta: number, patch: Partial<SaveState> = {}): void {
   set((s) => ({ save: { ...s.save, pending: Math.max(0, s.save.pending + delta), ...patch } }))
+  // A write answered (or a change forgotten): the records of the budget's start may all be on the disk now (T446).
+  syncHeld()
 }
 
 type Stamped = { updatedAt?: string; updatedBy?: string }
@@ -240,9 +242,11 @@ export function applySnapshot(snapshot: Snapshot): void {
   useRemote.setState({ pending: [], open: false })
   // The previous folder's operations: no question about them stays (AP-8).
   clearGuards()
-  // A folder shown anew: the hold of a close that did not come is over (T301).
+  // A folder shown anew: the hold of a close that did not come is over (T301), and so is the wait for the records of a
+  // start of the folder before (T446) – none of its changes is to write any more.
   clearTimeout(closeHold)
   closeHold = undefined
+  startKeys.clear()
   set({
     backgroundHeld: holds > 0,
     phase: 'ready',
@@ -481,6 +485,8 @@ export function resolveRemoteMany(decisions: readonly RemoteDecision[]): void {
     if (ids.length > 1) saveBatch(c, ids)
     else scheduleSave(c, ids[0]!, 0)
   }
+  // Another computer's version taken over a change of the budget's start: nothing of it to wait for (T446).
+  syncHeld()
 }
 
 /** A decision about the settings (`fi.json`) from another computer. */
@@ -632,6 +638,7 @@ function saveBatch(c: Collection, ids: readonly string[]): void {
   for (const [i, key] of keys.entries()) {
     versions.set(key, (versions.get(key) ?? 0) + 1)
     dirty.set(key, { collection: c, id: ids[i]! })
+    collecting?.add(key)
     const t = timers.get(key)
     if (t) clearTimeout(t)
     timers.delete(key)
@@ -805,6 +812,7 @@ function scheduleSave(collection: Collection | 'fi', id: string, delay = saveDel
   const key = keyOf(collection, id)
   versions.set(key, (versions.get(key) ?? 0) + 1)
   dirty.set(key, { collection, id })
+  collecting?.add(key)
   const existing = timers.get(key)
   if (existing) clearTimeout(existing)
   const now = Date.now()
@@ -829,7 +837,8 @@ export const useFolderLocked = (): boolean => useData((s) => !!s.status?.readOnl
 /**
  * Writes the app makes on its own – the game's days frozen, ICTTJ's goals followed, the settlements' start (D86: on a
  * computer in use only): in a writable folder shown in full, never while changes are being written (T301) – a write
- * started then would keep the flush going or reach the disk after its answer („zapis jeszcze trwa” at the window's close).
+ * started then would keep the flush going or reach the disk after its answer („zapis jeszcze trwa” at the window's close) –
+ * and never while the records of the budget's start are not on the disk yet (KR.29, T446 – `writeStart`).
  */
 export const writesInBackground = (s: DataState): boolean => s.phase === 'ready' && !s.status?.readOnly && !s.switching && !s.backgroundHeld
 
@@ -839,9 +848,17 @@ let holds = 0
 let closeHold: ReturnType<typeof setTimeout> | undefined
 /** How long at most: the window goes in a moment – unless main keeps it (its question after a minute of writing, „Anuluj”). */
 const CLOSE_HOLD_MS = 10_000
+/**
+ * The records of the budget's start not on the disk yet (KR.29, T446 – `writeStart`): the background writes wait for them.
+ * `collecting` – the changes being made now (the start's records).
+ */
+const startKeys = new Set<string>()
+let collecting: Set<string> | null = null
 
 function syncHeld(): void {
-  const held = holds > 0 || closeHold !== undefined
+  // A change of the start written, replaced by another computer's version or deleted: nothing of it to wait for.
+  for (const key of startKeys) if (!dirty.has(key)) startKeys.delete(key)
+  const held = holds > 0 || closeHold !== undefined || startKeys.size > 0
   if (get().backgroundHeld !== held) set({ backgroundHeld: held })
 }
 
@@ -1077,14 +1094,9 @@ export function deleteOrSay(collection: Collection, id: string): void {
  * Many records deleted with one call (W1: an import's, duplicates): gone from memory at once; those the disk refused come
  * back. Returns the ids deleted and the first error. `reason` 'undo': taken back with their import (F4 – T39); 'drop': old
  * batches of `imports`, no version in the history; 'import': the import's own (pending ones gone from the bank, copies
- * on another account – T331), no deletion of the user's. `expected` – id → the content mark of the only version to
- * delete (KR.29, T446): the main process reads the file again; one saying something else comes back (`changed`).
+ * on another account – T331), no deletion of the user's.
  */
-export async function deleteRecords(
-  collection: Collection,
-  ids: readonly string[],
-  opts: { reason?: 'undo' | 'drop' | 'import'; expected?: Readonly<Record<string, string>> } = {}
-): Promise<{ deleted: string[]; error: string | null; changed: string[] }> {
+export async function deleteRecords(collection: Collection, ids: readonly string[], opts: { reason?: 'undo' | 'drop' | 'import' } = {}): Promise<{ deleted: string[]; error: string | null }> {
   const s = get()
   const entries = new Map(ids.map((id) => [id, mapOf(s, collection)[id]]))
   const drafts = ids.filter((id) => s.drafts[id])
@@ -1105,11 +1117,10 @@ export async function deleteRecords(
   return deleting(async () => {
     await Promise.all(keys.map((k) => settled(inFlight.get(k))))
     const onDisk = ids.filter((id) => !drafts.includes(id))
-    if (!onDisk.length) return { deleted: [...ids], error: null, changed: [] }
-    const expected = opts.expected ? Object.fromEntries(onDisk.flatMap((id) => (opts.expected![id] != null ? [[id, opts.expected![id]!]] : []))) : undefined
-    let results: Array<{ id: string; error?: string; changed?: true }>
+    if (!onDisk.length) return { deleted: [...ids], error: null }
+    let results: Array<{ id: string; error?: string }>
     try {
-      results = await (expected ? api.deleteRecords(collection, onDisk, opts.reason, expected) : api.deleteRecords(collection, onDisk, opts.reason))
+      results = await api.deleteRecords(collection, onDisk, opts.reason)
     } catch (e) {
       results = onDisk.map((id) => ({ id, error: errorMessage(e) }))
     }
@@ -1131,8 +1142,7 @@ export async function deleteRecords(
       })
     for (const id of back) if (unsaved.has(keyOf(collection, id))) scheduleSave(collection, id)
     const failedIds = new Set(refused.map((r) => r.id))
-    const changed = refused.filter((r) => r.changed).map((r) => r.id)
-    return { deleted: ids.filter((id) => !failedIds.has(id)), error: (refused.find((r) => !r.changed) ?? refused[0])?.error ?? null, changed }
+    return { deleted: ids.filter((id) => !failedIds.has(id)), error: refused[0]?.error ?? null }
   })
 }
 
@@ -1175,7 +1185,8 @@ export async function flushSaves(): Promise<boolean> {
     // In rounds (T301): a record changed while its write was on its way – a field committed, an edit, a write started
     // just before, a record a refused deletion brought back – is written once more before the answer. The version each
     // record was sent at: a write that failed or waits for a decision about another computer's change is not sent again –
-    // its error or the decision is the answer.
+    // its error or the decision is the answer. The budget's start on its way (T446): its records come with its fi.json's
+    // answer – written in the next round.
     const sent = new Map<string, number>()
     for (let round = 0; round < FLUSH_ROUNDS; round++) {
       for (const key of new Set([...timers.keys(), ...dirty.keys()])) {
@@ -1222,7 +1233,7 @@ export function unsavedReport(): FlushResult {
 }
 
 /** A record's change not on the disk yet (AP-1): why – its last write's error, or its write on the way; null = saved. */
-export function unsavedOf(collection: Collection | 'fi', id: string): string | null {
+export function unsavedOf(collection: Collection, id: string): string | null {
   const key = keyOf(collection, id)
   return dirty.has(key) ? (failed.get(key) ?? 'zapis jeszcze trwa') : null
 }
@@ -1231,7 +1242,7 @@ export function unsavedOf(collection: Collection | 'fi', id: string): string | n
  * A record's write now, awaited (AP-1 – the quick entry says „Zapisano.” only once it is on the disk): true = written;
  * false = not yet (its error kept, retried as every write). Waits `limitMs` at most – a slow folder answers later.
  */
-export async function writeNow(collection: Collection | 'fi', id: string, limitMs = 5000): Promise<boolean> {
+export async function writeNow(collection: Collection, id: string, limitMs = 5000): Promise<boolean> {
   const key = keyOf(collection, id)
   if (!dirty.has(key)) return true
   const t = timers.get(key)
@@ -1243,19 +1254,75 @@ export async function writeNow(collection: Collection | 'fi', id: string, limitM
   return !dirty.has(key)
 }
 
+const SLOW = Symbol('slow')
+
 /**
- * A change of fi.json the folder refused (AF-14, KR.29 – the budget's start written whole or not at all): back to the
- * version on the disk, its retries dropped, so the window never shows what the folder does not have. Only when its last
- * write failed, none is on its way, no decision about another computer's change waits and nothing changed fi.json after
- * `expected`; false – the change stays, retried as every write.
+ * „Uruchom budżet” on the disk (KR.29, T446 – przegląd 3 N5): fi.json with the start (`update`) goes first – as fi.json's
+ * next write, after any on its way – and only once the folder took it does the window get the start, together with its
+ * records (`records`, made at once): neither the folder nor the window ever has the start without them, and a refusal
+ * changes nothing in either – nothing to take back. Every flush waits for it (fi.json's write on its way – the window
+ * closing in the middle writes the records too). The records are written as every change (a write refused is said and
+ * retried), and no background write starts until each of them is on the disk on this computer (`startKeys`). `slow` is said
+ * once `limitMs` passed without the folder's answer, which is awaited all the same. Resolves to why the folder refused
+ * fi.json; null = the budget runs.
  */
-export function takeBackSettings(expected: SettingsFile): boolean {
-  const base = bases.get(FI_KEY) as SettingsFile | undefined
-  if (!base || get().fi !== expected || !failed.has(FI_KEY) || inFlight.has(FI_KEY) || pendingFor(FI_KEY)) return false
-  forget(FI_KEY)
-  set({ fi: base })
-  bumpPending(0, { error: saveError() })
-  return true
+export async function writeStart(update: (f: SettingsFile) => SettingsFile, records: () => void, limitMs: number, slow: () => void): Promise<string | null> {
+  const shown = get().openedAt
+  const answer = (settled(inFlight.get(FI_KEY)) ?? Promise.resolve()).then(() => startOnDisk(update, records, shown))
+  // fi.json's write on its way: the next write of fi.json and every flush wait for it, whatever became of it.
+  const flight = answer.then(
+    () => undefined,
+    () => undefined
+  )
+  inFlight.set(FI_KEY, flight)
+  void flight.finally(() => {
+    if (inFlight.get(FI_KEY) === flight) inFlight.delete(FI_KEY)
+  })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const first = await Promise.race([answer, new Promise<typeof SLOW>((r) => (timer = setTimeout(() => r(SLOW), limitMs)))]).finally(() => clearTimeout(timer))
+  if (first !== SLOW) return first
+  slow()
+  return answer
+}
+
+/** `writeStart`'s write, in fi.json's queue: the settings to the disk, then – taken – to the window with the records. */
+async function startOnDisk(update: (f: SettingsFile) => SettingsFile, records: () => void, shown: number): Promise<string | null> {
+  const base = get().fi
+  if (!base || get().openedAt !== shown) return 'w trakcie startu pokazano inny folder'
+  bumpPending(1)
+  let saved: SettingsFile
+  try {
+    saved = await api.saveSettings(update(base))
+  } catch (e) {
+    bumpPending(-1, { error: saveError() })
+    return errorMessage(e)
+  }
+  try {
+    // Another folder shown meanwhile (never while a flush waits for this write – B31): nothing of the start in its window.
+    if (get().openedAt !== shown) return 'w trakcie startu pokazano inny folder'
+    const now = get().fi!
+    if (now === base && !dirty.has(FI_KEY)) set({ fi: shareSettings(now, saved) })
+    else {
+      // fi.json changed in the window meanwhile (an edit, another computer's version taken): kept, the start over it –
+      // written next; the disk has the start already (the base of a later merge).
+      bases.set(FI_KEY, saved)
+      set({ fi: update(now) })
+      scheduleSave('fi', 'fi', 0)
+    }
+    // A change from another computer came while this write was on its way (B48): the decision must reach the disk.
+    if (pendingFor(FI_KEY)) useRemote.setState((r) => ({ pending: r.pending.map((p) => (p.key === FI_KEY ? { ...p, savedAfter: true } : p)) }))
+    const keys = new Set<string>()
+    collecting = keys
+    try {
+      records()
+    } finally {
+      collecting = null
+    }
+    for (const key of [...keys, FI_KEY]) if (dirty.has(key)) startKeys.add(key)
+    return null
+  } finally {
+    bumpPending(-1, { lastSavedAt: new Date().toISOString(), error: saveError() })
+  }
 }
 
 /** The window closing (B108): everything written, the reason of what is not – a waiting decision's dialog opened behind the question. */
