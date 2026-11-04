@@ -24,13 +24,30 @@ export interface CsvTransfer {
   title: string
 }
 
+/** An ATM withdrawal (D100, AP-33): złote, positive = taken out; `blik` – „BLIK WYPŁATA GOTÓWKI”. */
+export interface CsvAtm {
+  /** RRRR-MM-DD */
+  date: string
+  amount: number
+  name: string
+  blik?: boolean
+}
+
 const day = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`
 const pln = (spent: number) => (-spent).toFixed(2).replace('.', ',')
 const transferRow = (t: CsvTransfer) =>
   `${day(t.date)};${t.name}, ${t.title}  PRZELEW ZEWNĘTRZNY ${t.amount > 0 ? 'PRZYCHODZĄCY' : 'WYCHODZĄCY'}  22 2222 2222 2222 2222 2222 2222;Wpływy - inne;${t.amount.toFixed(2).replace('.', ',')} PLN`
 
-/** „Lista operacji”: the period, the account's number (`null` – none), one row per purchase, then the transfers. */
-export function listaCsv(buys: readonly CsvBuy[], period: { from: string; to: string }, account: string | null = CSV_NUMBER, transfers: readonly CsvTransfer[] = []): string {
+const atmRow = (a: CsvAtm) => `${day(a.date)};${a.name}  ${a.blik ? 'BLIK WYPŁATA GOTÓWKI' : 'WYPŁATA W BANKOMACIE'}${' '.repeat(40)};Wypłata gotówki;${pln(a.amount)} PLN`
+
+/** „Lista operacji”: the period, the account's number (`null` – none), one row per purchase, then the transfers and the ATM withdrawals. */
+export function listaCsv(
+  buys: readonly CsvBuy[],
+  period: { from: string; to: string },
+  account: string | null = CSV_NUMBER,
+  transfers: readonly CsvTransfer[] = [],
+  atms: readonly CsvAtm[] = []
+): string {
   return [
     'mBank S.A. Bankowość Detaliczna;;;',
     ';;;',
@@ -46,6 +63,7 @@ export function listaCsv(buys: readonly CsvBuy[], period: { from: string; to: st
     '#Data operacji;#Opis operacji;#Kategoria;#Kwota',
     ...buys.map((b) => `${day(b.date)};${b.name}  ZAKUP PRZY UŻYCIU KARTY W KRAJU${' '.repeat(40)}${b.pending ? 'transakcja nierozliczona' : ''};Żywność i chemia domowa;${pln(b.amount)} PLN`),
     ...transfers.map(transferRow),
+    ...atms.map(atmRow),
     ''
   ].join('\r\n')
 }

@@ -3394,6 +3394,40 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   działaniu (ten sam Enter, to samo kliknięcie „Zapisz”) – każdy nowy klawisz albo kliknięcie zaczyna od zera, bo słowo
   powiedziane wcześniej było już w stopce. Odmowa zapisu (brak kwoty, cisza nocna…) też dopisuje słowa tego działania.
   Tag równy już dodanemu nie jest liczony jako „skrócony” (nic nie przybywa).
+- **T420** „-” i „_” w tagu jak spacja (AP-21, AF-18; zmienia T291): `tagKey` – bez wielkości liter, polskich znaków,
+  a „-” i „_” to spacja („#wakacje-chorwacja” w nazwie = tag „Wakacje Chorwacja”; „#słowo” nie ma spacji, więc wyprawa
+  z kilku słów rozdwajała się). Bez migracji: tagi operacji zostają jak zapisane (pierwsza pisownia jest etykietą), klucze
+  zapisane w ustawieniach przed 1.15.9 czytane przez `tagKey` jeszcze raz – cel wyprawy (`tagGoalOf`; `setTagGoal` usuwa
+  dawny klucz tego tagu), filtr zapisanego widoku i filtr tego komputera (`filterOf`). Tag z samych „-” / „_” – żaden.
+- **T421** Miesiąc w toku liczony do dziś (AP-36, C16 – D99 (9); RE sp. 4): debriefing (`debriefing` – koszty netto,
+  koperty, „bez koperty”, ładownia, sfinansowane przez domowników), przegląd roczny (`yearNumbers(…, today)` – koszty,
+  przychody, kategorie, miesiące), bilans paliwa (`fuelMonths` / `fuelSummary(…, today)`) i „Wydatki w czasie” Wywiadu
+  czytają operacje z datą do dnia budżetu (`upToDay`, `calc/operations.ts` – ta sama lista, gdy żadna nie jest późniejsza),
+  jak salda, energia i warstwy („Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia”). Koszty
+  netto operacji z datą po dziś – osobno jako „Zaplanowane (operacje z datą po dziś – poza kosztami)”: `Debriefing.planned`
+  i `YearNumbers.planned` (kolumna „Zaplanowane” w tabeli miesięcy przeglądu, gdy jest), linia tylko przy kwocie ≠ 0.
+  Miesiąc zakończony – jak dawniej (nie ma w nim dat po dziś). Eksport „Miesiące” bierze koszty z debriefingu (do dziś),
+  przychody liczy sam (poza tą zmianą). Operacje pokazują listę okresu bez zmian (suma tego, co na liście).
+- **T422** Wypłata z bankomatu na konto „Gotówka” (AP-33, D100 (1); zmienia spec „Konta budżetu” i „Przypadki
+  szczególne”, doprecyzowuje D83): konto gotówki to aktywne konto rodzaju `cash` (`cashAccountOf` – domyślne
+  `CASH_ACCOUNT_ID` najpierw; nazwa nie decyduje). Jest – import rozpoznaje wypłatę (`isAtmOperation`: „WYPŁATA
+  W BANKOMACIE”, „BLIK WYPŁATA GOTÓWKI” i podobne, jak dotąd) jako przelew własny pliku → Gotówka (`ClassifyContext.cash`,
+  `transfer` z `counterAccountId` – jedna operacja dla obu kont, `bothSides`; bez kosztu, warstwy bez zmian), nigdy na
+  konto samego pliku; reguła starego modelu – wydatek kategorii systemowej „Gotówka” (bez finansowania i wspólnego zakupu,
+  także słowo użytkownika) – ustępuje temu przelewowi, a „zapamiętaj” takiej decyzji przy koncie gotówki reguły nie uczy
+  (`ImportPlan.cash`; następny import by jej nie posłuchał); reguła innej kategorii zostaje. Nie ma – wydatek „Gotówka” jak
+  w specyfikacji, a import przy pliku z wypłatami proponuje konto (`cashAccountOffer`, przycisk przy pliku, nigdy po
+  cichu): zarchiwizowane konto gotówki wraca, konto nazwane „Gotówka” dostaje rodzaj `cash`, inaczej nowe „Gotówka”
+  (stałe id, gdy wolne); „Cofnij” przywraca konta, póki żadna operacja nie jest na tym koncie; ekran importu planuje od nowa
+  po zmianie kont (`PlanInputs.accounts`). Zakupy gotówką – szybki wpis i edytor z konta „Gotówka” (bez zmian w kodzie,
+  pilnuje E2E `cash.spec.ts`). Wpłatomat (wpłata gotówki na rachunek) – bez rozpoznania (brak wzoru opisu mBanku w danych
+  testowych), jak dotąd wpływ do decyzji użytkownika.
+- **T423** Dawne wypłaty z bankomatu zapisane jako wydatek „Gotówka” – bez migracji i bez meldunku zamiany (AP-33): zamiana
+  na przelew nie jest czysta – zmienia koszty, wynik „na plus” i łupy zamkniętych miesięcy (silnik przelicza historię),
+  a konto Gotówka dostałoby całą dawną gotówkę, której wydatków dawny model nie wymagał wpisywać (fałszywe saldo). Zostają
+  jak są; zmianę pojedynczej wypłaty robi edytor Operacji (rodzaj „Przelew własny” → Gotówka). Dawne podwójne liczenie
+  (wypłata jako wydatek i zakup z Gotówki – saldo Gotówki ujemne, OP sp. 7) prostuje jedno potwierdzenie salda Gotówki
+  (Ustawienia → Konta → „Potwierdź saldo” – korekta o różnicę) – do potwierdzenia, czy podpowiadać je meldunkiem.
 - **T435** Wpis ICTTJ z pierwszych dni budżetu (1.15.9, N5 – AP-26, AF-47 = C15, DO sp. 2; D72, T63; **zmienia zdanie T162**
   „bez Portfela XTB dla okna zaczętego przed startem”): „sprzed startu” tylko wpis z datą przed startem (`deliveries`:
   `!counted(e.date)`); wpis od startu, którego okno pary (−3 dni) zaczyna się przed startem, czeka na import jak każdy

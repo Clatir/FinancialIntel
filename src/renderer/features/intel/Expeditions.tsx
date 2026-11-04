@@ -5,7 +5,7 @@
  */
 import { useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
-import { tagGoalShare, tagKey, type TagSummary } from '@shared/calc/tags'
+import { tagGoalOf, tagGoalShare, type TagSummary } from '@shared/calc/tags'
 import { plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Empty, Panel, cx } from '../../components/ui'
@@ -27,7 +27,7 @@ export function ExpeditionsPanel() {
   const [all, setAll] = useState(false)
   if (!data) return null
   const { summaries, cats } = data
-  const goalOf = (s: TagSummary) => goals.find((g) => g.id === tagGoals[s.key]) ?? null
+  const goalOf = (s: TagSummary) => goals.find((g) => g.id === tagGoalOf(tagGoals, s.label)) ?? null
   const shown = all ? summaries : summaries.slice(0, SHOWN)
   return (
     <Panel title="Wyprawy" hint={glossaryOf('Wyprawa')} testId="intel-expeditions">
@@ -81,7 +81,7 @@ function ExpeditionCard({ s, label }: { s: TagSummary; label: (id: string | null
   const transactions = useRecordList('transactions')
   const tagGoals = useData((x) => x.fi?.settings.intel.tagGoals ?? NO_GOALS)
   const readOnly = useFolderLocked()
-  const goalId = tagGoals[tagKey(s.label)] ?? ''
+  const goalId = tagGoalOf(tagGoals, s.label)
   const goal = goals.find((g) => g.id === goalId) ?? null
   const unlinked = goalId ? unlinkedTagExpenses(s.label, transactions) : []
   const byCategory = [...s.byCategory].filter(([, v]) => v).sort((a, b) => b[1] - a[1])

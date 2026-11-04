@@ -10,7 +10,7 @@ import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthR
 import type { FleetEvent } from './fleet'
 import { financedBy } from './household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from './income'
-import { accountAmounts, asksImpulse, categoryIndex, costOf, ownSpent, partsOf, sum } from './operations'
+import { accountAmounts, asksImpulse, categoryIndex, costOf, ownSpent, partsOf, sum, upToDay } from './operations'
 import { operationName } from '../import/names'
 
 // ------------------------------------------------------------------ the wealth curve
@@ -390,9 +390,12 @@ export function nextWeekEnvelopes(envelopes: ReadonlyArray<{ categoryId: string;
 
 export interface YearNumbers {
   year: string
-  months: Array<{ month: string; costs: number; income: number }>
+  /** `planned` – the month's net costs dated after the budget's day (AP-36): apart from its costs. */
+  months: Array<{ month: string; costs: number; income: number; planned: number }>
   costs: number
   income: number
+  /** Net costs of the year's operations dated after the budget's day – „zaplanowane” (AP-36, T421). */
+  planned: number
   categories: Array<{ id: string; cost: number }>
   /** What household members financed in the year (D80): apart from the costs, by member. */
   financed: Array<{ memberId: string; amount: number }>
@@ -401,18 +404,24 @@ export interface YearNumbers {
 /**
  * A year in numbers (the year's review, spec: in January); `ctx` – what is income (D81). The year's income nets the
  * trading over the whole year (a withdrawal in January and a top-up in March cancel out), each month over itself.
+ * `today` – the budget's day (AP-36, T421): the year counted up to it, an operation dated later planned, apart.
  */
-export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ctx: IncomeContext = plainIncomeContext(transactions)): YearNumbers {
+export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ctx: IncomeContext = plainIncomeContext(transactions), today?: string): YearNumbers {
   const months = monthRange(`${year}-01`, `${year}-12`)
-  const spend = spendingByMonth(transactions, categories, months)
-  const income = months.map((m) => incomeOfPeriod(transactions.filter((t) => monthOf(t.date) === m), ctx).total)
+  const inYear = (t: Transaction) => t.date.startsWith(`${year}-`)
+  const now = today ? upToDay(transactions, today) : transactions
+  const later = today && now !== transactions ? transactions.filter((t) => t.date > today && inYear(t)) : []
+  const spend = spendingByMonth(now, categories, months)
+  const planned = later.length ? spendingByMonth(later, categories, months).totals : months.map(() => 0)
+  const income = months.map((m) => incomeOfPeriod(now.filter((t) => monthOf(t.date) === m), ctx).total)
   return {
     year,
-    months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]! })),
+    months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]!, planned: planned[i]! })),
     costs: sum(spend.totals),
-    income: incomeOfPeriod(transactions.filter((t) => t.date.startsWith(`${year}-`)), ctx).total,
+    income: incomeOfPeriod(now.filter(inYear), ctx).total,
+    planned: sum(planned),
     categories: [...spend.rows.map((r) => ({ id: r.id, cost: r.total })), { id: 'cargo', cost: sum(spend.cargo) }].filter((c) => c.cost > 0).sort((a, b) => b.cost - a.cost),
-    financed: financedBy(transactions.filter((t) => t.date.startsWith(`${year}-`)))
+    financed: financedBy(now.filter(inYear))
   }
 }
 

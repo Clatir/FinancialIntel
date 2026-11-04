@@ -14,7 +14,7 @@ import { openDays, scheduledDays } from '@shared/calc/scheduled'
 import { killzoneGrid, logAccuracy, logEntries, rangeForecast, spendingByMonth } from '@shared/calc/intel'
 import { dm } from '@shared/calc/briefing'
 import { debriefing } from '@shared/calc/plan'
-import { sum } from '@shared/calc/operations'
+import { sum, upToDay } from '@shared/calc/operations'
 import { rangeText } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -88,7 +88,8 @@ export function IntelPage() {
   // The week's mission (AP-30): a killzone mission's hour said beside the period's – one „Twoja killzone”.
   const game = useGameRecords()
   const weekMission = useMemo(() => (today ? (game.flatMap((g) => g.missions).find((m) => m.week === isoWeekOf(today)) ?? null) : null), [game, today])
-  const spending = useMemo(() => spendingByMonth(transactions, settings?.categories ?? [], months), [transactions, settings, months])
+  // The month in progress up to today (AP-36), as the debriefing and the fuel balance beside it.
+  const spending = useMemo(() => spendingByMonth(today ? upToDay(transactions, today) : transactions, settings?.categories ?? [], months), [transactions, settings, months, today])
   const log = useMemo(() => (settings ? logAccuracy(transactions, settings.orders, months) : []), [transactions, settings, months])
   const logWritten = useMemo(() => (today && months.length ? logEntries(transactions, `${months[0]}-01`, today, LOG_SHOWN) : { entries: [], total: 0 }), [transactions, months, today])
   const [fvgMonth, setFvgMonth] = useState<string | null>(null)
