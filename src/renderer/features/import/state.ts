@@ -23,8 +23,7 @@ import {
   type ImportTheme,
   type RowCopy,
   type SharePart,
-  type SharesSpread,
-  type SpreadLine
+  type SharesSpread
 } from '@shared/import/reconcile'
 import { balanceOf, type HouseholdLedger } from '@shared/calc/household'
 import type { LoanState } from '@shared/calc/loans'
@@ -45,7 +44,7 @@ import { api, errorMessage } from '../../lib/api'
 import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { fleetInputNow, fleetNow } from '../../store/fleet'
-import { bulkKeeps, choiceFor, fits, type Option } from './options'
+import { bulkKeeps, choiceFor, fits, linesKey, type Option } from './options'
 import { rememberInflows } from '../household/actions'
 import { checkedWithImport, importsMark, readDeletedBank } from './returned'
 
@@ -507,20 +506,45 @@ function patchChoices(fn: (c: ImportChoices) => ImportChoices): void {
   useImport.setState((s) => ({ choices: fn(s.choices) }))
 }
 
+type GroupsState = Pick<ImportSession, 'choices' | 'accepted' | 'lastDecided'>
+
+/**
+ * Groups decided, one state for all (W32) – every way a group's decision is set or taken back goes through it (przegląd
+ * N1 5). A choice: the user's own – remembered as a rule by default (its `remember` given: as given – per group, a bulk
+ * decision's differs by what each showed; after an accepted hint remembered as any of theirs – B97; a loan's repayment
+ * over a decision that repaid none – not unless asked, D100 T358: `remembersByDefault`), no longer a new member's open
+ * question (`implicit`, N85) nor an accepted offer. Null: back to its theme's decision (or the proposal) – its decision,
+ * remembering, question and offer gone, and the keyword proposed for it (D78) with them. `closesProposal` – a decision of
+ * several groups at once proposes no keyword: the one proposed for one of them closes.
+ */
+function groupsDecided(s: GroupsState, decided: Iterable<readonly [group: string, choice: Choice | null, remember?: boolean]>, opts: { closesProposal?: boolean } = {}): GroupsState {
+  const groups = { ...s.choices.groups }
+  const remember = { ...s.choices.remember }
+  const implicit = { ...s.choices.implicit }
+  const accepted = { ...s.accepted.groups }
+  let lastDecided = s.lastDecided
+  for (const [group, choice, given] of decided) {
+    if (choice) {
+      groups[group] = choice
+      remember[group] = given ?? (accepted[group] ? true : remembersByDefault(choice, s.choices.groups[group], s.choices.remember[group]))
+    } else {
+      delete groups[group]
+      delete remember[group]
+    }
+    delete implicit[group]
+    delete accepted[group]
+    if (group === lastDecided && (!choice || opts.closesProposal)) lastDecided = null
+  }
+  return { choices: { ...s.choices, groups, remember, implicit }, accepted: { ...s.accepted, groups: accepted }, lastDecided }
+}
+
 /**
  * A decision for a whole group: the user's own is remembered as a rule by default (they can untick it); `remember`
  * false = not by default (the bank's hints taken in one click are no decision of the user – D68).
  */
 export function chooseGroup(group: string, choice: Choice, remember?: boolean): void {
-  // The user's own choice after an accepted hint (B97): remembered by default, as any of theirs.
-  const wasHint = !!useImport.getState().accepted.groups[group]
-  patchChoices((c) => {
-    const implicit = { ...c.implicit }
-    delete implicit[group]
-    // A loan's repayment (D100, T358): a rule of it only when asked – „zapamiętaj” starts off.
-    return { ...c, groups: { ...c.groups, [group]: choice }, remember: { ...c.remember, [group]: remember ?? (wasHint ? true : remembersByDefault(choice, c.groups[group], c.remember[group])) }, implicit }
-  })
-  unaccept('groups', group)
+  // A loan's repayment (D100, T358): a rule of it only when asked – „zapamiętaj” starts off (`groupsDecided`).
+  useImport.setState((s) => groupsDecided(s, [[group, choice, remember]]))
 }
 
 /**
@@ -563,14 +587,9 @@ function unaccept(kind: 'themes' | 'groups', key: string): void {
   useImport.setState({ accepted: { ...accepted, [kind]: next } })
 }
 
-/** A group back to its theme's decision (or the proposal). */
+/** A group back to its theme's decision (or the proposal) – a new member's question with its decision (N85). */
 export function clearGroup(group: string): void {
-  patchChoices((c) => {
-    const groups = { ...c.groups }
-    delete groups[group]
-    return { ...c, groups }
-  })
-  unaccept('groups', group)
+  useImport.setState((s) => groupsDecided(s, [[group, null]]))
 }
 
 /**
@@ -586,27 +605,40 @@ export function chooseTheme(theme: string, choice: Choice, remember?: boolean, a
 }
 
 /**
- * A decision for a theme whose brands were each decided the same (shown as the theme's – their „w tym za” what they gave
- * together, `themeCommon`): theirs give way – the theme decides them all, as the screen shows.
+ * A decision for a theme whose brands were each decided the same, without „w tym za” of an amount (`themeShows` 'same' –
+ * shown as the theme's, `themeCommon`): theirs give way – the theme decides them all, as the screen shows.
  */
-export function chooseThemeOverGroups(t: ImportTheme, choice: Choice): void {
-  patchChoices((c) => {
-    const groups = { ...c.groups }
-    const remember = { ...c.remember }
-    const implicit = { ...c.implicit }
-    for (const g of t.groups) {
-      delete groups[g.group]
-      delete remember[g.group]
-      delete implicit[g.group]
-    }
-    return { ...c, groups, remember, implicit }
-  })
-  useImport.setState((s) => {
-    const groups = { ...s.accepted.groups }
-    for (const g of t.groups) delete groups[g.group]
-    return { accepted: { ...s.accepted, groups } }
-  })
+function chooseThemeOverGroups(t: ImportTheme, choice: Choice): void {
+  useImport.setState((s) => groupsDecided(s, t.groups.map((g) => [g.group, null] as const)))
   chooseTheme(t.theme, choice)
+}
+
+/**
+ * A change on a theme's row (N78, T336): of its own decision or its proposal – the theme's decision; of its brands' common
+ * decision ('same') – the theme's decision of them all; of their common decision with „w tym za” ('brands') – each
+ * brand's own: the change in each, the lines as each brand has them (none to edit on the theme's row). Never one theme
+ * decision of brands with lines: its amount is for all the theme's rows together, a brand's for its rows – one amount
+ * made of theirs (one brand's, the sum, what they give now) was never what each brand typed (reviews N1 2–4).
+ */
+export function chooseThemeRow(t: ImportTheme, next: Choice): void {
+  const shows = themeShows(t, useImport.getState().choices)
+  if (shows === 'brands') chooseBrandsAlike(t, next)
+  else if (shows === 'same') chooseThemeOverGroups(t, next)
+  else chooseTheme(t.theme, next)
+}
+
+/**
+ * A change of the brands' common decision with „w tym za” (`chooseThemeRow`): every brand takes it as the user's own (as
+ * `chooseGroup`, one state for all – W32), its lines as typed (of 0 zł too) unless the change itself changed the lines
+ * (another kind – `choiceFor` – has none: as that change in each brand).
+ */
+function chooseBrandsAlike(t: ImportTheme, next: Choice): void {
+  useImport.setState((s) => {
+    const keepsLines = linesKey(next.shares) === linesKey(s.choices.groups[t.groups[0]!.group]?.shares)
+    const decided = t.groups.map((g) => [g.group, keepsLines ? { ...next, shares: s.choices.groups[g.group]?.shares } : next] as const)
+    // A decision of several brands proposes no keyword (D78): the one proposed for a brand decided apart closes.
+    return groupsDecided(s, decided, { closesProposal: true })
+  })
 }
 
 export function chooseRow(key: string, choice: Choice | null): void {
@@ -674,20 +706,14 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
     return false
   }
   // One state for all (W32): copies made once, not one per group – each copy and each listener for every group.
-  const nextGroups = { ...choices.groups }
-  const remember = { ...choices.remember }
-  const implicit = { ...choices.implicit }
+  const decided: Array<readonly [string, Choice, boolean]> = []
   const rows = { ...choices.rows }
-  const acceptedGroups = { ...accepted.groups }
   const rowGroup = new Map(groups.flatMap((g) => g.rows.map((p) => [p.key, g] as const)))
   for (const g of groups) {
     if (!selected.groups[g.group]) continue
     if (takes(g.direction, shown(g))) {
-      nextGroups[g.group] = choice
-      // A loan's repayment (D100): no rule of it unless asked.
-      remember[g.group] = remembersByDefault(choice, shown(g), true)
-      delete implicit[g.group]
-      delete acceptedGroups[g.group]
+      // Remembered – a loan's repayment over what did not repay one: no rule of it unless asked (D100, T358).
+      decided.push([g.group, choice, remembersByDefault(choice, shown(g), true)])
       applied++
     } else unfit++
   }
@@ -699,12 +725,9 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
       applied++
     } else unfit++
   }
-  useImport.setState({
-    choices: { ...choices, groups: nextGroups, remember, implicit, rows },
-    accepted: { ...accepted, groups: acceptedGroups },
-    // A bulk decision proposes no keyword (D78): the one proposed for a group decided apart closes when it changes.
-    ...(lastDecided && selected.groups[lastDecided] ? { lastDecided: null } : {})
-  })
+  // The ticked groups' own, remembered as above; a bulk decision proposes no keyword (D78) – the one proposed for a group
+  // decided apart closes when it changes.
+  useImport.setState(groupsDecided({ choices: { ...choices, rows }, accepted, lastDecided }, decided, { closesProposal: true }))
   return { applied, unfit, kept }
 }
 
@@ -827,42 +850,38 @@ const partsSum = (lines: readonly SharePart[]) => lines.reduce((a, x) => a + Mat
 
 /**
  * The import's decision a „w tym za” is of (AF-27): its key (`g:<group>`, `t:<theme>`) – or the keys of a theme's groups
- * when the theme shows their common decision (N78: a change there replaces them all – `chooseThemeOverGroups`).
+ * when the theme shows their common decision without lines of an amount (N78 – a new line there starts at what the member
+ * owes beyond their rows' parts, and is the theme's decision then: `chooseThemeRow`).
  */
 export type DecisionKeys = string | readonly string[]
 const keysOf = (from: DecisionKeys): readonly string[] => (typeof from === 'string' ? [from] : from)
 
-/** What a theme's row shows (N78): its own decision, its groups' common one (each decided alike), theirs that differ, or none. */
-export type ThemeShows = 'theme' | 'same' | 'mixed' | 'open'
+/**
+ * What a theme's row shows (N78): its own decision; its groups' common one (each decided alike – `sameChoice`): 'same',
+ * or – of more groups with „w tym za” of an amount – 'brands' (their lines are each brand's: said on the theme's row,
+ * edited in the brand; a change there goes to each brand – `chooseThemeRow`, T336); theirs that differ; or none.
+ */
+export type ThemeShows = 'theme' | 'same' | 'brands' | 'mixed' | 'open'
 export function themeShows(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<ImportChoices, 'themes' | 'groups'>): ThemeShows {
   if (c.themes[t.theme]) return 'theme'
   const own = t.groups.map((g) => c.groups[g.group])
   if (!own.every(Boolean)) return 'open'
-  return own.every((x) => sameChoice(x!, own[0]!)) ? 'same' : 'mixed'
+  if (!own.every((x) => sameChoice(x!, own[0]!))) return 'mixed'
+  // Alike, so each has the same lines of an amount (`sameChoice` – lines of 0 zł aside).
+  return own.length > 1 && own[0]!.shares?.some((x) => x.amount > 0) ? 'brands' : 'same'
 }
 
-/** The decision a theme row's „w tym za” is of: its groups' when it shows their common one, else its own. */
+/** The decision a theme row's „w tym za” is of: its groups' when it shows their common one (of one group – its key), else its own. */
 export const themeSharesFrom = (t: Pick<ImportTheme, 'theme' | 'groups'>, shows: ThemeShows): DecisionKeys =>
-  shows === 'same' ? t.groups.map((g) => `g:${g.group}`) : `t:${t.theme}`
+  shows === 'same' || shows === 'brands' ? (t.groups.length === 1 ? `g:${t.groups[0]!.group}` : t.groups.map((g) => `g:${g.group}`)) : `t:${t.theme}`
 
 /**
- * The decision a theme's row shows when each of its groups decided alike (N78 – `themeShows` 'same'; none otherwise): of
- * one group as it is; of more, their lines with an amount (lines of 0 zł aside – `sameChoice`), each other member's at
- * what the groups gave together (their spread – `decisionSpread`), the sender's own as it is (it never spreads). A change
- * there (`chooseThemeOverGroups`) makes the theme's decision of it – one amount for all its rows (T328): never more than
- * the groups gave (review N1 3: each group's amount times their number counted a group whose rows had their own
- * decisions, or whose money ran out, as giving it all – a change there credited the member with money nobody sent; review
- * N1 2: one group's amount – a change halved what two gave).
+ * The decision a theme's row shows when each of its groups decided alike (N78 – `themeShows` 'same' or 'brands'; none
+ * otherwise): the first group's, as it is (their lines of an amount are the same – a reference, nothing summed).
  */
-export function themeCommon(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<ImportChoices, 'themes' | 'groups'>, view: () => SharesView | null): Choice | undefined {
-  if (themeShows(t, c) !== 'same') return undefined
-  const first = c.groups[t.groups[0]!.group]!
-  if (t.groups.length < 2 || !first.shares?.some((x) => x.amount > 0)) return first
-  const lines = first.shares.filter((x) => x.amount > 0)
-  const v = view()
-  const spread = v ? decisionSpread(v, themeSharesFrom(t, 'same'), { ...first, shares: lines }) : null
-  const sender = first.memberId ?? HOUSE_MEMBER_ID
-  return { ...first, shares: lines.map((x, i) => (!x.loanId && x.memberId === sender ? x : { ...x, amount: spread?.get(i)?.typed ?? 0 })) }
+export function themeCommon(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<ImportChoices, 'themes' | 'groups'>): Choice | undefined {
+  const shows = themeShows(t, c)
+  return shows === 'same' || shows === 'brands' ? c.groups[t.groups[0]!.group] : undefined
 }
 
 /** What a member still owes back beyond their own money of the file and its parts given by others than `from` (the decision). */
@@ -872,33 +891,26 @@ export function owedLeftOfDecision(view: SharesView, from: DecisionKeys, memberI
   return Math.max(0, (view.owed.get(memberId) ?? 0) - ((view.total.get(memberId) ?? 0) - given))
 }
 
+/** A line's spread over the rows of a group or a theme (AF-27): typed, given row by row, cut at what the member owes. */
+export interface LineSpread {
+  typed: number
+  given: Array<{ date: string; amount: number }>
+  /** Less than typed because the member owes no more (else: the rows' money ran out). */
+  capped: boolean
+}
+
 /**
- * A decision's „w tym za” lines spread over its rows (AF-27), by the line shown: of one decision as they are; of a
- * theme's groups (their common decision shown – `themeCommon`, lines of 0 zł aside) added up line by line – each group's
- * n-th line typed is the n-th line of another member (the same lines in the same order, `sameChoice`), and the line is
- * what they gave together, as shown (review N1 3: not what each typed – a change there would give that).
+ * The „w tym za” lines of one decision (`g:<group>`, `t:<theme>` – AF-27) spread over its rows, by the line (its place
+ * in the decision's own lines, of 0 zł too): what was typed, where it went, and whether less because the member owes no
+ * more – the note at the line („X z Y zł (tyle … ma oddać)”, „… nie ma nic do oddania”). Never of several decisions
+ * together: the brands' lines shown by their theme stay each brand's (T336).
  */
-export function decisionSpread(view: SharesView, from: DecisionKeys, choice: Pick<Choice, 'memberId' | 'shares'>): Map<number, SpreadLine> {
-  const keys = keysOf(from)
-  if (keys.length === 1) return new Map((view.spread.get(keys[0]!) ?? []).map((l) => [l.line, l]))
-  // The shown lines of other members and of loans (D100; the sender's own never spreads), in order: a group's n-th line
-  // typed is the n-th.
-  const sender = choice.memberId ?? HOUSE_MEMBER_ID
-  const shown = (choice.shares ?? []).flatMap((x, i) => (x.loanId || x.memberId !== sender ? [i] : []))
-  const out = new Map<number, SpreadLine>()
-  for (const k of keys)
-    (view.spread.get(k) ?? [])
-      .filter((l) => l.typed > 0)
-      .sort((a, b) => a.line - b.line)
-      .forEach((l, n) => {
-        const line = shown[n]
-        if (line == null) return
-        const sum = out.get(line)
-        out.set(line, sum ? { ...sum, given: [...sum.given, ...l.given] } : { ...l, line, given: [...l.given] })
-      })
-  for (const l of out.values()) {
-    l.given.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-    l.typed = l.given.reduce((a, g) => a + g.amount, 0)
+export function lineSpreads(view: SharesView, from: string): Record<number, LineSpread> {
+  const out: Record<number, LineSpread> = {}
+  for (const l of view.spread.get(from) ?? []) {
+    const total = l.given.reduce((a, g) => a + g.amount, 0)
+    // Whose (`SpreadLine.memberId`): a member's id or a loan's key (`loanKey`, D100) – its debt the loan's open amount.
+    out[l.line] = { typed: l.typed, given: l.given.map((g) => ({ date: g.date, amount: g.amount })), capped: total < l.typed && (view.total.get(l.memberId) ?? 0) >= (view.owed.get(l.memberId) ?? 0) }
   }
   return out
 }

@@ -22,6 +22,9 @@ paths:
   najwyżej raz (`dockings/*` z `source.ictjEntryId`).
 - Pula wpisu ICTTJ: `current` / `surplus` → zwykłe dokowanie, `goals` → prosto do celów, `tax` → przepływ poza
   budżetem (PIT-38), nie koszt. PIT-38 na radarze tylko jako termin, bez kwoty.
+- Para do zadokowania liczy się od razu według puli wpisu (T341, od 1.15.6): `pendingPairsOf` → `FleetInput.pendingPairs`;
+  ekrany mówią o niej osobno („Do zadokowania” – `FleetState.toDock`, T342). Bez odczytu ICTTJ na komputerze – zwykła
+  kolejność do dokowania.
 - Dopasowanie: wypłata z ICTTJ bez pary w CSV z mBanku przez 3 dni robocze (D72) → Portfel XTB (potwierdzenie przy
   dokowaniu); wpływ z XTB w mBanku bez wpisu w ICTTJ → dokuje normalnie + przypomnienie o wpisie w ICTTJ.
 - Przycisk „Otwórz ICTTJ” w menu bocznym FI; w ICTTJ nic się nie zmienia.

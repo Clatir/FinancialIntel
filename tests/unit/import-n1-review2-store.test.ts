@@ -3,6 +3,7 @@ import type { FolderStatus, Snapshot } from '@shared/api'
 import { categoryIndex } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
 import { latestImport } from '@shared/import/batch'
+import { isDuplicatePairKey } from '@shared/import/duplicates'
 import type { MbankFile, MbankRow } from '@shared/import/mbank'
 import { buildImport, importGroups, importThemes, planImport, type Choice, type ImportChoices, type ImportPlan } from '@shared/import/reconcile'
 import { COLLECTIONS } from '@shared/paths'
@@ -10,7 +11,7 @@ import { defaultCategoryId, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema,
 import { listaCsv, type CsvBuy, type CsvTransfer } from '../e2e/mbank-csv'
 import type { SharesView } from '../../src/renderer/features/import/state'
 
-// The second and third code reviews of N1 (1.15.5): their findings in the window's import (renderer's stores), each with
+// The second to fifth code reviews of N1 (1.15.5, the fifth's in N2): their findings in the window's import (renderer's stores), each with
 // the scenario that failed before the fix. The stores talk to the main process through window.fi (preload): a mock
 // writing nothing.
 const api = {
@@ -36,8 +37,10 @@ const data = await import('../../src/renderer/store/data')
 const ui = await import('../../src/renderer/store/ui')
 const fleet = await import('../../src/renderer/store/fleet')
 const state = await import('../../src/renderer/features/import/state')
+const options = await import('../../src/renderer/features/import/options')
 const batches = await import('../../src/renderer/features/import/batches')
 const returned = await import('../../src/renderer/features/import/returned')
+const rules = await import('../../src/renderer/features/import/rules')
 
 const AT = '2026-09-01T10:00:00.000Z'
 const bytes = (text: string) => new TextEncoder().encode(text)
@@ -92,19 +95,22 @@ describe('przegląd N1 2, 1: „Cofnij” cofnięcia importu usuwa jego operacje
   })
 })
 
-describe('przegląd N1 2, 5 i N1 3, 1, 4: temat z decyzją swoich marek pokazuje „w tym za” – to, co marki dały razem; zmiana tam nigdy nie daje więcej', () => {
+describe('przegląd N1 2, 5, N1 3, 1, 4 i N1 4, 1, 2, 5, 6, 8: temat z jednakową decyzją marek – ich „w tym za” zostaje w markach, zmiana w temacie trafia do każdej marki', () => {
   const TATA = '01KN2STATA0000000000000001'
   const BABCIA = '01KN2SBABC0000000000000002'
   const LEKI = '01KN2SAPTK0000000000000003'
   const CIOCIA = '01KN2SCIOC0000000000000005'
   const PERIOD = { from: '2026-10-26', to: '2026-11-02' }
   const person = (id: string, name: string, over: object = {}) => ({ id, name, bankNames: [] as string[], inflow: 'advance' as const, archived: false, via: null as string | null, opening: { owed: 0, deposit: 0 }, ...over })
-  /** Babcia owes 300 zł for „Leki” and passes her money through Tata. */
-  function openFamily(): void {
-    const leki = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: LEKI, createdAt: AT, updatedAt: AT, date: '2026-10-20', accountId: MBANK_ACCOUNT_ID, amount: -30000, categoryId: defaultCategoryId(5, 0), refundable: true, memberId: BABCIA, counterparty: 'Apteka' })
+  /** Babcia owes `owes` (300 zł; 0 – nothing) for „Leki” and passes her money through Tata; Ciocia owes nothing. */
+  function openFamily(owes = 30000): void {
+    const leki = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: LEKI, createdAt: AT, updatedAt: AT, date: '2026-10-20', accountId: MBANK_ACCOUNT_ID, amount: -owes, categoryId: defaultCategoryId(5, 0), refundable: true, memberId: BABCIA, counterparty: 'Apteka' })
     open({
-      transactions: [leki],
-      patch: (s) => ({ ...s, household: { ...s.household, since: null, assignFrom: null, members: [...s.household.members, person(TATA, 'Tata', { bankNames: ['PIOTR TESTOWY'] }), person(BABCIA, 'Babcia', { via: TATA })] } })
+      transactions: owes ? [leki] : [],
+      patch: (s) => ({
+        ...s,
+        household: { ...s.household, since: null, assignFrom: null, members: [...s.household.members, person(TATA, 'Tata', { bankNames: ['PIOTR TESTOWY'] }), person(BABCIA, 'Babcia', { via: TATA }), person(CIOCIA, 'Ciocia')] }
+      })
     })
   }
   const groups = () => importGroups(state.useImport.getState().plan, state.useImport.getState().choices.restoreDeleted)
@@ -114,85 +120,58 @@ describe('przegląd N1 2, 5 i N1 3, 1, 4: temat z decyzją swoich marek pokazuje
     return state.sharesView(s.plan, s.choices, fleet.fleetNow()?.household ?? null, data.useData.getState().fi!.settings.household.members)!
   }
 
-  it('dwie marki po „w tym za Babcia 100 zł”: temat pokazuje 200 zł; zmiana w temacie – Babcia dalej dostaje razem 200 zł', async () => {
-    openFamily()
-    // Tata's money under two of his names in the bank: two brands of one theme.
-    const TATA_IN: CsvTransfer[] = [
-      { date: '2026-10-29', amount: 200, name: 'PIOTR TESTOWY', title: 'ZWROT' },
-      { date: '2026-11-01', amount: 300, name: 'PIOTR TESTOWY', title: 'OD TATY I BABCI' },
-      { date: '2026-10-30', amount: 150, name: 'TESTOWY PIOTR', title: 'NA ZAKUPY' }
-    ]
-    await state.loadImportFile('lista.csv', bytes(listaCsv([], PERIOD, null, TATA_IN)))
-    const big = groupOf('PIOTR TESTOWY')
-    const small = groupOf('TESTOWY PIOTR')
-    expect(small.theme).toBe(big.theme)
-    const theme = () => importThemes(groups()).find((t) => t.theme === big.theme)!
-    const shares = [{ memberId: BABCIA, amount: 10000, advance: true }]
-    state.decideGroup(big.group, { ...big.proposed, shares })
-    state.decideGroup(small.group, { ...small.proposed, shares })
-    expect(state.themeShows(theme(), state.useImport.getState().choices)).toBe('same')
-    expect(view().total.get(BABCIA)).toBe(20000)
-    // The theme's row shows the brands' decision with their lines together: 200 zł, as its spread says they gave.
-    const shown = state.themeCommon(theme(), state.useImport.getState().choices, view)!
-    expect(shown.shares).toEqual([{ memberId: BABCIA, amount: 20000, advance: true }])
-    const keys = state.themeSharesFrom(theme(), 'same')
-    expect([...state.decisionSpread(view(), keys, shown)].map(([line, l]) => [line, l.typed])).toEqual([[0, 20000]])
-    // Any change there makes the theme's decision of what it shows (before: of one brand's 100 zł – Babcia's half lost).
-    state.chooseThemeOverGroups(theme(), { ...shown, advance: false })
-    expect(state.themeShows(theme(), state.useImport.getState().choices)).toBe('theme')
-    expect(view().total.get(BABCIA)).toBe(20000)
-  })
-
-  it('jedna marka albo bez „w tym za”: decyzja marki jak jest; temat ze swoją decyzją, marki różne albo nie wszystkie – żadna', () => {
+  it('jedna marka, bez „w tym za” albo z nim: co pokazuje temat – decyzja pierwszej marki jak jest, nic nie sumowane; temat ze swoją decyzją, marki różne albo nie wszystkie – żadna', () => {
     type Theme = Parameters<typeof state.themeCommon>[0]
     const c: Choice = { kind: 'income', categoryId: null, refundable: false, household: true, memberId: TATA, advance: true, counterAccountId: null }
     const one = { ...c, shares: [{ memberId: BABCIA, amount: 10000, advance: true }, { memberId: TATA, amount: 5000, advance: true }] }
     const single = { theme: 'x', groups: [{ group: 'a' }] } as unknown as Theme
     const two = { theme: 'x', groups: [{ group: 'a' }, { group: 'b' }] } as unknown as Theme
-    /** The groups' spread (`g:<group>` → its lines): Babcia's line given that much from each brand's rows. */
-    const spread = (lines: Record<string, Array<{ line: number; memberId: string; typed: number; given: number }>>) => (): SharesView => ({
-      parts: new Map(),
-      rows: new Map(),
-      total: new Map(),
-      owed: new Map(),
-      spread: new Map(Object.entries(lines).map(([g, ls], i) => [`g:${g}`, ls.map((l) => ({ ...l, given: l.given ? [{ key: `${g}${l.line}`, date: `2026-10-2${i}`, amount: l.given }] : [] }))]))
-    })
-    const none = () => null
-    expect(state.themeCommon(single, { themes: {}, groups: { a: one } }, none)).toBe(one)
-    expect(state.themeCommon(two, { themes: {}, groups: { a: c, b: { ...c } } }, none)).toBe(c)
-    // Two brands: the other members' lines – what the brands gave together (review N1 3: not each one's amount times two),
-    // the sender's own line as it is (it never spreads).
-    const gave = spread({ a: [{ line: 0, memberId: BABCIA, typed: 10000, given: 10000 }], b: [{ line: 0, memberId: BABCIA, typed: 10000, given: 3000 }] })
-    expect(state.themeCommon(two, { themes: {}, groups: { a: one, b: { ...one } } }, gave)?.shares).toEqual([
-      { memberId: BABCIA, amount: 13000, advance: true },
-      { memberId: TATA, amount: 5000, advance: true }
-    ])
-    // A line of 0 zł of one brand (the same decision – `sameChoice` – lines of 0 zł aside): not shown, the others matched.
-    const zero = { ...c, shares: [{ memberId: CIOCIA, amount: 0, advance: true }, { memberId: BABCIA, amount: 10000, advance: true }] }
-    const gaveZero = spread({ a: [{ line: 0, memberId: CIOCIA, typed: 0, given: 0 }, { line: 1, memberId: BABCIA, typed: 10000, given: 4000 }], b: [{ line: 0, memberId: BABCIA, typed: 10000, given: 10000 }] })
-    const shownZero = state.themeCommon(two, { themes: {}, groups: { a: zero, b: { ...c, shares: [{ memberId: BABCIA, amount: 10000, advance: true }] } } }, gaveZero)!
-    expect(shownZero.shares).toEqual([{ memberId: BABCIA, amount: 14000, advance: true }])
-    expect([...state.decisionSpread(gaveZero(), ['g:a', 'g:b'], shownZero)].map(([line, l]) => [line, l.typed, l.given.map((g) => g.amount)])).toEqual([[0, 14000, [4000, 10000]]])
-    // Nothing given (no rows, the debt paid): 0 zł – never the amount typed.
-    expect(state.themeCommon(two, { themes: {}, groups: { a: one, b: { ...one } } }, spread({ a: [{ line: 0, memberId: BABCIA, typed: 10000, given: 0 }] }))?.shares?.[0]?.amount).toBe(0)
-    // A line given nothing before another: each line's spread at its own line (not by the amounts shown).
-    const both = { ...c, shares: [{ memberId: BABCIA, amount: 10000, advance: true }, { memberId: CIOCIA, amount: 5000, advance: true }] }
-    const gaveBoth = spread({
-      a: [{ line: 0, memberId: BABCIA, typed: 10000, given: 0 }, { line: 1, memberId: CIOCIA, typed: 5000, given: 5000 }],
-      b: [{ line: 0, memberId: BABCIA, typed: 10000, given: 0 }, { line: 1, memberId: CIOCIA, typed: 5000, given: 2000 }]
-    })
-    const shownBoth = state.themeCommon(two, { themes: {}, groups: { a: both, b: { ...both } } }, gaveBoth)!
-    expect(shownBoth.shares?.map((x) => [x.memberId, x.amount])).toEqual([[BABCIA, 0], [CIOCIA, 7000]])
-    expect([...state.decisionSpread(gaveBoth(), ['g:a', 'g:b'], shownBoth)].map(([line, l]) => [line, l.memberId, l.typed])).toEqual([[0, BABCIA, 0], [1, CIOCIA, 7000]])
-    expect(state.themeCommon(two, { themes: { x: c }, groups: { a: c, b: c } }, none)).toBeUndefined()
-    expect(state.themeCommon(two, { themes: {}, groups: { a: c } }, none)).toBeUndefined()
-    expect(state.themeCommon(two, { themes: {}, groups: { a: c, b: { ...c, advance: false } } }, none)).toBeUndefined()
+    const of = (t: Theme, ch: Pick<ImportChoices, 'themes' | 'groups'>) => [state.themeShows(t, ch), state.themeCommon(t, ch), state.themeSharesFrom(t, state.themeShows(t, ch))]
+    // One brand: its decision with its lines – the theme's row shows its spread (its own key), a change there is the theme's.
+    expect(of(single, { themes: {}, groups: { a: one } })).toEqual(['same', one, 'g:a'])
+    // Brands alike without lines of an amount (of 0 zł aside – `sameChoice`): their decision, a line typed there the theme's.
+    const zero = { ...c, shares: [{ memberId: CIOCIA, amount: 0, advance: true }] }
+    expect(of(two, { themes: {}, groups: { a: c, b: { ...c } } })).toEqual(['same', c, ['g:a', 'g:b']])
+    expect(of(two, { themes: {}, groups: { a: zero, b: c } })).toEqual(['same', zero, ['g:a', 'g:b']])
+    // Brands alike with lines: the first brand's decision as it is – what each typed, never their sum (review N1 2, 3, 4).
+    expect(state.themeCommon(two, { themes: {}, groups: { a: one, b: { ...one } } })).toBe(one)
+    expect(state.themeShows(two, { themes: {}, groups: { a: { ...one, shares: [{ memberId: CIOCIA, amount: 0, advance: true }, ...one.shares] }, b: one } })).toBe('brands')
+    // The theme's own decision, brands not all decided or decided differently: nothing of theirs.
+    expect(of(two, { themes: { x: c }, groups: { a: c, b: c } })).toEqual(['theme', undefined, 't:x'])
+    expect(of(two, { themes: {}, groups: { a: c } })).toEqual(['open', undefined, 't:x'])
+    expect(of(two, { themes: {}, groups: { a: c, b: { ...c, advance: false } } })).toEqual(['mixed', undefined, 't:x'])
   })
 
+  it('lineSpreads: linie jednej decyzji na swoim miejscu (także 0 zł) – mniej niż wpisano, bo osoba nic więcej nie ma oddać, albo bo zabrakło pieniędzy', () => {
+    const line = (n: number, memberId: string, typed: number, given: number[]) => ({ line: n, memberId, typed, given: given.map((amount, i) => ({ key: `r${n}${i}`, date: `2026-10-2${i}`, amount })) })
+    const v: SharesView = {
+      parts: new Map(),
+      rows: new Map(),
+      // Babcia owes 150 zł and is credited with all of it; Ciocia owes 100 zł, credited with 30 zł.
+      owed: new Map([
+        [BABCIA, 15000],
+        [CIOCIA, 10000]
+      ]),
+      total: new Map([
+        [BABCIA, 15000],
+        [CIOCIA, 3000]
+      ]),
+      spread: new Map([['g:a', [line(0, CIOCIA, 0, []), line(1, BABCIA, 10000, [6000]), line(2, CIOCIA, 5000, [3000])]]])
+    }
+    // Review N1 4, 8: each line at its own place in the decision's lines – of one decision only, nothing to misalign.
+    expect(state.lineSpreads(v, 'g:a')).toEqual({
+      0: { typed: 0, given: [], capped: false },
+      1: { typed: 10000, given: [{ date: '2026-10-20', amount: 6000 }], capped: true },
+      2: { typed: 5000, given: [{ date: '2026-10-20', amount: 3000 }], capped: false }
+    })
+    expect(state.lineSpreads(v, 'g:b')).toEqual({})
+  })
+
+  const choicesNow = () => state.useImport.getState().choices
   /** Tata's transfers under two of his names (two brands of one theme), each brand „w tym za Babcia 100 zł”. */
-  async function twoBrands(transfers: CsvTransfer[]) {
-    openFamily()
-    await state.loadImportFile('lista.csv', bytes(listaCsv([], PERIOD, null, transfers)))
+  async function twoBrands(transfers: CsvTransfer[], owes?: number, buys: CsvBuy[] = []) {
+    openFamily(owes)
+    await state.loadImportFile('lista.csv', bytes(listaCsv(buys, PERIOD, null, transfers)))
     const big = groupOf('PIOTR TESTOWY')
     const small = groupOf('TESTOWY PIOTR')
     expect(small.theme).toBe(big.theme)
@@ -200,33 +179,43 @@ describe('przegląd N1 2, 5 i N1 3, 1, 4: temat z decyzją swoich marek pokazuje
     const shares = [{ memberId: BABCIA, amount: 10000, advance: true }]
     state.decideGroup(big.group, { ...big.proposed, shares })
     state.decideGroup(small.group, { ...small.proposed, shares })
-    expect(state.themeShows(theme(), state.useImport.getState().choices)).toBe('same')
-    // What the theme's row shows – the screen's own call (review N1 3, 4: ThemeRow calls themeCommon).
-    const shown = () => state.themeCommon(theme(), state.useImport.getState().choices, view)!
+    expect(state.themeShows(theme(), choicesNow())).toBe('brands')
+    // What the theme's row shows – the screen's own call (review N1 3, 4: ThemeRow calls themeCommon), else its own decision.
+    const shown = () => state.themeCommon(theme(), choicesNow()) ?? choicesNow().themes[theme().theme]!
     return { big, small, theme, shown }
   }
 
-  it('przegląd N1 3, 1: wpłatom marki zabrakło pieniędzy – temat pokazuje, co marki dały (130 zł, nie 2 × 100); zmiana tam – Babcia dalej 130 zł', async () => {
-    const { theme, shown } = await twoBrands([
+  it('przegląd N1 2, 5: dwie marki po „w tym za Babcia 100 zł” – razem 200 zł; zmiana w temacie – każda marka dalej daje swoje 100 zł', async () => {
+    const { big, small, theme, shown } = await twoBrands([
+      { date: '2026-10-29', amount: 200, name: 'PIOTR TESTOWY', title: 'ZWROT' },
+      { date: '2026-11-01', amount: 300, name: 'PIOTR TESTOWY', title: 'OD TATY I BABCI' },
+      { date: '2026-10-30', amount: 150, name: 'TESTOWY PIOTR', title: 'NA ZAKUPY' }
+    ])
+    expect(view().total.get(BABCIA)).toBe(20000)
+    // The theme's row shows the brands' decision as each typed it: 100 zł – theirs, not the theme's (before: one brand's
+    // 100 zł made the theme's decision – Babcia's half lost).
+    expect(shown().shares).toEqual([{ memberId: BABCIA, amount: 10000, advance: true }])
+    state.chooseThemeRow(theme(), { ...shown(), advance: false, inflowKind: 'repay' })
+    expect(state.themeShows(theme(), choicesNow())).toBe('brands')
+    expect([choicesNow().groups[big.group]?.advance, choicesNow().groups[small.group]?.advance]).toEqual([false, false])
+    expect(view().total.get(BABCIA)).toBe(20000)
+  })
+
+  it('przegląd N1 3, 1: wpłatom marki zabrakło pieniędzy – przy marce „30 z 100 zł (tyle zostało we wpłatach)”; zmiana w temacie – Babcia dalej 130 zł', async () => {
+    const { small, theme, shown } = await twoBrands([
       { date: '2026-10-29', amount: 200, name: 'PIOTR TESTOWY', title: 'ZWROT' },
       { date: '2026-11-01', amount: 300, name: 'PIOTR TESTOWY', title: 'OD TATY I BABCI' },
       { date: '2026-10-30', amount: 30, name: 'TESTOWY PIOTR', title: 'NA ZAKUPY' }
     ])
-    // The small brand's only transfer has 30 zł: its 100 zł gives 30.
+    // The small brand's only transfer has 30 zł: its 100 zł gives 30 – said at its line (the money, not the debt).
     expect(view().total.get(BABCIA)).toBe(13000)
-    expect(shown().shares).toEqual([{ memberId: BABCIA, amount: 13000, advance: true }])
-    // The line's note: where the 130 zł went (not „130 z 200 zł”).
-    expect([...state.decisionSpread(view(), state.themeSharesFrom(theme(), 'same'), shown())].map(([line, l]) => [line, l.typed, l.given.map((g) => [g.date, g.amount])])).toEqual([
-      [0, 13000, [['2026-10-29', 10000], ['2026-10-30', 3000]]]
-    ])
-    // Any change there makes the theme's decision of what it shows (before: 200 zł spread over all the rows – Babcia given
-    // 200 zł, 70 zł nobody sent for her).
-    state.chooseThemeOverGroups(theme(), { ...shown(), advance: false })
-    expect(state.themeShows(theme(), state.useImport.getState().choices)).toBe('theme')
+    expect(state.lineSpreads(view(), `g:${small.group}`)).toEqual({ 0: { typed: 10000, given: [{ date: '2026-10-30', amount: 3000 }], capped: false } })
+    // A change on the theme's row (before review N1 3: 200 zł spread over all the rows – Babcia given 70 zł nobody sent).
+    state.chooseThemeRow(theme(), { ...shown(), advance: false, inflowKind: 'repay' })
     expect(view().total.get(BABCIA)).toBe(13000)
   })
 
-  it('przegląd N1 3, 1: wiersz marki z własną decyzją – jej „w tym za” nic nie daje; temat pokazuje 100 zł, zmiana tam – Babcia dalej 100 zł', async () => {
+  it('przegląd N1 3, 1: wiersz marki z własną decyzją – jej „w tym za” nic nie daje (bez uwagi); zmiana w temacie – Babcia dalej 100 zł', async () => {
     const { small, theme, shown } = await twoBrands([
       { date: '2026-10-29', amount: 200, name: 'PIOTR TESTOWY', title: 'ZWROT' },
       { date: '2026-11-01', amount: 300, name: 'PIOTR TESTOWY', title: 'OD TATY I BABCI' },
@@ -235,8 +224,76 @@ describe('przegląd N1 2, 5 i N1 3, 1, 4: temat z decyzją swoich marek pokazuje
     // The small brand's only row decided on its own (no „w tym za”): the brand's decision takes no row.
     state.chooseRow(small.rows[0]!.key, { ...small.proposed })
     expect(view().total.get(BABCIA)).toBe(10000)
-    expect(shown().shares).toEqual([{ memberId: BABCIA, amount: 10000, advance: true }])
-    state.chooseThemeOverGroups(theme(), { ...shown(), advance: false })
+    expect(state.lineSpreads(view(), `g:${small.group}`)).toEqual({})
+    state.chooseThemeRow(theme(), { ...shown(), advance: false, inflowKind: 'repay' })
+    expect(view().total.get(BABCIA)).toBe(10000)
+  })
+
+  // Review N1 4: the theme's row of two brands with „w tym za” showed one line made of what they gave now – with no sign of
+  // a brand's amount not credited (1), and any change there saved that line as the theme's decision (2).
+  const TATA_TWICE: CsvTransfer[] = [
+    { date: '2026-10-29', amount: 200, name: 'PIOTR TESTOWY', title: 'ZWROT' },
+    { date: '2026-11-01', amount: 300, name: 'PIOTR TESTOWY', title: 'OD TATY I BABCI' },
+    { date: '2026-10-30', amount: 150, name: 'TESTOWY PIOTR', title: 'NA ZAKUPY' }
+  ]
+  /** What each member is credited with in the file (their repayments: own money and parts). */
+  const credited = () => Object.fromEntries(view().total)
+
+  it('przegląd N1 4, 1: dwie marki po „w tym za Babcia 100 zł”, Babcia ma oddać 100 zł albo nic – temat nie składa linii z marek; przy marce, której 100 zł nie poszło: „nie ma nic do oddania”', async () => {
+    for (const owes of [10000, 0]) {
+      const { big, small, theme, shown } = await twoBrands(TATA_TWICE, owes)
+      // The theme's row: the brands' decision as each typed it – its lines are the brands' (said there, edited in each).
+      expect(state.themeShows(theme(), choicesNow())).toBe('brands')
+      expect(shown()).toBe(choicesNow().groups[big.group])
+      // Each brand's line, with its note (before: the theme's one line – 100 zł „z wpłaty …”, or empty with no note).
+      const lines = (g: typeof big) => state.lineSpreads(view(), `g:${g.group}`)
+      expect(lines(big)).toEqual({ 0: { typed: 10000, given: owes ? [{ date: '2026-10-29', amount: 10000 }] : [], capped: !owes } })
+      expect(lines(small)).toEqual({ 0: { typed: 10000, given: [], capped: true } })
+      expect(view().total.get(BABCIA) ?? 0).toBe(owes)
+    }
+  })
+
+  it('przegląd N1 4, 2: zmiana w temacie marek z „w tym za” (tylko kategoria, cel wpłaty) – każda marka zostaje ze swoimi liniami; zaliczone bez zmian, a gdy dług urośnie – tyle, ile wpisano', async () => {
+    const APTEKA: CsvBuy = { date: '2026-10-31', amount: 180, name: 'APTEKA POD LIPA' }
+    for (const owes of [12000, 0]) {
+      const { big, small, theme, shown } = await twoBrands(TATA_TWICE, owes, [APTEKA])
+      // The small brand has a line of 0 zł first (Ciocia's, being typed): the same decision – lines of 0 zł aside.
+      const typed = [{ memberId: CIOCIA, amount: 0, advance: true }, { memberId: BABCIA, amount: 10000, advance: true }]
+      state.decideGroup(small.group, { ...small.proposed, shares: typed })
+      // Babcia owes 120 zł: the brands give 100 + 20 now (owes nothing: 0).
+      expect(view().total.get(BABCIA) ?? 0).toBe(owes)
+      const before = credited()
+      // Only the category changed on the theme's row: every member credited as before.
+      state.chooseThemeRow(theme(), { ...shown(), categoryId: defaultCategoryId(5, 0) })
+      expect(credited()).toEqual(before)
+      // The sender's money as his income now (the row's „cel wpłaty”): Babcia's parts the same.
+      state.chooseThemeRow(theme(), { ...shown(), inflowKind: 'income', advance: false })
+      expect(view().total.get(BABCIA) ?? 0).toBe(owes)
+      // Later the pharmacy becomes Babcia's purchase (+180 zł): the brands give what each typed (before: the theme's
+      // 120 zł – or 0 zł, its „w tym za” cleared – whatever she owes).
+      const apteka = groupOf('APTEKA POD LIPA')
+      state.decideGroup(apteka.group, { ...apteka.proposed, kind: 'expense', refundable: true, memberId: BABCIA, categoryId: defaultCategoryId(5, 0) })
+      expect(view().total.get(BABCIA)).toBe(Math.min(20000, owes + 18000))
+      // Never a theme decision: each brand's own with the changes, its lines as typed (a line of 0 zł too).
+      expect(choicesNow().themes[theme().theme]).toBeUndefined()
+      expect(choicesNow().groups[big.group]).toMatchObject({ categoryId: defaultCategoryId(5, 0), inflowKind: 'income', shares: [{ memberId: BABCIA, amount: 10000, advance: true }] })
+      expect(choicesNow().groups[small.group]).toMatchObject({ categoryId: defaultCategoryId(5, 0), inflowKind: 'income', shares: typed })
+      expect(state.themeShows(theme(), choicesNow())).toBe('brands')
+      // Its note at its own line, after the line of 0 zł (review N1 4, 8: never another member's line).
+      expect(state.lineSpreads(view(), `g:${small.group}`)).toEqual({ 0: { typed: 0, given: [], capped: false }, 1: { typed: 10000, given: [{ date: '2026-10-30', amount: owes ? 10000 : 8000 }], capped: !owes } })
+    }
+  })
+
+  it('przegląd N1 4, 2: inny rodzaj w temacie marek – każda marka bez linii, jak zmiana rodzaju w marce; temat bez linii – zmiana tam to decyzja tematu', async () => {
+    const { big, small, theme, shown } = await twoBrands(TATA_TWICE)
+    expect(view().total.get(BABCIA)).toBe(20000)
+    // „Od domownika: Tata – reszta jako przychód” on the theme's row: the kind changed – the lines go, in every brand alike.
+    state.chooseThemeRow(theme(), options.choiceFor(`household:${TATA}:income`, shown()))
+    expect([choicesNow().groups[big.group]?.shares, choicesNow().groups[small.group]?.shares]).toEqual([undefined, undefined])
+    expect(state.themeShows(theme(), choicesNow())).toBe('same')
+    // Their decision without lines: a line typed on the theme's row is the theme's – for all its rows together (T328).
+    state.chooseThemeRow(theme(), { ...shown(), shares: [{ memberId: BABCIA, amount: 10000, advance: true }] })
+    expect(state.themeShows(theme(), choicesNow())).toBe('theme')
     expect(view().total.get(BABCIA)).toBe(10000)
   })
 })
@@ -388,5 +445,79 @@ describe('przegląd N1 2, 10: podpis planu (B38) obejmuje to, czy kopia ma inną
     const other = planImport(fromMama('lista'), MBANK_ACCOUNT_ID, here({ memberId: null }), family)
     expect(copy(other)).toMatchObject({ remove: false, conflict: true })
     expect(state.planSignature(other)).not.toBe(state.planSignature(shown))
+  })
+})
+
+describe('przegląd N1 5: decyzja grupy księgowana w jednym miejscu (groupsDecided) – każda droga tak samo', () => {
+  const PERIOD = { from: '2026-10-19', to: '2026-10-26' }
+  const FUEL = defaultCategoryId(1, 0)
+  /** Two purchases nothing recognizes: two brands of one theme. */
+  async function twoUnknown() {
+    open()
+    await state.loadImportFile('lista.csv', bytes(listaCsv([{ date: '2026-10-20', amount: 87.91, name: 'SLUSARZ KOWAL' }, { date: '2026-10-21', amount: 12.5, name: 'KIOSK RUCH' }], PERIOD)))
+    const groups = () => importGroups(state.useImport.getState().plan, state.useImport.getState().choices.restoreDeleted)
+    const [a, b] = ['SLUSARZ KOWAL', 'KIOSK RUCH'].map((n) => groups().find((g) => g.label === n || g.names.includes(n))!)
+    expect(b!.theme).toBe(a!.theme)
+    const theme = () => importThemes(groups()).find((t) => t.theme === a!.theme)!
+    return { a: a!, b: b!, groups, theme }
+  }
+  const s = () => state.useImport.getState()
+
+  it('podpowiedź mBanku przyjęta, potem własna decyzja (B97): zapamiętana; decyzja zbiorcza – zapamiętana, propozycja słowa zamknięta tylko dla zmienionej grupy', async () => {
+    const { a, b, groups } = await twoUnknown()
+    const expense = { ...a.proposed, kind: 'expense' as const, categoryId: FUEL }
+    state.acceptGroupHint(a.group, expense)
+    expect([s().accepted.groups[a.group], s().choices.remember[a.group]]).toEqual([true, false])
+    state.decideGroup(a.group, { ...expense, categoryId: defaultCategoryId(1, 1) })
+    expect([s().accepted.groups[a.group], s().choices.remember[a.group], s().lastDecided]).toEqual([undefined, true, a.group])
+    // Ticked: only the other brand – the proposal of the one decided apart stays.
+    state.selectImport({ groups: [b.group] }, true)
+    expect(state.chooseSelected(groups(), 'expense', FUEL).applied).toBe(1)
+    expect([s().choices.remember[b.group], s().lastDecided]).toEqual([true, a.group])
+    state.selectImport({ groups: [a.group] }, true)
+    state.chooseSelected(groups(), 'expense', FUEL)
+    expect(s().lastDecided).toBeNull()
+  })
+
+  it('marki z jednakową decyzją, zmiana w temacie: ich decyzje, zapamiętanie i podpowiedź ustępują tematowi – propozycja słowa też', async () => {
+    const { a, b, theme } = await twoUnknown()
+    const expense = { ...a.proposed, kind: 'expense' as const, categoryId: FUEL }
+    state.acceptGroupHint(a.group, expense)
+    state.decideGroup(b.group, expense)
+    expect(state.themeShows(theme(), s().choices)).toBe('same')
+    state.chooseThemeRow(theme(), { ...expense, categoryId: defaultCategoryId(1, 1) })
+    expect(s().choices.themes[theme().theme]).toMatchObject({ categoryId: defaultCategoryId(1, 1) })
+    for (const g of [a, b]) expect([s().choices.groups[g.group], s().choices.remember[g.group], s().accepted.groups[g.group]]).toEqual([undefined, undefined, undefined])
+    expect(s().lastDecided).toBeNull()
+  })
+
+  it('„jak temat” po „+ domownik”: pytanie „zaliczka czy przychód?” odchodzi razem z decyzją grupy', async () => {
+    const { a, theme } = await twoUnknown()
+    state.decideNewMember(a.group, { ...a.proposed })
+    expect(s().choices.implicit?.[a.group]).toBe(true)
+    state.clearGroup(a.group)
+    // Before: the question stayed – the badge asked it of the theme's decision, the theme stayed „do zrobienia”.
+    expect(s().choices.implicit?.[a.group]).toBeUndefined()
+    expect(s().choices.groups[a.group]).toBeUndefined()
+    state.chooseTheme(theme().theme, { ...a.proposed, kind: 'expense', categoryId: FUEL })
+    expect(state.themeStatus(theme(), s().choices)).toBe('done')
+  })
+})
+
+describe('przegląd N1 5: „Pary oznaczone „to nie duplikat”” – tylko pary panelu duplikatów (T324)', () => {
+  const PAIR = '01KN5PAIRA0000000000000001|01KN5PAIRB0000000000000002'
+  const ROW = `row:${MBANK_ACCOUNT_ID}|2026-10-20|-8791|SLUSARZ`
+  const OTHERS = ['back:01KN5BACK00000000000000003', 'correction:01KN5CORR00000000000000004', 'transfer:01KN5TRA000000000000000005:01KN5TRB000000000000000006', 'transfer-lone:01KN5TRL000000000000000007']
+
+  it('liczone i zapominane tylko pary – „zostaw” meldunku „Wróciły po usunięciu”, korekty i przelewu zostaje', async () => {
+    expect([PAIR, ROW, ...OTHERS].map(isDuplicatePairKey)).toEqual([true, true, false, false, false, false])
+    const notDuplicates = Object.fromEntries([PAIR, ROW, ...OTHERS].map((k) => [k, AT]))
+    open({ patch: (s) => ({ ...s, import: { ...s.import, notDuplicates } }) })
+    rules.clearNotDuplicates()
+    // Before: the operations left as they came back (and those brought back on purpose) and the transfers reported again.
+    expect(Object.keys(data.useData.getState().fi!.settings.import.notDuplicates).sort()).toEqual([...OTHERS].sort())
+    // „Cofnij”: the pairs back.
+    ui.useUi.getState().toasts.at(-1)!.action!.run()
+    expect(Object.keys(data.useData.getState().fi!.settings.import.notDuplicates).sort()).toEqual([PAIR, ROW, ...OTHERS].sort())
   })
 })

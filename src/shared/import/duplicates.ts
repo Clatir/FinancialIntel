@@ -45,6 +45,15 @@ export const duplicateKey = (ids: readonly string[]): string => [...ids].sort().
 export const rowKey = (accountId: string, bankKey: string): string => `row:${accountId}|${bankKey}`
 
 /**
+ * Is a key of `settings.import.notDuplicates` a pair of the duplicates panel – „to nie duplikat” (`duplicateKey`,
+ * `rowKey`)? The map keeps the other reports' „zostaw” too, none of them such a pair (przegląd N1 5): a correction said to
+ * be no repeat (`correction:<id>` – B129), a transfer left as it is (`transfer:…`, `transfer-lone:<id>` – F10), an
+ * operation back after its deletion and one brought back on purpose (`back:<id>` – T324), a rule and a member's money kept
+ * as an advance for the future (`advanceRule:<id>`, `advanceKept:<tx>:<member>` – AP-4, T352).
+ */
+export const isDuplicatePairKey = (key: string): boolean => key.startsWith('row:') || !key.includes(':')
+
+/**
  * The duplicates among the operations (drafts left out by the caller); `dismissed` = groups the user said are none
  * (`settings.import.notDuplicates`).
  */

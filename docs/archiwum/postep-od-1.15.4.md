@@ -130,3 +130,26 @@ Po podaniu procentu po iC przeliczam zużycie na godzinę pracy i obie grupy.
 **Porządek kontekstu (25.10.2026):** CLAUDE.md skrócony ze 124 KB do kompasu, wiedza modułów w `.claude/rules/`,
 dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1,4–1,7 % limitu na godzinę pracy
 (Opus 5.5 · max, wyżej) – po kolejnej grupie porównaj z nowym zużyciem.
+
+## N1 – Dane i import (1.15.5, 04.11.2026) – wydane 04.11 07:33, PR #50
+- **Zakres:** AP-1 (T314–T318), AP-8 (T319), AP-2 (T320–T324), AP-6 (T325, T326), AP-7 (T327–T329); po przeglądzie
+  T330–T332. Wykonawcy: N1-a (AP-1, AP-8) w osobnym drzewie równolegle z N1-b (AP-2), potem N1-c (AP-6, AP-7, max).
+- **Przegląd:** 4 rundy – xhigh na całości (15 uwag: 14 poprawionych, 1 odrzucona – telefon sam przekazuje stan folderu),
+  potem high na samych poprawkach (10, 7, 8 uwag – wszystkie poprawione; w 4. rundzie temat z „w tym za” uproszczony
+  zamiast kolejnej łaty, T336). Każda poprawka z testem, który przed nią padał. Najpoważniejsze: „Usuń” w meldunku „Wróciły po
+  usunięciu” mógł skasować prawdziwą operację połączoną z wierszem banku; kopia usuwana przy imporcie gubiła spłacane
+  zakupy; „w tym za X” nie liczył własnych wpłat X; próba zapisu przy otwarciu dawała „tylko do odczytu” przy chwilowej
+  blokadzie OneDrive; kopia przed migracją mogła założyć folder-widmo. Weryfikacja przez odtworzenie testem (druga opinia
+  Fable niepotrzebna). Poprawki – po 2–3 podagentów równolegle w osobnych drzewach (max dla rozliczeń, xhigh reszta).
+  Zasada na kolejne grupy: pełny przegląd + jeden na poprawkach; dalej tylko przy poważnych uwagach.
+- **Testy:** typecheck, `npm test` (ok. 1065), build, E2E komputera 78, telefonu 10/10. Lokalnie pada tylko `ictj.spec.ts`
+  (ICTTJ zainstalowany na tym komputerze); ZIP64 w `folder-speed` przekracza czas pod obciążeniem – pułapki w
+  `.claude/rules/testy.md`. Decyzje T314–T337.
+- **Krok 0:** CI audytu padało w nocy – szybki wpis telefonu w ciszy nocnej wymaga notatki (poprawiony pomocnik E2E).
+- **Otwarte:** KR.29 (przy starcie budżetu najpierw `fi.json` albo wycofanie przy częściowym błędzie); numer pliku
+  zapamiętany przy złym koncie po błędnym imporcie; panel duplikatów nie paruje kopii między kontami bez importu
+  naprawczego; PIT-38 bez rozpoznania po nazwie; edytor reguł pokazuje „w tym za”, którego reguły nie zachowują (AP-15,
+  N4).
+- **Czas:** 01:53–07:00 do PR, ok. 5 h (N1-b 42 min, N1-a 63 min, N1-c 65 min; 4 przeglądy 6–20 min; 4 rundy poprawek
+  20–34 min) – plan 2,5–4 h; przekroczenie z rund przeglądu.
+

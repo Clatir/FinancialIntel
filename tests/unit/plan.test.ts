@@ -125,7 +125,7 @@ describe('podział pensji (spec: ładownia, odkładki, koperty planowe i codzien
     const s = salarySplit(plan, '2026-10', [rent, oc, old], categories)
     expect(s.cargo).toEqual({ items: [{ containerId: rent.id, name: 'Czynsz', amount: zl(2000) }], total: zl(2000) })
     // OC 1 240 zł a year = 11 × 103,33 + 103,37; October 2026 is the 7th month of the cycle ending in March 2027.
-    expect(s.tanks.items).toEqual([{ containerId: oc.id, name: 'OC', amount: 10333, dueMonth: '2027-03', due: zl(1240) }])
+    expect(s.tanks.items).toEqual([{ containerId: oc.id, name: 'OC', amount: 10333, required: 10333, dueMonth: '2027-03', due: zl(1240) }])
     expect(s.envelopes.daily).toEqual({ items: [{ categoryId: FOOD, limit: zl(1000), extra: 0 }, { categoryId: FUN, limit: zl(400), extra: 0 }], total: zl(1400), extra: 0 })
     expect(s.envelopes.planned.total).toBe(zl(300))
     expect(s.allocated).toBe(zl(2000) + 10333 + zl(300) + zl(1400))

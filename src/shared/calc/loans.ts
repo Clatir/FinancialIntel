@@ -232,3 +232,17 @@ export function monthlySchedule(total: number, count: number, first: string, mak
     return { id: makeId(), date: `${month}-${String(Math.min(day, daysInMonth(month))).padStart(2, '0')}`, amount }
   })
 }
+
+/**
+ * A taken loan's installments as its container's amounts (AP-11, AF-51 – amends T72): each month the schedule's – its
+ * `amount` the last month's, the months before as its amount history (`past`, F9 – `amountIn`), so the cargo and the
+ * month's plan count 33,33 / 33,33 / 33,34 zł of 100 zł in 3, the rest in the last as the schedule has it.
+ */
+export function installmentAmounts(installments: ReadonlyArray<{ date: string; amount: number }>): Pick<Container, 'amount' | 'past'> {
+  const byMonth = new Map<string, number>()
+  for (const s of [...installments].sort((a, b) => a.date.localeCompare(b.date))) byMonth.set(s.date.slice(0, 7), (byMonth.get(s.date.slice(0, 7)) ?? 0) + s.amount)
+  const months = [...byMonth]
+  const past: Container['past'] = []
+  for (const [i, [month, amount]] of months.entries()) if (i < months.length - 1 && months[i + 1]![1] !== amount) past.push({ until: month, amount })
+  return { amount: months.at(-1)?.[1] ?? 0, past }
+}

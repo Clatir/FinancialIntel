@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FolderStatus, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceOf, skippedDebtsOf, skippedKey } from '@shared/calc/household'
+import { isDuplicatePairKey } from '@shared/import/duplicates'
 import { importGroups, type Choice } from '@shared/import/reconcile'
 import { COLLECTIONS } from '@shared/paths'
 import { defaultCategoryId, importRuleSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type SettingsFile, type Transaction } from '@shared/schema'
@@ -189,6 +190,6 @@ describe('AP-4: naprawa zapisanych wpłat – meldunek „nie spłaciły długu 
     expect(data.useData.getState().fi!.settings.import.rules[0]).toMatchObject({ inflowKind: 'advance', learned: true })
     // Kept as it is: out of the review – the key not a pair of the duplicates panel.
     rules.keepAdvanceRule(learned)
-    expect(Object.keys(data.useData.getState().fi!.settings.import.notDuplicates).filter(rules.isDuplicatePairKey)).toEqual([])
+    expect(Object.keys(data.useData.getState().fi!.settings.import.notDuplicates).filter(isDuplicatePairKey)).toEqual([])
   })
 })

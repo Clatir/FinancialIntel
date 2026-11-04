@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
 import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
-import { DEFAULT_SIGN, withKind } from '@shared/calc/kinds'
+import { DEFAULT_SIGN, unlinkedBy, withKind } from '@shared/calc/kinds'
 import { confirmedChanges, confirmedPeriodOf, type OperationEdit } from '@shared/calc/balances'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
 import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
@@ -11,6 +11,7 @@ import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
+import { toast } from '../../store/ui'
 import { AmountField, DateField, plnText, signedPln, TimeField } from '../../components/fields'
 import { Badge, Empty, Field, Segmented, TextArea, TextField, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -76,6 +77,7 @@ export function OperationEditor({ id }: { id: string }) {
   const tagGoals = useData((s) => s.fi?.settings.intel.tagGoals)
   const loans = useRecordList('loans')
   const balances = useRecordList('balances')
+  const containers = useRecordList('containers')
   const members = useMembers()
   const knownTags = useKnownTags()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
@@ -108,6 +110,24 @@ export function OperationEditor({ id }: { id: string }) {
   }
   const confirmed = confirmedPeriodOf(t, balances)
   const patch = (p: Partial<Transaction>) => update((r) => ({ ...r, ...p }))
+  /**
+   * Another kind (N-PC-4, T362): only an expense is paid from a goal or a container of the cargo – a change that unlinks
+   * one says so, with „Cofnij” (the operation as it was, while it still has the new kind).
+   */
+  const changeKind = (k: TxKind) => {
+    setZeroSign(null)
+    const before = t
+    const lost = unlinkedBy(before, withKind(before, k))
+    if (!update((r) => withKind(r, k)) || (!lost.goals.length && !lost.containers.length)) return
+    const names = [
+      ...lost.goals.map((g) => `cel „${fleet?.goals.find((x) => x.id === g)?.name ?? '?'}”`),
+      ...lost.containers.map((c) => `kontener „${containers.find((x) => x.id === c)?.name ?? '?'}”`)
+    ]
+    toast(`Rodzaj „${TX_KIND_LABEL[k]}” nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: ${names.join(', ')}.`, 'info', 8000, {
+      label: 'Cofnij',
+      run: () => void updateRecord('transactions', id, (r) => (r.kind === k ? { ...before } : r))
+    })
+  }
   // F8: an expense without a category – what the officer knows of its brand (history, the import's rule, the chain).
   const officer =
     t.kind === 'expense' && !t.categoryId && !t.splits.length && rules && !readOnly
@@ -165,10 +185,7 @@ export function OperationEditor({ id }: { id: string }) {
           <Segmented
             size="sm"
             value={MAIN_KINDS.includes(t.kind) ? t.kind : null}
-            onChange={(k) => {
-              setZeroSign(null)
-              update((r) => withKind(r, k))
-            }}
+            onChange={changeKind}
             options={MAIN_KINDS.map((k) => ({ value: k, label: k === 'trading' ? 'XTB' : TX_KIND_LABEL[k] }))}
             aria-label="Rodzaj operacji"
           />
@@ -177,9 +194,7 @@ export function OperationEditor({ id }: { id: string }) {
             value={OTHER_KINDS.includes(t.kind) ? t.kind : ''}
             onChange={(e) => {
               const k = e.currentTarget.value as TxKind | ''
-              if (!k) return
-              setZeroSign(null)
-              update((r) => withKind(r, k))
+              if (k) changeKind(k)
             }}
             aria-label="Inny rodzaj"
             data-testid="operation-kind-other"

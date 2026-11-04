@@ -49,10 +49,12 @@ paths:
 - Decyzja zbiorcza nie zmienia pożyczki, PIT-38, XTB ani pieniędzy domownika decyzją innego rodzaju (`bulkKeeps`, T326);
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
 - „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X
-  ma oddać z zakupami pliku, bez jego własnych wpłat pliku (`owedWithFile`, T328); ekran (`sharesView`) i `runImport`
-  z tego samego. Temat z decyzją swoich marek (N78) czyta ich klucze (`themeSharesFrom`) i pokazuje (`themeCommon` – to
-  samo na ekranie i w testach) linie jako to, co marki dały razem z rozkładu, nie kwotę razy liczbę marek – zmiana tam
-  nigdy nie daje więcej (T327). **Pułapka:** `sameChoice`
+  ma oddać z zakupami pliku, bez jego własnych wpłat pliku (`owedWithFile`, T328); ekran (`sharesView`, uwagi przy linii
+  `lineSpreads` – zawsze jednej decyzji) i `runImport` z tego samego. Temat z decyzją swoich marek (N78 – `themeShows`,
+  `themeCommon`: decyzja pierwszej marki, nic nie sumowane): bez linii z kwotą zmiana tam to decyzja tematu; kilka marek
+  z liniami ('brands') – linie zostają w markach, zmiana w temacie trafia do każdej marki (`chooseThemeRow`, T336).
+  **Pułapka:** kwota tematu jest dla wszystkich jego wierszy razem, kwota marki – dla jej wierszy: nie składaj linii marek
+  w jedną decyzję tematu (przeglądy N1 2–4: raz o połowę mniej, raz więcej, raz zgubiona kwota). **Pułapka:** `sameChoice`
   pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
 - Wpłata domownika (AP-4, T351): opcje `household:<osoba>:income|advance|all-income|all-advance`, jedna nazwa wyboru
   (`MEMBER_MONEY_TEXT` – lista, temat, podgląd, reguła). „spłata, reszta jako …” = `inflowKind: 'repay'` + `advance`.
@@ -68,7 +70,9 @@ paths:
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.
 - Łączenie i duplikaty: `looseMatch` (kwota, ±3 dni, podobieństwo kontrahenta), także między kontami; decyzja
-  użytkownika („Nie łącz”, `notDuplicates`, `notSimilar`) zawsze wygrywa.
+  użytkownika („Nie łącz”, `notDuplicates`, `notSimilar`) zawsze wygrywa. **Pułapka:** `notDuplicates` trzyma też
+  „zostaw” innych meldunków (`back:`, `correction:`, `transfer:`, `transfer-lone:`) – pary panelu duplikatów tylko przez
+  `isDuplicatePairKey`.
 - Tożsamość wiersza między formatami (B5) to miara, nie klucz – stosuj ją wszędzie, gdzie działa klucz: przy usuniętych
   (T320), na kontach tego samego numeru rachunku (T321), przy rozliczeniu (stary klucz w `altKeys`, T323). Kolejność
   przejść planu ma znaczenie: B5 tutaj bierze też wiersze `elsewhere` z B35 (kopia → `RowCopy`, „usuń duplikat”), a

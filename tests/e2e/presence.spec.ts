@@ -66,11 +66,11 @@ test('komputer w zasobniku nie zamraża dni gry (1.5.3, D86): uruchomiony z syst
     await expect.poll(async () => (await json(join(dataDir, '.presence', 'E2E-PC.json')).catch(() => ({ activeAt: 'no file yet' }))).activeAt, { timeout: 20_000 }).toBeNull()
     await page.waitForTimeout(3000)
     expect(await frozenDays(dataDir)).toBe(0)
-    // The window brought up from the tray: in use – the days due are frozen.
-    await app.evaluate(({ BrowserWindow }) => {
-      const w = BrowserWindow.getAllWindows().find((x) => !x.webContents.getURL().includes('quick=1'))!
-      w.show()
-      w.focus()
+    // The window brought up from the tray the app's own way (a second start, as the tray's „Pokaż” – `showMainWindow`):
+    // in use – the days due are frozen. Not by `show()` + `focus()` from outside: Windows may keep the foreground with
+    // another program (another app's window, a parallel run) and the window then gets no 'focus' event at all.
+    await app.evaluate(({ app: electronApp }) => {
+      electronApp.emit('second-instance', {}, [process.execPath], process.cwd(), {})
     })
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await expect.poll(() => frozenDays(dataDir), { timeout: 20_000 }).toBeGreaterThan(0)

@@ -42,8 +42,8 @@ Poprawki po audycie – folder danych, szkice i import z mBanku:
     się z licznikiem, a słowo z tytułu nie jest już „do poprawy”.
   - „+ w tym za…” przy pojedynczej wpłacie działa i startuje od kwoty, którą osoba ma oddać. Dla grupy albo tematu
     dzieli kwotę po kolei i nigdy nie daje więcej, niż osoba ma oddać – licząc też jej własne wpłaty z pliku. Temat
-    z jednakową decyzją marek pokazuje „w tym za” jako to, co marki naprawdę dały, a zmiana w temacie nie zmienia
-    kwoty zaliczonej domownikowi.
+    z jednakową decyzją kilku marek z „w tym za” pokazuje „w tym za – ustawione w markach”: kwoty i uwagi są przy
+    każdej marce, a zmiana w temacie trafia do każdej marki i nie zmienia wpisanych w nich kwot.
   - Przy podziale wpłaty na osoby pewny zakup każdej osoby przypisuje się sam; wpłata równa całemu długowi albo większa
     spłaca wszystkie zakupy.
 

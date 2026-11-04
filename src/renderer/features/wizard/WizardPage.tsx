@@ -1,12 +1,13 @@
 import { cycleText } from '@shared/calc/cargoWatch'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { addDays, daysInMonth, warsawNow } from '@shared/calc/dates'
+import { addDays, daysInMonth, firstDayOf, warsawNow } from '@shared/calc/dates'
 import { balanceAt } from '@shared/calc/balances'
-import { cyclePosition, sinkingInstallment, sinkingSchedule, startMonthSpentOf } from '@shared/calc/fleet'
+import { paymentsIndex } from '@shared/calc/cargoStatus'
+import { startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
-import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments } from '@shared/calc/plan'
-import { startSplit, startTargets } from '@shared/calc/start'
+import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments, unlinkedPayments } from '@shared/calc/plan'
+import { startSplit, startTanks, startTargets } from '@shared/calc/start'
 import { plural } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
@@ -74,6 +75,16 @@ export function WizardPage() {
     // The engine's rule (B126): the start is today; the chosen proposals' payments get linked to their containers.
     return startMonthSpentOf(transactions, today, (t) => (!!t.containerId && periodic.has(t.containerId)) || chosenKeys.has(payeeKey(t)))
   }, [transactions, month, today, containers, chosen])
+  // The days each periodic fee was paid, as the engine will see them after the start (AP-5): a container's linked
+  // payments, a chosen proposal's of its payee from the month's 1st (linked to it at the start) – a cycle they paid is paid.
+  const paidDays = useMemo(() => {
+    const out = new Map<string, string[]>()
+    const linked = paymentsIndex(transactions).byContainer
+    for (const c of containers) if (c.cycleMonths > 1) out.set(c.id, (linked.get(c.id) ?? []).map((p) => p.date))
+    const ids = new Set(containers.map((c) => c.id))
+    for (const p of chosen) if (p.cycleMonths > 1) out.set(p.key, unlinkedPayments(transactions, p.label, firstDayOf(month), ids).map((t) => t.date))
+    return out
+  }, [transactions, containers, chosen, month])
   // Operations dated after today by account (B127): not in the bank's balance now – the engine takes them on their day.
   const aheadBy = useMemo(() => {
     const out = new Map<string, number>()
@@ -106,14 +117,16 @@ export function WizardPage() {
   const goalsTotal = sum(Object.values(goalsSplit))
   // Periodic cargo items (N-PC-7): existing periodic containers and periodic proposals chosen in step 4.
   const periodicItems = [
-    ...containers.filter((c) => !c.archived && c.cycleMonths > 1).map((c) => ({ key: c.id, name: c.name, amount: c.amount, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, schedule: c.schedule })),
-    ...chosen.filter((p) => p.cycleMonths > 1).map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule }))
-  ].map((item) => {
-    const pos = cyclePosition(item, month)
-    const planAmount = pos.index > 0 ? sum(sinkingSchedule(item.amount, pos.length).slice(0, pos.index)) : 0
-    return { ...item, planAmount }
-  })
+    ...containers
+      .filter((c) => !c.archived && c.cycleMonths > 1)
+      .map((c) => ({ key: c.id, name: c.name, amount: c.amount, past: c.past, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, schedule: c.schedule, archived: false, from: c.from, until: c.until })),
+    ...chosen
+      .filter((p) => p.cycleMonths > 1)
+      .map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule, archived: false, from: null, until: null }))
+  ]
   const tanksSplit = Object.fromEntries(periodicItems.map((item) => [item.key, Math.max(0, w.tanks?.[item.key] ?? 0)]))
+  // The first month's tanks and „do planu” by the engine's rule (AP-5): a cycle paid before the start wants nothing.
+  const tankPlan = new Map(startTanks(periodicItems.map((item) => ({ ...item, paid: paidDays.get(item.key) ?? [] })), today, tanksSplit).map((t) => [t.key, t]))
   const tanksTotal = sum(Object.values(tanksSplit))
   const overSplit = hull + goalsTotal + tanksTotal > Math.max(0, total)
   // The proposals with what was typed over them (B75): choosing the cargo again never drops a typed envelope.
@@ -124,9 +137,7 @@ export function WizardPage() {
   }
   const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => c.amount)) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
   // The tanks of the first month as the engine fills them (N9, T29, N-PC-7): a fee due soon catches up unless funded at start.
-  const tanksMonthly =
-    sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map((c) => sinkingInstallment(c, month, tanksSplit[c.id] ?? 0))) +
-    sum(chosen.filter((p) => p.cycleMonths > 1).map((p) => sinkingInstallment({ amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule }, month, tanksSplit[p.key] ?? 0)))
+  const tanksMonthly = sum([...tankPlan.values()].map((t) => t.installment))
   const tanksLater = sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map(monthlyShare)) + sum(chosen.filter((p) => p.cycleMonths > 1).map(monthlyShare))
   const envelopesTotal = sum(Object.values(envelopes))
   const unallocated = (salary ?? 0) - cargoMonthly - tanksMonthly - envelopesTotal
@@ -290,7 +301,10 @@ export function WizardPage() {
         </div>
         {tanksMonthly !== tanksLater && (
           <Note>
-            Odkładki w tym miesiącu: {zl(tanksMonthly)} – zbiorniki nadrabiają do terminów opłat; potem ok. {zl(tanksLater)} miesięcznie.
+            {/* Less than later with a cycle paid before the start (AP-5): no catching up – that fee is not set aside again. */}
+            Odkładki w tym miesiącu: {zl(tanksMonthly)} –{' '}
+            {tanksMonthly < tanksLater && [...tankPlan.values()].some((t) => t.paid) ? 'opłaty zapłacone przed startem nie odkładają się drugi raz' : 'zbiorniki nadrabiają do terminów opłat'}; potem ok.{' '}
+            {zl(tanksLater)} miesięcznie.
           </Note>
         )}
         <div className="flex justify-between" data-testid="wizard-unallocated">
@@ -348,32 +362,36 @@ export function WizardPage() {
             cele – propozycja
           </button>
         )}
-        {periodicItems.map((item) => (
-          <div key={item.key} className="mt-1 flex items-center gap-2" data-testid="wizard-split-tank" data-name={item.name}>
-            <span className="w-[170px] truncate text-muted" title={item.name}>
-              zbiornik: {item.name}
-            </span>
-            <AmountField
-              className="w-[130px]"
-              value={tanksSplit[item.key] ?? 0}
-              onChange={(v) => patchWizard({ tanks: { ...tanksSplit, [item.key]: Math.max(0, v ?? 0) } })}
-              aria-label={`Zbiornik ${item.name} na start`}
-              data-testid="wizard-split-tank-input"
-            />
-            <span className="text-[11px] text-dim">opłata {zl(item.amount)}</span>
-            {item.planAmount > 0 && (tanksSplit[item.key] ?? 0) !== item.planAmount && (
-              <button
-                type="button"
-                className="text-[11px] text-accent hover:underline"
-                onClick={() => patchWizard({ tanks: { ...tanksSplit, [item.key]: item.planAmount } })}
-                title="Tyle przypada za miesiące cyklu przed startem budżetu – po uzupełnieniu rata odkładki nie musi nadrabiać"
-                data-testid="wizard-split-tank-plan"
-              >
-                do planu ({zl(item.planAmount)})
-              </button>
-            )}
-          </div>
-        ))}
+        {periodicItems.map((item) => {
+          // A cycle paid before the start (AP-5) has nothing to fill: its tank collects for the next one.
+          const planAmount = tankPlan.get(item.key)?.planAmount ?? 0
+          return (
+            <div key={item.key} className="mt-1 flex items-center gap-2" data-testid="wizard-split-tank" data-name={item.name}>
+              <span className="w-[170px] truncate text-muted" title={item.name}>
+                zbiornik: {item.name}
+              </span>
+              <AmountField
+                className="w-[130px]"
+                value={tanksSplit[item.key] ?? 0}
+                onChange={(v) => patchWizard({ tanks: { ...tanksSplit, [item.key]: Math.max(0, v ?? 0) } })}
+                aria-label={`Zbiornik ${item.name} na start`}
+                data-testid="wizard-split-tank-input"
+              />
+              <span className="text-[11px] text-dim">opłata {zl(item.amount)}</span>
+              {planAmount > 0 && (tanksSplit[item.key] ?? 0) !== planAmount && (
+                <button
+                  type="button"
+                  className="text-[11px] text-accent hover:underline"
+                  onClick={() => patchWizard({ tanks: { ...tanksSplit, [item.key]: planAmount } })}
+                  title="Tyle przypada za miesiące cyklu przed startem budżetu – po uzupełnieniu rata odkładki nie musi nadrabiać"
+                  data-testid="wizard-split-tank-plan"
+                >
+                  do planu ({zl(planAmount)})
+                </button>
+              )}
+            </div>
+          )
+        })}
         {overSplit && (
           <p className="text-[11.5px] text-down" data-testid="wizard-split-over">
             Kadłub, cele i zbiorniki ({zl(hull + goalsTotal + tanksTotal)}) przekraczają obecne środki ({zl(Math.max(0, total))}) – zmniejsz je.

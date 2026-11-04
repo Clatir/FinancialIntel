@@ -1,12 +1,14 @@
 /**
  * Docking a delivery (E5, D72): the docking record (each ICTTJ entry at most once – T15) and, for a payout without a
- * pair in the bank, its operation on Portfel XTB. Undone with „Cofnij”.
+ * pair in the bank, its operation on Portfel XTB. Undone with „Cofnij”; taken back later with „Wycofaj dokowanie”
+ * (AP-9 – `undockDelivery`).
  */
 import { asPayout, type Delivery } from '@shared/calc/dock'
+import { dockingIdOf, undockingOf, walletOperationId } from '@shared/calc/undock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
-import { derivedId, newId } from '@shared/ids'
+import { newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteOrSay, updateRecord, updateSettings, useData } from '../../store/data'
+import { addRecord, canWrite, deleteOrSay, NEWER_RECORD_MESSAGE, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
@@ -24,7 +26,7 @@ export function walletOperation(d: Delivery, now: string): Transaction {
   return transactionSchema.parse({
     schemaVersion: SCHEMA_VERSION,
     // One id per payout (B17): docked on two computers before the sync, it is one file – never twice the money.
-    id: d.entry ? derivedId(d.entry.id, `wallet:${d.entry.id}`) : newId(),
+    id: d.entry ? walletOperationId(d.entry.id) : newId(),
     createdAt: now,
     updatedAt: now,
     date: d.date,
@@ -44,7 +46,7 @@ export function dockingOf(d: Delivery, tx: Transaction, split: SplitDraft | null
   // A payout's docking has one id too (B17); one whose entry was deleted in ICTTJ leaves its pool behind (B21).
   const kept = d.entryGone ? null : d.docking
   return dockingSchema.parse({
-    ...(d.docking ?? { schemaVersion: SCHEMA_VERSION, id: d.entry ? derivedId(d.entry.id, `docking:${d.entry.id}`) : newId(), createdAt: now }),
+    ...(d.docking ?? { schemaVersion: SCHEMA_VERSION, id: d.entry ? dockingIdOf(d.entry.id) : newId(), createdAt: now }),
     updatedAt: now,
     date: tx.date,
     transactionId: tx.id,
@@ -114,6 +116,39 @@ export function removeExtraDockings(d: Delivery): void {
       for (const x of d.extra) addRecord('dockings', x.docking)
     }
   })
+}
+
+/**
+ * „Wycofaj dokowanie” (AP-9, N-PC-2): a docked delivery taken back – its docking (with the extra ones of its entry – B17)
+ * and the Portfel XTB operation the docking made go; an operation of the bank stays and waits to be docked again
+ * (`calc/undock.ts`, T360). „Cofnij” brings them back. Never a write to ICTTJ's folder.
+ */
+export function undockDelivery(d: Delivery): boolean {
+  const plan = undockingOf(d)
+  if (!plan || !canWrite()) return false
+  const { records } = useData.getState()
+  // A record a newer version of the app wrote (B67): this one never deletes it – nothing taken back by halves.
+  if (plan.dockings.some((x) => records.dockings?.[x.id]?.readOnly) || plan.transactions.some((t) => records.transactions[t.id]?.readOnly)) {
+    toast(NEWER_RECORD_MESSAGE, 'error', 8000)
+    return false
+  }
+  // The records as they are now (an edit since the list was counted is what „Cofnij” brings back).
+  const dockings = plan.dockings.map((x) => records.dockings?.[x.id]?.record ?? x)
+  const ops = plan.transactions.map((t) => records.transactions[t.id]?.record ?? t)
+  for (const x of dockings) deleteOrSay('dockings', x.id)
+  for (const t of ops) deleteOrSay('transactions', t.id)
+  const what = ops.length ? ' i jego operację na Portfelu XTB' : ''
+  const then = ops.length ? 'dostawa znowu czeka na dokowanie' : 'operacja z banku zostaje i czeka na ponowne dokowanie'
+  toast(`Wycofano dokowanie ${plnText(d.amount)} zł${what} – ${then}.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      // Docked again meanwhile (the same ids – B17): that docking stays.
+      const now = useData.getState().records
+      for (const t of ops) if (!now.transactions[t.id]) addRecord('transactions', t)
+      for (const x of dockings) if (!now.dockings?.[x.id]) addRecord('dockings', x)
+    }
+  })
+  return true
 }
 
 /** An ICTTJ entry that is not the budget's money (it went elsewhere): left out of the docking, until brought back. */

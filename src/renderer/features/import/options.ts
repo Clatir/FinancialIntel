@@ -216,7 +216,7 @@ export function offersNewMember(
 }
 
 /** The lines of „w tym za” as one text – of 0 zł too (`sameChoice` leaves those out); a loan's part by its loan (D100). */
-const linesKey = (xs: Choice['shares']): string => (xs ?? []).map((x) => `${shareWho(x)}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`).join(',')
+export const linesKey = (xs: Choice['shares']): string => (xs ?? []).map((x) => `${shareWho(x)}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`).join(',')
 
 /**
  * A row's decision after its „w tym za” changed (AF-27 – a new line of 0 zł was „the same as the group's”, so the row's

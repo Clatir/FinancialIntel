@@ -22,7 +22,7 @@ import {
 import { sameContentAs } from '@shared/merge'
 import { SCHEMAS, parseRecordObject, parseRecordText, serializeRecord, type AnyRecord, type RecordTypes } from '@shared/records'
 import { SCHEMA_VERSION, type SettingsFile } from '@shared/schema'
-import { dataRootOf, mkdirWithin, pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
+import { atomicFailure, dataRootOf, mkdirWithin, pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
 import { mapLimit, walkFiles } from './fsutil'
 import { ReadTracker, type LoadProgress, type LoadStats } from './progress'
 import { HISTORY_DIR, RecordHistory } from './history'
@@ -154,10 +154,10 @@ export interface DataStoreOptions {
    */
   onStatus?: (change: ChangeSet) => void
   /**
-   * This computer's presence written in the folder (the main process's heartbeat write – T316), each step tried
-   * `attempts` times: the write probe's check that new files can be made (temp + rename in `.presence/`), at the open and
-   * while the folder takes no writes – no file of the probe's own. Without it (the phone's mirror, tests) only fi.json is
-   * tried.
+   * This computer's presence written in the folder (the main process's heartbeat write by `writeFileAtomic` – T316),
+   * each step tried `attempts` times: the write probe's check that new files can be made (temp + rename in `.presence/`),
+   * at the open and while the folder takes no writes – no file of the probe's own; the step that failed (`AtomicWriteError`)
+   * says whether the folder refused a new file. Without it (the phone's mirror, tests) only fi.json is tried.
    */
   presence?: (attempts: number) => Promise<void>
 }
@@ -607,10 +607,11 @@ export class DataStore {
    * the probe makes no file of its own (on OneDrive each would go to its online recycle bin) and none can be left behind.
    * Every step is tried `attempts` times – at the open and the return a few (an antivirus or OneDrive holding a file a
    * moment is no read-only folder, ~0.1 s), idle once, no waiting (a folder read-only for real, every few seconds – T335).
-   * Of the presence only a new file refused is the folder's (`.presence/` or the temp file not made – a name nobody holds);
-   * its one file not replaced (the attribute „tylko do odczytu”, a lock held long) or any other failure is logged, never
-   * read-only – the heartbeat writes it again. Null = it takes writes; else why not. Any other failure (the folder gone,
-   * a file held for long) is no read-only folder – the write itself says it.
+   * Of the presence only a new file refused is the folder's (`.presence/` or the temp file not made – a name nobody holds;
+   * told by the step of our write that failed, `AtomicWriteError`, never by the error's `syscall`); its one file not replaced
+   * (a lock held long – the attribute „tylko do odczytu” the presence write clears itself, T337) or any other failure is
+   * logged, never read-only – the heartbeat writes it again. Null = it takes writes; else why not. Any other failure (the
+   * folder gone, a file held for long) is no read-only folder – the write itself says it.
    */
   private async writeProbe(attempts = 1): Promise<string | null> {
     const fi = join(this.root, SETTINGS_FILE)
@@ -625,9 +626,10 @@ export class DataStore {
     try {
       await this.presence?.(attempts)
     } catch (e) {
-      const syscall = (e as NodeJS.ErrnoException).syscall
-      if (refusedWrite(e) && (syscall === 'open' || syscall === 'mkdir')) return FOLDER_NOT_WRITABLE_MESSAGE
-      this.log?.('warn', 'write probe: presence not written', e)
+      // Its own failure, also wrapped by the caller (`cause`): its step and its code (przegląd N1 5).
+      const failed = atomicFailure(e)
+      if (failed && refusedWrite(failed) && (failed.step === 'dir' || failed.step === 'create')) return FOLDER_NOT_WRITABLE_MESSAGE
+      this.log?.('warn', `write probe: presence not written (step: ${failed?.step ?? 'unknown'})`, e)
     }
     return null
   }

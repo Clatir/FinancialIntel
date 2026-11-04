@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { BrandAlias } from '@shared/schema'
+import { isDuplicatePairKey } from '@shared/import/duplicates'
 import { useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { countLabel } from '../../lib/format'
@@ -9,7 +10,7 @@ import { setMachinePrefs, useMachine } from '../../store/machine'
 import { KeywordRules } from '../import/KeywordRules'
 import { RecentImports } from '../import/RecentImports'
 import { MixedBrandsPanel, RulesPanel, useRuleAudit } from '../import/RulesAudit'
-import { clearDismissedSimilar, clearNotDuplicates, inactiveAlias, isDuplicatePairKey, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
+import { clearDismissedSimilar, clearNotDuplicates, inactiveAlias, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
 
 const NO_NAMES: string[] = []
 const NO_ALIASES: Record<string, BrandAlias> = {}

@@ -4,7 +4,7 @@
  */
 import { coverAmount, type AccountAhead } from '@shared/calc/ahead'
 import { warsawNow } from '@shared/calc/dates'
-import { monthlySchedule, type LoanState } from '@shared/calc/loans'
+import { installmentAmounts, monthlySchedule, type LoanState } from '@shared/calc/loans'
 import { newId } from '@shared/ids'
 import { containerSchema, loanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Loan, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, deleteRecord, updateRecord, useData } from '../../store/data'
@@ -78,7 +78,8 @@ export function addLoan(o: NewLoan): Loan {
           id: newId(),
           name: `Rata: ${loan.name}`.slice(0, 80),
           type: 'installment',
-          amount: first.amount,
+          // Each month the schedule's installment, the rest in the last (AP-11, AF-51).
+          ...installmentAmounts(loan.schedule),
           cycleMonths: 1,
           dueMonth: first.date.slice(0, 7),
           dueDay: Number(first.date.slice(8, 10)),
@@ -114,12 +115,14 @@ export function ensureLoanContainer(s: LoanState): Container | null {
   const first = s.next ?? s.loan.schedule[0]
   const last = s.left.at(-1) ?? s.loan.schedule.at(-1) ?? first
   const dueDate = first?.date ?? s.loan.date
+  // What is left of each installment, the rest in the last (AP-11, AF-51); no schedule – the debt at once.
+  const rest = s.left.length ? s.left : s.loan.schedule
   const c = containerSchema.parse({
     ...stamp(),
     id: newId(),
     name: `Rata: ${s.loan.name}`.slice(0, 80),
     type: 'installment',
-    amount: first?.amount ?? s.open,
+    ...(rest.length ? installmentAmounts(rest) : { amount: s.open }),
     cycleMonths: 1,
     dueMonth: dueDate.slice(0, 7),
     dueDay: Number(dueDate.slice(8, 10)),

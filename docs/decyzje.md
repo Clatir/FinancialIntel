@@ -1020,6 +1020,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T129** Pieniądze celu (D84 C2, B30): archiwizacja celu z pieniędzmi pyta – osłony / inny cel / zostają; przeniesienie =
   wpis `transfers` {at, to, amount}, silnik na koniec dnia przenosi `min(kwota, stan)` (nigdy więcej, niż cel ma);
   „przenieś środki” na liście zarchiwizowanych także później (cele ICTTJ spoza scenariusza też); „Cofnij” przywraca cel.
+  **Od 1.15.6 „na koniec dnia” zastąpione przez T340** (w chwili `at` wśród zdarzeń dnia – AP-3, AF-4).
 - **T130** Scenariusz ICTTJ (D84 C3): scenariusz zapamiętany w `fi.json` przy pierwszym podłączeniu (ostatnio zmieniany
   w ICTTJ – `chosenForecast`); zmiana w Ustawieniach → ICTTJ dopiero po potwierdzeniu z listą celów do archiwizacji (ich
   pieniądze zostają).
@@ -1192,6 +1193,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   niezadokowaną nie zamarza (`pendingPairDays`, `advanceGame` `hold`, liczone z bieżących dostaw – także po pominięciu
   wpisu czy nowym odczycie ICTTJ) – najwyżej 7 dni, potem zamarza jak dotąd. Silnik
   do dokowania nadal liczy parę zwykłą kolejnością (pula dopiero z rekordem dokowania – wariant „pełniej” bez zmian).
+  **Od 1.15.6 zdanie o silniku zastąpione przez T341** (para liczona od razu według puli wpisu – D99 pkt 2, AP-12);
+  wstrzymanie zamrażania zostaje.
 - **T164** Dni robocze (F42, zmienia T63): bez sobót, niedziel i polskich świąt ustawowych – stałe (1.01, 6.01, 1.05,
   3.05, 15.08, 1.11, 11.11, 25–26.12; 24.12 od 2025), Wielkanoc i poniedziałek wielkanocny, Zielone Świątki (+49 dni),
   Boże Ciało (+60) – `isPolishHoliday` / `isWorkingDay` (`calc/dates.ts`), tylko w oknie pary i 3 dniach roboczych D72.
@@ -1652,7 +1655,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   to decyzja użytkownika (reguła nadawcy jak każda), reszta ponad należność – pytanie „zaliczka czy przychód?” (temat „do
   decyzji”, także po nowym planie z innym kluczem grupy); odpowiedź zapamiętana dla osoby tylko z decyzji użytkownika,
   głosami operacji bez pominiętych. Temat: „różne – patrz marki”, gdy marki zdecydowano różnie; jednakowe decyzje marek
-  pokazane jako decyzja tematu – jej zmiana je zastępuje. Słowo kluczowe z paska zbiorczego dla każdej decyzji ze słowem
+  pokazane jako decyzja tematu – jej zmiana je zastępuje (z „w tym za” kilku marek – trafia do każdej marki, T336).
+  Słowo kluczowe z paska zbiorczego dla każdej decyzji ze słowem
   (wydatek, wpływ, przelew, domownik), kierunek z zaznaczonych, do których decyzja pasuje; żaden nie pasuje – słowo
   niezapisane. Wyszukiwarka po kategorii, którą grupa dostaje (nie propozycji), bez powodu propozycji; „Przyjmij pewne” i
   „Przyjmij podpowiedzi” w wyszukiwaniu tylko na znalezionych. Własna decyzja operacji inna niż wydatek widoczna z „jak
@@ -2362,22 +2366,39 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   decyduje, a próba nie zakłada własnego pliku (wcześniej `.fi-zapis.tmp-…` w korzeniu przy każdym otwarciu – wpis
   w koszu online OneDrive, przy blokadzie usuwania plik zostawał). Zakładanie nowych plików (każdy zapis to plik
   tymczasowy i zamiana) sprawdza zapis obecności tego komputera w `.presence/` (`DataStoreOptions.presence` =
-  `writeOwnPresence` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
+  `presenceKept.write` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
   więc folder, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie uprawnienia), jest tylko do odczytu
   z powodem i bez migracji, której nie da się dokończyć (wcześniej: bez banera, każdy zapis z własnym błędem, migracja
   przerywała otwarcie). Po przeglądzie 3: z zapisu obecności o trybie tylko do odczytu decyduje tylko odmowa założenia
-  nowego pliku – katalogu `.presence/` albo pliku tymczasowego (EPERM / EACCES / EROFS z `mkdir` / `open`, po próbach
-  jak `fi.json` – T335; nowej nazwy nikt nie trzyma). Plik obecności, którego nie da się zastąpić (atrybut „tylko do
-  odczytu” po przywróceniu kopii, blokada dłuższa niż próby), i każdy inny błąd obecności to tylko wpis w logu („write
-  probe: presence not written”) – folder przyjmuje zapisy, obecność zapisze heartbeat (wcześniej taki jeden plik dawał
-  tryb tylko do odczytu przy każdym otwarciu, bez wyjścia). Przyjęte: uprawnienia odbierające zakładanie plików tylko
+  nowego pliku – katalogu `.presence/` albo pliku tymczasowego (EPERM / EACCES / EROFS w tym kroku naszego zapisu, po
+  próbach jak `fi.json` – T335; nowej nazwy nikt nie trzyma). Po przeglądzie 4 krok zna sam zapis (`atomicStep` –
+  `writeFileAtomic` znaczy błąd krokiem, który padł: katalog, plik tymczasowy, zapis, zamiana), nie pole `syscall` błędu
+  (wcześniej `mkdir` / `open` z błędu: błąd bez `syscall` albo z innym dawał tylko wpis w logu, a zamiana zgłoszona jako
+  `open` – tryb tylko do odczytu). Plik obecności, którego nie da się zastąpić (blokada dłuższa niż próby; atrybut „tylko
+  do odczytu” po przywróceniu kopii zapis obecności zdejmuje sam – T337), i każdy inny błąd obecności to tylko wpis
+  w logu („write probe: presence not written (step: …)”) – folder przyjmuje zapisy, obecność zapisze heartbeat (wcześniej
+  taki jeden plik dawał tryb tylko do odczytu przy każdym otwarciu, bez wyjścia). Przyjęte: uprawnienia odbierające zakładanie plików tylko
   w `.presence/` (nie w reszcie folderu) dałyby tryb tylko do odczytu – OneDrive uprawnień katalogów nie przenosi.
   Otwarcie nieudane albo ustępujące nowszemu po próbie usuwa tę obecność (`openFolder`, `finally`), chyba że ten folder
   jest otwarty albo otwiera go nowsze otwarcie (przegląd 3: `PresenceKeeper` w `main/datastore/presence.ts` – folder
   otwarty i foldery otwarć w toku trzymają obecność; tak samo zamknięcie magazynu i heartbeat magazynu sprzed zmiany;
   wcześniej spóźnione usunięcie zdejmowało obecność zapisaną już przez próbę nowszego otwarcia tego folderu i drugi
-  komputer do końca tego otwarcia, także w trakcie migracji, nie widział tego komputera). Telefon (lustro folderu)
-  i testy bez `presence` – tylko `fi.json`.
+  komputer do końca tego otwarcia, także w trakcie migracji, nie widział tego komputera). Po przeglądzie 4 każdy zapis
+  i każde usunięcie obecności tego komputera idzie przez `PresenceKeeper` po kolei w danym folderze (`write` – próba
+  i heartbeat, `clear`; inne foldery nie czekają), a usunięcie sprawdza trzymanie dopiero w swojej kolejce, tuż przed
+  `rm` (wcześniej przy wywołaniu: usunięcie ustępującego otwarcia, puszczone bez czekania, mogło na wolnym OneDrive dojść
+  po zapisie próby nowszego otwarcia tego folderu, które zaczęło się w międzyczasie – drugi komputer nie widział tego do
+  następnego heartbeatu, w zasobniku do 5 min). Po przeglądzie N1 5: kolejka `PresenceKeeper` uruchamia tylko jego
+  własne zapisy i usunięcia – obecność zapisuje sam (`write(folder, próby)`, `beat(folder)`; wersja i ostatni ruch w oknie
+  z `content`), nigdy operacji wołającego, więc żaden zapis nie czeka w niej na siebie (wcześniej pilnował tego tylko
+  komentarz: operacja wołająca kolejkę zakleszczyłaby folder); zamknięcie folderu (zmiana folderu, wyjście) czeka na
+  usunięcie obecności najwyżej 5 s (`PRESENCE_CLEAR_MS`, `clearWithin`; wcześniej bez limitu za wszystkimi zapisami
+  obecności folderu – wolny OneDrive wstrzymywał wyjście i otwarcie następnego folderu), potem usunięcie idzie dalej
+  w swojej kolejce i sprawdza trzymanie w swojej kolei – obecność nowszego otwarcia zostaje. Krok zapisu niesie sam błąd:
+  `writeFileAtomic` odrzuca `AtomicWriteError { step, cause }` z kodem i komunikatem błędu fs, `atomicFailure` /
+  `atomicStep` znajdują go także w błędzie opakowanym (`cause`) – wcześniej krok w `WeakMap` po obiekcie błędu i
+  opakowanie go gubiło (folder naprawdę tylko do odczytu nierozpoznany). Telefon (lustro folderu) i testy bez
+  `presence` – tylko `fi.json`.
   W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
   podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
 - **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
@@ -2438,7 +2459,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
   mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu (gdy jest
   po co – T332), od razu na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je
-  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie.
+  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie. Po przeglądzie N1 5
+  Ustawienia → Import („Pary oznaczone „to nie duplikat”: N”, „pokazuj znowu”) liczą i zapominają tylko pary panelu
+  duplikatów (`isDuplicatePairKey` w `shared/import/duplicates.ts` – klucz `row:…` albo id pary): klucze `back:<id>`,
+  a także `correction:` (B129), `transfer:` i `transfer-lone:` (F10) zostają – wcześniej liczone jako pary, a „pokazuj
+  znowu” przywracało meldunki operacji zostawionych i przywróconych świadomie oraz przelewów „zostaw tak”.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
   rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
@@ -2466,14 +2491,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „jak grupa” albo usunięcie wszystkich linii, gdy grupa nie ma swoich. Nowa linia (wiersz, grupa, temat) startuje od
   tego, co X ma oddać – po zakupach pliku, po własnych wpłatach X w pliku i po częściach X w innych wierszach – najwyżej
   tyle, ile zostało w pieniądzach wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”.
-  Temat, który pokazuje wspólną decyzję swoich marek (N78), liczy start i rozkład przy linii z ich wierszy i ich linii
-  (`themeSharesFrom`, `decisionSpread`; przegląd N1) i pokazuje linię innego domownika jako to, co marki razem mu dały
-  (`themeCommon` – suma ich rozkładu: dwie marki po 100 zł = 200 zł, ale marka, której wiersze mają własne decyzje albo
-  której wpłatom zabrakło pieniędzy, daje mniej; linie 0 zł pominięte; przy linii – z których wpłat poszło); zmiana tam
-  robi decyzję tematu z tą kwotą (kwota tematu jest dla wszystkich jego wierszy, T328) – X nigdy nie dostaje więcej, niż
-  marki dały (przegląd N1 2: wcześniej kwota jednej marki – zmiana zmniejszała sumę o połowę; przegląd N1 3: potem kwota
-  marki razy ich liczba – zmiana dawała X pieniądze, których nikt za niego nie wysłał). Własna część wiersza zostaje
-  wpisana jak wpisana (także ponad dług – świadomie, za ten przelew).
+  Temat, który pokazuje wspólną decyzję swoich marek bez linii z kwotą (N78), liczy start nowej linii z ich wierszy
+  (`themeSharesFrom`; przegląd N1), a linia wpisana tam to decyzja tematu (razem dla X, T328); linie marek z kwotą
+  zostają w markach – T336. Własna część wiersza zostaje wpisana jak wpisana (także ponad dług – świadomie, za ten
+  przelew).
 - **T328** „w tym za X” grupy i tematu (AP-7, AF-27; D81): kwota decyzji wspólnej dla kilku wpłat to razem dla X, nie
   na każdą wpłatę – rozkładana po kolei od najstarszej (każda wpłata najwyżej swoją kwotą), a wszystkie spłaty X z grup
   i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy i o własne wpłaty X w pliku,
@@ -2481,9 +2502,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   cała, dopóki jej części nie są znane – po kolei; przegląd N1) (`rowShares`). „Ma oddać” =
   dług z księgi teraz plus części X zakupów, które ten import tworzy (zwrot towaru odejmuje), pomniejszone o jego zaliczkę
   (`owedWithFile`); część zaliczki / przychodu (`inflowKind` inny niż spłata) – bez tego limitu. Podgląd mówi przy linii
-  grupy, z których wpłat poszła i dlaczego mniej niż wpisane („tyle X ma oddać” / „tyle zostało we wpłatach”); import
-  liczy to samo (`runImport` → `buildImport({ owed })`). Bez migracji: importy z „w tym za” w grupie kilku wpłat sprzed
-  1.15.5 mają zdublowane części – do poprawy w Operacjach.
+  jednej decyzji – grupy, tematu z własną decyzją, tematu jednej marki (`lineSpreads`) – z których wpłat poszła i dlaczego
+  mniej niż wpisane („tyle X ma oddać” / „tyle zostało we wpłatach”, „X nie ma nic do oddania”); linii kilku decyzji
+  razem nie składa (T336); import liczy to samo (`runImport` → `buildImport({ owed })`). Bez migracji: importy
+  z „w tym za” w grupie kilku wpłat sprzed 1.15.5 mają zdublowane części – do poprawy w Operacjach.
 - **T329** Pewne dopasowanie przy podziale na osoby (AP-7, D91 b – D99; DM sp. 1–2): w edytorze Operacji dopisana albo
   zmieniona część osoby („+ także za…”, „podziel na osoby”) wiąże sama pewny zakup tej osoby, gdy jej część nie wskazuje
   jeszcze żadnego (to samo, co edytor proponował jako „Pasuje: …” – `moreSureCovers`, `repaymentSharesByMember`); część
@@ -2546,7 +2568,122 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`writeFileAtomic(…, attempts)`: katalog, plik tymczasowy, zamiana): przy otwarciu i powrocie ok. 0,1 s na krok,
   w spoczynku i w kolejce jedna próba bez czekania. Wcześniej plik tymczasowy raz (jeden chwilowy EPERM na `.presence/`
   dawał tryb tylko do odczytu), a zamiana zawsze 8 razy (ok. 1,4 s co 5 s w spoczynku i w kolejce magazynu). Zwykłe
-  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy.
+  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy. Po przeglądzie 4 naprawa pliku obecności tylko do
+  odczytu (T337) to jeden `access`, `chmod` i drugi zapis z tymi samymi próbami – tylko gdy plik naprawdę nie ma prawa
+  zapisu; plik trzymany nie dostaje drugiego zapisu (czas jak dotąd).
+- **T336** Temat z jednakową decyzją marek z „w tym za” (przegląd N1 4; doprecyzowuje T235 – N78, T327, T328): gdy
+  kilka marek tematu ma tę samą decyzję z liniami „w tym za” z kwotą (`themeShows` 'brands'), wiersz tematu pokazuje ich
+  decyzję bez edytora linii – „w tym za – ustawione w markach”; linie, kwoty i uwagi rozkładu są przy każdej marce (jej
+  klucz, `lineSpreads`). Zmiana w temacie (np. cel wpłaty) trafia do decyzji każdej marki jako jej własna, a linie marki
+  zostają jak wpisane (także 0 zł); inny rodzaj zdejmuje linie w każdej marce, jak ta zmiana w marce (`chooseThemeRow`).
+  Nigdy jedna decyzja tematu z kwotą policzoną z marek: kwota tematu jest dla wszystkich jego wierszy razem (T328), kwota
+  marki – dla jej wierszy, więc żadna jedna kwota nie jest tym, co wpisała każda marka (przegląd N1 2: kwota jednej marki
+  – suma o połowę mniejsza; N1 3: kwota razy liczba marek – X dostawał pieniądze, których nikt za niego nie wysłał; N1 4:
+  to, co marki dają teraz – zmiana obok, np. kategorii, zapisywała kwotę obciętą do długu, a gdy dług potem rósł, X
+  dostawał mniej, niż marki wpisały, albo nic). Jedna marka albo marki bez linii z kwotą – jak dotąd: zmiana w temacie to
+  decyzja tematu (te same wiersze i kwoty). Wiersz tematu nie czyta rozkładu (`themeCommon` – decyzja pierwszej marki,
+  bez sumowania), uwagi przy linii zawsze z jednej decyzji – kilku kluczy razem nikt nie składa. Po przeglądzie N1 5
+  księgowanie decyzji grupy (B97 – własna po przyjętej podpowiedzi zapamiętana, pytanie „zaliczka czy przychód?” nowego
+  domownika, przyjęta podpowiedź, propozycja słowa D78) jest w jednym miejscu (`groupsDecided` w
+  `features/import/state.ts`) dla decyzji grupy, zbiorczej, tematu nad markami ('same'), marek z liniami ('brands') i
+  „jak temat”; grupa wracająca do tematu traci też pytanie domownika i propozycję słowa (wcześniej „jak temat” po
+  „+ domownik” zostawiał pytanie – plakietka i temat „do zrobienia”).
+- **T337** Własny plik obecności, którego nie da się zastąpić (przegląd 4 AP-1; doprecyzowuje T316): zamiana
+  `.presence/<komputer>.json` odmówiona (EPERM / EACCES w kroku zamiany – `atomicStep`), a plik bez prawa zapisu
+  (`access(…, W_OK)`; na Windows atrybut „tylko do odczytu”, np. po przywróceniu kopii) → `writePresence` oddaje mu
+  prawo zapisu (`chmod` z bitem zapisu właściciela, na Windows zdejmuje atrybut) i zapisuje raz jeszcze – zamiana
+  zostaje atomowa, plik nie znika ani na chwilę. Plik trzymany (blokada antywirusa albo OneDrive) zostaje, jak jest –
+  minie sama, ponawia następny heartbeat. Błąd zapisu obecności w heartbeacie nie jest połykany
+  (`PresenceKeeper.beat`): wpis w logu, gdy zaczyna się nie udawać w danym folderze (z błędem), i gdy znów się udaje –
+  nie przy każdej próbie (co minutę, w zasobniku co 5 min; tygodnie w zasobniku wypchnęłyby resztę z logu 1 MB).
+  Seria kończy się bez wpisu, gdy folder zamknięto – obecność z niego usunięta albo heartbeat pisze w innym folderze:
+  błąd w nim po powrocie to nowa seria z wpisem (przegląd N1 5; wcześniej jeden znacznik dla wszystkich folderów – po
+  powrocie z B błąd w A bez wpisu, a potem mylące „presence written again”).
+  Wcześniej plik tylko do odczytu zostawał na zawsze ze starym `lastSeen` (próba i heartbeat tylko odnotowywały albo
+  połykały błąd) – drugi komputer po 11 min uznawał ten za niedziałający i oba robiły zapisy w tle naraz. Bez komunikatu
+  w oknie: przyczynę trwałą naprawia sam zapis, chwilowa mija; zostaje wpis w logu.
+  zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
+  w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak
+  – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
+  czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
+  tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
+- **T340** Przeniesienie środków celu w swojej chwili (1.15.6, AP-3, AF-4 K – MG.8, MG.10; **zastępuje „na koniec dnia”
+  z T129**): wpis `transfers` {at, to, amount} silnik liczy w chwili `at` wśród zdarzeń jej dnia warszawskiego – przed
+  pierwszym zdarzeniem dnia (w kolejności silnika), które przyszło do FI później niż przeniesienie (`cameIn`: utworzenie
+  dokowania, inaczej operacji, nie wcześniej niż początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
+  przelewu – jej utworzenie), zawsze po początku dnia (start, przełom miesiąca, termin łupów); gdy tego dnia nic
+  później nie przyszło – po ostatnim zdarzeniu dnia, przed następnym dniem. Przenosi `min(kwota, stan celu)`; czego cel
+  w tej chwili silnika jeszcze nie ma (wpływ sprzed przeniesienia, który kolejność dnia liczy później – operacje bez
+  godziny idą przed operacjami z godziną), przenosi na koniec dnia, nigdy więcej, niż cel ma. Skutek: wydatek z celu
+  wpisany po przeniesieniu płaci z celu tyle, ile pokazuje ekran (T131), dostawa tego dnia zaimportowana albo zadokowana
+  po przeniesieniu widzi cel po nim i dopełnia go tylko do jego kwoty (D13, spec „każdy do swojej kwoty”). Granica:
+  operacja z dnia wcześniejszego liczy się w swoim dniu (kolejność dni) – przeniesienie z późniejszego dnia nie zmienia
+  jej podziału. „Przenieś środki” ostrzega (bez blokady), gdy cel docelowy jest już pełny albo przeniesienie przekroczy
+  to, czego mu brakuje (`overTarget`, przycisk „tylko brakujące”); cel bez kwoty (cel ICTTJ bez ceny – N46) bez
+  ostrzeżenia. Rozważone i odrzucone: stały klucz przeniesienia wśród operacji (godzina albo utworzenie) – operacje
+  z godziną i bez niej mają w dniu inne porządki, a zadokowana później dostawa ma chwilę dokowania, nie operacji. Bez
+  migracji (stany liczone): dni z przeniesieniem i wydatkiem z celu albo dostawą tego samego dnia przeliczą się inaczej
+  (notatka wydania); zamrożone dni gry bez zmian.
+- **T341** Dostawa do zadokowania według puli wpisu (1.15.6, AP-12, AF-46, AF-48 – DO.5, DO sp. 1, MG sp. 1, PR sp. 2;
+  D99 pkt 2; **zastępuje zdanie T163 o silniku**): para wpisu ICTTJ z operacją banku jeszcze niezadokowana (lista dostaw
+  `deliveries` – stan „do zadokowania” z wpisem i operacją, bez dokowania; także para innej kwoty – B22, liczy się kwota
+  banku – i wpływ wpisany na Portfelu XTB – B69; bez wpisu pominiętego, sprzed startu, czekającego na import,
+  zadokowanego i wpływu z XTB bez wpisu) trafia do silnika jako `FleetInput.pendingPairs` (operacja → pula i dzień
+  wpisu, `pendingPairsOf`; okno liczy je z migawki ICTTJ tego komputera tymi samymi danymi co panel Dokowanie –
+  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama) i liczy się od razu tak, jak jej dokowanie z tą
+  pulą bez zmienionego podziału: Cele – prosto do celów (najpierw cele z prognozy ICTTJ; miesiąc celu bez ceny – dzień
+  wpisu, N46), Podatek – rezerwa na PIT-38 poza budżetem i bez przychodu (`taxOfDockings` z parami), zwrot z puli
+  Podatek – z rezerwy, bez firewalla (T65), pozostałe pule – kolejnością dokowania. Chwila pieniędzy dla celów –
+  utworzenie operacji (T128), więc „Zadokuj” bez zmian celów niczego nie przesuwa; dokowanie operacji decyduje nad parą
+  (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`, klucz pamięci `engineParts`); dzień z parą dalej
+  czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego naruszenia „dopłata wbrew firewallowi”. Granica:
+  komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego wpisu – liczy parę jak dotąd zwykłą kolejnością,
+  aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery czytające ten sam folder ICTTJ liczą to samo. Bez
+  nowych pól w danych i bez migracji; zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
+- **T342** „Do zadokowania” na ekranach (1.15.6, AP-12; MG sp. 1, PR sp. 2, DO sp. 4): silnik zlicza pary liczone
+  według puli wpisu (`FleetState.toDock` – ile, wpływ, wypływ, część w celach; zdarzenie dziennika z `pending`). Stan
+  okrętu na Mostku – wiersz „Do zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu
+  i wypływu (dymek: jak liczone i że „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do
+  zadokowania) – dokąd poszła?” i w rozbiciu „Dostawa do zadokowania (według puli wpisu ICTTJ)”; Mapa gwiezdna – „w celach
+  … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed dziś (DO sp.
+  4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.”.
+- **T345** Opłata okresowa zapłacona przed startem (AP-5, AF-12, KR.16; stosuje T135 także przed startem, T45 / T220 bez
+  zmian): połączona z kontenerem płatność sprzed startu budżetu nie przechodzi przez przebieg (pieniądze wyszły przed
+  saldem otwarcia), ale zamyka swój cykl tak samo jak płatność w przebiegu – `paidBeforeStart` przed przebiegiem silnika
+  (`paidCycleOf`: miesiąc terminu, przy cyklu ≥ 3 także miesiąc przed terminem, gdy poprzedni zamknięty; płatność w życiu
+  opłaty – `activeIn`; części paragonu jak w przebiegu, bez części celu i „do zwrotu”). W praktyce to płatności z miesiąca
+  startu (od jego 1. dnia łączy je kreator), przy cyklu ≥ 3 też z miesiąca przed nim, gdy były połączone wcześniej.
+  Zapłacony cykl nie ma rat: miesiąc startu nie odkłada opłaty drugi raz (energia = pensja pomniejszona według T45 minus
+  raty innych zbiorników), zbiornik zbiera na następny termin od miesiąca po zapłaconym cyklu, ma `paidDue` – odprawa
+  i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
+  kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
+  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności: kontenera – połączonych, propozycji – tego
+  odbiorcy od 1. dnia miesiąca (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
+  kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone przed startem nie
+  odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
+  z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
+  (energia wyższa o opłatę odkładaną drugi raz, zbiornik niższy); zamrożone dni gry zostają.
+- **T346** Plan miesiąca = silnik (AP-11, AF-44 / LA.8 = C17, AF-52 / C20 – D99 pkt 9, W5; doprecyzowuje T29, F15):
+  miesiąc po bieżącym liczy `monthAhead` od stanu silnika teraz – zbiorniki (kwoty, `paidDue`) i cele (kwoty) – miesiąc
+  po miesiącu regułą silnika: opłata z terminem w danym miesiącu, jeszcze niezapłacona, schodzi ze zbiornika w tym
+  miesiącu (bieżący – gdy `paidDue` jej nie zamknął); na przełomie miesiąca pensja z planu w mocy daje zbiornikom
+  `tankWant` (opłata dodana w trakcie cyklu nadrabia do terminu – 225 zł zamiast 75 zł), w kolejności kontenerów do
+  wyczerpania pensji, potem celom z terminem według priorytetu `goalInstallment` od kwoty po wcześniejszych ratach
+  („Kurs przechwycenia” stały, nie rosnący; przy założeniu pełnych osłon i kadłuba 1. dnia – podpis jak dotąd). Pensja
+  przyjęta w całości (pensji częściowej z pustych osłon plan nie przewiduje). Bez pensji (0 albo brak planu – C20):
+  nic nie pobrane, cele bez rat, następne miesiące nadrabiają. Podział pensji: przy odkładce pobrane i „wymagana”
+  (`required` – rata według T29, gdy pensja dała mniej), pod nimi żółta notka „Brak pensji: odkładki nie są pobierane –
+  zbiorniki będą za planem o X” albo „Pensja nie wystarcza na odkładki: X zamiast Y – …” (`split-tanks-short`).
+  Bieżący miesiąc z silnika: pobrane – dziennik, wymagana – `FleetState.tanks[].want` (rata zbiornika z przełomu
+  miesiąca, liczona także bez pensji; brak – silnik nie liczył tego miesiąca). „Rozdzielone” liczy pobrane. Miesiące
+  minione bez zmian (dziennik, bez „wymagana”). Bez nowego alarmu silnika na Mostku i w odprawie – C20 dotyczy planu.
+- **T347** Kontener raty pożyczki z kwotami harmonogramu (AP-11, AF-51 / PR.9; zmienia T72 „kwota pierwszej raty”):
+  `installmentAmounts` – `amount` = rata ostatniego miesiąca, wcześniejsze miesiące w historii kwot (`past`, F9 –
+  `amountIn`), każda do swojego miesiąca (100 zł w 3: 33,33 zł do grudnia, 33,34 zł w styczniu); kontener dodany
+  w trakcie spłaty (`ensureLoanContainer`) – z tego, co zostało z rat. Ładownia pokazuje kwotę i część miesięczną
+  bieżącego miesiąca (`amountIn`, `monthlyWeight` z miesiącem), masa ładunku i Plan – miesiąca, więc Ładownia, Plan
+  i Radar mówią to samo. Istniejące kontenery bez zmian (grosz w ostatnim miesiącu – bez migracji). Addytywnie (pole
+  `past` już jest), bez `SCHEMA_VERSION`.
 - **T350** Jeden plan części wpłaty domownika i naprawa zapisanych „zaliczek” przy odczycie (AP-4, AF-8 K, MG sp. 6; D99 S4):
   `incomeShares` mówi, czyje są pieniądze, `inflowPlanOf` – co robią: `debt` (spłata długu – wskazane, inaczej jak
   `assignFrom`; reszta wg `advance`), `named` (jawny niezależny przychód albo zaliczka na przyszłość, które mimo to wskazują
@@ -2635,3 +2772,31 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zamknięta lub usunięta w międzyczasie (lista okna starsza – jak przy domownikach, B125). Edytor wpływu: „+ spłata
   pożyczki” (linia z pierwszą otwartą pożyczką, kwota – to, co ma do spłaty, najwyżej reszta), pożyczki w liście „czyja
   część” obok domowników, przy linii „do spłaty … zł” i nadwyżka jako przychód (dług bez tej operacji – `openWithout`).
+- **T360** „Wycofaj dokowanie” (AP-9, AF-7 / MO.29 / DO.7; realizuje D95 N-PC-2, uzupełnia B15, B17, B69): przycisk
+  w oknie zadokowanej dostawy (`docking-undock`) i „wycofaj” w jej wierszu na Mostku (`docking-row-undock`, obok
+  przycisku wiersza, nie w nim). Zabiera (`calc/undock.ts` `undockingOf`): dokowanie dostawy i nadmiarowe dokowania
+  tego samego wpisu ICTTJ (B17 – inaczej dostawa dalej byłaby zadokowana) oraz operacje Portfela XTB zrobione przez
+  dokowanie (`madeByDocking`: rodzaj XTB, bez wiersza banku, id `walletOperationId` wpisu, a sprzed B17 – ten sam
+  `createdAt` co dokowanie). Zostają: operacja z banku, wpływ wpisany ręcznie na Portfelu XTB (B69 – zostaje jako
+  wypłata XTB i paruje się z wpisem znowu; dawnej kategorii nie odtwarzamy – „Cofnij” dokowania jej nie zna po 6 s)
+  i operacja XTB z edytora. Dostawa wraca do „do zadokowania” (para z banku, Portfel XTB) albo „czeka na import”;
+  okno się zamyka, toast z „Cofnij” (8 s) dodaje z powrotem te same rekordy (pominięte, gdy w międzyczasie zadokowano
+  ponownie – te same id). Rekord nowszej wersji (B67) – odmowa w całości, bez wycofania po połowie. Folder ICTTJ tylko
+  czytany. Zamrożone dni gry bez zmian (jak przy edycji operacji). Bez zmian formatu.
+- **T361** Usuwanie kategorii (AP-9, AF-37 / US.6; realizuje D95 N-PC-7): „usuń” przy kategorii głównej i ikona kosza
+  przy podkategorii (Ustawienia → Kategorie); kategoria główna znika razem z podkategoriami. Tylko gdy nic jej nie używa
+  (`calc/categoryUse.ts` `categoryUses`, na kategorię z podkategoriami): operacje (także szkice) i części paragonów,
+  plany miesięcy (limit koperty – także 0 zł, łupy w kopercie, pokrycie z / do koperty), reguły importu, kontenery,
+  boje, zapisane widoki Operacji (filtr kategorii), zamrożone dni gry (naruszenie koperty). Szablony szybkiego wpisu
+  powstają z operacji – są w nich. W użyciu: odmowa z toastem „… jest w użyciu (2 operacje, 1 reguła importu) –
+  usunąć można tylko nieużywaną; zarchiwizuj ją…” i akcją „Archiwizuj”; systemowej („Gotówka”) – nigdy. „Cofnij”
+  (8 s) wstawia kategorie na ich miejsca w liście. Paczki importu (`imports/`) i historia `.history/` nie są
+  sprawdzane: wersja przywrócona stamtąd z usuniętą kategorią pokazuje „(usunięta kategoria)” (`categoryIndex.label`),
+  jak zmiana z drugiego komputera sprzed synchronizacji. Seed (`settings.seeded`) jej nie przywraca. Bez zmian formatu.
+- **T362** Zmiana rodzaju a cel i Ładownia (N-PC-4 z D95 – w 1.15.2 bez kodu): `withKind` zostawia `containerId`
+  tylko wydatkowi (jak `goalId`, T24) – na przelewie / pożyczce / XTB powiązanie było ukryte: silnik go nie czytał,
+  a Ładownia (`paymentsIndex`) brała taki przelew za zapłatę kontenera. Edytor operacji przy zmianie rodzaju, która
+  odpina cel albo kontener (operacji albo części paragonu – `unlinkedBy`), mówi to toastem „Rodzaj „Przelew własny”
+  nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
+  dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
+  przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
