@@ -26,49 +26,30 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | --- | --- | --- | --- | --- | --- |
 | 0 – przygotowanie | – | `claude/audyt-1.15.4` | ✅ D101, porządek tego pliku, PR audytu scalony (bez wydania); poprawka E2E telefonu w nocy | #49 | 0,5 h |
 | N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ✅ wydane 04.11 07:33 (wpis w archiwum `postep-od-1.15.4.md`) | #50 | ok. 5,5 h (01:53–07:33) |
-| N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis niżej – do archiwum przy PR N3) | #51 | ok. 8 h zegara (05:05–13:06) |
-| N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | 🔄 kod gotowy (z N2), wyrocznia bez rozbieżności; zostały przegląd poprawek, wydanie | – | – |
-| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | 🔄 kod gotowy; 10 uwag przeglądu do poprawy | – | – |
-| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-n5*` | 🔄 6 z 13 AP gotowe, 2 WIP, reszta nie zaczęta | – | – |
+| N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis w archiwum `postep-od-1.15.4.md`) | #51 | ok. 8 h zegara (05:05–13:06) |
+| N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | 🔄 poprawki po 2 przeglądach, wyrocznia bez rozbieżności; ostatni przegląd high, PR, wydanie | – | – |
+| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | 🔄 przegląd 1 poprawiony; runda 2 (10 uwag) w toku | – | – |
+| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-n5*` | 🔄 8 z 13 AP gotowe (AP-27, 28 po wznowieniu); AP-19, 20, 24, 25, 26, 34 w toku | – | – |
 | R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
 | R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
 
-## WZNOWIENIE – przerwane 04.11.2026 ok. 14:00 (na prośbę użytkownika)
+## Stan ciągu (wznowione 04.11.2026 ok. 14:20 po przerwie na prośbę użytkownika)
 
-Po wznowieniu przeczytaj tę sekcję, potem notatki koordynatora w `C:\CC-Projekty\FI-wt\_notatki\` (poza repozytorium:
-`notatki-n1.md` … `notatki-n5.md` – raporty podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` –
-uwagi przeglądów; `ap32-wyrocznia.md`). Drzewa robocze z `node_modules` / `.tools` jako junction do tego repozytorium –
-**przed `git worktree remove` usuń same łącza** (`[System.IO.Directory]::Delete(<łącze>, $false)`; `.claude/rules/testy.md`).
+Notatki koordynatora poza repozytorium: `C:\CC-Projekty\FI-wt\_notatki\` (`notatki-n1.md` … `notatki-n5.md` – raporty
+podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` – uwagi przeglądów). Drzewa robocze z
+`node_modules` / `.tools` jako junction do tego repozytorium – **przed `git worktree remove` usuń same łącza**
+(`[System.IO.Directory]::Delete(<łącze>, $false)`; `.claude/rules/testy.md`). Po przerwie: `git worktree list`, ten plik,
+notatki, dalej od pierwszej grupy niewydanej.
 
-**Wydane:** 1.15.5 (N1, PR #50) i 1.15.6 (N2, PR #51, w tym D100 – spłata pożyczki dowolną wpłatą). Główny katalog jest na
-gałęzi N3 `claude/1.15.7-oplaty`.
-
-**N3 (1.15.7) – kod gotowy, gałąź `claude/1.15.7-oplaty` (ten katalog), wypchnięta.** Zawiera N2 (scalone), AP-10, 13, 14,
-17, 18, 30, 31, integrację (T370–T394), poprawki po przeglądzie xhigh (15 uwag), jedną regułę płatność ↔ cykl opłaty
-(`feeDuesOf`, `paymentsIndex` – T393/T394) i wyrocznię bez rozbieżności (412 przypadków, AF-15 zamknięte). Testy: npm test
-1392, E2E zielone. **Dalej:** (1) `/code-review` high na poprawkach: commity 54a189c, cb8ee7b, dd2d47d (rozwiązanie
-konfliktów), 8c8a9e3, a4a67e3 – przerwany przed startem; (2) poprawki; (3) wersja 1.15.7, CHANGELOG (linie
-w `_notatki/notatki-n3.md`), tutaj: wpis N2 do archiwum, wpis N3, wiersze N3 do „Do potwierdzenia”; (4) PR, CI, scalenie,
-wydanie.
-
-**N4 (1.15.8) – kod gotowy, gałąź `claude/1.15.8-interfejs` (drzewo `C:\CC-Projekty\FI-wt\n4a`), wypchnięta.** AP-15, AP-22,
-AP-16, AP-23 (T400–T409); baza: N3 sprzed scalenia z N2. Przegląd high zrobiony – **10 uwag niepoprawionych**
-(`_notatki/n4-review1.md`; m.in. literówka `/s+/` w `tagsLost`, „Cofnij import” bez ostrzeżenia o własnych zmianach,
-„Cofnij” nazwy banku nadpisuje listę). **Dalej:** po wydaniu N3 scal `claude/1.15.7-oplaty` do N4, popraw 10 uwag (testy),
-CHANGELOG (linie w `_notatki/notatki-n4.md`), PR, wydanie.
-
-**N5 (1.15.9) – w toku, gałęzie lokalne (niewypchnięte):**
-- `claude/1.15.9-n5a` (wypchnięta; baza `main` = 1.15.6) – ✅ AP-21, AP-36, AP-33 (T420–T423).
-- `claude/1.15.9-n5b` (drzewo `FI-wt\n5b`; baza `main`) – ✅ AP-29, AP-37, AP-38 (T425–T429); **WIP** AP-27, AP-28
-  (commit 72415b0, przerwany, niesprawdzony – dokończyć albo zacząć od nowa; T430–T434).
-- `claude/1.15.9-n5d` (drzewo `FI-wt\n5d`; baza N4) – AP-19, AP-26 nie zaczęte (T435–T439).
-- `claude/1.15.9-n5e` (drzewo `FI-wt\n5e`; baza N4) – AP-20, AP-34 nie zaczęte (T440–T444).
-- `claude/1.15.9-n5f` (drzewo `FI-wt\n5f`; baza N4) – **WIP** AP-25 (commit a3e8614, tylko `start.ts`, niesprawdzony);
-  AP-24 nie zaczęte (T445–T449).
-**Dalej:** dokończyć AP-27/28, AP-19/26, AP-20/34, AP-24/25 (polecenia zleceń jak dotąd – opis w `_notatki/notatki-n5.md`),
-scalić wszystkie gałęzie N5 na bazie N4 po jego wydaniu, przegląd high, poprawki, wydanie.
-
-**R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
+- **N3 (1.15.7)** – gałąź `claude/1.15.7-oplaty` (ten katalog): przegląd high poprawek (9 uwag) → poprawki 2cf22ba (T398,
+  T399) → przegląd high 2cf22ba → PR, CI, wydanie.
+- **N4 (1.15.8)** – gałąź `claude/1.15.8-interfejs` (drzewo `FI-wt\n4a`): poprawki przeglądu 1 d877273 (T410–T414),
+  przegląd high poprawek – 10 uwag (`_notatki/n4-review2.md`, „Cofnij import”), runda 2 w toku; potem scalenie N3 (z N2) do N4,
+  pełne testy, PR, wydanie.
+- **N5 (1.15.9)** – gałęzie `claude/1.15.9-n5a` (AP-21, 33, 36), `-n5b` (AP-29, 37, 38 + AP-27, 28 – ac3caf5), `-n5d` (AP-19,
+  26), `-n5e` (AP-20, 34), `-n5f` (AP-24, 25 + KR.29 częściowo); n5a i n5b na bazie `main` 1.15.6, reszta na N4. Po wydaniu
+  N4: scalenie wszystkich na N4, przegląd high całości, poprawki, wydanie.
+- **R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
 całości + jeden high na poprawkach, dalej tylko przy poważnych uwagach; numery T przydzielaj podagentom z góry.
@@ -92,6 +73,8 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N3 | Misje | nazwa „Zaciemnienie” (inaczej „Nocna wachta”); „Dziś bez wydatków” przy wydatku z dziś zapisuje i ostrzega, nie odmawia; „Inwentaryzacja” liczona po chwili zapisu potwierdzenia (ponowne potwierdzenie tego samego salda też się liczy) | T383 |
 | N3 | Kurs i symulator | brak nie przechodzi na następny miesiąc: osłony kończą na 0, kurs pokazuje „Brakuje na koszty” jako sumę 12 mies.; „Zasięg po resztce miesiąca” tylko, gdy różni się od „teraz”, i zakłada, że spóźnione spłaty pożyczek wrócą w tym miesiącu; wszystko pełne – „teraz” (także cele) | T385–T387 |
 | N3 | Trend poduszki | koniec miesiąca tylko dla zakończonych miesięcy; w Wywiadzie pod „Bilans paliwa”, linia „rosną w N z M mies.”; przy ukrytych kwotach zmiana w zł bez znaku i strzałki, zmiana zasięgu widoczna | T388 |
+| N3 | Opłata zapłacona wydatkiem z datą po dziś | płaci termin dopiero w dniu płatności; do tego czasu Ładownia „zaplanowane dd.mm” bez „Zapłacone (dziś)”, odprawa bez alertu (także po 3 dniach łaski), Radar bez tego terminu | T398 |
+| N3 | Potwierdzenia salda sprzed 1.15.7 | liczą się do „Inwentaryzacji” po dacie salda, jak w 1.15.6 (import z tygodnia aktualizacji z saldem z niedzieli nie zalicza tygodnia); nowe – po chwili potwierdzenia | T383 |
 | N1 | Zmiany w trakcie niedostępności folderu | folder tylko do odczytu jak dotąd: nowe zmiany odrzucane z komunikatem, czekają tylko przyjęte wcześniej (inaczej: przyjmować w pamięci) | T315 |
 | N1 | Szybki wpis tuż przed wykryciem braku folderu | „Wpis przyjęty, ale jeszcze niezapisany…”, okno zostaje 4 s | T317 |
 | N1 | Pytanie „Zmienić operację?” poza edytorem | z nazwą operacji (pojawia się też na innym ekranie) | T319 |
@@ -111,6 +94,28 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Meldunek „Zaliczki przy długu” | pyta tylko o dług nadal do oddania przez zaliczkę, także o zaliczki wybrane świadomie; „zostaw” raz na wpłatę | T352 |
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
+
+## N3 – Opłaty, energia, gra (1.15.7, 04.11.2026)
+- **Zakres:** AP-13 energia dziś w granicach miesiąca, zwrot dawnego zakupu od jutra (T370, T371), AP-17 kadłub od 99 %,
+  „Dopełnij kadłub z osłon”, podgląd celów warstw (T372–T374), AP-10 jeden stan opłaty i zaległości (T375–T379), AP-14
+  zamrażanie dni po przerwie porcjami, pytanie bez importu, „Nowa klasa” (T380–T382), AP-30 misje i droga do awansu
+  (T383, T384), AP-18 kurs bez osłon poniżej zera, „teraz” = Mostek (T385–T387), AP-31 trend poduszki (T388, T389);
+  integracja (T390–T392), jedna reguła „która płatność płaci opłatę” – silnik = Ładownia = kreator (T393, T394), płatność
+  z datą po dziś (T398), wydajność stanu opłat i boi (T399).
+- **Wykonawcy:** 4 strumienie w osobnych drzewach (AP-13 + AP-17 max, AP-10, AP-14 + AP-30, AP-18 + AP-31 – xhigh),
+  integracja max, scalenie z N2 (max) – razem z N2 w jednej regule płatności opłat.
+- **Przegląd:** xhigh całości (15 uwag – przyczyna: dwie reguły płatność ↔ cykl; poprawki R max i S xhigh), high na
+  poprawkach i rozwiązaniu konfliktów z N2 (9 uwag: 8 poprawionych, 1 z innym skutkiem niż w recenzji – poprawiony
+  skutek odwrotny; kreator z rachunkiem zmiennym o cykl w tyle, płatność z datą po dziś zapłacona tylko w Ładowni,
+  „Cofnij” dopełnienia kadłuba mógł usunąć plan miesiąca z cudzą zmianą), high na tych poprawkach.
+- **Wyrocznia:** 412 przypadków, 28 963 kwoty, 2 852 porównania ekranów – bez rozbieżności; AF-15 zamknięte.
+- **Testy:** typecheck (także `typecheck:audyt`), `npm test` 1412 (lokalnie pod obciążeniem pada tylko `folder-speed`
+  ZIP64), build, E2E zmienionych ekranów; pełne E2E – CI.
+- **Otwarte:** Radar nie widzi płatności wpisanych naprzód przy terminach kolejnych miesięcy (salda naprzód liczą termin
+  i operację – od 1.8.0); `priceChanges` liczy płatności wpisane naprzód; dni zamrożone przed 1.15.7 bez `clsBefore`;
+  kalibracja progów gry (D99 pkt 12) – za osobną zgodą.
+- **Czas:** 07:15–ok. 13:50 kod i dwa przeglądy (przerwa 14:00–14:20), 14:20–ok. 16:45 przegląd poprawek, poprawki,
+  wydanie – plan 2,5–3,5 h pracy; zegar dłuższy przez scalenie z N2 i trzy rundy przeglądu.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
