@@ -13,13 +13,15 @@
  * - a withdrawal typed on Portfel XTB as an ordinary inflow (the quick entry – B69) is its pair too, after the bank's
  *   operations: the docking makes it the payout it is (`asPayout`), never a second operation;
  * - the budget's start is decided by the date of the money in the bank (B19): an entry whose pair came before the start
- *   is in the opening balances (and so is its pair); an entry from before the start with its pair after it docks; no
- *   Portfel XTB for an entry whose window begins before the start;
+ *   is in the opening balances (and so is its pair); an entry from before the start with its pair after it docks; an
+ *   entry of the budget's first days whose window begins before the start waits for the import (AF-47, T435) – Portfel
+ *   XTB only when the bank's history reaches back to the window's first day (a pair before the start would be in it);
  * - an entry docks at most once (`dockings/*` with its id – T15); a docking whose operation is gone (B15) docks nothing,
  *   one whose entry was deleted in ICTTJ (read whole – B21) leaves its operation free to pair again; two dockings of one
  *   entry (two computers – B17) are shown, the extra one to remove.
  */
 import type { IctjEntry } from '../ictj'
+import { plDate } from '../format'
 import { XTB_WALLET_ACCOUNT_ID } from '../schema/budget'
 import type { Docking, Transaction } from '../schema/records'
 import { addDays, isWorkingDay } from './dates'
@@ -84,6 +86,43 @@ export interface Delivery {
   entryGone: boolean
   /** The pair is an inflow typed on Portfel XTB (B69): the docking makes it the payout (`asPayout`). */
   walletTyped: boolean
+  /**
+   * Waiting past its window (DO sp. 3, T436): the last day the bank's file reaches – the import of a newer one decides
+   * (absent – the window has not passed yet).
+   */
+  fileTo?: string
+  /**
+   * Past its window without a pair, the bank's history not reaching the window's first day before the budget's start
+   * (AF-47, T435): Portfel XTB or the opening balances – the user says (dock on Portfel XTB, or skip the entry).
+   */
+  unseen?: true
+  /** Docked with an entry ICTTJ does not show now (switched off, not read – DO sp. 13, T437): `entry` is the docking's. */
+  fromDocking?: true
+}
+
+/**
+ * The day of a delivery's money (MO.7, T437): its operation's in the bank – the day the layers count it and the bridge's
+ * „ostatnia dostawa” says – else the ICTTJ entry's.
+ */
+export const deliveryDay = (d: Pick<Delivery, 'date' | 'transaction'>): string => d.transaction?.date ?? d.date
+
+/**
+ * The toast of a docking saved (DO sp. 5, T437): a new one – „Zadokowano”, a docked one saved again („Zapisz podział”) –
+ * „Zmieniono podział”; the amount the layers took – the operation's (the bank's when it differs from the entry's, B22).
+ */
+export function dockedText(d: Pick<Delivery, 'state' | 'amount'>, tx: Pick<Transaction, 'amount'> | null, onWallet: boolean, money: (grosze: number) => string): string {
+  const amount = tx ? Math.abs(tx.amount) : d.amount
+  if (d.state === 'docked') return `Zmieniono podział dostawy ${money(amount)}.`
+  return `Zadokowano ${money(amount)}${onWallet ? ' na Portfelu XTB' : ''}.`
+}
+
+/**
+ * What a delivery waiting for the bank waits for (DO sp. 3, T436): the import until the window's last day – or, past it,
+ * a newer file than the one imported (never „czeka na import do” a day gone by).
+ */
+export function waitingText(d: Pick<Delivery, 'fileTo'>, until: string | null): string {
+  if (d.fileTo) return `ostatni plik z mBanku kończy się ${plDate(d.fileTo)} – zaimportuj nowszy`
+  return `FI czeka na import do ${until ? plDate(until) : '…'}`
 }
 
 export interface DeliveriesInput {
@@ -106,6 +145,11 @@ export interface DeliveriesInput {
    * of the import); null = never imported – the time alone decides.
    */
   coveredTo: string | null
+  /**
+   * The first day of the bank's history on those accounts (AF-47, T435): an entry of the budget's first days whose
+   * window begins before the start goes to Portfel XTB only when it reaches the window's first day. Absent – unknown.
+   */
+  bankFrom?: string | null
 }
 
 const STATE_ORDER: Record<DeliveryState, number> = { pending: 0, waiting: 1, docked: 2, skipped: 3, 'before-start': 4 }
@@ -239,15 +283,21 @@ export function deliveries(o: DeliveriesInput): Delivery[] {
       placed.set(e.id, paired(e, near, true))
       continue
     }
-    // An entry, or its window, before the budget's start: its money is in the opening balances, not on Portfel XTB (B19).
-    if (!counted(from)) {
+    // An entry before the budget's start: its money is in the opening balances, not on Portfel XTB (B19).
+    if (!counted(e.date)) {
       placed.set(e.id, { ...base(e), state: 'before-start', transaction: null, docking: null })
       continue
     }
     // Past the window, and the bank's file reaches past it too: the money is not on mBank – Portfel XTB. A file not
-    // reaching it: still waiting for it (a wallet docking now could count the inflow twice).
-    const late = o.today > until && (o.coveredTo == null || o.coveredTo > until)
-    placed.set(e.id, { ...base(e), state: late ? 'pending' : 'waiting', transaction: null, docking: null, wallet: late })
+    // reaching it: still waiting for it (a wallet docking now could count the inflow twice). An entry of the first days
+    // with its window from before the start (AF-47): Portfel XTB only with the bank's history from the window's first
+    // day – a pair before the start (in the opening balances) would be there; else it waits (the window still offers it).
+    const fileReaches = o.coveredTo == null || o.coveredTo > until
+    const seenFrom = counted(from) || (o.bankFrom != null && o.bankFrom <= from)
+    const passed = o.today > until && fileReaches
+    const late = passed && seenFrom
+    const stale = o.today > until && !fileReaches && o.coveredTo ? { fileTo: o.coveredTo } : passed && !seenFrom ? { unseen: true as const } : {}
+    placed.set(e.id, { ...base(e), state: late ? 'pending' : 'waiting', transaction: null, docking: null, wallet: late, ...stale })
   }
   // A skipped entry keeps the bank's operation left for it (N45): never an inflow „without an entry in ICTTJ” to add again –
   // the money counts in the usual order; brought back, the entry docks it with its pool. Only what no other entry took.
@@ -257,6 +307,25 @@ export function deliveries(o: DeliveriesInput): Delivery[] {
     placed.set(e.id, { ...base(e), state: 'skipped', transaction: pair, docking: null })
   }
   for (const e of entries) out.push(placed.get(e.id)!)
+  // Docked with an entry ICTTJ does not show now (DO sp. 13, T437) – switched off, not read, a file still syncing: the
+  // docking is still the budget's (its pool counts), so it stays on the list – an entry made of the docking.
+  for (const [id, list] of dockedByEntry) {
+    if (entryIds.has(id)) continue
+    const made = (d: Docking) => (txById.get(d.transactionId)?.bank ? 0 : 1)
+    const docked = [...list].filter((d) => !gone(d)).sort((a, b) => made(a) - made(b) || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+    const first = docked[0]
+    if (!first) continue
+    const t = txById.get(first.transactionId)!
+    const e: IctjEntry = { id, kind: t.amount < 0 ? 'return' : 'withdrawal', date: first.entryDate ?? t.date, amount: Math.abs(t.amount), pool: first.pool ?? 'current', note: '', updatedAt: null }
+    out.push({
+      ...base(e),
+      state: 'docked',
+      transaction: t,
+      docking: first,
+      extra: docked.slice(1).map((d) => ({ docking: d, transaction: txById.get(d.transactionId)! })),
+      fromDocking: true
+    })
+  }
 
   // XTB inflows without an entry: to dock the usual way (a top-up without an entry is the firewall's matter only); one
   // docked with an entry deleted in ICTTJ – to dock again (B21).

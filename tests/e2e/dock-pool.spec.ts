@@ -66,8 +66,8 @@ test('Dostawa do zadokowania według puli wpisu (AP-12): Podatek w rezerwie, zwr
     await expect(toDock).toContainText('−300,00 zł')
     await expect(page.getByText('poza budżetem (PIT-38)').locator('..')).toContainText('500,00 zł')
     await expect(page.locator('[data-testid="briefing-item"][data-kind="alarm"]').filter({ hasText: 'Firewall' })).toHaveCount(0)
-    // The last delivery said to be one to dock (PR sp. 2).
-    await expect(page.getByTestId('state-delivery-why')).toContainText('do zadokowania')
+    // „Ostatnia dostawa” only after the docking (AP-26, PR sp. 2 – 1.15.9): a pair to dock is „Do zadokowania” above.
+    await expect(page.getByTestId('state-delivery-why')).toHaveCount(0)
 
     // The return docked: nothing moves, one entry left to dock.
     await rows.filter({ hasText: 'Zwrot do masy' }).click()

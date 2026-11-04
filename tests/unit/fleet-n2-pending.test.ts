@@ -97,15 +97,9 @@ describe('AP-12: para do zadokowania liczona od razu według puli wpisu (T341)',
     expect(s.toDock).toEqual({ count: 1, inflow: zl(1500), outflow: 0, goals: zl(1500) })
     const ev = s.log.find((x) => x.txId === t.id)!
     expect([ev.pending, ev.moves]).toEqual([true, { goals: { [trip.id]: zl(1500) } }])
-    // „Ostatnia dostawa – dokąd poszła?” (PR sp. 2): said to be one to dock.
-    expect(deliveryWhy(s.log, (id) => s.goals.find((g) => g.id === id)!.name)).toEqual({
-      date: '2026-10-12',
-      pending: true,
-      lines: [
-        { label: 'Dostawa do zadokowania (według puli wpisu ICTTJ)', amount: zl(1500) },
-        { label: 'Cel: Wakacje', amount: zl(1500) }
-      ]
-    })
+    // „Ostatnia dostawa – dokąd poszła?” (PR sp. 2, AP-26 – 1.15.9): only after the docking – a pair to dock is the
+    // bridge's „Do zadokowania” (`toDock`), never the last delivery.
+    expect(deliveryWhy(s.log, (id) => s.goals.find((g) => g.id === id)!.name)).toBeNull()
     // Before: the docking order – all of it to the shields below their target (14 500 → 13 000 after „Zadokuj”).
     const before = ship({ transactions: [t], goals: [own, trip] })
     expect([before.shields.amount, before.goals.map((g) => g.amount)]).toEqual([zl(10140), [0, 0]])

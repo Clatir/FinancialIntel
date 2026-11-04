@@ -40,10 +40,10 @@ class ListingError extends Error {}
  * One entry per id (B71): an entry moved by a change of its date sits in two files while OneDrive brings the change – the
  * newer one counts (`updatedAt`, none = oldest), then the one of the smaller path, as ICTTJ itself resolves it.
  */
-function oneEntryPerId(found: ReadonlyArray<{ entry: IctjEntry; path: string }>): { entries: IctjEntry[]; twice: string[] } {
+function oneEntryPerId(found: ReadonlyArray<{ entry: IctjEntry; path: string }>): { entries: IctjEntry[]; twice: Array<{ left: string; kept: string }> } {
   const best = new Map<string, { entry: IctjEntry; path: string }>()
-  // The files left out (the older of each pair) – the warning names them.
-  const twice: string[] = []
+  // The files left out (the older of each pair) – the warning names them, with the one taken (DO sp. 7).
+  const left: Array<{ id: string; path: string }> = []
   for (const x of found) {
     const cur = best.get(x.entry.id)
     if (!cur) {
@@ -54,10 +54,10 @@ function oneEntryPerId(found: ReadonlyArray<{ entry: IctjEntry; path: string }>)
     const b = cur.entry.updatedAt ?? ''
     if (a > b || (a === b && x.path < cur.path)) {
       best.set(x.entry.id, x)
-      twice.push(cur.path)
-    } else twice.push(x.path)
+      left.push({ id: x.entry.id, path: cur.path })
+    } else left.push({ id: x.entry.id, path: x.path })
   }
-  return { entries: [...best.values()].map((x) => x.entry), twice }
+  return { entries: [...best.values()].map((x) => x.entry), twice: left.map((l) => ({ left: l.path, kept: best.get(l.id)!.path })) }
 }
 
 export async function readIctjFolder(dir: string, now = new Date()): Promise<IctjSnapshot> {
@@ -69,6 +69,8 @@ export async function readIctjFolder(dir: string, now = new Date()): Promise<Ict
 
   const found: Array<{ entry: IctjEntry; path: string }> = []
   const problems: string[] = []
+  // Read with a remark (DO sp. 7): a pool of a newer ICTTJ – the entry docks the usual way, its file is not left out.
+  const remarks: string[] = []
   // The payouts not read (their ids from the files' names) and a folder not listed: no entry of them is deleted (B21).
   const unread: string[] = []
   let complete = true
@@ -94,7 +96,7 @@ export async function readIctjFolder(dir: string, now = new Date()): Promise<Ict
           newest = Math.max(newest, p.schemaVersion)
           if (p.entry) found.push({ entry: p.entry, path: `payouts/${year}/${file}` })
           else if (p.problem) unread.push(name[2]!)
-          if (p.problem) problems.push(`payouts/${year}/${file}: ${p.problem}`)
+          if (p.problem) (p.entry ? remarks : problems).push(`payouts/${year}/${file}: ${p.problem}`)
         } catch {
           unread.push(name[2]!)
           problems.push(`payouts/${year}/${file}: nieczytelny plik`)
@@ -121,8 +123,10 @@ export async function readIctjFolder(dir: string, now = new Date()): Promise<Ict
     const warnings: string[] = []
     if (newest > ICTJ_KNOWN_SCHEMA) warnings.push(`ICTTJ zapisał dane w nowszym formacie (wersja ${newest}) – FI czyta pola, które zna; zaktualizuj Financial Intel.`)
     if (problems.length) warnings.push(`Pominięte pliki ICTTJ (${problems.length}): ${problems.slice(0, 3).join('; ')}${problems.length > 3 ? '; …' : ''}`)
+    if (remarks.length) warnings.push(`Wpisy ICTTJ z nieznaną pulą (${remarks.length}) – FI je czyta: ${remarks.slice(0, 3).join('; ')}${remarks.length > 3 ? '; …' : ''}`)
     const { entries, twice } = oneEntryPerId(found)
-    if (twice.length) warnings.push(`Wpis ICTTJ w dwóch plikach (konflikt do rozstrzygnięcia w ICTTJ → Synchronizacja) – FI bierze nowszy: ${twice.slice(0, 3).join('; ')}${twice.length > 3 ? '; …' : ''}`)
+    // The file FI takes and the one it leaves out (DO sp. 7): never only the older one's path after „bierze nowszy”.
+    if (twice.length) warnings.push(`Wpis ICTTJ w dwóch plikach (konflikt do rozstrzygnięcia w ICTTJ → Synchronizacja) – FI bierze nowszy, pomija: ${twice.slice(0, 3).map((t) => `${t.left} (bierze ${t.kept})`).join('; ')}${twice.length > 3 ? '; …' : ''}`)
     entries.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
     return { ...base, status: 'ok', message: null, entries, forecasts, warnings, unread, complete }
   } catch (e) {

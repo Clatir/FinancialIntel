@@ -1,6 +1,6 @@
 /**
  * „Meldunki do rozpatrzenia” (F6, D86): one inbox of what waits for the captain's decision – the deliveries from XTB to
- * dock, the data folder's conflicts and files with errors, the expenses without a category, the possible duplicates, the
+ * dock, the top-ups of XTB against the firewall to confirm, the data folder's conflicts and files with errors, the expenses without a category, the possible duplicates, the
  * bank's operations come back after their deletion (AF-1), the refunds still owed, the balances unconfirmed for over 30 days, the loot undecided. Pure; no notifications of its own –
  * the side menu counts the reports, the inbox lists them.
  */
@@ -8,21 +8,23 @@ import { formatPln, plDate, plural } from '../format'
 import { isUncategorized, uncategorizedAmount } from '../operationsView'
 import type { Container, Transaction } from '../schema/records'
 import { daysBetween, warsawNow } from './dates'
-import { deliveryItem, dm, type AccountConfirmation } from './briefing'
+import { againstFirewall, deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
+import type { Alarm } from './fleet'
 import { isOpeningItem, type MemberBalance } from './household'
 import type { TransferIssue } from './transfers'
 import { deadText, priceText, type DeadContainer, type PriceChange } from './cargoWatch'
 import { anomalyText, type Anomaly } from './anomalies'
 import { lateReturnText, type AwaitedReturn } from './returns'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'refunds' | 'returns' | 'cargo' | 'balances'
+export type InboxKind = 'dock' | 'firewall' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'refunds' | 'returns' | 'cargo' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'firewall', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
+  firewall: 'Firewall',
   loot: 'Łupy',
   folder: 'Folder danych',
   uncategorized: 'Bez kategorii',
@@ -56,6 +58,33 @@ export interface InboxItem {
 
 /** A balance not confirmed for longer is a report (D86). */
 export const INBOX_BALANCE_DAYS = 30
+
+/** A top-up of XTB against the firewall waits this long for its confirmation (DO sp. 12, T438) – an older one is history. */
+export const TOPUP_CONFIRM_DAYS = 30
+
+/** A top-up of XTB against the firewall to confirm (DO sp. 12, T438): the engine's alarm of its operation. */
+export interface TopUpToConfirm {
+  txId: string
+  date: string
+  amount: number
+}
+
+/**
+ * The top-ups of XTB against the firewall found only in the bank (DO sp. 12, T438 – spec: „czerwony alarm, potwierdzenie
+ * i poważne naruszenie”): the engine's alarm, no ICTTJ entry of it (one with its entry is confirmed in the docking window),
+ * not confirmed yet (`confirmed` – the operations with a docking record), of the last `TOPUP_CONFIRM_DAYS` days.
+ */
+export function topUpsToConfirm(
+  alarms: readonly Pick<Alarm, 'kind' | 'txId' | 'date' | 'amount'>[],
+  deliveries: readonly Pick<Delivery, 'entry' | 'transaction' | 'state'>[],
+  confirmed: (txId: string) => boolean,
+  today: string
+): TopUpToConfirm[] {
+  const withEntry = new Set(deliveries.filter((d) => d.entry && d.transaction && (d.state === 'pending' || d.state === 'waiting' || d.state === 'docked')).map((d) => d.transaction!.id))
+  return alarms
+    .filter((a) => a.kind === 'firewall' && a.txId && !withEntry.has(a.txId) && !confirmed(a.txId) && daysBetween(a.date, today) <= TOPUP_CONFIRM_DAYS)
+    .map((a) => ({ txId: a.txId!, date: a.date, amount: a.amount }))
+}
 
 /** The expenses without a category (the operations' mark „bez kategorii”) from `from` on, drafts aside. */
 export interface Uncategorized {
@@ -98,6 +127,10 @@ export interface InboxInput {
   /** The budget started: before it only the data folder reports. */
   started: boolean
   deliveries: readonly Delivery[]
+  /** The engine's alarms (`FleetState.alarms`): a return to dock said against the firewall only then (DO sp. 6). */
+  alarms?: readonly Pick<Alarm, 'kind' | 'txId' | 'date' | 'amount'>[]
+  /** The top-ups of XTB against the firewall to confirm (DO sp. 12 – `topUpsToConfirm`). */
+  topUps?: readonly TopUpToConfirm[]
   conflicts: number
   problems: number
   uncategorized: Uncategorized
@@ -137,9 +170,19 @@ export function inboxItems(o: InboxInput): InboxItem[] {
   if (o.started)
     for (const d of o.deliveries) {
       if (d.state !== 'pending') continue
-      const line = deliveryItem(d, o.today, zl)
+      const line = deliveryItem(d, o.today, zl, againstFirewall(o.alarms ?? [], d))
       if (line) out.push({ kind: 'dock', key: `dock:${d.key}`, ref: d.key, text: line.text, action: 'Zadokuj' })
     }
+  // A top-up of XTB against the firewall found only in the bank (DO sp. 12): confirmed here – the violation stays.
+  if (o.started)
+    for (const t of o.topUps ?? [])
+      out.push({
+        kind: 'firewall',
+        key: `firewall:${t.txId}`,
+        ref: t.txId,
+        text: `Dopłata do XTB ${zl(t.amount)} z ${dm(t.date)} wbrew rozkazowi firewall (osłony albo kadłub niepełne) – potwierdź, że to Twoja decyzja.`,
+        action: 'Potwierdź'
+      })
   if (o.started && o.loot.month && o.loot.amount > 0)
     out.push({ kind: 'loot', key: `loot:${o.loot.month}`, text: `Łupy z poprzedniego miesiąca: ${zl(o.loot.amount)} – podział do 7. dnia, potem trafią do osłon.`, action: 'Plan miesiąca' })
   if (o.conflicts || o.problems) {

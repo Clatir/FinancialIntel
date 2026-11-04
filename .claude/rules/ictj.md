@@ -32,7 +32,10 @@ paths:
   odczyt zostawia ostatnią dobrą migawkę (`LAST_READ_FAILED`); dwa pliki jednego wpisu – ostrzeżenie (`oneEntryPerId`).
 - Dostawy (`calc/dock.ts` `deliveries`): stany pending / waiting / docked / skipped / before-start, okno −3 dni … +3 dni
   robocze; operacja Portfela i dokowanie z id wpisu (`derivedId`); usunięty wpis albo zmieniona pula oznaczane, nie
-  gubione (`entryGone`, `poolChanged`).
+  gubione (`entryGone`, `poolChanged`). „Sprzed startu” tylko wpis z datą przed startem (T435 – okno sprzed startu: Portfel
+  XTB dopiero z historią banku `bankFrom`); zadokowane bez wpisu w migawce – z rekordu dokowania (`fromDocking`, T437);
+  dzień dostawy na ekranach – `deliveryDay` (operacja banku); „ostatnia dostawa” tylko zadokowana; „firewall” w tekstach
+  tylko z alarmem silnika (`againstFirewall`, T438).
 - Cele ICTTJ: `syncIctjGoals` – rekordy z id ICTTJ; pula Cele najpierw do celów ICTTJ.
 - Testy: `FI_ICTJ_DIR`, `FI_ICTJ_APPDATA`, `FI_ICTJ_LAUNCH=dry`; przykładowy folder ICTTJ tylko zanonimizowany.
 

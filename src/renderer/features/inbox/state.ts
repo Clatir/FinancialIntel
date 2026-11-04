@@ -6,7 +6,8 @@ import { useMemo } from 'react'
 import { doubleCorrections, openingOf } from '@shared/calc/balances'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { memberName } from '@shared/calc/household'
-import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
+import { inboxItems, topUpsToConfirm, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
+import { dockingsByTx } from '@shared/calc/fleet'
 import { noNarrowing } from '@shared/operationsView'
 import { listOf, updateSettings, useData } from '../../store/data'
 import { useGhosts } from '../../store/ghosts'
@@ -17,6 +18,7 @@ import { useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
 import { openDocking, useDeliveries } from '../dock/state'
+import { confirmTopUp } from '../dock/actions'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
 import { removeReturned, useReturned } from '../import/returned'
 import { openOperation, openRefundables, showFilter } from '../operations/state'
@@ -74,11 +76,20 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const cargo = useMemo(() => ({ prices: watch.prices, dead: watch.dead, containers: listOf(containers) }), [watch, containers])
   // A „folder-widmo” of an older version (AP-1).
   const ghosts = useGhosts((g) => g.list)
+  // The top-ups of XTB against the firewall found only in the bank, to confirm (DO sp. 12): not the ones with a docking.
+  const dockings = useData((s) => s.records.dockings)
+  const topUps = useMemo(() => {
+    if (!fleet) return []
+    const docked = dockingsByTx(listOf(dockings))
+    return topUpsToConfirm(fleet.alarms, deliveries, (id) => docked.has(id), fleet.today)
+  }, [fleet, deliveries, dockings])
   if (!fleet) return []
   return inboxItems({
     today: fleet.today,
     started: fleet.started,
     deliveries,
+    alarms: fleet.alarms,
+    topUps,
     conflicts,
     problems,
     uncategorized,
@@ -134,6 +145,8 @@ export const opensPairs = (item: InboxItem): boolean => item.kind === 'transfers
 /** A report's button: the docking window, Operacje with the filter set, or the screen deciding it. */
 export function openInboxItem(item: InboxItem, from: string | null): void {
   if (item.kind === 'dock' && item.ref) openDocking(item.ref)
+  // A top-up of XTB against the firewall (DO sp. 12): confirmed – „Cofnij” in the toast.
+  else if (item.kind === 'firewall' && item.ref) confirmTopUp(item.ref)
   else if (item.kind === 'loot') navigate({ page: 'month' })
   else if (item.kind === 'folder' && item.ref) void api.showGhostFolder(item.ref).catch((e: unknown) => toast(errorMessage(e), 'error', 6000))
   else if (item.kind === 'folder') navigate({ page: 'sync' })

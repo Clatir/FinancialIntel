@@ -4,13 +4,13 @@ import { arrangeBriefing, BIAS_LABEL, briefing, briefingSpeech, confirmationsOf,
 import { daysBetween, isoWeekOf } from '@shared/calc/dates'
 import { financersText, memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
-import { HULL_TOLERANCE_PCT, hullCountsFull, SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
+import { dockingsByTx, HULL_TOLERANCE_PCT, hullCountsFull, SHIP_CLASS_LABEL, type FleetState } from '@shared/calc/fleet'
 import { sum } from '@shared/calc/operations'
 import { amountTone, newestOperations, noNarrowing } from '@shared/operationsView'
 import { shortcutLabel } from '@shared/machine'
 import { plural, rangeText } from '@shared/format'
 import type { DetachEvent } from '@shared/api'
-import { useData, useFolderLocked } from '../../store/data'
+import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useMachine } from '../../store/machine'
 import { useHostedDetach, useDetach, type DetachSpec } from '../../store/detach'
@@ -52,21 +52,30 @@ export type BridgeFleet = Pick<
   FleetState,
   'today' | 'month' | 'plan' | 'started' | 'total' | 'shields' | 'hull' | 'goals' | 'energy' | 'tanks' | 'taxHold' | 'deposit' | 'toDock' | 'loot' | 'costs' | 'range' | 'shipClass' | 'cargo' | 'envelopes' | 'daily' | 'debt'
 > & {
-  /** „Skąd ta liczba?” (F29): the layers' targets as set and the last delivery's split (`pending` – not docked yet, AP-12). */
+  /** „Skąd ta liczba?” (F29): the layers' targets as set and the last docked delivery's split (AP-26, PR sp. 2). */
   layers: { shieldSalaries: number; hullMonths: number }
-  lastDelivery: { date: string; pending: boolean; lines: WhyLine[] } | null
+  lastDelivery: { date: string; lines: WhyLine[] } | null
   /** The firewall order on (D23): off – the top-ups of XTB go unchecked, the ship's state says so (AP-17, DW.12). */
   firewall: boolean
 }
 
 const DEFAULT_LAYERS = { shieldSalaries: 3, hullMonths: 6 }
 
-export const bridgeFleet = (f: FleetState, layers: { shieldSalaries: number; hullMonths: number } = DEFAULT_LAYERS, firewall = true): BridgeFleet => ({
+/** The operations with a docking record (AP-26, PR sp. 2): „ostatnia dostawa” only of those – the same test while they stay. */
+function useDocked(): (txId: string) => boolean {
+  const dockings = useData((s) => s.records.dockings)
+  return useMemo(() => {
+    const ids = dockingsByTx(listOf(dockings))
+    return (txId: string) => ids.has(txId)
+  }, [dockings])
+}
+
+export const bridgeFleet = (f: FleetState, layers: { shieldSalaries: number; hullMonths: number } = DEFAULT_LAYERS, firewall = true, docked?: (txId: string) => boolean): BridgeFleet => ({
   month: f.month,
   plan: f.plan,
   layers: { shieldSalaries: layers.shieldSalaries, hullMonths: layers.hullMonths },
   firewall,
-  lastDelivery: deliveryWhy(f.log, (id) => f.goals.find((g) => g.id === id)?.name ?? 'cel'),
+  lastDelivery: deliveryWhy(f.log, (id) => f.goals.find((g) => g.id === id)?.name ?? 'cel', docked),
   today: f.today,
   started: f.started,
   total: f.total,
@@ -162,7 +171,8 @@ function useBridgeSpecs(fleet: FleetState | null, items: BriefingItem[]): Record
   const cats = useCategories()
   const layers = useData((s) => s.fi?.settings.layers)
   const firewall = useData((s) => s.fi?.settings.orders.firewall ?? true)
-  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers, firewall) : null), [fleet, layers, firewall])
+  const docked = useDocked()
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers, firewall, docked) : null), [fleet, layers, firewall, docked])
   const labels = useMemo(() => Object.fromEntries((fleet?.envelopes ?? []).map((e) => [e.categoryId, cats.label(e.categoryId)])), [fleet, cats])
   return useMemo(() => {
     if (!view) return null
@@ -337,7 +347,8 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   const items = useBriefingItems(fleet)
   const layers = useData((s) => s.fi?.settings.layers)
   const firewall = useData((s) => s.fi?.settings.orders.firewall ?? true)
-  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers, firewall) : null), [fleet, layers, firewall])
+  const docked = useDocked()
+  const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers, firewall, docked) : null), [fleet, layers, firewall, docked])
   const specs = useBridgeSpecs(fleet, items)
   const readOnly = useFolderLocked()
   // The 10 newest in one pass (W29): the bridge renders every minute – never a sort of the whole history.
@@ -733,7 +744,7 @@ function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t:
         </button>
         {fleet.lastDelivery && (
           <button type="button" className={cx('hover:text-fg-strong', why === 'delivery' ? 'text-accent' : 'text-dim')} onClick={() => toggle('delivery')} aria-expanded={why === 'delivery'} title={glossaryOf('Dostawa')} data-testid="state-delivery-why">
-            ostatnia dostawa ({plDate(fleet.lastDelivery.date)}{fleet.lastDelivery.pending ? ', do zadokowania' : ''}) – dokąd poszła?
+            ostatnia dostawa ({plDate(fleet.lastDelivery.date)}) – dokąd poszła?
           </button>
         )}
       </div>

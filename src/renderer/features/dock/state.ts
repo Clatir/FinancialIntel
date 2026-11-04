@@ -20,18 +20,23 @@ let memo: { tx: Records['transactions']; dk: Records['dockings']; skipped: reado
 /**
  * The last day the bank's files cover on the accounts the XTB money comes to (B18): the accounts with trading operations
  * (else mBank), the least covered one – its period's end as imported, or its latest row from the bank (a folder of
- * before 1.5.0). null = none imported: the time alone decides.
+ * before 1.5.0). null = none imported: the time alone decides. With the first day of their rows from the bank (AF-47).
  */
-function coveredToOf(transactions: readonly Transaction[], covered: Readonly<Record<string, string>>): string | null {
+function coveredOf(transactions: readonly Transaction[], covered: Readonly<Record<string, string>>): { coveredTo: string | null; bankFrom: string | null } {
   const last = new Map<string, string>()
+  const first = new Map<string, string>()
   const trading = new Set<string>()
   for (const t of transactions) {
     if (t.kind === 'trading') trading.add(t.accountId)
     if (t.bank && t.date > (last.get(t.accountId) ?? '')) last.set(t.accountId, t.date)
+    if (t.bank && t.date < (first.get(t.accountId) ?? '9999')) first.set(t.accountId, t.date)
   }
   const accounts = [...trading].filter((id) => last.has(id) || covered[id])
-  const ends = (accounts.length ? accounts : [MBANK_ACCOUNT_ID]).map((id) => [covered[id] ?? '', last.get(id) ?? ''].sort().at(-1)!).filter(Boolean)
-  return ends.length ? ends.sort()[0]! : null
+  const ids = accounts.length ? accounts : [MBANK_ACCOUNT_ID]
+  const ends = ids.map((id) => [covered[id] ?? '', last.get(id) ?? ''].sort().at(-1)!).filter(Boolean)
+  // The bank's history from (AF-47, T435): the account whose rows begin latest – none without rows of the bank.
+  const starts = ids.map((id) => first.get(id) ?? null)
+  return { coveredTo: ends.length ? ends.sort()[0]! : null, bankFrom: starts.some((x) => x == null) ? null : starts.sort().at(-1)! }
 }
 
 function deliveriesOf(records: Pick<Records, 'transactions' | 'dockings'>, skipped: readonly string[], snap: IctjSnapshot, start: string | null, today: string, covered: Readonly<Record<string, string>>): Delivery[] {
@@ -49,7 +54,7 @@ function deliveriesOf(records: Pick<Records, 'transactions' | 'dockings'>, skipp
     // A payout of ICTTJ not read (still syncing) is never taken for deleted (B21); a newer format's warning changes nothing.
     entriesComplete: snap.status === 'ok' && snap.complete !== false,
     unreadEntries: snap.unread,
-    coveredTo: coveredToOf(transactions, covered)
+    ...coveredOf(transactions, covered)
   })
   memo = { tx: records.transactions, dk: records.dockings, skipped, snap, start, today, covered, list }
   return list

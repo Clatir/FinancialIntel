@@ -12,7 +12,7 @@ import type { Balance, Container } from '../schema/records'
 import { lastConfirmation } from './balances'
 import { nextDueOf, type CargoStatus } from './cargoStatus'
 import { daysBetween, firstDayOf, warsawNow } from './dates'
-import type { Delivery } from './dock'
+import { deliveryDay, type Delivery } from './dock'
 import { isOpeningItem, memberName } from './household'
 import { HOUSE_DAYS } from './loans'
 import { lastPaymentOf, pit38Deadline } from './radar'
@@ -197,23 +197,43 @@ export const MISSING_ENTRY_DAYS = 30
 /** '2026-10-16' → '16.10' (the briefing's and the notifications' short date – one for the app, `format.ts`). */
 export { dm }
 
-/** The line of a delivery in the briefing (null = nothing to say); the inbox says the same of one to dock (F6). */
-export function deliveryItem(d: Delivery, today: string, zl: (grosze: number) => string): BriefingItem | null {
+/** A delivery's operation the engine counts as a top-up against the firewall (its red alarm – DO sp. 6, T438). */
+export const againstFirewall = (alarms: readonly Pick<Alarm, 'kind' | 'txId'>[], d: Pick<Delivery, 'transaction'>): boolean =>
+  !!d.transaction && alarms.some((a) => a.kind === 'firewall' && a.txId === d.transaction!.id)
+
+/**
+ * The line of a delivery in the briefing (null = nothing to say); the inbox says the same of one to dock (F6). `against`
+ * – a return the engine counts against the firewall (its alarm on the delivery's operation): the word only then (DO sp. 6).
+ */
+export function deliveryItem(d: Delivery, today: string, zl: (grosze: number) => string, against = false): BriefingItem | null {
   const e = d.entry
+  // The day of the money (MO.7): the bank's operation, else the entry's.
+  const day = dm(deliveryDay(d))
   if (d.state === 'pending') {
     const text = e
       ? e.kind === 'withdrawal'
         ? d.wallet
-          ? `Wypłata z ICTTJ ${zl(d.amount)} (${dm(d.date)}, pula ${ICTJ_POOL_LABEL[e.pool]}) bez pary w mBanku – zadokuj na Portfelu XTB albo poczekaj na import.`
+          ? `Wypłata z ICTTJ ${zl(d.amount)} (${day}, pula ${ICTJ_POOL_LABEL[e.pool]}) bez pary w mBanku – zadokuj na Portfelu XTB albo poczekaj na import.`
           : `Wypłata z ICTTJ ${zl(d.amount)} (pula ${ICTJ_POOL_LABEL[e.pool]}) do zadokowania.`
         : e.pool === 'tax'
-          ? `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}, pula Podatek) do potwierdzenia – wraca z rezerwy na PIT-38.`
-          : `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}) do potwierdzenia – firewall.`
-      : `Wpływ z XTB ${zl(d.amount)} (${dm(d.date)}) do zadokowania${d.missingEntry ? ' – dopisz wypłatę w ICTTJ' : ''}.`
+          ? `Zwrot do masy z ICTTJ ${zl(d.amount)} (${day}, pula Podatek) do potwierdzenia – wraca z rezerwy na PIT-38.`
+          : against
+            ? `Zwrot do masy z ICTTJ ${zl(d.amount)} (${day}) do potwierdzenia – dopłata wbrew rozkazowi firewall (osłony albo kadłub niepełne).`
+            : `Zwrot do masy z ICTTJ ${zl(d.amount)} (${day}) do potwierdzenia.`
+      : `Wpływ z XTB ${zl(d.amount)} (${day}) do zadokowania${d.missingEntry ? ' – dopisz wypłatę w ICTTJ' : ''}.`
     return { level: 'yellow', kind: 'dock', key: `dock:${d.key}`, text, since: d.date }
   }
   const what = e?.kind === 'return' ? 'Zwrot do masy' : 'Wypłata'
-  if (d.state === 'waiting' && e) return { level: 'info', kind: 'dock', key: `dock:${d.key}`, text: `${what} z ICTTJ ${zl(d.amount)} (${dm(d.date)}) czeka na import z mBanku.` }
+  // Past its window (DO sp. 3): a newer file of the bank decides; the bank's history not reaching it (AF-47) – the user.
+  if (d.state === 'waiting' && e)
+    return {
+      level: 'info',
+      kind: 'dock',
+      key: `dock:${d.key}`,
+      text: d.unseen
+        ? `${what} z ICTTJ ${zl(d.amount)} (${dm(d.date)}) bez pary w mBanku – zadokuj na Portfelu XTB albo pomiń wpis, jeśli pieniądze wpłynęły przed startem budżetu.`
+        : `${what} z ICTTJ ${zl(d.amount)} (${dm(d.date)}) ${d.fileTo ? `czeka na nowszy plik z mBanku (ostatni kończy się ${dm(d.fileTo)})` : 'czeka na import z mBanku'}.`
+    }
   if (d.state === 'docked' && d.mismatch) return { level: 'yellow', kind: 'dock', key: `dock:${d.key}`, text: `${what} w ICTTJ z ${dm(d.date)} ma inną kwotę niż operacja w banku – sprawdź wpis w ICTTJ.` }
   if (d.state === 'docked' && d.missingEntry && daysBetween(d.date, today) <= MISSING_ENTRY_DAYS)
     return { level: 'info', kind: 'ictj', key: `ictj:${d.key}`, text: `Wpływ z XTB ${zl(d.amount)} z ${dm(d.date)} bez wpisu w ICTTJ – dopisz wypłatę w ICTTJ.` }
@@ -335,7 +355,7 @@ export function briefing(o: BriefingInput): BriefingItem[] {
   if (f.loot.month && f.loot.amount > 0)
     items.push({ level: 'yellow', kind: 'loot', key: `loot:${f.loot.month}`, text: `Łupy z poprzedniego miesiąca: ${zl(f.loot.amount)} – podział do 7. dnia, potem trafią do osłon.` })
   for (const d of o.deliveries ?? []) {
-    const item = deliveryItem(d, f.today, zl)
+    const item = deliveryItem(d, f.today, zl, againstFirewall(f.alarms, d))
     if (item) items.push(item)
   }
   if (o.ictjProblem) items.push({ level: 'info', kind: 'ictj', key: `ictj:folder:${f.today}`, text: `ICTTJ: ${o.ictjProblem}` })

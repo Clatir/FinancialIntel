@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addWorkingDays, deliveries, pendingPairDays, previewDocking, type DeliveriesInput } from '@shared/calc/dock'
+import { addWorkingDays, deliveries, pendingPairDays, previewDocking, type DeliveriesInput, type Delivery } from '@shared/calc/dock'
 import { isPolishHoliday } from '@shared/calc/dates'
 import { computeFleet, layersSum, type FleetEvent, type FleetInput } from '@shared/calc/fleet'
 import { goalEtas, goalInflow, renumber, syncIctjGoals, byPriority } from '@shared/calc/goals'
@@ -215,8 +215,10 @@ describe('dokowanie (1.5.0): święta, zasięg pliku, granica startu, osierocone
     const after = tx('2026-10-02', zl(800))
     const b = deliveries(input({ start, entries: [entry('2026-09-29', zl(800), { pool: 'tax' })], transactions: [after], today: '2026-10-20' }))
     expect(b.map((d) => [d.key.split(':')[0], d.state, d.transaction?.id])).toEqual([['ictj', 'pending', after.id]])
-    // (c) No pair, the window beginning before the start: in the opening balances – never Portfel XTB.
-    expect(deliveries(input({ start, entries: [entry('2026-10-02', zl(300))], today: '2026-10-20', coveredTo: '2026-10-19' }))[0]).toMatchObject({ state: 'before-start', wallet: false })
+    // (c) No pair, the window beginning before the start (AF-47, 1.15.9): the entry is the budget's – it waits for the
+    // import, never „sprzed startu”; Portfel XTB only with the bank's history from the window's first day (T435).
+    expect(deliveries(input({ start, entries: [entry('2026-10-02', zl(300))], today: '2026-10-20', coveredTo: '2026-10-19' }))[0]).toMatchObject({ state: 'waiting', wallet: false })
+    expect(deliveries(input({ start, entries: [entry('2026-10-02', zl(300))], today: '2026-10-20', coveredTo: '2026-10-19', bankFrom: '2026-09-29' }))[0]).toMatchObject({ state: 'pending', wallet: true })
   })
 
   it('B22: kwota w banku inna o grosze – możliwa para, bez „Portfel XTB?” i bez „wpływ bez wpisu”; dokładna para ma pierwszeństwo', () => {
@@ -275,10 +277,11 @@ describe('dokowanie (1.5.0): święta, zasięg pliku, granica startu, osierocone
     expect(list.map((x) => [x.key, x.state, x.transaction?.id, x.docking?.id, x.wallet])).toEqual([[`ictj:${fresh.id}`, 'pending', t.id, d.id, false]])
     const alone = deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: true }))
     expect(alone[0]).toMatchObject({ key: `tx:${t.id}`, state: 'pending', entryGone: true })
-    // ICTTJ not read whole (a file syncing): the docking stands – nothing to dock again.
-    expect(deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: false }))).toEqual([])
+    // ICTTJ not read whole (a file syncing): the docking stands – nothing to dock again; still listed as docked (DO sp. 13).
+    const docked = (x: Delivery[]) => x.map((y) => [y.key, y.state, y.fromDocking, y.entry?.pool, y.transaction?.id])
+    expect(docked(deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: false })))).toEqual([[`ictj:${old.id}`, 'docked', true, 'tax', t.id]])
     // The payouts listed whole, its own file not read (a broken one): not deleted either.
-    expect(deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: true, unreadEntries: [old.id] }))).toEqual([])
+    expect(docked(deliveries(input({ entries: [], transactions: [t], dockings: [d], entriesComplete: true, unreadEntries: [old.id] })))).toEqual([[`ictj:${old.id}`, 'docked', true, 'tax', t.id]])
   })
 
   it('B20: dni do wstrzymania gry – para wypłaty bez dokowania', () => {

@@ -4,7 +4,7 @@
  * the first opening of the window after them – or its hour, when one is set (D99 pkt 7) – and comes before the others
  * (AP-16): until then the day's other notices wait, at most to `BRIEFING_HOLD_UNTIL`.
  */
-import { briefing, dm, type BriefingInput } from './calc/briefing'
+import { againstFirewall, briefing, dm, type BriefingInput } from './calc/briefing'
 import { WATCH_TIME } from './calc/intel'
 import { addDays, dayOfMonth, daysBetween, inClockWindow, monthOf, WARSAW, warsawNow, weekdayOf } from './calc/dates'
 import { envelopeOverrun, SERIOUS_ENVELOPE_PCT, type FleetState } from './calc/fleet'
@@ -218,8 +218,14 @@ export function dueNotices(o: NotifyInput): Notice[] {
               tag: 'dock',
               target: `dock:${d.key}`,
               title: 'Zwrot do masy w ICTTJ',
-              // The pool „Podatek” comes back from the reserve – no firewall there (T65, N43).
-              body: e.pool === 'tax' ? `${o.money(e.amount)} z puli Podatek – wraca z rezerwy na PIT-38; potwierdź w Financial Intel.` : `${o.money(e.amount)} – potwierdź w Financial Intel (firewall).`
+              // The pool „Podatek” comes back from the reserve – no firewall there (T65, N43); the firewall's word only when
+              // the engine counts it against the order (DO sp. 6, T438).
+              body:
+                e.pool === 'tax'
+                  ? `${o.money(e.amount)} z puli Podatek – wraca z rezerwy na PIT-38; potwierdź w Financial Intel.`
+                  : againstFirewall(f.alarms, d)
+                    ? `${o.money(e.amount)} – dopłata wbrew rozkazowi firewall; potwierdź w Financial Intel.`
+                    : `${o.money(e.amount)} – potwierdź w Financial Intel.`
             }
       )
     }

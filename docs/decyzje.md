@@ -3025,3 +3025,39 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i rozkazy) cofa wpis – `NumberField` z AP-15 wystarczył, dopisany test E2E; (2) cisza nocna „od” = „do” zostaje
   przyjęta (to sposób na wyłączenie ciszy), ale pole mówi to wprost („ta sama godzina – cisza nocna wyłączona”);
   (3) `clampZoom` zaokrągla do siatki 10 % (ręcznie wpisane 1,23 czyta się jako 120 %, nie „123%”).
+- **T435** Wpis ICTTJ z pierwszych dni budżetu (1.15.9, N5 – AP-26, AF-47 = C15, DO sp. 2; D72, T63; **zmienia zdanie T162**
+  „bez Portfela XTB dla okna zaczętego przed startem”): „sprzed startu” tylko wpis z datą przed startem (`deliveries`:
+  `!counted(e.date)`); wpis od startu, którego okno pary (−3 dni) zaczyna się przed startem, czeka na import jak każdy
+  („czeka na import”, na liście do zadokowania – okno dokowania pozwala zadokować na Portfelu XTB od razu). Po oknie
+  (plik banku sięga dalej) „Portfel XTB?” tylko, gdy historia banku kont z XTB sięga pierwszego dnia okna
+  (`DeliveriesInput.bankFrom` – najpóźniejszy z pierwszych wierszy z banku tych kont, `dock/state.ts` `coveredOf`) –
+  para sprzed startu byłaby w niej i dała „sprzed startu”; bez tej historii dostawa zostaje „czeka na import” z
+  `unseen` i tekstem „bez pary w mBanku – zadokuj na Portfelu XTB albo pomiń wpis, jeśli pieniądze wpłynęły przed
+  startem budżetu” (wybór użytkownika – bez ryzyka podwójnego liczenia saldem otwarcia). Para silnika bez zmian
+  (`pendingPairsFor` – tylko wpisy z operacją).
+- **T436** „Czeka na import do …” tylko z datą w przyszłości (1.15.9, N5 – AP-26, DO sp. 3): dostawa po oknie, gdy plik
+  banku kończy się w oknie (`coveredTo ≤ until`), ma `Delivery.fileTo` (koniec pliku); okno dokowania mówi „ostatni plik
+  z mBanku kończy się dd.mm.rrrr – zaimportuj nowszy” (`waitingText`), odprawa „czeka na nowszy plik z mBanku (ostatni
+  kończy się dd.mm)”; w oknie – jak dotąd „FI czeka na import do” dnia końca okna.
+- **T437** Dokowanie na ekranach (1.15.9, N5 – AP-26: DO sp. 5, 7, 13, MO.7, PR sp. 2; DM sp. 9 – **zmienia część T342**
+  „ostatnia dostawa (data, do zadokowania)”): (1) „ostatnia dostawa – dokąd poszła?” dopiero po dokowaniu – ostatni
+  wpływ `trading` z rekordem dokowania (`deliveryWhy(log, …, docked)`; para liczona według puli wpisu i wpływ XTB bez
+  dokowania to „Do zadokowania” w Stanie okrętu); dostawa to wypłata z XTB (słowniczek) – wpłata domownika nią nie jest
+  (DM sp. 9 bez zmian); (2) jedna data dostawy – dzień pieniędzy w banku (`deliveryDay`: operacja, bez niej wpis): wiersz
+  panelu Dokowanie (dzień wpisu w dymku), odprawa i Meldunki; okno dokowania pisze „wpis z dd.mm.rrrr” przy innym dniu
+  banku; (3) zadokowane dostawy zostają na liście przy wyłączonym ICTTJ albo nieodczytanym wpisie (`fromDocking` –
+  wpis z rekordu dokowania: pula, `entryDate`, kwota operacji; wpis usunięty w ICTTJ – jak dotąd do ponownego
+  dokowania); (4) toast: „Zapisz podział” zadokowanej – „Zmieniono podział dostawy X zł.”, nowe dokowanie – „Zadokowano
+  X zł”, zawsze kwota operacji (banku przy innej kwocie – B22), także „Wycofano dokowanie” (`dockedText`); (5) ostrzeżenia
+  folderu ICTTJ: wpis z nieznaną pulą osobno („Wpisy ICTTJ z nieznaną pulą (N) – FI je czyta”, nie „Pominięte pliki”),
+  wpis w dwóch plikach – plik pominięty z plikiem, który FI bierze.
+- **T438** Firewall – słowo i potwierdzenie (1.15.9, N5 – AP-26, DO sp. 6, 12; spec „Zasięg i firewall” – „czerwony alarm,
+  potwierdzenie i poważne naruszenie”, wnioski sekcja 5 – D99 pkt 9): (1) „firewall” w odprawie, Meldunkach
+  i powiadomieniu o zwrocie do masy tylko, gdy silnik liczy go wbrew rozkazowi (`againstFirewall` – alarm `firewall`
+  operacji dostawy); zwrot bez operacji w banku – bez werdyktu („do potwierdzenia.”); (2) dopłata do XTB wykryta tylko
+  z banku (alarm firewalla, bez wpisu ICTTJ w dostawach do zadokowania, czekających i zadokowanych) – meldunek „Firewall”
+  „Dopłata do XTB X zł z dd.mm wbrew rozkazowi firewall … – potwierdź” z „Pokaż” i „Potwierdź” (`topUpsToConfirm`, 30 dni
+  – `TOPUP_CONFIRM_DAYS`); potwierdzenie = rekord dokowania operacji bez wpisu i puli (`derivedId(tx, topup:…)` – dwa
+  komputery piszą jeden plik; „Cofnij”) – pieniędzy, alarmu ani naruszenia w grze nie zmienia. Dopłata z wpisem ICTTJ
+  potwierdza się jak dotąd w oknie dokowania. Telefon meldunku nie pokazuje (dokowanie tylko na komputerze). Bez zmian
+  formatu (rekord dokowania jak dotąd).
