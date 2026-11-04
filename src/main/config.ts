@@ -84,8 +84,27 @@ function loadUpdates(raw: unknown): MachineConfig['updates'] {
   }
 }
 
+/**
+ * The settings that count only once written (AP-28, T434): chosen in a dialog or a field and confirmed – the folder of
+ * backups, ICT Trade Journal's folder and program, the GitHub token, the update checks. A refused write of config.json
+ * takes them back in memory and says so (`ConfigNotSavedError`): the screen, the memory and the next start agree, the
+ * user tries again. Every other setting works at once and is written later (US.33 – the tray and the start with
+ * Windows, the preferences, the window, the folder of data and of mBank's files, a downloaded update).
+ */
+const ONLY_ONCE_SAVED: ReadonlyArray<readonly string[]> = [['backupDirOverride'], ['backupDirsBefore'], ['ictj'], ['updates', 'token'], ['updates', 'tokenEncrypted'], ['updates', 'prefs']]
+
+/** A change of `ONLY_ONCE_SAVED` refused by config.json and taken back: the window says it was not saved. */
+export class ConfigNotSavedError extends Error {
+  constructor(cause: unknown) {
+    super(`Nie udało się zapisać ustawień tego komputera – config.json jest zajęty (np. przez antywirus albo program kopii), więc zmiana nie została zapamiętana. Spróbuj ponownie za chwilę. (${cause instanceof Error ? cause.message : String(cause)})`, { cause })
+    this.name = 'ConfigNotSavedError'
+  }
+}
+
 export class ConfigStore {
   private config: MachineConfig = { ...DEFAULTS }
+  /** The settings as config.json has them (read or last written): what a change refused for good goes back to. */
+  private saved: MachineConfig = { ...DEFAULTS }
   /** The quick entry's shortcut config.json had, replaced by the default: it took a Polish letter (B29); null = none. */
   replacedShortcut: string | null = null
   /**
@@ -126,6 +145,7 @@ export class ConfigStore {
       // No file: the first start on this computer. Any other error: the file is there – never replaced by defaults.
       this.loadFailed = (e as NodeJS.ErrnoException).code === 'ENOENT' ? null : e instanceof Error ? e.message : String(e)
       this.config = { ...DEFAULTS }
+      this.saved = this.config
       return this.config
     }
     this.loadFailed = null
@@ -139,6 +159,7 @@ export class ConfigStore {
       await fs.rename(this.file, join(this.userDataDir, aside)).catch(() => undefined)
       this.setAside = aside
       this.config = { ...DEFAULTS }
+      this.saved = this.config
       return this.config
     }
     const shortcut = (raw.prefs as { quickShortcut?: unknown } | undefined)?.quickShortcut
@@ -154,6 +175,7 @@ export class ConfigStore {
       importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null,
       backupDirsBefore: loadBackupDirsBefore(raw.backupDirsBefore)
     }
+    this.saved = this.config
     if (this.held.length) {
       let next = this.config
       for (const [path, value] of this.held) next = withValueAt(next, path, value) as MachineConfig
@@ -184,32 +206,33 @@ export class ConfigStore {
     try {
       await this.queueWrite()
     } catch (e) {
-      // config.json held for a while (an antivirus, a backup tool – US.33): the settings work, and are written later.
+      // config.json held for a while (an antivirus, a backup tool – US.33): the settings work, and are written later –
+      // but for those that count only once saved, taken back.
+      const undone = this.undo(before, patch)
       this.retryLater()
+      if (undone) throw new ConfigNotSavedError(e)
       throw e
     }
     return this.config
   }
 
   /**
-   * A change that counts only once written (the folder of backups – T434: not remembered on this computer, the backups
-   * stay where they were): a failed write takes its fields back in memory too, so the retried write never brings back
-   * what the window was told was not saved (AP-28). A field changed again meanwhile keeps the newer value.
+   * The fields of `patch` that count only once written (`ONLY_ONCE_SAVED`) taken back in memory after a refused write
+   * (AP-28, T434): the window says the change was not saved, so the retried write never brings it back after a restart.
+   * Back to what config.json has (or a change held for it from while it was not readable) – never to an earlier change
+   * refused too; a field changed again meanwhile keeps the newer value. True = something was taken back.
    */
-  async updateOrUndo(patch: Partial<MachineConfig>): Promise<MachineConfig> {
-    const before = this.config
-    const changes = leafChanges(before, { ...before, ...patch })
-    try {
-      return await this.update(patch)
-    } catch (e) {
-      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-      for (const [path, value] of changes) {
-        if (!same(valueAt(this.config, path), value)) continue
-        this.config = withValueAt(this.config, path, valueAt(before, path)) as MachineConfig
-        this.held = this.held.filter(([p, v]) => !(same(p, path) && same(v, value)))
-      }
-      throw e
+  private undo(before: MachineConfig, patch: Partial<MachineConfig>): boolean {
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+    let undone = false
+    for (const [path, value] of leafChanges(before, { ...before, ...patch })) {
+      if (!ONLY_ONCE_SAVED.some((p) => p.every((k, i) => path[i] === k)) || !same(valueAt(this.config, path), value)) continue
+      this.held = this.held.filter(([p, v]) => !(same(p, path) && same(v, value)))
+      const held = this.held.filter(([p]) => same(p, path)).at(-1)
+      this.config = withValueAt(this.config, path, held ? held[1] : valueAt(this.saved, path)) as MachineConfig
+      undone = true
     }
+    return undone
   }
 
   /** The latest settings written, after the writes queued before. */
@@ -219,8 +242,10 @@ export class ConfigStore {
       await fs.mkdir(this.userDataDir, { recursive: true })
       // The held changes in this state; those made after it wait for their own write.
       const held = this.held.length
+      const state = this.config
       // This computer's settings (userData): no data folder's file.
-      await writeFileAtomic(this.file, `${JSON.stringify(this.config, null, 2)}\n`, null)
+      await writeFileAtomic(this.file, `${JSON.stringify(state, null, 2)}\n`, null)
+      this.saved = state
       this.held.splice(0, held)
       if (this.retryTimer) clearTimeout(this.retryTimer)
       this.retryTimer = null

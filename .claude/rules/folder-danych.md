@@ -54,8 +54,9 @@ paths:
   (`unsavedQuestion`), main loguje ją przed pytaniem.
 - Ustawienia komputera w `userData/config.json` (`config.ts`, nie w folderze danych); jedna droga zmian – `changePrefs`
   w main, rozsyłana do wszystkich okien. Zmiana działa przed zapisem (także wpis autostartu – `changeTray`), nieudany
-  zapis ponawia się sam, a okno pokazuje stan z pamięci main; zmianę ważną dopiero po zapisie (folder kopii) cofa
-  `updateOrUndo` – w magazynie i w pamięci ustawień (przegląd N5, T433, T434).
+  zapis ponawia się sam, a okno pokazuje stan z pamięci main; pola ważne dopiero po zapisie (`ONLY_ONCE_SAVED` – folder
+  kopii, ICTTJ, token, aktualizacje) `update` cofa do stanu pliku z `ConfigNotSavedError` – handler stosuje zmianę dopiero
+  po udanym `await config.update` (przegląd N5, T433, T434).
 - Odświeżanie: `RefreshQueue` (jedno naraz, zaległe łączone), watcher + `pollMs`; nieczytelny plik → `readError` i
   ponowny odczyt.
 - OneDrive „tylko online”: `threadpool.ts` importowany pierwszy w `index.ts` (`UV_THREADPOOL_SIZE` 32),

@@ -102,7 +102,7 @@ describe('folder kopii przy zajętym config.json (uwaga 4, T434)', () => {
     await config.load()
     await config.update({ backupDirOverride: 'D:/Kopie' })
     refuse.on = true
-    await expect(config.updateOrUndo({ backupDirOverride: 'E:/Nowe', backupDirsBefore: [{ dataDir: 'C:/Dane', dir: 'D:/Kopie' }] })).rejects.toThrow(/EPERM/)
+    await expect(config.update({ backupDirOverride: 'E:/Nowe', backupDirsBefore: [{ dataDir: 'C:/Dane', dir: 'D:/Kopie' }] })).rejects.toThrow(/EPERM/)
     expect(config.get().backupDirOverride).toBe('D:/Kopie')
     expect(config.get().backupDirsBefore ?? []).toEqual([])
     // Another change meanwhile works and is written later (US.33) – the retry writes it, never the folder taken back.
@@ -115,19 +115,58 @@ describe('folder kopii przy zajętym config.json (uwaga 4, T434)', () => {
     expect((await new ConfigStore(dir).load()).backupDirOverride).toBe('D:/Kopie')
   })
 
-  it('pole zmienione ponownie w trakcie nieudanego zapisu zostaje przy nowszej wartości', async () => {
+  it('pole zmienione ponownie w trakcie nieudanego zapisu: nowsza wartość zostaje, gdy jej zapis się uda; gdy i on odmówi – wraca to, co ma config.json', async () => {
     const dir = await configDir()
     const config = new ConfigStore(dir, 30, 40)
     await config.load()
     refuse.on = true
-    const first = config.updateOrUndo({ backupDirOverride: 'E:/Nowe' })
+    const first = config.update({ backupDirOverride: 'E:/Nowe' })
     // Set again before the first write answered (a slow disk): the newer choice is not taken back with the first.
     const second = config.update({ backupDirOverride: 'F:/Najnowsze' })
     await expect(first).rejects.toThrow()
-    await expect(second).rejects.toThrow()
+    refuse.on = false
+    await second
+    expect(config.get().backupDirOverride).toBe('F:/Najnowsze')
+    expect((await onDisk(dir)).backupDirOverride).toBe('F:/Najnowsze')
+    // Both refused: back to what config.json has – never the first's value the window was told was not saved.
+    refuse.on = true
+    const third = config.update({ backupDirOverride: 'G:/Trzeci' })
+    const fourth = config.update({ backupDirOverride: 'H:/Czwarty' })
+    await expect(third).rejects.toThrow()
+    await expect(fourth).rejects.toThrow()
     expect(config.get().backupDirOverride).toBe('F:/Najnowsze')
     refuse.on = false
-    expect(await until(async () => (await onDisk(dir)).backupDirOverride === 'F:/Najnowsze')).toBe(true)
+    // The retry (nothing new to write) lands before the folder is removed.
+    await new Promise((r) => setTimeout(r, 200))
+    expect((await onDisk(dir)).backupDirOverride).toBe('F:/Najnowsze')
+  })
+})
+
+describe('ICTTJ, token GitHub i sprawdzanie aktualizacji przy zajętym config.json (przegląd N5 – ta sama klasa co uwaga 4)', () => {
+  it('ważne dopiero po zapisie: odmowa cofa je w pamięci z komunikatem „nie została zapamiętana”; reszta działa i zapisuje się później', async () => {
+    const dir = await configDir()
+    const config = new ConfigStore(dir, 0, 40)
+    await config.load()
+    await config.update({ ictj: { dir: 'D:/ICTTJ', exe: null } })
+    refuse.on = true
+    const notSaved = /config\.json jest zajęty.*nie została zapamiętana.*EPERM/
+    // ICTTJ's folder and program (Ustawienia → ICTTJ – the source reads it only once remembered).
+    await expect(config.update({ ictj: { ...config.get().ictj, dir: 'E:/Inny-ICTTJ' } })).rejects.toThrow(notSaved)
+    await expect(config.update({ ictj: { ...config.get().ictj, exe: 'C:/ICTTJ/ICT Trade Journal.exe' } })).rejects.toThrow(notSaved)
+    expect(config.get().ictj).toEqual({ dir: 'D:/ICTTJ', exe: null })
+    // The GitHub token and the update checks (the token panel keeps the typed token for another try).
+    await expect(config.updateUpdates({ token: 'github_pat_abc', tokenEncrypted: false })).rejects.toThrow(notSaved)
+    await expect(config.updateUpdates({ prefs: { autoCheck: false, autoDownload: false } })).rejects.toThrow(notSaved)
+    expect(config.get().updates).toMatchObject({ token: null, tokenEncrypted: false, prefs: { autoCheck: true } })
+    // A downloaded update and this computer's preferences work at once and are written later (US.33): kept, the raw reason.
+    const pending = { version: '9.9.9', notes: '', file: 'x.update', sha256: 'abc', mode: 'portable' as const }
+    await expect(config.updateUpdates({ pending })).rejects.toThrow(/^EPERM/)
+    await expect(config.update({ prefs: { ...config.get().prefs, zoom: 1.2 } })).rejects.toThrow(/^EPERM/)
+    expect(config.get()).toMatchObject({ updates: { pending: { version: '9.9.9' } }, prefs: { zoom: 1.2 } })
+    refuse.on = false
+    expect(await until(async () => (await onDisk(dir)).prefs?.zoom === 1.2)).toBe(true)
+    const next = await new ConfigStore(dir).load()
+    expect(next).toMatchObject({ ictj: { dir: 'D:/ICTTJ', exe: null }, updates: { token: null, prefs: { autoCheck: true }, pending: { version: '9.9.9' } }, prefs: { zoom: 1.2 } })
   })
 })
 

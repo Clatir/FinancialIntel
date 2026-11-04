@@ -226,7 +226,10 @@ function updateTokenState(): UpdateTokenState {
   return { present: !!token, hint: token ? `…${token.slice(-4)}` : null, encrypted: config.get().updates.tokenEncrypted }
 }
 
-/** Saves (or removes) the GitHub token of this computer, encrypted when the system allows it. */
+/**
+ * Saves (or removes) the GitHub token of this computer, encrypted when the system allows it. Only once saved
+ * (`ONLY_ONCE_SAVED`, AP-28): config.json refused takes it back and says so – the token panel and the next start agree.
+ */
 async function saveUpdateToken(token: string | null): Promise<void> {
   const value = typeof token === 'string' ? token.trim() : ''
   if (value && !validUpdateToken(value)) throw new Error('Token GitHub ma niepoprawny format (litery, cyfry i „_”, np. github_pat_…).')
@@ -1262,8 +1265,8 @@ function registerIpc(): void {
     // The backups made so far stay listed under the folder they are in (AP-28, DA.14) – never „Brak kopii.” after a change.
     const backupDirsBefore = backupDirsAfter(config.get().backupDirsBefore ?? [], s.root, before, s.backupsDir, sameDir)
     try {
-      // Taken back in config.json's memory too (AP-28): its retried write never makes it the folder after a restart.
-      await config.updateOrUndo({ backupDirOverride: dir, backupDirsBefore })
+      // Taken back in memory too (AP-28, `ONLY_ONCE_SAVED`): the retried write never makes it the folder after a restart.
+      await config.update({ backupDirOverride: dir, backupDirsBefore })
     } catch (e) {
       // Not remembered on this computer: the backups stay where they were.
       s.setBackupDir(overrideBefore)
@@ -1331,12 +1334,15 @@ function registerIpc(): void {
       if (kind === 'data') throw new Error('To folder danych Financial Intel – wskaż folder ICT Trade Journal.')
       if (kind !== 'ictj') throw new Error('W tym folderze nie ma danych ICT Trade Journal (brak pliku journal.json).')
     }
+    // Remembered first (`ONLY_ONCE_SAVED`, AP-28): a refused write of config.json takes it back and says so – the folder
+    // read stays the one the screen and the next start have.
     await config.update({ ictj: { ...config.get().ictj, dir: next } })
     log('info', `ICTTJ: folder ${next ? 'wybrany' : 'wyłączony'}`)
     return ictjSource().setDir(next)
   })
   handle('ictjProgram', () => findIctjExe(config.get().ictj.exe))
   handle('ictjPickExe', async (mode: 'pick' | 'clear') => {
+    // As the folder: a refused write takes the program back (`ONLY_ONCE_SAVED`) – the screen keeps the one remembered.
     if (mode === 'clear') await config.update({ ictj: { ...config.get().ictj, exe: null } })
     else {
       const res = await dialog.showOpenDialog(mainWindow!, {

@@ -3569,9 +3569,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Ostatnia kopia” i dają się odzyskać (`listedBackup` czyta tylko kopie z folderów listy); powrót do folderu zdejmuje go
   z listy; nieudany zapis ustawienia cofa folder kopii. Tekst panelu mówi o 5 ostatnich kopiach ręcznych. Nieudany zapis
   `config.json` (plik zajęty) ponawia się sam co 5 s z najnowszym stanem, aż się uda (`ConfigStore.retryLater`) –
-  komunikat w oknie to mówi. Dopisek (przegląd N5): nieudany zapis folderu kopii cofa go także w pamięci ustawień
-  (`ConfigStore.updateOrUndo` – pola tej zmiany wracają, chyba że zmieniono je w trakcie), więc ponowiony zapis nie robi
-  z niego folderu kopii po restarcie. Zmiany z chwili nieczytelnego `config.json` (`held`, B114) zostają, aż zapis je
+  komunikat w oknie to mówi. Dopisek (przegląd N5): ustawienia ważne dopiero po zapisie (`config.ts` `ONLY_ONCE_SAVED`:
+  folder kopii i lista wcześniejszych, folder i program ICTTJ, token GitHub, sprawdzanie i pobieranie aktualizacji) przy
+  odrzuconym zapisie wracają w pamięci do tego, co ma `config.json` (pole zmienione w trakcie zostaje przy nowszej
+  wartości), z komunikatem „config.json jest zajęty… zmiana nie została zapamiętana. Spróbuj ponownie” (`ConfigNotSavedError`) –
+  ponowiony zapis nie przywraca ich po restarcie, a ekran (folder kopii w magazynie, odczyt ICTTJ, panel tokenu,
+  przełączniki aktualizacji) zostaje przy zapamiętanych. Reszta działa od razu i zapisuje się później: zasobnik i start
+  z Windows (T433), preferencje komputera, okno, folder danych i plików z mBanku, pobrana aktualizacja (gotowa do
+  instalacji, a nie „nie udało się pobrać”, gdy tylko `config.json` odmówił). Zmiany z chwili nieczytelnego `config.json` (`held`, B114) zostają, aż zapis je
   weźmie: odczyt, po którym zapis jest odrzucony, kończy się (ustawienia działają, odczyt nie jest ponawiany), zmiany
   idą do ponawianego zapisu, a kolejny odczyt nakłada je na plik jeszcze raz (także zmiany zrobione po odczycie, do
   udanego zapisu) – wcześniej odczyt je zdejmował i przepadały z nieudanym zapisem.
