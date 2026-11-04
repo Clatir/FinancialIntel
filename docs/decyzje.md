@@ -1020,6 +1020,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T129** Pieniądze celu (D84 C2, B30): archiwizacja celu z pieniędzmi pyta – osłony / inny cel / zostają; przeniesienie =
   wpis `transfers` {at, to, amount}, silnik na koniec dnia przenosi `min(kwota, stan)` (nigdy więcej, niż cel ma);
   „przenieś środki” na liście zarchiwizowanych także później (cele ICTTJ spoza scenariusza też); „Cofnij” przywraca cel.
+  **Od 1.15.6 „na koniec dnia” zastąpione przez T340** (w chwili `at` wśród zdarzeń dnia – AP-3, AF-4).
 - **T130** Scenariusz ICTTJ (D84 C3): scenariusz zapamiętany w `fi.json` przy pierwszym podłączeniu (ostatnio zmieniany
   w ICTTJ – `chosenForecast`); zmiana w Ustawieniach → ICTTJ dopiero po potwierdzeniu z listą celów do archiwizacji (ich
   pieniądze zostają).
@@ -2488,3 +2489,20 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
   czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
   tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
+- **T340** Przeniesienie środków celu w swojej chwili (1.15.6, AP-3, AF-4 K – MG.8, MG.10; **zastępuje „na koniec dnia”
+  z T129**): wpis `transfers` {at, to, amount} silnik liczy w chwili `at` wśród zdarzeń jej dnia warszawskiego – przed
+  pierwszym zdarzeniem dnia (w kolejności silnika), które przyszło do FI później niż przeniesienie (`cameIn`: utworzenie
+  dokowania, inaczej operacji, nie wcześniej niż początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
+  przelewu – jej utworzenie), zawsze po początku dnia (start, przełom miesiąca, termin łupów); gdy tego dnia nic
+  później nie przyszło – po ostatnim zdarzeniu dnia, przed następnym dniem. Przenosi `min(kwota, stan celu)`; czego cel
+  w tej chwili silnika jeszcze nie ma (wpływ sprzed przeniesienia, który kolejność dnia liczy później – operacje bez
+  godziny idą przed operacjami z godziną), przenosi na koniec dnia, nigdy więcej, niż cel ma. Skutek: wydatek z celu
+  wpisany po przeniesieniu płaci z celu tyle, ile pokazuje ekran (T131), dostawa tego dnia zaimportowana albo zadokowana
+  po przeniesieniu widzi cel po nim i dopełnia go tylko do jego kwoty (D13, spec „każdy do swojej kwoty”). Granica:
+  operacja z dnia wcześniejszego liczy się w swoim dniu (kolejność dni) – przeniesienie z późniejszego dnia nie zmienia
+  jej podziału. „Przenieś środki” ostrzega (bez blokady), gdy cel docelowy jest już pełny albo przeniesienie przekroczy
+  to, czego mu brakuje (`overTarget`, przycisk „tylko brakujące”); cel bez kwoty (cel ICTTJ bez ceny – N46) bez
+  ostrzeżenia. Rozważone i odrzucone: stały klucz przeniesienia wśród operacji (godzina albo utworzenie) – operacje
+  z godziną i bez niej mają w dniu inne porządki, a zadokowana później dostawa ma chwilę dokowania, nie operacji. Bez
+  migracji (stany liczone): dni z przeniesieniem i wydatkiem z celu albo dostawą tego samego dnia przeliczą się inaczej
+  (notatka wydania); zamrożone dni gry bez zmian.

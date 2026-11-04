@@ -285,7 +285,10 @@ export const goalPastSchema = z.looseObject({
 })
 export type GoalPast = z.infer<typeof goalPastSchema>
 
-/** The goal's money moved out (1.4.2, D84 C2): at the end of the Warsaw day of `at`, to the shields or another goal. */
+/**
+ * The goal's money moved out (1.4.2, D84 C2): at its moment `at` among the events of its Warsaw day (AP-3, T340 – before
+ * 1.15.6 at the day's end), to the shields or another goal.
+ */
 export const goalTransferSchema = z.looseObject({
   at: isoDateTime,
   /** 'shields' or the id of a goal. */

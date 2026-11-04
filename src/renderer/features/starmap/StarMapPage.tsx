@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
 import { addMonths, monthsBetween } from '@shared/calc/dates'
 import { goalInstallment, ratedIn } from '@shared/calc/fleet'
-import { byPriority, goalEtas, goalLate, goalPace } from '@shared/calc/goals'
+import { byPriority, goalEtas, goalLate, goalPace, overTarget } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData, useEntryNewer, useFolderLocked } from '../../store/data'
@@ -197,6 +197,7 @@ export function StarMapPage() {
           amount={amounts.get(moving.goal.id) ?? 0}
           archive={moving.archive}
           others={active.filter((g) => g.id !== moving.goal.id)}
+          amounts={amounts}
           onClose={() => setMoving(null)}
         />
       )}
@@ -206,14 +207,32 @@ export function StarMapPage() {
 
 /**
  * Where a goal's money goes (C2, B30): archiving a goal with money asks – to the shields, to another goal, or it stays
- * (then „przenieś środki” on the archived list later); an archived goal's money moved the same way.
+ * (then „przenieś środki” on the archived list later); an archived goal's money moved the same way. Into a goal full
+ * already, or above what it lacks – a warning (AP-3), never a refusal.
  */
-function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goal; amount: number; archive: boolean; others: readonly Goal[]; onClose: () => void }) {
+function GoalMoneyDialog({
+  goal,
+  amount,
+  archive,
+  others,
+  amounts,
+  onClose
+}: {
+  goal: Goal
+  amount: number
+  archive: boolean
+  others: readonly Goal[]
+  amounts: ReadonlyMap<string, number>
+  onClose: () => void
+}) {
   const [to, setTo] = useState<'shields' | 'goal' | 'stay'>('shields')
   const [goalTo, setGoalTo] = useState(others[0]?.id ?? '')
   const [moveAmount, setMoveAmount] = useState<number | null>(amount)
   const target: GoalMoneyTarget | null = to === 'stay' ? null : to === 'goal' ? goalTo || null : 'shields'
   const chosenAmount = moveAmount ?? 0
+  const dest = to === 'goal' ? (others.find((g) => g.id === goalTo) ?? null) : null
+  const destHas = dest ? (amounts.get(dest.id) ?? 0) : 0
+  const over = dest && chosenAmount > 0 ? overTarget({ amount: destHas, target: dest.target }, chosenAmount) : null
   const confirm = () => {
     if (to === 'goal' && !goalTo) return toast('Wybierz cel.', 'error')
     if (to !== 'stay' && (chosenAmount <= 0 || chosenAmount > amount)) return toast(`Podaj kwotę od 0,01 zł do ${zl(amount)}.`, 'error')
@@ -270,6 +289,18 @@ function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goa
             ))}
           </select>
         </label>
+        {dest && over && (
+          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="starmap-money-over">
+            {over.lacks === 0
+              ? `Cel „${dest.name}” jest już pełny (${zl(destHas)} z ${zl(dest.target)}): wszystko, co przeniesiesz, będzie ponad jego kwotę, a nowe dostawy go ominą.`
+              : `Celowi „${dest.name}” brakuje ${zl(over.lacks)} – reszta (${zl(over.over)}) będzie ponad jego kwotę.`}
+            {over.lacks > 0 && (
+              <button type="button" className="ml-1.5 text-accent hover:underline" onClick={() => setMoveAmount(over.lacks)} data-testid="starmap-money-lacks">
+                tylko brakujące ({zl(over.lacks)})
+              </button>
+            )}
+          </p>
+        )}
         {archive && (
           <label className="flex items-center gap-2">
             <input type="radio" checked={to === 'stay'} onChange={() => setTo('stay')} data-testid="starmap-money-stay" />

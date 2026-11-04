@@ -623,13 +623,15 @@ export interface FleetState {
 }
 
 /**
- * An event of the calendar (the start, an account joining, a month's turn, the loot, a goal's money moved): its place
- * among the operations is `${date} ${slot} ${rest}` – an operation's is `${date} 3 ${time} ${createdAt} ${id}`.
+ * An event of the calendar (the start, an account joining, a month's turn, the loot): its place among the operations is
+ * `${date} ${slot} ${rest}` – an operation's is `${date} 3 ${time} ${createdAt} ${id}`.
  */
 interface Ev {
   date: string
   slot: number
   rest: string
+  /** Slot 3 (among the operations): when it came to FI (ms) – a goal's money moved before it goes first (AP-3). */
+  at?: number
   run: () => void
 }
 
@@ -1263,6 +1265,7 @@ export function computeFleet(input: FleetInput): FleetState {
           date,
           slot: 3,
           rest: decidedStamp.slice(11),
+          at: Date.parse(decision.decidedAt),
           run: () => {
             if (lootMonth !== prev || !loot) return
             const moves: Moves = { loot: -loot }
@@ -1302,44 +1305,87 @@ export function computeFleet(input: FleetInput): FleetState {
         })
       }
     }
-    // A goal's money moved out (C2, B30) at the end of its day: what it held then (never more than it holds), to the
-    // shields or another goal.
-    for (const g of goalsAll)
-      for (const [i, tr] of (g.transfers ?? []).entries()) {
-        const date = warsawNow(tr.at).date
-        if (date < start || date > today) continue
-        events.push({
-          date,
-          slot: 4,
-          rest: `${g.id} ${String(i).padStart(4, '0')}`,
-          run: () => {
-            const move = Math.min(tr.amount, goalAmount.get(g.id) ?? 0)
-            if (move <= 0) return
-            const moves: Moves = {}
-            addGoal(g.id, -move, moves)
-            if (tr.to !== g.id && knownGoal(tr.to)) addGoal(tr.to, move, moves)
-            else addShields(move, moves)
-            record({ date, kind: 'goal', amount: move, moves })
-          }
-        })
-      }
     // A transfer in one operation whose own side is outside the run (F10): its other side alone, on that side's day, in
     // the operations' order there.
     for (const t of input.transactions) {
       if (!otherInRun(t) || inRun(t.accountId, t.date)) continue
       const date = t.counterDate ?? t.date
-      events.push({ date, slot: 3, rest: opRest(t), run: () => runTx(t, date) })
+      events.push({ date, slot: 3, rest: opRest(t), at: Math.max(Date.parse(t.createdAt), dayStart(date)), run: () => runTx(t, date) })
     }
     const keys = new Map(events.map((e) => [e, evKey(e)]))
     events.sort((a, b) => order(keys.get(a)!, keys.get(b)!))
+
+    // A goal's money moved out (C2, B30; AP-3 – T340 instead of T129's „at the end of its day”): at its moment `at` among
+    // the events of its day – before the first one (in the engine's order) that came to FI after it (`cameIn`: an
+    // operation's docking, else the operation; a loot's decision), after the day's start; nothing of its day after it –
+    // after the day's last. What the goal does not hold then (money that came before it, counted later in the day's
+    // order) moves at the day's end; never more than the goal holds.
+    const transfers = goalsAll
+      .flatMap((g) => (g.transfers ?? []).map((tr, i) => ({ g, tr, i, date: warsawNow(tr.at).date, at: Date.parse(tr.at) })))
+      .filter((m) => m.date >= start && m.date <= today)
+      .sort((a, b) => order(a.date, b.date) || a.at - b.at || order(a.g.id, b.g.id) || a.i - b.i)
+    type GoalMove = (typeof transfers)[number]
+    let nextMove = 0
+    /** The day of the events run last: its transfers wait for its later events. */
+    let moveDay: string | null = null
+    /** The parts of `moveDay`'s transfers the goal did not hold at their moment: moved at the day's end. */
+    let short: Array<{ m: GoalMove; rest: number }> = []
+    const moveOut = (m: GoalMove, amount: number): number => {
+      const move = Math.min(amount, goalAmount.get(m.g.id) ?? 0)
+      if (move <= 0) return 0
+      const moves: Moves = {}
+      addGoal(m.g.id, -move, moves)
+      if (m.tr.to !== m.g.id && knownGoal(m.tr.to)) addGoal(m.tr.to, move, moves)
+      else addShields(move, moves)
+      record({ date: m.date, kind: 'goal', amount: move, moves })
+      return move
+    }
+    /** The next transfer whole – its day has nothing after it. */
+    const moveNext = () => {
+      const m = transfers[nextMove++]!
+      moveOut(m, m.tr.amount)
+    }
+    /** The end of `moveDay`: the parts its transfers could not move at their moment, then those after its last event. */
+    const endMoveDay = () => {
+      for (const s of short) moveOut(s.m, s.rest)
+      short = []
+      while (nextMove < transfers.length && transfers[nextMove]!.date === moveDay) moveNext()
+    }
+    /** The events of `date` come: the days before it end; true = a transfer of `date` still waits. */
+    const movesWait = (date: string): boolean => {
+      if (nextMove >= transfers.length && !short.length) return false
+      if (moveDay !== date) {
+        if (moveDay !== null) endMoveDay()
+        // Days without an event of their own: their transfers at their end.
+        while (nextMove < transfers.length && transfers[nextMove]!.date < date) moveNext()
+        moveDay = date
+      }
+      return nextMove < transfers.length && transfers[nextMove]!.date === date
+    }
+    /** The transfers of `date` made before an event of that day that came to FI at `at` (ms). */
+    const movesBefore = (date: string, at: number) => {
+      while (nextMove < transfers.length && transfers[nextMove]!.date === date && transfers[nextMove]!.at < at) {
+        const m = transfers[nextMove++]!
+        const moved = moveOut(m, m.tr.amount)
+        if (moved < m.tr.amount) short.push({ m, rest: m.tr.amount - moved })
+      }
+    }
+    const runEvent = (e: Ev) => {
+      // The calendar's day start (the start, a month's turn, the loot's deadline) comes before the day's transfers.
+      if (movesWait(e.date) && e.slot === 3) movesBefore(e.date, e.at ?? -Infinity)
+      e.run()
+    }
     // The operations in their order, merged with the calendar's events (W27) – no event, key or closure for each.
     let next = 0
     for (const t of sortedOps(input.transactions)) {
       if (t.date < start || t.date > today || !counts(t)) continue
-      while (next < events.length && evFirst(events[next]!, t)) events[next++]!.run()
+      while (next < events.length && evFirst(events[next]!, t)) runEvent(events[next++]!)
+      if (movesWait(t.date)) movesBefore(t.date, cameIn(t, dockingByTx.get(t.id)))
       runTx(t)
     }
-    while (next < events.length) events[next++]!.run()
+    while (next < events.length) runEvent(events[next++]!)
+    if (moveDay !== null) endMoveDay()
+    while (nextMove < transfers.length) moveNext()
   }
 
   // ---------------------------------------------------------------- now
