@@ -1,13 +1,17 @@
 /**
- * N3 (1.15.7) – the seams between AP-10, AP-13, AP-17 and AP-18 (T390, T391):
+ * N3 (1.15.7) – the seams between AP-10, AP-13, AP-17, AP-18 and AP-31 (T390, T391):
  * - the course's rest of this month pays what the month's plan still spends from the month's energy left – today's energy
  *   is never more (AP-13, T371) – and over it from the shields (T390);
  * - the course's „Kadłub pełny” counts the hull full from 99 % of its target, as the firewall and „wolne do decyzji”
- *   (AP-17, T372); the goals' installments at the turn still want 100 % (T391).
+ *   (AP-17, T372); the goals' installments at the turn still want 100 % (T391);
+ * - „Dopełnij kadłub z osłon” (AP-17, T373) is a move of the engine's log, so the cushion at each month's end (AP-31,
+ *   T389) adds it up from the log – never the slow run of the engine per month.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { cargoStatuses } from '@shared/calc/cargoStatus'
 import { course, courseIncome, courseInputOf, restNeeds, type CourseInput } from '@shared/calc/course'
+import { cushionMonths, cushionTrend, layersAtMonthEnds } from '@shared/calc/cushion'
+import { lastDayOf, warsawEndOf } from '@shared/calc/dates'
 import { computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, containerSchema, defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Container, type MonthPlan, type Settings, type Transaction } from '@shared/schema'
@@ -165,5 +169,36 @@ describe('N3 integracja: „Kadłub pełny” w kursie od 99 % celu jak firewall
     expect(course(input(zl(29670)), 'median').hullFull).toBeNull()
     // Exactly full – the installment comes (T272: 100 % at the turn).
     expect(course(input(zl(30000)), 'median').months[0]!.rates).toBeGreaterThan(0)
+  })
+})
+
+describe('N3 integracja: „Dopełnij kadłub z osłon” w logu silnika – osłony + kadłub na koniec miesiąca bez przebiegu na miesiąc (AP-17 × AP-31)', () => {
+  it('dopełnienie 15.09 (1 000 zł): koniec każdego miesiąca = silnik tego dnia, log sumuje się do stanu (bez `engineAt`)', () => {
+    // From 1 August: 60 000 zł, the hull 17 000 zł at the start of its 18 000 zł (6 × 3 000 zł assumed), the salary
+    // 4 000 zł, 2 000 zł of costs a month; on 15 September 1 000 zł from the shields' surplus to the hull.
+    const months = [plan('2026-08', zl(4000), {}), plan('2026-09', zl(4000), {}, { hullTopUps: [{ id: nextId(), amount: zl(1000), at: '2026-09-15T08:00:00.000Z' }] })]
+    const input: FleetInput = {
+      settings: settingsOf('2026-08-01', { assumedCosts: zl(3000) }, { shields: 0, hull: zl(17000), goals: {} }),
+      balances: [opening('2026-08-01', zl(60000))],
+      months,
+      transactions: ['2026-08', '2026-09', '2026-10'].map((m) => tx(`${m}-12`, -zl(2000), { categoryId: GROCERIES })),
+      now: NOW
+    }
+    const f = run(input)
+    const moved = f.log.filter((e) => e.kind === 'hull')
+    expect(moved.map((e) => [e.date, e.amount, e.moves])).toEqual([['2026-09-15', zl(1000), { hull: zl(1000), shields: -zl(1000) }]])
+    expect(layersAtMonthEnds(f, ['2026-08', '2026-09', '2026-10'])).not.toBeNull()
+    const engineAt = vi.fn((date: string) => computeFleet({ ...input, now: warsawEndOf(date) }))
+    const t = cushionTrend({ fleet: f, transactions: input.transactions, loans: [], containers: [], assumedCosts: zl(3000), months: cushionMonths(f.month), engineAt })
+    // The log adds up to the state: no run of the engine per month.
+    expect(engineAt).not.toHaveBeenCalled()
+    expect(t.map((p) => p.month)).toEqual(['2026-08', '2026-09', '2026-10'])
+    for (const p of t) {
+      const then = run({ ...input, now: warsawEndOf(lastDayOf(p.month)) })
+      expect([p.month, p.shields, p.hull]).toEqual([p.month, then.shields.amount, then.hull.amount])
+      expect(p.range).toBeCloseTo(then.range!, 10)
+    }
+    // September's end: the hull topped up to its target.
+    expect(t[1]!.hull).toBe(zl(18000))
   })
 })

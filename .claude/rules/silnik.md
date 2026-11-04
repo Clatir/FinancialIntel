@@ -50,7 +50,8 @@ paths:
   (`CourseInput.energy`, `restNeeds` – pula dzienna, koperty planowe, opłaty ze stanu AP-10), ponad nią z osłon (T390);
   kadłub pełny w kursie od 99 % (`hullCountsFull`), raty celów kursu przy 100 % (T391).
 - Osłony + kadłub na koniec miesiąca (`cushion.ts`, T388–T389) to sumy `moves` logu silnika: **każdy ruch osłon
-  i kadłuba w silniku ma wpis w logu** (`record`) – inaczej trend przechodzi na przebieg silnika na każdy miesiąc (wolno).
+  i kadłuba w silniku ma wpis w logu** (`record`; także dopełnienie kadłuba `hull`, T373) – inaczej trend przechodzi na
+  przebieg silnika na każdy miesiąc (wolno).
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).
 - Pewne dopasowanie zwrotu (D91 b, T329): każda osoba wpłaty osobno (`repaymentSharesByMember`) – import i szybki wpis
   `linkRepayments`, edytor przy zmianie części `moreSureCovers` / `keptCovers`; wpłata ≥ cały dług osoby wiąże wszystkie.
