@@ -19,7 +19,7 @@
  */
 import type { Settings } from '../schema/settings'
 import { envelopeKind, type EnvelopeKind, type MemberOpening } from '../schema/budget'
-import type { Balance, Container, Docking, Goal, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
+import type { Balance, Container, Docking, Goal, IctjPool, Loan, MonthPlan, Transaction, TxKind } from '../schema/records'
 import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, monthRange, monthsBetween, warsawEndOf, warsawNow, warsawStamp, warsawStartOf } from './dates'
 import { openingsOf } from './balances'
 import { balanceOf, heldOf, ledgerOrder, settleHousehold, settlesHousehold, type HouseholdLedger, type MemberBalance, type MemberFlow } from './household'
@@ -472,6 +472,12 @@ export function openingIdsOf(input: Pick<FleetInput, 'settings' | 'balances' | '
 
 // ------------------------------------------------------------------ the whole state
 
+/** An ICTTJ payout's pair not docked yet (AP-12): its entry's pool and day (the month of a goal without a price – N46). */
+export interface PendingPair {
+  pool: IctjPool
+  entryDate: string
+}
+
 export interface FleetInput {
   /** `game`: the serious overrun's threshold of Dowództwo (N102) – without it the default 20%. */
   settings: Pick<Settings, 'accounts' | 'categories' | 'layers' | 'orders' | 'budget' | 'household'> & { game?: Pick<Settings['game'], 'seriousEnvelopePct'> }
@@ -481,6 +487,13 @@ export interface FleetInput {
    * renderer's: the engine never reads ICTTJ): no income. Operation id → amount.
    */
   preStartTax?: ReadonlyMap<string, number>
+  /**
+   * The ICTTJ payouts paired with an operation and not docked yet (AP-12, T341 – `pendingPairsOf`, the renderer's: the
+   * engine never reads ICTTJ): operation id → the entry's pool and day. Counted at once by the pool, as their docking
+   * without a split counts (Cele → the goals, Podatek → the tax reserve, a return of it without the firewall); a docking
+   * of the operation decides over it.
+   */
+  pendingPairs?: ReadonlyMap<string, PendingPair>
   containers?: readonly Container[]
   goals?: readonly Goal[]
   months?: readonly MonthPlan[]
@@ -549,6 +562,8 @@ export interface FleetEvent {
   txId?: string
   /** 'loot': the month whose loot it splits (1.4.2, B10). */
   ref?: string
+  /** An operation counted by its ICTTJ payout's pool before its docking (AP-12) – „do zadokowania”. */
+  pending?: true
   moves: Moves
 }
 
@@ -585,6 +600,11 @@ export interface FleetState {
   taxHold: number
   /** The household members' advances held on the accounts (D80): a layer, never the ship's money. */
   deposit: number
+  /**
+   * „Do zadokowania” (AP-12): the pairs of ICTTJ payouts not docked yet, in the layers by their entry's pool – how many,
+   * the money in and out (grosze, both positive) and what of it went to the goals.
+   */
+  toDock: { count: number; inflow: number; outflow: number; goals: number }
   loot: { month: string | null; amount: number }
   /**
    * Not money on the accounts, counted beside: what the household members owe (`house` all of them, `houseSince` the
@@ -671,6 +691,8 @@ export function computeFleet(input: FleetInput): FleetState {
   const goalsAll = [...(input.goals ?? [])].sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
   const plans = [...(input.months ?? [])].sort((a, b) => a.month.localeCompare(b.month))
   const dockingByTx = dockingsByTx(input.dockings ?? [])
+  /** The pair of an operation not docked yet (AP-12): its ICTTJ entry's pool counts until a docking decides. */
+  const pairOf = (t: Transaction): PendingPair | undefined => (input.pendingPairs?.size && !dockingByTx.has(t.id) && (t.kind === 'trading' || t.kind === 'income') ? input.pendingPairs.get(t.id) : undefined)
   const loansById = new Map((input.loans ?? []).map((l) => [l.id, l]))
   const txs = input.transactions.filter((t) => t.date <= today)
 
@@ -720,8 +742,17 @@ export function computeFleet(input: FleetInput): FleetState {
     const c = costOf(t)
     if (c) costsByMonth.set(m, (costsByMonth.get(m) ?? 0) + c)
   }
-  // Income (D81): work and trading net, without the members' money and the pool „Podatek”.
-  const tax = taxOfDockings(dockingByTx, txs)
+  // Income (D81): work and trading net, without the members' money and the pool „Podatek” – of a pair not docked yet too
+  // (AP-12: the engine holds it in the reserve).
+  let pools: ReadonlyMap<string, Pick<Docking, 'pool' | 'split'>> = dockingByTx
+  if (input.pendingPairs?.size) {
+    const all = new Map<string, Pick<Docking, 'pool' | 'split'>>()
+    for (const [id, p] of input.pendingPairs) all.set(id, { pool: p.pool, split: null })
+    // A docking decides over the pair.
+    for (const [id, d] of dockingByTx) all.set(id, d)
+    pools = all
+  }
+  const tax = taxOfDockings(pools, txs)
   // The pool „Podatek” before the start (N38): paired, never docked – no income either.
   for (const [id, v] of input.preStartTax ?? []) if (!tax.has(id)) tax.set(id, v)
   const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax }
@@ -783,6 +814,7 @@ export function computeFleet(input: FleetInput): FleetState {
   const envelopeExtra = new Map<string, Map<string, number>>()
   const alarms: Alarm[] = []
   const log: FleetEvent[] = []
+  const toDock: FleetState['toDock'] = { count: 0, inflow: 0, outflow: 0, goals: 0 }
 
   // The goals as they were that day (C1): added by then, not archived then, by the priority and target then – a change
   // of the list never moves money docked before it.
@@ -988,10 +1020,23 @@ export function computeFleet(input: FleetInput): FleetState {
     }
   }
 
+  /**
+   * A payout by its ICTTJ pool (D55, T65): Cele → the goals, Podatek → outside the budget, the rest by the docking order.
+   * `d` – the operation's docking (when the money came in – `cameIn`); `entryDate` – the ICTTJ payout's day (N46).
+   */
+  const dockByPool = (v: number, t: Transaction, d: Docking | undefined, pool: IctjPool | null, entryDate: string, moves: Moves) => {
+    if (pool === 'goals') fillGoals(v, cameIn(t, d), moves, entryDate)
+    else if (pool === 'tax') {
+      taxHold += v
+      moves.taxHold = (moves.taxHold ?? 0) + v
+    } else dock(v, t.date, cameIn(t, d), moves)
+  }
   /** An operation in the run; `on` – the day it moves the layers (a transfer's other side alone – its own day). */
   const runTx = (t: Transaction, on = t.date) => {
     const moves: Moves = {}
     const amt = t.amount
+    // Paired with an ICTTJ payout, not docked yet (AP-12): counted by the entry's pool at once – the docking confirms it.
+    const pair = pairOf(t)
     switch (t.kind) {
       case 'expense': {
         for (const p of partsOf(t)) {
@@ -1048,25 +1093,22 @@ export function computeFleet(input: FleetInput): FleetState {
         const d = dockingByTx.get(t.id)
         if (!rest) break
         if (d?.split) applySplit(rest, d.split, moves)
-        else dock(rest, t.date, cameIn(t, d), moves)
+        // A payout typed on Portfel XTB as an inflow (B69), paired with its ICTTJ entry: by the entry's pool (AP-12).
+        else dockByPool(rest, t, d, pair?.pool ?? null, pair?.entryDate ?? t.date, moves)
         break
       }
       case 'trading': {
+        const d = dockingByTx.get(t.id)
+        const pool = d ? d.pool : (pair?.pool ?? null)
         if (amt > 0) {
           // A withdrawal from the trading account (D55): the pool decides – Cele → goals, Podatek → outside the budget.
-          const d = dockingByTx.get(t.id)
           if (d?.split) applySplit(amt, d.split, moves)
           // The ICTTJ payout's day decides a goal's month (N46: entered on the 31st, in the bank on the 2nd).
-          else if (d?.pool === 'goals') fillGoals(amt, cameIn(t, d), moves, d.entryDate ?? t.date)
-          else if (d?.pool === 'tax') {
-            taxHold += amt
-            moves.taxHold = amt
-          } else dock(amt, t.date, cameIn(t, d), moves)
+          else dockByPool(amt, t, d, pool, d?.entryDate ?? pair?.entryDate ?? t.date, moves)
         } else if (amt < 0) {
           // The tax money going back to the trading capital (an ICTTJ return of the pool „Podatek”): out of the tax
           // hold, not the budget's money – no firewall.
-          const d = dockingByTx.get(t.id)
-          if (d?.pool === 'tax') {
+          if (pool === 'tax') {
             const fromHold = Math.min(-amt, Math.max(0, taxHold))
             taxHold -= fromHold
             if (fromHold) moves.taxHold = -fromHold
@@ -1151,7 +1193,12 @@ export function computeFleet(input: FleetInput): FleetState {
         addShields(amt, moves)
         break
     }
-    record({ date: on, kind: t.kind, amount: amt, txId: t.id, moves })
+    if (!pair) return record({ date: on, kind: t.kind, amount: amt, txId: t.id, moves })
+    record({ date: on, kind: t.kind, amount: amt, txId: t.id, pending: true, moves })
+    toDock.count++
+    if (amt > 0) toDock.inflow += amt
+    else toDock.outflow -= amt
+    for (const v of Object.values(moves.goals ?? {})) if (v > 0) toDock.goals += v
   }
 
   if (started && start) {
@@ -1493,6 +1540,7 @@ export function computeFleet(input: FleetInput): FleetState {
       }),
     taxHold,
     deposit,
+    toDock,
     loot: { month: lootMonth, amount: loot },
     receivables: { house: household.owed, houseSince: household.since, members: household.members, loans: given, total: household.owed + sum(Object.values(given)) },
     household,

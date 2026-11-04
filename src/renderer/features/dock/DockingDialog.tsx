@@ -245,7 +245,15 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
               </Row>
             )}
             {over && <p className="text-down">Podział przekracza kwotę dostawy o {zl(-shields)}.</p>}
-            {!draft && <p className="text-[11px] text-dim">Propozycja według kolejności dokowania{e?.pool === 'goals' ? ' – pula Cele: prosto do celów, najpierw cele z prognozy ICTTJ' : e?.pool === 'tax' ? ' – pula Podatek: poza budżetem' : ''}.</p>}
+            {!draft && (
+              <p className="text-[11px] text-dim" data-testid="docking-proposal">
+                Propozycja według kolejności dokowania{e?.pool === 'goals' ? ' – pula Cele: prosto do celów, najpierw cele z prognozy ICTTJ' : e?.pool === 'tax' ? ' – pula Podatek: poza budżetem' : ''}
+                {/* The layers of the inflow's day (DO sp. 4): an earlier day's state, not today's. */}
+                {fleet && tx.date < fleet.today ? `, na stan warstw z dnia wpływu (${plDate(tx.date)})` : ''}.
+                {/* A pair not docked yet (AP-12): the engine counts it by the entry's pool already – the docking confirms it. */}
+                {d.state === 'pending' && e && d.transaction && !d.docking && ' Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.'}
+              </p>
+            )}
           </section>
         ) : (
           <section className={cx('border-l-2 pl-2', firewall ? 'border-down text-down' : 'border-up text-muted')} data-testid="docking-firewall">

@@ -45,6 +45,10 @@ paths:
   pierwszym, które przyszło do FI później (`cameIn` – dokowanie, inaczej operacja; łupy – `decidedAt`, `Ev.at`); czego
   cel wtedy nie ma – na koniec dnia (`short`). Kolejności operacji w dniu to nie zmienia; wydatek z celu i dostawa po
   przeniesieniu widzą cel jak ekran.
+- Para do zadokowania (T341, od 1.15.6): silnik nie czyta ICTTJ – pary niezadokowane dostaje jako
+  `FleetInput.pendingPairs` (`pendingPairsOf` z `deliveries`; w oknie `store/fleet.ts` `pendingPairsFor`, gra przez
+  `gameInputOf`) i liczy je jak dokowanie z pulą wpisu (`dockByPool`); rekord dokowania decyduje nad parą. Nowe wejście
+  silnika z ICTTJ dopisz do klucza (`keyOf`, `useEngineParts`, `engineParts` w `game.ts`).
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

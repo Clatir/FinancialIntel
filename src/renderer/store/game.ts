@@ -14,7 +14,7 @@ import { useDeliveries } from '../features/dock/state'
 import type { RecordEntry } from '@shared/api'
 import type { GameMonth, GameSettings } from '@shared/schema'
 import { addRecords, listOf, tooNewMonths, updateRecord, updateSettings, useData, writesInBackground } from './data'
-import { fleetNow, useToday } from './fleet'
+import { fleetNow, pendingPairsNow, useEngineParts, useToday } from './fleet'
 import { usePresence } from './presence'
 import { timed } from '../lib/timing'
 
@@ -22,9 +22,11 @@ type DataState = ReturnType<typeof useData.getState>
 type Records = DataState['records']
 type Fi = NonNullable<DataState['fi']>
 
+/** The game's input: the engine's – the pairs of ICTTJ payouts not docked yet by their pool too (AP-12). */
 export function gameInputOf(fi: Fi, records: Records): GameInput {
   return {
     settings: fi.settings,
+    pendingPairs: pendingPairsNow(),
     transactions: listOf(records.transactions),
     containers: listOf(records.containers),
     goals: listOf(records.goals),
@@ -116,14 +118,16 @@ const NO_GAME: Record<string, RecordEntry<GameMonth>> = {}
 export function useGameView(): { view: GameView; input: GameInput } | null {
   const today = useToday()
   const parts = useData(useShallow(gameParts))
+  // The engine's parts (AP-12): an ICTTJ payout read later pairs an operation – today's rating changes with the engine.
+  const engine = useEngineParts()
   return useMemo(() => {
     const { fi, records } = useData.getState()
     if (!fi) return null
     const input = gameInputOf(fi, records)
     // The covers of an overrun (F28) in the watch's log: the month plans are among what the game reads.
     return { view: timed('gra: widok', () => gameView(input.game, fi.settings.game, today, coversOf(input.months))), input }
-    // `parts` and `today` are the key (read inside from the store's state of now).
-  }, [parts, today])
+    // `parts`, `engine` and `today` are the key (read inside from the store's state of now).
+  }, [parts, engine, today])
 }
 
 /** The game's view and today's rating so far (the command's screen). */

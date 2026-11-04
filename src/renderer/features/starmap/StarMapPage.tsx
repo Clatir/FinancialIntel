@@ -13,7 +13,7 @@ import type { Goal } from '@shared/schema'
 import { useData, useEntryNewer, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
-import { useFleet } from '../../store/fleet'
+import { pendingPairsNow, useFleet } from '../../store/fleet'
 import { useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
@@ -44,7 +44,12 @@ export function StarMapPage() {
   // The payouts of the pool Cele apart (N42): they fill the ICTTJ goals first, whatever the list's order. Once per fleet
   // (W38): the pace walks the engine's log – the month's total from the same walk.
   const dockings = useRecordList('dockings')
-  const poolTx = useMemo(() => new Set(dockings.filter((d) => d.pool === 'goals').map((d) => d.transactionId)), [dockings])
+  // A pair of the pool Cele not docked yet too (AP-12): the engine puts it in the goals by the pool already. The pairs are
+  // the engine's input – a new fleet when they change.
+  const poolTx = useMemo(() => {
+    const pairs = [...pendingPairsNow()].filter(([, p]) => p.pool === 'goals').map(([id]) => id)
+    return new Set([...dockings.filter((d) => d.pool === 'goals').map((d) => d.transactionId), ...pairs])
+  }, [dockings, fleet])
   const pace = useMemo(() => (fleet ? goalPace(fleet.log, fleet.started ? fleet.start : null, fleet.month, poolTx) : null), [fleet, poolTx])
   const monthly = pace?.total ?? null
   const etas = useMemo(
@@ -76,6 +81,13 @@ export function StarMapPage() {
         <span className="text-[12px] text-muted">
           w celach <span className="num text-fg-strong" data-testid="starmap-total">{zl(total)}</span>
           {inArchived > 0 && <span className="text-dim"> (w tym zarchiwizowane {zl(inArchived)})</span>}
+          {/* ICTTJ payouts not docked yet (AP-12, MG sp. 1): in the goals by their pool already – said apart. */}
+          {fleet.toDock.goals > 0 && (
+            <span className="text-dim" title="Wypłaty z ICTTJ sparowane z bankiem, a jeszcze niezadokowane – liczone według puli wpisu; „Zadokuj” na Mostku potwierdza podział albo go zmienia" data-testid="starmap-to-dock">
+              {' '}
+              (w tym do zadokowania {zl(fleet.toDock.goals)})
+            </span>
+          )}
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">

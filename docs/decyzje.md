@@ -1193,6 +1193,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   niezadokowaną nie zamarza (`pendingPairDays`, `advanceGame` `hold`, liczone z bieżących dostaw – także po pominięciu
   wpisu czy nowym odczycie ICTTJ) – najwyżej 7 dni, potem zamarza jak dotąd. Silnik
   do dokowania nadal liczy parę zwykłą kolejnością (pula dopiero z rekordem dokowania – wariant „pełniej” bez zmian).
+  **Od 1.15.6 zdanie o silniku zastąpione przez T341** (para liczona od razu według puli wpisu – D99 pkt 2, AP-12);
+  wstrzymanie zamrażania zostaje.
 - **T164** Dni robocze (F42, zmienia T63): bez sobót, niedziel i polskich świąt ustawowych – stałe (1.01, 6.01, 1.05,
   3.05, 15.08, 1.11, 11.11, 25–26.12; 24.12 od 2025), Wielkanoc i poniedziałek wielkanocny, Zielone Świątki (+49 dni),
   Boże Ciało (+60) – `isPolishHoliday` / `isWorkingDay` (`calc/dates.ts`), tylko w oknie pary i 3 dniach roboczych D72.
@@ -2506,3 +2508,26 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   z godziną i bez niej mają w dniu inne porządki, a zadokowana później dostawa ma chwilę dokowania, nie operacji. Bez
   migracji (stany liczone): dni z przeniesieniem i wydatkiem z celu albo dostawą tego samego dnia przeliczą się inaczej
   (notatka wydania); zamrożone dni gry bez zmian.
+- **T341** Dostawa do zadokowania według puli wpisu (1.15.6, AP-12, AF-46, AF-48 – DO.5, DO sp. 1, MG sp. 1, PR sp. 2;
+  D99 pkt 2; **zastępuje zdanie T163 o silniku**): para wpisu ICTTJ z operacją banku jeszcze niezadokowana (lista dostaw
+  `deliveries` – stan „do zadokowania” z wpisem i operacją, bez dokowania; także para innej kwoty – B22, liczy się kwota
+  banku – i wpływ wpisany na Portfelu XTB – B69; bez wpisu pominiętego, sprzed startu, czekającego na import,
+  zadokowanego i wpływu z XTB bez wpisu) trafia do silnika jako `FleetInput.pendingPairs` (operacja → pula i dzień
+  wpisu, `pendingPairsOf`; okno liczy je z migawki ICTTJ tego komputera tymi samymi danymi co panel Dokowanie –
+  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama) i liczy się od razu tak, jak jej dokowanie z tą
+  pulą bez zmienionego podziału: Cele – prosto do celów (najpierw cele z prognozy ICTTJ; miesiąc celu bez ceny – dzień
+  wpisu, N46), Podatek – rezerwa na PIT-38 poza budżetem i bez przychodu (`taxOfDockings` z parami), zwrot z puli
+  Podatek – z rezerwy, bez firewalla (T65), pozostałe pule – kolejnością dokowania. Chwila pieniędzy dla celów –
+  utworzenie operacji (T128), więc „Zadokuj” bez zmian celów niczego nie przesuwa; dokowanie operacji decyduje nad parą
+  (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`, klucz pamięci `engineParts`); dzień z parą dalej
+  czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego naruszenia „dopłata wbrew firewallowi”. Granica:
+  komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego wpisu – liczy parę jak dotąd zwykłą kolejnością,
+  aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery czytające ten sam folder ICTTJ liczą to samo. Bez
+  nowych pól w danych i bez migracji; zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
+- **T342** „Do zadokowania” na ekranach (1.15.6, AP-12; MG sp. 1, PR sp. 2, DO sp. 4): silnik zlicza pary liczone
+  według puli wpisu (`FleetState.toDock` – ile, wpływ, wypływ, część w celach; zdarzenie dziennika z `pending`). Stan
+  okrętu na Mostku – wiersz „Do zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu
+  i wypływu (dymek: jak liczone i że „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do
+  zadokowania) – dokąd poszła?” i w rozbiciu „Dostawa do zadokowania (według puli wpisu ICTTJ)”; Mapa gwiezdna – „w celach
+  … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed dziś (DO sp.
+  4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.”.

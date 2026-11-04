@@ -358,6 +358,7 @@ const engineParts = (input: GameInput): unknown[] => [
   input.settings.orders,
   input.settings.game.seriousEnvelopePct,
   input.preStartTax,
+  input.pendingPairs,
   input.containers,
   input.goals,
   input.months,
