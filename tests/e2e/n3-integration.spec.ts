@@ -1,7 +1,7 @@
 /**
- * N3 (1.15.7) – one state, every screen (T390, T391): a partial salary this month (AP-13 – today's energy capped by the
- * month's) with last month's rent unpaid (AP-10 – still due): Mostek, Plan miesiąca, odprawa, Ładownia, Radar and
- * Wywiad (the course's rest of the month from the month's energy, „teraz” = Mostek – AP-18) say the same;
+ * N3 (1.15.7) – one state, every screen (T390–T392): a partial salary this month (AP-13 – today's energy capped by the
+ * month's) with last month's rent unpaid (AP-10 – still due): Mostek, Plan miesiąca, odprawa, Ładownia, Radar,
+ * Dowództwo and Wywiad (the course's rest of the month from the month's energy, „teraz” = Mostek – AP-18) say the same;
  * the hull at 99,4 % of its target counts as full on Mostek and in the course alike (AP-17).
  */
 import { mkdtempSync } from 'node:fs'
@@ -21,7 +21,7 @@ const FUN = '01KDEFCAT00000000000000600'
 const GIFTS = '01KDEFCAT00000000000000900'
 const RENT = '01K9N3J00000000000000000C1'
 
-test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładownia, Radar i Wywiad mówią to samo', async () => {
+test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładownia, Radar, Dowództwo i Wywiad mówią to samo', async () => {
   const { date: today, month } = warsawNow()
   const prev = addMonths(month, -1)
   const start = `${prev}-01`
@@ -71,6 +71,11 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
     const late = page.locator('[data-testid="radar-item"][data-kind="fixed"]').filter({ hasText: 'Czynsz' }).filter({ hasText: dm(lateDue) })
     await expect(late).toHaveAttribute('data-overdue', 'yes')
     await expect(late).toContainText(`po terminie ${daysBetween(lateDue, today)} dni`)
+
+    // Dowództwo: the order says what today's energy is – capped by the month's – and what breaks it (the allowance).
+    await page.keyboard.press('Control+8')
+    await expect(page.getByTestId('command-orders')).toContainText('wydatki dnia ≤ przydział dnia')
+    await expect(page.getByTestId('command-orders-daily')).toContainText('nie więcej niż zostało energii miesiąca')
 
     // Wywiad: „teraz” = Mostek; the month's rest – the envelopes 3 500 zł and the two rents 1 600 zł over the month's
     // energy (0 zł): 2 000 zł from the shields, 3 100 zł lacking; the course starts from it.

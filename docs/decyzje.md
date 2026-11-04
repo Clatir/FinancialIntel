@@ -2921,3 +2921,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w kursie i symulatorze (`Course.hullFull`, także „teraz” – T387) liczona `hullCountsFull`, jak Mostek („liczy się jako
   pełny”), firewall i „wolne do decyzji”. Bez zmian: raty celów z pensji na przełomie miesiąca kursu (T272) wymagają
   100 % kadłuba, dokowanie w kursie dopełnia go do 100 % (D13), osłony – bez tolerancji.
+- **T392** Dowództwo – rozkaz dziennego przydziału przy energii ograniczonej (1.15.7, N3 – integracja AP-13 × gra):
+  „wydatki dnia ≤ przydział dnia” (było „≤ energia dziś”) i opis: przydział dnia = koperty codzienne, które zostały,
+  ÷ dni do końca miesiąca (z dziś); energia dziś = przydział − wydane dziś, nie więcej niż zostało energii miesiąca
+  (T371); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera; `daily.left`, jak alarm i gra).
+  Bez zmian reguły gry.

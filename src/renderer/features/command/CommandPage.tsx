@@ -407,10 +407,12 @@ function OrdersPanel({ game, orders, shieldSalaries, readOnly }: { game: GameSet
   return (
     <Panel title="Rozkazy i progi" testId="command-orders">
       <div className="flex flex-col gap-1 text-[12px]">
-        {/* What the game judges (N29): the day's spending against today's energy – not the plain base. */}
-        <Order label="Dzienny przydział energii (wydatków dnia)" value="wydatki dnia ≤ energia dziś" />
-        <span className="text-[11px] text-dim">
-          Energia dziś = koperty codzienne, które zostały, ÷ dni do końca miesiąca (z dziś); podstawa – koperty codzienne ÷ dni miesiąca.
+        {/* What the game judges (N29): the day's spending against its allowance – not the plain base; today's energy as
+            shown is capped by the month's (AP-13, T371), the violation stays the allowance's (`daily.left` – T392). */}
+        <Order label="Dzienny przydział energii (wydatków dnia)" value="wydatki dnia ≤ przydział dnia" />
+        <span className="text-[11px] text-dim" data-testid="command-orders-daily">
+          Przydział dnia = koperty codzienne, które zostały, ÷ dni do końca miesiąca (z dziś); podstawa – koperty codzienne ÷ dni miesiąca. Energia dziś = przydział − wydane dziś, ale nie więcej niż
+          zostało energii miesiąca (przy pensji częściowej mniej, nawet 0,00 zł); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera).
         </span>
         {/* The minimum the engine applies (B84): never above the shields' target. */}
         {orders.minShieldSalaries > shieldSalaries && (
