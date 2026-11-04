@@ -19,21 +19,24 @@ interface CargoState {
 
 const EMPTY: CargoState = { list: NONE, days: NO_DAYS }
 
-let memo: { today: string; start: string | null; tanks: FleetState['tanks']; containers: unknown; transactions: unknown; covered: unknown; state: CargoState } | null = null
+let memo: { today: string; start: string | null; containers: unknown; transactions: unknown; covered: unknown; state: CargoState } | null = null
 
-/** Counted again only when what it reads changes (the screens and the notifier share it). */
+/**
+ * Counted again only when what it reads changes (the screens and the notifier share it) – the engine's day and start, not
+ * its every run: the state never reads the tanks (T393 – its own rule, `feeDuesOf`).
+ */
 function stateOf(fleet: FleetState | null, records: Pick<RecordMaps, 'containers' | 'transactions'>, covered: Readonly<Record<string, string>>): CargoState {
   if (!fleet) return EMPTY
   const m = memo
-  if (m && m.today === fleet.today && m.start === fleet.start && m.tanks === fleet.tanks && m.containers === records.containers && m.transactions === records.transactions && m.covered === covered) return m.state
+  if (m && m.today === fleet.today && m.start === fleet.start && m.containers === records.containers && m.transactions === records.transactions && m.covered === covered) return m.state
   const containers = listOf(records.containers)
   const transactions = listOf(records.transactions)
   const state = {
     // The engine's budget start: the dues of the months before this one followed from it (D99 pkt 3).
-    list: cargoStatuses({ containers, transactions, today: fleet.today, tanks: fleet.tanks, coveredTo: covered, start: fleet.start }),
+    list: cargoStatuses({ containers, transactions, today: fleet.today, coveredTo: covered, start: fleet.start }),
     days: cargoDays({ containers, transactions, today: fleet.today })
   }
-  memo = { today: fleet.today, start: fleet.start, tanks: fleet.tanks, containers: records.containers, transactions: records.transactions, covered, state }
+  memo = { today: fleet.today, start: fleet.start, containers: records.containers, transactions: records.transactions, covered, state }
   return state
 }
 

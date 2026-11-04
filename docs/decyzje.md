@@ -1012,7 +1012,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T128** Cele od chwili zmiany (D84 C1, B2): cel ma `activeFrom` (dodany w 1.4.2 albo później – bierze pieniądze od
   tej chwili), `past` (stan – kolejność, kwota, archiwizacja – sprzed każdej zmiany, z chwilą `until`) i `transfers`.
   Pieniądze idą do celów w stanie z chwili, gdy przyszły do FI (`cameIn`): utworzenie dokowania (nie jego ostatni zapis –
-  scalenie duplikatów czy synchronizacja nie przenoszą pieniędzy), bez dokowania utworzenie operacji, nigdy wcześniej niż
+  scalenie duplikatów czy synchronizacja nie przenoszą pieniędzy; dokowanie pary liczonej według puli – utworzenie jej
+  operacji, `countedFrom`, T363), bez dokowania utworzenie operacji, nigdy wcześniej niż
   początek jej dnia; łupy – chwila decyzji (`decidedAt`), dokowanie przy starcie – koniec dnia startu. Cel sprzed 1.4.2 bez
   historii działa jak wcześniej (`goalDecided`). Każda zmiana zostaje w historii, także kilka w krótkim czasie: kolejność
   jest wspólna dla wszystkich celów – stan wycięty z historii jednego celu remisowałby albo zamieniał go z innym (scalanie
@@ -1037,7 +1038,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   duplikatów (`bank-format`) łączy pary zaimportowane wcześniej, każdą w dniach importu drugiej strony.
 - **T135** Cykl opłaty okresowej (B55, B6): płatność zamyka cykl miesiąca terminu; przy cyklu ≥ 3 miesięcy także płatność
   w miesiącu przed terminem (np. 1. w poniedziałek) – gdy poprzedni cykl jest zamknięty (zapłacony albo sprzed śledzenia
-  opłaty: przed startem budżetu i jej `from`), inaczej to zaległa zapłata poprzedniego cyklu. Zapłacony cykl: bez rat,
+  opłaty: przed startem budżetu i jej `from`; płatności sprzed startu – sprzed pierwszej z nich, T345), inaczej to zaległa
+  zapłata poprzedniego cyklu. Zapłacony cykl: bez rat,
   zbiornik zbiera na następny, odprawa i Radar pokazują następny termin (`nextUnpaidOf`, `paidDue`).
 - **T136** Życie kontenera (B56): opłata okresowa dodana albo zmieniona na okresową w trakcie budżetu zbiera od bieżącego
   miesiąca (`from`); archiwizacja zapisuje `archivedAt` i liczy się do końca swojego miesiąca (zarchiwizowany sprzed 1.4.2
@@ -2394,7 +2396,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   komentarz: operacja wołająca kolejkę zakleszczyłaby folder); zamknięcie folderu (zmiana folderu, wyjście) czeka na
   usunięcie obecności najwyżej 5 s (`PRESENCE_CLEAR_MS`, `clearWithin`; wcześniej bez limitu za wszystkimi zapisami
   obecności folderu – wolny OneDrive wstrzymywał wyjście i otwarcie następnego folderu), potem usunięcie idzie dalej
-  w swojej kolejce i sprawdza trzymanie w swojej kolei – obecność nowszego otwarcia zostaje. Krok zapisu niesie sam błąd:
+  w swojej kolejce i sprawdza trzymanie w swojej kolei – obecność nowszego otwarcia zostaje. Po przeglądzie N2 wyjście
+  z aplikacji czeka na usunięcie w limicie wyjścia (`clearAtClose` z `quitBy` – koniec `QUIT_DRAIN_MS` po zapisach,
+  najmniej 5 s): proces kończy się zaraz potem, więc usunięcie „dalej w tle” nigdy się nie odbywało, plik zostawał,
+  a drugi komputer brał ten za uruchomiony do 11 min, choć log mówił, że usunięcie trwa; nieskończone w limicie – log
+  mówi, że plik obecności zostaje. Zmiana folderu – jak wyżej. Krok zapisu niesie sam błąd:
   `writeFileAtomic` odrzuca `AtomicWriteError { step, cause }` z kodem i komunikatem błędu fs, `atomicFailure` /
   `atomicStep` znajdują go także w błędzie opakowanym (`cause`) – wcześniej krok w `WeakMap` po obiekcie błędu i
   opakowanie go gubiło (folder naprawdę tylko do odczytu nierozpoznany). Telefon (lustro folderu) i testy bez
@@ -2463,7 +2469,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Ustawienia → Import („Pary oznaczone „to nie duplikat”: N”, „pokazuj znowu”) liczą i zapominają tylko pary panelu
   duplikatów (`isDuplicatePairKey` w `shared/import/duplicates.ts` – klucz `row:…` albo id pary): klucze `back:<id>`,
   a także `correction:` (B129), `transfer:` i `transfer-lone:` (F10) zostają – wcześniej liczone jako pary, a „pokazuj
-  znowu” przywracało meldunki operacji zostawionych i przywróconych świadomie oraz przelewów „zostaw tak”.
+  znowu” przywracało meldunki operacji zostawionych i przywróconych świadomie oraz przelewów „zostaw tak”. Po przeglądzie
+  N2 para panelu rozpoznana po tym, co panel zapisuje (`row:…` albo co najmniej dwa id połączone `|`), nie po kluczu bez
+  dwukropka; przedrostki innych meldunków w rejestrze `REPORT_KEY_PREFIXES` (nowy meldunek dopisuje tam swój) – goły id
+  przyszłego meldunku nie jest już parą. Zapisane klucze bez zmian.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
   rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
@@ -2542,10 +2551,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   dni i format liczy tylko dla importów kandydatów.
 - **T333** Kopia z innego konta a zakupy, które spłaca (przegląd N1 2; doprecyzowuje T321): usuwana kopia (AF-9) nigdy po
   cichu nie zabiera spłaty zakupów domownika (D91). Operacja tutaj, która nic nie wskazuje, przejmuje to, co kopia spłaca
-  (`covers`, dług startowy, `repaid`), przy tej samej decyzji albo przy innej, gdy jej pieniądze spłacają każdego
+  (`covers`, dług startowy, `repaid`), przy tej samej decyzji albo przy innej, gdy jej pieniądze są spłatą każdego
   domownika, którego spłacają pieniądze kopii (`takesCovers` – np. ta sama wpłata Mamy z częścią „w tym za Tata”; także
-  panel duplikatów). Gdy nie przejmie – wskazuje inne zakupy (`coversOtherwise`), ma inną decyzję bez pieniędzy tych
-  osób (zwykły wpływ) albo jej pieniądze nie są ich spłatą (ich przychód, zaliczka) – kopia nie jest zaznaczona,
+  panel duplikatów; po przeglądzie 2 N2 pieniądze kopii spłacają według planu księgi – `planOf`, także jawna zaliczka albo
+  przychód, które wskazują zakupy (AP-4, T350): wcześniej taka kopia 1.15.3–1.15.5 „nikogo nie spłacała”, nie była
+  zaznaczona, a zakup po usunięciu był znów do oddania). Gdy nie przejmie – wskazuje inne zakupy (`coversOtherwise`), ma
+  inną decyzję bez pieniędzy tych osób (zwykły wpływ) albo jej pieniądze nie spłacają ich tak, jak pieniądze kopii (spłatę
+  kopii – ich przychód albo zaliczka tutaj, które spłaciłyby je tylko wbrew temu, co mówią; jawną zaliczkę kopii ze
+  wskazanymi – spłata albo ta sama zaliczka tutaj wystarczy) – kopia nie jest zaznaczona,
   a podgląd mówi „po usunięciu spłacane przez nią zakupy będą znów do oddania” (`RowCopy.dropsCovers`, `copyNotes` –
   zaznaczona czy nie; przegląd N1 3: wcześniej „usunięta – …” przy kopii, której import nie usuwa); zaznaczona mimo to –
   operacja tutaj zostaje ze swoją decyzją, te zakupy znów do oddania (jak przy `otherCovers`). Kopia, której pieniądze
@@ -2602,15 +2615,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Wcześniej plik tylko do odczytu zostawał na zawsze ze starym `lastSeen` (próba i heartbeat tylko odnotowywały albo
   połykały błąd) – drugi komputer po 11 min uznawał ten za niedziałający i oba robiły zapisy w tle naraz. Bez komunikatu
   w oknie: przyczynę trwałą naprawia sam zapis, chwilowa mija; zostaje wpis w logu.
-  zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
-  w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak
-  – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
-  czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
-  tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
 - **T340** Przeniesienie środków celu w swojej chwili (1.15.6, AP-3, AF-4 K – MG.8, MG.10; **zastępuje „na koniec dnia”
   z T129**): wpis `transfers` {at, to, amount} silnik liczy w chwili `at` wśród zdarzeń jej dnia warszawskiego – przed
   pierwszym zdarzeniem dnia (w kolejności silnika), które przyszło do FI później niż przeniesienie (`cameIn`: utworzenie
-  dokowania, inaczej operacji, nie wcześniej niż początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
+  dokowania – dokowania pary liczonej według puli: utworzenie jej operacji, T363 –, inaczej operacji, nie wcześniej niż
+  początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
   przelewu – jej utworzenie), zawsze po początku dnia (start, przełom miesiąca, termin łupów); gdy tego dnia nic
   później nie przyszło – po ostatnim zdarzeniu dnia, przed następnym dniem. Przenosi `min(kwota, stan celu)`; czego cel
   w tej chwili silnika jeszcze nie ma (wpływ sprzed przeniesienia, który kolejność dnia liczy później – operacje bez
@@ -2630,37 +2639,57 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   banku – i wpływ wpisany na Portfelu XTB – B69; bez wpisu pominiętego, sprzed startu, czekającego na import,
   zadokowanego i wpływu z XTB bez wpisu) trafia do silnika jako `FleetInput.pendingPairs` (operacja → pula i dzień
   wpisu, `pendingPairsOf`; okno liczy je z migawki ICTTJ tego komputera tymi samymi danymi co panel Dokowanie –
-  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama) i liczy się od razu tak, jak jej dokowanie z tą
+  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama; po przeglądzie N2 z tej samej listy co panel –
+  jedna pamięć `store/deliveries.ts`, jedno przejście po operacjach) i liczy się od razu tak, jak jej dokowanie z tą
   pulą bez zmienionego podziału: Cele – prosto do celów (najpierw cele z prognozy ICTTJ; miesiąc celu bez ceny – dzień
   wpisu, N46), Podatek – rezerwa na PIT-38 poza budżetem i bez przychodu (`taxOfDockings` z parami), zwrot z puli
   Podatek – z rezerwy, bez firewalla (T65), pozostałe pule – kolejnością dokowania. Chwila pieniędzy dla celów –
-  utworzenie operacji (T128), więc „Zadokuj” bez zmian celów niczego nie przesuwa; dokowanie operacji decyduje nad parą
-  (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`, klucz pamięci `engineParts`); dzień z parą dalej
-  czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego naruszenia „dopłata wbrew firewallowi”. Granica:
-  komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego wpisu – liczy parę jak dotąd zwykłą kolejnością,
-  aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery czytające ten sam folder ICTTJ liczą to samo. Bez
-  nowych pól w danych i bez migracji; zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
+  utworzenie operacji (T128), także po „Zadokuj” (`countedFrom`, T363), więc „Zadokuj” bez zmienionego podziału niczego
+  nie przesuwa; dokowanie operacji decyduje nad parą (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`,
+  klucz pamięci `engineParts`); dzień z parą dalej czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego
+  naruszenia „dopłata wbrew firewallowi”. Granica: komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego
+  wpisu – liczy parę jak dotąd zwykłą kolejnością, aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery
+  czytające ten sam folder ICTTJ liczą to samo. Bez migracji (jedyne nowe pole – `countedFrom` dokowania, T363);
+  zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
 - **T342** „Do zadokowania” na ekranach (1.15.6, AP-12; MG sp. 1, PR sp. 2, DO sp. 4): silnik zlicza pary liczone
-  według puli wpisu (`FleetState.toDock` – ile, wpływ, wypływ, część w celach; zdarzenie dziennika z `pending`). Stan
-  okrętu na Mostku – wiersz „Do zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu
-  i wypływu (dymek: jak liczone i że „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do
-  zadokowania) – dokąd poszła?” i w rozbiciu „Dostawa do zadokowania (według puli wpisu ICTTJ)”; Mapa gwiezdna – „w celach
-  … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed dziś (DO sp.
-  4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.”.
+  według puli wpisu (`FleetState.toDock` – ile, wpływ i wypływ liczone według puli – wpływ wpisany na Portfelu XTB bez
+  części domownika, B69, i bez tego, co jego część spłaty pożyczki oddała osłonom, D100 – nadwyżka ponad dług dokuje
+  z resztą (przegląd 2 N2: wcześniej „wpływ” liczył też część pożyczki, o tyle więcej, niż dokuje silnik) –, część wciąż
+  w celach; zdarzenie dziennika z `pending`). Część w celach (przegląd N2 5):
+  pieniądze pary wychodzą z celu ostatnie (wydatek z celu i przeniesienie biorą najpierw jego inne pieniądze),
+  przeniesienie do innego celu zabiera je ze sobą, do osłon – wychodzą z celów; nigdy więcej, niż cele mają (wcześniej
+  wszystko, co para włożyła – „w celach 400 zł (w tym do zadokowania 1 000 zł)”). Stan okrętu na Mostku – wiersz „Do
+  zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu i wypływu (dymek: jak liczone i że
+  „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do zadokowania) – dokąd poszła?” i w rozbiciu
+  „Dostawa do zadokowania (według puli wpisu ICTTJ)” – także wpływ wpisany na Portfelu XTB (B69; wcześniej pominięty –
+  brany tylko rodzaj XTB), część domownika osobno („Domownicy – spłata i zaliczka”, nie w osłonach), część spłaty
+  pożyczki też („Spłata pożyczki (do osłon)” – przegląd 2 N2; wcześniej w „Osłony”, jakby z puli); Mapa gwiezdna –
+  „w celach … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed
+  dziś (DO sp. 4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten
+  podział.” (prawda także po zmianie celów – T363).
 - **T345** Opłata okresowa zapłacona przed startem (AP-5, AF-12, KR.16; stosuje T135 także przed startem, T45 / T220 bez
   zmian): połączona z kontenerem płatność sprzed startu budżetu nie przechodzi przez przebieg (pieniądze wyszły przed
   saldem otwarcia), ale zamyka swój cykl tak samo jak płatność w przebiegu – `paidBeforeStart` przed przebiegiem silnika
   (`paidCycleOf`: miesiąc terminu, przy cyklu ≥ 3 także miesiąc przed terminem, gdy poprzedni zamknięty; płatność w życiu
-  opłaty – `activeIn`; części paragonu jak w przebiegu, bez części celu i „do zwrotu”). W praktyce to płatności z miesiąca
-  startu (od jego 1. dnia łączy je kreator), przy cyklu ≥ 3 też z miesiąca przed nim, gdy były połączone wcześniej.
+  opłaty – `activeIn`; części paragonu jak w przebiegu, tylko wydatek – od 1.15.7 `paymentsIndex`, także z celu i „do
+  zwrotu”, T393).
+  Przed startem opłata jest śledzona od pierwszej widzianej płatności (przegląd N2 4): cykl przed nią zamknięty (nie
+  śledzony – zapłata w miesiącu przed terminem jest wcześniejszą następnego), późniejszy – tylko zapłacony; spóźniona
+  zapłata zamyka poprzedni cykl (T135), nigdy następny (wcześniej każdy cykl sprzed startu był zamknięty: luty zapłacony
+  28.04 przy starcie 5.05 zamykał maj – bez odkładki, a płatność za maj z energii z alarmem „za mało w zbiorniku”). W
+  praktyce to płatności z miesiąca startu (od jego 1. dnia łączy je kreator), przy cyklu ≥ 3 też z miesiąca przed nim,
+  gdy były połączone wcześniej.
   Zapłacony cykl nie ma rat: miesiąc startu nie odkłada opłaty drugi raz (energia = pensja pomniejszona według T45 minus
   raty innych zbiorników), zbiornik zbiera na następny termin od miesiąca po zapłaconym cyklu, ma `paidDue` – odprawa
   i Radar pokazują następny termin (bez „Asteroida … dziś”), Ładownia „zapłacone”. Rata zbiornika – jedna funkcja silnika,
   kreatora i planu (T346): `tankWant` (zapłacony cykl 0, inaczej `sinkingInstallment`). Kreator (krok 4 „Odkładki w tym
-  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z dniami płatności: kontenera – połączonych, propozycji – tego
-  odbiorcy od 1. dnia miesiąca (połączy je start); opłata poza życiem w miesiącu startu – bez raty, jak w silniku. Notka
-  kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone przed startem nie
-  odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
+  miesiącu”, krok 6 „do planu”) liczy przez `startTanks` z płatnościami tą samą regułą co silnik i Ładownia
+  (`startPaidDays` – `paymentsIndex`, T393; przegląd N2 3: wcześniej kreator brał indeks Ładowni, a silnik nie liczył
+  płatności z celu ani „do zwrotu” – kreator 0 zł, silnik cała rata): kontenera – połączonych, propozycji – tego
+  odbiorcy od 1. dnia miesiąca przed miesiącem startu (T379; połączy je start), z kwotami – cykle regułą Ładowni
+  (`paidBeforeStart` → `paidDuesOf`, T393; scalenie N2 z N3); opłata poza życiem w miesiącu startu – bez raty, jak
+  w silniku. Notka kroku 4, gdy odkładki miesiąca są niższe niż później przez cykl zapłacony: „… – opłaty zapłacone
+  przed startem nie odkładają się drugi raz; potem ok. …” (zamiast „zbiorniki nadrabiają do terminów opłat”). Płatność
   z dnia startu jest w przebiegu jak dotąd. Bez migracji: warstwy liczone z rekordów – pierwszy miesiąc przeliczy się sam
   (energia wyższa o opłatę odkładaną drugi raz, zbiornik niższy); zamrożone dni gry zostają.
 - **T346** Plan miesiąca = silnik (AP-11, AF-44 / LA.8 = C17, AF-52 / C20 – D99 pkt 9, W5; doprecyzowuje T29, F15):
@@ -2683,7 +2712,147 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w trakcie spłaty (`ensureLoanContainer`) – z tego, co zostało z rat. Ładownia pokazuje kwotę i część miesięczną
   bieżącego miesiąca (`amountIn`, `monthlyWeight` z miesiącem), masa ładunku i Plan – miesiąca, więc Ładownia, Plan
   i Radar mówią to samo. Istniejące kontenery bez zmian (grosz w ostatnim miesiącu – bez migracji). Addytywnie (pole
-  `past` już jest), bez `SCHEMA_VERSION`.
+  `past` już jest), bez `SCHEMA_VERSION`. Po przeglądzie N2: „Kwota” zmieniona w Ładowni liczy się od tego miesiąca
+  także przy historii sięgającej dalej (`pastAfterChange` kończy ją przed tym miesiącem, poprzedni zostaje przy swojej
+  racie – wcześniej historia zostawała, a zmiana działała dopiero po ostatnim jej wpisie); kreator startu liczy Ładownię
+  pierwszego miesiąca kwotą tego miesiąca (`amountIn`), nie ostatniej raty. „Termin … – kwota” i „Zapłacone (…)”
+  w Ładowni kontenera raty nie dotyczą (`cargoStatuses` pomija kontenery pożyczki – bez zmian).
+- **T350** Jeden plan części wpłaty domownika i naprawa zapisanych „zaliczek” przy odczycie (AP-4, AF-8 K, MG sp. 6; D99 S4):
+  `incomeShares` mówi, czyje są pieniądze, `inflowPlanOf` – co robią: `debt` (spłata długu – wskazane, inaczej jak
+  `assignFrom`; reszta wg `advance`), `named` (jawny niezależny przychód albo zaliczka na przyszłość, które mimo to wskazują
+  zakupy – `covers`, dług startowy: spłacają tylko wskazane, także późniejsze jako rezerwacja D94, nigdy najstarsze, nic nie
+  czeka na przypisanie; reszta – ich przychód / zaliczka), `none` (jawny rodzaj bez wskazanych – omija dług, jak 1.15.3).
+  Zapisane `inflowKind: 'advance'` z wskazanym zakupem (opcja „reszta jako zaliczka” 1.15.3–1.15.5 i wskazanie z wersji
+  sprzed 1.15.3) spłacają go deterministycznie, bez przepisywania rekordów – każdy komputer liczy to samo; `inflowKind:
+  'income'` ze wskazanym tak samo (ten sam sprzeczny zapis starszej wersji: wskazanie zakupu = ta wpłata go spłaca).
+  Po przeglądzie 2 N2 plan części czyta jedno `planOf`: wskazane zakupy są jawnego rodzaju (`named`) tylko wtedy, gdy ta
+  osoba nie ma w tej samej operacji części „spłata” – inaczej należą do niej, a część jawna omija dług (zaliczka rozbita
+  przez „Spłać” na „spłatę” i zaliczkę – T352: wskazany później zakup, np. „Przypisz” z meldunku, spłaciłaby też
+  zaliczka). `repaymentShares` bez zmian – edytor nie proponuje jawnym rodzajom nowych zakupów; spłacający w kopiach
+  (`repayersOf`, `copies.ts`) jak księga (`planOf` – także jawny rodzaj ze wskazanymi; spłaty kopii nie zastąpi jawny
+  rodzaj operacji tutaj – T333). Addytywnie, bez `SCHEMA_VERSION`.
+  Uwaga edytora wpłaty „poza wskazanymi wcześniej zakupami: te spłaca” – jak księga (`namesFor`):
+  wskazany zakup albo dług startowy tej osoby, przy `coversOpeningMembers` – tylko wskazanych (`namesPurchases`; przegląd
+  N2 2.10: przedtem zaliczka A z `coversOpeningMembers` [B] mówiła, że spłaca).
+- **T351** „reszta jako zaliczka” w imporcie = spłata, reszta do depozytu (AP-4, AF-8, IM.23, IM sp. 4): opcja
+  `household:<osoba>:advance` daje `inflowKind: 'repay'` i `advance: true` (wcześniej `inflowKind: 'advance'` – reguła
+  uczyła się „całość jako zaliczka”); jawne rodzaje to osobne opcje `:all-income` i `:all-advance`; `optionOf`
+  (`memberMoneyOf`) rozróżnia wszystkie cztery. Jedna nazwa wyboru w imporcie (`MEMBER_MONEY_TEXT`: „spłata, reszta jako
+  przychód / zaliczka”, „niezależny przychód (bez spłaty)”, „zaliczka na przyszłość (bez spłaty)”) – lista, temat, podgląd,
+  tekst reguły; przełącznik „spłata / niezależny przychód / zaliczka” obok listy usunięty. Jawny rodzaj przy długu osoby –
+  uwaga w imporcie (`skipsDebtText`). Reguła „spłata” (`'repay'` albo brak) bierze resztę z ustawienia osoby (D80 b; od
+  1.15.3 dawała zawsze przychód) – reguła reszty nie zapamiętuje, więc jej edytor pokazuje tylko resztę z ustawienia osoby
+  (`restNotOfRule`, `choiceOfRule`). Na „zaliczka czy przychód?” odpowiada tylko wybór „spłata” (`inflowVotes`).
+  Po scaleniu z T336 (N2): zmiana w liście między wyborami tej samej osoby (cel wpłaty i reszta – dawniej przełącznik
+  obok listy) zostawia linie „w tym za” i części pożyczki jak wpisane (`listChoice`) – także w temacie marek, w każdej
+  marce; inny rodzaj albo inna osoba – bez linii (`choiceFor`, jak dotąd).
+- **T352** Meldunek „Zaliczki przy długu” (AP-4, naprawa danych): silnik zbiera `HouseholdLedger.skipped` – części
+  `inflowKind: 'advance'`, które przy długu osoby nic nie spłaciły ani nie zarezerwowały (od ostatniego startu sald);
+  meldunek na osobę, dopóki ma oddać (`skippedDebtsOf`) i tylko o tym, co z tamtego długu jest nadal do oddania przez nią
+  (przegląd 2 N2 – `SkippedDebt.open`): najmniej z części, długu wtedy minus to, co osoba spłaciła po niej, jej wolnej
+  zaliczki od tej chwili w najniższym punkcie i długu teraz, po kolei jej takich wpłat (wcześniejsza pierwsza); dług
+  spłacony później inną wpłatą albo zaliczka zużyta na późniejsze zakupy – nic (wcześniej: zaliczka 100 zł przy długu
+  100 zł, potem spłata 100 zł, zakup 150 zł – „ma oddać 50 zł. Spłacić?”, a „Spłać” spłacała dług z dnia zaliczki, spłata
+  stawała się przychodem 100 zł, zakup cały do oddania: dług 50 → 150 zł). Gdy spłaci mniej, niż mogłyby wpłaty i dług,
+  meldunek mówi ile („… – ma oddać 150,00 zł; ta wpłata spłaci z tego 50,00 zł. Spłacić?”). „Spłać” to jawna akcja
+  z „Cofnij” (`repayingAdvancesOf`, po kolei, każda wobec księgi ze zmienionymi wcześniejszymi) i spłaca tylko to: część,
+  która spłaci wszystko, co mogła wtedy – „spłata, reszta jako zaliczka” (`repayingAdvance`); inaczej linia „spłata” tej
+  kwoty tej osoby, reszta zostaje jawną zaliczką (wskazane zakupy są wtedy części „spłata” – T350); pewne zakupy wskazane
+  jak w imporcie (`linkRepayments`) tylko, gdy osoba nic nie spłaciła po tej wpłacie (inaczej mogłyby być zakupami
+  późniejszej spłaty) – reszta czeka na przypisanie (D91 a); „Cofnij” przywraca tylko wpisy niezmienione od tamtej pory.
+  „zostaw” (wpłaty z meldunku) – klucz
+  `advanceKept:<operacja>:<osoba>` w `settings.import.notDuplicates` (z „Cofnij”); kolejna taka wpłata – pyta znowu (jawna
+  zaliczka wolno omijać dług – D99 S4, meldunek tylko pyta). Klucze AP-4 nie są parami „to nie duplikat”
+  (`isDuplicatePairKey`).
+- **T353** Reguły z „zaliczką na przyszłość” do przeglądu (AP-4): audyt reguł (`review`) – reguły wpłaty domownika
+  z `inflowKind: 'advance'`, poza słowami kluczowymi z Operacji (tam „zaliczka” obok „spłata zakupów” była wyborem
+  jawnym), w „niespójne” po jednej, z „do przeglądu”: „Zmień na spłatę” (`repayingRule` – reguła „spłata”, reszta
+  z ustawienia osoby; `editRule` z „Cofnij”) albo „zostaw zaliczkę na przyszłość” (klucz `advanceRule:<reguła>`). Do tego
+  czasu import z taką regułą pokazuje jej jawną nazwę i uwagę o długu. Bez migracji reguł. Audyt czyta z
+  `notDuplicates` tylko te klucze (`advanceRulesKept` – tekst, raz na mapę): inne „zostaw” i „to nie duplikat” nie liczą
+  audytu wszystkich operacji od nowa (przegląd N2 2.14).
+- **T354** Saldo osoby w obie strony (AF-16, AP-4): Mostek, Radar, Ustawienia → Domownicy i edytor wpłaty pokazują naraz
+  „ma oddać” i „zaliczka” (`balanceText`), gdy osoba ma oba (jawna zaliczka może omijać dług – D99 S4; rezerwacja D94) –
+  depozyt domowników to suma tego, co widać przy osobach.
+- **T355** Spłata pożyczki częścią wpłaty – zapis i silnik (D100 (2); doprecyzowuje T70, T350): część dowolnego wpływu
+  (`kind: 'income'`) spłacająca pożyczkę udzieloną to linia podziału z `loanId` bez domownika (`Split.loanId`,
+  `memberId: null`) – pieniądze pożyczki, kimkolwiek jest nadawca; spłata całą wpłatą zostaje operacją rodzaju
+  „Pożyczka” z `loanId` (import „Zwrot pożyczki – X”, Radar „spłata otrzymana”) – bez zmian. `incomeShares` daje linię
+  jako część z `loanId` (ucięta kwotą wpłaty w kolejności linii, jak części domowników); księga domowników jej nie czyta
+  (`repaymentShares`, `repayers` pomijają ją jawnie), reszta wpłaty jak dotąd – spłata domownika, depozyt albo przychód.
+  Jedno czytanie spłat pożyczki – `loanParts` / `forEachLoanOperation` (stan pożyczki, wartość netto F24, filtr Operacji
+  `loanIdsOf`); silnik (`fleet.ts` `repayLoanParts`): do osłon do wysokości długu (kwota pożyczki − spłacone, spłaty
+  sprzed startu też – jak spłata całością), nadwyżka dokuje jako przychód z resztą wpłaty (T70). Ile każdej spłaty idzie
+  na dług, liczy jedno `loanBacksOf` (`calc/loans.ts`): po kolei operacji przez całą historię do dziś – także spłaty
+  w saldzie otwarcia konta po starcie budżetu (nie w przebiegu, ale spłacone; przegląd 2 N2: wcześniej tylko sprzed
+  startu, więc późniejsza spłata wracała do osłon cała zamiast w części jako nadwyżka) – silnik i statystyki czytają tę
+  samą liczbę. Linia pożyczki nieznanej albo wziętej – przychód (tak czyta ją starsza wersja). Statystyki przychodów
+  (przegląd 2 N2, AF-5 – stosuje T70; wcześniej spłata pożyczki nigdy nie była przychodem, a linia każdej pożyczki była
+  odejmowana): spłata pożyczki udzielonej do wysokości długu nie jest przychodem, całością ani częścią; nadwyżka ponad dług
+  (odsetki) jest – jak dokuje silnik, także sprzed startu (historia); linia pożyczki nieznanej albo wziętej – przychód, jak
+  w silniku; kontekst bez silnika (`plainIncomeContext` – domyślny raportów) bez podanych pożyczek nie zna długu: linia
+  pożyczki nie jest wtedy przychodem (przegląd 3 N2 – wcześniej domyślnie liczona jako przychód); tagi (F17): to nie zwrot
+  pieniędzy na wyprawie. Lista
+  Operacji mówi „spłata pożyczki: X”; pożyczki z taką linią nie da się usunąć (linia stałaby się przychodem) – tylko
+  zamknąć. Kopia z innego konta: linia pożyczki należy do decyzji (`copies.ts` – inna decyzja niż bez niej, operacja bez
+  decyzji ją przejmuje). Addytywnie, bez `SCHEMA_VERSION`: starsza wersja czyta linię jako „mój przychód” (dokuje,
+  pożyczka u niej zostaje otwarta).
+- **T356** Kto zapłacił (D100 (2)): `LoanState.payments` – każda spłata pożyczki udzielonej (całością i częścią) z nadawcą
+  operacji (`memberId` wpłaty domownika, inaczej kontrahent); `loanPayers` – po osobie z sumą, w kolejności pierwszej
+  wpłaty: domownik po imieniu (jego wpłata albo jego nazwa w banku – `memberOf`), reszta po nazwie z operacji. Wiersz
+  pożyczki na Radarze: „kto zapłacił: Mama 200,00 zł · EWA KOWALSKA 250,00 zł”, gdy zapłacił ktoś inny niż
+  pożyczkobiorca (pożyczkobiorca – wszystkie słowa kontrahenta pożyczki w nazwie nadawcy, jak `loanFor`, wspólne `nameIn`);
+  same spłaty pożyczkobiorcy – bez tej linii (mówi to „oddane … z …”). Po przeglądzie 2 N2 pożyczkobiorcy jest też spłata
+  bez nadawcy (własna „Spłata” Radaru kopiuje kontrahenta pożyczki – pusty, gdy go nie ma), a przy pożyczce bez
+  kontrahenta – jej własne spłaty (rodzaj „Pożyczka”, np. „Zwrot pożyczki” z banku: nikogo nie da się od nich odróżnić),
+  część wpłaty – nadawcy (wcześniej każda pożyczka bez kontrahenta miała „kto zapłacił: bez nazwy …”); jego spłata bez
+  nazwy – po kontrahencie pożyczki, inaczej „pożyczkobiorca”.
+- **T357** Spłata pożyczki częścią w imporcie (D100 (2); doprecyzowuje T327, T328): linia „w tym spłata pożyczki” decyzji
+  wpływu – pieniędzy domownika albo zwykłego przychodu (`SharePart.loanId`, `memberId` '') – w wierszu, grupie i temacie.
+  W `rowShares` pożyczka stoi za domownika pod kluczem `loan:<id>` (`loanKey`, porównania linii po `shareWho`): jej dług
+  to kwota otwarta teraz (silnik – `owedWithFile(…, loans)`, `sharesView(…, fleet.loans)` wszędzie tak samo), jej
+  „własne pieniądze” w pliku – wiersze spłaty całością tej pożyczki. Własna linia wiersza – jak wpisana (nadwyżka to
+  przychód, T70); linia grupy i tematu – razem dla pożyczki, po kolei od najstarszej wpłaty, nigdy ponad dług pomniejszony
+  o spłaty całością z pliku i własne linie wierszy; pożyczka zamknięta – bez części. Nowa linia startuje od tego, co
+  pożyczka ma jeszcze do spłaty, najwyżej to, co zostało we wpłatach – zawsze pożyczki jeszcze nienazwanej w tej decyzji
+  (`loanToName`; wszystkie nazwane – bez przycisku, przegląd N2 2.11). Wiersz wpływu bez linii przy otwartej pożyczce
+  pokazuje tylko „+ w tym spłata pożyczki” i czyta rozkład pliku dopiero przy kliknięciu (`rowPartsOf` 'add',
+  `RowLoanPart`; przegląd N2 2.13 – setki wierszy pensji). Decyzja zbiorcza nie zmienia decyzji z częścią
+  pożyczki (AP-6, `bulkKeeps` – tylko spłata całością tej samej pożyczki), „+ domownik” przy niej się nie pojawia, słowo
+  kluczowe z niej się nie uczy. Spłata całością – jak dotąd („Zwrot pożyczki – X (Radar)”, każda otwarta pożyczka przy
+  każdym wpływie). W temacie marek z liniami ('brands', T336) linie pożyczki jak linie domowników: zostają w markach
+  (wiersz tematu: „w tym spłata pożyczki – ustawiona w markach”, `linesInBrands`), uwagi przy każdej marce z jej klucza
+  (`lineSpreads` – dług pożyczki pod `loanKey`), nic nie sumowane.
+- **T358** Reguła importu ze spłatą pożyczki (D100 (2); dla pożyczki z Radaru zmienia N14 / T98, doprecyzowuje T325):
+  reguła może nazwać pożyczkę udzieloną – `loanId` przy regule rodzaju „Pożyczka” (cała wpłata) albo `loanId` +
+  `loanAmount` przy regule wpływu (ta część każdej wpłaty, reszta jak mówi reguła). Działa tylko, gdy pożyczka jest
+  otwarta i udzielona do dnia wiersza (`ruleLoanFor` – warunki `loanFor`); inaczej reguła spłaty całością ustępuje (jak
+  bez reguły), a część reguły odpada. Część z reguły to propozycja wiersza: liczona dla każdego wiersza osobno, nigdy
+  ponad dług (po kolei z innymi częściami pliku) – także w decyzji grupy albo tematu, która ją zostawia (linia z `each`:
+  zmiana w liście w obrębie tej samej osoby – `listChoice`; uwaga przy linii „z każdej wpłaty … zł”; przegląd N2 2.2:
+  przedtem np. „reszta jako zaliczka” robiła z 200 zł każdej z 3 wpłat 200 zł razem); zmieniona przy grupie (kwota albo
+  pożyczka linii) staje się decyzją grupy (razem dla grupy – T328). Reguła uczy się części tylko jako kwoty każdej wpłaty
+  – T368.
+  Reguła z częścią pożyczki pożyczkobiorcy nie ustępuje rozpoznaniu tej pożyczki (czynsz i rata w jednym przelewie),
+  reguła spłaty całością nie ustępuje pieniądzom domownika (użytkownik powiedział, że jego pieniądze spłacają pożyczkę);
+  dawna reguła pożyczki bez `loanId` – jak dotąd (propozycja, ustępuje domownikowi). Uczy się tylko na życzenie:
+  „zapamiętaj” przy decyzji ze spłatą pożyczki (całością albo częścią) wybranej w miejsce innej zaczyna wyłączone
+  (`remembersByDefault`, także decyzja zbiorcza), a decyzja bez spłaty pożyczki wybrana w miejsce takiej wraca do tego,
+  co użytkownik miał przed wyborem pożyczki (`rememberKept`, przegląd N2 3.1: jego własne „nie” zostaje), bez tego – do
+  domyślnego włączonego (przegląd N2 2.9: „nie” było pożyczki, nie użytkownika). Edytor reguły w Ustawieniach oferuje dla wpływów „Zwrot pożyczki – X”
+  otwartych pożyczek i jedną część pożyczki (części domowników reguła nie trzyma – nie pokazane). Audyt reguł bez zmian
+  (reguły pożyczki poza „bez trafień” i „Zastosuj do historii”). Addytywnie: starsza wersja czyta regułę pożyczki jako
+  propozycję sprzed 1.5.1, części nie widzi. „zapamiętaj” liczy jedno księgowanie decyzji grup (`groupsDecided`, T336):
+  decyzja grupy, zbiorcza (każda grupa według tego, co pokazywała) i zmiana w temacie marek.
+- **T359** Szybki wpis i edytor Operacji (D100 (2)): w szybkim wpisie przy wpływie „Spłata pożyczki” – otwarta pożyczka
+  udzielona z listy (`QuickData.loans` z tym, co zostało) i kwota (pusta = to, co pożyczka ma do spłaty, najwyżej reszta
+  wpłaty po częściach domowników; wyczyszczone pole wraca do niej – `typedLoan`, przegląd N2 2.12); zapis – linia pożyczki wpływu, także na całą kwotę (wpłata zostaje wpływem z nadawcą –
+  domownikiem albo nazwą, więc „kto zapłacił” go zna); okno odmawia, gdy części przekraczają kwotę albo pożyczka została
+  zamknięta lub usunięta w międzyczasie (lista okna starsza – jak przy domownikach, B125). Edytor wpływu: „+ spłata
+  pożyczki” (linia z pierwszą otwartą pożyczką jeszcze nienazwaną – `loanToName`; wszystkie nazwane – bez przycisku, przegląd
+  N2 2.11: druga linia tej samej pożyczki, każda porównana z całym długiem, ukrywała nadwyżkę; kwota – to, co ma do
+  spłaty, najwyżej reszta), pożyczki w liście „czyja
+  część” obok domowników, przy linii „do spłaty … zł” i nadwyżka jako przychód (dług bez tej operacji – `openWithout`).
 - **T360** „Wycofaj dokowanie” (AP-9, AF-7 / MO.29 / DO.7; realizuje D95 N-PC-2, uzupełnia B15, B17, B69): przycisk
   w oknie zadokowanej dostawy (`docking-undock`) i „wycofaj” w jej wierszu na Mostku (`docking-row-undock`, obok
   przycisku wiersza, nie w nim). Zabiera (`calc/undock.ts` `undockingOf`): dokowanie dostawy i nadmiarowe dokowania
@@ -2693,7 +2862,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wypłata XTB i paruje się z wpisem znowu; dawnej kategorii nie odtwarzamy – „Cofnij” dokowania jej nie zna po 6 s)
   i operacja XTB z edytora. Dostawa wraca do „do zadokowania” (para z banku, Portfel XTB) albo „czeka na import”;
   okno się zamyka, toast z „Cofnij” (8 s) dodaje z powrotem te same rekordy (pominięte, gdy w międzyczasie zadokowano
-  ponownie – te same id). Rekord nowszej wersji (B67) – odmowa w całości, bez wycofania po połowie. Folder ICTTJ tylko
+  ponownie – te same id, a po przeglądzie N2 także inne dokowanie tego wpisu albo tej operacji: dokowanie bez stałego id –
+  wpływ z XTB bez wpisu, sprzed B17 – dodawało się obok nowego, dwa rekordy na jedną operację). Rekord nowszej wersji (B67) – odmowa w całości, bez wycofania po połowie. Folder ICTTJ tylko
   czytany. Zamrożone dni gry bez zmian (jak przy edycji operacji). Bez zmian formatu.
 - **T361** Usuwanie kategorii (AP-9, AF-37 / US.6; realizuje D95 N-PC-7): „usuń” przy kategorii głównej i ikona kosza
   przy podkategorii (Ustawienia → Kategorie); kategoria główna znika razem z podkategoriami. Tylko gdy nic jej nie używa
@@ -2705,13 +2875,57 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (8 s) wstawia kategorie na ich miejsca w liście. Paczki importu (`imports/`) i historia `.history/` nie są
   sprawdzane: wersja przywrócona stamtąd z usuniętą kategorią pokazuje „(usunięta kategoria)” (`categoryIndex.label`),
   jak zmiana z drugiego komputera sprzed synchronizacji. Seed (`settings.seeded`) jej nie przywraca. Bez zmian formatu.
+  Po przeglądzie N2 w użyciu także w decyzjach otwartego pliku importu (motywy, grupy, wiersze – „1 decyzja otwartego
+  importu”): wcześniej usuwała się, a import zapisywał operacje z kategorią spoza drzewa.
 - **T362** Zmiana rodzaju a cel i Ładownia (N-PC-4 z D95 – w 1.15.2 bez kodu): `withKind` zostawia `containerId`
   tylko wydatkowi (jak `goalId`, T24) – na przelewie / pożyczce / XTB powiązanie było ukryte: silnik go nie czytał,
   a Ładownia (`paymentsIndex`) brała taki przelew za zapłatę kontenera. Edytor operacji przy zmianie rodzaju, która
   odpina cel albo kontener (operacji albo części paragonu – `unlinkedBy`), mówi to toastem „Rodzaj „Przelew własny”
-  nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
-  dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
-  przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
+  nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (pola, które zmiana
+  ustawiła, wracają, dopóki operacja ma nowy rodzaj – `kindUndone`; pole zmienione od tej pory zostaje, po przeglądzie N2:
+  wcześniej cały rekord sprzed zmiany cofał też kwotę czy kontrahenta wpisane w ciągu 8 s). Toast po zapisie zmiany –
+  także po pytaniu o potwierdzone saldo i „Zmień mimo to” (`features/operations/state.ts` `changeKind` /
+  `updateOperation`; wcześniej wtedy bez komunikatu i bez „Cofnij”). Zmiana kategorii nie rusza celu ani kontenera (jak
+  dotąd). Zmiana zbiorcza rodzaju (F11) – przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym
+  `containerId` nie są poprawiane (bez migracji) – od 1.15.7 nie płacą terminu nigdzie, także w Ładowni (T393).
+- **T363** Dokowanie pary liczonej według puli (1.15.6, przegląd N2 1; uzupełnia T341 i T128): „Zadokuj” na parze do
+  zadokowania (wpis ICTTJ z operacją banku albo wpływem wpisanym na Portfelu XTB, bez dokowania – liczonej od razu według
+  puli wpisu; tylko operacja rodzaju, który silnik tak liczy – `countsByPool`, ten sam warunek co `pairOf`, przegląd N2
+  3.2) zapisuje w dokowaniu `countedFrom` = utworzenie operacji; silnik (`cameIn`) liczy takie dokowanie od tej
+  chwili, jak liczył parę, nie od utworzenia dokowania. Przeniesienie środków celu (T340) i zmiana celów (C1 – nowy cel,
+  kwota, priorytet, archiwizacja, synchronizacja celów ICTTJ) między wpływem a „Zadokuj” nie zmieniają już podziału:
+  okno proponuje podział, który warstwy mają (podgląd też z `countedFrom`), „Zadokuj” bez zmian niczego nie przesuwa,
+  zmieniony podział (`split`) liczy się od tej samej chwili. Wcześniej chwila dokowania: cel 500 / 1 000 zł, para Cele
+  1 000 zł o 9:00 (cel +500, osłony +500), o 10:00 całe 1 000 zł celu do osłon, „Zadokuj” o 11:00 – przeniesienie
+  przed wypłatą, cel 500 zł, osłony o 500 zł niżej, niż pokazywał Mostek. Dokowanie bez pola – sprzed 1.15.6, wpływu
+  z XTB bez wpisu (zwykłe dokowanie), operacji Portfela XTB tworzonej przez dokowanie – od swojego utworzenia jak dotąd
+  (T128), więc dawne dokowania się nie przeliczają; ponowne dokowanie zostawia pole i chwilę rekordu. Rozważone
+  i odrzucone: chwila operacji dla każdego dokowania z wpisem ICTTJ (bez pola) – przeliczyłaby dawne dokowania, gdy cel
+  zmienił się między importem a dokowaniem; samo ustawienie przeniesień T340 względem wpływu pary – zmiana celu (C1)
+  dalej zmieniałaby podział. Pole addytywne (`z.looseObject`), bez `SCHEMA_VERSION` – starsza wersja liczy takie
+  dokowanie od jego utworzenia; etykieta historii „Liczone od chwili”.
+- **T367** Wyrocznia jako regresja silnika pieniędzy (AP-32, N2; raport audytu sek. 6 – W1, S1–S4, C19 / R-15, C24,
+  PR sp. 9): wyrocznia (`tests/audyt/wyrocznia`, u3) zostaje ślepa – wymagania i kopia schematów `lib/schemat.mjs` (pola,
+  wartości domyślne, brak ≠ null; `src/` nie czyta), zmiana reguły pieniędzy wchodzi do niej z tekstu T-decyzji, nigdy
+  z kodu. Regresja `npm run test:wyrocznia` (`vitest.wyrocznia.config.mts`) – lokalnie, po każdej grupie silnika i przed
+  jej PR: stany persony i migawki odczytów audytu z laboratorium (`FI_AUDIT_LAB`, domyślnie `C:\FI-audyt` – dane
+  syntetyczne poza repozytorium, D97), wyrocznia i `computeFleet` (z parami ICTTJ jak okno, `monthAhead`) na tych samych
+  plikach w tej samej chwili; każda liczba pieniędzy wyroczni = aplikacji, „ten sam stan – ta sama liczba na każdym
+  ekranie”, kopia schematów = parsowanie aplikacji; ok. 2 min, poza CI (migawek nie ma w repozytorium). Znane rozbieżności
+  – lista `KNOWN` z powodem i grupą naprawy; znana, która zniknęła, też zatrzymuje test. Szybka część w `npm test` (CI):
+  `tests/unit/wyrocznia-ap32.test.ts` – scenariusze reguł N2 (wyrocznia = silnik) i ekrany; otwarty błąd jako `it.fails`
+  (AF-15 – termin asteroidy w odprawie; naprawiony w N3 – AP-10, T376: po scaleniu N2 z N3 zwykły test, ekrany ze stanem
+  opłat i dniami jak okno, `KNOWN` bez niego). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
+  wyroczni – nigdy dopasowanie wyroczni do wyniku.
+- **T368** Reguła uczy się części pożyczki tylko jako kwoty każdej wpłaty (przegląd N2 2.3; doprecyzowuje T358, T328):
+  `loanAmount` reguły to część każdej wpłaty, linia grupy albo tematu – kwota razem dla jej wpłat (po kolei). Nauka
+  (`buildImport` → `ruleDecisionOf(c, rows)`, `rows` – wpłaty, dla których linie decyzji są razem: `rowShares().rows`
+  `g:` / `t:`) zapisuje część jako `loanAmount` tylko, gdy jest kwotą każdej wpłaty: część z reguły zostawiona w decyzji
+  (`each`, T358) albo linia decyzji jednej wpłaty; linia grupy / tematu kilku wpłat – reguła uczy się decyzji bez części
+  pożyczki (jak decyzja bez niej – `upsertRules`: wcześniejsza część reguły znika). Przedtem 600 zł „razem” dla 3 wpłat
+  zapisywało 600 zł na każdą przyszłą wpłatę (do 3× więcej). Rozważone i odrzucone: kwota podzielona przez liczbę wpłat
+  albo to, co rozkład dał każdej – „po kolei” daje wpłatom różne kwoty, żadna nie jest tym, co użytkownik wpisał. Edytor
+  reguły w Ustawieniach – jedna wpłata (`rows` 1): kwota jak wpisana.
 - **T370** Zwrot wcześniejszego zakupu nie do energii dziś (1.15.7, AP-13 – MO sp. 6; realizuje D99 pkt 4, doprecyzowuje
   T30 / T295): dzisiejsze części puli dziennej (koperty codzienne i bez kategorii) liczone osobno na kategorię główną (bez
   kategorii – jedna grupa); zwrot (dodatni wydatek) najpierw pomniejsza dzisiejsze zakupy swojej kategorii (towar oddany
@@ -2761,7 +2975,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zmian), wpis błędny pomijany (`lenientList`), starsza wersja pole pomija (jej warstwy bez dopełnienia), bez
   `SCHEMA_VERSION`; kwota w `AMOUNT_FIELDS`. Rozważone i odrzucone: dopełnianie samo przy każdym wzroście celu (spec
   „Dokowanie” – nadwyżka płynie tylko przy dostawie; D99 wybrało propozycję); zapis w `fi.json` – zdarzenie z chwilą
-  należy do miesiąca, jak pokrycie koperty.
+  należy do miesiąca, jak pokrycie koperty. Przegląd 2 N3 (7): „Cofnij” usuwa plik planu, który dopełnienie założyło,
+  tylko gdy jest on nadal dokładnie tym, co dopełnienie zapisało (treść bez znaczników zapisu – `sameContentAs`, także
+  pola nieznane tej wersji z `looseObject`, zmiany z drugiego komputera) i żadna zmiana z drugiego komputera nie czeka
+  przy nim na decyzję; inaczej zabiera tylko wpis, plik zostaje (wcześniej: porównanie kilku znanych pól – pole nowszej
+  wersji albo czekająca zmiana z drugiego komputera ginęły z plikiem).
 - **T374** Podgląd zmiany celów warstw, firewall wyłączony (1.15.7, AP-17 – MO sp. 4, DW.12): Ustawienia → Warstwy
   i rozkazy – wpisany cel osłon albo kadłuba, zanim pole się zapisze (`NumberField.onDraft`; po 300 ms bez pisania –
   silnik raz na wpisane cele, zapis po wyjściu z pola używa tego przebiegu, `fleetWithLayers` – przegląd N3), pokazuje
@@ -2771,7 +2989,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Firewall wyłączony – dopłaty do XTB nie są sprawdzane…”, w stanie okrętu na Mostku „Firewall wyłączony – dopłaty do
   XTB bez sprawdzania osłon i kadłuba” (bez „nie do dopłaty XTB”), w odprawie dzisiejsza dopłata do XTB – informacja
   „Firewall wyłączony: dopłata do XTB X zł bez sprawdzania osłon i kadłuba.” (zwrot puli Podatek – nie, także przy pustej
-  rezerwie na PIT-38: zdarzenie silnika `tax`, przegląd N3). Bez zmian formatu.
+  rezerwie na PIT-38: zdarzenie silnika `tax`, przegląd N3). Bez zmian formatu. Przegląd 2 N3 (6): w trakcie pisania
+  „Po zmianie” zostaje dla celów ustalonych ostatnio (300 ms bez pisania), aż ustalą się nowe – nie znika przy każdym
+  klawiszu; wpisane cele równe zapisanym (pole opuszczone, wartość, której pole nie przyjmie) – bez podglądu.
 - **T375** Jeden stan opłaty i zaległość do zapłaty (1.15.7, AP-10 – AF-50 / RA.4, AF-80, AF-45 / LA.10, LA sp. 1, 6;
   realizuje D99 pkt 3 i rekomendację F1 / T208 wobec D86 / D4 z sekcji 5 wniosków; zmienia T208 „tylko w bieżącym
   miesiącu” i okno 14 dni dla opłat okresowych): płatności przypisuje do terminów jedna funkcja `feeDues`
@@ -2866,7 +3086,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   z dziś zapisuje (raport wachty zamknięty) i mówi toastem / powiadomieniem, że dzień się nie liczy (`noSpendWarning`).
   Misja ciszy nocnej „Zaciemnienie” (dawniej „Cisza w eterze” – tak zostaje osiągnięcie 30 dni; lista misji D73 bez
   innych zmian). Jedna „Twoja killzone”: misja – „z 4 tygodni przed misją”, Wywiad – „killzone wydatków tego okresu
-  (N mies.)” i godzina misji obok, gdy misja tygodnia to Killzone (`killzoneNote`).
+  (N mies.)” i godzina misji obok, gdy misja tygodnia to Killzone (`killzoneNote`). Przegląd 2 N3 (5): rekord bez
+  `confirmedAt` (zapisany przed 1.15.7) liczy się dniem salda (`date`), jak liczyła go wersja, która go zapisała – tydzień
+  niezamrożony nie zmienia wyniku misji przez samą aktualizację (dzień utworzenia zaliczał po aktualizacji import
+  z poniedziałku z saldem z niedzieli, którego 1.15.6 nie liczyła; ponowne potwierdzenie pod 1.15.6 – jak wtedy, po dacie
+  salda); każde nowe potwierdzenie ma `confirmedAt` – także zapisane przy imporcie z salda pliku banku.
 - **T384** Droga do awansu w Dowództwie (1.15.7, AP-30, DW.18, DW sp. 5): `progressText` – dzień po zmianie stopnia
   „dni zgodne 0 (liczone od 02.11)” zamiast odwróconego „od 02.11 do 01.11”; próg spełniony bez awansu (obniżony w trakcie)
   – „próg spełniony, awans przy zamrożeniu kolejnego dnia” (awans rozstrzyga zamrożenie dnia, jak dotąd).
@@ -2937,6 +3161,77 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ÷ dni do końca miesiąca (z dziś); energia dziś = przydział − wydane dziś, nie więcej niż zostało energii miesiąca
   (T371); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera; `daily.left`, jak alarm i gra).
   Bez zmian reguły gry.
+- **T393** Jedna reguła płatności opłaty – Ładownia i silnik (1.15.7, przegląd N3 1–4, 13, scalenie z N2; zmienia T135 /
+  T345 w silniku i przegląd N2 3, uzupełnia T375): który termin płaci płatność, decyduje jedna funkcja `feeDuesOf` (`calc/cargoStatus.ts`) – stan
+  w Ładowni, Radar, odprawa i cykle zapłacone silnika (`paidDuesOf`: rata zbiornika `tankWant` na przełomie, `paidDue`),
+  także kreator (`paidBeforeStart`). Okna T375 (miesięczna i co 2 miesiące – od 14 dni przed dniem płatności, ≥ 3 mies. –
+  od 1. dnia miesiąca przed terminem); przed dniem terminu, gdy poprzedni niezapłacony – zaległa zapłata (T394), nie
+  następny cykl; druga płatność okna – najstarszy niezapłacony; terminy budżetu od dnia startu, od miesiąca dodania
+  kontenera (`createdAt`), w życiu opłaty, nie sprzed „Zapłacone poza budżetem” / „Nadal płacę” (`aliveAt`; ten miesiąc
+  zawsze). Przed startem opłata śledzona od pierwszej widzianej płatności (T345, przegląd N2 4): spóźniona zapłata
+  płaci zaległy termin, nigdy następny. Na przełomie miesiąca (i w dniu startu) silnik liczy płatności sprzed przełomu
+  z dniem płatności tego miesiąca – stan, jaki Ładownia pokazywała tego dnia (płatność 1. dnia jest po przełomie);
+  `paidDue` – płatności do dziś. Która płatność płaci opłatę – też jedna reguła (`paymentsIndex`, po scaleniu N2 z N3):
+  części wydatku z kontenerem (linii, inaczej operacji), jedna płatność na operację – suma jej części z tym kontenerem
+  (wypływ), także sprzed startu i spoza życia opłaty (pieniądze takiej – jak dotąd zwykły wydatek, B56); czytają ją
+  Ładownia, Radar, odprawa, straż ładowni, silnik i kreator (`startPaidDays`). Opłata zapłacona z pieniędzy celu albo
+  zakupem do zwrotu (cały zakup albo linia paragonu) jest zapłacona – rachunek zapłacony: pieniądze są celu (T131) albo
+  domownika (D80), zbiornik nietknięty, cykl zamknięty (rata 0, zbiornik zbiera na następny termin – to, co już
+  uzbierał, zostaje na niego); zwrot domownika później to zwykły wpływ (spłata jego długu). Inny rodzaj z kontenerem
+  (dawny przelew, pożyczka, XTB sprzed T362) – nigdy, także w Ładowni. Ładownia nie czyta już zbiorników silnika
+  (`tankPaid`). Wcześniej (`paidCycleOf`): kwartalna 180 zł, listopad zapłacony 10.12, luty 20.01 – zaległa nie
+  zamykała listopada, lutowa była „zaległą”, 1.02 zbiornik brał 180 zł z energii drugi raz (Ładownia – luty zapłacony);
+  co 2 miesiące grudzień niezapłacony, płatność 05.02 – Ładownia grudzień (i luty „zapłacone” ze zbiornika silnika),
+  silnik luty: jedna płatność dwa terminy, alarm lutego nigdy; listopad „poza budżetem” albo kontener dodany w styczniu
+  – silnik nadal brał 20.01 za zaległy listopad.
+  Do scalenia z N2 płatności liczyły się różnie: Ładownia – też płatność z celu, cały zakup do zwrotu i dawny przelew
+  z kontenerem, silnik i kreator (przegląd N2 3) – żadnej z nich, linii paragonu do zwrotu – nikt (kwartalna 180 zł
+  zapłacona z celu 15.11: Ładownia „zapłacone”, silnik bez `paidDue` – plan i zbiornik liczyły zapłacony cykl jak
+  niezapłacony; przelew z ukrytym kontenerem – odwrotnie). Rozważone i odrzucone: płaci tylko część z moich pieniędzy
+  (jak przegląd N2 3) – Ładownia pokazywałaby rachunek zapłacony z celu albo przez domownika jako zaległy, Radar
+  i odprawa – asteroidę zapłaconego terminu. Bez zmian formatu i migracji: warstwy liczone z rekordów – miesiące,
+  w których cykl był zapłacony tylko w jednym miejscu, przeliczą się same; zamrożone dni gry zostają. Przegląd 2 N3 (1):
+  kreator liczy opłatę kontenera w całości (`startTankItems` – kwoty, kalendarz, życie, rachunek zmienny `variable` F23,
+  `createdAt`, `aliveAt`), jak silnik i Ładownia; wcześniej bez `variable` – rachunek co 2 miesiące zapłacony raz dwoma
+  przelewami, potem kilka dni przed dniem terminu: kreator był cykl w tyle (lipiec niezapłacony, rata 300 zł i „do planu”
+  150 zł), silnik i Ładownia – lipiec zapłacony. Test własności „silnik = Ładownia = kreator” – też rachunki zmienne
+  i płatności z wyprzedzeniem (T398).
+- **T394** Termin sprzed startu, najstarsza zaległa, „Zapłacone (dziś)” (1.15.7, przegląd N3 5, 10; doprecyzowuje T375,
+  T379): terminy budżetu liczą się od dnia startu, nie od miesiąca – termin sprzed niego bez płatności nie jest „po
+  terminie” ani zaległy (bez alertu odprawy, pozycji Radaru i resztki kursu z osłon), zapłacony – „zapłacone” (T379);
+  płatność po starcie płaci tylko terminy budżetu (01.10 przy starcie 20.09 i terminie 3. – październik, nie wrzesień).
+  Płatność przed dniem terminu przy niezapłaconym poprzednim płaci najstarszy niezapłacony termin (wrzesień i październik
+  zaległe, płatność 01.11 – wrzesień; wcześniej październik, a wrzesień zostawał na zawsze); poprzedni zapłacony –
+  płatność jest wcześniejszą następnego (T135), choćby starszy był zaległy. Płatności przydzielane po kolei (stan każdego
+  dnia zostaje): druga płatność okna płaci najstarszy niezapłacony termin w chwili, gdy przyszła. „Zapłacone (kwota,
+  dziś)” (`payToday`) – termin, który płatność dziś tej kwoty zostawia zapłaconym (także przez drugą płatność okna, gdy
+  termin okna już zapłacony); „Płatność dziś zamknie najpierw zaległą opłatę (termin …)” – ten termin.
+- **T398** Płatność wpisana z wyprzedzeniem płaci termin w swoim dniu (1.15.7, przegląd 2 N3 2; doprecyzowuje T375,
+  T393, B127): płatność opłaty z datą po dziś (wydatek wpisany naprzód) nie płaci terminu przed swoim dniem – stan
+  w Ładowni, Radarze, odprawie i resztce kursu (`cargoStatuses` – płatności do dziś) jak silnik (`paidBefore` do dziś,
+  `paidDue`, przełom miesiąca); w jej dniu – zapłacony w obu. Termin, który ona zapłaci (ta sama reguła z płatnościami do
+  jej dnia – także gdy jako druga płatność okna oddaje wcześniejszą zaległemu terminowi, T375), ma płatność zaplanowaną
+  (`CargoStatus.planned`): Ładownia – w wierszu „zaplanowane dd.mm” (bez akcentu „po terminie”), w edytorze „Zaplanowana
+  płatność: kwota (dd.mm) – zapłaci termin dd.mm w swoim dniu.” bez „Zapłacone (kwota, dziś)” (byłaby drugą płatnością),
+  w „Zaległe” – „zaplanowana płatność dd.mm (kwota) zamknie go w swoim dniu”; Radar – bez pozycji tego terminu (salda
+  naprzód liczą operację w jej dniu – raz); odprawa – bez alertu „Kontener niezaładowany” i bez asteroidy tego terminu
+  (najbliższy do zapłaty – następny, `nextDueOf`); resztka miesiąca w kursie (T390) liczy go do zapłaty z energii (silnik
+  jeszcze jej nie wziął – wcześniej pomijała go jako zapłacony). Płatność dalej niż okno terminu po tym miesiącu nie jest
+  zaplanowaną żadnego. Wcześniej Ładownia, Radar i odprawa pokazywały „zapłacone” od chwili wpisania, a silnik liczył cykl
+  dopiero w dniu płatności (plan miesiąca i zbiornik chciały raty cyklu „zapłaconego”, T393). Rozważone i odrzucone:
+  płatność naprzód płaci od razu także w silniku – zbiornik przestałby zbierać na pieniądze, które jeszcze są na koncie,
+  a data operacji wpisanej naprzód bywa zmieniana. Bez zmian formatu. Otwarte: terminy następnych miesięcy na Radarze
+  (asteroidy naprzód, opłaty miesięczne kolejnych miesięcy) nie widzą płatności wpisanych naprzód – salda naprzód liczą
+  wtedy termin i operację (jak od 1.8.0).
+- **T399** Wydajność stanu opłat i boi (1.15.7, przegląd 2 N3 3, 4, 8, 9; obok T375, T378): „Zapłacone (dziś)”
+  (`payToday`) i płatności zaplanowane (T398) liczone tylko dla opłaty z pokazanym terminem do zapłaty – opłata zapłacona
+  nie przelicza całej historii drugi raz; stan opłat w oknie (`features/cargo/status.ts`) przeliczany przy zmianie
+  rekordów, dnia, startu i plików z banku, nie przy każdym przebiegu silnika (stan nie czyta zbiorników od T393 –
+  `CargoInput.tanks` usunięte). „Pozostałe boje” – stan boi jednorazowych po dniu raz na listę boi, operacji i dzień
+  (`pastStates`, pamięć po liście), każda tymi samymi dniami co dotąd (boje z dniem w ±6 dni jej dnia, operacje zrobione
+  z każdej boi), nie przebieg po wszystkich bojach dla każdej z nich przy każdym odmalowaniu. Jedna kolejność płatności
+  jednego dnia (`byPaymentDay` – indeks Ładowni i płatności sprzed startu w silniku). Wynik bez zmian (test równości ze
+  stanem liczonym jak dotąd).
 - **T400** Nic nie zmienia się po cichu (1.15.8, N4, AP-15): każda odmowa i każde przycięcie mówi to przy polu – co zostaje
   i dlaczego. Pole kwoty `amountRefusal` (nieprawidłowa / pusta / ujemna; „1.200” i „12,345” z podpowiedzią), `NumberField`
   domyślnie sam mówi („Dozwolone: od … do …”, „Tu tylko liczby całkowite”, `range`; `onReject` nadpisuje), w trybie
@@ -2962,6 +3257,25 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nowe `savedAt` (zapisy z powrotem nie są pracą użytkownika). Lista „Ostatnie importy” przy dziesięciu paczkach mówi, że
   następny import usunie najstarszą (razem z jej „Cofnij import”); Ustawienia → Folder i kopie mówią o 5 ręcznych kopiach.
   Bez zmian formatu danych.
+- **T403** Teksty interfejsu (1.15.8, N4 – AP-23, AF-55, AF-66, AF-69, AF-71–AF-73): jeden sposób pisania w `shared/format.ts`
+  – `plDate` (dd.mm.rrrr), `plDateTime` (dd.mm.rrrr, gg:mm – dwie cyfry dnia i miesiąca), `decimalText` / `percentText`
+  (przecinek, minus typograficzny „−”, zero bez znaku), `countLabel` / `plural` / `salariesText` (liczebniki); ISO dat
+  nie ma w żadnym tekście (tytuły wpisów w historii i dzienniku zmian `recordTitle`, wartości w różnicach `formatValue`,
+  zakres Operacji `periodLabel`, chwile przez `plDateTime`). Stopa oszczędności zawsze z jednym miejscem po przecinku
+  (T294: `rateText` „55,0%”, CSV „55,0”, Excel format „0.0”); pole liczby (`NumberField`) pisze przecinek („1,0”).
+  Komunikaty systemu po polsku: `shared/plainError.ts` zamienia kody systemu plików (ENOENT, EBUSY, EPERM…), błędy
+  JSON, ZIP i schematu (zod) na zdanie; stosuje je `errorMessage` okna (wywołania IPC loguje `handle` z surowym
+  tekstem), opis plików z problemami, nieudana kopia, błąd odczytu folderu ICTTJ; plik, który zajął OneDrive albo inny
+  program, ma plakietkę „zablokowany”, nie „uszkodzony”. Podsumowanie odzyskania z kopii uzgadnia imiesłów z
+  rzeczownikiem („1 plan miesiąca zmieniony”). Kody decyzji, identyfikatory i teksty robocze („spec”) tylko w
+  komentarzach – pilnuje tego `tests/unit/ui-no-codes.test.ts` (źródła) i `tests/e2e/ap23.spec.ts` (renderowane
+  ekrany i dymki). Słowniczek: osobna lista „Terminy ICT” (`ICT_GLOSSARY`, w F1) – termin po angielsku, objaśnienie po
+  polsku; wszystkie linie „Stanu okrętu” i Daily Bias mają dymek. Słowo „firma” zastąpione („sprzedawca albo osoba”),
+  przejścia 100 ms → 150 ms (120–160 ms).
+- **T404** Sprawdzenia po scaleniu N4 (1.15.8, AP-23, US.9, AF-71): (1) Esc w polach „Progi gry” (Ustawienia → Warstwy
+  i rozkazy) cofa wpis – `NumberField` z AP-15 wystarczył, dopisany test E2E; (2) cisza nocna „od” = „do” zostaje
+  przyjęta (to sposób na wyłączenie ciszy), ale pole mówi to wprost („ta sama godzina – cisza nocna wyłączona”);
+  (3) `clampZoom` zaokrągla do siatki 10 % (ręcznie wpisane 1,23 czyta się jako 120 %, nie „123%”).
 - **T405** Odprawa z hierarchią (1.15.8, N4 – AP-16, MO sp. 1, 2, DW sp. 3): `arrangeBriefing` (`calc/briefing.ts`, czyste)
   układa pozycje odprawy: alarmy (czerwone, potem żółte – wszystkie poziomy inne niż „info”), sprawy dnia (informacje
   wymagające ruchu dziś: start, import i nowy plik z mBanku, salda, misja, dostawa czekająca na import, folder ICTTJ,
@@ -3006,25 +3320,6 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Ustawieniach → Warstwy i rozkazy ›”; progi gry przeniesione do Ustawień → Warstwy i rozkazy (panel „Progi gry”, te
   same pola i granice). Odrzucony próg mówi dlaczego i że zostaje poprzednia wartość (AP-15, DW sp. 5:
   `thresholdRefusal`, komunikat jak przy celach warstw). Bez zmian formatu (`settings.game`, `settings.orders`).
-- **T403** Teksty interfejsu (1.15.8, N4 – AP-23, AF-55, AF-66, AF-69, AF-71–AF-73): jeden sposób pisania w `shared/format.ts`
-  – `plDate` (dd.mm.rrrr), `plDateTime` (dd.mm.rrrr, gg:mm – dwie cyfry dnia i miesiąca), `decimalText` / `percentText`
-  (przecinek, minus typograficzny „−”, zero bez znaku), `countLabel` / `plural` / `salariesText` (liczebniki); ISO dat
-  nie ma w żadnym tekście (tytuły wpisów w historii i dzienniku zmian `recordTitle`, wartości w różnicach `formatValue`,
-  zakres Operacji `periodLabel`, chwile przez `plDateTime`). Stopa oszczędności zawsze z jednym miejscem po przecinku
-  (T294: `rateText` „55,0%”, CSV „55,0”, Excel format „0.0”); pole liczby (`NumberField`) pisze przecinek („1,0”).
-  Komunikaty systemu po polsku: `shared/plainError.ts` zamienia kody systemu plików (ENOENT, EBUSY, EPERM…), błędy
-  JSON, ZIP i schematu (zod) na zdanie; stosuje je `errorMessage` okna (wywołania IPC loguje `handle` z surowym
-  tekstem), opis plików z problemami, nieudana kopia, błąd odczytu folderu ICTTJ; plik, który zajął OneDrive albo inny
-  program, ma plakietkę „zablokowany”, nie „uszkodzony”. Podsumowanie odzyskania z kopii uzgadnia imiesłów z
-  rzeczownikiem („1 plan miesiąca zmieniony”). Kody decyzji, identyfikatory i teksty robocze („spec”) tylko w
-  komentarzach – pilnuje tego `tests/unit/ui-no-codes.test.ts` (źródła) i `tests/e2e/ap23.spec.ts` (renderowane
-  ekrany i dymki). Słowniczek: osobna lista „Terminy ICT” (`ICT_GLOSSARY`, w F1) – termin po angielsku, objaśnienie po
-  polsku; wszystkie linie „Stanu okrętu” i Daily Bias mają dymek. Słowo „firma” zastąpione („sprzedawca albo osoba”),
-  przejścia 100 ms → 150 ms (120–160 ms).
-- **T404** Sprawdzenia po scaleniu N4 (1.15.8, AP-23, US.9, AF-71): (1) Esc w polach „Progi gry” (Ustawienia → Warstwy
-  i rozkazy) cofa wpis – `NumberField` z AP-15 wystarczył, dopisany test E2E; (2) cisza nocna „od” = „do” zostaje
-  przyjęta (to sposób na wyłączenie ciszy), ale pole mówi to wprost („ta sama godzina – cisza nocna wyłączona”);
-  (3) `clampZoom` zaokrągla do siatki 10 % (ręcznie wpisane 1,23 czyta się jako 120 %, nie „123%”).
 - **T410** „Cofnij import” – zmiany użytkownika po zapisach importów i cofnięć (1.15.8, N4 – przegląd 1 pkt 2, 3; zmienia
   T402): operacja paczki jest „zmieniona później przez Ciebie”, gdy jej `updatedAt` jest późniejszy niż ostatni zapis
   aplikacji tej operacji (`appWrites`: `savedAt` paczek, które ją utworzyły albo zmieniły – import i „Cofnij” cofnięcia –

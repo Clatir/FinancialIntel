@@ -15,8 +15,8 @@ const nextId = () => `01K3900000000000000000${String(++seq).padStart(4, '0')}`
 const base = () => ({ schemaVersion: SCHEMA_VERSION, id: nextId(), createdAt: AT, updatedAt: AT })
 const FOOD = defaultCategoryId(1)
 const tx = (date: string, amount: number, over: Partial<Transaction> = {}): Transaction => transactionSchema.parse({ ...base(), date, accountId: MBANK_ACCOUNT_ID, amount, categoryId: FOOD, ...over })
-/** A confirmation of the balance of `date`, made at `at` (UTC). */
-const confirmation = (accountId: string, date: string, at: string): Balance => balanceSchema.parse({ ...base(), createdAt: at, updatedAt: at, date, accountId, kind: 'confirmation', amount: zl(100) })
+/** A confirmation of the balance of `date`, made at `at` (UTC) – by 1.15.7: its moment stamped (`confirmedAt`, T383). */
+const confirmation = (accountId: string, date: string, at: string): Balance => balanceSchema.parse({ ...base(), createdAt: at, updatedAt: at, confirmedAt: at, date, accountId, kind: 'confirmation', amount: zl(100) })
 
 /** The budget from 1 September 2026 (the three accounts of a new folder), the game from Monday 7 September. */
 function world(o: { settings?: (s: Settings) => Settings; balances?: Balance[]; transactions?: Transaction[] } = {}): GameInput {

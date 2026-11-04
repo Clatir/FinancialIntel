@@ -8,6 +8,7 @@ import { quickTemplates } from '@shared/calc/quick'
 import { hashTags, withoutHashTags, withTags } from '@shared/calc/tags'
 import { knownTagsOf, lastTagOf } from '../features/tags/state'
 import { daysInMonth, warsawNow } from '@shared/calc/dates'
+import { loanChoices } from '@shared/calc/loans'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import { shareSplits } from '@shared/calc/share'
@@ -77,6 +78,8 @@ export function quickData(): QuickData | null {
         const b = fleet?.receivables.members.find((x) => x.memberId === m.id)
         return { id: m.id, name: m.name, owed: b?.owed ?? 0, deposit: b?.deposit ?? 0, inflow: inflowOf(m), via: m.via ?? null }
       }),
+    // The open loans given (D100): any inflow may repay one.
+    loans: loanChoices(listOf(s.records.loans), fleet?.loans).map((l) => ({ id: l.id, name: l.name, open: l.open })),
     hideAmounts: useMachine.getState().prefs.hideAmounts,
     // Another folder opening (AF-75): nothing taken until it is open – the lists and the energy are still the old one's.
     readOnly: !!s.status?.readOnly || s.switching,
@@ -119,6 +122,11 @@ export interface QuickDraft {
   share?: Share | null
   /** A household member's money carrying others' (D81, „w tym za …”): their parts, the rest the sender's. */
   shares?: Array<{ memberId: string; amount: number; advance: boolean }>
+  /**
+   * The part of an income repaying a loan given (D100, T359 – whoever sent it): its loan and amount (the whole amount –
+   * all of it); the rest as the income says (a member's money, income).
+   */
+  loanPart?: { loanId: string; amount: number } | null
   /** „Zaliczka / przychód” switched by the user (N39): only then remembered for a member still asked (D80 b). */
   advanceChosen?: boolean
   /** Its tags (F17); „#słowo” in the counterparty or the note adds one too. */
@@ -133,12 +141,19 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
   const sign = income ? 1 : -1
   const household = income && d.household && !!d.memberId
   const shares = household ? (d.shares ?? []).filter((x) => x.amount > 0) : []
+  // A part repaying a loan given (D100): of any inflow, a member's or not.
+  const loanPart = income && d.loanPart && ulidSchema.safeParse(d.loanPart.loanId).success && Number.isInteger(d.loanPart.amount) && d.loanPart.amount > 0 ? d.loanPart : null
   if (shares.reduce((a, x) => a + x.amount, 0) > d.amount) return 'Części innych osób przekraczają kwotę wpłaty.'
+  if (loanPart && shares.reduce((a, x) => a + x.amount, 0) + loanPart.amount > d.amount) return 'Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.'
   // A shared purchase (D83): a share the schema reads (a window of another version sends what it sends).
   const parsedShare = !income && d.share ? shareSchema.safeParse(d.share) : null
   const share = parsedShare?.success ? parsedShare.data : null
   const splits = income
-    ? shares.map((x) => ({ id: newId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, note: '' }))
+    ? [
+        ...shares.map((x) => ({ id: newId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, note: '' })),
+        // No member's money: the loan's (T355).
+        ...(loanPart ? [{ id: newId(), amount: loanPart.amount, categoryId: null, refundable: false, memberId: null, advance: false, loanId: loanPart.loanId, note: '' }] : [])
+      ]
     : share
       ? shareSplits({ amount: sign * d.amount, categoryId: d.categoryId }, share)
       : d.splits.length > 1
@@ -255,6 +270,12 @@ export async function quickAdd(draft: QuickDraft): Promise<void> {
   const members = new Set(settings.household.members.map((m) => m.id))
   if ([t.memberId, ...t.splits.map((x) => x.memberId), ...(t.share?.lines.map((l) => l.memberId) ?? [])].some((id) => id && !members.has(id)))
     return answer({ ok: false, message: 'Lista domowników się zmieniła – wybierz domownika ponownie.' })
+  // A part's loan (D100): a loan given of the Radar, still open – closed or gone meanwhile, the part would be income.
+  const usable = (id: string) => {
+    const l = s.records.loans[id]?.record
+    return !!l && l.direction === 'given' && l.closedAt == null
+  }
+  if (t.splits.some((x) => x.loanId && !usable(x.loanId))) return answer({ ok: false, message: 'Lista pożyczek się zmieniła – wybierz pożyczkę ponownie.' })
   // A member's money paying back one purchase of theirs surely (D91): named now, else it waits to be assigned.
   if (!addRecord('transactions', { ...t, ...sureCoversOf(t) })) return answer({ ok: false, message: 'Folder jest tylko do odczytu.' })
   // A household member's money with the rest chosen here – by the user (N39): asked once, remembered for them (D80 b).

@@ -297,8 +297,9 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     })
   }
   // A fixed fee 3 days after its due without a payment (F1, D86) – once per due; an earlier month's until paid (D99 pkt 3).
+  // One a payment written ahead pays on its day (T398) is no alert: Ładownia shows it planned.
   for (const s of o.cargo ?? []) {
-    if (s.state !== 'overdue') continue
+    if (s.state !== 'overdue' || s.planned) continue
     items.push({ level: 'yellow', kind: 'cargo', key: `cargo:${s.containerId}:${s.due}`, text: `Kontener niezaładowany: ${s.name} ${zl(s.amount)} – termin ${dm(s.due)} minął, brak płatności.` })
   }
   for (const imp of o.imports) {

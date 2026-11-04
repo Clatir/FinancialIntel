@@ -113,14 +113,20 @@ function LayersPreview({ shieldSalaries, hullMonths, saved }: { shieldSalaries: 
     const t = setTimeout(() => setSettled({ shieldSalaries, hullMonths }), PREVIEW_SETTLE_MS)
     return () => clearTimeout(t)
   }, [shieldSalaries, hullMonths])
-  const still = settled.shieldSalaries === shieldSalaries && settled.hullMonths === hullMonths
-  const changed = still && (shieldSalaries !== saved.shieldSalaries || hullMonths !== saved.hullMonths)
+  // While a key is typed the preview of the targets settled last stays (przegląd 2 N3 – it never blinks out and back on
+  // each key); the targets typed as saved (the field left, a value it refuses, the saved one typed again) – none.
+  const pending = settled.shieldSalaries !== shieldSalaries || settled.hullMonths !== hullMonths
+  const typedSaved = shieldSalaries === saved.shieldSalaries && hullMonths === saved.hullMonths
+  const changed = !typedSaved && (settled.shieldSalaries !== saved.shieldSalaries || settled.hullMonths !== saved.hullMonths)
   // `fleet` – the records (or the day) changed under the preview: counted again (one run per targets – `fleetWithLayers`).
-  const after = useMemo(() => (changed && fleet?.started ? fleetWithLayers({ shieldSalaries, hullMonths }) : null), [changed, fleet, shieldSalaries, hullMonths])
+  const after = useMemo(
+    () => (changed && fleet?.started ? fleetWithLayers({ shieldSalaries: settled.shieldSalaries, hullMonths: settled.hullMonths }) : null),
+    [changed, fleet, settled.shieldSalaries, settled.hullMonths]
+  )
   if (!fleet || !after) return null
   const lines = layersEffect(fleet, after)
   return (
-    <div className="flex flex-col border-l-2 border-accent pl-2 text-[11.5px]" data-testid="layers-preview">
+    <div className="flex flex-col border-l-2 border-accent pl-2 text-[11.5px]" data-testid="layers-preview" data-pending={pending ? 'yes' : undefined}>
       <span className="text-muted">Po zmianie (zapisze się po wyjściu z pola – cała historia policzy się od startu z nowymi celami):</span>
       {!lines.length ? (
         <span className="text-dim">bez zmian w warstwach</span>

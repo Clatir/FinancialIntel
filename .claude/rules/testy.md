@@ -41,3 +41,7 @@ paths:
   zainstalowany – CI to nie dotyczy. `folder-speed` ZIP64 (ok. 20 s) przekracza 60 s, gdy obok idą E2E – powtórz osobno.
   Równoległe drzewa robocze: `node_modules` i `.tools` jako junction do głównego repozytorium; przed
   `git worktree remove` usuń same łącza (`[System.IO.Directory]::Delete(<łącze>, $false)` w PowerShell).
+- **Wyrocznia (AP-32, T367):** po każdej grupie silnika pieniędzy `npm run test:wyrocznia` (lokalnie, migawki audytu
+  z `C:\FI-audyt`, ok. 2 min); szybka część `tests/unit/wyrocznia-ap32.test.ts` jest w `npm test`. Wyrocznia jest ślepa –
+  poprawiaj ją tylko z tekstu wymagań i kopii schematów `tests/audyt/wyrocznia/lib/schemat.mjs` (nowe pole czytane przez
+  nią – tam), nigdy z kodu `src/`; rozbieżność to błąd aplikacji (lista `KNOWN` z grupą naprawy) albo luka wyroczni.

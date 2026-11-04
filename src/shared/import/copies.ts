@@ -3,7 +3,7 @@
  * data), whether a copy decides otherwise (a conflict to check), and what the kept one takes from the copies. No import
  * of the plan's (`reconcile.ts` uses it).
  */
-import { incomeShares } from '../calc/household'
+import { incomeShares, planOf } from '../calc/household'
 import { financerOf, isTwoSided, partsOf } from '../calc/operations'
 import { withBankAmount } from '../calc/share'
 import type { Transaction } from '../schema/records'
@@ -36,8 +36,9 @@ function decision(t: Transaction): string | null {
   return [
     t.kind,
     t.categoryId ?? '',
-    // An income's parts are its members' money (D81): the member and the rest as an advance decide too.
-    t.splits.map((s) => `${s.categoryId}:${s.amount}:${member(s.refundable || t.kind === 'income', s.memberId)}:${t.kind === 'income' && s.advance ? 'a' : ''}`).join(','),
+    // An income's parts are its members' money (D81): the member and the rest as an advance decide too – a part repaying
+    // a loan (D100) its loan.
+    t.splits.map((s) => `${s.categoryId}:${s.amount}:${member(s.refundable || t.kind === 'income', s.memberId)}:${t.kind === 'income' && s.advance ? 'a' : ''}${t.kind === 'income' && s.loanId ? `:l=${s.loanId}` : ''}`).join(','),
     t.refundable,
     member(t.refundable || t.kind === 'income', t.memberId),
     t.counterAccountId ?? '',
@@ -77,39 +78,54 @@ export const coversOtherwise = (keep: Transaction, copy: Transaction): boolean =
 }
 
 /**
- * The members whose purchases an operation's money pays back, as the ledger reads it (`settleHousehold`, D91): an
- * income's shares of members that repay (not their income nor advance), a product return's lines of a member's purchase.
+ * The members whose purchases an operation's money pays back, as the ledger reads it (`settleHousehold`, D91), and how:
+ * an income's shares of members – their plan (`planOf`): a repayment (`debt`), or an explicit income or advance naming
+ * purchases anyway (`named` – AP-4, review 2 of N2: it pays them back too), never a part repaying a loan (D100); a product
+ * return's lines of a member's purchase (a repayment).
  */
-function repayers(t: Transaction): ReadonlySet<string> {
-  if (t.kind === 'income') return new Set(incomeShares(t).flatMap((s) => (s.memberId && s.inflowKind !== 'income' && s.inflowKind !== 'advance' ? [s.memberId] : [])))
-  if (t.kind !== 'expense' || t.amount <= 0) return new Set()
-  return new Set(partsOf(t).flatMap((p) => (p.refundable && !p.gift && p.amount > 0 ? [financerOf(p)] : [])))
+function repayersOf(t: Transaction): ReadonlyMap<string, 'debt' | 'named'> {
+  const out = new Map<string, 'debt' | 'named'>()
+  if (t.kind === 'income') {
+    const shares = incomeShares(t)
+    for (const s of shares) {
+      if (!s.memberId || s.loanId) continue
+      const plan = planOf(t, { ...s, memberId: s.memberId }, shares).repays
+      if (plan !== 'none' && out.get(s.memberId) !== 'debt') out.set(s.memberId, plan)
+    }
+  } else if (t.kind === 'expense' && t.amount > 0) for (const p of partsOf(t)) if (p.refundable && !p.gift && p.amount > 0) out.set(financerOf(p), 'debt')
+  return out
 }
-const within = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => [...a].every((x) => b.has(x))
+/** The members whose purchases its money pays back as a repayment (not an explicit kind naming them). */
+const debtRepayers = (t: Transaction): ReadonlySet<string> => new Set([...repayersOf(t)].flatMap(([m, plan]) => (plan === 'debt' ? [m] : [])))
+const within = (a: Iterable<string>, b: ReadonlySet<string>): boolean => [...a].every((x) => b.has(x))
 
 /**
  * Does the kept operation (decided) take what a copy pays back (AF-9 – review N1 2)? It names nothing itself, and it
- * decides the same or its money pays back every member the copy's does – the purchases named are theirs (D91), so they
- * stay paid back by this money, whatever else the kept one decides.
+ * decides the same or its money pays back every member the copy's does – as a repayment – the purchases named are theirs
+ * (D91), so they stay paid back by this money, whatever else the kept one decides.
  */
 function takesCovers(keep: Transaction, copy: Transaction): boolean {
   if (assignmentOf(keep) || !assignmentOf(copy)) return false
   if (decision(keep) === decision(copy)) return true
-  const theirs = repayers(copy)
-  return theirs.size > 0 && within(theirs, repayers(keep))
+  const theirs = repayersOf(copy)
+  return theirs.size > 0 && within(theirs.keys(), debtRepayers(keep))
 }
 
 /**
  * Would removing a copy leave the purchases it pays back unpaid (AF-9 – review N1 2: never silently)? Its money pays them
- * back, and the kept one with what it takes from the copy (`takeUserData`) does not: it names others (`coversOtherwise`),
- * or decides otherwise without those members' money, or its money is no repayment of theirs (their income, an advance).
- * A copy whose money repays nobody loses nothing.
+ * back (a repayment, or an explicit income or advance naming them – AP-4), and the kept one with what it takes from the
+ * copy (`takeUserData`) does not: it names others (`coversOtherwise`), or decides otherwise without those members' money,
+ * or its money is no repayment of theirs (their income, an advance). A copy whose money repays nobody loses nothing.
  */
 export function dropsCovers(keep: Transaction, copy: Transaction): boolean {
-  const theirs = repayers(copy)
+  const theirs = repayersOf(copy)
   if (!assignmentOf(copy) || !theirs.size) return false
   const out = takeUserData(keep, [copy], keep.updatedAt)
-  return assignmentOf(out) !== assignmentOf(copy) || !within(theirs, repayers(out))
+  if (assignmentOf(out) !== assignmentOf(copy)) return true
+  // Each member's money pays them back as the copy's does: its repayment by a repayment – an explicit income or advance of
+  // the kept one would repay them only against what it says (AP-4), never in place of a repayment.
+  const ours = repayersOf(out)
+  return [...theirs].some(([m, plan]) => !ours.has(m) || (plan === 'debt' && ours.get(m) !== 'debt'))
 }
 
 /**

@@ -48,11 +48,11 @@ describe('AP-10: płatność ponad 14 dni przed terminem zamyka bieżący cykl (
     const fleet = fleetOf([waste], wastePaid, '2026-11-03T12:00:00+01:00')
     // The engine (T135): November's cycle paid, the tank collects for February.
     expect(fleet.tanks.find((t) => t.containerId === waste.id)).toMatchObject({ paidDue: '2026-11', dueMonth: '2027-02' })
-    const s = cargoStatuses({ containers: [waste], transactions: wastePaid, today: '2026-11-03', tanks: fleet.tanks, coveredTo: covered, start: START })
+    // The state never reads the engine's tanks (T393): its payments say it.
+    const s = cargoStatuses({ containers: [waste], transactions: wastePaid, today: '2026-11-03', coveredTo: covered, start: START })
     expect(s.map((x) => [x.due, x.state, x.carried])).toEqual([['2026-11-20', 'paid', false]])
     expect(s[0]!.payments).toEqual([{ id: wastePaid[4]!.id, date: '2026-10-22', amount: zl(240) }])
-    // Without the engine's tanks the same: its payments say it.
-    expect(cargoStatuses({ containers: [waste], transactions: wastePaid, today: '2026-11-03', tanks: [], coveredTo: covered, start: START })[0]).toMatchObject({ state: 'paid', paid: zl(240) })
+    expect(s[0]).toMatchObject({ state: 'paid', paid: zl(240) })
     // The Radar: no asteroid on 20.11, the next one on 20.02.
     const items = radar({ today: '2026-11-03', plans: [], containers: [waste], tanks: fleet.tanks, loans: [], money, cargo: s, days: 120 }).filter((i) => i.kind === 'asteroid')
     expect(items.map((i) => i.date)).toEqual(['2027-02-20'])
@@ -69,20 +69,20 @@ describe('AP-10: płatność ponad 14 dni przed terminem zamyka bieżący cykl (
   it('płatność w miesiącu terminu ponad 14 dni przed jego dniem (02.11 na 25.11) – listopadowa, nie poprzedniego cyklu', () => {
     const oc = container({ name: 'OC', amount: zl(1240), cycleMonths: 12, dueDay: 25 })
     const paid = ['2025-11-25', '2026-11-02'].map((d) => pay(oc, d))
-    const s = cargoStatuses({ containers: [oc], transactions: paid, today: '2026-11-03', tanks: [], coveredTo: covered, start: START })
+    const s = cargoStatuses({ containers: [oc], transactions: paid, today: '2026-11-03', coveredTo: covered, start: START })
     expect(s.map((x) => [x.due, x.state, x.paid])).toEqual([['2026-11-25', 'paid', zl(1240)]])
     expect(priceChanges({ containers: [oc], transactions: paid, today: '2026-11-03' })).toEqual([])
   })
 
   it('Woda: zapłata 14.10 zaległego sierpnia zamyka sierpień, nie listopad; przed nią sierpień „po terminie” (D99 pkt 3)', () => {
     // 10 September: the August due (its history day: 15) unpaid – still „po terminie”.
-    const sep = cargoStatuses({ containers: [water], transactions: waterPaid.slice(0, 3), today: '2026-09-10', tanks: [], coveredTo: { [MBANK_ACCOUNT_ID]: '2026-09-09' }, start: START })
+    const sep = cargoStatuses({ containers: [water], transactions: waterPaid.slice(0, 3), today: '2026-09-10', coveredTo: { [MBANK_ACCOUNT_ID]: '2026-09-09' }, start: START })
     expect(sep.map((x) => [x.due, x.state, x.carried])).toEqual([['2026-08-15', 'overdue', true]])
     // The Radar shows it as an asteroid past its day.
     const items = radar({ today: '2026-09-10', plans: [], containers: [water], tanks: [], loans: [], money, cargo: sep, days: 30 }).filter((i) => i.kind === 'asteroid')
     expect(items.map((i) => [i.date, i.overdue ?? false])).toEqual([['2026-08-15', true]])
     // 3 November, after the late payment: August closed, November (14.11) still to pay – the payment of 14.10 is not its.
-    const nov = cargoStatuses({ containers: [water], transactions: waterPaid, today: '2026-11-03', tanks: [], coveredTo: covered, start: START })
+    const nov = cargoStatuses({ containers: [water], transactions: waterPaid, today: '2026-11-03', coveredTo: covered, start: START })
     expect(nov.map((x) => [x.due, x.state, x.paid])).toEqual([['2026-11-14', 'waiting', 0]])
     expect(priceChanges({ containers: [water], transactions: waterPaid, today: '2026-11-03' })).toEqual([])
   })

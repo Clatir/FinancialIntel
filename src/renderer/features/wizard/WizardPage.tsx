@@ -1,13 +1,12 @@
 import { cycleText } from '@shared/calc/cargoWatch'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { addDays, daysInMonth, firstDayOf, warsawNow } from '@shared/calc/dates'
+import { addDays, daysInMonth, warsawNow } from '@shared/calc/dates'
 import { balanceAt } from '@shared/calc/balances'
-import { paymentsIndex } from '@shared/calc/cargoStatus'
-import { startMonthSpentOf } from '@shared/calc/fleet'
+import { amountIn, startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
-import { costsByMonth, firstFullMonth, fullMonthsBefore, linkFromOf, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments, unlinkedPayments } from '@shared/calc/plan'
-import { startSplit, startTanks, startTargets } from '@shared/calc/start'
+import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments } from '@shared/calc/plan'
+import { startPaidDays, startSplit, startTankItems, startTanks, startTargets } from '@shared/calc/start'
 import { countLabel, plural, salariesText } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
@@ -76,17 +75,10 @@ export function WizardPage() {
     // The engine's rule (B126): the start is today; the chosen proposals' payments get linked to their containers.
     return startMonthSpentOf(transactions, today, (t) => (!!t.containerId && periodic.has(t.containerId)) || chosenKeys.has(payeeKey(t)))
   }, [transactions, month, today, containers, chosen])
-  // The days each periodic fee was paid, as the engine will see them after the start (AP-5): a container's linked
-  // payments, a chosen proposal's of its payee from the 1st of the month before (linked to it at the start – T379: paid
-  // the month before its due month, T135) – a cycle they paid is paid.
-  const paidDays = useMemo(() => {
-    const out = new Map<string, string[]>()
-    const linked = paymentsIndex(transactions).byContainer
-    for (const c of containers) if (c.cycleMonths > 1) out.set(c.id, (linked.get(c.id) ?? []).map((p) => p.date))
-    const ids = new Set(containers.map((c) => c.id))
-    for (const p of chosen) if (p.cycleMonths > 1) out.set(p.key, unlinkedPayments(transactions, p.label, linkFromOf(firstDayOf(month)), ids).map((t) => t.date))
-    return out
-  }, [transactions, containers, chosen, month])
+  // The payments of each periodic fee before the start, as the engine and Ładownia will count them (AP-5, T345, T393 –
+  // one rule, `paymentsIndex`): a container's linked payments, a chosen proposal's of its payee from the 1st of the month
+  // before (linked to it at the start – T379: paid the month before its due month, T135) – a cycle they paid is paid.
+  const paidDays = useMemo(() => startPaidDays(transactions, today, containers, chosen), [transactions, today, containers, chosen])
   // Operations dated after today by account (B127): not in the bank's balance now – the engine takes them on their day.
   const aheadBy = useMemo(() => {
     const out = new Map<string, number>()
@@ -117,15 +109,9 @@ export function WizardPage() {
   const hull = Math.min(Math.max(0, w.hull ?? proposedSplit.hull), Math.max(0, total))
   const goalsSplit = Object.fromEntries(goals.map((g) => [g.id, Math.max(0, w.goals?.[g.id] ?? proposedSplit.goals[g.id] ?? 0)]))
   const goalsTotal = sum(Object.values(goalsSplit))
-  // Periodic cargo items (N-PC-7): existing periodic containers and periodic proposals chosen in step 4.
-  const periodicItems = [
-    ...containers
-      .filter((c) => !c.archived && c.cycleMonths > 1)
-      .map((c) => ({ key: c.id, name: c.name, amount: c.amount, past: c.past, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, schedule: c.schedule, archived: false, from: c.from, until: c.until })),
-    ...chosen
-      .filter((p) => p.cycleMonths > 1)
-      .map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule, archived: false, from: null, until: null }))
-  ]
+  // Periodic cargo items (N-PC-7): existing periodic containers and periodic proposals chosen in step 4 – as the engine
+  // counts them (a variable bill too – przegląd 2 N3).
+  const periodicItems = startTankItems(containers, chosen)
   const tanksSplit = Object.fromEntries(periodicItems.map((item) => [item.key, Math.max(0, w.tanks?.[item.key] ?? 0)]))
   // The first month's tanks and „do planu” by the engine's rule (AP-5): a cycle paid before the start wants nothing.
   const tankPlan = new Map(startTanks(periodicItems.map((item) => ({ ...item, paid: paidDays.get(item.key) ?? [] })), today, tanksSplit).map((t) => [t.key, t]))
@@ -137,7 +123,7 @@ export function WizardPage() {
     if (v == null) delete envelopes[id]
     else envelopes[id] = v
   }
-  const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => c.amount)) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
+  const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => amountIn(c, month))) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
   // The tanks of the first month as the engine fills them (N9, T29, N-PC-7): a fee due soon catches up unless funded at start.
   const tanksMonthly = sum([...tankPlan.values()].map((t) => t.installment))
   const tanksLater = sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map(monthlyShare)) + sum(chosen.filter((p) => p.cycleMonths > 1).map(monthlyShare))

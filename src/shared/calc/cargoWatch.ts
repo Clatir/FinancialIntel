@@ -205,13 +205,16 @@ export function deadContainers(o: CargoWatchInput): DeadContainer[] {
 /**
  * Its amount history after a change of the amount in `month` (F9): the amount so far up to the month before – unless it
  * counts only from this month on (its `from`, else its creation) or a change of this month already ended the history
- * there (a second change the same month only sets the new amount).
+ * there (a second change the same month only sets the new amount). The new amount counts from `month` on: a history
+ * reaching past it (a loan's installments – T347) ends before it, the month before keeping its amount then – else the
+ * months up to its last entry kept theirs and the change showed nowhere (przegląd N2).
  */
 export function pastAfterChange(c: Pick<Container, 'amount' | 'past' | 'from' | 'createdAt'>, month: string): Container['past'] {
   const prev = addMonths(month, -1)
   const first = c.from ?? warsawNow(c.createdAt).month
-  if (first > prev || c.past.some((x) => x.until >= prev)) return c.past
-  return [...c.past, { until: prev, amount: c.amount }]
+  const kept = c.past.every((x) => x.until <= prev) ? c.past : c.past.filter((x) => x.until <= prev)
+  if (first > prev || kept.some((x) => x.until === prev)) return kept
+  return [...kept, { until: prev, amount: amountIn(c, prev) }]
 }
 
 const zlotych = (grosze: number) => `${formatPln(grosze)} zł`

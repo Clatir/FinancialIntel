@@ -2,6 +2,7 @@
  * The kind of an operation changed (the editor, a bulk change in Operacje – F11): the amount and the fields that still
  * mean something stay; the sign follows the new kind.
  */
+import { deepEqual } from '../merge'
 import type { Transaction, TxKind } from '../schema/records'
 
 /** The sign of a new amount of a kind (money out of the account < 0). */
@@ -66,4 +67,21 @@ export function unlinkedBy(before: Transaction, after: Transaction): { goals: st
   const was = links(before)
   const now = links(after)
   return { goals: [...was.goals].filter((id) => !now.goals.has(id)), containers: [...was.containers].filter((id) => !now.containers.has(id)) }
+}
+
+/**
+ * „Cofnij” of a kind change (T362) on the operation as it is now: the fields the change (`before` → `after`) set get
+ * back their values from before – a field edited since keeps its edit (an amount, a counterparty typed within the
+ * toast's 8 s – przegląd N2: the whole record from before reverted them silently); none once the kind is another again.
+ */
+export function kindUndone(current: Transaction, before: Transaction, after: Transaction): Transaction {
+  if (current.kind !== after.kind) return current
+  const now = current as unknown as Record<string, unknown>
+  const was = before as unknown as Record<string, unknown>
+  const made = after as unknown as Record<string, unknown>
+  // null and no field are two values here (`share: null` set by the change, none before – back to none).
+  const same = (a: unknown, b: unknown) => (a == null || b == null ? a === b : deepEqual(a, b))
+  const out: Record<string, unknown> = { ...now }
+  for (const k of new Set([...Object.keys(was), ...Object.keys(made)])) if (!same(was[k], made[k]) && same(now[k], made[k])) out[k] = was[k]
+  return out as unknown as Transaction
 }

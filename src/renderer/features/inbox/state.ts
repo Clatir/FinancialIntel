@@ -5,7 +5,7 @@
 import { useMemo } from 'react'
 import { doubleCorrections, openingOf } from '@shared/calc/balances'
 import { confirmationsOf } from '@shared/calc/briefing'
-import { memberName } from '@shared/calc/household'
+import { memberName, skippedDebtsOf } from '@shared/calc/household'
 import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
 import { noNarrowing } from '@shared/operationsView'
 import { listOf, updateSettings, useData } from '../../store/data'
@@ -20,12 +20,14 @@ import { openDocking, useDeliveries } from '../dock/state'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
 import { removeReturned, useReturned } from '../import/returned'
 import { openOperation, openRefundables, showFilter } from '../operations/state'
+import { repayAdvances } from '../household/actions'
 import { addOtherSide, joinTransfers, transferIssuesNow, transferIssuesOf, transferKey } from '../operations/transfers'
 
 /** The inbox counts the duplicates a while after the last change (0,6 s at 150 tys. operacji – never while typing). */
 export const DUPLICATES_AFTER_MS = 3000
 
 const NO_MONEY = () => ''
+const NO_KEPT: Readonly<Record<string, string>> = {}
 
 /**
  * The reports now; `duplicates` – counted by the caller (the inbox counts them, the side menu takes the last count – W4);
@@ -74,6 +76,8 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const cargo = useMemo(() => ({ prices: watch.prices, dead: watch.dead, containers: listOf(containers) }), [watch, containers])
   // A „folder-widmo” of an older version (AP-1).
   const ghosts = useGhosts((g) => g.list)
+  // A member's advances for the future that left their debt unpaid (AP-4) – not those said „zostaw”.
+  const advances = useMemo(() => (fleet ? skippedDebtsOf(fleet.household, fleet.receivables.members, dismissed ?? NO_KEPT) : []), [fleet, dismissed])
   if (!fleet) return []
   return inboxItems({
     today: fleet.today,
@@ -95,7 +99,8 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     ghosts,
     anomalies,
     returns,
-    returned
+    returned,
+    advances
   })
 }
 
@@ -142,6 +147,8 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
     navigate({ page: 'operations' })
   } else if (item.kind === 'duplicates') navigate({ page: 'import' })
   else if (item.kind === 'refunds') openRefundables()
+  // A member's advances for the future that left the debt unpaid (AP-4): they repay it now – with „Cofnij”.
+  else if (item.kind === 'advances' && item.ref) repayAdvances(item.ref)
   else if (item.kind === 'balances') navigate({ page: 'settings', tab: 'accounts' })
   else if (item.kind === 'transfers') {
     // One report (the pairs together – the inbox's list of them first).

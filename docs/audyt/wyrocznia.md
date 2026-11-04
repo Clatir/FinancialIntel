@@ -23,9 +23,11 @@ w wymaganiach – rozstrzyga AU-11.
 
 ```
 .tools\node-v24.21.0-win-x64\node.exe tests\audyt\wyrocznia\wyrocznia.mjs --dane <folder FI> [--ictj <folder ICTTJ>] --chwila "2026-11-03 12:00" [--json <plik>]
-.tools\node-v24.21.0-win-x64\node.exe --test "tests/audyt/wyrocznia/*.test.mjs"     # 24 testy: przykłady spec / plan E1 + poprawki u1 i u2
+.tools\node-v24.21.0-win-x64\node.exe --test tests/audyt/wyrocznia/wyrocznia.test.mjs tests/audyt/wyrocznia/wyrocznia-u3.test.mjs   # 24 + 13 testów (u1, u2, u3)
+npm run test:wyrocznia     # u3: regresja na migawkach audytu (wyrocznia a silnik aplikacji, ok. 2 min) + testy wyroczni
 ```
-Wyniki z 03.11: `C:\FI-audyt\wyrocznia\{rok,start}-2026-11-03-1200.{json,txt}`, `rok-2026-11-03-2000.json`.
+Wyniki z 03.11: `C:\FI-audyt\wyrocznia\{rok,start}-2026-11-03-1200.{json,txt}`, `rok-2026-11-03-2000.json`; u3 (04.11):
+`C:\FI-audyt\wyrocznia\u3\` (`rok-1200.json`, `regresja.json`).
 
 ## Reguły (źródła)
 
@@ -198,7 +200,8 @@ zdarzeniach 13 000 → 14 000 → 13 200 → 6 700 → 8 150 → 1 650 → −4 
 ## Poprawki po uzgodnieniu
 
 **u1 (03.11.2026, pole `wersja`: „2026-11-03 u1”).** Uzgodnienie odczytów bloków A–B
-(`C:FI-audytwyroczniaozbieznosci-ab.md`, odpowiedzi: `C:FI-audytwyroczniaodpowiedzi-ab.md`). Wartości stanów
+(`C:FI-audytwyrocznia
+ozbieznosci-ab.md`, odpowiedzi: `C:FI-audytwyroczniaodpowiedzi-ab.md`). Wartości stanów
 `rok` i `start` w tabelach wyżej – bez zmian poza Radarem i wpisem ICTTJ 31.10 w `start`.
 
 | Pozycja | Co | Dlaczego (źródło) |
@@ -223,7 +226,8 @@ zdarzeniach 13 000 → 14 000 → 13 200 → 6 700 → 8 150 → 1 650 → −4 
 Bez zmian (potwierdzone albo luka bez nowego pola): R-11 (S4 – wariant B już w JSON), R-15, R-18.
 Nowe testy: R-1, R-2/R-3, R-12, R-14, R-5/R-10 – razem 17, wszystkie przechodzą.
 
-**u2 (03.11.2026, „2026-11-03 u2”).** Uzgodnienie bloku C (`C:FI-audytwyroczniaozbieznosci-c.md`, odpowiedzi:
+**u2 (03.11.2026, „2026-11-03 u2”).** Uzgodnienie bloku C (`C:FI-audytwyrocznia
+ozbieznosci-c.md`, odpowiedzi:
 `C:FI-audytwyroczniaodpowiedzi-c.md`). Stany `rok` i `start` – główne liczby bez zmian.
 
 | Pozycja | Co | Dlaczego (źródło) |
@@ -266,3 +270,66 @@ suma warstw = salda kont każdego dnia, bez błędów wykonania.
   (saldo pliku mBanku, dwa osiągnięcia).
 - Wyrocznia nie jest poprawiana w audycie (werdykty się nie zmieniają); przed użyciem jej do testów regresji po grupach
   naprawczych – poprawić W1 i S1–S4.
+
+## u3 – wyrocznia poprawiona i włączona jako regresja (AP-32, N2, 04.11.2026, „2026-11-04 u3”)
+
+Ślepota bez zmian: poprawki tylko z przeglądu kodu wyroczni (`C:\FI-audyt\wyrocznia\przeglad.md`) i z wymagań – D99,
+D100 i T340–T362 (`docs/decyzje.md`); format danych z kopii schematów `lib/schemat.mjs` (nazwy pól, wartości domyślne,
+brak ≠ null – przepisane z `src/shared/schema` @ 281e4f4; zgodność kopii ze schematami sprawdza regresja). Silnik
+aplikacji czyta tylko regresja (`regresja.test.ts`, `tests/unit/wyrocznia-ap32.test.ts`), nigdy wyrocznia.
+
+| Pozycja | Co | Źródło |
+| --- | --- | --- |
+| W1 = C24 | podział dokowania do celu – cel w stanie z chwili dokowania (`goalAt`), nie dzisiejsze `archived` | T128, T176 |
+| S1 | „ładunek”: masa miesiąca znana na koniec dnia wobec znanej na koniec dnia poprzedniego (utworzenie, `archivedAt`, `amountAt`); kontener `from` null – bez dolnej granicy | T75, T227, schemat |
+| S2 | osłony poniżej minimum z doliczeniem pożyczonego domownikom tego dnia | T161 |
+| S3 | zakup nocny, impuls, zwrot i wydatek z godziną – raz na operację (moja część) | T161, T187 |
+| S4 | operacje domowników sprzed rozliczeń spoza `openingIds` – zaraz po saldach na start; rezerwacje D94 i pominięte zerowane w dniu rozliczeń (N4) | T159, T312 |
+| N1, N2, N5, N6, N8, N9, N11, N12, N14, N15, N16, N17 | przelew / korekta / pożyczka tylko z osłon; brak w celu – decyzja dnia; linia „do zwrotu” bez osoby – pierwszy domownik; zwrot z prezentu do osłon; kandydat pary wg T224, pominięty wpis parowany na końcu; „sprzed startu” po dacie pary; problemy ICTTJ w uwagach; zapas koperty od chwili decyzji; termin celu z historii; start bez `budget.start` – najwcześniejsze saldo; przeniesienie do nieznanego celu zostaje; saldo pliku mBanku tylko z zewnątrz | T31, T24, schemat, T157, T224, T162, T163, T279, T272, T25 |
+| N3 | wskazany zakup spłacony czekającymi pieniędzmi zużywa je | T304 |
+| C19 / R-15 | sprostowane: „teraz” symulatora to ten sam zasięg co Mostek (F35, T218), 7,9 w 1.15.4 to zasięg po resztce miesiąca (AF-33, N3) – nie zaokrąglenie; pole `zasieg.wszedzie` | T71, T218, F35 |
+| PR sp. 9 | kolejność potwierdzona (D99 pkt 9): wydatek ponad energię – osłony, potem kadłub, potem deficyt; na zwykłej kwocie aplikacja liczy tak samo (test) | T28, T32 |
+| T340 | przeniesienie środków celu w chwili `at` – przed pierwszym zdarzeniem dnia, które przyszło później (`cameIn`: dokowanie / operacja, decyzja łupów); czego cel wtedy nie miał – na koniec dnia | T340 (AP-3) |
+| T341, T342, C13 | pary ICTTJ liczone przed przebiegiem (`pairIctj`: okno T63 / T164, „inna kwota” T162, Portfel XTB T224); niezadokowana para = dokowanie z pulą wpisu; „Do zadokowania” (ile, wpływ, wypływ, w celach); para z puli Podatek poza przychodem | T341, T342 (AP-12) |
+| T345 | płatność opłaty okresowej sprzed startu zamyka swój cykl (od 1.15.7 regułą T393: opłata śledzona od pierwszej płatności, spóźniona płaci zaległy termin) | T345 (AP-5) |
+| T393, T394 | terminy opłat i cykle zapłacone – jedna reguła stanu Ładowni (`lib/oplaty.mjs`: okna T375, zaległa najpierw, druga płatność okna, terminy budżetu od dnia startu, `createdAt`, `aliveAt`); płatności kontenera (`feePays`) – części wydatku z kontenerem, jedna na operację, także z celu i „do zwrotu” (zbiornik nietknięty), inny rodzaj nigdy – te same dla silnika, Ładowni i Radaru (scalenie N2 z N3); część z celem i kontenerem naraz – płaci cel (T131) | T393, T394 (AP-10), T131 |
+| T346 | `planNaprzod` – 3 miesiące od stanu teraz: pobrane i wymagane odkładki, raty celów; bez pensji nic pobrane | T346, C20 (AP-11) |
+| T350, T352, T354 | główny wariant domowników **D99** (A – spec i B – 1.15.3 obok): „spłata” najpierw spłaca, jawny przychód / zaliczka spłacają tylko wskazane zakupy tej osoby, bez wskazania omijają dług (`zaliczkiPrzyDlugu`); obok części „spłata” tej osoby w tej samej operacji wskazane są tamtej części, jawna omija dług (przegląd 2 N2 – zaliczka rozbita przez „Spłać”); Marek (14.09, zaliczka → EVENTIM) 300,00 zł od 24.09, depozyt 4 737,20 zł | D99 pkt 1 (AP-4) |
+| T355, T356 | linia wpływu z `loanId` – spłata pożyczki udzielonej do wysokości długu, nadwyżka dokuje; spłaty sprzed startu i w saldzie otwarcia konta w stanie pożyczki (po kolei dni); „kto zapłacił”; w statystykach do wysokości długu poza przychodem, nadwyżka ponad dług (odsetki) – przychód, całością i częścią (`loanExtra`, T70 – AF-5, przegląd 2 N2); linia pożyczki nieznanej / wziętej – przychód | D100, T70 |
+| S8, C21 | przydział dziś nie poniżej zera (`przydzialDzisNieUjemny`, `energiaDzis`); „Razem” przychodów jako suma zaokrąglonych części | D99 pkt 9 |
+
+**Regresja.** `npm run test:wyrocznia` (`vitest.wyrocznia.config.mts`, tylko lokalnie – migawki są w laboratorium,
+`FI_AUDIT_LAB`): stany `rok` i `start` oraz każda migawka odczytów (dzień i minuta pierwszego odczytu) – wyrocznia (wariant
+D99, pary według T341) i silnik aplikacji (`computeFleet` z parami `deliveries` / `pendingPairsOf` z folderu ICTTJ jak
+okno, `monthAhead`) na tych samych plikach i w tej samej chwili: salda kont, suma, warstwy, każdy cel i zbiornik, cele
+warstw, wolne do decyzji, średnie koszty, dług, zasięg, klasa, masa ładunku, „do zadokowania”, każdy domownik (ma oddać,
+zaliczka), każda pożyczka, pensja (z osłon / kadłuba), odkładki pobrane i wymagane, raty celów, przydział i energia dziś,
+średnie przychodów, 3 miesiące planu naprzód; „ten sam stan – ta sama liczba na każdym ekranie” (suma warstw = salda,
+depozyt = zaliczki przy osobach, „mają oddać” = suma przy osobach, termin asteroidy odprawa = Radar, eksport miesiąca =
+pasek Operacji); kopia schematów (pola wyroczni po jej odczycie = po parsowaniu aplikacji). Wynik:
+`C:\FI-audyt\wyrocznia\u3\regresja.json`. Znane rozbieżności – lista `KNOWN` z powodem (błąd aplikacji naprawiany w
+późniejszej grupie); zniknięcie znanej też zatrzymuje test. Szybka część w `npm test`: `tests/unit/wyrocznia-ap32.test.ts`
+(scenariusze reguł N2 – wyrocznia = silnik; ekrany – AF-15 od scalenia z N3 zwykłym testem: stan opłat od startu budżetu
+i dni `cargoDays`, jak okno).
+
+**Wynik 04.11.2026 (gałąź `claude/1.15.6-n2b`):** 412 przypadków, 28 963 liczb pieniędzy, 2 852 porównań ekranów,
+9,75 mln pól schematów, ok. 2 min (sama regresja) – liczby pieniędzy wyroczni = aplikacji we wszystkich przypadkach. Rozbieżności: termin
+asteroidy „Woda” – odprawa 15.11 (dzień kontenera), Radar i Ładownia 14.11 (historia płatności) w 11 migawkach LA – AF-15,
+błąd aplikacji, naprawa w N3 (AP-10); zbiornik „OC motocykla” po końcu życia (LA.11-4) – wyrocznia 0,00 zł, aplikacja go
+nie pokazuje (te same pieniądze – porównanie czyta brak jako 0). Bez pokrycia na migawkach (nowe w N2, dane 1.15.4 ich
+nie mają): T345 z dniem startu po płatności, T355 – sprawdzane scenariuszami w `npm test`.
+
+**Przegląd 2 N2 (04.11.2026, gałąź `claude/1.15.6-silnik`):** wyrocznia z tekstu T355 (zmienionego – nadwyżka spłaty
+pożyczki ponad dług to przychód w statystykach, T70 / AF-5) i T350 (wskazane zakupy części „spłata” obok jawnej zaliczki
+tej osoby); wynik regresji ten sam (412 przypadków, 28 963 liczb, tylko AF-15). Nadwyżka jest w 5 migawkach (DM.18-4,
+DM.19 – „Pożyczka dla Oli”, 1 050 z 1 000 zł), ale w miesiącu migawki, poza średnimi pełnych miesięcy – AF-5 sprawdza
+scenariusz w `npm test` (`wyrocznia-ap32`) i `wyrocznia-u3`.
+
+**Scalenie N2 z N3 (04.11.2026, gałąź `claude/1.15.7-oplaty`):** jedna wyrocznia – reguła terminów opłat i cykli
+zapłaconych z `lib/oplaty.mjs` (T393, T394; zamiast `paidCycles` / `trackFrom` / `closeCycleFor` z u3), płatności kontenera
+z tekstu T393 po scaleniu (`feePays`: wydatek, także z celu i „do zwrotu”, inny rodzaj nigdy – te same dla silnika,
+Ładowni i Radaru wyroczni), część z celem i kontenerem płaci cel (T131). Ekrany regresji jak okno (stan opłat od startu
+budżetu, dni `cargoDays`). Wynik: 412 przypadków, 28 963 liczb pieniędzy, 2 852 porównań ekranów, 9,75 mln pól schematów
+– wszystkie zgodne, `KNOWN` pusta (AF-15 naprawione w N3, AP-10); ok. 7 min przy obciążonym komputerze. Bez pokrycia na
+migawkach (dane 1.15.4 ich nie mają): płatność opłaty z celu, do zwrotu i dawny przelew z kontenerem – scenariusze
+w `wyrocznia.test.mjs` i `npm test` (`fees-n3-paid-by`, właściwość `fees-n3-agree`).

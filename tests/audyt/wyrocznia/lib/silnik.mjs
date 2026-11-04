@@ -15,6 +15,8 @@ import {
   warsawDayStart
 } from './daty.mjs'
 import { splitEvenly } from './kwoty.mjs'
+// T393: terminy opłat i cykle zapłacone – jedna reguła z Ładownią (moduł czyta kalendarz stąd: cykl samych funkcji)
+import { cykleZaplacone, dzienPlatnosci, terminyOplaty } from './oplaty.mjs'
 
 export const HOUSE_MEMBER_ID = '01KDEFMEM00000000000000001'
 
@@ -39,7 +41,8 @@ export function categoryIndex(settings) {
 
 /**
  * Części operacji (T105, T117, T156, T238): wydatek – linie paragonu (reszta bez linii = część bez kategorii);
- * wpływ – części innych osób z `splits`, reszta kwoty jest nadawcy (memberId operacji).
+ * wpływ – części innych osób z `splits`, reszta kwoty jest nadawcy (memberId operacji); linia z `loanId` (D100, T355) –
+ * część spłacająca pożyczkę udzieloną, bez domownika, ucinana kwotą wpłaty w kolejności linii jak części osób.
  */
 export function partsOf(t) {
   const base = { containerId: null, goalId: null }
@@ -49,10 +52,11 @@ export function partsOf(t) {
     const parts = (t.splits ?? []).map((s) => {
       const amount = t.amount > 0 ? Math.max(0, Math.min(s.amount, left)) : s.amount
       if (t.amount > 0) left -= amount
-      return { ...base, amount, memberId: s.memberId ?? null, advance: !!s.advance, inflowKind: s.inflowKind, split: true }
+      const loanId = s.loanId ?? null
+      return { ...base, amount, memberId: loanId ? null : s.memberId ?? null, loanId, advance: !!s.advance, inflowKind: s.inflowKind, split: true }
     })
     const rest = t.amount - parts.reduce((a, p) => a + p.amount, 0)
-    if (rest !== 0 || !parts.length) parts.push({ ...base, amount: rest, memberId: t.memberId ?? null, advance: !!t.advance, inflowKind: t.inflowKind, split: false })
+    if (rest !== 0 || !parts.length) parts.push({ ...base, amount: rest, memberId: t.memberId ?? null, loanId: null, advance: !!t.advance, inflowKind: t.inflowKind, split: false })
     return parts
   }
   if (t.splits?.length) {
@@ -94,13 +98,14 @@ export function sidesOf(t) {
 /**
  * Klasyfikacja własnej części wydatku. Zwraca rodzaj: 'cargo' (płatność kontenera), 'goal' (z pieniędzy celu),
  * 'daily' (koperta codzienna albo bez kategorii – T30), 'planned' (kategoria planowa), 'outside' (kategoria poza
- * kopertami).
+ * kopertami). Część z celem i kontenerem naraz (T131: wykluczają się – dane spoza aplikacji) płaci cel: rachunek
+ * opłaty zapłacony z pieniędzy celu, zbiornik nietknięty (T393 po scaleniu N2 z N3; cykl zamyka płatność opłaty).
  */
 export function classifyOwn(t, p, ctx) {
-  const contId = p.containerId ?? t.containerId ?? null
-  if (contId && ctx.containers.has(contId)) return { kind: 'cargo', containerId: contId }
   const goalId = p.goalId ?? t.goalId ?? null
   if (goalId && ctx.goals.has(goalId)) return { kind: 'goal', goalId }
+  const contId = p.containerId ?? t.containerId ?? null
+  if (contId && ctx.containers.has(contId)) return { kind: 'cargo', containerId: contId }
   const main = ctx.cats.mainOf(p.categoryId)
   if (main === null) return { kind: 'daily', main: null }
   if (main === undefined) return { kind: 'daily', main: null, unknownCategory: p.categoryId }
@@ -177,10 +182,13 @@ export function amountIn(c, m) {
   return c.amount
 }
 
-/** Miesiąc pierwszy i ostatni, w którym kontener jest w ładowni (T136). */
+/**
+ * Miesiąc pierwszy i ostatni, w którym kontener jest w ładowni (T136). `from` null = bez dolnej granicy (schemat:
+ * „null = open”; AP-32 – wcześniej miesiąc utworzenia, przegląd S1).
+ */
 export function lifeOf(c, budgetStartMonth) {
-  const created = monthOf(toWarsaw(c.createdAt).date)
-  const from = c.from ?? created
+  void budgetStartMonth
+  const from = c.from ?? null
   let until = c.until ?? null
   if (c.archived) {
     if (!c.archivedAt) return { from, until: '0000-00', never: true } // archiwum sprzed 1.4.2 – nigdy (T136)
@@ -193,7 +201,7 @@ export function lifeOf(c, budgetStartMonth) {
 export const aliveIn = (c, m, bsm) => {
   const l = lifeOf(c, bsm)
   if (l.never) return false
-  return m >= l.from && (l.until == null || m <= l.until)
+  return (l.from == null || m >= l.from) && (l.until == null || m <= l.until)
 }
 
 /** Miesiące płatności opłaty okresowej w roku (harmonogram T286 albo cykl od dueMonth). */
@@ -252,7 +260,14 @@ export function monthlyWeight(c, m) {
 export function goalAt(g, tMs) {
   if (g.activeFrom && tMs < Date.parse(g.activeFrom)) return null
   const past = [...(g.past ?? [])].sort((a, b) => Date.parse(a.until) - Date.parse(b.until))
-  for (const p of past) if (tMs < Date.parse(p.until)) return { priority: p.priority, target: p.target, archived: !!p.archived, deadline: p.deadline === undefined ? g.deadline : p.deadline }
+  for (let i = 0; i < past.length; i++) {
+    const p = past[i]
+    if (!(tMs < Date.parse(p.until))) continue
+    // AP-32 (przegląd N14, T272): brak terminu w stanie z historii = najbliższy późniejszy znany termin
+    let deadline = p.deadline
+    for (let j = i + 1; deadline === undefined && j < past.length; j++) deadline = past[j].deadline
+    return { priority: p.priority, target: p.target, archived: !!p.archived, deadline: deadline === undefined ? g.deadline ?? null : deadline }
+  }
   return { priority: g.priority ?? 1, target: g.target, archived: !!g.archived, deadline: g.deadline ?? null }
 }
 
@@ -264,16 +279,28 @@ export function goalInstallment(gap, m, deadline) {
   return n === 1 ? gap : Math.floor(gap / n)
 }
 
-// ------------------------------------------------------------------ domownicy (D80, D81, D83, D91, D94; T105–T117, T157, T304)
+// ------------------------------------------------------------------ domownicy (D80, D81, D83, D91, D94, D99; T105–T117, T157, T159, T304, T350, T352)
 
-/** Część zakupu finansowana przez osobę (kwota dodatnia). */
-function memberPartOf(t, memberId) {
+/** Część zakupu finansowana przez osobę (kwota dodatnia); linia bez osoby – pierwszy domownik (schemat; przegląd N5). */
+function memberPartOf(t, memberId, firstId) {
   if (t.kind !== 'expense') return 0
   let x = 0
-  for (const p of partsOf(t)) if (p.refundable && (p.memberId ?? t.memberId) === memberId && p.amount < 0) x += -p.amount
+  for (const p of partsOf(t)) if (p.refundable && (p.memberId ?? firstId) === memberId && p.amount < 0) x += -p.amount
   return x
 }
 
+/** Czy operacja dotyczy domowników (zakup / prezent / zwrot towaru za osobę albo wpłata osoby) – T159. */
+export function isHouseholdOp(t) {
+  if (t.kind === 'expense') return partsOf(t).some((p) => p.refundable && p.amount !== 0)
+  if (t.kind === 'income') return partsOf(t).some((p) => p.amount > 0 && !p.loanId && (p.memberId != null || (p.split === false && t.memberId != null)))
+  return false
+}
+
+/**
+ * Rejestr domowników. Warianty wpłaty (S4): 'D99' – wymaganie po audycie (D99 pkt 1, T350: „spłata” najpierw spłaca, reszta
+ * wg `advance`; jawny przychód / zaliczka wskazujące zakupy tej osoby spłacają tylko je, późniejsze rezerwacją D94; bez
+ * wskazania omijają dług); 'A' – spec / D80 b / D91 (każda wpłata najpierw spłaca); 'B' – 1.15.3 (`inflowKind` omija dług).
+ */
 class Household {
   constructor(settings, variant, startDate, txById = new Map()) {
     const hh = settings.household ?? {}
@@ -287,7 +314,7 @@ class Household {
     this.notes = []
   }
   fresh(m) {
-    return { id: m.id, name: m.name, deposit: 0, purchases: [], unassigned: 0, giftsFromShields: 0, repaidTotal: 0, inflowIncome: 0, earmarks: {}, events: [] }
+    return { id: m.id, name: m.name, deposit: 0, purchases: [], unassigned: 0, giftsFromShields: 0, repaidTotal: 0, inflowIncome: 0, earmarks: {}, skipped: [], events: [] }
   }
   get(id) {
     const key = id ?? this.firstId
@@ -317,21 +344,56 @@ class Household {
     m.events.push({ date: t.date, txId: t.id, type: gift ? 'prezent' : 'zakup', amount, fromDep, rest })
     return { fromDep, lent: gift ? 0 : rest, gift: gift ? rest : 0 }
   }
-  /** Wpłata części osoby: wariant A (spec, D80 b, D91) – najpierw spłata; B (1.15.3) – wg `inflowKind`. */
+  /**
+   * Spłata zakupów kwotą `left`: wskazane po kolei (wskazany zakup, którego reszta jest już spłacona czekającymi pieniędzmi,
+   * zużywa je – T304), przy `fifo` potem najstarsze. Zwraca to, co zostało z `left`.
+   */
+  settle(m, left, coversAll, fifo) {
+    for (const id of coversAll) {
+      const p = m.purchases.find((x) => x.txId === id && x.remaining > 0)
+      if (!p) continue
+      const x = Math.min(left, p.remaining)
+      p.remaining -= x
+      left -= x
+      if (p.remaining > 0 && m.unassigned > 0) {
+        const y = Math.min(m.unassigned, p.remaining)
+        p.remaining -= y
+        m.unassigned -= y
+      }
+    }
+    if (left > 0 && fifo) {
+      for (const p of m.purchases) {
+        if (left <= 0) break
+        const x = Math.min(left, p.remaining)
+        p.remaining -= x
+        left -= x
+      }
+    }
+    return left
+  }
+  /** Wpłata części osoby (plan części – T350): 'repay' (spłata długu), 'named' (tylko wskazane), 'advance' / 'income' (bez spłaty). */
   inflow(memberId, amount, advance, inflowKind, covers, t) {
     const m = this.get(memberId)
-    let repay = 0
-    let toDep = 0
-    let income = 0
-    const mode = this.variant === 'B' && (inflowKind === 'advance' || inflowKind === 'income') ? inflowKind : 'repay'
+    const explicit = inflowKind === 'advance' || inflowKind === 'income'
+    const coversOpening = !!t.coversOpening && (!t.coversOpeningMembers || t.coversOpeningMembers.includes(m.id))
+    const coversAll = [...(coversOpening ? [`opening:${m.id}`] : []), ...(covers ?? [])]
+    const names = coversOpening || (covers ?? []).some((id) => memberPartOf(this.txById.get(id) ?? {}, m.id, this.firstId) > 0)
+    // T350 (przegląd 2 N2): wskazane zakupy należą do części „spłata” tej osoby w tej samej operacji, gdy ją ma (rozbita
+    // zaliczka po „Spłać” – T352) – jawna część obok niej omija dług
+    const repaysToo = explicit && t.kind === 'income' && partsOf(t).some((p) => p.amount > 0 && !p.loanId && (p.memberId ?? null) === m.id && p.inflowKind !== 'advance' && p.inflowKind !== 'income')
+    let mode
+    if (this.variant === 'B') mode = explicit ? inflowKind : 'repay'
+    else if (this.variant === 'D99') mode = !explicit ? 'repay' : names && !repaysToo ? 'named' : inflowKind
+    else mode = 'repay'
+    const owedBefore = this.owedNet(m)
     // D94 (u2, C23): wskazane późniejsze zakupy tej osoby – rezerwacja (celowa zaliczka w depozycie, także przy advance: false)
     let reserved = 0
-    if (mode === 'repay') {
+    if (mode === 'repay' || mode === 'named') {
       for (const id of covers ?? []) {
         const p = this.txById.get(id)
         if (!p || !(p.date > t.date || (p.date === t.date && (p.time ?? '') > (t.time ?? '')))) continue
         if (m.purchases.some((x) => x.txId === id)) continue
-        const part = memberPartOf(p, m.id)
+        const part = memberPartOf(p, m.id, this.firstId)
         const x = Math.min(amount - reserved, Math.max(0, part - (m.earmarks[id] ?? 0)))
         if (x <= 0) continue
         m.earmarks[id] = (m.earmarks[id] ?? 0) + x
@@ -340,34 +402,28 @@ class Household {
       amount -= reserved
       m.deposit += reserved
     }
+    let repay = 0
+    let toDep = 0
+    let income = 0
     if (mode === 'advance') toDep = amount
     else if (mode === 'income') income = amount
     else {
-      repay = Math.min(amount, Math.max(0, this.owedNet(m)))
-      let left = repay
-      const coversAll = [...(t.coversOpening && (!t.coversOpeningMembers || t.coversOpeningMembers.includes(m.id)) ? [`opening:${m.id}`] : []), ...(covers ?? [])]
-      for (const id of coversAll) {
-        if (left <= 0) break
-        const p = m.purchases.find((x) => x.txId === id && x.remaining > 0)
-        if (!p) continue
-        const x = Math.min(left, p.remaining)
-        p.remaining -= x
-        left -= x
-      }
-      const fifo = this.assignFrom === undefined || (this.assignFrom !== null && t.date < this.assignFrom)
-      if (left > 0 && fifo) {
-        for (const p of m.purchases) {
-          if (left <= 0) break
-          const x = Math.min(left, p.remaining)
-          p.remaining -= x
-          left -= x
-        }
-      }
+      const named = mode === 'named'
+      // T304: wpłata spłaca najwyżej to, co osoba ma oddać
+      let want = Math.min(amount, Math.max(0, this.owedNet(m)))
+      if (named) want = Math.min(want, coversAll.reduce((a, id) => a + (m.purchases.find((x) => x.txId === id)?.remaining ?? 0), 0))
+      const fifo = !named && (this.assignFrom === undefined || (this.assignFrom !== null && t.date < this.assignFrom))
+      const left = this.settle(m, want, coversAll, fifo)
+      // spłacone ponad wskazane czeka na przypisanie (D91); „named” – nic nie czeka (T350)
       if (left > 0) m.unassigned += left
+      repay = want
       const rest = amount - repay
-      if (advance) toDep = rest
+      const toAdvance = named ? inflowKind === 'advance' : advance
+      if (toAdvance) toDep = rest
       else income = rest
     }
+    // T352: jawna zaliczka na przyszłość, która przy długu osoby nic nie spłaciła ani nie zarezerwowała
+    if (this.variant === 'D99' && inflowKind === 'advance' && owedBefore > 0 && repay === 0 && reserved === 0) m.skipped.push(t.id)
     m.deposit += toDep
     m.repaidTotal += repay
     m.inflowIncome += income
@@ -375,16 +431,41 @@ class Household {
     m.events.push({ date: t.date, txId: t.id, type: 'wpłata', amount: amount + reserved, repay, toDep: toDep + reserved, reserved, income, mode })
     return { repay, toDep: toDep + reserved, income, reserved }
   }
+  /** Zwrot towaru z zakupu domownika (T105): jego pieniądze – spłata, reszta zaliczka. */
+  productReturn(memberId, amount, t) {
+    return this.inflow(memberId, amount, true, 'repay', t.covers ?? [], t)
+  }
+  /** Część operacji dla rejestru bez warstw (operacje „późne” T159 w dniu rozliczeń). */
+  registerOnly(t) {
+    if (t.kind === 'expense') {
+      for (const p of partsOf(t)) {
+        if (!p.refundable || p.amount === 0) continue
+        const gift = p.gift || (!t.splits?.length && t.gift)
+        if (p.amount < 0) this.purchase(p.memberId ?? null, -p.amount, gift, t)
+        else if (!gift) this.productReturn(p.memberId ?? null, p.amount, t)
+      }
+    } else if (t.kind === 'income') {
+      for (const p of partsOf(t)) {
+        if (p.amount <= 0 || p.loanId) continue
+        const isMember = p.memberId != null || (p.split === false && t.memberId != null)
+        if (isMember) this.inflow(p.memberId ?? t.memberId, p.amount, p.advance, p.inflowKind, t.covers, t)
+      }
+    }
+  }
   /**
-   * Dzień rozliczeń (T115, T116, T228): rejestr zeruje salda drugi raz – saldo osoby = jej `opening` (należność jako
-   * otwarta pozycja `opening:<osoba>` z datą `opening.since`, zaliczka do depozytu). Zwraca zmianę depozytu.
+   * Dzień rozliczeń (T115, T116, T159, T228): rejestr zeruje salda drugi raz – saldo osoby = jej `opening` (należność jako
+   * otwarta pozycja `opening:<osoba>` z datą `opening.since`, zaliczka do depozytu); rezerwacje D94 i pominięte (T352) tej
+   * epoki też (T312; przegląd N4). Potem operacje domowników sprzed rozliczeń spoza `openingIds` (`late`, T159). Zwraca
+   * zmianę depozytu.
    */
-  resetAt(members, since) {
+  resetAt(members, since, late = []) {
     const before = [...this.members.values()].reduce((a, m) => a + m.deposit, 0)
     for (const m of this.members.values()) {
       m.deposit = 0
       m.purchases = []
       m.unassigned = 0
+      m.earmarks = {}
+      m.skipped = []
     }
     for (const mm of members ?? []) {
       const m = this.get(mm.id)
@@ -394,24 +475,34 @@ class Household {
       if (owed > 0) m.purchases.push({ txId: `opening:${mm.id}`, date: o.since ?? since, amount: owed, full: owed, remaining: owed, opening: true })
       if (owed > 0 || m.deposit > 0) m.events.push({ date: since, type: 'saldo na start rozliczeń', owed, deposit: m.deposit })
     }
+    const repaidToday = this.repaidToday
+    for (const t of late) this.registerOnly(t)
+    this.repaidToday = repaidToday
     const after = [...this.members.values()].reduce((a, m) => a + m.deposit, 0)
     return after - before
-  }
-  /** Zwrot towaru z zakupu domownika (T105): jego pieniądze – spłata, reszta zaliczka. */
-  productReturn(memberId, amount, t) {
-    return this.inflow(memberId, amount, true, 'repay', t.covers ?? [], t)
   }
 }
 
 // ------------------------------------------------------------------ silnik
 
+/** Start warstw (T25): `budget.start`, inaczej najwcześniejsze saldo otwarcia (do dziś) – przegląd N15. */
+export function startOf(input, today) {
+  const s = input.settings?.budget?.start
+  if (s) return s
+  let first = null
+  for (const b of input.balances ?? []) if (b.kind === 'opening' && b.date <= today && (first == null || b.date < first)) first = b.date
+  return first
+}
+
 /**
  * @param input { settings, transactions, containers, goals, months, dockings, loans, balances, scheduled, imports }
- * @param opt { today: 'RRRR-MM-DD', household: 'A'|'B' }
+ * @param opt { today: 'RRRR-MM-DD', household: 'D99'|'A'|'B', pendingPairs?: Map<txId, { pool, entryDate, entryId }> }
+ *   pendingPairs (T341): pary wpisu ICTTJ z operacją jeszcze bez dokowania – liczone jak dokowanie z pulą wpisu.
  */
 export function runFleet(input, opt) {
   const today = opt.today
-  const variant = opt.household ?? 'A'
+  const variant = opt.household ?? 'D99'
+  const pendingPairs = opt.pendingPairs ?? new Map()
   const S0 = input.settings
   const cats = categoryIndex(S0)
   const containers = new Map(input.containers.map((c) => [c.id, c]))
@@ -460,7 +551,7 @@ export function runFleet(input, opt) {
     const prev = openings.get(b.accountId)
     if (!prev || b.date > prev.date || (b.date === prev.date && b.updatedAt > prev.updatedAt)) openings.set(b.accountId, b)
   }
-  const budgetStart = S0.budget?.start ?? [...openings.values()].reduce((a, b) => (a == null || b.date < a ? b.date : a), null)
+  const budgetStart = startOf(input, today)
   if (!budgetStart) return { error: 'brak startu budżetu i sald otwarcia' }
   const bsm = monthOf(budgetStart)
   // R-12 (u1): konto budżetu bez salda otwarcia = suma operacji (saldo 0 od pierwszej operacji) – inaczej suma warstw ≠ salda
@@ -550,31 +641,43 @@ export function runFleet(input, opt) {
   const log = []
   const loot = new Map() // miesiąc → { amount, decided, toShields, at }
   const loansState = new Map(input.loans.map((l) => [l.id, { paid: 0, lent: 0, received: 0, extraIncome: 0, payments: [] }]))
+  // T70, T355 (przegląd 2 N2, AF-5): nadwyżka spłaty pożyczki udzielonej ponad dług (odsetki) z każdej operacji – przychód
+  // także w statystykach przychodów (całą wpłatą i częścią wpłaty, w biegu i poza nim)
+  const loanExtra = new Map()
+  const addExtra = (t, x) => {
+    if (x > 0) loanExtra.set(t.id, (loanExtra.get(t.id) ?? 0) + x)
+  }
   const deliveries = []
   const hullTargetAt = new Map()
 
   // ---------------------------------------------------------------- przepływy
-  const paidCycles = new Map()
-  const trackFrom = (c) => {
-    const f = c.from ?? monthOf(toWarsaw(c.createdAt).date)
-    return f > bsm ? f : bsm
+  // T393 (po scaleniu N2 z N3): płatności kontenera – jedna reguła Ładowni, Radaru, silnika i kreatora: części wydatku
+  // z kontenerem (linii, inaczej operacji), jedna płatność na operację – suma jej części z tym kontenerem (wypływ);
+  // także z pieniędzy celu i „do zwrotu” (rachunek zapłacony – pieniądze celu albo domownika, zbiornik nietknięty),
+  // sprzed startu i spoza życia opłaty; inny rodzaj z kontenerem (dawny przelew – T362) nigdy. Cykle zapłacone opłaty
+  // okresowej liczy z nich reguła stanu Ładowni (`oplaty.mjs`)
+  const feePays = new Map()
+  for (const t of ops) {
+    if (t.kind !== 'expense') continue
+    const perFee = new Map()
+    for (const p of partsOf(t)) {
+      const cid = p.containerId ?? t.containerId ?? null
+      if (cid && containers.has(cid)) perFee.set(cid, (perFee.get(cid) ?? 0) - p.amount)
+    }
+    for (const [cid, amount] of perFee) {
+      if (amount <= 0) continue
+      if (!feePays.has(cid)) feePays.set(cid, [])
+      feePays.get(cid).push({ id: t.id, date: t.date, amount })
+    }
   }
-  const prevDueOf = (c, m) => {
-    let x = addMonths(m, -1)
-    let guard = 0
-    while (!isDueMonth(c, x) && guard++ < 120) x = addMonths(x, -1)
-    return x
-  }
-  const cycleClosed = (c, due) => !!paidCycles.get(c.id)?.has(due) || due < trackFrom(c)
+  for (const list of feePays.values()) list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))
+  /** Cykle opłaty zapłacone płatnościami sprzed dnia `before` – stan Ładowni miesiąca m (T393). */
+  const paidBefore = (c, before, m) => cykleZaplacone(c, feePays.get(c.id) ?? [], before, m, budgetStart)
+  /** Termin, który zapłaciła płatność z dnia `date` (do logu) – po płatnościach do tego dnia (T393, T394). */
   const closeCycleFor = (c, date) => {
-    const X = monthOf(date)
-    let due
-    if (isDueMonth(c, X)) due = X
-    else if ((c.cycleMonths ?? 1) >= 3 && isDueMonth(c, addMonths(X, 1))) due = cycleClosed(c, prevDueOf(c, addMonths(X, 1))) ? addMonths(X, 1) : prevDueOf(c, addMonths(X, 1))
-    else due = prevDueOf(c, X)
-    if (!paidCycles.has(c.id)) paidCycles.set(c.id, new Set())
-    paidCycles.get(c.id).add(due)
-    return due
+    const known = (feePays.get(c.id) ?? []).filter((p) => p.date <= date)
+    const m = monthOf(date)
+    return terminyOplaty(c, known, { start: budgetStart, miesiac: m, dzien: dzienPlatnosci(c, known, m) }).find((x) => x.platnosci.some((p) => p.date === date))?.m ?? null
   }
   const takeChain = (x) => {
     const fromS = Math.min(x, Math.max(st.S, 0))
@@ -585,6 +688,12 @@ export function runFleet(input, opt) {
     rest -= fromH
     if (rest > 0) st.S -= rest // deficyt: osłony poniżej zera (T32)
     return { fromS, fromH, deficit: rest }
+  }
+  // T31: przelew własny, korekta salda, pożyczka (wzięta, udzielona – wypływ z osłon, T72) zmieniają tylko osłony –
+  // także poniżej zera (przegląd N1; T32 – osłony → kadłub – tylko wydatek ponad energię, do zwrotu i dopłata do XTB)
+  const takeShields = (x) => {
+    st.S -= x
+    return { fromS: x, fromH: 0, deficit: 0 }
   }
   const spendEnergy = (x, rec) => {
     if (x < 0) {
@@ -693,11 +802,21 @@ export function runFleet(input, opt) {
     out.toShields += rest
     return out
   }
-  const cameInOf = (t) => {
+  // T128 / T340: chwila, w której pieniądze przyszły do FI – utworzenie dokowania, bez niego operacji (para do
+  // zadokowania – operacji, T341), nigdy przed początkiem dnia (druga strona przelewu – jej dnia)
+  const cameInOf = (t, day = t.date) => {
     const d = dockByTx.get(t.id)
     const c = Date.parse(d ? d.createdAt : t.createdAt)
-    return Math.max(c, warsawDayStart(t.date))
+    return Math.max(c, warsawDayStart(day))
   }
+  /** Dokowanie operacji: rekord, inaczej para do zadokowania z pulą wpisu (T341) – rekord decyduje nad parą. */
+  const dockOf = (t) => {
+    const d = dockByTx.get(t.id)
+    if (d) return d
+    const p = pendingPairs.get(t.id)
+    return p ? { pool: p.pool ?? null, entryDate: p.entryDate ?? null, split: null, ictjEntryId: p.entryId ?? null, pending: true } : null
+  }
+  const toDock = []
 
   // ---------------------------------------------------------------- dzień po dniu
   let curMonth = null
@@ -786,8 +905,9 @@ export function runFleet(input, opt) {
       if ((c.cycleMonths ?? 1) <= 1 || !aliveIn(c, m, bsm)) continue
       const tank = st.T.get(c.id) ?? 0
       const cyc0 = cycleOf(c, m)
-      if (paidCycles.get(c.id)?.has(cyc0.due)) {
-        // u2 (C2): cykl już zapłacony (T135) – bez rat, zbiornik zbiera na następny
+      if (paidBefore(c, d, m).has(cyc0.due)) {
+        // u2 (C2): cykl już zapłacony (T135) – bez rat, zbiornik zbiera na następny; zapłacony w stanie Ładowni w dniu
+        // przełomu – płatności sprzed niego (T393)
         rec.tanks[c.id] = 0
         rec.tankDetails[c.id] = { nominal: 0, share: 0, installment: 0, due: cyc0.due, pos: cyc0.pos, length: cyc0.length, paidCycle: true }
         continue
@@ -822,9 +942,18 @@ export function runFleet(input, opt) {
     rec.energyStart = paid - tanks - rates
   }
 
+  // T159 (przegląd S4): operacje domowników z dni od startu do dnia przed rozliczeniami spoza `openingIds` (dopisane
+  // później) – rejestr liczy je zaraz po saldach na start; brak listy = salda obejmują wszystkie
+  const lateOps = Array.isArray(hhSet.openingIds)
+    ? (() => {
+        const known = new Set(hhSet.openingIds)
+        return ops.filter((t) => t.date >= budgetStart && t.date < householdSince && t.date <= today && !known.has(t.id) && isHouseholdOp(t))
+      })()
+    : []
+  if (lateOps.length) note(`T159: ${lateOps.length} operacji domowników sprzed rozliczeń spoza openingIds – liczone zaraz po saldach na start`)
   const householdEvent = (d) => {
     if (d !== householdSince) return
-    const diff = hh.resetAt(hhSet.members, d)
+    const diff = hh.resetAt(hhSet.members, d, lateOps)
     if (diff > 0) st.S -= diff // T116: brakujące bierze z osłon
     else if (diff < 0) st.S += -diff // to, co depozyt trzymał wcześniej, wraca do osłon
     log.push({ date: d, type: 'saldo na start rozliczeń (T116)', depositChange: diff })
@@ -864,6 +993,9 @@ export function runFleet(input, opt) {
         const rec = monthRec(nm)
         rec.envelopeExtra = rec.envelopeExtra ?? {}
         rec.envelopeExtra[cid] = (rec.envelopeExtra[cid] ?? 0) + x
+        // przegląd N12: zapas koperty od chwili decyzji (gra ocenia dzień limitami sprzed niej – D73, T279)
+        rec.envelopeExtraAt = rec.envelopeExtraAt ?? []
+        rec.envelopeExtraAt.push({ cid, x, at: Date.parse(dec.decidedAt) })
       }
       const nx = Math.min(dec.nextMonth ?? 0, left)
       left -= nx
@@ -884,24 +1016,136 @@ export function runFleet(input, opt) {
   }
 
   // ---------------------------------------------------------------- operacja
+  /** Nadawca spłaty pożyczki (T356): domownik wpłaty, inaczej kontrahent. */
+  const payerOf = (t) => (t.memberId ? `member:${t.memberId}` : t.counterparty || null)
+  /** Stan pożyczki z operacji, której nie ma w biegu (sprzed startu albo sprzed salda otwarcia konta – T70, T355). */
+  const loanStateOnly = (t) => {
+    if (t.kind === 'loan' && t.loanId && loans.has(t.loanId)) {
+      const loan = loans.get(t.loanId)
+      const ls = loansState.get(loan.id)
+      if (loan.direction === 'given') {
+        if (t.amount > 0) {
+          const back = Math.min(t.amount, Math.max(0, loan.amount - ls.received))
+          ls.received += back
+          ls.extraIncome += t.amount - back
+          addExtra(t, t.amount - back)
+          ls.payments.push({ date: t.date, amount: t.amount, payer: payerOf(t), txId: t.id, beforeRun: true })
+        } else ls.lent += -t.amount
+      } else if (t.amount < 0) {
+        ls.paid += -t.amount
+        ls.payments.push({ date: t.date, amount: -t.amount, txId: t.id, beforeRun: true })
+      } else ls.received += t.amount
+      return
+    }
+    if (t.kind === 'income') {
+      for (const p of partsOf(t)) {
+        const loan = p.loanId ? loans.get(p.loanId) : null
+        if (!loan || loan.direction !== 'given' || p.amount <= 0) continue
+        const ls = loansState.get(loan.id)
+        const back = Math.min(p.amount, Math.max(0, loan.amount - ls.received))
+        ls.received += back
+        ls.extraIncome += p.amount - back
+        addExtra(t, p.amount - back)
+        ls.payments.push({ date: t.date, amount: p.amount, payer: payerOf(t), txId: t.id, part: true, beforeRun: true })
+      }
+      return
+    }
+    if (t.kind === 'expense') {
+      for (const p of partsOf(t)) {
+        if (p.refundable) continue
+        const k = classifyOwn(t, p, ctx)
+        const c = k.kind === 'cargo' ? containers.get(k.containerId) : null
+        if (!c?.loanId || !loansState.has(c.loanId) || -p.amount <= 0) continue
+        const ls = loansState.get(c.loanId)
+        ls.paid += -p.amount
+        ls.payments.push({ date: t.date, amount: -p.amount, txId: t.id, viaContainer: true, beforeRun: true })
+      }
+    }
+  }
+
+  /** Wpływ z XTB albo para do zadokowania (T26, T64, T65, T176, T224, T341): pula z dokowania albo z wpisu. */
+  const tradingInflow = (t, dk, cameIn) => {
+    const pending = !!dk?.pending
+    if (dk?.pool === 'tax' && !dk?.split) {
+      st.X += t.amount
+      deliveries.push({ amount: t.amount, date: t.date, txId: t.id, pool: 'tax', toTax: t.amount, toShields: 0, toHull: 0, toGoals: {}, docked: !!dk && !pending, pending })
+      if (pending) toDock.push({ txId: t.id, amount: t.amount, toGoals: 0, pool: 'tax' })
+      return
+    }
+    if (dk?.split) {
+      note(`dokowanie z ręcznym podziałem (${t.id}) – liczone według zapisanego podziału dopasowanego do kwoty (T176)`)
+      const sp = dk.split
+      let rest = t.amount
+      const tax = Math.min(sp.taxHold ?? 0, rest)
+      st.X += tax
+      rest -= tax
+      const hullX = Math.min(sp.hull ?? 0, rest)
+      st.H += hullX
+      rest -= hullX
+      const g = {}
+      for (const [gid, x0] of Object.entries(sp.goals ?? {})) {
+        const x = Math.min(x0, rest)
+        // W1 (C24, T128, T176): cel w stanie z chwili dokowania – nieaktywny albo zarchiwizowany wtedy pominięty
+        const s = goals.has(gid) ? goalAt(goals.get(gid), cameIn) : null
+        if (x > 0 && st.G.has(gid) && s && !s.archived) {
+          st.G.set(gid, st.G.get(gid) + x)
+          g[gid] = x
+          rest -= x
+        }
+      }
+      st.S += rest
+      deliveries.push({ amount: t.amount, date: t.date, txId: t.id, pool: dk.pool, split: true, toTax: tax, toHull: hullX, toGoals: g, toShields: rest, docked: true })
+      dayCtx.decisionsSH += rest + hullX
+      return
+    }
+    const o = dk?.pool === 'goals' ? dockGoalsPool(t.amount, t.date, cameIn, { txId: t.id, entryMonth: monthOf(dk.entryDate ?? t.date) }) : dock(t.amount, t.date, cameIn, { txId: t.id, pool: dk?.pool ?? null })
+    o.docked = !!dk && !pending
+    o.pending = pending
+    deliveries.push(o)
+    if (pending) toDock.push({ txId: t.id, amount: t.amount, toGoals: Object.values(o.toGoals ?? {}).reduce((a, b) => a + b, 0), pool: dk.pool ?? null })
+    dayCtx.decisionsSH += o.toShields + o.toHull
+  }
+
+  /** Spłata pożyczki udzielonej (całością albo częścią wpłaty – T70, T355): do osłon do wysokości długu, nadwyżka dokuje. */
+  const repayGiven = (t, loan, amount, cameIn, part) => {
+    const ls = loansState.get(loan.id)
+    const due = Math.max(0, loan.amount - ls.received)
+    const back = Math.min(amount, due)
+    ls.received += back
+    ls.payments.push({ date: t.date, amount, payer: payerOf(t), txId: t.id, part: !!part })
+    st.S += back
+    dayCtx.decisionsSH += back
+    if (amount - back > 0) {
+      ls.extraIncome += amount - back
+      addExtra(t, amount - back)
+      const o = dock(amount - back, t.date, cameIn, { txId: t.id, source: 'nadwyżka spłaty pożyczki' })
+      deliveries.push(o)
+      dayCtx.decisionsSH += o.toShields + o.toHull
+    }
+  }
+
   const applyOp = (t, rec, d) => {
     const sides = sidesOf(t).filter((s) => accIds.has(s.accountId))
     if (sides.length < sidesOf(t).length) note(`operacja ${t.id} ma stronę na koncie spoza ustawień – ta strona pominięta`)
     const run = sides.filter((s) => s.date === d && inRun(s.accountId, s.date))
     for (const s of run) balances.set(s.accountId, (balances.get(s.accountId) ?? 0) + s.amount)
-    if (!run.length) return
+    if (!run.length) {
+      if (t.date === d && t.date <= today && t.kind !== 'transfer') loanStateOnly(t)
+      return
+    }
+    const cameIn = cameInOf(t, d)
     // przelew: strony się znoszą (T31, T262); strona poza biegiem – ruch osłon
     if (t.kind === 'transfer') {
       // T31, T262: strony w biegu się znoszą; każda strona liczona w swoim dniu jako ruch osłon (suma warstw = salda)
       const amt = run.reduce((a, s) => a + s.amount, 0)
       if (amt > 0) st.S += amt
-      else if (amt < 0) takeChain(-amt)
+      else if (amt < 0) takeShields(-amt)
       if (!(t.bothSides && t.counterAccountId)) dayCtx.decisionsSH += amt
       return
     }
     if (t.kind === 'correction') {
       if (t.amount >= 0) st.S += t.amount
-      else takeChain(-t.amount)
+      else takeShields(-t.amount)
       return
     }
     if (t.kind === 'tax') {
@@ -921,81 +1165,36 @@ export function runFleet(input, opt) {
       const ls = loan ? loansState.get(loan.id) : null
       if (loan && loan.direction === 'given') {
         if (t.amount < 0) {
-          takeChain(-t.amount)
+          takeShields(-t.amount)
           ls.lent += -t.amount
           dayCtx.decisionsSH += t.amount
-        } else {
-          const due = Math.max(0, loan.amount - ls.received)
-          const back = Math.min(t.amount, due)
-          ls.received += back
-          ls.payments.push({ date: t.date, amount: t.amount })
-          st.S += back
-          dayCtx.decisionsSH += back
-          if (t.amount - back > 0) {
-            ls.extraIncome += t.amount - back
-            const o = dock(t.amount - back, t.date, cameInOf(t), { txId: t.id, source: 'nadwyżka spłaty pożyczki' })
-            deliveries.push(o)
-            dayCtx.decisionsSH += o.toShields + o.toHull
-          }
-        }
+        } else repayGiven(t, loan, t.amount, cameIn, false)
       } else if (loan && loan.direction === 'taken') {
         if (t.amount > 0) {
           st.S += t.amount
           ls.received += t.amount
-        }
-        else {
-          takeChain(-t.amount)
+        } else {
+          takeShields(-t.amount)
           ls.paid += -t.amount
-          ls.payments.push({ date: t.date, amount: -t.amount })
+          ls.payments.push({ date: t.date, amount: -t.amount, txId: t.id })
         }
       } else {
         // T174: pożyczka bez rekordu – tylko osłony
         if (t.amount >= 0) st.S += t.amount
-        else takeChain(-t.amount)
+        else takeShields(-t.amount)
         dayCtx.decisionsSH += t.amount
       }
       return
     }
     if (t.kind === 'trading') {
-      const dk = dockByTx.get(t.id)
+      const dk = dockOf(t)
       if (t.amount > 0) {
-        if (dk?.pool === 'tax' && !dk?.split) {
-          st.X += t.amount
-          deliveries.push({ amount: t.amount, date: t.date, txId: t.id, pool: 'tax', toTax: t.amount, toShields: 0, toHull: 0, toGoals: {} })
-          return
-        }
-        if (dk?.split) {
-          note(`dokowanie z ręcznym podziałem (${t.id}) – liczone według zapisanego podziału dopasowanego do kwoty (T176)`)
-          const sp = dk.split
-          let rest = t.amount
-          const tax = Math.min(sp.taxHold ?? 0, rest)
-          st.X += tax
-          rest -= tax
-          const hullX = Math.min(sp.hull ?? 0, rest)
-          st.H += hullX
-          rest -= hullX
-          const g = {}
-          for (const [gid, x0] of Object.entries(sp.goals ?? {})) {
-            const x = Math.min(x0, rest)
-            if (x > 0 && st.G.has(gid) && !goals.get(gid)?.archived) {
-              st.G.set(gid, st.G.get(gid) + x)
-              g[gid] = x
-              rest -= x
-            }
-          }
-          st.S += rest
-          deliveries.push({ amount: t.amount, date: t.date, txId: t.id, pool: dk.pool, split: true, toTax: tax, toHull: hullX, toGoals: g, toShields: rest })
-          dayCtx.decisionsSH += rest + hullX
-          return
-        }
-        const o = dk?.pool === 'goals' ? dockGoalsPool(t.amount, t.date, cameInOf(t), { txId: t.id, entryMonth: monthOf(dk.entryDate ?? t.date) }) : dock(t.amount, t.date, cameInOf(t), { txId: t.id, pool: dk?.pool ?? null })
-        o.docked = !!dk
-        deliveries.push(o)
-        dayCtx.decisionsSH += o.toShields + o.toHull
+        tradingInflow(t, dk, cameIn)
         return
       }
-      // dopłata do XTB (zwrot do masy) – z osłon; firewall (D23, T31)
+      // dopłata do XTB (zwrot do masy) – z osłon; firewall (D23, T31); z puli Podatek – z rezerwy, bez firewalla (T65, T341)
       const x = -t.amount
+      if (dk?.pending) toDock.push({ txId: t.id, amount: t.amount, toGoals: 0, pool: dk.pool ?? null })
       if (dk?.pool === 'tax') {
         const fromX = Math.min(x, Math.max(st.X, 0))
         st.X -= fromX
@@ -1015,14 +1214,29 @@ export function runFleet(input, opt) {
       return
     }
     if (t.kind === 'income') {
+      // T341 / B69: wpływ wpisany na Portfelu XTB w parze z wpisem ICTTJ – jak dokowanie z pulą wpisu
+      const pend = !dockByTx.has(t.id) && pendingPairs.has(t.id) ? dockOf(t) : null
+      if (pend && t.amount > 0) {
+        tradingInflow(t, pend, cameIn)
+        return
+      }
       for (const p of partsOf(t)) {
         if (p.amount === 0) continue
-        const isMember = p.memberId != null || (p.split === false && t.memberId != null)
+        if (p.loanId && p.amount > 0) {
+          const loan = loans.get(p.loanId)
+          // T355: część pożyczki udzielonej – do osłon do wysokości długu, nadwyżka dokuje; pożyczka nieznana / wzięta – przychód
+          if (loan && loan.direction === 'given') {
+            repayGiven(t, loan, p.amount, cameIn, true)
+            continue
+          }
+          if (!loan) note(`linia wpływu ${t.id} spłaca nieznaną pożyczkę ${p.loanId} – liczona jako przychód (T355)`)
+        }
+        const isMember = !p.loanId && (p.memberId != null || (p.split === false && t.memberId != null))
         if (isMember && p.amount > 0) {
           const r = hh.inflow(p.memberId ?? t.memberId, p.amount, p.advance, p.inflowKind, t.covers, t)
           st.S += r.repay
           if (r.income > 0) {
-            const o = dock(r.income, t.date, cameInOf(t), { txId: t.id, source: 'przychód od domownika' })
+            const o = dock(r.income, t.date, cameIn, { txId: t.id, source: 'przychód od domownika' })
             deliveries.push(o)
             dayCtx.decisionsSH += o.toShields + o.toHull
           }
@@ -1030,7 +1244,7 @@ export function runFleet(input, opt) {
           continue
         }
         if (p.amount > 0) {
-          const o = dock(p.amount, t.date, cameInOf(t), { txId: t.id })
+          const o = dock(p.amount, t.date, cameIn, { txId: t.id })
           deliveries.push(o)
           dayCtx.decisionsSH += o.toShields + o.toHull
         } else {
@@ -1042,15 +1256,20 @@ export function runFleet(input, opt) {
     }
     if (t.kind === 'expense') {
       const m = monthOf(t.date)
+      // S3 (przegląd): zakup nocny, impuls, zwrot i wydatek z godziną – na operację (moja część, T161), nie na linię
+      let ownCost = 0
+      let timedCost = 0
       for (const p of partsOf(t)) {
         if (p.amount === 0) continue
         if (p.refundable) {
-          const mid = p.memberId ?? t.memberId ?? null
+          const mid = p.memberId ?? null // linia bez osoby – pierwszy domownik (schemat; przegląd N5)
           const gift = p.gift || (!t.splits?.length && t.gift)
           if (p.amount < 0) {
             const r = hh.purchase(mid, -p.amount, gift, t)
             if (r.lent + r.gift > 0) takeChain(r.lent + r.gift)
             dayCtx.householdLent += r.lent + r.gift
+          } else if (gift) {
+            st.S += p.amount // T157: zwrot towaru z prezentu domownika wraca do osłon (przegląd N6)
           } else {
             // zwrot towaru z zakupu domownika – jego pieniądze (T105)
             const r = hh.productReturn(mid, p.amount, t)
@@ -1065,14 +1284,18 @@ export function runFleet(input, opt) {
         rec.costs += cost
         if (k.kind !== 'goal') {
           dayCtx.costs += cost
-          if (t.time && cost > 0) dayCtx.timed.push({ time: t.time, amount: cost })
+          timedCost += cost
         }
         if (k.kind === 'goal') {
           const gid = k.goalId
           if (cost > 0) {
             const fromG = Math.min(cost, Math.max(st.G.get(gid) ?? 0, 0))
             st.G.set(gid, (st.G.get(gid) ?? 0) - fromG)
-            if (cost > fromG) takeChain(cost - fromG)
+            if (cost > fromG) {
+              // T24, T131: brak w celu płacą osłony – to decyzja dnia (T75; przegląd N2)
+              const c2 = takeChain(cost - fromG)
+              dayCtx.decisionsSH -= c2.fromS + c2.fromH + c2.deficit
+            }
           } else st.G.set(gid, (st.G.get(gid) ?? 0) - cost)
           continue
         }
@@ -1107,6 +1330,7 @@ export function runFleet(input, opt) {
         }
         const r = spendEnergy(cost, rec)
         if (r.chain) dayCtx.decisionsSH -= r.chain.fromS + r.chain.fromH + r.chain.deficit
+        ownCost += cost
         if (k.kind === 'daily') {
           dayCtx.dailySpent += cost
           rec.dailySpent += cost
@@ -1121,11 +1345,12 @@ export function runFleet(input, opt) {
             plannedCum.set(m, pc)
           } else rec.outsideSpent[k.main] = (rec.outsideSpent[k.main] ?? 0) + cost
         } else rec.outsideSpent[k.main ?? 'brak'] = (rec.outsideSpent[k.main ?? 'brak'] ?? 0) + cost
-        // gra: zakup nocny potwierdzony (T187), impuls (Judas), zwrot (Turtle)
-        if (cost > 0 && t.time && inQuiet(t.time, orders.quiet) && (t.logNote ?? '').trim()) dayCtx.night.push({ txId: t.id, time: t.time, amount: cost, impulse: t.impulse, container: false, logNote: t.logNote })
-        if (cost > 0 && t.impulse === 'impulse') dayCtx.judas.push({ txId: t.id, amount: cost })
-        if (cost < 0) dayCtx.turtle.push({ txId: t.id, amount: -cost })
       }
+      // gra: zakup nocny potwierdzony (T187), impuls (Judas), zwrot (Turtle), wydatek z godziną (killzone) – raz na operację
+      if (t.time && timedCost > 0) dayCtx.timed.push({ time: t.time, amount: timedCost })
+      if (ownCost > 0 && t.time && inQuiet(t.time, orders.quiet) && (t.logNote ?? '').trim()) dayCtx.night.push({ txId: t.id, time: t.time, amount: ownCost, impulse: t.impulse, container: false, logNote: t.logNote })
+      if (ownCost > 0 && t.impulse === 'impulse') dayCtx.judas.push({ txId: t.id, amount: ownCost })
+      if (ownCost < 0) dayCtx.turtle.push({ txId: t.id, amount: -ownCost })
       return
     }
     note(`nieznany rodzaj operacji ${t.kind} (${t.id}) – pominięta w warstwach`)
@@ -1144,6 +1369,23 @@ export function runFleet(input, opt) {
     return total
   })()
   const init = S0.budget?.initial ?? null
+
+  // T70 / T355: spłaty i raty pożyczek sprzed startu w stanie pożyczek
+  for (const t of ops) {
+    if (t.date >= budgetStart) break
+    loanStateOnly(t)
+  }
+  // T345, T393: płatność opłaty okresowej sprzed startu nie przechodzi przez przebieg, ale jest płatnością opłaty
+  // (`feePays`) – cykl, który zapłaciła, liczy reguła stanu Ładowni (opłata śledzona od pierwszej widzianej płatności,
+  // spóźniona płaci zaległy termin, nigdy następny); tu tylko wpis do logu
+  for (const [cid, list] of feePays) {
+    const c = containers.get(cid)
+    if ((c.cycleMonths ?? 1) <= 1) continue
+    for (const p of list) {
+      if (p.date >= budgetStart) break
+      log.push({ date: p.date, type: 'cykl zamknięty przed startem (T345)', containerId: cid, due: closeCycleFor(c, p.date) })
+    }
+  }
 
   const goalTransfers = []
   for (const g of goals.values()) for (const tr of g.transfers ?? []) goalTransfers.push({ g, tr, day: toWarsaw(tr.at).date })
@@ -1186,26 +1428,51 @@ export function runFleet(input, opt) {
         salaryEvent(m, d, false)
       }
     }
-    // łupy: decyzje w swojej chwili, bez decyzji 8. dnia do osłon (T28, T52)
+    // T340: przeniesienia środków celów tego dnia – w chwili `at`, przed pierwszym zdarzeniem dnia (w kolejności silnika),
+    // które przyszło do FI później (cameIn); po zdarzeniach początku dnia (start, przełom miesiąca, termin łupów)
+    const dayTransfers = goalTransfers.filter((x) => x.day === d).sort((a, b) => Date.parse(a.tr.at) - Date.parse(b.tr.at))
+    let nextTransfer = 0
+    const moveGoal = (x0, final) => {
+      const { g, tr } = x0
+      const have = Math.max(0, st.G.get(g.id) ?? 0)
+      const want = final ? tr.amount - (x0.moved ?? 0) : tr.amount
+      const x = Math.min(want, have)
+      if (x <= 0) return
+      if (tr.to !== 'shields' && !st.G.has(tr.to)) {
+        note(`przeniesienie środków celu ${g.id} do nieznanego celu ${tr.to} – pieniądze zostają w celu (przegląd N16)`)
+        return
+      }
+      st.G.set(g.id, (st.G.get(g.id) ?? 0) - x)
+      if (tr.to === 'shields') st.S += x
+      else st.G.set(tr.to, st.G.get(tr.to) + x)
+      x0.moved = (x0.moved ?? 0) + x
+      log.push({ date: d, type: 'przeniesienie środków celu', goalId: g.id, to: tr.to, requested: tr.amount, moved: x, short: final })
+    }
+    const flushTransfers = (cameIn) => {
+      while (nextTransfer < dayTransfers.length && Date.parse(dayTransfers[nextTransfer].tr.at) < cameIn) moveGoal(dayTransfers[nextTransfer++], false)
+    }
+    // łupy: termin bez decyzji (8. dnia do osłon) – początek dnia; decyzja – zdarzenie w chwili `decidedAt` (T28, T52, T128)
+    const lootEvents = []
     for (const [lm, l] of loot) {
       if (l.decided) continue
       const dec = plans.get(lm)?.loot
       const decDay = dec ? toWarsaw(dec.decidedAt).date : null
       if (decDay && decDay > `${addMonths(lm, 1)}-07`) note(`łupy ${lm}: decyzja po 7. dniu (${decDay}) – N-PC-16, liczona w dniu decyzji (Z)`)
-      if (decDay && decDay <= d) applyLootDecision(lm, d)
+      if (decDay && decDay <= d) lootEvents.push({ lm, cameIn: Math.max(Date.parse(dec.decidedAt), warsawDayStart(d)) })
       else if (!dec && d >= `${addMonths(lm, 1)}-08`) applyLootDecision(lm, d)
     }
-    for (const t of opsByDay.get(d) ?? []) applyOp(t, rec, d)
-    // koniec dnia: przeniesienia środków celów (T129) i resztki zbiorników po końcu życia (T136)
-    for (const { g, tr, day } of goalTransfers) {
-      if (day !== d) continue
-      const have = Math.max(0, st.G.get(g.id) ?? 0)
-      const x = Math.min(tr.amount, have)
-      st.G.set(g.id, have - x)
-      if (tr.to === 'shields') st.S += x
-      else if (st.G.has(tr.to)) st.G.set(tr.to, st.G.get(tr.to) + x)
-      log.push({ date: d, type: 'przeniesienie środków celu', goalId: g.id, to: tr.to, requested: tr.amount, moved: x })
+    for (const e of lootEvents) {
+      flushTransfers(e.cameIn)
+      applyLootDecision(e.lm, d)
     }
+    for (const t of opsByDay.get(d) ?? []) {
+      flushTransfers(cameInOf(t, d))
+      applyOp(t, rec, d)
+    }
+    // koniec dnia: przeniesienia, po których nic później nie przyszło; czego cel w swojej chwili nie miał – teraz, nigdy
+    // więcej, niż ma (T340); resztki zbiorników po końcu życia (T136)
+    flushTransfers(Infinity)
+    for (const x of dayTransfers) if ((x.moved ?? 0) < x.tr.amount) moveGoal(x, true)
     if (d === addDays(`${addMonths(m, 1)}-01`, -1)) {
       for (const c of containers.values()) {
         if ((c.cycleMonths ?? 1) <= 1) continue
@@ -1288,7 +1555,7 @@ export function runFleet(input, opt) {
     const rec = monthRec(m)
     const lim = {}
     for (const [cid, x] of Object.entries(plan?.envelopes ?? {})) lim[cid] = x
-    for (const [cid, x] of Object.entries(rec.envelopeExtra ?? {})) lim[cid] = (lim[cid] ?? 0) + x
+    for (const e of rec.envelopeExtraAt ?? []) if (e.at <= cutoffMs) lim[e.cid] = (lim[e.cid] ?? 0) + e.x
     for (const cv of plans.get(m)?.envelopeCovers ?? []) {
       if (!(Date.parse(cv.at) <= cutoffMs)) continue
       lim[cv.from] = (lim[cv.from] ?? 0) - cv.amount
@@ -1317,6 +1584,7 @@ export function runFleet(input, opt) {
     deliveries,
     household: hh,
     loansState,
+    loanExtra,
     balances,
     accountsTotal,
     layersSum: layersSum(),
@@ -1338,7 +1606,19 @@ export function runFleet(input, opt) {
     inputBalances: input.balances,
     householdSince,
     limitsAt,
-    paidCycles,
+    // T393: cykle zapłacone płatnościami do dziś – terminy zapłacone w Ładowni (Radar: duePaid)
+    paidCycles: new Map([...containers.values()].filter((c) => (c.cycleMonths ?? 1) > 1).map((c) => [c.id, paidBefore(c, addDays(today, 1), monthOf(today))])),
+    // T393: płatności każdego kontenera ({ id, date, amount > 0 }, po dniu) – Ładownia i Radar czytają tylko je
+    feePays,
+    pendingPairs,
+    // T342: pary liczone według puli wpisu (bez rekordu dokowania) – ile, wpływ, wypływ, część w celach
+    toDock: {
+      count: toDock.length,
+      inflow: toDock.filter((x) => x.amount > 0).reduce((a, x) => a + x.amount, 0),
+      outflow: toDock.filter((x) => x.amount < 0).reduce((a, x) => a - x.amount, 0),
+      inGoals: toDock.reduce((a, x) => a + x.toGoals, 0),
+      items: toDock
+    },
     dailyBeforeOf: (m) => dailyBefore.get(m) ?? 0
   }
 }

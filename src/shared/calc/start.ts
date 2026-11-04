@@ -3,10 +3,12 @@
  * targets of the layers from the salary and the costs, and the proposed split of the money at the start (the docking
  * order – D70).
  */
-import type { Transaction } from '../schema/records'
+import type { Container, Transaction } from '../schema/records'
+import { paymentsIndex, type FeeDuesOf, type Linked } from './cargoStatus'
 import { monthOf } from './dates'
-import { activeIn, cyclePosition, dockAmount, paidBeforeStart, sinkingSchedule, tankWant, type AmountOf, type FeeOf } from './fleet'
+import { activeIn, cyclePosition, dockAmount, paidBeforeStart, sinkingSchedule, tankWant } from './fleet'
 import { amountOn, dateOn, sum } from './operations'
+import { linkFromOf, unlinkedPayments, type RecurringPayment } from './plan'
 
 /**
  * The opening balance at the start of `today` from the balance read in the bank now: the operations of today already in
@@ -46,14 +48,61 @@ export function startSplit(
   return { shields: split.shields, hull: split.hull, goals: split.goals, free: split.free }
 }
 
-/** A periodic fee the start finds (a container, or a proposal chosen in the wizard) with the days of its payments. */
-export type StartTankItem = FeeOf & AmountOf & { key: string; paid: readonly string[] }
+/**
+ * A periodic fee the start finds (a container, or a proposal chosen in the wizard) with its payments – their days (each
+ * the fee's amount then) or the payments – and its payment day (none: its latest payment's, T376); counted as the fees'
+ * state counts it (`FeeDuesOf` – a variable bill too, F23).
+ */
+export type StartTankItem = FeeDuesOf & { key: string; paid: ReadonlyArray<string | { date: string; amount: number }> }
+
+/** A proposal of the wizard's step 4 (D70, F23) as the start makes it a container. */
+export type StartProposal = Pick<RecurringPayment, 'key' | 'label' | 'amount' | 'cycleMonths' | 'dueMonth' | 'dueDay' | 'schedule' | 'variable'>
+
+/**
+ * The periodic fees of the start (N-PC-7): the hold's containers (not archived) and the proposals chosen in step 4 – each
+ * as the engine counts it after the start (AP-5, T393, przegląd 2 N3): a container whole – its amounts, calendar and life,
+ * a bill of a varying amount (F23: any second payment of a window pays an older due), the month it came into the hold,
+ * the dues settled outside the budget; a proposal as the container the start makes of it.
+ */
+export function startTankItems(containers: readonly Container[], chosen: readonly StartProposal[]): Array<Omit<StartTankItem, 'paid'> & { name: string }> {
+  return [
+    ...containers.filter((c) => !c.archived && c.cycleMonths > 1).map((c) => ({ ...c, key: c.id })),
+    ...chosen
+      .filter((p) => p.cycleMonths > 1)
+      .map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, dueDay: p.dueDay, schedule: p.schedule, variable: p.variable, archived: false, from: null, until: null }))
+  ]
+}
+
+/**
+ * The payments of each periodic fee before the start, as the engine and Ładownia will count them (AP-5, T345, T393 – the
+ * one rule, `paymentsIndex`): a container's; a chosen proposal's – its payee's payments not linked yet from the 1st of the
+ * month before the start's (T379), which the start links to it (`linkPayments`). Container id or proposal key → payments
+ * by day.
+ */
+export function startPaidDays(
+  transactions: readonly Transaction[],
+  start: string,
+  containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths'>>,
+  proposals: ReadonlyArray<{ key: string; label: string; cycleMonths: number }>
+): Map<string, Linked[]> {
+  const before = (list: readonly Linked[] | undefined): Linked[] => (list ?? []).filter((p) => p.date < start)
+  const linked = paymentsIndex(transactions).byContainer
+  const out = new Map<string, Linked[]>(containers.filter((c) => c.cycleMonths > 1).map((c) => [c.id, before(linked.get(c.id))] as const))
+  const ids = new Set(containers.map((c) => c.id))
+  for (const p of proposals) {
+    if (p.cycleMonths <= 1) continue
+    const found = unlinkedPayments(transactions, p.label, linkFromOf(start), ids).map((t) => ({ ...t, containerId: p.key }))
+    out.set(p.key, before(paymentsIndex(found).byContainer.get(p.key)))
+  }
+  return out
+}
 
 /**
  * The tanks of the start's month as the engine fills them (N9, N-PC-7, AP-5): each fee's installment (`tankWant` – with
  * the money set in its tank at the start, `tanks`) and what the plan wants in the tank for the months of its cycle
- * before the start (`planAmount` – „do planu”). A cycle its payments before the start paid (`paidBeforeStart`, T135 –
- * `paid`) wants neither: its tank collects for the next one; a fee out of its life that month neither.
+ * before the start (`planAmount` – „do planu”). A cycle its payments before the start paid (`paidBeforeStart` – the
+ * hold's rule, T135, T393 – `paid`) wants neither: its tank collects for the next one; a fee out of its life that month
+ * neither.
  */
 export function startTanks(items: readonly StartTankItem[], start: string, tanks: Readonly<Record<string, number>>): Array<{ key: string; installment: number; planAmount: number; paid: boolean }> {
   const month = monthOf(start)
