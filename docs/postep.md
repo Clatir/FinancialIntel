@@ -9,8 +9,8 @@ Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarza
 plan N1–N5 (`docs/audyt/raport.md`, `docs/audyt/wnioski.md`; przebieg w archiwum). Odpowiedzi 04.11: D98 (iPhone
 wstrzymany), D99 (wnioski przyjęte, S4), D100 (konto Gotówka, wpłata od dowolnej osoby spłaca pożyczkę), D101 (ciąg
 N1–R2 bez pauz, bez kart kredytowych, wydanie po każdej grupie, zasada wątpliwości).
-**Następny krok:** ciąg N1 → N2 → N3 → N4 → N5 → R1 → R2 (D101) w toku – stan w tabeli niżej; po wznowieniu kontynuuj od
-pierwszej grupy bez ✅. Otwarte poza ciągiem: raport maszyny wirtualnej i lista „Tylko Ty” (`docs/audyt/ty.md`) – dopiszą się
+**Następny krok:** ciąg N1 → N2 → N3 → N4 → N5 → R1 → R2 (D101) **przerwany 04.11 ok. 14:00** – po wznowieniu zacznij od
+sekcji „WZNOWIENIE” niżej. Otwarte poza ciągiem: raport maszyny wirtualnej i lista „Tylko Ty” (`docs/audyt/ty.md`) – dopiszą się
 do wniosków, gdy będą; kalibracja progów gry po N3 (D99 pkt 12, za osobną zgodą). iPhone (iD, iE, AP-39, AP-40)
 wstrzymany (D98) – „Przed grupą iD” niżej zostaje jako zapis na później. Odrzucone (D88): F32, F38, F39, F41, F43.
 
@@ -26,12 +26,52 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | --- | --- | --- | --- | --- | --- |
 | 0 – przygotowanie | – | `claude/audyt-1.15.4` | ✅ D101, porządek tego pliku, PR audytu scalony (bez wydania); poprawka E2E telefonu w nocy | #49 | 0,5 h |
 | N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ✅ wydane 04.11 07:33 (wpis w archiwum `postep-od-1.15.4.md`) | #50 | ok. 5,5 h (01:53–07:33) |
-| N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | 🔄 kod i przeglądy gotowe; PR, CI, wydanie | – | ok. 8 h zegara (05:05–13:00 do PR) |
-| N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | 🔄 kod zintegrowany, przegląd xhigh zrobiony; ostatnia poprawka – jedna reguła płatność ↔ cykl opłaty | – | – |
-| N4 Zasady interfejsu | 1.15.8 | – | ⏳ | – | – |
-| N5 Ścieżki i ergonomia | 1.15.9 | – | ⏳ | – | – |
+| N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis niżej – do archiwum przy PR N3) | #51 | ok. 8 h zegara (05:05–13:06) |
+| N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | 🔄 kod gotowy (z N2), wyrocznia bez rozbieżności; zostały przegląd poprawek, wydanie | – | – |
+| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | 🔄 kod gotowy; 10 uwag przeglądu do poprawy | – | – |
+| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-n5*` | 🔄 6 z 13 AP gotowe, 2 WIP, reszta nie zaczęta | – | – |
 | R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
 | R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
+
+## WZNOWIENIE – przerwane 04.11.2026 ok. 14:00 (na prośbę użytkownika)
+
+Po wznowieniu przeczytaj tę sekcję, potem notatki koordynatora w `C:\CC-Projekty\FI-wt\_notatki\` (poza repozytorium:
+`notatki-n1.md` … `notatki-n5.md` – raporty podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` –
+uwagi przeglądów; `ap32-wyrocznia.md`). Drzewa robocze z `node_modules` / `.tools` jako junction do tego repozytorium –
+**przed `git worktree remove` usuń same łącza** (`[System.IO.Directory]::Delete(<łącze>, $false)`; `.claude/rules/testy.md`).
+
+**Wydane:** 1.15.5 (N1, PR #50) i 1.15.6 (N2, PR #51, w tym D100 – spłata pożyczki dowolną wpłatą). Główny katalog jest na
+gałęzi N3 `claude/1.15.7-oplaty`.
+
+**N3 (1.15.7) – kod gotowy, gałąź `claude/1.15.7-oplaty` (ten katalog), wypchnięta.** Zawiera N2 (scalone), AP-10, 13, 14,
+17, 18, 30, 31, integrację (T370–T394), poprawki po przeglądzie xhigh (15 uwag), jedną regułę płatność ↔ cykl opłaty
+(`feeDuesOf`, `paymentsIndex` – T393/T394) i wyrocznię bez rozbieżności (412 przypadków, AF-15 zamknięte). Testy: npm test
+1392, E2E zielone. **Dalej:** (1) `/code-review` high na poprawkach: commity 54a189c, cb8ee7b, dd2d47d (rozwiązanie
+konfliktów), 8c8a9e3, a4a67e3 – przerwany przed startem; (2) poprawki; (3) wersja 1.15.7, CHANGELOG (linie
+w `_notatki/notatki-n3.md`), tutaj: wpis N2 do archiwum, wpis N3, wiersze N3 do „Do potwierdzenia”; (4) PR, CI, scalenie,
+wydanie.
+
+**N4 (1.15.8) – kod gotowy, gałąź `claude/1.15.8-interfejs` (drzewo `C:\CC-Projekty\FI-wt\n4a`), wypchnięta.** AP-15, AP-22,
+AP-16, AP-23 (T400–T409); baza: N3 sprzed scalenia z N2. Przegląd high zrobiony – **10 uwag niepoprawionych**
+(`_notatki/n4-review1.md`; m.in. literówka `/s+/` w `tagsLost`, „Cofnij import” bez ostrzeżenia o własnych zmianach,
+„Cofnij” nazwy banku nadpisuje listę). **Dalej:** po wydaniu N3 scal `claude/1.15.7-oplaty` do N4, popraw 10 uwag (testy),
+CHANGELOG (linie w `_notatki/notatki-n4.md`), PR, wydanie.
+
+**N5 (1.15.9) – w toku, gałęzie lokalne (niewypchnięte):**
+- `claude/1.15.9-n5a` (wypchnięta; baza `main` = 1.15.6) – ✅ AP-21, AP-36, AP-33 (T420–T423).
+- `claude/1.15.9-n5b` (drzewo `FI-wt\n5b`; baza `main`) – ✅ AP-29, AP-37, AP-38 (T425–T429); **WIP** AP-27, AP-28
+  (commit 72415b0, przerwany, niesprawdzony – dokończyć albo zacząć od nowa; T430–T434).
+- `claude/1.15.9-n5d` (drzewo `FI-wt\n5d`; baza N4) – AP-19, AP-26 nie zaczęte (T435–T439).
+- `claude/1.15.9-n5e` (drzewo `FI-wt\n5e`; baza N4) – AP-20, AP-34 nie zaczęte (T440–T444).
+- `claude/1.15.9-n5f` (drzewo `FI-wt\n5f`; baza N4) – **WIP** AP-25 (commit a3e8614, tylko `start.ts`, niesprawdzony);
+  AP-24 nie zaczęte (T445–T449).
+**Dalej:** dokończyć AP-27/28, AP-19/26, AP-20/34, AP-24/25 (polecenia zleceń jak dotąd – opis w `_notatki/notatki-n5.md`),
+scalić wszystkie gałęzie N5 na bazie N4 po jego wydaniu, przegląd high, poprawki, wydanie.
+
+**R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
+
+**Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
+całości + jeden high na poprawkach, dalej tylko przy poważnych uwagach; numery T przydzielaj podagentom z góry.
 
 ### Do Twojej decyzji
 - **Rekordy z atrybutem „tylko do odczytu”** (np. po przywróceniu kopii): zapis takiego rekordu pada (EPERM, 8 prób), nic nie
@@ -43,6 +83,7 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
+| N3 | Opłata zapłacona z celu albo zakupem do zwrotu | zapłacona w Ładowni i silniku – cykl zamknięty, zbiornik nietknięty (zebrane zostaje na następny termin), zwrot domownika to spłata długu; dawny przelew z ukrytym kontenerem nie płaci nigdzie (pozostałe wiersze N3–N5 – w `_notatki/notatki-n3…n5.md`, do przeniesienia przy ich PR) | T393 |
 | N1 | Zmiany w trakcie niedostępności folderu | folder tylko do odczytu jak dotąd: nowe zmiany odrzucane z komunikatem, czekają tylko przyjęte wcześniej (inaczej: przyjmować w pamięci) | T315 |
 | N1 | Szybki wpis tuż przed wykryciem braku folderu | „Wpis przyjęty, ale jeszcze niezapisany…”, okno zostaje 4 s | T317 |
 | N1 | Pytanie „Zmienić operację?” poza edytorem | z nazwą operacji (pojawia się też na innym ekranie) | T319 |
