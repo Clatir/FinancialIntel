@@ -1,7 +1,7 @@
 // Gra „Dowództwo” wyroczni (AU-9): ocena dni, seria, stopnie, klasa (spec „Gra”, D73, T9, T75–T79, T161, T163,
 // T187, T216, T219, T227, T279, N-PC-19). Liczona z migawek końca dnia silnika (dane z folderu w chwili liczenia).
 import { addDays, dayNum, monthOf, isoWeek, weekday, toWarsaw, warsawDayStart } from './daty.mjs'
-import { monthlyWeight, aliveIn } from './silnik.mjs'
+import { monthlyWeight, aliveIn, amountIn } from './silnik.mjs'
 
 export const RANKS = ['Kadet', 'Chorąży', 'Porucznik', 'Komandor', 'Kapitan', 'Admirał']
 export const CLASSES = [
@@ -21,10 +21,31 @@ export function shipClass(range) {
   return c
 }
 
-/** Masa ładunku dnia (suma wag miesięcznych kontenerów w ładowni) – do porównania z dniem poprzednim (T75, T227). */
+/** Masa ładunku miesiąca (suma wag miesięcznych kontenerów w ładowni) według dzisiejszych rekordów. */
 export function cargoMass(r, m) {
   let w = 0
   for (const c of r.containers.values()) if (aliveIn(c, m, monthOf(r.budgetStart))) w += monthlyWeight(c, m)
+  return w
+}
+
+/**
+ * Masa ładunku miesiąca m znana w chwili `atMs` (T75, T227; przegląd S1): kontener utworzony do tej chwili, archiwizacja
+ * i zmiana masy (`amountAt`) od swojej chwili – przed zmianą kwota sprzed niej (ostatnia z historii kwot `past`).
+ */
+export function cargoMassAt(r, m, atMs) {
+  const bsm = monthOf(r.budgetStart)
+  let w = 0
+  for (const c0 of r.containers.values()) {
+    if (c0.createdAt && Date.parse(c0.createdAt) > atMs) continue
+    let c = c0
+    if (c.archived && c.archivedAt && Date.parse(c.archivedAt) > atMs) c = { ...c, archived: false, archivedAt: null }
+    if (!aliveIn(c, m, bsm)) continue
+    if (c.amountAt && Date.parse(c.amountAt) > atMs && (c.past ?? []).length) {
+      const last = [...c.past].sort((a, b) => (a.until < b.until ? -1 : 1)).at(-1)
+      if (m > last.until) c = { ...c, amount: last.amount, past: c.past.filter((x) => x !== last) }
+    }
+    w += monthlyWeight({ ...c, amount: amountIn(c, m), past: [] }, m)
+  }
   return w
 }
 
@@ -68,7 +89,9 @@ export function rateDay(r, snap, settings, opt = {}) {
     v.push({ order: 'koperta', serious, ref: cat, amount: cum - limit, note: `limit ${limit}, wydane ${cum}` })
   }
   // 3. osłony poniżej minimum przez decyzje dnia (T16, T75, T161, T219)
-  if (snap.minShields != null && snap.S < snap.minShields && snap.decisionsSH < 0) v.push({ order: 'osłony', serious: true, amount: snap.minShields - snap.S })
+  // T161 (przegląd S2): sprawdzenie oddaje to, co osłony tego dnia pożyczyły domownikom albo zapłaciły za ich prezent
+  const shieldsOwn = snap.S + (snap.householdLent ?? 0)
+  if (snap.minShields != null && shieldsOwn < snap.minShields && snap.decisionsSH < 0) v.push({ order: 'osłony', serious: true, amount: snap.minShields - shieldsOwn })
   // 4. firewall (D23, T31)
   for (const f of snap.firewall) v.push({ order: 'firewall', serious: true, ref: f.txId, amount: f.amount })
   // 5. potwierdzony zakup w ciszy nocnej (T187; N-PC-19 bez „plan” i kontenerów)
@@ -112,21 +135,22 @@ export function playGame(r, settings, today, opt = {}) {
   const changes = []
   let serMonth = null
   let serCount = 0
-  let prevCargo = null
   for (let d = start; d <= lastFrozen; d = addDays(d, 1)) {
     const snap = r.days.get(d)
     if (!snap) break
     const res = rateDay(r, snap, settings, opt)
-    // ładunek ponad linią po wzroście masy (T75, T227)
+    // ładunek ponad linią po wzroście masy (T75, T227; przegląd S1): wzrost ocenia dzień zmiany – masa miesiąca znana na
+    // koniec dnia wobec znanej na koniec dnia poprzedniego (1. dnia miesiąca liczy się tylko zmiana z tego dnia)
     const m = monthOf(d)
-    const mass = cargoMass(r, m)
+    const endMs = warsawDayStart(addDays(d, 1)) - 1
+    const mass = cargoMassAt(r, m, endMs)
+    const before = cargoMassAt(r, m, warsawDayStart(d) - 1)
     const salary = r.salaryOf(m)
     const line = salary ? ((settings.orders?.cargoLimitPct ?? 40) / 100) * salary : null
-    if (prevCargo != null && line != null && mass > prevCargo + 0.5 && mass > line) {
+    if (line != null && mass > before + 0.5 && mass > line) {
       res.violations.push({ order: 'ładunek', serious: false, amount: Math.round(mass - line) })
       res.status = 'broken'
     }
-    prevCargo = d.endsWith('-01') ? null : mass
     // klasa dnia
     const avg = r.hist.avgCosts(m).value
     res.range = rangeOf(snap.S, snap.H, snap.debt, avg)

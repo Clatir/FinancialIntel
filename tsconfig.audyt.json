@@ -11,6 +11,8 @@
     "tests/audyt/persona.ts",
     "tests/audyt/persona.spec.ts",
     "tests/audyt/pakiet.spec.ts",
-    "tests/audyt/smoke.spec.ts"
+    "tests/audyt/smoke.spec.ts",
+    "vitest.wyrocznia.config.mts",
+    "tests/audyt/wyrocznia/regresja.test.ts"
   ]
 }

@@ -2806,3 +2806,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
   dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
   przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
+- **T367** Wyrocznia jako regresja silnika pieniędzy (AP-32, N2; raport audytu sek. 6 – W1, S1–S4, C19 / R-15, C24,
+  PR sp. 9): wyrocznia (`tests/audyt/wyrocznia`, u3) zostaje ślepa – wymagania i kopia schematów `lib/schemat.mjs` (pola,
+  wartości domyślne, brak ≠ null; `src/` nie czyta), zmiana reguły pieniędzy wchodzi do niej z tekstu T-decyzji, nigdy
+  z kodu. Regresja `npm run test:wyrocznia` (`vitest.wyrocznia.config.mts`) – lokalnie, po każdej grupie silnika i przed
+  jej PR: stany persony i migawki odczytów audytu z laboratorium (`FI_AUDIT_LAB`, domyślnie `C:\FI-audyt` – dane
+  syntetyczne poza repozytorium, D97), wyrocznia i `computeFleet` (z parami ICTTJ jak okno, `monthAhead`) na tych samych
+  plikach w tej samej chwili; każda liczba pieniędzy wyroczni = aplikacji, „ten sam stan – ta sama liczba na każdym
+  ekranie”, kopia schematów = parsowanie aplikacji; ok. 2 min, poza CI (migawek nie ma w repozytorium). Znane rozbieżności
+  – lista `KNOWN` z powodem i grupą naprawy; znana, która zniknęła, też zatrzymuje test. Szybka część w `npm test` (CI):
+  `tests/unit/wyrocznia-ap32.test.ts` – scenariusze reguł N2 (wyrocznia = silnik) i ekrany; otwarty błąd jako `it.fails`
+  (AF-15 – termin asteroidy w odprawie, N3 AP-10). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
+  wyroczni – nigdy dopasowanie wyroczni do wyniku.
