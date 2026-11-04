@@ -49,8 +49,26 @@ test('odprawa z hierarchią, jedno powiadomienie przy starcie, godzina odprawy, 
     })
     const notes = () => app.evaluate(() => (globalThis as unknown as { __notes: Array<{ title: string; body: string }> }).__notes)
 
-    // The bridge: the day's matter (the import) shown, the asteroid 10 days ahead folded – „Pokaż wszystkie”.
     await expect(page.getByTestId('page-bridge')).toBeVisible()
+
+    // The start's notifications (the briefing, the import, the asteroid): one – the briefing naming the others.
+    await expect.poll(() => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('fi.notify.sent') ?? '{}')))).toContain(`briefing:${today}`)
+    await app.evaluate(() => {
+      ;(globalThis as unknown as { __notes: unknown[] }).__notes = []
+    })
+    await page.evaluate(() => localStorage.removeItem('fi.notify.sent'))
+    // The first touch of the window: the morning's opening. Before any click of this test – the notifier takes one touch
+    // in 30 s, so a click just before would swallow it (a fast machine: CI).
+    await page.evaluate('window.dispatchEvent(new PointerEvent("pointerdown"))')
+    await expect.poll(notes).toHaveLength(1)
+    const [note] = await notes()
+    expect(note!.title).toBe('Odprawa poranna')
+    // The day's others (a debriefing in the first week, the evening report after 21:00) may join them – one notification still.
+    expect(note!.body).toMatch(/^Energia dziś: .* Do tego \d+ inn\S+ powiadomie\S+: .*– Mostek\.$/)
+    expect(note!.body).toContain('Asteroida na kursie')
+    expect(note!.body).toContain('Zaległy import z mBanku')
+
+    // The bridge: the day's matter (the import) shown, the asteroid 10 days ahead folded – „Pokaż wszystkie”.
     const line = (kind: string) => page.locator(`[data-testid="briefing-item"][data-kind="${kind}"]`)
     await expect(line('import')).toBeVisible()
     await expect(line('import')).toHaveAttribute('data-tier', 'day')
@@ -65,22 +83,6 @@ test('odprawa z hierarchią, jedno powiadomienie przy starcie, godzina odprawy, 
     await expect(all).toHaveText('Zwiń')
     await all.click()
     await expect(line('asteroid')).toBeHidden()
-
-    // The start's notifications (the briefing, the import, the asteroid): one – the briefing naming the others.
-    await expect.poll(() => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('fi.notify.sent') ?? '{}')))).toContain(`briefing:${today}`)
-    await app.evaluate(() => {
-      ;(globalThis as unknown as { __notes: unknown[] }).__notes = []
-    })
-    await page.evaluate(() => localStorage.removeItem('fi.notify.sent'))
-    // The first touch of the window: the morning's opening.
-    await page.evaluate('window.dispatchEvent(new PointerEvent("pointerdown"))')
-    await expect.poll(notes).toHaveLength(1)
-    const [note] = await notes()
-    expect(note!.title).toBe('Odprawa poranna')
-    // The day's others (a debriefing in the first week, the evening report after 21:00) may join them – one notification still.
-    expect(note!.body).toMatch(/^Energia dziś: .* Do tego \d+ inn\S+ powiadomie\S+: .*– Mostek\.$/)
-    expect(note!.body).toContain('Asteroida na kursie')
-    expect(note!.body).toContain('Zaległy import z mBanku')
 
     // Ustawienia → Powiadomienia: the briefing at the first opening (default) or at its hour (config.json, this computer).
     await page.keyboard.press('Control+,')
