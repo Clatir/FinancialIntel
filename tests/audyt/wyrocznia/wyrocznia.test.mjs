@@ -389,3 +389,60 @@ test('u2 C6 / T279: pokrycie z koperty codziennej zmniejsza pulę dzienną od ch
   assert.equal(r.limitsAt('2026-11').lim[AUTO], 16500)
   void ROZ
 })
+
+// ------------------------------------------------------------------ T393, T394: jedna reguła płatności opłaty (przegląd N3)
+
+const fee = (o) => ({ id: '01TESTCONTF000000000000001', name: 'Opłata', createdAt: '2025-08-01T00:00:00.000Z', amount: 18000, cycleMonths: 3, dueMonth: '2025-11', dueDay: 15, accountId: MB, from: null, until: null, archived: false, past: [], schedule: [], aliveAt: null, ...o })
+const feeShip = (c, start, pays, today) =>
+  runFleet(
+    input({
+      settings: { budget: { start, initial: { shields: 0, hull: 0, goals: {} } } },
+      balances: [opening(start, MB, 3000000)],
+      months: [plan(start.slice(0, 7), 500000)],
+      containers: [c],
+      transactions: pays.map((date) => tx({ date, amount: -c.amount, containerId: c.id }))
+    }),
+    { today }
+  )
+
+test('T393 (przegląd N3 1): listopad zapłacony 10.12, luty 20.01 – oba cykle zapłacone, 1.02 bez raty', () => {
+  const c = fee({})
+  const r = feeShip(c, '2025-09-01', ['2025-08-15', '2025-12-10', '2026-01-20'], '2026-02-05')
+  assert.equal(r.months.get('2026-02').tanks[c.id], 0)
+  assert.ok(r.paidCycles.get(c.id).has('2025-11'))
+  assert.ok(r.paidCycles.get(c.id).has('2026-02'))
+})
+
+test('T393 (przegląd N3 2): co 2 miesiące, grudzień niezapłacony, płatność 05.02 – grudnia, luty niezapłacony', () => {
+  const c = fee({ amount: 10000, cycleMonths: 2, dueMonth: '2025-10', dueDay: 10 })
+  const r = feeShip(c, '2025-09-01', ['2025-10-10', '2026-02-05'], '2026-02-06')
+  assert.ok(r.paidCycles.get(c.id).has('2025-12'))
+  assert.ok(!r.paidCycles.get(c.id).has('2026-02'))
+})
+
+test('T393 (przegląd N3 3, 4): listopad „poza budżetem” albo kontener dodany w styczniu – 20.01 płaci luty, 1.02 bez raty', () => {
+  const settled = fee({ aliveAt: '2025-11-16' })
+  const a = feeShip(settled, '2025-09-01', ['2025-08-15', '2026-01-20'], '2026-02-05')
+  assert.equal(a.months.get('2026-02').tanks[settled.id], 0)
+  assert.ok(a.paidCycles.get(settled.id).has('2026-02'))
+  const added = fee({ createdAt: '2026-01-10T10:00:00.000Z' })
+  const b = feeShip(added, '2025-09-01', ['2026-01-20'], '2026-02-05')
+  assert.equal(b.months.get('2026-02').tanks[added.id], 0)
+  assert.ok(b.paidCycles.get(added.id).has('2026-02'))
+})
+
+test('T393 (T345, przegląd N2 4): luty zapłacony 28.04 przed startem 5.05 – maj niezapłacony, odkłada 300 zł', () => {
+  const c = fee({ amount: 30000, dueMonth: '2026-02', dueDay: 10 })
+  const r = feeShip(c, '2026-05-05', ['2025-11-10', '2026-04-28', '2026-05-10'], '2026-05-12')
+  assert.equal(r.months.get('2026-05').tanks[c.id], 30000)
+  assert.ok(r.paidCycles.get(c.id).has('2026-02'))
+  assert.ok(r.paidCycles.get(c.id).has('2026-05'))
+})
+
+test('T394 (przegląd N3 10): co 2 miesiące, grudzień i luty niezapłacone – płatność 05.04 płaci grudzień (najstarszy)', () => {
+  const c = fee({ amount: 10000, cycleMonths: 2, dueMonth: '2025-10', dueDay: 10 })
+  const r = feeShip(c, '2025-09-01', ['2025-10-10', '2026-04-05'], '2026-04-06')
+  assert.ok(r.paidCycles.get(c.id).has('2025-12'))
+  assert.ok(!r.paidCycles.get(c.id).has('2026-02'))
+  assert.ok(!r.paidCycles.get(c.id).has('2026-04'))
+})

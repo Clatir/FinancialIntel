@@ -694,6 +694,12 @@ function LateDues({ c, late }: { c: Container; late: readonly CargoStatus[] }) {
   )
 }
 
+/** The late due a payment today pays (`payToday` – the oldest one unpaid, T393) as „ (termin dd.mm)”; none – ''. */
+function lateToday(late: readonly CargoStatus[]): string {
+  const s = late.find((x) => x.payToday)
+  return s ? ` (termin ${dm(s.due)})` : ''
+}
+
 /** The fee in this month (F1): its payments, its due and where it comes from; „Zapłacone” for a payment no file shows. */
 function ThisMonth({ c, s, late }: { c: Container; s: CargoStatus; late: readonly CargoStatus[] }) {
   const day = s.dayFrom === 'history' ? `dzień płatności z historii: ${s.day}.` : `dzień płatności kontenera: ${s.day}.`
@@ -721,7 +727,7 @@ function ThisMonth({ c, s, late }: { c: Container; s: CargoStatus; late: readonl
       </span>
       {s.state !== 'paid' &&
         // Paid today counts for this due only from its window on – earlier it is the previous due's; before this due's
-        // day an earlier one still unpaid takes it first (T375).
+        // day the oldest one still unpaid takes it first (T375, T393).
         (s.payToday ? (
           <button type="button" className="btn h-[22px] self-start" onClick={() => payContainer(c, s.amount)} data-testid="container-paid">
             Zapłacone ({zl(s.amount)}, dziś)
@@ -730,7 +736,7 @@ function ThisMonth({ c, s, late }: { c: Container; s: CargoStatus; late: readonl
           <span className="text-[11px] text-dim" data-testid="container-paid-from">
             {today < s.from
               ? `„Zapłacone” od ${dm(s.from)} – płatność wcześniejsza należy do poprzedniego terminu.`
-              : `Płatność dziś zamknie najpierw zaległą opłatę${late.length ? ` (termin ${dm(late[late.length - 1]!.due)})` : ''}.`}
+              : `Płatność dziś zamknie najpierw zaległą opłatę${lateToday(late)}.`}
           </span>
         ))}
     </div>

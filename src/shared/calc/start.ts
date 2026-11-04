@@ -46,14 +46,18 @@ export function startSplit(
   return { shields: split.shields, hull: split.hull, goals: split.goals, free: split.free }
 }
 
-/** A periodic fee the start finds (a container, or a proposal chosen in the wizard) with the days of its payments. */
-export type StartTankItem = FeeOf & AmountOf & { key: string; paid: readonly string[] }
+/**
+ * A periodic fee the start finds (a container, or a proposal chosen in the wizard) with its payments – their days (each
+ * the fee's amount then) or the payments – and its payment day (none: its latest payment's, T376).
+ */
+export type StartTankItem = FeeOf & AmountOf & { key: string; dueDay?: number; dueAt?: string | null; paid: ReadonlyArray<string | { date: string; amount: number }> }
 
 /**
  * The tanks of the start's month as the engine fills them (N9, N-PC-7, AP-5): each fee's installment (`tankWant` – with
  * the money set in its tank at the start, `tanks`) and what the plan wants in the tank for the months of its cycle
- * before the start (`planAmount` – „do planu”). A cycle its payments before the start paid (`paidBeforeStart`, T135 –
- * `paid`) wants neither: its tank collects for the next one; a fee out of its life that month neither.
+ * before the start (`planAmount` – „do planu”). A cycle its payments before the start paid (`paidBeforeStart` – the
+ * hold's rule, T135, T393 – `paid`) wants neither: its tank collects for the next one; a fee out of its life that month
+ * neither.
  */
 export function startTanks(items: readonly StartTankItem[], start: string, tanks: Readonly<Record<string, number>>): Array<{ key: string; installment: number; planAmount: number; paid: boolean }> {
   const month = monthOf(start)

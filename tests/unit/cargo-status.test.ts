@@ -58,7 +58,7 @@ describe('opłaty stałe w miesiącu (F1, D86)', () => {
     expect(at({ [MBANK_ACCOUNT_ID]: '2026-10-12' })).toMatchObject({ state: 'overdue', importPending: false })
   })
 
-  it('opłata okresowa tylko w miesiącu terminu, zapłacona według zbiornika silnika; zarchiwizowany, rata pożyczki i spoza życia – bez stanu', () => {
+  it('opłata okresowa tylko w miesiącu terminu, zapłacona płatnością swojego okna (jak silnik – T393); zarchiwizowany, rata pożyczki i spoza życia – bez stanu', () => {
     const oc = container({ name: 'OC', amount: zl(1200), cycleMonths: 12, dueMonth: '2026-10', dueDay: 5 })
     const later = container({ name: 'Przegląd', cycleMonths: 12, dueMonth: '2026-12', dueDay: 5 })
     const archived = container({ name: 'Stary', archived: true })
@@ -66,8 +66,8 @@ describe('opłaty stałe w miesiącu (F1, D86)', () => {
     const future = container({ name: 'Od grudnia', from: '2026-12' })
     const all = [oc, later, archived, loanRate, future]
     expect(cargoStatuses(input({ containers: all, today: '2026-10-15' })).map((s) => [s.name, s.state])).toEqual([['OC', 'overdue']])
-    const tanks = [{ containerId: oc.id, name: 'OC', amount: 0, dueMonth: '2027-10', paidDue: '2026-10', due: zl(1200) }]
-    expect(cargoStatuses(input({ containers: all, today: '2026-10-15', tanks }))[0]!.state).toBe('paid')
+    // Paid the month before its due month (T135): its due paid by that payment – the engine's cycle by the same rule.
+    expect(cargoStatuses(input({ containers: all, today: '2026-10-15', transactions: [pay(oc, '2026-09-20')] }))[0]).toMatchObject({ name: 'OC', state: 'paid', paid: zl(1200) })
   })
 
   it('odprawa i powiadomienie tylko przy „po terminie” (raz na termin), wyłączane; Radar – opłaty miesięczne w każdym miesiącu, ta zaległa też', () => {

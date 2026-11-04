@@ -15,6 +15,8 @@ import {
   warsawDayStart
 } from './daty.mjs'
 import { splitEvenly } from './kwoty.mjs'
+// T393: terminy opłat i cykle zapłacone – jedna reguła z Ładownią (moduł czyta kalendarz stąd: cykl samych funkcji)
+import { cykleZaplacone, dzienPlatnosci, terminyOplaty } from './oplaty.mjs'
 
 export const HOUSE_MEMBER_ID = '01KDEFMEM00000000000000001'
 
@@ -554,27 +556,32 @@ export function runFleet(input, opt) {
   const hullTargetAt = new Map()
 
   // ---------------------------------------------------------------- przepływy
-  const paidCycles = new Map()
-  const trackFrom = (c) => {
-    const f = c.from ?? monthOf(toWarsaw(c.createdAt).date)
-    return f > bsm ? f : bsm
+  // T393: cykle zapłacone opłaty okresowej – regułą stanu Ładowni (`oplaty.mjs`) z płatności opłaty: części wydatku
+  // z kontenerem (bez znanego celu i „do zwrotu”), jedna na operację, także sprzed startu i spoza życia opłaty
+  const feePays = new Map()
+  for (const t of ops) {
+    if (t.date > today || t.kind !== 'expense') continue
+    const perFee = new Map()
+    for (const p of partsOf(t)) {
+      const cid = p.containerId ?? t.containerId ?? null
+      const gid = p.goalId ?? t.goalId ?? null
+      const c = cid ? containers.get(cid) : null
+      if (p.refundable || p.amount >= 0 || !c || (c.cycleMonths ?? 1) <= 1 || (gid && goals.has(gid))) continue
+      perFee.set(cid, (perFee.get(cid) ?? 0) - p.amount)
+    }
+    for (const [cid, amount] of perFee) {
+      if (!feePays.has(cid)) feePays.set(cid, [])
+      feePays.get(cid).push({ id: t.id, date: t.date, amount })
+    }
   }
-  const prevDueOf = (c, m) => {
-    let x = addMonths(m, -1)
-    let guard = 0
-    while (!isDueMonth(c, x) && guard++ < 120) x = addMonths(x, -1)
-    return x
-  }
-  const cycleClosed = (c, due) => !!paidCycles.get(c.id)?.has(due) || due < trackFrom(c)
+  for (const list of feePays.values()) list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))
+  /** Cykle opłaty zapłacone płatnościami sprzed dnia `before` – stan Ładowni miesiąca m (T393). */
+  const paidBefore = (c, before, m) => cykleZaplacone(c, feePays.get(c.id) ?? [], before, m, budgetStart)
+  /** Termin, który zapłaciła płatność z dnia `date` (do logu) – po płatnościach do tego dnia (T393, T394). */
   const closeCycleFor = (c, date) => {
-    const X = monthOf(date)
-    let due
-    if (isDueMonth(c, X)) due = X
-    else if ((c.cycleMonths ?? 1) >= 3 && isDueMonth(c, addMonths(X, 1))) due = cycleClosed(c, prevDueOf(c, addMonths(X, 1))) ? addMonths(X, 1) : prevDueOf(c, addMonths(X, 1))
-    else due = prevDueOf(c, X)
-    if (!paidCycles.has(c.id)) paidCycles.set(c.id, new Set())
-    paidCycles.get(c.id).add(due)
-    return due
+    const known = (feePays.get(c.id) ?? []).filter((p) => p.date <= date)
+    const m = monthOf(date)
+    return terminyOplaty(c, known, { start: budgetStart, miesiac: m, dzien: dzienPlatnosci(c, known, m) }).find((x) => x.platnosci.some((p) => p.date === date))?.m ?? null
   }
   const takeChain = (x) => {
     const fromS = Math.min(x, Math.max(st.S, 0))
@@ -786,8 +793,9 @@ export function runFleet(input, opt) {
       if ((c.cycleMonths ?? 1) <= 1 || !aliveIn(c, m, bsm)) continue
       const tank = st.T.get(c.id) ?? 0
       const cyc0 = cycleOf(c, m)
-      if (paidCycles.get(c.id)?.has(cyc0.due)) {
-        // u2 (C2): cykl już zapłacony (T135) – bez rat, zbiornik zbiera na następny
+      if (paidBefore(c, d, m).has(cyc0.due)) {
+        // u2 (C2): cykl już zapłacony (T135) – bez rat, zbiornik zbiera na następny; zapłacony w stanie Ładowni w dniu
+        // przełomu – płatności sprzed niego (T393)
         rec.tanks[c.id] = 0
         rec.tankDetails[c.id] = { nominal: 0, share: 0, installment: 0, due: cyc0.due, pos: cyc0.pos, length: cyc0.length, paidCycle: true }
         continue
@@ -1338,7 +1346,8 @@ export function runFleet(input, opt) {
     inputBalances: input.balances,
     householdSince,
     limitsAt,
-    paidCycles,
+    // T393: cykle zapłacone płatnościami do dziś – terminy zapłacone w Ładowni (Radar: duePaid)
+    paidCycles: new Map([...containers.values()].filter((c) => (c.cycleMonths ?? 1) > 1).map((c) => [c.id, paidBefore(c, addDays(today, 1), monthOf(today))])),
     dailyBeforeOf: (m) => dailyBefore.get(m) ?? 0
   }
 }

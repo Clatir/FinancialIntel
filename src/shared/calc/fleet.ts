@@ -28,6 +28,8 @@ import { goalAt, goalDecided, goalTakes } from './goals'
 import { debtOf, loanStates, type LoanState } from './loans'
 import { coveredMonths, monthsBefore } from './history'
 import { accountAmounts, categoryIndex, costOf, isCargoPayment, isTwoSided, partsOf, splitEvenly, sum } from './operations'
+// The paid cycles by the fees' state rule (T393) – that module reads the calendar from this one: a cycle of functions only.
+import { feeDayOf, paidDuesOf, paymentDay, type FeeDuesOf, type Linked } from './cargoStatus'
 
 // ------------------------------------------------------------------ the rules as small pure functions
 
@@ -382,39 +384,34 @@ export function nextUnpaidOf(c: CycleOf & Pick<Container, 'dueDay'>, today: stri
   return paidDue && date.slice(0, 7) === paidDue ? nextPaymentOf(c, addDays(date, 1)) : date
 }
 
-/**
- * The cycle (its due month) a payment of a periodic fee in `month` closes (B55): the due month's, or – a cycle of 3
- * months or more – the next due month's when paid the month before it (early: the 1st on a Monday), only while the cycle
- * before is closed (`closed` – paid, or before the fee was followed): else it is that cycle's, late. null = paid late.
- */
-export function paidCycleOf(c: CycleOf, month: string, closed: (dueMonth: string) => boolean = () => true): string | null {
-  const { dueMonth: due, length } = cyclePosition(c, month)
-  if (due === month) return due
-  return length >= 3 && addMonths(month, 1) === due && closed(addMonths(due, -length)) ? due : null
-}
-
 /** The month a periodic fee is followed from (T135): the budget's start, or its `from` when later (T136). */
 export const followedFrom = (c: { from?: string | null }, start: string): string => [monthOf(start), c.from ?? ''].sort().at(-1)!
 
 /** A periodic fee's calendar and life (a proposal of the start wizard: `from`, `until` null, not archived). */
 export type FeeOf = CycleOf & Pick<Container, 'archived' | 'from' | 'until'> & { archivedAt?: string | null }
 
+/** Payments by their day, then their operation (as the hold's index – `paymentsIndex`). */
+const byDay = (a: Linked, b: Linked): number => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+
 /**
- * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135): they never pass the
- * run – the money left before the opening balances – yet each closes its cycle as one in the run does (`paidCycleOf`:
- * the due month's; a cycle of 3 months or more – the next due's the month before it, the one before closed). Only a
- * payment in the fee's life is its tank's (B56). The engine and the start wizard count the same; `dates` – its payments'.
+ * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135, T345, T393): they
+ * never pass the run – the money left before the opening balances – yet each pays its due as the hold counts it
+ * (`paidDuesOf`, the engine's turn of the start the same): the due of its window, the next cycle's early only with the one
+ * before paid; a late one the late due (the fee followed from its first payment seen – przegląd N2 4), never the next.
+ * The start wizard reads it; `paid` – the payments (a day alone: the fee's amount then).
  */
-export function paidBeforeStart(c: FeeOf, dates: Iterable<string>, start: string): Set<string> {
-  const followed = followedFrom(c, start)
-  const paid = new Set<string>()
-  for (const date of [...dates].sort()) {
-    if (date >= start || !activeIn(c, monthOf(date))) continue
-    const cycle = paidCycleOf(c, monthOf(date), (due) => due < followed || paid.has(due))
-    if (cycle) paid.add(cycle)
+export function paidBeforeStart(c: FeeDuesOf, paid: Iterable<string | { date: string; amount: number }>, start: string): Set<string> {
+  const linked: Linked[] = []
+  for (const p of paid) {
+    const date = typeof p === 'string' ? p : p.date
+    if (date < start) linked.push({ id: String(linked.length).padStart(6, '0'), date, amount: typeof p === 'string' ? amountIn(c, monthOf(date)) : p.amount, accountId: '' })
   }
-  return paid
+  linked.sort(byDay)
+  const month = monthOf(start)
+  return paidDuesOf(c, linked, feeDayOf(c, linked, month), { start, month })
 }
+
+const NO_CYCLES: ReadonlySet<string> = new Set()
 
 /** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
 const archivedMonth = (c: { archived: boolean; archivedAt?: string | null }): string | null => (c.archived && c.archivedAt ? warsawNow(c.archivedAt).month : null)
@@ -683,8 +680,9 @@ export interface FleetState {
   energy: number
   /**
    * The periodic fees' tanks: `dueMonth` = the next payment still to make; `paidDue` = this cycle's due month when paid
-   * already (B6, B55); `want` = the installment it wanted at this month's turn (T29, `tankWant`) – the energy gave it or
-   * less (the log's `sinking`; without a salary nothing – C20); none = the engine did not run this month's turn.
+   * already (B6, B55) – its due paid in Ładownia by the same payments (T393); `want` = the installment it wanted at this
+   * month's turn (T29, `tankWant`) – the energy gave it or less (the log's `sinking`; without a salary nothing – C20);
+   * none = the engine did not run this month's turn.
    */
   tanks: Array<{ containerId: string; name: string; amount: number; dueMonth: string; paidDue: string | null; due: number; want?: number }>
   taxHold: number
@@ -1076,29 +1074,52 @@ export function computeFleet(input: FleetInput): FleetState {
   // salary already (T45), the start pays only the rest.
   // A periodic fee is its tank's, never the salary's.
   const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
-  /** The cycles (due months) of each periodic fee paid already (B55). */
-  const paidCycles = new Map<string, Set<string>>()
   /** What each tank wanted at this month's turn (T29, C20) – the energy gave it, or less (`FleetState.tanks[].want`). */
   const wantedNow = new Map<string, number>()
-  // Paid before the start (AP-5): those cycles are paid too – the first salary never sets their fee aside again.
-  if (started && start) {
-    const paidOn = new Map<string, string[]>()
-    for (const t of txs) {
-      if (t.date >= start || t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
-      for (const p of partsOf(t)) {
-        // As the run counts a part (below): a goal's money is the goal's, a part to be refunded the household's.
-        const cid = p.containerId ?? t.containerId
-        const gid = p.goalId ?? t.goalId
-        if (p.refundable || p.amount >= 0 || !cid || !periodicIds.has(cid) || (gid && knownGoal(gid))) continue
-        const dates = paidOn.get(cid)
-        if (dates) dates.push(t.date)
-        else paidOn.set(cid, [t.date])
-      }
+  /**
+   * Each periodic fee's payments its cycles count (B55, T393), by day: an expense's parts linked to it as the run counts
+   * them – a known goal's money is the goal's (T131), a part to be refunded the household's –, one per operation; the
+   * ones before the budget's start too (AP-5, T345: the first salary never sets a fee paid then aside again).
+   */
+  const feePayments = new Map<string, Linked[]>()
+  for (const t of txs) {
+    if (t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
+    let byFee: Map<string, number> | null = null
+    for (const p of partsOf(t)) {
+      const cid = p.containerId ?? t.containerId
+      const gid = p.goalId ?? t.goalId
+      if (p.refundable || p.amount >= 0 || !cid || !periodicIds.has(cid) || (gid && knownGoal(gid))) continue
+      byFee ??= new Map()
+      byFee.set(cid, (byFee.get(cid) ?? 0) - p.amount)
     }
-    for (const [id, dates] of paidOn) {
-      const paid = paidBeforeStart(containerById.get(id)!, dates, start)
-      if (paid.size) paidCycles.set(id, paid)
+    for (const [cid, amount] of byFee ?? []) {
+      const p: Linked = { id: t.id, date: t.date, amount, accountId: t.accountId }
+      const list = feePayments.get(cid)
+      if (list) list.push(p)
+      else feePayments.set(cid, [p])
     }
+  }
+  for (const list of feePayments.values()) list.sort(byDay)
+  /** Each fee's last paid cycles: its payments then, its payment day – the same for its active dues whatever the month. */
+  const paidMemo = new Map<string, { n: number; day: number; paid: ReadonlySet<string> }>()
+  /**
+   * The cycles (due months) of a periodic fee its payments before `before` paid (B55, T393): the dues Ładownia showed paid
+   * then – the hold's one rule (`paidDuesOf`) for the month `m`, on its payment day then; a cycle paid wants nothing more.
+   * The budget's dues from its first day – none before it runs (this month's only, as Ładownia).
+   */
+  const paidBefore = (c: Container, before: string, m: string): ReadonlySet<string> => {
+    const list = feePayments.get(c.id)
+    if (!list) return NO_CYCLES
+    let n = 0
+    while (n < list.length && list[n]!.date < before) n++
+    if (!n) return NO_CYCLES
+    const known = n === list.length ? list : list.slice(0, n)
+    const day = paymentDay(c, known, m).day
+    const memo = paidMemo.get(c.id)
+    if (memo && memo.n === n && memo.day === day) return memo.paid
+    const paid = paidDuesOf(c, known, day, { start: started ? start : null, month: m })
+    paidMemo.set(c.id, { n, day, paid })
+    return paid
   }
   const startMonthSpent = start ? startMonthSpentOf(txs, start, (t) => !!t.containerId && periodicIds.has(t.containerId)) : 0
   const payMonth = (m: string, date: string) => {
@@ -1131,8 +1152,9 @@ export function computeFleet(input: FleetInput): FleetState {
     for (const c of containers) {
       if (c.cycleMonths <= 1 || !activeIn(c, m)) continue
       const tank = tanks.get(c.id) ?? 0
-      // This cycle paid already (early – B55, before the start – AP-5): nothing more to collect for it.
-      const want = tankWant(c, m, tank, paidCycles.get(c.id))
+      // This cycle paid already (early – B55, before the start – AP-5) as Ładownia showed it then (T393): nothing more to
+      // collect for it.
+      const want = tankWant(c, m, tank, paidBefore(c, date, m))
       if (m === month) wantedNow.set(c.id, want)
       if (!paid) continue
       const take = Math.min(want, Math.max(0, energy))
@@ -1199,10 +1221,7 @@ export function computeFleet(input: FleetInput): FleetState {
             } else addGoal(goal, p.amount, moves)
           } else if (periodic) {
             if (p.amount < 0) {
-              // The cycle before closed – paid, or before the fee was followed (the budget's start, its `from`).
-              const followed = start ? followedFrom(periodic, start) : ''
-              const cycle = paidCycleOf(periodic, monthOf(t.date), (due) => due < followed || !!paidCycles.get(periodic.id)?.has(due))
-              if (cycle) paidCycles.set(periodic.id, (paidCycles.get(periodic.id) ?? new Set()).add(cycle))
+              // The cycle it pays: the hold's rule, read at each turn and today (`paidBefore`, T393).
               const tank = tanks.get(periodic.id) ?? 0
               const fromTank = Math.min(-p.amount, Math.max(0, tank))
               tanks.set(periodic.id, tank - fromTank)
@@ -1715,10 +1734,10 @@ export function computeFleet(input: FleetInput): FleetState {
   const overTarget = targets.shields != null ? Math.max(0, shields - targets.shields) : 0
   // „Wolne do decyzji” with the hull from 99 % of its target (AP-17, T372) – as the firewall lets a top-up of XTB.
   const hullFull = hullCountsFull(hull, targets.hull)
-  /** The tank's cycle: this one, or – paid already – the next one (B6). */
+  /** The tank's cycle: this one, or – paid already by today's payments, as Ładownia shows it (T393) – the next one (B6). */
   const tankCycle = (c: Container) => {
     const due = cyclePosition(c, month).dueMonth
-    return paidCycles.get(c.id)?.has(due) ? { dueMonth: cyclePosition(c, addMonths(due, 1)).dueMonth, paidDue: due } : { dueMonth: due, paidDue: null }
+    return paidBefore(c, addDays(today, 1), month).has(due) ? { dueMonth: cyclePosition(c, addMonths(due, 1)).dueMonth, paidDue: due } : { dueMonth: due, paidDue: null }
   }
   return {
     today,

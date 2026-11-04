@@ -120,10 +120,10 @@ export function WizardPage() {
   const periodicItems = [
     ...containers
       .filter((c) => !c.archived && c.cycleMonths > 1)
-      .map((c) => ({ key: c.id, name: c.name, amount: c.amount, past: c.past, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, schedule: c.schedule, archived: false, from: c.from, until: c.until })),
+      .map((c) => ({ key: c.id, name: c.name, amount: c.amount, past: c.past, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, dueDay: c.dueDay, dueAt: c.dueAt, schedule: c.schedule, archived: false, from: c.from, until: c.until })),
     ...chosen
       .filter((p) => p.cycleMonths > 1)
-      .map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, schedule: p.schedule, archived: false, from: null, until: null }))
+      .map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, dueDay: p.dueDay, schedule: p.schedule, archived: false, from: null, until: null }))
   ]
   const tanksSplit = Object.fromEntries(periodicItems.map((item) => [item.key, Math.max(0, w.tanks?.[item.key] ?? 0)]))
   // The first month's tanks and „do planu” by the engine's rule (AP-5): a cycle paid before the start wants nothing.

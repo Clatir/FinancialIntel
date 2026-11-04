@@ -2926,3 +2926,34 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ÷ dni do końca miesiąca (z dziś); energia dziś = przydział − wydane dziś, nie więcej niż zostało energii miesiąca
   (T371); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera; `daily.left`, jak alarm i gra).
   Bez zmian reguły gry.
+- **T393** Jedna reguła płatności opłaty – Ładownia i silnik (1.15.7, przegląd N3 1–4, 13; zmienia T135 / T345 w silniku,
+  uzupełnia T375): który termin płaci płatność, decyduje jedna funkcja `feeDuesOf` (`calc/cargoStatus.ts`) – stan
+  w Ładowni, Radar, odprawa i cykle zapłacone silnika (`paidDuesOf`: rata zbiornika `tankWant` na przełomie, `paidDue`),
+  także kreator (`paidBeforeStart`). Okna T375 (miesięczna i co 2 miesiące – od 14 dni przed dniem płatności, ≥ 3 mies. –
+  od 1. dnia miesiąca przed terminem); przed dniem terminu, gdy poprzedni niezapłacony – zaległa zapłata (T394), nie
+  następny cykl; druga płatność okna – najstarszy niezapłacony; terminy budżetu od dnia startu, od miesiąca dodania
+  kontenera (`createdAt`), w życiu opłaty, nie sprzed „Zapłacone poza budżetem” / „Nadal płacę” (`aliveAt`; ten miesiąc
+  zawsze). Przed startem opłata śledzona od pierwszej widzianej płatności (T345, przegląd N2 4): spóźniona zapłata
+  płaci zaległy termin, nigdy następny. Na przełomie miesiąca (i w dniu startu) silnik liczy płatności sprzed przełomu
+  z dniem płatności tego miesiąca – stan, jaki Ładownia pokazywała tego dnia (płatność 1. dnia jest po przełomie);
+  `paidDue` – płatności do dziś. Płatności cyklu w silniku: części wydatku z kontenerem jak w przebiegu (bez znanego celu
+  i „do zwrotu”, przegląd N2 3), jedna na operację, także sprzed startu i spoza życia opłaty (pieniądze takiej – jak
+  dotąd zwykły wydatek, B56). Ładownia nie czyta już zbiorników silnika (`tankPaid`). Wcześniej (`paidCycleOf`):
+  kwartalna 180 zł, listopad zapłacony 10.12, luty 20.01 – zaległa nie zamykała listopada, lutowa była „zaległą”, 1.02
+  zbiornik brał 180 zł z energii drugi raz (Ładownia – luty zapłacony); co 2 miesiące grudzień niezapłacony, płatność
+  05.02 – Ładownia grudzień (i luty „zapłacone” ze zbiornika silnika), silnik luty: jedna płatność dwa terminy, alarm
+  lutego nigdy; listopad „poza budżetem” albo kontener dodany w styczniu – silnik nadal brał 20.01 za zaległy listopad.
+  Zostaje: Ładownia liczy też płatność z celu, dawny przelew z kontenerem (T362) i zakup do zwrotu (indeks
+  `paymentsIndex`), silnik nie (przegląd N2 3) – dane spoza aplikacji albo sprzed T362. Bez zmian formatu i migracji:
+  warstwy liczone z rekordów – miesiące, w których cykl był zapłacony tylko w jednym miejscu, przeliczą się same;
+  zamrożone dni gry zostają.
+- **T394** Termin sprzed startu, najstarsza zaległa, „Zapłacone (dziś)” (1.15.7, przegląd N3 5, 10; doprecyzowuje T375,
+  T379): terminy budżetu liczą się od dnia startu, nie od miesiąca – termin sprzed niego bez płatności nie jest „po
+  terminie” ani zaległy (bez alertu odprawy, pozycji Radaru i resztki kursu z osłon), zapłacony – „zapłacone” (T379);
+  płatność po starcie płaci tylko terminy budżetu (01.10 przy starcie 20.09 i terminie 3. – październik, nie wrzesień).
+  Płatność przed dniem terminu przy niezapłaconym poprzednim płaci najstarszy niezapłacony termin (wrzesień i październik
+  zaległe, płatność 01.11 – wrzesień; wcześniej październik, a wrzesień zostawał na zawsze); poprzedni zapłacony –
+  płatność jest wcześniejszą następnego (T135), choćby starszy był zaległy. Płatności przydzielane po kolei (stan każdego
+  dnia zostaje): druga płatność okna płaci najstarszy niezapłacony termin w chwili, gdy przyszła. „Zapłacone (kwota,
+  dziś)” (`payToday`) – termin, który płatność dziś tej kwoty zostawia zapłaconym (także przez drugą płatność okna, gdy
+  termin okna już zapłacony); „Płatność dziś zamknie najpierw zaległą opłatę (termin …)” – ten termin.
