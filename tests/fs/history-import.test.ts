@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { HISTORY_DIR } from '../../src/main/datastore/history'
 import { freshStore, sampleTransaction } from './helpers'
 
-describe('usunięcie przez sam import w historii (przegląd N1, T334)', () => {
+describe('usunięcie przez sam import w historii (przegląd N1, T331)', () => {
   it('„import”: wersja usunięta ze znakiem byImport, plik dalej _delete_ (starsza wersja zna klucze); zwykłe usunięcie bez znaku', async () => {
     const store = await freshStore()
     const gone = sampleTransaction({ note: 'nierozliczona, której bank już nie pokazuje' })

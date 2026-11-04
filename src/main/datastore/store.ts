@@ -1596,7 +1596,7 @@ export class DataStore {
   /**
    * Many records deleted at once (an import's, duplicates – W1): one change set; a record that fails says why. `reason`
    * 'undo': taken back with its import (F4) – its last version in the history is no deletion by the user (T39); 'drop':
-   * no version kept (old batches of `imports`); 'import': the import's own – a deletion marked `byImport` (T334).
+   * no version kept (old batches of `imports`); 'import': the import's own – a deletion marked `byImport` (T331).
    */
   deleteRecords(collection: Collection, ids: readonly string[], reason: 'delete' | 'undo' | 'drop' | 'import' = 'delete'): Promise<{ results: Array<{ id: string; error?: string }>; change: ChangeSet | null }> {
     return this.writing(async () => {
@@ -1628,7 +1628,7 @@ export class DataStore {
     // other would come back as the record at once (B111) – the conflict is resolved first.
     if ((this.files.ids.get(`${collection}:${id}`)?.size ?? 0) > 1)
       throw new Error('Ten wpis ma drugą kopię z innego komputera (ten sam identyfikator) – najpierw rozstrzygnij ją w Synchronizacji, potem usuń.')
-    // The import's own deletion (T334): a deletion all the same – an older version keeps its row's keys out – marked.
+    // The import's own deletion (T331): a deletion all the same – an older version keeps its row's keys out – marked.
     const kept = reason === 'drop' ? null : await this.history.snapshot(collection, state.record as AnyRecord, reason === 'import' ? 'delete' : reason, { byImport: reason === 'import' })
     // Without its version in the history a deleted record could never be brought back („Cofnij”, „Usunięte wpisy”), and
     // a deleted operation from the bank would come back with the next import (T39): not deleted then (B112).

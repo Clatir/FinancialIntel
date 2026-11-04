@@ -86,7 +86,7 @@ test('AP-2: usunięta operacja nie wraca z plikiem drugiego formatu; meldunek dl
     await app.close()
   }
 
-  // As 1.15.4 left it: the deleted one's row of the list imported again as a new operation (made by that import – T333).
+  // As 1.15.4 left it: the deleted one's row of the list imported again as a new operation (made by that import – T330).
   const zabka = buys[2]!
   const cameBackAt = new Date(Date.parse(deletedAt) + 60_000).toISOString()
   writeRecords(dataDir, 'transactions', [

@@ -85,7 +85,7 @@ const T1 = '2026-10-26T18:00:00.000Z'
 const T2 = '2026-10-27T18:00:00.000Z'
 const T3 = '2026-10-28T18:00:00.000Z'
 
-describe('przegląd N1 – „Wróciły po usunięciu” tylko dla operacji, którą zrobił import (T333)', () => {
+describe('przegląd N1 – „Wróciły po usunięciu” tylko dla operacji, którą zrobił import (T330)', () => {
   it('ręcznie wpisana połączona z wierszem drugiego formatu po usunięciu duplikatu z banku – bez meldunku; także scalona w panelu duplikatów', () => {
     // The user typed ZABKA by hand; the list brought its row as another operation – deleted as the duplicate.
     const hand = handTyped('2026-10-25', -zl(31.95), 'ZABKA Z1234', '2026-10-25T19:00:00.000Z')
@@ -121,7 +121,7 @@ describe('przegląd N1 – „Wróciły po usunięciu” tylko dla operacji, kt�
   })
 })
 
-describe('przegląd N1 – usunięcia przez import w historii (T334)', () => {
+describe('przegląd N1 – usunięcia przez import w historii (T331)', () => {
   it('wersja usunięta przez import (`byImport`) – tylko klucze, także gdy jej paczki importu już nie ma', () => {
     const history = imported(fileOf('historia', [KIOSK, ZABKA]), [], T1)
     const zabka = history.find((t) => t.counterparty === 'ZABKA Z1234')!
@@ -130,7 +130,7 @@ describe('przegląd N1 – usunięcia przez import w historii (T334)', () => {
   })
 })
 
-describe('przegląd N1 – meldunek liczony tanio (T335)', () => {
+describe('przegląd N1 – meldunek liczony tanio (T332)', () => {
   it('operacje innej kwoty niż usunięte – ich wiersz z banku nieczytany', () => {
     const history = imported(fileOf('historia', [KIOSK, ZABKA]), [], T1)
     const zabka = history.find((t) => t.counterparty === 'ZABKA Z1234')!
@@ -190,7 +190,7 @@ beforeEach(() => {
 })
 
 describe('przegląd N1 – meldunek w oknie', () => {
-  it('„Usuń” nie usuwa operacji, która ma już inny wiersz z banku (połączona albo rozliczona) – T333', async () => {
+  it('„Usuń” nie usuwa operacji, która ma już inny wiersz z banku (połączona albo rozliczona) – T330', async () => {
     const hand = handTyped('2026-10-25', -zl(31.95), 'ZABKA Z1234', '2026-10-25T19:00:00.000Z')
     const joined = { ...hand, bank: imported(fileOf('historia', [ZABKA]), [], T3)[0]!.bank }
     open({ transactions: [joined] })
@@ -253,13 +253,13 @@ describe('przegląd N1 – meldunek w oknie', () => {
   }
   const latestImport = () => data.useData.getState().fi!.settings.import.lastImport[MBANK_ACCOUNT_ID]!
 
-  it('import usuwa nierozliczoną, której bank już nie pokazuje: jako usuniętą przez import (T334)', async () => {
+  it('import usuwa nierozliczoną, której bank już nie pokazuje: jako usuniętą przez import (T331)', async () => {
     open()
     const id = await vanishedImport()
     expect(api.deleteRecords).toHaveBeenCalledWith('transactions', [id], 'import')
   })
 
-  it('import z tego komputera (z usuniętymi przeczytanymi): sprawdzenie przesunięte na jego czas – bez czytania przy następnym otwarciu (T335)', async () => {
+  it('import z tego komputera (z usuniętymi przeczytanymi): sprawdzenie przesunięte na jego czas – bez czytania przy następnym otwarciu (T332)', async () => {
     const dir = open()
     await vanishedImport()
     expect(returned.deletedReadDue(dir, latestImport())).toBe(false)

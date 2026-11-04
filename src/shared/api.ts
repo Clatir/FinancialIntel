@@ -100,7 +100,7 @@ export interface HistoryEntry {
   /** Computer that replaced it. */
   savedBy: string | null
   reason: HistoryReason
-  /** A deletion by the import itself (T334: pending ones gone from the bank, copies on another account) – not the user's. */
+  /** A deletion by the import itself (T331: pending ones gone from the bank, copies on another account) – not the user's. */
   byImport?: boolean
   /** updatedAt / updatedBy of the kept version itself. */
   updatedAt: string | null
@@ -321,7 +321,7 @@ export interface FiApi {
   /** Many records deleted with one call (W1): each deleted, or why not. */
   /**
    * `reason` 'undo': taken back with its import (F4); 'drop': an old batch of `imports` – no version in the history;
-   * 'import': operations the import deleted itself – their deletion kept as `byImport` (T334).
+   * 'import': operations the import deleted itself – their deletion kept as `byImport` (T331).
    */
   deleteRecords(collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop' | 'import'): Promise<Array<{ id: string; error?: string }>>
   /** Kept versions of a record, newest first (the settings: `kind` 'fi', `id` = the id of fi.json). */

@@ -16,7 +16,7 @@ export interface DeletedVersion {
   id: string
   savedAt: string
   reason?: string
-  /** Deleted by the import itself (T334): a pending row the bank dropped, a copy on another account (AF-9). */
+  /** Deleted by the import itself (T331): a pending row the bank dropped, a copy on another account (AF-9). */
   byImport?: boolean
   record: unknown
 }
@@ -37,7 +37,7 @@ const formatBank = (b: Row): FormatBank => ({
 /**
  * The deleted operations of the bank: not the ones taken back with their import (F4 – `reason` 'undo'). The ones an
  * import removed (pending ones gone from the bank, copies on another account – AF-9) – no deletion of the user's, only
- * their keys stay out: marked so in the history (`byImport`, from 1.15.5 – T334) or, removed before, in `byImport` (the
+ * their keys stay out: marked so in the history (`byImport`, from 1.15.5 – T331) or, removed before, in `byImport` (the
  * ids its batches keep – the last ten). A transfer in one operation (F10): the other account's row is the user's
  * deletion too – on that account's day.
  */
@@ -79,7 +79,7 @@ export interface Returned {
 export const returnedKey = (id: string): string => `back:${id}`
 
 /**
- * An operation the import made from its bank's row, as it is still (T333): booked, created with that row and never given
+ * An operation the import made from its bank's row, as it is still (T330): booked, created with that row and never given
  * another one – not a hand-typed one joined with its row (the import's „połącz”, the duplicates panel), not a pending one
  * a later file settled (both rewrite `bank` with that file's `importedAt` and format). Only such an operation can be
  * a deleted one's row come back; the others are the user's operations.
@@ -88,10 +88,10 @@ export const madeByItsImport = (t: Transaction): boolean => !!t.bank && !t.bank.
 
 /**
  * Operations of the bank that came back after the user deleted them (AF-1, before 1.15.5): an operation the import made
- * from its row (`madeByItsImport`, T333) of the other format than a deleted one, the same account and amount, ±3 days,
+ * from its row (`madeByItsImport`, T330) of the other format than a deleted one, the same account and amount, ±3 days,
  * a similar name, imported after the deletion by an import whose days (its operations' first and last day) hold the
  * deleted one's. The closest first, each once; `dismissed` – „zostaw” (`returnedKey`) and the rows brought back on purpose
- * („importuj mimo to”). Counted at every change of the operations (the inbox, T335): only the operations of a deleted
+ * („importuj mimo to”). Counted at every change of the operations (the inbox, T332): only the operations of a deleted
  * one's amount are looked at, the days and the format only of their imports.
  */
 export function returnedOf(txs: readonly Transaction[], rows: readonly DeletedRow[], dismissed: Readonly<Record<string, unknown>> = {}): Returned[] {

@@ -33,4 +33,11 @@ paths:
 - **Pułapka (03.11.2026):** daty na sztywno w E2E (`'2026-10-05'`) to bomba zegarowa – lista Operacji pokazuje bieżący
   miesiąc, więc po jego końcu wierszy nie widać (`recover.spec.ts`, `repayments.spec.ts` padają od 1.11.2026). Daty
   w testach licz względem `warsawNow()` (`addDays`, `addMonths`). Skrypty laboratorium `tests/audyt/` są w zasięgu
-  `tsconfig.node.json` i psują `npm run typecheck` (typy DOM w `page.evaluate`) – do wyłączenia (`docs/postep.md`).
+  `tsconfig.node.json`, ale poza typecheck CI – ich typy sprawdza `npm run typecheck:audyt`.
+- **Pułapka (04.11.2026):** w ciszy nocnej (23:00–05:00) szybki wpis wymaga notatki (`quick-log-note`) i potwierdzenia
+  (`quick-night-ok`) – pomocnik E2E zapisujący szybki wpis musi to obsłużyć i poczekać na pytanie (`quickExpense`
+  w `tests/e2e-mobile/phone.spec.ts`), inaczej CI w nocy pada.
+- **Lokalnie na komputerze użytkownika:** `ictj.spec.ts` (krok „Nie znaleziono ICT Trade Journal”) pada, bo ICTTJ jest
+  zainstalowany – CI to nie dotyczy. `folder-speed` ZIP64 (ok. 20 s) przekracza 60 s, gdy obok idą E2E – powtórz osobno.
+  Równoległe drzewa robocze: `node_modules` i `.tools` jako junction do głównego repozytorium; przed
+  `git worktree remove` usuń same łącza (`[System.IO.Directory]::Delete(<łącze>, $false)` w PowerShell).

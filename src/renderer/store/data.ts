@@ -1077,7 +1077,7 @@ export function deleteOrSay(collection: Collection, id: string): void {
  * Many records deleted with one call (W1: an import's, duplicates): gone from memory at once; those the disk refused come
  * back. Returns the ids deleted and the first error. `reason` 'undo': taken back with their import (F4 – T39); 'drop': old
  * batches of `imports`, no version in the history; 'import': the import's own (pending ones gone from the bank, copies
- * on another account – T334), no deletion of the user's.
+ * on another account – T331), no deletion of the user's.
  */
 export async function deleteRecords(collection: Collection, ids: readonly string[], opts: { reason?: 'undo' | 'drop' | 'import' } = {}): Promise<{ deleted: string[]; error: string | null }> {
   const s = get()

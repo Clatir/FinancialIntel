@@ -24,7 +24,7 @@ interface SnapshotFile {
   savedAt: string
   savedBy: string
   reason: HistoryReason
-  /** A deletion by the import itself (T334) – its file stays `_delete_`: an older version keeps its row's keys out. */
+  /** A deletion by the import itself (T331) – its file stays `_delete_`: an older version keeps its row's keys out. */
   byImport?: true
   record: { id?: string; updatedAt?: string; updatedBy?: string | null } & Record<string, unknown>
 }
@@ -55,7 +55,7 @@ export class RecordHistory {
   /**
    * Keep `record` (the version about to be replaced or deleted). Never throws: a failed snapshot must not block
    * the save itself (it is reported to the log). Returns the file written (null = none: throttled or failed) – `drop`
-   * takes it back (a delete the disk refused). `byImport` – a deletion by the import itself (T334).
+   * takes it back (a delete the disk refused). `byImport` – a deletion by the import itself (T331).
    */
   async snapshot(kind: FileKind, record: SnapshotFile['record'], reason: HistoryReason, opts: { byImport?: boolean } = {}): Promise<string | null> {
     try {

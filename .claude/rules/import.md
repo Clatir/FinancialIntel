@@ -31,7 +31,7 @@ paths:
   Zmiana tylko kluczy (`keysOnly` – same `altKeys`) to „bez zmian”: bez kopii i paczki (T323).
 - Usunięte operacje z banku: `shared/import/deleted.ts` (`deletedBankRows` – klucze z `altKeys`, `DeletedRow` z formatem;
   `returnedOf` – meldunek „Wróciły po usunięciu”, tylko `madeByItsImport`), w oknie `features/import/returned.ts`
-  (T320, T324, T333–T335).
+  (T320, T324, T333–T332).
 - Konto importu po numerze rachunku pliku (`accountForNumber`, T322); jedna operacja i jej kopie – `copies.ts`.
   **Pułapka:** `conflicting` nie porównuje `covers` – usuwana kopia oddaje spłacane zakupy przez `takeUserData`, a kopia
   spłacająca inne zakupy niż operacja tutaj nie jest zaznaczona (`coversOtherwise`, T321).
@@ -58,9 +58,9 @@ paths:
   przejść planu ma znaczenie: B5 tutaj bierze też wiersze `elsewhere` z B35 (kopia → `RowCopy`, „usuń duplikat”), a
   usunięte – po wszystkich przejściach „już w budżecie”.
 - **Pułapka:** rekord usunięty przez sam import nie jest usunięciem użytkownika – tylko jego klucze zatrzymują wiersz;
-  usuwaj go z `reason: 'import'` (znak `byImport` w historii, T334) i dopisuj do paczki, nie usuwaj obok niej.
+  usuwaj go z `reason: 'import'` (znak `byImport` w historii, T331) i dopisuj do paczki, nie usuwaj obok niej.
 - **Pułapka:** połączenie z ręcznie wpisaną i rozliczenie nadpisują `bank` (`importedAt`, `source`) – „kiedy i jakim
-  plikiem przyszedł wiersz” to nie „kiedy import zrobił operację” (`createdAt`, T333).
+  plikiem przyszedł wiersz” to nie „kiedy import zrobił operację” (`createdAt`, T330).
 
 ## Wydajność
 - Pamięć `brandOf` / `counterpartyKey` do 50 tys.; plan od nowa tylko przy zmianie treści (`BY_CONTENT` + `deepEqual`);

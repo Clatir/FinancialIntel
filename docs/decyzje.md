@@ -2390,7 +2390,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   formatu miarą B5 (ta sama kwota, ±3 dni, podobna nazwa, dzień objęty plikiem) – w swoim formacie wiersz ma jej klucz.
   Pary od najbliższej, każda usunięta i każdy wiersz raz; wiersz już w budżecie w formacie pliku (po kluczu) zabiera swoją
   usuniętą – kopia usunięta przy podwójnym imporcie sprzed 1.4.2 nie ukrywa innego zakupu tego sklepu. Usunięte przez
-  import (zniknięte nierozliczone, kopie z innego konta – T321; znak `byImport` w historii – T334, wcześniejsze – paczka
+  import (zniknięte nierozliczone, kopie z innego konta – T321; znak `byImport` w historii – T331, wcześniejsze – paczka
   `imports/…removed`) to nie usunięcie użytkownika: tylko ich klucze. Wiersz ma status `deleted` z `other` („usunięta z historii rachunku” w podglądzie); „importuj mimo
   to” – jak przy T39.
 - **T321** Ten sam rachunek na dwóch kontach budżetu (AP-2, AF-9): przejście B5 obejmuje też konta, na które trafiał numer
@@ -2415,12 +2415,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w `altKeys`), zapisuje je, ale bez kopii przed importem i bez paczki do cofnięcia (jak N13); panel wyniku nie pokazuje
   pustej ścieżki kopii.
 - **T324** Meldunek „Wróciły po usunięciu” (AP-2, AF-1 – dane sprzed 1.15.5, bez migracji): operacja, którą zrobił import
-  z jej wiersza (T333), zaksięgowana w innym formacie niż usunięta, to samo konto i kwota, ±3 dni, podobna nazwa, zaimportowana po usunięciu importem, którego
+  z jej wiersza (T330), zaksięgowana w innym formacie niż usunięta, to samo konto i kwota, ±3 dni, podobna nazwa, zaimportowana po usunięciu importem, którego
   dni (pierwsza i ostatnia operacja) obejmują dzień usuniętej (`returnedOf`; pary od najbliższej). Jeden meldunek na
   operację (rodzaj `returned`, po „Możliwych duplikatach”): „Usuń” – jak w Operacjach (z dokowaniami, „Cofnij”), „Pokaż”,
   „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
   mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu (gdy jest
-  po co – T335), od razu na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je
+  po co – T332), od razu na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je
   w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
@@ -2467,21 +2467,21 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   usunięta zdejmuje wskazane zakupy tej osoby (`keptCovers`). Import i szybki wpis wiązały już każdą osobę osobno
   (`linkRepayments`). Pewne jest też wpłata co najmniej równa wszystkim otwartym zakupom osoby (do 500) – spłaca wszystkie
   (`matchCovers`; reszta jak dotąd: zaliczka albo przychód według osoby), zamiast „rozliczony” przy zakupach „do oddania”.
-- **T333** „Wróciły po usunięciu” tylko dla kopii, którą zrobił import (przegląd N1; doprecyzowuje T324): kandydat to
+- **T330** „Wróciły po usunięciu” tylko dla kopii, którą zrobił import (przegląd N1; doprecyzowuje T324): kandydat to
   wyłącznie operacja utworzona przez import razem z jej wierszem i bez innego wiersza od tamtej pory (`madeByItsImport`:
   zaksięgowana, `createdAt` = `bank.importedAt`). Ręcznie wpisana połączona z wierszem (import – „połącz”, panel
   duplikatów – „scal”) i nierozliczona rozliczona późniejszym plikiem mają w `bank` czas i format tamtego pliku, ale to
   operacje użytkownika – nigdy meldunek (wcześniej „Usuń” mogło skasować jedyną prawdziwą kopię). „Usuń” sprawdza to
   jeszcze raz przy kliknięciu (inaczej komunikat, operacja zostaje). W razie wątpliwości bez meldunku – siatką zostaje panel
   duplikatów.
-- **T334** Usunięcie przez sam import w historii (przegląd N1; doprecyzowuje T320, T321): nierozliczone, których bank już
+- **T331** Usunięcie przez sam import w historii (przegląd N1; doprecyzowuje T320, T321): nierozliczone, których bank już
   nie pokazuje, i kopie z innego konta (AF-9) import usuwa z powodem 'import' (`deleteRecords(…, { reason: 'import' })`):
   wersja w `.history/` ze znakiem `byImport: true`, plik dalej `_delete_` – starsza wersja aplikacji dalej trzyma klucze
   wiersza poza importem. `deletedBankRows` bierze z takich tylko klucze, niezależnie od tego, czy paczka importu jest
   jeszcze wśród 10 ostatnich (wcześniej po rotacji paczek liczyły się jako usunięcia użytkownika); usunięte przez import
   przed 1.15.5 – po paczkach, jak dotąd. Synchronizacja → Usunięte wpisy: „usunięty przez import”. Addytywnie, bez
   `SCHEMA_VERSION`.
-- **T335** Koszt meldunku „Wróciły po usunięciu” (przegląd N1; doprecyzowuje T324): operacja wraca tylko z importem po
+- **T332** Koszt meldunku „Wróciły po usunięciu” (przegląd N1; doprecyzowuje T324): operacja wraca tylko z importem po
   usunięciu, więc usunięte czytane 10 s po otwarciu folderu tylko wtedy, gdy ostatnie sprawdzenie tego komputera coś
   zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
   w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak

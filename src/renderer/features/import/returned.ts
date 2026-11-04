@@ -1,6 +1,6 @@
 /**
  * The bank's operations the user deleted, as the import and the inbox know them (`shared/import/deleted.ts`): read from
- * the history with every file of the import, on the inbox's screen and – when there may be something to report (T335) –
+ * the history with every file of the import, on the inbox's screen and – when there may be something to report (T332) –
  * a while after a folder opens. The operations that came back after their deletion before 1.15.5 (AF-1) are the inbox's
  * reports: „Usuń” (with „Cofnij”) or „zostaw” – never removed by themselves.
  */
@@ -33,7 +33,7 @@ const NO_DISMISSED: Readonly<Record<string, unknown>> = {}
 /** The newest import of the folder (any account, any computer – `settings.import.lastImport`); '' – none yet. */
 const newestImport = (fi: SettingsFile | null | undefined): string => Object.values(fi?.settings.import.lastImport ?? {}).reduce((m, at) => (at > m ? at : m), '')
 
-/** This computer's last check of a folder (T335): the newest import then, when nothing was to report. */
+/** This computer's last check of a folder (T332): the newest import then, when nothing was to report. */
 const CHECKED = 'fi.returned.checked:'
 
 function storage(): Storage | null {
@@ -63,7 +63,7 @@ function checkedThrough(dir: string): string | null {
 }
 
 /**
- * Whether the deleted operations are read a while after the folder opens (T335): an operation comes back only with an
+ * Whether the deleted operations are read a while after the folder opens (T332): an operation comes back only with an
  * import after its deletion – not read when this computer's last check found nothing to report and no import of the
  * folder (`latest` – the newest one, another computer's too) came since.
  */
@@ -80,13 +80,13 @@ export async function readDeletedBank(): Promise<DeletedBank> {
   try {
     const deleted = await api.historyDeleted('transactions')
     const s = useData.getState()
-    // Removed by an import before 1.15.5 (its batch keeps them – F4; the later ones are marked in the history – T334).
+    // Removed by an import before 1.15.5 (its batch keeps them – F4; the later ones are marked in the history – T331).
     const byImport = new Set(listOf(s.records.imports).flatMap((b) => b.removed.map((t) => t.id)))
     const transactions = listOf(s.records.transactions)
     const out = deletedBankRows(deleted, transactions, byImport)
     if (dir && (s.status?.dataDir ?? null) === dir) {
       useDeletedBank.setState({ ...out, dir }, true)
-      // Counted here once for the hooks too (their inputs): nothing to report – the folder checked (T335).
+      // Counted here once for the hooks too (their inputs): nothing to report – the folder checked (T332).
       const dismissed = s.fi?.settings.import.notDuplicates ?? NO_DISMISSED
       const back = out.rows.length ? returnedOf(transactions, out.rows, dismissed) : []
       last = { inputs: [s.records.transactions, out.rows, dismissed], out: back }
@@ -100,7 +100,7 @@ export async function readDeletedBank(): Promise<DeletedBank> {
 }
 
 /**
- * An import of this computer done with the deleted ones just read (`runImport`, T335): nothing came back with it – a
+ * An import of this computer done with the deleted ones just read (`runImport`, T332): nothing came back with it – a
  * check that found nothing to report holds through its time.
  */
 export function checkedWithImport(at: string): void {
@@ -152,7 +152,7 @@ export function keepReturned(id: string): void {
 
 /**
  * „Usuń”: the operation deleted again, as in Operacje (its dockings with it, „Cofnij” in the toast) – only one the import
- * made from its row (T333): one joined or settled since is the user's operation and stays.
+ * made from its row (T330): one joined or settled since is the user's operation and stays.
  */
 export async function removeReturned(id: string): Promise<void> {
   const t: Transaction | undefined = useData.getState().records.transactions[id]?.record
