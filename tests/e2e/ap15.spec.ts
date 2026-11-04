@@ -81,6 +81,32 @@ test('AP-15 szybki wpis: odmowa w stopce, Enter nie zapisuje starej kwoty, Esc =
   }
 })
 
+test('przegląd N4: szybki wpis – tag skrócony do 40 znaków nie wstrzymuje Enter, słowo o nim zostaje przy „Zapisano”', async () => {
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-ap15-')), 'FinancialIntel')
+  // No quiet hours („od” = „do”): the save asks for no note at night.
+  seedFolder(dataDir, { settings: (s) => ({ ...s, orders: { ...s.orders, quietHours: { from: '00:00', to: '00:00' } } }) })
+  const { app, page, dataDir: dir, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    const quick = await quickWindow(app, page)
+    const amount = quick.getByTestId('quick-amount')
+    await amount.click()
+    await amount.fill('12')
+    await amount.press('Tab')
+    // Enter in the tags field: the tag added (cut), the operation saved – an info is no refusal (before: Enter held back).
+    const tags = quick.getByTestId('quick-tags-input')
+    await tags.click()
+    await tags.fill('a'.repeat(45))
+    await tags.press('Enter')
+    await expect(quick.getByTestId('quick-message')).toContainText('Zapisano')
+    await expect(quick.getByTestId('quick-message')).toContainText('został skrócony')
+    await expect.poll(async () => (await records(dir, 'transactions')).map((t) => (t as { tags?: string[] }).tags)).toEqual([['a'.repeat(40)]])
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('AP-15 okno główne: kwoty od-do zamienione, liczby poza zakresem, Esc cofa, pusty eksport, 0 zł, przycisk bez powodu', async () => {
   const { date } = warsawNow()
   const dataDir = folder({ transactions: [{ date, accountId: ACC, amount: 0, kind: 'expense', counterparty: 'Zerowa', note: '', splits: [] }] })

@@ -99,9 +99,12 @@ export function QuickApp() {
   const sending = useRef(false)
   // Hiding after „Zapisano”: never the window opened again meanwhile.
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // `info`: a field's word about a value it took changed (a tag cut to 40 characters) – no refusal.
+  const [msg, setMsg] = useState<{ ok: boolean; text: string; info?: boolean } | null>(null)
   // A field refused what was typed in it (the Enter that left it does not save the old value in its place – AP-15).
   const refused = useRef(false)
+  // What the fields said about values they took changed: said again with the save's answer (T400, T413 – never silently).
+  const notes = useRef<string[]>([])
   const [officer, setOfficer] = useState<{ categoryId: string; source: OfficerSource } | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const [opened, setOpened] = useState(0)
@@ -127,15 +130,19 @@ export function QuickApp() {
     if (opened) amountRef.current?.focus()
   }, [opened])
 
-  // This window has no toasts (AP-15, AF-17): what a field says about a refused value („Nieprawidłowa kwota…”) goes to the footer.
+  // This window has no toasts (AP-15, AF-17, T413): what a field says goes to the footer – a refusal („Nieprawidłowa kwota…”)
+  // holds back the Enter that left the field; a word about a value taken changed („Tag … skrócony”) does not, it is said
+  // with the save's answer too.
   useEffect(
     () =>
       useUi.subscribe((s) => {
         const t = s.toasts.at(-1)
         if (!t) return
         useUi.setState({ toasts: [] })
-        refused.current = true
-        setMsg({ ok: false, text: t.text })
+        const refusal = t.kind === 'error'
+        if (refusal) refused.current = true
+        else if (!notes.current.includes(t.text)) notes.current.push(t.text)
+        setMsg({ ok: false, text: t.text, ...(refusal ? {} : { info: true }) })
       }),
     []
   )
@@ -160,6 +167,7 @@ export function QuickApp() {
       } else if (fresh && !fresh.accounts.some((a) => a.id === k.d.accountId)) setD((x) => ({ ...x, accountId: fresh.accountId }))
       setRestored(keep)
       setMsg(null)
+      notes.current = []
       setSeries(0)
       setBusy(false)
       sending.current = false
@@ -167,8 +175,10 @@ export function QuickApp() {
       setOpened((n) => n + 1)
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
-      // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”.
-      setMsg({ ok: r.ok && !r.pending, text: r.message })
+      // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”. The fields' words with it.
+      const said = notes.current
+      notes.current = []
+      setMsg({ ok: r.ok && !r.pending, text: [r.message, ...said].join(' ') })
       setRestored(false)
       if (r.ok && next.current) {
         // „Zapisz i następny” (F7): a fresh draft of the same account, day, kind and tags (a trip's receipts – F17); the
@@ -198,13 +208,13 @@ export function QuickApp() {
         // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
         // opened again meanwhile.
         if (closing.current) clearTimeout(closing.current)
-        // Not on the disk yet (AP-1): the window stays long enough to read why.
+        // Not on the disk yet (AP-1), or a field's word with it: the window stays long enough to read it.
         closing.current = setTimeout(
           () => {
             closing.current = null
             void api.quickClose()
           },
-          r.pending ? 4000 : 450
+          r.pending || said.length ? 4000 : 450
         )
       } else {
         sending.current = false
@@ -758,7 +768,7 @@ export function QuickApp() {
       )}
       <div className="flex shrink-0 items-center gap-2 border-t border-line px-3 py-2">
         {msg && (
-          <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : 'text-accent')} data-testid="quick-message">
+          <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : msg.info ? 'text-fg' : 'text-accent')} data-testid="quick-message" data-kind={msg.ok ? 'ok' : msg.info ? 'info' : 'refusal'}>
             {msg.text}
             {msg.ok && series > 0 && (
               <span className="text-muted" data-testid="quick-series">

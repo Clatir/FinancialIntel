@@ -168,9 +168,10 @@ export function initNotifier(): void {
   const touched = () => {
     const now = Date.now()
     if (now - touchedAt < 30_000 || document.visibilityState !== 'visible') return
-    // Its last touch before the quiet hours ended (or none since the start): the morning's first one.
+    // Its last touch before the quiet hours ended and long enough ago (or none since the start): the morning's first one –
+    // never a touch of the user working through their end (T411).
     const quiet = useData.getState().fi?.settings.orders.quietHours
-    const first = !!quiet && morningTouch(touchedAt, warsawNow(), quiet)
+    const first = !!quiet && morningTouch(touchedAt, { ...warsawNow(new Date(now)), ms: now }, quiet)
     touchedAt = now
     check(true, first)
   }

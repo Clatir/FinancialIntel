@@ -51,6 +51,8 @@ export interface BatchFacts {
   ownName: string | null
   /** Balances confirmed by the file (F5). */
   confirmations?: readonly string[]
+  /** Operations of earlier imports it changed or deleted carrying the user's changes (`editedOf` – T410). */
+  edited?: readonly string[]
 }
 
 const parseRule = (r: unknown): ImportRule | null => {
@@ -88,8 +90,66 @@ export function importBatch(f: BatchFacts): ImportBatch {
     before: f.before,
     after: f.after,
     ownName: f.ownName,
-    confirmations: f.confirmations ?? []
+    confirmations: f.confirmations ?? [],
+    edited: f.edited ?? []
   })
+}
+
+/**
+ * The app's own writes of the imports' operations (AP-22, T410): an import's, its undo's write-back and the undo's
+ * „Cofnij” – when each operation was last written so (a later stamp is the user's change) and which a write found
+ * carrying the user's changes (the batches' `edited` – the user's work still, though their stamp is now the app's).
+ * Every stamp of such a write is at most its batch's time: `savedAt` and `undoneAt` are taken after the writes.
+ */
+export interface AppWrites {
+  at: ReadonlyMap<string, string>
+  edited: ReadonlySet<string>
+  /** The operations the imports kept created – the only ones taking an import back deletes. */
+  created: ReadonlySet<string>
+}
+
+export function appWrites(batches: readonly ImportBatch[]): AppWrites {
+  const at = new Map<string, string>()
+  const edited = new Set<string>()
+  const created = new Set<string>()
+  const wrote = (id: string, time: string) => {
+    if (time > (at.get(id) ?? '')) at.set(id, time)
+  }
+  for (const b of batches) {
+    // The import (or its undo's „Cofnij”) wrote what it created and changed; its undo wrote back what it changed and deleted.
+    for (const id of b.created) {
+      created.add(id)
+      wrote(id, b.savedAt)
+    }
+    for (const u of b.updated) wrote(u.after.id, b.savedAt)
+    if (b.undoneAt) {
+      for (const u of b.updated) wrote(u.after.id, b.undoneAt)
+      for (const t of b.removed) wrote(t.id, b.undoneAt)
+    }
+    for (const id of b.edited) edited.add(id)
+  }
+  return { at, edited, created }
+}
+
+/** Does operation `t` (as it is now, or as a write of the app found it) carry the user's changes since the app wrote it? */
+export const userWork = (t: Pick<Transaction, 'id' | 'updatedAt'>, w: AppWrites): boolean => w.edited.has(t.id) || t.updatedAt > (w.at.get(t.id) ?? '')
+
+/**
+ * Of `ops` as a write of the app finds them (before it), the imports' operations carrying the user's changes: they go to
+ * the writing batch's `edited`, so the write never hides them (T410).
+ */
+export const editedOf = (ops: ReadonlyArray<Pick<Transaction, 'id' | 'updatedAt'>>, w: AppWrites): string[] => ops.filter((t) => w.created.has(t.id) && userWork(t, w)).map((t) => t.id)
+
+/** `a` with `b`'s ids added after it, each once. */
+export function withIds(a: readonly string[], b: readonly string[]): string[] {
+  const out = [...a]
+  const have = new Set(a)
+  for (const id of b) {
+    if (have.has(id)) continue
+    have.add(id)
+    out.push(id)
+  }
+  return out
 }
 
 const newer = (a: ImportBatch, b: ImportBatch) => a.at > b.at || (a.at === b.at && a.id > b.id)
@@ -128,10 +188,16 @@ export interface UndoPlan {
   rulesKept: number
   /** The balances it confirmed (F5), still there: deleted. */
   confirmations: string[]
+  /**
+   * The imports' operations it deletes or writes back carrying the user's changes – its batch keeps them (`edited`), so
+   * the undo's „Cofnij” and later writes never hide them (T410).
+   */
+  edited: string[]
 }
 
 /**
- * What taking `batch` back does now. `tx` = the operation now (undefined = none); `docked` = operations with a docking.
+ * What taking `batch` back does now. `tx` = the operation now (undefined = none); `docked` = operations with a docking;
+ * `batches` = the imports kept (with `batch`): their writes are no work of the user's (AP-22, IM.30, IM.31, T410).
  */
 export function undoPlan(
   batch: ImportBatch,
@@ -140,11 +206,13 @@ export function undoPlan(
     docked?: ReadonlySet<string>
     rules: readonly ImportRule[]
     balance?: (id: string) => unknown
-    /** Operations a later import touched (its changes, its undo): a write that is not the user's (AP-22, IM.30, IM.31). */
-    touched?: ReadonlySet<string>
+    batches?: readonly ImportBatch[]
   }
 ): UndoPlan {
+  const all = now.batches ?? []
+  const w = appWrites(all.some((b) => b.id === batch.id) ? all : [...all, batch])
   const remove: string[] = []
+  const edited: string[] = []
   let changed = 0
   let docked = 0
   let missing = 0
@@ -155,7 +223,11 @@ export function undoPlan(
       continue
     }
     remove.push(id)
-    if (t.updatedAt > batch.savedAt && !now.touched?.has(id)) changed++
+    // Changed by the user since an import wrote it last – or a write of the app carried such a change (T410).
+    if (userWork(t, w)) {
+      changed++
+      edited.push(id)
+    }
     if (now.docked?.has(id)) docked++
   }
   const restore: Transaction[] = []
@@ -168,9 +240,11 @@ export function undoPlan(
     if (!deepEqual(stripped(back), stripped(cur))) restore.push(back)
   }
   const readd = batch.removed.filter((t) => !now.tx(t.id))
+  // An earlier import's operations written back with the user's changes in them (its change taken back, the user's kept).
+  edited.push(...editedOf([...batch.updated.flatMap((u) => now.tx(u.after.id) ?? []), ...readd], w))
   const { back: rulesBack, kept: rulesKept } = rulesUndone(now.rules, batch)
   const confirmations = batch.confirmations.filter((id) => now.balance?.(id))
-  return { remove, changed, docked, missing, restore, readd, rulesBack, rulesKept, confirmations }
+  return { remove, changed, docked, missing, restore, readd, rulesBack, rulesKept, confirmations, edited }
 }
 
 /** A record without the save's stamps (compared by content). */

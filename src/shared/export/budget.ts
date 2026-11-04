@@ -207,6 +207,14 @@ export function monthsSheet(rows: readonly MonthRow[]): XlsxSheet {
   }
 }
 
+/**
+ * „Excel (operacje + miesiące)” (RE sp. 5, T412): both sheets when either has rows – a period with no operations still has
+ * its months; null – nothing in the period (said, no empty file).
+ */
+export function budgetWorkbook(ops: readonly OperationRow[], months: readonly MonthRow[]): XlsxSheet[] | null {
+  return ops.length || months.length ? [operationsSheet(ops), monthsSheet(months)] : null
+}
+
 // ------------------------------------------------------------------ a report as a document
 
 export interface ReportSection {

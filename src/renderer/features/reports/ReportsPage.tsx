@@ -16,7 +16,7 @@ import { arrangeBriefing, BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
 import { sum } from '@shared/calc/operations'
 import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
 import { netAdjustments } from '@shared/calc/netWorth'
-import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
+import { budgetWorkbook, monthRows, monthsCsv, operationRows, operationsCsv, reportHtml, type ReportSection } from '@shared/export/budget'
 import { formatPln, rangeText } from '@shared/format'
 import { ictOf } from '@shared/glossary'
 import { useData } from '../../store/data'
@@ -52,6 +52,7 @@ const saved = (path: string | null) => {
 }
 const NO_OPERATIONS = 'Brak operacji w okresie.'
 const NO_MONTHS = 'Brak miesięcy w okresie.'
+const NO_DATA = 'Brak operacji i miesięcy w okresie.'
 const failed = (e: unknown) => toast(`Nie udało się zapisać: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
 
 /** The costs linked to the cargo's containers (N72): one name in every report – monthly and periodic fees alike. */
@@ -526,8 +527,9 @@ function ExportPanel() {
     setTo(r.to!)
     if (r.swapped) toast(swappedText('daty', plDate(r.from!), plDate(r.to!)), 'info', 6000)
   }
-  // Nothing in the period: said, no empty file (RE sp. 5).
-  const save = (rows: number, none: string, write: () => Promise<string | null>) => (rows === 0 ? toast(none, 'info', 5000) : write().then(saved, failed))
+  // Nothing in the period: said, no empty file (RE sp. 5). The rows counted once – the same ones written.
+  const save = <R,>(rows: R | null, none: string, write: (rows: R) => Promise<string | null>) => (rows == null ? toast(none, 'info', 5000) : write(rows).then(saved, failed))
+  const some = <R,>(rows: readonly R[]) => (rows.length ? rows : null)
   const csv = { name: 'CSV', extensions: ['csv'] }
   return (
     <Columns id="reports-export" tracks={['minmax(420px,1fr)']} className="grid items-start">
@@ -540,13 +542,13 @@ function ExportPanel() {
             <DateField className="h-[24px] w-[100px]" value={to} onChange={(d) => setEnds(from, d)} aria-label="Do" data-testid="export-to" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="btn h-[26px]" onClick={() => save(ops().length, NO_OPERATIONS, () => api.saveTextFile(name('operacje', 'csv'), operationsCsv(ops()), csv))} data-testid="export-operations-csv">
+            <button className="btn h-[26px]" onClick={() => save(some(ops()), NO_OPERATIONS, (rows) => api.saveTextFile(name('operacje', 'csv'), operationsCsv(rows), csv))} data-testid="export-operations-csv">
               Operacje – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => save(months().length, NO_MONTHS, () => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(months()), csv))} data-testid="export-months-csv">
+            <button className="btn h-[26px]" onClick={() => save(some(months()), NO_MONTHS, (rows) => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(rows), csv))} data-testid="export-months-csv">
               Miesiące – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => save(ops().length, NO_OPERATIONS, () => api.saveXlsx(name('budzet', 'xlsx'), [operationsSheet(ops()), monthsSheet(months())]))} data-testid="export-xlsx">
+            <button className="btn h-[26px]" onClick={() => save(budgetWorkbook(ops(), months()), NO_DATA, (sheets) => api.saveXlsx(name('budzet', 'xlsx'), sheets))} data-testid="export-xlsx">
               Excel (operacje + miesiące)
             </button>
             <button className="btn h-[26px]" onClick={() => api.exportZip().then(saved, failed)} data-testid="export-zip">

@@ -15,16 +15,21 @@ export const MAX_TAGS = 20
 /** The last tag used is offered in the quick entry this many days (a trip of a week or two). */
 export const LAST_TAG_DAYS = 7
 
+/** A tag as typed, tidied but not cut: no „#”, single spaces ('' – none). */
+const tidyTag = (s: string): string => s.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim()
+
 /** A tag as typed, tidied: no „#”, single spaces, at most 40 characters ('' – none). */
-export const tagLabel = (s: string): string => s.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LENGTH)
+export const tagLabel = (s: string): string => tidyTag(s).slice(0, MAX_TAG_LENGTH)
 
 /** The tag's identity: „#Wakacje  Chorwacja” = „wakacje chorwacja” (no case, no Polish marks). */
 export const tagKey = (s: string): string => fold(tagLabel(s))
 
+/** One field's text in its tags as typed: split by commas, else by „#” (the one way of `parseTags` and `tagsLost`). */
+const splitTags = (text: string): string[] => (text.includes(',') ? text.split(',') : text.includes('#') ? text.split('#') : [text])
+
 /** Tags typed in one field: „#wakacje #remont”, „wakacje, remont łazienki” – each once, in their order. */
 export function parseTags(text: string): string[] {
-  const raw = text.includes(',') ? text.split(',') : text.includes('#') ? text.split('#') : [text]
-  return withTags([], raw)
+  return withTags([], splitTags(text))
 }
 
 /** The longest tag. */
@@ -35,13 +40,11 @@ export const MAX_TAG_LENGTH = 40
  * and new tags beyond `MAX_TAGS` – so the field says it, not a tag silently shorter or missing.
  */
 export function tagsLost(list: readonly string[], text: string): { cut: number; over: number } {
-  const raw = text.includes(',') ? text.split(',') : text.includes('#') ? text.split('#') : [text]
-  const tidy = (s: string) => s.trim().replace(/^#+/, '').replace(/s+/g, ' ').trim()
   const have = new Set(list.map(tagKey))
   let cut = 0
   let fresh = 0
-  for (const t of raw) {
-    const label = tidy(t)
+  for (const t of splitTags(text)) {
+    const label = tidyTag(t)
     if (!label) continue
     if (label.length > MAX_TAG_LENGTH) cut++
     const key = tagKey(label)

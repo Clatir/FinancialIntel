@@ -7,7 +7,7 @@
  *   values it is a conflict (`choose` decides, by default "mine"). Bookkeeping fields (updatedAt, updatedBy,
  *   schemaVersion, computed) never conflict: the newer / theirs wins.
  */
-import { countLabel, plDate, plDateTime } from './format'
+import { countLabel, decimalText, plDate, plDateTime } from './format'
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type Path = Array<string>
@@ -442,7 +442,11 @@ export function formatValue(v: unknown, max = 80): string {
     return v.length > max ? `${v.slice(0, max - 1)}…` : v
   }
   if (typeof v === 'boolean') return v ? 'tak' : 'nie'
-  if (typeof v === 'number') return String(v).replace('.', ',')
+  if (typeof v === 'number') {
+    // Its own places, never rounded, with the comma and the typographic minus (AP-23 – `decimalText`).
+    const plain = /^-?\d+(?:\.(\d+))?$/.exec(String(v))
+    return plain ? decimalText(v, plain[1]?.length ?? 0) : String(v)
+  }
   if (Array.isArray(v)) return v.length === 0 ? 'puste' : countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')
   const s = JSON.stringify(v)
   return s.length > max ? `${s.slice(0, max - 1)}…` : s

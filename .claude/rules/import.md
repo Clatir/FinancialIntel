@@ -34,6 +34,10 @@ paths:
   (T320, T324, T330–T332). **Pułapka:** czasów z różnych komputerów (`lastImport`, `importedAt`) nie porównuj „później
   niż” – zegary się różnią; porównuj, czy się zmieniły (`importsMark`, T332) – z dziennikiem `log` (klucz na import;
   scalenie `fi.json` zostawia przy koncie jeden czas) i tylko z tym, co jest w folderze, nigdy z czasem dopisanym tutaj.
+- „Cofnij import” (`shared/import/batch.ts`, okno `features/import/batches.ts`): „zmienione później przez Ciebie” =
+  `updatedAt` późniejszy niż ostatni zapis aplikacji (`appWrites`) albo id w `edited` paczek (T410). **Pułapka:** każdy
+  zapis operacji przez import, cofnięcie albo „Cofnij” bierze czas paczki po `flushSaves()` i dopisuje do `edited`
+  operacje, które zastał ze zmianą użytkownika (`editedOf`) – inaczej ta zmiana zniknie przy cofnięciu bez ostrzeżenia.
 - Konto importu po numerze rachunku pliku (`accountForNumber`, T322); jedna operacja i jej kopie – `copies.ts`.
   **Pułapka:** `conflicting` nie porównuje `covers` – usuwana kopia oddaje spłacane zakupy przez `takeUserData` (ta sama
   decyzja albo pieniądze tych samych domowników – `takesCovers`), a kopia, której zakupów operacja tutaj nie przejmie,

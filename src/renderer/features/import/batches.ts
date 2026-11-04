@@ -3,7 +3,7 @@
  * brings it again as it was.
  */
 import { useMemo } from 'react'
-import { latestImport, settingsRedone, settingsUndone, undoPlan, type UndoPlan } from '@shared/import/batch'
+import { latestImport, settingsRedone, settingsUndone, undoPlan, withIds, type UndoPlan } from '@shared/import/batch'
 import type { Balance, ImportBatch, Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { countLabel } from '../../lib/format'
@@ -28,14 +28,9 @@ export function useLatestImport(): ImportBatch | null {
 export function undoPreview(batch: ImportBatch): UndoPlan {
   const s = useData.getState()
   const docked = new Set(listOf(s.records.dockings).map((d) => d.transactionId))
-  // What a later import changed or removed – and what its undo wrote back – is not the user's work (IM.30, IM.31).
-  const touched = new Set<string>()
-  for (const b of listOf(s.records.imports)) {
-    if (b.id === batch.id || b.at <= batch.at) continue
-    for (const u of b.updated) touched.add(u.after.id)
-    for (const t of b.removed) touched.add(t.id)
-  }
-  return undoPlan(batch, { tx: (id) => s.records.transactions[id]?.record, docked, rules: s.fi?.settings.import.rules ?? [], balance: (id) => s.records.balances[id], touched })
+  // The imports' writes – a later import's changes, an undo's write-back, an undo's „Cofnij” – are not the user's work;
+  // a change of the user's made before one of them still is (IM.30, IM.31, T410).
+  return undoPlan(batch, { tx: (id) => s.records.transactions[id]?.record, docked, rules: s.fi?.settings.import.rules ?? [], balance: (id) => s.records.balances[id], batches: listOf(s.records.imports) })
 }
 
 /** What taking an import back changed, as it was before (its „Cofnij”). */
@@ -105,8 +100,11 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
     addRecords('transactions', plan.readd)
     if (plan.confirmations.length) await deleteRecords('balances', plan.confirmations)
     updateSettings((f) => ({ ...f, settings: settingsUndone(f.settings, batch) }))
+    // The undo's time after its writes (their stamps are the app's, a later one is the user's); the operations it
+    // deleted or wrote back with the user's changes in them stay the user's work for its „Cofnij” (T410).
+    await flushSaves()
     const at = new Date().toISOString()
-    updateRecord('imports', batch.id, (b) => ({ ...b, undoneAt: at }))
+    updateRecord('imports', batch.id, (b) => ({ ...b, undoneAt: at, edited: withIds(b.edited, plan.edited) }))
     const note = await unsavedNote()
     const parts = [
       `usunięte operacje: ${undone.deleted.length}`,
@@ -144,7 +142,9 @@ async function redoImport(u: Undone): Promise<void> {
   const again = u.readded.filter(has)
   const removal = again.length ? await deleteRecords('transactions', again, { reason: 'import' }) : null
   updateSettings((f) => ({ ...f, settings: settingsRedone(f.settings, u.batch) }))
-  // The records written back are the import's own, not the user's changes: its writing time is now (IM.30).
+  // The records written back are the import's own: its writing time is after them (IM.30). The user's changes in them
+  // were made before the undo – its `edited` keeps them (T410).
+  await flushSaves()
   const rewritten = new Date().toISOString()
   updateRecord('imports', u.batch.id, (b) => ({ ...b, undoneAt: null, savedAt: rewritten }))
   await flushSaves()

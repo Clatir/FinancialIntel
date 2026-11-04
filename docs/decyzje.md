@@ -3025,3 +3025,32 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i rozkazy) cofa wpis – `NumberField` z AP-15 wystarczył, dopisany test E2E; (2) cisza nocna „od” = „do” zostaje
   przyjęta (to sposób na wyłączenie ciszy), ale pole mówi to wprost („ta sama godzina – cisza nocna wyłączona”);
   (3) `clampZoom` zaokrągla do siatki 10 % (ręcznie wpisane 1,23 czyta się jako 120 %, nie „123%”).
+- **T410** „Cofnij import” – zmiany użytkownika po zapisach importów i cofnięć (1.15.8, N4 – przegląd 1 pkt 2, 3; zmienia
+  T402): operacja paczki jest „zmieniona później przez Ciebie”, gdy jej `updatedAt` jest późniejszy niż ostatni zapis
+  aplikacji tej operacji (`appWrites`: `savedAt` paczek, które ją utworzyły albo zmieniły – import i „Cofnij” cofnięcia –
+  oraz `undoneAt` cofniętych paczek, które ją zmieniły albo usunęły), albo gdy jakiś zapis aplikacji zastał ją ze zmianą
+  użytkownika – paczka, która pisała, zapamiętuje ją w nowym polu `edited` (lista id, addytywnie): import – operacje
+  wcześniejszych importów, które zmienia albo usuwa; cofnięcie – te, które usuwa albo zapisuje z powrotem (`editedOf`).
+  `undoneAt` i nowe `savedAt` „Cofnij” są brane po zapisach (`flushSaves`), więc stemple zapisów aplikacji nigdy nie są
+  późniejsze. Zastępuje wykluczanie operacji dotkniętych przez późniejszy import (zmiana użytkownika po cofnięciu tamtego
+  importu nie ostrzegała) i samo nowe `savedAt` przy „Cofnij” (zmiany sprzed cofnięcia przestawały się liczyć). Granice:
+  zapis, który dotarł do folderu dopiero przy ponowieniu, liczy się jak zmiana użytkownika (ostrzeżenie w nadmiarze);
+  paczki sprzed 1.15.8 nie mają `edited` – zmiana przykryta wtedy późniejszym importem nie ostrzega; czasy z różnych
+  komputerów porównywane jak dotąd. Bez podbicia `SCHEMA_VERSION`.
+- **T411** Pierwszy dotyk okna po ciszy nocnej (1.15.8, N4 – przegląd 1 pkt 6; zmienia T406): poranny tylko po przerwie –
+  poprzedni dotyk przed końcem ciszy i co najmniej 30 min wcześniej (`MORNING_IDLE_MS`, `morningTouch`). Praca przez
+  koniec ciszy (04:59 → 05:00) nie przenosi na Mostek; okno zostawione na noc – tak, jak dotąd.
+- **T412** Eksport i wyszukiwanie usuniętych (1.15.8, N4 – przegląd 1 pkt 7, 8): „Excel (operacje + miesiące)” zapisuje
+  plik, gdy którykolwiek arkusz ma wiersze (`budgetWorkbook` – okres bez operacji ma swoje miesiące); bez niczego –
+  „Brak operacji i miesięcy w okresie.” i brak pliku; wiersze liczone raz na kliknięcie. „Usunięte wpisy” szukają dat
+  w obu zapisach (`deletedSearchText`): tytuł jak na ekranie (dd.mm.rrrr) i daty rekordu rrrr-mm-dd, chwila usunięcia jak
+  na liście („dd.mm.rrrr, gg:mm”) i rrrr-mm-dd tego samego dnia.
+- **T413** Słowa pól w szybkim wpisie (1.15.8, N4 – przegląd 1 pkt 5; uzupełnia T400): Enter wstrzymuje tylko odmowa pola
+  (toast „error”); słowo o wartości przyjętej, ale zmienionej (tag skrócony do 40 znaków, tag ponad 20 pominięty) idzie do
+  stopki zwykłym kolorem, Enter zapisuje, a słowo jest dopisane do odpowiedzi zapisu („Zapisano. Tag … został skrócony.”)
+  i okno czeka 4 s, by dało się je przeczytać.
+- **T414** Nazwy domownika w banku (1.15.8, N4 – przegląd 1 pkt 4; uzupełnia T401): „Cofnij” usunięcia nazwy przywraca
+  tylko tę nazwę, na jej miejsce wśród nazw z chwili cofnięcia (dopisane w międzyczasie zostają, inne usunięte nie
+  wracają); nie wraca, gdy domownik ma ją znowu albo ma ją teraz inny domownik (komunikat – jedna nazwa nie wskazuje dwóch
+  osób). Najwyżej 20 nazw na domownika (`MAX_BANK_NAMES`, granica schematu – ponad nią lista czytała się jako pusta i
+  znikała przy zapisie): 21. odmówiona z komunikatem.

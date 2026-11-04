@@ -7,7 +7,7 @@ import { newerSide, newestResolutions } from '@shared/conflicts'
 import { chooser, deepEqual, diffRecords, fieldLabel, formatValue, isAmountPath, merge3, pathKey, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText } from '../../components/fields'
 import { plDateTime } from '../../lib/format'
-import { recordTitle } from '../../lib/recordTitle'
+import { deletedSearchText, recordTitle } from '../../lib/recordTitle'
 import { ChangeList, HistoryButton, useDictNames } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
 import { api, errorMessage } from '../../lib/api'
@@ -274,13 +274,13 @@ type Deleted = HistoryEntry & { id: string; record: unknown; kind: Collection }
 function DeletedRecords() {
   const [items, setItems] = useState<Deleted[] | null>(null)
   const [busy, setBusy] = useState(false)
-  // A search over the titles and who deleted them.
+  // A search over the titles, who deleted them and when – the dates as shown and as rrrr-mm-dd.
   const [query, setQuery] = useState('')
   const readOnly = useFolderLocked()
   const parts = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = items?.filter((d) => {
     if (!parts.length) return true
-    const hay = `${recordTitle(d.kind, d.record)} ${d.savedBy ?? ''} ${d.savedAt.slice(0, 10)}`.toLowerCase()
+    const hay = deletedSearchText(d.kind, d.record, d.savedAt, d.savedBy ?? null)
     return parts.every((p) => hay.includes(p))
   })
   const load = async () => {

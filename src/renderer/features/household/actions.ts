@@ -133,6 +133,52 @@ export function patchMember(id: string, patch: Partial<Omit<HouseholdMember, 'id
   patchMembers((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)))
 }
 
+/** The most names in the bank a member keeps (the schema's limit: beyond it the list would be read as empty). */
+export const MAX_BANK_NAMES = 20
+
+const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+
+/**
+ * A member's name in the bank added (D80): once, at most `MAX_BANK_NAMES` – the limit said (AP-15). false – refused (the
+ * field keeps what was typed).
+ */
+export function addBankName(memberId: string, name: string): boolean {
+  const m = membersNow().find((x) => x.id === memberId)
+  const v = name.trim().slice(0, 120)
+  if (!m || !v || m.bankNames.some((x) => sameName(x, v))) return true
+  if (m.bankNames.length >= MAX_BANK_NAMES) {
+    toast(`Najwyżej ${MAX_BANK_NAMES} nazw w banku na domownika – usuń którąś, by dodać nową.`, 'error', 6000)
+    return false
+  }
+  patchMember(memberId, { bankNames: [...m.bankNames, v] })
+  return true
+}
+
+/**
+ * A member's name in the bank taken off (AP-22, T414): „Cofnij” brings back that one name, at its place among the names
+ * as they are then (one added meanwhile stays) – not when the member has it again, nor when another member holds it now
+ * (said: one name never points at two members).
+ */
+export function removeBankName(memberId: string, name: string): void {
+  const m = membersNow().find((x) => x.id === memberId)
+  const at = m ? m.bankNames.indexOf(name) : -1
+  if (!m || at < 0) return
+  patchMember(memberId, { bankNames: m.bankNames.filter((x) => x !== name) })
+  toast(`Nazwa „${name}” nie wskazuje już ${m.name}.`, 'info', 8000, { label: 'Cofnij', run: () => bankNameBack(memberId, name, at) })
+}
+
+function bankNameBack(memberId: string, name: string, at: number): void {
+  const ms = membersNow()
+  const m = ms.find((x) => x.id === memberId)
+  if (!m || m.bankNames.some((x) => sameName(x, name))) return
+  const holder = ms.find((x) => x.id !== memberId && x.bankNames.some((y) => sameName(y, name)))
+  if (holder) return toast(`Nazwa „${name}” wskazuje teraz ${holder.name} – zostaje tam, ${m.name} jej nie odzyskuje.`, 'info', 6000)
+  if (m.bankNames.length >= MAX_BANK_NAMES) return toast(`Najwyżej ${MAX_BANK_NAMES} nazw w banku na domownika – nazwa „${name}” nie wróciła.`, 'error', 6000)
+  const names = [...m.bankNames]
+  names.splice(Math.min(at, names.length), 0, name)
+  patchMember(memberId, { bankNames: names })
+}
+
 /**
  * What a member's money beyond their debt is, asked once (D80 b): the first decision of a member still „ask” becomes
  * theirs. `incomes` = their money as decided (an import, the editor); the most chosen answer wins.

@@ -143,10 +143,13 @@ describe('AP-22: przerwanie kreatora i okno „Cofnij import”', () => {
       [T1, tx(T1, later)],
       [T2, tx(T2, later)]
     ])
-    const plan = (touched?: ReadonlySet<string>) => undoPlan(batch(), { tx: (id) => rows.get(id), rules: [], ...(touched ? { touched } : {}) })
+    // A later import (its write at `later`) changed these operations of the batch.
+    const by = (ids: string[]) =>
+      importBatchSchema.parse({ schemaVersion: SCHEMA_VERSION, id: '01K7B0000000000000000000B2', createdAt: later, updatedAt: later, at: later, savedAt: later, accountId: '01KDEFACC00000000000000001', fileName: 'L2.csv', updated: ids.map((id) => ({ before: tx(id, NOW), after: tx(id, NOW) })) })
+    const plan = (ids?: string[]) => undoPlan(batch(), { tx: (id) => rows.get(id), rules: [], ...(ids ? { batches: [batch(), by(ids)] } : {}) })
     expect(plan().changed).toBe(2)
-    expect(plan(new Set([T1])).changed).toBe(1)
-    expect(plan(new Set([T1, T2])).changed).toBe(0)
+    expect(plan([T1]).changed).toBe(1)
+    expect(plan([T1, T2]).changed).toBe(0)
   })
 
   it('okno cofania pomija ślady późniejszych importów, a lista pełn(IM.31)', () => {
@@ -161,7 +164,9 @@ describe('AP-22: przerwanie kreatora i okno „Cofnij import”', () => {
       accountId: '01KDEFACC00000000000000001',
       fileName: 'L2.csv',
       created: [],
-      updated: [{ before: tx(T1, NOW), after: tx(T1, NOW) }]
+      updated: [{ before: tx(T1, NOW), after: tx(T1, NOW) }],
+      // Taken back: its undo wrote T1 back then (T410 – a stamp not after it is the app's).
+      undoneAt: '2026-10-04T10:00:00.000Z'
     })
     data.addRecord('imports', batch())
     data.addRecord('imports', later)
