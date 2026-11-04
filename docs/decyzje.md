@@ -2937,3 +2937,23 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i `YearNumbers.planned` (kolumna „Zaplanowane” w tabeli miesięcy przeglądu, gdy jest), linia tylko przy kwocie ≠ 0.
   Miesiąc zakończony – jak dawniej (nie ma w nim dat po dziś). Eksport „Miesiące” bierze koszty z debriefingu (do dziś),
   przychody liczy sam (poza tą zmianą). Operacje pokazują listę okresu bez zmian (suma tego, co na liście).
+- **T422** Wypłata z bankomatu na konto „Gotówka” (AP-33, D100 (1); zmienia spec „Konta budżetu” i „Przypadki
+  szczególne”, doprecyzowuje D83): konto gotówki to aktywne konto rodzaju `cash` (`cashAccountOf` – domyślne
+  `CASH_ACCOUNT_ID` najpierw; nazwa nie decyduje). Jest – import rozpoznaje wypłatę (`isAtmOperation`: „WYPŁATA
+  W BANKOMACIE”, „BLIK WYPŁATA GOTÓWKI” i podobne, jak dotąd) jako przelew własny pliku → Gotówka (`ClassifyContext.cash`,
+  `transfer` z `counterAccountId` – jedna operacja dla obu kont, `bothSides`; bez kosztu, warstwy bez zmian), nigdy na
+  konto samego pliku; reguła starego modelu – wydatek kategorii systemowej „Gotówka” (bez finansowania i wspólnego zakupu,
+  także słowo użytkownika) – ustępuje temu przelewowi, a „zapamiętaj” takiej decyzji przy koncie gotówki reguły nie uczy
+  (`ImportPlan.cash`; następny import by jej nie posłuchał); reguła innej kategorii zostaje. Nie ma – wydatek „Gotówka” jak
+  w specyfikacji, a import przy pliku z wypłatami proponuje konto (`cashAccountOffer`, przycisk przy pliku, nigdy po
+  cichu): zarchiwizowane konto gotówki wraca, konto nazwane „Gotówka” dostaje rodzaj `cash`, inaczej nowe „Gotówka”
+  (stałe id, gdy wolne); „Cofnij” przywraca konta, póki żadna operacja nie jest na tym koncie; ekran importu planuje od nowa
+  po zmianie kont (`PlanInputs.accounts`). Zakupy gotówką – szybki wpis i edytor z konta „Gotówka” (bez zmian w kodzie,
+  pilnuje E2E `cash.spec.ts`). Wpłatomat (wpłata gotówki na rachunek) – bez rozpoznania (brak wzoru opisu mBanku w danych
+  testowych), jak dotąd wpływ do decyzji użytkownika.
+- **T423** Dawne wypłaty z bankomatu zapisane jako wydatek „Gotówka” – bez migracji i bez meldunku zamiany (AP-33): zamiana
+  na przelew nie jest czysta – zmienia koszty, wynik „na plus” i łupy zamkniętych miesięcy (silnik przelicza historię),
+  a konto Gotówka dostałoby całą dawną gotówkę, której wydatków dawny model nie wymagał wpisywać (fałszywe saldo). Zostają
+  jak są; zmianę pojedynczej wypłaty robi edytor Operacji (rodzaj „Przelew własny” → Gotówka). Dawne podwójne liczenie
+  (wypłata jako wydatek i zakup z Gotówki – saldo Gotówki ujemne, OP sp. 7) prostuje jedno potwierdzenie salda Gotówki
+  (Ustawienia → Konta → „Potwierdź saldo” – korekta o różnicę) – do potwierdzenia, czy podpowiadać je meldunkiem.

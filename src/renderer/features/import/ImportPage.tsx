@@ -29,6 +29,7 @@ import { keywordOfSearch, saveKeywordRule } from './rules'
 import { bulkOptions, bulkResultText, fits, hasCategory, MEMBER_MONEY_TEXT, memberMoneyOf, offersNewMember, type LoanPick, type Option } from './options'
 import { countLabel } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
+import { CashOffer } from './cash'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
   acceptGroupHint,
@@ -177,6 +178,7 @@ function FilePanel() {
             </label>
             {importable.length > 1 && <span className="text-[11px] text-dim">Plik z mBanku trafia na wybrane konto; Portfel XTB nie ma eksportu – jego operacje dopisujesz ręcznie.</span>}
             <AccountWarning account={file.account} accountId={accountId} />
+            <CashOffer accountName={accounts.find((a) => a.id === accountId)?.name ?? 'konto'} />
             {file.skipped.length > 0 && (
               <div className="text-[11.5px] text-accent" data-testid="import-skipped">
                 Pominięte wiersze: {file.skipped.map((s) => `linia ${s.line} (${s.reason})`).join('; ')}
@@ -1275,9 +1277,11 @@ export function ImportPage() {
   const containers = useData((s) => s.records.containers)
   const loans = useData((s) => s.records.loans)
   const transactions = useData((s) => s.records.transactions)
+  const budgetAccounts = useData((s) => s.fi?.settings.accounts)
   // A keyword added, a rule deleted, names merged, a member added; the holder's names, a category, a container, a loan,
-  // the operations (B38) – here, in the settings, on another computer: the open file planned again.
-  useEffect(() => replanIfChanged(planInputsNow()), [rules, aliases, members, ownNames, categories, containers, loans, transactions])
+  // the operations (B38), the accounts (AP-33 – the cash account) – here, in the settings, on another computer: the open
+  // file planned again.
+  useEffect(() => replanIfChanged(planInputsNow()), [rules, aliases, members, ownNames, categories, containers, loans, transactions, budgetAccounts])
   const done = useImport((s) => s.done)
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()

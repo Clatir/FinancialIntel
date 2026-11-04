@@ -72,6 +72,10 @@ paths:
   `loanAmount`; tylko otwarta od swojego dnia – `ruleLoanFor`; „zapamiętaj” domyślnie wyłączone – `remembersByDefault`
   w `groupsDecided`, jedynym księgowaniu decyzji grup).
   Kategoria mBanku tylko jako podpowiedź (`hintFor`).
+- Bankomat (D100, AP-33, T422): przelew własny pliku → konto gotówki (`ClassifyContext.cash` z `cashAccountOf`, nigdy
+  konto pliku), bez niego wydatek „Gotówka” i propozycja konta przy pliku (`features/import/cash.tsx`). **Pułapka:**
+  reguła wydatku „Gotówka” na wypłacie ustępuje przelewowi (`isCashExpenseRule`) – dlatego „zapamiętaj” jej nie uczy
+  przy koncie gotówki (`ImportPlan.cash`); nowe wejście planu z ustawień dopisz do `PlanInputs` (tu: `accounts`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.
 - Łączenie i duplikaty: `looseMatch` (kwota, ±3 dni, podobieństwo kontrahenta), także między kontami; decyzja

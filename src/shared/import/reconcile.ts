@@ -23,7 +23,7 @@ import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Split, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
+import { classifyRow, counterpartyKey, isAtmOperation, isCashExpenseRule, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
@@ -306,6 +306,8 @@ export interface ImportPlan {
   /** Pending operations of the file's period the file does not have any more. */
   vanished: Transaction[]
   period: { from: string; to: string } | null
+  /** The cash account an ATM withdrawal went onto (AP-33, `ClassifyContext.cash`); none – an expense „Gotówka”. */
+  cash?: string | null
 }
 
 /**
@@ -725,8 +727,10 @@ export function planImport(
     plans[c.i] = { status: 'merge', row, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount', ask: !looseSure(c, row.operation) }
   }
 
-  // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is).
-  const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, ctx)))
+  // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is). The cash
+  // is another account than the file's (AP-33): never a transfer onto itself.
+  const classifyCtx = ctx.cash && ctx.cash.id === accountId ? { ...ctx, cash: null } : ctx
+  const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, classifyCtx)))
   shareMerged(classified, file.rows)
   const plannedOf = (i: number): Planned => {
     const { decision, hint, brand, direction, target } = classified[i]!
@@ -746,7 +750,7 @@ export function planImport(
   // A transfer's other side gone from the list (F10) is not offered: removing it would take the transfer's other side too.
   const vanished =
     period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && !locked(t) && !isSideView(t) && t.date >= period.from && t.date <= period.to) : []
-  return { accountId, format: file.format, rows, vanished, period }
+  return { accountId, format: file.format, rows, vanished, period, cash: classifyCtx.cash?.id ?? null }
 }
 
 /** Keys of a row (`altKeys`) with more of them, each once, the last 20. */
@@ -1617,6 +1621,9 @@ export function buildImport(
     const c = own ?? choices.themes[g.theme]
     const imported = g.rows.filter((p) => !choices.skip[p.key]).length
     if (!c || !g.brand || g.byTitle || !imported || !learnable(c, g.direction)) continue
+    // An ATM withdrawal as the expense „Gotówka” while the budget has its cash account (AP-33, T422): the rule would give
+    // way to the own transfer at the next import – none learned.
+    if (plan.cash && isCashExpenseRule(c) && g.rows.every((p) => isAtmOperation(p.row.operation))) continue
     if (!(own ? choices.remember[g.group] : choices.rememberThemes[g.theme])) continue
     if ((g.source === 'rule' || g.source === 'builtin') && sameChoice(c, g.proposed)) continue
     const rule = amountRuleOf(g)

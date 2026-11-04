@@ -40,7 +40,7 @@ import { accountForNumber, accountNumberOf } from '@shared/import/mbank'
 import { statementCheck, statementOf, type Statement } from '@shared/import/statement'
 import { countLabel } from '../../lib/format'
 import { openingOf } from '@shared/calc/balances'
-import { balanceSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Balance, type HouseholdMember, type ImportBatchSettings, type ImportSettings, type Share, type Transaction } from '@shared/schema'
+import { balanceSchema, cashAccountOf, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Balance, type HouseholdMember, type ImportBatchSettings, type ImportSettings, type Share, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -135,6 +135,8 @@ export interface PlanInputs {
   loans: unknown
   transactions: unknown
   accountNumbers: unknown
+  /** The accounts (AP-33: the cash account an ATM withdrawal goes onto). */
+  accounts: unknown
 }
 
 /** The plan's inputs as the store has them now. */
@@ -142,7 +144,7 @@ export function planInputsNow(): PlanInputs | null {
   const s = useData.getState()
   if (!s.fi) return null
   const { rules, aliases, ownNames } = s.fi.settings.import
-  return { rules, aliases, members: s.fi.settings.household.members, ownNames, categories: s.fi.settings.categories, containers: s.records.containers, loans: s.records.loans, transactions: s.records.transactions, accountNumbers: s.fi.settings.import.accountNumbers }
+  return { rules, aliases, members: s.fi.settings.household.members, ownNames, categories: s.fi.settings.categories, containers: s.records.containers, loans: s.records.loans, transactions: s.records.transactions, accountNumbers: s.fi.settings.import.accountNumbers, accounts: s.fi.settings.accounts }
 }
 
 /**
@@ -201,6 +203,8 @@ function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<st
       members,
       loans: listOf(s.records.loans ?? {}),
       accountNumbers: s.fi.settings.import.accountNumbers,
+      // The cash kept on its account (D100 (1), AP-33): an ATM withdrawal is an own transfer onto it.
+      cash: cashAccountOf(s.fi.settings.accounts),
       locked: lockedOf(s.records.transactions),
       docked: dockedOf(s.records.dockings ?? NO_DOCKINGS)
     },
@@ -392,7 +396,7 @@ export function replanIfChanged(inputs: PlanInputs | null): void {
 }
 
 /** What a plan reads from the settings (small, compared by content); the records' maps change only with their content. */
-const BY_CONTENT: ReadonlySet<keyof PlanInputs> = new Set(['rules', 'aliases', 'members', 'ownNames', 'categories', 'accountNumbers'])
+const BY_CONTENT: ReadonlySet<keyof PlanInputs> = new Set(['rules', 'aliases', 'members', 'ownNames', 'categories', 'accountNumbers', 'accounts'])
 
 /**
  * The plan once more (the rules changed – a keyword added, a rule deleted – or the operations did): the decisions stay;
