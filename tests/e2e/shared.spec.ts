@@ -93,8 +93,18 @@ test('Wspólne finansowanie (D83): kilka osób równo i procentami, prezent babc
     await expect(share.getByTestId('operation-share-sum')).toHaveText('razem 100 %')
     await typeAmount(page, share.getByTestId('operation-share-percent').nth(0), '20')
     await typeAmount(page, share.getByTestId('operation-share-percent').nth(1), '50')
-    await expect(share.getByTestId('operation-share-sum')).toContainText('ostatnia osoba bierze resztę do 100 %')
-    await typeAmount(page, share.getByTestId('operation-share-percent').nth(2), '30')
+    // One rule (AP-37, T156): percents not summing to 100 % are refused as in the quick entry – nothing written; another
+    // operation and back keeps them; „dopełnij ostatniej do 100 %” gives the last one the rest.
+    await expect(share.getByTestId('operation-share-sum')).toHaveText('razem 103,34 % – podział zapisze się dopiero przy 100 %')
+    await expect(share.getByTestId('operation-share-sum')).toHaveAttribute('data-state', 'refused')
+    const percentsOf = async () => (await opOf(dir, 'Biedronka'))?.share?.lines.map((l) => l.value)
+    await expect.poll(percentsOf).toEqual([33.33, 33.33, 33.34])
+    await page.locator('[data-testid="operation-row"]', { hasText: 'Rossmann' }).click()
+    await page.locator('[data-testid="operation-row"]', { hasText: 'Biedronka' }).click()
+    await expect(share.getByTestId('operation-share-sum')).toHaveText('razem 103,34 % – podział zapisze się dopiero przy 100 %')
+    expect(await percentsOf()).toEqual([33.33, 33.33, 33.34])
+    await share.getByTestId('operation-share-fill').click()
+    await expect(share.getByTestId('operation-share-fill')).toHaveCount(0)
     await expect(share.getByTestId('operation-share-sum')).toHaveText('razem 100 %')
     await expect(share.getByTestId('operation-share-part')).toHaveText(['60,00 zł', '150,00 zł', '90,00 zł'])
     await expect
@@ -183,6 +193,8 @@ test('Wspólne finansowanie (D83): kilka osób równo i procentami, prezent babc
     await typeAmount(page, bulk.getByTestId('operations-bulk-share-percent').nth(0), '30')
     await typeAmount(page, bulk.getByTestId('operations-bulk-share-percent').nth(1), '30')
     await expect(page.getByTestId('operations-bulk-finance')).toBeDisabled()
+    await expect(bulk.getByTestId('operations-bulk-share-sum')).toHaveText('razem 60 % – podział zapisze się dopiero przy 100 %')
+    await expect(bulk.getByTestId('operations-bulk-share-fill')).toBeVisible()
     await bulk.getByRole('radio', { name: 'równo' }).click()
     await page.getByTestId('operations-bulk-finance').click()
     await expect.poll(async () => [partsOf(await opOf(dir, 'Rossmann')), partsOf(await opOf(dir, 'Apteka'))]).toEqual([

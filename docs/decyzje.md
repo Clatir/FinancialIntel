@@ -2943,3 +2943,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`{from, to, toToday}` – `exportPeriodOf` / `exportPeriodText`), jak filtry Operacji – wybór biurka, nie folderu (inny
   komputer eksportuje swój okres; format danych folderu bez zmian). Koniec okresu równy dniowi wyboru = „do dziś” – przy
   następnym eksporcie idzie z nowym dniem; inny koniec zostaje. Zły zapis – od początku roku do dziś.
+- **T428** Procenty „Wspólnie” – jedna reguła (AP-37, AF-49, zmienia „edytor ostrzega” z T156): procenty ≠ 100 % nie są
+  zapisywane nigdzie – szybki wpis, zmiana zbiorcza i import odmawiały, teraz edytor operacji też. Wpisany podział, który
+  nie daje 100 %, czeka w pamięci okna (`useDraft` `operation-share:<id>` – inna operacja, inny ekran go nie gubią; plik
+  operacji ma ostatni pełny podział), aż da 100 % albo „bez podziału” / „Wspólnie” od nowa. Edytor podziału
+  (`ShareEditor`, wszystkie miejsca) mówi „razem X % – podział zapisze się dopiero przy 100 %” (`data-state="refused"`)
+  i ma „dopełnij ostatniej do 100 %” (`share.ts` `fillLastPercent`: ostatnia osoba dostaje 100 − suma pozostałych, z
+  groszami procentów; brak przycisku, gdy pozostali mają już ponad 100 %). Kwoty innych ponad całość – bez zmian (reszta
+  0 zł): ich pełność zależy od kwoty operacji, która może się jeszcze zmienić.

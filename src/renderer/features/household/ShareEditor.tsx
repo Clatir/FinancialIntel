@@ -3,7 +3,7 @@
  * equally, by percents or by amounts (mine – the rest). One editor for the operation, the quick entry, the import's
  * decisions and the bulk decisions; it knows the members only from its props (the quick window has no store).
  */
-import { changeMode, equalPercents, line, percentSum, restIndex, SHARE_MODE_LABEL, shareAmounts, shareComplete } from '@shared/calc/share'
+import { changeMode, equalPercents, fillLastPercent, line, percentSum, restIndex, SHARE_MODE_LABEL, shareAmounts, shareComplete } from '@shared/calc/share'
 import { SHARE_MODES, type Share, type ShareLine, type ShareMode } from '@shared/schema'
 import { AmountField, plnText } from '../../components/fields'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -72,6 +72,9 @@ export function ShareEditor({
   const rest = share.mode === 'amounts' ? restIndex(share) : -1
   const sumPct = percentSum(share)
   const complete = shareComplete(share, total)
+  // One rule everywhere (AP-37, T156): percents not summing to 100 % are never written – the editor of an operation, the
+  // quick entry, the bulk and the import's decisions alike; the last person can take the rest of 100 % in one click.
+  const filled = share.mode === 'percent' && !complete ? fillLastPercent(share) : null
   return (
     <div className="flex flex-col gap-1.5" data-testid={testId}>
       <div className="flex flex-wrap items-center gap-2">
@@ -149,9 +152,14 @@ export function ShareEditor({
           </button>
         )}
         {share.mode === 'percent' && (
-          <span className={cx(complete ? 'text-dim' : 'text-accent')} data-testid={`${testId}-sum`}>
-            razem {String(sumPct).replace('.', ',')} %{complete ? '' : ' – ostatnia osoba bierze resztę do 100 %'}
+          <span className={cx(complete ? 'text-dim' : 'text-accent')} data-state={complete ? 'complete' : 'refused'} data-testid={`${testId}-sum`}>
+            razem {String(sumPct).replace('.', ',')} %{complete ? '' : ' – podział zapisze się dopiero przy 100 %'}
           </span>
+        )}
+        {filled && (
+          <button type="button" className="text-accent hover:underline" onClick={() => onChange(filled)} data-testid={`${testId}-fill`}>
+            dopełnij ostatniej do 100 %
+          </button>
         )}
         {share.mode === 'amounts' && !complete && <span className="text-accent">kwoty innych przekraczają całość – reszta 0 zł</span>}
         <span className="text-dim">moja część – mój wydatek; części domowników – do ich rozliczeń</span>
