@@ -1020,6 +1020,7 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
 - **T129** Pieniądze celu (D84 C2, B30): archiwizacja celu z pieniędzmi pyta – osłony / inny cel / zostają; przeniesienie =
   wpis `transfers` {at, to, amount}, silnik na koniec dnia przenosi `min(kwota, stan)` (nigdy więcej, niż cel ma);
   „przenieś środki” na liście zarchiwizowanych także później (cele ICTTJ spoza scenariusza też); „Cofnij” przywraca cel.
+  **Od 1.15.6 „na koniec dnia” zastąpione przez T340** (w chwili `at` wśród zdarzeń dnia – AP-3, AF-4).
 - **T130** Scenariusz ICTTJ (D84 C3): scenariusz zapamiętany w `fi.json` przy pierwszym podłączeniu (ostatnio zmieniany
   w ICTTJ – `chosenForecast`); zmiana w Ustawieniach → ICTTJ dopiero po potwierdzeniu z listą celów do archiwizacji (ich
   pieniądze zostają).
@@ -1192,6 +1193,8 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   niezadokowaną nie zamarza (`pendingPairDays`, `advanceGame` `hold`, liczone z bieżących dostaw – także po pominięciu
   wpisu czy nowym odczycie ICTTJ) – najwyżej 7 dni, potem zamarza jak dotąd. Silnik
   do dokowania nadal liczy parę zwykłą kolejnością (pula dopiero z rekordem dokowania – wariant „pełniej” bez zmian).
+  **Od 1.15.6 zdanie o silniku zastąpione przez T341** (para liczona od razu według puli wpisu – D99 pkt 2, AP-12);
+  wstrzymanie zamrażania zostaje.
 - **T164** Dni robocze (F42, zmienia T63): bez sobót, niedziel i polskich świąt ustawowych – stałe (1.01, 6.01, 1.05,
   3.05, 15.08, 1.11, 11.11, 25–26.12; 24.12 od 2025), Wielkanoc i poniedziałek wielkanocny, Zielone Świątki (+49 dni),
   Boże Ciało (+60) – `isPolishHoliday` / `isWorkingDay` (`calc/dates.ts`), tylko w oknie pary i 3 dniach roboczych D72.
@@ -2488,6 +2491,46 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
   czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
   tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
+- **T340** Przeniesienie środków celu w swojej chwili (1.15.6, AP-3, AF-4 K – MG.8, MG.10; **zastępuje „na koniec dnia”
+  z T129**): wpis `transfers` {at, to, amount} silnik liczy w chwili `at` wśród zdarzeń jej dnia warszawskiego – przed
+  pierwszym zdarzeniem dnia (w kolejności silnika), które przyszło do FI później niż przeniesienie (`cameIn`: utworzenie
+  dokowania, inaczej operacji, nie wcześniej niż początek jej dnia; decyzja o łupach – `decidedAt`; druga strona
+  przelewu – jej utworzenie), zawsze po początku dnia (start, przełom miesiąca, termin łupów); gdy tego dnia nic
+  później nie przyszło – po ostatnim zdarzeniu dnia, przed następnym dniem. Przenosi `min(kwota, stan celu)`; czego cel
+  w tej chwili silnika jeszcze nie ma (wpływ sprzed przeniesienia, który kolejność dnia liczy później – operacje bez
+  godziny idą przed operacjami z godziną), przenosi na koniec dnia, nigdy więcej, niż cel ma. Skutek: wydatek z celu
+  wpisany po przeniesieniu płaci z celu tyle, ile pokazuje ekran (T131), dostawa tego dnia zaimportowana albo zadokowana
+  po przeniesieniu widzi cel po nim i dopełnia go tylko do jego kwoty (D13, spec „każdy do swojej kwoty”). Granica:
+  operacja z dnia wcześniejszego liczy się w swoim dniu (kolejność dni) – przeniesienie z późniejszego dnia nie zmienia
+  jej podziału. „Przenieś środki” ostrzega (bez blokady), gdy cel docelowy jest już pełny albo przeniesienie przekroczy
+  to, czego mu brakuje (`overTarget`, przycisk „tylko brakujące”); cel bez kwoty (cel ICTTJ bez ceny – N46) bez
+  ostrzeżenia. Rozważone i odrzucone: stały klucz przeniesienia wśród operacji (godzina albo utworzenie) – operacje
+  z godziną i bez niej mają w dniu inne porządki, a zadokowana później dostawa ma chwilę dokowania, nie operacji. Bez
+  migracji (stany liczone): dni z przeniesieniem i wydatkiem z celu albo dostawą tego samego dnia przeliczą się inaczej
+  (notatka wydania); zamrożone dni gry bez zmian.
+- **T341** Dostawa do zadokowania według puli wpisu (1.15.6, AP-12, AF-46, AF-48 – DO.5, DO sp. 1, MG sp. 1, PR sp. 2;
+  D99 pkt 2; **zastępuje zdanie T163 o silniku**): para wpisu ICTTJ z operacją banku jeszcze niezadokowana (lista dostaw
+  `deliveries` – stan „do zadokowania” z wpisem i operacją, bez dokowania; także para innej kwoty – B22, liczy się kwota
+  banku – i wpływ wpisany na Portfelu XTB – B69; bez wpisu pominiętego, sprzed startu, czekającego na import,
+  zadokowanego i wpływu z XTB bez wpisu) trafia do silnika jako `FleetInput.pendingPairs` (operacja → pula i dzień
+  wpisu, `pendingPairsOf`; okno liczy je z migawki ICTTJ tego komputera tymi samymi danymi co panel Dokowanie –
+  `store/fleet.ts` `pendingPairsFor`, mapa ta sama, póki treść ta sama) i liczy się od razu tak, jak jej dokowanie z tą
+  pulą bez zmienionego podziału: Cele – prosto do celów (najpierw cele z prognozy ICTTJ; miesiąc celu bez ceny – dzień
+  wpisu, N46), Podatek – rezerwa na PIT-38 poza budżetem i bez przychodu (`taxOfDockings` z parami), zwrot z puli
+  Podatek – z rezerwy, bez firewalla (T65), pozostałe pule – kolejnością dokowania. Chwila pieniędzy dla celów –
+  utworzenie operacji (T128), więc „Zadokuj” bez zmian celów niczego nie przesuwa; dokowanie operacji decyduje nad parą
+  (podział z okna). Gra ocenia dni tym samym wejściem (`gameInputOf`, klucz pamięci `engineParts`); dzień z parą dalej
+  czeka na dokowanie najwyżej 7 dni (T163) i zamarza bez fałszywego naruszenia „dopłata wbrew firewallowi”. Granica:
+  komputer bez odczytu ICTTJ (i telefon) nie zna puli niezadokowanego wpisu – liczy parę jak dotąd zwykłą kolejnością,
+  aż do dokowania (pula jest wtedy w rekordzie dokowania); komputery czytające ten sam folder ICTTJ liczą to samo. Bez
+  nowych pól w danych i bez migracji; zamrożonych dni gry z takim naruszeniem sprzed 1.15.6 nie da się poprawić.
+- **T342** „Do zadokowania” na ekranach (1.15.6, AP-12; MG sp. 1, PR sp. 2, DO sp. 4): silnik zlicza pary liczone
+  według puli wpisu (`FleetState.toDock` – ile, wpływ, wypływ, część w celach; zdarzenie dziennika z `pending`). Stan
+  okrętu na Mostku – wiersz „Do zadokowania · N wpisów ICTTJ – już w warstwach według puli wpisu” z kwotą wpływu
+  i wypływu (dymek: jak liczone i że „Zadokuj” potwierdza albo zmienia podział); „ostatnia dostawa (data, do
+  zadokowania) – dokąd poszła?” i w rozbiciu „Dostawa do zadokowania (według puli wpisu ICTTJ)”; Mapa gwiezdna – „w celach
+  … (w tym do zadokowania X zł)”; okno dokowania – „na stan warstw z dnia wpływu (data)” przy wpływie sprzed dziś (DO sp.
+  4) i „Do zadokowania: te pieniądze już są w warstwach według puli wpisu – „Zadokuj” potwierdzi ten podział.”.
 - **T345** Opłata okresowa zapłacona przed startem (AP-5, AF-12, KR.16; stosuje T135 także przed startem, T45 / T220 bez
   zmian): połączona z kontenerem płatność sprzed startu budżetu nie przechodzi przez przebieg (pieniądze wyszły przed
   saldem otwarcia), ale zamyka swój cykl tak samo jak płatność w przebiegu – `paidBeforeStart` przed przebiegiem silnika

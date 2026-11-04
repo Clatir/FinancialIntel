@@ -50,9 +50,22 @@ export function changeGoal(g: Goal, patch: Partial<Omit<Goal, 'past' | 'id'>>, n
   return { ...next, past: [...(g.past ?? []), { until: now, priority: g.priority, target: g.target, archived: g.archived, deadline: g.deadline }] }
 }
 
-/** The goal's money moved out now (C2, B30): `amount` (what it holds now) to the shields or another goal. */
+/**
+ * The goal's money moved out now (C2, B30): `amount` (what it holds now) to the shields or another goal – the engine moves
+ * it at this moment among the day's events (AP-3, T340).
+ */
 export function transferGoal(g: Goal, to: string, amount: number, now: string): Goal {
   return { ...g, transfers: [...(g.transfers ?? []), { at: now, to, amount }], updatedAt: now }
+}
+
+/**
+ * Money moved into a goal beyond its target (AP-3 – the warning of „przenieś środki”): what it still lacks and how much
+ * of `amount` goes over it; null = it fits, or the goal has no target (an ICTTJ goal without a price takes all – N46).
+ */
+export function overTarget(goal: { amount: number; target: number }, amount: number): { lacks: number; over: number } | null {
+  if (goal.target <= 0 || amount <= 0) return null
+  const lacks = Math.max(0, goal.target - goal.amount)
+  return amount > lacks ? { lacks, over: amount - lacks } : null
 }
 
 export interface GoalSync {

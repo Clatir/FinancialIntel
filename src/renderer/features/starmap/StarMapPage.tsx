@@ -7,13 +7,13 @@ import { useMemo, useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
 import { addMonths, monthsBetween } from '@shared/calc/dates'
 import { goalInstallment, ratedIn } from '@shared/calc/fleet'
-import { byPriority, goalEtas, goalLate, goalPace } from '@shared/calc/goals'
+import { byPriority, goalEtas, goalLate, goalPace, overTarget } from '@shared/calc/goals'
 import { chosenForecast } from '@shared/ictj'
 import type { Goal } from '@shared/schema'
 import { useData, useEntryNewer, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
-import { useFleet } from '../../store/fleet'
+import { pendingPairsNow, useFleet } from '../../store/fleet'
 import { useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
@@ -44,7 +44,12 @@ export function StarMapPage() {
   // The payouts of the pool Cele apart (N42): they fill the ICTTJ goals first, whatever the list's order. Once per fleet
   // (W38): the pace walks the engine's log – the month's total from the same walk.
   const dockings = useRecordList('dockings')
-  const poolTx = useMemo(() => new Set(dockings.filter((d) => d.pool === 'goals').map((d) => d.transactionId)), [dockings])
+  // A pair of the pool Cele not docked yet too (AP-12): the engine puts it in the goals by the pool already. The pairs are
+  // the engine's input – a new fleet when they change.
+  const poolTx = useMemo(() => {
+    const pairs = [...pendingPairsNow()].filter(([, p]) => p.pool === 'goals').map(([id]) => id)
+    return new Set([...dockings.filter((d) => d.pool === 'goals').map((d) => d.transactionId), ...pairs])
+  }, [dockings, fleet])
   const pace = useMemo(() => (fleet ? goalPace(fleet.log, fleet.started ? fleet.start : null, fleet.month, poolTx) : null), [fleet, poolTx])
   const monthly = pace?.total ?? null
   const etas = useMemo(
@@ -76,6 +81,13 @@ export function StarMapPage() {
         <span className="text-[12px] text-muted">
           w celach <span className="num text-fg-strong" data-testid="starmap-total">{zl(total)}</span>
           {inArchived > 0 && <span className="text-dim"> (w tym zarchiwizowane {zl(inArchived)})</span>}
+          {/* ICTTJ payouts not docked yet (AP-12, MG sp. 1): in the goals by their pool already – said apart. */}
+          {fleet.toDock.goals > 0 && (
+            <span className="text-dim" title="Wypłaty z ICTTJ sparowane z bankiem, a jeszcze niezadokowane – liczone według puli wpisu; „Zadokuj” na Mostku potwierdza podział albo go zmienia" data-testid="starmap-to-dock">
+              {' '}
+              (w tym do zadokowania {zl(fleet.toDock.goals)})
+            </span>
+          )}
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -197,6 +209,7 @@ export function StarMapPage() {
           amount={amounts.get(moving.goal.id) ?? 0}
           archive={moving.archive}
           others={active.filter((g) => g.id !== moving.goal.id)}
+          amounts={amounts}
           onClose={() => setMoving(null)}
         />
       )}
@@ -206,14 +219,32 @@ export function StarMapPage() {
 
 /**
  * Where a goal's money goes (C2, B30): archiving a goal with money asks – to the shields, to another goal, or it stays
- * (then „przenieś środki” on the archived list later); an archived goal's money moved the same way.
+ * (then „przenieś środki” on the archived list later); an archived goal's money moved the same way. Into a goal full
+ * already, or above what it lacks – a warning (AP-3), never a refusal.
  */
-function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goal; amount: number; archive: boolean; others: readonly Goal[]; onClose: () => void }) {
+function GoalMoneyDialog({
+  goal,
+  amount,
+  archive,
+  others,
+  amounts,
+  onClose
+}: {
+  goal: Goal
+  amount: number
+  archive: boolean
+  others: readonly Goal[]
+  amounts: ReadonlyMap<string, number>
+  onClose: () => void
+}) {
   const [to, setTo] = useState<'shields' | 'goal' | 'stay'>('shields')
   const [goalTo, setGoalTo] = useState(others[0]?.id ?? '')
   const [moveAmount, setMoveAmount] = useState<number | null>(amount)
   const target: GoalMoneyTarget | null = to === 'stay' ? null : to === 'goal' ? goalTo || null : 'shields'
   const chosenAmount = moveAmount ?? 0
+  const dest = to === 'goal' ? (others.find((g) => g.id === goalTo) ?? null) : null
+  const destHas = dest ? (amounts.get(dest.id) ?? 0) : 0
+  const over = dest && chosenAmount > 0 ? overTarget({ amount: destHas, target: dest.target }, chosenAmount) : null
   const confirm = () => {
     if (to === 'goal' && !goalTo) return toast('Wybierz cel.', 'error')
     if (to !== 'stay' && (chosenAmount <= 0 || chosenAmount > amount)) return toast(`Podaj kwotę od 0,01 zł do ${zl(amount)}.`, 'error')
@@ -270,6 +301,18 @@ function GoalMoneyDialog({ goal, amount, archive, others, onClose }: { goal: Goa
             ))}
           </select>
         </label>
+        {dest && over && (
+          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="starmap-money-over">
+            {over.lacks === 0
+              ? `Cel „${dest.name}” jest już pełny (${zl(destHas)} z ${zl(dest.target)}): wszystko, co przeniesiesz, będzie ponad jego kwotę, a nowe dostawy go ominą.`
+              : `Celowi „${dest.name}” brakuje ${zl(over.lacks)} – reszta (${zl(over.over)}) będzie ponad jego kwotę.`}
+            {over.lacks > 0 && (
+              <button type="button" className="ml-1.5 text-accent hover:underline" onClick={() => setMoveAmount(over.lacks)} data-testid="starmap-money-lacks">
+                tylko brakujące ({zl(over.lacks)})
+              </button>
+            )}
+          </p>
+        )}
         {archive && (
           <label className="flex items-center gap-2">
             <input type="radio" checked={to === 'stay'} onChange={() => setTo('stay')} data-testid="starmap-money-stay" />
