@@ -49,10 +49,12 @@ paths:
 - Decyzja zbiorcza nie zmienia pożyczki, PIT-38, XTB ani pieniędzy domownika decyzją innego rodzaju (`bulkKeeps`, T326);
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
 - „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X
-  ma oddać z zakupami pliku, bez jego własnych wpłat pliku (`owedWithFile`, T328); ekran (`sharesView`) i `runImport`
-  z tego samego. Temat z decyzją swoich marek (N78) czyta ich klucze (`themeSharesFrom`) i pokazuje (`themeCommon` – to
-  samo na ekranie i w testach) linie jako to, co marki dały razem z rozkładu, nie kwotę razy liczbę marek – zmiana tam
-  nigdy nie daje więcej (T327). **Pułapka:** `sameChoice`
+  ma oddać z zakupami pliku, bez jego własnych wpłat pliku (`owedWithFile`, T328); ekran (`sharesView`, uwagi przy linii
+  `lineSpreads` – zawsze jednej decyzji) i `runImport` z tego samego. Temat z decyzją swoich marek (N78 – `themeShows`,
+  `themeCommon`: decyzja pierwszej marki, nic nie sumowane): bez linii z kwotą zmiana tam to decyzja tematu; kilka marek
+  z liniami ('brands') – linie zostają w markach, zmiana w temacie trafia do każdej marki (`chooseThemeRow`, T336).
+  **Pułapka:** kwota tematu jest dla wszystkich jego wierszy razem, kwota marki – dla jej wierszy: nie składaj linii marek
+  w jedną decyzję tematu (przeglądy N1 2–4: raz o połowę mniej, raz więcej, raz zgubiona kwota). **Pułapka:** `sameChoice`
   pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
 - Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą. Kategoria mBanku tylko jako podpowiedź (`hintFor`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –

@@ -200,7 +200,7 @@ describe('„w tym za” w imporcie – AP-7 (AF-27)', () => {
     const theme = () => importThemes(groups()).find((t) => t.theme === big.theme)!
     const keysNow = () => state.themeSharesFrom(theme(), state.themeShows(theme(), state.useImport.getState().choices))
     expect(keysNow()).toBe(`t:${big.theme}`)
-    // Both brands decided alike: the theme shows their decision, a change there replaces theirs (chooseThemeOverGroups).
+    // Both brands decided alike, no „w tym za”: the theme shows their decision, a change there replaces theirs.
     state.decideGroup(big.group, { ...big.proposed })
     state.decideGroup(small.group, { ...small.proposed })
     expect(state.themeShows(theme(), state.useImport.getState().choices)).toBe('same')
@@ -210,18 +210,23 @@ describe('„w tym za” w imporcie – AP-7 (AF-27)', () => {
     expect(state.decisionStart(view(), `t:${big.theme}`, BABCIA, [])).toBe(0)
     expect(state.decisionStart(view(), keys, BABCIA, [])).toBe(10000)
     expect(state.owedLeftOfDecision(view(), keys, BABCIA)).toBe(10000)
-    // „w tym za Babcia 100” in each brand's decision: the theme's line says where the brands' parts went – what they gave
-    // together (review N1 3: Babcia owes 100 zł, the second brand gives nothing – not 2 × 100 zł).
+    // „w tym za Babcia 100” in each brand's decision (T336): the lines are each brand's – the theme's row says so, each
+    // brand's line where its part went (Babcia owes 100 zł: the second brand gives nothing – she owes no more).
     const shares = [{ memberId: BABCIA, amount: 10000, advance: true }]
     state.decideGroup(big.group, { ...big.proposed, shares })
     state.decideGroup(small.group, { ...small.proposed, shares })
+    expect(state.themeShows(theme(), state.useImport.getState().choices)).toBe('brands')
+    expect(state.themeCommon(theme(), state.useImport.getState().choices)?.shares).toEqual(shares)
     const earlier = big.rows.find((p) => p.row.date === '2026-10-29')!
-    expect([...state.decisionSpread(view(), keysNow(), { ...big.proposed, shares })]).toEqual([[0, { line: 0, memberId: BABCIA, typed: 10000, given: [{ key: earlier.key, date: '2026-10-29', amount: 10000 }] }]])
-    expect(state.themeCommon(theme(), state.useImport.getState().choices, view)?.shares).toEqual([{ memberId: BABCIA, amount: 10000, advance: true }])
-    expect(state.owedLeftOfDecision(view(), keysNow(), BABCIA)).toBe(10000)
-    // The theme decides them all now: its own key, its line spread over all the rows.
-    state.chooseThemeOverGroups(theme(), { ...big.proposed, shares })
+    expect(state.lineSpreads(view(), `g:${big.group}`)).toEqual({ 0: { typed: 10000, given: [{ date: earlier.row.date, amount: 10000 }], capped: false } })
+    expect(state.lineSpreads(view(), `g:${small.group}`)).toEqual({ 0: { typed: 10000, given: [], capped: true } })
+    expect(state.owedLeftOfDecision(view(), `g:${big.group}`, BABCIA)).toBe(10000)
+    // The brands without lines again: a line typed on the theme's row makes the theme decide them all – its own key, its
+    // line spread over all the rows.
+    state.decideGroup(big.group, { ...big.proposed })
+    state.decideGroup(small.group, { ...small.proposed })
+    state.chooseThemeRow(theme(), { ...big.proposed, shares })
     expect(keysNow()).toBe(`t:${big.theme}`)
-    expect([...state.decisionSpread(view(), keysNow(), { ...big.proposed, shares })].map(([line, l]) => [line, l.typed, l.given.map((x) => x.amount)])).toEqual([[0, 10000, [10000]]])
+    expect(state.lineSpreads(view(), `t:${big.theme}`)).toEqual({ 0: { typed: 10000, given: [{ date: earlier.row.date, amount: 10000 }], capped: false } })
   })
 })

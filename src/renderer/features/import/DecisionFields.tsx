@@ -16,18 +16,10 @@ import { useMembers } from '../household/actions'
 import { ShareEditor } from '../household/ShareEditor'
 import { Segmented } from '../../components/ui'
 import { choiceFor, optionOf, optionsFor, rowSharesChoice, type Option } from './options'
-import { chooseRow, decisionSpread, decisionStart, owedLeftOfDecision, owedLeftOfRow, rowStart, sharesView, useImport, type DecisionKeys, type SharesView } from './state'
+import { chooseRow, decisionStart, lineSpreads, owedLeftOfDecision, owedLeftOfRow, rowStart, sharesView, useImport, type DecisionKeys, type LineSpread, type SharesView } from './state'
 
 /** A shared purchase's split for the import (D83): equally or by percents – each row has its own amount. */
 export const IMPORT_SHARE_MODES = SHARE_MODES.filter((m) => m !== 'amounts')
-
-/** A line's spread over the rows of a group or a theme (AF-27): typed, given row by row, cut at what the member owes. */
-export interface LineSpread {
-  typed: number
-  given: Array<{ date: string; amount: number }>
-  /** Less than typed because the member owes no more (else: the rows' money ran out). */
-  capped: boolean
-}
 
 /** The note at a group's „w tym za” line (AF-27): where its amount went, and why less than typed (none – 0 zł typed). */
 function spreadText(s: LineSpread, name: string): string | null {
@@ -160,21 +152,17 @@ function sharesNow(ledger: ReturnType<typeof useHousehold>, members: readonly Ho
 
 /**
  * „w tym za” of a group's or a theme's decision in the import (`from` – `g:<group>`, `t:<theme>`, a theme's groups' when
- * it shows their common decision; AF-27): a new line starts at what the member owes back (D81), each line says how it is
- * spread over the rows – never beyond the debt.
+ * it shows their common decision without lines of an amount; AF-27): a new line starts at what the member owes back
+ * (D81), each line of one decision says how it is spread over the rows – never beyond the debt (`lineSpreads`).
  */
 function DecisionShares({ from, choice, members, onChange, testId }: { from: DecisionKeys; choice: Choice; members: readonly HouseholdMember[]; onChange: (c: Choice) => void; testId: string }) {
   const ledger = useHousehold()
   const key = useSharesKey((v) => ({
     owed: Object.fromEntries(members.map((m) => [m.id, owedLeftOfDecision(v, from, m.id)])),
-    spread: Object.fromEntries(
-      [...decisionSpread(v, from, choice)].map(([line, l]) => {
-        const total = l.given.reduce((a, g) => a + g.amount, 0)
-        return [line, { typed: l.typed, given: l.given.map((g) => ({ date: g.date, amount: g.amount })), capped: total < l.typed && (v.total.get(l.memberId) ?? 0) >= (v.owed.get(l.memberId) ?? 0) }]
-      })
-    )
+    // Several groups' keys: their lines, of 0 zł only, spread nothing (with an amount – each brand's, T336).
+    spread: typeof from === 'string' ? lineSpreads(v, from) : {}
   }))
-  const view = useMemo(() => (key ? (JSON.parse(key) as { owed: Record<string, number>; spread: Record<string, LineSpread> }) : null), [key])
+  const view = useMemo(() => (key ? (JSON.parse(key) as { owed: Record<string, number>; spread: Record<number, LineSpread> }) : null), [key])
   return (
     <IncomeSharesEditor
       choice={choice}
@@ -231,7 +219,8 @@ export function DecisionFields({
   testId,
   exclude,
   own,
-  sharesFrom
+  sharesFrom,
+  sharesInBrands
 }: {
   choice: Choice
   direction: 'in' | 'out'
@@ -243,6 +232,8 @@ export function DecisionFields({
   own?: string
   /** The import's decision this is (`g:<group>`, `t:<theme>`, a theme's groups' – AF-27): its „w tym za” spread over its rows. */
   sharesFrom?: DecisionKeys
+  /** Its „w tym za” are its brands' own (a theme showing their common decision – `themeShows` 'brands', T336): said, not edited. */
+  sharesInBrands?: boolean
 }) {
   const members = useMembers()
   const loans = useRecordList('loans')
@@ -310,7 +301,11 @@ export function DecisionFields({
         choice.kind === 'income' &&
         choice.household &&
         members.length > 1 &&
-        (sharesFrom ? (
+        (sharesInBrands ? (
+          <span className="text-[11px] text-muted" title="Każda marka ma swoje „w tym za” – kwotę i rozkład zmienisz przy marce" data-testid={`${testId}-also-for-brands`}>
+            w tym za – ustawione w markach
+          </span>
+        ) : sharesFrom ? (
           <DecisionShares from={sharesFrom} choice={choice} members={members} onChange={onChange} testId={testId} />
         ) : (
           <IncomeSharesEditor choice={choice} members={members} onChange={onChange} testId={testId} />
