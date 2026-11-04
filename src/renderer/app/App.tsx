@@ -9,6 +9,7 @@ import { OpenProgressPanel, useOpenProgress } from '../features/setup/OpenProgre
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { SyncPage } from '../features/sync/SyncPage'
 import { RemoteChangesDialog } from '../features/sync/RemoteChangesDialog'
+import { GuardDialog } from '../features/operations/OperationEditor'
 import { CommandPalette } from '../features/palette/CommandPalette'
 import { PAGES } from '../features/screens/pages'
 import { OperationsPage } from '../features/operations/OperationsPage'
@@ -328,6 +329,8 @@ function Window({ route, hideAmounts }: { route: Route; hideAmounts: boolean }) 
       <BridgeDetachHost />
       <ShortcutsHelp />
       <RemoteChangesDialog />
+      {/* „Zmienić operację?” – kept when its editor is left (AP-8). */}
+      <GuardDialog />
       <Toasts />
     </div>
   )

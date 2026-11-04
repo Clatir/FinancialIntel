@@ -70,7 +70,8 @@ export class RecordHistory {
       const name = `${fileStamp(nowIso)}_${reason}_${randomBytes(2).toString('hex')}.json`
       const body: SnapshotFile = { savedAt: nowIso, savedBy: this.machineName, reason, record }
       const file = join(dir, name)
-      await writeFileAtomic(file, `${JSON.stringify(body, null, 2)}\n`)
+      // Never the data folder itself made for it (AP-1): a folder gone fails the version, as any write does.
+      await writeFileAtomic(file, `${JSON.stringify(body, null, 2)}\n`, this.root)
       // Only a version written holds the next edits back (B112): a failed one is tried again at the next edit.
       this.lastSnapshot.set(key, nowMs)
       // The oldest versions over the limit go; a file that would not go now goes at a later snapshot.

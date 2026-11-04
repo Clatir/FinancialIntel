@@ -2,10 +2,11 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
 import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
 import { DEFAULT_SIGN, withKind } from '@shared/calc/kinds'
-import { confirmedChanges, confirmedPeriodOf, type ConfirmedChange, type OperationEdit } from '@shared/calc/balances'
+import { confirmedChanges, confirmedPeriodOf, type OperationEdit } from '@shared/calc/balances'
 import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
 import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { listOf, updateRecord, useData, useFolderLocked } from '../../store/data'
+import { answerGuard, askGuard, useGuard } from '../../store/guard'
 import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
@@ -79,18 +80,19 @@ export function OperationEditor({ id }: { id: string }) {
   const knownTags = useKnownTags()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
-  // An edit that changes a confirmed balance or a bank's amount (F12): asked before it is made.
-  const [ask, setAsk] = useState<{ run: () => void; changes: ConfirmedChange[]; bank: boolean } | null>(null)
   // A new entry being written (the editor opened on it as a draft – keyed by the operation): its whole first writing is
   // the user's own, a purchase typed in with a past day too – nothing to ask.
   const [fresh] = useState(isDraft)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
   const t = entry.record
   const readOnly = folderReadOnly || entry.readOnly
-  /** Runs `run` – or asks first when `edits` change a confirmed balance (F12). */
+  /**
+   * Runs `run` – or asks first when `edits` change a confirmed balance (F12). The question waits outside the editor
+   * (`store/guard.ts`, AP-8): leaving the editor or closing the window never drops the typed change silently.
+   */
   const guarded = (edits: readonly OperationEdit[], run: () => void) => {
     const changes = confirmedChanges(edits, balances)
-    if (changes.length) setAsk({ run, changes, bank: false })
+    if (changes.length) askGuard({ id, run, changes, bankAmount: null })
     else run()
   }
   const update = (fn: (r: Transaction) => Transaction): boolean => {
@@ -101,7 +103,7 @@ export function OperationEditor({ id }: { id: string }) {
     // The bank's amount of either side.
     const bank = (!!t.bank || !!t.counterBank) && next.amount !== t.amount
     if (!changes.length && !bank) return updateRecord('transactions', id, fn)
-    setAsk({ run: () => void updateRecord('transactions', id, fn), changes, bank })
+    askGuard({ id, run: () => void updateRecord('transactions', id, fn), changes, bankAmount: bank ? t.amount : null })
     return false
   }
   const confirmed = confirmedPeriodOf(t, balances)
@@ -539,44 +541,49 @@ export function OperationEditor({ id }: { id: string }) {
           </div>
         )}
       </fieldset>
-      {ask && (
-        <Modal
-          title="Zmienić operację?"
-          width={500}
-          onClose={() => setAsk(null)}
-          testId="operation-guard"
-          footer={
-            <>
-              <button type="button" className="btn" onClick={() => setAsk(null)} data-testid="operation-guard-cancel">
-                Anuluj
-              </button>
-              <button
-                type="button"
-                className="btn btn-accent"
-                onClick={() => {
-                  setAsk(null)
-                  ask.run()
-                }}
-                data-testid="operation-guard-confirm"
-              >
-                Zmień mimo to
-              </button>
-            </>
-          }
-        >
-          <div className="flex flex-col gap-1.5 text-[12px]" data-testid="operation-guard-text">
-            {ask.changes.map((c) => (
-              <p key={c.accountId}>
-                To zmieni potwierdzone saldo konta {accounts.find((a) => a.id === c.accountId)?.name ?? '?'} z {plDate(c.date)} o{' '}
-                <span className="num">{signedPln(c.delta)} zł</span> i stan osłon.
-              </p>
-            ))}
-            {ask.bank && <p>Kwota pochodzi z banku ({plnText(t.amount)} zł) – po zmianie operacja nie zgodzi się z wyciągiem.</p>}
-            <p className="text-dim">Zamrożone dni gry zostają bez zmian.</p>
-          </div>
-        </Modal>
-      )}
     </div>
+  )
+}
+
+/**
+ * „Zmienić operację?” (F12) – an edit of an operation that changes a confirmed balance or a bank's amount, waiting for
+ * „Zmień mimo to”. Shown by the window, not by the editor (AP-8): the question stays when the editor is left (another
+ * screen, another operation) and is open behind the window's question at its close.
+ */
+export function GuardDialog() {
+  const ask = useGuard((s) => s.asks[0])
+  const accounts = useData((s) => s.fi?.settings.accounts)
+  const operation = useData((s) => (ask ? s.records.transactions[ask.id]?.record : undefined))
+  if (!ask) return null
+  return (
+    <Modal
+      title="Zmienić operację?"
+      width={500}
+      onClose={() => answerGuard(ask.seq, false)}
+      testId="operation-guard"
+      footer={
+        <>
+          <button type="button" className="btn" onClick={() => answerGuard(ask.seq, false)} data-testid="operation-guard-cancel">
+            Anuluj
+          </button>
+          <button type="button" className="btn btn-accent" onClick={() => answerGuard(ask.seq, true)} data-testid="operation-guard-confirm">
+            Zmień mimo to
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-1.5 text-[12px]" data-testid="operation-guard-text">
+        {operation && <p className="text-muted">{operationLabel(operation)}</p>}
+        {ask.changes.map((c) => (
+          <p key={c.accountId}>
+            To zmieni potwierdzone saldo konta {accounts?.find((a) => a.id === c.accountId)?.name ?? '?'} z {plDate(c.date)} o{' '}
+            <span className="num">{signedPln(c.delta)} zł</span> i stan osłon.
+          </p>
+        ))}
+        {ask.bankAmount != null && <p>Kwota pochodzi z banku ({plnText(ask.bankAmount)} zł) – po zmianie operacja nie zgodzi się z wyciągiem.</p>}
+        <p className="text-dim">Zamrożone dni gry zostają bez zmian.</p>
+      </div>
+    </Modal>
   )
 }
 

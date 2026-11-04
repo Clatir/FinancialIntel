@@ -7,7 +7,7 @@ import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, Notification, app, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
 import { IMPORT_MAX_BYTES } from '@shared/import/text'
-import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
+import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type GhostFolder, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import { SAVED, unsavedQuestion } from '@shared/unsaved'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
@@ -445,6 +445,8 @@ async function closeStore(): Promise<void> {
   refreshes = null
   if (presenceTimer) clearInterval(presenceTimer)
   presenceTimer = null
+  if (folderTimer) clearInterval(folderTimer)
+  folderTimer = null
   store = null
   if (!closing) return
   // The writes the window sent before closing finish first (a rescan ahead of them in the queue takes seconds – B43).
@@ -475,6 +477,68 @@ async function heartbeat(force = false): Promise<void> {
   } catch (e) {
     log('warn', 'heartbeat failed', e)
   }
+}
+
+/**
+ * The folder checked this often while open (AP-1): gone (renamed, unplugged, OneDrive away) – the banner „niedostępny” and
+ * no write; back – the writes that waited go. One stat of fi.json; a full check only when it changed.
+ */
+const FOLDER_CHECK_MS = envMs('FI_FOLDER_CHECK_MS', 5000)
+let folderTimer: NodeJS.Timeout | null = null
+
+/** The folder's watcher, its changes into the queue of refreshes (W21). */
+function watchFolder(s: DataStore, queue: RefreshQueue): void {
+  watcher?.stop()
+  watcher = new FolderWatcher(s.root, (paths) => void queue.request(paths ?? undefined).catch(() => undefined), {
+    onError: (e, repeated) => log('warn', `watcher error${repeated ? ` (i ${repeated} kolejnych od poprzedniego wpisu)` : ''}`, e)
+  })
+  watcher.start()
+}
+
+/**
+ * The idle check (AP-1): a folder gone or back, or one that took no writes taking them again (AF-14) – a full check says
+ * it to the window. Back: watched anew (a watcher may have followed the folder renamed away, or failed with the drive).
+ */
+let folderChecking = false
+async function checkFolder(s: DataStore): Promise<void> {
+  if (s !== store || folderChecking || windowClosing || opening) return
+  folderChecking = true
+  try {
+    const was = s.status().available
+    if (!(await s.stale()) || s !== store) return
+    const queue = refreshes
+    await queue?.request()
+    const now = s.status().available
+    if (now !== was) log(now ? 'info' : 'warn', now ? `folder danych znów dostępny: ${s.root}` : `folder danych niedostępny: ${s.root}`)
+    if (now && !was && s === store && queue) watchFolder(s, queue)
+  } catch (e) {
+    log('warn', 'folder check failed', e)
+  } finally {
+    folderChecking = false
+  }
+}
+
+/** The folders `ghostFolders` found last – the only ones `showGhostFolder` opens. */
+let lastGhosts: GhostFolder[] = []
+
+/**
+ * This computer's data folders of before (the remembered ones) holding FI's records without fi.json (AP-1): a write of
+ * 1.15.4 or older made such a folder in the old place of a data folder gone for a while, and its records are in no
+ * budget. The open folder is never one; a folder OneDrive is still bringing (no records yet) neither.
+ */
+async function ghostFolders(): Promise<GhostFolder[]> {
+  const open = store
+  const found: GhostFolder[] = []
+  const seen: string[] = []
+  for (const dir of [config.get().dataDir, ...config.get().recentDirs]) {
+    if (!dir || seen.some((d) => sameDir(d, dir)) || (open && sameDir(open.root, dir))) continue
+    seen.push(dir)
+    if ((await DataStore.inspect(dir).catch(() => 'unavailable')) !== 'partial') continue
+    const files = await DataStore.recordFiles(dir)
+    if (files) found.push({ dir, files })
+  }
+  lastGhosts = found
+  return found
 }
 
 /** The open in progress (1.4.1): „Przerwij” aborts it, a new open replaces it – until its folder is read. */
@@ -583,7 +647,9 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
         remembered: rememberedDir(target),
         message:
           kind === 'partial'
-            ? 'W tym folderze są już dane Financial Intel, ale bez pliku fi.json – OneDrive pewnie jeszcze go pobiera. Poczekaj chwilę i spróbuj ponownie (nowe dane nie są tworzone, żeby nie rozdzielić budżetu).'
+            ? // A folder made by a write of 1.15.4 or older while the data folder was away (AP-1) looks the same: said too.
+              'W tym folderze są już dane Financial Intel, ale bez pliku fi.json – OneDrive pewnie jeszcze go pobiera. Poczekaj chwilę i spróbuj ponownie (nowe dane nie są tworzone, żeby nie rozdzielić budżetu). ' +
+              'Jeśli fi.json się nie pojawia, to może być folder-widmo – zapisany przez starszą wersję aplikacji, gdy folder danych był niedostępny: wskaż właściwy folder danych, a wpisy z tego przenieś do niego (te same podfoldery).'
             : `Folder ${DATA_FOLDER_NAME} zawiera inne pliki – wybierz pusty folder.`
       }
     }
@@ -629,7 +695,18 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
         message: `W tym folderze nie ma danych Financial Intel (fi.json). Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
       }
     }
-    next = new DataStore(target, { machineName, trash, backupDir: config.get().backupDirOverride, log })
+    // A write that finds the folder gone (AP-1): the window learns it at once, not at the next check.
+    const created: DataStore = new DataStore(target, {
+      machineName,
+      trash,
+      backupDir: config.get().backupDirOverride,
+      log,
+      onStatus: (change) => {
+        log('warn', `folder danych niedostępny przy zapisie: ${target}`)
+        sendFrom(created, change)
+      }
+    })
+    next = created
     step = 'list'
     // Open the new folder first: if it fails or is stopped, the current one stays open and keeps saving. Once read
     // (before a migration) it no longer stops: „Przerwij” would promise an untouched folder.
@@ -665,12 +742,10 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       }
     })
     refreshes = queue
-    watcher = new FolderWatcher(target, (paths) => void queue.request(paths ?? undefined).catch(() => undefined), {
-      onError: (e, repeated) => log('warn', `watcher error${repeated ? ` (i ${repeated} kolejnych od poprzedniego wpisu)` : ''}`, e)
-    })
-    watcher.start()
+    watchFolder(opened, queue)
     void heartbeat(true)
     presenceTimer = setInterval(() => void heartbeat(), 60_000)
+    folderTimer = setInterval(() => void checkFolder(opened), FOLDER_CHECK_MS)
     // Daily backup (decision D31), in the background.
     dailyBackup()
     // The folder is open from here on: remembering it failing must not report the open as failed – the window would
@@ -923,6 +998,13 @@ function registerIpc(): void {
       return
     }
     shell.showItemInFolder(s.abs(rel))
+  })
+  handle('ghostFolders', () => ghostFolders())
+  handle('showGhostFolder', async (dir: string) => {
+    // Only a folder found as one (never any path the window sends).
+    if (!lastGhosts.some((g) => sameDir(g.dir, dir))) throw new Error('Tego folderu nie ma już na liście.')
+    const err = await shell.openPath(dir)
+    if (err) throw new Error(err)
   })
   handle('trayPrefs', () => trayView())
   handle('setTrayPrefs', async (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>) => {
@@ -1450,7 +1532,7 @@ function createWindow(): void {
         // The renderer keeps unsaved changes; closing now would lose them. The question says why (B108) – the window
         // is shown for it (closed from the tray), and a waiting decision's dialog is open in it already. The log says
         // it too: the question holds the main process until it is answered.
-        log('warn', `zamykanie: niezapisane zmiany (decyzje: ${result.waiting}, nowsza wersja: ${result.newer}, błąd: ${result.error ?? 'brak'})`)
+        log('warn', `zamykanie: niezapisane zmiany (decyzje: ${result.waiting}, „Zmień mimo to”: ${result.asks ?? 0}, nowsza wersja: ${result.newer}, błąd: ${result.error ?? 'brak'})`)
         if (!win.isVisible() || win.isMinimized()) showMainWindow()
         const choice = dialog.showMessageBoxSync(win, { type: 'warning', ...unsavedQuestion(result), buttons: ['Anuluj', 'Zamknij mimo to'], defaultId: 0, cancelId: 0 })
         if (choice === 0) {

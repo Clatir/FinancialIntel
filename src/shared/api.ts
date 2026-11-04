@@ -265,10 +265,23 @@ export const SLOW_FILE_MS = 3000
 /** A month's record written beside the month's file of another record (two computers made it – B46): the start of the error's message. */
 export const CONFLICT_COPY_MESSAGE = 'Ten miesiąc zapisał już inny komputer'
 
+/**
+ * The data folder gone while open (AP-1): renamed or moved, a drive unplugged, OneDrive away – its fi.json is not there.
+ * Nothing is written until it is back; the changes not written wait in the window and go once it is.
+ */
+export const FOLDER_UNAVAILABLE_MESSAGE =
+  'Folder danych jest niedostępny (przeniesiony, odłączony dysk albo OneDrive) – zapis wstrzymany. Niezapisane zmiany czekają w aplikacji i zapiszą się same, gdy folder wróci.'
+
 export const OPEN_ABORTED_MESSAGE =
   'Przerwano wczytywanie folderu – nic w nim nie zostało zmienione. Jeśli pliki pobiera OneDrive, ustaw na folderze „Zawsze zachowuj na tym urządzeniu”, poczekaj na zielone ptaszki i spróbuj ponownie.'
 
 /** What a flush before closing left unsaved and why (B108): closing tells the user the real reason. */
+/** A folder of FI's records without fi.json (AP-1): where, and how many records' files it holds. */
+export interface GhostFolder {
+  dir: string
+  files: number
+}
+
 export interface FlushResult {
   saved: boolean
   /** Unsaved records held by a decision about another computer's change – only that decision saves them. */
@@ -277,6 +290,8 @@ export interface FlushResult {
   newer: number
   /** The last write error of the others (null = none). */
   error: string | null
+  /** Edits of operations typed and waiting for „Zmień mimo to” (AP-8) – not on the disk until answered. */
+  asks?: number
 }
 
 export interface FiApi {
@@ -328,6 +343,13 @@ export interface FiApi {
   resolveConflicts(items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>): Promise<Array<{ id: string; error?: string; skipped?: boolean }>>
   trashProblemFile(relPath: string): Promise<void>
   showInFolder(relPath: string | null): Promise<void>
+  /**
+   * FI's records without fi.json among this computer's recent data folders (AP-1): a „folder-widmo” a write of 1.15.4 or
+   * older made while the data folder was away – their files are not in the budget.
+   */
+  ghostFolders(): Promise<GhostFolder[]>
+  /** One of `ghostFolders` shown in the file manager. */
+  showGhostFolder(dir: string): Promise<void>
   openExternal(url: string): Promise<void>
   /** Opens the folder of this computer's application log (userData/logs) in the file manager. */
   openLogs(): Promise<void>
@@ -493,7 +515,11 @@ export interface QuickData {
    */
   members: Array<{ id: string; name: string; owed: number; deposit: number; inflow: 'ask' | 'advance' | 'income'; via: string | null }>
   hideAmounts: boolean
+  /** Nothing is taken now: a read-only folder, the folder gone (AP-1), another one opening (AF-75) – why. */
   readOnly: boolean
+  readOnlyReason?: string | null
+  /** The data folder the lists are of (AF-75): sent back with the draft – one typed with another folder's is refused. */
+  folder?: string | null
   /** „Powtórz ostatni” (F7): the last operation typed by hand (one line). */
   last?: QuickTemplate | null
   /** The templates (F7): the latest counterparty + category pairs typed by hand, at most 5, newest first. */
@@ -521,6 +547,8 @@ export interface QuickTemplate {
 export interface QuickResult {
   ok: boolean
   message: string
+  /** Taken, but not on the disk yet (AP-1 – the data folder gone): it is written by itself later; never „Zapisano.”. */
+  pending?: boolean
   /** The data after the save (F7): a series („Zapisz i następny”) shows the energy as it is now. */
   data?: QuickData | null
 }

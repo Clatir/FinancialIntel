@@ -9,8 +9,10 @@ import { memberName } from '@shared/calc/household'
 import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
 import { noNarrowing } from '@shared/operationsView'
 import { listOf, updateSettings, useData } from '../../store/data'
+import { useGhosts } from '../../store/ghosts'
+import { api, errorMessage } from '../../lib/api'
 import { useFleet } from '../../store/fleet'
-import { focusRecord, navigate } from '../../store/ui'
+import { focusRecord, navigate, toast } from '../../store/ui'
 import { useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
@@ -70,6 +72,8 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const watch = useCargoWatch()
   const containers = useData((s) => s.records.containers)
   const cargo = useMemo(() => ({ prices: watch.prices, dead: watch.dead, containers: listOf(containers) }), [watch, containers])
+  // A „folder-widmo” of an older version (AP-1).
+  const ghosts = useGhosts((g) => g.list)
   if (!fleet) return []
   return inboxItems({
     today: fleet.today,
@@ -88,6 +92,7 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     accountName: (id) => accounts?.find((a) => a.id === id)?.name ?? 'Konto',
     money,
     cargo,
+    ghosts,
     anomalies,
     returns,
     returned
@@ -120,6 +125,7 @@ export const opensPairs = (item: InboxItem): boolean => item.kind === 'transfers
 export function openInboxItem(item: InboxItem, from: string | null): void {
   if (item.kind === 'dock' && item.ref) openDocking(item.ref)
   else if (item.kind === 'loot') navigate({ page: 'month' })
+  else if (item.kind === 'folder' && item.ref) void api.showGhostFolder(item.ref).catch((e: unknown) => toast(errorMessage(e), 'error', 6000))
   else if (item.kind === 'folder') navigate({ page: 'sync' })
   else if (item.kind === 'uncategorized') {
     showFilter({ period: from ? { kind: 'range', from, to: null } : { kind: 'all' }, ...noNarrowing(), marks: ['uncategorized'] })

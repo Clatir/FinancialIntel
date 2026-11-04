@@ -70,11 +70,82 @@ const initial = (): WizardState => ({
 
 export const useWizard = create<WizardState>(() => initial())
 
+/**
+ * The wizard's answers kept on this computer (AP-8, AF-11): typed and not applied yet, they live through a restart – one
+ * draft per data folder (its accounts, its goals), until the budget starts or the wizard is broken off.
+ */
+const DRAFT_KEY = 'fi.wizard.draft:'
+const draftKey = (dir: string) => `${DRAFT_KEY}${dir.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()}`
+
+function storage(): Storage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+/** The draft of the folder shown; null = none (or one this version cannot read – started afresh). */
+export function wizardDraftOf(dir: string): WizardState | null {
+  try {
+    const raw = storage()?.getItem(draftKey(dir))
+    if (!raw) return null
+    const kept = JSON.parse(raw) as { v?: unknown; state?: unknown }
+    if (kept.v !== 1 || !kept.state || typeof kept.state !== 'object') return null
+    const state = { ...initial(), ...(kept.state as Partial<WizardState>), active: true }
+    return Number.isInteger(state.step) && state.step >= 0 && state.step < WIZARD_STEPS.length ? state : { ...state, step: 0 }
+  } catch {
+    return null
+  }
+}
+
+function keepDraft(dir: string, w: WizardState): void {
+  try {
+    storage()?.setItem(draftKey(dir), JSON.stringify({ v: 1, at: new Date().toISOString(), state: w }))
+  } catch {
+    /* a full or blocked storage: the answers stay for this session */
+  }
+}
+
+function dropDraft(dir: string | undefined): void {
+  if (!dir) return
+  try {
+    storage()?.removeItem(draftKey(dir))
+  } catch {
+    /* ignore */
+  }
+}
+
+const shownDir = () => useData.getState().status?.dataDir
+
+// The answers kept as they change, while the wizard runs.
+useWizard.subscribe((w) => {
+  const dir = shownDir()
+  if (w.active && dir) keepDraft(dir, w)
+})
+
+// A folder shown (the start, another folder): its own draft, if the budget is not running yet; a running budget's goes.
+useData.subscribe((s, prev) => {
+  const dir = s.status?.dataDir
+  const shown = s.phase === 'ready' && (prev.phase !== 'ready' || dir !== prev.status?.dataDir)
+  if (shown && dir) {
+    if (s.fi?.settings.budget.start) {
+      dropDraft(dir)
+      if (useWizard.getState().active) useWizard.setState(initial())
+    } else useWizard.setState(wizardDraftOf(dir) ?? initial())
+  } else if (dir && s.fi?.settings.budget.start && !prev.fi?.settings.budget.start) dropDraft(dir)
+})
+
 export function startWizard(): void {
   const fi = useData.getState().fi
   // A running budget is never restarted from here: the start would reset the layers' history.
   if (fi?.settings.budget.start) {
     useWizard.setState(initial())
+    navigate({ page: 'wizard' })
+    return
+  }
+  // Already running (the banner, the palette – AF-11): back to it with every answer, never from the start.
+  if (useWizard.getState().active) {
     navigate({ page: 'wizard' })
     return
   }
@@ -102,6 +173,7 @@ export const patchWizard = (p: Partial<WizardState>) => useWizard.setState(p)
 
 export function cancelWizard(): void {
   useWizard.setState(initial())
+  dropDraft(shownDir())
   navigate({ page: 'bridge' })
 }
 
@@ -181,6 +253,7 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
   }
   const note = await unsavedNote()
   useWizard.setState(initial())
+  dropDraft(shownDir())
   navigate({ page: 'bridge' })
   playSound('docking')
   toast(note ? `Budżet uruchomiony – ${note}.` : 'Okręt wypłynął: budżet działa od dziś.', note ? 'info' : 'success', note ? 9000 : 5000)

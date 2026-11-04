@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { DateTime } from 'luxon'
 import type { BackupInfo } from '@shared/api'
 import { COLLECTIONS, SETTINGS_FILE, isIgnoredPath } from '@shared/paths'
-import { tempPathFor, withRetry } from './atomic'
+import { mkdirOne, tempPathFor, withRetry } from './atomic'
 import type { ZipResult } from './zip'
 
 /** Daily backups kept, and one a week for 8 weeks back (D31, D84 C4 – 30 daily before 1.4.3). */
@@ -98,8 +98,9 @@ export async function runBackups(source: DataSource, backupsDir: string, now = n
   }
   const weeklies = await list(weeklyDir, 'weekly')
   if (!weeklies.length) {
-    // Before the first weekly copy: the daily ones kept so far stand for their weeks.
-    await fs.mkdir(weeklyDir, { recursive: true })
+    // Before the first weekly copy: the daily ones kept so far stand for their weeks. Its parent – the folder of the
+    // daily ones – is there: never the data folder made anew by a backup (AP-1).
+    await mkdirOne(weeklyDir)
     const seeded = new Set<string>()
     for (const f of dailies) {
       const d = DateTime.fromISO(f.name.replace(/\.zip$/, ''))
@@ -110,7 +111,7 @@ export async function runBackups(source: DataSource, backupsDir: string, now = n
     }
   }
   if (!weeklies.some((f) => f.name === weekOf(day))) {
-    await fs.mkdir(weeklyDir, { recursive: true })
+    await mkdirOne(weeklyDir)
     await copyBackup(file, join(weeklyDir, weekOf(day)))
   }
   await rotate(dailyDir, 'daily', DAILY_KEEP)

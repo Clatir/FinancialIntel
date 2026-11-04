@@ -119,6 +119,11 @@ export interface InboxInput {
   returns?: readonly AwaitedReturn[]
   /** The bank's operations come back after their deletion (AF-1): each one a report – „Usuń” or „zostaw”. */
   returned?: readonly ReturnedOperation[]
+  /**
+   * Folders of FI's records without fi.json among this computer's data folders of before (AP-1): a „folder-widmo” a write
+   * of 1.15.4 or older made while the data folder was away – its records are in no budget.
+   */
+  ghosts?: ReadonlyArray<{ dir: string; files: number }>
   /** The cargo hold's watch (F9): containers at a new price, containers gone quiet. */
   cargo?: { prices: readonly PriceChange[]; dead: readonly DeadContainer[]; containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths' | 'schedule'>> }
 }
@@ -144,6 +149,14 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     ].filter(Boolean)
     out.push({ kind: 'folder', key: 'folder', text: `${parts.join(', ')} – do rozstrzygnięcia w Synchronizacji.`, action: 'Synchronizacja' })
   }
+  for (const g of o.ghosts ?? [])
+    out.push({
+      kind: 'folder',
+      key: `ghost:${g.dir}`,
+      ref: g.dir,
+      text: `Folder-widmo ${g.dir}: ${g.files} ${plural(g.files, 'plik wpisu', 'pliki wpisów', 'plików wpisów')} bez fi.json – zapisane przez starszą wersję aplikacji, gdy folder danych był niedostępny, nie ma ich w budżecie. Przenieś je do folderu danych (te same podfoldery) – aplikacja wczyta je sama; potem usuń ten folder.`,
+      action: 'Pokaż folder'
+    })
   if (!o.started) return out
   const u = o.uncategorized
   if (u.count)

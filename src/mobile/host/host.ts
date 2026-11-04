@@ -491,6 +491,9 @@ export class PhoneHost {
       resolveConflicts: pcOnly('resolveConflicts'),
       trashProblemFile: pcOnly('trashProblemFile'),
       showInFolder: call('showInFolder', () => undefined),
+      // The phone keeps one folder, the mirror of OneDrive's: no other folders to look at.
+      ghostFolders: call('ghostFolders', () => []),
+      showGhostFolder: call('showGhostFolder', () => undefined),
       openExternal: call('openExternal', (url: string) => this.d.openUrl(url)),
       openLogs: call('openLogs', () => undefined),
       trayPrefs: call('trayPrefs', () => this.tray()),

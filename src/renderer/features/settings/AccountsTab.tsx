@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { lastConfirmation, openingOf } from '@shared/calc/balances'
 import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
 import { ACCOUNT_KINDS, type Account, type AccountKind, type Balance } from '@shared/schema'
 import { updateSettings, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
+import { useDraft } from '../../store/drafts'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Toggle, cx } from '../../components/ui'
@@ -64,10 +65,11 @@ export function AccountsTab() {
 }
 
 function AccountRow({ account: a, opening, confirmed, balance, taken }: { account: Account; opening: Balance | null; confirmed: Balance | null; balance: number; taken: Set<string> }) {
-  const [bank, setBank] = useState<number | null>(null)
+  // The balance typed from the bank (AP-8, SA.4): a draft – another screen and back, it is still there until confirmed.
+  const [bank, setBank, clearBank] = useDraft<number | null>(`account-bank:${a.id}`, () => null)
   const today = warsawNow().date
   // A difference asks whether today's operations are written first (B83).
-  const check = useConfirmToday(a.id, a.name, () => setBank(null))
+  const check = useConfirmToday(a.id, a.name, clearBank)
   return (
     <div className={cx('flex flex-col gap-1.5 border-b border-line/70 py-2 last:border-b-0', a.archived && 'opacity-60')} data-testid="account-row" data-name={a.name}>
       <div className="flex flex-wrap items-center gap-2">

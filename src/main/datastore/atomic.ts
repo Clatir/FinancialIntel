@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/main/datastore/atomic.ts @ 84a8339
 import { createHash, randomBytes } from 'node:crypto'
 import { promises as fs } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 const RETRYABLE = new Set(['EPERM', 'EBUSY', 'EACCES', 'ENOTEMPTY', 'EMFILE'])
 
@@ -34,12 +34,50 @@ export function tempPathFor(target: string): string {
   return join(dirname(target), `.${basename(target)}.tmp-${randomBytes(4).toString('hex')}`)
 }
 
+const errCode = (e: unknown): string | undefined => (e as NodeJS.ErrnoException).code
+
+/** A directory made if missing – its parent must be there (no recursive creation). */
+export async function mkdirOne(dir: string): Promise<void> {
+  try {
+    await fs.mkdir(dir)
+  } catch (e) {
+    if (errCode(e) !== 'EEXIST') throw e
+  }
+}
+
+/**
+ * `dir` made where missing, but only below `root` (AP-1): the data folder itself is never made by a write – gone
+ * (renamed, a drive unplugged, OneDrive away), the write fails with ENOENT instead of a new empty folder in its old place
+ * taking the records („folder-widmo”). The common case – the directory there – costs one call.
+ */
+export async function mkdirWithin(root: string, dir: string): Promise<void> {
+  const rel = relative(resolve(root), resolve(dir))
+  // The root itself: never made here – a write into it fails by itself when it is gone.
+  if (!rel) return
+  if (rel.startsWith('..') || isAbsolute(rel)) throw new Error(`Ścieżka poza folderem danych: ${dir}`)
+  try {
+    await fs.mkdir(dir)
+    return
+  } catch (e) {
+    if (errCode(e) === 'EEXIST') return
+    if (errCode(e) !== 'ENOENT') throw e
+  }
+  // A parent missing too: made one by one from the root down – a root that is gone fails the first of them.
+  let cur = resolve(root)
+  for (const part of rel.split(/[\\/]+/)) {
+    cur = join(cur, part)
+    await mkdirOne(cur)
+  }
+}
+
 /**
  * Atomic write: write to a temp file in the same directory, fsync, then rename over the target.
- * A crash leaves either the old or the new file, never a truncated one.
+ * A crash leaves either the old or the new file, never a truncated one. `within` – the data folder the target lies in:
+ * missing directories are made only below it, never the folder itself (AP-1).
  */
-export async function writeFileAtomic(target: string, data: string | Uint8Array): Promise<void> {
-  await fs.mkdir(dirname(target), { recursive: true })
+export async function writeFileAtomic(target: string, data: string | Uint8Array, within?: string): Promise<void> {
+  if (within) await mkdirWithin(within, dirname(target))
+  else await fs.mkdir(dirname(target), { recursive: true })
   const tmp = tempPathFor(target)
   const handle = await fs.open(tmp, 'w')
   try {
