@@ -18,6 +18,7 @@ import { IconClose, IconPlus } from '../../components/icons'
 import { api } from '../../lib/api'
 import type { QuickDraft } from '../../store/quickHost'
 import { useUi } from '../../store/ui'
+import { fieldWords } from './fieldWords'
 
 type Kind = QuickDraft['kind']
 interface Line {
@@ -133,8 +134,8 @@ export function QuickApp() {
   // A field refused what was typed in it (the Enter that left it does not save the old value in its place – AP-15).
   const refused = useRef(false)
   // What the fields said about values they took changed during the action that saves (an Enter, a click): said again with
-  // its answer (T400, T413 – never silently). A new key or click starts afresh: a word said before was read in the footer.
-  const notes = useRef<string[]>([])
+  // its answer (T400, T413, T417 – never silently). A new key or click starts afresh: a word said before was in the footer.
+  const [words] = useState(fieldWords)
   const [officer, setOfficer] = useState<{ categoryId: string; source: OfficerSource } | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const [opened, setOpened] = useState(0)
@@ -171,7 +172,7 @@ export function QuickApp() {
         useUi.setState({ toasts: [] })
         const refusal = t.kind === 'error'
         if (refusal) refused.current = true
-        else if (!notes.current.includes(t.text)) notes.current.push(t.text)
+        else words.word(t.text)
         setMsg({ ok: false, text: t.text, ...(refusal ? {} : { info: true }) })
       }),
     []
@@ -198,7 +199,7 @@ export function QuickApp() {
       } else if (fresh && !fresh.accounts.some((a) => a.id === k.d.accountId)) setD((x) => ({ ...x, accountId: fresh.accountId }))
       setRestored(keep)
       setMsg(null)
-      notes.current = []
+      words.reset()
       setSeries(0)
       setBusy(false)
       sending.current = false
@@ -207,8 +208,7 @@ export function QuickApp() {
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
       // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”. The fields' words with it.
-      const said = notes.current
-      notes.current = []
+      const said = words.answer()
       setMsg({ ok: r.ok && !r.pending, text: [r.message, ...said].join(' ') })
       setRestored(false)
       if (r.ok && next.current) {
@@ -468,7 +468,7 @@ export function QuickApp() {
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
     // Not saved: why – with the fields' words of this action (they would be gone under it).
-    const refuse = (text: string) => setMsg({ ok: false, text: [text, ...notes.current].join(' ') })
+    const refuse = (text: string) => setMsg({ ok: false, text: [text, ...words.now()].join(' ') })
     if (data.readOnly) return refuse(data.readOnlyReason ?? 'Folder jest tylko do odczytu.')
     if (d.amount <= 0) return refuse('Wpisz kwotę.')
     if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return refuse('Części paragonu nie sumują się do kwoty.')
@@ -483,6 +483,7 @@ export function QuickApp() {
     if (d.kind === 'income' && loan && (loanNow?.amount ?? 0) <= 0) return refuse('Wpisz kwotę spłaty pożyczki.')
     if (loanNow && parts.reduce((a, x) => a + x.amount, 0) + loanNow.amount > d.amount) return refuse('Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.')
     sending.current = true
+    words.send()
     next.current = andNext
     setBusy(true)
     setMsg(null)
@@ -535,9 +536,7 @@ export function QuickApp() {
     }
     // Each key or click its own action: the fields' words said before it are no part of its answer (a tag cut, then
     // taken off – a later save says nothing of it).
-    const onAction = () => {
-      notes.current = []
-    }
+    const onAction = () => words.action()
     window.addEventListener('keydown', onAction, true)
     window.addEventListener('pointerdown', onAction, true)
     window.addEventListener('focusin', onFocus)

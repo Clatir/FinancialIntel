@@ -225,14 +225,14 @@ describe('przegląd N4 1, 4: „Cofnij” usunięcia nazwy w banku przywraca tyl
     back.action!.run()
     expect(names(ANNA)).toEqual([])
     expect(names(OLA)).toEqual(['anna kowalska'])
-    expect(ui.useUi.getState().toasts.at(-1)!.text).toContain('wskazuje teraz Ola')
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toContain('którą ma teraz Ola')
   })
 
   it('nazwa, którą ma inny domownik – także bez polskich znaków albo w innej kolejności słów – odmówiona (2, 2 i 3)', () => {
     openHouse(['JAN ŻÓŁW'])
     for (const typed of ['jan zolw', 'ŻÓŁW  JAN']) {
       expect(household.addBankName(OLA, typed)).toBe(false)
-      expect(ui.useUi.getState().toasts.at(-1)).toMatchObject({ kind: 'error', text: expect.stringContaining('ma już Anna') })
+      expect(ui.useUi.getState().toasts.at(-1)).toMatchObject({ kind: 'error', text: expect.stringContaining('od nazwy, którą ma Anna') })
     }
     expect(names(OLA)).toEqual([])
     // The same comparison as the import's: these are the names it would give Anna.

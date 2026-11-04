@@ -398,9 +398,19 @@ export function sameBankName(a: string, b: string): boolean {
   return key(a) === key(b)
 }
 
-/** The member (not `except`) holding a name in the bank the import reads as `name`; null – none. */
+/**
+ * Two names in the bank of whom the import could take one for the other (T416, review 3 of N4): one found in the other
+ * as `memberOf` finds a name in a counterparty – the bank writing either, the transfer could go to the other's member
+ * („JAN KOWALSKI” in „JAN KOWALSKI SENIOR”, „JAN” in „JAN JAN”, the same words in any order, without Polish marks).
+ */
+export const bankNamesClash = (a: string, b: string): boolean => sameBankName(a, b) || nameIn(a, b) || nameIn(b, a)
+
+/**
+ * The member (not `except`) whose name in the bank the import could not tell from `name` (`bankNamesClash`); null –
+ * none. The one rule of adding a name, of its „Cofnij”, of „+ domownik” and of a member from the import.
+ */
 export function bankNameHolder<M extends Pick<HouseholdMember, 'id' | 'bankNames'>>(members: readonly M[], name: string, except?: string): M | null {
-  return members.find((m) => m.id !== except && m.bankNames.some((n) => sameBankName(n, name))) ?? null
+  return members.find((m) => m.id !== except && m.bankNames.some((n) => bankNamesClash(n, name))) ?? null
 }
 
 /** All words of a person's name in a counterparty, in any order – a name of one word only when it is the whole counterparty. */

@@ -17,16 +17,16 @@ export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.sli
 
 const two = (n: number) => String(n).padStart(2, '0')
 
-/**
- * A moment (an ISO timestamp, epoch ms or a Date) as '16.10.2026, 09:05' in the computer's time – the date always with two
- * digits for the day and the month (the platform's short style writes '1.09.2025'); `seconds` adds ':28'. '—' for none.
- */
 /** The day of a moment in the computer's time as 'RRRR-MM-DD' ('' – none): the same day `plDateTime` writes. */
 export function localDay(value: string | number | Date): string {
   const d = value instanceof Date ? value : new Date(value)
   return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`
 }
 
+/**
+ * A moment (an ISO timestamp, epoch ms or a Date) as '16.10.2026, 09:05' in the computer's time – the date always with two
+ * digits for the day and the month (the platform's short style writes '1.09.2025'); `seconds` adds ':28'. '—' for none.
+ */
 export function plDateTime(value: string | number | Date | null | undefined, seconds = false): string {
   if (value == null || value === '') return '—'
   const d = value instanceof Date ? value : new Date(value)

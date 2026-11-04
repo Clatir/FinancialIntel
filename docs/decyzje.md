@@ -3382,18 +3382,41 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zostaje, zmiana importu wraca na wierzch, przy kolizji wygrywa użytkownik); operacja przywrócona przez cofnięcie
   (usunięta przez import) – zmieniona od cofnięcia zostaje, a import przy następnym cofnięciu jej nie dubluje; toast mówi
   „Zmiany wprowadzone po cofnięciu zostają (N operacji)”. `savedAt` nie zmienia się przy „Cofnij”. Bez podbicia
-  `SCHEMA_VERSION`.
+  `SCHEMA_VERSION`. **Dopisek (przegląd 3 N4):** „Cofnij” cofnięcia odmawia ze słowem, gdy przywróciłby operacje obok tych
+  samych wierszy banku (`redoRefusal`): po cofnięciu stoi późniejszy import (ten sam plik znowu, inny – tu albo na drugim
+  komputerze) albo klucze wierszy (`bank` / `counterBank`, także `altKeys`) są w budżecie inną drogą – import nie wraca
+  wcale (nie częściowo); wczytuje się go ponownie z pliku. Nigdy w ciszy: folder tylko do odczytu albo otwieranie innego,
+  import już z powrotem, import, który wypadł z listy dziesięciu – każde ze zdaniem.
 - **T416** Jedno porównanie nazw w banku (1.15.8, N4 – przegląd 2 pkt 2, 3, 8): `sameBankName` (`calc/household.ts`) –
   te same słowa co w `memberOf` (`bankNameWords`: bez wielkości liter i polskich znaków, słowa od dwóch znaków), w dowolnej
   kolejności („JAN ŻÓŁW” = „jan zolw” = „ŻÓŁW JAN”). Dodanie nazwy, którą ma inny domownik, jest odmówione z komunikatem
   („Nazwę … ma już …”), to samo przy „Cofnij” jej usunięcia (T414); „+ domownik” z importu dla nazwy, którą ktoś już ma,
   przypisuje tego domownika zamiast tworzyć drugiego. Granica 20 nazw – jedna stała `MAX_BANK_NAMES` w schemacie i w oknie.
   Nazwy częściowo wspólne („ANNA KOWALSKA” i „KOWALSKA ANNA MARIA”) nie są odmawiane – `memberOf` bierze pierwszego.
+  **Dopisek (przegląd 3 N4, zmienia zdanie wyżej):** reguła „ta sama osoba” jest regułą `memberOf` – `bankNamesClash`:
+  nazwa, którą import znalazłby w nazwie innego domownika albo odwrotnie („JAN KOWALSKI” w „JAN KOWALSKI SENIOR”, „JAN”
+  w „JAN JAN”, te same słowa w innej kolejności), jest odmawiana przy dodaniu, przy „Cofnij” usunięcia, w „+ domownik”
+  importu (`offersNewMember` – przycisku nie ma) i w domowniku z importu (przypisany ten, którego nazwę import odnajduje).
+  Ta sama nazwa tego samego domownika w innej pisowni (`sameBankName`) – słowo „… ma już nazwę …”, nic nie dopisane.
 - **T417** Słowa pól w szybkim wpisie należą do jednego działania (1.15.8, N4 – przegląd 2 pkt 6; zawęża T413): słowo
   o przyjętej, ale zmienionej wartości (skrócony tag) idzie z odpowiedzią zapisu tylko wtedy, gdy padło w tym samym
   działaniu (ten sam Enter, to samo kliknięcie „Zapisz”) – każdy nowy klawisz albo kliknięcie zaczyna od zera, bo słowo
   powiedziane wcześniej było już w stopce. Odmowa zapisu (brak kwoty, cisza nocna…) też dopisuje słowa tego działania.
-  Tag równy już dodanemu nie jest liczony jako „skrócony” (nic nie przybywa).
+  Tag równy już dodanemu nie jest liczony jako „skrócony” (nic nie przybywa). **Dopisek (przegląd 3 N4):** słowa działania
+  są brane w chwili wysłania zapisu (`fieldWords`, `features/quick/fieldWords.ts`) – klawisze wpisane, zanim przyjdzie
+  odpowiedź (kolejna kwota po Ctrl+Enter), ich nie gubią.
+- **T418** „Cofnij” nie nadpisuje zmian zrobionych po działaniu (1.15.8, N4 – przegląd 3 pkt 6, 7, 8; reguły importu
+  i domownicy, uzupełnia T401): „Cofnij” cofa tylko to, co nadal jest takie, jak działanie to zostawiło; zmienione od tego
+  czasu zostaje, a toast to mówi (`undoKept`: „Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.” albo
+  „Cofnięte operacje: N; zmienione od tego czasu zostają, jak są: M.”). Dotyczy: zmiany reguły i „spłata” z przeglądu
+  reguł (`editRule`, `repayingRule` – reguła zmieniona albo usunięta od tego czasu zostaje), nowej reguły kwotowej (nie
+  jest usuwana, gdy zmieniona), „zostaje zaliczką” reguły (zdejmuje tylko swój znak), „Zastosuj do historii”, rozłączenia
+  i połączenia nazw (klucze zmienione od tego czasu zostają), „Spłać” zaliczek, przypisania zwrotu (gdy wskazane zakupy się
+  zmieniły), zwrotu gotówką (nie jest usuwany, gdy zmieniony), dnia „zwroty spłacają tylko wskazane zakupy”, startu
+  rozliczeń (wraca tylko start, jego operacje i saldo na start domowników nadal przeliczone – domownicy dodani albo zmienieni
+  potem zostają; dawniej całe ustawienia domowników z chwili kliknięcia). „zostaw” zaliczek liczy meldunek jak skrzynka
+  (zostawione już się nie liczą) – na meldunku zostawionym gdzie indziej mówi „nic do zmiany”. Inne ekrany (Ładownia, Radar,
+  Operacje) – poza tym przeglądem.
 - **T420** „-” i „_” w tagu jak spacja (AP-21, AF-18; zmienia T291): `tagKey` – bez wielkości liter, polskich znaków,
   a „-” i „_” to spacja („#wakacje-chorwacja” w nazwie = tag „Wakacje Chorwacja”; „#słowo” nie ma spacji, więc wyprawa
   z kilku słów rozdwajała się). Bez migracji: tagi operacji zostają jak zapisane (pierwsza pisownia jest etykietą), klucze
