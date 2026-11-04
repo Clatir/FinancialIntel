@@ -2914,7 +2914,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ekranie”, kopia schematów = parsowanie aplikacji; ok. 2 min, poza CI (migawek nie ma w repozytorium). Znane rozbieżności
   – lista `KNOWN` z powodem i grupą naprawy; znana, która zniknęła, też zatrzymuje test. Szybka część w `npm test` (CI):
   `tests/unit/wyrocznia-ap32.test.ts` – scenariusze reguł N2 (wyrocznia = silnik) i ekrany; otwarty błąd jako `it.fails`
-  (AF-15 – termin asteroidy w odprawie, N3 AP-10). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
+  (AF-15 – termin asteroidy w odprawie; naprawiony w N3 – AP-10, T376: po scaleniu N2 z N3 zwykły test, ekrany ze stanem
+  opłat i dniami jak okno, `KNOWN` bez niego). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
   wyroczni – nigdy dopasowanie wyroczni do wyniku.
 - **T368** Reguła uczy się części pożyczki tylko jako kwoty każdej wpłaty (przegląd N2 2.3; doprecyzowuje T358, T328):
   `loanAmount` reguły to część każdej wpłaty, linia grupy albo tematu – kwota razem dla jej wpłat (po kolei). Nauka

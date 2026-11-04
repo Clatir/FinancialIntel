@@ -98,13 +98,14 @@ export function sidesOf(t) {
 /**
  * Klasyfikacja własnej części wydatku. Zwraca rodzaj: 'cargo' (płatność kontenera), 'goal' (z pieniędzy celu),
  * 'daily' (koperta codzienna albo bez kategorii – T30), 'planned' (kategoria planowa), 'outside' (kategoria poza
- * kopertami).
+ * kopertami). Część z celem i kontenerem naraz (T131: wykluczają się – dane spoza aplikacji) płaci cel: rachunek
+ * opłaty zapłacony z pieniędzy celu, zbiornik nietknięty (T393 po scaleniu N2 z N3; cykl zamyka płatność opłaty).
  */
 export function classifyOwn(t, p, ctx) {
-  const contId = p.containerId ?? t.containerId ?? null
-  if (contId && ctx.containers.has(contId)) return { kind: 'cargo', containerId: contId }
   const goalId = p.goalId ?? t.goalId ?? null
   if (goalId && ctx.goals.has(goalId)) return { kind: 'goal', goalId }
+  const contId = p.containerId ?? t.containerId ?? null
+  if (contId && ctx.containers.has(contId)) return { kind: 'cargo', containerId: contId }
   const main = ctx.cats.mainOf(p.categoryId)
   if (main === null) return { kind: 'daily', main: null }
   if (main === undefined) return { kind: 'daily', main: null, unknownCategory: p.categoryId }
@@ -650,20 +651,21 @@ export function runFleet(input, opt) {
   const hullTargetAt = new Map()
 
   // ---------------------------------------------------------------- przepływy
-  // T393: cykle zapłacone opłaty okresowej – regułą stanu Ładowni (`oplaty.mjs`) z płatności opłaty: części wydatku
-  // z kontenerem (bez znanego celu i „do zwrotu”), jedna na operację, także sprzed startu i spoza życia opłaty
+  // T393 (po scaleniu N2 z N3): płatności kontenera – jedna reguła Ładowni, Radaru, silnika i kreatora: części wydatku
+  // z kontenerem (linii, inaczej operacji), jedna płatność na operację – suma jej części z tym kontenerem (wypływ);
+  // także z pieniędzy celu i „do zwrotu” (rachunek zapłacony – pieniądze celu albo domownika, zbiornik nietknięty),
+  // sprzed startu i spoza życia opłaty; inny rodzaj z kontenerem (dawny przelew – T362) nigdy. Cykle zapłacone opłaty
+  // okresowej liczy z nich reguła stanu Ładowni (`oplaty.mjs`)
   const feePays = new Map()
   for (const t of ops) {
-    if (t.date > today || t.kind !== 'expense') continue
+    if (t.kind !== 'expense') continue
     const perFee = new Map()
     for (const p of partsOf(t)) {
       const cid = p.containerId ?? t.containerId ?? null
-      const gid = p.goalId ?? t.goalId ?? null
-      const c = cid ? containers.get(cid) : null
-      if (p.refundable || p.amount >= 0 || !c || (c.cycleMonths ?? 1) <= 1 || (gid && goals.has(gid))) continue
-      perFee.set(cid, (perFee.get(cid) ?? 0) - p.amount)
+      if (cid && containers.has(cid)) perFee.set(cid, (perFee.get(cid) ?? 0) - p.amount)
     }
     for (const [cid, amount] of perFee) {
+      if (amount <= 0) continue
       if (!feePays.has(cid)) feePays.set(cid, [])
       feePays.get(cid).push({ id: t.id, date: t.date, amount })
     }
@@ -1377,9 +1379,11 @@ export function runFleet(input, opt) {
   // (`feePays`) – cykl, który zapłaciła, liczy reguła stanu Ładowni (opłata śledzona od pierwszej widzianej płatności,
   // spóźniona płaci zaległy termin, nigdy następny); tu tylko wpis do logu
   for (const [cid, list] of feePays) {
+    const c = containers.get(cid)
+    if ((c.cycleMonths ?? 1) <= 1) continue
     for (const p of list) {
       if (p.date >= budgetStart) break
-      log.push({ date: p.date, type: 'cykl zamknięty przed startem (T345)', containerId: cid, due: closeCycleFor(containers.get(cid), p.date) })
+      log.push({ date: p.date, type: 'cykl zamknięty przed startem (T345)', containerId: cid, due: closeCycleFor(c, p.date) })
     }
   }
 
@@ -1604,6 +1608,8 @@ export function runFleet(input, opt) {
     limitsAt,
     // T393: cykle zapłacone płatnościami do dziś – terminy zapłacone w Ładowni (Radar: duePaid)
     paidCycles: new Map([...containers.values()].filter((c) => (c.cycleMonths ?? 1) > 1).map((c) => [c.id, paidBefore(c, addDays(today, 1), monthOf(today))])),
+    // T393: płatności każdego kontenera ({ id, date, amount > 0 }, po dniu) – Ładownia i Radar czytają tylko je
+    feePays,
     pendingPairs,
     // T342: pary liczone według puli wpisu (bez rekordu dokowania) – ile, wpływ, wypływ, część w celach
     toDock: {

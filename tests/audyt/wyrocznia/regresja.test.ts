@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { briefing } from '@shared/calc/briefing'
-import { cargoStatuses } from '@shared/calc/cargoStatus'
+import { cargoDays, cargoStatuses } from '@shared/calc/cargoStatus'
 import { deliveries, pendingPairsOf, preStartTaxOf } from '@shared/calc/dock'
 import { budgetStartOf, computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { monthAhead } from '@shared/calc/plan'
@@ -262,10 +262,12 @@ function sameEverywhere(id: string, app: Awaited<ReturnType<typeof appState>>, o
   // the deposit = the advances shown at the persons; the owed = their debts (T354, AF-16)
   eq('depozyt = suma zaliczek przy osobach', fleet.deposit, fleet.receivables.members.reduce((a, m) => a + m.deposit, 0))
   eq('domownicy mają oddać = suma przy osobach', fleet.receivables.house, fleet.receivables.members.reduce((a, m) => a + m.owed, 0))
-  // the asteroid's due: the briefing (Mostek, odprawa) = the Radar = the cargo hold (AF-15)
-  const cargo = cargoStatuses({ containers: records.containers, transactions: records.transactions, today: fleet.today, tanks: fleet.tanks, coveredTo: settings.import.coveredTo })
-  const radarItems = radar({ today: fleet.today, plans: records.months, containers: records.containers, tanks: fleet.tanks, loans: fleet.loans, money: (g) => String(g), cargo })
-  const brief = briefing({ fleet, containers: records.containers, imports: [], label: () => '', cargo })
+  // the asteroid's due: the briefing (Mostek, odprawa) = the Radar = the cargo hold (AF-15) – the fees' state and their
+  // payment days as the window gives them (`features/cargo/status.ts`: from the budget's start, `cargoDays` – T375, T376)
+  const cargo = cargoStatuses({ containers: records.containers, transactions: records.transactions, today: fleet.today, tanks: fleet.tanks, coveredTo: settings.import.coveredTo, start: fleet.start })
+  const payDays = cargoDays({ containers: records.containers, transactions: records.transactions, today: fleet.today })
+  const radarItems = radar({ today: fleet.today, plans: records.months, containers: records.containers, tanks: fleet.tanks, loans: fleet.loans, money: (g) => String(g), cargo, payDays })
+  const brief = briefing({ fleet, containers: records.containers, imports: [], label: () => '', cargo, payDays })
   for (const b of brief.filter((x) => x.kind === 'asteroid')) {
     const [, cid, date] = b.key.split(':')
     const first = radarItems.filter((r) => r.kind === 'asteroid' && r.ref === cid).sort((x, y) => (x.date < y.date ? -1 : 1))[0]
@@ -323,9 +325,8 @@ function schemaCopy(id: string, raw: any, app: Awaited<ReturnType<typeof appStat
  * (`docs/audyt/wyrocznia.md`, u3) – keep this list short and dated.
  */
 const KNOWN: Array<{ what: RegExp; why: string }> = [
-  // 04.11.2026 (AP-32 u3): the briefing counts the asteroid's due from the container's day (`nextUnpaidOf`, `dueDay`), the
-  // Radar and the cargo hold from the day of its payments (T208, T221) – one fee, two dues (S, the fix: N3 AP-10)
-  { what: /^termin asteroidy .*: odprawa = Radar$/, why: 'AF-15 (S) – odprawa liczy termin z dnia kontenera, Radar i Ładownia z historii płatności; naprawa N3 (AP-10)' }
+  // 04.11.2026 (AP-32 u3) – AF-15 (the briefing's asteroid on the container's day, the Radar's on the day of its payments):
+  // fixed in N3 (AP-10, T376 – one fees' state, `nextDueOf`, `cargoDays`), gone from the list after the merge of N2 with N3.
 ]
 
 const cases = casesOf()
