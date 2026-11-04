@@ -4,7 +4,7 @@ import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { notesOf } from '@shared/calc/operations'
 import { tagsText } from '@shared/calc/tags'
 import { useMarkFlags } from '../sensors/state'
-import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { MARK_LABEL, OPERATION_MARKS, amountTone, asideOfOperations, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { BulkChangeBar } from './BulkChange'
 import { ColumnsMenu, ExportVisible, MoreFilters, SortHeader, ViewsBar, viewable } from './ListTools'
@@ -443,6 +443,8 @@ export function OperationsPage() {
     )
   }, [all, deferred, cats, accounts, fi, drafts, flags])
   const sums = useMemo(() => sumOperations(rows), [rows])
+  const view = deferred.accounts.length === 1 ? deferred.accounts[0]! : null
+  const aside = useMemo(() => asideOfOperations(rows, view), [rows, view])
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW, overscan: 20 })
   const selectedIndex = rows.findIndex((t) => t.id === selectedId)
 
@@ -561,8 +563,17 @@ export function OperationsPage() {
           <span className="text-muted" title="Wydatki minus zwroty towaru (bez przelewów własnych, XTB i wydatków finansowanych przez domowników)">
             Koszty <span className="num text-fg-strong">{plnText(sums.costs)} zł</span>
           </span>
+          {aside.count > 0 && (
+            <span
+              className="text-dim"
+              title={`${aside.corrections ? 'Przelewy własne i korekty' : 'Przelewy własne'} (${aside.count}) nie liczą się do Wpływów ani Wydatków – w eksporcie są, więc suma kwot pliku = Wpływy − Wydatki ${aside.amount < 0 ? '−' : '+'} ${plnText(Math.abs(aside.amount))} zł`}
+              data-testid="operations-aside"
+            >
+              poza sumami: {aside.corrections ? 'przelewy własne i korekty' : 'przelewy własne'} <span className="num">{signedPln(aside.amount)} zł</span>
+            </span>
+          )}
           <DuplicatesLink />
-          <ExportVisible rows={rows} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
+          <ExportVisible rows={rows} view={view} />
           <ColumnsMenu />
           <span className="flex-1" />
           {balances.map((a) => (

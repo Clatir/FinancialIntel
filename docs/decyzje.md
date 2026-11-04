@@ -2923,3 +2923,23 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zapisywało 600 zł na każdą przyszłą wpłatę (do 3× więcej). Rozważone i odrzucone: kwota podzielona przez liczbę wpłat
   albo to, co rozkład dał każdej – „po kolei” daje wpłatom różne kwoty, żadna nie jest tym, co użytkownik wpisał. Edytor
   reguły w Ustawieniach – jedna wpłata (`rows` 1): kwota jak wpisana.
+- **T425** Eksport „Części” (AP-29, AF-35, D89 / T303 – wiersz operacji bez zmian): `export/budget.ts` `partRowsOf` – wiersz
+  na każdą linię operacji okresu: część paragonu i wspólnego zakupu z własną kwotą, kategorią, „Finansuje” (domownik,
+  „(prezent)”, część wpływu „od: …”), opisem i tagami (tagi operacji + linii); operacja bez linii – jeden wiersz; czego
+  linie nie pokrywają (plik zmieniony ręcznie) – wiersz kategorii operacji jak `partsOf`, więc suma części = kwota
+  operacji i tabela przestawna sumuje kategorie roku. „Nr operacji” = jej miejsce w „Operacjach” tego samego eksportu;
+  „Część” jako „1 z 3” (nie „1/3” – Excel bierze to za datę). Raporty → Eksport: „Części – CSV” i arkusz „Części” w Excelu
+  (między „Operacjami” a „Miesiącami”); Excel widocznej listy Operacji – też z arkuszem „Części” (strona przelewu na
+  liście jednego konta jak wiersz główny). „Miesiące” – na końcu (kolumny przed nimi bez zmian) „Energia miesiąca (zł)”
+  (`debriefing().energy.budget`, puste bez pensji) i „Sfinansowane przez domowników (zł)” (suma `financed`).
+- **T426** Daty w Excelu (AP-29, RE sp. 3): rodzaje kolumn `date` / `month` / `time` w `export/xlsx.ts` – tekst
+  `RRRR-MM-DD` / `RRRR-MM` / `GG:MM` zapisany jako liczba dnia Excela (system 1900) z formatem `yyyy-mm-dd` / `yyyy-mm` /
+  `hh:mm` (wygląd jak w CSV, filtr dat i tabela przestawna je widzą); tekst, który datą nie jest, zostaje tekstem bez
+  stylu daty. Dopiski (AF-57, AF-70): pasek Operacji – „poza sumami: przelewy własne (i korekty) ±X zł”
+  (`operationsView.ts` `asideOfOperations`, kwoty jak w eksporcie – strona przelewu przy liście jednego konta), więc suma
+  pliku = Wpływy − Wydatki + X; panel „Przychody” – przy miesiącu z dopłatą do XTB w 12 miesiącach dopisek, że okno liczy
+  trading netto, ze średnią miesięcy jak w Bilansie paliwa (`income.ts` `monthsAverageOf`; bez dopłat – brak dopisku).
+- **T427** Okres eksportu zapamiętany na tym komputerze (AP-29, RE sp. 1): `localStorage` `fi.reports.exportPeriod`
+  (`{from, to, toToday}` – `exportPeriodOf` / `exportPeriodText`), jak filtry Operacji – wybór biurka, nie folderu (inny
+  komputer eksportuje swój okres; format danych folderu bez zmian). Koniec okresu równy dniowi wyboru = „do dziś” – przy
+  następnym eksporcie idzie z nowym dniem; inny koniec zostaje. Zły zapis – od początku roku do dziś.

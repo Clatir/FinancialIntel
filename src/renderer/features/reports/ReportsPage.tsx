@@ -8,7 +8,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { addDays, isoWeekOf, mondayOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
 import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekNumbers, yearNumbers, yearWealth } from '@shared/calc/intel'
-import { setReportTab, setWatchMonday, useReportsUi, watchMondayOf, type ReportTab } from './state'
+import { readExportPeriod, setReportTab, setWatchMonday, storeExportPeriod, useReportsUi, watchMondayOf, type ReportTab } from './state'
 import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
@@ -16,7 +16,7 @@ import { BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
 import { sum } from '@shared/calc/operations'
 import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
 import { netAdjustments } from '@shared/calc/netWorth'
-import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
+import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsOfPeriod, operationsSheet, partRowsOf, partsCsv, partsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
 import { formatPln, rangeText } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -499,9 +499,18 @@ function ExportPanel() {
   const transactions = useRecordList('transactions')
   const plans = useRecordList('months')
   const containers = useRecordList('containers')
-  const [from, setFrom] = useState(`${fleet.today.slice(0, 4)}-01-01`)
-  const [to, setTo] = useState(fleet.today)
+  // The period as last chosen on this computer (AP-29): another tab, a restart keep it.
+  const [period, setPeriod] = useState(() => readExportPeriod(fleet.today))
+  const { from, to } = period
+  const choose = (next: { from: string; to: string }) => {
+    setPeriod(next)
+    storeExportPeriod(next.from, next.to, fleet.today)
+  }
+  const setFrom = (v: string) => choose({ from: v, to })
+  const setTo = (v: string) => choose({ from, to: v })
   const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members)
+  // The operations' lines (AP-29) in the order of „Operacje” – the same operations, so „Nr operacji” is its row.
+  const parts = () => partRowsOf(operationsOfPeriod(transactions, from, to), settings.categories, settings.accounts, settings.household.members)
   const months = () =>
     monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
@@ -520,19 +529,28 @@ function ExportPanel() {
             <button className="btn h-[26px]" onClick={() => api.saveTextFile(name('operacje', 'csv'), operationsCsv(ops()), csv).then(saved, failed)} data-testid="export-operations-csv">
               Operacje – CSV
             </button>
+            <button
+              className="btn h-[26px]"
+              onClick={() => api.saveTextFile(name('czesci', 'csv'), partsCsv(parts()), csv).then(saved, failed)}
+              title="Każda część paragonu i wspólnego zakupu osobno, z kwotą i kategorią – operacja bez części jako jeden wiersz"
+              data-testid="export-parts-csv"
+            >
+              Części – CSV
+            </button>
             <button className="btn h-[26px]" onClick={() => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(months()), csv).then(saved, failed)} data-testid="export-months-csv">
               Miesiące – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => api.saveXlsx(name('budzet', 'xlsx'), [operationsSheet(ops()), monthsSheet(months())]).then(saved, failed)} data-testid="export-xlsx">
-              Excel (operacje + miesiące)
+            <button className="btn h-[26px]" onClick={() => api.saveXlsx(name('budzet', 'xlsx'), [operationsSheet(ops()), partsSheet(parts()), monthsSheet(months())]).then(saved, failed)} data-testid="export-xlsx">
+              Excel (operacje + części + miesiące)
             </button>
             <button className="btn h-[26px]" onClick={() => api.exportZip().then(saved, failed)} data-testid="export-zip">
               Pełna kopia danych – ZIP
             </button>
           </div>
           <span className="text-[11px] text-dim">
-            Pliki zawsze z prawdziwymi kwotami – ukrycie kwot (Ctrl+$) dotyczy tylko ekranu. CSV dla polskiego Excela (średnik, przecinek dziesiętny). Debriefing i
-            przegląd roczny jako PDF – w ich zakładkach.
+            Pliki zawsze z prawdziwymi kwotami – ukrycie kwot (Ctrl+$) dotyczy tylko ekranu. CSV dla polskiego Excela (średnik, przecinek dziesiętny). „Części” – wiersz na
+            każdą część paragonu (suma części = kwota operacji), do sumowania kategorii. Okres zapamiętany na tym komputerze. Debriefing i przegląd roczny jako PDF – w
+            ich zakładkach.
           </span>
         </div>
       </Panel>

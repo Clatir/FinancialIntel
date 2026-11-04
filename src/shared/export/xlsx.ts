@@ -4,7 +4,11 @@
  * with yazl (no extra dependency). Texts are inline strings; numbers keep full precision with a display format.
  */
 
-export type XlsxKind = 'text' | 'int' | 'money' | 'pct' | 'number'
+/**
+ * `date` ('RRRR-MM-DD'), `month` ('RRRR-MM') and `time` ('GG:MM') take the texts and write Excel's dates and times (AP-29:
+ * a date filter and a pivot table see them); a text that is none of them stays a text.
+ */
+export type XlsxKind = 'text' | 'int' | 'money' | 'pct' | 'number' | 'date' | 'month' | 'time'
 export type XlsxCell = string | number | null
 
 export interface XlsxColumn {
@@ -28,8 +32,42 @@ export interface XlsxPart {
   content: string
 }
 
-/** Style ids in styles.xml: 0 default, 1 bold header, 2 money, 3 return in percent (4 places), 4 whole number, 5 number. */
-const STYLE: Record<XlsxKind, number> = { text: 0, money: 2, pct: 3, int: 4, number: 5 }
+/**
+ * Style ids in styles.xml: 0 default, 1 bold header, 2 money, 3 return in percent (4 places), 4 whole number, 5 number,
+ * 6 date, 7 month, 8 time.
+ */
+const STYLE: Record<XlsxKind, number> = { text: 0, money: 2, pct: 3, int: 4, number: 5, date: 6, month: 7, time: 8 }
+
+const DAY_MS = 86_400_000
+/** Excel's day 0 (the 1900 system with its leap-year bug: every day from 1.03.1900 on is right). */
+const EPOCH = Date.UTC(1899, 11, 30)
+
+/** A date 'RRRR-MM-DD' (or a month 'RRRR-MM' – its first day) as Excel's serial day; null – not one. */
+export function excelDay(v: string): number | null {
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(v)
+  if (!m) return null
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), m[3] == null ? 1 : Number(m[3])]
+  const at = Date.UTC(y, mo - 1, d)
+  const back = new Date(at)
+  if (y < 1901 || back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d) return null
+  return (at - EPOCH) / DAY_MS
+}
+
+/** A time 'GG:MM' as Excel's part of a day; null – not one. */
+export function excelTime(v: string): number | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(v)
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null
+  return (Number(m[1]) * 60 + Number(m[2])) / 1440
+}
+
+/** The value a column of its kind writes: a date's, a month's or a time's text as Excel's number. */
+function valueOf(v: XlsxCell, kind: XlsxKind): XlsxCell {
+  if (typeof v !== 'string') return v
+  const n = kind === 'date' ? (v.length === 10 ? excelDay(v) : null) : kind === 'month' ? (v.length === 7 ? excelDay(v) : null) : kind === 'time' ? excelTime(v) : null
+  return n ?? v
+}
+
+const DATE_KINDS: ReadonlySet<XlsxKind> = new Set(['date', 'month', 'time'])
 
 const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 
@@ -75,7 +113,15 @@ function sheetXml(sheet: XlsxSheet): string {
     .join('')
   const header = `<row r="1">${sheet.columns.map((c, i) => cellXml(`${columnName(i)}1`, c.header, 1)).join('')}</row>`
   const rows = sheet.rows
-    .map((r, ri) => `<row r="${ri + 2}">${r.map((v, ci) => cellXml(`${columnName(ci)}${ri + 2}`, v, STYLE[sheet.columns[ci]?.kind ?? 'text'])).join('')}</row>`)
+    .map((r, ri) => {
+      const cells = r.map((v, ci) => {
+        const kind = sheet.columns[ci]?.kind ?? 'text'
+        const value = valueOf(v, kind)
+        // A text a date column could not read stays a plain text.
+        return cellXml(`${columnName(ci)}${ri + 2}`, value, DATE_KINDS.has(kind) && typeof value !== 'number' ? 0 : STYLE[kind])
+      })
+      return `<row r="${ri + 2}">${cells.join('')}</row>`
+    })
     .join('')
   const views = sheet.freezeHeader
     ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>'
@@ -88,18 +134,21 @@ function sheetXml(sheet: XlsxSheet): string {
 
 const STYLES =
   `${XML_HEADER}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
-  '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0000"/></numFmts>' +
+  '<numFmts count="4"><numFmt numFmtId="164" formatCode="0.0000"/><numFmt numFmtId="165" formatCode="yyyy-mm-dd"/><numFmt numFmtId="166" formatCode="yyyy-mm"/><numFmt numFmtId="167" formatCode="hh:mm"/></numFmts>' +
   '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
   '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
   '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-  '<cellXfs count="6">' +
+  '<cellXfs count="9">' +
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
   '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
   '<xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '<xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '<xf numFmtId="167" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
 
 /** All parts of the workbook (paths inside the ZIP). */
