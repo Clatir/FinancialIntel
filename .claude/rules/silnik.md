@@ -45,8 +45,8 @@ paths:
   efektu przy zaległości > 100 dni to #185. Dni bez danych z banku (`importWait`) czekają na pytanie najwyżej 7 dni
   (`waitImport`, T381), misja tygodnia z nimi; nowe wstrzymanie – opcja `advanceGame`, nigdy przeliczanie zamrożonych.
   Zmiana klasy z nowych danych (`GameDay.clsBefore`, T382) nie jest świętowana. Potwierdzenie salda w misji – po chwili
-  potwierdzenia (`confirmedAt` – każdy zapis potwierdzenia ją ustawia, także import), nigdy po `updatedAt`; rekord sprzed
-  1.15.7 bez niej – po dacie salda, jak liczyła tamta wersja (T383, przegląd 2 N3).
+  potwierdzenia (`confirmedAt` – każdy zapis potwierdzenia ją ustawia, także import), nie wcześniej niż dnia salda (jak
+  1.15.6 – mieszane wersje), nigdy po `updatedAt` (scalanie); rekord bez niej – dzień salda (T383, przeglądy 2–3 N3).
 - Kurs i symulator (1.15.7, T385–T387): osłony w kursie nigdy poniżej zera – czego brak, to `short`, pensja bez
   pieniędzy `partial`; „teraz” symulatora = stan silnika (`rangeNow` z `courseInputOf`), boje i spłaty reszty miesiąca
   tylko w `rangeRest`; warstwa pełna teraz – data tego miesiąca. Resztka miesiąca płaci plan z energii miesiąca
@@ -92,8 +92,9 @@ paths:
   miesiąca zostaje (`CargoStatus.carried`) do zapłaty – konsument mapujący stan po kontenerze filtruje `!carried`.
   Terminy naprzód na dniu z historii (`cargoDays` → `payDays`, `nextDueOf`), nigdy wprost z `dueDay`; `dueAt` – dzień
   ustawiony ręcznie. **Pułapka (T398):** płatność z datą po dziś płaci termin dopiero w swoim dniu – stan liczy płatności
-  do dziś (jak silnik); termin, który ona zapłaci, ma `planned`: Radar, odprawa i `nextDueOf` go pomijają (salda naprzód
-  liczą samą operację, raz), a stan nie jest „zapłacone” i resztka kursu liczy go do zapłaty.
+  do dziś (jak silnik); termin, któremu ta sama reguła ją daje (wszystkie płatności, okno Radaru `AHEAD_DAYS`), jest
+  zaplanowany – jeden zbiór `plannedDues` dla Radaru, odprawy i `nextDueOf` (salda naprzód liczą samą operację, raz),
+  `CargoStatus.planned` z tej samej reguły; „Zapłacone (dziś)” liczone z nimi. Nowy konsument terminów naprzód – też z nim.
 - Wpłata domownika (AP-4, T350): `incomeShares` (czyje pieniądze) → `planOf` / `inflowPlanOf` (spłata długu / tylko
   wskazane / bez spłaty; wskazane należą do części „spłata” tej osoby, gdy ją ma) → `repay` (które zakupy). Jawny
   niezależny przychód i zaliczka na przyszłość omijają dług (D99 S4), ale wskazane zakupy spłacają (naprawa liczona przy

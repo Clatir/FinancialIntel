@@ -4,14 +4,15 @@
  * ends and the shields after each event that moves them (F27). Pure.
  */
 import type { Container, MonthPlan } from '../schema/records'
-import { dueIn, type CargoStatus } from './cargoStatus'
+import { AHEAD_DAYS, dueIn, type CargoStatus } from './cargoStatus'
 import { addDays, addMonths, daysBetween, firstDayOf, monthOf } from './dates'
 import { activeIn, amountIn, cyclePosition, dockAmount, monthlyWeight, nextPaymentOf, nextUnpaidOf, type DockTargets, type FleetState } from './fleet'
 import { OVERDUE_DAYS, type LoanState } from './loans'
 import type { ScheduledDay } from './scheduled'
 import type { AwaitedReturn } from './returns'
 
-export const RADAR_DAYS = 90
+/** 90 days – the window the payments written ahead are matched to their dues in too (`AHEAD_DAYS`, T398). */
+export const RADAR_DAYS = AHEAD_DAYS
 /** PIT-38 (D58, D72): its deadline on the radar from 1 February, without an amount (the amount is ICTTJ's). */
 export const PIT38_DAY = '04-30'
 export const PIT38_FROM = '02-01'
@@ -59,6 +60,11 @@ export interface RadarInput {
   cargo?: readonly CargoStatus[]
   /** Each container's payment day (`cargoDays`, T376): the dues ahead on it – as the briefing and Ładownia count them. */
   payDays?: ReadonlyMap<string, number>
+  /**
+   * The dues a payment written ahead pays (`plannedDues`, T398 – container → due months): none of them is an item – the
+   * balances ahead count that payment on its day, once.
+   */
+  planned?: ReadonlyMap<string, ReadonlySet<string>>
   /** The purchases awaiting a return (F34, `awaitedReturns`). */
   returns?: readonly AwaitedReturn[]
   /** The planned operations' days (F16, `scheduledWindow`): the open ones are on it. */
@@ -114,6 +120,8 @@ export function radar(o: RadarInput): RadarItem[] {
   }
   // A periodic fee due this month (F1): its cycle on the payment day of its history – once, below.
   const cycleNow = new Map((o.cargo ?? []).filter((s) => s.cycleMonths > 1 && !s.carried).map((s) => [s.containerId, s]))
+  // A due a payment written ahead pays (T398): that payment's – on the accounts' forecast on its day, never here again.
+  const planned = (id: string, month: string) => !!o.planned?.get(id)?.has(month)
   // The asteroids: every payment of a periodic fee in the window, during the container's life – on its payment day.
   for (const fee of o.containers) {
     if (fee.cycleMonths <= 1 || fee.archived) continue
@@ -122,7 +130,7 @@ export function radar(o: RadarInput): RadarItem[] {
     const now = cycleNow.get(c.id)
     // A cycle paid already (early – B55) has no asteroid left: the next one.
     for (let date = nextUnpaidOf(c, o.today, tankOf?.paidDue), first = true; date <= end; date = nextPaymentOf(c, addDays(date, 1)), first = false) {
-      if (!activeIn(c, date.slice(0, 7)) || (now && date.slice(0, 7) === now.due.slice(0, 7))) continue
+      if (!activeIn(c, date.slice(0, 7)) || (now && date.slice(0, 7) === now.due.slice(0, 7)) || planned(c.id, date.slice(0, 7))) continue
       const tank = tankOf?.amount ?? 0
       out.push({ key: `asteroid:${c.id}:${date}`, date, kind: 'asteroid', name: c.name, amount: amountIn(c, date.slice(0, 7)), direction: 'out', note: first ? `w zbiorniku ${o.money(tank)}` : '', ref: c.id })
     }
@@ -136,7 +144,7 @@ export function radar(o: RadarInput): RadarItem[] {
     const day = s?.day ?? o.payDays?.get(c.id) ?? c.dueDay
     for (let m = thisMonth; firstDayOf(m) <= end; m = addMonths(m, 1)) {
       const date = m === thisMonth && s ? s.due : dueIn(m, day)
-      if (date > end || !activeIn(c, m)) continue
+      if (date > end || !activeIn(c, m) || planned(c.id, m)) continue
       // Paid, or a payment written ahead pays it on its day (T398 – the balances ahead count that operation, once).
       if (m === thisMonth && (!s || s.state === 'paid' || s.planned)) continue
       const late = m === thisMonth && s && date < o.today
@@ -145,14 +153,14 @@ export function radar(o: RadarInput): RadarItem[] {
   }
   // The periodic fees due this month, not paid yet – a late one too; one a payment written ahead pays – that operation's.
   for (const s of cycleNow.values()) {
-    if (s.state === 'paid' || s.planned || s.due > end) continue
+    if (s.state === 'paid' || s.planned || planned(s.containerId, monthOf(s.due)) || s.due > end) continue
     const tank = o.tanks.find((t) => t.containerId === s.containerId)?.amount ?? 0
     const note = s.due < o.today ? lateNote(s, o.today) : `w zbiorniku ${o.money(tank)}`
     out.push({ key: `asteroid:${s.containerId}:${s.due}`, date: s.due, kind: 'asteroid', name: s.name, amount: s.amount, direction: 'out', note, ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
   }
   // The dues of earlier months still unpaid (D99 pkt 3, AF-50): on their day, until a payment pays them.
   for (const s of o.cargo ?? []) {
-    if (!s.carried || s.state === 'paid' || s.planned) continue
+    if (!s.carried || s.state === 'paid' || s.planned || planned(s.containerId, monthOf(s.due))) continue
     const kind = s.cycleMonths > 1 ? 'asteroid' : 'fixed'
     out.push({ key: `${kind}:${s.containerId}:${s.due}`, date: s.due, kind, name: s.name, amount: s.amount, direction: 'out', note: lateNote(s, o.today), ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
   }

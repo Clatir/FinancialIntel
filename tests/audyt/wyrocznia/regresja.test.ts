@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { briefing } from '@shared/calc/briefing'
-import { cargoDays, cargoStatuses } from '@shared/calc/cargoStatus'
+import { cargoDays, cargoStatuses, plannedDues } from '@shared/calc/cargoStatus'
 import { deliveries, pendingPairsOf, preStartTaxOf } from '@shared/calc/dock'
 import { budgetStartOf, computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { monthAhead } from '@shared/calc/plan'
@@ -266,8 +266,9 @@ function sameEverywhere(id: string, app: Awaited<ReturnType<typeof appState>>, o
   // payment days as the window gives them (`features/cargo/status.ts`: from the budget's start, `cargoDays` – T375, T376)
   const cargo = cargoStatuses({ containers: records.containers, transactions: records.transactions, today: fleet.today, coveredTo: settings.import.coveredTo, start: fleet.start })
   const payDays = cargoDays({ containers: records.containers, transactions: records.transactions, today: fleet.today })
-  const radarItems = radar({ today: fleet.today, plans: records.months, containers: records.containers, tanks: fleet.tanks, loans: fleet.loans, money: (g) => String(g), cargo, payDays })
-  const brief = briefing({ fleet, containers: records.containers, imports: [], label: () => '', cargo, payDays })
+  const planned = plannedDues({ containers: records.containers, transactions: records.transactions, today: fleet.today, start: fleet.start })
+  const radarItems = radar({ today: fleet.today, plans: records.months, containers: records.containers, tanks: fleet.tanks, loans: fleet.loans, money: (g) => String(g), cargo, payDays, planned })
+  const brief = briefing({ fleet, containers: records.containers, imports: [], label: () => '', cargo, payDays, planned })
   for (const b of brief.filter((x) => x.kind === 'asteroid')) {
     const [, cid, date] = b.key.split(':')
     const first = radarItems.filter((r) => r.kind === 'asteroid' && r.ref === cid).sort((x, y) => (x.date < y.date ? -1 : 1))[0]

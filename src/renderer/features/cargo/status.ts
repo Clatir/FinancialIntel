@@ -1,5 +1,5 @@
 import type { CargoWatch } from '@shared/calc/briefing'
-import { cargoDays, cargoStatuses, type CargoStatus } from '@shared/calc/cargoStatus'
+import { cargoDays, cargoStatuses, plannedDues, type CargoStatus } from '@shared/calc/cargoStatus'
 import { deadContainers, priceChanges } from '@shared/calc/cargoWatch'
 import type { FleetState } from '@shared/calc/fleet'
 import { recurringPayments, type RecurringPayment } from '@shared/calc/plan'
@@ -9,15 +9,20 @@ import { sensorTransactions } from '../sensors/inputs'
 
 const NONE: CargoStatus[] = []
 const NO_DAYS: ReadonlyMap<string, number> = new Map()
+const NO_PLANNED: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 const NO_COVERED: Readonly<Record<string, string>> = {}
 
-/** The fees' state (F1, AP-10): this month's dues, the earlier ones still unpaid, each container's payment day. */
+/**
+ * The fees' state (F1, AP-10): this month's dues, the earlier ones still unpaid, each container's payment day, the dues a
+ * payment written ahead pays (T398 – the Radar, the briefing and Ładownia's next due leave them out).
+ */
 interface CargoState {
   list: CargoStatus[]
   days: ReadonlyMap<string, number>
+  planned: ReadonlyMap<string, ReadonlySet<string>>
 }
 
-const EMPTY: CargoState = { list: NONE, days: NO_DAYS }
+const EMPTY: CargoState = { list: NONE, days: NO_DAYS, planned: NO_PLANNED }
 
 let memo: { today: string; start: string | null; containers: unknown; transactions: unknown; covered: unknown; state: CargoState } | null = null
 
@@ -34,7 +39,8 @@ function stateOf(fleet: FleetState | null, records: Pick<RecordMaps, 'containers
   const state = {
     // The engine's budget start: the dues of the months before this one followed from it (D99 pkt 3).
     list: cargoStatuses({ containers, transactions, today: fleet.today, coveredTo: covered, start: fleet.start }),
-    days: cargoDays({ containers, transactions, today: fleet.today })
+    days: cargoDays({ containers, transactions, today: fleet.today }),
+    planned: plannedDues({ containers, transactions, today: fleet.today, start: fleet.start })
   }
   memo = { today: fleet.today, start: fleet.start, containers: records.containers, transactions: records.transactions, covered, state }
   return state
@@ -59,9 +65,13 @@ export const useCargoStatuses = (): CargoStatus[] => useCargoState().list
 /** Each container's payment day (T376): the dues ahead on the Radar, in the briefing and in Ładownia. */
 export const useCargoDays = (): ReadonlyMap<string, number> => useCargoState().days
 
+/** The dues a payment written ahead pays (T398): container → due months – the Radar, the briefing, Ładownia's next due. */
+export const useCargoPlanned = (): ReadonlyMap<string, ReadonlySet<string>> => useCargoState().planned
+
 /** The same outside React (the notifier). */
 export const cargoStatusesNow = (): CargoStatus[] => stateNow().list
 export const cargoDaysNow = (): ReadonlyMap<string, number> => stateNow().days
+export const cargoPlannedNow = (): ReadonlyMap<string, ReadonlySet<string>> => stateNow().planned
 
 /** The cargo hold's watch (F9, F23): new prices, containers gone quiet, the history's proposals (the new ones apart). */
 export interface CargoWatchState extends CargoWatch {

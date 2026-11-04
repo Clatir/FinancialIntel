@@ -135,12 +135,16 @@ export function topUpHull(amount: number): boolean {
     label: 'Cofnij',
     run: () => {
       if (!canWrite()) return
-      const own = wrote ? useData.getState().records.months[wrote.id] : undefined
+      const own = allPlans().find((p) => p.month === month)
+      // Nothing to take back – the month's plan gone meanwhile (another computer, the month back on the plan in force) or
+      // the entry no longer in it: never a plan made anew (przegląd 3 N3 – T46 would pin the month to a copy).
+      if (!own || !(own.hullTopUps ?? []).some((u) => u.id === id)) return
+      const entry = useData.getState().records.months[own.id]
       // Gone, as it came – only when nothing changed it since, to the last field (przegląd 2 N3): one from another
       // computer or a newer version (kept by `looseObject`), an edit here, a change of another computer waiting for a
       // decision. Anything else – the entry only, the file stays.
-      const untouched = !!own && !own.readOnly && sameContentAs(own.record, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === wrote!.id)
-      if (untouched) deleteOrSay('months', wrote!.id)
+      const untouched = !!wrote && own.id === wrote.id && !!entry && !entry.readOnly && sameContentAs(own, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === own.id)
+      if (untouched) deleteOrSay('months', own.id)
       else editPlan(month, (p) => ({ ...p, hullTopUps: (p.hullTopUps ?? []).filter((u) => u.id !== id) }))
     }
   })

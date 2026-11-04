@@ -2979,7 +2979,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   tylko gdy jest on nadal dokładnie tym, co dopełnienie zapisało (treść bez znaczników zapisu – `sameContentAs`, także
   pola nieznane tej wersji z `looseObject`, zmiany z drugiego komputera) i żadna zmiana z drugiego komputera nie czeka
   przy nim na decyzję; inaczej zabiera tylko wpis, plik zostaje (wcześniej: porównanie kilku znanych pól – pole nowszej
-  wersji albo czekająca zmiana z drugiego komputera ginęły z plikiem).
+  wersji albo czekająca zmiana z drugiego komputera ginęły z plikiem). Przegląd 3 N3 (4): bez planu miesiąca (usunięty na
+  drugim komputerze, miesiąc z powrotem na planie w mocy) albo bez wpisu dopełnienia w planie „Cofnij” nic nie robi – nie
+  zakłada nowej kopii planu w mocy (T46), nic nie zapisuje.
 - **T374** Podgląd zmiany celów warstw, firewall wyłączony (1.15.7, AP-17 – MO sp. 4, DW.12): Ustawienia → Warstwy
   i rozkazy – wpisany cel osłon albo kadłuba, zanim pole się zapisze (`NumberField.onDraft`; po 300 ms bez pisania –
   silnik raz na wpisane cele, zapis po wyjściu z pola używa tego przebiegu, `fleetWithLayers` – przegląd N3), pokazuje
@@ -2991,7 +2993,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Firewall wyłączony: dopłata do XTB X zł bez sprawdzania osłon i kadłuba.” (zwrot puli Podatek – nie, także przy pustej
   rezerwie na PIT-38: zdarzenie silnika `tax`, przegląd N3). Bez zmian formatu. Przegląd 2 N3 (6): w trakcie pisania
   „Po zmianie” zostaje dla celów ustalonych ostatnio (300 ms bez pisania), aż ustalą się nowe – nie znika przy każdym
-  klawiszu; wpisane cele równe zapisanym (pole opuszczone, wartość, której pole nie przyjmie) – bez podglądu.
+  klawiszu; wpisane cele równe zapisanym (pole opuszczone, wartość, której pole nie przyjmie) – bez podglądu. Przegląd 3
+  N3 (6): od pierwszego klawisza (także zaraz po zapisie) ramka stoi i mówi „Po zmianie – liczę…”, liczby celów ustalonych
+  wcześniej przygaszone pod nią – nigdy jako skutek wpisanej wartości.
 - **T375** Jeden stan opłaty i zaległość do zapłaty (1.15.7, AP-10 – AF-50 / RA.4, AF-80, AF-45 / LA.10, LA sp. 1, 6;
   realizuje D99 pkt 3 i rekomendację F1 / T208 wobec D86 / D4 z sekcji 5 wniosków; zmienia T208 „tylko w bieżącym
   miesiącu” i okno 14 dni dla opłat okresowych): płatności przypisuje do terminów jedna funkcja `feeDues`
@@ -3090,7 +3094,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `confirmedAt` (zapisany przed 1.15.7) liczy się dniem salda (`date`), jak liczyła go wersja, która go zapisała – tydzień
   niezamrożony nie zmienia wyniku misji przez samą aktualizację (dzień utworzenia zaliczał po aktualizacji import
   z poniedziałku z saldem z niedzieli, którego 1.15.6 nie liczyła; ponowne potwierdzenie pod 1.15.6 – jak wtedy, po dacie
-  salda); każde nowe potwierdzenie ma `confirmedAt` – także zapisane przy imporcie z salda pliku banku.
+  salda); każde nowe potwierdzenie ma `confirmedAt` – także zapisane przy imporcie z salda pliku banku. Przegląd 3 N3 (5,
+  mieszane wersje): dzień potwierdzenia = późniejszy z dnia `confirmedAt` i dnia salda – 1.15.6 liczy dzień salda,
+  a potwierdzając ponownie zapisuje tylko `updatedAt` (dzień salda jest w id rekordu), więc ponowne potwierdzenie pod
+  1.15.6 nie zalicza tygodnia także tam (oba komputery zgodne); `updatedAt` nie liczy się nigdy (scalanie i rozwiązanie
+  konfliktu też go zapisują). Saldo dnia późniejszego niż chwila potwierdzenia liczy się w tygodniu salda, jak w 1.15.6 –
+  ten komputer nigdy nie liczy potwierdzenia wcześniej niż komputer ze starszą wersją.
 - **T384** Droga do awansu w Dowództwie (1.15.7, AP-30, DW.18, DW sp. 5): `progressText` – dzień po zmianie stopnia
   „dni zgodne 0 (liczone od 02.11)” zamiast odwróconego „od 02.11 do 01.11”; próg spełniony bez awansu (obniżony w trakcie)
   – „próg spełniony, awans przy zamrożeniu kolejnego dnia” (awans rozstrzyga zamrożenie dnia, jak dotąd).
@@ -3206,23 +3215,29 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   dnia zostaje): druga płatność okna płaci najstarszy niezapłacony termin w chwili, gdy przyszła. „Zapłacone (kwota,
   dziś)” (`payToday`) – termin, który płatność dziś tej kwoty zostawia zapłaconym (także przez drugą płatność okna, gdy
   termin okna już zapłacony); „Płatność dziś zamknie najpierw zaległą opłatę (termin …)” – ten termin.
-- **T398** Płatność wpisana z wyprzedzeniem płaci termin w swoim dniu (1.15.7, przegląd 2 N3 2; doprecyzowuje T375,
-  T393, B127): płatność opłaty z datą po dziś (wydatek wpisany naprzód) nie płaci terminu przed swoim dniem – stan
-  w Ładowni, Radarze, odprawie i resztce kursu (`cargoStatuses` – płatności do dziś) jak silnik (`paidBefore` do dziś,
-  `paidDue`, przełom miesiąca); w jej dniu – zapłacony w obu. Termin, który ona zapłaci (ta sama reguła z płatnościami do
-  jej dnia – także gdy jako druga płatność okna oddaje wcześniejszą zaległemu terminowi, T375), ma płatność zaplanowaną
-  (`CargoStatus.planned`): Ładownia – w wierszu „zaplanowane dd.mm” (bez akcentu „po terminie”), w edytorze „Zaplanowana
-  płatność: kwota (dd.mm) – zapłaci termin dd.mm w swoim dniu.” bez „Zapłacone (kwota, dziś)” (byłaby drugą płatnością),
-  w „Zaległe” – „zaplanowana płatność dd.mm (kwota) zamknie go w swoim dniu”; Radar – bez pozycji tego terminu (salda
-  naprzód liczą operację w jej dniu – raz); odprawa – bez alertu „Kontener niezaładowany” i bez asteroidy tego terminu
-  (najbliższy do zapłaty – następny, `nextDueOf`); resztka miesiąca w kursie (T390) liczy go do zapłaty z energii (silnik
-  jeszcze jej nie wziął – wcześniej pomijała go jako zapłacony). Płatność dalej niż okno terminu po tym miesiącu nie jest
-  zaplanowaną żadnego. Wcześniej Ładownia, Radar i odprawa pokazywały „zapłacone” od chwili wpisania, a silnik liczył cykl
-  dopiero w dniu płatności (plan miesiąca i zbiornik chciały raty cyklu „zapłaconego”, T393). Rozważone i odrzucone:
-  płatność naprzód płaci od razu także w silniku – zbiornik przestałby zbierać na pieniądze, które jeszcze są na koncie,
-  a data operacji wpisanej naprzód bywa zmieniana. Bez zmian formatu. Otwarte: terminy następnych miesięcy na Radarze
-  (asteroidy naprzód, opłaty miesięczne kolejnych miesięcy) nie widzą płatności wpisanych naprzód – salda naprzód liczą
-  wtedy termin i operację (jak od 1.8.0).
+- **T398** Płatność wpisana z wyprzedzeniem płaci termin w swoim dniu (1.15.7, przegląd 2 N3 2, przegląd 3 N3 1–3, 9;
+  doprecyzowuje T375, T393, B127): płatność opłaty z datą po dziś (wydatek wpisany naprzód) nie płaci terminu przed swoim
+  dniem – stan w Ładowni, Radarze, odprawie i resztce kursu (`cargoStatuses` – płatności do dziś) jak silnik (`paidBefore`
+  do dziś, `paidDue`, przełom miesiąca); w jej dniu – zapłacony w obu. Zaplanowany jest wyłącznie termin, któremu tę
+  płatność daje ta sama reguła (`feeDuesOf` ze wszystkimi płatnościami opłaty, terminy do końca okna Radaru –
+  `AHEAD_DAYS` = `RADAR_DAYS`, 90 dni; `plannedDues`, `CargoStatus.planned` – jej pierwsza taka płatność); termin
+  zamknięty dopiero wcześniejszą płatnością, którą ona przesuwa (druga płatność okna oddaje wcześniejszą zaległemu – T375),
+  nie jest zaplanowany – zostaje „po terminie” do jej dnia. Ładownia: w wierszu „zaplanowane dd.mm” (bez akcentu „po
+  terminie”), w edytorze „Zaplanowana płatność: kwota (dd.mm) – zapłaci termin dd.mm w swoim dniu.”, w „Zaległe” –
+  „zaplanowana płatność dd.mm (kwota) zamknie go w swoim dniu”. „Zapłacone (kwota, dziś)” (`payToday`) stoi przy
+  najstarszym terminie ani zapłaconym, ani zaplanowanym, który płatność dziś zostawi zapłaconym albo zaplanowanym –
+  z płatnościami wpisanymi naprzód po niej (zaległy październik zaplanowany płatnością 13.11 z okna listopada: przy
+  listopadzie – dzisiejsza zamknie październik, 13.11 listopad); płatność dziś, która zamknęłaby termin tylko przesunięciem
+  przez płatność wpisaną naprzód – bez przycisku. Termin zaplanowany – w tym albo kolejnym miesiącu okna Radaru – nie jest
+  pozycją Radaru, asteroidą odprawy ani najbliższym terminem do zapłaty w Ładowni (`nextDueOf` – następny); salda naprzód
+  liczą wtedy samą operację, raz; odprawa bez alertu „Kontener niezaładowany” dla zaplanowanego; resztka miesiąca w kursie
+  (T390) liczy go do zapłaty z energii (silnik jeszcze jej nie wziął). Płatność dalej niż okno Radaru – żadnego terminu.
+  Wcześniej (do przeglądu 2 N3) Ładownia, Radar i odprawa pokazywały „zapłacone” od chwili wpisania, a silnik liczył cykl
+  dopiero w dniu płatności; po przeglądzie 2 – płatność zaplanowana tylko dla terminów tego miesiąca i zaległych (termin
+  kolejnego miesiąca – pozycja Radaru obok operacji, salda naprzód liczyły go dwa razy; tak było od 1.8.0), z zapasową
+  płatnością dnia przy przesunięciu i „Zapłacone (dziś)” przy terminie już zaplanowanym (przycisk ukryty). Rozważone
+  i odrzucone: płatność naprzód płaci od razu także w silniku – zbiornik przestałby zbierać na pieniądze, które jeszcze są
+  na koncie, a data operacji wpisanej naprzód bywa zmieniana. Bez zmian formatu.
 - **T399** Wydajność stanu opłat i boi (1.15.7, przegląd 2 N3 3, 4, 8, 9; obok T375, T378): „Zapłacone (dziś)”
   (`payToday`) i płatności zaplanowane (T398) liczone tylko dla opłaty z pokazanym terminem do zapłaty – opłata zapłacona
   nie przelicza całej historii drugi raz; stan opłat w oknie (`features/cargo/status.ts`) przeliczany przy zmianie
@@ -3231,7 +3246,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`pastStates`, pamięć po liście), każda tymi samymi dniami co dotąd (boje z dniem w ±6 dni jej dnia, operacje zrobione
   z każdej boi), nie przebieg po wszystkich bojach dla każdej z nich przy każdym odmalowaniu. Jedna kolejność płatności
   jednego dnia (`byPaymentDay` – indeks Ładowni i płatności sprzed startu w silniku). Wynik bez zmian (test równości ze
-  stanem liczonym jak dotąd).
+  stanem liczonym jak dotąd). Przegląd 3 N3 (7, 8): `pastStateOf` tylko czyta `pastStates` (jedna droga – ta, której
+  używa panel); dopasowanie dni okna nie kopiuje zbioru operacji zrobionych z boi (własny zbiór dopasowanych w oknie).
 - **T400** Nic nie zmienia się po cichu (1.15.8, N4, AP-15): każda odmowa i każde przycięcie mówi to przy polu – co zostaje
   i dlaczego. Pole kwoty `amountRefusal` (nieprawidłowa / pusta / ujemna; „1.200” i „12,345” z podpowiedzią), `NumberField`
   domyślnie sam mówi („Dozwolone: od … do …”, „Tu tylko liczby całkowite”, `range`; `onReject` nadpisuje), w trybie

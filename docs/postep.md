@@ -74,7 +74,8 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N3 | Kurs i symulator | brak nie przechodzi na następny miesiąc: osłony kończą na 0, kurs pokazuje „Brakuje na koszty” jako sumę 12 mies.; „Zasięg po resztce miesiąca” tylko, gdy różni się od „teraz”, i zakłada, że spóźnione spłaty pożyczek wrócą w tym miesiącu; wszystko pełne – „teraz” (także cele) | T385–T387 |
 | N3 | Trend poduszki | koniec miesiąca tylko dla zakończonych miesięcy; w Wywiadzie pod „Bilans paliwa”, linia „rosną w N z M mies.”; przy ukrytych kwotach zmiana w zł bez znaku i strzałki, zmiana zasięgu widoczna | T388 |
 | N3 | Opłata zapłacona wydatkiem z datą po dziś | płaci termin dopiero w dniu płatności; do tego czasu Ładownia „zaplanowane dd.mm” bez „Zapłacone (dziś)”, odprawa bez alertu (także po 3 dniach łaski), Radar bez tego terminu | T398 |
-| N3 | Potwierdzenia salda sprzed 1.15.7 | liczą się do „Inwentaryzacji” po dacie salda, jak w 1.15.6 (import z tygodnia aktualizacji z saldem z niedzieli nie zalicza tygodnia); nowe – po chwili potwierdzenia | T383 |
+| N3 | Termin zapłacony wpisem naprzód | znika z Radaru i z „Płatność” w Ładowni (kolejne miesiące też); „Zapłacone (dziś)” nie ma, gdy dzisiejsza płatność zamknęłaby termin tylko przez przesunięcie | T398 |
+| N3 | Potwierdzenia salda w „Inwentaryzacji” | dzień potwierdzenia = późniejszy z chwili potwierdzenia i dnia salda; zapisane przed 1.15.7 – po dniu salda, jak w 1.15.6 (import z tygodnia aktualizacji z saldem z niedzieli nie zalicza tygodnia) | T383 |
 | N1 | Zmiany w trakcie niedostępności folderu | folder tylko do odczytu jak dotąd: nowe zmiany odrzucane z komunikatem, czekają tylko przyjęte wcześniej (inaczej: przyjmować w pamięci) | T315 |
 | N1 | Szybki wpis tuż przed wykryciem braku folderu | „Wpis przyjęty, ale jeszcze niezapisany…”, okno zostaje 4 s | T317 |
 | N1 | Pytanie „Zmienić operację?” poza edytorem | z nazwą operacji (pojawia się też na innym ekranie) | T319 |
@@ -107,12 +108,15 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 - **Przegląd:** xhigh całości (15 uwag – przyczyna: dwie reguły płatność ↔ cykl; poprawki R max i S xhigh), high na
   poprawkach i rozwiązaniu konfliktów z N2 (9 uwag: 8 poprawionych, 1 z innym skutkiem niż w recenzji – poprawiony
   skutek odwrotny; kreator z rachunkiem zmiennym o cykl w tyle, płatność z datą po dziś zapłacona tylko w Ładowni,
-  „Cofnij” dopełnienia kadłuba mógł usunąć plan miesiąca z cudzą zmianą), high na tych poprawkach.
+  „Cofnij” dopełnienia kadłuba mógł usunąć plan miesiąca z cudzą zmianą), high na tych poprawkach (9 uwag – reguła
+  płatności wpisanej z wyprzedzeniem uproszczona do jednego zbioru terminów zaplanowanych w oknie Radaru, co zamknęło też
+  podwójne liczenie w saldach naprzód od 1.8.0; „Cofnij” bez planu nic nie tworzy); trzecia runda sprawdzona przez
+  koordynatora na diffie.
 - **Wyrocznia:** 412 przypadków, 28 963 kwoty, 2 852 porównania ekranów – bez rozbieżności; AF-15 zamknięte.
-- **Testy:** typecheck (także `typecheck:audyt`), `npm test` 1412 (lokalnie pod obciążeniem pada tylko `folder-speed`
-  ZIP64), build, E2E zmienionych ekranów; pełne E2E – CI.
-- **Otwarte:** Radar nie widzi płatności wpisanych naprzód przy terminach kolejnych miesięcy (salda naprzód liczą termin
-  i operację – od 1.8.0); `priceChanges` liczy płatności wpisane naprzód; dni zamrożone przed 1.15.7 bez `clsBefore`;
+- **Testy:** typecheck (także `typecheck:audyt`), `npm test` 1424 (lokalnie pod obciążeniem pada tylko `folder-speed`
+  ZIP64), build, E2E zmienionych ekranów; pełne E2E – CI (Linux zielone na 2cf22ba).
+- **Otwarte:** zaległy termin zamknięty dopiero przesunięciem przez drugą płatność okna wpisaną naprzód zostaje „po
+  terminie” do jej dnia (w saldach naprzód podwójnie); `priceChanges` liczy płatności wpisane naprzód; dni zamrożone przed 1.15.7 bez `clsBefore`;
   kalibracja progów gry (D99 pkt 12) – za osobną zgodą.
 - **Czas:** 07:15–ok. 13:50 kod i dwa przeglądy (przerwa 14:00–14:20), 14:20–ok. 16:45 przegląd poprawek, poprawki,
   wydanie – plan 2,5–3,5 h pracy; zegar dłuższy przez scalenie z N2 i trzy rundy przeglądu.

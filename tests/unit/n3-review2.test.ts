@@ -154,20 +154,20 @@ describe('2: płatność wpisana z wyprzedzeniem płaci termin dopiero w swoim d
     expect(items.map((i) => i.date)).toEqual(['2026-12-10'])
   })
 
-  it('druga płatność okna wpisana z wyprzedzeniem: zaległy październik zamknie dopiero ona (zaplanowany na jej dzień)', () => {
+  it('druga płatność okna wpisana z wyprzedzeniem: październik zamknie przesunięta płatność 10.11 – nie jest zaplanowany', () => {
     const rent = container({ name: 'Czynsz', amount: zl(1200), cycleMonths: 1, dueMonth: '2026-09', dueDay: 10 })
     const second = pay(rent, '2026-11-25')
     const paid = [pay(rent, '2026-09-10'), pay(rent, '2026-11-10'), second]
-    // Before: on the 14th October already paid (the payment of 10.11 moved to it by the one of 25.11).
+    // Before: on the 14th October already paid (the payment of 10.11 moved to it by the one of 25.11). Przegląd 3 N3: the
+    // payment of 25.11 is November's – October holds none written ahead, so it is not planned (no other payment's date).
     expect(shown(cargoOf([rent], paid, '2026-11-14', START))).toEqual([
-      ['2026-10-10', 'overdue', true, '2026-11-25'],
+      ['2026-10-10', 'overdue', true, null],
       ['2026-11-10', 'paid', false, null]
     ])
-    expect(cargoOf([rent], paid, '2026-11-14', START)[0]!.planned).toEqual({ id: second.id, date: '2026-11-25', amount: zl(1200) })
     expect(shown(cargoOf([rent], paid, '2026-11-25', START))).toEqual([['2026-11-10', 'paid', false, null]])
   })
 
-  it('płatność daleko naprzód (poza oknami terminów) nie jest zaplanowaną żadnego z nich', () => {
+  it('płatność dalej niż okno Radaru (90 dni) nie jest zaplanowaną żadnego terminu', () => {
     const rent = container({ name: 'Czynsz', amount: zl(1200), cycleMonths: 1, dueMonth: '2026-09', dueDay: 10 })
     const paid = [pay(rent, '2026-09-10'), pay(rent, '2026-10-10'), pay(rent, '2027-03-10')]
     expect(shown(cargoOf([rent], paid, '2026-11-14', START))).toEqual([['2026-11-10', 'overdue', false, null]])
@@ -181,25 +181,25 @@ describe('3: „Zapłacone (dziś)” nie liczy całej historii opłaty zapłaco
   const history: Transaction[] = []
   for (let m = '2016-11'; m <= '2026-11'; m = monthOf(addDays(`${m}-28`, 7))) history.push(pay(rent, dueIn(m, 10)))
 
-  /** How many times the fee's payments are gone through (the rule's pass over them) in one state. */
+  /** How many times the fee's payments are copied for the payment of today counted with them (`paidToday`) in one state. */
   function passes(transactions: Transaction[], today: string): number {
     const list = paymentsIndex(transactions).byContainer.get(rent.id)!
     let n = 0
-    Object.defineProperty(list, Symbol.iterator, {
+    Object.defineProperty(list, 'slice', {
       configurable: true,
-      value(this: Linked[]) {
+      value(this: Linked[], ...args: [number?, number?]) {
         n++
-        return Array.prototype[Symbol.iterator].call(this)
+        return Array.prototype.slice.apply(this, args)
       }
     })
     cargoOf([rent], transactions, today, START)
     return n
   }
 
-  it('termin tego miesiąca zapłacony – jedno przejście; niezapłacony – drugie dla „Zapłacone (dziś)”', () => {
-    // Before: two passes every time (the payment of today simulated for every fee).
-    expect(passes(history, '2026-11-12')).toBe(1)
-    expect(passes(history.slice(0, -1), '2026-11-12')).toBe(2)
+  it('termin tego miesiąca zapłacony – bez symulacji płatności dziś; niezapłacony – z nią', () => {
+    // Before: the payment of today simulated for every fee – its whole history again.
+    expect(passes(history, '2026-11-12')).toBe(0)
+    expect(passes(history.slice(0, -1), '2026-11-12')).toBeGreaterThan(0)
     expect(cargoOf([rent], history.slice(0, -1), '2026-11-12', START).map((s) => [s.due, s.state, s.payToday])).toEqual([['2026-11-10', 'waiting', true]])
   })
 
