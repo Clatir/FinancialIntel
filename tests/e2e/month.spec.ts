@@ -70,6 +70,21 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     // The start's day (AP-25, AF-10): the first salary goes from the shields to the energy – the bridge's shields.
     await expect(page.getByTestId('wizard-effect-salary')).toContainText('2 500,00')
     await expect(page.getByTestId('wizard-effect-shields')).toHaveText('6 620,06 zł')
+    // Below the orders' minimum (1 salary – 2 500 zł) with the hull 20 000 zł: the warning in the accent – 1 500 zł is no
+    // minus, never red (przegląd N5 11: before – red).
+    await page.getByTestId('wizard-split-hull').click()
+    await page.getByTestId('wizard-split-hull').fill('20000')
+    await page.getByTestId('wizard-split-hull').press('Enter')
+    await expect(page.getByTestId('wizard-effect-shields')).toHaveText('1 500,00 zł')
+    await expect(page.getByTestId('wizard-effect-shields')).toHaveAttribute('data-state', 'below-min')
+    await expect(page.getByTestId('wizard-effect-shields')).toHaveClass(/text-accent/)
+    await expect(page.getByTestId('wizard-effect-shields')).not.toHaveClass(/text-down/)
+    await expect(page.getByTestId('wizard-effect-below-min')).toBeVisible()
+    await page.getByTestId('wizard-split-hull').click()
+    await page.getByTestId('wizard-split-hull').fill('14879,94')
+    await page.getByTestId('wizard-split-hull').press('Enter')
+    await expect(page.getByTestId('wizard-effect-shields')).toHaveText('6 620,06 zł')
+    await expect(page.getByTestId('wizard-effect-below-min')).toHaveCount(0)
     await page.getByTestId('wizard-next').click()
     // 7. The ship.
     await page.getByTestId('wizard-ship').fill('Sokół')

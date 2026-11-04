@@ -67,8 +67,9 @@ paths:
   Dokowanie – jedna pamięć `store/deliveries.ts`, gra przez `gameInputOf`) i liczy je jak dokowanie z pulą wpisu
   (`dockByPool`, tylko rodzaje `countsByPool`); rekord dokowania decyduje nad parą – dokowanie pary liczonej według puli
   liczy się od chwili jej operacji (`countedFrom` z `dockingOf` – ten sam `countsByPool`, T363), bez pola od swojego
-  utworzenia (T128). Nowe wejście silnika z ICTTJ dopisz do klucza (`keyOf`,
-  `useEngineParts`, `engineParts` w `game.ts`).
+  utworzenia (T128). **Pułapka:** rekord dokowania, który tylko potwierdza (dopłata z meldunku – `topUpConfirmation`,
+  T438), też z `countedFrom` = utworzenie operacji – inaczej przeniesienia dnia (T340) wchodzą przed operację. Nowe
+  wejście silnika z ICTTJ dopisz do klucza (`keyOf`, `useEngineParts`, `engineParts` w `game.ts`).
 - Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
   (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Cykle zapłacone
   tylko z reguły Ładowni (`paidDuesOf`, T393 – na przełomie płatności sprzed niego), nigdy własną regułą; która płatność

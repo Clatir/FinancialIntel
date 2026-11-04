@@ -180,12 +180,13 @@ export const shieldsMinimum = (salary: number | null, minShieldSalaries: number,
  * The envelopes' proposals fitted to the salary (AP-25, KR sp. 5): the averages of 3 months (T47) may ask more than the
  * salary of 6 months leaves after the cargo, the tanks and the envelopes typed by hand (`room`) – then each proposal
  * shrinks in proportion, down to whole tens of złoty, so the first month's plan never starts over the salary by itself.
- * What the tens leave stays unplanned (the loot). Proposals that fit come back as they are (`fitted` false).
+ * What the tens leave stays unplanned (the loot). Proposals that fit come back as they are (`fitted` false) – also none
+ * at all with nothing left (przegląd N5 9: nothing proposed is nothing made smaller).
  */
 export function fitEnvelopes(proposals: Readonly<Record<string, number>>, room: number): { envelopes: Record<string, number>; fitted: boolean; asked: number } {
   const asked = sum(Object.values(proposals))
-  if (asked <= room) return { envelopes: { ...proposals }, fitted: false, asked }
   const left = Math.max(0, room)
+  if (asked <= left) return { envelopes: { ...proposals }, fitted: false, asked }
   const envelopes: Record<string, number> = {}
   for (const [id, limit] of Object.entries(proposals)) envelopes[id] = Math.floor((limit * left) / asked / ENVELOPE_STEP) * ENVELOPE_STEP
   return { envelopes, fitted: true, asked }

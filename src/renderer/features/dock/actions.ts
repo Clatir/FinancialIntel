@@ -5,9 +5,10 @@
  */
 import { asPayout, dockedText, type Delivery } from '@shared/calc/dock'
 import { countsByPool } from '@shared/calc/fleet'
+import { topUpConfirmation } from '@shared/calc/inbox'
 import { dockingIdOf, undockingOf, walletOperationId } from '@shared/calc/undock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
-import { derivedId, newId } from '@shared/ids'
+import { newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, listOf, NEWER_RECORD_MESSAGE, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -163,15 +164,14 @@ export function undockDelivery(d: Delivery): boolean {
 
 /**
  * A top-up of XTB against the firewall found only in the bank, confirmed (DO sp. 12, T438): a docking record of its
- * operation without an ICTTJ entry (one id per operation – two computers write one file). It changes no money – the red
- * alarm and the game's serious violation stay; the report goes. „Cofnij” takes it back.
+ * operation without an ICTTJ entry (`topUpConfirmation` – one id per operation, counted from the operation's arrival).
+ * It changes no money – the red alarm and the game's serious violation stay; the report goes. „Cofnij” takes it back.
  */
 export function confirmTopUp(txId: string): boolean {
   if (!canWrite()) return false
   const t = useData.getState().records.transactions[txId]?.record
   if (!t) return false
-  const now = new Date().toISOString()
-  const docking = dockingSchema.parse({ schemaVersion: SCHEMA_VERSION, id: derivedId(txId, `topup:${txId}`), createdAt: now, updatedAt: now, date: t.date, transactionId: t.id, ictjEntryId: null, pool: null, split: null })
+  const docking = topUpConfirmation(t, new Date().toISOString())
   if (!addRecord('dockings', docking)) return false
   toast(`Potwierdzono dopłatę do XTB ${plnText(Math.abs(t.amount))} zł – wbrew rozkazowi firewall, w grze zostaje poważnym naruszeniem.`, 'success', 8000, {
     label: 'Cofnij',

@@ -6,6 +6,7 @@
  */
 import { useMemo, useState } from 'react'
 import { confirmedChanges } from '@shared/calc/balances'
+import { lostPairText } from '@shared/calc/effect'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { plnText, signedPln } from '../../components/fields'
 import { Modal } from '../../components/Modal'
@@ -159,7 +160,7 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
             ))}
             {effect.pairs.map((p, i) => (
               <p key={i} className="text-accent" data-testid="operations-bulk-pair">
-                {p.direction === 'in' ? 'Wypłata z ICTTJ' : 'Wpływ do XTB z ICTTJ'} z {plDate(p.date)} ({zl(p.amount)}) straci parę w banku – Dokowanie pokaże ją bez pary.
+                {lostPairText(p, zl)}
               </p>
             ))}
           </div>

@@ -1,6 +1,7 @@
 // AP-25 / KR.29 (1.15.9, N5 – AF-14): „Uruchom budżet” writes the start whole or not at all. A folder that refuses
 // fi.json (the attribute „tylko do odczytu” on the file) leaves no budget running in the window, the answers kept; the
-// records written before it are the same at the next try – no second container, the start completes.
+// records written before it are taken back (przegląd N5 2 – `n5-review1-fixb-store.test.ts`) – the next try writes the
+// start whole, one container.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RecordEntry, Snapshot } from '@shared/api'
 import { warsawNow } from '@shared/calc/dates'
@@ -17,7 +18,7 @@ const api = {
   saveRecords: vi.fn(async (_c: string, rs: Array<{ id: string }>) => rs.map((r) => ({ id: r.id, entry: saved(r) }))),
   saveSettings: vi.fn(async (f: unknown) => f),
   deleteRecord: vi.fn(),
-  deleteRecords: vi.fn(),
+  deleteRecords: vi.fn(async (_c: string, ids: string[]) => ids.map((id) => ({ id }))),
   historyKeep: vi.fn(),
   trayPrefs: vi.fn(async () => tray),
   setTrayPrefs: vi.fn(async () => tray),
@@ -73,28 +74,21 @@ beforeEach(() => {
 })
 
 describe('KR.29: start budżetu w całości albo wcale (AF-14)', () => {
-  it('fi.json odrzucony: budżet nie działa w oknie, odpowiedzi zostają, salda i kontener zapisane; ponowny start kończy go bez drugiego kontenera', async () => {
+  it('fi.json odrzucony: budżet nie działa w oknie, odpowiedzi zostają, rekordy startu wycofane; ponowny start zapisuje go w całości', async () => {
     api.saveSettings.mockRejectedValue(EPERM)
     expect(await finish()).toBe(false)
     // The window shows what the folder has: no start, nothing waiting to be retried for fi.json.
     expect(data.useData.getState().fi!.settings.budget.start).toBeNull()
     expect(data.unsavedOf('fi', 'fi')).toBeNull()
-    expect(toasts().at(-1)).toMatch(/^Budżet nie wystartował – nie udało się zapisać ustawień w folderze .*„Uruchom budżet” ponownie dokończy start\./)
+    expect(toasts().at(-1)).toMatch(/^Budżet nie wystartował – nie udało się zapisać ustawień w folderze .*w folderze nie ma nic ze startu, „Uruchom budżet” zapisze je od nowa\./)
     expect(toasts().some((t) => t.startsWith('Okręt wypłynął') || t.startsWith('Budżet uruchomiony'))).toBe(false)
-    // The start's records went to the disk before fi.json (the openings, the plan, the container).
-    expect(list('balances').map((e) => [e.record.accountId, e.record.amount])).toEqual(
-      expect.arrayContaining([
-        [MBANK_ACCOUNT_ID, 1_000_000],
-        [XTB_WALLET_ACCOUNT_ID, 0]
-      ])
-    )
-    expect(list('months').map((e) => e.record.salary)).toEqual([500_000])
-    expect(list('containers').map((e) => e.record.counterparty)).toEqual(['NETFLIX.COM'])
-    // The answers stay – in the window and on this computer (a restart keeps them); the proposal is a container now.
-    expect(wizard.useWizard.getState()).toMatchObject({ active: true, salary: 500_000, cargo: {} })
+    // The start's records written before fi.json are taken back (przegląd N5 2): no opening, plan or container stays.
+    expect([list('balances'), list('months'), list('containers')]).toEqual([[], [], []])
+    // The answers stay – in the window and on this computer (a restart keeps them); the proposal too (its container went).
+    expect(wizard.useWizard.getState()).toMatchObject({ active: true, salary: 500_000, cargo: { [proposal.key]: proposal } })
     expect(wizard.wizardDraftOf('/dane')).toMatchObject({ active: true, salary: 500_000 })
 
-    // The attribute taken off: the next „Uruchom budżet” completes the start – the same records, one container.
+    // The attribute taken off: the next „Uruchom budżet” writes the start whole – one container.
     api.saveSettings.mockImplementation(async (f: unknown) => f)
     expect(await finish()).toBe(true)
     const fi = data.useData.getState().fi!

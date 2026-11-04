@@ -3433,6 +3433,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   któryś z pokazanych miesięcy; zaplanowane późniejszych miesięcy – w linii roku.
   Miesiąc zakończony – jak dawniej (nie ma w nim dat po dziś). Eksport „Miesiące” bierze koszty z debriefingu (do dziś),
   przychody liczy sam (poza tą zmianą). Operacje pokazują listę okresu bez zmian (suma tego, co na liście).
+  Dopisek (przegląd N5 8 – zmienia zdanie o przychodach eksportu): eksport „Miesiące” liczy przychody miesiąca w toku
+  z tych samych operacji co koszty – do dnia budżetu (`monthRows` z `upToDay`, jak Bilans paliwa `fuelMonths`), więc
+  bilans i stopa oszczędności są z jednego okresu (wcześniej: przychody całego miesiąca, także z datą po dziś, przeciw
+  kosztom do dziś); koszty netto operacji z datą po dziś – osobno, w nowej ostatniej kolumnie „Zaplanowane – data po
+  dziś (zł)” (`Debriefing.planned`; miesiąc zakończony 0,00 – kolumny przed nią na swoich miejscach, jak w AP-29).
+  Przychód z datą po dziś nie ma kolumny (jak w debriefingu i przeglądzie rocznym).
 - **T422** Wypłata z bankomatu na konto „Gotówka” (AP-33, D100 (1); zmienia spec „Konta budżetu” i „Przypadki
   szczególne”, doprecyzowuje D83): konto gotówki to aktywne konto rodzaju `cash` (`cashAccountOf` – domyślne
   `CASH_ACCOUNT_ID` najpierw; nazwa nie decyduje). Jest – import rozpoznaje wypłatę (`isAtmOperation`: „WYPŁATA
@@ -3488,6 +3494,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wypłaty i zwroty ICTTJ, które tracą parę w banku (`pairsLost`: dostawy jak panel Dokowanie – `deliveriesFor` teraz,
   `deliveriesOfLists` ze zmianą; para przed, brak operacji po). Silnik ze zmianą liczy pary niezadokowane z dostaw po
   zmianie (`pendingPairsOf`), nie z obecnych. Tylko odczyt wyników silnika – reguły pieniędzy bez zmian.
+  Dopisek (przegląd N5 10): linia tracącej parę – nazwą z okna dokowania (N43, AP-23; `lostPairText` w `calc/effect.ts`):
+  „Wypłata z ICTTJ z dd.mm.rrrr (X zł) straci parę w banku…” albo „Zwrot do masy w ICTTJ z …” (było „Wpływ do XTB z
+  ICTTJ” – zwrot to wypływ do XTB).
 - **T430** Konflikty i historia czytelne (AP-27, DA sp. 3, DA.22, DA.23, DA.28, DA.30): karta konfliktu nazywa wpis tym, co
   człowiek rozpoznaje (`conflicts.ts` `conflictSubject`) – operacja: kontrahent (inaczej tytuł, kategoria), data
   dd.mm.rrrr, kwota ze znakiem i konto; plan i Dowództwo – miesiąc słownie; kontener, cel, pożyczka – nazwa i kwota;
@@ -3591,6 +3600,16 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   komputery piszą jeden plik; „Cofnij”) – pieniędzy, alarmu ani naruszenia w grze nie zmienia. Dopłata z wpisem ICTTJ
   potwierdza się jak dotąd w oknie dokowania. Telefon meldunku nie pokazuje (dokowanie tylko na komputerze). Bez zmian
   formatu (rekord dokowania jak dotąd).
+  Dopisek (przegląd N5 5 – silnik pieniędzy): potwierdzenie zapisuje `countedFrom` = utworzenie operacji
+  (`topUpConfirmation`, `calc/inbox.ts` – jak dokowanie pary liczonej według puli, T363), więc chwila operacji w silniku
+  (`cameIn`) zostaje jej własna: przeniesienie środków celu (T340) i „Dopełnij kadłub z osłon” (T373) z jej dnia,
+  zrobione między importem a kliknięciem, liczą się po dopłacie jak przed potwierdzeniem – warstwy, alarm firewalla,
+  `drawShields` i dzień gry bez zmian. Wcześniej rekord bez pola liczył się od kliknięcia (T128): dopłata 9:00,
+  przeniesienie celu do osłon 12:00, potwierdzenie 20:00 – przeniesienie przed dopłatą, osłony przy niej wyżej, alarm
+  i naruszenie znikały (z dopełnieniem kadłuba – inne kadłub i osłony). Testy: scenariusz recenzji w oknie
+  (`n5-review1-fixb-store.test.ts`) i własność na 300 losowych dniach – stan silnika z potwierdzeniem i bez niego
+  identyczny (`n5-review1-fixb.test.ts`). Pole addytywne jak w T363; potwierdzeń sprzed poprawki w danych nie ma (1.15.9
+  niewydana).
 - **T439** Domownicy w grze, dzienniku i listach (1.15.9, N5 – AP-19: AF-22, AF-23, AF-58, OP sp. 1, SW sp. 3, SW.12,
   SW sp. 9, DM sp. 6, 7; R-17 – D99 pkt 9; D80 b, D91 bez zmian): (1) „plan czy impuls?” od mojej części zakupu bez
   tego, co z definicji zaplanowane: `impulseAmount` – linie własne (nie domownika, finansowane ani prezent), bez
@@ -3686,6 +3705,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   historii nagłówek „bez historii: wpisz je sam” zamiast „średnie z 0 pełnych mies.”. Ślady przerwanego kreatora (AP-22
   bez zmian) uzupełnione o folder ICTTJ wybrany w kroku 5 (cele jego prognozy w folderze) i import zrobiony w trakcie
   (`noteImportTrace` po nowej paczce importu) – z „Cofnij import” w treści pytania.
+  Dopisek (przegląd N5 9, 11): informacja „propozycje zmniejszone” tylko, gdy coś zaproponowano (`fitEnvelopes`: bez
+  propozycji `fitted` false także wtedy, gdy pensja nic nie zostawia – było „Średnie wydatki (0,00 zł) są wyższe…”).
+  „Osłony po starcie” poniżej minimum z rozkazów – kwota kolorem akcentu (`data-state="below-min"`, jak w kursie)
+  z ostrzeżeniem pod spodem; na czerwono tylko kwota poniżej zera – zieleń i czerwień tylko dla kwot na plus i minus
+  (zmienia „na czerwono i z ostrzeżeniem poniżej minimum”).
 - **T446** Start budżetu w całości albo wcale (1.15.9, N5 – KR.29 / AF-14, część „zapis częściowy”; rozszerza T51):
   `finishWizard` najpierw zapisuje wszystko, co czekało (`saveFirst` – członek, cel, inna zmiana; folder, który tego nie
   przyjmuje, nie dostaje niczego ze startu), potem rekordy startu (salda otwarcia, plan miesiąca, wybrane kontenery
@@ -3698,6 +3722,23 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   jego id). Przycisk „Uruchom budżet” podaje obok tylko to, czego brakuje (`finishBlockers` – nazwy kont bez salda,
   pensja, podział ponad środki), w folderze tylko do odczytu – powód folderu, a gdy zapisy teraz padają – że start
   poczeka. Wykrywanie i zdejmowanie atrybutu „tylko do odczytu” z plików – czeka na decyzję użytkownika (bez zmian).
+  Dopisek (przegląd N5 2 – zmienia zdania „Ponowienie jest bezpieczne…” i „wybór propozycji przechodzi na kontener”):
+  start odrzucony po swoich rekordach (zapis rekordów albo `fi.json`) od razu je wycofuje (`refusedStart` →
+  `withdrawStart`, `features/wizard/state.ts`) – folder nie zostaje z saldem otwarcia z dziś, od którego silnik ruszyłby
+  bez startu (T25), z planem miesiąca, kontenerem ani płatnością połączoną z kontenerem; tekst „przepadną” przy
+  „Przerwij kreator” mówi prawdę. Pewność jak „Cofnij” (T418): rekord założony przez start znika tylko taki, jaki start
+  go zostawił (do historii jako cofnięty – „Usunięte wpisy” go przywrócą); rekord zmieniony przez start (saldo otwarcia
+  albo plan sprzed kreatora, płatność połączona z kontenerem) dostaje z powrotem tylko pola, które start zmienił, póki są
+  takie, jak je zostawił; zmieniony od tego czasu, zapisany przez nowszą wersję albo czekający na decyzję o zmianie
+  z drugiego komputera zostaje, jak jest (ze słowem). Co start zapisał, kreator pamięta z odpowiedziami
+  (`WizardState.startWrites` – rekord przed startem i po nim, także w szkicu na tym komputerze), dopóki budżet nie działa.
+  Czego folder nie dał wycofać (plik zajęty), zostaje w nich razem z płatnościami swojego kontenera: komunikat to nazywa,
+  pytanie „Przerwij kreator” wymienia („rekordy nieudanego startu (…) kreator usunie – zmienione od tego czasu zostaną,
+  jak są”), „Przerwij” wycofuje je tą samą regułą (folder dalej odmawia – kreator zostaje, ze słowem), następny start
+  ich używa (kontener tego odbiorcy z płatnościami, saldo i plan aktualizowane). Propozycja, której kontener zostaje, jest
+  w odpowiedziach tym kontenerem (zbiornik pod jego id – jak dotąd); której kontener poszedł – znów propozycją.
+  Rozważone i odrzucone: tylko „Przerwij” wymienia i usuwa (do tego czasu silnik liczyłby budżet od salda otwarcia
+  startu, którego nie było); zapis wielu plików naraz w jednym kroku – folder (OneDrive) tego nie ma.
 - **T447** Propozycje z historii i pierwsze dni (1.15.9, N5 – AP-25, AF-13, KR.19, KR sp. 9, ME sp. 3, AF-53; rozszerza
   T286): rachunek o zmiennej kwocie także co 2 miesiące (`VARIABLE_MID_CYCLES`) – co najmniej 3 ostatnie płatności w
   odstępie cyklu (±12 dni), kwoty ±60% mediany, w swoim dniu miesiąca (±6 dni), kwota = 75. percentyl roku w górę do

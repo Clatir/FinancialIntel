@@ -25,7 +25,7 @@ import { useAccounts, useCategories } from '../operations/pickers'
 import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
 import { ConfirmButton } from '../../components/ConfirmButton'
-import { cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
+import { cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, startWriteLabels, useWizard, WIZARD_STEPS } from './state'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const HULL_MONTHS = 12
@@ -474,7 +474,13 @@ export function WizardPage() {
         ))}
         <div className="flex-1" />
         <div className="m-3 flex flex-col gap-1.5">
-          <ConfirmButton className="text-left text-[11.5px] text-dim hover:text-fg-strong" confirmLabel="Przerwij kreator" message={cancelWizardText(w.traces)} onConfirm={cancelWizard} testId="wizard-cancel">
+          <ConfirmButton
+            className="text-left text-[11.5px] text-dim hover:text-fg-strong"
+            confirmLabel="Przerwij kreator"
+            message={cancelWizardText(w.traces, startWriteLabels(w.startWrites))}
+            onConfirm={() => void cancelWizard()}
+            testId="wizard-cancel"
+          >
             Przerwij kreator
           </ConfirmButton>
         </div>
@@ -540,7 +546,9 @@ function StartEffectRows({ effect }: { effect: ReturnType<typeof startEffect> })
       )}
       <div className="flex items-baseline gap-2">
         <span className="min-w-0 flex-1 text-fg">Osłony po starcie (na Mostku)</span>
-        <span className={cx('num', effect.shields < 0 || effect.belowMin ? 'text-down' : 'text-fg-strong')} data-testid="wizard-effect-shields">
+        {/* Red only for an amount below zero (green / red only for plus / minus – przegląd N5 11); below the orders' minimum
+            the accent, as the course paints it, with the warning under it. */}
+        <span className={cx('num', effect.shields < 0 ? 'text-down' : effect.belowMin ? 'text-accent' : 'text-fg-strong')} data-testid="wizard-effect-shields" data-state={effect.shields < 0 ? 'minus' : effect.belowMin ? 'below-min' : undefined}>
           {zl(effect.shields)}
         </span>
       </div>
