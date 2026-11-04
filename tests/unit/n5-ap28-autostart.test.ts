@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loginItemWrites, type LoginContext } from '../../src/main/loginItem'
+import { loginEntryOf, loginItemWrites, type LaunchItem, type LoginContext } from '../../src/main/loginItem'
 
 // The Run key is never touched here: the rules decide the writes, the test reads them (AP-28, incident of 03.11.2026).
 const INSTALLED = 'C:\\Users\\Kapitan\\AppData\\Local\\Programs\\Financial Intel\\Financial Intel.exe'
@@ -60,5 +60,18 @@ describe('autostart przy dwóch profilach (AP-28)', () => {
     expect(loginItemWrites(ctx({ ...mac, want: false }))).toEqual([])
     expect(loginItemWrites(ctx({ ...mac, want: false, changed: true }))).toHaveLength(1)
     expect(loginItemWrites(ctx({ ...mac, want: true }))).toMatchObject([{ openAtLogin: true }])
+  })
+})
+
+describe('stan wpisu w systemie tej kopii (przegląd 3 N5, T433)', () => {
+  const base = { ownProfile: true, windows: true, path: INSTALLED, items: [] as LaunchItem[] }
+  it('wpis tego exe – tak (także pod starą nazwą); wyłączony w Menedżerze zadań albo innej kopii – nie; profil testowy – nieznany', () => {
+    expect(loginEntryOf({ ...base, items: [own] })).toBe(true)
+    expect(loginEntryOf({ ...base, items: [{ name: 'app.financialintel.desktop', path: INSTALLED.toUpperCase(), args: [] }] })).toBe(true)
+    expect(loginEntryOf({ ...base, items: [{ ...own, enabled: false }] })).toBe(false)
+    expect(loginEntryOf({ ...base, items: [] })).toBe(false)
+    expect(loginEntryOf({ ...base, path: LAB, items: [own] })).toBe(false)
+    expect(loginEntryOf({ ...base, ownProfile: false, items: [own] })).toBeNull()
+    expect(loginEntryOf({ ...base, windows: false, openAtLogin: true })).toBe(true)
   })
 })

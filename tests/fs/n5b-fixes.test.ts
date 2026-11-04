@@ -18,7 +18,7 @@ vi.mock('../../src/main/datastore/atomic', async (importOriginal) => {
   }
 })
 
-const { ConfigStore, changeTray } = await import('../../src/main/config')
+const { ConfigStore, backupDirsAfter, changeTray } = await import('../../src/main/config')
 const { loginItemWrites } = await import('../../src/main/loginItem')
 const { CONFLICT_CHANGED_TEXT, newestOnShown } = await import('@shared/conflicts')
 const { serializeRecord } = await import('@shared/records')
@@ -48,7 +48,21 @@ const until = async (check: () => Promise<boolean>, ms = 5000) => {
   }
   return false
 }
-const onDisk = async (dir: string) => JSON.parse(await fs.readFile(join(dir, 'config.json'), 'utf8').catch(() => '{}')) as Record<string, unknown> & { tray?: { launchAtLogin?: boolean }; prefs?: { zoom?: number } }
+type OnDisk = Record<string, unknown> & { tray?: { launchAtLogin?: boolean }; prefs?: { zoom?: number } }
+/**
+ * config.json as on the disk; {} = not there. Read again for a moment when the read is refused – on Windows a read
+ * during a write's rename (a retried write under load) is refused for an instant (it failed the full run, not the file).
+ */
+async function onDisk(dir: string): Promise<OnDisk> {
+  for (let i = 0; ; i++) {
+    try {
+      return JSON.parse(await fs.readFile(join(dir, 'config.json'), 'utf8')) as OnDisk
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT' || i >= 40) return {}
+      await new Promise((r) => setTimeout(r, 25))
+    }
+  }
+}
 
 describe('start z Windows przy zajętym config.json (uwaga 1, T433)', () => {
   const INSTALLED = 'C:\\Users\\Kapitan\\AppData\\Local\\Programs\\Financial Intel\\Financial Intel.exe'
@@ -134,7 +148,9 @@ describe('folder kopii przy zajętym config.json (uwaga 4, T434)', () => {
 
   it('pole zmienione ponownie w trakcie nieudanego zapisu: nowsza wartość zostaje, gdy jej zapis się uda; gdy i on odmówi – wraca to, co ma config.json', async () => {
     const dir = await configDir()
-    const config = new ConfigStore(dir, 30, 40)
+    // The retry of a failed write far away: only the writes of the test run, in the order it gives (under load the 40 ms
+    // retry came between them and the disk was read during its rename).
+    const config = new ConfigStore(dir, 30, 60_000)
     await config.load()
     refuse.on = true
     const first = config.update({ backupDirOverride: 'E:/Nowe' })
@@ -153,9 +169,37 @@ describe('folder kopii przy zajętym config.json (uwaga 4, T434)', () => {
     await expect(fourth).rejects.toThrow()
     expect(config.get().backupDirOverride).toBe('F:/Najnowsze')
     refuse.on = false
-    // The retry (nothing new to write) lands before the folder is removed.
-    await new Promise((r) => setTimeout(r, 200))
+    // A write that goes: the state as it is (the retry no longer waits – nothing written into the folder once removed).
+    await config.update({ window: null })
     expect((await onDisk(dir)).backupDirOverride).toBe('F:/Najnowsze')
+  })
+})
+
+describe('listy folderów z chwili nieczytelnego config.json (przegląd 3 N5, pkt 9)', () => {
+  it('ostatnie foldery danych i wcześniejsze foldery kopii: dopisane do list z pliku, nie zamiast nich; folder już na liście – na początek, bez powtórzeń', async () => {
+    const dir = await configDir()
+    await fs.mkdir(join(dir, 'config.json'))
+    await fs.writeFile(join(dir, 'config.json', 'blokada'), 'x')
+    const config = new ConfigStore(dir, 0, 40)
+    await config.load()
+    expect(config.loadFailed).toBeTruthy()
+    // Opened while config.json was held (the start with Windows): the list built on the defaults has only these.
+    await config.rememberDir('D:/Nowy')
+    await config.rememberDir('C:/R3')
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+    await config.update({ backupDirsBefore: backupDirsAfter(config.get().backupDirsBefore ?? [], 'D:/Nowy', 'D:/Nowy/backups', 'E:/Kopie', same) })
+    expect(config.get().recentDirs).toEqual(['C:/R3', 'D:/Nowy'])
+    // Readable: the file's 8 recent folders and its earlier folder of backups.
+    const recent = ['C:/R1', 'C:/R2', 'C:/R3', 'C:/R4', 'C:/R5', 'C:/R6', 'C:/R7', 'C:/R8']
+    const earlier = [{ dataDir: 'C:/Dane', dir: 'C:/Dane/backups' }]
+    await fs.rm(join(dir, 'config.json'), { recursive: true })
+    await fs.writeFile(join(dir, 'config.json'), JSON.stringify({ dataDir: 'C:/R1', recentDirs: recent, backupDirsBefore: earlier }))
+    await config.load()
+    // Before: [C:/R3, D:/Nowy] in place of the file's eight – the other recent folders and the earlier backups gone.
+    expect(config.get().recentDirs).toEqual(['C:/R3', 'D:/Nowy', 'C:/R1', 'C:/R2', 'C:/R4', 'C:/R5', 'C:/R6', 'C:/R7'])
+    expect(config.get().backupDirsBefore).toEqual([{ dataDir: 'D:/Nowy', dir: 'D:/Nowy/backups' }, ...earlier])
+    expect(config.get().dataDir).toBe('C:/R3')
+    expect(await onDisk(dir)).toMatchObject({ recentDirs: config.get().recentDirs, backupDirsBefore: config.get().backupDirsBefore })
   })
 })
 
@@ -186,20 +230,20 @@ describe('pamięć przy nieczytelnym albo zajętym config.json (przegląd 2 N5, 
 
   it('zmiana zabrana przez wcześniejszy zapis tego samego stanu – zapisana: bez „nie zapamiętano” i bez cofania', async () => {
     const dir = await configDir()
-    const config = new ConfigStore(dir, 30, 40)
+    const config = new ConfigStore(dir, 30, 60_000)
     await config.load()
     // The window's size written (a slow disk) – the folder of backups chosen meanwhile goes with it (the latest state).
     const bounds = config.update({ window: { x: 1, y: 2, width: 800, height: 600, maximized: false } })
     const backups = config.update({ backupDirOverride: 'E:/Kopie' })
     await bounds
-    expect((await onDisk(dir)).backupDirOverride).toBe('E:/Kopie')
-    // The folder's own write refused: the folder is on the disk – before, „nie została zapamiętana” and Ustawienia took it
-    // back while the next start used it.
+    // The folder's own write refused (still waiting for its slow disk): the folder is on the disk – before, „nie została
+    // zapamiętana” and Ustawienia took it back while the next start used it.
     refuse.on = true
+    expect((await onDisk(dir)).backupDirOverride).toBe('E:/Kopie')
     await expect(backups).resolves.toMatchObject({ backupDirOverride: 'E:/Kopie' })
     expect(config.get().backupDirOverride).toBe('E:/Kopie')
     refuse.on = false
-    await new Promise((r) => setTimeout(r, 200))
+    await config.update({ window: null })
   })
 })
 

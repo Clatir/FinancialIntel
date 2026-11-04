@@ -19,15 +19,15 @@ describe('„Zachowaj tę wersję” – wersja pokazana na karcie (uwaga 7)', (
   it('kopia zmieniona w trakcie zapisu przed decyzją (watcher przyniósł nowszą) – odmowa w oknie, nie czasy nowej wersji', () => {
     const now = { ...shown, copy: side(shown.copy.relPath, tx(-1900, '2026-10-14T11:00:00.000Z', 'LAPTOP'), 3000) }
     // Before: the times of the version after the flush went to main – it matched them and binned the version unseen.
-    for (const keep of ['canonical', 'copy'] as const) expect(seenFor(shown, now, keep, 'TEN-PC')).toBeNull()
+    for (const keep of ['canonical', 'copy'] as const) expect(seenFor(shown, now, keep)).toBeNull()
   })
 
   it('zapis tego komputera tylko odświeżył znaczniki oryginału – decyzja idzie z czasami po zapisie', () => {
     const now = { ...shown, canonical: side(ORIGINAL, { ...tx(-1200, '2026-10-14T12:00:00.000Z'), updatedBy: 'TEN-PC' }, 4000) }
-    expect(seenFor(shown, now, 'copy', 'TEN-PC')).toEqual({ canonical: 4000, copy: 2000 })
-    expect(seenFor(shown, shown, 'copy', 'TEN-PC')).toEqual({ canonical: 1000, copy: 2000 })
+    expect(seenFor(shown, now, 'copy')).toEqual({ canonical: 4000, copy: 2000 })
+    expect(seenFor(shown, shown, 'copy')).toEqual({ canonical: 1000, copy: 2000 })
     // Gone from the window meanwhile: the times shown – the main process says it is gone.
-    expect(seenFor(shown, undefined, 'copy', 'TEN-PC')).toEqual({ canonical: 1000, copy: 2000 })
+    expect(seenFor(shown, undefined, 'copy')).toEqual({ canonical: 1000, copy: 2000 })
   })
 })
 
@@ -59,35 +59,41 @@ describe('„Zaakceptuj nowsze” – wybór na pokazanych wersjach (uwaga 3)', 
   })
 })
 
-describe('własny zapis okna przed decyzją nie jest „nowszą kopią z OneDrive” (przegląd 2 N5, pkt 7)', () => {
+describe('własny zapis okna przed decyzją nie jest „nowszą kopią z OneDrive” (przegląd 2 i 3 N5)', () => {
   const ME = 'TEN-PC'
   const original = side(ORIGINAL, tx(-1200, '2026-10-14T10:00:00.000Z'), 1000)
   const shown = conflict('-LAPTOP.json', original, tx(-1500, '2026-10-14T09:00:00.000Z', 'LAPTOP'), 2000)
-  // The unsaved edits of the original written by saveFirst (this computer's stamp) – and the same change from outside.
+  // The window's unsaved edit of the original, taken before saveFirst – and the original on the disk after it.
+  const unsaved = tx(-1250, '2026-10-14T10:00:00.000Z', ME)
   const savedHere = { ...shown, canonical: side(ORIGINAL, tx(-1250, '2026-10-14T12:00:00.000Z', ME), 4000) }
+  // Another content with this computer's name: OneDrive bringing back this computer's earlier upload (or two PCs of one name).
+  const restored = { ...shown, canonical: side(ORIGINAL, tx(-1100, '2026-10-14T12:00:00.000Z', ME), 4000) }
   const fromOutside = { ...shown, canonical: side(ORIGINAL, tx(-1250, '2026-10-14T12:00:00.000Z', 'LAPTOP'), 4000) }
 
-  it('„Zachowaj tę wersję”: własny zapis oryginału nie odmawia; z zewnątrz – tylko przy zachowaniu kopii (zastąpiłaby niewidziany oryginał)', () => {
-    // Before: both refused with „OneDrive przyniósł nowszą kopię”, though nothing came from outside.
-    expect(seenFor(shown, savedHere, 'canonical', ME)).toEqual({ canonical: 4000, copy: 2000 })
-    expect(seenFor(shown, savedHere, 'copy', ME)).toEqual({ canonical: 4000, copy: 2000 })
-    // The original changed from outside: kept as it is by „Zachowaj oryginał” (nothing replaced), never replaced unseen.
-    expect(seenFor(shown, fromOutside, 'canonical', ME)).toEqual({ canonical: 4000, copy: 2000 })
-    expect(seenFor(shown, fromOutside, 'copy', ME)).toBeNull()
-    // No name of this computer (not known yet): every change of the original counts as from outside.
-    expect(seenFor(shown, savedHere, 'copy', null)).toBeNull()
+  it('„Zachowaj tę wersję”: własny zapis tego okna nie odmawia; nazwa komputera nie wystarcza; z zewnątrz – odmowa tylko przy zachowaniu kopii', () => {
+    expect(seenFor(shown, savedHere, 'canonical', unsaved)).toEqual({ canonical: 4000, copy: 2000 })
+    expect(seenFor(shown, savedHere, 'copy', unsaved)).toEqual({ canonical: 4000, copy: 2000 })
+    // Przegląd 3: this computer's name on another content is no own save – the copy would replace an original not seen.
+    expect(seenFor(shown, restored, 'copy', unsaved)).toBeNull()
+    expect(seenFor(shown, restored, 'copy', null)).toBeNull()
+    // The original changed from outside: kept as it is by keeping it (nothing replaced), never replaced unseen.
+    expect(seenFor(shown, fromOutside, 'canonical', null)).toEqual({ canonical: 4000, copy: 2000 })
+    expect(seenFor(shown, fromOutside, 'copy', null)).toBeNull()
   })
 
-  it('„Zaakceptuj nowsze”: grupa z własnym zapisem oryginału nie jest „zmieniona” – najnowsza wybrana na zapisanym oryginale', () => {
-    // Shown: the copy newer than the original – „keep the copy”. Saved here meanwhile: the original is the newest now.
+  it('„Zaakceptuj nowsze”: zostaje ta, która na karcie była nowsza – własny zapis oryginału nie odwraca wyboru; kopia nowsza a oryginał z Twoimi zmianami – grupa dla użytkownika', () => {
+    // The original newer on the card, the user's edits saved just now: kept – the edits stay.
+    const kept = newestOnShown([shown], [savedHere], [shown.id], new Map([[shown.id, unsaved]]))
+    expect(kept).toMatchObject({ changed: [], mine: [], resolutions: [{ id: shown.id, keep: 'canonical', seen: { canonical: 4000, copy: 2000 } }] })
+    // The copy newer on the card („nowsza”), the original with the user's fresh edits: neither goes without a word.
+    // Before (przegląd 2): chosen again on the saved original – the copy the card marked „nowsza” binned.
     const newerCopy = conflict('-LAPTOP.json', original, tx(-1500, '2026-10-14T11:00:00.000Z', 'LAPTOP'), 2000)
     const saved = { ...newerCopy, canonical: savedHere.canonical }
-    const plan = newestOnShown([newerCopy], [saved], [newerCopy.id], ME)
-    expect(plan.changed).toEqual([])
-    expect(plan.resolutions).toEqual([{ id: newerCopy.id, keep: 'canonical', group: ORIGINAL, seen: { canonical: 4000, copy: 2000 } }])
-    // From outside: the copy chosen would replace an original not seen – the group left; keeping the original goes on.
-    const outside = { ...newerCopy, canonical: fromOutside.canonical }
-    expect(newestOnShown([newerCopy], [outside], [newerCopy.id], ME).changed).toEqual([newerCopy.id])
-    expect(newestOnShown([shown], [fromOutside], [shown.id], ME).resolutions.map((r) => r.keep)).toEqual(['canonical'])
+    expect(newestOnShown([newerCopy], [saved], [newerCopy.id], new Map([[newerCopy.id, unsaved]]))).toMatchObject({ resolutions: [], changed: [], mine: [newerCopy.id] })
+    // This computer's name on another content (no unsaved version taken): from outside – the group left as changed.
+    const back = { ...newerCopy, canonical: restored.canonical }
+    expect(newestOnShown([newerCopy], [back], [newerCopy.id])).toMatchObject({ resolutions: [], changed: [newerCopy.id], mine: [] })
+    // From outside, the original kept: goes on.
+    expect(newestOnShown([shown], [fromOutside], [shown.id]).resolutions.map((r) => r.keep)).toEqual(['canonical'])
   })
 })

@@ -8,7 +8,7 @@ import { countLabel, fmtBytes, plDateTime } from '../../lib/format'
 import { saveFirst, switchFolder, unsavedReport, updateSettings, useData, useFolderLocked } from '../../store/data'
 import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
-import { loadTrayPrefs, setTrayPrefs, useTray } from '../../store/tray'
+import { autostartOf, refreshTrayPrefs, setTrayPrefs, useTray } from '../../store/tray'
 import { UpdatesTab } from './UpdatesTab'
 import { AccountsTab } from './AccountsTab'
 import { CategoriesTab } from './CategoriesTab'
@@ -476,11 +476,13 @@ function FolderTab() {
 /** Tray and start with Windows (decision D46): settings of this computer. */
 function SystemTab() {
   const prefs = useTray((s) => s.prefs)
+  // The system's entry as it is now, each time the tab is shown (przegląd 3 N5).
   useEffect(() => {
-    void loadTrayPrefs()
+    void refreshTrayPrefs()
   }, [])
   const change = (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin'>>) => setTrayPrefs(patch).catch((e: unknown) => toast(`Nie udało się zapisać: ${errorMessage(e)}`, 'error'))
   if (!prefs) return <Panel title="Zasobnik i start z Windows">Wczytywanie…</Panel>
+  const autostart = autostartOf(prefs)
   return (
     <Panel title="Zasobnik i start z Windows" name="Zasobnik i start z Windows (ten komputer)" actions={<MachineOnly />}>
       <div className="flex flex-col gap-2.5 text-[12px]">
@@ -491,12 +493,17 @@ function SystemTab() {
           data-testid="tray-close"
         />
         <Toggle
-          checked={prefs.launchAtLogin}
+          checked={autostart.on}
           disabled={!prefs.loginSupported}
           onChange={(launchAtLogin) => void change({ launchAtLogin })}
           label="Uruchamiaj z Windows (ukryta w zasobniku)"
           data-testid="tray-login"
         />
+        {autostart.note && (
+          <p className="text-[11.5px] text-accent" data-testid="tray-login-note">
+            {autostart.note}
+          </p>
+        )}
         {!prefs.loginSupported && <p className="text-[11.5px] text-dim">Start z systemem działa w zainstalowanej albo przenośnej wersji dla Windows.</p>}
         <p className="text-[11.5px] text-muted">
           Te ustawienia są zapisane na tym komputerze (nie w folderze danych). Start z Windows włączysz też w kreatorze startu. Ikona pokazuje w

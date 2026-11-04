@@ -3546,6 +3546,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Zbiorczo: grupa z własnym zapisem oryginału wybiera najnowszą na zapisanym oryginale; z oryginałem zmienionym
   z zewnątrz zostaje dla użytkownika tylko, gdy najnowsza to kopia. „Scal…” bez zmian (wybory na obu pokazanych
   stronach). Wcześniej E2E `sync` (kopia `fi.json`) padał: okno zapisało `fi.json` w `saveFirst` i odmawiało samo sobie.
+  Dopisek (przegląd 3 N5 – **zmienia** rozpoznanie i wybór zbiorczy z przeglądu 2): własny zapis rozpoznaje znak tego okna
+  i tej decyzji, nie nazwa komputera – niezapisana wersja oryginału wzięta tuż przed `saveFirst` (`SyncPage`
+  `unsavedOriginal`, `unsavedOf`) i oryginał po zapisie o tej treści (`sameContentAs`); ta sama nazwa komputera przy innej
+  treści (OneDrive przywraca wcześniejszy plik tego komputera, dwa komputery o jednej nazwie) to zmiana z zewnątrz.
+  „Zaakceptuj nowsze” zawsze według kart: zostaje wersja, którą karta oznaczyła „nowsza” – własny zapis oryginału nie
+  odwraca wyboru. Gdy na karcie nowsza była kopia, a oryginał ma teraz zapisane przed chwilą zmiany użytkownika, grupa
+  zostaje dla użytkownika (`newestOnShown` `mine`, komunikat „Nowsza na karcie była kopia, a oryginał ma Twoje zmiany…
+  żadnej wersji nie odrzucono, wybierz ręcznie”); oryginał nowszy na karcie zostaje z tymi zmianami.
 - **T432** Nowy komputer (AP-28, US.1, US.13, US.31, SW sp. 8): panele ustawień zapisanych w `config.json` mają jeden
   znak „tylko ten komputer” (`MachineOnly` – rozmiar, prywatność kwot, szybki wpis, powiadomienia, dźwięki, ICTTJ: folder
   i program, pliki z mBanku, bieżący i ostatnie foldery, zasobnik i start, aktualizacje, token). Pierwsze otwarcie
@@ -3585,7 +3593,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   to klasa incydentu 03.11. Wpis usuwa tylko przełącznik (Ustawienia, kreator, baner, lista nowego komputera), od razu,
   przed zapisem `config.json` (`changeTray`), więc odrzucony zapis nie zostawia wpisu za ustawieniem. Zostaje znana
   rozbieżność: wpis z wersji sprzed poprawki albo drugiej kopii przy „wyłączone” – usuwa go dopiero przełącznik
-  (włącz i wyłącz) w tej kopii.
+  (włącz i wyłącz) w tej kopii. Dopisek (przegląd 3 N5): przełącznik pokazuje stan prawdziwego wpisu tej kopii w systemie
+  (`loginItem.ts` `loginEntryOf` – wpis tego exe, nie wyłączony w Menedżerze zadań; macOS – `openAtLogin`; `tray.ts`
+  `loginEntry`, `trayView().loginEntry`), czytany przy każdym pokazaniu Ustawień → Zasobnik i listy nowego komputera
+  (`refreshTrayPrefs`) i po każdej zmianie; inny niż `config.json` – stan systemu z notką („Windows uruchamia tę kopię…
+  przełącznik pokazuje stan systemu; wyłącz, żeby usunąć wpis” albo odwrotnie), a przełączenie zapisuje wpis według
+  wyboru. Profil testowy i wersja niespakowana – stan nieznany, przełącznik według `config.json`. Baner „Uruchamiać z
+  Windows?” nie pyta komputera, który już startuje z Windows. Start dalej niczego nie usuwa.
 - **T434** „Co nowego” bez sieci, kopie po zmianie folderu kopii, zapis `config.json` ponawiany (AP-28, AF-40, IN.26,
   DA.14, DA.11, US.33): okno ma wbudowane 15 najnowszych sekcji CHANGELOG (`electron.vite.config.mts` `__FI_CHANGELOG__`,
   `releaseNotes.ts` `notesOf`) – panel „Co nowego w wersji X” pokazuje się z nich, gdy notatek z GitHuba nie ma
@@ -3611,6 +3625,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ICTTJ, folder kopii i pobrana aktualizacja nie wracają do domyślnych. „Nie została zapamiętana” tylko wtedy, gdy
   `config.json` naprawdę nie ma nowej wartości: zmiana zabrana przez wcześniejszy zapis z kolejki (każdy pisze najnowszy
   stan) jest zapisana – bez komunikatu i bez cofania (`ConfigStore.update` porównuje z `saved`, stanem pliku).
+  Dopisek (przegląd 3 N5): zmiana czekająca na liście folderów (`recentDirs`, `backupDirsBefore`) jest zmianą elementów –
+  dopisane na początek i usunięte (`config.ts` `listChange`, `applyHeld`) – nakładaną na listę z pliku z jej granicą
+  (8), nigdy całą listą zbudowaną na domyślnych (folder otwarty przy nieczytelnym pliku zostawiał z 8 ostatnich folderów
+  tylko siebie, a wcześniejsze foldery kopii znikały).
 - **T435** Wpis ICTTJ z pierwszych dni budżetu (1.15.9, N5 – AP-26, AF-47 = C15, DO sp. 2; D72, T63; **zmienia zdanie T162**
   „bez Portfela XTB dla okna zaczętego przed startem”): „sprzed startu” tylko wpis z datą przed startem (`deliveries`:
   `!counted(e.date)`); wpis od startu, którego okno pary (−3 dni) zaczyna się przed startem, czeka na import jak każdy

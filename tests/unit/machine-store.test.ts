@@ -163,3 +163,24 @@ describe('zasobnik i start z Windows przy zajętym config.json (przegląd N5, uw
     expect(useUi.getState().toasts.at(-1)?.text).toMatch(/działają, a zapis ponawia się sam/)
   })
 })
+
+describe('przełącznik startu z Windows pokazuje stan systemu (przegląd 3 N5, T433)', () => {
+  const view = (launchAtLogin: boolean, loginEntry: boolean | null | undefined) => ({ closeToTray: true, launchAtLogin, notified: true, autostartAsked: false, loginSupported: true, loginEntry })
+  it('config.json mówi „nie”, a Windows ma wpis tej kopii (plik odłożony albo usunięty): przełącznik włączony z notką; zgodne albo nieznane – bez notki', () => {
+    // Before: the switch showed config.json's „off” while Windows kept starting the app.
+    expect(trayStore.autostartOf(view(false, true))).toMatchObject({ on: true, note: expect.stringMatching(/stan systemu/) })
+    expect(trayStore.autostartOf(view(true, false))).toMatchObject({ on: false, note: expect.stringMatching(/stan systemu/) })
+    expect(trayStore.autostartOf(view(true, true))).toEqual({ on: true, note: null })
+    expect(trayStore.autostartOf(view(false, null))).toEqual({ on: false, note: null })
+    expect(trayStore.autostartOf(view(false, undefined))).toEqual({ on: false, note: null })
+    // A computer whose app starts with Windows already is never asked whether it should.
+    expect(trayStore.asksAutostart(view(false, true), true)).toBe(false)
+    expect(trayStore.asksAutostart(view(false, false), true)).toBe(true)
+  })
+
+  it('pokazanie Ustawień czyta stan systemu od nowa (nie z pierwszego odczytu)', async () => {
+    mainTray = { ...mainTray, launchAtLogin: false, loginEntry: true } as typeof mainTray
+    await trayStore.refreshTrayPrefs()
+    expect(trayStore.autostartOf(trayStore.useTray.getState().prefs!).on).toBe(true)
+  })
+})

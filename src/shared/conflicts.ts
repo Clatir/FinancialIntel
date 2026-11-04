@@ -152,48 +152,51 @@ export interface ConflictSeen {
 const seenOf = (c: Pick<ConflictEntry, 'canonical' | 'copy'>): ConflictSeen => ({ canonical: c.canonical.mtimeMs, copy: c.copy.mtimeMs })
 
 /**
- * The original as this computer saved it (its `updatedBy` – `me`, this computer's name): the window's own save before a
- * decision (`saveFirst` of unsaved edits) is no version brought from outside (przegląd 2 N5). A copy is never this
- * window's write – OneDrive's (or another program's) only.
+ * The original as this window saved it just now (przegląd 3 N5): `ownBefore` – its unsaved version taken right before
+ * the decision's `saveFirst` (null = nothing unsaved), and the original on the disk after the save has that content. A
+ * mark of this window and this decision – never the computer's name (OneDrive bringing back this computer's earlier
+ * upload, two computers of one name). A copy is never this window's write – OneDrive's (or another program's) only.
  */
-const ownSave = (side: ConflictSide, me: string | null): boolean => !!me && (side.record as { updatedBy?: unknown } | null)?.updatedBy === me
+const ownSave = (side: ConflictSide, ownBefore: unknown): boolean => ownBefore != null && side.record != null && sameContentAs(side.record, ownBefore)
 
 /**
  * The versions a decision on `shown` (what the card showed at the click) goes with after this window's own save
  * (`saveFirst`, AP-27, T431). Refused here (null) only for a side whose unseen content the decision would let go: the
  * copy changed (OneDrive brought another one during the save – kept unseen, or binned unseen), or – keeping the copy,
  * which replaces the original – the original changed from outside. The original changed by this window's own save
- * (`me`) is no surprise: kept, or let go into the history at the user's choice; the original kept, a newer
- * original from outside is kept too, nothing replaced. Otherwise the file times `now`, and the main process refuses
- * what changed after. Gone from the window (`now` none): the times shown – the main process says it is gone.
+ * (`ownBefore`, `ownSave`) is no surprise: kept, or let go into the history at the user's choice; the original kept, a
+ * newer original from outside is kept too, nothing replaced. Otherwise the file times `now`, and the main process
+ * refuses what changed after. Gone from the window (`now` none): the times shown – the main process says it is gone.
  */
 export function seenFor(
   shown: Pick<ConflictEntry, 'canonical' | 'copy'>,
   now: Pick<ConflictEntry, 'canonical' | 'copy'> | undefined,
   keep: Keep,
-  me: string | null
+  ownBefore: unknown = null
 ): ConflictSeen | null {
   if (!now) return seenOf(shown)
   const side = changedSince(shown, now)
   if (side === 'copy' || side === 'both') return null
-  if (side === 'canonical' && keep === 'copy' && !ownSave(now.canonical, me)) return null
+  if (side === 'canonical' && keep === 'copy' && !ownSave(now.canonical, ownBefore)) return null
   return seenOf(now)
 }
 
 /**
  * „Zaakceptuj nowsze” on the versions the window showed (AP-27, T431): the newest of each is chosen on `shown` (the
- * cards at the click, `newestResolutions`), and each resolution goes with the file times known `now` (after this
- * window's save). A group (one original's copies, decided together) is left whole for the user (`changed`) when a copy
- * of it changed in content since, or is gone, or when its original changed from outside and the newest chosen is a
- * copy (it would replace an original not seen). An original changed by this window's own save (`me` – przegląd 2 N5)
- * is no change from outside: the group's newest is chosen on it as saved (its own edits are what the user knows).
+ * cards at the click, `newestResolutions` – the one the card marked „nowsza” stays), and each resolution goes with the
+ * file times known `now` (after this window's save). A group (one original's copies, decided together) is left whole
+ * for the user when a copy of it changed in content since, or is gone (`changed`), or when its original changed and
+ * the newest on the cards is a copy, which would replace it: changed from outside (`changed` – not seen), or by this
+ * window's own save of the user's edits just now (`mine`, `own` – the unsaved versions taken before the save, by
+ * conflict; przegląd 3 N5): neither the newer copy nor the fresh edits go without a word. An original changed and kept
+ * goes on as it is now.
  */
 export function newestOnShown(
   shown: readonly ConflictEntry[],
   now: readonly ConflictEntry[],
   ids: Iterable<string>,
-  me: string | null = null
-): { resolutions: Array<{ id: string; keep: Keep; group: string; seen: ConflictSeen }>; skipped: string[]; changed: string[] } {
+  own: ReadonlyMap<string, unknown> = new Map()
+): { resolutions: Array<{ id: string; keep: Keep; group: string; seen: ConflictSeen }>; skipped: string[]; changed: string[]; mine: string[] } {
   const chosen = new Set(ids)
   const nowById = new Map(now.map((c) => [c.id, c]))
   // Per group (the original's path, as `newestResolutions` groups): what changed since the cards were shown.
@@ -205,20 +208,21 @@ export function newestOnShown(
     const side = is ? changedSince(c, is) : 'both'
     if (!is || side === 'copy' || side === 'both') g.copy = true
     else if (side === 'canonical') {
-      if (ownSave(is.canonical, me)) g.own = true
+      if (ownSave(is.canonical, own.get(c.id))) g.own = true
       else g.outside = true
     }
     moved.set(c.canonical.relPath, g)
   }
-  const basis = shown.map((c) => (moved.get(c.canonical.relPath)?.own ? (nowById.get(c.id) ?? c) : c))
-  const plan = newestResolutions(basis, ids)
+  const plan = newestResolutions(shown, ids)
   const keepsCopy = new Set(plan.resolutions.filter((r) => r.keep === 'copy').map((r) => r.group))
   const resolutions: Array<{ id: string; keep: Keep; group: string; seen: ConflictSeen }> = []
   const changed: string[] = []
+  const mine: string[] = []
   for (const r of plan.resolutions) {
     const g = moved.get(r.group)
     if (g?.copy || (g?.outside && keepsCopy.has(r.group))) changed.push(r.id)
+    else if (g?.own && keepsCopy.has(r.group)) mine.push(r.id)
     else resolutions.push({ ...r, seen: seenOf(nowById.get(r.id)!) })
   }
-  return { resolutions, skipped: plan.skipped, changed }
+  return { resolutions, skipped: plan.skipped, changed, mine }
 }

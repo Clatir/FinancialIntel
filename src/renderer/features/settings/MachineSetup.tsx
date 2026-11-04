@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { shortcutLabel, type NotifyPrefs } from '@shared/machine'
 import { useIctj } from '../../store/ictj'
 import { useMachine } from '../../store/machine'
-import { loadTrayPrefs, setTrayPrefs, useTray } from '../../store/tray'
+import { autostartOf, refreshTrayPrefs, setTrayPrefs, useTray } from '../../store/tray'
 import { useUpdate } from '../../store/update'
 import { navigate, toast, type SettingsTab } from '../../store/ui'
 import { errorMessage } from '../../lib/api'
@@ -72,7 +72,8 @@ export function MachineSetupDialog() {
   const tray = useTray((s) => s.prefs)
   const token = useUpdate((s) => s.state?.token.present ?? false)
   useEffect(() => {
-    if (open) void loadTrayPrefs()
+    // The system's entry as it is now (przegląd 3 N5).
+    if (open) void refreshTrayPrefs()
   }, [open])
   if (!open) return null
   const close = () => useMachineSetup.setState({ open: false })
@@ -85,6 +86,7 @@ export function MachineSetupDialog() {
       Ustaw…
     </button>
   )
+  const autostart = tray ? autostartOf(tray) : null
   const on = NOTIFY_KEYS(notify).filter(([, v]) => v).length
   const all = NOTIFY_KEYS(notify).length
   return (
@@ -116,17 +118,17 @@ export function MachineSetupDialog() {
       </Row>
       <Row
         label="Start z Windows"
-        state={!tray ? '…' : !tray.loginSupported ? 'tylko w zainstalowanej albo przenośnej wersji dla Windows' : tray.launchAtLogin ? 'włączony (ukryty w zasobniku)' : 'wyłączony'}
-        ok={!!tray?.launchAtLogin}
+        state={!tray || !autostart ? '…' : !tray.loginSupported ? 'tylko w zainstalowanej albo przenośnej wersji dla Windows' : `${autostart.on ? 'włączony (ukryty w zasobniku)' : 'wyłączony'}${autostart.note ? ' – stan systemu, inny niż zapisane ustawienie' : ''}`}
+        ok={!!autostart?.on}
         testId="machine-setup-autostart"
       >
         {tray?.loginSupported && (
           <button
             className="btn h-[22px]"
-            onClick={() => void setTrayPrefs({ launchAtLogin: !tray.launchAtLogin }).catch((e: unknown) => toast(`Nie udało się zapisać: ${errorMessage(e)}`, 'error'))}
+            onClick={() => void setTrayPrefs({ launchAtLogin: !autostart?.on }).catch((e: unknown) => toast(`Nie udało się zapisać: ${errorMessage(e)}`, 'error'))}
             data-testid="machine-setup-autostart-toggle"
           >
-            {tray.launchAtLogin ? 'Wyłącz' : 'Włącz'}
+            {autostart?.on ? 'Wyłącz' : 'Włącz'}
           </button>
         )}
         {set('system')}

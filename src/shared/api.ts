@@ -371,9 +371,12 @@ export interface FiApi {
   openExternal(url: string): Promise<void>
   /** Opens the folder of this computer's application log (userData/logs) in the file manager. */
   openLogs(): Promise<void>
-  /** Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows). */
-  trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean }>
-  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean }>
+  /**
+   * Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows); `loginEntry` = the
+   * system starts this copy now (its entry), null = not known (T433).
+   */
+  trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null }>
+  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null }>
   rescan(): Promise<void>
   /** ZIP of the whole data folder (without backups). */
   exportZip(): Promise<string | null>

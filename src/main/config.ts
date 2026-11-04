@@ -119,7 +119,7 @@ export class ConfigStore {
    * read – a choice made meanwhile (an update downloaded, the tray, a folder) is kept, never the defaults beside it.
    * Kept till a write of them lands (AP-28): a write refused after the read loses none of them.
    */
-  private held: Array<[string[], unknown]> = []
+  private held: Held[] = []
   /** Writes are queued and always write the latest state, so an older snapshot never lands last. */
   private writing: Promise<void> = Promise.resolve()
   private retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -144,7 +144,7 @@ export class ConfigStore {
     // on the defaults while it is still not readable (each retry of the read), gone or set aside – what the user set in
     // this session is what the app does and shows, never the defaults beside it (przegląd 2 N5).
     let next = base
-    for (const [path, value] of this.held) next = withValueAt(next, path, value) as MachineConfig
+    for (const h of this.held) next = applyHeld(next, h)
     this.config = next
     // Read (or gone, or set aside), but refused for writing (an antivirus holds it – AP-28): the changes work and stay
     // held till a write takes them – the retry writes them, a read again puts them on the file's settings once more.
@@ -199,11 +199,11 @@ export class ConfigStore {
     // Not read yet (B114): the change lives in memory – the file on the disk keeps this computer's settings – and waits,
     // field by field, for the file to be read.
     if (this.loadFailed) {
-      this.held.push(...leafChanges(before, this.config))
+      this.held.push(...heldChanges(before, this.config))
       return this.config
     }
     // Changes held from before the read and not written yet (AP-28): this one joins them, in order.
-    if (this.held.length) this.held.push(...leafChanges(before, this.config))
+    if (this.held.length) this.held.push(...heldChanges(before, this.config))
     try {
       await this.queueWrite()
     } catch (e) {
@@ -307,6 +307,52 @@ export async function changeTray(config: ConfigStore, patch: TrayPatch | undefin
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * A change held for config.json (B114): the field and its new value – for a list of this computer's folders (recent
+ * data folders, earlier folders of backups) also what was put at its front and taken out (`list`, przegląd 3 N5), so
+ * on the file's list it adds and removes, never replaces the whole list built on the defaults (a folder opened while
+ * config.json was not readable kept only itself of the 8 recent ones).
+ */
+type Held = [string[], unknown, ListChange?]
+interface ListChange {
+  front: unknown[]
+  out: unknown[]
+}
+/** The lists held as changes of their elements, with their length kept as `load` keeps it. */
+const HELD_LISTS: Readonly<Record<string, number>> = { recentDirs: 8, backupDirsBefore: BACKUP_DIRS_KEPT }
+
+/** The changes of `after` against `before` to hold (`Held`). */
+function heldChanges(before: MachineConfig, after: MachineConfig): Held[] {
+  return leafChanges(before, after).map(([path, value]): Held => {
+    const was = valueAt(before, path)
+    return path.length === 1 && path[0]! in HELD_LISTS && Array.isArray(value) ? [path, value, listChange(Array.isArray(was) ? was : [], value)] : [path, value]
+  })
+}
+
+/**
+ * A newest-first list's change (`before` → `after`): the shortest front of `after` whose rest is `before` in its order
+ * without what went to the front and without what was taken out.
+ */
+function listChange(before: readonly unknown[], after: readonly unknown[]): ListChange {
+  const key = (v: unknown) => JSON.stringify(v)
+  const kept = new Set(after.map(key))
+  const out = before.filter((v) => !kept.has(key(v)))
+  for (let i = 0; ; i++) {
+    const front = new Set(after.slice(0, i).map(key))
+    if (same(before.filter((v) => kept.has(key(v)) && !front.has(key(v))), after.slice(i))) return { front: after.slice(0, i), out }
+  }
+}
+
+/** A held change put on `config`: a list's elements on the list there, any other value as it is. */
+function applyHeld(config: MachineConfig, [path, value, list]: Held): MachineConfig {
+  if (!list) return withValueAt(config, path, value) as MachineConfig
+  const key = (v: unknown) => JSON.stringify(v)
+  const drop = new Set([...list.front, ...list.out].map(key))
+  const base = valueAt(config, path)
+  const rest = (Array.isArray(base) ? base : []).filter((v) => !drop.has(key(v)))
+  return withValueAt(config, path, [...list.front, ...rest].slice(0, HELD_LISTS[path[0]!])) as MachineConfig
+}
 
 /** The fields `after` changed against `before`, each with its new value (a list or a value as a whole). */
 function leafChanges(before: unknown, after: unknown, path: string[] = [], out: Array<[string[], unknown]> = []): Array<[string[], unknown]> {

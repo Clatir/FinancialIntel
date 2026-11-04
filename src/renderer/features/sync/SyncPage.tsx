@@ -11,7 +11,7 @@ import { deletedSearchText, recordTitle } from '../../lib/recordTitle'
 import { ChangeList, HistoryButton, useDictNames } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
 import { api, errorMessage } from '../../lib/api'
-import { saveFirst, useData, useFolderLocked } from '../../store/data'
+import { saveFirst, unsavedOf, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
 import { ConfirmButton } from '../../components/ConfirmButton'
@@ -176,6 +176,19 @@ function ConflictMerge({ c, onClose, busy, setBusy }: { c: ConflictEntry; onClos
   )
 }
 
+/**
+ * This window's unsaved version of a conflict's original (przegląd 3 N5): what the decision's `saveFirst` is about to
+ * write – the mark of the window's own save (`seenFor`, `newestOnShown`); null = nothing unsaved.
+ */
+function unsavedOriginal(c: ConflictEntry): unknown {
+  const s = useData.getState()
+  if (c.kind === 'fi') return unsavedOf('fi', 'fi') != null ? s.fi : null
+  const id = (c.canonical.record as { id?: unknown } | null)?.id
+  if (typeof id !== 'string' || !(COLLECTIONS as readonly string[]).includes(c.kind)) return null
+  const kind = c.kind as Collection
+  return unsavedOf(kind, id) != null ? ((s.records[kind] as Record<string, { record: unknown } | undefined>)[id]?.record ?? null) : null
+}
+
 /** The computer that wrote a side (its `updatedBy`); '' = unknown. */
 const by = (s: ConflictEntry['canonical']): string => {
   const v = (s.record as { updatedBy?: unknown } | null)?.updatedBy
@@ -195,6 +208,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
   const resolve = async (keep: 'canonical' | 'copy') => {
     // The versions the card shows at the click (AP-27, T431) – the decision is about them.
     const shown = c
+    const ownBefore = unsavedOriginal(shown)
     setBusy(true)
     try {
       // Unsaved local edits would be written over the version kept here (e.g. a kept copy of fi.json).
@@ -202,9 +216,8 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
       // A side whose content moved on during the flush (OneDrive's copy the watcher brought meanwhile) refuses here – the
       // card shows it now; one only stamped anew by this save goes with the file times this window knows after it, and
       // main refuses a file changed on the disk since (the watcher not there yet).
-      // This window's own save of the original is no outside change (przegląd 2 N5): its machine's name tells it.
-      const { conflicts, appInfo } = useData.getState()
-      const seen = seenFor(shown, conflicts.find((x) => x.id === shown.id), keep, appInfo?.machineName ?? null)
+      // This window's own save of the original is no outside change: its unsaved version taken before tells it.
+      const seen = seenFor(shown, useData.getState().conflicts.find((x) => x.id === shown.id), keep, ownBefore)
       if (!seen) return toast(CONFLICT_CHANGED_TEXT, 'error', 8000)
       await api.resolveConflict(shown.id, keep, seen)
       toast('Konflikt rozstrzygnięty – odrzucona wersja jest w historii wpisu (i w Koszu).', 'success')
@@ -400,7 +413,9 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
     // The versions the cards show at the click: the newest of each is chosen on them.
     const shown = conflicts
     setBusy(true)
-    let plan: ReturnType<typeof newestOnShown> = { resolutions: [], skipped: [], changed: [] }
+    // This window's unsaved versions of the originals – its own save just below is no change from outside.
+    const own = new Map(shown.filter((c) => ids.includes(c.id)).map((c) => [c.id, unsavedOriginal(c)] as const).filter(([, v]) => v != null))
+    let plan: ReturnType<typeof newestOnShown> = { resolutions: [], skipped: [], changed: [], mine: [] }
     let done = 0
     let untouched = 0
     const errors = new Set<string>()
@@ -412,7 +427,7 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
         return
       }
       // After the flush: a version the watcher brought meanwhile is never decided unseen.
-      plan = newestOnShown(shown, useData.getState().conflicts, ids, useData.getState().appInfo?.machineName ?? null)
+      plan = newestOnShown(shown, useData.getState().conflicts, ids, own)
       // The newest copy of a file could not be kept (or a version changed): the others of that file stay.
       if (plan.resolutions.length)
         for (const r of await api.resolveConflicts(plan.resolutions)) {
@@ -429,9 +444,10 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
     const skipped = plan.skipped.length ? `Nieczytelna wersja – wybierz ręcznie: ${plan.skipped.length}.` : ''
     const parts = [...errors]
     if (plan.changed.length) parts.push(`Zmieniły się w trakcie (np. OneDrive przyniósł nowszą kopię) – nic w nich nie zapisano, sprawdź wersje jeszcze raz i wybierz od nowa: ${plan.changed.length}.`)
+    if (plan.mine.length) parts.push(`Nowsza na karcie była kopia, a oryginał ma Twoje zmiany zapisane przed chwilą – żadnej wersji nie odrzucono, wybierz ręcznie: ${plan.mine.length}.`)
     if (untouched) parts.push(`Pozostawione bez zmian (nowszej wersji tego pliku nie udało się zachować albo zmieniła się w trakcie): ${untouched}.`)
     if (skipped) parts.push(skipped)
-    if (errors.size || plan.changed.length) toast(`Rozstrzygnięto ${done} z ${ids.length}. ${parts.join(' ')}`, 'error', 8000)
+    if (errors.size || plan.changed.length || plan.mine.length) toast(`Rozstrzygnięto ${done} z ${ids.length}. ${parts.join(' ')}`, 'error', 8000)
     else toast(`Zaakceptowano nowsze wersje: ${done} – odrzucone są w historii wpisów (i w Koszu).${skipped ? ` ${skipped}` : ''}`, skipped ? 'info' : 'success', skipped ? 6000 : 3200)
   }
   return (

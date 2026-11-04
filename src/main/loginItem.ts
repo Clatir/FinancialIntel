@@ -19,6 +19,8 @@ export interface LaunchItem {
   name: string
   path: string
   args: string[]
+  /** Windows: false = turned off in Task Manager (the system does not start it). */
+  enabled?: boolean
 }
 
 /** One call of `app.setLoginItemSettings`. */
@@ -48,6 +50,17 @@ export interface LoginContext {
 
 const samePath = (a: string, b: string, windows: boolean) => (windows ? a.toLowerCase() === b.toLowerCase() : a === b)
 const sameArgs = (a: readonly string[] | undefined, b: readonly string[]) => (a ?? []).length === b.length && b.every((x, i) => a?.[i] === x)
+
+/**
+ * Whether the system starts this copy at login now (przegląd 3 N5, T433) – what the switch shows, also when config.json
+ * says otherwise (set aside, gone, an entry of an older version): an entry of this exe the system starts (Windows), the
+ * app's login item (macOS); null = not known – a test or lab profile, whose entries are never looked at.
+ */
+export function loginEntryOf(c: { ownProfile: boolean; windows: boolean; path: string; items: readonly LaunchItem[]; openAtLogin?: boolean }): boolean | null {
+  if (!c.ownProfile) return null
+  if (!c.windows) return c.openAtLogin ?? null
+  return c.items.some((i) => samePath(i.path, c.path, true) && i.enabled !== false)
+}
 
 /** The writes of the start with the system, in order; [] = nothing to write. */
 export function loginItemWrites(c: LoginContext): LoginWrite[] {

@@ -30,7 +30,7 @@ import type { XlsxSheet } from '@shared/export/xlsx'
 import { Updater } from './update/updater'
 import { startPortableSwap, startSilentInstaller } from './update/apply'
 import { setupDetach } from './detach'
-import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
+import { AppTray, HIDDEN_ARG, applyLoginItem, loginEntry } from './tray'
 import { QuickEntry } from './quick'
 import { isZoomKey, patchMachinePrefs, zoomByKey, type MachinePrefs } from '@shared/machine'
 import { windowBounds } from '@shared/bounds'
@@ -192,8 +192,9 @@ function appTray(): AppTray {
 }
 
 /** Tray settings as the window shows them. */
-function trayView(): TrayPrefs & { loginSupported: boolean } {
-  return { ...config.get().tray, loginSupported: app.isPackaged && (process.platform === 'win32' || process.platform === 'darwin') }
+/** The tray of this computer for the window; `loginEntry` – the start with the system as the system has it (T433). */
+function trayView(): TrayPrefs & { loginSupported: boolean; loginEntry: boolean | null } {
+  return { ...config.get().tray, loginSupported: app.isPackaged && (process.platform === 'win32' || process.platform === 'darwin'), loginEntry: loginEntry() }
 }
 
 /**
