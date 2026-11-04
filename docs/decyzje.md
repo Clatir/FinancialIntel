@@ -2363,7 +2363,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   decyduje, a próba nie zakłada własnego pliku (wcześniej `.fi-zapis.tmp-…` w korzeniu przy każdym otwarciu – wpis
   w koszu online OneDrive, przy blokadzie usuwania plik zostawał). Zakładanie nowych plików (każdy zapis to plik
   tymczasowy i zamiana) sprawdza zapis obecności tego komputera w `.presence/` (`DataStoreOptions.presence` =
-  `writeOwnPresence` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
+  `presenceKept.write` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
   więc folder, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie uprawnienia), jest tylko do odczytu
   z powodem i bez migracji, której nie da się dokończyć (wcześniej: bez banera, każdy zapis z własnym błędem, migracja
   przerywała otwarcie). Po przeglądzie 3: z zapisu obecności o trybie tylko do odczytu decyduje tylko odmowa założenia
@@ -2385,7 +2385,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i heartbeat, `clear`; inne foldery nie czekają), a usunięcie sprawdza trzymanie dopiero w swojej kolejce, tuż przed
   `rm` (wcześniej przy wywołaniu: usunięcie ustępującego otwarcia, puszczone bez czekania, mogło na wolnym OneDrive dojść
   po zapisie próby nowszego otwarcia tego folderu, które zaczęło się w międzyczasie – drugi komputer nie widział tego do
-  następnego heartbeatu, w zasobniku do 5 min). Telefon (lustro folderu) i testy bez `presence` – tylko `fi.json`.
+  następnego heartbeatu, w zasobniku do 5 min). Po przeglądzie N1 5: kolejka `PresenceKeeper` uruchamia tylko jego
+  własne zapisy i usunięcia – obecność zapisuje sam (`write(folder, próby)`, `beat(folder)`; wersja i ostatni ruch w oknie
+  z `content`), nigdy operacji wołającego, więc żaden zapis nie czeka w niej na siebie (wcześniej pilnował tego tylko
+  komentarz: operacja wołająca kolejkę zakleszczyłaby folder); zamknięcie folderu (zmiana folderu, wyjście) czeka na
+  usunięcie obecności najwyżej 5 s (`PRESENCE_CLEAR_MS`, `clearWithin`; wcześniej bez limitu za wszystkimi zapisami
+  obecności folderu – wolny OneDrive wstrzymywał wyjście i otwarcie następnego folderu), potem usunięcie idzie dalej
+  w swojej kolejce i sprawdza trzymanie w swojej kolei – obecność nowszego otwarcia zostaje. Krok zapisu niesie sam błąd:
+  `writeFileAtomic` odrzuca `AtomicWriteError { step, cause }` z kodem i komunikatem błędu fs, `atomicFailure` /
+  `atomicStep` znajdują go także w błędzie opakowanym (`cause`) – wcześniej krok w `WeakMap` po obiekcie błędu i
+  opakowanie go gubiło (folder naprawdę tylko do odczytu nierozpoznany). Telefon (lustro folderu) i testy bez
+  `presence` – tylko `fi.json`.
   W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
   podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
 - **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
@@ -2446,7 +2456,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
   mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu (gdy jest
   po co – T332), od razu na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je
-  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie.
+  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie. Po przeglądzie N1 5
+  Ustawienia → Import („Pary oznaczone „to nie duplikat”: N”, „pokazuj znowu”) liczą i zapominają tylko pary panelu
+  duplikatów (`isDuplicatePairKey` w `shared/import/duplicates.ts` – klucz `row:…` albo id pary): klucze `back:<id>`,
+  a także `correction:` (B129), `transfer:` i `transfer-lone:` (F10) zostają – wcześniej liczone jako pary, a „pokazuj
+  znowu” przywracało meldunki operacji zostawionych i przywróconych świadomie oraz przelewów „zostaw tak”.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
   rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
@@ -2551,7 +2565,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`writeFileAtomic(…, attempts)`: katalog, plik tymczasowy, zamiana): przy otwarciu i powrocie ok. 0,1 s na krok,
   w spoczynku i w kolejce jedna próba bez czekania. Wcześniej plik tymczasowy raz (jeden chwilowy EPERM na `.presence/`
   dawał tryb tylko do odczytu), a zamiana zawsze 8 razy (ok. 1,4 s co 5 s w spoczynku i w kolejce magazynu). Zwykłe
-  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy.
+  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy. Po przeglądzie 4 naprawa pliku obecności tylko do
+  odczytu (T337) to jeden `access`, `chmod` i drugi zapis z tymi samymi próbami – tylko gdy plik naprawdę nie ma prawa
+  zapisu; plik trzymany nie dostaje drugiego zapisu (czas jak dotąd).
 - **T336** Temat z jednakową decyzją marek z „w tym za” (przegląd N1 4; doprecyzowuje T235 – N78, T327, T328): gdy
   kilka marek tematu ma tę samą decyzję z liniami „w tym za” z kwotą (`themeShows` 'brands'), wiersz tematu pokazuje ich
   decyzję bez edytora linii – „w tym za – ustawione w markach”; linie, kwoty i uwagi rozkładu są przy każdej marce (jej
@@ -2563,10 +2579,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   to, co marki dają teraz – zmiana obok, np. kategorii, zapisywała kwotę obciętą do długu, a gdy dług potem rósł, X
   dostawał mniej, niż marki wpisały, albo nic). Jedna marka albo marki bez linii z kwotą – jak dotąd: zmiana w temacie to
   decyzja tematu (te same wiersze i kwoty). Wiersz tematu nie czyta rozkładu (`themeCommon` – decyzja pierwszej marki,
-  bez sumowania), uwagi przy linii zawsze z jednej decyzji – kilku kluczy razem nikt nie składa.
-  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy. Po przeglądzie 4 naprawa pliku obecności tylko do
-  odczytu (T337) to jeden `access`, `chmod` i drugi zapis z tymi samymi próbami – tylko gdy plik naprawdę nie ma prawa
-  zapisu; plik trzymany nie dostaje drugiego zapisu (czas jak dotąd).
+  bez sumowania), uwagi przy linii zawsze z jednej decyzji – kilku kluczy razem nikt nie składa. Po przeglądzie N1 5
+  księgowanie decyzji grupy (B97 – własna po przyjętej podpowiedzi zapamiętana, pytanie „zaliczka czy przychód?” nowego
+  domownika, przyjęta podpowiedź, propozycja słowa D78) jest w jednym miejscu (`groupsDecided` w
+  `features/import/state.ts`) dla decyzji grupy, zbiorczej, tematu nad markami ('same'), marek z liniami ('brands') i
+  „jak temat”; grupa wracająca do tematu traci też pytanie domownika i propozycję słowa (wcześniej „jak temat” po
+  „+ domownik” zostawiał pytanie – plakietka i temat „do zrobienia”).
 - **T337** Własny plik obecności, którego nie da się zastąpić (przegląd 4 AP-1; doprecyzowuje T316): zamiana
   `.presence/<komputer>.json` odmówiona (EPERM / EACCES w kroku zamiany – `atomicStep`), a plik bez prawa zapisu
   (`access(…, W_OK)`; na Windows atrybut „tylko do odczytu”, np. po przywróceniu kopii) → `writePresence` oddaje mu
@@ -2575,6 +2593,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   minie sama, ponawia następny heartbeat. Błąd zapisu obecności w heartbeacie nie jest połykany
   (`PresenceKeeper.beat`): wpis w logu, gdy zaczyna się nie udawać w danym folderze (z błędem), i gdy znów się udaje –
   nie przy każdej próbie (co minutę, w zasobniku co 5 min; tygodnie w zasobniku wypchnęłyby resztę z logu 1 MB).
+  Seria kończy się bez wpisu, gdy folder zamknięto – obecność z niego usunięta albo heartbeat pisze w innym folderze:
+  błąd w nim po powrocie to nowa seria z wpisem (przegląd N1 5; wcześniej jeden znacznik dla wszystkich folderów – po
+  powrocie z B błąd w A bez wpisu, a potem mylące „presence written again”).
   Wcześniej plik tylko do odczytu zostawał na zawsze ze starym `lastSeen` (próba i heartbeat tylko odnotowywały albo
   połykały błąd) – drugi komputer po 11 min uznawał ten za niedziałający i oba robiły zapisy w tle naraz. Bez komunikatu
   w oknie: przyczynę trwałą naprawia sam zapis, chwilowa mija; zostaje wpis w logu.
