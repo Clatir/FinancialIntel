@@ -5,45 +5,15 @@ import type { Collection } from '@shared/paths'
 import { Modal } from '../../components/Modal'
 import { ShowMore, cx } from '../../components/ui'
 import { api, errorMessage } from '../../lib/api'
-import { plural } from '../../lib/format'
+import { plDateTime, plural } from '../../lib/format'
 import { recordTitle } from '../../lib/recordTitle'
 import { useData, useFolderLocked } from '../../store/data'
 import { ChangeList } from '../history/HistoryDialog'
-import { recoverFromBackup } from './recover'
+import { countOf, recoverFromBackup, summary } from './recover'
 
 const PAGE = 100
 
-/** A collection's records in the summary: 1 / 2–4 / 5+. */
-const NOUN: Record<Collection, [string, string, string]> = {
-  transactions: ['operacja', 'operacje', 'operacji'],
-  containers: ['kontener', 'kontenery', 'kontenerów'],
-  goals: ['cel', 'cele', 'celów'],
-  months: ['plan miesiąca', 'plany miesięcy', 'planów miesięcy'],
-  dockings: ['dokowanie', 'dokowania', 'dokowań'],
-  loans: ['pożyczka', 'pożyczki', 'pożyczek'],
-  balances: ['saldo', 'salda', 'sald'],
-  game: ['miesiąc gry', 'miesiące gry', 'miesięcy gry'],
-  imports: ['import', 'importy', 'importów'],
-  scheduled: ['boja', 'boje', 'boi']
-}
-const count = (c: Collection, n: number) => `${n} ${plural(n, ...NOUN[c])}`
-
 const keyOf = (i: BackupDiffItem) => `${i.collection}:${i.id}`
-
-/** „N zmienionych, M usuniętych” of each collection, in the collections' order. */
-function summary(items: readonly BackupDiffItem[]): string[] {
-  const by = new Map<Collection, { changed: number; deleted: number }>()
-  for (const i of items) {
-    const s = by.get(i.collection) ?? { changed: 0, deleted: 0 }
-    s[i.change]++
-    by.set(i.collection, s)
-  }
-  return [...by].map(([c, s]) =>
-    [s.changed ? `${count(c, s.changed)} ${plural(s.changed, 'zmieniona', 'zmienione', 'zmienionych')}` : '', s.deleted ? `${count(c, s.deleted)} ${plural(s.deleted, 'usunięta', 'usunięte', 'usuniętych')}` : '']
-      .filter(Boolean)
-      .join(', ')
-  )
-}
 
 /**
  * Recovery from a backup (F3, D86): what changed or was deleted since the backup – chosen records written back as new
@@ -74,7 +44,7 @@ export function RecoverDialog({ backup, label, onClose, onFolder }: { backup: Ba
   }, [backup.path])
   const items = preview?.items ?? []
   const lines = useMemo(() => summary(items), [items])
-  const added = preview ? (Object.entries(preview.added) as Array<[Collection, number]>).map(([c, n]) => count(c, n)) : []
+  const added = preview ? (Object.entries(preview.added) as Array<[Collection, number]>).map(([c, n]) => countOf(c, n)) : []
   const chosen = items.filter((i) => picked.has(keyOf(i)))
   const toggle = (key: string, on: boolean) =>
     setPicked((s) => {
@@ -90,7 +60,7 @@ export function RecoverDialog({ backup, label, onClose, onFolder }: { backup: Ba
     setBusy(false)
     if (ok) onClose()
   }
-  const date = new Date(backup.mtimeMs).toLocaleString('pl-PL')
+  const date = plDateTime(backup.mtimeMs, true)
 
   return (
     <Modal

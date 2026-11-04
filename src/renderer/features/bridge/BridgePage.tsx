@@ -41,7 +41,7 @@ import { useMembers } from '../household/actions'
 import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
 import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
-import { glossaryOf } from '@shared/glossary'
+import { glossaryOf, ictOf } from '@shared/glossary'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 // Cut down (N56): never the threshold of a class the ship has not reached.
@@ -492,7 +492,7 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
             )}
           </div>
           {bias && (
-            <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-accent' : bias === 'bullish' ? 'text-fg-strong' : 'text-muted')} data-testid="bridge-bias" title="Daily Bias (spec, Wywiad)">
+            <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-accent' : bias === 'bullish' ? 'text-fg-strong' : 'text-muted')} data-testid="bridge-bias" title={ictOf('Daily Bias')}>
               {bias === 'bullish' ? '▲' : bias === 'bearish' ? '▼' : '◆'} {BIAS_LABEL[bias]}
             </span>
           )}
@@ -739,12 +739,12 @@ function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t:
       </div>
       {why === 'targets' && <WhyList lines={targetsWhy(fleet, fleet.layers)} testId="state-targets-lines" />}
       {why === 'delivery' && fleet.lastDelivery && <WhyList lines={fleet.lastDelivery.lines} testId="state-delivery-lines" />}
-      {fleet.goals.length > 0 && <Line metaphor="Układy gwiezdne" name="cele" value={zl(goals)} />}
-      {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" value={zl(tanks)} />}
-      {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" value={zl(fleet.taxHold)} />}
-      {fleet.deposit !== 0 && <Line metaphor="Depozyt domowników" name="ich zaliczki – nie do wydania na siebie" value={zl(fleet.deposit)} testId="state-deposit" />}
-      {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" value={zl(fleet.loot.amount)} />}
-      {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" value={zl(fleet.debt)} testId="state-debt" />}
+      {fleet.goals.length > 0 && <Line metaphor="Układy gwiezdne" name="cele" hint={glossaryOf('Układy gwiezdne')} value={zl(goals)} />}
+      {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" hint={glossaryOf('Zbiornik')} value={zl(tanks)} />}
+      {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" hint={glossaryOf('Podatek')} value={zl(fleet.taxHold)} />}
+      {fleet.deposit !== 0 && <Line metaphor="Depozyt domowników" name="ich zaliczki – nie do wydania na siebie" hint={glossaryOf('Depozyt')} value={zl(fleet.deposit)} testId="state-deposit" />}
+      {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" hint={glossaryOf('Łupy')} value={zl(fleet.loot.amount)} />}
+      {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" hint={glossaryOf('Dług')} value={zl(fleet.debt)} testId="state-debt" />}
       {fleet.toDock.count > 0 && (
         // The pairs of ICTTJ payouts not docked yet (AP-12): in the layers above already, by their entry's pool – said apart.
         <Line
@@ -769,12 +769,12 @@ function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t:
           </span>
           <span className="text-[10.5px] text-dim">{fleet.debt > 0 ? '(osłony − dług + kadłub) / koszty' : '(osłony + kadłub) / koszty'}</span>
         </button>
-        <div className="flex flex-col">
+        <div className="flex flex-col" title={glossaryOf('Klasa okrętu')}>
           <span className="label">Klasa</span>
           <span className="text-[14px] text-fg-strong">{fleet.shipClass ? SHIP_CLASS_LABEL[fleet.shipClass] : '—'}</span>
           <span className="text-[10.5px] text-dim">średnie koszty {fleet.costs.average != null ? zl(fleet.costs.average) : '—'}</span>
         </div>
-        <button className="flex flex-col text-left hover:text-accent" onClick={() => onOpen('cargo')}>
+        <button className="flex flex-col text-left hover:text-accent" onClick={() => onOpen('cargo')} title={glossaryOf('Masa ładunku')}>
           <span className="label">Masa ładunku</span>
           <span className={cx('num text-[14px]', fleet.cargo.over ? 'text-down' : 'text-fg-strong')}>{fleet.cargo.pct != null ? `${fleet.cargo.pct.toFixed(1).replace('.', ',')}%` : '—'}</span>
           <span className="text-[10.5px] text-dim" data-testid="state-cargo">

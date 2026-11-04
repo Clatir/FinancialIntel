@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { layersEffect, type LayersLine } from '@shared/calc/effect'
+import { salariesText } from '@shared/format'
 import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel, type NotifyPrefs } from '@shared/machine'
 import { briefingAt, eveningAt } from '@shared/notify'
 import { BRIEFING_FROM } from '@shared/notifyPlan'
@@ -62,13 +63,13 @@ export function LayersTab() {
               commitOnBlur
               isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries}
               onChange={(v) => v != null && setLayers({ shieldSalaries: v })}
-              onReject={(v) => toast(v != null && v >= 1 && v < orders.minShieldSalaries ? `Cel osłon nie może być mniejszy niż minimalne osłony (${orders.minShieldSalaries} pensji) – najpierw zmniejsz minimum.` : 'Cel osłon to od 1 do 24 pensji – zostaje poprzedni.', 'error', 6000)}
+              onReject={(v) => toast(v != null && v >= 1 && v < orders.minShieldSalaries ? `Cel osłon nie może być mniejszy niż minimalne osłony (${salariesText(orders.minShieldSalaries)}) – najpierw zmniejsz minimum.` : 'Cel osłon to od 1 do 24 pensji – zostaje poprzedni.', 'error', 6000)}
               onDraft={(v) => setDraft((d) => ({ ...d, shieldSalaries: v }))}
               aria-label="Osłony w pensjach"
               data-testid="layers-shields"
             />
           </Field>
-          <Field label="Kadłub – cel" labelWidth={200} hint="Fundusz awaryjny: tyle miesięcy średnich kosztów netto (D12).">
+          <Field label="Kadłub – cel" labelWidth={200} hint="Fundusz awaryjny: tyle miesięcy średnich kosztów netto.">
             <NumberField
               className="w-[80px]"
               value={layers.hullMonths}
@@ -161,7 +162,7 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
           commitOnBlur
           isValid={(v) => v != null && v >= 0 && v <= 24 && v <= layers.shieldSalaries}
           onChange={(v) => v != null && setOrders({ minShieldSalaries: v })}
-          onReject={(v) => toast(v != null && v > layers.shieldSalaries ? `Minimalne osłony nie mogą przekraczać celu osłon (${layers.shieldSalaries} pensji) – zostaje poprzednie.` : 'Minimalne osłony to od 0 do 24 pensji – zostaje poprzednie.', 'error', 6000)}
+          onReject={(v) => toast(v != null && v > layers.shieldSalaries ? `Minimalne osłony nie mogą przekraczać celu osłon (${salariesText(layers.shieldSalaries)}) – zostaje poprzednie.` : 'Minimalne osłony to od 0 do 24 pensji – zostaje poprzednie.', 'error', 6000)}
           aria-label="Minimalne osłony"
           data-testid="orders-min-shields"
         />
@@ -169,17 +170,25 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
       <Field label="Linia zanurzenia (% pensji)" labelWidth={labelWidth}>
         <NumberField className="w-[80px]" value={orders.cargoLimitPct} decimals={0} step={5} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} aria-label="Linia zanurzenia" data-testid="orders-cargo" />
       </Field>
-      <Field label="Cisza nocna" labelWidth={labelWidth} hint="Zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu (D40).">
-        <div className="flex items-center gap-2">
-          <TimeField className="w-[70px]" value={orders.quietHours.from} onChange={(from) => from && setOrders({ quietHours: { ...orders.quietHours, from } })} aria-label="Cisza od" />
-          –
-          <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" />
+      <Field label="Cisza nocna" labelWidth={labelWidth} hint="Zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu.">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <TimeField className="w-[70px]" value={orders.quietHours.from} onChange={(from) => from && setOrders({ quietHours: { ...orders.quietHours, from } })} aria-label="Cisza od" />
+            –
+            <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" />
+          </div>
+          {/* US.9 (AP-23): the same hour twice is a window of no length – accepted, but said: no quiet hours at all. */}
+          {orders.quietHours.from === orders.quietHours.to && (
+            <span className="text-[11.5px] text-accent" role="status" data-testid="orders-quiet-off">
+              „Od” i „do” to ta sama godzina – cisza nocna wyłączona: zakupy o każdej porze bez potwierdzenia i wpisu.
+            </span>
+          )}
         </div>
       </Field>
-      <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty (D41); 0 albo puste – dziennik nie pyta.">
+      <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty; 0 albo puste – dziennik nie pyta.">
         <AmountField className="w-[120px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
       </Field>
-      <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (D23)" data-testid="orders-firewall" />
+      <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne" data-testid="orders-firewall" />
       {/* DW.12 (AP-17): switched off, nothing checks a top-up – said here, on the bridge and in the briefing. */}
       {orders.firewall ? (
         <p className="text-[11px] text-muted">Kadłub od 99 % celu liczy się jako pełny – cel rośnie ze średnimi kosztami.</p>

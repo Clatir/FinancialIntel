@@ -3,6 +3,7 @@ import { constants as fsConstants, promises as fs } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { CONFLICT_COPY_MESSAGE, FOLDER_UNAVAILABLE_MESSAGE, SLOW_FILE_MS, type BackupDiffItem, type BackupPreview, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
+import { plainError } from '@shared/plainError'
 import {
   BACKUPS_DIR,
   COLLECTIONS,
@@ -793,7 +794,7 @@ export class DataStore {
   /** A file that could not be read (B42): a problem read again next time. */
   private unreadableState(rel: string, st: { mtimeMs: number; size: number }, e: unknown): FileState {
     this.unreadable.add(rel)
-    return { ...this.problemState(rel, st, '', 'corrupt', `Nie można odczytać pliku (OneDrive może go jeszcze pobierać): ${(e as Error).message}`), readError: true }
+    return { ...this.problemState(rel, st, '', 'corrupt', `Nie można odczytać pliku (OneDrive może go jeszcze pobierać): ${plainError((e as Error).message)}`), readError: true }
   }
 
   private problemState(
@@ -882,7 +883,7 @@ export class DataStore {
     this.folderSchemaVersion = state.readOnly ? state.fromVersion : SCHEMA_VERSION
     this.folderReadOnlyReason = state.readOnly
       ? `Folder danych ma format v${state.fromVersion}, a ta wersja aplikacji obsługuje v${SCHEMA_VERSION}. ` +
-        'Zaktualizuj aplikację - do tego czasu dane są tylko do odczytu.'
+        'Zaktualizuj aplikację – do tego czasu dane są tylko do odczytu.'
       : null
   }
 
@@ -899,7 +900,7 @@ export class DataStore {
     }
     if (state?.problemKind === 'too-new') {
       this.folderReadOnlyReason =
-        'fi.json zapisała nowsza wersja aplikacji (nowszy format danych). Zaktualizuj aplikację - do tego czasu dane są tylko do odczytu.'
+        'fi.json zapisała nowsza wersja aplikacji (nowszy format danych). Zaktualizuj aplikację – do tego czasu dane są tylko do odczytu.'
     }
     return false
   }
@@ -1678,7 +1679,7 @@ export class DataStore {
     } catch (e) {
       // The file stays (held by OneDrive, an antivirus): no „deleted” version in the history either (B9).
       await this.history.drop(kept)
-      throw new Error(`Nie udało się usunąć pliku ${state.relPath} (zajęty przez inny program?) – spróbuj ponownie. ${(e as Error).message}`)
+      throw new Error(`Nie udało się usunąć pliku ${state.relPath} (zajęty przez inny program?) – spróbuj ponownie. ${plainError((e as Error).message)}`)
     }
     this.files.delete(state.relPath)
     return true
@@ -1784,7 +1785,7 @@ export class DataStore {
       this.files.delete(conflict.copy.relPath)
       return false
     }
-    if (!copyState?.record) throw new Error('Kopii nie da się odczytać - można zachować tylko oryginał.')
+    if (!copyState?.record) throw new Error('Kopii nie da się odczytać – można zachować tylko oryginał.')
     if (merged !== undefined && !canonicalState?.record) throw new Error('Oryginału nie da się odczytać – scalić można tylko dwie czytelne wersje.')
     // A newer format is never written over, nor written by this version (B45).
     if (copyState.readOnly) throw new ReadOnlyError('Kopię zapisała nowsza wersja aplikacji – zaktualizuj aplikację, żeby ją zachować.')

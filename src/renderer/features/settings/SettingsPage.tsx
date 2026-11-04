@@ -4,7 +4,7 @@ import type { BackupInfo, TrayPrefs } from '@shared/api'
 import { DEFAULT_SHIP_NAME } from '@shared/schema'
 import { daysBetween, warsawNow } from '@shared/calc/dates'
 import { api, errorMessage } from '../../lib/api'
-import { countLabel, fmtBytes } from '../../lib/format'
+import { countLabel, fmtBytes, plDateTime } from '../../lib/format'
 import { saveFirst, switchFolder, unsavedReport, updateSettings, useData, useFolderLocked } from '../../store/data'
 import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
@@ -59,7 +59,7 @@ export function SettingsPage() {
             key={t.id}
             onClick={() => navigate({ page: 'settings', tab: t.id })}
             className={cx(
-              'h-[28px] border-l-2 px-3 text-left transition-colors duration-100',
+              'h-[28px] border-l-2 px-3 text-left transition-colors duration-150',
               tab === t.id ? 'border-accent bg-accent-soft text-fg-strong' : 'border-transparent text-muted hover:bg-hover hover:text-fg-strong'
             )}
             data-testid={`settings-tab-${t.id}`}
@@ -196,7 +196,7 @@ function BackupAge({ files, failure }: { files: readonly BackupInfo[]; failure: 
       )}
       {failure && (
         <p className="mb-2 text-[11.5px] text-accent" data-testid="backup-failure">
-          Kopia dzienna nie powstała ({new Date(failure.at).toLocaleString('pl-PL')}): {failure.message} – sprawdź, czy folder kopii jest dostępny (np. dysk podłączony).
+          Kopia dzienna nie powstała ({plDateTime(failure.at, true)}): {failure.message} – sprawdź, czy folder kopii jest dostępny (np. dysk podłączony).
         </p>
       )}
     </>
@@ -372,8 +372,8 @@ function FolderTab() {
               {b.name}
             </button>
             <span className="num text-right text-muted">{fmtBytes(b.bytes)}</span>
-            <span className="num text-right text-dim">{new Date(b.mtimeMs).toLocaleString('pl-PL')}</span>
-            <button className="btn h-[20px] px-1.5 text-[11px]" disabled={switching} title="Porównaj z bieżącym folderem i odzyskaj wybrane wpisy albo cały folder (F3)" onClick={() => setRecovering(b)} data-testid="backup-recover">
+            <span className="num text-right text-dim">{plDateTime(b.mtimeMs, true)}</span>
+            <button className="btn h-[20px] px-1.5 text-[11px]" disabled={switching} title="Porównaj z bieżącym folderem i odzyskaj wybrane wpisy albo cały folder" onClick={() => setRecovering(b)} data-testid="backup-recover">
               Odzyskaj…
             </button>
           </div>

@@ -4,7 +4,7 @@
  * bank's operations come back after their deletion (AF-1), the refunds still owed, the balances unconfirmed for over 30 days, the loot undecided. Pure; no notifications of its own –
  * the side menu counts the reports, the inbox lists them.
  */
-import { formatPln, plural } from '../format'
+import { formatPln, plDate, plural } from '../format'
 import { isUncategorized, uncategorizedAmount } from '../operationsView'
 import type { Container, Transaction } from '../schema/records'
 import { daysBetween, warsawNow } from './dates'
@@ -128,7 +128,7 @@ export interface InboxInput {
   cargo?: { prices: readonly PriceChange[]; dead: readonly DeadContainer[]; containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths' | 'schedule'>> }
 }
 
-const dmy = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
+const dmy = plDate
 const zlotych = (g: number) => `${formatPln(g)} zł`
 
 export function inboxItems(o: InboxInput): InboxItem[] {

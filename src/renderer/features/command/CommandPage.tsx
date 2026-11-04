@@ -23,7 +23,7 @@ import {
   type WatchEntry
 } from '@shared/calc/game'
 import { CLASS_FROM, SHIP_CLASS_LABEL, SHIP_CLASSES, type ShipClass } from '@shared/calc/fleet'
-import { rangeGapText, rangeText } from '@shared/format'
+import { rangeGapText, rangeText, salariesText } from '@shared/format'
 import type { GameSettings } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -396,8 +396,7 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
 
 type Orders = NonNullable<ReturnType<typeof useData.getState>['fi']>['settings']['orders']
 
-/** „1,5 pensji”, „3 pensje” (US.1). */
-const salaries = (n: number) => `${String(n).replace('.', ',')} ${plural(n, 'pensja', 'pensje', 'pensji', 'pensji')}`
+const salaries = salariesText
 
 /**
  * The orders and the game's thresholds – read here, changed only in Ustawienia → Warstwy i rozkazy (D84 C9, D99 pkt 7,

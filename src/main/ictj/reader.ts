@@ -14,6 +14,7 @@ import {
   type IctjForecast,
   type IctjSnapshot
 } from '@shared/ictj'
+import { plainError } from '@shared/plainError'
 import { DataStore } from '../datastore/store'
 
 /** A payout or a scenario is a few kilobytes; anything far bigger is not one. */
@@ -63,7 +64,7 @@ export async function readIctjFolder(dir: string, now = new Date()): Promise<Ict
   const readAt = now.toISOString()
   const base = { dir, entries: [] as IctjEntry[], forecasts: [] as IctjForecast[], warnings: [] as string[], readAt }
   const kind = await DataStore.inspect(dir).catch(() => 'missing' as const)
-  if (kind === 'missing') return { ...base, status: 'missing', message: 'Folder ICTTJ jest niedostępny – OneDrive może się jeszcze nie uruchomił albo dysk jest odłączony.' }
+  if (kind === 'missing') return { ...base, status: 'missing', message: 'Folder ICTTJ jest niedostępny – OneDrive mógł się jeszcze nie uruchomić albo dysk jest odłączony.' }
   if (kind !== 'ictj') return { ...base, status: 'not-ictj', message: 'W tym folderze nie ma danych ICT Trade Journal (brak pliku journal.json).' }
 
   const found: Array<{ entry: IctjEntry; path: string }> = []
@@ -125,6 +126,6 @@ export async function readIctjFolder(dir: string, now = new Date()): Promise<Ict
     entries.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
     return { ...base, status: 'ok', message: null, entries, forecasts, warnings, unread, complete }
   } catch (e) {
-    return { ...base, status: 'error', message: e instanceof ListingError ? `Nie udało się odczytać folderu ICTTJ – ${e.message}.` : `Nie udało się odczytać folderu ICTTJ: ${(e as Error).message}` }
+    return { ...base, status: 'error', message: e instanceof ListingError ? `Nie udało się odczytać folderu ICTTJ – ${e.message}.` : `Nie udało się odczytać folderu ICTTJ: ${plainError((e as Error).message)}` }
   }
 }

@@ -3006,3 +3006,22 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   Ustawieniach → Warstwy i rozkazy ›”; progi gry przeniesione do Ustawień → Warstwy i rozkazy (panel „Progi gry”, te
   same pola i granice). Odrzucony próg mówi dlaczego i że zostaje poprzednia wartość (AP-15, DW sp. 5:
   `thresholdRefusal`, komunikat jak przy celach warstw). Bez zmian formatu (`settings.game`, `settings.orders`).
+- **T403** Teksty interfejsu (1.15.8, N4 – AP-23, AF-55, AF-66, AF-69, AF-71–AF-73): jeden sposób pisania w `shared/format.ts`
+  – `plDate` (dd.mm.rrrr), `plDateTime` (dd.mm.rrrr, gg:mm – dwie cyfry dnia i miesiąca), `decimalText` / `percentText`
+  (przecinek, minus typograficzny „−”, zero bez znaku), `countLabel` / `plural` / `salariesText` (liczebniki); ISO dat
+  nie ma w żadnym tekście (tytuły wpisów w historii i dzienniku zmian `recordTitle`, wartości w różnicach `formatValue`,
+  zakres Operacji `periodLabel`, chwile przez `plDateTime`). Stopa oszczędności zawsze z jednym miejscem po przecinku
+  (T294: `rateText` „55,0%”, CSV „55,0”, Excel format „0.0”); pole liczby (`NumberField`) pisze przecinek („1,0”).
+  Komunikaty systemu po polsku: `shared/plainError.ts` zamienia kody systemu plików (ENOENT, EBUSY, EPERM…), błędy
+  JSON, ZIP i schematu (zod) na zdanie; stosuje je `errorMessage` okna (wywołania IPC loguje `handle` z surowym
+  tekstem), opis plików z problemami, nieudana kopia, błąd odczytu folderu ICTTJ; plik, który zajął OneDrive albo inny
+  program, ma plakietkę „zablokowany”, nie „uszkodzony”. Podsumowanie odzyskania z kopii uzgadnia imiesłów z
+  rzeczownikiem („1 plan miesiąca zmieniony”). Kody decyzji, identyfikatory i teksty robocze („spec”) tylko w
+  komentarzach – pilnuje tego `tests/unit/ui-no-codes.test.ts` (źródła) i `tests/e2e/ap23.spec.ts` (renderowane
+  ekrany i dymki). Słowniczek: osobna lista „Terminy ICT” (`ICT_GLOSSARY`, w F1) – termin po angielsku, objaśnienie po
+  polsku; wszystkie linie „Stanu okrętu” i Daily Bias mają dymek. Słowo „firma” zastąpione („sprzedawca albo osoba”),
+  przejścia 100 ms → 150 ms (120–160 ms).
+- **T404** Sprawdzenia po scaleniu N4 (1.15.8, AP-23, US.9, AF-71): (1) Esc w polach „Progi gry” (Ustawienia → Warstwy
+  i rozkazy) cofa wpis – `NumberField` z AP-15 wystarczył, dopisany test E2E; (2) cisza nocna „od” = „do” zostaje
+  przyjęta (to sposób na wyłączenie ciszy), ale pole mówi to wprost („ta sama godzina – cisza nocna wyłączona”);
+  (3) `clampZoom` zaokrągla do siatki 10 % (ręcznie wpisane 1,23 czyta się jako 120 %, nie „123%”).

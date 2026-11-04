@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { RELEASES_PAGE, type UpdateState } from '@shared/update'
 import { api, errorMessage } from '../../lib/api'
-import { fmtBytes } from '../../lib/format'
+import { fmtBytes, plDateTime } from '../../lib/format'
 import { checkForUpdates, downloadUpdate, restartToUpdate, setUpdatePrefs, setUpdateToken, useUpdate } from '../../store/update'
 import { toast } from '../../store/ui'
 import { installWhen, useTray } from '../../store/tray'
@@ -199,7 +199,7 @@ export function UpdatesTab() {
           <Field label="Status">
             <div className="flex flex-col gap-1" data-testid="update-status">
               <StatusLine s={s} />
-              {s.lastCheckAt && <span className="num text-[11px] text-dim">ostatnie sprawdzenie: {new Date(s.lastCheckAt).toLocaleString('pl-PL')}</span>}
+              {s.lastCheckAt && <span className="num text-[11px] text-dim">ostatnie sprawdzenie: {plDateTime(s.lastCheckAt, true)}</span>}
             </div>
           </Field>
           <div className="flex flex-wrap items-center gap-2">

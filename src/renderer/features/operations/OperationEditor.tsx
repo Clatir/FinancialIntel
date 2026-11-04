@@ -16,7 +16,7 @@ import { AmountField, DateField, plnText, signedPln, TimeField } from '../../com
 import { Badge, Empty, Field, Segmented, TextArea, TextField, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
 import { Modal } from '../../components/Modal'
-import { plDate } from '../../lib/format'
+import { plDate, plDateTime } from '../../lib/format'
 import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
 import { AccountSelect, CategorySelect, useAccounts } from './pickers'
@@ -373,7 +373,7 @@ export function OperationEditor({ id }: { id: string }) {
                         type="button"
                         className="btn h-[24px] shrink-0"
                         onClick={() => update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))}
-                        title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami (D83)"
+                        title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami"
                         data-testid="operation-share-start"
                       >
                         Wspólnie
@@ -510,7 +510,7 @@ export function OperationEditor({ id }: { id: string }) {
             />
             {night && !t.logNote.trim() && (
               <p className="text-[11.5px] text-accent" data-testid="operation-night-confirm">
-                Godzina w ciszy nocnej ({orders.quietHours.from}–{orders.quietHours.to}): zakup o tej porze potwierdź krótkim wpisem wyżej (D40). Dopisujesz zakup z dnia?{' '}
+                Godzina w ciszy nocnej ({orders.quietHours.from}–{orders.quietHours.to}): zakup o tej porze potwierdź krótkim wpisem wyżej. Dopisujesz zakup z dnia?{' '}
                 <button type="button" className="text-accent underline" onClick={() => patch({ time: null })} data-testid="operation-night-clear">
                   usuń godzinę
                 </button>
@@ -557,7 +557,7 @@ export function OperationEditor({ id }: { id: string }) {
         )}
         {!isDraft && (
           <div className="text-[10.5px] text-dim">
-            zapisano {new Date(t.updatedAt).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+            zapisano {plDateTime(t.updatedAt)}
             {t.updatedBy ? ` · ${t.updatedBy}` : ''}
           </div>
         )}
@@ -689,7 +689,7 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
             <button
               type="button"
               className={cx('btn btn-ghost h-[22px] px-1 text-[11px]', (!!s.tags?.length || tagLines.has(s.id)) && 'text-accent')}
-              title="Tagi tej części (F17) – np. jedna rzecz z paragonu na wyprawę"
+              title="Tagi tej części – np. jedna rzecz z paragonu na wyprawę"
               onClick={() => setTagLines((x) => (x.has(s.id) ? new Set([...x].filter((y) => y !== s.id)) : new Set([...x, s.id])))}
               data-testid="split-tags-open"
             >

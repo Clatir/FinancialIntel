@@ -6,6 +6,7 @@ import { COLLECTIONS, type Collection } from '@shared/paths'
 import { newerSide, newestResolutions } from '@shared/conflicts'
 import { chooser, deepEqual, diffRecords, fieldLabel, formatValue, isAmountPath, merge3, pathKey, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText } from '../../components/fields'
+import { plDateTime } from '../../lib/format'
 import { recordTitle } from '../../lib/recordTitle'
 import { ChangeList, HistoryButton, useDictNames } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
@@ -36,6 +37,9 @@ const PROBLEM_LABEL: Record<string, string> = {
   'too-new': 'nowszy format',
   'unknown-file': 'nieznany plik'
 }
+
+/** A file OneDrive still brings or another program holds is „zablokowany”, not damaged (AP-23). */
+export const problemLabel = (p: Pick<Problem, 'kind' | 'unreadable'>): string => (p.unreadable ? 'zablokowany' : (PROBLEM_LABEL[p.kind] ?? p.kind))
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
@@ -181,8 +185,8 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         )}
       </div>
       <div className="num text-[11px] text-dim">
-        zmieniony: {s.updatedAt ? new Date(s.updatedAt).toLocaleString('pl-PL') : '—'}
-        {s.mtimeMs ? ` · plik: ${new Date(s.mtimeMs).toLocaleString('pl-PL')}` : ''}
+        zmieniony: {s.updatedAt ? plDateTime(s.updatedAt, true) : '—'}
+        {s.mtimeMs ? ` · plik: ${plDateTime(s.mtimeMs, true)}` : ''}
       </div>
       {s.error && <div className="text-[11.5px] text-down">{s.error}</div>}
       <button className="btn self-start" disabled={busy || readOnly || !s.record} title={!s.record ? 'Tej wersji nie da się odczytać – zachowaj drugą.' : undefined} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
@@ -315,7 +319,7 @@ function DeletedRecords() {
             <div key={`${d.kind}:${d.id}`} className="flex items-center gap-3 border-b border-line/60 py-1 text-[12px] last:border-b-0" data-testid="deleted-row">
               <span className="min-w-0 flex-1 truncate">{recordTitle(d.kind, d.record)}</span>
               <span className="num text-[11px] text-muted">
-                {d.reason === 'undo' ? 'usunięty przy cofnięciu importu' : d.byImport ? 'usunięty przez import' : 'usunięty'} {new Date(d.savedAt).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })} · {d.savedBy ?? '?'}
+                {d.reason === 'undo' ? 'usunięty przy cofnięciu importu' : d.byImport ? 'usunięty przez import' : 'usunięty'} {plDateTime(d.savedAt)} · {d.savedBy ?? '?'}
               </span>
               <button
                 className="btn h-[22px]"
@@ -435,7 +439,7 @@ export function SyncPage() {
             ))}
             {lastRemote && (
               <div className="text-[12px] text-muted" data-testid="sync-last-remote">
-                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {new Date(lastRemote.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {plDateTime(lastRemote.at)}
               </div>
             )}
           </Panel>
@@ -467,7 +471,7 @@ export function SyncPage() {
           <div className="border border-line bg-panel">
             {problems.map((p) => (
               <div key={p.relPath} className="grid grid-cols-[110px_minmax(0,1fr)_auto] items-center gap-3 border-b border-line/70 px-2.5 py-1.5 last:border-b-0" data-testid="problem-row">
-                <Badge tone={p.kind === 'unknown-file' ? 'default' : 'down'}>{PROBLEM_LABEL[p.kind]}</Badge>
+                <Badge tone={p.kind === 'unknown-file' ? 'default' : 'down'}>{problemLabel(p)}</Badge>
                 <div className="min-w-0">
                   <div className="num truncate text-[12px] text-fg-strong">{p.relPath}</div>
                   <div className={cx('truncate text-[11.5px]', p.kind === 'unknown-file' ? 'text-muted' : 'text-down')} title={p.message}>

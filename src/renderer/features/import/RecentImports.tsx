@@ -7,12 +7,12 @@ import type { ImportBatch } from '@shared/schema'
 import { Modal } from '../../components/Modal'
 import { Panel } from '../../components/ui'
 import { useFolderLocked } from '../../store/data'
-import { plDate } from '../../lib/format'
+import { plDate, plDateTime } from '../../lib/format'
 import { useAccounts } from '../operations/pickers'
 import { KEEP_IMPORTS } from '@shared/import/batch'
 import { undoImport, undoPreview, useImportBatches, useLatestImport } from './batches'
 
-const when = (iso: string) => new Date(iso).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
+const when = (iso: string) => plDateTime(iso)
 
 /** „Cofnij import”: a dialog with what taking it back does now, then the undo (its toast has „Cofnij”). */
 export function UndoImportButton({ batch, testId = 'import-undo' }: { batch: ImportBatch; testId?: string }) {

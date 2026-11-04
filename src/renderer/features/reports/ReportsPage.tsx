@@ -18,6 +18,7 @@ import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
 import { netAdjustments } from '@shared/calc/netWorth'
 import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
 import { formatPln, rangeText } from '@shared/format'
+import { ictOf } from '@shared/glossary'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useGameView } from '../../store/game'
@@ -108,7 +109,7 @@ function BriefingReport() {
         <div className="flex flex-col text-[12px]">
           {fleet.daily && <Line label="Energia dziś" value={zl(fleet.daily.energy)} strong />}
           {/* The briefing's first element (spec, N26) – as on the bridge. */}
-          {bias && <Line label="Daily Bias" value={BIAS_LABEL[bias]} testId="reports-briefing-bias" />}
+          {bias && <Line label={<span title={ictOf('Daily Bias')}>Daily Bias</span>} value={`${bias === 'bullish' ? '▲' : bias === 'bearish' ? '▼' : '◆'} ${BIAS_LABEL[bias]}`} testId="reports-briefing-bias" />}
           {!rows.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
           {rows.map((i) => (
             <span key={i.key} className={cx('py-0.5', i.level === 'red' ? 'text-down' : 'text-fg')} data-testid="reports-briefing-item" data-tier={i.tier}>
@@ -161,7 +162,7 @@ function WatchReport() {
               )}
             </div>
             <Line label="Koszty netto" value={zl(w.costs)} strong testId="reports-watch-costs" />
-            <Line label={<span title="Przychód (D81): praca i trading netto – bez zwrotów, pożyczek i pieniędzy domowników">Przychody</span>} value={zl(w.income)} />
+            <Line label={<span title="Przychód: praca i trading netto – bez zwrotów, pożyczek i pieniędzy domowników">Przychody</span>} value={zl(w.income)} />
             <div className="flex flex-col pt-1">
               {w.days.map((d) => {
                 const g = days.get(d.date)

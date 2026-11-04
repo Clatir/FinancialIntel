@@ -151,7 +151,7 @@ function NavItem({
       data-badge={badge || undefined}
       aria-current={active ? 'page' : undefined}
       className={cx(
-        'relative flex h-[38px] w-full shrink-0 items-center gap-2.5 border-l-2 px-3 text-left transition-colors duration-100',
+        'relative flex h-[38px] w-full shrink-0 items-center gap-2.5 border-l-2 px-3 text-left transition-colors duration-150',
         active ? 'border-accent bg-accent-soft text-accent' : 'border-transparent hover:bg-hover hover:text-fg-strong',
         !active && 'text-fg'
       )}

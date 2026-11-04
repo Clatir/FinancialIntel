@@ -112,8 +112,8 @@ export const ZOOM_MIN = 0.9
 export const ZOOM_MAX = 1.5
 export const ZOOM_STEP = 0.1
 
-/** A size within the bounds, to a whole per cent. */
-export const clampZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100))
+/** A size within the bounds, on the grid of 10 % (AP-23, AF-71: a hand-edited 1,23 reads 120 %, never 123 %). */
+export const clampZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10))
 
 /** One step bigger or smaller, on the grid of 10 % (an odd size from a hand-edited file snaps to it). */
 export const zoomStep = (z: number, dir: 1 | -1): number => clampZoom((dir > 0 ? Math.floor(z * 10 + 1e-6) + 1 : Math.ceil(z * 10 - 1e-6) - 1) / 10)

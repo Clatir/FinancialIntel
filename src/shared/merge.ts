@@ -7,6 +7,8 @@
  *   values it is a conflict (`choose` decides, by default "mine"). Bookkeeping fields (updatedAt, updatedBy,
  *   schemaVersion, computed) never conflict: the newer / theirs wins.
  */
+import { countLabel, plDate, plDateTime } from './format'
+
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type Path = Array<string>
 
@@ -426,13 +428,22 @@ export function isAmountPath(path: Path): boolean {
 /** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */
 export const isAmountKey = (key: string): boolean => isAmountPath(key.replace(/\[\d+\]/g, '').split('.').filter(Boolean))
 
-/** Short text of a value for the diff lists. */
+/**
+ * Short text of a value for the diff lists, as the screens write values (AP-23): a day 'dd.mm.rrrr', a moment
+ * 'dd.mm.rrrr, gg:mm', a month 'mm.rrrr', a decimal with a comma, a yes / no as „tak” / „nie”.
+ */
 export function formatValue(v: unknown, max = 80): string {
   if (v === undefined) return '—'
   if (v === null || v === '') return 'puste'
-  if (typeof v === 'string') return v.length > max ? `${v.slice(0, max - 1)}…` : v
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
-  if (Array.isArray(v)) return v.length === 0 ? 'puste' : `${v.length} ${v.length === 1 ? 'pozycja' : v.length < 5 ? 'pozycje' : 'pozycji'}`
+  if (typeof v === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return plDate(v)
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) && !Number.isNaN(Date.parse(v))) return plDateTime(v)
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) return `${v.slice(5)}.${v.slice(0, 4)}`
+    return v.length > max ? `${v.slice(0, max - 1)}…` : v
+  }
+  if (typeof v === 'boolean') return v ? 'tak' : 'nie'
+  if (typeof v === 'number') return String(v).replace('.', ',')
+  if (Array.isArray(v)) return v.length === 0 ? 'puste' : countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')
   const s = JSON.stringify(v)
   return s.length > max ? `${s.slice(0, max - 1)}…` : s
 }

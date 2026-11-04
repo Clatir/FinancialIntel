@@ -7,6 +7,7 @@ import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, Notification, app, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
 import { IMPORT_MAX_BYTES } from '@shared/import/text'
+import { plainError } from '@shared/plainError'
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type GhostFolder, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import { SAVED, unsavedQuestion } from '@shared/unsaved'
 import { COLLECTIONS, type Collection } from '@shared/paths'
@@ -415,7 +416,7 @@ function dailyBackup(): void {
       async (e) => {
         log('warn', 'backup failed', e)
         if (s !== store) return
-        backupFailure = { at: new Date().toISOString(), message: e instanceof Error ? e.message : String(e), dir: s.backupsDir }
+        backupFailure = { at: new Date().toISOString(), message: plainError(e instanceof Error ? e.message : String(e)), dir: s.backupsDir }
         backupFailingSince ??= Date.now()
         await noticeStaleBackups(s)
       }
@@ -848,7 +849,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
 function openErrorMessage(e: unknown): string {
   const message = e instanceof Error ? e.message : String(e)
   const foreign = !(e instanceof Error) || (e as NodeJS.ErrnoException).code != null || e instanceof RangeError || e instanceof TypeError || e instanceof SyntaxError || e instanceof ReferenceError
-  return foreign ? `Nie udało się wczytać folderu danych (${message}). Szczegóły są w logu – „Otwórz folder logów”.` : message
+  return foreign ? `Nie udało się wczytać folderu danych (${plainError(message)}). Szczegóły są w logu – „Otwórz folder logów”.` : message
 }
 
 /**

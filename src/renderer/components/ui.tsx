@@ -91,7 +91,8 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
   // the focus: a field saving at every valid key goes back to it.
   const cancelled = useRef(false)
   const atFocus = useRef<number | null>(null)
-  const formatted = value == null ? '' : decimals != null ? value.toFixed(decimals) : String(value)
+  // A decimal comma, as the app writes numbers everywhere (AP-23): „1,0”, never „1.0” (the field reads both).
+  const formatted = value == null ? '' : (decimals != null ? value.toFixed(decimals) : String(value)).replace('.', ',')
   const shown = draft ?? (typographicMinus ? formatted.replace('-', '\u2212') : formatted)
   // A field of whole numbers (decimals 0 – B26) never takes a fraction: 2,5 raty would save as a schedule losing a part.
   const fits = (v: number | null) => v == null || decimals !== 0 || Number.isInteger(v)
@@ -318,7 +319,7 @@ export function Segmented<T extends string>({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cx(
-              'px-2.5 transition-colors duration-100 flex items-center justify-center text-center',
+              'px-2.5 transition-colors duration-150 flex items-center justify-center text-center',
               isFull && 'flex-1',
               size === 'sm' ? 'min-h-[22px] py-1 text-[11.5px] leading-tight' : 'min-h-[24px] py-1 leading-tight',
               i > 0 && 'border-l border-line-strong',

@@ -1,15 +1,11 @@
 // adapted from ICTTJ src/renderer/lib/format.ts @ 84a8339
 import { addDays, warsawNow } from '@shared/calc/dates'
-import { plural } from '@shared/format'
+import { countLabel, plDate, plDateTime, plural } from '@shared/format'
+import type { PeriodFilter } from '@shared/operationsView'
 const MINUS = '−'
 
-/** Polish plural form of the noun after a number (in `shared/format.ts` – the notifications and the inbox use it too). */
-export { plural }
-
-/** "3 cele", "5 miesięcy", "1 dzień". */
-export function countLabel(n: number, one: string, few: string, many: string, fraction?: string): string {
-  return `${n} ${plural(n, one, few, many, fraction)}`
-}
+/** Plural forms, counts and dates live in `shared/format.ts` (the notifications and the inbox use them too). */
+export { countLabel, plDate, plDateTime, plural }
 
 export function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -160,6 +156,13 @@ export function monthLabel(month: string): string {
   return `${MONTH_PL[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`
 }
 
+/** The period of the Operations list (AP-23): a month, the whole history, or a range with its days as dd.mm.rrrr. */
+export function periodLabel(p: PeriodFilter): string {
+  if (p.kind === 'month') return monthLabel(p.month)
+  if (p.kind === 'all') return 'cała historia'
+  return `${p.from ? plDate(p.from) : '…'} – ${p.to ? plDate(p.to) : '…'}`
+}
+
 /** '2026-10' → „października 2026” (after „od”, „do”). */
 export function monthGenLabel(month: string): string {
   return `${MONTH_PL_GEN[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`
@@ -170,5 +173,9 @@ export function dayLabel(date: string): string {
   return `${Number(date.slice(8, 10))} ${MONTH_PL_GEN[Number(date.slice(5, 7)) - 1] ?? ''}`.trim()
 }
 
-/** '2026-10-17' → „17.10.2026”. */
-export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
+const MONTH_PL_LOC = ['styczniu', 'lutym', 'marcu', 'kwietniu', 'maju', 'czerwcu', 'lipcu', 'sierpniu', 'wrześniu', 'październiku', 'listopadzie', 'grudniu']
+
+/** '2026-11' → „listopadzie 2026” (after „w”: „pula Cele w listopadzie 2026”). */
+export function monthLocLabel(month: string): string {
+  return `${MONTH_PL_LOC[Number(month.slice(5, 7)) - 1] ?? month} ${month.slice(0, 4)}`
+}

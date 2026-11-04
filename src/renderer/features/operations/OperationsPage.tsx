@@ -21,7 +21,7 @@ import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../.
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
 import { Badge, Kbd, cx } from '../../components/ui'
-import { WEEKDAY_PL, monthLabel, plDate, plural } from '../../lib/format'
+import { WEEKDAY_PL, periodLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { operationRowText } from './rowText'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
@@ -47,7 +47,7 @@ function PeriodBar({ period }: { period: PeriodFilter }) {
       </button>
       <Popover
         buttonClassName="btn h-[24px] min-w-[150px] justify-center"
-        label={<span data-testid="operations-period">{period.kind === 'month' ? monthLabel(period.month) : period.kind === 'all' ? 'cała historia' : `${period.from ?? '…'} – ${period.to ?? '…'}`}</span>}
+        label={<span data-testid="operations-period">{periodLabel(period)}</span>}
         width={250}
         testId="operations-period-menu"
       >

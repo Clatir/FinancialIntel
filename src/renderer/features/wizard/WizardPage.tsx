@@ -8,7 +8,7 @@ import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
 import { costsByMonth, firstFullMonth, fullMonthsBefore, linkFromOf, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments, unlinkedPayments } from '@shared/calc/plan'
 import { startSplit, startTanks, startTargets } from '@shared/calc/start'
-import { plural } from '@shared/format'
+import { countLabel, plural, salariesText } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, useData, useFolderLocked } from '../../store/data'
@@ -169,7 +169,7 @@ export function WizardPage() {
                     ? 'Gotówka w portfelu – puste = 0 zł.'
                     : 'Potrzebne – 0, jeśli konto jest puste.'
                   : ahead
-                    ? `Na koncie ${ahead} ${plural(ahead, 'operacja', 'operacje', 'operacji')} z datą po dziś – saldo „teraz” ich nie obejmuje, silnik odejmie je w ich dniu.`
+                    ? `Na koncie ${countLabel(ahead, 'operacja', 'operacje', 'operacji')} z datą po dziś – saldo „teraz” ${ahead === 1 ? 'jej nie obejmuje, silnik odejmie ją w jej dniu' : 'ich nie obejmuje, silnik odejmie je w ich dniu'}.`
                     : undefined
             }
           >
@@ -407,7 +407,7 @@ export function WizardPage() {
         <TextField value={w.shipName} onChange={(shipName) => patchWizard({ shipName })} maxLength={40} data-testid="wizard-ship" />
       </Field>
       <span className="label mt-1">Rozkazy (zmienisz je później)</span>
-      <Field label="Minimalne osłony (pensje)" labelWidth={170} hint={`Najwyżej cel osłon (${w.shieldSalaries} pensji).`}>
+      <Field label="Minimalne osłony (pensje)" labelWidth={170} hint={`Najwyżej cel osłon (${salariesText(w.shieldSalaries)}).`}>
         <NumberField className="w-[70px]" value={orders.minShieldSalaries} decimals={1} step={0.5} isValid={(v) => v != null && v >= 0 && v <= 24 && v <= w.shieldSalaries} onChange={(v) => v != null && setOrders({ minShieldSalaries: v })} />
       </Field>
       <Field label="Linia zanurzenia (% pensji)" labelWidth={170}>

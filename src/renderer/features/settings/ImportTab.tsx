@@ -59,7 +59,7 @@ function MergedNames() {
       }
     >
       <p className="mb-2 text-[11.5px] text-muted">
-        Nazwy, które przy imporcie połączyłeś jako jedną firmę albo osobę („Podobne nazwy”, „Połącz nazwy”): jedna grupa i jedna reguła. Rozłączona nazwa
+        Nazwy, które przy imporcie połączyłeś jako jednego sprzedawcę albo jedną osobę („Podobne nazwy”, „Połącz nazwy”): jedna grupa i jedna reguła. Rozłączona nazwa
         wraca do własnej grupy (i do reguły, którą miała wcześniej).
       </p>
       {list.length === 0 && <span className="text-[11.5px] text-dim">Brak połączonych nazw.</span>}

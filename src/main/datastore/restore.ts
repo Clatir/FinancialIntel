@@ -11,6 +11,7 @@ import { pipeline } from 'node:stream/promises'
 import { DateTime } from 'luxon'
 import yauzl from 'yauzl'
 import { COLLECTIONS, SETTINGS_FILE, classifyCanonical, sanitizeRelPath, type Collection } from '@shared/paths'
+import { plainError } from '@shared/plainError'
 import { parseRecordText, type AnyRecord } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { pathExists, withRetry } from './atomic'
@@ -31,7 +32,7 @@ function eachEntry(zipPath: string, accept: (rel: string) => boolean, take: (rel
         /* already closed */
       }
       const msg = String((e as Error)?.message)
-      rejectRaw(/invalid relative path|absolute path/i.test(msg) ? new Error('ZIP zawiera niedozwolone ścieżki (np. ../) – odrzucony.') : new Error(`Uszkodzony plik ZIP: ${msg}`))
+      rejectRaw(/invalid relative path|absolute path/i.test(msg) ? new Error('ZIP zawiera niedozwolone ścieżki (np. ../) – odrzucony.') : new Error(`Uszkodzony plik ZIP: ${plainError(msg)}`))
     }
     yauzl.open(zipPath, { lazyEntries: true }, (err, zip) => {
       if (err || !zip) return reject(err ?? new Error('Nie można otworzyć ZIP'))

@@ -20,7 +20,7 @@ import { showFilter } from '../operations/state'
 import { useCategories } from '../operations/pickers'
 
 const zl = (g: number) => `${plnText(g)} zł`
-const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toLocaleString('pl-PL', { maximumFractionDigits: 1 })}%`
+const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toLocaleString('pl-PL', { maximumFractionDigits: 1 }).replace('-', '−')}%`
 
 /** A cell of the spending: its operations in Operacje (a view – the stored filter stays, B88). */
 export function showSpending(month: string, id: string, containerIds: readonly string[]): void {

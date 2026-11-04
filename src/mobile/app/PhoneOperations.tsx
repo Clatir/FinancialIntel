@@ -14,7 +14,7 @@ import { listOf, useData } from '@renderer/store/data'
 import { useMinute } from '@renderer/store/fleet'
 import { plnText, signedPln } from '@renderer/components/fields'
 import { Empty, cx } from '@renderer/components/ui'
-import { monthLabel } from '@renderer/lib/format'
+import { monthLabel, periodLabel } from '@renderer/lib/format'
 import { useMarkFlags } from '@renderer/features/sensors/state'
 import { useMembers } from '@renderer/features/household/actions'
 import { OperationEditor } from '@renderer/features/operations/OperationEditor'
@@ -30,7 +30,6 @@ const TONE = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', acce
 
 const toggle = <T,>(list: readonly T[], v: T): T[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
-const periodLabel = (p: PeriodFilter): string => (p.kind === 'month' ? monthLabel(p.month) : p.kind === 'all' ? 'cała historia' : `${p.from ?? '…'} – ${p.to ?? '…'}`)
 
 /** The filters set beyond the phone's own (amounts, members, brands, tags… – a computer's), the search apart. */
 const otherFilters = (f: OperationsFilter): boolean => narrows({ ...f, accounts: [], categories: [], marks: [], query: '' })

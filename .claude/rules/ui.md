@@ -31,3 +31,9 @@ paths:
   Esc = „×” (szkic zostaje).
 - **Cofnij i potwierdzenia (AP-22, T401):** usunięcie, rozłączenie i zrzut mają toast „Cofnij” (min. 8 s); działanie
   nieodwracalne z aplikacji (Kosz, token, przerwanie kreatora) – `ConfirmButton`, nigdy własny dwuklik.
+- **Teksty (AP-23, T403):** daty tylko `plDate` / `plDateTime` (dd.mm.rrrr – nigdy ISO ani `toLocaleString`), liczby z
+  przecinkiem i minusem „−” (`decimalText`, `percentText`; stopa oszczędności `rateText` zawsze z jednym miejscem),
+  liczebniki `countLabel` / `salariesText`, imiesłów zgodny z rzeczownikiem. Kody decyzji (D…, T…, B…, F…, AF-…) i „spec”
+  tylko w komentarzach (`tests/unit/ui-no-codes.test.ts` pada na każdym w tekście). Błąd systemu, JSON, ZIP i zod
+  przechodzi przez `plainError` (`errorMessage` w oknie robi to sam); nowy termin ICT – do `ICT_GLOSSARY`, nowa linia
+  Stanu okrętu – dymek z `glossaryOf`.

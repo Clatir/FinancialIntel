@@ -1,12 +1,16 @@
 // adapted from ICTTJ src/renderer/lib/api.ts @ 84a8339
 import type { FiApi } from '@shared/api'
+import { plainError } from '@shared/plainError'
 
 export const api: FiApi = window.fi
 
-/** Strip Electron's "Error invoking remote method ..." prefix from IPC errors. */
+/**
+ * Strip Electron's "Error invoking remote method ..." prefix from IPC errors; a system's or the parser's English text is said
+ * in Polish (AP-23) – the main process logged the raw error when the call failed.
+ */
 export function errorMessage(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e)
-  return raw.replace(/^Error invoking remote method '[^']+': /, '').replace(/^(\w*Error): /, '')
+  return plainError(raw.replace(/^Error invoking remote method '[^']+': /, '').replace(/^(\w*Error): /, ''))
 }
 
 /** A write refused for good (B67): a newer version of the app wrote the record's file – trying again changes nothing. */

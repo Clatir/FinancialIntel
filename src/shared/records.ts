@@ -1,6 +1,7 @@
 // adapted from ICTTJ src/shared/records.ts @ 84a8339
 import { z } from 'zod'
 import { migrateRaw, SchemaTooNewError } from './migrations'
+import { jsonErrorText, schemaIssueText } from './plainError'
 import type { Collection, FileKind } from './paths'
 import { settingsFileSchema, type SettingsFile } from './schema/settings'
 import {
@@ -63,7 +64,7 @@ export type ParseOutcome<K extends FileKind> =
 export function formatZodError(error: z.ZodError): string {
   return error.issues
     .slice(0, 4)
-    .map((i) => `${i.path.length ? i.path.join('.') : '(plik)'}: ${i.message}`)
+    .map((i) => `${i.path.length ? i.path.join('.') : '(plik)'}: ${schemaIssueText(i.message)}`)
     .join('; ')
 }
 
@@ -76,7 +77,8 @@ export function parseRecordText<K extends FileKind>(kind: K, text: string, idHin
   try {
     raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text)
   } catch (e) {
-    return { ok: false, error: `Uszkodzony JSON: ${(e as Error).message}` }
+    // Polish for the screen (AP-23); the position says where to look in the file.
+    return { ok: false, error: `Uszkodzony JSON: ${jsonErrorText(e)}` }
   }
   return parseRecordObject(kind, raw, idHint)
 }

@@ -28,7 +28,7 @@ import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { bulkOptions, bulkResultText, fits, hasCategory, offersNewMember, type LoanPick, type Option } from './options'
-import { countLabel } from '../../lib/format'
+import { countLabel, plDateTime } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
@@ -995,7 +995,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
           type="button"
           className="btn h-[24px]"
           disabled={readOnly}
-          title="Zaznaczone grupy to jedna firma albo osoba pod różnymi nazwami: jedna grupa i jedna reguła, także w kolejnych importach"
+          title="Zaznaczone grupy to jeden sprzedawca albo jedna osoba pod różnymi nazwami: jedna grupa i jedna reguła, także w kolejnych importach"
           onClick={() => mergeSelectedNames(groups, selected.groups)}
           data-testid="import-bulk-merge"
         >
@@ -1280,7 +1280,7 @@ export function ImportPage() {
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()
   const last = Object.entries(lastImport ?? {})
-    .map(([id, at]) => `${accounts.find((a) => a.id === id)?.name ?? '?'}: ${new Date(at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}`)
+    .map(([id, at]) => `${accounts.find((a) => a.id === id)?.name ?? '?'}: ${plDateTime(at)}`)
     .join(' · ')
   const wizard = useWizard((w) => w.active)
   return (
