@@ -55,8 +55,10 @@ export interface RadarInput {
   days?: number
   /** Formats an amount (the hidden amounts mask the notes). */
   money: (grosze: number) => string
-  /** The fixed fees of this month (F1, `cargoStatuses`): their state and payment day. */
+  /** The fixed fees of this month (F1, `cargoStatuses`): their state and payment day – and the earlier dues still unpaid (D99 pkt 3). */
   cargo?: readonly CargoStatus[]
+  /** Each container's payment day (`cargoDays`, T376): the dues ahead on it – as the briefing and Ładownia count them. */
+  payDays?: ReadonlyMap<string, number>
   /** The purchases awaiting a return (F34, `awaitedReturns`). */
   returns?: readonly AwaitedReturn[]
   /** The planned operations' days (F16, `scheduledWindow`): the open ones are on it. */
@@ -80,6 +82,16 @@ export function lastPaymentOf(c: Pick<Container, 'until' | 'cycleMonths' | 'dueM
   return date >= today ? date : null
 }
 
+/**
+ * What a fee past its day without a payment says (RA sp. 2): waiting for the bank's file that reaches its days, else the
+ * days past it – overdue (marked) 3 days after it, as a loan's installment.
+ */
+function lateNote(s: Pick<CargoStatus, 'due' | 'importPending'>, today: string): string {
+  if (s.importPending) return 'czeka na import'
+  const days = daysBetween(s.due, today)
+  return `po terminie ${days} ${days === 1 ? 'dzień' : 'dni'}`
+}
+
 /** What a planned operation's day says on the radar (F16). */
 function planNote(d: ScheduledDay): string {
   if (d.state === 'late') return `po terminie ${-d.days} ${-d.days === 1 ? 'dzień' : 'dni'}`
@@ -101,10 +113,11 @@ export function radar(o: RadarInput): RadarItem[] {
     if (salary) out.push({ key: `salary:${m}`, date: firstDayOf(m), kind: 'salary', name: 'Pensja od siebie', amount: salary, direction: 'inside', note: 'z osłon do energii miesiąca' })
   }
   // A periodic fee due this month (F1): its cycle on the payment day of its history – once, below.
-  const cycleNow = new Map((o.cargo ?? []).filter((s) => s.cycleMonths > 1).map((s) => [s.containerId, s]))
-  // The asteroids: every payment of a periodic fee in the window, during the container's life.
-  for (const c of o.containers) {
-    if (c.cycleMonths <= 1 || c.archived) continue
+  const cycleNow = new Map((o.cargo ?? []).filter((s) => s.cycleMonths > 1 && !s.carried).map((s) => [s.containerId, s]))
+  // The asteroids: every payment of a periodic fee in the window, during the container's life – on its payment day.
+  for (const fee of o.containers) {
+    if (fee.cycleMonths <= 1 || fee.archived) continue
+    const c = { ...fee, dueDay: o.payDays?.get(fee.id) ?? fee.dueDay }
     const tankOf = o.tanks.find((t) => t.containerId === c.id)
     const now = cycleNow.get(c.id)
     // A cycle paid already (early – B55) has no asteroid left: the next one.
@@ -115,26 +128,32 @@ export function radar(o: RadarInput): RadarItem[] {
     }
   }
   // The fixed fees (F1): this month's still to pay – a late one too – and each month's ahead, on its payment day.
-  const status = new Map((o.cargo ?? []).map((s) => [s.containerId, s]))
+  const status = new Map((o.cargo ?? []).filter((s) => !s.carried).map((s) => [s.containerId, s]))
   const thisMonth = monthOf(o.today)
   for (const c of o.containers) {
     if (c.cycleMonths > 1 || c.archived || c.loanId) continue
     const s = status.get(c.id)
-    const day = s?.day ?? c.dueDay
+    const day = s?.day ?? o.payDays?.get(c.id) ?? c.dueDay
     for (let m = thisMonth; firstDayOf(m) <= end; m = addMonths(m, 1)) {
       const date = m === thisMonth && s ? s.due : dueIn(m, day)
       if (date > end || !activeIn(c, m)) continue
       if (m === thisMonth && (!s || s.state === 'paid')) continue
       const late = m === thisMonth && s && date < o.today
-      out.push({ key: `fixed:${c.id}:${date}`, date, kind: 'fixed', name: c.name, amount: amountIn(c, m), direction: 'out', note: late && s.importPending ? 'czeka na import' : '', ref: c.id, ...(s && m === thisMonth && s.state === 'overdue' ? { overdue: true } : {}) })
+      out.push({ key: `fixed:${c.id}:${date}`, date, kind: 'fixed', name: c.name, amount: amountIn(c, m), direction: 'out', note: late ? lateNote(s, o.today) : '', ref: c.id, ...(s && m === thisMonth && s.state === 'overdue' ? { overdue: true } : {}) })
     }
   }
   // The periodic fees due this month, not paid yet – a late one too.
   for (const s of cycleNow.values()) {
     if (s.state === 'paid' || s.due > end) continue
     const tank = o.tanks.find((t) => t.containerId === s.containerId)?.amount ?? 0
-    const note = s.due < o.today ? (s.importPending ? 'czeka na import' : '') : `w zbiorniku ${o.money(tank)}`
+    const note = s.due < o.today ? lateNote(s, o.today) : `w zbiorniku ${o.money(tank)}`
     out.push({ key: `asteroid:${s.containerId}:${s.due}`, date: s.due, kind: 'asteroid', name: s.name, amount: s.amount, direction: 'out', note, ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
+  }
+  // The dues of earlier months still unpaid (D99 pkt 3, AF-50): on their day, until a payment pays them.
+  for (const s of o.cargo ?? []) {
+    if (!s.carried || s.state === 'paid') continue
+    const kind = s.cycleMonths > 1 ? 'asteroid' : 'fixed'
+    out.push({ key: `${kind}:${s.containerId}:${s.due}`, date: s.due, kind, name: s.name, amount: s.amount, direction: 'out', note: lateNote(s, o.today), ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
   }
   // The loans' installments not paid yet: own ones out, the expected repayments in (late ones too).
   for (const s of o.loans) {

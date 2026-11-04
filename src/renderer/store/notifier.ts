@@ -20,7 +20,7 @@ import { useIctj } from './ictj'
 import { usePresence } from './presence'
 import { showFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
-import { cargoStatusesNow, cargoWatchNow } from '../features/cargo/status'
+import { cargoDaysNow, cargoStatusesNow, cargoWatchNow } from '../features/cargo/status'
 import { futureNow } from '../features/radar/future'
 import { newBankFilesNow, openBankFile } from './bankFiles'
 import { openSensor } from '../features/sensors/open'
@@ -116,6 +116,7 @@ function check(opened: boolean, shown = false): void {
     ictjProblem: null,
     members: fi.settings.household.members,
     cargo: cargoStatusesNow(),
+    payDays: cargoDaysNow(),
     // The buoys (F16) and the accounts ahead (F26).
     scheduled: futureNow().reminders,
     accounts: futureNow().accounts,

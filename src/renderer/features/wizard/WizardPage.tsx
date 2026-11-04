@@ -6,7 +6,7 @@ import { paymentsIndex } from '@shared/calc/cargoStatus'
 import { startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
-import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments, unlinkedPayments } from '@shared/calc/plan'
+import { costsByMonth, firstFullMonth, fullMonthsBefore, linkFromOf, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments, unlinkedPayments } from '@shared/calc/plan'
 import { startSplit, startTanks, startTargets } from '@shared/calc/start'
 import { plural } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
@@ -76,13 +76,14 @@ export function WizardPage() {
     return startMonthSpentOf(transactions, today, (t) => (!!t.containerId && periodic.has(t.containerId)) || chosenKeys.has(payeeKey(t)))
   }, [transactions, month, today, containers, chosen])
   // The days each periodic fee was paid, as the engine will see them after the start (AP-5): a container's linked
-  // payments, a chosen proposal's of its payee from the month's 1st (linked to it at the start) – a cycle they paid is paid.
+  // payments, a chosen proposal's of its payee from the 1st of the month before (linked to it at the start – T379: paid
+  // the month before its due month, T135) – a cycle they paid is paid.
   const paidDays = useMemo(() => {
     const out = new Map<string, string[]>()
     const linked = paymentsIndex(transactions).byContainer
     for (const c of containers) if (c.cycleMonths > 1) out.set(c.id, (linked.get(c.id) ?? []).map((p) => p.date))
     const ids = new Set(containers.map((c) => c.id))
-    for (const p of chosen) if (p.cycleMonths > 1) out.set(p.key, unlinkedPayments(transactions, p.label, firstDayOf(month), ids).map((t) => t.date))
+    for (const p of chosen) if (p.cycleMonths > 1) out.set(p.key, unlinkedPayments(transactions, p.label, linkFromOf(firstDayOf(month)), ids).map((t) => t.date))
     return out
   }, [transactions, containers, chosen, month])
   // Operations dated after today by account (B127): not in the bank's balance now – the engine takes them on their day.

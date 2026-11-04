@@ -2712,3 +2712,55 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
   dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
   przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
+- **T375** Jeden stan opłaty i zaległość do zapłaty (1.15.7, AP-10 – AF-50 / RA.4, AF-80, AF-45 / LA.10, LA sp. 1, 6;
+  realizuje D99 pkt 3 i rekomendację F1 / T208 wobec D86 / D4 z sekcji 5 wniosków; zmienia T208 „tylko w bieżącym
+  miesiącu” i okno 14 dni dla opłat okresowych): płatności przypisuje do terminów jedna funkcja `feeDues`
+  (`calc/cargoStatus.ts`) – stan w Ładowni, Radar, odprawa, powiadomienia, salda naprzód i straż ładowni (`cyclesPaid`,
+  `deadContainers` – `dueWindow`) liczą to samo. Okno terminu: opłata miesięczna i co 2 miesiące od 14 dni przed dniem
+  płatności do 14 dni przed następnym (jak T208); opłata okresowa ≥ 3 mies. od 1. dnia miesiąca przed miesiącem
+  terminu (T135 – jak silnik `paidCycleOf`). Płatność z okna przed dniem terminu (opłata okresowa – przed miesiącem
+  terminu) idzie najpierw do poprzedniego terminu, gdy ten jest niezapłacony („zaległa zapłata poprzedniego cyklu”,
+  T135); druga płatność okna (gdy późniejsze same pokrywają kwotę terminu minus tolerancja ceny 5 %, min. 2 zł;
+  rachunek zmienny – każda) spłaca najstarszy niezapłacony termin wcześniej. Niezapłacony termin wcześniejszego
+  miesiąca zostaje (`carried`) – „po terminie” 3 dni po dniu płatności, w okresie łaski albo bez pliku banku „czeka na
+  import” – aż do zapłaty; liczony od miesiąca startu budżetu (`FleetState.start`), `from` kontenera i miesiąca jego
+  dodania (`createdAt`), w życiu kontenera; „Zapłacone poza budżetem” (`settleDue`) ustawia `aliveAt` na dzień po
+  terminie (jak „Nadal płacę”) – ten termin i starsze znikają. Termin 28.–31. dnia dostaje „po terminie” w następnym
+  miesiącu (AF-80). Bez startu budżetu – tylko termin tego miesiąca (jak dotąd). Odprawa: pozycja `cargo` raz na
+  termin (klucz bez zmian); Radar: pozycja zaległa w swoim dniu (`fixed` / `asteroid`, `overdue`), notatka „czeka na
+  import” albo „po terminie N dni” (RA sp. 2 – także w 3 dniach łaski; `importPending` liczony od dnia po terminie);
+  salda naprzód liczą ją dziś. Ładownia: znaczek wiersza – najstarsza zaległa „po terminie · dd.mm”; w edytorze blok
+  „Zaległe” (`container-late`) z „Zapłacone (kwota, dziś)” tylko, gdy płatność dziś zamknie ten termin (`payToday`),
+  i „Zapłacone poza budżetem”; „Zapłacone” bieżącego terminu – gdy płatność dziś jest jego (inaczej „Płatność dziś
+  zamknie najpierw zaległą opłatę”). Odkładki: notka „Opłata za … niezapłacona – zbiornik trzyma na nią pieniądze”
+  (LA sp. 6 – silnik bez zmian: zbiornik trzyma pieniądze niezapłaconego cyklu, następny cykl dozbiera po zapłacie,
+  T29). Kwota i zapłata cyklu z płatności (LA.10: „zapłacone 22.10”, lista „Zapłacone”). Bez zmian formatu i migracji.
+- **T376** Dzień płatności opłaty (1.15.7, AP-10 – AF-15 / MO.11, MO.15, R-20; W2 – pole „Płatność”, LA sp. 8;
+  doprecyzowuje T208): dzień z historii płatności (`paymentDay`) liczy się z płatności od chwili ustawienia dnia ręcznie
+  – nowe pole kontenera `dueAt` (ISO, addytywnie, bez `SCHEMA_VERSION`; zapisuje je zmiana `dueDay` / `dueMonth`
+  w edytorze); bez płatności po niej – dzień kontenera („ustawiony”). Ten sam dzień dla terminów naprzód: `cargoDays`
+  → Radar (`RadarInput.payDays`, asteroidy i opłaty miesięczne kolejnych miesięcy), odprawa (`BriefingInput.payDays`)
+  i Ładownia; najbliższy termin do zapłaty – `nextDueOf` (ten miesiąc ze stanu, zapłacony – następny, cykl zapłacony
+  przez silnik – pominięty). Odprawa bierze asteroidę z tego stanu, nie z dnia kontenera. Pole „Płatność” zapisanego
+  kontenera pokazuje najbliższy niezapłacony termin (nie pierwszą datę sprzed roku), podpowiedź: dzień i jego źródło
+  („z historii płatności (zmień datę, gdy bank pobiera innego dnia)”); nowy kontener – data wpisana jak dotąd.
+- **T377** Podpowiedź raty zbiornika (1.15.7, AP-10 – AF-43 / LA.3, PR sp. 7, LA sp. 2): `tankRate` (`calc/plan.ts`) –
+  rata miesiąca jak w silniku: `want` z przełomu miesiąca (`FleetState.tanks[].want`, T29, zbiornik sprzed raty), bez
+  niego `tankWant` od stanu zbiornika sprzed raty (`amount` − pobrane w miesiącu); cykl zapłacony (`paidDue`) – 0, bez
+  wyrównania; „wyrównanie” tylko, gdy rata różni się od raty harmonogramu tego miesiąca cyklu o więcej niż 1 gr –
+  ostatnia rata z resztą groszy (103,37 zł) i rata harmonogramu F23 (75,00 zł) nie są wyrównaniem. Edytor (pole „Cykl”)
+  i wiersz Ładowni („(…)”, dymek) czytają to samo; nowy kontener (szkic) – pusty zbiornik, jak dotąd (225 zł przy
+  opłacie dodanej w trakcie cyklu).
+- **T378** Debriefing i boje (1.15.7, AP-10 – LA sp. 5, RA sp. 1, RA sp. 4): debriefing miesiąca ma `tanksShort`
+  (alarmy `sinking-short` miesiąca na opłatę, suma) – wiersz „Za mało w zbiorniku (odkładce) X – brak zapłacony
+  z energii” (`debrief-tank-short`). Boja zamyka się operacją z banku o tej samej kwocie tylko z podobną nazwą: podobną
+  według importu (`looseMatch` `similar`) albo ze słowem nazwy boi (lub jej odbiorcy) w nazwie / tytule operacji – to
+  samo słowo ≥ 4 liter albo te same pierwsze 5 liter („komina” – KOMINIARZ), bez słów płatności i miesięcy („opłata”,
+  „przelew”, „listopad”); operacja bez nazwy (wpisana ręcznie, z wyprzedzeniem – T282) – dokładną kwotą jak dotąd;
+  bliska kwota – tylko z podobną nazwą (jak dotąd). „Pozostałe boje”: boja jednorazowa po dniu mówi, co z nią
+  (`pastStateOf`: „zrobiona”, „po terminie”, „minęła bez operacji – po 30 dniach zniknęła z radaru”).
+- **T379** Łączenie płatności od miesiąca przed startem (1.15.7, AP-10 – otwarte z N2, T345): `linkFromOf` – kontener
+  łączy płatności odbiorcy od 1. dnia miesiąca przed miesiącem startu budżetu (dodanie kontenera, „Połącz płatności”,
+  kreator – `paidDays` propozycji): płatność 28.10 za termin 03.11 (start 04.11) jest tego terminu – stan „zapłacone”,
+  przy opłacie okresowej ≥ 3 mies. cykl zapłacony (T135, T345), kreator i silnik nie odkładają jej drugi raz.
+  Płatności sprzed startu nie przechodzą przez przebieg (jak dotąd), wcześniejsze tylko mówią o dniu płatności.

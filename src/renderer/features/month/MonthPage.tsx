@@ -504,6 +504,8 @@ function FuelLine({ month, fleet, running }: { month: string; fleet: FleetState;
 function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debriefing; fleet: FleetState; today: string; plans: MonthPlan[]; readOnly: boolean }) {
   const cats = useCategories()
   const members = useMembers()
+  const containers = useRecordList('containers')
+  const containerName = (id: string) => containers.find((c) => c.id === id)?.name ?? ''
   const deadline = lootDeadline(brief.month)
   const decision = plans.find((p) => p.month === brief.month)?.loot ?? null
   const pending = fleet.loot.month === brief.month && fleet.loot.amount > 0 && today <= deadline
@@ -568,6 +570,16 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
         )}
         <div className="flex flex-col">
           <Row label="Ładownia i odkładki" value={zl(brief.cargo)} />
+          {/* The briefing's „za mało w zbiorniku” kept in the month's debriefing (LA sp. 5). */}
+          {brief.tanksShort.map((s) => (
+            <Row
+              key={s.containerId}
+              label={<span className="text-accent">Za mało w zbiorniku (odkładce) {containerName(s.containerId)}</span>}
+              sub="brak zapłacony z energii (pensji miesiąca)"
+              value={zl(s.amount)}
+              testId="debrief-tank-short"
+            />
+          ))}
           {brief.financed.length > 0 && (
             <Row
               label={`Sfinansowane przez domowników (${brief.financed.map((f) => memberName(f.memberId, members)).join(', ')}) – nie Twoje koszty`}

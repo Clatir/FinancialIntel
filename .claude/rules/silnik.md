@@ -52,6 +52,12 @@ paths:
 - Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
   (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Miesiąc przed
   silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
+  Podpowiedź raty w Ładowni – `tankRate` (T377: `want` silnika, cykl zapłacony bez raty), nigdy `sinkingInstallment`
+  od pustego zbiornika.
+- Jeden stan opłaty (T375, T376, od 1.15.7): płatności do terminów tylko przez `feeDues` / `dueWindow`
+  (`calc/cargoStatus.ts` – stan, Radar, odprawa, straż ładowni); niezapłacony termin wcześniejszego miesiąca zostaje
+  (`CargoStatus.carried`) do zapłaty – konsument mapujący stan po kontenerze filtruje `!carried`. Terminy naprzód na
+  dniu z historii (`cargoDays` → `payDays`, `nextDueOf`), nigdy wprost z `dueDay`; `dueAt` – dzień ustawiony ręcznie.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

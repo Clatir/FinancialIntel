@@ -22,7 +22,8 @@ test('opłaty stałe w miesiącu (1.6.0, F1): stan w Ładowni, „Kontener nieza
     records: {
       balances: [{ date: start, accountId: MBANK, kind: 'opening', amount: zl(20000) }],
       months: [{ month: addMonths(month, -3), salary: zl(4000), envelopes: {} }],
-      containers: [{ name: 'Czynsz', amount: zl(2000), cycleMonths: 1, dueMonth: start.slice(0, 7), dueDay, counterparty: 'SPÓŁDZIELNIA' }]
+      // Added this month (AP-10): the months before it have no dues of its – this month's state only.
+      containers: [{ name: 'Czynsz', amount: zl(2000), cycleMonths: 1, dueMonth: start.slice(0, 7), dueDay, counterparty: 'SPÓŁDZIELNIA', createdAt: new Date().toISOString() }]
     }
   })
   const { app, page, dataDir: dir, errors } = await launch({ dataDir })
