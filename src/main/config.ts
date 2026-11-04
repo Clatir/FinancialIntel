@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/main/config.ts @ 84a8339
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
-import type { MachineConfig } from '@shared/api'
+import type { MachineConfig, TrayPrefs } from '@shared/api'
 import { DEFAULT_UPDATE_PREFS, type PendingUpdate } from '@shared/update'
 import { DEFAULT_MACHINE_PREFS, altGrConflict, machinePrefsFrom } from '@shared/machine'
 import { withRetry, writeFileAtomic } from './datastore/atomic'
@@ -98,6 +98,7 @@ export class ConfigStore {
   /**
    * The changes made while config.json could not be read (B114), field by field: put onto the file's settings once it is
    * read – a choice made meanwhile (an update downloaded, the tray, a folder) is kept, never the defaults beside it.
+   * Kept till a write of them lands (AP-28): a write refused after the read loses none of them.
    */
   private held: Array<[string[], unknown]> = []
   /** Writes are queued and always write the latest state, so an older snapshot never lands last. */
@@ -154,11 +155,13 @@ export class ConfigStore {
       backupDirsBefore: loadBackupDirsBefore(raw.backupDirsBefore)
     }
     if (this.held.length) {
-      const held = this.held
-      this.held = []
       let next = this.config
-      for (const [path, value] of held) next = withValueAt(next, path, value) as MachineConfig
-      await this.update(next)
+      for (const [path, value] of this.held) next = withValueAt(next, path, value) as MachineConfig
+      this.config = next
+      // Read, but refused for writing (an antivirus holds it – AP-28): the changes work and stay held till a write takes
+      // them – the retry writes them, a read again puts them on the file's settings once more, never the file's old
+      // values over them. Before, they were dropped first and lost with the failed write.
+      await this.queueWrite().catch(() => this.retryLater())
     }
     return this.config
   }
@@ -176,6 +179,8 @@ export class ConfigStore {
       this.held.push(...leafChanges(before, this.config))
       return this.config
     }
+    // Changes held from before the read and not written yet (AP-28): this one joins them, in order.
+    if (this.held.length) this.held.push(...leafChanges(before, this.config))
     try {
       await this.queueWrite()
     } catch (e) {
@@ -186,13 +191,37 @@ export class ConfigStore {
     return this.config
   }
 
+  /**
+   * A change that counts only once written (the folder of backups – T434: not remembered on this computer, the backups
+   * stay where they were): a failed write takes its fields back in memory too, so the retried write never brings back
+   * what the window was told was not saved (AP-28). A field changed again meanwhile keeps the newer value.
+   */
+  async updateOrUndo(patch: Partial<MachineConfig>): Promise<MachineConfig> {
+    const before = this.config
+    const changes = leafChanges(before, { ...before, ...patch })
+    try {
+      return await this.update(patch)
+    } catch (e) {
+      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+      for (const [path, value] of changes) {
+        if (!same(valueAt(this.config, path), value)) continue
+        this.config = withValueAt(this.config, path, valueAt(before, path)) as MachineConfig
+        this.held = this.held.filter(([p, v]) => !(same(p, path) && same(v, value)))
+      }
+      throw e
+    }
+  }
+
   /** The latest settings written, after the writes queued before. */
   private queueWrite(): Promise<void> {
     const write = this.writing.then(async () => {
       if (this.writeDelayMs) await new Promise((r) => setTimeout(r, this.writeDelayMs))
       await fs.mkdir(this.userDataDir, { recursive: true })
+      // The held changes in this state; those made after it wait for their own write.
+      const held = this.held.length
       // This computer's settings (userData): no data folder's file.
       await writeFileAtomic(this.file, `${JSON.stringify(this.config, null, 2)}\n`, null)
+      this.held.splice(0, held)
       if (this.retryTimer) clearTimeout(this.retryTimer)
       this.retryTimer = null
     })
@@ -224,6 +253,30 @@ export class ConfigStore {
   }
 }
 
+export type TrayPatch = Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>
+
+/**
+ * The tray's settings changed here (AP-28, T433): in effect at once – the start with the system and the icon, `apply` –
+ * whether config.json takes them now or later. Before, a refused write (US.33) threw before the system's entry was
+ * changed, while the setting in memory and the retried write said otherwise: switched off, the app kept starting with
+ * Windows. `login` = the start with the system chosen here (only that writes its entry); a failed write is thrown after
+ * `apply`.
+ */
+export async function changeTray(config: ConfigStore, patch: TrayPatch | undefined, apply: (tray: TrayPrefs, login: boolean) => void): Promise<TrayPrefs> {
+  const next: TrayPrefs = {
+    ...config.get().tray,
+    ...(typeof patch?.closeToTray === 'boolean' ? { closeToTray: patch.closeToTray } : {}),
+    // The start with Windows set or answered here: chosen on this computer, never asked again (N100).
+    ...(typeof patch?.launchAtLogin === 'boolean' ? { launchAtLogin: patch.launchAtLogin, autostartAsked: true } : {}),
+    ...(patch?.autostartAsked === true ? { autostartAsked: true } : {})
+  }
+  const saved = config.update({ tray: next })
+  saved.catch(() => undefined)
+  apply(next, typeof patch?.launchAtLogin === 'boolean')
+  await saved
+  return next
+}
+
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** The fields `after` changed against `before`, each with its new value (a list or a value as a whole). */
@@ -232,6 +285,13 @@ function leafChanges(before: unknown, after: unknown, path: string[] = [], out: 
     for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) leafChanges(before[k], after[k], [...path, k], out)
   } else if (JSON.stringify(before) !== JSON.stringify(after)) out.push([path, after])
   return out
+}
+
+/** The value at `path` of `obj` (undefined when not there). */
+function valueAt(obj: unknown, path: readonly string[]): unknown {
+  let v = obj
+  for (const k of path) v = isPlain(v) ? v[k] : undefined
+  return v
 }
 
 /** `obj` with `value` at `path` (objects made on the way, the rest kept). */

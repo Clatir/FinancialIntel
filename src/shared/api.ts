@@ -348,10 +348,10 @@ export interface FiApi {
   /** `seen` = the sides' file times the merge was made from (N17): a side changed since refuses it. */
   mergeConflict(conflictId: string, merged: unknown, seen?: { canonical: number; copy: number }): Promise<void>
   /**
-   * Many conflicts in the order given, one change for the window (W23); a group whose copy could not be kept leaves
-   * its other conflicts as they are (`skipped`).
+   * Many conflicts in the order given, one change for the window (W23); a group whose copy could not be kept, or one
+   * with a side changed since `seen` (AP-27 – that conflict refused), leaves its other conflicts as they are (`skipped`).
    */
-  resolveConflicts(items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>): Promise<Array<{ id: string; error?: string; skipped?: boolean }>>
+  resolveConflicts(items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string; seen?: { canonical: number; copy: number } }>): Promise<Array<{ id: string; error?: string; skipped?: boolean }>>
   trashProblemFile(relPath: string): Promise<void>
   showInFolder(relPath: string | null): Promise<void>
   /**
