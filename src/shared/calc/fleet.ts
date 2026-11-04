@@ -219,6 +219,14 @@ export function sinkingInstallment(container: CycleOf & AmountOf, month: string,
   return Math.max(0, (plan[index] ?? 0) + share)
 }
 
+/**
+ * What a tank wants from this month's energy (T29) – the engine's, the start wizard's and the plan's one rule: nothing for
+ * a cycle paid already (`paid` – its due months; B55, AP-5), else `sinkingInstallment`.
+ */
+export function tankWant(container: CycleOf & AmountOf, month: string, tank: number, paid: ReadonlySet<string> | null | undefined): number {
+  return paid?.has(cyclePosition(container, month).dueMonth) ? 0 : sinkingInstallment(container, month, tank)
+}
+
 export interface DailyAllowance {
   /** „Podstawowy przydział”: the daily envelopes over the days of the month. */
   base: number
@@ -330,6 +338,29 @@ export function paidCycleOf(c: CycleOf, month: string, closed: (dueMonth: string
   const { dueMonth: due, length } = cyclePosition(c, month)
   if (due === month) return due
   return length >= 3 && addMonths(month, 1) === due && closed(addMonths(due, -length)) ? due : null
+}
+
+/** The month a periodic fee is followed from (T135): the budget's start, or its `from` when later (T136). */
+export const followedFrom = (c: { from?: string | null }, start: string): string => [monthOf(start), c.from ?? ''].sort().at(-1)!
+
+/** A periodic fee's calendar and life (a proposal of the start wizard: `from`, `until` null, not archived). */
+export type FeeOf = CycleOf & Pick<Container, 'archived' | 'from' | 'until'> & { archivedAt?: string | null }
+
+/**
+ * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135): they never pass the
+ * run – the money left before the opening balances – yet each closes its cycle as one in the run does (`paidCycleOf`:
+ * the due month's; a cycle of 3 months or more – the next due's the month before it, the one before closed). Only a
+ * payment in the fee's life is its tank's (B56). The engine and the start wizard count the same; `dates` – its payments'.
+ */
+export function paidBeforeStart(c: FeeOf, dates: Iterable<string>, start: string): Set<string> {
+  const followed = followedFrom(c, start)
+  const paid = new Set<string>()
+  for (const date of [...dates].sort()) {
+    if (date >= start || !activeIn(c, monthOf(date))) continue
+    const cycle = paidCycleOf(c, monthOf(date), (due) => due < followed || paid.has(due))
+    if (cycle) paid.add(cycle)
+  }
+  return paid
 }
 
 /** The month a container archived from 1.4.2 counts until (its end); null = archived before (never counts), or not archived. */
@@ -927,6 +958,26 @@ export function computeFleet(input: FleetInput): FleetState {
   const periodicIds = new Set(containers.filter((c) => c.cycleMonths > 1).map((c) => c.id))
   /** The cycles (due months) of each periodic fee paid already (B55). */
   const paidCycles = new Map<string, Set<string>>()
+  // Paid before the start (AP-5): those cycles are paid too – the first salary never sets their fee aside again.
+  if (started && start) {
+    const paidOn = new Map<string, string[]>()
+    for (const t of txs) {
+      if (t.date >= start || t.kind !== 'expense' || (!t.containerId && !t.splits.length)) continue
+      for (const p of partsOf(t)) {
+        // As the run counts a part (below): a goal's money is the goal's, a part to be refunded the household's.
+        const cid = p.containerId ?? t.containerId
+        const gid = p.goalId ?? t.goalId
+        if (p.refundable || p.amount >= 0 || !cid || !periodicIds.has(cid) || (gid && knownGoal(gid))) continue
+        const dates = paidOn.get(cid)
+        if (dates) dates.push(t.date)
+        else paidOn.set(cid, [t.date])
+      }
+    }
+    for (const [id, dates] of paidOn) {
+      const paid = paidBeforeStart(containerById.get(id)!, dates, start)
+      if (paid.size) paidCycles.set(id, paid)
+    }
+  }
   const startMonthSpent = start ? startMonthSpentOf(txs, start, (t) => !!t.containerId && periodicIds.has(t.containerId)) : 0
   const payMonth = (m: string, date: string) => {
     // A periodic fee's life over (its `until`, its archiving): what its tank still holds goes back to the shields (B56).
@@ -956,10 +1007,9 @@ export function computeFleet(input: FleetInput): FleetState {
     // The tanks of the periodic fees, from this month's energy.
     for (const c of containers) {
       if (c.cycleMonths <= 1 || !activeIn(c, m)) continue
-      // This cycle paid already (early, B55): nothing more to collect for it.
-      if (paidCycles.get(c.id)?.has(cyclePosition(c, m).dueMonth)) continue
       const tank = tanks.get(c.id) ?? 0
-      const want = sinkingInstallment(c, m, tank)
+      // This cycle paid already (early – B55, before the start – AP-5): nothing more to collect for it.
+      const want = tankWant(c, m, tank, paidCycles.get(c.id))
       const take = Math.min(want, Math.max(0, energy))
       if (!take) continue
       energy -= take
@@ -1012,7 +1062,7 @@ export function computeFleet(input: FleetInput): FleetState {
           } else if (periodic) {
             if (p.amount < 0) {
               // The cycle before closed – paid, or before the fee was followed (the budget's start, its `from`).
-              const followed = start ? [monthOf(start), periodic.from ?? ''].sort().at(-1)! : ''
+              const followed = start ? followedFrom(periodic, start) : ''
               const cycle = paidCycleOf(periodic, monthOf(t.date), (due) => due < followed || !!paidCycles.get(periodic.id)?.has(due))
               if (cycle) paidCycles.set(periodic.id, (paidCycles.get(periodic.id) ?? new Set()).add(cycle))
               const tank = tanks.get(periodic.id) ?? 0
