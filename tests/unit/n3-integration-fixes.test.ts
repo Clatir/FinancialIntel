@@ -1,0 +1,139 @@
+/**
+ * N3 (1.15.7) – the seams between AP-10, AP-13 and AP-18 (T390):
+ * - the course's rest of this month pays what the month's plan still spends from the month's energy left – today's energy
+ *   is never more (AP-13, T371) – and over it from the shields (T390).
+ */
+import { describe, expect, it } from 'vitest'
+import { cargoStatuses } from '@shared/calc/cargoStatus'
+import { course, courseIncome, courseInputOf, restNeeds } from '@shared/calc/course'
+import { computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { createDefaultSettings } from '@shared/defaults'
+import { balanceSchema, containerSchema, defaultCategoryId, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Container, type MonthPlan, type Settings, type Transaction } from '@shared/schema'
+
+const zl = (v: number) => Math.round(v * 100)
+const AT = '2026-01-01T00:00:00.000Z'
+let seq = 0
+const nextId = () => `01K9N3J000000000000000${String(++seq).padStart(4, '0')}`
+const base = () => ({ schemaVersion: SCHEMA_VERSION, id: nextId(), createdAt: AT, updatedAt: AT })
+
+// Jedzenie and Rozrywka – daily envelopes, Dom and Prezenty – planned (the default categories).
+const FOOD = defaultCategoryId(1)
+const GROCERIES = defaultCategoryId(1, 1)
+const HOME = defaultCategoryId(2)
+const FUN = defaultCategoryId(6)
+const GIFTS = defaultCategoryId(9)
+
+const tx = (date: string, amount: number, over: Partial<Transaction> = {}): Transaction => transactionSchema.parse({ ...base(), date, accountId: MBANK_ACCOUNT_ID, amount, ...over })
+const plan = (month: string, salary: number, envelopes: Record<string, number>, over: Partial<MonthPlan> = {}) => monthPlanSchema.parse({ ...base(), month, salary, envelopes, ...over })
+const opening = (date: string, amount: number) => balanceSchema.parse({ ...base(), date, accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount })
+const container = (over: Partial<Container>): Container => containerSchema.parse({ ...base(), name: 'Czynsz', amount: zl(800), dueMonth: '2026-01', dueDay: 10, accountId: MBANK_ACCOUNT_ID, ...over })
+
+function settingsOf(start: string, layers: Partial<Settings['layers']> = {}, initial?: Settings['budget']['initial']): Settings {
+  const s = createDefaultSettings(AT).settings
+  return { ...s, budget: { ...s.budget, start, ...(initial ? { initial } : {}) }, layers: { ...s.layers, ...layers } }
+}
+
+function run(input: FleetInput): FleetState {
+  const f = computeFleet(input)
+  // The invariant: every złoty on the accounts belongs to exactly one layer.
+  expect(layersSum(f)).toBe(f.total)
+  return f
+}
+
+const NOW = '2026-11-04T12:00:00+01:00'
+const ENVELOPES = { [FOOD]: zl(1500), [FUN]: zl(500), [HOME]: zl(500), [GIFTS]: zl(1000) }
+
+/**
+ * PM.3 w2 with a pay-in: the budget from 1 October with 4 000 zł, October's plan 4 000 zł (daily 2 000, planned 1 500)
+ * spent whole – on 1 November the shields and the hull are empty, the salary 0 zł of 4 000 zł; 2 000 zł in on the 2nd
+ * (the shields). The rent of 800 zł on the 10th: October's unpaid (AP-10 – still due), November's still to come.
+ */
+function partialMonth() {
+  const rent = container({})
+  const input: FleetInput = {
+    settings: settingsOf('2026-10-01'),
+    balances: [opening('2026-10-01', zl(4000))],
+    months: [plan('2026-10', zl(4000), ENVELOPES)],
+    containers: [rent],
+    transactions: [
+      tx('2026-10-05', -zl(1500), { categoryId: GROCERIES }),
+      tx('2026-10-10', -zl(500), { categoryId: FUN }),
+      tx('2026-10-15', -zl(1000), { categoryId: GIFTS }),
+      tx('2026-10-20', -zl(1000), { categoryId: HOME }),
+      tx('2026-11-02', zl(2000), { kind: 'income', categoryId: null, counterparty: 'Pracodawca' })
+    ],
+    now: NOW
+  }
+  const f = run(input)
+  const cargo = cargoStatuses({ containers: [rent], transactions: input.transactions, today: f.today, tanks: f.tanks, coveredTo: {}, start: f.start })
+  const ci = courseInputOf(f, { settings: input.settings, plans: input.months ?? [], goals: [], scheduled: [], transactions: input.transactions, cargo })!
+  return { f, cargo, ci, input }
+}
+
+describe('N3 integracja: resztka miesiąca w kursie z energii miesiąca, nie więcej (AP-13 × AP-18, T390)', () => {
+  it('pensja częściowa: koperty i opłaty miesiąca ponad energię miesiąca (0 zł) z osłon – „teraz” = Mostek, „po resztce” 0', () => {
+    const { f, cargo, ci } = partialMonth()
+    // Mostek (AP-13): the month's energy 0 zł – today's capped, „pensja częściowa”.
+    expect(f.energy).toBe(0)
+    expect(f.daily?.cap).toEqual({ month: 0, why: 'partial' })
+    expect(f.shields.amount).toBe(zl(2000))
+    // AP-10's one state: October's rent still due (carried), November's ahead.
+    expect(cargo.map((s) => [s.due, s.state, s.carried])).toEqual([
+      ['2026-10-10', 'overdue', true],
+      ['2026-11-10', 'waiting', false]
+    ])
+    // The plan still spends: the daily pool 2 000, the planned envelopes 1 500, the two rents 1 600 zł.
+    expect(ci.energy).toEqual({ left: 0, needs: zl(2000) + zl(1500) + zl(1600) })
+    const c = course({ ...ci, income: courseIncome(f.incomeStats, 'median') }, 'median')
+    // „Teraz” stays Mostek's (AF-33): 2 000 zł over October's 4 000 zł of costs.
+    expect(f.costs.average).toBe(zl(4000))
+    expect(c.rangeNow).toBe(f.range)
+    expect(c.rangeNow).toBe(0.5)
+    // The rest: 5 100 zł over the month's energy from the shields (2 000 zł) – 3 100 zł lacking, the shields at zero.
+    // Before: the month's energy „paid” it – the course started from 2 000 zł of shields.
+    expect(c.rest).toEqual({ overEnergy: zl(5100), short: zl(3100) })
+    expect(c.rangeRest).toBe(0)
+    expect(c.short).toBe(zl(3100) + c.months.reduce((a, m) => a + m.short, 0))
+    // December starts from what is: nothing to pay the salary from.
+    expect(c.months[0]).toMatchObject({ month: '2026-12', partial: zl(4000), fromHull: 0 })
+  })
+
+  it('energia miesiąca wydana na kopertę planową (powód „spent”): pula dzienna ponad nią z osłon; zwykły miesiąc – nic', () => {
+    const input: FleetInput = {
+      settings: settingsOf('2026-11-01', { assumedCosts: zl(3000) }),
+      balances: [opening('2026-11-01', zl(20000))],
+      months: [plan('2026-11', zl(4000), ENVELOPES)],
+      transactions: [],
+      now: NOW
+    }
+    const plain = run(input)
+    const ciPlain = courseInputOf(plain, { settings: input.settings, plans: input.months ?? [], goals: [], scheduled: [], transactions: [] })!
+    // The plan within the salary (500 zł unplanned): the month's energy pays its rest – nothing drawn (as before).
+    expect(ciPlain.energy).toEqual({ left: zl(4000), needs: zl(3500) })
+    const cPlain = course(ciPlain, 'median')
+    expect(cPlain.rest).toEqual({ overEnergy: 0, short: 0 })
+    expect(cPlain.rangeRest).toBe(cPlain.rangeNow)
+
+    // Prezenty 3 950 zł over its 1 000 zł: the month's energy 50 zł – today's 74,07 zł of the pool capped by it (T371
+    // „spent”); the plan still spends 2 000 zł of the pool and Dom 500 zł – 2 450 zł over the month's energy.
+    const transactions = [tx('2026-11-02', -zl(3950), { categoryId: GIFTS })]
+    const spent = run({ ...input, transactions })
+    expect(spent.energy).toBe(zl(50))
+    expect(spent.daily).toMatchObject({ allowance: zl(74.07), energy: zl(50), cap: { month: zl(50), why: 'spent' } })
+    const ci = courseInputOf(spent, { settings: input.settings, plans: input.months ?? [], goals: [], scheduled: [], transactions })!
+    expect(ci.energy).toEqual({ left: zl(50), needs: zl(2500) })
+    const c = course(ci, 'median')
+    expect(c.rest).toEqual({ overEnergy: zl(2450), short: 0 })
+    expect(c.rangeNow).toBe(spent.range)
+    expect(c.rangeRest).toBeCloseTo((spent.shields.amount - zl(2450) + spent.hull.amount) / spent.costs.average!)
+  })
+
+  it('opłata okresowa: zbiornik płaci, energia tylko brak w nim; dwa terminy jednego zbiornika dzielą to, co ma', () => {
+    const daily = { limit: 0, spentBefore: 0, spentToday: 0, returned: 0 } as FleetState['daily']
+    const fleet = { daily, envelopes: [], tanks: [{ containerId: 'T', name: 'OC', amount: zl(900), dueMonth: '2026-11', paidDue: null, due: zl(1200) }] }
+    const due = (amount: number) => ({ containerId: 'T', cycleMonths: 12, amount, state: 'overdue' as const })
+    expect(restNeeds(fleet, [due(zl(1200))])).toBe(zl(300))
+    expect(restNeeds(fleet, [due(zl(600)), due(zl(600))])).toBe(zl(300))
+    expect(restNeeds(fleet, [{ ...due(zl(1200)), state: 'paid' }])).toBe(0)
+  })
+})

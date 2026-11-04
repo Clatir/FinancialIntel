@@ -11,13 +11,18 @@
  * the shields, the hull and its income) is its `short`, a salary the shields and the hull cannot pay whole its `partial`
  * (the engine's red alarm, `paySalary`); „teraz” is the state the engine has now (`rangeNow` = Mostek), the month's rest
  * of buoys and repayments only in `rangeRest`; a layer full now is full this month.
+ *
+ * N3 integration (T390): the month's rest pays what its plan still spends (the envelopes, the fees due) from the month's
+ * energy left – today's energy is never more (AP-13, T371) – and over it from the shields.
  */
 import type { Settings } from '../schema/settings'
 import type { Goal, MonthPlan, Scheduled, Transaction } from '../schema/records'
+import type { CargoStatus } from './cargoStatus'
 import { addMonths, monthOf } from './dates'
 import { dockAmount, goalInstallment, paySalary, rangeMonths, ratedIn, shipClass, type DockTargets, type FleetState, type ShipClass } from './fleet'
 import { byPriority } from './goals'
 import type { IncomeStats } from './income'
+import { sum } from './operations'
 import { planFor } from './plan'
 import { openDays, scheduledWindow } from './scheduled'
 
@@ -68,6 +73,13 @@ export interface CourseInput {
    * (null). Apart from `extras`: a purchase this month is in „teraz” after the maneuver, this month's buoys are not (AF-33).
    */
   purchases?: ReadonlyArray<{ month: string; goalId: string | null; amount: number }>
+  /**
+   * This month's energy (AP-13 – T390): `left` – the month's energy left now (the engine's `energy`: today's energy is
+   * never more – T371), `needs` – what the month's plan still spends from it (the daily pool's rest for the days left,
+   * the planned envelopes' rest, the fees still to pay – `restNeeds`). What `left` cannot pay comes from the shields in
+   * the month's rest, as the engine's „energy-exhausted”; absent – the month's energy pays its rest (nothing drawn).
+   */
+  energy?: { left: number; needs: number }
   horizon?: number
 }
 
@@ -111,8 +123,17 @@ export interface Course {
    * its costs count in it.
    */
   rangeNow: number | null
-  /** The range after this month's rest: its open buoys and the repayments expected (a late one too) – the course's start. */
+  /**
+   * The range after this month's rest: what its plan spends over the month's energy left (T390), its open buoys and the
+   * repayments expected (a late one too) – the course's start.
+   */
   rangeRest: number | null
+  /**
+   * This month's rest (AP-13 – T390): `overEnergy` – what its plan still spends over the month's energy left (the shields
+   * pay it – a partial salary: all of it); `short` – what the shields and the hull lack for it and the month's buoys (they
+   * end the rest at zero, as a month – AF-32).
+   */
+  rest: { overEnergy: number; short: number }
   months: CourseMonth[]
   /** The first month the shields and the hull end full – this month when full now (null = not in the course). */
   shieldsFull: string | null
@@ -122,7 +143,10 @@ export interface Course {
   /** Months under the minimum of the shields, and months the hull paid the salary. */
   belowMin: string[]
   fromHull: string[]
-  /** Months of a partial salary (AF-32), and what the course's months lack together (`CourseMonth.short`). */
+  /**
+   * Months of a partial salary (AF-32), and what the course lacks together: this month's rest (`rest.short`) and its
+   * months' (`CourseMonth.short`).
+   */
   partial: string[]
   short: number
 }
@@ -134,12 +158,44 @@ export function courseIncome(stats: IncomeStats, kind: CourseKind): { work: numb
 }
 
 /**
+ * What this month's plan still spends from the month's energy (AP-13 – T390): the daily pool's rest for the days left,
+ * today's included (its limit less what it took – a refund of an earlier purchase back in it, T370), each planned
+ * envelope's rest and the fees still to pay (`cargoStatuses` – AP-10's one state): a monthly one whole, a periodic one
+ * what its tank lacks (the energy pays a tank's shortfall – „za mało w zbiorniku”), an earlier month's due still unpaid
+ * too (D99 pkt 3, `carried`).
+ */
+export function restNeeds(fleet: Pick<FleetState, 'daily' | 'envelopes' | 'tanks'>, cargo: ReadonlyArray<Pick<CargoStatus, 'containerId' | 'cycleMonths' | 'amount' | 'state'>> = []): number {
+  const d = fleet.daily
+  const pool = d ? Math.max(0, d.limit - d.spentBefore - d.spentToday + d.returned) : 0
+  const planned = sum(fleet.envelopes.filter((e) => e.kind === 'planned').map((e) => Math.max(0, e.left)))
+  // Each tank once: two dues of one fee (a late one and this month's) share what it holds.
+  const tanks = new Map(fleet.tanks.map((t) => [t.containerId, Math.max(0, t.amount)]))
+  let fees = 0
+  for (const s of cargo) {
+    if (s.state === 'paid') continue
+    const have = s.cycleMonths > 1 ? (tanks.get(s.containerId) ?? 0) : 0
+    const fromTank = Math.min(have, s.amount)
+    if (fromTank) tanks.set(s.containerId, have - fromTank)
+    fees += s.amount - fromTank
+  }
+  return pool + planned + fees
+}
+
+/**
  * The course's input from the engine's state now and the records (Wywiad): the plans, the buoys, the loans. The layers,
  * the average costs and the debt are the engine's – the course's „teraz” is Mostek's (AF-33). The income – `courseIncome`.
+ * `cargo` – the fees' state (`cargoStatuses`): the month's rest pays the ones still due from its energy (T390).
  */
 export function courseInputOf(
   fleet: FleetState,
-  r: { settings: Pick<Settings, 'layers' | 'orders'>; plans: readonly MonthPlan[]; goals: readonly Goal[]; scheduled: readonly Scheduled[]; transactions: readonly Transaction[] }
+  r: {
+    settings: Pick<Settings, 'layers' | 'orders'>
+    plans: readonly MonthPlan[]
+    goals: readonly Goal[]
+    scheduled: readonly Scheduled[]
+    transactions: readonly Transaction[]
+    cargo?: readonly CargoStatus[]
+  }
 ): CourseInput | null {
   if (!fleet.started) return null
   const extras = new Map<string, number>()
@@ -175,7 +231,9 @@ export function courseInputOf(
     income: { work: 0, trading: 0 },
     extras,
     debt: fleet.debt,
-    installments
+    installments,
+    // The month's rest from its energy left (AP-13 – T390): what today's energy is capped with (T371).
+    energy: { left: fleet.energy, needs: restNeeds(fleet, r.cargo) }
   }
 }
 
@@ -223,12 +281,19 @@ export function course(input: CourseInput, kind: CourseKind): Course {
   for (const g of goals) goalEta[g.id] = g.target > 0 && g.amount >= g.target ? input.month : null
   // Now the whole debt: an installment of this month or a late one is not paid yet (it leaves `debt` when it is).
   const rangeNow = rangeMonths(shields, hull, costs, input.debt)
-  // This month's rest: its planned operations and repayments still to come (its salary and costs are behind it).
-  // TODO(AP-13): with the engine's energy left in the month (a partial salary – „pensja częściowa”), the costs still to
-  // come over it would come from the shields here too; the course reads the layers now and leaves the energy to the month.
+  // This month's rest (AP-13 – T390): what its plan still spends over the month's energy left comes from the shields (the
+  // hull when they lack), as the engine's „energy-exhausted” – today's energy is never more than the month's (T371): a
+  // partial salary, none, or the energy spent leave the days ahead without it. What the energy leaves stays the month's
+  // (the loot – D18, the captain's decision).
+  const overEnergy = input.energy ? Math.max(0, input.energy.needs - Math.max(0, input.energy.left)) : 0
+  if (overEnergy) drawShields(overEnergy)
+  // Its planned operations and repayments still to come (its salary is behind it).
   const now = input.extras.get(input.month) ?? 0
   if (now < 0) drawShields(-now)
   else dock(now, turnNow)
+  // What the rest lacks (AF-32, as a month's): the shields end it at zero – the next month starts from what is.
+  const restShort = Math.max(0, -shields)
+  shields += restShort
   const rangeRest = rangeMonths(shields, hull, costs, input.debt)
   const months: CourseMonth[] = []
   for (let i = 1; i <= horizon; i++) {
@@ -297,6 +362,7 @@ export function course(input: CourseInput, kind: CourseKind): Course {
     income: input.income.work + input.income.trading,
     rangeNow,
     rangeRest,
+    rest: { overEnergy, short: restShort },
     months,
     shieldsFull,
     hullFull,
@@ -304,7 +370,7 @@ export function course(input: CourseInput, kind: CourseKind): Course {
     belowMin: months.filter((m) => m.belowMin).map((m) => m.month),
     fromHull: months.filter((m) => m.fromHull > 0).map((m) => m.month),
     partial: months.filter((m) => m.partial > 0).map((m) => m.month),
-    short: months.reduce((a, m) => a + m.short, 0)
+    short: months.reduce((a, m) => a + m.short, restShort)
   }
 }
 

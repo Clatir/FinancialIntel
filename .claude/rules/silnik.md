@@ -46,7 +46,8 @@ paths:
   zapisu (`confirmedOn`), nie dacie salda (T383).
 - Kurs i symulator (1.15.7, T385–T387): osłony w kursie nigdy poniżej zera – czego brak, to `short`, pensja bez
   pieniędzy `partial`; „teraz” symulatora = stan silnika (`rangeNow` z `courseInputOf`), boje i spłaty reszty miesiąca
-  tylko w `rangeRest`; warstwa pełna teraz – data tego miesiąca.
+  tylko w `rangeRest`; warstwa pełna teraz – data tego miesiąca. Resztka miesiąca płaci plan z energii miesiąca
+  (`CourseInput.energy`, `restNeeds` – pula dzienna, koperty planowe, opłaty ze stanu AP-10), ponad nią z osłon (T390).
 - Osłony + kadłub na koniec miesiąca (`cushion.ts`, T388–T389) to sumy `moves` logu silnika: **każdy ruch osłon
   i kadłuba w silniku ma wpis w logu** (`record`) – inaczej trend przechodzi na przebieg silnika na każdy miesiąc (wolno).
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).

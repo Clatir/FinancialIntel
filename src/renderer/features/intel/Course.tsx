@@ -5,8 +5,9 @@
  */
 import { useMemo, useState } from 'react'
 import { addMonths } from '@shared/calc/dates'
-import { course, COURSE_KINDS, COURSE_LABEL, courseIncome, courseInputOf, maneuver, MANEUVER_GOAL, type CourseInput, type CourseKind, type Maneuver } from '@shared/calc/course'
+import { course, COURSE_KINDS, COURSE_LABEL, courseIncome, courseInputOf, maneuver, MANEUVER_GOAL, type Course, type CourseInput, type CourseKind, type Maneuver } from '@shared/calc/course'
 import { SHIP_CLASS_LABEL, shipClass, type FleetState } from '@shared/calc/fleet'
+import { CAP_REASON } from '@shared/calc/why'
 import { rangeText } from '@shared/format'
 import { AmountField, plnText } from '../../components/fields'
 import { Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
@@ -14,6 +15,7 @@ import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { monthLabel } from '../../lib/format'
+import { useCargoStatuses } from '../cargo/status'
 import { setSalary } from '../month/actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -22,18 +24,35 @@ const mm = (m: string | null) => (m ? `${m.slice(5, 7)}.${m.slice(0, 4)}` : '—
 const eta = (m: string | null, now: string) => (m === now ? 'teraz' : mm(m))
 const monthsText = (v: readonly string[]) => (v.length ? v.map(mm).join(', ') : 'nie')
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
-/** The course's input from the engine's state now and the records (`courseInputOf`): the plans, the buoys, the loans. */
+/**
+ * The course's input from the engine's state now and the records (`courseInputOf`): the plans, the buoys, the loans – and
+ * the fees still due this month (AP-10's state, as Ładownia has it): the month's rest pays them from its energy (T390).
+ */
 export function useCourseInput(fleet: FleetState | null): CourseInput | null {
   const settings = useData((s) => s.fi?.settings ?? null)
   const plans = useRecordList('months')
   const goals = useRecordList('goals')
   const scheduled = useRecordList('scheduled')
   const transactions = useRecordList('transactions')
-  return useMemo(() => (fleet && settings ? courseInputOf(fleet, { settings, plans, goals, scheduled, transactions }) : null), [fleet, settings, plans, goals, scheduled, transactions])
+  const cargo = useCargoStatuses()
+  return useMemo(() => (fleet && settings ? courseInputOf(fleet, { settings, plans, goals, scheduled, transactions, cargo }) : null), [fleet, settings, plans, goals, scheduled, transactions, cargo])
+}
+
+/**
+ * This month's rest over its energy (T390): „Resztka miesiąca: koperty i opłaty 3 500,00 zł ponad energię miesiąca
+ * (pensja częściowa) – z osłon, brakuje 3 500,00 zł.”; null – the month's energy pays it.
+ */
+function restText(c: Course, fleet: FleetState): string | null {
+  if (!c.rest.overEnergy) return null
+  const why = fleet.daily?.cap ? ` (${CAP_REASON[fleet.daily.cap.why]})` : ''
+  const lack = c.rest.short ? `, brakuje ${zl(c.rest.short)}` : ''
+  return `Resztka miesiąca: koperty i opłaty ${zl(c.rest.overEnergy)} ponad energię miesiąca${why} – z osłon${lack}.`
 }
 
 export function CoursePanel({ fleet, input }: { fleet: FleetState; input: CourseInput | null }) {
   const courses = useMemo(() => (input ? COURSE_KINDS.map((k) => course({ ...input, income: courseIncome(fleet.incomeStats, k) }, k)) : []), [input, fleet.incomeStats])
+  // The month's rest is the same in each course (the income starts next month).
+  const rest = courses[0] ? restText(courses[0], fleet) : null
   return (
     <Panel title="Kurs na 12 miesięcy" testId="intel-course">
       {!input ? (
@@ -68,11 +87,17 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
                 label="Brakuje na koszty"
                 values={courses.map((c) => (c.short ? zl(c.short) : 'nie'))}
                 late={courses.map((c) => c.short > 0)}
-                title="Koszty po średniej i płatności ponad osłony, kadłub i wpływy miesiąca – razem w 12 miesiącach; osłony nie schodzą poniżej zera"
+                title="Koszty po średniej i płatności ponad osłony, kadłub i wpływy miesiąca – razem w resztce tego miesiąca (koperty i opłaty ponad energię miesiąca) i w 12 kolejnych; osłony nie schodzą poniżej zera"
                 testId="intel-course-short"
               />
             </tbody>
           </table>
+          {/* The month's rest over its energy (AP-13 – T390): Mostek's „Energia dziś … – pensja częściowa” in the course. */}
+          {rest && (
+            <span className="text-[11.5px] text-accent" data-testid="intel-course-rest">
+              {rest}
+            </span>
+          )}
           <table className="w-full text-[11.5px]" data-testid="intel-course-months">
             <thead>
               <tr className="text-dim">
@@ -105,7 +130,8 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
           </table>
           <span className="text-[11px] text-dim">
             Pensja z osłon 1. dnia (brakuje – z kadłuba, a bez obu – pensja częściowa), koszty po średniej (nad pensję – z osłon, nigdy poniżej zera: reszta to „brakuje na koszty”), wpływy dokowane: osłony
-            → kadłub → cele; boje i spodziewane spłaty w swoich miesiącach. Wpływy: mediana albo średnia z 12 miesięcy (panel Przychody).
+            → kadłub → cele; boje i spodziewane spłaty w swoich miesiącach. Resztka tego miesiąca: koperty i opłaty jeszcze do zapłaty z energii miesiąca, ponad nią – z osłon. Wpływy: mediana albo
+            średnia z 12 miesięcy (panel Przychody).
           </span>
         </div>
       )}
@@ -267,12 +293,13 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
               </tr>
             </thead>
             <tbody>
-              {/* AF-33: „teraz” is the engine's range now – Mostek's; the month's rest of buoys and repayments apart. */}
+              {/* AF-33: „teraz” is the engine's range now – Mostek's; the month's rest (its plan over the month's energy – T390,
+                  the buoys, the repayments) apart. */}
               <Compare label="Zasięg i klasa" a={before.rangeNow} b={after.rangeNow} text={rangeClass} worse={(a, b) => (b ?? 0) < (a ?? 0)} testId="maneuver-range" />
               {(rangeClass(before.rangeRest) !== rangeClass(before.rangeNow) || rangeClass(after.rangeRest) !== rangeClass(after.rangeNow)) && (
                 <Compare
                   label="Zasięg po resztce miesiąca"
-                  title="Po otwartych bojach tego miesiąca i spodziewanych spłatach pożyczek udzielonych (zaległa – w tym miesiącu); od tego stanu liczy się kurs"
+                  title="Po kopertach i opłatach tego miesiąca ponad energię miesiąca (z osłon), otwartych bojach i spodziewanych spłatach pożyczek udzielonych (zaległa – w tym miesiącu); od tego stanu liczy się kurs"
                   a={before.rangeRest}
                   b={after.rangeRest}
                   text={rangeClass}

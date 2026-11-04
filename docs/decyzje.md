@@ -2901,3 +2901,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w logu), przełącza na przebieg silnika na koniec każdego miesiąca (`engineAt`). Test: każdy koniec miesiąca =
   `computeFleet` z `now` tego dnia (dostawy, łupy, wydatek ponad energię, pensja z kadłuba, pożyczki, konto dołączone
   później). Nowy ruch warstwy w silniku – zawsze z wpisem w logu.
+- **T390** Resztka miesiąca w kursie z energii miesiąca (1.15.7, N3 – integracja AP-13 × AP-18; zamyka haczyk T385
+  `TODO(AP-13)`): `courseInputOf` daje kursowi energię miesiąca (`CourseInput.energy`): `left` – energia miesiąca silnika
+  (ta, którą T371 ogranicza energię dziś), `needs` – co plan miesiąca jeszcze z niej wyda (`restNeeds`): reszta puli
+  dziennej na dni do końca miesiąca z dziś (limit kopert codziennych minus wydane; zwrot dawnego zakupu wraca do puli –
+  T370), reszta kopert planowych i opłaty jeszcze do zapłaty ze stanu AP-10 (`cargoStatuses`, także zaległe – `carried`):
+  miesięczna w całości, okresowa – czego brakuje w jej zbiorniku (dwa terminy jednego zbiornika dzielą to, co ma).
+  Resztka miesiąca: `needs` ponad `left` z osłon (kadłub, gdy brak – jak „energia wyczerpana” silnika), potem boje
+  i spłaty; czego brakuje – `Course.rest.short`: osłony kończą resztkę na zerze (jak miesiąc kursu – T385), „Brakuje na
+  koszty” (`Course.short`) liczy ją razem z miesiącami. Co energia zostawi – zostaje w miesiącu (łupy, decyzja kapitana –
+  D18, jak dotąd). Zwykły miesiąc (plan w pensji) bez zmian; pensja częściowa, bez pensji albo energia wydana – kurs
+  rusza od osłon po tej resztce. „Teraz” symulatora (`rangeNow`) dalej = Mostek (T386), „Zasięg po resztce miesiąca”
+  liczy ją; Wywiad: „Resztka miesiąca: koperty i opłaty X ponad energię miesiąca (pensja częściowa) – z osłon, brakuje
+  Y.” (`intel-course-rest`, powód z `daily.cap`). Rozważone i odrzucone: koszty po średniej minus wydane w miesiącu –
+  podwójnie liczą raty zbiorników (energia już bez nich, średnia z opłatami okresowymi), a wpływów reszty miesiąca kurs
+  nie zna; sama pula dzienna (jak porównanie T371) – pomija koperty planowe i czynsz, które biorą tę samą energię. Bez
+  zmian formatu.
