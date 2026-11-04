@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { lostPairText } from '@shared/calc/effect'
-import { computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { budgetStartOf, computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { fuelMonths } from '@shared/calc/fuel'
 import { transferGoal } from '@shared/calc/goals'
 import { topUpConfirmation } from '@shared/calc/inbox'
@@ -15,6 +15,7 @@ import { plainIncomeContext } from '@shared/calc/income'
 import { fitEnvelopes } from '@shared/calc/start'
 import { createDefaultSettings } from '@shared/defaults'
 import { monthRows, monthsCsv, monthsSheet } from '@shared/export/budget'
+import { contentMark } from '@shared/merge'
 import { balanceSchema, goalSchema, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Goal, type Settings, type Transaction } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
@@ -115,7 +116,7 @@ describe('przegląd N5 8: eksport „Miesiące” – miesiąc w toku do dziś, 
   const op = (date: string, amount: number, over: Partial<Transaction> = {}) =>
     transactionSchema.parse({ ...base(), date, accountId: MBANK_ACCOUNT_ID, amount, counterparty: 'X', ...(amount > 0 ? { kind: 'income', categoryId: null } : {}), ...over })
 
-  it('przychód i koszty z tego samego okresu (do dziś); operacje z datą po dziś – „Zaplanowane”, poza bilansem', () => {
+  it('przychód i koszty z tego samego okresu (do dziś); operacje z datą po dziś – „Zaplanowane” koszty i przychody osobno', () => {
     // 20.11: the salary of 5 000 zł on the 10th and a bonus of 3 000 zł typed ahead for the 25th; 1 000 zł spent on the
     // 5th, 400 zł planned for the 28th.
     const transactions = [op('2026-11-10', zl(5000)), op('2026-11-25', zl(3000)), op('2026-11-05', -zl(1000)), op('2026-11-28', -zl(400))]
@@ -127,13 +128,15 @@ describe('przegląd N5 8: eksport „Miesiące” – miesiąc w toku do dziś, 
     // One period with „Bilans paliwa” of Raporty.
     const [fuel] = fuelMonths(transactions, plainIncomeContext(transactions), ['2026-11'], today)
     expect([row!.income, row!.costs, row!.balance, row!.rate]).toEqual([fuel!.income, fuel!.costs, fuel!.balance, fuel!.rate])
+    // Przegląd 2 N5: the bonus dated after today is not lost from the file – its own column beside the planned costs.
+    expect(row!.plannedIncome).toBe(zl(3000))
     const csv = monthsCsv([row!]).split('\r\n')
-    expect(csv[0]!.endsWith(';Sfinansowane przez domowników (zł);Zaplanowane – data po dziś (zł)')).toBe(true)
-    expect(csv[1]).toBe('2026-11;4000,00;1000,00;5000,00;w toku;;4000,00;80,0;;0,00;400,00')
-    expect(monthsSheet([row!]).rows[0]!.at(-1)).toBe(400)
+    expect(csv[0]!.endsWith(';Sfinansowane przez domowników (zł);Zaplanowane koszty – data po dziś (zł);Zaplanowane przychody – data po dziś (zł)')).toBe(true)
+    expect(csv[1]).toBe('2026-11;4000,00;1000,00;5000,00;w toku;;4000,00;80,0;;0,00;400,00;3000,00')
+    expect(monthsSheet([row!]).rows[0]!.slice(-2)).toEqual([400, 3000])
     // A month that has ended: everything in it, nothing planned.
     const [ended] = monthRows({ transactions, categories: s.categories, plans, log: [], today: '2026-12-02' }, ['2026-11'])
-    expect(ended).toMatchObject({ costs: zl(1400), income: zl(8000), balance: zl(6600), planned: 0, inProgress: false })
+    expect(ended).toMatchObject({ costs: zl(1400), income: zl(8000), balance: zl(6600), planned: 0, plannedIncome: 0, inProgress: false })
   })
 })
 
@@ -153,5 +156,27 @@ describe('przegląd N5 10: podgląd zmiany zbiorczej – zwrot ICTTJ tracący pa
   it('zwrot do masy nazwany jak w oknie dokowania, wypłata bez zmian', () => {
     expect(lostPairText({ direction: 'out', date: '2026-10-19', amount: zl(300) }, money)).toBe('Zwrot do masy w ICTTJ z 19.10.2026 (300,00 zł) straci parę w banku – Dokowanie pokaże ją bez pary.')
     expect(lostPairText({ direction: 'in', date: '2026-10-19', amount: zl(800) }, money)).toBe('Wypłata z ICTTJ z 19.10.2026 (800,00 zł) straci parę w banku – Dokowanie pokaże ją bez pary.')
+  })
+})
+
+describe('przegląd 2 N5: saldo otwarcia nieudanego startu nie uruchamia warstw (`byStart`, T446)', () => {
+  const s0 = createDefaultSettings(AT).settings
+  const opening = (over: Record<string, unknown> = {}) => balanceSchema.parse({ ...base(), date: '2026-11-03', accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(10000), ...over })
+
+  it('bez `budget.start` – nie od salda ze startu kreatora; od salda wpisanego ręcznie jak dotąd (T25); z `budget.start` – start', () => {
+    // Before: the earliest opening, whatever wrote it – a start the folder refused ran the layers from its money.
+    expect(budgetStartOf(s0, [opening({ byStart: true })], '2026-11-03')).toBeNull()
+    expect(computeFleet({ settings: s0, balances: [opening({ byStart: true })], transactions: [], now: '2026-11-03T12:00:00.000Z' }).started).toBe(false)
+    expect(budgetStartOf(s0, [opening()], '2026-11-03')).toBe('2026-11-03')
+    expect(budgetStartOf({ budget: { ...s0.budget, start: '2026-11-03' } }, [opening({ byStart: true })], '2026-11-03')).toBe('2026-11-03')
+    // Only `true` is the mark (a value of another version – none).
+    expect(opening({ byStart: 'tak' }).byStart).toBeUndefined()
+  })
+
+  it('znacznik treści rekordu: ten sam bez względu na kolejność pól i stemple zapisu, inny przy każdej zmianie pola', () => {
+    const r = { id: 'x', amount: 1, nested: { a: 1, b: [1, 2] }, updatedAt: '2026-11-03T10:00:00.000Z', updatedBy: 'PC' }
+    expect(contentMark({ nested: { b: [1, 2], a: 1 }, amount: 1, id: 'x', updatedAt: '2026-11-04T10:00:00.000Z', updatedBy: 'LAPTOP', note: undefined })).toBe(contentMark(r))
+    expect(contentMark({ ...r, amount: 2 })).not.toBe(contentMark(r))
+    expect(contentMark({ ...r, nested: { a: 1, b: [2, 1] } })).not.toBe(contentMark(r))
   })
 })

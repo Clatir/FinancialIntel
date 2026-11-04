@@ -3439,6 +3439,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   kosztom do dziś); koszty netto operacji z datą po dziś – osobno, w nowej ostatniej kolumnie „Zaplanowane – data po
   dziś (zł)” (`Debriefing.planned`; miesiąc zakończony 0,00 – kolumny przed nią na swoich miejscach, jak w AP-29).
   Przychód z datą po dziś nie ma kolumny (jak w debriefingu i przeglądzie rocznym).
+  Dopisek (przegląd 2 N5 6 – zmienia ostatnie zdanie poprzedniego dopisku): przychód (D81) operacji z datą po dziś nie
+  znika z eksportu – kolumna „Zaplanowane przychody – data po dziś (zł)” obok „Zaplanowane koszty – data po dziś (zł)”
+  (dawniej „Zaplanowane – data po dziś (zł)”; `MonthRow.plannedIncome` – ta sama reguła przychodu co „Przychody”);
+  bilans i stopa oszczędności dalej do dziś, jak debriefing (AP-36).
 - **T422** Wypłata z bankomatu na konto „Gotówka” (AP-33, D100 (1); zmienia spec „Konta budżetu” i „Przypadki
   szczególne”, doprecyzowuje D83): konto gotówki to aktywne konto rodzaju `cash` (`cashAccountOf` – domyślne
   `CASH_ACCOUNT_ID` najpierw; nazwa nie decyduje). Jest – import rozpoznaje wypłatę (`isAtmOperation`: „WYPŁATA
@@ -3767,6 +3771,31 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w odpowiedziach tym kontenerem (zbiornik pod jego id – jak dotąd); której kontener poszedł – znów propozycją.
   Rozważone i odrzucone: tylko „Przerwij” wymienia i usuwa (do tego czasu silnik liczyłby budżet od salda otwarcia
   startu, którego nie było); zapis wielu plików naraz w jednym kroku – folder (OneDrive) tego nie ma.
+  Dopisek (przegląd 2 N5 2, 3, 8, 9 – upraszcza mechanizm poprzedniego dopisku, zastępuje jego zdania o polach zmienionych
+  przez start i o tym, co kreator pamięta): przed `fi.json` start zapisuje już tylko nowe rekordy – salda otwarcia kont
+  bez salda (ze znacznikiem `byStart`), plan miesiąca, gdy go nie ma, kontenery propozycji (bez połączenia płatności);
+  to, co było w folderze (saldo otwarcia albo plan sprzed kreatora, płatności połączone z wybranymi kontenerami – T379),
+  zmienia dopiero po zapisie `fi.json`, więc odmowa nie ma niczego do przywracania. Wycofanie to tylko usunięcie nowego
+  rekordu i tylko wtedy, gdy plik na dysku jest dokładnie tym, co start zapisał: kreator pamięta id i znacznik treści
+  (`contentMark`, `shared/merge.ts` – bez stempli zapisu; w szkicu na tym komputerze tylko to, przy kontenerze jeszcze
+  propozycja z kroku 4), okno porównuje swoją wersję, a proces główny czyta plik od nowa w chwili usuwania
+  (`deleteRecords` z `expected` → `removeRecord`: inna treść – `ChangedSinceError`, nic nie usunięte, do historii nic ze
+  starszego odczytu). Każdy inny przypadek zostaje i jest nazwany: zmieniony od zapisu startu (w oknie, na dysku, kontener
+  z połączoną płatnością) – „Zostają w folderze, bo zmieniły się od zapisu startu: …”, odtąd użytkownika, kreator go nie
+  śledzi; zapisany przez nowszą wersję aplikacji, czekający na decyzję o zmianie z drugiego komputera albo plik, którego
+  folder nie dał usunąć – „nie da się teraz wycofać: … (powód)”: kreator go pamięta, „Przerwij kreator” nie kończy się po
+  cichu (kreator zostaje, ze słowem), ponowna odmowa i „Przerwij” próbują znowu. Drugi start liczy „nowe” od stanu sprzed
+  siebie: rekord pierwszego startu, który został w folderze, jest dla niego zastany (zmienia go dopiero po `fi.json`);
+  kontener, który został i zastępuje w odpowiedziach swoją propozycję, dostaje połączone płatności przy udanym starcie
+  jak nowy (`startContainers` – same id).
+  Zabezpieczenie silnika: saldo otwarcia ze znacznikiem `byStart` bez `budget.start` nie uruchamia warstw (`budgetStartOf`,
+  baner N23 tak samo; z `budget.start` – pieniądze startu); zmiana salda ręcznie (`setOpening`) zdejmuje znacznik – saldo
+  staje się zwykłym (T25). Pole addytywne (`z.literal(true)`, bez `SCHEMA_VERSION`; starsza wersja liczy je jak każde saldo
+  otwarcia; wyrocznia zna regułę – `startOf`). Rozważone i odrzucone: przywracanie pól zmienionych przez start z kontrolą
+  wersji (osobny zapis warunkowy w procesie głównym, rekordy w szkicu) – zmiany zastanych po `fi.json` zamykają tę klasę
+  prościej; połączenie płatności przed `fi.json` i odłączanie przy odmowie – zapis nie do sprawdzenia na dysku. Koszt:
+  między zapisem `fi.json` a zapisem tych zmian (milisekundy, przy wolnym folderze do 15 s) okno liczy budżet jeszcze bez
+  nich; odrzucony zapis zmian po starcie – komunikat jak przy każdej zmianie, ponawiany.
 - **T447** Propozycje z historii i pierwsze dni (1.15.9, N5 – AP-25, AF-13, KR.19, KR sp. 9, ME sp. 3, AF-53; rozszerza
   T286): rachunek o zmiennej kwocie także co 2 miesiące (`VARIABLE_MID_CYCLES`) – co najmniej 3 ostatnie płatności w
   odstępie cyklu (±12 dni), kwoty ±60% mediany, w swoim dniu miesiąca (±6 dni), kwota = 75. percentyl roku w górę do

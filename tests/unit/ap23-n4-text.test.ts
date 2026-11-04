@@ -41,7 +41,7 @@ describe('AP-23: daty, liczby i liczebniki jednym sposobem', () => {
     expect(rateText(52.9)).toBe('52,9%')
     expect(rateText(-60)).toBe('−60,0%')
     expect(rateText(null)).toBe('—')
-    const csv = monthsCsv([{ month: '2025-10', salary: null, costs: 4500, income: 10000, plus: true, loot: null, inProgress: false, balance: 5500, rate: 55, energy: null, financed: 0, planned: 0 }])
+    const csv = monthsCsv([{ month: '2025-10', salary: null, costs: 4500, income: 10000, plus: true, loot: null, inProgress: false, balance: 5500, rate: 55, energy: null, financed: 0, planned: 0, plannedIncome: 0 }])
     // The rate's column – the 8th (the energy and the financed after it since AP-29).
     expect(csv.split('\r\n')[1]!.split(';')[7]).toBe('55,0')
   })

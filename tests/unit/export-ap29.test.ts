@@ -88,7 +88,7 @@ describe('AP-29: eksport do sumowania', () => {
     expect(styles).toContain('<cellXfs count="10">')
     expect(styles).toContain('<numFmt numFmtId="168" formatCode="0.0"/>')
     // The month of „Miesiące” – its first day shown as RRRR-MM; the rate with one place.
-    const months = xlsxParts([monthsSheet([{ month: '2026-10', salary: null, costs: 0, income: 0, plus: null, inProgress: true, loot: null, balance: 0, rate: 55, energy: null, financed: 0, planned: 0 }])])
+    const months = xlsxParts([monthsSheet([{ month: '2026-10', salary: null, costs: 0, income: 0, plus: null, inProgress: true, loot: null, balance: 0, rate: 55, energy: null, financed: 0, planned: 0, plannedIncome: 0 }])])
     const monthsXml = months.find((p) => p.path === 'xl/worksheets/sheet1.xml')!.content
     expect(monthsXml).toContain('<c r="A2" s="7"><v>46296</v></c>')
     expect(monthsXml).toContain('<c r="H2" s="9"><v>55</v></c>')
@@ -109,10 +109,10 @@ describe('AP-29: eksport do sumowania', () => {
     const [row] = monthRows(input, ['2026-09'])
     expect([row!.energy, row!.financed]).toEqual([d.energy!.budget, zl(100)])
     const csv = monthsCsv([row!]).split('\r\n')
-    // The planned (przegląd N5 8) after them: the columns before it where they were.
-    expect(csv[0]!.endsWith(';Energia miesiąca (zł);Sfinansowane przez domowników (zł);Zaplanowane – data po dziś (zł)')).toBe(true)
-    expect(csv[1]!.endsWith(`;${(d.energy!.budget / 100).toFixed(2).replace('.', ',')};100,00;0,00`)).toBe(true)
-    expect(monthsSheet([row!]).rows[0]!.slice(-3)).toEqual([d.energy!.budget / 100, 100, 0])
+    // The planned costs and income (przegląd N5 8, 2 N5) after them: the columns before them where they were.
+    expect(csv[0]!.endsWith(';Energia miesiąca (zł);Sfinansowane przez domowników (zł);Zaplanowane koszty – data po dziś (zł);Zaplanowane przychody – data po dziś (zł)')).toBe(true)
+    expect(csv[1]!.endsWith(`;${(d.energy!.budget / 100).toFixed(2).replace('.', ',')};100,00;0,00;0,00`)).toBe(true)
+    expect(monthsSheet([row!]).rows[0]!.slice(-4)).toEqual([d.energy!.budget / 100, 100, 0, 0])
   })
 
   it('pasek Operacji: przelewy własne i korekty poza sumami – suma pliku = Wpływy − Wydatki + one', () => {

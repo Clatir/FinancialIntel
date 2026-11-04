@@ -274,6 +274,8 @@ export interface MonthRow {
    * the balance (AP-36, T421 – the debriefing's `planned`); 0 in a month that has ended.
    */
   planned: number
+  /** The income (D81) of the month's operations dated after the budget's day – apart, as `planned` (przegląd 2 N5). */
+  plannedIncome: number
 }
 
 export function monthRows(
@@ -288,6 +290,8 @@ export function monthRows(
   return months.map((month) => {
     const d = debriefing(month, input)
     const income = incomeOfPeriod(transactionsOfMonth(upTo, month), ctx).total
+    // The income dated later (a salary typed ahead) – never lost from the file: its own column, as the costs' (przegląd 2 N5).
+    const later = upTo === input.transactions ? [] : transactionsOfMonth(input.transactions, month).filter((t) => t.date > input.today)
     return {
       month,
       salary: d.salary,
@@ -300,15 +304,29 @@ export function monthRows(
       rate: savingsRate(income - d.costs, income),
       energy: d.energy?.budget ?? null,
       financed: sum(d.financed.map((f) => f.amount)),
-      planned: d.planned
+      planned: d.planned,
+      plannedIncome: later.length ? incomeOfPeriod(later, ctx).total : 0
     }
   })
 }
 
 // The income as D81 counts it – „Przychody” everywhere it means that (N24).
-// The energy and the financed at the end (AP-29), the planned after them (przegląd N5 8): the columns before them where
-// they were.
-const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)', 'Bilans (zł)', 'Stopa oszczędności (%)', 'Energia miesiąca (zł)', 'Sfinansowane przez domowników (zł)', 'Zaplanowane – data po dziś (zł)'] as const
+// The energy and the financed at the end (AP-29), the planned after them – the costs and the income (przegląd N5 8, 2 N5):
+// the columns before them where they were.
+const MONTH_HEADER = [
+  'Miesiąc',
+  'Pensja (zł)',
+  'Koszty netto (zł)',
+  'Przychody (zł)',
+  'Na plus',
+  'Łupy (zł)',
+  'Bilans (zł)',
+  'Stopa oszczędności (%)',
+  'Energia miesiąca (zł)',
+  'Sfinansowane przez domowników (zł)',
+  'Zaplanowane koszty – data po dziś (zł)',
+  'Zaplanowane przychody – data po dziś (zł)'
+] as const
 // One place after the comma (T294): „55,0”, as the screens write the rate.
 const rateCell = (rate: number | null) => (rate == null ? '' : rate.toFixed(1).replace('.', ','))
 const plusText = (r: Pick<MonthRow, 'plus' | 'inProgress'>) => (r.inProgress ? 'w toku' : r.plus == null ? '' : r.plus ? 'tak' : 'nie')
@@ -327,7 +345,8 @@ export function monthsCsv(rows: readonly MonthRow[]): string {
       rateCell(r.rate),
       r.energy == null ? '' : plnCell(r.energy),
       plnCell(r.financed),
-      plnCell(r.planned)
+      plnCell(r.planned),
+      plnCell(r.plannedIncome)
     ])
   )
 }
@@ -347,9 +366,23 @@ export function monthsSheet(rows: readonly MonthRow[]): XlsxSheet {
       { header: 'Stopa oszczędności (%)', kind: 'rate', width: 12 },
       { header: 'Energia miesiąca (zł)', kind: 'money', width: 14 },
       { header: 'Sfinansowane przez domowników (zł)', kind: 'money', width: 16 },
-      { header: 'Zaplanowane – data po dziś (zł)', kind: 'money', width: 16 }
+      { header: 'Zaplanowane koszty – data po dziś (zł)', kind: 'money', width: 16 },
+      { header: 'Zaplanowane przychody – data po dziś (zł)', kind: 'money', width: 16 }
     ],
-    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100, r.balance / 100, r.rate, r.energy == null ? null : r.energy / 100, r.financed / 100, r.planned / 100])
+    rows: rows.map((r) => [
+      r.month,
+      r.salary == null ? null : r.salary / 100,
+      r.costs / 100,
+      r.income / 100,
+      plusText(r),
+      r.loot == null ? null : r.loot / 100,
+      r.balance / 100,
+      r.rate,
+      r.energy == null ? null : r.energy / 100,
+      r.financed / 100,
+      r.planned / 100,
+      r.plannedIncome / 100
+    ])
   }
 }
 

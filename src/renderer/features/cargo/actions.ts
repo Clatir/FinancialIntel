@@ -58,13 +58,14 @@ function runningMonth(): string | null {
  */
 const fromNow = <T extends Pick<Container, 'cycleMonths' | 'from'>>(c: T): T => (c.cycleMonths > 1 && c.from == null ? { ...c, from: runningMonth() } : c)
 
-export function addContainer(draft: ContainerDraft, opts: { start?: string } = {}): string | null {
+export function addContainer(draft: ContainerDraft): string | null {
   if (!canWrite()) return null
   const now = new Date().toISOString()
   const record = containerSchema.parse({ ...fromNow(draft), schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now })
   addRecord('containers', record)
-  // `start` – the budget's start being written (the start wizard: its containers before the settings – AF-14).
-  linkPayments(record.id, record.counterparty, true, opts.start)
+  // Before the budget's start nothing is linked (the start wizard links its containers' payments once fi.json is written –
+  // `finishWizard`, T446).
+  linkPayments(record.id, record.counterparty, true)
   return record.id
 }
 

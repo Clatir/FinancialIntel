@@ -17,6 +17,7 @@ import type {
   TrayPrefs
 } from '@shared/api'
 import { EMPTY_ICTJ } from '@shared/ictj'
+import { marksOf } from '@shared/merge'
 import { DEFAULT_MACHINE_PREFS, machinePrefsFrom, patchMachinePrefs, zoomByKey, type MachinePrefs, type ZoomKey } from '@shared/machine'
 import { DEFAULT_UPDATE_PREFS, NO_UPDATE_TOKEN, type UpdateState } from '@shared/update'
 import type { Collection } from '@shared/paths'
@@ -454,9 +455,9 @@ export class PhoneHost {
         for (const c of changes) this.send(c)
         return results
       }) as FiApi['saveRecords'],
-      deleteRecords: call('deleteRecords', async (collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop' | 'import') => {
+      deleteRecords: call('deleteRecords', async (collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop' | 'import', expected?: Readonly<Record<string, string>>) => {
         const s = store()
-        const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
+        const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete', marksOf(expected))
         this.send(change)
         return results
       }),

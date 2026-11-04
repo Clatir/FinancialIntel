@@ -326,9 +326,16 @@ export interface FiApi {
   /** Many records deleted with one call (W1): each deleted, or why not. */
   /**
    * `reason` 'undo': taken back with its import (F4); 'drop': an old batch of `imports` – no version in the history;
-   * 'import': operations the import deleted itself – their deletion kept as `byImport` (T331).
+   * 'import': operations the import deleted itself – their deletion kept as `byImport` (T331). `expected` – id → the
+   * content mark (`contentMark`) of the only version to delete (KR.29, T446): the main process reads the file again, one
+   * that says something else stays (`changed`).
    */
-  deleteRecords(collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop' | 'import'): Promise<Array<{ id: string; error?: string }>>
+  deleteRecords(
+    collection: Collection,
+    ids: readonly string[],
+    reason?: 'delete' | 'undo' | 'drop' | 'import',
+    expected?: Readonly<Record<string, string>>
+  ): Promise<Array<{ id: string; error?: string; changed?: true }>>
   /** Kept versions of a record, newest first (the settings: `kind` 'fi', `id` = the id of fi.json). */
   historyList(kind: HistoryKind, id: string): Promise<HistoryEntry[]>
   /** The record of one kept version (null when gone). */
