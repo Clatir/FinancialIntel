@@ -42,8 +42,8 @@ paths:
 - Gra (1.15.7): porcja zamrażania (`DAYS_PER_PASS`) zawsze w osobnym zadaniu (`schedulePortion`, T380) – zapis w ciele
   efektu przy zaległości > 100 dni to #185. Dni bez danych z banku (`importWait`) czekają na pytanie najwyżej 7 dni
   (`waitImport`, T381), misja tygodnia z nimi; nowe wstrzymanie – opcja `advanceGame`, nigdy przeliczanie zamrożonych.
-  Zmiana klasy z nowych danych (`GameDay.clsBefore`, T382) nie jest świętowana. Potwierdzenie salda w misji – po dniu
-  zapisu (`confirmedOn`), nie dacie salda (T383).
+  Zmiana klasy z nowych danych (`GameDay.clsBefore`, T382) nie jest świętowana. Potwierdzenie salda w misji – po chwili
+  potwierdzenia (`confirmedAt`, bez niej `createdAt`), nigdy po `updatedAt` ani dacie salda (T383).
 - Kurs i symulator (1.15.7, T385–T387): osłony w kursie nigdy poniżej zera – czego brak, to `short`, pensja bez
   pieniędzy `partial`; „teraz” symulatora = stan silnika (`rangeNow` z `courseInputOf`), boje i spłaty reszty miesiąca
   tylko w `rangeRest`; warstwa pełna teraz – data tego miesiąca. Resztka miesiąca płaci plan z energii miesiąca

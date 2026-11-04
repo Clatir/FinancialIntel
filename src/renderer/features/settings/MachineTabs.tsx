@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { computeFleet, type FleetState } from '@shared/calc/fleet'
 import { layersEffect, type LayersLine } from '@shared/calc/effect'
 import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel, type NotifyPrefs } from '@shared/machine'
 import { eveningAt } from '@shared/notify'
@@ -7,7 +6,7 @@ import type { LayersSettings, Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { playSound } from '../../lib/sounds'
 import { updateSettings, useData, useFolderLocked } from '../../store/data'
-import { fleetInputNow, fleetNow, useFleet } from '../../store/fleet'
+import { fleetNow, fleetWithLayers, useFleet } from '../../store/fleet'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { AmountField, plnText, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
@@ -16,11 +15,8 @@ import { toast } from '../../store/ui'
 
 type LayersPatch = Partial<Pick<LayersSettings, 'shieldSalaries' | 'hullMonths' | 'assumedCosts'>>
 
-/** The ship's state with other layers' targets (AP-17): the engine's input now, the history counted again from the start. */
-function fleetWithLayers(patch: LayersPatch): FleetState | null {
-  const input = fleetInputNow()
-  return input ? computeFleet({ ...input, settings: { ...input.settings, layers: { ...input.settings.layers, ...patch } } }) : null
-}
+/** The preview counts a typed target once it stays this long (the whole history runs again – never on each key). */
+const PREVIEW_SETTLE_MS = 300
 
 /** „Osłony 13 000,00 → 6 500,00 zł” – a line of the layers' effect (the hidden amounts mask it). */
 const effectText = (l: LayersLine) => `${l.label} ${l.before == null ? '—' : plnText(l.before)} → ${l.after == null ? '—' : `${plnText(l.after)} zł`}`
@@ -104,8 +100,15 @@ export function LayersTab() {
  */
 function LayersPreview({ shieldSalaries, hullMonths, saved }: { shieldSalaries: number; hullMonths: number; saved: LayersSettings }) {
   const fleet = useFleet()
-  const changed = shieldSalaries !== saved.shieldSalaries || hullMonths !== saved.hullMonths
-  // `fleet` – the records (or the day) changed under the preview: counted again.
+  // The targets typed, once they stay (`PREVIEW_SETTLE_MS`): the engine runs on a value, not on each key.
+  const [settled, setSettled] = useState({ shieldSalaries, hullMonths })
+  useEffect(() => {
+    const t = setTimeout(() => setSettled({ shieldSalaries, hullMonths }), PREVIEW_SETTLE_MS)
+    return () => clearTimeout(t)
+  }, [shieldSalaries, hullMonths])
+  const still = settled.shieldSalaries === shieldSalaries && settled.hullMonths === hullMonths
+  const changed = still && (shieldSalaries !== saved.shieldSalaries || hullMonths !== saved.hullMonths)
+  // `fleet` – the records (or the day) changed under the preview: counted again (one run per targets – `fleetWithLayers`).
   const after = useMemo(() => (changed && fleet?.started ? fleetWithLayers({ shieldSalaries, hullMonths }) : null), [changed, fleet, shieldSalaries, hullMonths])
   if (!fleet || !after) return null
   const lines = layersEffect(fleet, after)

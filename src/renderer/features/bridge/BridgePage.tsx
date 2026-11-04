@@ -760,14 +760,14 @@ function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t:
   )
 }
 
-/** „Skąd ta liczba?” (F29): a number taken apart – lines one adds up, the result last. */
+/** „Skąd ta liczba?” (F29): a number taken apart – lines one adds up, the result last; a note beside them in brackets. */
 function WhyList({ lines, testId }: { lines: readonly WhyLine[]; testId: string }) {
   return (
     <div className="flex flex-col border-l-2 border-line-strong pl-2 text-[11.5px]" data-testid={testId}>
       {lines.map((l, i) => (
-        <div key={i} className={cx('flex items-baseline gap-2', l.total ? 'mt-0.5 border-t border-line pt-0.5 text-fg-strong' : 'text-muted')} data-testid="why-line">
+        <div key={i} className={cx('flex items-baseline gap-2', l.total ? 'mt-0.5 border-t border-line pt-0.5 text-fg-strong' : l.aside ? 'text-dim' : 'text-muted')} data-testid="why-line" data-aside={l.aside ? '' : undefined}>
           <span className="min-w-0 flex-1">{l.label}</span>
-          <span className={cx('num', l.total ? 'text-fg-strong' : 'text-fg')}>{l.amount == null ? (l.text ?? '—') : zl(l.amount)}</span>
+          <span className={cx('num', l.total ? 'text-fg-strong' : l.aside ? 'text-dim' : 'text-fg')}>{l.amount == null ? (l.text ?? '—') : l.aside ? `(${zl(l.amount)})` : zl(l.amount)}</span>
         </div>
       ))}
     </div>

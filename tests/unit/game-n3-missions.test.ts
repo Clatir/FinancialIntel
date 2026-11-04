@@ -44,12 +44,12 @@ describe('AP-30: „Inwentaryzacja” liczona po dniu potwierdzenia (AF-31, D84 
     expect(missionStatus(world({ balances: all }), W45, '2026-11-04')).toEqual({ ok: true, have: 3, need: 3 })
   })
 
-  it('potwierdzenie sprzed tygodnia misji nie liczy się, choć saldo jest z tego tygodnia; ponowne potwierdzenie (zapis) – liczy się', () => {
+  it('potwierdzenie sprzed tygodnia misji nie liczy się, choć saldo jest z tego tygodnia; ponowne potwierdzenie – liczy się', () => {
     // Confirmed on Sunday 01.11 at 23:30 Warsaw time (22:30 UTC) – the week before.
     const sunday = confirmation(MBANK_ACCOUNT_ID, '2026-11-01', '2026-11-01T22:30:00.000Z')
     expect(missionStatus(world({ balances: [sunday] }), W45, '2026-11-04')).toMatchObject({ have: 0 })
-    // The same balance confirmed again on Monday (the record's write – `confirmBalance` keeps one record per balance).
-    expect(missionStatus(world({ balances: [{ ...sunday, updatedAt: '2026-11-02T08:00:00.000Z' }] }), W45, '2026-11-04')).toMatchObject({ have: 1 })
+    // The same balance confirmed again on Monday (`confirmBalance` keeps one record per balance and stamps the moment).
+    expect(missionStatus(world({ balances: [{ ...sunday, updatedAt: '2026-11-02T08:00:00.000Z', confirmedAt: '2026-11-02T08:00:00.000Z' }] }), W45, '2026-11-04')).toMatchObject({ have: 1 })
   })
 
   it('wybór misji: potwierdzenie zrobione w 4 tygodniach przed poniedziałkiem to nie słaby punkt, choć saldo jest starsze', () => {
@@ -57,7 +57,7 @@ describe('AP-30: „Inwentaryzacja” liczona po dniu potwierdzenia (AF-31, D84 
     const imports = (s: Settings): Settings => ({ ...s, import: { ...s.import, log: { '2026-10-24T09:00:00.000Z': MBANK_ACCOUNT_ID } } })
     const old = confirmation(MBANK_ACCOUNT_ID, '2026-09-20', '2026-09-20T10:00:00.000Z')
     expect(chooseMission(world({ settings: imports, balances: [old] }), '2026-10-26', null).template).toBe('balances')
-    const confirmedLately = { ...old, updatedAt: '2026-10-20T10:00:00.000Z' }
+    const confirmedLately = { ...old, updatedAt: '2026-10-20T10:00:00.000Z', confirmedAt: '2026-10-20T10:00:00.000Z' }
     expect(chooseMission(world({ settings: imports, balances: [confirmedLately] }), '2026-10-26', null).template).toBe('nospend')
   })
 })

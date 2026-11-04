@@ -345,6 +345,19 @@ export function rangeMonths(shields: number, hull: number, monthlyCosts: number 
   return Math.max(0, shields + hull - debt) / monthlyCosts
 }
 
+/**
+ * The average monthly costs in `month` (T27 – one rule: the engine's state, the hull's target, the range at each month's
+ * end – T388): the covered months before it, at most 12, at their costs (`costsByMonth`); under 3 of them the assumed
+ * costs, when set.
+ */
+export function averageCosts(covered: readonly string[], costsByMonth: ReadonlyMap<string, number>, assumed: number | null, month: string): { average: number | null; months: number; source: 'history' | 'assumed' | null } {
+  const window = monthsBefore(covered, month, 12)
+  const average = window.length ? Math.round(sum(window.map((x) => costsByMonth.get(x) ?? 0)) / window.length) : null
+  if (window.length >= 3 || (assumed == null && average != null)) return { average, months: window.length, source: 'history' }
+  if (assumed != null) return { average: assumed, months: window.length, source: 'assumed' }
+  return { average: null, months: 0, source: null }
+}
+
 export const SHIP_CLASSES = ['scout', 'corvette', 'frigate', 'destroyer', 'cruiser', 'flagship'] as const
 export type ShipClass = (typeof SHIP_CLASSES)[number]
 export const SHIP_CLASS_LABEL: Record<ShipClass, string> = {
@@ -649,6 +662,11 @@ export interface FleetEvent {
   ref?: string
   /** An operation counted by its ICTTJ payout's pool before its docking (AP-12) – „do zadokowania”. */
   pending?: true
+  /**
+   * A return of the pool „Podatek” to the trading account (its tax hold's money – the shields when it is empty): never a
+   * top-up the firewall checks (T374), whatever the hold had.
+   */
+  tax?: true
   moves: Moves
 }
 
@@ -874,14 +892,7 @@ export function computeFleet(input: FleetInput): FleetState {
   for (const [id, v] of input.preStartTax ?? []) if (!tax.has(id)) tax.set(id, v)
   const incomeContext: IncomeContext = { ledger: household, since: settleFrom, members: settings.household.members, tax }
   const incomeMonths = incomeByMonth(txs, incomeContext)
-  const costsFor = (m: string): FleetState['costs'] => {
-    const window = monthsBefore(covered, m, 12)
-    const h = { average: window.length ? Math.round(sum(window.map((x) => costsByMonth.get(x) ?? 0)) / window.length) : null, months: window.length }
-    const assumed = settings.layers.assumedCosts
-    if (h.months >= 3 || (assumed == null && h.average != null)) return { average: h.average, months: h.months, source: 'history' }
-    if (assumed != null) return { average: assumed, months: h.months, source: 'assumed' }
-    return { average: null, months: 0, source: null }
-  }
+  const costsFor = (m: string): FleetState['costs'] => averageCosts(covered, costsByMonth, settings.layers.assumedCosts, m)
   const costsCache = new Map<string, FleetState['costs']>()
   const costsAt = (m: string) => costsCache.get(m) ?? costsCache.set(m, costsFor(m)).get(m)!
   const planFor = (m: string): MonthPlan | null => {
@@ -1178,6 +1189,7 @@ export function computeFleet(input: FleetInput): FleetState {
     const amt = t.amount
     // Paired with an ICTTJ payout, not docked yet (AP-12): counted by the entry's pool at once – the docking confirms it.
     const pair = pairOf(t)
+    let taxReturn = false
     switch (t.kind) {
       case 'expense': {
         for (const p of partsOf(t)) {
@@ -1250,6 +1262,7 @@ export function computeFleet(input: FleetInput): FleetState {
           // The tax money going back to the trading capital (an ICTTJ return of the pool „Podatek”): out of the tax
           // hold, not the budget's money – no firewall.
           if (pool === 'tax') {
+            taxReturn = true
             const fromHold = Math.min(-amt, Math.max(0, taxHold))
             taxHold -= fromHold
             if (fromHold) moves.taxHold = -fromHold
@@ -1335,8 +1348,9 @@ export function computeFleet(input: FleetInput): FleetState {
         addShields(amt, moves)
         break
     }
-    if (!pair) return record({ date: on, kind: t.kind, amount: amt, txId: t.id, moves })
-    record({ date: on, kind: t.kind, amount: amt, txId: t.id, pending: true, moves })
+    const tax = taxReturn ? { tax: true as const } : {}
+    if (!pair) return record({ date: on, kind: t.kind, amount: amt, txId: t.id, ...tax, moves })
+    record({ date: on, kind: t.kind, amount: amt, txId: t.id, pending: true, ...tax, moves })
     toDock.count++
     if (amt > 0) toDock.inflow += amt
     else toDock.outflow -= amt

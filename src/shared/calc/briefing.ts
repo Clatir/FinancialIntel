@@ -263,10 +263,10 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     items.push({ level: a.level, kind: 'alarm', key: `alarm:${key}:${f.month}`, text: alarmText(a, o.label, zl) })
   }
   // The firewall switched off (AP-17, DW.12): a top-up of XTB today is not checked – said so, once per operation (a
-  // return of the pool „Podatek” comes from the reserve: never the firewall's).
+  // return of the pool „Podatek” is the reserve's money: never the firewall's – with the reserve empty too, `tax`).
   if (o.firewallOff)
     for (const e of f.log)
-      if (e.kind === 'trading' && e.amount < 0 && e.date === f.today && e.txId && !e.moves.taxHold)
+      if (e.kind === 'trading' && e.amount < 0 && e.date === f.today && e.txId && !e.tax)
         items.push({ level: 'info', kind: 'alarm', key: `alarm:firewall:off:${e.txId}:${f.month}`, text: `Firewall wyłączony: dopłata do XTB ${zl(-e.amount)} bez sprawdzania osłon i kadłuba.` })
   // The fees' state of this month (AF-15): a periodic fee's due as Ładownia and the Radar have it.
   const current = new Map((o.cargo ?? []).filter((s) => !s.carried).map((s) => [s.containerId, s]))

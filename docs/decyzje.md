@@ -2722,7 +2722,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   towaru kupionego dziś dawałby przekroczenie dnia, zamrażane w grze; (b) dopasowanie po kontrahencie – inna nazwa tego
   samego sklepu (wpis ręczny i bank) robiłaby z dzisiejszego zwrotu dawny; (c) cała pula jako jedna grupa – zwrot butów
   pokrywałby dzisiejszą kawę. Gra: dzień ze zwrotem dawnego zakupu i wydatkami ponad przydział łamie przydział (przedtem
-  zwrot to zasłaniał); dni zamrożone bez zmian. Bez zmian formatu.
+  zwrot to zasłaniał); dni zamrożone bez zmian. „Skąd ta liczba?” (przegląd N3): wiersz zwrotu stoi obok sumy, w nawiasie
+  (`WhyLine.aside`) – nie jest w niej: przydział na dziś − wydane dziś = energia dziś. Bez zmian formatu.
 - **T371** Energia dziś nie większa niż energia miesiąca (1.15.7, AP-13 – S6, PM sp. 1, PM.3, MO sp. 5, PM sp. 6;
   realizuje D99 pkt 4, potwierdza T295): `daily.energy` = `min(daily.left, energia miesiąca)` (`cappedEnergy`), gdy warstwy
   się liczą (`started`); `daily.left` (przydział − wydane dziś, T295) zostaje miarą przekroczenia dnia – alarm
@@ -2748,7 +2749,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T373** „Dopełnij kadłub z osłon” (1.15.7, AP-17; realizuje D99 pkt 6 – propozycja jednym kliknięciem): przycisk na
   Mostku pod kadłubem (`state-hull-topup`), gdy kadłub < cel i osłony > cel – kwota min(brak kadłuba, nadwyżka osłon).
   Zapis: wpis `{id, amount, at}` w `hullTopUps` planu bieżącego miesiąca (`months/RRRR-MM.json`, jak `envelopeCovers`;
-  miesiąc bez własnego planu dostaje kopię planu w mocy – T46), toast z „Cofnij” (8 s) zabiera wpis. Silnik liczy go
+  miesiąc bez własnego planu dostaje kopię planu w mocy – T46), toast z „Cofnij” (8 s) zabiera wpis, a kopię planu,
+  którą dopełnienie założyło (bez innych zmian w niej – przegląd N3), całą: miesiąc znowu żyje planem w mocy; zapis
+  odrzucony (plik miesiąca z nowszej wersji, plan tylko do odczytu, folder tylko do odczytu) – bez toastu. Silnik liczy go
   w chwili `at` jak przeniesienie środków celu (T340 – ta sama kolejka: przed pierwszym zdarzeniem dnia, które przyszło
   do FI później; czego wtedy nie przeniósł – na koniec dnia) i przenosi min(kwota, osłony − cel osłon, cel kadłuba −
   kadłub): nigdy osłon poniżej celu ani kadłuba ponad cel, przy nieznanym celu nic – późniejsza zmiana celów albo operacji
@@ -2760,14 +2763,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Dokowanie” – nadwyżka płynie tylko przy dostawie; D99 wybrało propozycję); zapis w `fi.json` – zdarzenie z chwilą
   należy do miesiąca, jak pokrycie koperty.
 - **T374** Podgląd zmiany celów warstw, firewall wyłączony (1.15.7, AP-17 – MO sp. 4, DW.12): Ustawienia → Warstwy
-  i rozkazy – wpisany cel osłon albo kadłuba, zanim pole się zapisze (`NumberField.onDraft`), pokazuje „Po zmianie”:
-  osłony, cel osłon, kadłub, cel kadłuba, cele razem, energię miesiąca i wolne do decyzji przed → po (`layersEffect`,
+  i rozkazy – wpisany cel osłon albo kadłuba, zanim pole się zapisze (`NumberField.onDraft`; po 300 ms bez pisania –
+  silnik raz na wpisane cele, zapis po wyjściu z pola używa tego przebiegu, `fleetWithLayers` – przegląd N3), pokazuje
+  „Po zmianie”: osłony, cel osłon, kadłub, cel kadłuba, cele razem, energię miesiąca i wolne do decyzji przed → po (`layersEffect`,
   silnik z nowymi celami od startu budżetu); zapisana zmiana celu osłon, kadłuba albo przyjętych kosztów – toast „Cele
   warstw zmienione: …” z „Cofnij” (poprzednie wartości). Firewall wyłączony: pod przełącznikiem (Ustawienia i Dowództwo)
   „Firewall wyłączony – dopłaty do XTB nie są sprawdzane…”, w stanie okrętu na Mostku „Firewall wyłączony – dopłaty do
   XTB bez sprawdzania osłon i kadłuba” (bez „nie do dopłaty XTB”), w odprawie dzisiejsza dopłata do XTB – informacja
-  „Firewall wyłączony: dopłata do XTB X zł bez sprawdzania osłon i kadłuba.” (zwrot puli Podatek – nie). Bez zmian
-  formatu.
+  „Firewall wyłączony: dopłata do XTB X zł bez sprawdzania osłon i kadłuba.” (zwrot puli Podatek – nie, także przy pustej
+  rezerwie na PIT-38: zdarzenie silnika `tax`, przegląd N3). Bez zmian formatu.
 - **T375** Jeden stan opłaty i zaległość do zapłaty (1.15.7, AP-10 – AF-50 / RA.4, AF-80, AF-45 / LA.10, LA sp. 1, 6;
   realizuje D99 pkt 3 i rekomendację F1 / T208 wobec D86 / D4 z sekcji 5 wniosków; zmienia T208 „tylko w bieżącym
   miesiącu” i okno 14 dni dla opłat okresowych): płatności przypisuje do terminów jedna funkcja `feeDues`
@@ -2814,7 +2818,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   samo słowo ≥ 4 liter albo te same pierwsze 5 liter („komina” – KOMINIARZ), bez słów płatności i miesięcy („opłata”,
   „przelew”, „listopad”); operacja bez nazwy (wpisana ręcznie, z wyprzedzeniem – T282) – dokładną kwotą jak dotąd;
   bliska kwota – tylko z podobną nazwą (jak dotąd). „Pozostałe boje”: boja jednorazowa po dniu mówi, co z nią
-  (`pastStateOf`: „zrobiona”, „po terminie”, „minęła bez operacji – po 30 dniach zniknęła z radaru”).
+  (`pastStateOf`: „zrobiona”, „po terminie”, „minęła bez operacji – po 30 dniach zniknęła z radaru”) – z listą wszystkich
+  boi: operacja zrobiona z innej boi albo dopasowana do jej dnia (kolejność radaru – jedna operacja, jeden dzień) nie jest
+  jej (przegląd N3).
 - **T379** Łączenie płatności od miesiąca przed startem (1.15.7, AP-10 – otwarte z N2, T345): `linkFromOf` – kontener
   łączy płatności odbiorcy od 1. dnia miesiąca przed miesiącem startu budżetu (dodanie kontenera, „Połącz płatności”,
   kreator – `paidDays` propozycji): płatność 28.10 za termin 03.11 (start 04.11) jest tego terminu – stan „zapłacone”,
@@ -2851,8 +2857,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`missionAhead`), inaczej „Misja tygodnia zostanie wybrana po zamrożeniu dni” (przy czekaniu na import – „po imporcie
   z banku (albo po „Zamroź bez danych”)”) – nigdy poniedziałek z przeszłości.
 - **T383** Misje (1.15.7, AP-30, AF-31, AF-65, RY sp. 1, WY sp. 1; D84 C11 zgodnie): „Inwentaryzacja” liczy potwierdzenie
-  po dniu potwierdzenia – warszawski dzień ostatniego zapisu rekordu (`updatedAt`; `confirmBalance` trzyma jeden rekord
-  na saldo, ponowne potwierdzenie go zapisuje), nie po dacie salda (saldo z pliku banku ma datę ostatniego dnia pliku) –
+  po dniu potwierdzenia – warszawski dzień chwili potwierdzenia (`confirmedAt` salda: `confirmBalance` trzyma jeden rekord
+  na saldo i ustawia ją przy każdym, także ponownym, potwierdzeniu; rekord bez niej – dzień utworzenia, `createdAt`),
+  nigdy ostatni zapis rekordu (`updatedAt` – edycja, scalanie, rozwiązanie konfliktu to nie potwierdzenie; przegląd N3;
+  pole addytywne, bez `SCHEMA_VERSION`), nie po dacie salda (saldo z pliku banku ma datę ostatniego dnia pliku) –
   w stanie misji i w wyborze słabego punktu. „Dzień bez wydatków”: dziś potwierdzone „Dziś bez wydatków” liczy się od
   razu (nie „+1, jeśli dziś bez wydatków”); wydatek z dziś i tak go zabiera (`costOn`). „Dziś bez wydatków” przy wydatku
   z dziś zapisuje (raport wachty zamknięty) i mówi toastem / powiadomieniem, że dzień się nie liczy (`noSpendWarning`).
@@ -2887,7 +2895,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   miesięcy kończy się na początku następnego.
 - **T388** „Osłony + kadłub i zasięg” na koniec miesiąca (1.15.7, AP-31, kryterium 2, WY.3, RY.23): `calc/cushion.ts`
   `cushionTrend` – osłony + kadłub w ostatnim dniu miesiąca i zasięg tego dnia (jak Mostek tego dnia: średnie koszty
-  według reguły `costsFor` – 12 objętych miesięcy przed nim, poniżej 3 przyjęte koszty – i dług pożyczek wziętych z dniem
+  silnika jedną funkcją `averageCosts` (`fleet.ts`, przegląd N3) – 12 objętych miesięcy przed nim, poniżej 3 przyjęte
+  koszty – i dług pożyczek wziętych z dniem
   nie późniejszym), zmiana m/m kwoty (strzałka ↑ / ↓ / →, zieleń / czerwień jak kwoty) i zasięgu (w dziesiątych, po
   obcięciu T218). Tylko miesiące zakończone: bieżący jest po wypłacie pensji do energii, a przed łupami – wobec końca
   miesiąca zawsze by spadał. Miesiące przed startem budżetu pominięte, pierwszy bez zmiany („—”). Wywiad – panel
@@ -2908,7 +2917,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   T370), reszta kopert planowych i opłaty jeszcze do zapłaty ze stanu AP-10 (`cargoStatuses`, także zaległe – `carried`):
   miesięczna w całości, okresowa – czego brakuje w jej zbiorniku (dwa terminy jednego zbiornika dzielą to, co ma).
   Resztka miesiąca: `needs` ponad `left` z osłon (kadłub, gdy brak – jak „energia wyczerpana” silnika), potem boje
-  i spłaty; czego brakuje – `Course.rest.short`: osłony kończą resztkę na zerze (jak miesiąc kursu – T385), „Brakuje na
+  i spłaty – boja tego miesiąca (wydatek) z kategorią koperty planowej bierze najpierw resztę tej koperty (jest już
+  w `needs`; jej operacja weźmie z koperty, jak w silniku; boje jednej koperty dzielą resztę), z osłon tylko to, co ponad
+  nią (przegląd N3); czego brakuje – `Course.rest.short`: osłony kończą resztkę na zerze (jak miesiąc kursu – T385), „Brakuje na
   koszty” (`Course.short`) liczy ją razem z miesiącami. Co energia zostawi – zostaje w miesiącu (łupy, decyzja kapitana –
   D18, jak dotąd). Zwykły miesiąc (plan w pensji) bez zmian; pensja częściowa, bez pensji albo energia wydana – kurs
   rusza od osłon po tej resztce. „Teraz” symulatora (`rangeNow`) dalej = Mostek (T386), „Zasięg po resztce miesiąca”
