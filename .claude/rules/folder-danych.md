@@ -25,6 +25,12 @@ paths:
 - Zapis atomowy, historia `.history/`, konflikt chmury → kopia `-KOMPUTER.json` i scalanie trójstronne (`merge.ts`,
   `resolveConflict`, `mergeConflict`).
 - Wpis albo plik nowszej wersji → tylko do odczytu (`NewerFileError`, `SettingsFileError` 'too-new'); nigdy nie nadpisuj.
+- **Zapis nigdy nie zakłada folderu danych** (AP-1, T314): każdy zapis pod korzeniem idzie przez
+  `writeFileAtomic(…, within)` / `mkdirWithin` (nowy zapis do folderu – też obecność, historia, ZIP w `backups/`); zwykłe
+  `fs.mkdir(…, { recursive: true })` pod korzeniem to błąd (folder-widmo). Nowa metoda zapisu `DataStore` – przez
+  `writing()` (sprawdza `fi.json`, błąd zniknięcia → `FolderUnavailableError` i `onStatus`).
+- Niedostępność: `stale()` co `FI_FOLDER_CHECK_MS` w spoczynku, próba zapisu przy otwarciu (`writeBlocked`, T316); brak
+  korzenia nie jest „usunięty na innym komputerze”.
 - Usuwanie: plik z wersją w historii usuwany od razu, bez niej – do Kosza; `removeRecord` odmawia przy drugiej kopii id.
 - Kopie ZIP: dzienne (14) i tygodniowe (8), przed importem (10), przed migracją; pełna kontrola folderu przed kopią
   dzienną i ręczną (`checkedData`); nieczytelny rekord przerywa kopię.

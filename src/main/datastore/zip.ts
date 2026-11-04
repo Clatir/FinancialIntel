@@ -2,7 +2,7 @@
 import { promises as fs, type Stats } from 'node:fs'
 import { dirname, join } from 'node:path'
 import zlib from 'node:zlib'
-import { tempPathFor, withRetry } from './atomic'
+import { mkdirWithin, tempPathFor, withRetry } from './atomic'
 import { mapLimit, walkFiles } from './fsutil'
 
 /**
@@ -241,9 +241,11 @@ export function diskSource(abs: string, name: string): ZipSource {
 /**
  * Write the files in the order given into `outFile`, atomically (a temp file renamed over it). Already-compressed
  * images are stored; the contents of a batch are got side by side (disk reads), compressed and appended in order.
+ * `within` – the data folder holding `outFile` (its `backups/`): directories made only below it, never it (AP-1).
  */
-export async function writeZipFile(outFile: string, items: readonly ZipSource[]): Promise<ZipResult> {
-  await fs.mkdir(dirname(outFile), { recursive: true })
+export async function writeZipFile(outFile: string, items: readonly ZipSource[], within?: string): Promise<ZipResult> {
+  if (within) await mkdirWithin(within, dirname(outFile))
+  else await fs.mkdir(dirname(outFile), { recursive: true })
   const tmp = tempPathFor(outFile)
   try {
     const fh = await fs.open(tmp, 'w')

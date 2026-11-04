@@ -15,7 +15,7 @@ import { envelopeKind, inflowOf, SCHEMA_VERSION, shareSchema, transactionSchema,
 import { rememberInflows, sureCoversOf } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
-import { addRecord, listOf, useData } from './data'
+import { addRecord, listOf, unsavedOf, useData, writeNow } from './data'
 import { officerNow } from './officer'
 import { fleetNow } from './fleet'
 import { useMachine } from './machine'
@@ -67,7 +67,11 @@ export function quickData(): QuickData | null {
         return { id: m.id, name: m.name, owed: b?.owed ?? 0, deposit: b?.deposit ?? 0, inflow: inflowOf(m), via: m.via ?? null }
       }),
     hideAmounts: useMachine.getState().prefs.hideAmounts,
-    readOnly: !!s.status?.readOnly,
+    // Another folder opening (AF-75): nothing taken until it is open – the lists and the energy are still the old one's.
+    readOnly: !!s.status?.readOnly || s.switching,
+    readOnlyReason: s.switching ? QUICK_SWITCHING : (s.status?.readOnlyReason ?? null),
+    // The folder the lists are of (AF-75): a draft made with another folder's lists is not saved into this one.
+    folder: s.status?.dataDir ?? null,
     ...quickTemplates(listOf(s.records.transactions)),
     knownTags: knownTagsOf(listOf(s.records.transactions)),
     lastTag: lastTagOf(listOf(s.records.transactions), warsawNow().date)
@@ -78,6 +82,8 @@ export function quickData(): QuickData | null {
 export interface QuickDraft {
   /** The operation's id, given in the quick window (B51): a draft that comes twice is saved once. */
   id?: string
+  /** The data folder of the lists it was typed with (`QuickData.folder`, AF-75). */
+  folder?: string | null
   kind: 'expense' | 'income' | 'refundable'
   /** Grosze, > 0. */
   amount: number
@@ -194,39 +200,63 @@ export function initQuickHost(): void {
   useMachine.subscribe((s, p) => {
     if (s.prefs !== p.prefs) push()
   })
-  api.onQuickAdd((raw) => {
-    const answer = (r: QuickResult) => void api.quickResult(r)
-    const s = useData.getState()
-    if (!s.fi || s.phase !== 'ready') return answer({ ok: false, message: 'Najpierw otwórz folder danych.' })
-    if (s.status?.readOnly) return answer({ ok: false, message: 'Folder jest tylko do odczytu.' })
-    if (s.switching) return answer({ ok: false, message: 'Trwa otwieranie innego folderu – spróbuj za chwilę.' })
-    const draft = raw as QuickDraft
-    // Sent again (a second Enter before the answer came, B51): it is saved already.
-    if (draft.id && s.records.transactions[draft.id]) return answer({ ok: true, message: 'Zapisano.' })
-    const t = quickTransaction(draft)
-    if (typeof t === 'string') return answer({ ok: false, message: t })
-    // The lists of the window may be older than the folder's (B125): an account, a category or a household member it
-    // no longer has is refused – an archived one is still the folder's.
-    const settings = s.fi.settings
-    if (!settings.accounts.some((a) => a.id === t.accountId)) return answer({ ok: false, message: 'Lista kont się zmieniła – wybierz konto ponownie.' })
-    const known = new Set(settings.categories.map((c) => c.id))
-    if ([t.categoryId, ...t.splits.map((x) => x.categoryId)].some((id) => id && !known.has(id))) return answer({ ok: false, message: 'Lista kategorii się zmieniła – wybierz kategorię ponownie.' })
-    const members = new Set(settings.household.members.map((m) => m.id))
-    if ([t.memberId, ...t.splits.map((x) => x.memberId), ...(t.share?.lines.map((l) => l.memberId) ?? [])].some((id) => id && !members.has(id)))
-      return answer({ ok: false, message: 'Lista domowników się zmieniła – wybierz domownika ponownie.' })
-    // A member's money paying back one purchase of theirs surely (D91): named now, else it waits to be assigned.
-    addRecord('transactions', { ...t, ...sureCoversOf(t) })
-    // A household member's money with the rest chosen here – by the user (N39): asked once, remembered for them (D80 b).
-    if (t.kind === 'income' && t.memberId && draft.advanceChosen) rememberInflows([t])
-    try {
-      localStorage.setItem(ACCOUNT_KEY, t.accountId)
-    } catch {
-      /* ignore */
-    }
-    playSound('entry')
-    const today = warsawNow().date
-    toast(`Szybki wpis: ${t.counterparty || (t.kind === 'income' ? 'wpływ' : 'wydatek')}${t.date !== today ? ` (${t.date})` : ''}.`, 'success', 2500)
-    // The data as it is after it (F7): a series goes on with today's energy as it is now.
-    answer({ ok: true, message: 'Zapisano.', data: quickData() })
-  })
+  api.onQuickAdd((raw) => void quickAdd(raw as QuickDraft))
+}
+
+/** Said by the quick entry while another folder opens (AF-75). */
+const QUICK_SWITCHING = 'Trwa otwieranie innego folderu – spróbuj za chwilę.'
+
+/**
+ * „Zapisano.” only once the operation is on the disk (AP-1, AF-2): a write that did not go (the data folder gone) says so –
+ * the operation waits in the main window and is written by itself once the folder is back.
+ */
+function savedAnswer(id: string, saved: boolean): QuickResult {
+  if (saved) return { ok: true, message: 'Zapisano.' }
+  const why = unsavedOf('transactions', id)
+  return {
+    ok: true,
+    pending: true,
+    message: `Wpis przyjęty, ale jeszcze niezapisany${why && why !== 'zapis jeszcze trwa' ? ` (${why.replace(/[.\s]+$/, '')})` : ''} – zapisze się sam, gdy będzie można.`
+  }
+}
+
+/** An operation from the quick window (`QuickDraft`): checked against the folder now, saved, answered once on the disk. */
+export async function quickAdd(draft: QuickDraft): Promise<void> {
+  const answer = (r: QuickResult) => void api.quickResult(r)
+  const s = useData.getState()
+  if (!s.fi || s.phase !== 'ready') return answer({ ok: false, message: 'Najpierw otwórz folder danych.' })
+  if (s.switching) return answer({ ok: false, message: QUICK_SWITCHING })
+  if (s.status?.readOnly) return answer({ ok: false, message: s.status.readOnlyReason ?? 'Folder jest tylko do odczytu.' })
+  // Typed with the lists of another folder (opened meanwhile – AF-75): never saved into this one unseen.
+  if (draft.folder && s.status && draft.folder !== s.status.dataDir)
+    return answer({ ok: false, message: 'W międzyczasie otwarto inny folder danych – sprawdź wpis (listy i energia są już z tego folderu) i zapisz ponownie.' })
+  // Sent again (a second Enter before the answer came, B51): it is there already – said as it is on the disk.
+  if (draft.id && s.records.transactions[draft.id]) return answer(savedAnswer(draft.id, await writeNow('transactions', draft.id)))
+  const t = quickTransaction(draft)
+  if (typeof t === 'string') return answer({ ok: false, message: t })
+  // The lists of the window may be older than the folder's (B125): an account, a category or a household member it
+  // no longer has is refused – an archived one is still the folder's.
+  const settings = s.fi.settings
+  if (!settings.accounts.some((a) => a.id === t.accountId)) return answer({ ok: false, message: 'Lista kont się zmieniła – wybierz konto ponownie.' })
+  const known = new Set(settings.categories.map((c) => c.id))
+  if ([t.categoryId, ...t.splits.map((x) => x.categoryId)].some((id) => id && !known.has(id))) return answer({ ok: false, message: 'Lista kategorii się zmieniła – wybierz kategorię ponownie.' })
+  const members = new Set(settings.household.members.map((m) => m.id))
+  if ([t.memberId, ...t.splits.map((x) => x.memberId), ...(t.share?.lines.map((l) => l.memberId) ?? [])].some((id) => id && !members.has(id)))
+    return answer({ ok: false, message: 'Lista domowników się zmieniła – wybierz domownika ponownie.' })
+  // A member's money paying back one purchase of theirs surely (D91): named now, else it waits to be assigned.
+  if (!addRecord('transactions', { ...t, ...sureCoversOf(t) })) return answer({ ok: false, message: 'Folder jest tylko do odczytu.' })
+  // A household member's money with the rest chosen here – by the user (N39): asked once, remembered for them (D80 b).
+  if (t.kind === 'income' && t.memberId && draft.advanceChosen) rememberInflows([t])
+  try {
+    localStorage.setItem(ACCOUNT_KEY, t.accountId)
+  } catch {
+    /* ignore */
+  }
+  playSound('entry')
+  const saved = await writeNow('transactions', t.id)
+  const today = warsawNow().date
+  const label = `Szybki wpis: ${t.counterparty || (t.kind === 'income' ? 'wpływ' : 'wydatek')}${t.date !== today ? ` (${t.date})` : ''}`
+  toast(saved ? `${label}.` : `${label} – czeka na zapis.`, saved ? 'success' : 'info', saved ? 2500 : 6000)
+  // The data as it is after it (F7): a series goes on with today's energy as it is now.
+  answer({ ...savedAnswer(t.id, saved), data: quickData() })
 }

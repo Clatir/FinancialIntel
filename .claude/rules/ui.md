@@ -9,6 +9,7 @@ paths:
   `MonthField`, `NameInput`); teksty przez `useTextDraft` (Enter / Ctrl+Enter zatwierdza, Esc cofa). Akcja czytająca
   formularz woła najpierw `commitActiveField` (`store/ui.ts`, T34).
 - Szkice formularzy w pamięci okna (`store/drafts.ts` `useDraft`); zmiana folderu je czyści.
+- „Zapisano.” tylko po zapisie na dysk (`writeNow`, T317); w folderze tylko do odczytu – powód (`status.readOnlyReason`).
 - Kwoty zawsze przez `plnText` / `signedPln` (maskowanie przy ukrytych kwotach – flaga ustawiana przy każdym renderze,
   nic nie jest memoizowane) i `formatPln`; liczebniki przez `plural` / `countLabel`.
 - Selektory zustand zwracają prymitywy albo istniejące referencje (nowy obiekt w selektorze = pętla renderów).

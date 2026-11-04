@@ -5,6 +5,7 @@ import { toast } from '../../store/ui'
 import { openResult, useData } from '../../store/data'
 import { IconFolder, IconPlus } from '../../components/icons'
 import { OpenProgressPanel, openLogs, useOpenProgress } from './OpenProgress'
+import { retriesBySelf } from './retry'
 
 /** A folder that is not ready yet is tried again this often (B109). */
 const RETRY_MS = 30_000
@@ -49,8 +50,9 @@ export function FolderSetup() {
   // empty: a retry. New data never goes to the remembered folder unasked – it would split the budget once OneDrive
   // brings the old one (B53): only „Utwórz tu nowe dane…” with a confirmation.
   const canRetry = why?.reason === 'aborted' || why?.reason === 'error' || p === 'missing' || p === 'unavailable' || p === 'partial' || p === 'settings-unreadable' || (p === 'empty' && remembered)
-  // A folder not ready yet (OneDrive starting with Windows – B109): tried again by itself, while nothing else is going on.
-  const waiting = !!dir && (p === 'settings-unreadable' || p === 'unavailable' || p === 'partial')
+  // A folder not ready yet (OneDrive starting with Windows – B109) or the remembered one missing (a drive not plugged in,
+  // OneDrive not there yet – AF-41): tried again by itself, while nothing else is going on.
+  const waiting = !!dir && retriesBySelf(why)
   useEffect(() => {
     if (!waiting || busy || !dir) return
     const t = setTimeout(() => void run(() => api.openDataDir(dir, false)), RETRY_MS)

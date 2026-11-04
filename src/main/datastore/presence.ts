@@ -26,7 +26,8 @@ export function safeMachineName(name: string): string {
 
 export async function writePresence(root: string, machine: string, appVersion: string, activeAt: string | null = null): Promise<void> {
   const file = join(root, PRESENCE_DIR, `${safeMachineName(machine)}.json`)
-  await writeFileAtomic(file, `${JSON.stringify({ machine, lastSeen: new Date().toISOString(), appVersion, activeAt }, null, 2)}\n`)
+  // The data folder gone: no presence – never a new empty folder in its old place for it (AP-1, DA.40).
+  await writeFileAtomic(file, `${JSON.stringify({ machine, lastSeen: new Date().toISOString(), appVersion, activeAt }, null, 2)}\n`, root)
 }
 
 export async function clearPresence(root: string, machine: string): Promise<void> {

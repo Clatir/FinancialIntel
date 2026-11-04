@@ -121,6 +121,9 @@ export const promises = {
   }
 }
 
+/** The modes of `access` (the data store's write probe – AF-14): the mirror has no rights, so every mode is granted. */
+export const constants = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 } as const
+
 export function watch(): never {
   throw new Error('Obserwacja folderu nie działa na telefonie – zmiany przynosi synchronizacja z OneDrive.')
 }
@@ -129,4 +132,4 @@ export function createWriteStream(): never {
   throw new Error('Zapis strumieniem nie działa na telefonie.')
 }
 
-export default { promises, watch, createWriteStream }
+export default { promises, constants, watch, createWriteStream }

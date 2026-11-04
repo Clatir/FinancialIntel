@@ -151,7 +151,8 @@ export function QuickApp() {
       setOpened((n) => n + 1)
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
-      setMsg({ ok: r.ok, text: r.message })
+      // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”.
+      setMsg({ ok: r.ok && !r.pending, text: r.message })
       setRestored(false)
       if (r.ok && next.current) {
         // „Zapisz i następny” (F7): a fresh draft of the same account, day, kind and tags (a trip's receipts – F17); the
@@ -181,10 +182,14 @@ export function QuickApp() {
         // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
         // opened again meanwhile.
         if (closing.current) clearTimeout(closing.current)
-        closing.current = setTimeout(() => {
-          closing.current = null
-          void api.quickClose()
-        }, 450)
+        // Not on the disk yet (AP-1): the window stays long enough to read why.
+        closing.current = setTimeout(
+          () => {
+            closing.current = null
+            void api.quickClose()
+          },
+          r.pending ? 4000 : 450
+        )
       } else {
         sending.current = false
         setBusy(false)
@@ -349,7 +354,7 @@ export function QuickApp() {
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
-    if (data.readOnly) return setMsg({ ok: false, text: 'Folder jest tylko do odczytu.' })
+    if (data.readOnly) return setMsg({ ok: false, text: data.readOnlyReason ?? 'Folder jest tylko do odczytu.' })
     if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
     if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
     if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
@@ -361,7 +366,7 @@ export function QuickApp() {
     setMsg(null)
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
     const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
-    void api.quickAdd({ ...d, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
+    void api.quickAdd({ ...d, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
   }, [busy, data, d, lines, share, night, nightOk, shares])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.

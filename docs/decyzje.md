@@ -2331,3 +2331,36 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `goalId` i `containerId` w pozycjach podzielonego paragonu (`splitSchema`), obsługa transferów celów i elastycznego podziału
   łupów (`fleet.ts`), korekta dokowania bez naruszania powiązanych transakcji ręcznych (`dock.ts`), wygaszanie ciszy nocnej
   dla wydatków planowych lub kontenerowych (`operations.ts`) oraz wznawianie wachty wieczornej (`reopenEvening`). Pełna zgodność typów.
+- **T314** Folder danych znika w trakcie pracy (1.15.5, AP-1, AF-2, AF-42): zapis nigdy nie zakłada samego folderu danych –
+  `writeFileAtomic(cel, dane, within)` / `mkdirWithin` robią brakujące katalogi tylko pod istniejącym korzeniem (rekordy,
+  kopie konfliktu, `.history/`, `.presence/`, kopie ZIP w `backups/` – `writeZipFile(…, within)`, kopia tygodniowa
+  `mkdirOne`); folder kopii ustawiony na komputerze gdzie indziej – jak dotąd. Przed każdą paczką zapisów `ensureWritable`
+  sprawdza `fi.json` (`rootPresent`, jeden `stat`): brak → `FolderUnavailableError` (podklasa `ReadOnlyError`, komunikat
+  `FOLDER_UNAVAILABLE_MESSAGE` w `shared/api.ts`), `available = false` i od razu zestaw zmian do okna
+  (`DataStoreOptions.onStatus`); pusty folder założony w starym miejscu (bez `fi.json`) też jest niedostępny. Brak pliku
+  wpisu przy braku korzenia to nigdy `RemovedOutsideError` („usunięty na innym komputerze”) – pamięć bez zmian; paczka
+  (`saveRecords`, `deleteRecords`) przerwana w połowie – reszta z tym samym błędem, stan folderu w zestawie zmian paczki.
+- **T315** Sprawdzanie folderu w spoczynku i powrót (1.15.5, AP-1): `checkFolder` w `main/index.ts` co `FI_FOLDER_CHECK_MS`
+  (domyślnie 5 s) woła `DataStore.stale()` (stat `fi.json`; przy blokadzie zapisu – próba); różnica → pełne odświeżenie w
+  `RefreshQueue` (w logu „folder danych niedostępny” / „znów dostępny”), po powrocie obserwator od nowa (`watchFolder`).
+  Okno: przejście `available` false → true w `applyChange` → `resumeSaves` – wszystko, co czekało, zapisane od razu
+  (`saveBatch` po kolekcjach; bez wpisów czekających na decyzję z drugiego komputera i wpisów nowszej wersji). W czasie
+  niedostępności folder jest tylko do odczytu jak dotąd: nowe zmiany odrzucane z powodem (`UNAVAILABLE_NOTICE`), zapisane
+  wcześniej w pamięci czekają; pytanie przy zamknięciu z błędem folderu – własna gałąź `unsavedQuestion`.
+- **T316** Tryb tylko do odczytu z próby zapisu (1.15.5, AP-1, AF-14): przy otwarciu (przed migracją) i po powrocie folderu
+  `writeProbe` – `access(fi.json, W_OK)` (na Windows atrybut „tylko do odczytu” pliku), potem plik `.fi-zapis.tmp-…`
+  założony i usunięty w korzeniu; EPERM / EACCES / EROFS → `writeBlocked` (`FOLDER_NOT_WRITABLE_MESSAGE`) i
+  `status.readOnly` – bez migracji i bez połowicznego startu kreatora. W spoczynku sprawdzane znowu (dopóki blokada
+  trwa, pada już `access` – żaden plik nie powstaje co kilka sekund). Telefon: `constants` w `mobile/node/fs.ts`. Kreator:
+  podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
+- **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
+  najwyżej 5 s); niezapisany → `QuickResult.pending` („Wpis przyjęty, ale jeszcze niezapisany (powód) – zapisze się sam”,
+  okno zostaje 4 s); szkic wysłany ponownie – według stanu na dysku (`unsavedOf`). `QuickData.folder` wraca ze szkicem:
+  szkic z listami innego folderu (otwartego w międzyczasie) odrzucony; w trakcie zmiany folderu `readOnly` z powodem.
+  Ctrl+S / „Zapisz teraz” w folderze tylko do odczytu – powód zamiast „Zapisano.”. Ekran brakującego zapamiętanego
+  folderu ponawia otwarcie co 30 s jak przy niedostępnym (`features/setup/retry.ts` `retriesBySelf`).
+- **T318** Folder-widmo starszej wersji (1.15.5, AP-1): `ghostFolders` w `main/index.ts` – zapamiętane foldery danych
+  (`dataDir`, `recentDirs`, bez otwartego) rodzaju 'partial' z plikami wpisów (`DataStore.recordFiles`) → meldunek
+  „Folder danych” („Folder-widmo …: n plików wpisów bez fi.json…”, „Pokaż folder” – `showGhostFolder` otwiera tylko folder z
+  ostatniej listy); szukane raz po pokazaniu folderu (`store/ghosts.ts`). Komunikat ekranu wyboru przy 'partial' wspomina
+  folder-widmo. Bez automatycznego przenoszenia wpisów.
