@@ -5,7 +5,7 @@
  */
 import type { Transaction } from '../schema/records'
 import { monthOf } from './dates'
-import { activeIn, cyclePosition, dockAmount, paidBeforeStart, sinkingSchedule, tankWant, type AmountOf, type FeeOf } from './fleet'
+import { activeIn, cyclePosition, dockAmount, paidBeforeStart, paySalary, sinkingSchedule, tankWant, type AmountOf, type FeeOf, type SalaryPayment } from './fleet'
 import { amountOn, dateOn, sum } from './operations'
 
 /**
@@ -65,4 +65,38 @@ export function startTanks(items: readonly StartTankItem[], start: string, tanks
     const planAmount = pos.index > 0 && !paid ? sum(sinkingSchedule(item.amount, pos.length).slice(0, pos.index)) : 0
     return { key: item.key, installment: tankWant(item, month, tanks[item.key] ?? 0, paidDues), planAmount, paid }
   })
+}
+
+/** What the start does to the layers on its day after the split (AP-25, AF-10): the rows of the wizard's step 6. */
+export interface StartEffect {
+  /** The shields right after the split (the money at the start of the day less the hull, the goals and the tanks). */
+  split: number
+  /** The first salary into the energy: its month's salary less what the month spent before the start (T45). */
+  salary: SalaryPayment & { due: number }
+  /** The household members' opening advances into their deposit (D81): from the shields, short – from the hull. */
+  deposit: { amount: number; fromShields: number; fromHull: number }
+  /** The shields and the hull after the start's moves – what the bridge shows after „Uruchom budżet”. */
+  shields: number
+  hull: number
+}
+
+/**
+ * The start's day as the engine runs it (`computeFleet`: the start's event with its salary, then the settlements' start
+ * – D81): the money at the start of the day split (`total` – the opening balances, never the balances now with today's
+ * operations – R-4), the first salary paid from the shields (short – from the hull, `paySalary`), the members' advances
+ * drawn into their deposit (the engine's `drawShields`). `spentBefore` – `startMonthSpentOf`; `deposit` – the members'
+ * opening advances.
+ */
+export function startEffect(o: { total: number; hull: number; goals: number; tanks: number; salary: number | null; spentBefore: number; deposit: number }): StartEffect {
+  const split = o.total - o.hull - o.goals - o.tanks
+  const due = o.salary != null && o.salary > 0 ? Math.max(0, o.salary - o.spentBefore) : 0
+  const pay = paySalary(due, split, o.hull)
+  let shields = split - pay.fromShields
+  let hull = o.hull - pay.fromHull
+  const amount = Math.max(0, o.deposit)
+  const fromShields = Math.min(amount, Math.max(0, shields))
+  const fromHull = Math.min(amount - fromShields, Math.max(0, hull))
+  hull -= fromHull
+  shields -= amount - fromHull
+  return { split, salary: { ...pay, due }, deposit: { amount, fromShields, fromHull }, shields, hull }
 }
