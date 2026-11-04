@@ -31,22 +31,26 @@ paths:
   Zmiana tylko kluczy (`keysOnly` – same `altKeys`) to „bez zmian”: bez kopii i paczki (T323).
 - Usunięte operacje z banku: `shared/import/deleted.ts` (`deletedBankRows` – klucze z `altKeys`, `DeletedRow` z formatem;
   `returnedOf` – meldunek „Wróciły po usunięciu”, tylko `madeByItsImport`), w oknie `features/import/returned.ts`
-  (T320, T324, T333–T332).
+  (T320, T324, T330–T332). **Pułapka:** czasów z różnych komputerów (`lastImport`, `importedAt`) nie porównuj „później
+  niż” – zegary się różnią; porównuj, czy się zmieniły (`importsMark`, T332).
 - Konto importu po numerze rachunku pliku (`accountForNumber`, T322); jedna operacja i jej kopie – `copies.ts`.
-  **Pułapka:** `conflicting` nie porównuje `covers` – usuwana kopia oddaje spłacane zakupy przez `takeUserData`, a kopia
-  spłacająca inne zakupy niż operacja tutaj nie jest zaznaczona (`coversOtherwise`, T321).
+  **Pułapka:** `conflicting` nie porównuje `covers` – usuwana kopia oddaje spłacane zakupy przez `takeUserData` (ta sama
+  decyzja albo pieniądze tych samych domowników – `takesCovers`), a kopia, której zakupów operacja tutaj nie przejmie,
+  nie jest zaznaczona (`coversOtherwise`, `dropsCovers`; T321, T333).
 - Pliki z banku w Pobranych: `main/bankFiles.ts` + `shared/import/bankFiles.ts`.
 
 ## Rozpoznanie
 - Kolejność: reguła (`findRule`: marka → cała nazwa → „zawiera” → słowo użytkownika; tryb `amount` z `maxAmount`) →
-  pożyczka z Radaru → przelew własny → domownik → XTB → bankomat, zwrot towaru, opłata banku. Reguła innego rodzaju
-  ustępuje pożyczce (od dnia jej udzielenia), domownikowi i XTB (`ruleGivesWay`, T325); słowo z tytułu i przelew własny
-  zostają regułą. Audyt reguł (`audit.ts`) zgłasza tylko to, czemu reguła ustępuje teraz.
+  pożyczka z Radaru → przelew własny → domownik → XTB → bankomat, zwrot towaru, opłata banku. Pożyczka tylko otwarta
+  i od dnia jej udzielenia – z regułą i bez (`loanFor`). Reguła innego rodzaju ustępuje pożyczce, domownikowi i XTB
+  (`ruleGivesWay`, T325); słowo z tytułu i przelew własny zostają regułą. Audyt reguł (`audit.ts`) zgłasza tylko to,
+  czemu reguła ustępuje teraz – ta sama `loanFor`.
 - Decyzja zbiorcza nie zmienia pożyczki, PIT-38, XTB ani pieniędzy domownika decyzją innego rodzaju (`bulkKeeps`, T326);
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
 - „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X
   ma oddać z zakupami pliku, bez jego własnych wpłat pliku (`owedWithFile`, T328); ekran (`sharesView`) i `runImport`
-  z tego samego. Temat z decyzją swoich marek (N78) czyta ich klucze (`themeSharesFrom`). **Pułapka:** `sameChoice`
+  z tego samego. Temat z decyzją swoich marek (N78) czyta ich klucze (`themeSharesFrom`) i pokazuje ich linie razem
+  (`sharesTogether` – zmiana tam nie zmienia sumy). **Pułapka:** `sameChoice`
   pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
 - Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą. Kategoria mBanku tylko jako podpowiedź (`hintFor`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
@@ -58,7 +62,8 @@ paths:
   przejść planu ma znaczenie: B5 tutaj bierze też wiersze `elsewhere` z B35 (kopia → `RowCopy`, „usuń duplikat”), a
   usunięte – po wszystkich przejściach „już w budżecie”.
 - **Pułapka:** rekord usunięty przez sam import nie jest usunięciem użytkownika – tylko jego klucze zatrzymują wiersz;
-  usuwaj go z `reason: 'import'` (znak `byImport` w historii, T331) i dopisuj do paczki, nie usuwaj obok niej.
+  usuwaj go z `reason: 'import'` (znak `byImport` w historii, T331) i dopisuj do paczki, nie usuwaj obok niej – także
+  ponownie przy „Cofnij” cofnięcia importu (`redoImport`).
 - **Pułapka:** połączenie z ręcznie wpisaną i rozliczenie nadpisują `bank` (`importedAt`, `source`) – „kiedy i jakim
   plikiem przyszedł wiersz” to nie „kiedy import zrobił operację” (`createdAt`, T330).
 

@@ -3,7 +3,8 @@
  * data), whether a copy decides otherwise (a conflict to check), and what the kept one takes from the copies. No import
  * of the plan's (`reconcile.ts` uses it).
  */
-import { isTwoSided } from '../calc/operations'
+import { incomeShares } from '../calc/household'
+import { financerOf, isTwoSided, partsOf } from '../calc/operations'
 import { withBankAmount } from '../calc/share'
 import type { Transaction } from '../schema/records'
 
@@ -76,6 +77,42 @@ export const coversOtherwise = (keep: Transaction, copy: Transaction): boolean =
 }
 
 /**
+ * The members whose purchases an operation's money pays back, as the ledger reads it (`settleHousehold`, D91): an
+ * income's shares of members that repay (not their income nor advance), a product return's lines of a member's purchase.
+ */
+function repayers(t: Transaction): ReadonlySet<string> {
+  if (t.kind === 'income') return new Set(incomeShares(t).flatMap((s) => (s.memberId && s.inflowKind !== 'income' && s.inflowKind !== 'advance' ? [s.memberId] : [])))
+  if (t.kind !== 'expense' || t.amount <= 0) return new Set()
+  return new Set(partsOf(t).flatMap((p) => (p.refundable && !p.gift && p.amount > 0 ? [financerOf(p)] : [])))
+}
+const within = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => [...a].every((x) => b.has(x))
+
+/**
+ * Does the kept operation (decided) take what a copy pays back (AF-9 – review N1 2)? It names nothing itself, and it
+ * decides the same or its money pays back every member the copy's does – the purchases named are theirs (D91), so they
+ * stay paid back by this money, whatever else the kept one decides.
+ */
+function takesCovers(keep: Transaction, copy: Transaction): boolean {
+  if (assignmentOf(keep) || !assignmentOf(copy)) return false
+  if (decision(keep) === decision(copy)) return true
+  const theirs = repayers(copy)
+  return theirs.size > 0 && within(theirs, repayers(keep))
+}
+
+/**
+ * Would removing a copy leave the purchases it pays back unpaid (AF-9 – review N1 2: never silently)? Its money pays them
+ * back, and the kept one with what it takes from the copy (`takeUserData`) does not: it names others (`coversOtherwise`),
+ * or decides otherwise without those members' money, or its money is no repayment of theirs (their income, an advance).
+ * A copy whose money repays nobody loses nothing.
+ */
+export function dropsCovers(keep: Transaction, copy: Transaction): boolean {
+  const theirs = repayers(copy)
+  if (!assignmentOf(copy) || !theirs.size) return false
+  const out = takeUserData(keep, [copy], keep.updatedAt)
+  return assignmentOf(out) !== assignmentOf(copy) || !within(theirs, repayers(out))
+}
+
+/**
  * The kept operation with what only the copies had: the bank's data (date, amount, row – a hand-typed one takes
  * them from its copy), the user's fields it lacks (category, notes, log, time, container… – `takeUserData`).
  */
@@ -97,8 +134,8 @@ export function mergeDuplicate(keep: Transaction, copies: readonly Transaction[]
 
 /**
  * The kept operation with the user's fields only the copies had (category and the whole decision when it has none,
- * what a member's money pays back when it names nothing, notes, log, time, container…); its bank's rows as they are – a
- * copy removed by the import's repair (AF-9).
+ * what a member's money pays back when it names nothing and pays back those members – `takesCovers`, notes, log, time,
+ * container…); its bank's rows as they are – a copy removed by the import's repair (AF-9).
  */
 export function takeUserData(keep: Transaction, copies: readonly Transaction[], now: string): Transaction {
   let out: Transaction = { ...keep }
@@ -128,9 +165,10 @@ export function takeUserData(keep: Transaction, copies: readonly Transaction[], 
         goalId: c.goalId,
         loanId: c.loanId
       }
-    // The same decision (a member's money, a product return of theirs): the purchases only the copy names stay paid back
-    // by it (D91 – a removed copy never takes their repayment away).
-    else if (mine != null && mine === decision(c) && !assignmentOf(out) && assignmentOf(c))
+    // The same decision (a member's money, a product return of theirs) – or another one whose money pays back the same
+    // members (review N1 2): the purchases only the copy names stay paid back by it (D91 – a removed copy never takes
+    // their repayment away; when it would, `dropsCovers` says so before).
+    else if (mine != null && takesCovers(out, c))
       out = { ...out, covers: c.covers, coversOpening: c.coversOpening, coversOpeningMembers: c.coversOpeningMembers, repaid: c.repaid }
     out = {
       ...out,

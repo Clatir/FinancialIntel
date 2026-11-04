@@ -41,7 +41,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('powrót folderu, którego odświeżenie padło (przegląd 2 AP-1, T335)', () => {
+describe('powrót folderu, którego odświeżenie padło (przegląd 2 AP-1, T334)', () => {
   it('odświeżenie znalazło fi.json, ale folderu nie przeczytało: dalej niedostępny – sprawdzanie w spoczynku próbuje znowu, powrót liczy dopiero odświeżenie, które go przeczytało', async () => {
     const root = await folder()
     const store = new DataStore(root, { machineName: 'TEST-PC' })
@@ -68,7 +68,7 @@ describe('powrót folderu, którego odświeżenie padło (przegląd 2 AP-1, T335
   })
 })
 
-describe('próba zapisu w folderze naprawdę tylko do odczytu (przegląd 2 AP-1, T336)', () => {
+describe('próba zapisu w folderze naprawdę tylko do odczytu (przegląd 2 AP-1, T335)', () => {
   it('fi.json bez prawa zapisu: przy otwarciu kilka krótkich prób, w spoczynku i przy odświeżeniu w kolejce – jedna', async () => {
     const root = await folder()
     const fi = resolve(root, 'fi.json')

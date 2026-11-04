@@ -19,6 +19,7 @@ import {
   type ImportPlan,
   type ImportResult,
   type ImportTheme,
+  type RowCopy,
   type SharePart,
   type SharesSpread,
   type SpreadLine
@@ -212,8 +213,10 @@ function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<st
 export function planSignature(plan: ImportPlan | null): string {
   if (!plan) return ''
   const rows = plan.rows.map((p) => {
-    // A copy on another account (AF-9): which one, and whether it may be removed.
-    const copy = p.status === 'known' && p.copy ? `/${p.copy.tx.id}${p.copy.blocked ? `:${p.copy.blocked}` : ''}` : ''
+    // A copy on another account (AF-9): which one, whether it may be removed and is by default, and why not – another
+    // decision, purchases it pays back that the operation here would not (review N1 2: the default changes with them).
+    const flags = (c: RowCopy) => `${c.blocked ?? ''}:${c.remove ? 'r' : ''}${c.conflict ? 'c' : ''}${c.otherCovers ? 'o' : ''}${c.dropsCovers ? 'd' : ''}`
+    const copy = p.status === 'known' && p.copy ? `/${p.copy.tx.id}:${flags(p.copy)}` : ''
     const what = p.status === 'new' || p.status === 'deleted' ? p.group : p.status === 'merge' ? `${p.tx.id}/${p.planned.group}` : `${p.tx.id}${copy}`
     return `${p.status}:${p.key}:${what}`
   })
@@ -558,8 +561,8 @@ export function chooseTheme(theme: string, choice: Choice, remember?: boolean, a
 }
 
 /**
- * A decision for a theme whose brands were each decided the same (shown as the theme's): theirs give way – the theme
- * decides them all, as the screen shows.
+ * A decision for a theme whose brands were each decided the same (shown as the theme's – their „w tym za” together,
+ * `sharesTogether`): theirs give way – the theme decides them all, as the screen shows.
  */
 export function chooseThemeOverGroups(t: ImportTheme, choice: Choice): void {
   patchChoices((c) => {
@@ -797,6 +800,26 @@ export function themeShows(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<Imp
 export const themeSharesFrom = (t: Pick<ImportTheme, 'theme' | 'groups'>, shows: ThemeShows): DecisionKeys =>
   shows === 'same' ? t.groups.map((g) => `g:${g.group}`) : `t:${t.theme}`
 
+/**
+ * `groups` groups' common decision (each one `choice` – `sameChoice`) as their theme's row shows it (N78): each other
+ * member's „w tym za” line is what the groups give together – a theme's amount is for all its rows (T328), so a change
+ * there (`chooseThemeOverGroups`) keeps the total, and the line is what its spread says typed (`decisionSpread`; review
+ * N1 2: before, one group's amount – a change halved what two groups gave).
+ */
+export function sharesTogether(choice: Choice, groups: number): Choice {
+  if (groups < 2 || !choice.shares?.some((x) => x.amount > 0)) return choice
+  const sender = choice.memberId ?? HOUSE_MEMBER_ID
+  // Decided alike: the groups' lines with an amount are the same – together their number times each (the sender's own
+  // never spreads).
+  return { ...choice, shares: choice.shares.map((x) => (x.amount > 0 && x.memberId !== sender ? { ...x, amount: x.amount * groups } : x)) }
+}
+
+/** The groups' common decision a theme's row shows (`themeShows` 'same', `sharesTogether`); none when it shows another. */
+export function themeCommon(t: Pick<ImportTheme, 'theme' | 'groups'>, c: Pick<ImportChoices, 'themes' | 'groups'>): Choice | undefined {
+  if (themeShows(t, c) !== 'same') return undefined
+  return sharesTogether(c.groups[t.groups[0]!.group]!, t.groups.length)
+}
+
 /** What a member still owes back beyond their own money of the file and its parts given by others than `from` (the decision). */
 export function owedLeftOfDecision(view: SharesView, from: DecisionKeys, memberId: string): number {
   let given = 0
@@ -1016,7 +1039,7 @@ export async function runImport(): Promise<void> {
       }
     }))
     // Run with the deleted ones just read: nothing came back with it – no reading of the history at the next opening (T332).
-    checkedWithImport(now)
+    checkedWithImport(acc, now)
     // A household member's money the user decided here (zaliczka / przychód): asked once, remembered for them (D80 b) –
     // one answer per operation (N84).
     rememberInflows(inflowVotes(groupsOf(plan, cur.choices.restoreDeleted), cur.choices))

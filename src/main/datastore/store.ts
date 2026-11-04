@@ -600,7 +600,7 @@ export class DataStore {
    * Then new files (every write is temp + rename): this computer's presence written – a write the open makes anyway, so
    * the probe makes no file of its own (on OneDrive each would go to its online recycle bin) and none can be left behind.
    * fi.json's open is tried `attempts` times – at the open and the return a few (an antivirus or OneDrive holding it a
-   * moment is no read-only folder), idle once (a folder read-only for real, every few seconds – T336); the presence
+   * moment is no read-only folder), idle once (a folder read-only for real, every few seconds – T335); the presence
    * write retries its rename as every write. Null = it takes writes; else why not. Any other failure (the folder gone,
    * a file held for long) is no read-only folder – the write itself says it.
    */
@@ -1198,7 +1198,7 @@ export class DataStore {
     } catch (e) {
       // Back but not read (OneDrive still bringing its files – EBUSY): still away, so the idle check tries again in a few
       // seconds and the refresh that reads it is the one that finds it back – the window told, the folder watched anew
-      // (T335). Never back without that: no later refresh would see the return.
+      // (T334). Never back without that: no later refresh would see the return.
       if (!wasAvailable) this.available = false
       throw e
     }

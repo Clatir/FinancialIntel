@@ -32,10 +32,10 @@ paths:
   zniknięcia → `FolderUnavailableError` i `onStatus`).
 - Niedostępność: `stale()` co `FI_FOLDER_CHECK_MS` w spoczynku, próba zapisu przy otwarciu (`writeBlocked`, T316); brak
   korzenia nie jest „usunięty na innym komputerze”; powrót liczy tylko odświeżenie, które folder przeczytało (nieudane
-  zostawia go niedostępnym – T335); obserwator od nowa po każdym odświeżeniu (`folderSeen` w `finally`).
+  zostawia go niedostępnym – T334); obserwator od nowa po każdym odświeżeniu (`folderSeen` w `finally`).
 - **Pułapka (przegląd AP-1):** na Windows i OneDrive EPERM bywa chwilowy (antywirus, synchronizacja) – sprawdzenie
   „tylko do odczytu” ponawia krótko tylko przy otwarciu i powrocie (w spoczynku i w kolejce raz – folder naprawdę tylko
-  do odczytu sprawdzany co 5 s, T336) i ocenia tylko krok zapisu, nigdy sprzątanie; nie zakłada własnych plików –
+  do odczytu sprawdzany co 5 s, T335) i ocenia tylko krok zapisu, nigdy sprzątanie; nie zakłada własnych plików –
   zakładanie sprawdza zapis obecności tego komputera (`DataStoreOptions.presence`, T316).
 - Usuwanie: plik z wersją w historii usuwany od razu, bez niej – do Kosza; `removeRecord` odmawia przy drugiej kopii id.
 - Kopie ZIP: dzienne (14) i tygodniowe (8), przed importem (10), przed migracją; pełna kontrola folderu przed kopią

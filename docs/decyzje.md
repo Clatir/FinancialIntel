@@ -2348,7 +2348,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `RefreshQueue`. Przejście ocenia każde odświeżenie (`folderSeen` po każdym odświeżeniu w kolejce, także nieudanym –
   `finally`; po przeglądzie): powrót zauważony najpierw przez obserwatora, obecność, fokus okna czy Synchronizację też
   daje obserwatora od nowa (`watchFolder`; `DataStore.regained` liczy powroty – tylko odświeżenia, które folder
-  przeczytały, T335) i wpis w logu („folder danych niedostępny” / „znów dostępny”).
+  przeczytały, T334) i wpis w logu („folder danych niedostępny” / „znów dostępny”).
   Okno: przejście `available` false → true w `applyChange` → `resumeSaves` – wszystko, co czekało, zapisane od razu
   (`saveBatch` po kolekcjach; bez wpisów czekających na decyzję z drugiego komputera i wpisów nowszej wersji). W czasie
   niedostępności folder jest tylko do odczytu jak dotąd: nowe zmiany odrzucane z powodem (`UNAVAILABLE_NOTICE`), zapisane
@@ -2358,7 +2358,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   otwarty do zapisu (`r+`) i zamknięty bez zapisu (brak prawa zapisu – uprawnienia, udział albo dysk tylko do odczytu);
   EPERM / EACCES / EROFS → `writeBlocked` (`FOLDER_NOT_WRITABLE_MESSAGE`) i `status.readOnly` – bez migracji i bez
   połowicznego startu kreatora. Po przeglądzie: otwarcie ponawiane (chwilowa blokada antywirusa albo OneDrive to nie
-  tryb tylko do odczytu; przy otwarciu i powrocie kilka prób, w spoczynku jedna – T336), zamknięcie o niczym nie
+  tryb tylko do odczytu; przy otwarciu i powrocie kilka prób, w spoczynku jedna – T335), zamknięcie o niczym nie
   decyduje, a próba nie zakłada własnego pliku (wcześniej `.fi-zapis.tmp-…` w korzeniu przy każdym otwarciu – wpis
   w koszu online OneDrive, przy blokadzie usuwania plik zostawał). Zakładanie nowych plików (każdy zapis to plik
   tymczasowy i zamiana) sprawdza zapis obecności tego komputera w `.presence/` (`DataStoreOptions.presence` =
@@ -2406,10 +2406,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   kluczu (B35), którego operacja jest tu w drugim formacie, to `known` z kopią (`RowCopy`) – „usuń duplikat” zamiast
   „przenieś” (`ImportChoices.removeCopies`): zaznaczony, gdy kopia przyszła tam z importu i nie ma innej decyzji
   (`conflicting`); nigdy, gdy zadokowana (`ClassifyContext.docked`), spłacana wpłatą domownika (`covers`) albo tylko do
-  odczytu. Usunięta kopia oddaje operacji tutaj kategorię i notatki (`takeUserData`), a przy tej samej decyzji, gdy
-  operacja tutaj nic nie wskazuje, też to, co spłaca (`covers`, dług startowy, `repaid` – przegląd N1; także panel
-  duplikatów); kopia spłacająca inne zakupy niż operacja tutaj nie jest zaznaczona („kopia spłaca inne zakupy niż
-  operacja tutaj”, `coversOtherwise`). Usunięta jest w paczce importu („Cofnij import” ją przywraca), licznik `copies`. Wspólne „jedna operacja i jej kopie” (`userContent`, `conflicting`,
+  odczytu. Usunięta kopia oddaje operacji tutaj kategorię i notatki (`takeUserData`), a gdy operacja tutaj nic nie
+  wskazuje, też to, co spłaca (`covers`, dług startowy, `repaid` – przegląd N1; także panel duplikatów) – przy tej samej
+  decyzji albo pieniądzach tych samych domowników (T333); kopia, której spłacanych zakupów operacja tutaj nie przejmie, nie
+  jest zaznaczona („kopia spłaca inne zakupy niż operacja tutaj”, `coversOtherwise`; T333). Usunięta jest w paczce importu („Cofnij import” ją przywraca), licznik `copies`. Wspólne „jedna operacja i jej kopie” (`userContent`, `conflicting`,
   `mergeDuplicate`, `takeUserData`) przeniesione z `duplicates.ts` do `shared/import/copies.ts` (bez cyklu importów).
 - **T322** Konto importu po numerze rachunku (AP-2, IM sp. 2): plik otwiera się na koncie, na które trafiał jego numer
   (`accountForNumber`: otwarte konta z tym numerem – z kilku to z importem mBanku, potem wybrane wcześniej); numer nieznany
@@ -2431,8 +2431,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
   rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
-  przelewu (każda reguła poza regułą pożyczki; przelew sprzed dnia pożyczki – reguła, jak w audycie `loanOn`, przegląd
-  N1; bez reguły jak dotąd – każda otwarta, B34), pieniądzom domownika (każda poza regułą wpływu z osobą i przelewem własnym) i XTB (każda
+  przelewu (każda reguła poza regułą pożyczki; pożyczka istnieje od dnia udzielenia – przelew sprzed niego nigdy nie jest
+  jej zwrotem: z regułą zostaje regułą, bez reguły zwykły wpływ (B34 – tylko od tego dnia), dawna reguła pożyczki
+  proponuje pożyczkę bez rekordu; `loanFor`, ten sam w audycie – przegląd N1, N1 2), pieniądzom domownika (każda poza regułą wpływu z osobą i przelewem własnym) i XTB (każda
   poza regułą XTB i przelewem własnym – portfel XTB). Zostaje regułą: słowo kluczowe z tytułu (o tej płatności – „ZA
   PIZZĘ” od pożyczkobiorcy), reguła tego samego rodzaju (dawna reguła pożyczki / XTB – propozycja, N14), przelew własny
   (rozpoznanie domownika i XTB tylko, gdy bank nie mówi „przelew własny”). PIT-38 nie ma rozpoznania po nazwie – chroni
@@ -2444,8 +2445,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ten sam domownik – tak; reszta liczona jako „nie pasuje” z powodem w komunikacie. „+ domownik” tylko przy wpływie
   przelewem od osoby spoza listy z decyzją „wpływ (przychód)” – nigdy przy przelewie własnym (nazwy posiadacza), XTB,
   zwrocie pożyczki ani pieniądzach domownika (`offersNewMember`). Audyt reguł: reguła innego rodzaju niż pożyczka, która
-  złapała wpływ od osoby z pożyczką z Radaru otwartą w dniu wpływu (`loanOn`: udzielona do tego dnia, niezamknięta przed
-  nim), zapisany jako rodzaj reguły – „N do poprawy” w „niespójne” (licznik razem z innymi), z listą operacji do otwarcia;
+  złapała wpływ od osoby z pożyczką z Radaru udzieloną do dnia wpływu i otwartą teraz (`loanFor` – ta, której import
+  ustępuje dziś; zamknięta od tamtej pory – reguła zostaje, bez zgłoszenia, przegląd N1 2), zapisany jako rodzaj reguły – „N do poprawy” w „niespójne” (licznik razem z innymi), z listą operacji do otwarcia;
   słowo z tytułu nie (zostaje regułą – `ruleGivesWay`, przegląd N1);
   „bez trafień” = jego licznik (`inAuditView`, bez reguł pożyczki, PIT-38 i XTB).
 - **T327** „+ w tym za X” w wierszu importu (AP-7, AF-27; D81): wiersz bez własnej decyzji pokazuje swoją część
@@ -2455,8 +2456,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   tego, co X ma oddać – po zakupach pliku, po własnych wpłatach X w pliku i po częściach X w innych wierszach – najwyżej
   tyle, ile zostało w pieniądzach wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”.
   Temat, który pokazuje wspólną decyzję swoich marek (N78), liczy start i rozkład przy linii z ich wierszy i ich linii
-  (kwoty marek razem – `themeSharesFrom`, `decisionSpread`; przegląd N1); zmiana tam robi decyzję tematu. Własna część
-  wiersza zostaje wpisana jak wpisana (także ponad dług – świadomie, za ten przelew).
+  (kwoty marek razem – `themeSharesFrom`, `decisionSpread`; przegląd N1) i pokazuje linię innego domownika jako kwotę
+  marek razem (`sharesTogether`: dwie marki po 100 zł = 200 zł – kwota tematu jest dla wszystkich jego wierszy, T328);
+  zmiana tam robi decyzję tematu z tą kwotą – suma dla X zostaje (przegląd N1 2: wcześniej kwota jednej marki, więc
+  zmiana po cichu zmniejszała ją o połowę). Własna część wiersza zostaje wpisana jak wpisana (także ponad dług –
+  świadomie, za ten przelew).
 - **T328** „w tym za X” grupy i tematu (AP-7, AF-27; D81): kwota decyzji wspólnej dla kilku wpłat to razem dla X, nie
   na każdą wpłatę – rozkładana po kolei od najstarszej (każda wpłata najwyżej swoją kwotą), a wszystkie spłaty X z grup
   i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy i o własne wpłaty X w pliku,
@@ -2485,16 +2489,35 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wersja w `.history/` ze znakiem `byImport: true`, plik dalej `_delete_` – starsza wersja aplikacji dalej trzyma klucze
   wiersza poza importem. `deletedBankRows` bierze z takich tylko klucze, niezależnie od tego, czy paczka importu jest
   jeszcze wśród 10 ostatnich (wcześniej po rotacji paczek liczyły się jako usunięcia użytkownika); usunięte przez import
-  przed 1.15.5 – po paczkach, jak dotąd. Synchronizacja → Usunięte wpisy: „usunięty przez import”. Addytywnie, bez
+  przed 1.15.5 – po paczkach, jak dotąd. „Cofnij” po „Cofnij import” usuwa przywrócone przez cofnięcie tak samo – z powodem
+  'import' (`redoImport`, przegląd N1 2). Synchronizacja → Usunięte wpisy: „usunięty przez import”. Addytywnie, bez
   `SCHEMA_VERSION`.
 - **T332** Koszt meldunku „Wróciły po usunięciu” (przegląd N1; doprecyzowuje T324): operacja wraca tylko z importem po
   usunięciu, więc usunięte czytane 10 s po otwarciu folderu tylko wtedy, gdy ostatnie sprawdzenie tego komputera coś
+  zgłosiło albo od niego zmienił się którykolwiek import folderu (`settings.import.lastImport` wszystkich kont, także
+  z drugiego komputera – porównane, czy są takie same, nigdy „później niż”: zegar drugiego komputera może się spóźniać,
+  przegląd N1 2). Stan w `localStorage` komputera (`fi.returned.checked:<folder>` – importy folderu, z którymi nie było
+  nic do zgłoszenia, `importsMark`; brak albo starsza postać – czytaj; nieudany odczyt historii go kasuje). Import na tym
+  komputerze czyta usunięte sam i dopisuje do sprawdzenia swój import (konto → czas, `checkedWithImport`) – import
+  drugiego komputera, który przyszedł w tym czasie, zostaje zmianą. Ekran Meldunków i import czytają jak dotąd.
+  `returnedOf` przy każdej zmianie operacji ogląda tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów
+  kandydatów.
+- **T333** Kopia z innego konta a zakupy, które spłaca (przegląd N1 2; doprecyzowuje T321): usuwana kopia (AF-9) nigdy po
+  cichu nie zabiera spłaty zakupów domownika (D91). Operacja tutaj, która nic nie wskazuje, przejmuje to, co kopia spłaca
+  (`covers`, dług startowy, `repaid`), przy tej samej decyzji albo przy innej, gdy jej pieniądze spłacają każdego
+  domownika, którego spłacają pieniądze kopii (`takesCovers` – np. ta sama wpłata Mamy z częścią „w tym za Tata”; także
+  panel duplikatów). Gdy nie przejmie – wskazuje inne zakupy (`coversOtherwise`), ma inną decyzję bez pieniędzy tych
+  osób (zwykły wpływ) albo jej pieniądze nie są ich spłatą (ich przychód, zaliczka) – kopia nie jest zaznaczona,
+  a podgląd mówi „usunięta – spłacane przez nią zakupy znów do oddania” (`RowCopy.dropsCovers`); zaznaczona mimo to –
+  operacja tutaj zostaje ze swoją decyzją, te zakupy znów do oddania (jak przy `otherCovers`). Kopia, której pieniądze
+  nikogo nie spłacają, nic nie gubi. Podpis planu (B38, `planSignature`) obejmuje przy kopii też to, czy jest zaznaczona
+  domyślnie, ma inną decyzję i czy gubi zakupy – zmiana między podglądem a importem zatrzymuje import („sprawdź podgląd”).
   zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
   w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak
   – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
   czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
   tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
-- **T335** Powrót folderu dopiero po jego przeczytaniu (przegląd 2 AP-1; doprecyzowuje T315): odświeżenie, które znalazło
+- **T334** Powrót folderu dopiero po jego przeczytaniu (przegląd 2 AP-1; doprecyzowuje T315): odświeżenie, które znalazło
   `fi.json`, ale folderu nie przeczytało (EBUSY – OneDrive dopiero sprowadza pliki), zostawia go niedostępnym (`available`
   z powrotem false w `refreshInQueue`) – sprawdzanie w spoczynku widzi różnicę i za kilka sekund próbuje znowu;
   `regained` podbija dopiero odświeżenie, które folder przeczytało, i to ono mówi oknu „dostępny”, a main obserwuje folder
@@ -2502,7 +2525,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w `finally` kolejki i tak obserwuje folder od nowa. Wcześniej: `regained` podbite, odświeżenie padało przed
   `folderSeen`, a następne zastawało podbitą już liczbę – zostawał stary obserwator (zmiany z drugiego komputera dopiero
   co 5 min), okno nie wiedziało o powrocie.
-- **T336** Ile prób w próbie zapisu (przegląd 2 AP-1; doprecyzowuje T316): `fi.json` otwierany do zapisu przy otwarciu
+- **T335** Ile prób w próbie zapisu (przegląd 2 AP-1; doprecyzowuje T316): `fi.json` otwierany do zapisu przy otwarciu
   folderu i przy jego powrocie najwyżej 4 razy (`PROBE_ATTEMPTS`, ok. 0,1 s czekania), w spoczynku (`stale()` co 5 s) i
   przy odświeżeniu w kolejce, dopóki blokada trwa – raz. Wcześniej `withRetry` 8 razy (EPERM / EACCES są w nim
   chwilowe): w folderze naprawdę tylko do odczytu ok. 1,4 s przy otwarciu, co 5 s w spoczynku i przy każdym odświeżeniu
