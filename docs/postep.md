@@ -83,7 +83,15 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
-| N3 | Opłata zapłacona z celu albo zakupem do zwrotu | zapłacona w Ładowni i silniku – cykl zamknięty, zbiornik nietknięty (zebrane zostaje na następny termin), zwrot domownika to spłata długu; dawny przelew z ukrytym kontenerem nie płaci nigdzie (pozostałe wiersze N3–N5 – w `_notatki/notatki-n3…n5.md`, do przeniesienia przy ich PR) | T393 |
+| N3 | Opłata zapłacona z celu albo zakupem do zwrotu | zapłacona w Ładowni i silniku – cykl zamknięty, zbiornik nietknięty (zebrane zostaje na następny termin), zwrot domownika to spłata długu; dawny przelew z ukrytym kontenerem nie płaci nigdzie | T393 |
+| N3 | Zaległe opłaty | liczone od startu budżetu albo miesiąca dodania kontenera – po aktualizacji stare luki w historii pojawią się od razu („Zapłacone poza budżetem” je czyści); opłata ustawiona jako miesięczna, a płacona co 2 miesiące, pokaże pominięte miesiące; płatność przed dniem następnego terminu idzie najpierw na zaległy | T375, T376 |
+| N3 | Boje i pole „Płatność” | boja zamyka się tylko operacją z jej nazwą; pole „Płatność” pokazuje następny termin; silnik trzyma w zbiorniku pieniądze na niezapłacony cykl (tylko notka) | T376, T378 |
+| N3 | Energia dziś przy pensji częściowej | dopiski „pensja częściowa”, „bez pensji w tym miesiącu”, „nie więcej niż zostało w miesiącu”; zwrot wcześniejszego zakupu nic nie daje dziś, zwrot tego samego dnia znosi zakup tej samej kategorii głównej (nie sklepu) | T370, T371 |
+| N3 | Kadłub od 99 % | „Dopełnij kadłub z osłon” widoczny zawsze, gdy kadłubowi brakuje, a osłony mają nadwyżkę (także w 1 %), bez automatycznego dopełniania; raty celów i dokowanie nadal wymagają 100 % kadłuba; „Pokryj z koperty” domyślnie z koperty z największą rezerwą; linia „firewall wyłączony” na Mostku stale, póki rozkaz wyłączony | T372–T374 |
+| N3 | Zamrażanie dni po przerwie | pytanie, gdy import spóźniony > 3 dni (inaczej 7); „Zamroź bez danych” wstrzymuje pytanie do następnego importu, na tym komputerze; konto nigdy nieimportowane niczego nie wstrzymuje; dni czekają najwyżej 7 dni od pierwszego pytania; misja tygodnia czeka razem z dniami luki | T380, T381 |
+| N3 | Misje | nazwa „Zaciemnienie” (inaczej „Nocna wachta”); „Dziś bez wydatków” przy wydatku z dziś zapisuje i ostrzega, nie odmawia; „Inwentaryzacja” liczona po chwili zapisu potwierdzenia (ponowne potwierdzenie tego samego salda też się liczy) | T383 |
+| N3 | Kurs i symulator | brak nie przechodzi na następny miesiąc: osłony kończą na 0, kurs pokazuje „Brakuje na koszty” jako sumę 12 mies.; „Zasięg po resztce miesiąca” tylko, gdy różni się od „teraz”, i zakłada, że spóźnione spłaty pożyczek wrócą w tym miesiącu; wszystko pełne – „teraz” (także cele) | T385–T387 |
+| N3 | Trend poduszki | koniec miesiąca tylko dla zakończonych miesięcy; w Wywiadzie pod „Bilans paliwa”, linia „rosną w N z M mies.”; przy ukrytych kwotach zmiana w zł bez znaku i strzałki, zmiana zasięgu widoczna | T388 |
 | N1 | Zmiany w trakcie niedostępności folderu | folder tylko do odczytu jak dotąd: nowe zmiany odrzucane z komunikatem, czekają tylko przyjęte wcześniej (inaczej: przyjmować w pamięci) | T315 |
 | N1 | Szybki wpis tuż przed wykryciem braku folderu | „Wpis przyjęty, ale jeszcze niezapisany…”, okno zostaje 4 s | T317 |
 | N1 | Pytanie „Zmienić operację?” poza edytorem | z nazwą operacji (pojawia się też na innym ekranie) | T319 |
@@ -103,31 +111,6 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Meldunek „Zaliczki przy długu” | pyta tylko o dług nadal do oddania przez zaliczkę, także o zaliczki wybrane świadomie; „zostaw” raz na wpłatę | T352 |
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
-
-## N2 – Silnik pieniędzy (1.15.6, 04.11.2026)
-- **Zakres:** AP-3 przeniesienie środków celu w chwili zapisu (T340, zastępuje „na koniec dnia” z T129), AP-12 dostawy
-  według puli przed dokowaniem (T341, T342, T363), AP-5 płatność sprzed startu (T345), AP-11 plan = silnik (T346, T347),
-  AP-9 „Wycofaj dokowanie”, usuwanie kategorii, N-PC-4 i N-PC-14 (T360–T362), AP-4 „reszta jako zaliczka” najpierw spłaca
-  i naprawa przy odczycie (T350–T354), D100 wpłata od dowolnej osoby spłaca pożyczkę (T355–T359, T368), AP-32 wyrocznia
-  jako regresja (T367), AF-5 – odsetki od pożyczki jako przychód (T70, poprawka po przeglądzie), drobne po N1 (N2-h).
-- **Wykonawcy:** 3 strumienie równolegle w osobnych drzewach (warstwy i cele; opłaty i plan, potem AP-9; rozliczenia –
-  AP-4, potem D100), wszystkie Opus · max poza AP-9 i drobnymi (xhigh); scalenie konfliktów importu (max), AP-32 (max).
-- **Przegląd:** xhigh na części 1 (14 uwag) i części 2 (14 + AF-5) – wszystkie poprawione z testem, który przed
-  poprawką padał (1 częściowo odrzucona: fragment Ładowni nieosiągalny dla kontenera pożyczki); high na poprawkach – bez
-  pewnych błędów, 6 drobnych poprawionych. Najpoważniejsze: „Zadokuj” przesuwał pieniądze po przeniesieniu środków celu,
-  spóźniona płatność sprzed startu zamykała następny cykl, „Spłać” w meldunku rozliczał historię od nowa (dług 50 → 150 zł),
-  część pożyczki z reguły stawała się sumą grupy.
-- **Wyrocznia:** `npm run test:wyrocznia` (lokalnie, migawki `C:\FI-audyt`, ok. 2 min) – 412 przypadków, 28 963 kwoty,
-  2 852 porównania ekranów zgodne z aplikacją; znane: AF-15 (termin asteroidy w odprawie – naprawia N3), zbiornik po końcu
-  życia opłaty (bez różnicy w pieniądzach).
-- **Testy:** typecheck (także `typecheck:audyt`), `npm test` ok. 1265, build, E2E komputera 89 (lokalnie pada tylko
-  `ictj.spec.ts`), telefonu 10/10.
-- **Otwarte:** audyt reguł nie oznacza reguły z zamkniętą pożyczką; telefon pokazuje „pożyczka” zamiast nazwy; eksport
-  bez kolumny części pożyczki; edytor operacji nadal „depozyt na przyszłość”; zbiorcza decyzja tej samej osoby kasuje linie
-  „w tym za”; operacje z ukrytym `containerId` bez migracji; wyrocznia – pary przychodu w toku bez części domownika
-  i pożyczki (lab ich nie ma).
-- **Czas:** 05:05–ok. 13:00 do PR (strumienie 55–100 min, scalenia i przeglądy, 3 rundy poprawek) – plan 3–4,5 h pracy;
-  zegar dłuższy przez rundy przeglądu i scalenia równoległych gałęzi.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.

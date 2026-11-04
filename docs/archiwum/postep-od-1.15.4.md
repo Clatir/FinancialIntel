@@ -153,3 +153,28 @@ dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1
 - **Czas:** 01:53–07:00 do PR, ok. 5 h (N1-b 42 min, N1-a 63 min, N1-c 65 min; 4 przeglądy 6–20 min; 4 rundy poprawek
   20–34 min) – plan 2,5–4 h; przekroczenie z rund przeglądu.
 
+
+## N2 – Silnik pieniędzy (1.15.6, 04.11.2026) – wydane 04.11 13:06, PR #51
+- **Zakres:** AP-3 przeniesienie środków celu w chwili zapisu (T340, zastępuje „na koniec dnia” z T129), AP-12 dostawy
+  według puli przed dokowaniem (T341, T342, T363), AP-5 płatność sprzed startu (T345), AP-11 plan = silnik (T346, T347),
+  AP-9 „Wycofaj dokowanie”, usuwanie kategorii, N-PC-4 i N-PC-14 (T360–T362), AP-4 „reszta jako zaliczka” najpierw spłaca
+  i naprawa przy odczycie (T350–T354), D100 wpłata od dowolnej osoby spłaca pożyczkę (T355–T359, T368), AP-32 wyrocznia
+  jako regresja (T367), AF-5 – odsetki od pożyczki jako przychód (T70, poprawka po przeglądzie), drobne po N1 (N2-h).
+- **Wykonawcy:** 3 strumienie równolegle w osobnych drzewach (warstwy i cele; opłaty i plan, potem AP-9; rozliczenia –
+  AP-4, potem D100), wszystkie Opus · max poza AP-9 i drobnymi (xhigh); scalenie konfliktów importu (max), AP-32 (max).
+- **Przegląd:** xhigh na części 1 (14 uwag) i części 2 (14 + AF-5) – wszystkie poprawione z testem, który przed
+  poprawką padał (1 częściowo odrzucona: fragment Ładowni nieosiągalny dla kontenera pożyczki); high na poprawkach – bez
+  pewnych błędów, 6 drobnych poprawionych. Najpoważniejsze: „Zadokuj” przesuwał pieniądze po przeniesieniu środków celu,
+  spóźniona płatność sprzed startu zamykała następny cykl, „Spłać” w meldunku rozliczał historię od nowa (dług 50 → 150 zł),
+  część pożyczki z reguły stawała się sumą grupy.
+- **Wyrocznia:** `npm run test:wyrocznia` (lokalnie, migawki `C:\FI-audyt`, ok. 2 min) – 412 przypadków, 28 963 kwoty,
+  2 852 porównania ekranów zgodne z aplikacją; znane: AF-15 (termin asteroidy w odprawie – naprawia N3), zbiornik po końcu
+  życia opłaty (bez różnicy w pieniądzach).
+- **Testy:** typecheck (także `typecheck:audyt`), `npm test` ok. 1265, build, E2E komputera 89 (lokalnie pada tylko
+  `ictj.spec.ts`), telefonu 10/10.
+- **Otwarte:** audyt reguł nie oznacza reguły z zamkniętą pożyczką; telefon pokazuje „pożyczka” zamiast nazwy; eksport
+  bez kolumny części pożyczki; edytor operacji nadal „depozyt na przyszłość”; zbiorcza decyzja tej samej osoby kasuje linie
+  „w tym za”; operacje z ukrytym `containerId` bez migracji; wyrocznia – pary przychodu w toku bez części domownika
+  i pożyczki (lab ich nie ma).
+- **Czas:** 05:05–ok. 13:00 do PR (strumienie 55–100 min, scalenia i przeglądy, 3 rundy poprawek) – plan 3–4,5 h pracy;
+  zegar dłuższy przez rundy przeglądu i scalenia równoległych gałęzi.
