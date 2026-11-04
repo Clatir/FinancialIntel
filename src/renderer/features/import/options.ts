@@ -263,3 +263,29 @@ export function choiceFor(option: Option, prev: Pick<Choice, 'kind' | 'categoryI
   if (option.startsWith('transfer:')) return { ...base, kind: 'transfer', counterAccountId: option.slice('transfer:'.length) || null }
   return { ...base, kind: option as Choice['kind'] }
 }
+
+/**
+ * A decision's list changed (`DecisionFields`): as `choiceFor` – but another of the same member's money (AP-4, T351: what
+ * their money is – „cel wpłaty” – is chosen in the list since the switch beside it went) keeps its „w tym za” and loan
+ * parts as typed, as the switch did (T336: a change of it on a theme's row of brands – every brand's lines stay). Another
+ * kind or member – none of them, as `choiceFor`.
+ */
+export function listChoice(option: Option, prev: Choice, share?: Share | null): Choice {
+  const next = choiceFor(option, prev, share)
+  const sameMoney = prev.kind === 'income' && prev.household && next.kind === 'income' && next.household && memberOfChoice(prev) === memberOfChoice(next)
+  return sameMoney && prev.shares?.length ? { ...next, shares: prev.shares } : next
+}
+
+/**
+ * What a theme's row says of its brands' lines (`themeShows` 'brands', T336 – edited at each brand): of other members
+ * („w tym za”), of loans (D100 – „w tym spłata pożyczki”) or both.
+ */
+export function linesInBrands(shares: Choice['shares']): { text: string; title: string } {
+  const lines = (shares ?? []).filter((x) => x.amount > 0)
+  const loans = lines.some((x) => x.loanId)
+  const only = loans && !lines.some((x) => !x.loanId)
+  return {
+    text: only ? 'w tym spłata pożyczki – ustawiona w markach' : `${loans ? 'w tym za i spłata pożyczki' : 'w tym za'} – ustawione w markach`,
+    title: `Każda marka ma ${only ? 'swoją spłatę pożyczki' : loans ? 'swoje „w tym za” i spłatę pożyczki' : 'swoje „w tym za”'} – kwotę i rozkład zmienisz przy marce`
+  }
+}

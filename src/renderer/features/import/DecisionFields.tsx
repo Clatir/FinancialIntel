@@ -17,7 +17,7 @@ import { IconClose, IconPlus } from '../../components/icons'
 import { CategorySelect, useAccounts } from '../operations/pickers'
 import { useMembers } from '../household/actions'
 import { ShareEditor } from '../household/ShareEditor'
-import { choiceFor, optionOf, optionsFor, rowSharesChoice, skipsDebtText, type Option } from './options'
+import { linesInBrands, listChoice, optionOf, optionsFor, rowSharesChoice, skipsDebtText, type Option } from './options'
 import { chooseRow, decisionStart, lineSpreads, owedLeftOfDecision, owedLeftOfRow, rowStart, sharesView, useImport, type DecisionKeys, type LineSpread, type LoanStates, type SharesView } from './state'
 
 /** A shared purchase's split for the import (D83): equally or by percents – each row has its own amount. */
@@ -312,6 +312,16 @@ function SkipsDebt({ choice, testId }: { choice: Choice; testId: string }) {
   ) : null
 }
 
+/** A theme's row of brands with lines of an amount (`themeShows` 'brands', T336): their lines said – edited at each brand. */
+function BrandsShares({ choice, testId }: { choice: Choice; testId: string }) {
+  const { text, title } = linesInBrands(choice.shares)
+  return (
+    <span className="text-[11px] text-muted" title={title} data-testid={`${testId}-also-for-brands`}>
+      {text}
+    </span>
+  )
+}
+
 export function DecisionFields({
   choice,
   direction,
@@ -346,7 +356,7 @@ export function DecisionFields({
       <select
         className="input h-[24px] w-[230px] py-0"
         value={option}
-        onChange={(e) => onChange(choiceFor(e.currentTarget.value as Option, choice, first ? startShare(first.id) : null))}
+        onChange={(e) => onChange(listChoice(e.currentTarget.value as Option, choice, first ? startShare(first.id) : null))}
         aria-label="Co to jest"
         data-testid={`${testId}-kind`}
       >
@@ -390,9 +400,7 @@ export function DecisionFields({
         // Other members' parts of a member's money (D81), a loan's part of any income (D100) – while a loan is open.
         ((choice.household && members.length > 1) || loans.some((l) => l.direction === 'given' && !l.closedAt) || !!choice.shares?.some((x) => x.loanId)) &&
         (sharesInBrands ? (
-          <span className="text-[11px] text-muted" title="Każda marka ma swoje „w tym za” – kwotę i rozkład zmienisz przy marce" data-testid={`${testId}-also-for-brands`}>
-            w tym za – ustawione w markach
-          </span>
+          <BrandsShares choice={choice} testId={testId} />
         ) : sharesFrom ? (
           <DecisionShares from={sharesFrom} choice={choice} members={members} onChange={onChange} testId={testId} />
         ) : (

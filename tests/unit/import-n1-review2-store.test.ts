@@ -287,7 +287,8 @@ describe('przegląd N1 2, 5, N1 3, 1, 4 i N1 4, 1, 2, 5, 6, 8: temat z jednakow�
   it('przegląd N1 4, 2: inny rodzaj w temacie marek – każda marka bez linii, jak zmiana rodzaju w marce; temat bez linii – zmiana tam to decyzja tematu', async () => {
     const { big, small, theme, shown } = await twoBrands(TATA_TWICE)
     expect(view().total.get(BABCIA)).toBe(20000)
-    // „Od domownika: Tata – reszta jako przychód” on the theme's row: the kind changed – the lines go, in every brand alike.
+    // A change on the theme's row without the lines (`choiceFor` – as the list gives another kind or member; within Tata's
+    // money the list keeps them – `listChoice`, T351): the lines go, in every brand alike.
     state.chooseThemeRow(theme(), options.choiceFor(`household:${TATA}:income`, shown()))
     expect([choicesNow().groups[big.group]?.shares, choicesNow().groups[small.group]?.shares]).toEqual([undefined, undefined])
     expect(state.themeShows(theme(), choicesNow())).toBe('same')

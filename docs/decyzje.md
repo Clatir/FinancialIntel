@@ -2703,6 +2703,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   uwaga w imporcie (`skipsDebtText`). Reguła „spłata” (`'repay'` albo brak) bierze resztę z ustawienia osoby (D80 b; od
   1.15.3 dawała zawsze przychód) – reguła reszty nie zapamiętuje, więc jej edytor pokazuje tylko resztę z ustawienia osoby
   (`restNotOfRule`, `choiceOfRule`). Na „zaliczka czy przychód?” odpowiada tylko wybór „spłata” (`inflowVotes`).
+  Po scaleniu z T336 (N2): zmiana w liście między wyborami tej samej osoby (cel wpłaty i reszta – dawniej przełącznik
+  obok listy) zostawia linie „w tym za” i części pożyczki jak wpisane (`listChoice`) – także w temacie marek, w każdej
+  marce; inny rodzaj albo inna osoba – bez linii (`choiceFor`, jak dotąd).
 - **T352** Meldunek „Zaliczki przy długu” (AP-4, naprawa danych): silnik zbiera `HouseholdLedger.skipped` – części
   `inflowKind: 'advance'`, które przy długu osoby nic nie spłaciły ani nie zarezerwowały (od ostatniego startu sald);
   meldunek na osobę, dopóki ma oddać (`skippedDebtsOf`). „Spłać” to jawna akcja z „Cofnij”: części tej osoby →
@@ -2750,7 +2753,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   pożyczka ma jeszcze do spłaty, najwyżej to, co zostało we wpłatach. Decyzja zbiorcza nie zmienia decyzji z częścią
   pożyczki (AP-6, `bulkKeeps` – tylko spłata całością tej samej pożyczki), „+ domownik” przy niej się nie pojawia, słowo
   kluczowe z niej się nie uczy. Spłata całością – jak dotąd („Zwrot pożyczki – X (Radar)”, każda otwarta pożyczka przy
-  każdym wpływie).
+  każdym wpływie). W temacie marek z liniami ('brands', T336) linie pożyczki jak linie domowników: zostają w markach
+  (wiersz tematu: „w tym spłata pożyczki – ustawiona w markach”, `linesInBrands`), uwagi przy każdej marce z jej klucza
+  (`lineSpreads` – dług pożyczki pod `loanKey`), nic nie sumowane.
 - **T358** Reguła importu ze spłatą pożyczki (D100 (2); dla pożyczki z Radaru zmienia N14 / T98, doprecyzowuje T325):
   reguła może nazwać pożyczkę udzieloną – `loanId` przy regule rodzaju „Pożyczka” (cała wpłata) albo `loanId` +
   `loanAmount` przy regule wpływu (ta część każdej wpłaty, reszta jak mówi reguła). Działa tylko, gdy pożyczka jest
@@ -2764,7 +2769,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`remembersByDefault`, także decyzja zbiorcza). Edytor reguły w Ustawieniach oferuje dla wpływów „Zwrot pożyczki – X”
   otwartych pożyczek i jedną część pożyczki (części domowników reguła nie trzyma – nie pokazane). Audyt reguł bez zmian
   (reguły pożyczki poza „bez trafień” i „Zastosuj do historii”). Addytywnie: starsza wersja czyta regułę pożyczki jako
-  propozycję sprzed 1.5.1, części nie widzi.
+  propozycję sprzed 1.5.1, części nie widzi. „zapamiętaj” liczy jedno księgowanie decyzji grup (`groupsDecided`, T336):
+  decyzja grupy, zbiorcza (każda grupa według tego, co pokazywała) i zmiana w temacie marek.
 - **T359** Szybki wpis i edytor Operacji (D100 (2)): w szybkim wpisie przy wpływie „Spłata pożyczki” – otwarta pożyczka
   udzielona z listy (`QuickData.loans` z tym, co zostało) i kwota (pusta = to, co pożyczka ma do spłaty, najwyżej reszta
   wpłaty po częściach domowników); zapis – linia pożyczki wpływu, także na całą kwotę (wpłata zostaje wpływem z nadawcą –

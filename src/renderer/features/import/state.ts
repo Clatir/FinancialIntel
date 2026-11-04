@@ -628,9 +628,10 @@ export function chooseThemeRow(t: ImportTheme, next: Choice): void {
 }
 
 /**
- * A change of the brands' common decision with „w tym za” (`chooseThemeRow`): every brand takes it as the user's own (as
- * `chooseGroup`, one state for all – W32), its lines as typed (of 0 zł too) unless the change itself changed the lines
- * (another kind – `choiceFor` – has none: as that change in each brand).
+ * A change of the brands' common decision with „w tym za” or a loan's part (`chooseThemeRow`): every brand takes it as the
+ * user's own (as `chooseGroup`, one state for all – W32), its lines as typed (of 0 zł too) unless the change itself
+ * changed the lines (another kind or member – `choiceFor` – has none: as that change in each brand; the same member's
+ * money keeps them – `listChoice`, T351).
  */
 function chooseBrandsAlike(t: ImportTheme, next: Choice): void {
   useImport.setState((s) => {
