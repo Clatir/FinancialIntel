@@ -334,6 +334,8 @@ export interface ClassifyContext {
   accountNumbers?: Readonly<Record<string, string>>
   /** Operations a newer version wrote – read only here (B95): the plan never joins a row with them nor settles them. */
   locked?: ReadonlySet<string>
+  /** Docked operations (their docking points at them, AF-9): a copy of one is never removed by the import. */
+  docked?: ReadonlySet<string>
 }
 
 /**

@@ -2331,3 +2331,40 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `goalId` i `containerId` w pozycjach podzielonego paragonu (`splitSchema`), obsługa transferów celów i elastycznego podziału
   łupów (`fleet.ts`), korekta dokowania bez naruszania powiązanych transakcji ręcznych (`dock.ts`), wygaszanie ciszy nocnej
   dla wydatków planowych lub kontenerowych (`operations.ts`) oraz wznawianie wachty wieczornej (`reopenEvening`). Pełna zgodność typów.
+- **T320** Usunięta operacja a drugi format pliku (AP-2, AF-1; doprecyzowuje T39, T134, T234): usunięte operacje z banku
+  zna import z opisem – `shared/import/deleted.ts` `deletedBankRows` (z wersji usuniętych `.history/`): klucze wierszy
+  (`bank.key` **i** `altKeys` – wiersz drugiego formatu zapamiętany przy B5) oraz wiersze dopasowywane bez klucza
+  (`DeletedRow`): nierozliczone (B96, jak dotąd) i zaksięgowane z formatem pliku (`bank.source`, starsze – głos importu
+  po `importedAt`, liczony z operacji w budżecie i usuniętych). Zaksięgowana usunięta zatrzymuje tylko wiersz **drugiego**
+  formatu miarą B5 (ta sama kwota, ±3 dni, podobna nazwa, dzień objęty plikiem) – w swoim formacie wiersz ma jej klucz.
+  Pary od najbliższej, każda usunięta i każdy wiersz raz; wiersz już w budżecie w formacie pliku (po kluczu) zabiera swoją
+  usuniętą – kopia usunięta przy podwójnym imporcie sprzed 1.4.2 nie ukrywa innego zakupu tego sklepu. Usunięte przez
+  import (paczka `imports/…removed`: zniknięte nierozliczone, kopie z innego konta – T321) to nie usunięcie użytkownika:
+  tylko ich klucze. Wiersz ma status `deleted` z `other` („usunięta z historii rachunku” w podglądzie); „importuj mimo
+  to” – jak przy T39.
+- **T321** Ten sam rachunek na dwóch kontach budżetu (AP-2, AF-9): przejście B5 obejmuje też konta, na które trafiał numer
+  rachunku pliku (oba numery znane i równe – inaczej dwa rachunki nigdy się nie mieszają, T166): wiersz drugiego formatu
+  na innym koncie = `elsewhere` z `other`, domyślnie **nie** przenoszony (miara, nie klucz wiersza); przeniesiony – klucz
+  swojego formatu na tym koncie, klucz wiersza pliku w `altKeys`. Import naprawczy: wiersz znaleziony na innym koncie po
+  kluczu (B35), którego operacja jest tu w drugim formacie, to `known` z kopią (`RowCopy`) – „usuń duplikat” zamiast
+  „przenieś” (`ImportChoices.removeCopies`): zaznaczony, gdy kopia przyszła tam z importu i nie ma innej decyzji
+  (`conflicting`); nigdy, gdy zadokowana (`ClassifyContext.docked`), spłacana wpłatą domownika (`covers`) albo tylko do
+  odczytu. Usunięta kopia oddaje operacji tutaj kategorię i notatki (`takeUserData`), jest w paczce importu („Cofnij
+  import” ją przywraca), licznik `copies`. Wspólne „jedna operacja i jej kopie” (`userContent`, `conflicting`,
+  `mergeDuplicate`, `takeUserData`) przeniesione z `duplicates.ts` do `shared/import/copies.ts` (bez cyklu importów).
+- **T322** Konto importu po numerze rachunku (AP-2, IM sp. 2): plik otwiera się na koncie, na które trafiał jego numer
+  (`accountForNumber`: otwarte konta z tym numerem – z kilku to z importem mBanku, potem wybrane wcześniej); numer nieznany
+  albo plik bez numeru – konto wybrane wcześniej, inaczej pierwsze z importem mBanku. Ostrzeżenie o innym rachunku (F4)
+  bez zmian.
+- **T323** Klucze bez zmiany widocznej (AP-2, AF-28, AF-63): rozliczenie nierozliczonej zachowuje klucz jej wiersza
+  w `altKeys` (starsza lista po rozliczeniu zna wiersz – nic drugi raz; operacje rozliczone przed 1.15.5 klucza nie mają –
+  siatką zostaje panel duplikatów). Import, który tylko zapamiętuje klucze wierszy (`keysOnly` – różnica wyłącznie
+  w `altKeys`), zapisuje je, ale bez kopii przed importem i bez paczki do cofnięcia (jak N13); panel wyniku nie pokazuje
+  pustej ścieżki kopii.
+- **T324** Meldunek „Wróciły po usunięciu” (AP-2, AF-1 – dane sprzed 1.15.5, bez migracji): operacja z banku zaksięgowana
+  w innym formacie niż usunięta, to samo konto i kwota, ±3 dni, podobna nazwa, zaimportowana po usunięciu importem, którego
+  dni (pierwsza i ostatnia operacja) obejmują dzień usuniętej (`returnedOf`; pary od najbliższej). Jeden meldunek na
+  operację (rodzaj `returned`, po „Możliwych duplikatach”): „Usuń” – jak w Operacjach (z dokowaniami, „Cofnij”), „Pokaż”,
+  „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
+  mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu, od razu
+  na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je w „Na komputerze”.

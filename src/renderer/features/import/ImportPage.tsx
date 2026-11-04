@@ -1,7 +1,7 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useShallow } from 'zustand/shallow'
 import type { DecisionSource } from '@shared/import/classify'
-import { choiceOf, importThemes, joins, learnable, movesHere, realOf, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { choiceOf, importThemes, joins, learnable, movesHere, realOf, removesCopy, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
 import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
@@ -55,6 +55,7 @@ import {
   setImportAccount,
   setImportQuery,
   setMoveHere,
+  setRemoveCopy,
   setNoMerge,
   setRemember,
   setRememberTheme,
@@ -203,7 +204,10 @@ function Summary() {
   const known = n('known') + elsewhere.length - moved
   const settledFlags = plan.rows.filter((p) => p.status === 'known' && p.settled).length
   const otherFormat = plan.rows.filter((p) => p.status === 'known' && p.other).length
-  const nothing = created + merged + sides + n('settle') + removed + settledFlags + moved === 0
+  // Copies of the rows on another account (AF-9): removed as duplicates – the import changes them.
+  const withCopy = plan.rows.filter((p): p is Extract<RowPlan, { status: 'known' }> => p.status === 'known' && !!p.copy)
+  const copies = withCopy.filter((p) => removesCopy(p, choices)).length
+  const nothing = created + merged + sides + n('settle') + removed + settledFlags + moved + copies === 0
   return (
     <Panel title="Podgląd">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-summary">
@@ -249,6 +253,16 @@ function Summary() {
               </span>
             </>
           )}
+          {withCopy.length > 0 && (
+            <>
+              <span className="text-muted" title="Te operacje są już na tym koncie z drugiego formatu pliku, a ich kopie z wcześniejszego importu – na innym koncie: zaznaczone kopie usuwam (kategoria i notatki przechodzą na operację tutaj).">
+                kopie z innego konta do usunięcia
+              </span>
+              <span className="num text-right" data-testid="import-count-copies">
+                {copies}
+              </span>
+            </>
+          )}
           {otherFormat > 0 && (
             <>
               <span className="pl-3 text-dim" title="Ta sama operacja z drugiego formatu pliku (lista operacji ↔ historia rachunku): opis jest tam inny, więc FI łączy ją po kwocie, dacie (±3 dni) i nazwie.">
@@ -290,7 +304,7 @@ function Summary() {
           title={nothing ? 'W pliku nie ma nic nowego – zapis zapamięta czas importu i okres pliku (odprawa, Portfel XTB, misja „Łączność z bazą”)' : undefined}
           data-testid="import-run"
         >
-          {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Zapisz import (bez zmian)' : `Importuj (${created + merged + n('settle') + settledFlags + removed + moved})`}
+          {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Zapisz import (bez zmian)' : `Importuj (${created + merged + n('settle') + settledFlags + removed + moved + copies})`}
         </button>
         <p className="text-[11px] text-dim">
           Rozpoznane (sieci, słowa kluczowe, reguły) wejdą z pokazaną decyzją; tematy bez decyzji – jako wydatki / wpływy bez kategorii, skategoryzujesz je później w
@@ -303,6 +317,13 @@ function Summary() {
 
 /** Rows of a long list shown at once (W17): the rest by „pokaż kolejne”. */
 const PAGE = 100
+
+/** Why a copy on another account stays (AF-9, `RowCopy.blocked`). */
+const COPY_BLOCKED = {
+  docked: 'zadokowana – zostaje (usuń ją sam po przeniesieniu dokowania)',
+  covered: 'spłaca ją wpłata domownika – zostaje',
+  locked: 'zapisana przez nowszą wersję aplikacji – zostaje'
+} as const
 
 function MatchesPanel() {
   const { plan, choices, file } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices, file: s.file })))
@@ -320,13 +341,16 @@ function MatchesPanel() {
   const settles = plan.rows.filter((p): p is Extract<RowPlan, { status: 'settle' }> => p.status === 'settle')
   const deleted = plan.rows.filter((p): p is Extract<RowPlan, { status: 'deleted' }> => p.status === 'deleted')
   const elsewhere = plan.rows.filter((p): p is Extract<RowPlan, { status: 'elsewhere' }> => p.status === 'elsewhere')
+  const withCopy = plan.rows.filter((p): p is Extract<RowPlan, { status: 'known' }> => p.status === 'known' && !!p.copy)
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '?'
+  // The file's other format (B5): where a row was found in it (AF-1, AF-9).
+  const otherFormat = plan.format === 'historia' ? 'z listy operacji' : 'z historii rachunku'
   // A matched hand-typed operation left apart (B36): what its row comes in as – its group's, theme's or the proposal.
   const decidedAs = (p: Extract<RowPlan, { status: 'merge' }>) => {
     const c = choices.rows[p.key] ?? choices.groups[p.planned.group] ?? choiceOf(p.planned.decision)
     return choiceText(c, p.row.amount < 0 ? 'out' : 'in', (id) => cats.label(id), members, loans)
   }
-  if (!merges.length && !sides.length && !settles.length && !plan.vanished.length && !deleted.length && !elsewhere.length) return null
+  if (!merges.length && !sides.length && !settles.length && !plan.vanished.length && !deleted.length && !elsewhere.length && !withCopy.length) return null
   return (
     <Panel title="Dopasowania">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-matches">
@@ -411,7 +435,38 @@ function MatchesPanel() {
               <label key={p.key} className="flex items-center gap-2" data-testid="import-elsewhere">
                 <input type="checkbox" checked={movesHere(p, choices)} onChange={(e) => setMoveHere(p.key, e.currentTarget.checked)} data-testid="import-elsewhere-move" />
                 <span className="min-w-0 flex-1 truncate">
-                  {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· teraz na: {accountName(p.tx.accountId)}</span>
+                  {p.row.counterparty || p.row.description} {fullDay(p.row.date)}{' '}
+                  <span className="text-dim">
+                    · teraz na: {accountName(p.tx.accountId)}
+                    {p.other ? ` (${otherFormat})` : ''}
+                  </span>
+                </span>
+                <span className="num">{signedPln(p.row.amount)}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        {withCopy.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="label">Kopie na innym koncie ({withCopy.length})</span>
+            <p className="text-[11px] text-dim">
+              Te operacje są już na tym koncie ({otherFormat}), a ich kopie z wcześniejszego importu tego pliku – na innym koncie, więc liczą się dwa razy.
+              Zaznaczone kopie usunę (ich kategoria i notatki przejdą na operację tutaj; „Cofnij import” je przywróci). Kopia z inną decyzją nie jest zaznaczona –
+              sprawdź ją.
+            </p>
+            {withCopy.map((p) => (
+              <label key={p.key} className="flex items-center gap-2" data-testid="import-copy" data-blocked={p.copy!.blocked ?? undefined}>
+                <input
+                  type="checkbox"
+                  checked={removesCopy(p, choices)}
+                  disabled={!!p.copy!.blocked}
+                  onChange={(e) => setRemoveCopy(p.key, e.currentTarget.checked)}
+                  data-testid="import-copy-remove"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· kopia na: {accountName(p.copy!.tx.accountId)}</span>
+                  {p.copy!.conflict && <span className="ml-1 text-accent">· inna decyzja w kopii</span>}
+                  {p.copy!.blocked && <span className="ml-1 text-accent">· {COPY_BLOCKED[p.copy!.blocked]}</span>}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -442,6 +497,7 @@ function MatchesPanel() {
                 <input type="checkbox" checked={!!choices.restoreDeleted[p.key]} onChange={(e) => setRestoreDeleted(p.key, e.currentTarget.checked)} />
                 <span className="min-w-0 flex-1 truncate">
                   {p.row.counterparty || p.row.description} {fullDay(p.row.date)}
+                  {p.other && <span className="text-dim"> · usunięta {otherFormat}</span>}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -1165,11 +1221,15 @@ function DonePanel() {
           {done.counts.skipped > 0 ? ` · pominięte (usunięte wcześniej): ${done.counts.skipped}` : ''}
           {done.counts.excluded > 0 ? ` · nie importowane (Twój wybór): ${done.counts.excluded}` : ''}
           {done.counts.moved > 0 ? ` · przeniesione z innego konta: ${done.counts.moved}` : ''}
+          {done.counts.copies > 0 ? ` · usunięte kopie z innego konta: ${done.counts.copies}` : ''}
           {done.rules > 0 ? ` · nowe reguły: ${done.rules}` : ''}
         </span>
-        <span className="num truncate text-[11px] text-dim" title={done.backup}>
-          kopia przed importem: {done.backup}
-        </span>
+        {/* Nothing changed (N13, AF-63): no backup made. */}
+        {done.backup && (
+          <span className="num truncate text-[11px] text-dim" title={done.backup}>
+            kopia przed importem: {done.backup}
+          </span>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn h-[24px]" onClick={() => navigate({ page: 'operations' })} data-testid="import-to-operations">
             Zobacz w Operacjach

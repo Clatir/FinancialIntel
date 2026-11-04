@@ -1,13 +1,13 @@
 /**
  * „Meldunki do rozpatrzenia” (F6, D86): one inbox of what waits for the captain's decision – the deliveries from XTB to
  * dock, the data folder's conflicts and files with errors, the expenses without a category, the possible duplicates, the
- * refunds still owed, the balances unconfirmed for over 30 days, the loot undecided. Pure; no notifications of its own –
+ * bank's operations come back after their deletion (AF-1), the refunds still owed, the balances unconfirmed for over 30 days, the loot undecided. Pure; no notifications of its own –
  * the side menu counts the reports, the inbox lists them.
  */
 import { formatPln, plural } from '../format'
 import { isUncategorized, uncategorizedAmount } from '../operationsView'
 import type { Container, Transaction } from '../schema/records'
-import { daysBetween } from './dates'
+import { daysBetween, warsawNow } from './dates'
 import { deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
 import { isOpeningItem, type MemberBalance } from './household'
@@ -16,10 +16,10 @@ import { deadText, priceText, type DeadContainer, type PriceChange } from './car
 import { anomalyText, type Anomaly } from './anomalies'
 import { lateReturnText, type AwaitedReturn } from './returns'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'refunds' | 'returns' | 'cargo' | 'balances'
+export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'refunds' | 'returns' | 'cargo' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
@@ -27,6 +27,7 @@ export const INBOX_TITLE: Record<InboxKind, string> = {
   folder: 'Folder danych',
   uncategorized: 'Bez kategorii',
   duplicates: 'Możliwe duplikaty',
+  returned: 'Wróciły po usunięciu',
   transfers: 'Przelewy między kontami',
   corrections: 'Podwójne korekty',
   anomalies: 'Nieznane sygnały',
@@ -47,7 +48,8 @@ export interface InboxItem {
   action: string
   /**
    * The delivery's key ('dock'), the member's id ('refunds'), the account's id ('balances'), the operation's
-   * ('corrections', the member's money waiting to be assigned – 'repayments'); a transfer's report – its key (`transferKey`, none for all the pairs together).
+   * ('corrections', the member's money waiting to be assigned – 'repayments', one come back after its deletion –
+   * 'returned'); a transfer's report – its key (`transferKey`, none for all the pairs together).
    */
   ref?: string
 }
@@ -75,6 +77,22 @@ export function uncategorizedOf(transactions: readonly Transaction[], from: stri
   return { count, amount, from }
 }
 
+/**
+ * A bank's operation that came back after the user deleted it (AF-1, `shared/import/deleted.ts` `returnedOf`): imported
+ * again from the other format of the file before 1.15.5 – it counts in the balance again.
+ */
+export interface ReturnedOperation {
+  id: string
+  accountId: string
+  date: string
+  amount: number
+  name: string
+  /** When the user deleted it (ISO). */
+  deletedAt: string
+  /** The format of the file it came back with. */
+  cameWith: 'lista' | 'historia'
+}
+
 export interface InboxInput {
   today: string
   /** The budget started: before it only the data folder reports. */
@@ -99,6 +117,8 @@ export interface InboxInput {
   anomalies?: readonly Anomaly[]
   /** The purchases awaiting a return (F34): a late one is a report. */
   returns?: readonly AwaitedReturn[]
+  /** The bank's operations come back after their deletion (AF-1): each one a report – „Usuń” or „zostaw”. */
+  returned?: readonly ReturnedOperation[]
   /** The cargo hold's watch (F9): containers at a new price, containers gone quiet. */
   cargo?: { prices: readonly PriceChange[]; dead: readonly DeadContainer[]; containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths' | 'schedule'>> }
 }
@@ -135,6 +155,15 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     })
   if (o.duplicates)
     out.push({ kind: 'duplicates', key: 'duplicates', text: `${o.duplicates} ${plural(o.duplicates, 'możliwy duplikat', 'możliwe duplikaty', 'możliwych duplikatów')} – ta sama operacja dwa razy.`, action: 'Scal na ekranie Import' })
+  // An operation the user deleted back with the other format of the file (AF-1): it counts in the balance again.
+  for (const r of o.returned ?? [])
+    out.push({
+      kind: 'returned',
+      key: `returned:${r.id}`,
+      ref: r.id,
+      text: `${o.accountName?.(r.accountId) ?? 'Konto'}: „${r.name || 'bez nazwy'}” z ${dmy(r.date)}, ${zl(Math.abs(r.amount))} – usunięta przez Ciebie ${dmy(warsawNow(r.deletedAt).date)}, wróciła z importem ${r.cameWith === 'lista' ? 'listy operacji' : 'historii rachunku'} i znowu liczy się w saldzie.`,
+      action: 'Usuń'
+    })
   // Transfers of before 1.7.0 (F10): the pairs together – joining them changes no balance –, each of the others apart.
   const transfers = o.transfers ?? []
   const pairs = transfers.filter((x) => x.issue.kind === 'pair').length

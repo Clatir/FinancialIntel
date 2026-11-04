@@ -317,6 +317,24 @@ export const accountNumberText = (n: string): string => `…${n.slice(-4)}`
 export const otherBankAccount = (numbers: Readonly<Record<string, string>> | undefined, a: string, b: string): boolean =>
   a !== b && !!numbers?.[a] && !!numbers[b] && numbers[a] !== numbers[b]
 
+/**
+ * The account of the budget a file goes to by its bank account's number (AP-2, IM.38 / IM.39): the open account its
+ * files went to – of several (a file imported onto a wrong one too) the one with the mBank import, then the one chosen
+ * before; null = the number is no account's (or the file has none) – the account chosen before stays.
+ */
+export function accountForNumber(
+  accounts: ReadonlyArray<{ id: string; archived: boolean; importFormat: string | null }>,
+  numbers: Readonly<Record<string, string>>,
+  number: string | null,
+  chosen: string
+): string | null {
+  if (!number) return null
+  const known = accounts.filter((a) => !a.archived && numbers[a.id] === number)
+  const mbank = known.filter((a) => a.importFormat === 'mbank')
+  const pick = (list: typeof known) => list.find((a) => a.id === chosen) ?? list[0]
+  return (pick(mbank) ?? pick(known))?.id ?? null
+}
+
 /** The key a row has on an account (`rowKeys`): its identity (`rowIdentity`) and its occurrence among identical rows. */
 export const keyOnAccount = (accountId: string, identity: string, n: number): string => `mbank:${fingerprint(`${accountId}|${identity}`)}:${n}`
 

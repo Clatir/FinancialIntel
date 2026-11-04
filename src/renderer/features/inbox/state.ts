@@ -16,6 +16,7 @@ import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
 import { openDocking, useDeliveries } from '../dock/state'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
+import { removeReturned, useReturned } from '../import/returned'
 import { openOperation, openRefundables, showFilter } from '../operations/state'
 import { addOtherSide, joinTransfers, transferIssuesNow, transferIssuesOf, transferKey } from '../operations/transfers'
 
@@ -59,6 +60,12 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   // The sensors (F31, F34): unknown signals, returns late.
   const anomalies = useAnomalies()
   const returns = useReturns()
+  // The bank's operations come back after their deletion (AF-1): the deleted ones read from the history.
+  const back = useReturned()
+  const returned = useMemo(
+    () => back.map(({ tx, deleted }) => ({ id: tx.id, accountId: tx.accountId, date: tx.date, amount: tx.amount, name: tx.counterparty || tx.bank?.counterparty || tx.title, deletedAt: deleted.deletedAt, cameWith: deleted.format === 'lista' ? ('historia' as const) : ('lista' as const) })),
+    [back]
+  )
   // The cargo hold's watch (F9): a new price, a container gone quiet.
   const watch = useCargoWatch()
   const containers = useData((s) => s.records.containers)
@@ -82,7 +89,8 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     money,
     cargo,
     anomalies,
-    returns
+    returns,
+    returned
   })
 }
 
@@ -127,6 +135,8 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
   } else if (item.kind === 'cargo' && item.ref) focusRecord('container', item.ref, { page: 'cargo' })
   else if (item.kind === 'anomalies' && item.ref) openSensor(item.ref)
   else if (item.kind === 'returns' && item.ref) openSensor(`return:${item.ref}`)
+  // An operation come back after its deletion (AF-1): deleted again, „Cofnij” in the toast.
+  else if (item.kind === 'returned' && item.ref) void removeReturned(item.ref)
   else if ((item.kind === 'corrections' || item.kind === 'repayments') && item.ref) {
     const t = useData.getState().records.transactions[item.ref]?.record
     if (t) openOperation(t)

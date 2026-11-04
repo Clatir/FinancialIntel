@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
 import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
-import { buildImport, importGroups, joins, planImport, sameChoice, type Choice, type DeletedPending, type ImportChoices, type ImportCounts, type ImportGroup, type ImportPlan, type ImportResult, type ImportTheme } from '@shared/import/reconcile'
+import { buildImport, importGroups, joins, keysOnly, planImport, sameChoice, type Choice, type DeletedRow, type ImportChoices, type ImportCounts, type ImportGroup, type ImportPlan, type ImportResult, type ImportTheme } from '@shared/import/reconcile'
+import { returnedKey } from '@shared/import/deleted'
 import { warsawNow } from '@shared/calc/dates'
 import { linkRepayments } from '@shared/calc/repayments'
 import { duplicateKey } from '@shared/import/duplicates'
@@ -10,7 +11,7 @@ import { decodeText, IMPORT_MAX_BYTES } from '@shared/import/text'
 import { shareComplete } from '@shared/calc/share'
 import { deepEqual } from '@shared/merge'
 import { batchesToDrop, importBatch, type BatchFacts } from '@shared/import/batch'
-import { accountNumberOf } from '@shared/import/mbank'
+import { accountForNumber, accountNumberOf } from '@shared/import/mbank'
 import { statementCheck, statementOf, type Statement } from '@shared/import/statement'
 import { countLabel } from '../../lib/format'
 import { openingOf } from '@shared/calc/balances'
@@ -21,6 +22,7 @@ import { toast } from '../../store/ui'
 import { fleetInputNow } from '../../store/fleet'
 import { choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
+import { readDeletedBank } from './returned'
 
 export interface ImportDone {
   counts: ImportCounts
@@ -45,10 +47,10 @@ interface ImportSession {
   errorName: string | null
   /** The budget's account of the file; '' = not chosen yet (the account with the mBank import). */
   accountId: string
-  /** `bank.key` of the operations the user deleted (from the history): their rows stay out. */
+  /** The keys of the rows of the operations the user deleted (from the history – `bank.key`, `altKeys`): their rows stay out. */
   deletedKeys: ReadonlySet<string>
-  /** The pending ones of them (B96): their rows settled with another amount or day stay out too. */
-  deletedPending: readonly DeletedPending[]
+  /** The ones of them matched without a key (B96 pending, AF-1 booked of the other format): their rows stay out too. */
+  deletedRows: readonly DeletedRow[]
   plan: ImportPlan | null
   choices: ImportChoices
   /** The search of the categorization (1.2.1). */
@@ -74,7 +76,7 @@ interface ImportSession {
 
 const noSelection = (): ImportSession['selected'] => ({ groups: {}, rows: {} })
 
-const emptyChoices = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {}, moveHere: {}, implicit: {} })
+const emptyChoices = (): ImportChoices => ({ themes: {}, rememberThemes: {}, groups: {}, rows: {}, remember: {}, noMerge: {}, removeVanished: {}, restoreDeleted: {}, skip: {}, moveHere: {}, removeCopies: {}, implicit: {} })
 
 export const useImport = create<ImportSession>(() => ({
   fileName: null,
@@ -84,7 +86,7 @@ export const useImport = create<ImportSession>(() => ({
   errorName: null,
   accountId: '',
   deletedKeys: new Set(),
-  deletedPending: [],
+  deletedRows: [],
   plan: null,
   choices: emptyChoices(),
   query: '',
@@ -141,11 +143,20 @@ function lockedOf(map: Record<string, { record: { id: string }; readOnly?: boole
   return set
 }
 
+/** Docked operations (AF-9: a copy of one is never removed by the import). Once per map of dockings. */
+const dockedMemo = new WeakMap<object, ReadonlySet<string>>()
+const NO_DOCKINGS: Record<string, { record: { transactionId: string } }> = {}
+function dockedOf(map: Record<string, { record: { transactionId: string } }>): ReadonlySet<string> {
+  let set = dockedMemo.get(map)
+  if (!set) dockedMemo.set(map, (set = new Set(Object.values(map).map((e) => e.record.transactionId))))
+  return set
+}
+
 /** The account holder's names: the settings' and the file's `#Klient`. */
 export const ownNamesWith = (names: readonly string[], file: MbankFile | null): string[] => [...names, ...(file?.client ? [file.client] : [])]
 
 /** The plan of `file` against the operations in memory now (rules, merged names and the holder's names from the settings). */
-function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<string>, deletedPending: readonly DeletedPending[] = useImport.getState().deletedPending): ImportPlan | null {
+function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<string>, deletedRows: readonly DeletedRow[] = useImport.getState().deletedRows): ImportPlan | null {
   const s = useData.getState()
   if (!s.fi) return null
   const { rules, aliases } = s.fi.settings.import
@@ -165,10 +176,11 @@ function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<st
       members,
       loans: listOf(s.records.loans ?? {}),
       accountNumbers: s.fi.settings.import.accountNumbers,
-      locked: lockedOf(s.records.transactions)
+      locked: lockedOf(s.records.transactions),
+      docked: dockedOf(s.records.dockings ?? NO_DOCKINGS)
     },
     deletedKeys,
-    deletedPending
+    deletedRows
   )
 }
 
@@ -179,64 +191,49 @@ function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<st
 export function planSignature(plan: ImportPlan | null): string {
   if (!plan) return ''
   const rows = plan.rows.map((p) => {
-    const what = p.status === 'new' || p.status === 'deleted' ? p.group : p.status === 'merge' ? `${p.tx.id}/${p.planned.group}` : p.tx.id
+    // A copy on another account (AF-9): which one, and whether it may be removed.
+    const copy = p.status === 'known' && p.copy ? `/${p.copy.tx.id}${p.copy.blocked ? `:${p.copy.blocked}` : ''}` : ''
+    const what = p.status === 'new' || p.status === 'deleted' ? p.group : p.status === 'merge' ? `${p.tx.id}/${p.planned.group}` : `${p.tx.id}${copy}`
     return `${p.status}:${p.key}:${what}`
   })
   return [...rows, ...plan.vanished.map((t) => `-${t.id}`)].join('|')
 }
 
 /**
- * Keys of the bank's rows of operations the user deleted (their last versions in the history) – not of those taken back
- * with their import (F4, T39: the next import brings their rows); the pending ones apart (B96: the bank settles them with
- * another amount or day – another key).
+ * The operations of the bank the user deleted (their last versions in the history – `shared/import/deleted.ts`): not
+ * those taken back with their import (F4, T39: the next import brings their rows); the pending ones (B96) and the booked
+ * ones with their format (AF-1) matched without a key too.
  */
-async function deletedBankRows(): Promise<{ deletedKeys: Set<string>; deletedPending: DeletedPending[] }> {
-  try {
-    const deleted = (await api.historyDeleted('transactions')).filter((d) => d.reason !== 'undo')
-    // Pending operations an import removed as gone from the bank (its batch keeps them – F4): no deletion of the user's,
-    // their row settled later (after the file's period) comes in.
-    const vanished = new Set(listOf(useData.getState().records.imports).flatMap((b) => b.removed.map((t) => t.id)))
-    const deletedKeys = new Set<string>()
-    const deletedPending: DeletedPending[] = []
-    type Row = { key?: unknown; pending?: unknown; counterparty?: unknown; description?: unknown }
-    type Deleted = { accountId?: unknown; date?: unknown; amount?: unknown; bank?: Row | null; counterAccountId?: unknown; counterDate?: unknown; counterBank?: Row | null }
-    for (const d of deleted) {
-      const r = d.record as Deleted | null
-      if (!r) continue
-      // A transfer in one operation (F10): the other account's row is the user's deletion too – on that account's day.
-      const sides: Array<[Row | null | undefined, unknown, unknown, unknown]> = [[r.bank, r.accountId, r.date, r.amount]]
-      if (r.counterBank) sides.push([r.counterBank, r.counterAccountId, r.counterDate ?? r.date, typeof r.amount === 'number' ? -r.amount : null])
-      for (const [bank, accountId, date, amount] of sides) {
-        const key = bank?.key
-        if (typeof key !== 'string') continue
-        deletedKeys.add(key)
-        if (bank!.pending === true && !vanished.has(d.id) && typeof accountId === 'string' && typeof date === 'string' && typeof amount === 'number')
-          deletedPending.push({ accountId, date, amount, name: String(bank!.counterparty || bank!.description || ''), deletedAt: d.savedAt })
-      }
-    }
-    return { deletedKeys, deletedPending }
-  } catch {
-    return { deletedKeys: new Set(), deletedPending: [] }
-  }
+async function deletedBankRows(): Promise<{ deletedKeys: ReadonlySet<string>; deletedRows: readonly DeletedRow[] }> {
+  const { keys, rows } = await readDeletedBank()
+  return { deletedKeys: keys, deletedRows: rows }
 }
 
-/** The account a file goes to: the one with the mBank import (the first), else mBank. */
-function importAccount(): string {
-  const accounts = useData.getState().fi?.settings.accounts ?? []
-  return accounts.find((a) => !a.archived && a.importFormat === 'mbank')?.id ?? MBANK_ACCOUNT_ID
+/**
+ * The account a file goes to (AP-2): the one its bank account's number was imported to (`accountForNumber`), else the
+ * one chosen before, else the one with the mBank import (the first), else mBank.
+ */
+function importAccount(file: MbankFile, chosen: string): string {
+  const s = useData.getState().fi?.settings
+  const accounts = s?.accounts ?? []
+  return (
+    accountForNumber(accounts, s?.import.accountNumbers ?? {}, accountNumberOf(file.account), chosen) ||
+    chosen ||
+    (accounts.find((a) => !a.archived && a.importFormat === 'mbank')?.id ?? MBANK_ACCOUNT_ID)
+  )
 }
 
 /** What of a session the user decided (N12): never thrown away without „Cofnij”. */
 function hasDecisions(s: ImportSession): boolean {
   const c = s.choices
-  return [c.themes, c.groups, c.rows, c.skip, c.noMerge, c.removeVanished, c.restoreDeleted, c.moveHere].some((m) => Object.keys(m).length > 0)
+  return [c.themes, c.groups, c.rows, c.skip, c.noMerge, c.removeVanished, c.restoreDeleted, c.moveHere, c.removeCopies ?? {}].some((m) => Object.keys(m).length > 0)
 }
 
 /** The open file and its decisions, as they are (N12: „Cofnij” brings them back). */
-type Snapshot = Pick<ImportSession, 'fileName' | 'file' | 'accountId' | 'deletedKeys' | 'deletedPending' | 'plan' | 'planInputs' | 'choices' | 'query' | 'selected' | 'accepted' | 'lastDecided' | 'noProposal'>
+type Snapshot = Pick<ImportSession, 'fileName' | 'file' | 'accountId' | 'deletedKeys' | 'deletedRows' | 'plan' | 'planInputs' | 'choices' | 'query' | 'selected' | 'accepted' | 'lastDecided' | 'noProposal'>
 function snapshot(s: ImportSession): Snapshot {
-  const { fileName, file, accountId, deletedKeys, deletedPending, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal } = s
-  return { fileName, file, accountId, deletedKeys, deletedPending, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal }
+  const { fileName, file, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal } = s
+  return { fileName, file, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal }
 }
 
 /** The session before an action back, re-planned against the data now (it may have changed meanwhile). */
@@ -249,8 +246,9 @@ export async function loadImportFile(name: string, bytes: Uint8Array, ref: strin
   const before = useImport.getState()
   try {
     const file = parseMbank(decodeText(bytes))
-    const accountId = before.accountId || importAccount()
-    const { deletedKeys, deletedPending } = await deletedBankRows()
+    // By the file's bank account first (AP-2): the account chosen for the file before does not stick to the next one.
+    const accountId = importAccount(file, before.accountId)
+    const { deletedKeys, deletedRows } = await deletedBankRows()
     const prev = before.file && hasDecisions(before) ? snapshot(before) : null
     // Nothing is ticked by itself: pending operations the list no longer shows may only be filtered out of it.
     useImport.setState({
@@ -261,8 +259,8 @@ export async function loadImportFile(name: string, bytes: Uint8Array, ref: strin
       errorName: null,
       accountId,
       deletedKeys,
-      deletedPending,
-      plan: planNow(file, accountId, deletedKeys, deletedPending),
+      deletedRows,
+      plan: planNow(file, accountId, deletedKeys, deletedRows),
       choices: emptyChoices(),
       query: '',
       selected: noSelection(),
@@ -577,6 +575,7 @@ export const setNoMerge = (key: string, on: boolean) => patchChoices((c) => ({ .
 export const setRemoveVanished = (id: string, on: boolean) => patchChoices((c) => ({ ...c, removeVanished: { ...c.removeVanished, [id]: on } }))
 export const setRestoreDeleted = (key: string, on: boolean) => patchChoices((c) => ({ ...c, restoreDeleted: { ...c.restoreDeleted, [key]: on } }))
 export const setMoveHere = (key: string, on: boolean) => patchChoices((c) => ({ ...c, moveHere: { ...c.moveHere, [key]: on } }))
+export const setRemoveCopy = (key: string, on: boolean) => patchChoices((c) => ({ ...c, removeCopies: { ...c.removeCopies, [key]: on } }))
 
 // ------------------------------------------------------------------ search and selection (1.2.1)
 
@@ -832,11 +831,12 @@ export async function runImport(): Promise<void> {
     const acc = st.accountId
     const rulesBefore = s.fi.settings.import.rules
     const result = withRepayments(buildImport(plan, cur.choices, { now, makeId: newId, rules: rulesBefore, accounts: s.fi.settings.accounts.map((a) => a.id) }))
-    // Nothing new (N13): no backup, no records – only the time of the import and what the file covers.
-    const changes = result.create.length + result.update.length + result.remove.length > 0 || result.rules !== rulesBefore
+    const txBefore = useData.getState().records.transactions
+    // Nothing new (N13): no backup, no records – only the time of the import and what the file covers; the other
+    // format's keys remembered only (AF-63) are nothing new either – written, but no backup and no import to take back.
+    const changes = result.create.length + result.remove.length > 0 || result.update.some((t) => !keysOnly(txBefore[t.id]?.record, t)) || result.rules !== rulesBefore
     const backup = changes ? await api.importBackup() : ''
     // What the import changes, as it was (F4: its batch – „Cofnij import”).
-    const txBefore = useData.getState().records.transactions
     const updated = result.update.flatMap((t) => (txBefore[t.id] ? [{ before: txBefore[t.id]!.record, after: t as Transaction }] : []))
     const membersBefore = s.fi.settings.household.members
     const imp = s.fi.settings.import
@@ -855,6 +855,9 @@ export async function runImport(): Promise<void> {
     // A hand-typed operation the user kept apart from its row (N88): the pair is no duplicate for the panel either.
     const createdKey = new Map(result.create.map((t) => [t.bank?.key ?? '', t.id]))
     const apart = plan.rows.flatMap((p) => (p.status === 'merge' && cur.choices.noMerge[p.key] === true && createdKey.has(p.key) ? [duplicateKey([p.tx.id, createdKey.get(p.key)!])] : []))
+    // A row of an operation deleted in the other format brought back on purpose („importuj mimo to”, AF-1): never
+    // reported as one that came back after its deletion.
+    const restored = plan.rows.flatMap((p) => (p.status === 'deleted' && p.other && cur.choices.restoreDeleted[p.key] && createdKey.has(p.key) ? [returnedKey(createdKey.get(p.key)!)] : []))
     updateSettings((f) => ({
       ...f,
       settings: {
@@ -873,7 +876,7 @@ export async function runImport(): Promise<void> {
               .sort(([a], [b]) => a.localeCompare(b))
               .slice(-100)
           ),
-          notDuplicates: apart.length ? { ...f.settings.import.notDuplicates, ...Object.fromEntries(apart.map((k) => [k, now])) } : f.settings.import.notDuplicates
+          notDuplicates: apart.length + restored.length ? { ...f.settings.import.notDuplicates, ...Object.fromEntries([...apart, ...restored].map((k) => [k, now])) } : f.settings.import.notDuplicates
         }
       }
     }))
@@ -904,7 +907,7 @@ export async function runImport(): Promise<void> {
     // The import is done in memory (its records, rules and batch): the folder taking the saves later is said, the file
     // closed with its result all the same (B95 – never a second import of the same rows with no decisions left).
     if (note) toast(`Import: ${note}.`, 'error', 10000)
-    if (removal?.error) toast(`Nie udało się usunąć części nierozliczonych operacji, których bank już nie pokazuje: ${removal.error}`, 'error', 10000)
+    if (removal?.error) toast(`Nie udało się usunąć części operacji (nierozliczonych, których bank już nie pokazuje, albo kopii z innego konta): ${removal.error}`, 'error', 10000)
     useImport.setState({
       done: { counts: result.counts, backup, accountId: acc, rules: learned, batchId, statement, confirmed: confirmation?.date ?? null },
       file: null,
@@ -943,7 +946,7 @@ useData.subscribe((s, prev) => {
     errorName: null,
     accountId: '',
     deletedKeys: new Set(),
-    deletedPending: [],
+    deletedRows: [],
     plan: null,
     choices: emptyChoices(),
     query: '',

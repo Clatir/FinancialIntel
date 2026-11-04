@@ -28,6 +28,10 @@ paths:
   new / deleted / elsewhere; `buildImport`).
 - `runImport` (`features/import/state.ts`): tylko do odczytu → zapis zmian → kopia (`backups/pre-import`) → plan od
   nowa → `buildImport` → zapis paczką z rekordem `imports/` (cofnięcie: `shared/import/batch.ts`) → reguły i nazwiska.
+  Zmiana tylko kluczy (`keysOnly` – same `altKeys`) to „bez zmian”: bez kopii i paczki (T323).
+- Usunięte operacje z banku: `shared/import/deleted.ts` (`deletedBankRows` – klucze z `altKeys`, `DeletedRow` z formatem;
+  `returnedOf` – meldunek „Wróciły po usunięciu”), w oknie `features/import/returned.ts` (T320, T324).
+- Konto importu po numerze rachunku pliku (`accountForNumber`, T322); jedna operacja i jej kopie – `copies.ts`.
 - Pliki z banku w Pobranych: `main/bankFiles.ts` + `shared/import/bankFiles.ts`.
 
 ## Rozpoznanie
@@ -38,6 +42,12 @@ paths:
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.
 - Łączenie i duplikaty: `looseMatch` (kwota, ±3 dni, podobieństwo kontrahenta), także między kontami; decyzja
   użytkownika („Nie łącz”, `notDuplicates`, `notSimilar`) zawsze wygrywa.
+- Tożsamość wiersza między formatami (B5) to miara, nie klucz – stosuj ją wszędzie, gdzie działa klucz: przy usuniętych
+  (T320), na kontach tego samego numeru rachunku (T321), przy rozliczeniu (stary klucz w `altKeys`, T323). Kolejność
+  przejść planu ma znaczenie: B5 tutaj bierze też wiersze `elsewhere` z B35 (kopia → `RowCopy`, „usuń duplikat”), a
+  usunięte – po wszystkich przejściach „już w budżecie”.
+- **Pułapka:** rekord usunięty przez sam import (paczka `removed`) nie jest usunięciem użytkownika – tylko jego klucze
+  zatrzymują wiersz; nowy powód usuwania przez import dopisuj do paczki, nie usuwaj obok niej.
 
 ## Wydajność
 - Pamięć `brandOf` / `counterpartyKey` do 50 tys.; plan od nowa tylko przy zmianie treści (`BY_CONTENT` + `deepEqual`);

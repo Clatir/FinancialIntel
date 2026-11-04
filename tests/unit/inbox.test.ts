@@ -60,6 +60,8 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         problems: 2,
         uncategorized: { count: 3, amount: zl(54.2), from: '2026-09-01' },
         duplicates: 2,
+        // A bank's operation back after its deletion (AF-1, 1.15.5).
+        returned: [{ id: '01KRETURNED000000000000001', accountId: MBANK_ACCOUNT_ID, date: '2026-09-25', amount: -zl(31.95), name: 'ZABKA Z1234', deletedAt: '2026-09-26T08:00:00.000Z', cameWith: 'lista' }],
         members: [
           { memberId: 'M1', owed: zl(120), deposit: 0, open: [{ txId: 'x', date: '2026-10-03', amount: zl(120) }], since: '2026-10-03', unassigned: [{ txId: 'p', date: '2026-10-05', amount: zl(30) }] },
           { memberId: 'M2', owed: 0, deposit: zl(50), open: [], since: null, unassigned: [] }
@@ -103,7 +105,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         }
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
@@ -113,6 +115,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(text('folder')).toEqual(['1 konflikt kopii, 2 pliki z błędem – do rozstrzygnięcia w Synchronizacji.'])
     expect(text('uncategorized')).toEqual(['3 wydatki bez kategorii od 01.09.2026 – razem 54.20 zł.'])
     expect(text('duplicates')).toEqual(['2 możliwe duplikaty – ta sama operacja dwa razy.'])
+    expect(text('returned')).toEqual(['mBank: „ZABKA Z1234” z 25.09.2026, 31.95 zł – usunięta przez Ciebie 26.09.2026, wróciła z importem listy operacji i znowu liczy się w saldzie.'])
     // A member's money waiting to be assigned (D91): its operation's editor.
     expect(items.filter((i) => i.kind === 'repayments').map((i) => [i.ref, i.text, i.action])).toEqual([['p', 'Babcia: zwrot 30.00 zł z 05.10 – wskaż, które zakupy spłaca (do oddania: 1 zakup).', 'Przypisz']])
     expect(text('transfers')).toEqual([
