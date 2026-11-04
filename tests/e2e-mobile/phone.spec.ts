@@ -72,9 +72,15 @@ async function quickExpense(page: Page, amount: string, counterparty: string): P
   await sheet.getByTestId('quick-amount').fill(amount)
   await sheet.getByTestId('quick-counterparty').fill(counterparty)
   await sheet.getByTestId('quick-save').click()
-  // In the quiet hours the entry asks first (the night's purchase).
+  // In the quiet hours (23:00–05:00) the entry asks first: confirm the night's purchase and say why (the note is
+  // required, like `bridge.spec.ts`). Wait until the sheet either closes or asks – a single isVisible() right after the
+  // click races the question's render, and without the note the save is refused (CI at night failed, 04.11.2026).
   const night = sheet.getByTestId('quick-night-ok')
+  await expect
+    .poll(async () => (await night.isVisible().catch(() => false)) || (await sheet.getAttribute('data-open')) !== '1')
+    .toBe(true)
   if (await night.isVisible().catch(() => false)) {
+    await sheet.getByTestId('quick-log-note').fill('test nocny')
     await night.check()
     await sheet.getByTestId('quick-save').click()
   }
