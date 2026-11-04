@@ -4,6 +4,7 @@
  * conflicts or all of them. Pure; the renderer resolves them one by one through `resolveConflict`.
  */
 import type { ConflictEntry, ConflictSide } from './api'
+import { sameContentAs } from './merge'
 import { isoMs } from './remoteChanges'
 
 export type Keep = 'canonical' | 'copy'
@@ -66,4 +67,75 @@ export function newestResolutions(conflicts: readonly ConflictEntry[], ids: Iter
     for (const c of list) if (c !== best) out.push({ id: c.id, keep: 'canonical', group })
   }
   return { resolutions: out, skipped }
+}
+
+const MONTHS = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
+const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+const day = (v: unknown): string => (/^\d{4}-\d{2}-\d{2}$/.test(str(v)) ? `${str(v).slice(8, 10)}.${str(v).slice(5, 7)}.${str(v).slice(0, 4)}` : '')
+const monthText = (v: unknown): string => (/^\d{4}-\d{2}$/.test(str(v)) ? `${MONTHS[Number(str(v).slice(5, 7)) - 1] ?? ''} ${str(v).slice(0, 4)}`.trim() : '')
+
+/** How the card writes an amount and an id (the window: amounts masked with Ctrl+$, names of accounts and categories). */
+export interface SubjectText {
+  /** grosze → „25,50 zł” (the window: masked with the amounts). */
+  amount: (grosze: number) => string
+  /** A signed amount (an operation, a buoy: „+4 000,00 zł”, „−25,50 zł”); default `amount`. */
+  signed?: (grosze: number) => string
+  names?: ReadonlyMap<string, string>
+}
+
+/**
+ * Which record a conflict is about (AP-27, DA sp. 3) – what a person recognises instead of a file name with a ULID:
+ * an operation by its counterparty (else its title or category), date and amount; a plan or the game by the month; a
+ * container, goal or loan by its name. From the original, or the copy when the original cannot be read; '' = neither.
+ */
+export function conflictSubject(c: Pick<ConflictEntry, 'kind' | 'canonical' | 'copy'>, t: SubjectText): string {
+  const r = (c.canonical.record ?? c.copy.record) as Record<string, unknown> | null
+  if (!r || typeof r !== 'object') return ''
+  const amount = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? t.amount(v) : '')
+  const signed = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? (t.signed ?? t.amount)(v) : '')
+  const name = (id: unknown) => (typeof id === 'string' ? (t.names?.get(id) ?? '') : '')
+  const parts = (...xs: string[]) => xs.filter(Boolean).join(' · ')
+  switch (c.kind) {
+    case 'transactions': {
+      const who = str(r.counterparty) || str(r.title) || name(r.categoryId) || 'bez kontrahenta'
+      return parts(who, day(r.date), signed(r.amount), name(r.accountId))
+    }
+    case 'containers':
+    case 'goals':
+      return parts(str(r.name), amount(c.kind === 'goals' ? r.target : r.amount))
+    case 'loans':
+      return parts(str(r.name), str(r.counterparty), amount(r.amount))
+    case 'months':
+      return parts(monthText(r.month))
+    case 'game':
+      return parts(monthText(r.month))
+    case 'balances':
+      return parts(r.kind === 'opening' ? 'saldo otwarcia' : 'potwierdzenie salda', name(r.accountId), day(r.date), amount(r.amount))
+    case 'dockings':
+      return parts('dostawa', day(r.date))
+    case 'scheduled':
+      return parts(str(r.name), day(r.date), signed(r.amount))
+    case 'imports':
+      return parts(str(r.fileName), day(str(r.at).slice(0, 10)))
+    case 'fi': {
+      const settings = r.settings as { shipName?: unknown } | undefined
+      return parts('ustawienia budżetu', str(settings?.shipName) ? `okręt ${str(settings?.shipName)}` : '')
+    }
+    default:
+      return ''
+  }
+}
+
+/** The same version of a side for a person: the same file, or the same content but for the stamps of a save. */
+const sameSide = (a: ConflictSide, b: ConflictSide): boolean =>
+  a.mtimeMs === b.mtimeMs || (a.record != null && b.record != null && a.error === b.error && sameContentAs(a.record, b.record))
+
+/**
+ * Which side of a conflict changed since `shown` (AP-27, T431 – „Scal…” opened on it): by content, so a save of this
+ * computer that only stamps the record anew (a flush before the merge) is no change; null = none.
+ */
+export function changedSince(shown: Pick<ConflictEntry, 'canonical' | 'copy'>, now: Pick<ConflictEntry, 'canonical' | 'copy'>): 'canonical' | 'copy' | 'both' | null {
+  const canonical = !sameSide(shown.canonical, now.canonical)
+  const copy = !sameSide(shown.copy, now.copy)
+  return canonical && copy ? 'both' : canonical ? 'canonical' : copy ? 'copy' : null
 }

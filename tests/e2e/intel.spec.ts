@@ -74,6 +74,24 @@ test('Wywiad i Raporty: krzywa majątku, Killzones, FVG, zasięg, dziennik; rapo
     await saveTo(app, xlsx)
     await page.getByTestId('export-xlsx').click()
     await expect.poll(async () => (await readFile(xlsx).catch(() => Buffer.alloc(0))).subarray(0, 2).toString()).toBe('PK')
+
+    // AP-29: the period kept – another tab and back – and the receipt's lines with their amounts.
+    const from = `${addMonths(month, -2)}-01`
+    const plFrom = `${from.slice(8, 10)}.${from.slice(5, 7)}.${from.slice(0, 4)}`
+    await page.getByTestId('export-from').fill(plFrom)
+    await page.getByTestId('export-from').press('Enter')
+    await expect(page.getByTestId('export-from')).toHaveValue(plFrom)
+    await page.getByRole('radio', { name: 'Debriefing' }).click()
+    await page.getByRole('radio', { name: 'Eksport' }).click()
+    await expect(page.getByTestId('export-from')).toHaveValue(plFrom)
+    const parts = join(out, 'czesci.csv')
+    await saveTo(app, parts)
+    await page.getByTestId('export-parts-csv').click()
+    await expect.poll(async () => (await readFile(parts, 'utf8').catch(() => '')).split('\r\n')[0]).toBe('﻿Nr operacji;Data;Konto;Rodzaj;Kontrahent;Tytuł;Część;Kwota części (zł);Kategoria;Finansuje;Opis;Tagi')
+    // Only the operations of the period: none before its first day.
+    const days = (await readFile(parts, 'utf8')).trim().split('\r\n').slice(1).map((l) => l.split(';')[1]!)
+    expect(days.length).toBeGreaterThan(0)
+    expect(days.every((d) => d >= from)).toBe(true)
     // A month before the first operation: no operations, but its month – the Excel (operacje + miesiące) is written.
     const empty = addMonths(month, -5)
     await page.getByTestId('export-from').click()

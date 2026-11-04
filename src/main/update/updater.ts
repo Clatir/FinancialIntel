@@ -145,7 +145,7 @@ export class Updater {
     const pending = this.deps.pending()
     try {
       if (lastRun && isNewerVersion(currentVersion, lastRun)) {
-        this.state.justUpdated = { version: currentVersion, notes: pending && pending.version === currentVersion ? pending.notes : '' }
+        this.state.justUpdated = { version: currentVersion, notes: pending && pending.version === currentVersion ? pending.notes : '', from: lastRun }
         this.deps.log('info', `updated ${lastRun} -> ${currentVersion}`)
       }
     } catch {

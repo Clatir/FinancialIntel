@@ -58,14 +58,14 @@ export function operationRows(
   to: string,
   members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = []
 ): OperationRow[] {
-  return operationRowsOf(
-    transactions
-      .filter((t) => t.date >= from && t.date <= to)
-      .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? '') || a.createdAt.localeCompare(b.createdAt)),
-    categories,
-    accounts,
-    members
-  )
+  return operationRowsOf(operationsOfPeriod(transactions, from, to), categories, accounts, members)
+}
+
+/** The operations of a period in the export's order: by date, time, entry. */
+export function operationsOfPeriod(transactions: readonly Transaction[], from: string, to: string): Transaction[] {
+  return transactions
+    .filter((t) => t.date >= from && t.date <= to)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? '') || a.createdAt.localeCompare(b.createdAt))
 }
 
 /**
@@ -130,8 +130,9 @@ export function operationsSheet(rows: readonly OperationRow[]): XlsxSheet {
     name: 'Operacje',
     freezeHeader: true,
     columns: [
-      { header: 'Data', kind: 'text', width: 11 },
-      { header: 'Godzina', kind: 'text', width: 8 },
+      // Dates and times as Excel's (AP-29): a date filter and a pivot table see them.
+      { header: 'Data', kind: 'date', width: 11 },
+      { header: 'Godzina', kind: 'time', width: 8 },
       { header: 'Konto', kind: 'text', width: 16 },
       { header: 'Rodzaj', kind: 'text', width: 16 },
       { header: 'Kwota (zł)', kind: 'money', width: 12 },
@@ -144,6 +145,109 @@ export function operationsSheet(rows: readonly OperationRow[]): XlsxSheet {
       { header: 'Tagi', kind: 'text', width: 22 }
     ],
     rows: rows.map((r) => [r.date, r.time, r.account, r.kind, r.amount / 100, r.category, r.counterparty, r.title, r.financed, r.log, r.note, r.tags])
+  }
+}
+
+// ------------------------------------------------------------------ the parts (AP-29)
+
+/**
+ * One line of an operation (AP-29, D89 / T303 – beside the operation's row, which stays as it is): a split receipt's or a
+ * shared purchase's line with its own amount, category, financer, note and tags, so a spreadsheet sums the categories; an
+ * operation without lines is its one line; what a receipt's lines do not cover (a file edited by hand) – a line of the
+ * operation's category, as the engine counts it (`partsOf`).
+ */
+export interface PartRow {
+  /** The operation's place in „Operacje” of the same export (1 = its first row). */
+  operation: number
+  date: string
+  account: string
+  kind: string
+  counterparty: string
+  title: string
+  /** „1 z 3” (never „1/3” – Excel would take it for a date); '' – an operation without lines. */
+  part: string
+  amount: number
+  category: string
+  /** The line's household member: who finances it (a gift marked) or whose money an income's part is („od: …”). */
+  financed: string
+  note: string
+  tags: string
+}
+
+/** The lines of the operations of `operationRowsOf` – the same order, the same accounts and amounts. */
+export function partRowsOf(
+  transactions: readonly Transaction[],
+  categories: readonly Category[],
+  accounts: readonly Account[],
+  members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = [],
+  view: string | null = null
+): PartRow[] {
+  const cats = categoryIndex(categories)
+  const main = operationRowsOf(transactions, categories, accounts, members, view)
+  const out: PartRow[] = []
+  transactions.forEach((t, i) => {
+    const row = main[i]!
+    const head = { operation: i + 1, date: row.date, account: row.account, kind: row.kind, counterparty: row.counterparty, title: row.title }
+    // An income's parts are its members' money (D81), not categories.
+    const label = (id: string | null) => (t.kind === 'income' ? '' : cats.label(id))
+    if (!t.splits.length) {
+      out.push({ ...head, part: '', amount: row.amount, category: label(t.categoryId), financed: row.financed, note: t.note.trim(), tags: row.tags })
+      return
+    }
+    const rest = t.amount - sum(t.splits.map((s) => s.amount))
+    const n = t.splits.length + (rest ? 1 : 0)
+    t.splits.forEach((s, j) => {
+      out.push({
+        ...head,
+        part: `${j + 1} z ${n}`,
+        amount: s.amount,
+        category: label(s.categoryId),
+        financed: lineWhose(t, s, members),
+        note: s.note.trim(),
+        // The operation's tags are each line's too (F17), then the line's own.
+        tags: tagsText({ tags: t.tags, splits: [s] })
+      })
+    })
+    if (rest) out.push({ ...head, part: `${n} z ${n}`, amount: rest, category: label(t.categoryId), financed: '', note: '', tags: tagsText({ tags: t.tags, splits: [] }) })
+  })
+  return out
+}
+
+/** Whose a line is (D80, D81, D83): a purchase's member – a gift marked –, an income part's sender; '' – mine. */
+function lineWhose(t: Transaction, s: Transaction['splits'][number], members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>): string {
+  if (t.kind === 'income') return s.memberId ? `od: ${memberName(s.memberId, members)}` : ''
+  if (t.kind !== 'expense' || !s.refundable) return ''
+  return `${memberName(s.memberId, members)}${s.gift ? ' (prezent)' : ''}`
+}
+
+const PART_HEADER = ['Nr operacji', 'Data', 'Konto', 'Rodzaj', 'Kontrahent', 'Tytuł', 'Część', 'Kwota części (zł)', 'Kategoria', 'Finansuje', 'Opis', 'Tagi'] as const
+
+export function partsCsv(rows: readonly PartRow[]): string {
+  return toCsv(
+    PART_HEADER,
+    rows.map((r) => [r.operation, r.date, r.account, r.kind, r.counterparty, r.title, r.part, plnCell(r.amount), r.category, r.financed, r.note, r.tags])
+  )
+}
+
+export function partsSheet(rows: readonly PartRow[]): XlsxSheet {
+  return {
+    name: 'Części',
+    freezeHeader: true,
+    columns: [
+      { header: 'Nr operacji', kind: 'int', width: 10 },
+      { header: 'Data', kind: 'date', width: 11 },
+      { header: 'Konto', kind: 'text', width: 16 },
+      { header: 'Rodzaj', kind: 'text', width: 16 },
+      { header: 'Kontrahent', kind: 'text', width: 30 },
+      { header: 'Tytuł', kind: 'text', width: 30 },
+      { header: 'Część', kind: 'text', width: 7 },
+      { header: 'Kwota części (zł)', kind: 'money', width: 14 },
+      { header: 'Kategoria', kind: 'text', width: 28 },
+      { header: 'Finansuje', kind: 'text', width: 14 },
+      { header: 'Opis', kind: 'text', width: 30 },
+      { header: 'Tagi', kind: 'text', width: 22 }
+    ],
+    rows: rows.map((r) => [r.operation, r.date, r.account, r.kind, r.counterparty, r.title, r.part, r.amount / 100, r.category, r.financed, r.note, r.tags])
   }
 }
 
@@ -161,6 +265,10 @@ export interface MonthRow {
   /** „Bilans paliwa” (F25): the income less the costs, and the savings rate (% of the income; null – no income). */
   balance: number
   rate: number | null
+  /** „Energia miesiąca” as the debriefing tells it (AP-29): the salary less the tanks' installments, with the loot; null – no salary paid. */
+  energy: number | null
+  /** „Sfinansowane przez domowników” (D80, AP-29): what household members financed in the month, together. */
+  financed: number
 }
 
 export function monthRows(
@@ -172,12 +280,25 @@ export function monthRows(
   return months.map((month) => {
     const d = debriefing(month, input)
     const income = incomeOfPeriod(transactionsOfMonth(input.transactions, month), ctx).total
-    return { month, salary: d.salary, costs: d.costs, income, plus: d.plus, inProgress: !d.ended, loot: d.loot, balance: income - d.costs, rate: savingsRate(income - d.costs, income) }
+    return {
+      month,
+      salary: d.salary,
+      costs: d.costs,
+      income,
+      plus: d.plus,
+      inProgress: !d.ended,
+      loot: d.loot,
+      balance: income - d.costs,
+      rate: savingsRate(income - d.costs, income),
+      energy: d.energy?.budget ?? null,
+      financed: sum(d.financed.map((f) => f.amount))
+    }
   })
 }
 
 // The income as D81 counts it – „Przychody” everywhere it means that (N24).
-const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)', 'Bilans (zł)', 'Stopa oszczędności (%)'] as const
+// The energy and the financed at the end (AP-29): the columns before them where they were.
+const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)', 'Bilans (zł)', 'Stopa oszczędności (%)', 'Energia miesiąca (zł)', 'Sfinansowane przez domowników (zł)'] as const
 // One place after the comma (T294): „55,0”, as the screens write the rate.
 const rateCell = (rate: number | null) => (rate == null ? '' : rate.toFixed(1).replace('.', ','))
 const plusText = (r: Pick<MonthRow, 'plus' | 'inProgress'>) => (r.inProgress ? 'w toku' : r.plus == null ? '' : r.plus ? 'tak' : 'nie')
@@ -185,7 +306,18 @@ const plusText = (r: Pick<MonthRow, 'plus' | 'inProgress'>) => (r.inProgress ? '
 export function monthsCsv(rows: readonly MonthRow[]): string {
   return toCsv(
     MONTH_HEADER,
-    rows.map((r) => [r.month, r.salary == null ? '' : plnCell(r.salary), plnCell(r.costs), plnCell(r.income), plusText(r), r.loot == null ? '' : plnCell(r.loot), plnCell(r.balance), rateCell(r.rate)])
+    rows.map((r) => [
+      r.month,
+      r.salary == null ? '' : plnCell(r.salary),
+      plnCell(r.costs),
+      plnCell(r.income),
+      plusText(r),
+      r.loot == null ? '' : plnCell(r.loot),
+      plnCell(r.balance),
+      rateCell(r.rate),
+      r.energy == null ? '' : plnCell(r.energy),
+      plnCell(r.financed)
+    ])
   )
 }
 
@@ -194,26 +326,51 @@ export function monthsSheet(rows: readonly MonthRow[]): XlsxSheet {
     name: 'Miesiące',
     freezeHeader: true,
     columns: [
-      { header: 'Miesiąc', kind: 'text', width: 10 },
+      { header: 'Miesiąc', kind: 'month', width: 10 },
       { header: 'Pensja (zł)', kind: 'money', width: 13 },
       { header: 'Koszty netto (zł)', kind: 'money', width: 16 },
       { header: 'Przychody (zł)', kind: 'money', width: 15 },
       { header: 'Na plus', kind: 'text', width: 9 },
       { header: 'Łupy (zł)', kind: 'money', width: 12 },
       { header: 'Bilans (zł)', kind: 'money', width: 13 },
-      { header: 'Stopa oszczędności (%)', kind: 'rate', width: 12 }
+      { header: 'Stopa oszczędności (%)', kind: 'rate', width: 12 },
+      { header: 'Energia miesiąca (zł)', kind: 'money', width: 14 },
+      { header: 'Sfinansowane przez domowników (zł)', kind: 'money', width: 16 }
     ],
-    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100, r.balance / 100, r.rate])
+    rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100, r.balance / 100, r.rate, r.energy == null ? null : r.energy / 100, r.financed / 100])
+  }
+}
+
+// ------------------------------------------------------------------ the export's period (AP-29)
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * The export's period as kept (RE sp. 1): its first day as chosen; its last one as chosen – or today when today was
+ * chosen, so the next export runs to the new day. Nothing kept (or unreadable): from the year's start to today.
+ */
+export function exportPeriodOf(raw: string | null, today: string): { from: string; to: string } {
+  const fallback = { from: `${today.slice(0, 4)}-01-01`, to: today }
+  try {
+    const kept = JSON.parse(raw ?? 'null') as { from?: unknown; to?: unknown; toToday?: unknown } | null
+    if (!kept || typeof kept.from !== 'string' || !ISO_DAY.test(kept.from)) return fallback
+    const to = kept.toToday === true || typeof kept.to !== 'string' || !ISO_DAY.test(kept.to) ? today : kept.to
+    return { from: kept.from, to }
+  } catch {
+    return fallback
   }
 }
 
 /**
- * „Excel (operacje + miesiące)” (RE sp. 5, T412): both sheets when either has rows – a period with no operations still has
- * its months; null – nothing in the period (said, no empty file).
+ * „Excel (operacje + miesiące)” (RE sp. 5, T412): the sheets when either has rows – a period with no operations still has
+ * its months; null – nothing in the period (said, no empty file). `parts` – the sheet „Części” between them (AP-29).
  */
-export function budgetWorkbook(ops: readonly OperationRow[], months: readonly MonthRow[]): XlsxSheet[] | null {
-  return ops.length || months.length ? [operationsSheet(ops), monthsSheet(months)] : null
+export function budgetWorkbook(ops: readonly OperationRow[], months: readonly MonthRow[], parts?: readonly PartRow[]): XlsxSheet[] | null {
+  return ops.length || months.length ? [operationsSheet(ops), ...(parts ? [partsSheet(parts)] : []), monthsSheet(months)] : null
 }
+
+/** The period to keep: „to today” when its last day is today. */
+export const exportPeriodText = (from: string, to: string, today: string): string => JSON.stringify({ from, to, toToday: to === today })
 
 // ------------------------------------------------------------------ a report as a document
 

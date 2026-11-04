@@ -1,5 +1,5 @@
 import type { FleetState } from '@shared/calc/fleet'
-import type { IncomeFigures, IncomeWindow } from '@shared/calc/income'
+import { monthsAverageOf, type IncomeFigures, type IncomeWindow } from '@shared/calc/income'
 import { plnText } from '../../components/fields'
 import { Panel, cx } from '../../components/ui'
 
@@ -27,6 +27,7 @@ export function IncomePanel({ fleet, salary, testId = 'income-panel' }: { fleet:
   const cols: Record<(typeof COLUMNS)[number]['key'], IncomeWindow> = { '3': s.windows[3], '6': s.windows[6], '12': s.windows[12], median: s.median }
   const avg6 = s.windows[6].total
   const diff = avg6 != null && salary != null && salary > 0 ? avg6 - salary : null
+  const monthsAverage = monthsAverageOf(s)
   return (
     <Panel title="Przychody" testId={testId}>
       {!s.months.length ? (
@@ -45,6 +46,12 @@ export function IncomePanel({ fleet, salary, testId = 'income-panel' }: { fleet:
             ))}
           </div>
           {s.months.length < 12 && <span className="text-[11px] text-dim">Pełnych miesięcy historii: {s.months.length} – dłuższe okna liczą tyle, ile jest.</span>}
+          {monthsAverage != null && (
+            <span className="text-[11px] text-dim" data-testid="income-window-note">
+              „12 mies.” liczy trading netto z całego okna – dopłata do XTB pomniejsza wypłaty innych miesięcy. Średnia miesięcy jak w Bilansie paliwa (miesiąc z
+              dopłatą – trading 0): {zl(monthsAverage)}.
+            </span>
+          )}
           {diff != null && (
             <span className="text-[11.5px] text-muted" data-testid="income-vs-salary">
               Pensja {zl(salary)} · średni przychód (6 mies.) {zl(avg6)} →{' '}

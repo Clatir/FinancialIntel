@@ -41,8 +41,9 @@ describe('AP-23: daty, liczby i liczebniki jednym sposobem', () => {
     expect(rateText(52.9)).toBe('52,9%')
     expect(rateText(-60)).toBe('−60,0%')
     expect(rateText(null)).toBe('—')
-    const csv = monthsCsv([{ month: '2025-10', salary: null, costs: 4500, income: 10000, plus: true, loot: null, inProgress: false, balance: 5500, rate: 55 }])
-    expect(csv.split('\r\n')[1]!.endsWith(';55,0')).toBe(true)
+    const csv = monthsCsv([{ month: '2025-10', salary: null, costs: 4500, income: 10000, plus: true, loot: null, inProgress: false, balance: 5500, rate: 55, energy: null, financed: 0 }])
+    // The rate's column – the 8th (the energy and the financed after it since AP-29).
+    expect(csv.split('\r\n')[1]!.split(';')[7]).toBe('55,0')
   })
 
   it('odmiana liczebników: jeden wspólny pomocnik (KR sp. 8)', () => {
@@ -129,7 +130,10 @@ describe('AP-23: tytuły, różnice i podsumowania bez ISO ani błędów odmiany
     expect(formatValue(1.5)).toBe('1,5')
     expect(formatValue(true)).toBe('tak')
     expect(formatValue('01KAZ00000000000000000AAAA')).toBe('01KAZ00000000000000000AAAA')
-    expect(formatValue([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])).toBe('12 pozycji')
+    // A list of objects by its count, in the Polish forms (AP-23); a list of values – the values (AP-27).
+    const items = (n: number) => Array.from({ length: n }, (_, i) => ({ a: i }))
+    expect([formatValue(items(12)), formatValue(items(22)), formatValue(items(25))]).toEqual(['12 pozycji', '22 pozycje', '25 pozycji'])
+    expect(formatValue([1, 2, 3])).toBe('1, 2, 3')
   })
 
   it('podsumowanie odzyskania: imiesłów zgodny z rzeczownikiem (DA.17)', () => {

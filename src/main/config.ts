@@ -36,6 +36,31 @@ function loadTray(raw: unknown): MachineConfig['tray'] {
   }
 }
 
+/** The folders of backups used before (AP-28, T434): a few, newest first, each with its data folder. */
+export const BACKUP_DIRS_KEPT = 8
+export type BackupDirBefore = { dataDir: string; dir: string }
+function loadBackupDirsBefore(raw: unknown): BackupDirBefore[] {
+  if (!Array.isArray(raw)) return []
+  const ok = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length < 1000
+  return raw.filter((x) => x && typeof x === 'object' && ok((x as { dataDir?: unknown }).dataDir) && ok((x as { dir?: unknown }).dir)).slice(0, BACKUP_DIRS_KEPT) as BackupDirBefore[]
+}
+
+/**
+ * The folders of backups used before after the data folder `dataDir` moved its backups from `before` to `after` (AP-28,
+ * DA.14): `before` first (its backups stay on the list), `after` never among them (it is the current one again).
+ */
+export function backupDirsAfter(list: readonly BackupDirBefore[], dataDir: string, before: string, after: string, same: (a: string, b: string) => boolean): BackupDirBefore[] {
+  const kept = list.filter((e) => !(same(e.dataDir, dataDir) && (same(e.dir, before) || same(e.dir, after))))
+  return (same(before, after) ? kept : [{ dataDir, dir: before }, ...kept]).slice(0, BACKUP_DIRS_KEPT)
+}
+
+/** The folders of backups `dataDir` used before, except the current one (AP-28). */
+export function earlierBackupDirsOf(list: readonly BackupDirBefore[], dataDir: string, current: string, same: (a: string, b: string) => boolean): string[] {
+  const out: string[] = []
+  for (const e of list) if (same(e.dataDir, dataDir) && !same(e.dir, current) && !out.some((d) => same(d, e.dir))) out.push(e.dir)
+  return out
+}
+
 function loadIctj(raw: unknown): MachineConfig['ictj'] {
   const t = (raw && typeof raw === 'object' ? raw : {}) as Partial<MachineConfig['ictj']>
   const path = (v: unknown) => (typeof v === 'string' && v.length > 0 && v.length < 1000 ? v : null)
@@ -77,10 +102,15 @@ export class ConfigStore {
   private held: Array<[string[], unknown]> = []
   /** Writes are queued and always write the latest state, so an older snapshot never lands last. */
   private writing: Promise<void> = Promise.resolve()
-  /** `writeDelayMs` – a slow disk in test runs (`FI_CONFIG_WRITE_DELAY_MS`): each write waits this long first. */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * `writeDelayMs` – a slow disk in test runs (`FI_CONFIG_WRITE_DELAY_MS`): each write waits this long first;
+   * `writeRetryMs` – a failed write is tried again this often (US.33).
+   */
   constructor(
     private readonly userDataDir: string,
-    private readonly writeDelayMs = 0
+    private readonly writeDelayMs = 0,
+    private readonly writeRetryMs = 5000
   ) {}
 
   get file(): string {
@@ -120,7 +150,8 @@ export class ConfigStore {
       tray: loadTray(raw.tray),
       prefs: machinePrefsFrom(raw.prefs),
       ictj: loadIctj(raw.ictj),
-      importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null
+      importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null,
+      backupDirsBefore: loadBackupDirsBefore(raw.backupDirsBefore)
     }
     if (this.held.length) {
       const held = this.held
@@ -145,15 +176,41 @@ export class ConfigStore {
       this.held.push(...leafChanges(before, this.config))
       return this.config
     }
+    try {
+      await this.queueWrite()
+    } catch (e) {
+      // config.json held for a while (an antivirus, a backup tool – US.33): the settings work, and are written later.
+      this.retryLater()
+      throw e
+    }
+    return this.config
+  }
+
+  /** The latest settings written, after the writes queued before. */
+  private queueWrite(): Promise<void> {
     const write = this.writing.then(async () => {
       if (this.writeDelayMs) await new Promise((r) => setTimeout(r, this.writeDelayMs))
       await fs.mkdir(this.userDataDir, { recursive: true })
       // This computer's settings (userData): no data folder's file.
       await writeFileAtomic(this.file, `${JSON.stringify(this.config, null, 2)}\n`, null)
+      if (this.retryTimer) clearTimeout(this.retryTimer)
+      this.retryTimer = null
     })
     this.writing = write.catch(() => undefined)
-    await write
-    return this.config
+    return write
+  }
+
+  /**
+   * A write that failed is tried again (AP-28, US.33): before, a change made while config.json was held was lost at the
+   * next start unless another change wrote the file. Every `writeRetryMs` until a write goes (always the latest state).
+   */
+  private retryLater(): void {
+    if (this.retryTimer) return
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      this.queueWrite().catch(() => this.retryLater())
+    }, this.writeRetryMs)
+    this.retryTimer.unref?.()
   }
 
   /** Change only the update section (prefs, pending update, last run version). */

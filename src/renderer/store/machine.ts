@@ -33,7 +33,7 @@ export async function loadMachinePrefs(): Promise<void> {
 }
 
 /** The main process applies a change before its write (T300): a failed write leaves it working, only not saved. */
-const saveFailed = (e: unknown) => toast(`Nie udało się zapisać ustawień tego komputera (działają, ale bez zapisu): ${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
+const saveFailed = (e: unknown) => toast(`Nie udało się zapisać ustawień tego komputera – działają, a zapis ponawia się sam co kilka sekund (config.json zajęty?): ${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
 
 export async function setMachinePrefs(patch: Partial<MachinePrefs>): Promise<void> {
   // At once on the screen; config.json and the other windows follow.

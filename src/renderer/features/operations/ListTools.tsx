@@ -5,7 +5,7 @@
  */
 import { useMemo, useState, type ReactNode } from 'react'
 import { brandTargetOf, inPeriod, type OperationSort, type OperationsFilter } from '@shared/operationsView'
-import { operationRowsOf, operationsCsv, operationsSheet } from '@shared/export/budget'
+import { operationRowsOf, operationsCsv, operationsSheet, partRowsOf, partsSheet } from '@shared/export/budget'
 import { warsawNow } from '@shared/calc/dates'
 import { fold } from '@shared/fold'
 import type { Transaction } from '@shared/schema'
@@ -293,7 +293,7 @@ export function ExportVisible({ rows, view }: { rows: readonly Transaction[]; vi
       <button type="button" className="btn h-[22px] px-1.5" onClick={() => void run(() => api.saveTextFile(`operacje_${day}.csv`, operationsCsv(out()), { name: 'CSV', extensions: ['csv'] }))} data-testid="operations-export-csv">
         CSV
       </button>
-      <button type="button" className="btn h-[22px] px-1.5" onClick={() => void run(() => api.saveXlsx(`operacje_${day}.xlsx`, [operationsSheet(out())]))} data-testid="operations-export-xlsx">
+      <button type="button" className="btn h-[22px] px-1.5" onClick={() => void run(() => api.saveXlsx(`operacje_${day}.xlsx`, [operationsSheet(out()), partsSheet(partRowsOf(rows, fi.settings.categories, fi.settings.accounts, fi.settings.household.members, view))]))} data-testid="operations-export-xlsx">
         Excel
       </button>
     </span>

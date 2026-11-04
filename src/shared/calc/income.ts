@@ -184,3 +184,13 @@ export function incomeStats(byMonth: ReadonlyMap<string, IncomeParts>, covered: 
     median: { months: months.length, work: median(months.map((m) => m.work)), trading: pos(median(months.map((m) => m.trading))), total: pos(median(months.map((m) => m.total))) }
   }
 }
+
+/**
+ * Why „12 mies.” may differ from the average of the months' rows (AP-29, AF-70): the window counts trading net over all
+ * its months (a top-up takes from the withdrawals of the others), a month's row – never below zero. With a top-up month
+ * in the 12: the months' average (as „Bilans paliwa” rows give it); null – none, the two agree.
+ */
+export function monthsAverageOf(stats: Pick<IncomeStats, 'months'>): number | null {
+  if (!stats.months.some((m) => m.trading < 0)) return null
+  return Math.round(sum(stats.months.map((m) => m.total)) / stats.months.length)
+}

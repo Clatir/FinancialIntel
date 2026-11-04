@@ -43,14 +43,14 @@ describe('różnice pól', () => {
     expect(fieldLabel(['note'])).toBe('Notatka')
     expect(fieldLabel(['settings', 'shipName'])).toBe('Nazwa okrętu')
     expect(fieldLabel(['settings', 'sync', 'remoteChanges'])).toBe('Zmiany z drugiego komputera')
-    expect(fieldLabel(['settings', 'layoutPresets', '#x', 'name'])).toBe('Zapisane układy – name')
+    expect(fieldLabel(['settings', 'layoutPresets', '#x', 'name'])).toBe('Zapisane układy – nazwa')
     expect(fieldLabel(['settings', 'accounts'])).toBe('Konta')
     expect(fieldLabel(['splits', '#s1', 'amount'])).toBe('Podział – kwota')
     expect(fieldLabel(['settings', 'categories', '#c', 'envelope'])).toBe('Kategorie – koperta')
     expect(fieldLabel(['settings', 'futureThing'])).toBe('Ustawienia – futureThing')
     expect(fieldLabel(['nieznane', 'pole'])).toBe('nieznane.pole')
     expect(fieldLabel([])).toBe('(cały wpis)')
-    expect([formatValue(null), formatValue(undefined), formatValue(''), formatValue([]), formatValue([1, 2]), formatValue([1]), formatValue([1, 2, 3, 4, 5]), formatValue(1.5), formatValue(true), formatValue('a'.repeat(100), 10), formatValue({ a: 1 })]).toEqual([
+    expect([formatValue(null), formatValue(undefined), formatValue(''), formatValue([]), formatValue([{ a: 1 }, { a: 2 }]), formatValue([{ a: 1 }]), formatValue([1, 2, 3, 4, 5].map((a) => ({ a }))), formatValue(1.5), formatValue(true), formatValue('a'.repeat(100), 10), formatValue({ a: 1 })]).toEqual([
       'puste',
       '—',
       'puste',
@@ -61,7 +61,7 @@ describe('różnice pól', () => {
       '1,5',
       'tak',
       'aaaaaaaaa…',
-      '{"a":1}'
+      'a: 1'
     ])
   })
 })

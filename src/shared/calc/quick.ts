@@ -54,23 +54,34 @@ export function typedByHand(t: Transaction, byBuoy: ReadonlySet<string> = NO_IDS
 
 type BuoyDays = Pick<Scheduled, 'done'>
 const NO_BUOYS: readonly BuoyDays[] = []
-const accountMemo = new WeakMap<readonly Transaction[], { scheduled: readonly BuoyDays[]; id: string | null }>()
+const accountMemo = new WeakMap<readonly Transaction[], { scheduled: readonly BuoyDays[]; newest: ReadonlyMap<string, Transaction> }>()
 
-/**
- * The account used last in the folder (AP-20, SW sp. 8): the account of the operation typed by hand latest
- * (`typedByHand`; its creation – on any computer of the folder), so the second computer proposes it too. `scheduled` –
- * the buoys, whose „Wykonaj teraz” operations do not count. null – none typed.
- */
-export function lastAccountOf(transactions: readonly Transaction[], scheduled: readonly BuoyDays[] = NO_BUOYS): string | null {
+/** Each account's operation typed by hand latest (`typedByHand`) – once per list of operations and of buoys. */
+function newestTypedOf(transactions: readonly Transaction[], scheduled: readonly BuoyDays[]): ReadonlyMap<string, Transaction> {
   const hit = accountMemo.get(transactions)
-  if (hit && hit.scheduled === scheduled) return hit.id
+  if (hit && hit.scheduled === scheduled) return hit.newest
   const byBuoy = new Set<string>()
   for (const b of scheduled) for (const id of Object.values(b.done)) if (id) byBuoy.add(id)
+  const newest = new Map<string, Transaction>()
+  for (const t of transactions) {
+    if (!typedByHand(t, byBuoy)) continue
+    const was = newest.get(t.accountId)
+    if (!was || newer(t, was)) newest.set(t.accountId, t)
+  }
+  accountMemo.set(transactions, { scheduled, newest })
+  return newest
+}
+
+/**
+ * The account used last in the folder (AP-20, AP-28, SW sp. 8): the account of the operation typed by hand latest
+ * (`typedByHand`; its creation – on any computer of the folder), so the second computer and a new one propose it too.
+ * `scheduled` – the buoys, whose „Wykonaj teraz” operations do not count; `open` – the accounts still open (one closed
+ * since – the latest of the open ones). null – none typed.
+ */
+export function lastAccountOf(transactions: readonly Transaction[], scheduled: readonly BuoyDays[] = NO_BUOYS, open?: ReadonlySet<string>): string | null {
   let last: Transaction | null = null
-  for (const t of transactions) if (typedByHand(t, byBuoy) && (!last || newer(t, last))) last = t
-  const id = last?.accountId ?? null
-  accountMemo.set(transactions, { scheduled, id })
-  return id
+  for (const [id, t] of newestTypedOf(transactions, scheduled)) if ((!open || open.has(id)) && (!last || newer(t, last))) last = t
+  return last?.accountId ?? null
 }
 
 /**
@@ -98,4 +109,14 @@ export function quickTemplates(transactions: readonly Transaction[]): Templates 
   found = { last: last ? templateOf(last) : null, templates }
   recentMemo.set(transactions, found)
   return found
+}
+
+/**
+ * The account a new entry starts on (the editor, Ctrl+N and the quick entry – AP-20, AP-28, SW sp. 8): the account used
+ * last in the folder (`lastAccountOf` – an open one), so a new computer and the second one start where the budget is;
+ * none typed by hand yet – the one used last on this computer (`mine`), else the first open one.
+ */
+export function entryAccount(accounts: ReadonlyArray<{ id: string }>, mine: string | null, transactions: readonly Transaction[], scheduled: readonly BuoyDays[] = NO_BUOYS): string | null {
+  const open = new Set(accounts.map((a) => a.id))
+  return lastAccountOf(transactions, scheduled, open) ?? (mine && open.has(mine) ? mine : null) ?? accounts[0]?.id ?? null
 }

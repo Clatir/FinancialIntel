@@ -3,9 +3,10 @@ import { newId } from '@shared/ids'
 import { asksImpulse, isNight, isTwoSided, nightVerdict, sum } from '@shared/calc/operations'
 import { DEFAULT_SIGN } from '@shared/calc/kinds'
 import { confirmedChanges, confirmedPeriodOf, type OperationEdit } from '@shared/calc/balances'
-import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
-import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
+import { shareComplete, shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
+import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Share, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { listOf, useData, useFolderLocked } from '../../store/data'
+import { useDraft } from '../../store/drafts'
 import { answerGuard, askGuard, useGuard } from '../../store/guard'
 import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
@@ -83,6 +84,9 @@ export function OperationEditor({ id }: { id: string }) {
   // A new entry being written (the editor opened on it as a draft – keyed by the operation): its whole first writing is
   // the user's own, a purchase typed in with a past day too – nothing to ask.
   const [fresh] = useState(isDraft)
+  // A share typed not covering the whole (AP-37, T156): refused as the quick entry refuses it – never written; kept in the
+  // window's memory (another screen, another operation keep it) until it sums to 100 % or is dropped.
+  const [refusedShare, setRefusedShare, clearRefusedShare] = useDraft<Share | null>(`operation-share:${id}`, () => null)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
   const t = entry.record
   const readOnly = folderReadOnly || entry.readOnly
@@ -126,7 +130,14 @@ export function OperationEditor({ id }: { id: string }) {
     })
   }
   // A purchase financed by several people (D83): its lines follow the share.
-  const share = shareOf(t)
+  const written = shareOf(t)
+  const share = written ? (refusedShare ?? written) : null
+  const changeShare = (s: Share) => {
+    // Percents only: their sum does not depend on the amount (amounts over it – the rest is 0 zł, as before).
+    if (s.mode === 'percent' && !shareComplete(s, null)) return setRefusedShare(s)
+    clearRefusedShare()
+    update((r) => withShare(r, s))
+  }
   const firstMember = members.find((m) => !m.archived)
   const directions = DIRECTIONS[t.kind]
   const outgoing = sign < 0
@@ -349,7 +360,17 @@ export function OperationEditor({ id }: { id: string }) {
                 {share ? (
                   <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2">
                     <span className="text-[11.5px] text-muted">{outgoing ? 'Wspólnie – kto ile płaci' : 'Zwrot wspólnego zakupu – dla kogo ile'}</span>
-                    <ShareEditor share={share} total={abs} members={members} onChange={(s) => update((r) => withShare(r, s))} onClear={() => update((r) => withShare(r, null))} testId="operation-share" />
+                    <ShareEditor
+                      share={share}
+                      total={abs}
+                      members={members}
+                      onChange={changeShare}
+                      onClear={() => {
+                        clearRefusedShare()
+                        update((r) => withShare(r, null))
+                      }}
+                      testId="operation-share"
+                    />
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -360,7 +381,10 @@ export function OperationEditor({ id }: { id: string }) {
                       <button
                         type="button"
                         className="btn h-[24px] shrink-0"
-                        onClick={() => update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))}
+                        onClick={() => {
+                          clearRefusedShare()
+                          update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))
+                        }}
                         title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami"
                         data-testid="operation-share-start"
                       >

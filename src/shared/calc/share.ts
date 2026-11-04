@@ -33,6 +33,18 @@ export function restIndex(share: Pick<Share, 'lines'>): number {
 }
 const takesRest = (share: Pick<Share, 'lines'>, i: number): boolean => i === restIndex(share)
 
+/**
+ * „dopełnij ostatniej do 100 %” (AP-37, T156): the last line takes what the others leave of 100; null – not percents,
+ * already 100, or the others over 100 already (nothing to give the last one).
+ */
+export function fillLastPercent(share: Share): Share | null {
+  if (share.mode !== 'percent' || share.lines.length < 2 || shareComplete(share, null)) return null
+  const others = Math.round(share.lines.slice(0, -1).reduce((a, l) => a + l.value, 0) * 100) / 100
+  if (others > 100) return null
+  const last = Math.round((100 - others) * 100) / 100
+  return { ...share, lines: share.lines.map((l, i) => (i === share.lines.length - 1 ? { ...l, value: last } : l)) }
+}
+
 /** Equal percents of `n` people (two decimals cut), the last one the rest of 100 – as equal amounts give it the rest (T3). */
 export function equalPercents(n: number): number[] {
   const each = Math.floor(10000 / n) / 100

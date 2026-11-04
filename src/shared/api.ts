@@ -147,6 +147,11 @@ export interface MachineConfig {
   dataDir: string | null
   recentDirs: string[]
   backupDirOverride: string | null
+  /**
+   * Backup folders used before a change of the folder of backups (AP-28, DA.14), newest first, per data folder: their
+   * backups stay listed (and can be recovered) instead of „Brak kopii.”.
+   */
+  backupDirsBefore?: Array<{ dataDir: string; dir: string }>
   window: { x?: number; y?: number; width: number; height: number; maximized: boolean } | null
   updates: {
     prefs: UpdatePrefs
@@ -337,7 +342,8 @@ export interface FiApi {
   saveSettings(fi: SettingsFile): Promise<SettingsFile>
   /** The window shows this folder open (B31): main takes its writes from now on. */
   folderShown(generation: number): Promise<void>
-  resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<void>
+  /** `seen` = the sides' file times the choice was made on (AP-27): a side changed since refuses it, nothing moved. */
+  resolveConflict(conflictId: string, keep: 'canonical' | 'copy', seen?: { canonical: number; copy: number }): Promise<void>
   /** The conflict merged field by field (N17): both versions to the history, the merged one at the original's path. */
   /** `seen` = the sides' file times the merge was made from (N17): a side changed since refuses it. */
   mergeConflict(conflictId: string, merged: unknown, seen?: { canonical: number; copy: number }): Promise<void>
@@ -370,7 +376,8 @@ export interface FiApi {
   /** A report's self-contained HTML printed to an A4 PDF. */
   savePdf(defaultName: string, html: string): Promise<string | null>
   /** `failure` – the last daily backup that did not come (B123), null when the last one did. */
-  listBackups(): Promise<{ dir: string; files: BackupInfo[]; failure: { at: string; message: string; dir: string } | null }>
+  /** `earlier`: backups in the folders of backups used before for this data folder (AP-28). */
+  listBackups(): Promise<{ dir: string; files: BackupInfo[]; failure: { at: string; message: string; dir: string } | null; earlier?: Array<{ dir: string; files: BackupInfo[] }> }>
   backupNow(): Promise<string>
   /** The backup before an import from the bank (backups/pre-import); returns its path. */
   importBackup(): Promise<string>

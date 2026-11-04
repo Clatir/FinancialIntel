@@ -14,8 +14,8 @@ import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
-import { ConfigStore, publicConfig } from './config'
-import { ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError } from './datastore/store'
+import { ConfigStore, backupDirsAfter, earlierBackupDirsOf, publicConfig } from './config'
+import { ConflictChangedError, ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError, type ConflictVersions } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { IN_USE_MS, PresenceKeeper, readOtherMachines } from './datastore/presence'
 import { initLog, log } from './log'
@@ -365,6 +365,25 @@ function sendFrom(s: DataStore, change: ChangeSet | null): void {
   if (s === store) send(change)
 }
 
+/** The versions of a conflict the window decided on (its two files' `mtimeMs`); anything else – none. */
+function conflictVersions(seen: unknown): ConflictVersions | undefined {
+  const sides = seen && typeof seen === 'object' ? (seen as { canonical?: unknown; copy?: unknown }) : {}
+  return typeof sides.canonical === 'number' && typeof sides.copy === 'number' ? { canonical: sides.canonical, copy: sides.copy } : undefined
+}
+
+/** A conflict decided: a side changed meanwhile (AP-27) refuses – the window gets the versions as they are now. */
+async function conflictDecision(s: DataStore, decide: () => Promise<ChangeSet | null>): Promise<void> {
+  try {
+    sendFrom(s, await decide())
+  } catch (e) {
+    if (e instanceof ConflictChangedError) {
+      log('info', `konflikt: wersja zmieniła się od pokazanej – decyzja odrzucona (${e.detail})`)
+      sendFrom(s, e.change)
+    }
+    throw e
+  }
+}
+
 async function trash(absPath: string): Promise<void> {
   try {
     await shell.trashItem(absPath)
@@ -598,9 +617,16 @@ const sameDir = (a: string, b: string): boolean => {
 /** This computer's data folder now or before (B53): found empty or missing, it gets no new data unasked. */
 const rememberedDir = (dir: string): boolean => [config.get().dataDir, ...config.get().recentDirs].some((d) => !!d && sameDir(d, dir))
 
-/** A backup of the list (F3): only a ZIP the backups folder holds is read. */
+/** The folders of backups this data folder used before the current one (AP-28): their backups listed too. */
+function earlierBackupDirs(s: DataStore): string[] {
+  return earlierBackupDirsOf(config.get().backupDirsBefore ?? [], s.root, s.backupsDir, sameDir)
+}
+
+/** A backup of the list (F3): only a ZIP a folder of the list holds is read. */
 async function listedBackup(s: DataStore, path: string): Promise<BackupInfo> {
-  const listed = (await listBackups(s.backupsDir)).find((f) => f.path === path)
+  let listed: BackupInfo | undefined
+  // Only a backup on the list – of the current folder of backups or of one used before (AP-28) – is ever read.
+  for (const dir of [s.backupsDir, ...earlierBackupDirs(s)]) if (!listed) listed = (await listBackups(dir)).find((f) => f.path === path)
   if (!listed) throw new Error('Tej kopii nie ma już na liście kopii (mogła zostać usunięta) – odśwież listę.')
   return listed
 }
@@ -1038,15 +1064,13 @@ function registerIpc(): void {
     sendFrom(s, change)
     return saved
   })
-  handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy') => {
+  handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy', seen?: unknown) => {
     const s = writableStore()
-    sendFrom(s, await s.resolveConflict(id, keep))
+    await conflictDecision(s, () => s.resolveConflict(id, keep, conflictVersions(seen)))
   })
   handle('mergeConflict', async (id: string, merged: unknown, seen?: unknown) => {
     const s = writableStore()
-    const sides = seen && typeof seen === 'object' ? (seen as { canonical?: unknown; copy?: unknown }) : {}
-    const asOf = typeof sides.canonical === 'number' && typeof sides.copy === 'number' ? { canonical: sides.canonical, copy: sides.copy } : undefined
-    sendFrom(s, await s.mergeConflict(id, merged, asOf))
+    await conflictDecision(s, () => s.mergeConflict(id, merged, conflictVersions(seen)))
   })
   handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
     const s = writableStore()
@@ -1085,7 +1109,8 @@ function registerIpc(): void {
     }
     await config.update({ tray: next })
     const view = trayView()
-    applyLoginItem(view, log)
+    // Only the setting chosen here writes the system's entry (AP-28, T433): the tray's switch or „zapytano” leaves it alone.
+    if (typeof patch?.launchAtLogin === 'boolean') applyLoginItem(view, log, true)
     if (view.closeToTray) appTray().ensure()
     else tray?.destroy()
     log('info', `zasobnik: zamykaj do zasobnika ${view.closeToTray ? 'tak' : 'nie'}, z systemem ${next.launchAtLogin ? 'tak' : 'nie'}`)
@@ -1137,7 +1162,12 @@ function registerIpc(): void {
   })
   handle('listBackups', async () => {
     const s = requireStore()
-    return { dir: s.backupsDir, files: await listBackups(s.backupsDir), failure: backupFailure?.dir === s.backupsDir ? backupFailure : null }
+    const earlier: Array<{ dir: string; files: BackupInfo[] }> = []
+    for (const dir of earlierBackupDirs(s)) {
+      const files = await listBackups(dir)
+      if (files.length) earlier.push({ dir, files })
+    }
+    return { dir: s.backupsDir, files: await listBackups(s.backupsDir), failure: backupFailure?.dir === s.backupsDir ? backupFailure : null, earlier }
   })
   handle('backupNow', async () => {
     const s = requireStore()
@@ -1231,8 +1261,18 @@ function registerIpc(): void {
       // Financial Intel never writes in ICT Trade Journal's data folder (B121) – its backups neither.
       if ((await DataStore.inspect(dir)) === 'ictj' || (await insideIctj(dir))) throw new Error('To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder na kopie.')
     }
-    await config.update({ backupDirOverride: dir })
+    const before = s.backupsDir
+    const overrideBefore = config.get().backupDirOverride
     s.setBackupDir(dir)
+    // The backups made so far stay listed under the folder they are in (AP-28, DA.14) – never „Brak kopii.” after a change.
+    const backupDirsBefore = backupDirsAfter(config.get().backupDirsBefore ?? [], s.root, before, s.backupsDir, sameDir)
+    try {
+      await config.update({ backupDirOverride: dir, backupDirsBefore })
+    } catch (e) {
+      // Not remembered on this computer: the backups stay where they were.
+      s.setBackupDir(overrideBefore)
+      throw e
+    }
     return s.backupsDir
   })
   handle('showPath', async (abs: string) => {
@@ -1695,7 +1735,7 @@ function retryConfig(): void {
       if (config.loadFailed) return
       clearInterval(timer)
       log('info', 'config.json odczytany ponownie – ustawienia tego komputera wczytane')
-      applyLoginItem(trayView(), log)
+      applyLoginItem(trayView(), log, false)
       if (config.get().tray.closeToTray) appTray().ensure()
       else tray?.destroy()
       quick?.applyShortcut(config.get().prefs.quickShortcut)
@@ -1728,8 +1768,8 @@ app.whenReady().then(async () => {
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
   watchBankFiles()
-  // The autostart only from a config.json read (B114): defaults in its place would remove the entry.
-  if (!config.loadFailed) applyLoginItem(trayView(), log)
+  // The autostart only from a config.json read (B114); a start never removes an entry, of any copy (AP-28, 03.11.2026).
+  if (!config.loadFailed) applyLoginItem(trayView(), log, false)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()
   createWindow()

@@ -4,7 +4,7 @@
  */
 import type { Account, OperationView, Orders } from './schema/budget'
 import { TX_KINDS, type Transaction, type TxKind } from './schema/records'
-import { asksImpulse, costOf, financedOf, isNight, isTwoSided, notesOf, partsOf, touchesAccount, type CategoryIndex, type Part } from './calc/operations'
+import { amountOn, asksImpulse, costOf, financedOf, isNight, isTwoSided, notesOf, partsOf, touchesAccount, type CategoryIndex, type Part } from './calc/operations'
 import { incomeShares } from './calc/household'
 import { loanIdsOf } from './calc/loans'
 import type { BrandAliases } from './import/aliases'
@@ -426,6 +426,24 @@ export function sumOperations(rows: readonly Transaction[]): OperationsSums {
     costs += costOf(t)
   }
   return { count: rows.length, inflow, outflow, costs }
+}
+
+/**
+ * What the bar's „Wpływy” and „Wydatki” leave out (AP-29, AF-57): own transfers and corrections – how many and their sum as
+ * the export writes them (`view` – the list of one account: a transfer's money on it), so the file's sum = Wpływy −
+ * Wydatki + this.
+ */
+export function asideOfOperations(rows: readonly Transaction[], view: string | null = null): { count: number; amount: number; corrections: boolean } {
+  let count = 0
+  let amount = 0
+  let corrections = false
+  for (const t of rows) {
+    if (t.kind !== 'transfer' && t.kind !== 'correction') continue
+    count++
+    amount += view && touchesAccount(t, view) ? amountOn(t, view) : t.amount
+    if (t.kind === 'correction') corrections = true
+  }
+  return { count, amount, corrections }
 }
 
 /**

@@ -1,4 +1,5 @@
 // adapted from ICTTJ electron.vite.config.mts @ 84a8339
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'electron-vite'
@@ -36,6 +37,16 @@ function cspPlugin(): Plugin {
   }
 }
 
+/**
+ * „Co nowego” offline (AP-28, AF-40): the newest sections of CHANGELOG.md built into the window – enough for an update
+ * over several versions, without the whole history in the bundle.
+ */
+function recentChangelog(sections = 15): string {
+  const lines = readFileSync(resolve(root, 'CHANGELOG.md'), 'utf8').replace(/\r\n/g, '\n').split('\n')
+  const heads = lines.flatMap((l, i) => (l.startsWith('## ') ? [i] : []))
+  return lines.slice(0, heads[sections] ?? lines.length).join('\n')
+}
+
 // All runtime libraries live in devDependencies and are bundled, so the packaged
 // app.asar contains only the build output (no node_modules, no native modules).
 export default defineConfig({
@@ -50,6 +61,7 @@ export default defineConfig({
   renderer: {
     resolve: { alias },
     plugins: [react(), tailwindcss(), cspPlugin()],
+    define: { __FI_CHANGELOG__: JSON.stringify(recentChangelog()) },
     build: { chunkSizeWarningLimit: 2000, minify: 'esbuild' }
   }
 })

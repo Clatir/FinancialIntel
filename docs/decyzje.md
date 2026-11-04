@@ -3428,6 +3428,99 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   jak są; zmianę pojedynczej wypłaty robi edytor Operacji (rodzaj „Przelew własny” → Gotówka). Dawne podwójne liczenie
   (wypłata jako wydatek i zakup z Gotówki – saldo Gotówki ujemne, OP sp. 7) prostuje jedno potwierdzenie salda Gotówki
   (Ustawienia → Konta → „Potwierdź saldo” – korekta o różnicę) – do potwierdzenia, czy podpowiadać je meldunkiem.
+- **T425** Eksport „Części” (AP-29, AF-35, D89 / T303 – wiersz operacji bez zmian): `export/budget.ts` `partRowsOf` – wiersz
+  na każdą linię operacji okresu: część paragonu i wspólnego zakupu z własną kwotą, kategorią, „Finansuje” (domownik,
+  „(prezent)”, część wpływu „od: …”), opisem i tagami (tagi operacji + linii); operacja bez linii – jeden wiersz; czego
+  linie nie pokrywają (plik zmieniony ręcznie) – wiersz kategorii operacji jak `partsOf`, więc suma części = kwota
+  operacji i tabela przestawna sumuje kategorie roku. „Nr operacji” = jej miejsce w „Operacjach” tego samego eksportu;
+  „Część” jako „1 z 3” (nie „1/3” – Excel bierze to za datę). Raporty → Eksport: „Części – CSV” i arkusz „Części” w Excelu
+  (między „Operacjami” a „Miesiącami”); Excel widocznej listy Operacji – też z arkuszem „Części” (strona przelewu na
+  liście jednego konta jak wiersz główny). „Miesiące” – na końcu (kolumny przed nimi bez zmian) „Energia miesiąca (zł)”
+  (`debriefing().energy.budget`, puste bez pensji) i „Sfinansowane przez domowników (zł)” (suma `financed`).
+- **T426** Daty w Excelu (AP-29, RE sp. 3): rodzaje kolumn `date` / `month` / `time` w `export/xlsx.ts` – tekst
+  `RRRR-MM-DD` / `RRRR-MM` / `GG:MM` zapisany jako liczba dnia Excela (system 1900) z formatem `yyyy-mm-dd` / `yyyy-mm` /
+  `hh:mm` (wygląd jak w CSV, filtr dat i tabela przestawna je widzą); tekst, który datą nie jest, zostaje tekstem bez
+  stylu daty. Dopiski (AF-57, AF-70): pasek Operacji – „poza sumami: przelewy własne (i korekty) ±X zł”
+  (`operationsView.ts` `asideOfOperations`, kwoty jak w eksporcie – strona przelewu przy liście jednego konta), więc suma
+  pliku = Wpływy − Wydatki + X; panel „Przychody” – przy miesiącu z dopłatą do XTB w 12 miesiącach dopisek, że okno liczy
+  trading netto, ze średnią miesięcy jak w Bilansie paliwa (`income.ts` `monthsAverageOf`; bez dopłat – brak dopisku).
+- **T427** Okres eksportu zapamiętany na tym komputerze (AP-29, RE sp. 1): `localStorage` `fi.reports.exportPeriod`
+  (`{from, to, toToday}` – `exportPeriodOf` / `exportPeriodText`), jak filtry Operacji – wybór biurka, nie folderu (inny
+  komputer eksportuje swój okres; format danych folderu bez zmian). Koniec okresu równy dniowi wyboru = „do dziś” – przy
+  następnym eksporcie idzie z nowym dniem; inny koniec zostaje. Zły zapis – od początku roku do dziś.
+- **T428** Procenty „Wspólnie” – jedna reguła (AP-37, AF-49, zmienia „edytor ostrzega” z T156): procenty ≠ 100 % nie są
+  zapisywane nigdzie – szybki wpis, zmiana zbiorcza i import odmawiały, teraz edytor operacji też. Wpisany podział, który
+  nie daje 100 %, czeka w pamięci okna (`useDraft` `operation-share:<id>` – inna operacja, inny ekran go nie gubią; plik
+  operacji ma ostatni pełny podział), aż da 100 % albo „bez podziału” / „Wspólnie” od nowa. Edytor podziału
+  (`ShareEditor`, wszystkie miejsca) mówi „razem X % – podział zapisze się dopiero przy 100 %” (`data-state="refused"`)
+  i ma „dopełnij ostatniej do 100 %” (`share.ts` `fillLastPercent`: ostatnia osoba dostaje 100 − suma pozostałych, z
+  groszami procentów; brak przycisku, gdy pozostali mają już ponad 100 %). Kwoty innych ponad całość – bez zmian (reszta
+  0 zł): ich pełność zależy od kwoty operacji, która może się jeszcze zmienić.
+- **T429** Podgląd zmiany zbiorczej – cały skutek (AP-38, AF-24, OP sp. 2, rozszerza T265): obok energii dziś, kopert
+  bieżącego miesiąca, osłon i sald – cele (`effectOf` `goals`: pieniądze celu przed i po), miniony miesiąc, z którego
+  operacje wychodzą albo do którego przychodzą, i każdy, którego łupy silnik kończy inaczej (`monthsEffectOf`: debriefing
+  z dziennika silnika przed i po – łupy i „zostało” kopert, tylko miesiące zakończone; bieżący ma swoje linie kopert) oraz
+  wypłaty i zwroty ICTTJ, które tracą parę w banku (`pairsLost`: dostawy jak panel Dokowanie – `deliveriesFor` teraz,
+  `deliveriesOfLists` ze zmianą; para przed, brak operacji po). Silnik ze zmianą liczy pary niezadokowane z dostaw po
+  zmianie (`pendingPairsOf`), nie z obecnych. Tylko odczyt wyników silnika – reguły pieniędzy bez zmian.
+- **T430** Konflikty i historia czytelne (AP-27, DA sp. 3, DA.22, DA.23, DA.28, DA.30): karta konfliktu nazywa wpis tym, co
+  człowiek rozpoznaje (`conflicts.ts` `conflictSubject`) – operacja: kontrahent (inaczej tytuł, kategoria), data
+  dd.mm.rrrr, kwota ze znakiem i konto; plan i Dowództwo – miesiąc słownie; kontener, cel, pożyczka – nazwa i kwota;
+  saldo, boja, import, ustawienia – swoje; z oryginału, gdy nieczytelny – z kopii. Nazwa pliku z ULID tylko w dymku,
+  przy stronie „zapisał komputer X”, czasy jak w aplikacji. Różnice (karta, „Scal…”, Historia, Dziennik zmian, okno zmian
+  z drugiego komputera, odzyskanie): każde pole każdego schematu ma polską nazwę – `merge.ts` `LABELS`, a pole pod znanym
+  przedrostkiem składa się z nazw kluczy (`partsAfter`: „Reguły importu – kwota najwyżej”, dzień mapy jako data); test
+  przechodzi wszystkie ścieżki schematów zod i nie dopuszcza surowego klucza (klucz nowszej wersji zostaje, jak był).
+  Wartości: wyliczenia słowami (`VALUE_LABELS`: rodzaj operacji, saldo, sposób podziału, kierunek, pula…), tak / nie,
+  przecinek, daty i chwile po warszawsku, lista wartości jako wartości, obiekt jako jego pola po polsku – nigdy JSON;
+  obiekt tylko po jednej stronie rozpisany na pola (`readableChanges`), identyfikator wpisu nigdy nie jest różnicą ani
+  wyborem „Scal…” (scalona wersja ma id oryginału). Kwoty `awaitReturn`, `envelopeCovers`, usuniętych operacji importu –
+  w złotych. Historia: odrzucona strona konfliktu to „wersja niezachowana” (zamiast „odrzucona przy scalaniu”, DA.27).
+  Meldunki „podwójne korekty” mówią, że para liczy się tylko z dwóch komputerów (SA sp. 3). Tytuły wpisów z datą ISO
+  (`recordTitle`) – AP-23 (N4).
+- **T431** Konflikt rozstrzygany na wersjach, które okno pokazało (AP-27, AF-76, DA.28; rozszerza N17): „Scal…” trzyma
+  wersje, na których je otwarto (`opened`) – kopia albo oryginał zmienione w trakcie nie wchodzą po cichu: wybory zostają
+  na pokazanej treści, „Zapisz scalone” wyłączone, pasek „Kopia zmieniła się w trakcie scalania…” z „Scal od nowa”.
+  Proces główny przed każdą decyzją konfliktu czyta oba pliki z dysku jeszcze raz (`freshConflict` – watcher mógł nie
+  zdążyć): „Scal…” i „Zachowaj tę wersję” podają czasy plików, które okno pokazało, i strona zmieniona od tamtej chwili
+  odmawia (`ConflictChangedError` z bieżącym stanem dla okna) – nic nie jest zapisane ani przeniesione do Kosza;
+  „Zaakceptuj nowsze” (zbiorczo, bez wersji okna) też czyta pliki od nowa, więc odrzucona strona trafia do historii taka,
+  jaka jest na dysku, nigdy tylko do Kosza. „Zmieniona” – po treści: okno porównuje rekord bez znaczników zapisu
+  (`conflicts.ts` `changedSince` – zapis tego komputera tuż przed decyzją, `saveFirst`, który tylko odświeżył znaczniki,
+  zmianą nie jest; decyzja idzie z czasami plików, które okno zna po tym zapisie), proces główny – po skrócie treści
+  pliku przy czasie, który okno podało (okno za stanem procesu – odmowa). Odmowa jest w logu (strona i czasy).
+- **T432** Nowy komputer (AP-28, US.1, US.13, US.31, SW sp. 8): panele ustawień zapisanych w `config.json` mają jeden
+  znak „tylko ten komputer” (`MachineOnly` – rozmiar, prywatność kwot, szybki wpis, powiadomienia, dźwięki, ICTTJ: folder
+  i program, pliki z mBanku, bieżący i ostatnie foldery, zasobnik i start, aktualizacje, token). Pierwsze otwarcie
+  istniejącego budżetu (wystartowanego) na komputerze bez żadnego folderu w `config.json` zostawia w `localStorage`
+  (`fi.machineSetup`) prośbę: baner „Pierwsze otwarcie tego budżetu na tym komputerze…” z „Ustaw na tym komputerze” –
+  lista ICTTJ, skrót, start z Windows (z przełącznikiem), powiadomienia, token, każde ze stanem i „Ustaw…” do swojego
+  panelu; „Gotowe” albo × kończy, „Później” zostawia baner; pytanie o autostart nie pojawia się obok listy. Lista też
+  w Ustawieniach → Folder i kopie („Ustaw na tym komputerze…”). Folder tylko do odczytu – baner na każdej zakładce
+  Ustawień (na zakładkach komputera z dopiskiem, że ustawienia „tylko ten komputer” działają); pola budżetu wyłączone jak
+  dotąd. Scenariusz ICTTJ spoza listy: „nie ma w ICTTJ” tylko przy ICTTJ przeczytanym, inaczej „ICTTJ nie jest czytany na
+  tym komputerze” / „teraz niedostępny” (`missingForecastText`). Konto nowego wpisu (edytor i szybki wpis,
+  `calc/quick.ts` `entryAccount`): wybór tego komputera, a komputer bez wyboru – konto najnowszego wpisu ręcznego
+  w budżecie (bez operacji z banku), dopiero potem pierwsze konto. Format folderu bez zmian.
+- **T433** Start z Windows tylko z decyzji na tym komputerze (AP-28, incydent 03.11.2026 – `main/loginItem.ts`
+  `loginItemWrites`, czyste reguły z testem): profil inny niż własny aplikacji (`FI_USER_DATA` – testy, laboratorium)
+  nigdy nie pisze w kluczu Run; start aplikacji i późny odczyt `config.json` nigdy niczego nie usuwają – przy włączonym
+  ustawieniu dopisują tylko brakujący (albo z innymi argumentami) wpis tego exe; wyłączenie tutaj (Ustawienia, kreator,
+  baner, lista nowego komputera – `setTrayPrefs` z `launchAtLogin`) usuwa wyłącznie wpisy tego exe (`launchItems` Electrona
+  są po ścieżce exe) – wpis o tej samej nazwie innej kopii zostaje; stare wpisy tego exe pod inną nazwą (B52) – tylko przy
+  zmianie ustawienia, po zapisie własnego. macOS: zapis przy zmianie albo przy włączonym. Do sprawdzenia w maszynie: dwie
+  kopie (zainstalowana i przenośna) dzielą `config.json`, a wpisy mają różne nazwy – wyłączenie w jednej nie usuwa wpisu
+  drugiej.
+- **T434** „Co nowego” bez sieci, kopie po zmianie folderu kopii, zapis `config.json` ponawiany (AP-28, AF-40, IN.26,
+  DA.14, DA.11, US.33): okno ma wbudowane 15 najnowszych sekcji CHANGELOG (`electron.vite.config.mts` `__FI_CHANGELOG__`,
+  `releaseNotes.ts` `notesOf`) – panel „Co nowego w wersji X” pokazuje się z nich, gdy notatek z GitHuba nie ma
+  (aktualizacja spoza aplikacji, offline), po aktualizacji z wersji Y także wersje pośrednie (`justUpdated.from`).
+  Zmiana folderu kopii zapamiętuje poprzedni dla tego folderu danych (`config.json` `backupDirsBefore`, addytywnie,
+  najwyżej 8, `backupDirsAfter`): jego kopie zostają na liście pod nagłówkiem „Wcześniejszy folder kopii”, liczą się do
+  „Ostatnia kopia” i dają się odzyskać (`listedBackup` czyta tylko kopie z folderów listy); powrót do folderu zdejmuje go
+  z listy; nieudany zapis ustawienia cofa folder kopii. Tekst panelu mówi o 5 ostatnich kopiach ręcznych. Nieudany zapis
+  `config.json` (plik zajęty) ponawia się sam co 5 s z najnowszym stanem, aż się uda (`ConfigStore.retryLater`) –
+  komunikat w oknie to mówi.
 - **T435** Wpis ICTTJ z pierwszych dni budżetu (1.15.9, N5 – AP-26, AF-47 = C15, DO sp. 2; D72, T63; **zmienia zdanie T162**
   „bez Portfela XTB dla okna zaczętego przed startem”): „sprzed startu” tylko wpis z datą przed startem (`deliveries`:
   `!counted(e.date)`); wpis od startu, którego okno pary (−3 dni) zaczyna się przed startem, czeka na import jak każdy

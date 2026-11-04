@@ -5,6 +5,7 @@
 import { create } from 'zustand'
 import { warsawNow } from '@shared/calc/dates'
 import { defaultWatchMonday } from '@shared/calc/intel'
+import { exportPeriodOf, exportPeriodText } from '@shared/export/budget'
 import { navigate } from '../../store/ui'
 
 export type ReportTab = 'briefing' | 'watch' | 'debrief' | 'year' | 'export'
@@ -40,4 +41,23 @@ export function openYearReview(): void {
 export function openWatchReport(): void {
   useReportsUi.setState({ tab: 'watch', watch: null })
   navigate({ page: 'reports' })
+}
+
+/** The export's period kept on this computer (AP-29, `exportPeriodOf`): a choice of this desk, not of the folder. */
+const EXPORT_PERIOD_KEY = 'fi.reports.exportPeriod'
+
+export function readExportPeriod(today: string): { from: string; to: string } {
+  try {
+    return exportPeriodOf(localStorage.getItem(EXPORT_PERIOD_KEY), today)
+  } catch {
+    return exportPeriodOf(null, today)
+  }
+}
+
+export function storeExportPeriod(from: string, to: string, today: string): void {
+  try {
+    localStorage.setItem(EXPORT_PERIOD_KEY, exportPeriodText(from, to, today))
+  } catch {
+    /* storage unavailable: the period lives while the panel is open */
+  }
 }
