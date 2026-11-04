@@ -91,10 +91,23 @@ function indexOf(transactions: readonly Transaction[]): { byDay: Map<string, Tra
  * `LAPSE_DAYS`) or lapsed. A term without an amount is never matched.
  */
 export function scheduledDays(list: readonly Scheduled[], transactions: readonly Transaction[], today: string, from: string, to: string): ScheduledDay[] {
-  const { byDay: index, ids } = indexOf(transactions)
-  // The operations each day was made from or ticked with: never matched to another one.
+  return daysOf(list, usedOf(list), transactions, today, from, to)
+}
+
+/** The operations the buoys' days were made from or ticked with: never matched to another one. */
+function usedOf(list: readonly Scheduled[]): Set<string> {
   const used = new Set<string>()
   for (const s of list) for (const v of Object.values(s.done)) if (v) used.add(v)
+  return used
+}
+
+/**
+ * `scheduledDays` of the buoys `list` with the operations `made` of all of them (`usedOf` – a buoy without a day in the
+ * window still keeps its operation from the others): the days in [from, to] come only from those in `list`.
+ */
+function daysOf(list: readonly Scheduled[], made: ReadonlySet<string>, transactions: readonly Transaction[], today: string, from: string, to: string): ScheduledDay[] {
+  const { byDay: index, ids } = indexOf(transactions)
+  const used = new Set(made)
   const out: ScheduledDay[] = []
   // A one-off is done by any of its days (its day moved after it was done still is).
   const doneOf = (s: Scheduled, date: string): string | null | undefined => {
@@ -169,18 +182,66 @@ export function remindStep(s: Pick<Scheduled, 'remind'>, days: number): number |
   return fit.length ? fit[0]! : null
 }
 
+export type PastState = 'done' | 'late' | 'lapsed'
+
+/** The state of `s` among the days of `near` around its own day (`pastStateOf`); `made` – the operations of all buoys. */
+function pastAmong(s: Scheduled, near: readonly Scheduled[], made: ReadonlySet<string>, transactions: readonly Transaction[], today: string): PastState | null {
+  const state = daysOf(near, made, transactions, today, addDays(s.date, -2 * MATCH_DAYS), addDays(s.date, 2 * MATCH_DAYS)).find((d) => d.scheduled.id === s.id)?.state
+  return state === 'done' || state === 'late' || state === 'lapsed' ? state : null
+}
+
 /**
  * A one-off whose day is past (RA sp. 4 – „Pozostałe boje”, T378): done (an operation made from it or matched, ticked
  * off) or lapsed – its day more than `LAPSE_DAYS` past without one, off the radar; null – not past (or a yearly one).
  * `list` – all the buoys: an operation made from another one, or matched to another one's day around it first (the
- * radar's order – one operation, one day), is never its.
+ * radar's order – one operation, one day), is never its. One of `list` – from `pastStates` (once per list).
  */
-export function pastStateOf(s: Scheduled, transactions: readonly Transaction[], today: string, list: readonly Scheduled[]): 'done' | 'late' | 'lapsed' | null {
+export function pastStateOf(s: Scheduled, transactions: readonly Transaction[], today: string, list: readonly Scheduled[]): PastState | null {
   if (s.yearly || s.date >= today) return null
+  if (list.includes(s)) return pastStates(list, transactions, today).get(s.id) ?? null
   // The days that compete for its operations (±3 days of them): within twice the match's days of its own.
   const all = [...list.filter((x) => x.id !== s.id), s]
-  const state = scheduledDays(all, transactions, today, addDays(s.date, -2 * MATCH_DAYS), addDays(s.date, 2 * MATCH_DAYS)).find((d) => d.scheduled.id === s.id)?.state
-  return state === 'done' || state === 'late' || state === 'lapsed' ? state : null
+  return pastAmong(s, all, usedOf(all), transactions, today)
+}
+
+const pastMemo = new WeakMap<readonly Scheduled[], { transactions: readonly Transaction[]; today: string; states: Map<string, PastState> }>()
+
+/**
+ * Each one-off of `list` whose day is past with its state (`pastStateOf`) – once per list of the buoys, of the operations
+ * and the day (the panel „Pozostałe boje” asks for each at every render – przegląd 2 N3). The same days as each one's
+ * own count: the buoys with a day within twice the match's days of its day (found by their days, not all of them each
+ * time), the operations made from any buoy kept from them all.
+ */
+export function pastStates(list: readonly Scheduled[], transactions: readonly Transaction[], today: string): ReadonlyMap<string, PastState> {
+  const known = pastMemo.get(list)
+  if (known && known.transactions === transactions && known.today === today) return known.states
+  const made = usedOf(list)
+  const once = list.filter((s) => !s.yearly).sort((a, b) => a.date.localeCompare(b.date))
+  const yearly = list.filter((s) => s.yearly)
+  const states = new Map<string, PastState>()
+  // The first one-off on or after `date` (binary search over their days).
+  const firstFrom = (date: string) => {
+    let lo = 0
+    let hi = once.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (once[mid]!.date < date) lo = mid + 1
+      else hi = mid
+    }
+    return lo
+  }
+  for (const s of once) {
+    if (s.date >= today) break
+    const from = addDays(s.date, -2 * MATCH_DAYS)
+    const to = addDays(s.date, 2 * MATCH_DAYS)
+    const near: Scheduled[] = []
+    for (let i = firstFrom(from); i < once.length && once[i]!.date <= to; i++) near.push(once[i]!)
+    for (const y of yearly) if (occurrences(y, from, to).length) near.push(y)
+    const state = pastAmong(s, near, made, transactions, today)
+    if (state) states.set(s.id, state)
+  }
+  pastMemo.set(list, { transactions, today, states })
+  return states
 }
 
 /** The next day of a planned one from `today` on (its next year's for a yearly one); null = a one-off past. */

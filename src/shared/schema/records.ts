@@ -520,8 +520,9 @@ export const balanceSchema = z.looseObject({
   amount: grosze,
   correctionId: ulidSchema.nullable().default(null),
   /**
-   * A confirmation's last moment of confirming (1.15.7, T383 – „Inwentaryzacja”): `confirmBalance` stamps it, again too;
-   * an edit, a merge or a conflict's resolution never does. None = before it – its creation counts.
+   * A confirmation's last moment of confirming (1.15.7, T383 – „Inwentaryzacja”): `confirmBalance` and the import stamp
+   * it, again too; an edit, a merge or a conflict's resolution never does. None = written before 1.15.7 – its balance's
+   * day counts, as that version counted it.
    */
   confirmedAt: isoDateTime.optional().catch(undefined),
   note: text

@@ -38,8 +38,8 @@ function fleetOf(start: string, containers: Container[], transactions: Transacti
   expect(layersSum(state)).toBe(state.total)
   return state
 }
-const cargoOf = (containers: Container[], transactions: Transaction[], today: string, start: string | null, tanks: FleetState['tanks'] = []) =>
-  cargoStatuses({ containers, transactions, today, tanks, coveredTo: {}, start })
+const cargoOf = (containers: Container[], transactions: Transaction[], today: string, start: string | null) =>
+  cargoStatuses({ containers, transactions, today, coveredTo: {}, start })
 const states = (list: CargoStatus[]) => list.map((s) => [s.due, s.state, s.carried])
 const paidWith = (list: CargoStatus[]) => list.map((s) => [s.due, s.state, s.payments.map((p) => p.date)])
 
@@ -55,7 +55,7 @@ describe('przegląd N3 1: spóźniona zapłata poprzedniego cyklu, potem wcześn
     expect(sinkingOf(f.log, '2026-02').get(water.id)).toBeUndefined()
     expect(f.energy).toBe(zl(5000))
     // Ładownia: February paid with the payment of 20.01, November closed by the one of 10.12.
-    expect(paidWith(cargoOf([water], paid, '2026-02-05', f.start, f.tanks))).toEqual([['2026-02-15', 'paid', ['2026-01-20']]])
+    expect(paidWith(cargoOf([water], paid, '2026-02-05', f.start))).toEqual([['2026-02-15', 'paid', ['2026-01-20']]])
   })
 
   it('przed startem (T345, przegląd N2 4): luty zapłacony 28.04, start 5.05 – maj nie jest zapłacony, odkłada 300 zł', () => {
@@ -68,7 +68,7 @@ describe('przegląd N3 1: spóźniona zapłata poprzedniego cyklu, potem wcześn
     expect(f.alarms.filter((a) => a.kind === 'sinking-short')).toEqual([])
     expect(f.tanks[0]).toMatchObject({ amount: 0, paidDue: '2026-05', dueMonth: '2026-08' })
     // Ładownia: May paid with its own payment of 10.05 – the one of 28.04 is February's.
-    expect(paidWith(cargoOf([w], txs, '2026-05-12', f.start, f.tanks))).toEqual([['2026-05-10', 'paid', ['2026-05-10']]])
+    expect(paidWith(cargoOf([w], txs, '2026-05-12', f.start))).toEqual([['2026-05-10', 'paid', ['2026-05-10']]])
   })
 })
 
@@ -81,10 +81,10 @@ describe('przegląd N3 2: opłata co 2 miesiące – płatność przed dniem ter
     // Before: February „paid” with no payment (the engine's paidDue), December paid by 05.02 – one payment, two dues.
     const f = fleetOf('2025-09-01', [tv], txs, '2026-02-06T12:00:00+01:00')
     expect(f.tanks[0]).toMatchObject({ paidDue: null, dueMonth: '2026-02' })
-    expect(paidWith(cargoOf([tv], txs, '2026-02-06', f.start, f.tanks))).toEqual([['2026-02-10', 'waiting', []]])
+    expect(paidWith(cargoOf([tv], txs, '2026-02-06', f.start))).toEqual([['2026-02-10', 'waiting', []]])
     const late = fleetOf('2025-09-01', [tv], txs, '2026-02-14T12:00:00+01:00')
     expect(late.tanks[0]).toMatchObject({ paidDue: null })
-    expect(states(cargoOf([tv], txs, '2026-02-14', late.start, late.tanks))).toEqual([['2026-02-10', 'overdue', false]])
+    expect(states(cargoOf([tv], txs, '2026-02-14', late.start))).toEqual([['2026-02-10', 'overdue', false]])
   })
 
   it('„Zapłacone (dziś)” przy zaległym grudniu 05.02 płaci grudzień – nie luty', () => {
@@ -108,7 +108,7 @@ describe('przegląd N3 3: „Zapłacone poza budżetem” zamyka zaległy termin
     // Before: November still open for the engine – the payment of 20.01 its late one, February collected again (180 zł).
     expect(f.tanks[0]).toMatchObject({ paidDue: '2026-02', want: 0 })
     expect(sinkingOf(f.log, '2026-02').get(water.id)).toBeUndefined()
-    expect(paidWith(cargoOf([water], txs, '2026-02-05', f.start, f.tanks))).toEqual([['2026-02-15', 'paid', ['2026-01-20']]])
+    expect(paidWith(cargoOf([water], txs, '2026-02-05', f.start))).toEqual([['2026-02-15', 'paid', ['2026-01-20']]])
   })
 })
 
@@ -122,7 +122,7 @@ describe('przegląd N3 4: kontener dodany po starcie – termin sprzed dodania n
     // Before: November open for the engine – at the turn of February the tank took the whole fee again from the energy.
     expect(f.tanks[0]).toMatchObject({ paidDue: '2026-02', want: 0 })
     expect(sinkingOf(f.log, '2026-02').get(waste.id)).toBeUndefined()
-    expect(paidWith(cargoOf([waste], txs, '2026-02-05', f.start, f.tanks))).toEqual([['2026-02-20', 'paid', ['2026-01-20']]])
+    expect(paidWith(cargoOf([waste], txs, '2026-02-05', f.start))).toEqual([['2026-02-20', 'paid', ['2026-01-20']]])
   })
 })
 
@@ -182,7 +182,7 @@ describe('przegląd N3 10: płatność przed dniem terminu zamyka najstarszy zal
     const txs = [pay(water, '2025-05-15'), pay(water, '2025-11-15'), pay(water, '2026-01-20')]
     const f = fleetOf('2025-06-01', [water], txs, '2026-02-05T12:00:00+01:00')
     expect(f.tanks[0]).toMatchObject({ paidDue: '2026-02' })
-    expect(states(cargoOf([water], txs, '2026-02-05', f.start, f.tanks))).toEqual([
+    expect(states(cargoOf([water], txs, '2026-02-05', f.start))).toEqual([
       ['2025-08-15', 'overdue', true],
       ['2026-02-15', 'paid', false]
     ])

@@ -137,21 +137,22 @@ export function radar(o: RadarInput): RadarItem[] {
     for (let m = thisMonth; firstDayOf(m) <= end; m = addMonths(m, 1)) {
       const date = m === thisMonth && s ? s.due : dueIn(m, day)
       if (date > end || !activeIn(c, m)) continue
-      if (m === thisMonth && (!s || s.state === 'paid')) continue
+      // Paid, or a payment written ahead pays it on its day (T398 – the balances ahead count that operation, once).
+      if (m === thisMonth && (!s || s.state === 'paid' || s.planned)) continue
       const late = m === thisMonth && s && date < o.today
       out.push({ key: `fixed:${c.id}:${date}`, date, kind: 'fixed', name: c.name, amount: amountIn(c, m), direction: 'out', note: late ? lateNote(s, o.today) : '', ref: c.id, ...(s && m === thisMonth && s.state === 'overdue' ? { overdue: true } : {}) })
     }
   }
-  // The periodic fees due this month, not paid yet – a late one too.
+  // The periodic fees due this month, not paid yet – a late one too; one a payment written ahead pays – that operation's.
   for (const s of cycleNow.values()) {
-    if (s.state === 'paid' || s.due > end) continue
+    if (s.state === 'paid' || s.planned || s.due > end) continue
     const tank = o.tanks.find((t) => t.containerId === s.containerId)?.amount ?? 0
     const note = s.due < o.today ? lateNote(s, o.today) : `w zbiorniku ${o.money(tank)}`
     out.push({ key: `asteroid:${s.containerId}:${s.due}`, date: s.due, kind: 'asteroid', name: s.name, amount: s.amount, direction: 'out', note, ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
   }
   // The dues of earlier months still unpaid (D99 pkt 3, AF-50): on their day, until a payment pays them.
   for (const s of o.cargo ?? []) {
-    if (!s.carried || s.state === 'paid') continue
+    if (!s.carried || s.state === 'paid' || s.planned) continue
     const kind = s.cycleMonths > 1 ? 'asteroid' : 'fixed'
     out.push({ key: `${kind}:${s.containerId}:${s.due}`, date: s.due, kind, name: s.name, amount: s.amount, direction: 'out', note: lateNote(s, o.today), ref: s.containerId, ...(s.state === 'overdue' ? { overdue: true } : {}) })
   }

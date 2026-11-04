@@ -114,8 +114,8 @@ describe('harmonogram płatności (1.9.0, F23)', () => {
     // Its end: the last payment of its life.
     expect(lastPaymentOf({ ...c, until: '2027-08' }, '2026-11-20')).toBe('2027-05-15')
     // Due in its schedule's month only (F1).
-    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-03-10', tanks: [], coveredTo: {} }).map((s) => [s.due, s.state])).toEqual([['2027-03-15', 'waiting']])
-    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-04-10', tanks: [], coveredTo: {} })).toEqual([])
+    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-03-10', coveredTo: {} }).map((s) => [s.due, s.state])).toEqual([['2027-03-15', 'waiting']])
+    expect(cargoStatuses({ containers: [c], transactions: payments, today: '2027-04-10', coveredTo: {} })).toEqual([])
   })
 })
 

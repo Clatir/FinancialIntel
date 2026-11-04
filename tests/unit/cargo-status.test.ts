@@ -17,7 +17,7 @@ const container = (over: Partial<Container> = {}): Container => containerSchema.
 const pay = (c: Container, date: string, over: Partial<Transaction> = {}): Transaction =>
   transactionSchema.parse({ ...base(), date, accountId: XTB_WALLET_ACCOUNT_ID, amount: -c.amount, containerId: c.id, ...over })
 const money = (g: number) => `${(g / 100).toFixed(2)} zł`
-const input = (over: Partial<CargoInput>): CargoInput => ({ containers: [], transactions: [], today: '2026-10-15', tanks: [], coveredTo: {}, ...over })
+const input = (over: Partial<CargoInput>): CargoInput => ({ containers: [], transactions: [], today: '2026-10-15', coveredTo: {}, ...over })
 /** A rent paid on the 10th of each month April – September. */
 const rentHistory = (c: Container) => ['04', '05', '06', '07', '08', '09'].map((m) => pay(c, `2026-${m}-10`))
 

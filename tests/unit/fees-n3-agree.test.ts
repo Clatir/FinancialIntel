@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { cargoStatuses, dueIn, paymentDay, paymentsIndex, type CargoStatus } from '@shared/calc/cargoStatus'
+import { cargoStatuses, dueIn, feeDuesOf, paymentDay, paymentsIndex, type CargoStatus } from '@shared/calc/cargoStatus'
 import { addDays, addMonths, firstDayOf, monthOf } from '@shared/calc/dates'
 import { activeIn, amountIn, computeFleet, cyclePosition, layersSum, sinkingInstallment, type FleetState } from '@shared/calc/fleet'
+import { startPaidDays, startTankItems, startTanks } from '@shared/calc/start'
 import { createDefaultSettings } from '@shared/defaults'
 import { balanceSchema, containerSchema, defaultCategoryId, goalSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Settings, type Transaction } from '@shared/schema'
 
@@ -13,6 +14,8 @@ import { balanceSchema, containerSchema, defaultCategoryId, goalSchema, HOUSE_ME
  * its installment for one it showed unpaid; „Zapłacone (dziś)” is the due a payment today pays. After the merge of N2
  * with N3 (T393) the same with the payments made every way: from a goal's money, to be refunded (the whole purchase or a
  * line of a receipt), an old transfer with a hidden container (T362) – one rule of which payment pays (`paymentsIndex`).
+ * Przegląd 2 N3: the same for a bill of a varying amount (F23) and with payments written ahead (T398: a due paid only from
+ * the payment's day, shown planned before it), and the start wizard's installment = the engine's at the start.
  */
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2025-01-01T00:00:00.000Z'
@@ -64,8 +67,17 @@ interface Case {
   name: string
 }
 
-function caseOf(seed: number, ways = false): Case {
+/**
+ * A fee's history from a seed. `ways` – every way of paying (T393 after N2); `variable` – a bill of a varying amount
+ * (F23: any second payment of a window pays an older due), each payment's amount ±40 % (przegląd 2 N3) – drawn apart, the
+ * other cases stay as they were.
+ */
+function caseOf(seed: number, o: { ways?: boolean; variable?: boolean } = {}): Case {
+  const { ways = false } = o
   const r = rng(seed)
+  const rv = rng(seed * 7919 + 17)
+  const variable = !!o.variable && rv() < 0.7
+  const vary = (amount: number) => (variable ? Math.max(100, Math.round(amount * (0.6 + rv() * 0.8))) : amount)
   const int = (lo: number, hi: number) => lo + Math.floor(r() * (hi - lo + 1))
   const kind = ['1', '2', '3', '12', 'schedule'][int(0, 4)]!
   const cycleMonths = kind === 'schedule' ? 12 : Number(kind)
@@ -78,11 +90,11 @@ function caseOf(seed: number, ways = false): Case {
   const created = roll < 0.55 ? start : roll < 0.85 ? addDays(start, int(1, 200)) : addDays(start, -int(1, 120))
   const from = created > start && cycleMonths > 1 && r() < 0.5 ? monthOf(created) : null
   const amount = zl(int(20, 1500))
-  const draft = containerSchema.parse({ ...base(`${created}T10:00:00.000Z`), name: `Opłata ${seed}`, amount, cycleMonths, schedule, dueMonth, dueDay, from, accountId: MBANK_ACCOUNT_ID })
+  const draft = containerSchema.parse({ ...base(`${created}T10:00:00.000Z`), name: `Opłata ${seed}`, amount, cycleMonths, schedule, dueMonth, dueDay, from, accountId: MBANK_ACCOUNT_ID, variable })
   // The payments: from 8 months before the start (history linked from before it) to 20 months after – every way of paying
   // drawn too (`ways`): half mine, the rest from a goal, to be refunded (whole, a line) or an old transfer.
   const payments: Transaction[] = []
-  const pay = (c: Container, date: string, amount: number): Transaction => (ways ? payBy(c, date, amount, r() < 0.5 ? 'own' : WAYS[int(1, 4)]!) : payBy(c, date, amount, 'own'))
+  const pay = (c: Container, date: string, amount: number): Transaction => (ways ? payBy(c, date, vary(amount), r() < 0.5 ? 'own' : WAYS[int(1, 4)]!) : payBy(c, date, vary(amount), 'own'))
   const end = addMonths(monthOf(start), 20)
   const dues: string[] = []
   for (let due = cyclePosition(draft, addMonths(monthOf(start), -8)).dueMonth; due <= end; due = cycleMonths > 1 ? cyclePosition(draft, addMonths(due, 1)).dueMonth : addMonths(due, 1)) {
@@ -102,7 +114,7 @@ function caseOf(seed: number, ways = false): Case {
   const c = settledDue ? { ...draft, aliveAt: addDays(settledDue, 1) } : draft
   const first = created > start ? created : start
   const todays = Array.from({ length: 4 }, () => addDays(first, int(0, 560))).filter((d) => d < `${end}-01`)
-  return { c, payments: payments.sort((a, b) => a.date.localeCompare(b.date)), start, todays, name: `#${seed} ${kind} dzień ${dueDay} start ${start} dodany ${created}${from ? ` od ${from}` : ''}${c.aliveAt ? ` aliveAt ${c.aliveAt}` : ''}` }
+  return { c, payments: payments.sort((a, b) => a.date.localeCompare(b.date)), start, todays, name: `#${seed} ${kind}${variable ? ' zmienna' : ''} dzień ${dueDay} start ${start} dodany ${created}${from ? ` od ${from}` : ''}${c.aliveAt ? ` aliveAt ${c.aliveAt}` : ''}` }
 }
 
 function fleetOf(k: Case, transactions: Transaction[], today: string): FleetState {
@@ -144,9 +156,10 @@ function checkToday(k: Case, f: FleetState, transactions: Transaction[], today: 
     tally.today++
     expect(tank.paidDue === due, `${why}: paidDue ${tank.paidDue}, Ładownia ${ownDue(cargoAt(k, transactions, today), month)?.state}`).toBe(ownDue(cargoAt(k, transactions, today), month)?.state === 'paid')
   } else if (cyclePosition(k.c, due).length >= 3 && dayFor(k, transactions, month) === dayFor(k, transactions, due)) {
-    // Paid early (T135): on the 1st of its due month Ładownia shows it paid by the same payments.
+    // Paid early (T135): on the 1st of its due month Ładownia shows it paid by the same payments – the ones up to today
+    // (one written ahead pays from its day – T398).
     tally.early++
-    const s = ownDue(cargoAt(k, transactions, firstDayOf(due)), due)
+    const s = ownDue(cargoAt(k, transactions.filter((t) => t.date <= today), firstDayOf(due)), due)
     expect(tank.paidDue === due, `${why}: paidDue ${tank.paidDue}, Ładownia 1.${due.slice(5)} ${s?.state}`).toBe(s?.state === 'paid')
   } else expect(tank.paidDue === null || tank.paidDue === due).toBe(true)
 }
@@ -189,6 +202,23 @@ function checkPayToday(k: Case, transactions: Transaction[], today: string, tall
   checkToday(k, f, after, today, tally, `${why} + zapłata dziś`)
 }
 
+/**
+ * „Zapłacone (dziś)” as the full count gives it (przegląd 2 N3 3 – counted now only for a fee with a due still to pay):
+ * the payment of today after the ones up to today, its due the oldest one it leaves paid.
+ */
+function checkPayTodayRef(k: Case, transactions: Transaction[], today: string, why: string) {
+  const month = monthOf(today)
+  const start = k.start <= today ? k.start : null
+  const linked = (paymentsIndex(transactions).byContainer.get(k.c.id) ?? []).filter((p) => p.date <= today)
+  const day = paymentDay(k.c, linked, month).day
+  const f = { start, month }
+  const now = feeDuesOf(k.c, linked, day, f).dues
+  const after = feeDuesOf(k.c, [...linked, { id: '', date: today, amount: amountIn(k.c, month), accountId: '' }], day, f).dues
+  const paidAfter = new Set(after.slice(0, -1).filter((d) => d.payments.length).map((d) => d.month))
+  const ref = now.slice(0, -1).find((d) => !d.payments.length && paidAfter.has(d.month))?.month ?? null
+  for (const s of cargoAt(k, transactions, today)) expect(s.payToday, `${why}: „Zapłacone (dziś)” ${s.due}`).toBe(ref === monthOf(s.due))
+}
+
 /** Ładownia's own rules: paid with payments, a late due unpaid and the budget's (T375, przegląd N3 3, 4, 5). */
 function checkShown(k: Case, shown: CargoStatus[], why: string) {
   const created = monthOf(k.c.createdAt)
@@ -215,6 +245,7 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
         checkToday(k, f, known, today, tally, why)
         checkTurn(k, f, known, today, tally, why)
         checkPayToday(k, known, today, tally, why)
+        checkPayTodayRef(k, known, today, why)
       }
     }
     // The checks ran on many histories, not a few.
@@ -228,7 +259,7 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
     const tally: Tally = { today: 0, turns: 0, early: 0, payToday: 0 }
     const seen = new Map<Way, number>()
     for (let seed = 1001; seed <= 1250; seed++) {
-      const k = caseOf(seed, true)
+      const k = caseOf(seed, { ways: true })
       for (const t of k.payments) seen.set(wayOf(t), (seen.get(wayOf(t)) ?? 0) + 1)
       for (const today of k.todays) {
         const why = `${k.name} (sposoby zapłaty), dziś ${today}`
@@ -247,5 +278,55 @@ describe('przegląd N3 13: silnik i Ładownia liczą cykle opłat jedną reguł�
     expect(tally.turns).toBeGreaterThan(400)
     expect(tally.early).toBeGreaterThan(350)
     expect(tally.payToday).toBeGreaterThan(200)
+  })
+
+  it('przegląd 2 N3: rachunek zmienny (F23) i płatności wpisane z wyprzedzeniem (T398) – 300 historii, silnik = Ładownia = kreator', () => {
+    const tally: Tally = { today: 0, turns: 0, early: 0, payToday: 0 }
+    let variable = 0
+    let planned = 0
+    let wizard = 0
+    for (let seed = 2001; seed <= 2300; seed++) {
+      const k = caseOf(seed, { variable: true })
+      if (k.c.variable) variable++
+      const r = rng(seed + 5)
+      for (const today of k.todays) {
+        // The payments written ahead (B127): those of the next 0–45 days are in the folder already.
+        const known = k.payments.filter((t) => t.date <= addDays(today, Math.floor(r() * 46)))
+        const why = `${k.name} (z wyprzedzeniem), dziś ${today}`
+        const f = fleetOf(k, known, today)
+        const shown = cargoAt(k, known, today)
+        checkShown(k, shown, why)
+        checkToday(k, f, known, today, tally, why)
+        checkTurn(k, f, known, today, tally, why)
+        checkPayToday(k, known, today, tally, why)
+        checkPayTodayRef(k, known, today, why)
+        // A due a payment written ahead pays (T398): not paid before that day – on it paid, as the engine has it then.
+        for (const s of shown) {
+          if (!s.planned) continue
+          planned++
+          expect(s.state, `${why}: zaplanowane ${s.due}`).not.toBe('paid')
+          expect(s.planned.date > today, `${why}: zaplanowane ${s.due} na ${s.planned.date}`).toBe(true)
+          if (monthOf(s.planned.date) !== monthOf(today)) continue
+          const then = cargoAt(k, known, s.planned.date)
+          expect(then.some((x) => x.due === s.due && x.state !== 'paid'), `${why}: ${s.due} w dniu ${s.planned.date}`).toBe(false)
+          checkToday(k, fleetOf(k, known, s.planned.date), known, s.planned.date, tally, `${why} → ${s.planned.date}`)
+        }
+      }
+      // The start wizard (T393, przegląd 2 N3 1): a fee of the hold at the start wants the installment the engine takes then.
+      if (k.c.cycleMonths <= 1 || monthOf(k.c.createdAt) > monthOf(k.start) || k.c.from || !activeIn(k.c, monthOf(k.start))) continue
+      const before = k.payments.filter((t) => t.date < k.start)
+      const tank = fleetOf(k, before, k.start).tanks.find((t) => t.containerId === k.c.id)
+      if (tank?.want == null) continue
+      wizard++
+      const days = startPaidDays(before, k.start, [k.c], [])
+      const items = startTankItems([k.c], []).map((item) => ({ ...item, paid: days.get(item.key) ?? [] }))
+      expect(startTanks(items, k.start, {})[0]!.installment, `${k.name}: kreator na starcie`).toBe(tank.want)
+    }
+    expect(variable).toBeGreaterThan(180)
+    expect(planned).toBeGreaterThan(60)
+    expect(wizard).toBeGreaterThan(120)
+    expect(tally.today).toBeGreaterThan(350)
+    expect(tally.turns).toBeGreaterThan(550)
+    expect(tally.payToday).toBeGreaterThan(250)
   })
 })

@@ -119,6 +119,19 @@ test('AP-17: „Dopełnij kadłub z osłon” z „Cofnij”, podgląd celów wa
     await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Cel kadłuba' })).toHaveText(/18\s000,00\szł\s*→\s*36\s000,00\szł/)
     await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Wolne do decyzji' })).toHaveText(/2\s100,00\szł\s*→\s*0,00\szł/)
     expect((await json(join(dir, 'fi.json'))).settings.layers.hullMonths).toBe(6)
+    // Another value typed (przegląd 2 N3): the preview of the last settled one stays until the new one settles – it never
+    // leaves the page on a key (before: gone for 300 ms on every key, the layout jumping).
+    await page.evaluate(`(() => {
+      window.__previewGone = false
+      new MutationObserver(() => {
+        if (!document.querySelector('[data-testid="layers-preview"]')) window.__previewGone = true
+      }).observe(document.body, { childList: true, subtree: true })
+    })()`)
+    await page.getByTestId('layers-hull').fill('10')
+    await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Cel kadłuba' })).toHaveText(/18\s000,00\szł\s*→\s*30\s000,00\szł/)
+    expect(await page.evaluate('window.__previewGone')).toBe(false)
+    await page.getByTestId('layers-hull').fill('12')
+    await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Cel kadłuba' })).toHaveText(/18\s000,00\szł\s*→\s*36\s000,00\szł/)
     await page.getByTestId('layers-hull').press('Enter')
     await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.layers.hullMonths).toBe(12)
     await expect(preview).toHaveCount(0)

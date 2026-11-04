@@ -6,12 +6,13 @@
  * it. The due: the day of the month its payments come on (its last linked payments since its day was set – T376), else
  * its own payment day. A loan's installments are the loan's (its own reminder – T70), an archived container is out of
  * the hold. Which payment pays a fee (`paymentsIndex`) and which due it pays (`feeDuesOf`) is one rule (T393) – the
- * engine's paid cycles and the start wizard's too (`paidDuesOf`). Pure.
+ * engine's paid cycles and the start wizard's too (`paidDuesOf`); a payment written ahead pays only from its day (T398).
+ * Pure.
  */
 import type { Container, Transaction } from '../schema/records'
 import { addDays, addMonths, dayOfMonth, daysInMonth, firstDayOf, monthOf, warsawNow } from './dates'
 // The engine reads its paid cycles from here (T393) and this module the calendar from it – a cycle of functions only.
-import { activeIn, amountIn, cyclePosition, followedFrom, nextUnpaidOf, type AmountOf, type CycleOf, type FeeOf, type FleetState } from './fleet'
+import { activeIn, amountIn, cyclePosition, followedFrom, nextUnpaidOf, type AmountOf, type CycleOf, type FeeOf } from './fleet'
 import { OVERDUE_DAYS } from './loans'
 import { partsOf } from './operations'
 
@@ -57,17 +58,18 @@ export interface CargoStatus {
    * unpaid, nor the next one.
    */
   payToday: boolean
+  /**
+   * A payment written ahead (dated after today – T398) on whose day this due, unpaid now, becomes paid by the same rule:
+   * the state and the engine count it only from that day; Ładownia shows it beside the due, the Radar and the briefing
+   * leave the due out (the balances ahead count the operation on its day). null – none.
+   */
+  planned: CargoPayment | null
 }
 
 export interface CargoInput {
   containers: readonly Container[]
   transactions: readonly Transaction[]
   today: string
-  /**
-   * The engine's tanks – not read since T393: the engine's paid cycles (`paidDue`) come from this state's own rule
-   * (`paidDuesOf`), so a cycle it paid is a due paid here by the same payments.
-   */
-  tanks?: FleetState['tanks']
   /** The last day the bank's files cover on each account (`settings.import.coveredTo`). */
   coveredTo: Readonly<Record<string, string>>
   /**
@@ -89,6 +91,13 @@ export interface PaymentsIndex {
 }
 
 const indexes = new WeakMap<readonly Transaction[], PaymentsIndex>()
+
+/**
+ * The order of a fee's payments (T393 – the hold's index and the engine's payments before the start alike): by their day,
+ * then their operation – the payments of one day come in one order everywhere.
+ */
+export const byPaymentDay = (a: Pick<Linked, 'date' | 'id'>, b: Pick<Linked, 'date' | 'id'>): number =>
+  a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 
 /**
  * Once per list of the store (its lists stay while the records do). A container's payments – the one rule of which
@@ -119,7 +128,7 @@ export function paymentsIndex(transactions: readonly Transaction[]): PaymentsInd
       else index.byContainer.set(containerId, [p])
     }
   }
-  for (const list of index.byContainer.values()) list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))
+  for (const list of index.byContainer.values()) list.sort(byPaymentDay)
   indexes.set(transactions, index)
   return index
 }
@@ -334,13 +343,43 @@ export function paidDuesOf(c: FeeDuesOf, linked: readonly Linked[], day: number,
 /**
  * The due a payment on `today` of the fee's amount pays (T375 – „Zapłacone (kwota, dziś)”): the oldest one unpaid it
  * leaves paid by the same rule (`feeDuesOf`) – its window's, the late one first, or one its spare pays; null – none.
+ * `linked` – the payments up to today (T398): the one of today comes after them.
  */
 function paidToday(c: FeeDuesOf, linked: readonly Linked[], day: number, f: FeeFollow, dues: readonly FeeDue[], today: string): string | null {
-  const at = linked.findIndex((p) => p.date > today)
   const payment: Linked = { id: '', date: today, amount: amountIn(c, f.month), accountId: '' }
-  const after = feeDuesOf(c, at < 0 ? [...linked, payment] : [...linked.slice(0, at), payment, ...linked.slice(at)], day, f).dues
+  const after = feeDuesOf(c, [...linked, payment], day, f).dues
   const paidAfter = new Set(after.slice(0, -1).filter((d) => d.payments.length).map((d) => d.month))
   return dues.slice(0, -1).find((d) => !d.payments.length && paidAfter.has(d.month))?.month ?? null
+}
+
+/** The first of a fee's payments (by day) dated after `today` – the list's length when none: the ones written ahead. */
+function aheadFrom(linked: readonly Linked[], today: string): number {
+  let i = linked.length
+  while (i > 0 && linked[i - 1]!.date > today) i--
+  return i
+}
+
+const strip = ({ id, date, amount }: CargoPayment): CargoPayment => ({ id, date, amount })
+
+/**
+ * The payments written ahead (T398) of the dues `unpaid` now: for each, the first of them on whose day it becomes paid by
+ * the same rule – the payments up to that day (a due once paid stays paid as later ones come: a spare moves only a due's
+ * earlier payments, never its latest). Its own payment of that day, else the day's last one (a second payment of a window
+ * makes an earlier one the late due's – T375). Only those before the last due's window can pay a due followed here.
+ */
+function plannedOf(c: FeeDuesOf, all: readonly Linked[], ahead: number, day: number, f: FeeFollow, unpaid: readonly FeeDue[], bound: string): Map<string, CargoPayment> {
+  const out = new Map<string, CargoPayment>()
+  for (let k = ahead; k < all.length && out.size < unpaid.length && all[k]!.date < bound; k++) {
+    // The payments of one day come together: on that day all of them are known.
+    if (k + 1 < all.length && all[k + 1]!.date === all[k]!.date) continue
+    const then = new Map(feeDuesOf(c, all.slice(0, k + 1), day, f).dues.map((d) => [d.month, d]))
+    for (const d of unpaid) {
+      const x = then.get(d.month)
+      if (out.has(d.month) || !x?.payments.length) continue
+      out.set(d.month, strip(x.payments.find((p) => p.date === all[k]!.date) ?? all[k]!))
+    }
+  }
+  return out
 }
 
 export function cargoStatuses(o: CargoInput): CargoStatus[] {
@@ -352,23 +391,30 @@ export function cargoStatuses(o: CargoInput): CargoStatus[] {
   for (const c of o.containers) {
     // A fee whose life ended (`until`) still has its last dues unpaid; one out of the hold (archived) none.
     if (c.archived || c.loanId || (!start && !activeIn(c, month))) continue
-    const linked = index.byContainer.get(c.id) ?? []
+    const all = index.byContainer.get(c.id) ?? []
+    // A payment dated after today (written ahead – B127) pays no due before its day, as in the engine (`paidBefore` up to
+    // today – T398): the state counts the payments up to today, the ones ahead are its due's planned payment.
+    const ahead = aheadFrom(all, o.today)
+    const linked = ahead < all.length ? all.slice(0, ahead) : all
     const { day, dayFrom } = paymentDay(c, linked, month)
+    const follow: FeeFollow = { start, month }
     // Up to the next due: a payment in its window before its day may be a late one of this month's.
-    const { dues, followed } = feeDuesOf(c, linked, day, { start, month })
+    const { dues, followed } = feeDuesOf(c, linked, day, follow)
     const isPaid = (d: FeeDue) => d.payments.length > 0
-    const payToday = paidToday(c, linked, day, { start, month }, dues, o.today)
-    const account = c.accountId ?? linked.at(-1)?.accountId ?? null
+    // This month's due (a periodic fee only in its due month – the months before fill its tank, the asteroids announce
+    // it); an earlier month's only while unpaid (D99 pkt 3); one not the budget's (before its first day, before the fee
+    // came into the hold, settled) – only paid this month (T379).
+    const shown = dues.slice(0, -1).filter((d) => d.month <= month && activeIn(c, d.month) && (isPaid(d) ? d.month === month : followed(d, o.today)))
+    const unpaid = shown.filter((d) => !isPaid(d))
+    // „Zapłacone (dziś)” and the payments written ahead – only for a due still to pay: a fee paid never counts its whole
+    // history again (przegląd 2 N3).
+    const payToday = unpaid.length ? paidToday(c, linked, day, follow, dues, o.today) : null
+    const planned = unpaid.length && ahead < all.length ? plannedOf(c, all, ahead, day, follow, unpaid, dues.at(-1)!.from) : null
+    const account = c.accountId ?? all.at(-1)?.accountId ?? null
     const covered = account ? [o.coveredTo[account] ?? '', index.lastBank.get(account) ?? ''].sort().at(-1)! : ''
-    for (let i = 0; i < dues.length - 1; i++) {
-      const d = dues[i]!
-      // This month's due (a periodic fee only in its due month – the months before fill its tank, the asteroids announce
-      // it); an earlier month's only while unpaid (D99 pkt 3); one not the budget's (before its first day, before the
-      // fee came into the hold, settled) – only paid this month (T379).
-      if (d.month > month || !activeIn(c, d.month)) continue
+    for (const d of shown) {
       const carried = d.month < month
-      if (isPaid(d) ? carried : !followed(d, o.today)) continue
-      const payments = d.payments.map(({ id, date, amount }) => ({ id, date, amount }))
+      const payments = d.payments.map(strip)
       // The last of the 3 days a payment may take: overdue after it – when the bank's files reach it (or none come).
       const graceEnd = addDays(d.date, OVERDUE_DAYS - 1)
       let state: CargoState = 'waiting'
@@ -392,7 +438,8 @@ export function cargoStatuses(o: CargoInput): CargoStatus[] {
         payments,
         paid: payments.reduce((s, p) => s + p.amount, 0),
         carried,
-        payToday: payToday === d.month
+        payToday: payToday === d.month,
+        planned: planned?.get(d.month) ?? null
       })
     }
   }
@@ -410,17 +457,17 @@ export function cargoDays(o: Pick<CargoInput, 'containers' | 'transactions' | 't
 
 /**
  * The next due of a fee still to pay (AP-10, AF-15 – the briefing, the Radar and Ładownia alike): this month's from its
- * state (late – still this one), else the next one on its payment day (`day` – `cargoDays`), a cycle the engine has paid
- * already skipped (`paidDue`, B55).
+ * state (late – still this one; one with a payment written ahead – T398 – is not to pay any more), else the next one on
+ * its payment day (`day` – `cargoDays`), a cycle the engine has paid already skipped (`paidDue`, B55).
  */
 export function nextDueOf(
   c: CycleOf & Pick<Container, 'dueDay'>,
   today: string,
-  o: { day?: number; paidDue?: string | null; status?: Pick<CargoStatus, 'due' | 'state' | 'carried'> }
+  o: { day?: number; paidDue?: string | null; status?: Pick<CargoStatus, 'due' | 'state' | 'carried'> & Partial<Pick<CargoStatus, 'planned'>> }
 ): string {
   const at = o.day != null ? { ...c, dueDay: o.day } : c
   const s = o.status && !o.status.carried ? o.status : undefined
-  if (s && s.state !== 'paid') return s.due
+  if (s && s.state !== 'paid' && !s.planned) return s.due
   const from = s ? firstDayOf(addMonths(monthOf(s.due), 1)) : today
   return nextUnpaidOf(at, from > today ? from : today, o.paidDue)
 }

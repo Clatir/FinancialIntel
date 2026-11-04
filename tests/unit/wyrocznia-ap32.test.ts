@@ -302,7 +302,7 @@ describe('ten sam stan – ta sama liczba na każdym ekranie (AP-32)', () => {
       const { app, input } = both({ ...sc, now })
       const containers = input.containers ?? []
       const settings = input.settings as Settings
-      const cargo = cargoStatuses({ containers, transactions: input.transactions, today: app.today, tanks: app.tanks, coveredTo: settings.import.coveredTo, start: app.start })
+      const cargo = cargoStatuses({ containers, transactions: input.transactions, today: app.today, coveredTo: settings.import.coveredTo, start: app.start })
       const payDays = cargoDays({ containers, transactions: input.transactions, today: app.today })
       const onRadar = radar({ today: app.today, plans: input.months ?? [], containers, tanks: app.tanks, loans: app.loans, money: (g) => String(g), cargo, payDays }).find((x) => x.kind === 'asteroid' && x.ref === fee.id)
       const inBriefing = briefing({ fleet: app, containers, imports: [], label: () => '', cargo, payDays }).find((x) => x.kind === 'asteroid')

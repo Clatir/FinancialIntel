@@ -45,7 +45,8 @@ paths:
   efektu przy zaległości > 100 dni to #185. Dni bez danych z banku (`importWait`) czekają na pytanie najwyżej 7 dni
   (`waitImport`, T381), misja tygodnia z nimi; nowe wstrzymanie – opcja `advanceGame`, nigdy przeliczanie zamrożonych.
   Zmiana klasy z nowych danych (`GameDay.clsBefore`, T382) nie jest świętowana. Potwierdzenie salda w misji – po chwili
-  potwierdzenia (`confirmedAt`, bez niej `createdAt`), nigdy po `updatedAt` ani dacie salda (T383).
+  potwierdzenia (`confirmedAt` – każdy zapis potwierdzenia ją ustawia, także import), nigdy po `updatedAt`; rekord sprzed
+  1.15.7 bez niej – po dacie salda, jak liczyła tamta wersja (T383, przegląd 2 N3).
 - Kurs i symulator (1.15.7, T385–T387): osłony w kursie nigdy poniżej zera – czego brak, to `short`, pensja bez
   pieniędzy `partial`; „teraz” symulatora = stan silnika (`rangeNow` z `courseInputOf`), boje i spłaty reszty miesiąca
   tylko w `rangeRest`; warstwa pełna teraz – data tego miesiąca. Resztka miesiąca płaci plan z energii miesiąca
@@ -72,7 +73,8 @@ paths:
   (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Cykle zapłacone
   tylko z reguły Ładowni (`paidDuesOf`, T393 – na przełomie płatności sprzed niego), nigdy własną regułą; która płatność
   płaci opłatę – tylko `paymentsIndex` (Ładownia, silnik, kreator `startPaidDays`; T393 po scaleniu z N2: wydatek, także
-  z celu i do zwrotu, inny rodzaj nigdy), nigdy własny filtr. **Pułapka:** płatność z celu / do zwrotu zamyka cykl, ale
+  z celu i do zwrotu, inny rodzaj nigdy), nigdy własny filtr; opłata kreatora – kontener w całości (`startTankItems`,
+  także `variable`). **Pułapka:** płatność z celu / do zwrotu zamyka cykl, ale
   nie bierze ze zbiornika – pieniądze rusza przebieg (`runTx`: cel, księga domowników), cykl – `paymentsIndex`. Miesiąc
   przed silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
   Podpowiedź raty w Ładowni – `tankRate` (T377: `want` silnika, cykl zapłacony bez raty), nigdy `sinkingInstallment` od
@@ -89,7 +91,9 @@ paths:
   startu; „Zapłacone (dziś)” (`payToday`) – płatność dziś policzona tą regułą; niezapłacony termin wcześniejszego
   miesiąca zostaje (`CargoStatus.carried`) do zapłaty – konsument mapujący stan po kontenerze filtruje `!carried`.
   Terminy naprzód na dniu z historii (`cargoDays` → `payDays`, `nextDueOf`), nigdy wprost z `dueDay`; `dueAt` – dzień
-  ustawiony ręcznie.
+  ustawiony ręcznie. **Pułapka (T398):** płatność z datą po dziś płaci termin dopiero w swoim dniu – stan liczy płatności
+  do dziś (jak silnik); termin, który ona zapłaci, ma `planned`: Radar, odprawa i `nextDueOf` go pomijają (salda naprzód
+  liczą samą operację, raz), a stan nie jest „zapłacone” i resztka kursu liczy go do zapłaty.
 - Wpłata domownika (AP-4, T350): `incomeShares` (czyje pieniądze) → `planOf` / `inflowPlanOf` (spłata długu / tylko
   wskazane / bez spłaty; wskazane należą do części „spłata” tej osoby, gdy ją ma) → `repay` (które zakupy). Jawny
   niezależny przychód i zaliczka na przyszłość omijają dług (D99 S4), ale wskazane zakupy spłacają (naprawa liczona przy
@@ -106,7 +110,8 @@ paths:
   (tagi), musi pominąć `loanId`.
 
 ## Wydajność
-- Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.
+- Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`, `pastStates`); wyniki
+  tylko do odczytu. Stan opłat: symulacja „Zapłacone (dziś)” i płatności zaplanowane tylko przy terminie do zapłaty (T399).
 - W oknie silnik liczony raz (`store/fleet.ts` `useFleet`) z kluczem z czytanych części (`KEY_SETTINGS`,
   `KEY_COLLECTIONS`, `useEngineParts`) – nowe pole czytane przez silnik dopisz do klucza, inaczej ekran nie odświeży się.
   To samo czujniki: przeliczają się tylko przy zmianie pól z `SENSOR_FIELDS` (`features/sensors/inputs.ts`).

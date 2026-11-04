@@ -630,23 +630,31 @@ function AmountHistory({ c }: { c: Container }) {
   )
 }
 
-/** A fixed fee's state (F1): paid on its day, its due ahead, waiting for the bank's file, or overdue. */
+/**
+ * A fixed fee's state (F1): paid on its day, its due ahead, waiting for the bank's file, or overdue – a payment written
+ * ahead pays it on its day (T398): planned.
+ */
 function stateText(s: CargoStatus): string {
   if (s.state === 'paid') return `zapłacone ${dm(s.payments.at(-1)?.date ?? s.due)}`
+  if (s.planned) return `zaplanowane ${dm(s.planned.date)}`
   if (s.state === 'overdue') return `po terminie · ${dm(s.due)}`
   return s.importPending ? `czeka na import · ${dm(s.due)}` : `termin ${dm(s.due)}`
 }
 
+/** Overdue and no payment written ahead for it (T398): the one to say first. */
+const alarming = (s: CargoStatus | undefined): boolean => s?.state === 'overdue' && !s.planned
+
 /** The row's state: an earlier due still unpaid first (AP-10 – the oldest overdue one), then this month's. */
 function StateBadge({ s, late }: { s: CargoStatus | undefined; late?: readonly CargoStatus[] }) {
-  const shown = late?.find((x) => x.state === 'overdue') ?? (s?.state === 'overdue' ? s : undefined) ?? late?.[0] ?? s
+  const shown = late?.find(alarming) ?? (alarming(s) ? s : undefined) ?? late?.[0] ?? s
   return (
     <span
-      className={cx('w-[132px] truncate text-right text-[11px]', shown?.state === 'overdue' ? 'text-accent' : 'text-muted')}
+      className={cx('w-[132px] truncate text-right text-[11px]', alarming(shown) ? 'text-accent' : 'text-muted')}
       data-testid="cargo-state"
       data-state={shown?.state}
       data-due={shown?.due}
       data-carried={shown?.carried ? 'yes' : undefined}
+      data-planned={shown?.planned ? shown.planned.date : undefined}
     >
       {shown ? stateText(shown) : ''}
     </span>
@@ -663,16 +671,18 @@ function LateDues({ c, late }: { c: Container; late: readonly CargoStatus[] }) {
     <div className="flex flex-col gap-1 border-l-2 border-accent pl-2 text-[12px]" data-testid="container-late">
       <span className="label text-accent">Zaległe</span>
       {late.map((s) => (
-        <div key={s.due} className="flex flex-col gap-0.5" data-testid="container-late-due" data-state={s.state} data-due={s.due}>
-          <span className={s.state === 'overdue' ? 'text-accent' : 'text-fg-strong'}>
-            {s.state === 'overdue'
-              ? `Po terminie – termin ${dm(s.due)} minął, płatności brak (${zl(s.amount)}).`
-              : s.importPending
-                ? `Termin ${dm(s.due)} minął – czeka na plik z banku, który obejmie te dni (${zl(s.amount)}).`
-                : `Termin ${dm(s.due)} minął – płatność może jeszcze dojść (${zl(s.amount)}).`}
+        <div key={s.due} className="flex flex-col gap-0.5" data-testid="container-late-due" data-state={s.state} data-due={s.due} data-planned={s.planned?.date}>
+          <span className={alarming(s) ? 'text-accent' : 'text-fg-strong'}>
+            {s.planned
+              ? `Termin ${dm(s.due)} minął – zaplanowana płatność ${dm(s.planned.date)} (${zl(s.planned.amount)}) zamknie go w swoim dniu.`
+              : s.state === 'overdue'
+                ? `Po terminie – termin ${dm(s.due)} minął, płatności brak (${zl(s.amount)}).`
+                : s.importPending
+                  ? `Termin ${dm(s.due)} minął – czeka na plik z banku, który obejmie te dni (${zl(s.amount)}).`
+                  : `Termin ${dm(s.due)} minął – płatność może jeszcze dojść (${zl(s.amount)}).`}
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            {s.payToday && (
+            {s.payToday && !s.planned && (
               <button type="button" className="btn h-[22px]" onClick={() => payContainer(c, s.amount)} data-testid="container-late-paid">
                 Zapłacone ({zl(s.amount)}, dziś)
               </button>
@@ -705,11 +715,16 @@ function ThisMonth({ c, s, late }: { c: Container; s: CargoStatus; late: readonl
   const day = s.dayFrom === 'history' ? `dzień płatności z historii: ${s.day}.` : `dzień płatności kontenera: ${s.day}.`
   const today = warsawNow().date
   return (
-    <div className={cx('flex flex-col gap-1 border-l-2 pl-2 text-[12px]', s.state === 'overdue' ? 'border-accent' : 'border-line-strong')} data-testid="container-month" data-state={s.state}>
+    <div className={cx('flex flex-col gap-1 border-l-2 pl-2 text-[12px]', alarming(s) ? 'border-accent' : 'border-line-strong')} data-testid="container-month" data-state={s.state} data-planned={s.planned?.date}>
       <span className="label">W tym miesiącu</span>
       {s.state === 'paid' ? (
         <span className="text-fg-strong">
           Zapłacone: {s.payments.map((p) => `${zl(p.amount)} (${dm(p.date)})`).join(', ')}
+        </span>
+      ) : s.planned ? (
+        // A payment written ahead (T398): it pays this due on its day – as the engine counts it, not before.
+        <span className="text-fg-strong" data-testid="container-planned">
+          Zaplanowana płatność: {zl(s.planned.amount)} ({dm(s.planned.date)}) – zapłaci termin {dm(s.due)} w swoim dniu.
         </span>
       ) : (
         <span className={s.state === 'overdue' ? 'text-accent' : 'text-fg-strong'}>
@@ -726,8 +741,9 @@ function ThisMonth({ c, s, late }: { c: Container; s: CargoStatus; late: readonl
         {day} Płatność z importu łączy się sama (po odbiorcy); zapłaconą gotówką albo z konta bez importu zapisz tutaj.
       </span>
       {s.state !== 'paid' &&
+        !s.planned &&
         // Paid today counts for this due only from its window on – earlier it is the previous due's; before this due's
-        // day the oldest one still unpaid takes it first (T375, T393).
+        // day the oldest one still unpaid takes it first (T375, T393). One written ahead pays it already (T398).
         (s.payToday ? (
           <button type="button" className="btn h-[22px] self-start" onClick={() => payContainer(c, s.amount)} data-testid="container-paid">
             Zapłacone ({zl(s.amount)}, dziś)

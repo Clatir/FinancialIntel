@@ -29,7 +29,7 @@ import { debtOf, loanBacksOf, loanStates, type LoanState } from './loans'
 import { coveredMonths, monthsBefore } from './history'
 import { accountAmounts, categoryIndex, costOf, isCargoPayment, isTwoSided, partsOf, splitEvenly, sum } from './operations'
 // The paid cycles by the fees' state rule (T393) – that module reads the calendar from this one: a cycle of functions only.
-import { feeDayOf, paidDuesOf, paymentDay, paymentsIndex, type FeeDuesOf, type Linked } from './cargoStatus'
+import { byPaymentDay, feeDayOf, paidDuesOf, paymentDay, paymentsIndex, type FeeDuesOf, type Linked } from './cargoStatus'
 
 // ------------------------------------------------------------------ the rules as small pure functions
 
@@ -403,9 +403,6 @@ export const followedFrom = (c: { from?: string | null }, start: string): string
 /** A periodic fee's calendar and life (a proposal of the start wizard: `from`, `until` null, not archived). */
 export type FeeOf = CycleOf & Pick<Container, 'archived' | 'from' | 'until'> & { archivedAt?: string | null }
 
-/** Payments by their day, then their operation (as the hold's index – `paymentsIndex`). */
-const byDay = (a: Linked, b: Linked): number => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-
 /**
  * The cycles (due months) a periodic fee's payments made before the budget's start paid (AP-5, T135, T345, T393): they
  * never pass the run – the money left before the opening balances – yet each pays its due as the hold counts it
@@ -420,7 +417,8 @@ export function paidBeforeStart(c: FeeDuesOf, paid: Iterable<string | { date: st
     const date = typeof p === 'string' ? p : p.date
     if (date < start) linked.push({ id: String(linked.length).padStart(6, '0'), date, amount: typeof p === 'string' ? amountIn(c, monthOf(date)) : p.amount, accountId: '' })
   }
-  linked.sort(byDay)
+  // The hold's order of one day's payments (`paymentsIndex` – one comparator, T393).
+  linked.sort(byPaymentDay)
   const month = monthOf(start)
   return paidDuesOf(c, linked, feeDayOf(c, linked, month), { start, month })
 }

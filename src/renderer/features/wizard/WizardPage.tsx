@@ -6,7 +6,7 @@ import { amountIn, startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
 import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments } from '@shared/calc/plan'
-import { startPaidDays, startSplit, startTanks, startTargets } from '@shared/calc/start'
+import { startPaidDays, startSplit, startTankItems, startTanks, startTargets } from '@shared/calc/start'
 import { plural } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
@@ -108,15 +108,9 @@ export function WizardPage() {
   const hull = Math.min(Math.max(0, w.hull ?? proposedSplit.hull), Math.max(0, total))
   const goalsSplit = Object.fromEntries(goals.map((g) => [g.id, Math.max(0, w.goals?.[g.id] ?? proposedSplit.goals[g.id] ?? 0)]))
   const goalsTotal = sum(Object.values(goalsSplit))
-  // Periodic cargo items (N-PC-7): existing periodic containers and periodic proposals chosen in step 4.
-  const periodicItems = [
-    ...containers
-      .filter((c) => !c.archived && c.cycleMonths > 1)
-      .map((c) => ({ key: c.id, name: c.name, amount: c.amount, past: c.past, cycleMonths: c.cycleMonths, dueMonth: c.dueMonth, dueDay: c.dueDay, dueAt: c.dueAt, schedule: c.schedule, archived: false, from: c.from, until: c.until })),
-    ...chosen
-      .filter((p) => p.cycleMonths > 1)
-      .map((p) => ({ key: p.key, name: p.label, amount: p.amount, cycleMonths: p.cycleMonths, dueMonth: p.dueMonth, dueDay: p.dueDay, schedule: p.schedule, archived: false, from: null, until: null }))
-  ]
+  // Periodic cargo items (N-PC-7): existing periodic containers and periodic proposals chosen in step 4 – as the engine
+  // counts them (a variable bill too – przegląd 2 N3).
+  const periodicItems = startTankItems(containers, chosen)
   const tanksSplit = Object.fromEntries(periodicItems.map((item) => [item.key, Math.max(0, w.tanks?.[item.key] ?? 0)]))
   // The first month's tanks and „do planu” by the engine's rule (AP-5): a cycle paid before the start wants nothing.
   const tankPlan = new Map(startTanks(periodicItems.map((item) => ({ ...item, paid: paidDays.get(item.key) ?? [] })), today, tanksSplit).map((t) => [t.key, t]))

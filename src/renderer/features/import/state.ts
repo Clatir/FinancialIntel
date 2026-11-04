@@ -1020,7 +1020,8 @@ function confirmFromStatement(st: Statement): Balance | null {
   if (check.diff !== 0) return null
   if (balances.some((b) => b.kind === 'confirmation' && b.accountId === st.accountId && b.date === st.end.date && b.amount === st.end.balance)) return null
   const now = new Date().toISOString()
-  const record = balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, date: st.end.date, accountId: st.accountId, kind: 'confirmation', amount: st.end.balance, correctionId: null, note: 'Saldo z pliku banku (historia rachunku)' })
+  // Its moment of confirming (T383): „Inwentaryzacja” counts the day of the import, not the file's last day.
+  const record = balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, confirmedAt: now, date: st.end.date, accountId: st.accountId, kind: 'confirmation', amount: st.end.balance, correctionId: null, note: 'Saldo z pliku banku (historia rachunku)' })
   addRecord('balances', record)
   return record
 }

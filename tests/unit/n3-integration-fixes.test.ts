@@ -71,7 +71,7 @@ function partialMonth() {
     now: NOW
   }
   const f = run(input)
-  const cargo = cargoStatuses({ containers: [rent], transactions: input.transactions, today: f.today, tanks: f.tanks, coveredTo: {}, start: f.start })
+  const cargo = cargoStatuses({ containers: [rent], transactions: input.transactions, today: f.today, coveredTo: {}, start: f.start })
   const ci = courseInputOf(f, { settings: input.settings, plans: input.months ?? [], goals: [], scheduled: [], transactions: input.transactions, cargo })!
   return { f, cargo, ci, input }
 }

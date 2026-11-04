@@ -264,7 +264,7 @@ function sameEverywhere(id: string, app: Awaited<ReturnType<typeof appState>>, o
   eq('domownicy mają oddać = suma przy osobach', fleet.receivables.house, fleet.receivables.members.reduce((a, m) => a + m.owed, 0))
   // the asteroid's due: the briefing (Mostek, odprawa) = the Radar = the cargo hold (AF-15) – the fees' state and their
   // payment days as the window gives them (`features/cargo/status.ts`: from the budget's start, `cargoDays` – T375, T376)
-  const cargo = cargoStatuses({ containers: records.containers, transactions: records.transactions, today: fleet.today, tanks: fleet.tanks, coveredTo: settings.import.coveredTo, start: fleet.start })
+  const cargo = cargoStatuses({ containers: records.containers, transactions: records.transactions, today: fleet.today, coveredTo: settings.import.coveredTo, start: fleet.start })
   const payDays = cargoDays({ containers: records.containers, transactions: records.transactions, today: fleet.today })
   const radarItems = radar({ today: fleet.today, plans: records.months, containers: records.containers, tanks: fleet.tanks, loans: fleet.loans, money: (g) => String(g), cargo, payDays })
   const brief = briefing({ fleet, containers: records.containers, imports: [], label: () => '', cargo, payDays })
