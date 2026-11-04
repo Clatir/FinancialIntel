@@ -3,6 +3,7 @@ import type { FolderStatus, Snapshot } from '@shared/api'
 import { categoryIndex } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
 import { latestImport } from '@shared/import/batch'
+import { isDuplicatePairKey } from '@shared/import/duplicates'
 import type { MbankFile, MbankRow } from '@shared/import/mbank'
 import { buildImport, importGroups, importThemes, planImport, type Choice, type ImportChoices, type ImportPlan } from '@shared/import/reconcile'
 import { COLLECTIONS } from '@shared/paths'
@@ -10,7 +11,7 @@ import { defaultCategoryId, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema,
 import { listaCsv, type CsvBuy, type CsvTransfer } from '../e2e/mbank-csv'
 import type { SharesView } from '../../src/renderer/features/import/state'
 
-// The second to fourth code reviews of N1 (1.15.5): their findings in the window's import (renderer's stores), each with
+// The second to fifth code reviews of N1 (1.15.5, the fifth's in N2): their findings in the window's import (renderer's stores), each with
 // the scenario that failed before the fix. The stores talk to the main process through window.fi (preload): a mock
 // writing nothing.
 const api = {
@@ -39,6 +40,7 @@ const state = await import('../../src/renderer/features/import/state')
 const options = await import('../../src/renderer/features/import/options')
 const batches = await import('../../src/renderer/features/import/batches')
 const returned = await import('../../src/renderer/features/import/returned')
+const rules = await import('../../src/renderer/features/import/rules')
 
 const AT = '2026-09-01T10:00:00.000Z'
 const bytes = (text: string) => new TextEncoder().encode(text)
@@ -443,5 +445,79 @@ describe('przegląd N1 2, 10: podpis planu (B38) obejmuje to, czy kopia ma inną
     const other = planImport(fromMama('lista'), MBANK_ACCOUNT_ID, here({ memberId: null }), family)
     expect(copy(other)).toMatchObject({ remove: false, conflict: true })
     expect(state.planSignature(other)).not.toBe(state.planSignature(shown))
+  })
+})
+
+describe('przegląd N1 5: decyzja grupy księgowana w jednym miejscu (groupsDecided) – każda droga tak samo', () => {
+  const PERIOD = { from: '2026-10-19', to: '2026-10-26' }
+  const FUEL = defaultCategoryId(1, 0)
+  /** Two purchases nothing recognizes: two brands of one theme. */
+  async function twoUnknown() {
+    open()
+    await state.loadImportFile('lista.csv', bytes(listaCsv([{ date: '2026-10-20', amount: 87.91, name: 'SLUSARZ KOWAL' }, { date: '2026-10-21', amount: 12.5, name: 'KIOSK RUCH' }], PERIOD)))
+    const groups = () => importGroups(state.useImport.getState().plan, state.useImport.getState().choices.restoreDeleted)
+    const [a, b] = ['SLUSARZ KOWAL', 'KIOSK RUCH'].map((n) => groups().find((g) => g.label === n || g.names.includes(n))!)
+    expect(b!.theme).toBe(a!.theme)
+    const theme = () => importThemes(groups()).find((t) => t.theme === a!.theme)!
+    return { a: a!, b: b!, groups, theme }
+  }
+  const s = () => state.useImport.getState()
+
+  it('podpowiedź mBanku przyjęta, potem własna decyzja (B97): zapamiętana; decyzja zbiorcza – zapamiętana, propozycja słowa zamknięta tylko dla zmienionej grupy', async () => {
+    const { a, b, groups } = await twoUnknown()
+    const expense = { ...a.proposed, kind: 'expense' as const, categoryId: FUEL }
+    state.acceptGroupHint(a.group, expense)
+    expect([s().accepted.groups[a.group], s().choices.remember[a.group]]).toEqual([true, false])
+    state.decideGroup(a.group, { ...expense, categoryId: defaultCategoryId(1, 1) })
+    expect([s().accepted.groups[a.group], s().choices.remember[a.group], s().lastDecided]).toEqual([undefined, true, a.group])
+    // Ticked: only the other brand – the proposal of the one decided apart stays.
+    state.selectImport({ groups: [b.group] }, true)
+    expect(state.chooseSelected(groups(), 'expense', FUEL).applied).toBe(1)
+    expect([s().choices.remember[b.group], s().lastDecided]).toEqual([true, a.group])
+    state.selectImport({ groups: [a.group] }, true)
+    state.chooseSelected(groups(), 'expense', FUEL)
+    expect(s().lastDecided).toBeNull()
+  })
+
+  it('marki z jednakową decyzją, zmiana w temacie: ich decyzje, zapamiętanie i podpowiedź ustępują tematowi – propozycja słowa też', async () => {
+    const { a, b, theme } = await twoUnknown()
+    const expense = { ...a.proposed, kind: 'expense' as const, categoryId: FUEL }
+    state.acceptGroupHint(a.group, expense)
+    state.decideGroup(b.group, expense)
+    expect(state.themeShows(theme(), s().choices)).toBe('same')
+    state.chooseThemeRow(theme(), { ...expense, categoryId: defaultCategoryId(1, 1) })
+    expect(s().choices.themes[theme().theme]).toMatchObject({ categoryId: defaultCategoryId(1, 1) })
+    for (const g of [a, b]) expect([s().choices.groups[g.group], s().choices.remember[g.group], s().accepted.groups[g.group]]).toEqual([undefined, undefined, undefined])
+    expect(s().lastDecided).toBeNull()
+  })
+
+  it('„jak temat” po „+ domownik”: pytanie „zaliczka czy przychód?” odchodzi razem z decyzją grupy', async () => {
+    const { a, theme } = await twoUnknown()
+    state.decideNewMember(a.group, { ...a.proposed })
+    expect(s().choices.implicit?.[a.group]).toBe(true)
+    state.clearGroup(a.group)
+    // Before: the question stayed – the badge asked it of the theme's decision, the theme stayed „do zrobienia”.
+    expect(s().choices.implicit?.[a.group]).toBeUndefined()
+    expect(s().choices.groups[a.group]).toBeUndefined()
+    state.chooseTheme(theme().theme, { ...a.proposed, kind: 'expense', categoryId: FUEL })
+    expect(state.themeStatus(theme(), s().choices)).toBe('done')
+  })
+})
+
+describe('przegląd N1 5: „Pary oznaczone „to nie duplikat”” – tylko pary panelu duplikatów (T324)', () => {
+  const PAIR = '01KN5PAIRA0000000000000001|01KN5PAIRB0000000000000002'
+  const ROW = `row:${MBANK_ACCOUNT_ID}|2026-10-20|-8791|SLUSARZ`
+  const OTHERS = ['back:01KN5BACK00000000000000003', 'correction:01KN5CORR00000000000000004', 'transfer:01KN5TRA000000000000000005:01KN5TRB000000000000000006', 'transfer-lone:01KN5TRL000000000000000007']
+
+  it('liczone i zapominane tylko pary – „zostaw” meldunku „Wróciły po usunięciu”, korekty i przelewu zostaje', async () => {
+    expect([PAIR, ROW, ...OTHERS].map(isDuplicatePairKey)).toEqual([true, true, false, false, false, false])
+    const notDuplicates = Object.fromEntries([PAIR, ROW, ...OTHERS].map((k) => [k, AT]))
+    open({ patch: (s) => ({ ...s, import: { ...s.import, notDuplicates } }) })
+    rules.clearNotDuplicates()
+    // Before: the operations left as they came back (and those brought back on purpose) and the transfers reported again.
+    expect(Object.keys(data.useData.getState().fi!.settings.import.notDuplicates).sort()).toEqual([...OTHERS].sort())
+    // „Cofnij”: the pairs back.
+    ui.useUi.getState().toasts.at(-1)!.action!.run()
+    expect(Object.keys(data.useData.getState().fi!.settings.import.notDuplicates).sort()).toEqual([PAIR, ROW, ...OTHERS].sort())
   })
 })

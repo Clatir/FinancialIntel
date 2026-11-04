@@ -1,6 +1,7 @@
 import { withMerged, type BrandAliases, type BrandName } from '@shared/import/aliases'
 import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
 import { findRule, ruleTargetOf, upsertRule, upsertRules, type LearnedRule } from '@shared/import/classify'
+import { isDuplicatePairKey } from '@shared/import/duplicates'
 import { cleanBankName } from '@shared/import/names'
 import { newId } from '@shared/ids'
 import { importRuleSchema, TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
@@ -345,10 +346,10 @@ export function clearDismissedSimilar(): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: {} } } }))
 }
 
-/** Is a key of `notDuplicates` a pair of the duplicates panel (not a correction said to be no repeat – B129)? */
-export const isDuplicatePairKey = (key: string): boolean => !key.startsWith('correction:')
-
-/** „to nie duplikat” forgotten (N74): the duplicates panel shows those pairs again – with „Cofnij”. */
+/**
+ * „to nie duplikat” forgotten (N74): the duplicates panel shows those pairs again – with „Cofnij”. The other reports'
+ * „zostaw” in the same map stay (`isDuplicatePairKey`).
+ */
 export function clearNotDuplicates(): void {
   const before = useData.getState().fi?.settings.import.notDuplicates ?? {}
   const kept = Object.fromEntries(Object.entries(before).filter(([k]) => !isDuplicatePairKey(k)))

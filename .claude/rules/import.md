@@ -60,7 +60,9 @@ paths:
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.
 - Łączenie i duplikaty: `looseMatch` (kwota, ±3 dni, podobieństwo kontrahenta), także między kontami; decyzja
-  użytkownika („Nie łącz”, `notDuplicates`, `notSimilar`) zawsze wygrywa.
+  użytkownika („Nie łącz”, `notDuplicates`, `notSimilar`) zawsze wygrywa. **Pułapka:** `notDuplicates` trzyma też
+  „zostaw” innych meldunków (`back:`, `correction:`, `transfer:`, `transfer-lone:`) – pary panelu duplikatów tylko przez
+  `isDuplicatePairKey`.
 - Tożsamość wiersza między formatami (B5) to miara, nie klucz – stosuj ją wszędzie, gdzie działa klucz: przy usuniętych
   (T320), na kontach tego samego numeru rachunku (T321), przy rozliczeniu (stary klucz w `altKeys`, T323). Kolejność
   przejść planu ma znaczenie: B5 tutaj bierze też wiersze `elsewhere` z B35 (kopia → `RowCopy`, „usuń duplikat”), a

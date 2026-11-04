@@ -2,7 +2,7 @@
 import { constants as fsConstants, promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { PRESENCE_DIR } from '@shared/paths'
-import { atomicStep, writeFileAtomic } from './atomic'
+import { atomicFailure, writeFileAtomic } from './atomic'
 
 /** A machine counts as running if it refreshed its heartbeat within this window (in the tray every 5 min – N20). */
 export const PRESENCE_WINDOW_MS = 11 * 60 * 1000
@@ -38,8 +38,8 @@ export async function writePresence(root: string, machine: string, appVersion: s
   try {
     await write()
   } catch (e) {
-    const refused = ['EPERM', 'EACCES'].includes((e as NodeJS.ErrnoException).code ?? '')
-    if (!(atomicStep(e) === 'replace' && refused && (await madeWritable(file)))) throw e
+    const failed = atomicFailure(e)
+    if (!(failed?.step === 'replace' && ['EPERM', 'EACCES'].includes(failed.code ?? '') && (await madeWritable(file)))) throw e
     await write()
   }
 }
@@ -65,22 +65,35 @@ export async function clearPresence(root: string, machine: string): Promise<void
 
 type Log = (level: 'info' | 'warn' | 'error', message: string, detail?: unknown) => void
 
+/** What this computer's presence says (`PresenceKeeper`), read at each write: its version, its last move in a window (D86). */
+export interface PresenceContent {
+  appVersion: string
+  activeAt: string | null
+}
+
 /**
  * This computer's presence in the folders (T316, przegląd 3 and 4). Kept: the folder open and each folder an open in
  * progress has – its write probe may have written the presence there already; cleared from a folder only when none keeps
  * it, so an open that failed or gave way never removes the presence a newer open of the same folder wrote. Its writes and
- * clears in a folder go one at a time (`write`, `clear`): a clear on its way never lands after a newer write there.
+ * clears in a folder go one at a time (`write`, `beat`, `clear`): a clear on its way never lands after a newer write
+ * there. The queue runs only the keeper's own writes and clears (`writePresence`, `clearPresence` – the content from
+ * `content`), never a caller's op: none of them can wait in the queue for itself (przegląd N1 5).
  */
 export class PresenceKeeper {
   private readonly roots: string[] = []
   /** Per folder, the last of the writes and clears queued there – each waits for the one before (other folders do not). */
   private readonly queues: { root: string; last: Promise<void> }[] = []
-  /** The folder the heartbeat failed to write the presence in last (`beat`): said in the log when it starts and ends. */
+  /**
+   * The folder whose heartbeat writes fail (`beat`): said in the log when it starts and ends. Ended unsaid too when the
+   * folder is closed – its presence cleared or the heartbeat writing in another folder: a failure there again is a new
+   * one (przegląd N1 5).
+   */
   private failing: string | null = null
 
   constructor(
     private readonly machine: string,
     private readonly same: (a: string, b: string) => boolean,
+    private readonly content: () => PresenceContent,
     private readonly log?: Log
   ) {}
 
@@ -113,9 +126,15 @@ export class PresenceKeeper {
     return result
   }
 
-  /** This computer's presence written in `root` by `op` (the heartbeat's or a write probe's write), in its turn there. */
-  write(root: string, op: () => Promise<void>): Promise<void> {
-    return this.queued(root, op)
+  /**
+   * This computer's presence written in `root` in its turn there – the heartbeat's write (`beat`) and the write probe's
+   * (`attempts` – its tries of each step, T335). What it says is read when its turn comes.
+   */
+  write(root: string, attempts?: number): Promise<void> {
+    return this.queued(root, () => {
+      const { appVersion, activeAt } = this.content()
+      return writePresence(root, this.machine, appVersion, activeAt, attempts)
+    })
   }
 
   /**
@@ -124,8 +143,28 @@ export class PresenceKeeper {
    */
   clear(root: string): Promise<void> {
     return this.queued(root, async () => {
-      if (!this.kept(root)) await clearPresence(root, this.machine)
+      if (this.kept(root)) return
+      if (this.failing != null && this.same(this.failing, root)) this.failing = null
+      await clearPresence(root, this.machine)
     })
+  }
+
+  /**
+   * `clear` waited for `ms` at most (closing a folder, quitting – przegląd N1 5): a removal behind a slow write there
+   * (OneDrive, a file held) never holds the close nor the next folder's open. Not waited for, it still goes in its turn
+   * and checks the keeping then – a newer open's presence stays (T316). True = done (or failed) in time.
+   */
+  async clearWithin(root: string, ms: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), ms)
+      timer.unref?.()
+    })
+    try {
+      return await Promise.race([this.clear(root).then(() => true, () => true), late])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**
@@ -134,10 +173,12 @@ export class PresenceKeeper {
    * tray every 5 – weeks of them would rotate the rest out of the log). Meanwhile the other computer takes this one for
    * not running.
    */
-  async beat(root: string, op: () => Promise<void>): Promise<void> {
+  async beat(root: string): Promise<void> {
+    // The heartbeat writes in the open folder only: one in another folder means the failing one is closed (przegląd N1 5).
+    if (this.failing != null && !this.same(this.failing, root)) this.failing = null
     const failingHere = () => this.failing != null && this.same(this.failing, root)
     try {
-      await this.write(root, op)
+      await this.write(root)
     } catch (e) {
       if (!failingHere()) this.log?.('warn', `heartbeat: presence not written in ${root} – other computers take this one for not running until it is`, e)
       this.failing = root
