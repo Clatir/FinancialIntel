@@ -10,7 +10,7 @@ import { startSplit, startTargets } from '@shared/calc/start'
 import { plural } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
-import { useData, useFolderLocked } from '../../store/data'
+import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { setIctjDir, useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
@@ -43,6 +43,8 @@ export function WizardPage() {
   const fi = useData((s) => s.fi)
   const started = useData((s) => s.fi?.settings.budget.start ?? null)
   const readOnly = useFolderLocked()
+  // Why nothing can be started now (AF-14): the folder's own reason, not the steps' – they may all be filled in.
+  const lockedReason = useData((s) => (s.switching ? SWITCHING_MESSAGE : (s.status?.readOnlyReason ?? READ_ONLY_MESSAGE)))
   const transactions = useRecordList('transactions')
   const containers = useRecordList('containers')
   const accounts = useAccounts().filter((a) => !a.archived)
@@ -451,6 +453,7 @@ export function WizardPage() {
             </button>
           ) : (
             <FinishButton
+              locked={readOnly ? lockedReason : null}
               disabled={readOnly || overSplit || salary == null || salary <= 0 || accounts.some((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id))}
               onFinish={() => finishWizard({ salary: salary ?? 0, hull, goals: goalsSplit, tanks: tanksSplit, envelopes })}
             />
@@ -461,13 +464,13 @@ export function WizardPage() {
   )
 }
 
-function FinishButton({ disabled, onFinish }: { disabled: boolean; onFinish: () => Promise<boolean> }) {
+function FinishButton({ disabled, locked, onFinish }: { disabled: boolean; locked: string | null; onFinish: () => Promise<boolean> }) {
   const [busy, setBusy] = useState(false)
   return (
     <button
       className="btn btn-accent"
       disabled={disabled || busy}
-      title={disabled ? 'Potrzebne: saldo każdego konta (krok 1), pensja (krok 3) i kadłub z celami w granicach środków (krok 6)' : undefined}
+      title={locked ?? (disabled ? 'Potrzebne: saldo każdego konta (krok 1), pensja (krok 3) i kadłub z celami w granicach środków (krok 6)' : undefined)}
       onClick={() => {
         setBusy(true)
         void onFinish().finally(() => setBusy(false))

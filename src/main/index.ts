@@ -7,7 +7,7 @@ import { basename, dirname, join, parse, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { BrowserWindow, Menu, Notification, app, dialog, globalShortcut, ipcMain, net, powerMonitor, safeStorage, screen, shell, type IpcMainInvokeEvent } from 'electron'
 import { IMPORT_MAX_BYTES } from '@shared/import/text'
-import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
+import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type GhostFolder, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import { SAVED, unsavedQuestion } from '@shared/unsaved'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
@@ -16,7 +16,7 @@ import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type Update
 import { ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
-import { IN_USE_MS, clearPresence, readOtherMachines, writePresence } from './datastore/presence'
+import { IN_USE_MS, PresenceKeeper, readOtherMachines, writePresence } from './datastore/presence'
 import { initLog, log } from './log'
 import { importBackup, listBackups, manualBackup, runBackups, type DataSource } from './datastore/backup'
 import { readBackupZip, unpackBackup, type BackupData } from './datastore/restore'
@@ -64,6 +64,13 @@ let refreshes: RefreshQueue | null = null
 const FOCUS_REFRESH_MS = 60_000
 let lastFocusRefresh = 0
 let presenceTimer: NodeJS.Timeout | null = null
+/**
+ * The folders this computer's presence stays in (T316, przegląd 3): the open one (`storePresence`) and each one an open in
+ * progress has – a failed or superseded open, a closed store and the heartbeat of the store before never clear it there.
+ * Every write and clear of the presence goes through it – one at a time per folder (przegląd 4).
+ */
+const presenceKept = new PresenceKeeper(machineName, (a, b) => sameDir(a, b), log)
+let storePresence: (() => void) | null = null
 /** This computer's presence file written last; in the tray (not in use) it is written this seldom (N20). */
 let presenceWrittenAt = 0
 const TRAY_PRESENCE_MS = 5 * 60_000
@@ -445,12 +452,31 @@ async function closeStore(): Promise<void> {
   refreshes = null
   if (presenceTimer) clearInterval(presenceTimer)
   presenceTimer = null
+  if (folderTimer) clearInterval(folderTimer)
+  folderTimer = null
   store = null
+  storePresence?.()
+  storePresence = null
   if (!closing) return
   // The writes the window sent before closing finish first (a rescan ahead of them in the queue takes seconds – B43).
   const drained = await Promise.race([closing.idle().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), QUIT_DRAIN_MS).unref?.())])
   if (!drained) log('warn', `zamykanie: zapisy trwały ponad ${QUIT_DRAIN_MS / 1000} s`)
-  await clearPresence(closing.root, machineName).catch(() => undefined)
+  // The same folder opening again keeps it (its write probe may have written it meanwhile).
+  await presenceKept.clear(closing.root).catch(() => undefined)
+}
+
+/**
+ * This computer's presence in `root`, as the heartbeat writes it – also the write probe's check that new files can be
+ * made at a folder's open (`DataStoreOptions.presence`, with the probe's `attempts` – T316, T335). In its turn among the
+ * presence writes and clears of that folder (`presenceKept`, przegląd 4).
+ */
+function writeOwnPresence(root: string, attempts?: number): Promise<void> {
+  return presenceKept.write(root, () => ownPresence(root, attempts))
+}
+
+/** The write itself – only as a `presenceKept` op (passing `writeOwnPresence` there would wait for itself). */
+function ownPresence(root: string, attempts?: number): Promise<void> {
+  return writePresence(root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null, attempts)
 }
 
 async function heartbeat(force = false): Promise<void> {
@@ -461,11 +487,13 @@ async function heartbeat(force = false): Promise<void> {
     // In use: every minute; only in the tray: every 5 minutes – OneDrive is not woken all night for it (N20).
     if (!s.status().readOnly && (force || inUseNow() || Date.now() - presenceWrittenAt >= TRAY_PRESENCE_MS)) {
       presenceWrittenAt = Date.now()
-      await writePresence(s.root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null).catch(() => undefined)
+      // A failure in the log when it starts and ends (T337) – never swallowed: the other computer meanwhile takes this
+      // one for not running.
+      await presenceKept.beat(s.root, () => ownPresence(s.root))
     }
     // Another folder opened meanwhile (B116): nothing of the closed one goes on – its presence cleared stays cleared; the
-    // same folder opened again keeps the presence its new store wrote.
-    if (s !== store) return void (store?.root === s.root ? undefined : await clearPresence(s.root, machineName).catch(() => undefined))
+    // same folder open again or opening keeps the presence its new store or its write probe wrote.
+    if (s !== store) return void (await presenceKept.clear(s.root).catch(() => undefined))
     const others = await readOtherMachines(s.root, machineName)
     if (s !== store) return
     if (JSON.stringify(others) !== JSON.stringify(s.otherMachines)) {
@@ -475,6 +503,76 @@ async function heartbeat(force = false): Promise<void> {
   } catch (e) {
     log('warn', 'heartbeat failed', e)
   }
+}
+
+/**
+ * The folder checked this often while open (AP-1): gone (renamed, unplugged, OneDrive away) – the banner „niedostępny” and
+ * no write; back – the writes that waited go. One stat of fi.json; a full check only when it changed.
+ */
+const FOLDER_CHECK_MS = envMs('FI_FOLDER_CHECK_MS', 5000)
+let folderTimer: NodeJS.Timeout | null = null
+
+/** The folder's watcher, its changes into the queue of refreshes (W21). */
+function watchFolder(s: DataStore, queue: RefreshQueue): void {
+  watcher?.stop()
+  watcher = new FolderWatcher(s.root, (paths) => void queue.request(paths ?? undefined).catch(() => undefined), {
+    onError: (e, repeated) => log('warn', `watcher error${repeated ? ` (i ${repeated} kolejnych od poprzedniego wpisu)` : ''}`, e)
+  })
+  watcher.start()
+}
+
+/**
+ * A refresh of the open folder done (AP-1) – whichever saw the folder go or come back first: the idle check, the
+ * watcher, the heartbeat, the window's focus, Synchronizacja. Said in the log; back, watched anew (a watcher may have
+ * followed the folder renamed away, or failed with the drive). `was`, `regained` – as before the refresh.
+ */
+function folderSeen(s: DataStore, queue: RefreshQueue, was: boolean, regained: number): void {
+  if (s !== store) return
+  const back = s.regained !== regained
+  if (back) log('info', `folder danych znów dostępny: ${s.root}`)
+  else if (was && !s.status().available) log('warn', `folder danych niedostępny: ${s.root}`)
+  if (back && s.status().available) watchFolder(s, queue)
+}
+
+/**
+ * The idle check (AP-1): a folder gone or back, or one that took no writes taking them again (AF-14) – a full check says
+ * it to the window (and `folderSeen` the rest).
+ */
+let folderChecking = false
+async function checkFolder(s: DataStore): Promise<void> {
+  if (s !== store || folderChecking || windowClosing || opening) return
+  folderChecking = true
+  try {
+    if (!(await s.stale()) || s !== store) return
+    await refreshes?.request()
+  } catch (e) {
+    log('warn', 'folder check failed', e)
+  } finally {
+    folderChecking = false
+  }
+}
+
+/** The folders `ghostFolders` found last – the only ones `showGhostFolder` opens. */
+let lastGhosts: GhostFolder[] = []
+
+/**
+ * This computer's data folders of before (the remembered ones) holding FI's records without fi.json (AP-1): a write of
+ * 1.15.4 or older made such a folder in the old place of a data folder gone for a while, and its records are in no
+ * budget. The open folder is never one; a folder OneDrive is still bringing (no records yet) neither.
+ */
+async function ghostFolders(): Promise<GhostFolder[]> {
+  const open = store
+  const found: GhostFolder[] = []
+  const seen: string[] = []
+  for (const dir of [config.get().dataDir, ...config.get().recentDirs]) {
+    if (!dir || seen.some((d) => sameDir(d, dir)) || (open && sameDir(open.root, dir))) continue
+    seen.push(dir)
+    if ((await DataStore.inspect(dir).catch(() => 'unavailable')) !== 'partial') continue
+    const files = await DataStore.recordFiles(dir)
+    if (files) found.push({ dir, files })
+  }
+  lastGhosts = found
+  return found
 }
 
 /** The open in progress (1.4.1): „Przerwij” aborts it, a new open replaces it – until its folder is read. */
@@ -537,6 +635,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
   const t0 = Date.now()
   let step: OpenStep = 'inspect'
   let next: DataStore | null = null
+  let unkeep: (() => void) | null = null
   const progress = (): OpenProgress => {
     const p = step === 'machines' || step === 'inspect' ? null : next?.progress()
     return {
@@ -583,7 +682,9 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
         remembered: rememberedDir(target),
         message:
           kind === 'partial'
-            ? 'W tym folderze są już dane Financial Intel, ale bez pliku fi.json – OneDrive pewnie jeszcze go pobiera. Poczekaj chwilę i spróbuj ponownie (nowe dane nie są tworzone, żeby nie rozdzielić budżetu).'
+            ? // A folder made by a write of 1.15.4 or older while the data folder was away (AP-1) looks the same: said too.
+              'W tym folderze są już dane Financial Intel, ale bez pliku fi.json – OneDrive pewnie jeszcze go pobiera. Poczekaj chwilę i spróbuj ponownie (nowe dane nie są tworzone, żeby nie rozdzielić budżetu). ' +
+              'Jeśli fi.json się nie pojawia, to może być folder-widmo – zapisany przez starszą wersję aplikacji, gdy folder danych był niedostępny: wskaż właściwy folder danych, a wpisy z tego przenieś do niego (te same podfoldery).'
             : `Folder ${DATA_FOLDER_NAME} zawiera inne pliki – wybierz pusty folder.`
       }
     }
@@ -629,7 +730,21 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
         message: `W tym folderze nie ma danych Financial Intel (fi.json). Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
       }
     }
-    next = new DataStore(target, { machineName, trash, backupDir: config.get().backupDirOverride, log })
+    // A write that finds the folder gone (AP-1): the window learns it at once, not at the next check.
+    const created: DataStore = new DataStore(target, {
+      machineName,
+      trash,
+      backupDir: config.get().backupDirOverride,
+      log,
+      onStatus: (change) => {
+        log('warn', `folder danych niedostępny przy zapisie: ${target}`)
+        sendFrom(created, change)
+      },
+      presence: (attempts) => writeOwnPresence(target, attempts)
+    })
+    next = created
+    // Its write probe writes this computer's presence there: no other open's or store's clearing removes it meanwhile.
+    unkeep = presenceKept.keep(target)
     step = 'list'
     // Open the new folder first: if it fails or is stopped, the current one stays open and keeps saving. Once read
     // (before a migration) it no longer stops: „Przerwij” would promise an untouched folder.
@@ -647,6 +762,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     if (generation !== openGeneration) return superseded()
     const opened = next
     store = opened
+    storePresence = presenceKept.keep(opened.root)
     // Another folder: its own backups – the failures of the one before are not its (the same folder keeps them).
     if (backupFailure?.dir !== opened.backupsDir) backupSucceeded()
     snapshot.generation = ++storeGeneration
@@ -656,21 +772,24 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     const queue = new RefreshQueue(async (paths) => {
       // Closing: no rescan before the last writes (B43); another folder opened meanwhile: nothing to read here.
       if (store !== opened || windowClosing) return
+      const was = opened.status().available
+      const regained = opened.regained
       try {
         // A refresh finishing after another folder opened is that folder's no more (B31).
         sendFrom(opened, await opened.refresh(paths))
       } catch (e) {
         log('error', 'refresh failed', e)
         throw e
+      } finally {
+        // Also after a failure past the return (the write probe, a migrated file's rewrite): watched anew all the same.
+        folderSeen(opened, queue, was, regained)
       }
     })
     refreshes = queue
-    watcher = new FolderWatcher(target, (paths) => void queue.request(paths ?? undefined).catch(() => undefined), {
-      onError: (e, repeated) => log('warn', `watcher error${repeated ? ` (i ${repeated} kolejnych od poprzedniego wpisu)` : ''}`, e)
-    })
-    watcher.start()
+    watchFolder(opened, queue)
     void heartbeat(true)
     presenceTimer = setInterval(() => void heartbeat(), 60_000)
+    folderTimer = setInterval(() => void checkFolder(opened), FOLDER_CHECK_MS)
     // Daily backup (decision D31), in the background.
     dailyBackup()
     // The folder is open from here on: remembering it failing must not report the open as failed – the window would
@@ -713,6 +832,12 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
   } finally {
     clearInterval(ticker)
     if (opening === controller) opening = null
+    // Failed or given way after its write probe (T316): no presence of this computer left in a folder it has not open –
+    // but none taken from the folder open or from a newer open of the same folder (its probe may have written it already).
+    // Not awaited: kept or not is checked in its turn, and a newer open's probe writes after it (przegląd 4).
+    unkeep?.()
+    const probed = next?.root
+    if (probed && store !== next) void presenceKept.clear(probed).catch(() => undefined)
   }
 }
 
@@ -870,8 +995,9 @@ function registerIpc(): void {
   })
   handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown) => {
     const s = writableStore()
-    // 'drop' (no version in the history) only for the imports' batches: never the user's records.
-    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
+    // 'drop' (no version in the history) only for the imports' batches: never the user's records; 'import' – the
+    // import's own deletion of operations (T331).
+    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
     sendFrom(s, change)
     return results
   })
@@ -924,6 +1050,13 @@ function registerIpc(): void {
     }
     shell.showItemInFolder(s.abs(rel))
   })
+  handle('ghostFolders', () => ghostFolders())
+  handle('showGhostFolder', async (dir: string) => {
+    // Only a folder found as one (never any path the window sends).
+    if (!lastGhosts.some((g) => sameDir(g.dir, dir))) throw new Error('Tego folderu nie ma już na liście.')
+    const err = await shell.openPath(dir)
+    if (err) throw new Error(err)
+  })
   handle('trayPrefs', () => trayView())
   handle('setTrayPrefs', async (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>) => {
     const cur = config.get().tray
@@ -970,7 +1103,8 @@ function registerIpc(): void {
   handle('saveTextFile', async (name: string, content: string, filter: { name: string; extensions: string[] }) => {
     const res = await dialog.showSaveDialog(mainWindow!, { defaultPath: name, filters: [filter] })
     if (res.canceled || !res.filePath) return null
-    await writeFileAtomic(res.filePath, content)
+    // A file the user named in the dialog (its folder is there): no data folder's file.
+    await writeFileAtomic(res.filePath, content, null)
     return res.filePath
   })
   handle('saveXlsx', async (name: string, sheets: XlsxSheet[]) => {
@@ -982,7 +1116,7 @@ function registerIpc(): void {
   handle('savePdf', async (name: string, html: string) => {
     const res = await dialog.showSaveDialog(mainWindow!, { defaultPath: name, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
     if (res.canceled || !res.filePath) return null
-    await writeFileAtomic(res.filePath, await htmlToPdf(html))
+    await writeFileAtomic(res.filePath, await htmlToPdf(html), null)
     return res.filePath
   })
   handle('listBackups', async () => {
@@ -1450,7 +1584,7 @@ function createWindow(): void {
         // The renderer keeps unsaved changes; closing now would lose them. The question says why (B108) – the window
         // is shown for it (closed from the tray), and a waiting decision's dialog is open in it already. The log says
         // it too: the question holds the main process until it is answered.
-        log('warn', `zamykanie: niezapisane zmiany (decyzje: ${result.waiting}, nowsza wersja: ${result.newer}, błąd: ${result.error ?? 'brak'})`)
+        log('warn', `zamykanie: niezapisane zmiany (decyzje: ${result.waiting}, „Zmień mimo to”: ${result.asks ?? 0}, nowsza wersja: ${result.newer}, błąd: ${result.error ?? 'brak'})`)
         if (!win.isVisible() || win.isMinimized()) showMainWindow()
         const choice = dialog.showMessageBoxSync(win, { type: 'warning', ...unsavedQuestion(result), buttons: ['Anuluj', 'Zamknij mimo to'], defaultId: 0, cancelId: 0 })
         if (choice === 0) {

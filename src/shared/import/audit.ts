@@ -3,12 +3,16 @@
  * operations of a rule decided otherwise (to apply the rule to the history – with „Cofnij”), the brands with operations
  * of two and more categories (a limit of the amount offered when one splits them cleanly), the rules catching nothing.
  */
-import { HOUSE_MEMBER_ID, type ImportRule, type Transaction } from '../schema'
+import { HOUSE_MEMBER_ID, type ImportRule, type Loan, type Transaction } from '../schema'
 import { shareOf, withShare } from '../calc/share'
 import { deepEqual } from '../merge'
 import type { BrandAliases } from './aliases'
-import { findRule, PER_OPERATION_KINDS } from './classify'
+import { keywordMatches } from './brands'
+import { findRule, loanFor, PER_OPERATION_KINDS, ruleGivesWay } from './classify'
 import { officerTarget } from './officer'
+
+/** A loan as the audit reads it (the Radar's given loans – AP-6). */
+export type AuditLoan = Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>
 
 export interface MixedBrand {
   brand: string
@@ -26,6 +30,13 @@ export interface RuleAudit {
   differ: Map<string, Array<{ before: Transaction; after: Transaction }>>
   /** Operations a rule catches of another kind than the rule's (changed by hand – not applied, said). */
   otherKind: Map<string, Transaction[]>
+  /**
+   * A rule on a borrower's name (AP-6, AF-26 – learned from a one-click mistake): the money that came from the person
+   * since a loan of the Radar open now was given to them, decided by the rule as another kind than the loan's – to check
+   * and fix by hand (the next imports recognize the loan first; a keyword of the title, a loan closed since stay the
+   * rule's – not here). Its operations and the loan, the oldest first.
+   */
+  borrower: Map<string, Array<{ t: Transaction; loan: AuditLoan }>>
   /** Brands with expenses of two and more categories. */
   mixed: MixedBrand[]
   /** Rules that catch nothing (a rule of a loan, the tax or XTB is a proposal only – left out). */
@@ -48,9 +59,11 @@ const decisionOf = (t: Transaction) => ({ categoryId: t.categoryId, refundable: 
 export interface AuditRun {
   rules: readonly ImportRule[]
   aliases: BrandAliases
+  loans: readonly AuditLoan[]
   hits: RuleAudit['hits']
   differ: RuleAudit['differ']
   otherKind: RuleAudit['otherKind']
+  borrower: RuleAudit['borrower']
   brands: Map<string, { label: string; byCategory: Map<string, number[]> }>
 }
 
@@ -60,7 +73,16 @@ function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   else map.set(key, [value])
 }
 
-export const startAudit = (rules: readonly ImportRule[], aliases: BrandAliases): AuditRun => ({ rules, aliases, hits: new Map(), differ: new Map(), otherKind: new Map(), brands: new Map() })
+export const startAudit = (rules: readonly ImportRule[], aliases: BrandAliases, loans: readonly AuditLoan[] = []): AuditRun => ({
+  rules,
+  aliases,
+  loans: loans.filter((l) => l.direction === 'given'),
+  hits: new Map(),
+  differ: new Map(),
+  otherKind: new Map(),
+  borrower: new Map(),
+  brands: new Map()
+})
 
 /** A portion of the operations: those from the bank (`bank`) against the rules. */
 export function feedAudit(run: AuditRun, transactions: readonly Transaction[]): void {
@@ -73,6 +95,14 @@ export function feedAudit(run: AuditRun, transactions: readonly Transaction[]): 
     const split = t.splits.length > 0 && !shareOf(t)
     if (rule) {
       push(run.hits, rule.id, t.id)
+      // Money from a borrower kept by a rule as its own kind (AP-6): to fix by hand – a rule the import gives way to the
+      // loan now: the loan it reads (`loanFor` – given by the day of the money and open now; a closed one keeps the
+      // rule's decision) and `ruleGivesWay` (a keyword of the title stays the rule's, T325).
+      if (direction === 'in' && rule.kind === t.kind && run.loans.length) {
+        const loan = loanFor(t.bank.counterparty || t.counterparty, run.loans, t.date)
+        const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
+        if (loan && ruleGivesWay(rule, { kind: 'loan', loanId: loan.id }, byTitle)) push(run.borrower, rule.id, { t, loan })
+      }
       if (!(PER_OPERATION_KINDS as readonly string[]).includes(rule.kind) && !split) {
         if (rule.kind !== t.kind) push(run.otherKind, rule.id, t)
         else if (rule.kind === 'expense' && direction === 'out') {
@@ -98,14 +128,37 @@ export function finishAudit(run: AuditRun): RuleAudit {
   }
   mixed.sort((a, b) => sumN(b) - sumN(a) || a.label.localeCompare(b.label))
   const idle = run.rules.filter((r) => !run.hits.has(r.id) && !(PER_OPERATION_KINDS as readonly string[]).includes(r.kind))
-  return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, mixed, idle }
+  for (const list of run.borrower.values()) list.sort((a, b) => a.t.date.localeCompare(b.t.date) || a.t.id.localeCompare(b.t.id))
+  return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, borrower: run.borrower, mixed, idle }
 }
 
-/** The operations from the bank (`bank`) against the rules (`aliases` – the user's merged names), at once. */
-export function auditRules(rules: readonly ImportRule[], transactions: readonly Transaction[], aliases: BrandAliases): RuleAudit {
-  const run = startAudit(rules, aliases)
+/** The operations from the bank (`bank`) against the rules (`aliases` – the user's merged names, `loans` – the Radar's), at once. */
+export function auditRules(rules: readonly ImportRule[], transactions: readonly Transaction[], aliases: BrandAliases, loans: readonly AuditLoan[] = []): RuleAudit {
+  const run = startAudit(rules, aliases, loans)
   feedAudit(run, transactions)
   return finishAudit(run)
+}
+
+/** What the audit's views list (Ustawienia → Reguły importu): `differ` – „niespójne”, `idle` – „bez trafień”. */
+export type AuditView = 'all' | 'differ' | 'idle'
+
+/** Is a rule in a view? „Bez trafień” is the audit's `idle` – a rule of a loan, PIT-38 or XTB never (AF-64: its count). */
+export function inAuditView(r: Pick<ImportRule, 'id'>, audit: RuleAudit | null, view: AuditView): boolean {
+  if (view === 'all') return true
+  if (!audit) return false
+  if (view === 'idle') return idleIdsOf(audit).has(r.id)
+  return (audit.differ.get(r.id)?.length ?? 0) > 0 || (audit.otherKind.get(r.id)?.length ?? 0) > 0 || (audit.borrower.get(r.id)?.length ?? 0) > 0
+}
+
+/** The operations „niespójne” counts: decided otherwise than their rule, and a borrower's money a rule keeps (AP-6). */
+export const inconsistentCount = (audit: RuleAudit): number =>
+  [...audit.differ.values()].reduce((s, xs) => s + xs.length, 0) + [...audit.borrower.values()].reduce((s, xs) => s + xs.length, 0)
+
+const idleIds = new WeakMap<RuleAudit, ReadonlySet<string>>()
+function idleIdsOf(audit: RuleAudit): ReadonlySet<string> {
+  let set = idleIds.get(audit)
+  if (!set) idleIds.set(audit, (set = new Set(audit.idle.map((r) => r.id))))
+  return set
 }
 
 const sumN = (m: MixedBrand) => m.categories.reduce((s, c) => s + c.n, 0)

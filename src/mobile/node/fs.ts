@@ -108,7 +108,8 @@ export const promises = {
     return vfs().copyFile(from, to)
   },
   async open(path: string, flags: string = 'r'): Promise<FileHandle> {
-    if (flags === 'r') {
+    // 'r+': the data store's write probe (T316) – opened and closed, never written (a write through it fails, EBADF).
+    if (flags === 'r' || flags === 'r+') {
       // Opening a missing file fails at once, as the system's does.
       await vfs().stat(path)
       return new FileHandle(path, 'r')
@@ -121,6 +122,9 @@ export const promises = {
   }
 }
 
+/** The modes of `access` (the data store's write probe – AF-14, T316): the mirror has no rights, so every mode is granted. */
+export const constants = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 } as const
+
 export function watch(): never {
   throw new Error('Obserwacja folderu nie działa na telefonie – zmiany przynosi synchronizacja z OneDrive.')
 }
@@ -129,4 +133,4 @@ export function createWriteStream(): never {
   throw new Error('Zapis strumieniem nie działa na telefonie.')
 }
 
-export default { promises, watch, createWriteStream }
+export default { promises, constants, watch, createWriteStream }

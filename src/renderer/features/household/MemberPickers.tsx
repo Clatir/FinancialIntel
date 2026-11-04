@@ -4,8 +4,10 @@
  * it.
  */
 import { balanceOf, incomeShares, memberName, payerOf } from '@shared/calc/household'
+import { assignsOn, keptCovers, moreSureCovers } from '@shared/calc/repayments'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, inflowOf, type HouseholdMember, type Split, type Transaction } from '@shared/schema'
+import { useData } from '../../store/data'
 import { useHousehold } from '../../store/fleet'
 import { AmountField, plnText } from '../../components/fields'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -120,6 +122,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const offered = useOffered(payer)
   const flows = ledger?.byTx.get(t.id) ?? []
   const before = useLedgerBefore(t)
+  const records = useData((s) => s.records.transactions)
+  const assignFrom = useData((s) => s.fi?.settings.household.assignFrom)
   const parts = t.splits
   const partsSum = parts.reduce((a, x) => a + x.amount, 0)
   const rest = t.amount - partsSum
@@ -135,7 +139,14 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
     // The purchase it surely pays back (D91), named at once – the list below changes it.
     patch(id ? { ...next, ...sureCoversOf({ ...t, ...next }) } : next)
   }
-  const setParts = (splits: Split[]) => patch({ splits, repaid: 0 })
+  const setParts = (splits: Split[]) => {
+    const next = { ...t, splits, repaid: 0 }
+    // A member's part taken off takes their purchases off; each part's sure purchase named at once (D91 b, AP-7 – as for
+    // one person; the list below changes it).
+    const kept = before ? keptCovers(next, before, ledger) : null
+    const more = before && assignsOn(assignFrom, t.date) ? moreSureCovers({ ...next, ...kept }, before, ledger, (id) => records[id]?.record) : null
+    patch({ splits, repaid: 0, ...kept, ...more })
+  }
   const addPart = (m: Pick<HouseholdMember, 'id' | 'inflow'> | null, amount: number) =>
     setParts([...parts, { id: newId(), amount, categoryId: null, refundable: false, memberId: m?.id ?? null, advance: !!m && inflowOf(m) === 'advance', note: '' }])
   const setPart = (id: string, p: Partial<Split>) => setParts(parts.map((x) => (x.id === id ? { ...x, ...p } : x)))

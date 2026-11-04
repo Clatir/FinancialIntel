@@ -8,20 +8,23 @@
  *   user's category and time and takes the bank's data;
  * - a row of the other side of a transfer between two accounts of the budget (F10) joins its operation – one operation
  *   for both sides (a one-sided transfer of before 1.7.0 becomes one too);
- * - a row of an operation the user deleted stays out (unless they bring it back);
+ * - a row of an operation the user deleted stays out (unless they bring it back) – also a row of the other format of
+ *   the file (AF-1);
  * - the rest is new and gets a decision (`classify.ts`);
  * - pending operations of the period a list of operations no longer has (a cancelled card authorization) are offered
  *   for removal – never ticked by themselves: a filtered list lacks rows too.
  */
 import { addDays, daysBetween } from '../calc/dates'
 import { isTwoSided } from '../calc/operations'
-import { shareSplits, withBankAmount } from '../calc/share'
+import { shareAmounts, shareSplits, withBankAmount } from '../calc/share'
 import { fold } from '../fold'
+import { deepEqual } from '../merge'
 import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
+import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
@@ -110,19 +113,29 @@ export function looseMatch(own: { amount: number; date: string; counterparty: st
 export const looseSure = (m: Pick<LooseMatch, 'similar' | 'strong' | 'days'>, operation: string): boolean =>
   (m.similar && m.strong) || (m.days <= 1 && /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC)/.test(operation))
 
+/** What a bank's row tells of the file it came from (`formatOfBanks`). */
+export type FormatBank = Pick<BankRow, 'source' | 'operation' | 'description' | 'importedAt'>
+
 /**
- * The file format of each bank's operation (B5): its own (`bank.source`, 1.4.2), else the format of the import it came
- * with – the account history's descriptions start with the type of operation, so most of them in one import = the history.
+ * The file format of bank's rows (B5): a row's own (`bank.source`, 1.4.2), else the format of the import it came with –
+ * the account history's descriptions start with the type of operation, so most of them in one import = the history.
+ * `banks` – all the rows the import's votes are counted from (an operation deleted since votes too – AF-1).
  */
-export function formatsOf(txs: readonly Transaction[]): (t: Transaction) => MbankFile['format'] {
+export function formatOfBanks(banks: Iterable<FormatBank | null | undefined>): (bank: FormatBank | null | undefined) => MbankFile['format'] {
   const votes = new Map<string, number>()
-  for (const t of txs) {
-    if (!t.bank || t.bank.source) continue
-    const op = t.bank.operation.trim().toUpperCase()
-    const history = !!op && t.bank.description.trim().toUpperCase().startsWith(op)
-    votes.set(t.bank.importedAt, (votes.get(t.bank.importedAt) ?? 0) + (history ? 1 : -1))
+  for (const b of banks) {
+    if (!b || b.source) continue
+    const op = b.operation.trim().toUpperCase()
+    const history = !!op && b.description.trim().toUpperCase().startsWith(op)
+    votes.set(b.importedAt, (votes.get(b.importedAt) ?? 0) + (history ? 1 : -1))
   }
-  return (t) => t.bank?.source ?? ((votes.get(t.bank?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')
+  return (b) => b?.source ?? ((votes.get(b?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')
+}
+
+/** The file format of each bank's operation (B5, `formatOfBanks`). */
+export function formatsOf(txs: readonly Transaction[]): (t: Transaction) => MbankFile['format'] {
+  const of = formatOfBanks(txs.map((t) => t.bank))
+  return (t) => of(t.bank)
 }
 
 /** The days a file covers: its period, else its rows' first and last day. */
@@ -200,15 +213,16 @@ export type RowPlan =
   /**
    * Imported before; `settled` = it was pending and is settled now (the mark goes); `other` = from the other format of
    * the file (the list of operations ↔ the account history, B5) – its key joins the operation's; `moved` = moved to this
-   * account from the one it was imported to (B35) – it takes this account's key.
+   * account from the one it was imported to (B35) – it takes this account's key; `copy` – see `RowCopy`.
    */
-  | { status: 'known'; row: MbankRow; key: string; tx: Transaction; settled: boolean; other?: boolean; moved?: boolean }
+  | { status: 'known'; row: MbankRow; key: string; tx: Transaction; settled: boolean; other?: boolean; moved?: boolean; copy?: RowCopy }
   /**
    * Imported before onto another account of the budget (B35: the file of this account imported there by mistake, or the
    * operation moved there): never a second operation – moved here when the user says so (`ImportChoices.moveHere`;
-   * by default when it was imported there, not moved there by the user).
+   * by default when it was imported there, not moved there by the user). `other` = there in the other format of the
+   * file, found by the B5 measure on an account of the same bank account (AF-9) – moved only when the user ticks it.
    */
-  | { status: 'elsewhere'; row: MbankRow; key: string; tx: Transaction; move: boolean }
+  | { status: 'elsewhere'; row: MbankRow; key: string; tx: Transaction; move: boolean; other?: boolean }
   /** A pending operation that came back changed: it takes the row's amount, date and description. */
   | { status: 'settle'; row: MbankRow; key: string; tx: Transaction }
   /**
@@ -232,8 +246,30 @@ export type RowPlan =
       planned: Planned
     }
   | ({ status: 'new' } & PlannedRow)
-  /** An operation the user deleted (its version is in the history): left out unless brought back. */
-  | ({ status: 'deleted' } & PlannedRow)
+  /**
+   * An operation the user deleted (its version is in the history): left out unless brought back. `other` = deleted in
+   * the other format of the file, found by the B5 measure (AF-1).
+   */
+  | ({ status: 'deleted'; other?: boolean } & PlannedRow)
+
+/**
+ * The copy of a row on another account (AF-9): this account's file imported there by mistake before (B35), while the row
+ * is here already in the other format (B5) – a duplicate, never moved here beside its original. Removed when the user
+ * says so (`ImportChoices.removeCopies`; by default when it was imported there and decides nothing else than the
+ * operation here), what only it had (category, notes, the purchases a member's money pays back) going to the operation
+ * here. `otherCovers` – it pays back other purchases than the operation here, which names its own: not ticked (removed,
+ * the operation here keeps its own). `dropsCovers` – removed, the purchases it pays back would be paid back no more (the
+ * operation here names others, or its money repays no member of theirs – `copies.ts`): not ticked, said (review N1 2).
+ * `blocked` – never removed: docked, paid back by a member's money (`covers`) or written by a newer version (read only).
+ */
+export interface RowCopy {
+  tx: Transaction
+  remove: boolean
+  conflict: boolean
+  otherCovers: boolean
+  dropsCovers: boolean
+  blocked: 'docked' | 'covered' | 'locked' | null
+}
 
 /** A row of the file that gets a decision: its group (brand, direction, proposal) and the proposal. */
 interface PlannedRow extends Planned {
@@ -375,19 +411,46 @@ function keysOf(rows: readonly MbankRow[], accountId: string): string[] {
   return keys
 }
 
-/** A pending operation the user deleted (B96): the bank's name of it ('' none) – its row settled later stays out too. */
-export interface DeletedPending {
+/**
+ * An operation of the bank the user deleted, as its row is matched without its key (`shared/import/deleted.ts`): a
+ * pending one (B96 – the bank settles it with another amount or day), a booked one of a format (AF-1 – the other format
+ * of the file describes its row in other words). `name` – the bank's name of it ('' none).
+ */
+export interface DeletedRow {
   accountId: string
   date: string
   amount: number
   name: string
   /** When it was deleted (the history's time): an operation of the budget imported later may be its row brought back. */
   deletedAt: string
+  /** A booked one: the format of the file it came from (none = a pending one). */
+  format?: MbankFile['format']
+}
+
+/** The key a bank's operation has on an account (B35): its date, the bank's description and amount, its occurrence. */
+const keyOnFor = (account: string, t: Transaction): string =>
+  keyOnAccount(account, rowIdentity({ date: t.date, description: t.bank!.description, amount: t.amount }), keyOccurrence(t.bank!.key))
+
+/** Every account's operations' formats, once per list of operations (AF-9: the other format on another account). */
+const allFormatsMemo = new WeakMap<readonly Transaction[], (t: Transaction) => MbankFile['format']>()
+function allFormatsOf(existing: readonly Transaction[]): (t: Transaction) => MbankFile['format'] {
+  let of = allFormatsMemo.get(existing)
+  if (!of) allFormatsMemo.set(existing, (of = formatsOf(existing)))
+  return of
+}
+
+/** Operations a member's money pays back (`covers`), once per list of operations (AF-9: such a copy stays). */
+const coveredMemo = new WeakMap<readonly Transaction[], ReadonlySet<string>>()
+function coveredOf(existing: readonly Transaction[]): ReadonlySet<string> {
+  let ids = coveredMemo.get(existing)
+  if (!ids) coveredMemo.set(existing, (ids = new Set(existing.flatMap((t) => t.covers))))
+  return ids
 }
 
 /**
- * `deletedKeys` = `bank.key` of the operations the user deleted (`.history/`): their rows do not come back by themselves;
- * `deletedPending` = the pending ones of them – the bank settles them with another amount or day (another key).
+ * `deletedKeys` = the keys of the rows of the operations the user deleted (`.history/` – `bank.key` and `altKeys`):
+ * their rows do not come back by themselves; `deletedRows` = those of them a row is matched to without its key – the
+ * pending ones (B96) and the booked ones of the other format (AF-1).
  */
 export function planImport(
   file: MbankFile,
@@ -395,7 +458,7 @@ export function planImport(
   existing: readonly Transaction[],
   ctx: ClassifyContext,
   deletedKeys: ReadonlySet<string> = new Set(),
-  deletedPending: readonly DeletedPending[] = []
+  deletedRows: readonly DeletedRow[] = []
 ): ImportPlan {
   const keys = keysOf(file.rows, accountId)
   const budget = budgetedOf(existing, accountId)
@@ -417,7 +480,7 @@ export function planImport(
   const days = file.rows.map((r) => r.date).sort()
   const lo = days.length ? addDays(days[0]!, -MATCH_DAYS) : ''
   const hi = days.length ? addDays(days.at(-1)!, MATCH_DAYS) : ''
-  const keyOn = (account: string, t: Transaction) => keyOnAccount(account, rowIdentity({ date: t.date, description: t.bank!.description, amount: t.amount }), keyOccurrence(t.bank!.key))
+  const keyOn = keyOnFor
   // An account whose files come from another bank account (both numbers known): its operations are its own (T166).
   const fileNumber = accountNumberOf(file.account)
   const numbers = fileNumber ? { ...ctx.accountNumbers, [accountId]: fileNumber } : ctx.accountNumbers
@@ -466,47 +529,96 @@ export function planImport(
   // words, so its key differs – a booked operation of the bank from the other format, the same amount within ±3 days
   // (a card's date may differ), a similar name. The closest first, each side once. Only operations of the days this
   // file covers: one outside its period is not in it – a row of the same amount and name next to it is another one.
-  const other = new Map<string, Transaction[]>()
+  // A row found on another account by its key (B35) is taken too (AF-9): its operation here in the other format is the
+  // row – the one there is a copy (`RowCopy`), never moved here beside it.
   const covers = coverageOf(file)
+  const nameOf = (t: Transaction) => t.bank!.counterparty || t.bank!.description
+  const rowName = (row: MbankRow) => row.counterparty || row.description
+  /** The B5 pairs of the rows `open` lets in with the operations of `byDay` (`${date}|${amount}`), the closest first. */
+  const formatPairs = (byDay: ReadonlyMap<string, Transaction[]>, open: (i: number) => boolean) => {
+    const pairs: Array<{ i: number; tx: Transaction; days: number }> = []
+    file.rows.forEach((row, i) => {
+      if (!open(i)) return
+      for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
+        for (const tx of byDay.get(`${addDays(row.date, d)}|${row.amount}`) ?? []) if (similarCounterparty(nameOf(tx), rowName(row))) pairs.push({ i, tx, days: Math.abs(d) })
+    })
+    return pairs.sort((a, b) => a.days - b.days || a.i - b.i)
+  }
+  const copyOf = (copy: Transaction, here: Transaction, imported: boolean): RowCopy => {
+    const real = realOf(here)
+    const blocked = locked(copy) || locked(real) ? 'locked' : ctx.docked?.has(copy.id) ? 'docked' : coveredOf(existing).has(copy.id) ? 'covered' : null
+    const conflict = conflicting(real, [copy])
+    const otherCovers = coversOtherwise(real, copy)
+    const drops = dropsCovers(real, copy)
+    return { tx: copy, remove: imported && !blocked && !conflict && !otherCovers && !drops, conflict, otherCovers, dropsCovers: drops, blocked }
+  }
+  const other = new Map<string, Transaction[]>()
   for (const [date, list] of budget.booked) {
     if (!covers(date)) continue
     for (const t of list) if (!used.has(t.id) && formatOf(t) !== file.format) push(other, `${t.date}|${t.amount}`, t)
   }
-  if (other.size) {
-    const pairs: Array<{ i: number; tx: Transaction; days: number }> = []
-    file.rows.forEach((row, i) => {
-      if (plans[i]) return
-      for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
-        for (const tx of other.get(`${addDays(row.date, d)}|${row.amount}`) ?? [])
-          if (similarCounterparty(tx.bank!.counterparty || tx.bank!.description, row.counterparty || row.description)) pairs.push({ i, tx, days: Math.abs(d) })
-    })
-    pairs.sort((a, b) => a.days - b.days || a.i - b.i)
-    for (const c of pairs) {
-      if (plans[c.i] || used.has(c.tx.id)) continue
+  const openHere = (i: number) => {
+    const p = plans[i]
+    return !p || (p.status === 'elsewhere' && !p.other)
+  }
+  if (other.size)
+    for (const c of formatPairs(other, openHere)) {
+      if (!openHere(c.i) || used.has(c.tx.id)) continue
       used.add(c.tx.id)
-      plans[c.i] = { status: 'known', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx, settled: false, other: true }
+      const there = plans[c.i]
+      plans[c.i] = { status: 'known', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx, settled: false, other: true, ...(there?.status === 'elsewhere' ? { copy: copyOf(there.tx, c.tx, there.move) } : {}) }
     }
+
+  // The same row of the other format on another account of this bank account (AF-9: this account's file imported there
+  // by mistake, its other format here now – or the other way round): in the budget already, never a second operation.
+  // Only accounts the file's number was imported to (the measure is no row's key: two bank accounts are never mixed);
+  // moved here only when the user ticks it.
+  const sameNumber = fileNumber ? new Set(Object.entries(numbers ?? {}).flatMap(([id, n]) => (id !== accountId && n === fileNumber ? [id] : []))) : null
+  if (sameNumber?.size) {
+    const formatAll = allFormatsOf(existing)
+    const there = new Map<string, Transaction[]>()
+    for (const [date, list] of budget.described) {
+      if (!covers(date)) continue
+      for (const t of list) if (sameNumber.has(t.accountId) && !used.has(t.id) && !t.bank!.pending && formatAll(t) !== file.format) push(there, `${t.date}|${t.amount}`, t)
+    }
+    if (there.size)
+      for (const c of formatPairs(there, (i) => !plans[i])) {
+        if (plans[c.i] || used.has(c.tx.id)) continue
+        used.add(c.tx.id)
+        plans[c.i] = { status: 'elsewhere', row: file.rows[c.i]!, key: keys[c.i]!, tx: c.tx, move: false, other: true }
+      }
   }
 
-  // A pending operation the user deleted, settled by the bank with another amount or day (B96, T39): its row stays out
-  // too – by the same measure, the closest pairs first, each deleted one and each row once; only the bank's booked rows
-  // (a later purchase of the same shop comes in). A row of the budget imported after the deletion – the row brought back
-  // („importuj mimo to”) – takes its deleted one as well: it hides no other purchase then.
-  const deletedRows = new Set<number>()
-  const gone = deletedPending.filter((d) => d.accountId === accountId)
+  // An operation the user deleted (T39): its row stays out – by its key (below); without it, the closest pairs first,
+  // each deleted one and each row once, only the bank's booked rows (a later purchase of the same shop comes in):
+  // - a pending one the bank settled with another amount or day (B96) – by the settling measure; a row of the budget
+  //   imported after the deletion – the row brought back („importuj mimo to”) – takes its deleted one as well: it hides
+  //   no other purchase then;
+  // - a booked one of the other format (AF-1: the list of operations ↔ the account history describe a row in other words)
+  //   – by the B5 measure: the same amount ±3 days, a similar name, a day the file covers; a row of the budget in this
+  //   format (by its key) takes its deleted one as well – the row is there, its deleted copy hides no other purchase.
+  const deletedOut = new Set<number>()
+  const deletedOther = new Set<number>()
+  const gone = deletedRows.filter((d) => d.accountId === accountId && (!d.format || (d.format !== file.format && covers(d.date))))
   if (gone.length) {
     const goneOn = new Map<string, number[]>()
-    gone.forEach((d, at) => goneOn.set(d.date, [...(goneOn.get(d.date) ?? []), at]))
+    gone.forEach((d, at) => push(goneOn, d.date, at))
     const pairs: Array<{ i: number; at: number; score: number }> = []
     file.rows.forEach((row, i) => {
       const p = plans[i]
       if (row.pending || deletedKeys.has(keys[i]!) || (p && p.status !== 'known')) return
       const since = p ? (p.tx.bank?.importedAt ?? p.tx.createdAt) : null
+      const thisFormat = p?.status === 'known' && !p.other && formatOf(p.tx) === file.format
       for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
         for (const at of goneOn.get(addDays(row.date, d)) ?? []) {
           const del = gone[at]!
-          if (since != null && since <= del.deletedAt) continue
-          const score = settleScore(del.name, del, row)
+          const score = del.format
+            ? (p && !thisFormat) || del.amount !== row.amount || !similarCounterparty(del.name, rowName(row))
+              ? null
+              : Math.abs(d)
+            : since != null && since <= del.deletedAt
+              ? null
+              : settleScore(del.name, del, row)
           if (score != null) pairs.push({ i, at, score })
         }
     })
@@ -517,7 +629,9 @@ export function planImport(
       if (rowTaken.has(c.i) || goneTaken.has(c.at)) continue
       rowTaken.add(c.i)
       goneTaken.add(c.at)
-      if (!plans[c.i]) deletedRows.add(c.i)
+      if (plans[c.i]) continue
+      deletedOut.add(c.i)
+      if (gone[c.at]!.format) deletedOther.add(c.i)
     }
   }
 
@@ -529,7 +643,7 @@ export function planImport(
   if (budget.waiting.size) {
     const pairs: Array<{ i: number; tx: Transaction; days: number; side: 'other' | 'legacy' }> = []
     file.rows.forEach((row, i) => {
-      if (plans[i] || deletedRows.has(i) || deletedKeys.has(keys[i]!)) return
+      if (plans[i] || deletedOut.has(i) || deletedKeys.has(keys[i]!)) return
       // A transfer naming no account (an import before 1.7.0 offered none): only a row the bank calls an own transfer.
       const own = isOwnTransferRow(row, ctx.ownNames)
       for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
@@ -558,7 +672,7 @@ export function planImport(
   }
   const candidates: Array<{ i: number; tx: Transaction; days: number; named: boolean }> = []
   file.rows.forEach((row, i) => {
-    if (plans[i] || deletedRows.has(i)) return
+    if (plans[i] || deletedOut.has(i)) return
     for (const tx of manualNear(row.date)) {
       if (tx.amount !== row.amount || locked(tx)) continue
       const days = Math.abs(daysBetween(tx.date, row.date))
@@ -580,7 +694,7 @@ export function planImport(
   // duplicate is never taken by itself) – one not joined is still found later by the duplicates panel.
   const loose: Array<{ i: number; tx: Transaction } & LooseMatch> = []
   file.rows.forEach((row, i) => {
-    if (plans[i] || deletedRows.has(i)) return
+    if (plans[i] || deletedOut.has(i)) return
     const bank = { amount: row.amount, date: row.date, name: row.counterparty || row.description }
     for (const tx of manualNear(row.date)) {
       if (used.has(tx.id) || locked(tx)) continue
@@ -607,7 +721,8 @@ export function planImport(
     const p = plans[i]
     if (p?.status === 'merge') return { ...p, planned: plannedOf(i) }
     if (p) return p
-    return { status: deletedKeys.has(keys[i]!) || deletedRows.has(i) ? 'deleted' : 'new', row, key: keys[i]!, ...plannedOf(i) }
+    if (deletedKeys.has(keys[i]!) || deletedOut.has(i)) return { status: 'deleted', row, key: keys[i]!, ...(deletedOther.has(i) && !deletedKeys.has(keys[i]!) ? { other: true } : {}), ...plannedOf(i) }
+    return { status: 'new', row, key: keys[i]!, ...plannedOf(i) }
   })
 
   const period = file.period ?? (days.length ? { from: days[0]!, to: days.at(-1)! } : null)
@@ -617,6 +732,19 @@ export function planImport(
   const vanished =
     period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && !locked(t) && !isSideView(t) && t.date >= period.from && t.date <= period.to) : []
   return { accountId, format: file.format, rows, vanished, period }
+}
+
+/** Keys of a row (`altKeys`) with more of them, each once, the last 20. */
+const withKeys = (keys: readonly string[] | undefined, more: ReadonlyArray<string | undefined>): string[] => [...new Set([...(keys ?? []), ...more.filter((k): k is string => !!k)])].slice(-20)
+
+/**
+ * A change of the import's that only remembers keys of an operation's rows (`altKeys` – the other format's, B5): nothing
+ * the user sees (AF-63) – no backup and no import to take back for it.
+ */
+export function keysOnly(before: Transaction | undefined, after: Transaction): boolean {
+  if (!before) return false
+  const bare = (t: Transaction) => ({ ...t, bank: t.bank ? { ...t.bank, altKeys: undefined } : t.bank, counterBank: t.counterBank ? { ...t.counterBank, altKeys: undefined } : t.counterBank })
+  return deepEqual(bare(before), bare(after))
 }
 
 /**
@@ -892,6 +1020,8 @@ export interface ImportChoices {
   skip: Record<string, boolean>
   /** Rows imported before onto another account (`RowPlan.key`, B35): moved here (true) or left there (false); missing = as proposed. */
   moveHere: Record<string, boolean>
+  /** Rows with a copy on another account (`RowPlan.key`, `RowCopy` – AF-9): removed (true) or left (false); missing = as proposed. */
+  removeCopies?: Record<string, boolean>
   /**
    * Groups decided by the app for the user (N85: „+ domownik” – the new member's money, the rest as income for now): no
    * answer of the user – the theme still asks, the person's „zaliczka / przychód” is not remembered from it.
@@ -901,6 +1031,10 @@ export interface ImportChoices {
 
 /** Is an operation imported onto another account moved here (B35)? */
 export const movesHere = (p: Extract<RowPlan, { status: 'elsewhere' }>, choices: Pick<ImportChoices, 'moveHere'>): boolean => choices.moveHere[p.key] ?? p.move
+
+/** Is the copy of a row on another account removed (AF-9, `RowCopy`)? A blocked one never. */
+export const removesCopy = (p: Extract<RowPlan, { status: 'known' }>, choices: Pick<ImportChoices, 'removeCopies'>): boolean =>
+  !!p.copy && !p.copy.blocked && (choices.removeCopies?.[p.key] ?? p.copy.remove)
 
 /** Is a matched hand-typed operation joined? `noMerge` false = ticked by the user (a possible duplicate that asks). */
 export const joins = (p: Extract<RowPlan, { status: 'merge' }>, choices: Pick<ImportChoices, 'noMerge'>): boolean => (p.ask ? choices.noMerge[p.key] === false : !choices.noMerge[p.key])
@@ -963,12 +1097,10 @@ export type ImportCounts = {
   moved: number
   /** Rows joined as the other side of a transfer between two accounts of the budget (F10). */
   sides: number
+  /** Copies of the file's rows on another account removed (AF-9, `RowCopy`). */
+  copies: number
 }
 
-/**
- * The records an import writes; `makeId` gives new ids (ULIDs), `now` the time of the import. A household member's money
- * says whose it is: what it repays and what is their advance the ledger counts (`calc/household.ts`, D80).
- */
 /** What a rule says, from a decision (the import's learning, a rule edited in the settings – F22). */
 export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId' | 'inflowKind'> {
   return {
@@ -984,6 +1116,196 @@ export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId
   }
 }
 
+// ------------------------------------------------------------------ other members' parts of a member's money (D81, AF-27)
+
+/** A household member's part of a row's money („w tym za…”). */
+export type SharePart = NonNullable<Choice['shares']>[number]
+
+/** Does the import make a new operation of the row (as `buildImport`): new, brought back, kept apart from a typed entry – not left out. */
+export const createsRow = (p: RowPlan, choices: ImportChoices): boolean =>
+  p.status === 'merge' ? !joins(p, choices) : p.status === 'new' ? !choices.skip[p.key] : p.status === 'deleted' && !!choices.restoreDeleted[p.key] && !choices.skip[p.key]
+
+/** A row's decision: its own, its group's (`from` `g:<group>`), its theme's (`t:<theme>`), else the proposal. */
+function rowDecision(p: RowPlan, choices: ImportChoices, themeOf: ReadonlyMap<string, string>): { c: Choice; from: string | null; own: boolean; group: string; theme: string | undefined } {
+  const planned = p.status === 'merge' ? p.planned : (p as PlannedRow)
+  const group = planned.group
+  const theme = themeOf.get(group)
+  const own = choices.rows[p.key]
+  if (own) return { c: own, from: null, own: true, group, theme }
+  const byGroup = group ? choices.groups[group] : undefined
+  if (byGroup) return { c: byGroup, from: `g:${group}`, own: false, group, theme }
+  const byTheme = theme ? choices.themes[theme] : undefined
+  if (byTheme) return { c: byTheme, from: `t:${theme}`, own: false, group, theme }
+  return { c: choiceOf(planned.decision), from: null, own: false, group, theme }
+}
+
+/** A member's money coming in (D80): the only decision with others' parts. */
+const memberMoneyIn = (c: Choice, p: RowPlan): boolean => c.kind === 'income' && c.household && p.row.amount > 0
+
+/** A part – or a sender's own money – that repays what the member owes first (not their income or advance only – `inflowKind`). */
+const repaysPart = (x: Pick<SharePart, 'inflowKind'>): boolean => !x.inflowKind || x.inflowKind === 'repay'
+
+/** Where a group's or a theme's „w tym za” went: each line's amount typed and the rows it was given from (in their order). */
+export interface SpreadLine {
+  line: number
+  memberId: string
+  typed: number
+  given: Array<{ key: string; date: string; amount: number }>
+}
+
+export interface SharesSpread {
+  /** Each row's parts as the import writes them (none – no key). */
+  parts: Map<string, SharePart[]>
+  /** By the decision (`g:<group>`, `t:<theme>`): its lines spread over its rows. */
+  spread: Map<string, SpreadLine[]>
+  /**
+   * The member's money a decision of each group and theme (`g:…`, `t:…`) takes: the rows without their own decision (of a
+   * theme – also not of a group deciding them), and their sum.
+   */
+  rows: Map<string, { keys: string[]; sum: number }>
+  /** All the repayments of each member in the file: their own money that repays and their parts (at most each row's money). */
+  total: Map<string, number>
+}
+
+/**
+ * The other members' parts each row of a member's money carries (D81, AF-27 – „w tym za X”): a row's own decision as
+ * typed; a group's or a theme's spread over its rows in their order (the oldest first – „po kolei”): each row at most what
+ * is left of its money, the line at most its amount, and all the repayments of a member – at most what they owe (`owed`,
+ * `owedWithFile`: with the file's purchases) less their own money of the file that repays (D80: it pays what they owe
+ * first, whatever its day) and what the rows' own decisions give them. A transfer of theirs whose group or theme gives
+ * others parts counts whole until its parts are known (in the rows' order): never more for them than they owe. No `owed`
+ * – no debt known: the amount typed only. A part beyond the debt only by a row's own decision (the user's, typed for that
+ * transfer).
+ */
+export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: ReadonlyMap<string, number>): SharesSpread {
+  const groups = importGroups(plan, choices.restoreDeleted)
+  const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
+  const out: SharesSpread = { parts: new Map(), spread: new Map(), rows: new Map(), total: new Map() }
+  const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v)
+  const sender = (c: Choice) => c.memberId ?? HOUSE_MEMBER_ID
+  const fresh = plan.rows.filter((p) => createsRow(p, choices)).sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
+  const shared: Array<{ p: RowPlan; c: Choice; from: string }> = []
+  const explicit = new Map<string, number>()
+  // Each member's own money of the file that repays (the sender's, beyond the parts of others in it).
+  const paid = new Map<string, number>()
+  for (const p of fresh) {
+    const d = rowDecision(p, choices, themeOf)
+    if (!memberMoneyIn(d.c, p)) continue
+    // The rows a decision of the group – and of the theme, for a group without its own – would take.
+    if (!d.own)
+      for (const k of [`g:${d.group}`, ...(d.theme && d.from !== `g:${d.group}` ? [`t:${d.theme}`] : [])]) {
+        const r = out.rows.get(k) ?? out.rows.set(k, { keys: [], sum: 0 }).get(k)!
+        r.keys.push(p.key)
+        r.sum += p.row.amount
+      }
+    const own = repaysPart(d.c)
+    if (!d.c.shares?.length) {
+      if (own) {
+        add(paid, sender(d.c), p.row.amount)
+        add(out.total, sender(d.c), p.row.amount)
+      }
+      continue
+    }
+    if (d.from) {
+      // Its parts come below: the sender's money counted whole until then.
+      if (own) add(paid, sender(d.c), p.row.amount)
+      shared.push({ p, c: d.c, from: d.from })
+      continue
+    }
+    // The row's own: as typed (the ledger reads at most the row's money – `incomeShares`); its repayments count.
+    const parts = d.c.shares.filter((x) => x.amount > 0 && x.memberId !== sender(d.c))
+    let money = p.row.amount
+    for (const x of parts) {
+      const counted = Math.min(x.amount, money)
+      money -= counted
+      if (repaysPart(x)) {
+        add(explicit, x.memberId, counted)
+        add(out.total, x.memberId, counted)
+      }
+    }
+    if (parts.length) out.parts.set(p.key, parts.map((x) => ({ ...x })))
+    if (own && money > 0) {
+      add(paid, sender(d.c), money)
+      add(out.total, sender(d.c), money)
+    }
+  }
+  const left = new Map<string, number>()
+  // The groups' and themes' repayments given each member so far.
+  const given = new Map<string, number>()
+  for (const { p, c, from } of shared) {
+    let money = p.row.amount
+    const parts: SharePart[] = []
+    const lines = out.spread.get(from) ?? out.spread.set(from, []).get(from)!
+    c.shares!.forEach((x, line) => {
+      if (x.memberId === sender(c)) return
+      let spread = lines.find((l) => l.line === line)
+      if (!spread) lines.push((spread = { line, memberId: x.memberId, typed: Math.max(0, x.amount), given: [] }))
+      const k = `${from}|${line}`
+      const typed = left.get(k) ?? Math.max(0, x.amount)
+      // A repayment never beyond the debt; a member's income or advance part (no repayment) – as typed.
+      const repays = repaysPart(x)
+      const id = x.memberId
+      const cap = owed && repays ? Math.max(0, (owed.get(id) ?? 0) - (explicit.get(id) ?? 0) - (paid.get(id) ?? 0) - (given.get(id) ?? 0)) : Infinity
+      const amount = Math.max(0, Math.min(typed, cap, money))
+      left.set(k, typed - amount)
+      if (amount <= 0) return
+      money -= amount
+      parts.push({ ...x, amount })
+      spread.given.push({ key: p.key, date: p.row.date, amount })
+      if (repays) {
+        add(given, id, amount)
+        add(out.total, id, amount)
+      }
+    })
+    if (parts.length) out.parts.set(p.key, parts)
+    // The sender's own money is what the parts left of it: the rest of what was counted whole is theirs no more.
+    if (repaysPart(c)) {
+      add(paid, sender(c), money - p.row.amount)
+      if (money > 0) add(out.total, sender(c), money)
+    }
+  }
+  return out
+}
+
+/**
+ * What each member owes once the file is in, before its transfers (AF-27, D81 – the most a group's or a theme's
+ * „w tym za” gives them): their debt now (`balance` – the ledger's) and their parts of the purchases the import creates
+ * (a product return of theirs takes off), less the advance they hold (it pays the purchases first).
+ */
+export function owedWithFile(plan: ImportPlan, choices: ImportChoices, balance: (memberId: string) => { owed: number; deposit: number }, members: readonly string[]): Map<string, number> {
+  const groups = importGroups(plan, choices.restoreDeleted)
+  const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
+  const bought = new Map<string, number>()
+  const add = (id: string, v: number) => bought.set(id, (bought.get(id) ?? 0) + v)
+  for (const p of plan.rows) {
+    if (!createsRow(p, choices)) continue
+    const { c } = rowDecision(p, choices, themeOf)
+    if (c.kind !== 'expense') continue
+    // A purchase (out) adds to what they owe, its return (in) takes off – a gift is nobody's debt.
+    if (c.refundable) {
+      if (!c.gift) add(c.memberId ?? HOUSE_MEMBER_ID, -p.row.amount)
+    } else if (c.share) {
+      const sign = p.row.amount < 0 ? 1 : -1
+      const amounts = shareAmounts(Math.abs(p.row.amount), c.share)
+      c.share.lines.forEach((l, i) => {
+        if (l.memberId && !l.gift) add(l.memberId, sign * (amounts[i] ?? 0))
+      })
+    }
+  }
+  const out = new Map<string, number>()
+  for (const id of new Set([...members, ...bought.keys()])) {
+    const b = balance(id)
+    const more = bought.get(id) ?? 0
+    out.set(id, more >= 0 ? b.owed + Math.max(0, more - b.deposit) : Math.max(0, b.owed + more))
+  }
+  return out
+}
+
+/**
+ * The records an import writes; `makeId` gives new ids (ULIDs), `now` the time of the import. A household member's money
+ * says whose it is: what it repays and what is their advance the ledger counts (`calc/household.ts`, D80); the other
+ * members' parts of it – `rowShares` (`owed`: what each member owes with the file's purchases, `owedWithFile`).
+ */
 export function buildImport(
   plan: ImportPlan,
   choices: ImportChoices,
@@ -993,10 +1315,13 @@ export function buildImport(
     rules: readonly ImportRule[]
     /** The budget's accounts (F10): a transfer to one of them is one operation for both sides; none given – any. */
     accounts?: readonly string[]
+    /** What each household member owes with the file's purchases (AF-27): a group's „w tym za” never beyond it. */
+    owed?: ReadonlyMap<string, number>
   }
 ): ImportResult {
   const groups = importGroups(plan, choices.restoreDeleted)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
+  const shares = rowShares(plan, choices, opts.owed).parts
   const ruleById = new Map(opts.rules.map((r) => [r.id, r]))
   const bankOf = (p: RowPlan): BankRow => ({
     format: 'mbank',
@@ -1012,11 +1337,21 @@ export function buildImport(
   })
   const create: Transaction[] = []
   const update: Transaction[] = []
-  const counts: ImportCounts = { created: 0, merged: 0, settled: 0, known: 0, removed: 0, skipped: 0, excluded: 0, moved: 0, sides: 0 }
+  const remove: string[] = []
+  const counts: ImportCounts = { created: 0, merged: 0, settled: 0, known: 0, removed: 0, skipped: 0, excluded: 0, moved: 0, sides: 0, copies: 0 }
   const keyed = (t: Transaction, key: string, settled = false): Transaction => ({
     ...t,
     bank: { ...t.bank!, key, altKeys: [...(t.bank!.altKeys ?? []), t.bank!.key].slice(-20), pending: settled ? false : t.bank!.pending }
   })
+  // A settled row's operation keeps its pending row's key (AF-28): an older file still showing it pending knows it.
+  const settledBank = (p: Extract<RowPlan, { status: 'settle' }>): BankRow => ({ ...bankOf(p), altKeys: withKeys(p.tx.bank?.altKeys, [p.tx.bank?.key]) })
+  // The copy of the row on another account removed (AF-9): what only it had goes to the operation here.
+  const withoutCopy = (p: Extract<RowPlan, { status: 'known' }>, kept: Transaction | null, real: Transaction): Transaction | null => {
+    if (!p.copy || !removesCopy(p, choices)) return kept
+    counts.copies++
+    remove.push(p.copy.tx.id)
+    return takeUserData(kept ?? real, [p.copy.tx], opts.now)
+  }
   const fresh = [...plan.rows].sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : 0))
   for (const p of fresh) {
     // The other side of a transfer in one operation (F10): only its row and day change – on the operation itself.
@@ -1025,12 +1360,13 @@ export function buildImport(
       const bank = real.counterBank!
       if (p.status === 'settle') {
         counts.settled++
-        update.push(withOtherSide(real, plan.accountId, bankOf(p), p.row.date))
+        update.push(withOtherSide(real, plan.accountId, settledBank(p), p.row.date))
       } else {
         if (p.settled) counts.settled++
         else counts.known++
-        if (p.other) update.push({ ...real, counterBank: { ...bank, altKeys: [...(bank.altKeys ?? []), p.key].slice(-20) } })
-        else if (p.settled) update.push({ ...real, counterBank: { ...bank, pending: false } })
+        const kept = p.other ? { ...real, counterBank: { ...bank, altKeys: [...(bank.altKeys ?? []), p.key].slice(-20) } } : p.settled ? { ...real, counterBank: { ...bank, pending: false } } : null
+        const out = withoutCopy(p, kept, real)
+        if (out) update.push(out)
       }
       continue
     }
@@ -1038,17 +1374,28 @@ export function buildImport(
       // A pending one settled with the same content (N77): „rozliczone”, as the preview counts it.
       if (p.settled) counts.settled++
       else counts.known++
-      // The row of the other format: its key remembered, so the next file of it is known at once.
-      if (p.other) update.push({ ...p.tx, bank: { ...p.tx.bank!, altKeys: [...(p.tx.bank!.altKeys ?? []), p.key].slice(-20) } })
-      // Moved here from the account it was imported to (B35): this account's key, the old one kept.
-      else if (p.moved) update.push(keyed(p.tx, p.key, p.settled))
-      else if (p.settled) update.push({ ...p.tx, bank: { ...p.tx.bank!, pending: false } })
+      const kept = p.other
+        ? // The row of the other format: its key remembered, so the next file of it is known at once.
+          { ...p.tx, bank: { ...p.tx.bank!, altKeys: [...(p.tx.bank!.altKeys ?? []), p.key].slice(-20) } }
+        : p.moved
+          ? // Moved here from the account it was imported to (B35): this account's key, the old one kept.
+            keyed(p.tx, p.key, p.settled)
+          : p.settled
+            ? { ...p.tx, bank: { ...p.tx.bank!, pending: false } }
+            : null
+      const out = withoutCopy(p, kept, p.tx)
+      if (out) update.push(out)
       continue
     }
     if (p.status === 'elsewhere') {
       if (movesHere(p, choices)) {
         counts.moved++
-        update.push({ ...keyed(p.tx, p.key, !!p.tx.bank?.pending && !p.row.pending), accountId: plan.accountId })
+        update.push(
+          p.other
+            ? // Found there in the other format (AF-9): its own format's key on this account, the file's row's key beside it.
+              { ...p.tx, accountId: plan.accountId, bank: { ...p.tx.bank!, key: keyOnFor(plan.accountId, p.tx), altKeys: withKeys(p.tx.bank!.altKeys, [p.tx.bank!.key, p.key]) } }
+            : { ...keyed(p.tx, p.key, !!p.tx.bank?.pending && !p.row.pending), accountId: plan.accountId }
+        )
       } else counts.known++
       continue
     }
@@ -1057,7 +1404,7 @@ export function buildImport(
       // The counterparty as the bank wrote it then (not changed by the user) takes the bank's new one.
       const bankCounterparty = p.tx.counterparty === '' || p.tx.counterparty === (p.tx.bank?.counterparty ?? '')
       // A shared purchase's lines made again for the new amount (D83).
-      update.push(withBankAmount({ ...p.tx, date: p.row.date, counterparty: bankCounterparty ? p.row.counterparty : p.tx.counterparty, bank: bankOf(p) }, p.row.amount))
+      update.push(withBankAmount({ ...p.tx, date: p.row.date, counterparty: bankCounterparty ? p.row.counterparty : p.tx.counterparty, bank: settledBank(p) }, p.row.amount))
       continue
     }
     if (p.status === 'deleted' && !choices.restoreDeleted[p.key]) {
@@ -1101,12 +1448,10 @@ export function buildImport(
     const refundable = c.kind === 'expense' && c.refundable
     const household = c.kind === 'income' && !out && c.household
     const share = c.kind === 'expense' && !refundable && c.share ? c.share : null
-    const incomeSplits =
-      household && c.shares?.length
-        ? c.shares
-            .filter((x) => x.amount > 0 && x.memberId !== (c.memberId ?? HOUSE_MEMBER_ID))
-            .map((x) => ({ id: opts.makeId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, ...(x.inflowKind ? { inflowKind: x.inflowKind } : {}), note: '' }))
-        : []
+    // Other members' parts (D81): a group's or a theme's spread over its rows, never beyond what they owe (AF-27).
+    const incomeSplits = household
+      ? (shares.get(p.key) ?? []).map((x) => ({ id: opts.makeId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, ...(x.inflowKind ? { inflowKind: x.inflowKind } : {}), note: '' }))
+      : []
     // The rule's tags (F17 – „Netia → #ulga-internet”): when its decision stands.
     const ruleTags = planned.decision.ruleId && sameChoice(c, base) ? ruleById.get(planned.decision.ruleId)?.tags : undefined
     counts.created++
@@ -1141,8 +1486,9 @@ export function buildImport(
       })
     )
   }
-  const remove = plan.vanished.filter((t) => choices.removeVanished[t.id]).map((t) => t.id)
-  counts.removed = remove.length
+  const vanished = plan.vanished.filter((t) => choices.removeVanished[t.id]).map((t) => t.id)
+  remove.push(...vanished)
+  counts.removed = vanished.length
 
   // Rules learned from the groups the user decided (spec: the rules learn from the user's decisions), by the brand: a
   // decision of a theme teaches every brand in it. Nothing new to learn when the group's own rule or the app's own

@@ -123,7 +123,7 @@ describe('watcher po zapisach atomowych', () => {
     await w.ready()
     const target = join(root, 'transactions', '2026', 'a.json')
     for (let i = 0; i < 3; i++) {
-      await writeFileAtomic(target, `{"v":${i}}`)
+      await writeFileAtomic(target, `{"v":${i}}`, root)
       await new Promise((r) => setTimeout(r, 120))
     }
     await new Promise((r) => setTimeout(r, 250))

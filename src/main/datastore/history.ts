@@ -24,6 +24,8 @@ interface SnapshotFile {
   savedAt: string
   savedBy: string
   reason: HistoryReason
+  /** A deletion by the import itself (T331) – its file stays `_delete_`: an older version keeps its row's keys out. */
+  byImport?: true
   record: { id?: string; updatedAt?: string; updatedBy?: string | null } & Record<string, unknown>
 }
 
@@ -53,9 +55,9 @@ export class RecordHistory {
   /**
    * Keep `record` (the version about to be replaced or deleted). Never throws: a failed snapshot must not block
    * the save itself (it is reported to the log). Returns the file written (null = none: throttled or failed) – `drop`
-   * takes it back (a delete the disk refused).
+   * takes it back (a delete the disk refused). `byImport` – a deletion by the import itself (T331).
    */
-  async snapshot(kind: FileKind, record: SnapshotFile['record'], reason: HistoryReason): Promise<string | null> {
+  async snapshot(kind: FileKind, record: SnapshotFile['record'], reason: HistoryReason, opts: { byImport?: boolean } = {}): Promise<string | null> {
     try {
       const id = String(record.id ?? 'fi')
       const key = `${kind}/${id}`
@@ -68,9 +70,10 @@ export class RecordHistory {
       }
       const dir = this.dir(kind, id)
       const name = `${fileStamp(nowIso)}_${reason}_${randomBytes(2).toString('hex')}.json`
-      const body: SnapshotFile = { savedAt: nowIso, savedBy: this.machineName, reason, record }
+      const body: SnapshotFile = { savedAt: nowIso, savedBy: this.machineName, reason, ...(opts.byImport ? { byImport: true as const } : {}), record }
       const file = join(dir, name)
-      await writeFileAtomic(file, `${JSON.stringify(body, null, 2)}\n`)
+      // Never the data folder itself made for it (AP-1): a folder gone fails the version, as any write does.
+      await writeFileAtomic(file, `${JSON.stringify(body, null, 2)}\n`, this.root)
       // Only a version written holds the next edits back (B112): a failed one is tried again at the next edit.
       this.lastSnapshot.set(key, nowMs)
       // The oldest versions over the limit go; a file that would not go now goes at a later snapshot.
@@ -115,6 +118,7 @@ export class RecordHistory {
       savedAt: s.savedAt,
       savedBy: s.savedBy ?? null,
       reason: s.reason,
+      ...(s.byImport === true ? { byImport: true } : {}),
       updatedAt: typeof s.record.updatedAt === 'string' ? s.record.updatedAt : null,
       updatedBy: typeof s.record.updatedBy === 'string' ? s.record.updatedBy : null
     }

@@ -454,9 +454,9 @@ export class PhoneHost {
         for (const c of changes) this.send(c)
         return results
       }) as FiApi['saveRecords'],
-      deleteRecords: call('deleteRecords', async (collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop') => {
+      deleteRecords: call('deleteRecords', async (collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop' | 'import') => {
         const s = store()
-        const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
+        const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
         this.send(change)
         return results
       }),
@@ -491,6 +491,9 @@ export class PhoneHost {
       resolveConflicts: pcOnly('resolveConflicts'),
       trashProblemFile: pcOnly('trashProblemFile'),
       showInFolder: call('showInFolder', () => undefined),
+      // The phone keeps one folder, the mirror of OneDrive's: no other folders to look at.
+      ghostFolders: call('ghostFolders', () => []),
+      showGhostFolder: call('showGhostFolder', () => undefined),
       openExternal: call('openExternal', (url: string) => this.d.openUrl(url)),
       openLogs: call('openLogs', () => undefined),
       trayPrefs: call('trayPrefs', () => this.tray()),

@@ -22,12 +22,15 @@ export function seedFolder(dir: string, data: { settings?: (s: Settings) => Sett
   const fi = createDefaultSettings(AT)
   const settings = data.settings ? data.settings(fi.settings) : fi.settings
   writeFileSync(join(dir, 'fi.json'), serializeRecord('fi', { ...fi, settings }))
-  for (const [collection, list] of Object.entries(data.records ?? {}) as Array<[Collection, Array<Record<string, unknown>>]>) {
-    for (const raw of list) {
-      const record = SCHEMAS[collection].parse({ schemaVersion: SCHEMA_VERSION, id: seedId(), createdAt: AT, updatedAt: AT, ...raw }) as unknown as Record<string, unknown>
-      const file = join(dir, recordRelPath(collection, record))
-      mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(file, serializeRecord(collection, record as never))
-    }
+  for (const [collection, list] of Object.entries(data.records ?? {}) as Array<[Collection, Array<Record<string, unknown>>]>) writeRecords(dir, collection, list)
+}
+
+/** Records written into a data folder (one made before, or by the app – while it is closed). */
+export function writeRecords(dir: string, collection: Collection, list: ReadonlyArray<Record<string, unknown>>): void {
+  for (const raw of list) {
+    const record = SCHEMAS[collection].parse({ schemaVersion: SCHEMA_VERSION, id: seedId(), createdAt: AT, updatedAt: AT, ...raw }) as unknown as Record<string, unknown>
+    const file = join(dir, recordRelPath(collection, record))
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, serializeRecord(collection, record as never))
   }
 }

@@ -1652,7 +1652,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   to decyzja użytkownika (reguła nadawcy jak każda), reszta ponad należność – pytanie „zaliczka czy przychód?” (temat „do
   decyzji”, także po nowym planie z innym kluczem grupy); odpowiedź zapamiętana dla osoby tylko z decyzji użytkownika,
   głosami operacji bez pominiętych. Temat: „różne – patrz marki”, gdy marki zdecydowano różnie; jednakowe decyzje marek
-  pokazane jako decyzja tematu – jej zmiana je zastępuje. Słowo kluczowe z paska zbiorczego dla każdej decyzji ze słowem
+  pokazane jako decyzja tematu – jej zmiana je zastępuje (z „w tym za” kilku marek – trafia do każdej marki, T336).
+  Słowo kluczowe z paska zbiorczego dla każdej decyzji ze słowem
   (wydatek, wpływ, przelew, domownik), kierunek z zaznaczonych, do których decyzja pasuje; żaden nie pasuje – słowo
   niezapisane. Wyszukiwarka po kategorii, którą grupa dostaje (nie propozycji), bez powodu propozycji; „Przyjmij pewne” i
   „Przyjmij podpowiedzi” w wyszukiwaniu tylko na znalezionych. Własna decyzja operacji inna niż wydatek widoczna z „jak
@@ -2331,3 +2332,249 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `goalId` i `containerId` w pozycjach podzielonego paragonu (`splitSchema`), obsługa transferów celów i elastycznego podziału
   łupów (`fleet.ts`), korekta dokowania bez naruszania powiązanych transakcji ręcznych (`dock.ts`), wygaszanie ciszy nocnej
   dla wydatków planowych lub kontenerowych (`operations.ts`) oraz wznawianie wachty wieczornej (`reopenEvening`). Pełna zgodność typów.
+- **T314** Folder danych znika w trakcie pracy (1.15.5, AP-1, AF-2, AF-42): zapis nigdy nie zakłada samego folderu danych –
+  `writeFileAtomic(cel, dane, within)` / `mkdirWithin` robią brakujące katalogi tylko pod istniejącym korzeniem (rekordy,
+  kopie konfliktu, `.history/`, `.presence/`, kopie ZIP w `backups/` – `writeZipFile(…, within)`, kopia tygodniowa
+  `mkdirOne`); folder kopii ustawiony na komputerze gdzie indziej – jak dotąd. `within` jest obowiązkowy (`string | null`,
+  `mkdirFor`; po przeglądzie): `null` tylko poza folderem danych (`config.json`, eksport w okienku zapisu, folder kopii
+  gdzie indziej) – pominięte miejsce zapisu to błąd kompilacji, nie folder-widmo; `zipFolder` sam podaje swój korzeń, gdy
+  ZIP leży w nim (kopia przed migracją – folder przeniesiony w trakcie otwarcia: otwarcie pada, nic nie powstaje). Przed każdą paczką zapisów `ensureWritable`
+  sprawdza `fi.json` (`rootPresent`, jeden `stat`): brak → `FolderUnavailableError` (podklasa `ReadOnlyError`, komunikat
+  `FOLDER_UNAVAILABLE_MESSAGE` w `shared/api.ts`), `available = false` i od razu zestaw zmian do okna
+  (`DataStoreOptions.onStatus`); pusty folder założony w starym miejscu (bez `fi.json`) też jest niedostępny. Brak pliku
+  wpisu przy braku korzenia to nigdy `RemovedOutsideError` („usunięty na innym komputerze”) – pamięć bez zmian; paczka
+  (`saveRecords`, `deleteRecords`) przerwana w połowie – reszta z tym samym błędem, stan folderu w zestawie zmian paczki.
+- **T315** Sprawdzanie folderu w spoczynku i powrót (1.15.5, AP-1): `checkFolder` w `main/index.ts` co `FI_FOLDER_CHECK_MS`
+  (domyślnie 5 s) woła `DataStore.stale()` (stat `fi.json`; przy blokadzie zapisu – próba); różnica → pełne odświeżenie w
+  `RefreshQueue`. Przejście ocenia każde odświeżenie (`folderSeen` po każdym odświeżeniu w kolejce, także nieudanym –
+  `finally`; po przeglądzie): powrót zauważony najpierw przez obserwatora, obecność, fokus okna czy Synchronizację też
+  daje obserwatora od nowa (`watchFolder`; `DataStore.regained` liczy powroty – tylko odświeżenia, które folder
+  przeczytały, T334) i wpis w logu („folder danych niedostępny” / „znów dostępny”).
+  Okno: przejście `available` false → true w `applyChange` → `resumeSaves` – wszystko, co czekało, zapisane od razu
+  (`saveBatch` po kolekcjach; bez wpisów czekających na decyzję z drugiego komputera i wpisów nowszej wersji). W czasie
+  niedostępności folder jest tylko do odczytu jak dotąd: nowe zmiany odrzucane z powodem (`UNAVAILABLE_NOTICE`), zapisane
+  wcześniej w pamięci czekają; pytanie przy zamknięciu z błędem folderu – własna gałąź `unsavedQuestion`.
+- **T316** Tryb tylko do odczytu z próby zapisu (1.15.5, AP-1, AF-14): przy otwarciu (przed migracją) i po powrocie folderu
+  `writeProbe` – `access(fi.json, W_OK)` (na Windows atrybut „tylko do odczytu” pliku, bez ponawiania), potem `fi.json`
+  otwarty do zapisu (`r+`) i zamknięty bez zapisu (brak prawa zapisu – uprawnienia, udział albo dysk tylko do odczytu);
+  EPERM / EACCES / EROFS → `writeBlocked` (`FOLDER_NOT_WRITABLE_MESSAGE`) i `status.readOnly` – bez migracji i bez
+  połowicznego startu kreatora. Po przeglądzie: otwarcie ponawiane (chwilowa blokada antywirusa albo OneDrive to nie
+  tryb tylko do odczytu; przy otwarciu i powrocie kilka prób, w spoczynku jedna – T335), zamknięcie o niczym nie
+  decyduje, a próba nie zakłada własnego pliku (wcześniej `.fi-zapis.tmp-…` w korzeniu przy każdym otwarciu – wpis
+  w koszu online OneDrive, przy blokadzie usuwania plik zostawał). Zakładanie nowych plików (każdy zapis to plik
+  tymczasowy i zamiana) sprawdza zapis obecności tego komputera w `.presence/` (`DataStoreOptions.presence` =
+  `writeOwnPresence` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
+  więc folder, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie uprawnienia), jest tylko do odczytu
+  z powodem i bez migracji, której nie da się dokończyć (wcześniej: bez banera, każdy zapis z własnym błędem, migracja
+  przerywała otwarcie). Po przeglądzie 3: z zapisu obecności o trybie tylko do odczytu decyduje tylko odmowa założenia
+  nowego pliku – katalogu `.presence/` albo pliku tymczasowego (EPERM / EACCES / EROFS w tym kroku naszego zapisu, po
+  próbach jak `fi.json` – T335; nowej nazwy nikt nie trzyma). Po przeglądzie 4 krok zna sam zapis (`atomicStep` –
+  `writeFileAtomic` znaczy błąd krokiem, który padł: katalog, plik tymczasowy, zapis, zamiana), nie pole `syscall` błędu
+  (wcześniej `mkdir` / `open` z błędu: błąd bez `syscall` albo z innym dawał tylko wpis w logu, a zamiana zgłoszona jako
+  `open` – tryb tylko do odczytu). Plik obecności, którego nie da się zastąpić (blokada dłuższa niż próby; atrybut „tylko
+  do odczytu” po przywróceniu kopii zapis obecności zdejmuje sam – T337), i każdy inny błąd obecności to tylko wpis
+  w logu („write probe: presence not written (step: …)”) – folder przyjmuje zapisy, obecność zapisze heartbeat (wcześniej
+  taki jeden plik dawał tryb tylko do odczytu przy każdym otwarciu, bez wyjścia). Przyjęte: uprawnienia odbierające zakładanie plików tylko
+  w `.presence/` (nie w reszcie folderu) dałyby tryb tylko do odczytu – OneDrive uprawnień katalogów nie przenosi.
+  Otwarcie nieudane albo ustępujące nowszemu po próbie usuwa tę obecność (`openFolder`, `finally`), chyba że ten folder
+  jest otwarty albo otwiera go nowsze otwarcie (przegląd 3: `PresenceKeeper` w `main/datastore/presence.ts` – folder
+  otwarty i foldery otwarć w toku trzymają obecność; tak samo zamknięcie magazynu i heartbeat magazynu sprzed zmiany;
+  wcześniej spóźnione usunięcie zdejmowało obecność zapisaną już przez próbę nowszego otwarcia tego folderu i drugi
+  komputer do końca tego otwarcia, także w trakcie migracji, nie widział tego komputera). Po przeglądzie 4 każdy zapis
+  i każde usunięcie obecności tego komputera idzie przez `PresenceKeeper` po kolei w danym folderze (`write` – próba
+  i heartbeat, `clear`; inne foldery nie czekają), a usunięcie sprawdza trzymanie dopiero w swojej kolejce, tuż przed
+  `rm` (wcześniej przy wywołaniu: usunięcie ustępującego otwarcia, puszczone bez czekania, mogło na wolnym OneDrive dojść
+  po zapisie próby nowszego otwarcia tego folderu, które zaczęło się w międzyczasie – drugi komputer nie widział tego do
+  następnego heartbeatu, w zasobniku do 5 min). Telefon (lustro folderu) i testy bez `presence` – tylko `fi.json`.
+  W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
+  podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
+- **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
+  najwyżej 5 s); niezapisany → `QuickResult.pending` („Wpis przyjęty, ale jeszcze niezapisany (powód) – zapisze się sam”,
+  okno zostaje 4 s); szkic wysłany ponownie – według stanu na dysku (`unsavedOf`). `QuickData.folder` wraca ze szkicem:
+  szkic z listami innego folderu (otwartego w międzyczasie) odrzucony; w trakcie zmiany folderu `readOnly` z powodem
+  (otwarte okno szybkiego wpisu dostaje go od razu – `switching` w subskrypcji `initQuickHost`, po przeglądzie).
+  Ctrl+S / „Zapisz teraz” w folderze tylko do odczytu – powód zamiast „Zapisano.”. Ekran brakującego zapamiętanego
+  folderu ponawia otwarcie co 30 s jak przy niedostępnym (`features/setup/retry.ts` `retriesBySelf`).
+- **T318** Folder-widmo starszej wersji (1.15.5, AP-1): `ghostFolders` w `main/index.ts` – zapamiętane foldery danych
+  (`dataDir`, `recentDirs`, bez otwartego) rodzaju 'partial' z plikami wpisów (`DataStore.recordFiles`) → meldunek
+  „Folder danych” („Folder-widmo …: n plików wpisów bez fi.json…”, „Pokaż folder” – `showGhostFolder` otwiera tylko folder z
+  ostatniej listy); szukane raz po pokazaniu folderu (`store/ghosts.ts`). Komunikat ekranu wyboru przy 'partial' wspomina
+  folder-widmo. Bez automatycznego przenoszenia wpisów.
+- **T319** Zmiana czekająca na „Zmień mimo to” i szkice (1.15.5, AP-8, AF-3, AF-11, SA.4): pytanie „Zmienić operację?” w
+  `store/guard.ts` (`askGuard`, `answerGuard`, jedno na operację – nowsze wpisanie zastępuje), pokazywane przez
+  `GuardDialog` okna (komputer i telefon), nie przez edytor – zostaje po opuszczeniu edytora; liczy się jako niezapisana
+  zmiana (`FlushResult.asks`, `unsavedReport`, `saveFirst`, Ctrl+S, pytanie przy zamknięciu „Niezapisana zmiana
+  operacji”); inny folder je czyści. Kreator: `startWizard` w trakcie tylko wraca (baner „Wróć do kreatora” z numerem
+  kroku); odpowiedzi jako szkic w `localStorage` komputera (`fi.wizard.draft:<folder>`, `v: 1`, po jednym na folder) –
+  wracają po restarcie, znikają po starcie budżetu i po „Przerwij kreator”. „Saldo w banku teraz” w Kontach – `useDraft`.
+- **T320** Usunięta operacja a drugi format pliku (AP-2, AF-1; doprecyzowuje T39, T134, T234): usunięte operacje z banku
+  zna import z opisem – `shared/import/deleted.ts` `deletedBankRows` (z wersji usuniętych `.history/`): klucze wierszy
+  (`bank.key` **i** `altKeys` – wiersz drugiego formatu zapamiętany przy B5) oraz wiersze dopasowywane bez klucza
+  (`DeletedRow`): nierozliczone (B96, jak dotąd) i zaksięgowane z formatem pliku (`bank.source`, starsze – głos importu
+  po `importedAt`, liczony z operacji w budżecie i usuniętych). Zaksięgowana usunięta zatrzymuje tylko wiersz **drugiego**
+  formatu miarą B5 (ta sama kwota, ±3 dni, podobna nazwa, dzień objęty plikiem) – w swoim formacie wiersz ma jej klucz.
+  Pary od najbliższej, każda usunięta i każdy wiersz raz; wiersz już w budżecie w formacie pliku (po kluczu) zabiera swoją
+  usuniętą – kopia usunięta przy podwójnym imporcie sprzed 1.4.2 nie ukrywa innego zakupu tego sklepu. Usunięte przez
+  import (zniknięte nierozliczone, kopie z innego konta – T321; znak `byImport` w historii – T331, wcześniejsze – paczka
+  `imports/…removed`) to nie usunięcie użytkownika: tylko ich klucze. Wiersz ma status `deleted` z `other` („usunięta z historii rachunku” w podglądzie); „importuj mimo
+  to” – jak przy T39.
+- **T321** Ten sam rachunek na dwóch kontach budżetu (AP-2, AF-9): przejście B5 obejmuje też konta, na które trafiał numer
+  rachunku pliku (oba numery znane i równe – inaczej dwa rachunki nigdy się nie mieszają, T166): wiersz drugiego formatu
+  na innym koncie = `elsewhere` z `other`, domyślnie **nie** przenoszony (miara, nie klucz wiersza); przeniesiony – klucz
+  swojego formatu na tym koncie, klucz wiersza pliku w `altKeys`. Import naprawczy: wiersz znaleziony na innym koncie po
+  kluczu (B35), którego operacja jest tu w drugim formacie, to `known` z kopią (`RowCopy`) – „usuń duplikat” zamiast
+  „przenieś” (`ImportChoices.removeCopies`): zaznaczony, gdy kopia przyszła tam z importu i nie ma innej decyzji
+  (`conflicting`); nigdy, gdy zadokowana (`ClassifyContext.docked`), spłacana wpłatą domownika (`covers`) albo tylko do
+  odczytu. Usunięta kopia oddaje operacji tutaj kategorię i notatki (`takeUserData`), a gdy operacja tutaj nic nie
+  wskazuje, też to, co spłaca (`covers`, dług startowy, `repaid` – przegląd N1; także panel duplikatów) – przy tej samej
+  decyzji albo pieniądzach tych samych domowników (T333); kopia, której spłacanych zakupów operacja tutaj nie przejmie, nie
+  jest zaznaczona („kopia spłaca inne zakupy niż operacja tutaj”, `coversOtherwise`; T333). Usunięta jest w paczce importu („Cofnij import” ją przywraca), licznik `copies`. Wspólne „jedna operacja i jej kopie” (`userContent`, `conflicting`,
+  `mergeDuplicate`, `takeUserData`) przeniesione z `duplicates.ts` do `shared/import/copies.ts` (bez cyklu importów).
+- **T322** Konto importu po numerze rachunku (AP-2, IM sp. 2): plik otwiera się na koncie, na które trafiał jego numer
+  (`accountForNumber`: otwarte konta z tym numerem – z kilku to z importem mBanku, potem wybrane wcześniej); numer nieznany
+  albo plik bez numeru – konto wybrane wcześniej, inaczej pierwsze z importem mBanku. Ostrzeżenie o innym rachunku (F4)
+  bez zmian.
+- **T323** Klucze bez zmiany widocznej (AP-2, AF-28, AF-63): rozliczenie nierozliczonej zachowuje klucz jej wiersza
+  w `altKeys` (starsza lista po rozliczeniu zna wiersz – nic drugi raz; operacje rozliczone przed 1.15.5 klucza nie mają –
+  siatką zostaje panel duplikatów). Import, który tylko zapamiętuje klucze wierszy (`keysOnly` – różnica wyłącznie
+  w `altKeys`), zapisuje je, ale bez kopii przed importem i bez paczki do cofnięcia (jak N13); panel wyniku nie pokazuje
+  pustej ścieżki kopii.
+- **T324** Meldunek „Wróciły po usunięciu” (AP-2, AF-1 – dane sprzed 1.15.5, bez migracji): operacja, którą zrobił import
+  z jej wiersza (T330), zaksięgowana w innym formacie niż usunięta, to samo konto i kwota, ±3 dni, podobna nazwa, zaimportowana po usunięciu importem, którego
+  dni (pierwsza i ostatnia operacja) obejmują dzień usuniętej (`returnedOf`; pary od najbliższej). Jeden meldunek na
+  operację (rodzaj `returned`, po „Możliwych duplikatach”): „Usuń” – jak w Operacjach (z dokowaniami, „Cofnij”), „Pokaż”,
+  „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
+  mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu (gdy jest
+  po co – T332), od razu na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je
+  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie.
+- **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
+  reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
+  rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
+  przelewu (każda reguła poza regułą pożyczki; pożyczka istnieje od dnia udzielenia – przelew sprzed niego nigdy nie jest
+  jej zwrotem: z regułą zostaje regułą, bez reguły zwykły wpływ (B34 – tylko od tego dnia), dawna reguła pożyczki
+  proponuje pożyczkę bez rekordu; `loanFor`, ten sam w audycie – przegląd N1, N1 2), pieniądzom domownika (każda poza regułą wpływu z osobą i przelewem własnym) i XTB (każda
+  poza regułą XTB i przelewem własnym – portfel XTB). Zostaje regułą: słowo kluczowe z tytułu (o tej płatności – „ZA
+  PIZZĘ” od pożyczkobiorcy), reguła tego samego rodzaju (dawna reguła pożyczki / XTB – propozycja, N14), przelew własny
+  (rozpoznanie domownika i XTB tylko, gdy bank nie mówi „przelew własny”). PIT-38 nie ma rozpoznania po nazwie – chroni
+  go tylko decyzja zbiorcza (T326). Pożyczka zamknięta – reguła decyduje jak dotąd. Bez migracji: stare operacje
+  zapisane regułą wskazuje audyt reguł (T326).
+- **T326** Decyzja zbiorcza i reguły po AP-6 (AF-26, AF-62, AF-64; doprecyzowuje T90): „Decyzja dla zaznaczonych” nie
+  zmienia grupy ani operacji, która teraz (własna decyzja, tematu albo propozycja) jest pożyczką, PIT-38, XTB albo
+  pieniędzmi domownika, gdy decyzja jest innego rodzaju (`bulkKeeps`): ta sama pożyczka (bez rekordu – dowolna z Radaru),
+  ten sam domownik – tak; reszta liczona jako „nie pasuje” z powodem w komunikacie. „+ domownik” tylko przy wpływie
+  przelewem od osoby spoza listy z decyzją „wpływ (przychód)” – nigdy przy przelewie własnym (nazwy posiadacza), XTB,
+  zwrocie pożyczki ani pieniądzach domownika (`offersNewMember`). Audyt reguł: reguła innego rodzaju niż pożyczka, która
+  złapała wpływ od osoby z pożyczką z Radaru udzieloną do dnia wpływu i otwartą teraz (`loanFor` – ta, której import
+  ustępuje dziś; zamknięta od tamtej pory – reguła zostaje, bez zgłoszenia, przegląd N1 2), zapisany jako rodzaj reguły – „N do poprawy” w „niespójne” (licznik razem z innymi), z listą operacji do otwarcia;
+  słowo z tytułu nie (zostaje regułą – `ruleGivesWay`, przegląd N1);
+  „bez trafień” = jego licznik (`inAuditView`, bez reguł pożyczki, PIT-38 i XTB).
+- **T327** „+ w tym za X” w wierszu importu (AP-7, AF-27; D81): wiersz bez własnej decyzji pokazuje swoją część
+  rozkładu grupy (`RowShares`); zmiana robi z tego własną decyzję wiersza, która zostaje w trakcie wpisu – także linia
+  0 zł (porównanie z linią 0 zł, nie `sameChoice`, które linie 0 zł pomija – `rowSharesChoice`); do decyzji grupy wraca
+  „jak grupa” albo usunięcie wszystkich linii, gdy grupa nie ma swoich. Nowa linia (wiersz, grupa, temat) startuje od
+  tego, co X ma oddać – po zakupach pliku, po własnych wpłatach X w pliku i po częściach X w innych wierszach – najwyżej
+  tyle, ile zostało w pieniądzach wiersza albo grupy (`rowStart`, `decisionStart`); przycisk mówi „(ma oddać … zł)”.
+  Temat, który pokazuje wspólną decyzję swoich marek bez linii z kwotą (N78), liczy start nowej linii z ich wierszy
+  (`themeSharesFrom`; przegląd N1), a linia wpisana tam to decyzja tematu (razem dla X, T328); linie marek z kwotą
+  zostają w markach – T336. Własna część wiersza zostaje wpisana jak wpisana (także ponad dług – świadomie, za ten
+  przelew).
+- **T328** „w tym za X” grupy i tematu (AP-7, AF-27; D81): kwota decyzji wspólnej dla kilku wpłat to razem dla X, nie
+  na każdą wpłatę – rozkładana po kolei od najstarszej (każda wpłata najwyżej swoją kwotą), a wszystkie spłaty X z grup
+  i tematów pliku razem najwyżej to, co X ma oddać, pomniejszone o własne części wierszy i o własne wpłaty X w pliku,
+  które spłacają (D80: najpierw, bez względu na dzień; wpłata X, której grupa albo temat daje części innym, liczy się
+  cała, dopóki jej części nie są znane – po kolei; przegląd N1) (`rowShares`). „Ma oddać” =
+  dług z księgi teraz plus części X zakupów, które ten import tworzy (zwrot towaru odejmuje), pomniejszone o jego zaliczkę
+  (`owedWithFile`); część zaliczki / przychodu (`inflowKind` inny niż spłata) – bez tego limitu. Podgląd mówi przy linii
+  jednej decyzji – grupy, tematu z własną decyzją, tematu jednej marki (`lineSpreads`) – z których wpłat poszła i dlaczego
+  mniej niż wpisane („tyle X ma oddać” / „tyle zostało we wpłatach”, „X nie ma nic do oddania”); linii kilku decyzji
+  razem nie składa (T336); import liczy to samo (`runImport` → `buildImport({ owed })`). Bez migracji: importy
+  z „w tym za” w grupie kilku wpłat sprzed 1.15.5 mają zdublowane części – do poprawy w Operacjach.
+- **T329** Pewne dopasowanie przy podziale na osoby (AP-7, D91 b – D99; DM sp. 1–2): w edytorze Operacji dopisana albo
+  zmieniona część osoby („+ także za…”, „podziel na osoby”) wiąże sama pewny zakup tej osoby, gdy jej część nie wskazuje
+  jeszcze żadnego (to samo, co edytor proponował jako „Pasuje: …” – `moreSureCovers`, `repaymentSharesByMember`); część
+  usunięta zdejmuje wskazane zakupy tej osoby (`keptCovers`). Import i szybki wpis wiązały już każdą osobę osobno
+  (`linkRepayments`). Pewne jest też wpłata co najmniej równa wszystkim otwartym zakupom osoby (do 500) – spłaca wszystkie
+  (`matchCovers`; reszta jak dotąd: zaliczka albo przychód według osoby), zamiast „rozliczony” przy zakupach „do oddania”.
+- **T330** „Wróciły po usunięciu” tylko dla kopii, którą zrobił import (przegląd N1; doprecyzowuje T324): kandydat to
+  wyłącznie operacja utworzona przez import razem z jej wierszem i bez innego wiersza od tamtej pory (`madeByItsImport`:
+  zaksięgowana, `createdAt` = `bank.importedAt`). Ręcznie wpisana połączona z wierszem (import – „połącz”, panel
+  duplikatów – „scal”) i nierozliczona rozliczona późniejszym plikiem mają w `bank` czas i format tamtego pliku, ale to
+  operacje użytkownika – nigdy meldunek (wcześniej „Usuń” mogło skasować jedyną prawdziwą kopię). „Usuń” sprawdza to
+  jeszcze raz przy kliknięciu (inaczej komunikat, operacja zostaje). W razie wątpliwości bez meldunku – siatką zostaje panel
+  duplikatów.
+- **T331** Usunięcie przez sam import w historii (przegląd N1; doprecyzowuje T320, T321): nierozliczone, których bank już
+  nie pokazuje, i kopie z innego konta (AF-9) import usuwa z powodem 'import' (`deleteRecords(…, { reason: 'import' })`):
+  wersja w `.history/` ze znakiem `byImport: true`, plik dalej `_delete_` – starsza wersja aplikacji dalej trzyma klucze
+  wiersza poza importem. `deletedBankRows` bierze z takich tylko klucze, niezależnie od tego, czy paczka importu jest
+  jeszcze wśród 10 ostatnich (wcześniej po rotacji paczek liczyły się jako usunięcia użytkownika); usunięte przez import
+  przed 1.15.5 – po paczkach, jak dotąd. „Cofnij” po „Cofnij import” usuwa przywrócone przez cofnięcie tak samo – z powodem
+  'import' (`redoImport`, przegląd N1 2). Synchronizacja → Usunięte wpisy: „usunięty przez import”. Addytywnie, bez
+  `SCHEMA_VERSION`.
+- **T332** Koszt meldunku „Wróciły po usunięciu” (przegląd N1; doprecyzowuje T324): operacja wraca tylko z importem po
+  usunięciu, więc usunięte czytane 10 s po otwarciu folderu tylko wtedy, gdy ostatnie sprawdzenie tego komputera coś
+  zgłosiło albo od niego zmienił się którykolwiek import folderu (`settings.import.lastImport` wszystkich kont i dziennik
+  importów `settings.import.log`, także z drugiego komputera – porównane, czy są takie same, nigdy „później niż”: zegar
+  drugiego komputera może się spóźniać, przegląd N1 2; dziennik ma klucz na każdy import i scalenie `fi.json` zachowuje
+  klucze obu komputerów, a ostatni import konta – tylko jeden czas, przegląd N1 3). Stan w `localStorage` komputera
+  (`fi.returned.checked:<folder>` – importy folderu, z którymi nie było nic do zgłoszenia, `importsMark`; brak albo
+  starsza postać – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam; gdy importy
+  folderu do jego zapisu są takie jak przy tym odczycie, sprawdzenie bierze importy folderu po zapisie
+  (`checkedWithImport` – odczytane, nigdy dopisane tutaj; przegląd N1 3: czas tego komputera wpisany przy koncie zakrywał
+  import drugiego komputera na tym koncie scalony pod tym czasem), inaczej czytane przy następnym otwarciu. Ekran
+  Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda tylko operacje kwoty usuniętej,
+  dni i format liczy tylko dla importów kandydatów.
+- **T333** Kopia z innego konta a zakupy, które spłaca (przegląd N1 2; doprecyzowuje T321): usuwana kopia (AF-9) nigdy po
+  cichu nie zabiera spłaty zakupów domownika (D91). Operacja tutaj, która nic nie wskazuje, przejmuje to, co kopia spłaca
+  (`covers`, dług startowy, `repaid`), przy tej samej decyzji albo przy innej, gdy jej pieniądze spłacają każdego
+  domownika, którego spłacają pieniądze kopii (`takesCovers` – np. ta sama wpłata Mamy z częścią „w tym za Tata”; także
+  panel duplikatów). Gdy nie przejmie – wskazuje inne zakupy (`coversOtherwise`), ma inną decyzję bez pieniędzy tych
+  osób (zwykły wpływ) albo jej pieniądze nie są ich spłatą (ich przychód, zaliczka) – kopia nie jest zaznaczona,
+  a podgląd mówi „po usunięciu spłacane przez nią zakupy będą znów do oddania” (`RowCopy.dropsCovers`, `copyNotes` –
+  zaznaczona czy nie; przegląd N1 3: wcześniej „usunięta – …” przy kopii, której import nie usuwa); zaznaczona mimo to –
+  operacja tutaj zostaje ze swoją decyzją, te zakupy znów do oddania (jak przy `otherCovers`). Kopia, której pieniądze
+  nikogo nie spłacają, nic nie gubi. Podpis planu (B38, `planSignature`) obejmuje przy kopii też to, czy jest zaznaczona
+  domyślnie, ma inną decyzję i czy gubi zakupy – zmiana między podglądem a importem zatrzymuje import („sprawdź podgląd”).
+- **T334** Powrót folderu dopiero po jego przeczytaniu (przegląd 2 AP-1; doprecyzowuje T315): odświeżenie, które znalazło
+  `fi.json`, ale folderu nie przeczytało (EBUSY – OneDrive dopiero sprowadza pliki), zostawia go niedostępnym (`available`
+  z powrotem false w `refreshInQueue`) – sprawdzanie w spoczynku widzi różnicę i za kilka sekund próbuje znowu;
+  `regained` podbija dopiero odświeżenie, które folder przeczytało, i to ono mówi oknu „dostępny”, a main obserwuje folder
+  od nowa. Błąd już po przeczytaniu (próba zapisu, przepisanie pliku po migracji) powrotu nie cofa – `folderSeen`
+  w `finally` kolejki i tak obserwuje folder od nowa. Wcześniej: `regained` podbite, odświeżenie padało przed
+  `folderSeen`, a następne zastawało podbitą już liczbę – zostawał stary obserwator (zmiany z drugiego komputera dopiero
+  co 5 min), okno nie wiedziało o powrocie.
+- **T335** Ile prób w próbie zapisu (przegląd 2 AP-1; doprecyzowuje T316): `fi.json` otwierany do zapisu przy otwarciu
+  folderu i przy jego powrocie najwyżej 4 razy (`PROBE_ATTEMPTS`, ok. 0,1 s czekania), w spoczynku (`stale()` co 5 s) i
+  przy odświeżeniu w kolejce, dopóki blokada trwa – raz. Wcześniej `withRetry` 8 razy (EPERM / EACCES są w nim
+  chwilowe): w folderze naprawdę tylko do odczytu ok. 1,4 s przy otwarciu, co 5 s w spoczynku i przy każdym odświeżeniu
+  w kolejce magazynu (zapisy czekały). Blokada dłuższa niż próby przy otwarciu daje baner na kilka sekund – zdejmuje go
+  następne sprawdzenie w spoczynku. Po przeglądzie 3 tyle samo prób ma każdy krok zapisu obecności w próbie
+  (`writeFileAtomic(…, attempts)`: katalog, plik tymczasowy, zamiana): przy otwarciu i powrocie ok. 0,1 s na krok,
+  w spoczynku i w kolejce jedna próba bez czekania. Wcześniej plik tymczasowy raz (jeden chwilowy EPERM na `.presence/`
+  dawał tryb tylko do odczytu), a zamiana zawsze 8 razy (ok. 1,4 s co 5 s w spoczynku i w kolejce magazynu). Zwykłe
+  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy.
+- **T336** Temat z jednakową decyzją marek z „w tym za” (przegląd N1 4; doprecyzowuje T235 – N78, T327, T328): gdy
+  kilka marek tematu ma tę samą decyzję z liniami „w tym za” z kwotą (`themeShows` 'brands'), wiersz tematu pokazuje ich
+  decyzję bez edytora linii – „w tym za – ustawione w markach”; linie, kwoty i uwagi rozkładu są przy każdej marce (jej
+  klucz, `lineSpreads`). Zmiana w temacie (np. cel wpłaty) trafia do decyzji każdej marki jako jej własna, a linie marki
+  zostają jak wpisane (także 0 zł); inny rodzaj zdejmuje linie w każdej marce, jak ta zmiana w marce (`chooseThemeRow`).
+  Nigdy jedna decyzja tematu z kwotą policzoną z marek: kwota tematu jest dla wszystkich jego wierszy razem (T328), kwota
+  marki – dla jej wierszy, więc żadna jedna kwota nie jest tym, co wpisała każda marka (przegląd N1 2: kwota jednej marki
+  – suma o połowę mniejsza; N1 3: kwota razy liczba marek – X dostawał pieniądze, których nikt za niego nie wysłał; N1 4:
+  to, co marki dają teraz – zmiana obok, np. kategorii, zapisywała kwotę obciętą do długu, a gdy dług potem rósł, X
+  dostawał mniej, niż marki wpisały, albo nic). Jedna marka albo marki bez linii z kwotą – jak dotąd: zmiana w temacie to
+  decyzja tematu (te same wiersze i kwoty). Wiersz tematu nie czyta rozkładu (`themeCommon` – decyzja pierwszej marki,
+  bez sumowania), uwagi przy linii zawsze z jednej decyzji – kilku kluczy razem nikt nie składa.
+  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy. Po przeglądzie 4 naprawa pliku obecności tylko do
+  odczytu (T337) to jeden `access`, `chmod` i drugi zapis z tymi samymi próbami – tylko gdy plik naprawdę nie ma prawa
+  zapisu; plik trzymany nie dostaje drugiego zapisu (czas jak dotąd).
+- **T337** Własny plik obecności, którego nie da się zastąpić (przegląd 4 AP-1; doprecyzowuje T316): zamiana
+  `.presence/<komputer>.json` odmówiona (EPERM / EACCES w kroku zamiany – `atomicStep`), a plik bez prawa zapisu
+  (`access(…, W_OK)`; na Windows atrybut „tylko do odczytu”, np. po przywróceniu kopii) → `writePresence` oddaje mu
+  prawo zapisu (`chmod` z bitem zapisu właściciela, na Windows zdejmuje atrybut) i zapisuje raz jeszcze – zamiana
+  zostaje atomowa, plik nie znika ani na chwilę. Plik trzymany (blokada antywirusa albo OneDrive) zostaje, jak jest –
+  minie sama, ponawia następny heartbeat. Błąd zapisu obecności w heartbeacie nie jest połykany
+  (`PresenceKeeper.beat`): wpis w logu, gdy zaczyna się nie udawać w danym folderze (z błędem), i gdy znów się udaje –
+  nie przy każdej próbie (co minutę, w zasobniku co 5 min; tygodnie w zasobniku wypchnęłyby resztę z logu 1 MB).
+  Wcześniej plik tylko do odczytu zostawał na zawsze ze starym `lastSeen` (próba i heartbeat tylko odnotowywały albo
+  połykały błąd) – drugi komputer po 11 min uznawał ten za niedziałający i oba robiły zapisy w tle naraz. Bez komunikatu
+  w oknie: przyczynę trwałą naprawia sam zapis, chwilowa mija; zostaje wpis w logu.

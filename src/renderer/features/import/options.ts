@@ -1,4 +1,5 @@
-import type { Choice } from '@shared/import/reconcile'
+import { isOwnName } from '@shared/import/classify'
+import { opKindOf, sameChoice, type Choice, type ImportGroup } from '@shared/import/reconcile'
 import { HOUSE_MEMBER_ID, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
 
 /**
@@ -133,6 +134,60 @@ export function fits(option: Option, direction: 'in' | 'out'): boolean {
     return true
   if (option.startsWith('gift:') || option === 'tax') return direction === 'out'
   return direction === 'in' && (option === 'income' || option === 'refund' || option.startsWith('household:'))
+}
+
+/**
+ * Does a bulk decision leave a decision of its own kind (AP-6, AF-26 – one click of „Wydatek / zwrot towaru” turned the
+ * loan's repayments into negative costs, and the rule it taught took the next ones)? A loan, PIT-38, XTB and a household
+ * member's money are changed in their own group only: the bulk decision takes them only within their kind – the same
+ * loan (one without its record – any loan of the Radar), the same member. Anything else it changes as before.
+ */
+export function bulkKeeps(option: Option, current: Choice): boolean {
+  if (current.kind === 'tax' || current.kind === 'trading') return option !== current.kind
+  if (current.kind === 'loan') return current.loanId ? option !== `loan:${current.loanId}` : !(option === 'loan' || option.startsWith('loan:'))
+  if (current.kind === 'income' && current.household) return !option.startsWith(`household:${memberOfChoice(current)}:`)
+  return false
+}
+
+/**
+ * „+ domownik” (D80 a, AF-62): only at a transfer coming in from a person outside the household decided as plain income
+ * – never an own transfer (the holder's names), XTB, a loan's repayment or a member's money; a name already a member's
+ * – no.
+ */
+export function offersNewMember(
+  g: Pick<ImportGroup, 'direction' | 'rows' | 'names' | 'label'>,
+  choice: Choice,
+  members: ReadonlyArray<Pick<HouseholdMember, 'bankNames'>>,
+  ownNames: readonly string[]
+): boolean {
+  const name = (g.names[0] ?? g.label).trim()
+  if (g.direction !== 'in' || !name || !g.rows.length || opKindOf(g.rows[0]!.row.operation) !== 'transfer') return false
+  if (choice.kind !== 'income' || choice.household || isOwnName(name, ownNames)) return false
+  return !members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.toUpperCase()))
+}
+
+/** The lines of „w tym za” as one text – of 0 zł too (`sameChoice` leaves those out). */
+export const linesKey = (xs: Choice['shares']): string => (xs ?? []).map((x) => `${x.memberId}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`).join(',')
+
+/**
+ * A row's decision after its „w tym za” changed (AF-27 – a new line of 0 zł was „the same as the group's”, so the row's
+ * decision was dropped at once): `shown` – what the row showed (`own` – its own decision, else its group's with the
+ * row's part of the group's spread). A row without its own decision gets one unless nothing changed; its own decision
+ * stays while it has lines, even of 0 zł being typed – back to the group's (null) only with no lines where the group
+ * has none either.
+ */
+export function rowSharesChoice(next: Choice, group: Choice, shown: Choice, own: boolean): Choice | null {
+  if (!own) return sameChoice(next, shown) && linesKey(next.shares) === linesKey(shown.shares) ? null : next
+  return !next.shares?.length && !group.shares?.length && sameChoice(next, group) ? null : next
+}
+
+/** What a bulk decision did (`chooseSelected`): why some were left as they were – the money's direction, or AP-6. */
+export function bulkResultText(applied: number, unfit: number, kept: number): string {
+  if (!unfit) return `Ustawiono dla ${applied}.`
+  const held = 'zwrot pożyczki, XTB, PIT-38 i wpłatę domownika zmienisz tylko w ich grupie'
+  if (!kept) return `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.`
+  if (kept === unfit) return `Ustawiono dla ${applied}; ${unfit} nie pasuje (${held}) – bez zmian.`
+  return `Ustawiono dla ${applied}; ${unfit} nie pasuje (kierunek pieniędzy; ${held}) – bez zmian.`
 }
 
 /** Does the option need a category (an expense, a purchase a member finances, a product return / reimbursement)? */

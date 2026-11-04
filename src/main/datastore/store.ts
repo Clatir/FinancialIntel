@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/main/datastore/store.ts @ 84a8339
-import { promises as fs } from 'node:fs'
+import { constants as fsConstants, promises as fs } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import { CONFLICT_COPY_MESSAGE, SLOW_FILE_MS, type BackupDiffItem, type BackupPreview, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
+import { CONFLICT_COPY_MESSAGE, FOLDER_UNAVAILABLE_MESSAGE, SLOW_FILE_MS, type BackupDiffItem, type BackupPreview, type ChangeSet, type ConflictEntry, type ConflictSide, type FolderStatus, type HistoryEntry, type HistoryKind, type HistoryReason, type Problem, type ProblemKind, type RecordEntry, type RecordLists, type Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
 import {
   BACKUPS_DIR,
@@ -22,7 +22,7 @@ import {
 import { sameContentAs } from '@shared/merge'
 import { SCHEMAS, parseRecordObject, parseRecordText, serializeRecord, type AnyRecord, type RecordTypes } from '@shared/records'
 import { SCHEMA_VERSION, type SettingsFile } from '@shared/schema'
-import { pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
+import { atomicStep, dataRootOf, mkdirWithin, pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
 import { mapLimit, walkFiles } from './fsutil'
 import { ReadTracker, type LoadProgress, type LoadStats } from './progress'
 import { HISTORY_DIR, RecordHistory } from './history'
@@ -56,6 +56,18 @@ export class ReadOnlyError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ReadOnlyError'
+  }
+}
+
+/** A folder that takes no writes (AF-14): the attribute „tylko do odczytu” or no right to write – found by a write probe. */
+export const FOLDER_NOT_WRITABLE_MESSAGE =
+  'Folder danych jest tylko do odczytu (atrybut „tylko do odczytu” albo brak prawa zapisu) – zmiany nie są zapisywane. Zdejmij atrybut albo nadaj prawo zapisu; aplikacja sprawdza to sama co kilka sekund.'
+
+/** A write refused because the data folder is not there (AP-1): read-only for a while, tried again once it is back. */
+export class FolderUnavailableError extends ReadOnlyError {
+  constructor(message = FOLDER_UNAVAILABLE_MESSAGE) {
+    super(message)
+    this.name = 'FolderUnavailableError'
   }
 }
 
@@ -136,7 +148,25 @@ export interface DataStoreOptions {
   backupDir?: string | null
   /** The main process's log: what the folder could not do quietly (a version not kept in the history – B112). */
   log?: (level: 'info' | 'warn' | 'error', message: string, detail?: unknown) => void
+  /**
+   * The folder found gone by a write (AP-1): its change set (the status „niedostępny”) for the window at once – the
+   * write's own answer is only its error.
+   */
+  onStatus?: (change: ChangeSet) => void
+  /**
+   * This computer's presence written in the folder (the main process's heartbeat write by `writeFileAtomic` – T316),
+   * each step tried `attempts` times: the write probe's check that new files can be made (temp + rename in `.presence/`),
+   * at the open and while the folder takes no writes – no file of the probe's own; the step that failed (`atomicStep`)
+   * says whether the folder refused a new file. Without it (the phone's mirror, tests) only fi.json is tried.
+   */
+  presence?: (attempts: number) => Promise<void>
 }
+
+/** The write probe's tries of each step at the open and at the folder's return (T316): a lock for a moment; idle – one. */
+const PROBE_ATTEMPTS = 4
+
+/** A write refused (the write probe, T316): no right to write, the attribute „tylko do odczytu”, a drive read-only. */
+const refusedWrite = (e: unknown): boolean => ['EPERM', 'EACCES', 'EROFS'].includes((e as NodeJS.ErrnoException).code ?? '')
 
 /**
  * 'partial' = FI's folders without fi.json (OneDrive has not synced it yet – never initialize over it);
@@ -364,11 +394,21 @@ export class DataStore {
   private tracker: ReadTracker | null = null
   /** How the last open went (logged by the main process). */
   loadStats: LoadStats | null = null
-  private readonly opts: Required<Omit<DataStoreOptions, 'backupDir' | 'log'>> & { backupDir: string | null }
+  private readonly opts: Required<Omit<DataStoreOptions, 'backupDir' | 'log' | 'onStatus' | 'presence'>> & { backupDir: string | null }
+  private readonly onStatus?: (change: ChangeSet) => void
+  private readonly presence?: (attempts: number) => Promise<void>
+  private readonly log?: DataStoreOptions['log']
   fi!: SettingsFile
   private folderReadOnlyReason: string | null = null
+  /** The folder takes no writes (AF-14 – the write probe at the open, tried again while so): why; null = it does. */
+  private writeBlocked: string | null = null
   private folderSchemaVersion = SCHEMA_VERSION
   private available = true
+  /**
+   * How many times a refresh found the folder back after it was gone (AP-1): whichever refresh reads it first, the main
+   * process watches the folder anew (a watcher may have followed the folder renamed away, or failed with the drive).
+   */
+  regained = 0
   migratedFrom: number | null = null
   backupPath: string | null = null
   otherMachines: FolderStatus['otherMachines'] = []
@@ -383,6 +423,9 @@ export class DataStore {
       now: opts.now ?? (() => new Date().toISOString()),
       backupDir: opts.backupDir ?? null
     }
+    this.onStatus = opts.onStatus
+    this.presence = opts.presence
+    this.log = opts.log
     this.history = new RecordHistory(root, this.opts.machineName, this.opts.now, (e) => opts.log?.('warn', 'history snapshot failed', e))
   }
 
@@ -409,6 +452,16 @@ export class DataStore {
     const entries = names.filter((n) => !n.startsWith('.') && n !== 'desktop.ini' && n !== 'Thumbs.db')
     if (entries.length === 0) return 'empty'
     return entries.some((n) => (COLLECTIONS as readonly string[]).includes(n)) ? 'partial' : 'other'
+  }
+
+  /**
+   * A folder of FI's records without fi.json (`inspect` 'partial'): how many records' files its collections hold – a
+   * „folder-widmo” (AP-1) has some, a folder OneDrive only began to bring may have none yet.
+   */
+  static async recordFiles(root: string): Promise<number> {
+    let n = 0
+    for (const c of COLLECTIONS) for (const rel of await walkFiles(root, join(root, c), isIgnoredPath).catch(() => [] as string[])) if (rel.toLowerCase().endsWith('.json')) n++
+    return n
   }
 
   /**
@@ -440,7 +493,7 @@ export class DataStore {
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
       }
-      await writeFileAtomic(target, serializeRecord('fi', fi))
+      await writeFileAtomic(target, serializeRecord('fi', fi), root)
       return typeof kept.savedAt === 'string' ? kept.savedAt : now
     }
     return null
@@ -450,8 +503,8 @@ export class DataStore {
   static async initialize(root: string, fi: SettingsFile = createDefaultSettings()): Promise<void> {
     await fs.mkdir(root, { recursive: true })
     if (await pathExists(join(root, SETTINGS_FILE))) throw new Error('Ten folder zawiera już dane Financial Intel (fi.json).')
-    for (const dir of [...COLLECTIONS, BACKUPS_DIR]) await fs.mkdir(join(root, dir), { recursive: true })
-    await writeFileAtomic(join(root, SETTINGS_FILE), serializeRecord('fi', fi))
+    for (const dir of [...COLLECTIONS, BACKUPS_DIR]) await mkdirWithin(root, join(root, dir))
+    await writeFileAtomic(join(root, SETTINGS_FILE), serializeRecord('fi', fi), root)
   }
 
   /**
@@ -465,6 +518,14 @@ export class DataStore {
   /** Per-machine backup location (null = backups/ inside the data folder). */
   setBackupDir(dir: string | null): void {
     this.opts.backupDir = dir
+  }
+
+  /**
+   * The data folder when `path` lies in it (AP-1): writes there never make the folder itself; a folder of backups set
+   * on this computer elsewhere is made as before (null).
+   */
+  private within(path: string): string | null {
+    return dataRootOf(this.root, path)
   }
 
   abs(rel: string): string {
@@ -488,9 +549,12 @@ export class DataStore {
         opts.signal?.throwIfAborted()
         opts.onCommit?.()
         this.applySettingsState()
+        // A folder that takes no writes (the attribute „tylko do odczytu”, no right to write – AF-14) is read-only from
+        // the start: no half-written step (the wizard's start) and no migration that cannot be finished.
+        this.writeBlocked = this.folderReadOnlyReason ? null : await this.writeProbe(PROBE_ATTEMPTS)
         tracker.step = 'migrate'
         const tm = performance.now()
-        if (!this.folderReadOnlyReason) await this.migrateIfNeeded()
+        if (!this.folderReadOnlyReason && !this.writeBlocked) await this.migrateIfNeeded()
         const migrateMs = Math.round(performance.now() - tm)
         await this.cleanupTempFiles(temps)
         tracker.step = 'prepare'
@@ -513,16 +577,117 @@ export class DataStore {
     return {
       dataDir: this.root,
       available: this.available,
-      readOnly: !!this.folderReadOnlyReason || !this.available,
-      readOnlyReason: !this.available
-        ? 'Folder danych jest niedostępny (odłączony dysk lub brak dostępu). Zmiany nie są zapisywane.'
-        : this.folderReadOnlyReason,
+      readOnly: !!this.folderReadOnlyReason || !!this.writeBlocked || !this.available,
+      readOnlyReason: !this.available ? FOLDER_UNAVAILABLE_MESSAGE : (this.folderReadOnlyReason ?? this.writeBlocked),
       folderSchemaVersion: this.folderSchemaVersion,
       appSchemaVersion: SCHEMA_VERSION,
       otherMachines: this.otherMachines,
       migratedFrom: this.migratedFrom,
       backupPath: this.backupPath
     }
+  }
+
+  /**
+   * The folder is there (AP-1): its fi.json, by one stat – before every batch of writes and every few seconds while
+   * idle. A folder renamed, moved or unplugged has none; so has an empty folder made in its old place.
+   */
+  async rootPresent(): Promise<boolean> {
+    try {
+      return (await withRetry(() => fs.stat(join(this.root, SETTINGS_FILE)))).isFile()
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Whether the folder takes writes (AF-14, T316): fi.json without the attribute „tylko do odczytu” (on Windows that
+   * attribute lets new files be made beside it, but not a file replaced – one look, never retried), then fi.json opened
+   * for writing and closed, nothing written: no right to write (permissions, a share or a drive read-only) refuses it.
+   * Then new files (every write is temp + rename): this computer's presence written – a write the open makes anyway, so
+   * the probe makes no file of its own (on OneDrive each would go to its online recycle bin) and none can be left behind.
+   * Every step is tried `attempts` times – at the open and the return a few (an antivirus or OneDrive holding a file a
+   * moment is no read-only folder, ~0.1 s), idle once, no waiting (a folder read-only for real, every few seconds – T335).
+   * Of the presence only a new file refused is the folder's (`.presence/` or the temp file not made – a name nobody holds;
+   * told by the step of our write that failed, `atomicStep`, never by the error's `syscall`); its one file not replaced
+   * (a lock held long – the attribute „tylko do odczytu” the presence write clears itself, T337) or any other failure is
+   * logged, never read-only – the heartbeat writes it again. Null = it takes writes; else why not. Any other failure (the
+   * folder gone, a file held for long) is no read-only folder – the write itself says it.
+   */
+  private async writeProbe(attempts = 1): Promise<string | null> {
+    const fi = join(this.root, SETTINGS_FILE)
+    try {
+      await fs.access(fi, fsConstants.W_OK)
+      const handle = await withRetry(() => fs.open(fi, 'r+'), attempts)
+      // Its close says nothing about the folder.
+      await handle.close().catch(() => undefined)
+    } catch (e) {
+      return refusedWrite(e) ? FOLDER_NOT_WRITABLE_MESSAGE : null
+    }
+    try {
+      await this.presence?.(attempts)
+    } catch (e) {
+      const failed = atomicStep(e)
+      if (refusedWrite(e) && (failed === 'dir' || failed === 'create')) return FOLDER_NOT_WRITABLE_MESSAGE
+      this.log?.('warn', `write probe: presence not written (step: ${failed ?? 'unknown'})`, e)
+    }
+    return null
+  }
+
+  /**
+   * The folder now differs from what the window was told (AP-1, the check every few seconds): fi.json gone or back,
+   * or a folder that took no writes takes them again. True = a full check is due (it finds out and says it).
+   */
+  async stale(): Promise<boolean> {
+    const present = await this.rootPresent()
+    if (present !== this.available) return true
+    return present && !!this.writeBlocked && (await this.writeProbe()) == null
+  }
+
+  /**
+   * Found gone by a write (AP-1): read-only until it is back, the window told at once (`onStatus`); the error the
+   * write answers with. Nothing in memory changes – the folder may come back as it was.
+   */
+  private lost(announce = true): FolderUnavailableError {
+    if (this.available) {
+      this.available = false
+      // A batch with records written before it went (`saveRecords`) says it in its own change set instead.
+      const change = announce ? this.diff(this.buildViews(), false, 'external') : null
+      if (change) this.onStatus?.(change)
+    }
+    return new FolderUnavailableError()
+  }
+
+  /**
+   * Before a batch of writes (AP-1): the folder must be writable and there – a write never lands in an empty folder
+   * made in its old place, nor makes one.
+   */
+  private async ensureWritable(): Promise<void> {
+    this.assertWritable()
+    if (!(await this.rootPresent())) throw this.lost()
+  }
+
+  /** A write in its turn of the queue: the folder checked first, a failure because it went said as such (AP-1). */
+  private writing<T>(fn: () => Promise<T>): Promise<T> {
+    return this.mutex.run(async () => {
+      await this.ensureWritable()
+      try {
+        return await fn()
+      } catch (e) {
+        throw await this.failure(e)
+      }
+    })
+  }
+
+  /** A write that failed: the folder gone meanwhile is said as such (AP-1), never as the record's own failure. */
+  private async failure(e: unknown): Promise<unknown> {
+    if (e instanceof FolderUnavailableError) return this.lost()
+    if (e instanceof ReadOnlyError || (await this.rootPresent())) return e
+    return this.lost()
+  }
+
+  /** A write's failure that means the folder is gone (AP-1): said so by the write, or the folder not there now. */
+  private async folderGone(e: unknown): Promise<boolean> {
+    return e instanceof FolderUnavailableError || (!(e instanceof ReadOnlyError) && !(await this.rootPresent()))
   }
 
   // ---------------------------------------------------------------- reading
@@ -762,7 +927,7 @@ export class DataStore {
     const dir = join(this.backupsDir, 'pre-migration', stamp(this.opts.now()))
     for (const s of states) {
       if (s.text == null) continue
-      await writeFileAtomic(join(dir, ...s.relPath.split('/')), s.text)
+      await writeFileAtomic(join(dir, ...s.relPath.split('/')), s.text, this.within(dir))
     }
     this.backupPath = dir
   }
@@ -774,7 +939,7 @@ export class DataStore {
 
   private async writeState(rel: string, kind: FileKind, record: AnyRecord | SettingsFile, text: string): Promise<FileState> {
     const abs = this.abs(rel)
-    await writeFileAtomic(abs, text)
+    await writeFileAtomic(abs, text, this.root)
     const st = await fs.stat(abs)
     const state: FileState = {
       relPath: rel,
@@ -1039,10 +1204,22 @@ export class DataStore {
       // Keep everything in memory; the folder may come back (pendrive, network drive).
       return wasAvailable ? this.diff(this.buildViews(), false, 'external') : null
     }
-    const settingsBefore = this.files.get(SETTINGS_FILE)?.hash
-    if (!paths || !wasAvailable || !(await this.rescanPaths(paths))) await this.rescanAll(listing)
-    const settingsChanged = this.files.get(SETTINGS_FILE)?.hash !== settingsBefore && this.refreshSettingsState()
-    if (!this.folderReadOnlyReason && this.files.migratedPaths.size) {
+    let settingsChanged: boolean
+    try {
+      const settingsBefore = this.files.get(SETTINGS_FILE)?.hash
+      if (!paths || !wasAvailable || !(await this.rescanPaths(paths))) await this.rescanAll(listing)
+      settingsChanged = this.files.get(SETTINGS_FILE)?.hash !== settingsBefore && this.refreshSettingsState()
+    } catch (e) {
+      // Back but not read (OneDrive still bringing its files – EBUSY): still away, so the idle check tries again in a few
+      // seconds and the refresh that reads it is the one that finds it back – the window told, the folder watched anew
+      // (T334). Never back without that: no later refresh would see the return.
+      if (!wasAvailable) this.available = false
+      throw e
+    }
+    if (!wasAvailable) this.regained++
+    // Back after a while away, or not taking writes before (AF-14): whether it takes them now.
+    if (!wasAvailable || this.writeBlocked) this.writeBlocked = this.folderReadOnlyReason ? null : await this.writeProbe(wasAvailable ? 1 : PROBE_ATTEMPTS)
+    if (!this.folderReadOnlyReason && !this.writeBlocked && this.files.migratedPaths.size) {
       const migrated = [...this.files.migratedPaths].map((rel) => this.files.get(rel)!)
       await this.backupOriginals(migrated)
       for (const s of migrated) await this.rewrite(s)
@@ -1179,6 +1356,7 @@ export class DataStore {
   // ---------------------------------------------------------------- writing
 
   private assertWritable(): void {
+    if (!this.available) throw new FolderUnavailableError()
     const status = this.status()
     if (status.readOnly) throw new ReadOnlyError(status.readOnlyReason ?? 'Tylko do odczytu')
   }
@@ -1272,7 +1450,7 @@ export class DataStore {
    */
   private async keepCopy(buf: Buffer, target: string): Promise<void> {
     const copyRel = target.replace(/\.json$/, `-zewnetrzna-${stamp(this.opts.now())}.json`)
-    await writeFileAtomic(this.abs(copyRel), buf)
+    await writeFileAtomic(this.abs(copyRel), buf, this.root)
     const st = await this.loadFile(copyRel)
     if (st) this.files.set(copyRel, st)
   }
@@ -1298,7 +1476,7 @@ export class DataStore {
 
   saveRecord<C extends Collection>(collection: C, input: RecordTypes[C]): Promise<{ entry: RecordEntry<RecordTypes[C]>; change: ChangeSet | null }> {
     return this.mutex.run(async () => {
-      this.assertWritable()
+      await this.ensureWritable()
       try {
         const state = await this.writeRecord(collection, input)
         return { entry: this.entry<C>(state), change: this.diff(this.buildViews(), false) }
@@ -1306,7 +1484,7 @@ export class DataStore {
         // The window gets what happened with the error (B49 – as a change from outside; B46 – the copy).
         if (e instanceof RemovedOutsideError) throw new RemovedOutsideError(e.relPath, this.diff(this.buildViews(), false, 'external'))
         if (e instanceof ConflictCopyError) throw new ConflictCopyError(e.relPath, this.diff(this.buildViews(), false))
-        throw e
+        throw await this.failure(e)
       }
     })
   }
@@ -1318,13 +1496,19 @@ export class DataStore {
    */
   saveRecords<C extends Collection>(collection: C, inputs: readonly RecordTypes[C][]): Promise<{ results: SaveResult<C>[]; changes: ChangeSet[] }> {
     return this.mutex.run(async () => {
-      this.assertWritable()
+      await this.ensureWritable()
       const results: SaveResult<C>[] = []
       const removed = new Set<string>()
-      for (const input of inputs) {
+      for (const [i, input] of inputs.entries()) {
         try {
           results.push({ id: input.id, entry: this.entry<C>(await this.writeRecord(collection, input)) })
         } catch (e) {
+          // The folder gone in the middle (AP-1): this record and the rest wait – the change set below says so.
+          if (await this.folderGone(e)) {
+            const gone = this.lost(false)
+            for (const rest of inputs.slice(i)) results.push({ id: rest.id, error: gone.message })
+            break
+          }
           if (e instanceof RemovedOutsideError) removed.add(input.id)
           results.push({ id: input.id, error: (e as Error).message, ...(e instanceof NewerFileError ? { newer: true } : {}) })
         }
@@ -1355,6 +1539,9 @@ export class DataStore {
     // like a reported one; a removal is never undone by this write – the window gets it and asks.
     const known = this.currentState(collection, input.id)
     if (known && !moved && !(await pathExists(this.abs(known.relPath)))) {
+      // The whole folder gone (renamed, unplugged – AP-1, DA.41): no record of it was removed on another computer –
+      // nothing in memory changes, the write waits for the folder.
+      if (!(await this.rootPresent())) throw new FolderUnavailableError()
       this.files.delete(known.relPath)
       moved = (await this.findMoved(collection, new Set([input.id]))).get(input.id) ?? null
       if (!moved) {
@@ -1380,7 +1567,7 @@ export class DataStore {
       // waits beside it as a sync copy for the user to pick – never written over it, never retried for ever.
       if (LAYOUTS[collection] === 'month') {
         const copyRel = rel.replace(/\.json$/, `-${this.opts.machineName.replace(/[^0-9A-Za-z]+/g, '-') || 'PC'}.json`)
-        await writeFileAtomic(this.abs(copyRel), serializeRecord(collection, record))
+        await writeFileAtomic(this.abs(copyRel), serializeRecord(collection, record), this.root)
         const copy = await this.loadFile(copyRel)
         if (copy) this.files.set(copyRel, copy)
         throw new ConflictCopyError(copyRel)
@@ -1409,8 +1596,7 @@ export class DataStore {
    * (the app reproduces them). Fields the user owns (`keep`) are carried over from the file.
    */
   saveGenerated<C extends Collection>(collection: C, inputs: readonly RecordTypes[C][], keep: readonly string[] = []): Promise<ChangeSet | null> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       for (const input of inputs) {
         const existing = this.currentState(collection, input.id)
         if (existing?.readOnly) continue
@@ -1438,8 +1624,7 @@ export class DataStore {
   }
 
   deleteRecord(collection: Collection, id: string): Promise<ChangeSet | null> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       if (!(await this.removeRecord(collection, id))) return null
       return this.diff(this.buildViews(), false)
     })
@@ -1448,17 +1633,22 @@ export class DataStore {
   /**
    * Many records deleted at once (an import's, duplicates – W1): one change set; a record that fails says why. `reason`
    * 'undo': taken back with its import (F4) – its last version in the history is no deletion by the user (T39); 'drop':
-   * no version kept (old batches of `imports`).
+   * no version kept (old batches of `imports`); 'import': the import's own – a deletion marked `byImport` (T331).
    */
-  deleteRecords(collection: Collection, ids: readonly string[], reason: 'delete' | 'undo' | 'drop' = 'delete'): Promise<{ results: Array<{ id: string; error?: string }>; change: ChangeSet | null }> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+  deleteRecords(collection: Collection, ids: readonly string[], reason: 'delete' | 'undo' | 'drop' | 'import' = 'delete'): Promise<{ results: Array<{ id: string; error?: string }>; change: ChangeSet | null }> {
+    return this.writing(async () => {
       const results: Array<{ id: string; error?: string }> = []
-      for (const id of ids) {
+      for (const [i, id] of ids.entries()) {
         try {
           await this.removeRecord(collection, id, reason)
           results.push({ id })
         } catch (e) {
+          // The folder gone in the middle (AP-1): the rest stays – the change set below says why.
+          if (await this.folderGone(e)) {
+            const gone = this.lost(false)
+            for (const rest of ids.slice(i)) results.push({ id: rest, error: gone.message })
+            break
+          }
           results.push({ id, error: (e as Error).message })
         }
       }
@@ -1467,7 +1657,7 @@ export class DataStore {
   }
 
   /** One record deleted (inside the queue); false = not there. */
-  private async removeRecord(collection: Collection, id: string, reason: 'delete' | 'undo' | 'drop' = 'delete'): Promise<boolean> {
+  private async removeRecord(collection: Collection, id: string, reason: 'delete' | 'undo' | 'drop' | 'import' = 'delete'): Promise<boolean> {
     const state = this.currentState(collection, id)
     if (!state) return false
     if (state.readOnly) throw new NewerFileError()
@@ -1475,7 +1665,8 @@ export class DataStore {
     // other would come back as the record at once (B111) – the conflict is resolved first.
     if ((this.files.ids.get(`${collection}:${id}`)?.size ?? 0) > 1)
       throw new Error('Ten wpis ma drugą kopię z innego komputera (ten sam identyfikator) – najpierw rozstrzygnij ją w Synchronizacji, potem usuń.')
-    const kept = reason === 'drop' ? null : await this.history.snapshot(collection, state.record as AnyRecord, reason)
+    // The import's own deletion (T331): a deletion all the same – an older version keeps its row's keys out – marked.
+    const kept = reason === 'drop' ? null : await this.history.snapshot(collection, state.record as AnyRecord, reason === 'import' ? 'delete' : reason, { byImport: reason === 'import' })
     // Without its version in the history a deleted record could never be brought back („Cofnij”, „Usunięte wpisy”), and
     // a deleted operation from the bank would come back with the next import (T39): not deleted then (B112).
     if (!kept && reason !== 'drop') throw new Error('Nie udało się odłożyć wersji do historii (folder .history niedostępny?) – wpis nie został usunięty. Spróbuj ponownie za chwilę.')
@@ -1501,8 +1692,7 @@ export class DataStore {
    * „-zewnetrzna-”, a broken fi.json moved aside – the window learns it now, not after a restart.
    */
   writeSettings(input: SettingsFile): Promise<{ fi: SettingsFile; change: ChangeSet | null }> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       const fi = SCHEMAS.fi.parse({ ...input, schemaVersion: SCHEMA_VERSION, updatedAt: this.opts.now(), updatedBy: this.opts.machineName })
       await this.reread((rel) => rel === SETTINGS_FILE)
       const existing = this.files.get(SETTINGS_FILE)
@@ -1519,8 +1709,7 @@ export class DataStore {
 
   /** One conflict resolved (`keep` = the version that stays): the change from inside the queue, no rescan (W23). */
   resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<ChangeSet | null> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       const settingsWritten = await this.resolveOne(conflictId, keep)
       return this.diff(this.buildViews(), settingsWritten)
     })
@@ -1531,8 +1720,7 @@ export class DataStore {
    * path (the original's id), every other file of the pair to the bin – as keeping the copy, with the merged content.
    */
   mergeConflict(conflictId: string, merged: unknown, asOf?: { canonical: number; copy: number }): Promise<ChangeSet | null> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       // Merged from the versions the window saw: a side changed since (a save of this record, OneDrive) is never
       // written over by a merge that does not know it.
       const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
@@ -1548,8 +1736,7 @@ export class DataStore {
    * could not be kept leaves its other conflicts as they are (nothing newer goes to the bin).
    */
   resolveConflicts(items: ReadonlyArray<{ id: string; keep: 'canonical' | 'copy'; group?: string }>): Promise<{ results: ConflictResult[]; change: ChangeSet | null }> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       const results: ConflictResult[] = []
       const failed = new Set<string>()
       let settingsWritten = false
@@ -1640,8 +1827,7 @@ export class DataStore {
 
   /** A problem file or a conflict copy to the bin: the change from inside the queue, no rescan (W23). */
   trashFile(relPath: string): Promise<ChangeSet | null> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       const s = this.files.get(relPath)
       if (!s || s.status === 'record') throw new Error('Można usuwać tylko pliki z listy problemów lub kopie konfliktów.')
       await this.opts.trash(this.abs(relPath))
@@ -1678,8 +1864,7 @@ export class DataStore {
    * new updatedAt at its canonical path (a deleted record comes back).
    */
   historyRestore(kind: HistoryKind, id: string, file: string): Promise<{ change: ChangeSet | null; fi: SettingsFile | null }> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       const old = await this.history.read(kind, id, file)
       if (!old) throw new Error('Tej wersji nie ma już w historii (mogła zostać usunięta na innym komputerze).')
       if (kind === 'fi') {
@@ -1772,8 +1957,7 @@ export class DataStore {
    * history first), one change set; a record that cannot be written says why, the others are written.
    */
   restoreVersions(items: ReadonlyArray<{ kind: Collection; record: AnyRecord }>, fi: SettingsFile | null): Promise<{ change: ChangeSet | null; fi: SettingsFile | null; done: string[]; failed: Array<{ id: string; error: string }> }> {
-    return this.mutex.run(async () => {
-      this.assertWritable()
+    return this.writing(async () => {
       const done: string[] = []
       const failed: Array<{ id: string; error: string }> = []
       for (const { kind, record } of items) {
@@ -1806,6 +1990,9 @@ export class DataStore {
    * records and the deleted ones (T39) come with it; the daily backups stay without it (T20).
    */
   async zipData(outFile: string, opts: { history?: boolean } = {}): Promise<ZipResult> {
+    // A backup into the folder's own `backups/` while the folder is gone (AP-1): none – never a new folder in its place.
+    const within = this.within(outFile)
+    if (within && !(await this.rootPresent())) throw new FolderUnavailableError()
     const states = await this.mutex.run(async () => [...this.files.values()].filter((s) => isDataFile(s.relPath)))
     states.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0))
     const items = states.map((s): ZipSource => {
@@ -1824,7 +2011,7 @@ export class DataStore {
       const rels = await walkFiles(this.root, join(this.root, HISTORY_DIR), (rel) => rel.includes('.tmp-'))
       for (const rel of rels.sort()) items.push(diskSource(this.abs(rel), rel))
     }
-    return writeZipFile(outFile, items)
+    return writeZipFile(outFile, items, within)
   }
 
   /** Snapshot of everything currently loaded (used after reconnecting the renderer). */

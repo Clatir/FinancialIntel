@@ -24,9 +24,9 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 
 | Grupa | Wersja | Gałąź | Stan | PR | Czas faktyczny |
 | --- | --- | --- | --- | --- | --- |
-| 0 – przygotowanie | – | `claude/audyt-1.15.4` | ⏳ D101, porządek tego pliku, PR audytu do `main` (bez wydania) | – | – |
-| N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ⏳ | – | – |
-| N2 Silnik pieniędzy | 1.15.6 | – | ⏳ | – | – |
+| 0 – przygotowanie | – | `claude/audyt-1.15.4` | ✅ D101, porządek tego pliku, PR audytu scalony (bez wydania); poprawka E2E telefonu w nocy | #49 | 0,5 h |
+| N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | 🔄 kod i 4 rundy przeglądu gotowe; PR, CI, wydanie | – | ok. 5 h do PR |
+| N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | 🔄 od 05:05 równolegle: AP-3, AP-5, AP-9, AP-11, AP-12 gotowe (gałąź `claude/1.15.6-n2c`); AP-4 w toku (`claude/1.15.6-n2b`); potem D100, AP-32 | – | – |
 | N3 Opłaty, energia, gra | 1.15.7 | – | ⏳ | – | – |
 | N4 Zasady interfejsu | 1.15.8 | – | ⏳ | – | – |
 | N5 Ścieżki i ergonomia | 1.15.9 | – | ⏳ | – | – |
@@ -38,28 +38,64 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
-| – | – | – | – |
+| N1 | Zmiany w trakcie niedostępności folderu | folder tylko do odczytu jak dotąd: nowe zmiany odrzucane z komunikatem, czekają tylko przyjęte wcześniej (inaczej: przyjmować w pamięci) | T315 |
+| N1 | Szybki wpis tuż przed wykryciem braku folderu | „Wpis przyjęty, ale jeszcze niezapisany…”, okno zostaje 4 s | T317 |
+| N1 | Pytanie „Zmienić operację?” poza edytorem | z nazwą operacji (pojawia się też na innym ekranie) | T319 |
+| N1 | Odpowiedzi kreatora w toku | na tym komputerze, osobno dla folderu; baner „Kreator startu jest w toku (krok N z 7)” | T319 |
+| N1 | Ten sam numer rachunku na innym koncie | wiersz pokazany, domyślnie nie przenoszony | T321 |
+| N1 | „Usuń duplikat” w imporcie naprawczym | zaznaczone, gdy kopia przyszła z importu bez innej decyzji; zadokowana, spłacana przez domownika, spłacająca inne zakupy albo tylko do odczytu – nigdy (z powodem) | T321 |
+| N1 | Kilka kont z numerem pliku | wygrywa konto z importem mBanku | T322 |
+| N1 | Rozpoznanie a reguła | słowo z tytułu i reguła przelewu własnego mają pierwszeństwo; domownik będący pożyczkobiorcą – wygrywa pożyczka; pożyczka wygrywa z regułą tylko od dnia jej udzielenia | T325 |
+| N1 | „w tym za X” | część wiersza może przekroczyć dług, część grupy / tematu – nigdy (licząc zakupy i własne wpłaty X z pliku); wpłata ≥ cały dług spłaca wszystkie zakupy | T327–T329 |
+| N1 | Temat z jednakową decyzją kilku marek z „w tym za” | wiersz tematu bez edytora części: „w tym za – ustawione w markach”; zmiana w temacie trafia do każdej marki, kwoty marek bez zmian | T336 |
+| N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
 
-## Przed grupą N1 – Dane i import (04.11.2026)
-1. **Co trzeba wiedzieć.** Zakres: AP-1 (folder danych przed zapisem, bez folderu-widma – AF-2 K, AF-42, AF-14, AF-39,
-   AF-41, AF-75), AP-2 (jedna tożsamość wiersza banku między formatami i kontami – AF-1 K, AF-9 W, AF-28, AF-63), AP-8
-   (zmiana czekająca na „Zmień mimo to” jako szkic – AF-3 W, AF-11), AP-6 (pożyczka, PIT-38, XTB i domownik przed regułą
-   i decyzją zbiorczą – AF-26 W, AF-62, AF-64), AP-7 („+ w tym za X” w imporcie – AF-27 W); opisy w `docs/audyt/wnioski.md`
-   sekcja 4, dowody w `docs/audyt/raport.md`. Najpierw PR audytu (dokumenty i laboratorium `tests/audyt/`, bez zmiany
-   wersji) do `main`; gałąź N1 wychodzi z gałęzi audytu. AP-1 i AP-8 (folder danych, edytory) idą równolegle w osobnym
-   drzewie roboczym; AP-2, potem AP-6 i AP-7 (ten sam moduł importu) – po kolei.
-2. **Co musisz powiedzieć** – nic (D101).
+## N1 – Dane i import (1.15.5, 04.11.2026)
+- **Zakres:** AP-1 (T314–T318), AP-8 (T319), AP-2 (T320–T324), AP-6 (T325, T326), AP-7 (T327–T329); po przeglądzie
+  T330–T332. Wykonawcy: N1-a (AP-1, AP-8) w osobnym drzewie równolegle z N1-b (AP-2), potem N1-c (AP-6, AP-7, max).
+- **Przegląd:** 4 rundy – xhigh na całości (15 uwag: 14 poprawionych, 1 odrzucona – telefon sam przekazuje stan folderu),
+  potem high na samych poprawkach (10, 7, 8 uwag – wszystkie poprawione; w 4. rundzie temat z „w tym za” uproszczony
+  zamiast kolejnej łaty, T336). Każda poprawka z testem, który przed nią padał. Najpoważniejsze: „Usuń” w meldunku „Wróciły po
+  usunięciu” mógł skasować prawdziwą operację połączoną z wierszem banku; kopia usuwana przy imporcie gubiła spłacane
+  zakupy; „w tym za X” nie liczył własnych wpłat X; próba zapisu przy otwarciu dawała „tylko do odczytu” przy chwilowej
+  blokadzie OneDrive; kopia przed migracją mogła założyć folder-widmo. Weryfikacja przez odtworzenie testem (druga opinia
+  Fable niepotrzebna). Poprawki – po 2–3 podagentów równolegle w osobnych drzewach (max dla rozliczeń, xhigh reszta).
+  Zasada na kolejne grupy: pełny przegląd + jeden na poprawkach; dalej tylko przy poważnych uwagach.
+- **Testy:** typecheck, `npm test` (ok. 1065), build, E2E komputera 78, telefonu 10/10. Lokalnie pada tylko `ictj.spec.ts`
+  (ICTTJ zainstalowany na tym komputerze); ZIP64 w `folder-speed` przekracza czas pod obciążeniem – pułapki w
+  `.claude/rules/testy.md`. Decyzje T314–T337.
+- **Krok 0:** CI audytu padało w nocy – szybki wpis telefonu w ciszy nocnej wymaga notatki (poprawiony pomocnik E2E).
+- **Otwarte:** KR.29 (przy starcie budżetu najpierw `fi.json` albo wycofanie przy częściowym błędzie); numer pliku
+  zapamiętany przy złym koncie po błędnym imporcie; panel duplikatów nie paruje kopii między kontami bez importu
+  naprawczego; PIT-38 bez rozpoznania po nazwie; edytor reguł pokazuje „w tym za”, którego reguły nie zachowują (AP-15,
+  N4).
+- **Czas:** 01:53–07:00 do PR, ok. 5 h (N1-b 42 min, N1-a 63 min, N1-c 65 min; 4 przeglądy 6–20 min; 4 rundy poprawek
+  20–34 min) – plan 2,5–4 h; przekroczenie z rund przeglądu.
+
+## Przed grupą N2 – Silnik pieniędzy (04.11.2026, start 05:05 równolegle z końcem N1)
+1. **Co trzeba wiedzieć.** Zakres (`docs/audyt/wnioski.md` sekcja 4): AP-3 przeniesienie środków celu w chwili zapisu –
+   nowa T zamiast „na koniec dnia” z T129 (AF-4 K); AP-12 dostawa „do zadokowania” od razu według puli wpisu ICTTJ (T163,
+   D99 pkt 2; AF-46, AF-48); AP-4 „reszta jako zaliczka” najpierw spłaca, reszta do depozytu, naprawa zapisanych wpłat
+   (AF-8 K, AF-16; jawna „zaliczka na przyszłość” może omijać dług – D99 pkt 1); D100 – każda wpłata, także od innej osoby,
+   może spłacać pożyczkę udzieloną, także częścią; AP-5 płatność sprzed startu zamyka cykl (AF-12 W); AP-11 plan = silnik
+   (AF-44, AF-51); AP-9 „Wycofaj dokowanie”, usuwanie kategorii, sprostowanie CHANGELOG 1.15.2 (AF-7 W, AF-37); AP-32
+   wyrocznia poprawiona i uruchomiona na migawkach audytu jako regresja. Notatka wydania: dni z przeniesieniami środków
+   celów przeliczą się inaczej (AP-3). Trzy strumienie równolegle: główne drzewo – rozliczenia (AP-4, potem D100); drzewo 2 –
+   warstwy i cele (AP-3, AP-12); drzewo 3 – opłaty i plan (AP-5, AP-11), potem AP-9. Na końcu AP-32 na scalonym kodzie.
+2. **Co musisz powiedzieć** – nic (D99, D100, D101).
 3. **Co przygotować** – nic.
 4. **Tabela prac:**
 
 | Krok | Co obejmuje | Model i thinking (z górką; minimum) | Czas Claude'a |
 | --- | --- | --- | --- |
-| N1-a | AP-1 folder danych przed zapisem, baner „Folder niedostępny”, „Zapisano.” po zapisie; AP-8 szkic przy „Zmień mimo to”, kreator i saldo banku jako szkic | podagent Opus 5.5 · xhigh (min. high); osobne drzewo, równolegle | 1–1,5 h |
-| N1-b | AP-2 operacje usunięte z opisem i parowane miarą B5, B5 po wszystkich kontach rachunku, „usuń duplikat”, konto po numerze rachunku, meldunek | podagent Opus 5.5 · xhigh (min. high) | 0,75–1,25 h |
-| N1-c | AP-6 pożyczka, PIT-38, XTB i domownik przed regułą, „niespójne” reguły; AP-7 „+ w tym za X” w imporcie | podagent Opus 5.5 · max (min. xhigh) – rozliczenia (D96) | 0,75–1,25 h, po N1-b |
-| N1-d | pełne testy, `/code-review` xhigh, poprawki z testem | koordynator; poprawki – podagent Opus 5.5 · xhigh | 0,5 h |
-| N1-e | CHANGELOG 1.15.5, wersja, PR, CI, scalenie, wydanie, wpis | koordynator (wystarczy Sonnet 5.5) | 0,25 h + CI |
-| Razem | rekomendacja: Opus 5.5 · xhigh, max w N1-c | | 2,5–4 h (z górką 4,5 h) + CI ok. 40 min |
+| N2-a | AP-3 przeniesienie środków celu w chwili zapisu, ostrzeżenie przy pełnym celu; AP-12 dostawy według puli | podagent Opus 5.5 · max (D96) – drzewo 2 | 1–1,5 h |
+| N2-b | AP-4 „reszta jako zaliczka” = spłata + depozyt, `optionOf`, naprawa danych i meldunek | podagent Opus 5.5 · max (D96) | 0,75–1,25 h |
+| N2-c | AP-5 płatność sprzed startu, kreator; AP-11 raty planu z funkcji silnika, rata pożyczki z harmonogramu | podagent Opus 5.5 · max (D96) – drzewo 3 | 0,75–1,25 h |
+| N2-d | D100 wpłata od dowolnej osoby spłaca pożyczkę (szybki wpis, Operacje, import, reguła), część wpłaty, „kto zapłacił” | podagent Opus 5.5 · max (D96), po N2-b | 1–1,5 h |
+| N2-e | AP-9 „Wycofaj dokowanie” z „Cofnij”, „Usuń” kategorię bez odwołań, N-PC-4 i N-PC-14 | podagent Opus 5.5 · xhigh (min. high), po N2-c | 0,5–0,75 h |
+| N2-f | AP-32 wyrocznia: poprawki z przeglądu, schematy spoza `src/`, migawki audytu jako regresja, test „ta sama liczba na każdym ekranie” | podagent Opus 5.5 · max (min. xhigh) | 0,75–1 h |
+| N2-g | scalenie, pełne testy, `/code-review` xhigh, poprawki, CHANGELOG 1.15.6, PR, CI, wydanie, wpis | koordynator; poprawki – podagenci | 1 h + CI |
+| Razem | rekomendacja: Opus 5.5 · max (D96) | | 3,5–5 h zegara (plan 3–4,5 h, z górką 5,5 h) |
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.

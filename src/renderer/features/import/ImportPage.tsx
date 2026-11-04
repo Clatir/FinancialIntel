@@ -1,11 +1,10 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useShallow } from 'zustand/shallow'
 import type { DecisionSource } from '@shared/import/classify'
-import { choiceOf, importThemes, joins, learnable, movesHere, realOf, sameChoice, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
+import { choiceOf, importThemes, joins, learnable, movesHere, realOf, removesCopy, searchGroups, type Choice, type ImportGroup, type ImportTheme, type NewRow, type OpKind, type RowPlan } from '@shared/import/reconcile'
 import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxKind } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
-import { opKindOf } from '@shared/import/reconcile'
 import { keywordMatcher } from '@shared/import/brands'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
@@ -19,7 +18,7 @@ import { Badge, Panel, ShowMore, cx } from '../../components/ui'
 import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
-import { DecisionFields, IMPORT_SHARE_MODES, IncomeSharesEditor } from './DecisionFields'
+import { DecisionFields, IMPORT_SHARE_MODES, RowShares } from './DecisionFields'
 import { DuplicatesNote, DuplicatesPanel } from './DuplicatesPanel'
 import { useLatestImport } from './batches'
 import { BankTelemetry } from './BankTelemetry'
@@ -27,7 +26,7 @@ import { UndoImportButton } from './RecentImports'
 import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
-import { bulkOptions, fits, hasCategory, type LoanPick, type Option } from './options'
+import { bulkOptions, bulkResultText, fits, hasCategory, offersNewMember, type LoanPick, type Option } from './options'
 import { countLabel } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
@@ -38,10 +37,11 @@ import {
   chooseRow,
   chooseSelected,
   chooseTheme,
-  chooseThemeOverGroups,
+  chooseThemeRow,
   clearGroup,
   clearImportSelection,
   closeImport,
+  copyNotes,
   decideGroup,
   decideNewMember,
   dropImportFile,
@@ -55,6 +55,7 @@ import {
   setImportAccount,
   setImportQuery,
   setMoveHere,
+  setRemoveCopy,
   setNoMerge,
   setRemember,
   setRememberTheme,
@@ -62,7 +63,11 @@ import {
   setRestoreDeleted,
   setSkip,
   skipSelected,
+  themeCommon,
+  themeSharesFrom,
+  themeShows,
   themeStatus,
+  ownNamesWith,
   trashImportFile,
   useImport,
   useImportGroups,
@@ -74,6 +79,8 @@ import { useMachine } from '../../store/machine'
 
 const day = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`
 const fullDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
+
+const NO_NAMES: readonly string[] = []
 
 const SOURCE_LABEL: Record<DecisionSource, string> = { rule: 'reguła', builtin: 'rozpoznane', brand: 'sieć', keyword: 'słowo kluczowe', none: 'do decyzji' }
 const THEME_SOURCE: Record<DecisionSource, string> = { rule: 'Twoje reguły', builtin: 'rozpoznane', brand: 'sieci', keyword: 'słowa kluczowe', none: 'do decyzji' }
@@ -203,7 +210,10 @@ function Summary() {
   const known = n('known') + elsewhere.length - moved
   const settledFlags = plan.rows.filter((p) => p.status === 'known' && p.settled).length
   const otherFormat = plan.rows.filter((p) => p.status === 'known' && p.other).length
-  const nothing = created + merged + sides + n('settle') + removed + settledFlags + moved === 0
+  // Copies of the rows on another account (AF-9): removed as duplicates – the import changes them.
+  const withCopy = plan.rows.filter((p): p is Extract<RowPlan, { status: 'known' }> => p.status === 'known' && !!p.copy)
+  const copies = withCopy.filter((p) => removesCopy(p, choices)).length
+  const nothing = created + merged + sides + n('settle') + removed + settledFlags + moved + copies === 0
   return (
     <Panel title="Podgląd">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-summary">
@@ -249,6 +259,16 @@ function Summary() {
               </span>
             </>
           )}
+          {withCopy.length > 0 && (
+            <>
+              <span className="text-muted" title="Te operacje są już na tym koncie z drugiego formatu pliku, a ich kopie z wcześniejszego importu – na innym koncie: zaznaczone kopie usuwam (kategoria i notatki przechodzą na operację tutaj).">
+                kopie z innego konta do usunięcia
+              </span>
+              <span className="num text-right" data-testid="import-count-copies">
+                {copies}
+              </span>
+            </>
+          )}
           {otherFormat > 0 && (
             <>
               <span className="pl-3 text-dim" title="Ta sama operacja z drugiego formatu pliku (lista operacji ↔ historia rachunku): opis jest tam inny, więc FI łączy ją po kwocie, dacie (±3 dni) i nazwie.">
@@ -290,7 +310,7 @@ function Summary() {
           title={nothing ? 'W pliku nie ma nic nowego – zapis zapamięta czas importu i okres pliku (odprawa, Portfel XTB, misja „Łączność z bazą”)' : undefined}
           data-testid="import-run"
         >
-          {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Zapisz import (bez zmian)' : `Importuj (${created + merged + n('settle') + settledFlags + removed + moved})`}
+          {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Zapisz import (bez zmian)' : `Importuj (${created + merged + n('settle') + settledFlags + removed + moved + copies})`}
         </button>
         <p className="text-[11px] text-dim">
           Rozpoznane (sieci, słowa kluczowe, reguły) wejdą z pokazaną decyzją; tematy bez decyzji – jako wydatki / wpływy bez kategorii, skategoryzujesz je później w
@@ -320,13 +340,16 @@ function MatchesPanel() {
   const settles = plan.rows.filter((p): p is Extract<RowPlan, { status: 'settle' }> => p.status === 'settle')
   const deleted = plan.rows.filter((p): p is Extract<RowPlan, { status: 'deleted' }> => p.status === 'deleted')
   const elsewhere = plan.rows.filter((p): p is Extract<RowPlan, { status: 'elsewhere' }> => p.status === 'elsewhere')
+  const withCopy = plan.rows.filter((p): p is Extract<RowPlan, { status: 'known' }> => p.status === 'known' && !!p.copy)
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '?'
+  // The file's other format (B5): where a row was found in it (AF-1, AF-9).
+  const otherFormat = plan.format === 'historia' ? 'z listy operacji' : 'z historii rachunku'
   // A matched hand-typed operation left apart (B36): what its row comes in as – its group's, theme's or the proposal.
   const decidedAs = (p: Extract<RowPlan, { status: 'merge' }>) => {
     const c = choices.rows[p.key] ?? choices.groups[p.planned.group] ?? choiceOf(p.planned.decision)
     return choiceText(c, p.row.amount < 0 ? 'out' : 'in', (id) => cats.label(id), members, loans)
   }
-  if (!merges.length && !sides.length && !settles.length && !plan.vanished.length && !deleted.length && !elsewhere.length) return null
+  if (!merges.length && !sides.length && !settles.length && !plan.vanished.length && !deleted.length && !elsewhere.length && !withCopy.length) return null
   return (
     <Panel title="Dopasowania">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-matches">
@@ -411,7 +434,48 @@ function MatchesPanel() {
               <label key={p.key} className="flex items-center gap-2" data-testid="import-elsewhere">
                 <input type="checkbox" checked={movesHere(p, choices)} onChange={(e) => setMoveHere(p.key, e.currentTarget.checked)} data-testid="import-elsewhere-move" />
                 <span className="min-w-0 flex-1 truncate">
-                  {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· teraz na: {accountName(p.tx.accountId)}</span>
+                  {p.row.counterparty || p.row.description} {fullDay(p.row.date)}{' '}
+                  <span className="text-dim">
+                    · teraz na: {accountName(p.tx.accountId)}
+                    {p.other ? ` (${otherFormat})` : ''}
+                  </span>
+                </span>
+                <span className="num">{signedPln(p.row.amount)}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        {withCopy.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="label">Kopie na innym koncie ({withCopy.length})</span>
+            <p className="text-[11px] text-dim">
+              Te operacje są już na tym koncie ({otherFormat}), a ich kopie z wcześniejszego importu tego pliku – na innym koncie, więc liczą się dwa razy.
+              Zaznaczone kopie usunę (ich kategoria, notatki i spłacane zakupy przejdą na operację tutaj; „Cofnij import” je przywróci). Kopia z inną decyzją
+              albo ze spłacanymi zakupami, których operacja tutaj nie przejmie, nie jest zaznaczona – sprawdź ją.
+            </p>
+            {withCopy.map((p) => (
+              <label
+                key={p.key}
+                className="flex items-center gap-2"
+                data-testid="import-copy"
+                data-blocked={p.copy!.blocked ?? undefined}
+                data-other-covers={p.copy!.otherCovers || undefined}
+                data-drops-covers={p.copy!.dropsCovers || undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={removesCopy(p, choices)}
+                  disabled={!!p.copy!.blocked}
+                  onChange={(e) => setRemoveCopy(p.key, e.currentTarget.checked)}
+                  data-testid="import-copy-remove"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {p.row.counterparty || p.row.description} {fullDay(p.row.date)} <span className="text-dim">· kopia na: {accountName(p.copy!.tx.accountId)}</span>
+                  {copyNotes(p.copy!).map((note) => (
+                    <span key={note} className="ml-1 text-accent">
+                      · {note}
+                    </span>
+                  ))}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -442,6 +506,7 @@ function MatchesPanel() {
                 <input type="checkbox" checked={!!choices.restoreDeleted[p.key]} onChange={(e) => setRestoreDeleted(p.key, e.currentTarget.checked)} />
                 <span className="min-w-0 flex-1 truncate">
                   {p.row.counterparty || p.row.description} {fullDay(p.row.date)}
+                  {p.other && <span className="text-dim"> · usunięta {otherFormat}</span>}
                 </span>
                 <span className="num">{signedPln(p.row.amount)}</span>
               </label>
@@ -520,12 +585,14 @@ const nothing = (direction: 'in' | 'out'): Choice => ({ kind: direction === 'out
  * group their money – the rest beyond their debt as income for now, the question „zaliczka czy przychód?” still open
  * (N85: never remembered for the person until the user answers).
  */
-function NewMember({ g }: { g: ImportGroup }) {
+function NewMember({ g, choice }: { g: ImportGroup; choice: Choice }) {
   const members = useMembers()
   const readOnly = useFolderLocked()
+  const settingsNames = useData((s) => s.fi?.settings.import.ownNames ?? NO_NAMES)
+  const file = useImport((s) => s.file)
   const name = g.names[0] ?? g.label
-  if (readOnly || g.direction !== 'in' || opKindOf(g.rows[0]!.row.operation) !== 'transfer' || !name.trim()) return null
-  if (members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.trim().toUpperCase()))) return null
+  // A person outside the household only (AF-62): not the holder's own transfer, XTB or a loan's repayment.
+  if (readOnly || !offersNewMember(g, choice, members, ownNamesWith(settingsNames, file))) return null
   return (
     <button
       type="button"
@@ -604,12 +671,8 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
           ))}
         </select>
       ) : c.kind === 'income' && c.household && members.length > 1 ? (
-        <IncomeSharesEditor
-          choice={c}
-          members={members}
-          onChange={(next) => chooseRow(p.key, sameChoice(next, choice) ? null : next)}
-          testId="import-row"
-        />
+        // „w tym za” of this transfer (AF-27): its own decision stays while typed; else its part of the group's spread.
+        <RowShares p={p} choice={choice} mine={mine} />
       ) : (
         <span />
       )}
@@ -672,7 +735,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
         <span className={cx('num shrink-0 text-right', g.sum > 0 ? 'text-up' : 'text-fg-strong')}>{signedPln(g.sum)}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-12">
-        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} own={fileAccount} testId="import-group" />
+        <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} own={fileAccount} sharesFrom={`g:${g.group}`} testId="import-group" />
         <Badge tone={implicit || (g.source === 'none' && !own && !themeDecided) ? 'warn' : 'default'} title={implicit ? 'Wybierz „reszta jako zaliczka” albo „reszta jako przychód” – odpowiedź zostanie zapamiętana dla tej osoby' : g.reason}>
           {badge}
         </Badge>
@@ -689,7 +752,7 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
         )}
         {!own && !themeDecided && g.source !== 'rule' && <span className="truncate text-[11px] text-dim">{g.reason}</span>}
         {g.byTitle && <span className="text-[11px] text-dim">z tytułu przelewu – bez reguły</span>}
-        {!(choice.kind === 'income' && choice.household) && <NewMember g={g} />}
+        <NewMember g={g} choice={choice} />
       </div>
       {own && proposing && <RuleProposal g={g} choice={own} />}
       {choice.kind === 'expense' && !choice.categoryId && g.hint && (
@@ -721,13 +784,10 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
   const accepted = useImport((s) => !!s.accepted.themes[t.theme])
   const fileAccount = useImport((s) => s.accountId)
   // Every group decided on its own (N78): their one decision, or „różne” – never the theme's empty proposal.
-  const groupsDecided = useImport((s) => {
-    if (s.choices.themes[t.theme]) return 'theme'
-    const own = t.groups.map((g) => s.choices.groups[g.group])
-    if (!own.every(Boolean)) return 'open'
-    return own.every((c) => sameChoice(c!, own[0]!)) ? 'same' : 'mixed'
-  })
-  const common = useImport((s) => (groupsDecided === 'same' ? s.choices.groups[t.groups[0]!.group] : undefined))
+  const groupsDecided = useImport((s) => themeShows(t, s.choices))
+  // Their one decision as the first group has it (a reference, nothing summed – T336): with „w tym za” of several brands
+  // ('brands') the lines are each brand's – said here, a change here goes to each brand (`chooseThemeRow`).
+  const common = useImport((s) => themeCommon(t, s.choices))
   // A keyword of a title (N79): about those payments – no rule of the brands, whatever „zapamiętaj” said.
   const byTitle = t.groups.every((g) => g.byTitle)
   const shown = t.groups.filter((g) => found.has(g.group))
@@ -770,8 +830,10 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
           <DecisionFields
             choice={common ?? choice}
             direction={t.direction}
-            onChange={(c) => (common ? chooseThemeOverGroups(t, c) : chooseTheme(t.theme, c))}
+            onChange={(c) => chooseThemeRow(t, c)}
             own={fileAccount}
+            sharesFrom={themeSharesFrom(t, groupsDecided)}
+            sharesInBrands={groupsDecided === 'brands'}
             testId="import-theme"
           />
         )}
@@ -782,7 +844,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
                 ? 'podpowiedź mBanku'
                 : 'przyjęte'
               : 'Twoja decyzja'
-            : groupsDecided === 'same' || groupsDecided === 'mixed'
+            : groupsDecided === 'same' || groupsDecided === 'brands' || groupsDecided === 'mixed'
               ? 'Twoje decyzje marek'
               : THEME_SOURCE[t.source]}
         </Badge>
@@ -872,8 +934,8 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
       note = err ? ` Słowo kluczowe: ${err}` : ` Słowo kluczowe „${keyword}” zapamiętane.`
     }
     setAsKeyword(false)
-    const { applied, unfit } = chooseSelected(groups, option, category, option === 'share' ? share : null)
-    toast((unfit ? `Ustawiono dla ${applied}; ${unfit} nie pasuje do kierunku pieniędzy (wpływ / wydatek) – bez zmian.` : `Ustawiono dla ${applied}.`) + note, unfit ? 'info' : 'success', 5000)
+    const { applied, unfit, kept } = chooseSelected(groups, option, category, option === 'share' ? share : null)
+    toast(bulkResultText(applied, unfit, kept) + note, unfit ? 'info' : 'success', kept ? 8000 : 5000)
   }
   return (
     <div className="sticky top-0 z-10 mb-1 flex flex-wrap items-center gap-2 border border-accent/50 bg-raised px-2 py-1.5 text-[12px]" data-testid="import-bulk">
@@ -1165,11 +1227,15 @@ function DonePanel() {
           {done.counts.skipped > 0 ? ` · pominięte (usunięte wcześniej): ${done.counts.skipped}` : ''}
           {done.counts.excluded > 0 ? ` · nie importowane (Twój wybór): ${done.counts.excluded}` : ''}
           {done.counts.moved > 0 ? ` · przeniesione z innego konta: ${done.counts.moved}` : ''}
+          {done.counts.copies > 0 ? ` · usunięte kopie z innego konta: ${done.counts.copies}` : ''}
           {done.rules > 0 ? ` · nowe reguły: ${done.rules}` : ''}
         </span>
-        <span className="num truncate text-[11px] text-dim" title={done.backup}>
-          kopia przed importem: {done.backup}
-        </span>
+        {/* Nothing changed (N13, AF-63): no backup made. */}
+        {done.backup && (
+          <span className="num truncate text-[11px] text-dim" title={done.backup}>
+            kopia przed importem: {done.backup}
+          </span>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn h-[24px]" onClick={() => navigate({ page: 'operations' })} data-testid="import-to-operations">
             Zobacz w Operacjach

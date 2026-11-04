@@ -1,5 +1,52 @@
 # Financial Intel – zmiany
 
+## 1.15.5
+
+Poprawki po audycie – folder danych, szkice i import z mBanku:
+
+- **Folder danych niedostępny:** gdy folder zniknie w trakcie pracy (przeniesiony, odłączony dysk, OneDrive), aplikacja
+  w kilka sekund pokazuje baner „Folder danych jest niedostępny” i niczego nie zakłada w starym miejscu. Zmiany, które
+  czekały, zapisują się same, gdy folder wróci, a zmiany z drugiego komputera widać od razu po jego powrocie.
+- Nowy meldunek o „folderze-widmie” – wpisach, które starsza wersja zapisała w pustym folderze, gdy folder danych był
+  niedostępny.
+- „Zapisano.” pojawia się dopiero, gdy wpis naprawdę jest na dysku; w folderze tylko do odczytu Ctrl+S podaje powód.
+- Folder z atrybutem „tylko do odczytu” albo bez prawa zapisu jest rozpoznawany od razu przy otwarciu. Chwilowa blokada
+  pliku przez antywirus albo OneDrive nie przełącza już folderu w tryb tylko do odczytu, a otwarcie folderu nie zostawia
+  w nim żadnego pliku. Folder, w którym wolno zmieniać pliki, ale nie zakładać nowych, otwiera się jako tylko do odczytu
+  z powodem, a folder, który wrócił, gdy OneDrive jeszcze sprowadzał pliki, jest wczytywany ponownie po kilku sekundach.
+- Ekran brakującego folderu sam ponawia otwarcie co 30 s. Szybki wpis w trakcie otwierania innego folderu od razu o tym
+  mówi i nie zapisuje wpisu do niewłaściwego folderu.
+- **Nic nie ginie przy zmianie ekranu:** pytanie „Zmienić operację?” nie znika po przejściu na inny ekran, a zamknięcie
+  aplikacji mówi, że zmiana czeka na decyzję. „Wróć do kreatora” zachowuje wpisane odpowiedzi, także po ponownym
+  uruchomieniu, a wpisane „Saldo w banku teraz” zostaje po zmianie ekranu.
+- **Import – usunięte operacje i kopie:**
+  - Usunięta operacja z banku nie wraca już przy imporcie pliku w drugim formacie (lista operacji po historii rachunku
+    i odwrotnie).
+  - Nowy meldunek „Wróciły po usunięciu”: operacje, które wcześniejsze wersje zaimportowały znowu po Twoim usunięciu –
+    usuniesz je jednym kliknięciem (z „Cofnij”) albo zostawisz. Operacji wpisanych ręcznie i połączonych z wierszem
+    z banku ani rozliczonych później meldunek nie zgłasza, a import z komputera z innym zegarem go nie ukrywa.
+  - Plik z banku otwiera się na koncie, na które trafiały pliki tego rachunku.
+  - Plik wczytany wcześniej na złe konto: przy imporcie na właściwe konto kopie są proponowane do usunięcia (kategoria,
+    notatki i spłacane zakupy przechodzą na operację), zamiast przenoszenia obok oryginałów. Kopia, której spłacanych
+    zakupów operacja nie może przejąć, nie jest zaznaczona do usunięcia, a podgląd mówi dlaczego.
+  - Lista operacji nie wpisuje drugi raz operacji, których historia jest już na innym koncie tego samego rachunku,
+    a starsza lista po rozliczeniu nie proponuje rozliczonych operacji jako nowych.
+  - „Zapisz import (bez zmian)” nie robi kopii zapasowej ani importu do cofnięcia.
+- **Import – pożyczki i domownicy:**
+  - Import rozpoznaje zwrot pożyczki z Radaru, wypłatę z XTB i wpłatę domownika, nawet gdy wcześniej przez pomyłkę
+    zapamiętała się reguła na to nazwisko. Przelew sprzed dnia udzielenia pożyczki nigdy nie jest jej zwrotem.
+  - „Decyzja dla zaznaczonych” nie zmienia już zwrotu pożyczki, XTB, PIT-38 ani wpłaty domownika – zmienisz je w ich
+    grupie.
+  - „+ domownik” tylko przy wpływie od obcej osoby (nie przy przelewie własnym, XTB ani zwrocie pożyczki).
+  - Reguły importu: „niespójne” pokazuje regułę na nazwisko osoby z pożyczką i wpływy do poprawy; „bez trafień” zgadza
+    się z licznikiem, a słowo z tytułu nie jest już „do poprawy”.
+  - „+ w tym za…” przy pojedynczej wpłacie działa i startuje od kwoty, którą osoba ma oddać. Dla grupy albo tematu
+    dzieli kwotę po kolei i nigdy nie daje więcej, niż osoba ma oddać – licząc też jej własne wpłaty z pliku. Temat
+    z jednakową decyzją kilku marek z „w tym za” pokazuje „w tym za – ustawione w markach”: kwoty i uwagi są przy
+    każdej marce, a zmiana w temacie trafia do każdej marki i nie zmienia wpisanych w nich kwot.
+  - Przy podziale wpłaty na osoby pewny zakup każdej osoby przypisuje się sam; wpłata równa całemu długowi albo większa
+    spłaca wszystkie zakupy.
+
 ## 1.15.4
 
 Poprawki interfejsu panelu operacji i komponentu Segmented:

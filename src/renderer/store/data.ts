@@ -8,6 +8,7 @@ import { chooser, deepEqual, merge3, pathKey, sameContentAs, type Path, type Sid
 import { changedPaths, decideRemote, decideRemoteRemoval, isoMs, newerChoice, newerFields, relatedPaths, type RemoteMode } from '@shared/remoteChanges'
 import { api, errorMessage, isNewerFileError } from '../lib/api'
 import { setRemoteDialog, useRemote, type PendingRemote } from './remote'
+import { clearGuards, guardsWaiting } from './guard'
 import { commitActiveField, toast } from './ui'
 
 type EntryMap<C extends Collection> = Record<string, RecordEntry<RecordTypes[C]>>
@@ -237,6 +238,8 @@ export function applySnapshot(snapshot: Snapshot): void {
   fieldEdits.clear()
   userEditedAt.clear()
   useRemote.setState({ pending: [], open: false })
+  // The previous folder's operations: no question about them stays (AP-8).
+  clearGuards()
   // A folder shown anew: the hold of a close that did not come is over (T301).
   clearTimeout(closeHold)
   closeHold = undefined
@@ -286,6 +289,8 @@ export function applyChange(change: ChangeSet): void {
     const prev = waiting.get(item.key)
     queued.push({ ...item, base: prev ? prev.base : item.base, hadLocalEdits: localEdits || !!prev?.hadLocalEdits, receivedAt: now })
   }
+  // The data folder back after a while away (AP-1): what waited for it is written now.
+  const regained = get().status?.available === false && change.status.available
   set((s) => {
     const next: Partial<DataState> = {
       problems: change.problems,
@@ -362,6 +367,7 @@ export function applyChange(change: ChangeSet): void {
     }
     return next
   })
+  if (regained) resumeSaves()
   for (const t of toSave) scheduleSave(t.collection, t.id)
   if (toSave.length) {
     const from = toSave.find((t) => t.from)?.from
@@ -769,6 +775,32 @@ function scheduleRetry(key: string): void {
   )
 }
 
+/**
+ * The data folder back (AP-1): every change that waited for it is written now, not at its next retry (up to a minute
+ * later) – many of a collection with one call (W1). One waiting for a decision about another computer's change, or one
+ * this version never writes (B67), stays as it is.
+ */
+function resumeSaves(): void {
+  const byCollection = new Map<Collection, string[]>()
+  let settings = false
+  for (const [key, target] of dirty) {
+    if (newer.has(key) || pendingFor(key)) continue
+    const t = timers.get(key)
+    if (t) clearTimeout(t)
+    timers.delete(key)
+    retryDelay.delete(key)
+    if (target.collection === 'fi') {
+      settings = true
+      continue
+    }
+    const ids = byCollection.get(target.collection)
+    if (ids) ids.push(target.id)
+    else byCollection.set(target.collection, [target.id])
+  }
+  if (settings) void enqueue(FI_KEY)
+  for (const [c, ids] of byCollection) saveBatch(c, ids)
+}
+
 function scheduleSave(collection: Collection | 'fi', id: string, delay = saveDelay()): void {
   const key = keyOf(collection, id)
   versions.set(key, (versions.get(key) ?? 0) + 1)
@@ -827,10 +859,17 @@ async function holding<T>(run: () => Promise<T>): Promise<T> {
 
 export const READ_ONLY_MESSAGE = 'Folder jest tylko do odczytu – zmiany nie są zapisywane.'
 export const SWITCHING_MESSAGE = 'Trwa otwieranie innego folderu – zmiany w tej chwili nie są przyjmowane.'
+export const UNAVAILABLE_NOTICE = 'Folder danych jest niedostępny – nowe zmiany nie są teraz przyjmowane; wcześniejsze czekają i zapiszą się same, gdy folder wróci.'
 let readOnlyNoticedAt = 0
 
+/** Why the folder takes no change now (N2, AP-1): another one opening, this one gone, or read-only. */
+function lockedMessage(): string {
+  const s = get()
+  return s.switching ? SWITCHING_MESSAGE : s.status?.available === false ? UNAVAILABLE_NOTICE : READ_ONLY_MESSAGE
+}
+
 /** A change the read-only folder does not take (N2): said once in a few seconds – never silently, never as a success. */
-function readOnlyNotice(message = get().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE): void {
+function readOnlyNotice(message = lockedMessage()): void {
   const now = Date.now()
   // A clock set back meanwhile never silences it.
   if (now >= readOnlyNoticedAt && now - readOnlyNoticedAt < 4000) return
@@ -1037,9 +1076,10 @@ export function deleteOrSay(collection: Collection, id: string): void {
 /**
  * Many records deleted with one call (W1: an import's, duplicates): gone from memory at once; those the disk refused come
  * back. Returns the ids deleted and the first error. `reason` 'undo': taken back with their import (F4 – T39); 'drop': old
- * batches of `imports`, no version in the history.
+ * batches of `imports`, no version in the history; 'import': the import's own (pending ones gone from the bank, copies
+ * on another account – T331), no deletion of the user's.
  */
-export async function deleteRecords(collection: Collection, ids: readonly string[], opts: { reason?: 'undo' | 'drop' } = {}): Promise<{ deleted: string[]; error: string | null }> {
+export async function deleteRecords(collection: Collection, ids: readonly string[], opts: { reason?: 'undo' | 'drop' | 'import' } = {}): Promise<{ deleted: string[]; error: string | null }> {
   const s = get()
   const entries = new Map(ids.map((id) => [id, mapOf(s, collection)[id]]))
   const drafts = ids.filter((id) => s.drafts[id])
@@ -1169,7 +1209,31 @@ export function unsavedReport(): FlushResult {
     else if (newer.has(key)) newerCount++
     else error = failed.get(key) ?? error ?? 'zapis jeszcze trwa'
   }
-  return { saved: dirty.size === 0, waiting, newer: newerCount, error }
+  // Typed and waiting for „Zmień mimo to” (AP-8): not on the disk – a change not saved, with its own reason.
+  const asks = guardsWaiting()
+  return { saved: dirty.size === 0 && asks === 0, waiting, newer: newerCount, error, ...(asks ? { asks } : {}) }
+}
+
+/** A record's change not on the disk yet (AP-1): why – its last write's error, or its write on the way; null = saved. */
+export function unsavedOf(collection: Collection, id: string): string | null {
+  const key = keyOf(collection, id)
+  return dirty.has(key) ? (failed.get(key) ?? 'zapis jeszcze trwa') : null
+}
+
+/**
+ * A record's write now, awaited (AP-1 – the quick entry says „Zapisano.” only once it is on the disk): true = written;
+ * false = not yet (its error kept, retried as every write). Waits `limitMs` at most – a slow folder answers later.
+ */
+export async function writeNow(collection: Collection, id: string, limitMs = 5000): Promise<boolean> {
+  const key = keyOf(collection, id)
+  if (!dirty.has(key)) return true
+  const t = timers.get(key)
+  if (t) clearTimeout(t)
+  timers.delete(key)
+  firstDirtyAt.delete(key)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([enqueue(key), new Promise<void>((r) => (timer = setTimeout(r, limitMs)))]).finally(() => clearTimeout(timer))
+  return !dirty.has(key)
 }
 
 /** The window closing (B108): everything written, the reason of what is not – a waiting decision's dialog opened behind the question. */
@@ -1206,6 +1270,8 @@ export async function saveFirst(what: string): Promise<void> {
 /** Why `what` waits for the unsaved changes (`saveFirst`); null = nothing holds it. Decisions waiting: their dialog opens. */
 function unsavedHold(what: string): string | null {
   const r = unsavedReport()
+  // An edit typed and waiting for „Zmień mimo to” (AP-8): its question is open – the step waits for the answer.
+  if (r.asks) return `${ASK_WAITING} – ${what} czeka na odpowiedź w otwartym pytaniu („Zmień mimo to” albo „Anuluj”).`
   if (r.waiting) {
     setRemoteDialog(true)
     return `Czekają zmiany z drugiego komputera (${r.waiting}) – ${what} czeka na Twoją decyzję w otwartym oknie.`
@@ -1228,10 +1294,18 @@ export async function unsavedNote(): Promise<string | null> {
   return r.newer ? 'części zmian ta wersja nie zapisze – te wpisy zapisała nowsza wersja aplikacji' : null
 }
 
+/** An edit of an operation typed and waiting for „Zmień mimo to” (AP-8), as the steps and Ctrl+S say it. */
+export const ASK_WAITING = 'Zmiana operacji czeka na Twoją decyzję („Zmień mimo to”) – nie jest jeszcze zapisana'
+
 /** Ctrl+S and the palette's „Zapisz teraz” (N62): one way – decisions about another computer's changes open their dialog. */
 export async function saveNow(): Promise<void> {
+  // A read-only folder (a newer format, no right to write, the folder gone – AF-39): nothing was written, so no
+  // „Zapisano.” – what waits (the folder gone) is said below.
+  const locked = !!get().status?.readOnly
   const saved = await flushSaves()
   const r = unsavedReport()
+  if (r.asks) return toast(`${ASK_WAITING}.`, 'info', 5000)
+  if (locked && saved && !useRemote.getState().pending.length) return toast(get().status?.readOnlyReason ?? READ_ONLY_MESSAGE, 'error', 6000)
   if (useRemote.getState().pending.length) {
     setRemoteDialog(true)
     const rest = !r.error && !r.newer

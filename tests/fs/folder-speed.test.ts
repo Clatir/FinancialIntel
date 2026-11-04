@@ -14,7 +14,7 @@ afterEach(() => vi.restoreAllMocks())
 
 type Spied = { loadFile(rel: string): Promise<unknown>; listDataFiles(): Promise<string[]> }
 const spyOn = (name: keyof Spied) => vi.spyOn(DataStore.prototype as unknown as Spied, name)
-const write = (store: DataStore, rel: string, data: unknown) => writeFileAtomic(join(store.root, ...rel.split('/')), serializeRecord('transactions', data as never))
+const write = (store: DataStore, rel: string, data: unknown) => writeFileAtomic(join(store.root, ...rel.split('/')), serializeRecord('transactions', data as never), store.root)
 
 describe('kolejka odświeżeń folderu (1.4.3, W21)', () => {
   it('jedno odświeżenie naraz; zaległe łączą się w jedno, pełne zastępuje ścieżki', async () => {
@@ -218,7 +218,7 @@ describe('kopie ZIP w jednym przejściu (1.4.3, W7)', () => {
       name: `transactions/${String(i).padStart(6, '0')}.json`,
       read: () => ({ data: Buffer.from(i % 1000 === 0 ? long : `{"n":${i}}`), mtime: new Date('2026-10-18T10:00:00Z') })
     }))
-    const res = await writeZipFile(out, items)
+    const res = await writeZipFile(out, items, null)
     expect(res.files).toBe(70_000)
     expect(await zipEntries(out, 'transactions/069999.json')).toEqual({ count: 70_000, content: '{"n":69999}' })
     expect((await zipEntries(out, 'transactions/001000.json')).content).toBe(long)

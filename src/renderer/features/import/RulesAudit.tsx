@@ -5,11 +5,12 @@
  * up to an amount offered when the amounts split them).
  */
 import { useEffect, useMemo, useState } from 'react'
-import { feedAudit, finishAudit, startAudit, type RuleAudit } from '@shared/import/audit'
+import { feedAudit, finishAudit, inAuditView, inconsistentCount, startAudit, type RuleAudit } from '@shared/import/audit'
 import { fold } from '@shared/fold'
 import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
-import type { ImportRule } from '@shared/schema'
+import type { RecordEntry } from '@shared/api'
+import type { ImportRule, Loan } from '@shared/schema'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { Panel, ShowMore, TextField, cx } from '../../components/ui'
@@ -24,6 +25,7 @@ import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, directionT
 
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
+const NO_LOANS: Record<string, RecordEntry<Loan>> = {}
 /** Operations audited per step: a large folder never stops the screen. */
 const STEP = 2000
 const SHOWN = 20
@@ -35,11 +37,13 @@ export function useRuleAudit(): { audit: RuleAudit | null; progress: number } {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const aliases = useData((s) => s.fi?.settings.import.aliases ?? NO_ALIASES)
   const map = useData((s) => s.records.transactions)
+  // The Radar's loans (AP-6): a rule on a borrower's name and the money it kept.
+  const loans = useData((s) => s.records.loans ?? NO_LOANS)
   const [state, setState] = useState<{ audit: RuleAudit | null; progress: number }>({ audit: null, progress: 0 })
   useEffect(() => {
     let stopped = false
     const txs = listOf(map).filter((t) => t.bank)
-    const run = startAudit(rules, aliases)
+    const run = startAudit(rules, aliases, listOf(loans))
     let i = 0
     const step = () => {
       if (stopped) return
@@ -55,7 +59,7 @@ export function useRuleAudit(): { audit: RuleAudit | null; progress: number } {
       stopped = true
       clearTimeout(timer)
     }
-  }, [rules, aliases, map])
+  }, [rules, aliases, map, loans])
   return state
 }
 
@@ -112,8 +116,27 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
   const readOnly = useFolderLocked()
   const differ = audit.differ.get(rule.id) ?? []
   const other = audit.otherKind.get(rule.id) ?? []
+  const borrower = audit.borrower.get(rule.id) ?? []
+  const loans = [...new Set(borrower.map((b) => b.loan.name))]
   return (
     <div className="flex flex-col gap-1 border-l-2 border-line-strong py-1 pl-2 text-[11.5px]" data-testid="import-rule-details">
+      {borrower.length > 0 && (
+        <>
+          {/* AP-6: a rule on a borrower's name – the next imports recognize the loan first; these were kept by the rule. */}
+          <span className="text-accent" data-testid="import-rule-borrower-note">
+            Reguła na nazwisko osoby z pożyczką z Radaru ({loans.join(', ')}): te wpływy przyszły, gdy pożyczka była otwarta, a reguła zapisała je jako „{ruleDecisionText(rule, label)}” – to zwykle
+            zwroty pożyczki. Popraw je w Operacjach (rodzaj „Pożyczka”, ta pożyczka); kolejne importy same rozpoznają zwrot pożyczki. Reguła z pomyłki – usuń ją.
+          </span>
+          {borrower.slice(0, SHOWN).map(({ t }) => (
+            <button key={t.id} type="button" className="flex gap-2 text-left hover:bg-hover" onClick={() => openOperation(t)} title="Otwórz w Operacjach" data-testid="import-rule-borrower-row">
+              <span className="num w-[78px] text-dim">{plDate(t.date)}</span>
+              <span className="min-w-0 flex-1 truncate">{t.counterparty}</span>
+              <span className="num">{signedPln(t.amount)}</span>
+            </button>
+          ))}
+          {borrower.length > SHOWN && <span className="text-dim">i {borrower.length - SHOWN} więcej</span>}
+        </>
+      )}
       {differ.length > 0 && (
         <>
           <span className="text-muted">Operacje tej marki z inną kategorią albo innym finansującym niż reguła:</span>
@@ -145,7 +168,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
           ))}
         </>
       )}
-      {!differ.length && !other.length && <span className="text-dim">Wszystkie operacje tej reguły są zgodne z nią.</span>}
+      {!differ.length && !other.length && !borrower.length && <span className="text-dim">Wszystkie operacje tej reguły są zgodne z nią.</span>}
     </div>
   )
 }
@@ -169,13 +192,15 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
     return rules
       .filter((r) => r.mode !== 'keyword')
       .filter((r) => !q || fold(`${r.label} ${r.match} ${decision(r)}`).includes(q))
-      .filter((r) => (show === 'idle' ? audit && !audit.hits.has(r.id) : show === 'differ' ? differOf(r) > 0 || (audit?.otherKind.get(r.id)?.length ?? 0) > 0 : true))
+      // „Bez trafień” = its count (AF-64: never a rule of a loan, PIT-38 or XTB – a proposal only).
+      .filter((r) => inAuditView(r, audit, show))
       .sort((a, b) => hitsOf(b) - hitsOf(a) || (a.label || a.match).localeCompare(b.label || b.match))
   }, [rules, query, show, audit, cats, members, accounts])
   // Thousands of rules after years of imports (W35): a page at a time, the first again for another search.
   const [limit, setLimit] = useState(RULES_PAGE)
   useEffect(() => setLimit(RULES_PAGE), [query, show])
-  const differCount = audit ? [...audit.differ.values()].reduce((s, xs) => s + xs.length, 0) : 0
+  const differCount = audit ? inconsistentCount(audit) : 0
+  const borrowerOf = (r: ImportRule) => audit?.borrower.get(r.id)?.length ?? 0
   return (
     <Panel title="Reguły importu">
       <p className="mb-2 text-[11.5px] text-muted">
@@ -209,6 +234,17 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                 {audit ? `${hitsOf(r)} op.` : '…'}
               </span>
               <span className="flex items-center gap-1">
+                {borrowerOf(r) > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost h-[22px] px-1.5 text-[11px] text-accent"
+                    onClick={() => setOpen(open === r.id ? null : r.id)}
+                    title="Wpływy od osoby z pożyczką z Radaru zapisane przez tę regułę – do sprawdzenia"
+                    data-testid="import-rule-borrower"
+                  >
+                    {borrowerOf(r)} do poprawy
+                  </button>
+                )}
                 {differOf(r) > 0 && (
                   <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] text-accent" onClick={() => setOpen(open === r.id ? null : r.id)} title="Operacje tej reguły z inną decyzją" data-testid="import-rule-differ">
                     {differOf(r)} inaczej
