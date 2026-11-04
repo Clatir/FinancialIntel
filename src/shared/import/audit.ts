@@ -54,6 +54,19 @@ export const advanceRule = (r: Pick<ImportRule, 'kind' | 'household' | 'inflowKi
 /** The key of a rule of an advance for the future kept so by the user (`settings.import.notDuplicates`, AP-4). */
 export const advanceRuleKey = (id: string): string => `advanceRule:${id}`
 
+const keptMemo = new WeakMap<object, string>()
+/**
+ * The rules of an advance kept so (`advanceRuleKey`) of `settings.import.notDuplicates` as one text – all the audit reads
+ * of it (przegląd N2 2.14: a pair of the duplicates panel or another report's „zostaw” leaves it the same, so the audit of
+ * all the bank's operations does not start again). Once per map.
+ */
+export function advanceRulesKept(map: Readonly<Record<string, unknown>> | undefined): string {
+  if (!map) return ''
+  let out = keptMemo.get(map)
+  if (out == null) keptMemo.set(map, (out = Object.keys(map).filter((k) => k.startsWith(advanceRuleKey('')) && !!map[k]).sort().join('\n')))
+  return out
+}
+
 /** An expense with what its rule of an expense says: category and financing (D80, D83). */
 export function withRule(t: Transaction, rule: ImportRule): Transaction {
   const refundable = rule.refundable

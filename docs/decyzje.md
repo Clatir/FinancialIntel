@@ -2722,7 +2722,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   sprzed 1.15.3) spłacają go deterministycznie, bez przepisywania rekordów – każdy komputer liczy to samo; `inflowKind:
   'income'` ze wskazanym tak samo (ten sam sprzeczny zapis starszej wersji: wskazanie zakupu = ta wpłata go spłaca).
   `repaymentShares` i `repayers` (`copies.ts`) bez zmian – edytor nie proponuje jawnym rodzajom nowych zakupów. Addytywnie,
-  bez `SCHEMA_VERSION`.
+  bez `SCHEMA_VERSION`. Uwaga edytora wpłaty „poza wskazanymi wcześniej zakupami: te spłaca” – jak księga (`namesFor`):
+  wskazany zakup albo dług startowy tej osoby, przy `coversOpeningMembers` – tylko wskazanych (`namesPurchases`; przegląd
+  N2 2.10: przedtem zaliczka A z `coversOpeningMembers` [B] mówiła, że spłaca).
 - **T351** „reszta jako zaliczka” w imporcie = spłata, reszta do depozytu (AP-4, AF-8, IM.23, IM sp. 4): opcja
   `household:<osoba>:advance` daje `inflowKind: 'repay'` i `advance: true` (wcześniej `inflowKind: 'advance'` – reguła
   uczyła się „całość jako zaliczka”); jawne rodzaje to osobne opcje `:all-income` i `:all-advance`; `optionOf`
@@ -2747,7 +2749,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   z `inflowKind: 'advance'`, poza słowami kluczowymi z Operacji (tam „zaliczka” obok „spłata zakupów” była wyborem
   jawnym), w „niespójne” po jednej, z „do przeglądu”: „Zmień na spłatę” (`repayingRule` – reguła „spłata”, reszta
   z ustawienia osoby; `editRule` z „Cofnij”) albo „zostaw zaliczkę na przyszłość” (klucz `advanceRule:<reguła>`). Do tego
-  czasu import z taką regułą pokazuje jej jawną nazwę i uwagę o długu. Bez migracji reguł.
+  czasu import z taką regułą pokazuje jej jawną nazwę i uwagę o długu. Bez migracji reguł. Audyt czyta z
+  `notDuplicates` tylko te klucze (`advanceRulesKept` – tekst, raz na mapę): inne „zostaw” i „to nie duplikat” nie liczą
+  audytu wszystkich operacji od nowa (przegląd N2 2.14).
 - **T354** Saldo osoby w obie strony (AF-16, AP-4): Mostek, Radar, Ustawienia → Domownicy i edytor wpłaty pokazują naraz
   „ma oddać” i „zaliczka” (`balanceText`), gdy osoba ma oba (jawna zaliczka może omijać dług – D99 S4; rezerwacja D94) –
   depozyt domowników to suma tego, co widać przy osobach.
@@ -2779,7 +2783,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „własne pieniądze” w pliku – wiersze spłaty całością tej pożyczki. Własna linia wiersza – jak wpisana (nadwyżka to
   przychód, T70); linia grupy i tematu – razem dla pożyczki, po kolei od najstarszej wpłaty, nigdy ponad dług pomniejszony
   o spłaty całością z pliku i własne linie wierszy; pożyczka zamknięta – bez części. Nowa linia startuje od tego, co
-  pożyczka ma jeszcze do spłaty, najwyżej to, co zostało we wpłatach. Decyzja zbiorcza nie zmienia decyzji z częścią
+  pożyczka ma jeszcze do spłaty, najwyżej to, co zostało we wpłatach – zawsze pożyczki jeszcze nienazwanej w tej decyzji
+  (`loanToName`; wszystkie nazwane – bez przycisku, przegląd N2 2.11). Wiersz wpływu bez linii przy otwartej pożyczce
+  pokazuje tylko „+ w tym spłata pożyczki” i czyta rozkład pliku dopiero przy kliknięciu (`rowPartsOf` 'add',
+  `RowLoanPart`; przegląd N2 2.13 – setki wierszy pensji). Decyzja zbiorcza nie zmienia decyzji z częścią
   pożyczki (AP-6, `bulkKeeps` – tylko spłata całością tej samej pożyczki), „+ domownik” przy niej się nie pojawia, słowo
   kluczowe z niej się nie uczy. Spłata całością – jak dotąd („Zwrot pożyczki – X (Radar)”, każda otwarta pożyczka przy
   każdym wpływie). W temacie marek z liniami ('brands', T336) linie pożyczki jak linie domowników: zostają w markach
@@ -2790,22 +2797,29 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `loanAmount` przy regule wpływu (ta część każdej wpłaty, reszta jak mówi reguła). Działa tylko, gdy pożyczka jest
   otwarta i udzielona do dnia wiersza (`ruleLoanFor` – warunki `loanFor`); inaczej reguła spłaty całością ustępuje (jak
   bez reguły), a część reguły odpada. Część z reguły to propozycja wiersza: liczona dla każdego wiersza osobno, nigdy
-  ponad dług (po kolei z innymi częściami pliku); zmieniona przy grupie staje się decyzją grupy (razem dla grupy – T328).
+  ponad dług (po kolei z innymi częściami pliku) – także w decyzji grupy albo tematu, która ją zostawia (linia z `each`:
+  zmiana w liście w obrębie tej samej osoby – `listChoice`; uwaga przy linii „z każdej wpłaty … zł”; przegląd N2 2.2:
+  przedtem np. „reszta jako zaliczka” robiła z 200 zł każdej z 3 wpłat 200 zł razem); zmieniona przy grupie (kwota albo
+  pożyczka linii) staje się decyzją grupy (razem dla grupy – T328). Reguła uczy się części tylko jako kwoty każdej wpłaty
+  – T368.
   Reguła z częścią pożyczki pożyczkobiorcy nie ustępuje rozpoznaniu tej pożyczki (czynsz i rata w jednym przelewie),
   reguła spłaty całością nie ustępuje pieniądzom domownika (użytkownik powiedział, że jego pieniądze spłacają pożyczkę);
   dawna reguła pożyczki bez `loanId` – jak dotąd (propozycja, ustępuje domownikowi). Uczy się tylko na życzenie:
   „zapamiętaj” przy decyzji ze spłatą pożyczki (całością albo częścią) wybranej w miejsce innej zaczyna wyłączone
-  (`remembersByDefault`, także decyzja zbiorcza). Edytor reguły w Ustawieniach oferuje dla wpływów „Zwrot pożyczki – X”
+  (`remembersByDefault`, także decyzja zbiorcza), a decyzja bez spłaty pożyczki wybrana w miejsce takiej wraca do
+  domyślnego włączonego (przegląd N2 2.9: „nie” było pożyczki, nie użytkownika). Edytor reguły w Ustawieniach oferuje dla wpływów „Zwrot pożyczki – X”
   otwartych pożyczek i jedną część pożyczki (części domowników reguła nie trzyma – nie pokazane). Audyt reguł bez zmian
   (reguły pożyczki poza „bez trafień” i „Zastosuj do historii”). Addytywnie: starsza wersja czyta regułę pożyczki jako
   propozycję sprzed 1.5.1, części nie widzi. „zapamiętaj” liczy jedno księgowanie decyzji grup (`groupsDecided`, T336):
   decyzja grupy, zbiorcza (każda grupa według tego, co pokazywała) i zmiana w temacie marek.
 - **T359** Szybki wpis i edytor Operacji (D100 (2)): w szybkim wpisie przy wpływie „Spłata pożyczki” – otwarta pożyczka
   udzielona z listy (`QuickData.loans` z tym, co zostało) i kwota (pusta = to, co pożyczka ma do spłaty, najwyżej reszta
-  wpłaty po częściach domowników); zapis – linia pożyczki wpływu, także na całą kwotę (wpłata zostaje wpływem z nadawcą –
+  wpłaty po częściach domowników; wyczyszczone pole wraca do niej – `typedLoan`, przegląd N2 2.12); zapis – linia pożyczki wpływu, także na całą kwotę (wpłata zostaje wpływem z nadawcą –
   domownikiem albo nazwą, więc „kto zapłacił” go zna); okno odmawia, gdy części przekraczają kwotę albo pożyczka została
   zamknięta lub usunięta w międzyczasie (lista okna starsza – jak przy domownikach, B125). Edytor wpływu: „+ spłata
-  pożyczki” (linia z pierwszą otwartą pożyczką, kwota – to, co ma do spłaty, najwyżej reszta), pożyczki w liście „czyja
+  pożyczki” (linia z pierwszą otwartą pożyczką jeszcze nienazwaną – `loanToName`; wszystkie nazwane – bez przycisku, przegląd
+  N2 2.11: druga linia tej samej pożyczki, każda porównana z całym długiem, ukrywała nadwyżkę; kwota – to, co ma do
+  spłaty, najwyżej reszta), pożyczki w liście „czyja
   część” obok domowników, przy linii „do spłaty … zł” i nadwyżka jako przychód (dług bez tej operacji – `openWithout`).
 - **T360** „Wycofaj dokowanie” (AP-9, AF-7 / MO.29 / DO.7; realizuje D95 N-PC-2, uzupełnia B15, B17, B69): przycisk
   w oknie zadokowanej dostawy (`docking-undock`) i „wycofaj” w jej wierszu na Mostku (`docking-row-undock`, obok
@@ -2869,3 +2883,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `tests/unit/wyrocznia-ap32.test.ts` – scenariusze reguł N2 (wyrocznia = silnik) i ekrany; otwarty błąd jako `it.fails`
   (AF-15 – termin asteroidy w odprawie, N3 AP-10). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
   wyroczni – nigdy dopasowanie wyroczni do wyniku.
+- **T368** Reguła uczy się części pożyczki tylko jako kwoty każdej wpłaty (przegląd N2 2.3; doprecyzowuje T358, T328):
+  `loanAmount` reguły to część każdej wpłaty, linia grupy albo tematu – kwota razem dla jej wpłat (po kolei). Nauka
+  (`buildImport` → `ruleDecisionOf(c, rows)`, `rows` – wpłaty, dla których linie decyzji są razem: `rowShares().rows`
+  `g:` / `t:`) zapisuje część jako `loanAmount` tylko, gdy jest kwotą każdej wpłaty: część z reguły zostawiona w decyzji
+  (`each`, T358) albo linia decyzji jednej wpłaty; linia grupy / tematu kilku wpłat – reguła uczy się decyzji bez części
+  pożyczki (jak decyzja bez niej – `upsertRules`: wcześniejsza część reguły znika). Przedtem 600 zł „razem” dla 3 wpłat
+  zapisywało 600 zł na każdą przyszłą wpłatę (do 3× więcej). Rozważone i odrzucone: kwota podzielona przez liczbę wpłat
+  albo to, co rozkład dał każdej – „po kolei” daje wpłatom różne kwoty, żadna nie jest tym, co użytkownik wpisał. Edytor
+  reguły w Ustawieniach – jedna wpłata (`rows` 1): kwota jak wpisana.

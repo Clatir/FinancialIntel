@@ -1001,9 +1001,10 @@ export interface Choice {
   /**
    * A household member's money carrying others' (D81, N-PC-10 – „w tym za…”): their parts, the rest the sender's. A part
    * repaying a loan given (D100, T357 – „w tym spłata pożyczki”, of any inflow: a member's money or plain income): its
-   * `loanId`, no member (`memberId` '').
+   * `loanId`, no member (`memberId` ''). `each` – a rule's loan part (T358): the amount of each inflow, never one total of
+   * a group's or a theme's rows (T328) – until the line is changed.
    */
-  shares?: ReadonlyArray<{ memberId: string; amount: number; advance: boolean; inflowKind?: 'repay' | 'income' | 'advance'; loanId?: string }>
+  shares?: ReadonlyArray<{ memberId: string; amount: number; advance: boolean; inflowKind?: 'repay' | 'income' | 'advance'; loanId?: string; each?: true }>
   counterAccountId: string | null
   /** The loan of the Radar a loan's operation belongs to (B34); none = a loan without its record. */
   loanId?: string | null
@@ -1023,9 +1024,11 @@ export const repaysLoan = (c: Pick<Choice, 'kind' | 'loanId' | 'shares'> | undef
 
 /**
  * Is a decision remembered as a rule unless the user says no (the import's „zapamiętaj”)? Yes – except a loan's
- * repayment (D100, T358: a rule of it only when asked – N14 stays the default) chosen over a decision that did not repay one.
+ * repayment (D100, T358: a rule of it only when asked – N14 stays the default) chosen over a decision that did not repay one;
+ * a decision repaying none chosen over one that did – back to the default (przegląd N2 2.9: the „no” was the loan's).
  */
-export const remembersByDefault = (c: Choice, before: Choice | undefined, was: boolean | undefined): boolean => (repaysLoan(c) && !repaysLoan(before) ? false : (was ?? true))
+export const remembersByDefault = (c: Choice, before: Choice | undefined, was: boolean | undefined): boolean =>
+  repaysLoan(c) !== repaysLoan(before) ? !repaysLoan(c) : (was ?? true)
 
 export interface ImportChoices {
   /** Per theme (`ImportGroup.theme`): the decision for all its groups… */
@@ -1080,8 +1083,9 @@ export const choiceOf = (d: ImportDecision): Choice => ({
   inflowKind: d.household ? (d.inflowKind ?? 'repay') : undefined,
   gift: d.refundable && d.gift,
   share: d.kind === 'expense' && !d.refundable ? d.share : null,
-  // A rule's part repaying a loan (D100): a line of the row, at most what the loan owes (`rowShares`).
-  ...(d.kind === 'income' && d.loanPart ? { shares: [{ memberId: '', amount: d.loanPart.amount, advance: false, loanId: d.loanPart.loanId }] } : {}),
+  // A rule's part repaying a loan (D100): of each inflow, at most what the loan owes (`rowShares`) – also when its group or
+  // theme is decided with it kept (`each`, przegląd N2 2.2).
+  ...(d.kind === 'income' && d.loanPart ? { shares: [{ memberId: '', amount: d.loanPart.amount, advance: false, loanId: d.loanPart.loanId, each: true as const }] } : {}),
   counterAccountId: d.counterAccountId,
   loanId: d.kind === 'loan' ? d.loanId : null
 })
@@ -1134,10 +1138,17 @@ export type ImportCounts = {
   copies: number
 }
 
-/** What a rule says, from a decision (the import's learning, a rule edited in the settings – F22). */
-export function ruleDecisionOf(c: Choice): Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId' | 'inflowKind' | 'loanId' | 'loanAmount'> {
-  // A loan of the Radar it repays (D100, T358): the whole inflow (kind 'loan'), or a part of an income – its first.
-  const part = c.kind === 'income' ? c.shares?.find((x) => x.loanId && x.amount > 0) : undefined
+/**
+ * What a rule says, from a decision (the import's learning, a rule edited in the settings – F22). `rows` – how many inflows
+ * the decision's lines are for together (a group's or a theme's, T328; the rule's editor – one).
+ */
+export function ruleDecisionOf(
+  c: Choice,
+  rows = 1
+): Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId' | 'inflowKind' | 'loanId' | 'loanAmount'> {
+  // A loan of the Radar it repays (D100, T358): the whole inflow (kind 'loan'), or a part of an income – its first – of
+  // each inflow (T368): a rule's own (`each`) or of one inflow; a total of more inflows is no amount of each – none.
+  const part = c.kind === 'income' ? c.shares?.find((x) => x.loanId && x.amount > 0 && (x.each || rows <= 1)) : undefined
   return {
     loanId: c.kind === 'loan' ? (c.loanId ?? undefined) : (part?.loanId ?? undefined),
     loanAmount: part?.amount ?? undefined,
@@ -1198,8 +1209,11 @@ const repaysPart = (x: Pick<SharePart, 'inflowKind'>): boolean => !x.inflowKind 
 export interface SpreadLine {
   line: number
   memberId: string
+  /** What the line gives at most: its amount – of a rule's part of each inflow (`each`), that amount for each row. */
   typed: number
   given: Array<{ key: string; date: string; amount: number }>
+  /** A rule's loan part (T358): its amount of each inflow. */
+  each?: number
 }
 
 export interface SharesSpread {
@@ -1303,8 +1317,10 @@ export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: Reado
       if (!givesLine(c, x)) return
       const id = shareWho(x)
       let spread = lines.find((l) => l.line === line)
-      if (!spread) lines.push((spread = { line, memberId: id, typed: Math.max(0, x.amount), given: [] }))
-      const k = `${from}|${line}`
+      if (!spread) lines.push((spread = { line, memberId: id, typed: x.each ? 0 : Math.max(0, x.amount), given: [], ...(x.each ? { each: Math.max(0, x.amount) } : {}) }))
+      // A rule's part of each inflow (T358, przegląd N2 2.2): its amount for this row – never one total of the decision's.
+      if (x.each) spread.typed += Math.max(0, x.amount)
+      const k = x.each ? `${p.key}|${from}|${line}` : `${from}|${line}`
       const typed = left.get(k) ?? Math.max(0, x.amount)
       // A repayment never beyond the debt; a member's income or advance part (no repayment) – as typed.
       const repays = repaysPart(x)
@@ -1392,7 +1408,8 @@ export function buildImport(
 ): ImportResult {
   const groups = importGroups(plan, choices.restoreDeleted)
   const themeOf = new Map(groups.map((g) => [g.group, g.theme]))
-  const shares = rowShares(plan, choices, opts.owed).parts
+  const spread = rowShares(plan, choices, opts.owed)
+  const shares = spread.parts
   const ruleById = new Map(opts.rules.map((r) => [r.id, r]))
   const bankOf = (p: RowPlan): BankRow => ({
     format: 'mbank',
@@ -1580,7 +1597,7 @@ export function buildImport(
     const r = id ? opts.rules.find((x) => x.id === id) : undefined
     return r?.mode === 'amount' ? r : null
   }
-  const learned = new Map<string, { g: ImportGroup; c: Choice; rows: number; total: number; rule: ImportRule | null }>()
+  const learned = new Map<string, { g: ImportGroup; c: Choice; rows: number; total: number; rule: ImportRule | null; together: number }>()
   for (const g of groups) {
     const own = choices.groups[g.group]
     const c = own ?? choices.themes[g.theme]
@@ -1592,13 +1609,15 @@ export function buildImport(
     const key = rule ? `amount|${rule.id}` : `${g.brand}|${g.direction}`
     const prev = learned.get(key)
     const total = (prev?.total ?? 0) + imported
-    learned.set(key, !prev || imported > prev.rows ? { g, c, rows: imported, total, rule } : { ...prev, total })
+    // The inflows its lines are for together (T328): a loan's part of more of them is no amount of each (T368).
+    const together = spread.rows.get(own ? `g:${g.group}` : `t:${g.theme}`)?.keys.length ?? imported
+    learned.set(key, !prev || imported > prev.rows ? { g, c, rows: imported, total, rule, together } : { ...prev, total })
   }
   // The same list when nothing is learned (N13: an import of nothing new changes nothing); one copy for all (W35).
   const amounts = new Map<string, { decided: ReturnType<typeof ruleDecisionOf>; total: number }>()
   const brands: Array<{ rule: LearnedRule; hits: number }> = []
-  for (const { g, c, total, rule } of learned.values()) {
-    const decided = ruleDecisionOf(c)
+  for (const { g, c, total, rule, together } of learned.values()) {
+    const decided = ruleDecisionOf(c, together)
     if (rule) amounts.set(rule.id, { decided, total })
     else brands.push({ rule: { match: g.brand, direction: g.direction, label: g.label, ...decided }, hits: total })
   }

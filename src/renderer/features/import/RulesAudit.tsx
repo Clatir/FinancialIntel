@@ -5,7 +5,7 @@
  * up to an amount offered when the amounts split them).
  */
 import { useEffect, useMemo, useState } from 'react'
-import { feedAudit, finishAudit, inAuditView, inconsistentCount, startAudit, type RuleAudit } from '@shared/import/audit'
+import { advanceRulesKept, feedAudit, finishAudit, inAuditView, inconsistentCount, startAudit, type RuleAudit } from '@shared/import/audit'
 import { fold } from '@shared/fold'
 import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
@@ -27,7 +27,6 @@ import { restNotOfRule } from './options'
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
 const NO_LOANS: Record<string, RecordEntry<Loan>> = {}
-const NO_KEPT: Record<string, string> = {}
 /** Operations audited per step: a large folder never stops the screen. */
 const STEP = 2000
 const SHOWN = 20
@@ -41,13 +40,15 @@ export function useRuleAudit(): { audit: RuleAudit | null; progress: number } {
   const map = useData((s) => s.records.transactions)
   // The Radar's loans (AP-6): a rule on a borrower's name and the money it kept.
   const loans = useData((s) => s.records.loans ?? NO_LOANS)
-  // The rules of an advance for the future kept so (AP-4) – out of the review.
-  const kept = useData((s) => s.fi?.settings.import.notDuplicates ?? NO_KEPT)
+  // The rules of an advance for the future kept so (AP-4) – out of the review; only they (a text): another „zostaw” or „to
+  // nie duplikat” never starts the audit again (przegląd N2 2.14).
+  const kept = useData((s) => advanceRulesKept(s.fi?.settings.import.notDuplicates))
   const [state, setState] = useState<{ audit: RuleAudit | null; progress: number }>({ audit: null, progress: 0 })
   useEffect(() => {
     let stopped = false
     const txs = listOf(map).filter((t) => t.bank)
-    const run = startAudit(rules, aliases, listOf(loans), (key) => !!kept[key])
+    const keys = new Set(kept ? kept.split('\n') : [])
+    const run = startAudit(rules, aliases, listOf(loans), (key) => keys.has(key))
     let i = 0
     const step = () => {
       if (stopped) return

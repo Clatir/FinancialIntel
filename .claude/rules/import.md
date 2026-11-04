@@ -65,7 +65,9 @@ paths:
 - Spłata pożyczki częścią (D100, T357): linia „w tym” z `loanId` (`memberId` '') przy każdym wpływie (domownika i
   zwykłym); w `rowShares` pożyczka to klucz `loanKey` – dług z `owedWithFile(…, loans)`, spłaty całością pliku jak własne
   pieniądze. `sharesView` wszędzie z `fleet.loans` (jedna pamięć). **Pułapka:** linie porównuj po `shareWho`, nie
-  `memberId`; bez pożyczki w `owed` część grupy = 0 (zamknięta – słusznie).
+  `memberId`; bez pożyczki w `owed` część grupy = 0 (zamknięta – słusznie). **Pułapka:** część z reguły (`each`) to
+  kwota każdej wpłaty, linia grupy / tematu – razem (T328): zmiana z listy ją zostawia (`each` zostaje), zmiana kwoty
+  albo pożyczki linii zdejmuje `each`; `loanAmount` reguły tylko z kwoty każdej wpłaty (`ruleDecisionOf(c, rows)`, T368).
 - Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą – poza spłatą pożyczki z Radaru (T358: `loanId`,
   `loanAmount`; tylko otwarta od swojego dnia – `ruleLoanFor`; „zapamiętaj” domyślnie wyłączone – `remembersByDefault`
   w `groupsDecided`, jedynym księgowaniu decyzji grup).
@@ -89,7 +91,9 @@ paths:
 
 ## Wydajność
 - Pamięć `brandOf` / `counterpartyKey` do 50 tys.; plan od nowa tylko przy zmianie treści (`BY_CONTENT` + `deepEqual`);
-  listy ekranu po 100 (`ShowMore`), `memo` tematów, marek i wierszy.
+  listy ekranu po 100 (`ShowMore`), `memo` tematów, marek i wierszy. Wiersz bez linii nie czyta rozkładu pliku przy
+  każdej zmianie – tylko przycisk (`rowPartsOf` 'add'); audyt reguł zależy od tekstu `advanceRulesKept`, nie od całej
+  mapy `notDuplicates` (przegląd N2 2.13–2.14).
 
 ## Dane testowe
 - `tests/fixtures/mbank/` – tylko pliki zanonimizowane (T44) albo syntetyczne; nigdy dane użytkownika. Zostają z CRLF
