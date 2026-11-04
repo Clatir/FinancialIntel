@@ -1,14 +1,14 @@
 /**
- * N5 (1.15.9), the reviews of the window – finding 5 of the first one and 2, 3, 8, 9 of the second one:
+ * N5 (1.15.9), the reviews of the window – finding 5 of the first one and the start of the budget (KR.29, T446 – przegląd 3):
  * - 5: „Potwierdź” of a top-up of XTB found only in the bank (DO sp. 12, T438) writes its docking counted from the
  *   operation's arrival (`countedFrom`, T363) – a goal's transfer or a hull top-up made between the import and the click
  *   keeps its place after it: the layers, the firewall's alarm and the game's day are the same before and after;
- * - KR.29 (T446): a start the folder refused takes back only its new records and only while they are what it wrote – in
- *   the window and on the disk (`deleteRecords` with the marks; here a small folder answering as the main process);
- *   what was there before changes only once fi.json is written; a record not to take back now keeps the wizard from
- *   ending in silence; the draft keeps only ids and marks.
+ * - KR.29 (T446, przegląd 3 N5): „Uruchom budżet” writes fi.json first, and only once the folder took it does the window
+ *   get the start together with its records – a refusal leaves nothing of the start in the folder nor in the window
+ *   (nothing to take back), a record refused after it is retried while the background writes (the game) wait for it, a slow
+ *   folder is awaited, a close in the middle waits for the records (here a small folder answering as the main process).
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RecordEntry, Snapshot } from '@shared/api'
 import type { FleetState } from '@shared/calc/fleet'
 import { rateDay } from '@shared/calc/game'
@@ -16,42 +16,38 @@ import { transferGoal } from '@shared/calc/goals'
 import type { RecurringPayment } from '@shared/calc/plan'
 import { createDefaultSettings } from '@shared/defaults'
 import { DEFAULT_MACHINE_PREFS } from '@shared/machine'
-import { contentMark } from '@shared/merge'
 import { COLLECTIONS } from '@shared/paths'
-import { balanceSchema, goalSchema, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Balance, type Goal, type MonthPlan, type Transaction } from '@shared/schema'
+import { balanceSchema, goalSchema, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Balance, type Goal, type MonthPlan, type SettingsFile, type Transaction } from '@shared/schema'
 
 // The renderer's stores talk to the main process through window.fi (preload); here a mock with a small folder: what was
-// written, what another computer changed behind the window, deletions the folder refuses.
+// written (records and fi.json), the collections whose writes the folder refuses.
 const saved = <T,>(r: T): RecordEntry<T> => ({ record: r, relPath: 'x.json', readOnly: false })
 const disk = new Map<string, Record<string, unknown>>()
 const refuse = new Map<string, string>()
+let fiOnDisk: SettingsFile | null = null
 const onDisk = (c: string, r: { id: string }) => void disk.set(`${c}:${r.id}`, r as Record<string, unknown>)
 const tray = { closeToTray: false, launchAtLogin: false, autostartAsked: true, notified: false, loginSupported: false }
 const saveRecord = async (c: string, r: { id: string }) => {
+  if (refuse.has(c)) throw new Error(refuse.get(c))
   onDisk(c, r)
   return saved(r)
 }
 const saveRecords = async (c: string, rs: Array<{ id: string }>): Promise<Array<{ id: string; entry?: RecordEntry<unknown>; error?: string }>> =>
   rs.map((r) => {
+    if (refuse.has(c)) return { id: r.id, error: refuse.get(c)! }
     onDisk(c, r)
     return { id: r.id, entry: saved(r) }
   })
-/** As `DataStore.deleteRecords` with `expected`: the file as it is now – another content is never deleted. */
-const deleteRecords = async (c: string, ids: string[], _reason?: string, expected?: Record<string, string>): Promise<Array<{ id: string; error?: string; changed?: true }>> =>
-  ids.map((id) => {
-    const key = `${c}:${id}`
-    if (refuse.has(c)) return { id, error: refuse.get(c)! }
-    const now = disk.get(key)
-    if (now && expected?.[id] != null && contentMark(now) !== expected[id]) return { id, error: 'Ten wpis zmienił się od zapisu, który miał zostać wycofany – zostaje, jak jest.', changed: true as const }
-    disk.delete(key)
-    return { id }
-  })
+const saveSettings = async (f: SettingsFile) => {
+  fiOnDisk = f
+  return f
+}
 const api = {
   saveRecord: vi.fn(saveRecord),
   saveRecords: vi.fn(saveRecords),
-  saveSettings: vi.fn(async (f: unknown) => f),
+  saveSettings: vi.fn(saveSettings),
   deleteRecord: vi.fn(async () => undefined),
-  deleteRecords: vi.fn(deleteRecords),
+  deleteRecords: vi.fn(async (_c: string, ids: string[]) => ids.map((id) => ({ id }))),
   historyKeep: vi.fn(async () => undefined),
   trayPrefs: vi.fn(async () => tray),
   setTrayPrefs: vi.fn(async () => tray),
@@ -66,10 +62,9 @@ vi.setSystemTime(new Date('2026-11-03T19:00:00.000Z'))
 afterAll(() => vi.useRealTimers())
 const data = await import('../../src/renderer/store/data')
 const fleet = await import('../../src/renderer/store/fleet')
-const { gameInputOf } = await import('../../src/renderer/store/game')
+const { advancePortion, gameInputOf } = await import('../../src/renderer/store/game')
 const { useRemote } = await import('../../src/renderer/store/remote')
 const { useUi } = await import('../../src/renderer/store/ui')
-const balances = await import('../../src/renderer/features/balances/actions')
 const dock = await import('../../src/renderer/features/dock/actions')
 const wizard = await import('../../src/renderer/features/wizard/state')
 
@@ -86,13 +81,13 @@ beforeEach(() => {
   for (const f of Object.values(api)) f.mockClear()
   api.saveRecord.mockImplementation(saveRecord)
   api.saveRecords.mockImplementation(saveRecords)
-  api.saveSettings.mockImplementation(async (f: unknown) => f)
-  api.deleteRecords.mockImplementation(deleteRecords)
+  api.saveSettings.mockImplementation(saveSettings)
   useRemote.setState({ pending: [] })
   useUi.setState({ toasts: [] })
   storage.clear()
   disk.clear()
   refuse.clear()
+  fiOnDisk = null
 })
 
 /** The top-up of XTB, 200 zł from mBank, imported at 09:00 (Warsaw). */
@@ -182,7 +177,7 @@ describe('przegląd N5 5: „Potwierdź” dopłaty do XTB niczego nie zmienia w
   })
 })
 
-describe('przegląd 2 N5: start odrzucony przez folder – wycofanie tylko tego, co start zapisał (KR.29, T446)', () => {
+describe('przegląd 3 N5: start budżetu – najpierw fi.json, potem rekordy startu (KR.29, T446)', () => {
   const EPERM = Object.assign(new Error("EPERM: operation not permitted, rename 'C:\\dane\\.fi.json.tmp-1' -> 'C:\\dane\\fi.json'"), { code: 'EPERM' })
   const proposal: RecurringPayment = {
     key: 'netflix com',
@@ -199,13 +194,15 @@ describe('przegląd 2 N5: start odrzucony przez folder – wycofanie tylko tego,
     last: '2026-10-07',
     fresh: false
   }
+  /** The car's insurance once a year: a periodic fee – its tank gets money at the start (N-PC-7). */
+  const insurance: RecurringPayment = { ...proposal, key: 'pzu sa', label: 'PZU SA', amount: 120_000, cycleMonths: 12, dueMonth: '2027-03', dueDay: 15, payments: 2, last: '2026-03-15' }
   /** Netflix in October (linked by a start – from the month before it) and in September (not). */
   const october = transactionSchema.parse({ ...base(), date: '2026-10-07', accountId: MBANK_ACCOUNT_ID, amount: -4999, counterparty: 'NETFLIX.COM' })
   const september = transactionSchema.parse({ ...base(), date: '2026-09-07', accountId: MBANK_ACCOUNT_ID, amount: -4999, counterparty: 'NETFLIX.COM' })
-  const DIR = '/dane-n5r2'
+  const DIR = '/dane-n5r3'
 
   /** A folder before the start (no `budget.start`): the wizard with every answer, at its last step; its files on the disk. */
-  function load(o: { balances?: Balance[]; months?: MonthPlan[] } = {}): void {
+  function load(o: { balances?: Balance[]; months?: MonthPlan[]; cargo?: RecurringPayment[] } = {}): void {
     const records = Object.fromEntries(COLLECTIONS.map((c) => [c, []])) as unknown as Snapshot['records']
     records.transactions = [entry('transactions', october), entry('transactions', september)]
     records.balances = (o.balances ?? []).map((b) => entry('balances', b))
@@ -220,188 +217,276 @@ describe('przegląd 2 N5: start odrzucony przez folder – wycofanie tylko tego,
       loadMs: 0
     })
     wizard.startWizard()
-    wizard.patchWizard({ balances: { [MBANK_ACCOUNT_ID]: 1_000_000, [XTB_WALLET_ACCOUNT_ID]: 0 }, salary: 500_000, cargo: { [proposal.key]: proposal }, step: 6 })
+    const cargo = Object.fromEntries((o.cargo ?? [proposal]).map((p) => [p.key, p]))
+    wizard.patchWizard({ balances: { [MBANK_ACCOUNT_ID]: 1_000_000, [XTB_WALLET_ACCOUNT_ID]: 0 }, salary: 500_000, cargo, step: 6 })
   }
   const list = <C extends keyof Snapshot['records']>(c: C) => Object.values(data.useData.getState().records[c])
-  const finish = () => wizard.finishWizard({ salary: 500_000, hull: 0, goals: {}, tanks: {}, envelopes: {} })
+  const finish = (tanks: Record<string, number> = {}) => wizard.finishWizard({ salary: 500_000, hull: 0, goals: {}, tanks, envelopes: {} })
   const linked = () => list('transactions').map((e) => [e.record.date, e.record.containerId ?? null])
-  /** The deletions asked of the main process: collection, how many, the reason, how many with the mark of the start's version. */
-  const deletions = () => api.deleteRecords.mock.calls.map(([c, ids, reason, expected]) => [c, ids.length, reason, Object.keys(expected ?? {}).length])
+  /** What of the start is in the folder: its records' files by collection (the operations were there before). */
+  const startFiles = () =>
+    [...disk.keys()]
+      .filter((k) => !k.startsWith('transactions:'))
+      .map((k) => k.split(':')[0])
+      .sort()
+  /** The moments of the folder's writes of records (`invocationCallOrder`) – each after fi.json's. */
+  const recordWrites = () => [...api.saveRecord.mock.invocationCallOrder, ...api.saveRecords.mock.invocationCallOrder]
+  const held = () => !data.writesInBackground(data.useData.getState())
 
-  it('fi.json odrzucony: nowe salda, plan i kontener wycofane ze znacznikiem wersji startu; płatności nietknięte do fi.json; silnik nie rusza', async () => {
+  it('fi.json odrzucony: w folderze nie ma nic ze startu – nic nie zapisane, nic do wycofania; silnik nie startuje, odpowiedzi zostają', async () => {
     load()
     api.saveSettings.mockRejectedValue(EPERM)
     expect(await finish()).toBe(false)
+    // Nothing of the start in the window either – nothing to take back, nothing waiting to be written.
     expect(data.useData.getState().fi!.settings.budget.start).toBeNull()
+    expect(data.hasUnsaved()).toBe(false)
+    // Before (przegląd 2): the openings, the plan and the container written before fi.json and deleted after the refusal –
+    // a deletion that could read a cached file, miss a file still there, or meet another computer's version (przegląd 3).
+    expect(api.saveRecord).not.toHaveBeenCalled()
+    expect(api.saveRecords).not.toHaveBeenCalled()
+    expect(api.deleteRecords).not.toHaveBeenCalled()
+    expect(startFiles()).toEqual([])
     expect([list('balances'), list('months'), list('containers')]).toEqual([[], [], []])
-    // Each with the mark of what the start wrote – the main process reads the file again (przegląd 2 N5 3).
-    expect(deletions()).toEqual(expect.arrayContaining([['balances', 2, 'undo', 2], ['months', 1, 'undo', 1], ['containers', 1, 'undo', 1]]))
-    // Nothing of what was there changed before fi.json (before: the payments linked, then let go again).
     expect(linked()).toEqual([
       ['2026-10-07', null],
       ['2026-09-07', null]
     ])
-    expect(api.saveRecords.mock.calls.filter(([c]) => c === 'transactions')).toEqual([])
     expect(fleet.fleetNow()!.started).toBe(false)
-    expect(toasts().at(-1)).toMatch(/w folderze nie ma nic ze startu, „Uruchom budżet” zapisze je od nowa\.$/)
-    const w = wizard.useWizard.getState()
-    expect(w).toMatchObject({ active: true, cargo: { [proposal.key]: proposal }, startWrites: [] })
-    expect(wizard.cancelWizardText(w.traces, wizard.startWriteLabels(w.startWrites))).toBe('Odpowiedzi kreatora (salda, plan, wybór kontenerów) przepadną, budżet się nie uruchomi.')
-
-    // The folder takes fi.json again: the start whole – the payments linked once fi.json is on the disk (T379).
-    api.saveSettings.mockImplementation(async (f: unknown) => f)
-    expect(await finish()).toBe(true)
-    expect([list('balances'), list('months'), list('containers')].map((l) => l.length)).toEqual([2, 1, 1])
-    expect(linked()).toEqual([
-      ['2026-10-07', list('containers')[0]!.record.id],
-      ['2026-09-07', null]
-    ])
-    expect(fleet.fleetNow()!.started).toBe(true)
+    expect(toasts().at(-1)).toMatch(/^Budżet nie wystartował – nie udało się zapisać ustawień w folderze \(.+\)\. Nic ze startu nie trafiło do folderu – odpowiedzi kreatora zostają, ponowne „Uruchom budżet” zacznie od nowa\.$/)
+    expect(wizard.useWizard.getState()).toMatchObject({ active: true, salary: 500_000, cargo: { [proposal.key]: proposal } })
+    expect(wizard.wizardDraftOf(DIR)).toMatchObject({ active: true, salary: 500_000 })
+    expect(held()).toBe(false)
+    // „Przerwij kreator” says the truth (N4): the answers go – nothing of the start to take back.
+    expect(wizard.cancelWizardText(wizard.useWizard.getState().traces)).toBe('Odpowiedzi kreatora (salda, plan, wybór kontenerów) przepadną, budżet się nie uruchomi.')
+    wizard.cancelWizard()
+    expect(wizard.useWizard.getState().active).toBe(false)
+    expect(wizard.wizardDraftOf(DIR)).toBeNull()
+    expect(api.deleteRecords).not.toHaveBeenCalled()
   })
 
-  it('saldo otwarcia i plan sprzed kreatora zmieniają się dopiero po zapisie fi.json – odmowa zostawia je nietknięte', async () => {
+  it('ponowne „Uruchom budżet” po odmowie: start w całości – fi.json przed rekordami, po jednym kontenerze, płatność połączona, zbiornik pod id kontenera', async () => {
+    load({ cargo: [proposal, insurance] })
+    api.saveSettings.mockRejectedValueOnce(EPERM)
+    expect(await finish({ [insurance.key]: 30_000 })).toBe(false)
+    expect(startFiles()).toEqual([])
+    expect(await finish({ [insurance.key]: 30_000 })).toBe(true)
+    // One container a proposal – never a second (before: a container of a refused start left behind had to be found again).
+    const containers = list('containers').map((e) => e.record)
+    expect(containers.map((c) => c.counterparty).sort()).toEqual(['NETFLIX.COM', 'PZU SA'])
+    expect(startFiles()).toEqual(['balances', 'balances', 'containers', 'containers', 'months'])
+    const netflix = containers.find((c) => c.counterparty === 'NETFLIX.COM')!
+    const pzu = containers.find((c) => c.counterparty === 'PZU SA')!
+    expect(linked()).toEqual([
+      ['2026-10-07', netflix.id],
+      ['2026-09-07', null]
+    ])
+    // fi.json on the disk before any record of the start – with the tank of a container written after it (its id known).
+    expect(fiOnDisk!.settings.budget).toMatchObject({ start: DAY, initial: { tanks: { [pzu.id]: 30_000 } } })
+    expect(Math.min(...recordWrites())).toBeGreaterThan(api.saveSettings.mock.invocationCallOrder.at(-1)!)
+    const state = fleet.fleetNow()!
+    expect(state.started).toBe(true)
+    expect(state.tanks.find((t) => t.containerId === pzu.id)).toBeDefined()
+    expect(toasts().at(-1)).toBe('Okręt wypłynął: budżet działa od dziś.')
+    expect(held()).toBe(false)
+  })
+
+  it('saldo otwarcia i plan sprzed kreatora: odmowa fi.json zostawia je nietknięte, udany start je zmienia', async () => {
     // An opening typed in Settings before the wizard (N23) and this month's plan.
     const mine = balanceSchema.parse({ ...base(), date: '2026-10-01', accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(5000) })
     const plan = monthPlanSchema.parse({ ...base(), id: '01KMTH00000000000000202611', month: '2026-11', salary: zl(3000), envelopes: {} })
     load({ balances: [mine], months: [plan] })
-    api.saveSettings.mockRejectedValue(EPERM)
+    api.saveSettings.mockRejectedValueOnce(EPERM)
     expect(await finish()).toBe(false)
     expect(list('balances').map((e) => e.record)).toEqual([mine])
     expect(list('months').map((e) => e.record.salary)).toEqual([zl(3000)])
-    expect(api.saveRecord.mock.calls.filter(([c, r]) => (c === 'balances' && r.id === mine.id) || c === 'months')).toEqual([])
-    // The start goes through: now they change – the opening at the start of today, the plan with the salary.
-    api.saveSettings.mockImplementation(async (f: unknown) => f)
+    expect(api.saveRecord).not.toHaveBeenCalled()
     expect(await finish()).toBe(true)
     expect(list('balances').find((e) => e.record.id === mine.id)!.record).toMatchObject({ amount: 1_000_000, date: DAY })
     expect(list('months').map((e) => e.record.salary)).toEqual([500_000])
   })
 
-  it('rekordy startu odrzucone już przy zapisie: wycofane z okna – autozapis ich później nie zapisze', async () => {
+  it('okno zamykane w trakcie startu: zamknięcie czeka na rekordy startu – w folderze nigdy fi.json bez nich', async () => {
     load()
-    api.saveRecords.mockImplementation(async (_c: string, rs: Array<{ id: string }>) => rs.map((r) => ({ id: r.id, error: 'EPERM: operation not permitted' })))
-    api.saveRecord.mockImplementation(async () => {
-      throw EPERM
+    let take!: () => void
+    api.saveSettings.mockImplementationOnce((f: SettingsFile) => new Promise<SettingsFile>((resolve) => (take = () => resolve(saveSettings(f)))))
+    const done = finish()
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
+    const closing = data.flushForClose()
+    take()
+    const r = await closing
+    expect(r.saved).toBe(true)
+    expect(fiOnDisk!.settings.budget.start).toBe(DAY)
+    expect(startFiles()).toEqual(['balances', 'balances', 'containers', 'months'])
+    expect(await done).toBe(true)
+  })
+
+  describe('ponowienia i wolny folder (zegar udawany)', () => {
+    beforeEach(() => vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }))
+    afterEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-11-03T19:00:00.000Z'))
     })
-    expect(await finish()).toBe(false)
-    expect([list('balances'), list('months'), list('containers')]).toEqual([[], [], []])
-    expect(data.hasUnsaved()).toBe(false)
-    expect(toasts().at(-1)).toMatch(/^Budżet nie wystartował – nie udało się zapisać rekordów startu w folderze \(.*\)\. Zapisane już salda otwarcia, plan i kontenery wycofano/)
-    expect(fleet.fleetNow()!.started).toBe(false)
-  })
 
-  it('przegląd 2 N5 3: plan zmieniony na dysku przez inny komputer (watcher jeszcze go nie przyniósł) zostaje – usunięcie tylko wersji ze startu', async () => {
-    load()
-    // Another computer writes the month's plan a moment after this start wrote it: only the disk knows.
-    api.saveSettings.mockImplementation(async () => {
-      for (const [k, r] of disk) if (k.startsWith('months:')) disk.set(k, { ...r, salary: 700_000, updatedBy: 'LAPTOP' })
-      throw EPERM
+    it('fi.json przyjęty, saldo odrzucone: saldo czeka i ponawia się samo, komunikat to mówi, gra nie startuje ani nie zamraża dni do jego zapisu', async () => {
+      load()
+      refuse.set('balances', 'EBUSY: resource busy or locked')
+      expect(await finish()).toBe(true)
+      // The budget runs: fi.json, the plan and the container on the disk; the openings wait – unsaved, with the folder's reason.
+      expect(fiOnDisk!.settings.budget.start).toBe(DAY)
+      expect(startFiles()).toEqual(['containers', 'months'])
+      const openings = list('balances').map((e) => e.record)
+      expect(openings).toHaveLength(2)
+      for (const b of openings) expect(data.unsavedOf('balances', b.id)).toContain('zajęty')
+      expect(toasts().at(-1)).toMatch(/^Budżet uruchomiony – część zmian nie zapisała się jeszcze w folderze \(.+\) – aplikacja ponawia zapis automatycznie\.$/)
+      // The window counts the budget from them meanwhile; the folder does not have them yet – nothing in the background: the
+      // game neither starts nor freezes a day (without the wait it would write its start at once).
+      expect(fleet.fleetNow()!.started).toBe(true)
+      expect(held()).toBe(true)
+      expect(advancePortion(null, new Date('2026-11-07T12:00:00.000Z'))).toBe(false)
+      expect(data.useData.getState().fi!.settings.game.start).toBeNull()
+      // Retried by itself, still refused: still waited for.
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(startFiles()).toEqual(['containers', 'months'])
+      expect(held()).toBe(true)
+      // The folder takes them at the next retry: the background writes go on – the game starts the next day.
+      refuse.clear()
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(startFiles()).toEqual(['balances', 'balances', 'containers', 'months'])
+      expect(data.hasUnsaved()).toBe(false)
+      expect(held()).toBe(false)
+      advancePortion(null)
+      expect(data.useData.getState().fi!.settings.game.start).toBe('2026-11-04')
     })
-    expect(await finish()).toBe(false)
-    expect(list('months')).toHaveLength(1)
-    expect([...disk.values()].filter((r) => r.month === '2026-11').map((r) => r.salary)).toEqual([700_000])
-    expect([list('balances'), list('containers')]).toEqual([[], []])
-    expect(toasts().at(-1)).toContain('Zostają w folderze, bo zmieniły się od zapisu startu: plan miesiąca (listopad 2026). Resztę rekordów startu wycofano.')
-    // Changed since – the user's now: not tracked, the wizard ends at once.
-    expect(wizard.useWizard.getState().startWrites).toEqual([])
-  })
 
-  it('przegląd 2 N5 2: druga odmowa nie cofa zmian z przerwy między startami – plan poprawiony po pierwszej odmowie zostaje', async () => {
-    load()
-    api.saveSettings.mockRejectedValue(EPERM)
-    refuse.set('months', 'Nie udało się usunąć pliku months/2026-11.json (zajęty przez inny program?)')
-    expect(await finish()).toBe(false)
-    expect(wizard.useWizard.getState().startWrites.map((w) => w.collection)).toEqual(['months'])
-    // Between the starts the plan left in the folder is changed (here; the same from another computer): the user's now.
-    const plan = list('months')[0]!.record
-    data.updateRecord('months', plan.id, (p) => ({ ...p, salary: 650_000 }))
-    await data.flushSaves()
-    refuse.clear()
-    api.deleteRecords.mockClear()
-    // The second start counts what was there before it: the plan is there – its change waits for fi.json, refused again.
-    expect(await finish()).toBe(false)
-    // Before: the plan of the first start („made by the start”) deleted with the change, or set back to before the first.
-    expect(list('months').map((e) => e.record.salary)).toEqual([650_000])
-    expect(deletions().filter(([c]) => c === 'months')).toEqual([])
-    expect(toasts().at(-1)).toContain('Zostają w folderze, bo zmieniły się od zapisu startu: plan miesiąca (listopad 2026).')
-    expect(wizard.useWizard.getState().startWrites).toEqual([])
-  })
+    it('fi.json zapisuje się dłużej niż 15 s: komunikat, start czeka na odpowiedź folderu – nic ze startu przed nią; odmowa po czasie – nic ze startu', async () => {
+      load()
+      let refuseNow!: (e: unknown) => void
+      api.saveSettings.mockImplementationOnce(() => new Promise<SettingsFile>((_, reject) => (refuseNow = reject)))
+      const done = finish()
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(toasts()).toContain(wizard.SLOW_START_TEXT)
+      // Before: after 15 s the start went on – its records made and written whatever the folder answered later.
+      await vi.advanceTimersByTimeAsync(45_000)
+      expect([list('balances'), list('months'), list('containers')]).toEqual([[], [], []])
+      expect(api.saveRecord).not.toHaveBeenCalled()
+      expect(api.saveRecords).not.toHaveBeenCalled()
+      // The window has no start either while the folder has not answered: the engine, the game and the notifications see
+      // the folder as it is (before: the budget ran in the window without the openings).
+      expect(data.useData.getState().fi!.settings.budget.start).toBeNull()
+      expect(fleet.fleetNow()!.started).toBe(false)
+      refuseNow(EPERM)
+      expect(await done).toBe(false)
+      expect(startFiles()).toEqual([])
+      expect(data.useData.getState().fi!.settings.budget.start).toBeNull()
+      expect(data.hasUnsaved()).toBe(false)
+      expect(toasts().at(-1)).toMatch(/^Budżet nie wystartował – nie udało się zapisać ustawień w folderze \(.+\)\. Nic ze startu nie trafiło do folderu/)
+      expect(held()).toBe(false)
+    })
 
-  it('przegląd 2 N5 8: czekający na decyzję o zmianie z drugiego komputera albo zapisany przez nowszą wersję – „nie da się teraz wycofać”, kreator go pamięta, „Przerwij” nie kończy po cichu', async () => {
-    load()
-    api.saveSettings.mockRejectedValue(EPERM)
-    refuse.set('balances', 'zajęty')
-    expect(await finish()).toBe(false)
-    const [one, two] = list('balances').map((e) => e.record)
-    expect(wizard.useWizard.getState().startWrites.map((w) => w.collection)).toEqual(['balances', 'balances'])
-    refuse.clear()
-    // One waits for a decision about another computer's change, the other a newer version of the app wrote.
-    useRemote.setState({ pending: [{ key: `balances:${one!.id}`, collection: 'balances', id: one!.id, type: 'update', base: undefined, theirs: null, hadLocalEdits: false, receivedAt: '2026-11-03T19:00:00.000Z' }] })
-    data.useData.setState((s) => ({ records: { ...s.records, balances: { ...s.records.balances, [two!.id]: { ...s.records.balances[two!.id]!, readOnly: true } } } }))
-    await wizard.cancelWizard()
-    // Before: „Zmienione od tego czasu zostają, jak są” – and dropped from the answers: an opening of the start untracked.
-    expect(wizard.useWizard.getState()).toMatchObject({ active: true, salary: 500_000 })
-    expect(wizard.useWizard.getState().startWrites).toHaveLength(2)
-    expect(toasts().at(-1)).toMatch(/^Kreator nie został przerwany – nie da się teraz wycofać: /)
-    expect(toasts().at(-1)).toContain('saldo otwarcia „mBank” (czeka na Twoją decyzję o zmianie z drugiego komputera)')
-    expect(toasts().at(-1)).toContain('saldo otwarcia „Portfel XTB” (zapisała go nowsza wersja aplikacji)')
-    // And the engine never runs from them without the start (`byStart` – T25 skips them).
-    expect(fleet.fleetNow()!.started).toBe(false)
-    // The decision made, the file this version's again: „Przerwij kreator” takes them back and ends.
-    useRemote.setState({ pending: [] })
-    data.useData.setState((s) => ({ records: { ...s.records, balances: { ...s.records.balances, [two!.id]: { ...s.records.balances[two!.id]!, readOnly: false } } } }))
-    await wizard.cancelWizard()
-    expect(list('balances')).toEqual([])
-    expect(wizard.useWizard.getState().active).toBe(false)
-    expect(toasts().at(-1)).toBe('Kreator przerwany. Rekordy nieudanego startu usunięte z folderu.')
-  })
-
-  it('przegląd 2 N5 9: szkic kreatora na tym komputerze – tylko id i znaczniki rekordów startu; po restarcie „Przerwij” je wycofuje', async () => {
-    load()
-    api.saveSettings.mockRejectedValue(EPERM)
-    refuse.set('containers', 'zajęty')
-    expect(await finish()).toBe(false)
-    const raw = storage.get(`fi.wizard.draft:${DIR}`)!
-    const kept = (JSON.parse(raw) as { state: { startWrites: Array<Record<string, unknown>> } }).state.startWrites
-    // Before: every record whole, before and after the start (all the payments linked too) – at every answer.
-    expect(kept.map((w) => Object.keys(w).sort())).toEqual([['collection', 'id', 'mark', 'proposal']])
-    // The proposal is that container in the answers (the next start uses it, never a second).
-    expect(wizard.useWizard.getState().cargo).toEqual({})
-    // A restart: the answers from the draft – „Przerwij kreator” takes the container back, the proposal back too was the answer.
-    wizard.useWizard.setState(wizard.wizardDraftOf(DIR)!)
-    refuse.clear()
-    await wizard.cancelWizard()
-    expect(list('containers')).toEqual([])
-    expect(wizard.useWizard.getState().active).toBe(false)
-  })
-
-  it('kontener, którego folder nie dał wycofać, po udanym starcie ma połączone płatności jak nowy (T379)', async () => {
-    load()
-    api.saveSettings.mockRejectedValue(EPERM)
-    refuse.set('containers', 'zajęty')
-    expect(await finish()).toBe(false)
-    const container = list('containers')[0]!.record.id
-    // The proposal is that container in the answers; the start runs now – one container, its October payment linked.
-    expect(wizard.useWizard.getState()).toMatchObject({ cargo: {}, startContainers: [container] })
-    refuse.clear()
-    api.saveSettings.mockImplementation(async (f: unknown) => f)
-    expect(await finish()).toBe(true)
-    expect(list('containers').map((e) => e.record.id)).toEqual([container])
-    expect(linked()).toEqual([
-      ['2026-10-07', container],
-      ['2026-09-07', null]
-    ])
-  })
-
-  it('saldo nieudanego startu poprawione ręcznie staje się zwykłym saldem (T25) – znacznik `byStart` znika', async () => {
-    load()
-    api.saveSettings.mockRejectedValue(EPERM)
-    refuse.set('balances', 'zajęty')
-    expect(await finish()).toBe(false)
-    const one = list('balances').find((e) => e.record.accountId === MBANK_ACCOUNT_ID)!.record
-    expect([one.byStart, fleet.fleetNow()!.started]).toEqual([true, false])
-    // Ustawienia → Konta: the opening set by hand – the user's from now on.
-    balances.setOpening(MBANK_ACCOUNT_ID, one.amount, one.date)
-    expect(data.useData.getState().records.balances[one.id]!.record.byStart).toBeUndefined()
-    expect(fleet.fleetNow()!.started).toBe(true)
+    it('fi.json przyjęty po czasie: start kończy się, rekordy zapisane po nim', async () => {
+      load()
+      let take!: () => void
+      api.saveSettings.mockImplementationOnce((f: SettingsFile) => new Promise<SettingsFile>((resolve) => (take = () => resolve(saveSettings(f)))))
+      const done = finish()
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(toasts()).toContain(wizard.SLOW_START_TEXT)
+      expect(list('balances')).toEqual([])
+      expect(data.useData.getState().fi!.settings.budget.start).toBeNull()
+      take()
+      expect(await done).toBe(true)
+      expect(data.useData.getState().fi!.settings.budget.start).toBe(DAY)
+      expect(startFiles()).toEqual(['balances', 'balances', 'containers', 'months'])
+      expect(Math.min(...recordWrites())).toBeGreaterThan(api.saveSettings.mock.invocationCallOrder.at(-1)!)
+      expect(toasts().at(-1)).toBe('Okręt wypłynął: budżet działa od dziś.')
+    })
   })
 })
+
+describe('przegląd 3 N5: magazyn okna – zapisy startu budżetu (T446)', () => {
+  /** A folder of one opening on the disk (nothing to write). */
+  function load(): void {
+    const records = Object.fromEntries(COLLECTIONS.map((c) => [c, []])) as unknown as Snapshot['records']
+    data.applySnapshot({
+      fi: createDefaultSettings(AT),
+      records,
+      problems: [],
+      conflicts: [],
+      status: { dataDir: '/dane-n5r3-store', available: true, readOnly: false, readOnlyReason: null, folderSchemaVersion: 1, appSchemaVersion: 1, otherMachines: [], migratedFrom: null, backupPath: null },
+      loadMs: 0
+    })
+  }
+  const opening = () => balanceSchema.parse({ ...base(), date: DAY, accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(100) })
+  const startOn = (f: SettingsFile): SettingsFile => ({ ...f, settings: { ...f.settings, budget: { ...f.settings.budget, start: DAY } } })
+  const start = (records: () => void = () => undefined) => data.writeStart(startOn, records, 15_000, () => undefined)
+  const held = () => !data.writesInBackground(data.useData.getState())
+  /** fi.json's write waiting for the folder's answer: `take` answers it. */
+  function slowSettings(): () => void {
+    let take!: () => void
+    api.saveSettings.mockImplementationOnce((f: SettingsFile) => new Promise<SettingsFile>((resolve) => (take = () => resolve(saveSettings(f)))))
+    return () => take()
+  }
+
+  it('okno nie ma nic ze startu przed odpowiedzią folderu; zapis wszystkiego (zamknięcie okna, inny folder, Ctrl+S) czeka na nią i zapisuje rekordy startu', async () => {
+    load()
+    const take = slowSettings()
+    const b = opening()
+    const started = start(() => void data.addRecord('balances', b))
+    let flushed = false
+    const flush = data.flushSaves().then(() => (flushed = true))
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+    expect(flushed).toBe(false)
+    expect(data.useData.getState().fi!.settings.budget.start).toBeNull()
+    expect(data.useData.getState().records.balances[b.id]).toBeUndefined()
+    take()
+    await flush
+    // The flush answers with the start's record on the disk – never fi.json alone.
+    expect(disk.has(`balances:${b.id}`)).toBe(true)
+    expect(await started).toBeNull()
+    expect(data.useData.getState().fi!.settings.budget.start).toBe(DAY)
+  })
+
+  it('zmiana fi.json w oknie w trakcie zapisu startu zostaje – start nałożony na nią, zapisany razem z nią', async () => {
+    load()
+    const take = slowSettings()
+    const started = start()
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
+    data.updateSettings((f) => ({ ...f, settings: { ...f.settings, shipName: 'Sokół' } }))
+    take()
+    expect(await started).toBeNull()
+    expect(data.useData.getState().fi!.settings).toMatchObject({ shipName: 'Sokół', budget: { start: DAY } })
+    await data.flushSaves()
+    expect(fiOnDisk!.settings).toMatchObject({ shipName: 'Sokół', budget: { start: DAY } })
+    expect(data.hasUnsaved()).toBe(false)
+  })
+
+  it('rekordy startu: zapisy w tle czekają, aż każdy jest na dysku – zapisany, usunięty albo pokazanie innego folderu zwalnia', async () => {
+    load()
+    refuse.set('balances', 'EBUSY: resource busy or locked')
+    const b = opening()
+    expect(await start(() => void data.addRecord('balances', b))).toBeNull()
+    expect(held()).toBe(true)
+    await data.flushSaves()
+    // Refused: still waited for.
+    expect(data.unsavedOf('balances', b.id)).not.toBeNull()
+    expect(held()).toBe(true)
+    refuse.clear()
+    await data.flushSaves()
+    expect(held()).toBe(false)
+    // Deleted before it was written: nothing to wait for.
+    refuse.set('balances', 'EBUSY: resource busy or locked')
+    const c = opening()
+    await start(() => void data.addRecord('balances', c))
+    await data.flushSaves()
+    expect(held()).toBe(true)
+    await data.deleteRecord('balances', c.id)
+    expect(held()).toBe(false)
+    // Another folder shown: the wait of this one's start is over.
+    const d = opening()
+    await start(() => void data.addRecord('balances', d))
+    await data.flushSaves()
+    expect(held()).toBe(true)
+    load()
+    expect(held()).toBe(false)
+  })
+})
+

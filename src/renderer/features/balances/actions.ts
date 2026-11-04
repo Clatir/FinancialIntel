@@ -10,23 +10,16 @@ const records = <T,>(map: Record<string, { record: T }>): T[] => Object.values(m
 
 export const CORRECTION_NOTE = 'Rozbieżność w ładowni – do wyjaśnienia (różnica między saldem w banku a operacjami).'
 
-/**
- * Set the opening balance of an account (at the start of `date`): the existing record changes, else a new one. `byStart` –
- * a new one written by „Uruchom budżet” before fi.json (T446): it starts nothing without the start; a change of the
- * opening afterwards (here or by the start once running) makes it an ordinary one.
- */
-export function setOpening(accountId: string, amount: number, date: string, opts: { byStart?: true } = {}): void {
+/** Set the opening balance of an account (at the start of `date`): the existing record changes, else a new one. */
+export function setOpening(accountId: string, amount: number, date: string): void {
   const s = useData.getState()
   const current = openingOf(accountId, records(s.records.balances))
   if (current) {
-    updateRecord('balances', current.id, (b) => {
-      const { byStart: _start, ...rest } = b
-      return { ...rest, amount, date }
-    })
+    updateRecord('balances', current.id, (b) => ({ ...b, amount, date }))
     return
   }
   const now = new Date().toISOString()
-  addRecord('balances', balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, date, accountId, kind: 'opening', amount, ...opts }))
+  addRecord('balances', balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, date, accountId, kind: 'opening', amount }))
 }
 
 /**

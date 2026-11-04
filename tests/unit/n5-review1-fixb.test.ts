@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { lostPairText } from '@shared/calc/effect'
-import { budgetStartOf, computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
+import { computeFleet, layersSum, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { fuelMonths } from '@shared/calc/fuel'
 import { transferGoal } from '@shared/calc/goals'
 import { topUpConfirmation } from '@shared/calc/inbox'
@@ -15,7 +15,6 @@ import { plainIncomeContext } from '@shared/calc/income'
 import { fitEnvelopes } from '@shared/calc/start'
 import { createDefaultSettings } from '@shared/defaults'
 import { monthRows, monthsCsv, monthsSheet } from '@shared/export/budget'
-import { contentMark } from '@shared/merge'
 import { balanceSchema, goalSchema, MBANK_ACCOUNT_ID, monthPlanSchema, SCHEMA_VERSION, transactionSchema, type Goal, type Settings, type Transaction } from '@shared/schema'
 
 const zl = (v: number) => Math.round(v * 100)
@@ -156,27 +155,5 @@ describe('przegląd N5 10: podgląd zmiany zbiorczej – zwrot ICTTJ tracący pa
   it('zwrot do masy nazwany jak w oknie dokowania, wypłata bez zmian', () => {
     expect(lostPairText({ direction: 'out', date: '2026-10-19', amount: zl(300) }, money)).toBe('Zwrot do masy w ICTTJ z 19.10.2026 (300,00 zł) straci parę w banku – Dokowanie pokaże ją bez pary.')
     expect(lostPairText({ direction: 'in', date: '2026-10-19', amount: zl(800) }, money)).toBe('Wypłata z ICTTJ z 19.10.2026 (800,00 zł) straci parę w banku – Dokowanie pokaże ją bez pary.')
-  })
-})
-
-describe('przegląd 2 N5: saldo otwarcia nieudanego startu nie uruchamia warstw (`byStart`, T446)', () => {
-  const s0 = createDefaultSettings(AT).settings
-  const opening = (over: Record<string, unknown> = {}) => balanceSchema.parse({ ...base(), date: '2026-11-03', accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(10000), ...over })
-
-  it('bez `budget.start` – nie od salda ze startu kreatora; od salda wpisanego ręcznie jak dotąd (T25); z `budget.start` – start', () => {
-    // Before: the earliest opening, whatever wrote it – a start the folder refused ran the layers from its money.
-    expect(budgetStartOf(s0, [opening({ byStart: true })], '2026-11-03')).toBeNull()
-    expect(computeFleet({ settings: s0, balances: [opening({ byStart: true })], transactions: [], now: '2026-11-03T12:00:00.000Z' }).started).toBe(false)
-    expect(budgetStartOf(s0, [opening()], '2026-11-03')).toBe('2026-11-03')
-    expect(budgetStartOf({ budget: { ...s0.budget, start: '2026-11-03' } }, [opening({ byStart: true })], '2026-11-03')).toBe('2026-11-03')
-    // Only `true` is the mark (a value of another version – none).
-    expect(opening({ byStart: 'tak' }).byStart).toBeUndefined()
-  })
-
-  it('znacznik treści rekordu: ten sam bez względu na kolejność pól i stemple zapisu, inny przy każdej zmianie pola', () => {
-    const r = { id: 'x', amount: 1, nested: { a: 1, b: [1, 2] }, updatedAt: '2026-11-03T10:00:00.000Z', updatedBy: 'PC' }
-    expect(contentMark({ nested: { b: [1, 2], a: 1 }, amount: 1, id: 'x', updatedAt: '2026-11-04T10:00:00.000Z', updatedBy: 'LAPTOP', note: undefined })).toBe(contentMark(r))
-    expect(contentMark({ ...r, amount: 2 })).not.toBe(contentMark(r))
-    expect(contentMark({ ...r, nested: { a: 1, b: [2, 1] } })).not.toBe(contentMark(r))
   })
 })

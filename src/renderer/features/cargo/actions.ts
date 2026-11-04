@@ -58,13 +58,12 @@ function runningMonth(): string | null {
  */
 const fromNow = <T extends Pick<Container, 'cycleMonths' | 'from'>>(c: T): T => (c.cycleMonths > 1 && c.from == null ? { ...c, from: runningMonth() } : c)
 
-export function addContainer(draft: ContainerDraft): string | null {
+/** `id` – one known before (the start wizard: fi.json keeps the container's tank before the container is written – T446). */
+export function addContainer(draft: ContainerDraft, id: string = newId()): string | null {
   if (!canWrite()) return null
   const now = new Date().toISOString()
-  const record = containerSchema.parse({ ...fromNow(draft), schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now })
+  const record = containerSchema.parse({ ...fromNow(draft), schemaVersion: SCHEMA_VERSION, id, createdAt: now, updatedAt: now })
   addRecord('containers', record)
-  // Before the budget's start nothing is linked (the start wizard links its containers' payments once fi.json is written –
-  // `finishWizard`, T446).
   linkPayments(record.id, record.counterparty, true)
   return record.id
 }
@@ -84,8 +83,8 @@ export function paymentsToLink(counterparty: string, txs: readonly Transaction[]
  * Link the counterparty's payments to the container: the cargo's (a periodic fee from its tank), no envelope's – the
  * engine counts what is linked. The import links new ones by itself.
  */
-export function linkPayments(containerId: string, counterparty: string, quiet = false, start?: string): number {
-  const from = linkFrom(start)
+export function linkPayments(containerId: string, counterparty: string, quiet = false): number {
+  const from = linkFrom()
   if (!from || !canWrite()) return 0
   const records = useData.getState().records
   // A payment of a container deleted (B58) is not linked: it may join this one.

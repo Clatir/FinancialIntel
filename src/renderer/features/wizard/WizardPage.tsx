@@ -25,7 +25,7 @@ import { useAccounts, useCategories } from '../operations/pickers'
 import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
 import { ConfirmButton } from '../../components/ConfirmButton'
-import { cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, startWriteLabels, useWizard, WIZARD_STEPS } from './state'
+import { cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const HULL_MONTHS = 12
@@ -474,13 +474,7 @@ export function WizardPage() {
         ))}
         <div className="flex-1" />
         <div className="m-3 flex flex-col gap-1.5">
-          <ConfirmButton
-            className="text-left text-[11.5px] text-dim hover:text-fg-strong"
-            confirmLabel="Przerwij kreator"
-            message={cancelWizardText(w.traces, startWriteLabels(w.startWrites))}
-            onConfirm={() => void cancelWizard()}
-            testId="wizard-cancel"
-          >
+          <ConfirmButton className="text-left text-[11.5px] text-dim hover:text-fg-strong" confirmLabel="Przerwij kreator" message={cancelWizardText(w.traces)} onConfirm={cancelWizard} testId="wizard-cancel">
             Przerwij kreator
           </ConfirmButton>
         </div>

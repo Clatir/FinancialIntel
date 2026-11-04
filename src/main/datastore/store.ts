@@ -20,7 +20,7 @@ import {
   type ConflictName,
   type FileKind
 } from '@shared/paths'
-import { contentMark, sameContentAs } from '@shared/merge'
+import { sameContentAs } from '@shared/merge'
 import { CONFLICT_CHANGED_TEXT } from '@shared/conflicts'
 import { SCHEMAS, parseRecordObject, parseRecordText, serializeRecord, type AnyRecord, type RecordTypes } from '@shared/records'
 import { SCHEMA_VERSION, type SettingsFile } from '@shared/schema'
@@ -113,17 +113,6 @@ export class ConflictChangedError extends Error {
   ) {
     super(CONFLICT_CHANGED_TEXT)
     this.name = 'ConflictChangedError'
-  }
-}
-
-/**
- * A deletion of a version the caller knew (KR.29 – the records of a refused start taken back, T446): the file read again
- * now says something else (another computer, the watcher not there yet; an edit since) – nothing deleted.
- */
-export class ChangedSinceError extends Error {
-  constructor(readonly relPath: string) {
-    super('Ten wpis zmienił się od zapisu, który miał zostać wycofany – zostaje, jak jest.')
-    this.name = 'ChangedSinceError'
   }
 }
 
@@ -1670,20 +1659,13 @@ export class DataStore {
    * Many records deleted at once (an import's, duplicates – W1): one change set; a record that fails says why. `reason`
    * 'undo': taken back with its import (F4) – its last version in the history is no deletion by the user (T39); 'drop':
    * no version kept (old batches of `imports`); 'import': the import's own – a deletion marked `byImport` (T331).
-   * `expected` – id → the content mark (`contentMark`) of the only version the caller deletes (KR.29, T446): the file is
-   * read again first, another content is never deleted (`changed`).
    */
-  deleteRecords(
-    collection: Collection,
-    ids: readonly string[],
-    reason: 'delete' | 'undo' | 'drop' | 'import' = 'delete',
-    expected?: Readonly<Record<string, string>>
-  ): Promise<{ results: Array<{ id: string; error?: string; changed?: true }>; change: ChangeSet | null }> {
+  deleteRecords(collection: Collection, ids: readonly string[], reason: 'delete' | 'undo' | 'drop' | 'import' = 'delete'): Promise<{ results: Array<{ id: string; error?: string }>; change: ChangeSet | null }> {
     return this.writing(async () => {
-      const results: Array<{ id: string; error?: string; changed?: true }> = []
+      const results: Array<{ id: string; error?: string }> = []
       for (const [i, id] of ids.entries()) {
         try {
-          await this.removeRecord(collection, id, reason, expected?.[id])
+          await this.removeRecord(collection, id, reason)
           results.push({ id })
         } catch (e) {
           // The folder gone in the middle (AP-1): the rest stays – the change set below says why.
@@ -1692,15 +1674,15 @@ export class DataStore {
             for (const rest of ids.slice(i)) results.push({ id: rest, error: gone.message })
             break
           }
-          results.push({ id, error: (e as Error).message, ...(e instanceof ChangedSinceError ? { changed: true as const } : {}) })
+          results.push({ id, error: (e as Error).message })
         }
       }
       return { results, change: this.diff(this.buildViews(), false) }
     })
   }
 
-  /** One record deleted (inside the queue); false = not there. `expected` – the content mark of the only version to delete. */
-  private async removeRecord(collection: Collection, id: string, reason: 'delete' | 'undo' | 'drop' | 'import' = 'delete', expected?: string): Promise<boolean> {
+  /** One record deleted (inside the queue); false = not there. */
+  private async removeRecord(collection: Collection, id: string, reason: 'delete' | 'undo' | 'drop' | 'import' = 'delete'): Promise<boolean> {
     const state = this.currentState(collection, id)
     if (!state) return false
     if (state.readOnly) throw new NewerFileError()
@@ -1708,19 +1690,8 @@ export class DataStore {
     // other would come back as the record at once (B111) – the conflict is resolved first.
     if ((this.files.ids.get(`${collection}:${id}`)?.size ?? 0) > 1)
       throw new Error('Ten wpis ma drugą kopię z innego komputera (ten sam identyfikator) – najpierw rozstrzygnij ją w Synchronizacji, potem usuń.')
-    let record = state.record as AnyRecord
-    if (expected != null) {
-      // The file as it is now, not as the last scan saw it (KR.29 – przegląd 2 N5): a version another computer wrote a
-      // moment ago (the watcher not there yet) is neither deleted unseen nor kept in the history as an older read saw it.
-      const fresh = await this.loadFile(state.relPath)
-      if (!fresh) return false
-      if (fresh.readOnly || fresh.problemKind === 'too-new') throw new NewerFileError()
-      if (fresh.status !== 'record' || fresh.readError || !fresh.record) throw new Error(`Plik ${state.relPath} jest teraz niedostępny albo uszkodzony – nic nie usunięto, spróbuj za chwilę.`)
-      if (contentMark(fresh.record) !== expected) throw new ChangedSinceError(state.relPath)
-      record = fresh.record as AnyRecord
-    }
     // The import's own deletion (T331): a deletion all the same – an older version keeps its row's keys out – marked.
-    const kept = reason === 'drop' ? null : await this.history.snapshot(collection, record, reason === 'import' ? 'delete' : reason, { byImport: reason === 'import' })
+    const kept = reason === 'drop' ? null : await this.history.snapshot(collection, state.record as AnyRecord, reason === 'import' ? 'delete' : reason, { byImport: reason === 'import' })
     // Without its version in the history a deleted record could never be brought back („Cofnij”, „Usunięte wpisy”), and
     // a deleted operation from the bank would come back with the next import (T39): not deleted then (B112).
     if (!kept && reason !== 'drop') throw new Error('Nie udało się odłożyć wersji do historii (folder .history niedostępny?) – wpis nie został usunięty. Spróbuj ponownie za chwilę.')

@@ -12,7 +12,6 @@ import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type
 import { SAVED, unsavedQuestion } from '@shared/unsaved'
 import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
-import { marksOf } from '@shared/merge'
 import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
 import { ConfigStore, backupDirsAfter, changeTray, earlierBackupDirsOf, publicConfig, type TrayPatch } from './config'
@@ -1039,11 +1038,11 @@ function registerIpc(): void {
     for (const change of changes) sendFrom(s, change)
     return results
   })
-  handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown, expected?: unknown) => {
+  handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown) => {
     const s = writableStore()
     // 'drop' (no version in the history) only for the imports' batches: never the user's records; 'import' – the
-    // import's own deletion of operations (T331). `expected` – the only versions to delete (KR.29, T446).
-    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete', marksOf(expected))
+    // import's own deletion of operations (T331).
+    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
     sendFrom(s, change)
     return results
   })
