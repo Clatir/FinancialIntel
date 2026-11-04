@@ -59,14 +59,17 @@ export function assignRepayment(paymentId: string, purchaseId: string, label: st
 /**
  * „Spłać” (AP-4, the inbox): a member's advances for the future that left their debt unpaid (not those kept) repay what
  * is still owed because of them – no more (`repayingAdvancesOf`, review 2 of N2: a debt a later repayment paid back is
- * not settled again); with „Cofnij”. False – nothing changed.
+ * not settled again); with „Cofnij”. False – nothing changed (said – AP-15).
  */
 export function repayAdvances(memberId: string): boolean {
   const input = canWrite() ? fleetInputNow() : null
   const s = useData.getState()
   if (!input || !s.fi) return false
   const after = repayingAdvancesOf(input, memberId, s.fi.settings.import.notDuplicates, warsawNow().date)
-  if (!after.length) return false
+  if (!after.length) {
+    noAdvancesLeft(memberId)
+    return false
+  }
   const was = after.map((t) => s.records.transactions[t.id]?.record).filter((t): t is Transaction => !!t)
   if (!replaceRecords('transactions', after)) return false
   toast(`${memberName(memberId, s.fi.settings.household.members)}: ${countLabel(after.length, 'wpłata spłaca', 'wpłaty spłacają', 'wpłat spłaca')} dług, reszta zostaje zaliczką.`, 'success', 8000, {
@@ -92,7 +95,7 @@ export function keepAdvances(memberId: string): void {
   if (!input) return
   const ledger = householdOf(input, warsawNow().date)
   const keys = (skippedDebtsOf(ledger, ledger.members, {}).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
-  if (!keys.length) return
+  if (!keys.length) return noAdvancesLeft(memberId)
   const at = new Date().toISOString()
   const set = (on: boolean) =>
     updateSettings((f) => {
@@ -103,6 +106,14 @@ export function keepAdvances(memberId: string): void {
       return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates } } }
     })
   if (set(true)) toast('Zaliczki zostają – meldunek nie wróci dla tych wpłat.', 'info', 7000, { label: 'Cofnij', run: () => set(false) })
+}
+
+/**
+ * The inbox's „Spłać” or „zostaw” on a report no longer so (its operations changed meanwhile – an edit, another computer):
+ * nothing is changed, and that is said (AP-15 – never a click that does nothing in silence).
+ */
+function noAdvancesLeft(memberId: string): void {
+  toast(`${memberName(memberId, membersNow())}: nic do zmiany – zaliczki na przyszłość nie zostawiają już długu.`, 'info', 5000)
 }
 
 /**

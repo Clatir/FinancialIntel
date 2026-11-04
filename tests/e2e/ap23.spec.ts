@@ -34,8 +34,8 @@ async function readable(page: Page): Promise<string> {
   )) as string
 }
 
-// A decision code (D81, T294, B12, N47, F17, AF-55…), a working text (spec) or a date in the ISO form.
-const WORKING = /\b[TDBNW]\d{1,3}\b|\bF(?!1\b|11\b|12\b)\d{2,3}\b|\bAF-\d+|\(spec[,)]|\b\d{4}-\d{2}-\d{2}\b/
+// A decision code (D81, T294, B12, N47, F17, AF-55, AP-4…), a working text (spec) or a date in the ISO form.
+const WORKING = /\b[TDBNW]\d{1,3}\b|\bF(?!1\b|11\b|12\b)\d{2,3}\b|\bA[FP]-\d+|\(spec[,)]|\b\d{4}-\d{2}-\d{2}\b/
 
 test('AP-23: ekrany bez kodów decyzji, tekstów roboczych i dat ISO; słowniczek „Terminy ICT”; dymki Stanu okrętu', async () => {
   const { app, page, errors } = await launch({ dataDir: folder() })

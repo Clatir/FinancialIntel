@@ -271,7 +271,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                     type="button"
                     className="btn btn-ghost h-[22px] px-1.5 text-[11px] text-accent"
                     onClick={() => setOpen(open === r.id ? null : r.id)}
-                    title="Zaliczka na przyszłość – wpłaty nie spłacają długu (AP-4)"
+                    title="Zaliczka na przyszłość – wpłaty nie spłacają długu"
                     data-testid="import-rule-review"
                   >
                     do przeglądu
