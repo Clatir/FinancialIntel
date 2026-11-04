@@ -23,19 +23,18 @@ import {
   type WatchEntry
 } from '@shared/calc/game'
 import { CLASS_FROM, SHIP_CLASS_LABEL, SHIP_CLASSES, type ShipClass } from '@shared/calc/fleet'
-import { rangeGapText, rangeText } from '@shared/format'
+import { rangeGapText, rangeText, salariesText } from '@shared/format'
 import type { GameSettings } from '@shared/schema'
-import { updateSettings, useData, useFolderLocked } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { freezeWithoutImport, useFreezeAsk, useGame } from '../../store/game'
 import { navigate } from '../../store/ui'
 import { plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
-import { Badge, Empty, Field, NumberField, Panel, cx } from '../../components/ui'
-import { countLabel, plDate } from '../../lib/format'
+import { Badge, Empty, Panel, cx } from '../../components/ui'
+import { countLabel, plDate, plural } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
-import { OrdersFields } from '../settings/MachineTabs'
 import { freezeRange } from './FreezeQuestion'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -169,7 +168,7 @@ export function CommandPage() {
                 </span>
               </div>
             </Panel>
-            <OrdersPanel game={settings.game} orders={settings.orders} shieldSalaries={settings.layers.shieldSalaries} readOnly={readOnly} />
+            <OrdersPanel game={settings.game} orders={settings.orders} shieldSalaries={settings.layers.shieldSalaries} />
           </div>
           <div className="flex min-w-0 flex-col">
             <Panel title="Dziennik wachty" testId="command-log">
@@ -300,9 +299,18 @@ function StreakPanel({ view, today, label }: { view: GameView; today: DayRating 
         {today && (
           <div className="flex flex-col gap-0.5 border-t border-line pt-1.5" data-testid="command-today">
             <span className="text-muted">Dziś na razie: {today.violations.length ? 'naruszenie' : 'zgodny'}</span>
+            {/* A serious one in red, with its mark – as in the log (DW sp. 3, AP-16). */}
             {today.violations.map((v, i) => (
-              <span key={i} className="text-[11.5px] text-accent">
+              <span key={i} className={cx('text-[11.5px]', v.serious ? 'text-down' : 'text-accent')} data-testid="command-today-violation" data-serious={v.serious}>
                 {violationText(v.order, v.amount, v.ref, v.note, label)}
+                {v.serious && (
+                  <>
+                    {' '}
+                    <Badge tone="down" title="Liczy się do degradacji">
+                      poważne
+                    </Badge>
+                  </>
+                )}
               </span>
             ))}
             <span className="text-[11px] text-dim">Dzień zamraża się 24 h po swoim końcu; późniejsza korekta zmienia budżet, nie ocenę.</span>
@@ -344,13 +352,14 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
         <>
           {violationText(e.order, e.amount, e.ref, e.note, label)}
           {e.serious && (
-            <Badge tone="accent" title="Liczy się do degradacji">
+            <Badge tone="down" title="Liczy się do degradacji">
               poważne
             </Badge>
           )}
         </>
       )
-      mark = 'bg-accent'
+      // A serious violation in red (DW sp. 3, AP-16) – as an envelope over the game's threshold.
+      mark = e.serious ? 'bg-down' : 'bg-accent'
       break
     case 'tag':
       text = TAG_LABEL[e.tag] ?? e.tag
@@ -386,24 +395,15 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
 }
 
 type Orders = NonNullable<ReturnType<typeof useData.getState>['fi']>['settings']['orders']
-type Threshold = 'promoteDays' | 'windowDays' | 'seriousEnvelopePct' | 'demoteSerious' | 'missionDays'
 
-function OrdersPanel({ game, orders, shieldSalaries, readOnly }: { game: GameSettings; orders: Orders; shieldSalaries: number; readOnly: boolean }) {
-  const setGame = (patch: Partial<GameSettings>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, game: { ...f.settings.game, ...patch } } }))
-  const field = (key: Threshold, min: number, max: number, testId: string) => (
-    <NumberField
-      className="h-[24px] w-[64px]"
-      value={game[key]}
-      decimals={0}
-      step={1}
-      commitOnBlur
-      readOnly={readOnly}
-      isValid={(v) => v != null && Number.isInteger(v) && v >= min && v <= max && (key !== 'promoteDays' || v <= game.windowDays) && (key !== 'windowDays' || v >= game.promoteDays)}
-      onChange={(v) => v != null && setGame({ [key]: v })}
-      aria-label={testId}
-      data-testid={testId}
-    />
-  )
+const salaries = salariesText
+
+/**
+ * The orders and the game's thresholds – read here, changed only in Ustawienia → Warstwy i rozkazy (D84 C9, D99 pkt 7,
+ * AP-16): a threshold of the game changes rarely, and a field here changed them by chance (AF-38).
+ */
+function OrdersPanel({ game, orders, shieldSalaries }: { game: GameSettings; orders: Orders; shieldSalaries: number }) {
+  const quiet = orders.quietHours.from === orders.quietHours.to ? 'brak' : `${orders.quietHours.from}–${orders.quietHours.to}`
   return (
     <Panel title="Rozkazy i progi" testId="command-orders">
       <div className="flex flex-col gap-1 text-[12px]">
@@ -414,47 +414,26 @@ function OrdersPanel({ game, orders, shieldSalaries, readOnly }: { game: GameSet
           Przydział dnia = koperty codzienne, które zostały, ÷ dni do końca miesiąca (z dziś); podstawa – koperty codzienne ÷ dni miesiąca. Energia dziś = przydział − wydane dziś, ale nie więcej niż
           zostało energii miesiąca (przy pensji częściowej mniej, nawet 0,00 zł); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera).
         </span>
-        {/* The minimum the engine applies (B84): never above the shields' target. */}
-        {orders.minShieldSalaries > shieldSalaries && (
-          <span className="text-[11px] text-accent">Minimalne osłony ponad cel osłon – liczy się cel ({shieldSalaries} pensji).</span>
-        )}
-        {/* The orders changed here too (spec, N73) – the same fields as in the settings. */}
-        <fieldset disabled={readOnly} data-testid="command-orders-fields">
-          <OrdersFields labelWidth={170} />
-        </fieldset>
-        <button className="self-start text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'settings', tab: 'layers' })} data-testid="command-orders-edit">
-          warstwy okrętu w Ustawieniach ›
-        </button>
-        <div className="mt-1 flex flex-col gap-1 border-t border-line pt-1.5">
+        <div className="flex flex-col gap-1" data-testid="command-orders-values">
+          <Order label="Minimalne osłony" value={salaries(orders.minShieldSalaries)} />
+          {/* The minimum the engine applies (B84): never above the shields' target. */}
+          {orders.minShieldSalaries > shieldSalaries && <span className="text-[11px] text-accent">Minimalne osłony ponad cel osłon – liczy się cel ({salaries(shieldSalaries)}).</span>}
+          <Order label="Linia zanurzenia" value={`${orders.cargoLimitPct}% pensji`} />
+          <Order label="Cisza nocna" value={quiet} />
+          <Order label="Dziennik kapitański od kwoty" value={orders.impulseThreshold > 0 ? zl(orders.impulseThreshold) : 'nie pyta'} />
+          <Order label="Firewall (dopłata do XTB)" value={orders.firewall ? 'włączony' : 'wyłączony – dopłaty nie są sprawdzane'} />
+        </div>
+        <div className="mt-1 flex flex-col gap-1 border-t border-line pt-1.5" data-testid="command-game-values">
           <span className="label">Progi gry</span>
-          <Field label="Awans: dni zgodnych" labelWidth={170}>
-            <div className="flex items-center gap-2">
-              {field('promoteDays', 1, 366, 'game-promote-days')}
-              <span className="text-muted">w ostatnich</span>
-              {field('windowDays', 1, 366, 'game-window-days')}
-              <span className="text-muted">dniach</span>
-            </div>
-          </Field>
-          <Field label="Koperta poważnie ponad" labelWidth={170}>
-            <div className="flex items-center gap-2">
-              {field('seriousEnvelopePct', 0, 500, 'game-serious-pct')}
-              <span className="text-muted">% limitu</span>
-            </div>
-          </Field>
-          <Field label="Degradacja po" labelWidth={170}>
-            <div className="flex items-center gap-2">
-              {field('demoteSerious', 1, 31, 'game-demote')}
-              <span className="text-muted">poważnych w miesiącu</span>
-            </div>
-          </Field>
-          <Field label="Wykonana misja" labelWidth={170}>
-            <div className="flex items-center gap-2">
-              {field('missionDays', 0, 30, 'game-mission-days')}
-              <span className="text-muted">dni zgodnych</span>
-            </div>
-          </Field>
+          <Order label="Awans" value={`${game.promoteDays} dni zgodnych w ostatnich ${game.windowDays} dniach`} />
+          <Order label="Koperta poważnie ponad" value={`${game.seriousEnvelopePct}% limitu`} />
+          <Order label="Degradacja po" value={`${countLabel(game.demoteSerious, 'poważnym naruszeniu', 'poważnych naruszeniach', 'poważnych naruszeniach')} w miesiącu`} />
+          <Order label="Wykonana misja" value={`+${countLabel(game.missionDays, 'dzień zgodny', 'dni zgodne', 'dni zgodnych')}`} />
           <span className="text-[11px] text-dim">Progi działają od kolejnych zamrożonych dni – zamrożone oceny i awanse zostają.</span>
         </div>
+        <button className="self-start text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'settings', tab: 'layers' })} data-testid="command-orders-edit">
+          zmień w Ustawieniach → Warstwy i rozkazy ›
+        </button>
       </div>
     </Panel>
   )

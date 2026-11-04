@@ -11,10 +11,12 @@ import { ShareEditor } from '../household/ShareEditor'
 import { TagsField } from '../../components/TagsField'
 import { tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
-import { Segmented, cx } from '../../components/ui'
+import { LimitHint, Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
 import { api } from '../../lib/api'
 import type { QuickDraft } from '../../store/quickHost'
+import { useUi } from '../../store/ui'
+import { fieldWords } from './fieldWords'
 
 type Kind = QuickDraft['kind']
 interface Line {
@@ -125,7 +127,13 @@ export function QuickApp() {
   const sending = useRef(false)
   // Hiding after „Zapisano”: never the window opened again meanwhile.
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // `info`: a field's word about a value it took changed (a tag cut to 40 characters) – no refusal.
+  const [msg, setMsg] = useState<{ ok: boolean; text: string; info?: boolean } | null>(null)
+  // A field refused what was typed in it (the Enter that left it does not save the old value in its place – AP-15).
+  const refused = useRef(false)
+  // What the fields said about values they took changed during the action that saves (an Enter, a click): said again with
+  // its answer (T400, T413, T417 – never silently). A new key or click starts afresh: a word said before was in the footer.
+  const [words] = useState(fieldWords)
   const [officer, setOfficer] = useState<{ categoryId: string; source: OfficerSource } | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const [opened, setOpened] = useState(0)
@@ -151,6 +159,23 @@ export function QuickApp() {
     if (opened) amountRef.current?.focus()
   }, [opened])
 
+  // This window has no toasts (AP-15, AF-17, T413): what a field says goes to the footer – a refusal („Nieprawidłowa kwota…”)
+  // holds back the Enter that left the field; a word about a value taken changed („Tag … skrócony”) does not, it is said
+  // with the save's answer too.
+  useEffect(
+    () =>
+      useUi.subscribe((s) => {
+        const t = s.toasts.at(-1)
+        if (!t) return
+        useUi.setState({ toasts: [] })
+        const refusal = t.kind === 'error'
+        if (refusal) refused.current = true
+        else words.word(t.text)
+        setMsg({ ok: false, text: t.text, ...(refusal ? {} : { info: true }) })
+      }),
+    []
+  )
+
   useEffect(() => {
     document.title = 'Szybki wpis – Financial Intel'
     const offData = api.onQuickData((fresh) => {
@@ -172,6 +197,7 @@ export function QuickApp() {
       } else if (fresh && !fresh.accounts.some((a) => a.id === k.d.accountId)) setD((x) => ({ ...x, accountId: fresh.accountId }))
       setRestored(keep)
       setMsg(null)
+      words.reset()
       setSeries(0)
       setBusy(false)
       sending.current = false
@@ -179,8 +205,9 @@ export function QuickApp() {
       setOpened((n) => n + 1)
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
-      // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”.
-      setMsg({ ok: r.ok && !r.pending, text: r.message })
+      // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”. The fields' words with it.
+      const said = words.answer()
+      setMsg({ ok: r.ok && !r.pending, text: [r.message, ...said].join(' ') })
       setRestored(false)
       if (r.ok && next.current) {
         // „Zapisz i następny” (F7): a fresh draft of the same account, day, kind and tags (a trip's receipts – F17); the
@@ -212,13 +239,13 @@ export function QuickApp() {
         // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
         // opened again meanwhile.
         if (closing.current) clearTimeout(closing.current)
-        // Not on the disk yet (AP-1): the window stays long enough to read why.
+        // Not on the disk yet (AP-1), or a field's word with it: the window stays long enough to read it.
         closing.current = setTimeout(
           () => {
             closing.current = null
             void api.quickClose()
           },
-          r.pending ? 4000 : 450
+          r.pending || said.length ? 4000 : 450
         )
       } else {
         sending.current = false
@@ -243,9 +270,9 @@ export function QuickApp() {
         setLines((ls) => ls.map((l) => (has(l.categoryId) ? l : { ...l, categoryId: null })))
       }
       if (people) {
-        // A member gone (another folder, removed): their choice is made again – nothing saved for someone the folder lacks.
-        const first = fresh.members[0]?.id ?? null
-        setD((x) => (member(x.memberId) ? x : { ...x, memberId: x.kind === 'refundable' ? first : null, household: false, advance: false, advanceChosen: false }))
+        // A member gone (another folder, removed): their choice is made again, not given to the first on the list (AF-20) –
+        // nothing is saved for someone the folder lacks.
+        setD((x) => (member(x.memberId) ? x : { ...x, memberId: null, household: false, advance: false, advanceChosen: false }))
         setLines((ls) => ls.map((l) => (member(l.memberId) ? l : { ...l, memberId: null, refundable: false, gift: false })))
         setShare((sh) => (sh && sh.lines.some((l) => !member(l.memberId)) ? null : sh))
         setShares((xs) => Object.fromEntries(Object.entries(xs).filter(([id]) => member(id))))
@@ -419,18 +446,21 @@ export function QuickApp() {
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
-    if (data.readOnly) return setMsg({ ok: false, text: data.readOnlyReason ?? 'Folder jest tylko do odczytu.' })
-    if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
-    if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
-    if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
-    if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
-    if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
+    // Not saved: why – with the fields' words of this action (they would be gone under it).
+    const refuse = (text: string) => setMsg({ ok: false, text: [text, ...words.now()].join(' ') })
+    if (data.readOnly) return refuse(data.readOnlyReason ?? 'Folder jest tylko do odczytu.')
+    if (d.amount <= 0) return refuse('Wpisz kwotę.')
+    if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return refuse('Części paragonu nie sumują się do kwoty.')
+    if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return refuse('Wybierz domownika, który finansuje zakup.')
+    if (share && !shareComplete(share, d.amount)) return refuse(share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.')
+    if (night && (!nightOk || !d.logNote.trim())) return refuse('Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.')
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
     const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
     // A loan's part (D100): with an amount, within the inflow beside the others' parts.
-    if (d.kind === 'income' && loan && (loanNow?.amount ?? 0) <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę spłaty pożyczki.' })
-    if (loanNow && parts.reduce((a, x) => a + x.amount, 0) + loanNow.amount > d.amount) return setMsg({ ok: false, text: 'Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.' })
+    if (d.kind === 'income' && loan && (loanNow?.amount ?? 0) <= 0) return refuse('Wpisz kwotę spłaty pożyczki.')
+    if (loanNow && parts.reduce((a, x) => a + x.amount, 0) + loanNow.amount > d.amount) return refuse('Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.')
     sending.current = true
+    words.send()
     next.current = andNext
     setBusy(true)
     setMsg(null)
@@ -442,10 +472,14 @@ export function QuickApp() {
   const saveRef = useRef(save)
   saveRef.current = save
   useEffect(() => {
-    // Esc closes before any field takes it (a field cancelling its draft stops it there).
+    // Esc is „×” (AP-15, AF-19): the field being typed in applies its value first (as the click on „×” does), the draft
+    // stays for the next opening. The event stops here – a field cancelling its draft on the same Esc would take it back.
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.preventDefault()
+      e.stopPropagation()
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active !== document.body) active.blur()
       kept.current.at = Date.now()
       void api.quickClose()
     }
@@ -456,12 +490,29 @@ export function QuickApp() {
         const andNext = e.ctrlKey || e.metaKey
         // The field being typed in applies its value first (amounts are drafts until left).
         ;(document.activeElement as HTMLElement | null)?.blur()
-        setTimeout(() => saveRef.current(andNext), 0)
+        setTimeout(() => {
+          // The field that took this Enter may have refused its value (its own Enter blurred it first).
+          if (refused.current) refused.current = false
+          else saveRef.current(andNext)
+        }, 0)
       }
     }
+    // A field given the focus is a new try: an old refusal does not hold back the next Enter.
+    const onFocus = () => {
+      refused.current = false
+    }
+    // Each key or click its own action: the fields' words said before it are no part of its answer (a tag cut, then
+    // taken off – a later save says nothing of it).
+    const onAction = () => words.action()
+    window.addEventListener('keydown', onAction, true)
+    window.addEventListener('pointerdown', onAction, true)
+    window.addEventListener('focusin', onFocus)
     window.addEventListener('keydown', onEscape, true)
     window.addEventListener('keydown', onKey)
     return () => {
+      window.removeEventListener('keydown', onAction, true)
+      window.removeEventListener('pointerdown', onAction, true)
+      window.removeEventListener('focusin', onFocus)
       window.removeEventListener('keydown', onEscape, true)
       window.removeEventListener('keydown', onKey)
     }
@@ -588,6 +639,7 @@ export function QuickApp() {
           </Row>
           <Row label={d.kind === 'income' ? 'Od kogo' : 'Gdzie'}>
             <input className="input" list="quick-counterparties" value={d.counterparty} onChange={(e) => onCounterparty(e.currentTarget.value)} maxLength={300} placeholder="sklep, usługa, osoba" data-testid="quick-counterparty" />
+            <LimitHint length={d.counterparty.length} max={300} />
             <datalist id="quick-counterparties">
               {data.counterparties.map((c) => (
                 <option key={c} value={c} />
@@ -776,6 +828,7 @@ export function QuickApp() {
           )}
           <Row label="Notatka">
             <input className="input" value={d.note} onChange={(e) => set({ note: e.currentTarget.value })} maxLength={500} data-testid="quick-note" />
+            <LimitHint length={d.note.length} max={500} />
           </Row>
           {/* F17: a trip's, a project's tags – „#słowo” in the name or the note adds one too; the last one in a click. */}
           <Row label="Tagi">
@@ -807,6 +860,7 @@ export function QuickApp() {
                 </div>
               )}
               <input className="input" value={d.logNote} onChange={(e) => set({ logNote: e.currentTarget.value })} maxLength={500} placeholder={night ? 'Zakup w ciszy nocnej – dlaczego teraz?' : 'Krótko: skąd ten zakup?'} data-testid="quick-log-note" />
+              <LimitHint length={d.logNote.length} max={500} />
               {night && (
                 <label className="flex items-center gap-1.5 text-[11.5px] text-muted">
                   <input type="checkbox" checked={nightOk} onChange={(e) => setNightOk(e.currentTarget.checked)} data-testid="quick-night-ok" />
@@ -820,7 +874,7 @@ export function QuickApp() {
       )}
       <div className="flex shrink-0 items-center gap-2 border-t border-line px-3 py-2">
         {msg && (
-          <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : 'text-accent')} data-testid="quick-message">
+          <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : msg.info ? 'text-fg' : 'text-accent')} data-testid="quick-message" data-kind={msg.ok ? 'ok' : msg.info ? 'info' : 'refusal'}>
             {msg.text}
             {msg.ok && series > 0 && (
               <span className="text-muted" data-testid="quick-series">

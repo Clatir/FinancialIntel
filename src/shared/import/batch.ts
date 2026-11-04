@@ -5,7 +5,8 @@
  * Taking an import back:
  * - only the latest one that stands (a stack: a later import may have settled or merged what an earlier one created);
  * - the operations it created are deleted – those changed since too (their number is said before; „Cofnij” brings them
- *   back) – as the undo's deletion (history 'undo'), not the user's: the next import brings their rows (T39);
+ *   back) – as the undo's deletion (history 'undo'), not the user's: the next import brings their rows (T39); changed =
+ *   their content is not the one it wrote (`createdHashes` – no clock compared, T415);
  * - the operations it changed get their versions before it, with what changed since kept (three-way: the base is the
  *   version the import wrote, the user's later change wins);
  * - the operations it deleted come back (unless they are there again);
@@ -13,7 +14,7 @@
  * - the settings it set (the account's last import, the day its files cover, the account's number, the members' inflows,
  *   the holder's name) go back each only while still as it set them; its entry of the log goes.
  */
-import { deepEqual, merge3 } from '../merge'
+import { BOOKKEEPING, deepEqual, merge3 } from '../merge'
 export { accountNumberOf, accountNumberText } from './mbank'
 import {
   SCHEMA_VERSION,
@@ -88,11 +89,75 @@ export function importBatch(f: BatchFacts): ImportBatch {
     before: f.before,
     after: f.after,
     ownName: f.ownName,
-    confirmations: f.confirmations ?? []
+    confirmations: f.confirmations ?? [],
+    createdHashes: Object.fromEntries(f.created.map((t) => [t.id, contentHash(t)]))
   })
 }
 
+/** JSON with the keys sorted and `undefined` left out: the same content, the same text. */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map((x) => (x === undefined ? 'null' : canonical(x))).join(',')}]`
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>
+    return `{${Object.keys(o)
+      .filter((k) => o[k] !== undefined)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(v) ?? 'null'
+}
+
+/** A 53-bit hash of a text (cyrb53, public domain), base 36. */
+function hash53(text: string): string {
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i)
+    h1 = Math.imul(h1 ^ c, 2654435761)
+    h2 = Math.imul(h2 ^ c, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
+}
+
+/**
+ * An operation's content as the user may change it (T415): as the folder keeps it (parsed), without the save's stamps
+ * (`BOOKKEEPING`) and without the other format's keys (an import remembering them changes nothing of the user's – T323).
+ * The same content on any computer, at any time – the same text; whoever and whenever wrote it does not count.
+ */
+export function contentHash(t: Transaction): string {
+  const parsed = transactionSchema.safeParse(t)
+  const r: Record<string, unknown> = { ...(parsed.success ? parsed.data : t) }
+  for (const k of BOOKKEEPING) delete r[k]
+  for (const k of ['bank', 'counterBank']) if (r[k] && typeof r[k] === 'object') r[k] = { ...(r[k] as object), altKeys: undefined }
+  return hash53(canonical(r))
+}
+
+/** The same content (`contentHash`): stamps and the other format's keys aside. */
+export const sameContent = (a: Transaction, b: Transaction): boolean => contentHash(a) === contentHash(b)
+
 const newer = (a: ImportBatch, b: ImportBatch) => a.at > b.at || (a.at === b.at && a.id > b.id)
+
+/** The bank's rows of operations: their keys, in both formats and of both sides of a transfer. */
+function rowKeys(t: Transaction): string[] {
+  return [t.bank, t.counterBank].flatMap((b) => (b ? [b.key, ...(b.altKeys ?? [])] : []))
+}
+
+/**
+ * Why the undo's „Cofnij” must not bring `batch` back now (T415, review 3 of N4): `later` – an import stands that ran
+ * after it (the same file again, another one – here or on the other computer; its operations are on top of where this
+ * one's would be); `rows` – the bank's rows of the operations it would add are in the budget again (brought in some
+ * other way). Either would double the bank's rows; null – it can come back.
+ */
+export function redoRefusal(batch: ImportBatch, batches: readonly ImportBatch[], deleted: readonly Transaction[], current: readonly Transaction[]): 'later' | 'rows' | null {
+  const top = latestImport(batches.filter((b) => b.id !== batch.id))
+  if (top && newer(top, batch)) return 'later'
+  const back = new Set(deleted.map((t) => t.id))
+  const there = new Set(current.filter((t) => !back.has(t.id)).flatMap(rowKeys))
+  return deleted.some((t) => rowKeys(t).some((k) => there.has(k))) ? 'rows' : null
+}
 
 /** The latest import that stands (null = none): the only one that can be taken back. */
 export function latestImport(batches: readonly ImportBatch[]): ImportBatch | null {
@@ -128,16 +193,30 @@ export interface UndoPlan {
   rulesKept: number
   /** The balances it confirmed (F5), still there: deleted. */
   confirmations: string[]
+  /**
+   * The fingerprints of its operations to keep in its batch (an import written before 1.15.8 has none: those it has not
+   * changed since get one now, so its „Cofnij” and the next undo compare by content too – T415); null – nothing new.
+   */
+  hashes: Record<string, string> | null
 }
 
 /**
  * What taking `batch` back does now. `tx` = the operation now (undefined = none); `docked` = operations with a docking.
+ * Changed since = its content is not the one the import wrote (T415): the writes of later imports, of their undos and of
+ * this one's „Cofnij” give it back as it was, a change of the user's never does. An import written before 1.15.8 (no
+ * fingerprint): a stamp after its writing is a change – more said than less.
  */
 export function undoPlan(
   batch: ImportBatch,
-  now: { tx: (id: string) => Transaction | undefined; docked?: ReadonlySet<string>; rules: readonly ImportRule[]; balance?: (id: string) => unknown }
+  now: {
+    tx: (id: string) => Transaction | undefined
+    docked?: ReadonlySet<string>
+    rules: readonly ImportRule[]
+    balance?: (id: string) => unknown
+  }
 ): UndoPlan {
   const remove: string[] = []
+  const fresh: Record<string, string> = {}
   let changed = 0
   let docked = 0
   let missing = 0
@@ -148,7 +227,9 @@ export function undoPlan(
       continue
     }
     remove.push(id)
-    if (t.updatedAt > batch.savedAt) changed++
+    const written = batch.createdHashes[id]
+    if (written != null ? contentHash(t) !== written : t.updatedAt > batch.savedAt) changed++
+    else if (written == null) fresh[id] = contentHash(t)
     if (now.docked?.has(id)) docked++
   }
   const restore: Transaction[] = []
@@ -163,7 +244,19 @@ export function undoPlan(
   const readd = batch.removed.filter((t) => !now.tx(t.id))
   const { back: rulesBack, kept: rulesKept } = rulesUndone(now.rules, batch)
   const confirmations = batch.confirmations.filter((id) => now.balance?.(id))
-  return { remove, changed, docked, missing, restore, readd, rulesBack, rulesKept, confirmations }
+  const hashes = Object.keys(fresh).length ? { ...batch.createdHashes, ...fresh } : null
+  return { remove, changed, docked, missing, restore, readd, rulesBack, rulesKept, confirmations, hashes }
+}
+
+/**
+ * „Cofnij” of taking an import back, for one operation the undo wrote back (T415): `before` – as it was before the undo,
+ * `wrote` – as the undo wrote it, `cur` – now. Untouched since – `before` again; changed by the user since – their change
+ * stays, the import's change applied over it (three-way, the user's side wins a clash). `kept` – a change of the user's kept.
+ */
+export function redoneAs(before: Transaction, wrote: Transaction | undefined, cur: Transaction): { record: Transaction; kept: boolean } {
+  if (!wrote || sameContent(wrote, cur)) return { record: before, kept: false }
+  const { merged } = merge3<Transaction>(wrote, cur, before, () => 'mine')
+  return { record: { ...merged, id: cur.id, createdAt: cur.createdAt }, kept: true }
 }
 
 /** A record without the save's stamps (compared by content). */

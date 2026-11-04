@@ -16,7 +16,7 @@ import { toast } from '../../store/ui'
 import { useCategories } from '../operations/pickers'
 
 const zl = (g: number) => `${plnText(g)} zł`
-const pct = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toLocaleString('pl-PL', { maximumFractionDigits: 1 })}%`)
+const pct = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toLocaleString('pl-PL', { maximumFractionDigits: 1 }).replace('-', '−')}%`)
 const NO_CPI: Record<string, number> = {}
 
 /** The CPI typed for a month (F36): the year-on-year change in % as GUS publishes it; null – the month's value taken off. */

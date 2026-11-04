@@ -19,7 +19,8 @@ describe('rozmiar interfejsu (1.6.6, F30)', () => {
     expect(zoomStep(1.25, -1)).toBe(1.2)
     expect(clampZoom(3)).toBe(1.5)
     expect(clampZoom(0.2)).toBe(0.9)
-    expect(clampZoom(1.234)).toBe(1.23)
+    // AP-23 (AF-71): a hand-edited size lands on the grid of 10 % – the screen never reads „123%”.
+    expect(clampZoom(1.234)).toBe(1.2)
   })
 
   it('klawisze: Ctrl+Plus (też Ctrl+= i plus z klawiatury numerycznej), Ctrl+Minus, Ctrl+Shift+0 = 100 %; reszta nie', () => {

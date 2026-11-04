@@ -4,6 +4,7 @@ import type { HistoryEntry, HistoryKind } from '@shared/api'
 import { diffRecords, fieldLabel, formatValue, isAmountPath, type FieldChange, type Path } from '@shared/merge'
 import type { SettingsFile } from '@shared/schema'
 import { api } from '../../lib/api'
+import { plDateTime } from '../../lib/format'
 import { recordTitle } from '../../lib/recordTitle'
 import { useData, useFolderLocked } from '../../store/data'
 import { IconHistory } from '../../components/icons'
@@ -22,7 +23,7 @@ const REASON: Record<HistoryEntry['reason'], string> = {
   undo: 'usunięty przy cofnięciu importu'
 }
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' }) : '—')
+const when = (iso: string | null) => plDateTime(iso)
 
 /**
  * id → name of every named item (categories, accounts, household members, containers, goals, loans – N92), so changed

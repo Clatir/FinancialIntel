@@ -35,7 +35,7 @@ export function confirmBalance(accountId: string, amount: number, date: string, 
   const now = new Date().toISOString()
   const base = { schemaVersion: SCHEMA_VERSION, createdAt: now, updatedAt: now }
   if (plan.kind === 'before-opening') {
-    toast(`${accountName}: saldo otwarcia jest na ${plan.opening} – później niż ${date}. Popraw datę salda otwarcia.`, 'error', 7000)
+    toast(`${accountName}: saldo otwarcia jest na ${plDate(plan.opening)} – później niż ${plDate(date)}. Popraw datę salda otwarcia.`, 'error', 7000)
     return plan
   }
   if (plan.kind === 'opening') {

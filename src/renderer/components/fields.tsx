@@ -33,6 +33,14 @@ export function signedPln(grosze: number): string {
   return grosze > 0 ? `+${plnText(grosze)}` : plnText(grosze)
 }
 
+/** Why a typed amount was refused (AP-15): said at the field, with what stays – never a silent return to the old value. */
+export function amountRefusal(text: string): string {
+  const v = parseAmountInput(text)
+  if (v === undefined) return 'Nieprawidłowa kwota – zostaje poprzednia (wpisz np. 1200, 1 200 albo 12,50; najwyżej 2 miejsca po przecinku).'
+  if (v === null) return 'Kwota nie może być pusta – zostaje poprzednia.'
+  return 'Kwota nie może być ujemna – zostaje poprzednia.'
+}
+
 /** An amount in złoty: grosze in and out (decision T3); `null` = empty. */
 export const AmountField = forwardRef<
   HTMLInputElement,
@@ -86,7 +94,7 @@ export const AmountField = forwardRef<
       onBlur={() => {
         if (draft != null && !cancelled.current) {
           const v = parse(draft)
-          if (v === undefined) toast('Nieprawidłowa kwota – zostaje poprzednia.', 'error')
+          if (v === undefined) toast(amountRefusal(draft), 'error')
           else if (v !== value) onChange(v)
         }
         cancelled.current = false

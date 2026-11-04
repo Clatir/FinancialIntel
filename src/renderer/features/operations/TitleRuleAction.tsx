@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { dm, formatPln } from '@shared/format'
+import { dm, formatPln, plural } from '@shared/format'
 import { TX_KIND_LABEL, type Transaction, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { Popover } from '../../components/Popover'
@@ -329,7 +329,7 @@ function TitleRulePopover({
                   onChange={(e) => setUpdateHistory(e.currentTarget.checked)}
                   data-testid="title-rule-update-history"
                 />
-                <span>Zaktualizuj w historii {matching.length} {matching.length === 1 ? 'operację' : matching.length < 5 ? 'operacje' : 'operacji'} o tym tytule</span>
+                <span>Zaktualizuj w historii {matching.length} {plural(matching.length, 'operację', 'operacje', 'operacji')} o tym tytule</span>
               </label>
             ) : (
               <div className="text-dim">W historii nie znaleziono innych operacji o tym tytule.</div>

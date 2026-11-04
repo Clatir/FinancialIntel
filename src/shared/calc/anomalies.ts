@@ -42,6 +42,7 @@ export interface Anomaly {
   usual: number | null
   /** Who or what: the counterparty, the category's id. */
   name: string
+  /** The category's (kind 'category'); a purchase's own category, when it has one (AP-16). */
   categoryId?: string
 }
 
@@ -86,6 +87,8 @@ export function anomalies(o: AnomalyInput): Anomaly[] {
     else byBrand.set(key, [t])
   }
   const name = (t: Transaction) => t.counterparty || t.title || 'operacja'
+  // The purchase's category (AP-16): the briefing says its signal with that envelope's alarm – one line per matter.
+  const cat = (t: Transaction) => (t.categoryId ? { categoryId: t.categoryId } : {})
   for (const [key, list] of byBrand) {
     list.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
     for (let i = 0; i < list.length; i++) {
@@ -97,11 +100,11 @@ export function anomalies(o: AnomalyInput): Anomaly[] {
         const yearFrom = addDays(t.date, -365)
         const before = list.slice(0, i).filter((x) => x.date >= yearFrom && x.date < t.date).map((x) => -x.amount)
         const usual = before.length >= BRAND_MIN_HISTORY ? percentile(before, 0.9) : null
-        if (usual != null && cost > usual * BRAND_FACTOR) out.push({ kind: 'brand', key: `brand:${t.id}`, txIds: [t.id], date: t.date, amount: cost, usual, name: name(t) })
+        if (usual != null && cost > usual * BRAND_FACTOR) out.push({ kind: 'brand', key: `brand:${t.id}`, txIds: [t.id], date: t.date, amount: cost, usual, name: name(t), ...cat(t) })
         // (c) A new payee from the log's threshold – with a history of 90 days before it (not the first import's).
         const threshold = o.orders.impulseThreshold
         if (threshold > 0 && cost >= threshold && firstSeen.get(key) === t.date && historyFrom != null && historyFrom <= addDays(t.date, -NEW_PAYEE_HISTORY_DAYS) && list.findIndex((x) => x.date === t.date) === i)
-          out.push({ kind: 'new', key: `new:${t.id}`, txIds: [t.id], date: t.date, amount: cost, usual: null, name: name(t) })
+          out.push({ kind: 'new', key: `new:${t.id}`, txIds: [t.id], date: t.date, amount: cost, usual: null, name: name(t), ...cat(t) })
       }
       // (d) Two charges from the bank of one brand and amount, the same day or the next: a possible double charge.
       if (!t.bank || t.bank.pending) continue

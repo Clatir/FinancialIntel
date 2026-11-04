@@ -178,7 +178,8 @@ export function monthRows(
 
 // The income as D81 counts it – „Przychody” everywhere it means that (N24).
 const MONTH_HEADER = ['Miesiąc', 'Pensja (zł)', 'Koszty netto (zł)', 'Przychody (zł)', 'Na plus', 'Łupy (zł)', 'Bilans (zł)', 'Stopa oszczędności (%)'] as const
-const rateCell = (rate: number | null) => (rate == null ? '' : String(rate).replace('.', ','))
+// One place after the comma (T294): „55,0”, as the screens write the rate.
+const rateCell = (rate: number | null) => (rate == null ? '' : rate.toFixed(1).replace('.', ','))
 const plusText = (r: Pick<MonthRow, 'plus' | 'inProgress'>) => (r.inProgress ? 'w toku' : r.plus == null ? '' : r.plus ? 'tak' : 'nie')
 
 export function monthsCsv(rows: readonly MonthRow[]): string {
@@ -200,10 +201,18 @@ export function monthsSheet(rows: readonly MonthRow[]): XlsxSheet {
       { header: 'Na plus', kind: 'text', width: 9 },
       { header: 'Łupy (zł)', kind: 'money', width: 12 },
       { header: 'Bilans (zł)', kind: 'money', width: 13 },
-      { header: 'Stopa oszczędności (%)', kind: 'number', width: 12 }
+      { header: 'Stopa oszczędności (%)', kind: 'rate', width: 12 }
     ],
     rows: rows.map((r) => [r.month, r.salary == null ? null : r.salary / 100, r.costs / 100, r.income / 100, plusText(r), r.loot == null ? null : r.loot / 100, r.balance / 100, r.rate])
   }
+}
+
+/**
+ * „Excel (operacje + miesiące)” (RE sp. 5, T412): both sheets when either has rows – a period with no operations still has
+ * its months; null – nothing in the period (said, no empty file).
+ */
+export function budgetWorkbook(ops: readonly OperationRow[], months: readonly MonthRow[]): XlsxSheet[] | null {
+  return ops.length || months.length ? [operationsSheet(ops), monthsSheet(months)] : null
 }
 
 // ------------------------------------------------------------------ a report as a document

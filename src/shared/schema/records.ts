@@ -617,7 +617,7 @@ export const importBatchSchema = z.looseObject({
   ...recordBase,
   /** When the import ran (its operations' `bank.importedAt`, the key of `settings.import.log`). */
   at: isoDateTime,
-  /** When its records were written: an operation changed after it is the user's work. */
+  /** When its records were written (an import without `createdHashes`: a later stamp of its operation is a change). */
   savedAt: isoDateTime,
   accountId: ulidSchema,
   fileName: z.string().max(300).catch('').default(''),
@@ -638,6 +638,11 @@ export const importBatchSchema = z.looseObject({
   /** The balance confirmed by the file's balances (F5): goes with it. */
   confirmations: lenientList(ulidSchema).catch([]).default([]),
   /** When it was taken back (null = it stands). */
-  undoneAt: isoDateTime.nullable().catch(null).default(null)
+  undoneAt: isoDateTime.nullable().catch(null).default(null),
+  /**
+   * Each operation it created: a fingerprint of its content as it wrote it (`contentHash`, T415) – a different content
+   * now is the user's change, whoever and whenever wrote it (additive, 1.15.8; none in an older import).
+   */
+  createdHashes: z.record(z.string(), z.string().max(20)).catch({}).default({})
 })
 export type ImportBatch = z.infer<typeof importBatchSchema>

@@ -3248,3 +3248,172 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   jednego dnia (`byPaymentDay` – indeks Ładowni i płatności sprzed startu w silniku). Wynik bez zmian (test równości ze
   stanem liczonym jak dotąd). Przegląd 3 N3 (7, 8): `pastStateOf` tylko czyta `pastStates` (jedna droga – ta, której
   używa panel); dopasowanie dni okna nie kopiuje zbioru operacji zrobionych z boi (własny zbiór dopasowanych w oknie).
+- **T400** Nic nie zmienia się po cichu (1.15.8, N4, AP-15): każda odmowa i każde przycięcie mówi to przy polu – co zostaje
+  i dlaczego. Pole kwoty `amountRefusal` (nieprawidłowa / pusta / ujemna; „1.200” i „12,345” z podpowiedzią), `NumberField`
+  domyślnie sam mówi („Dozwolone: od … do …”, „Tu tylko liczby całkowite”, `range`; `onReject` nadpisuje), w trybie
+  natychmiastowym i `commitOnBlur`; Esc w polu liczbowym cofa wpis (pole zapisujące przy każdym klawiszu wraca do wartości
+  z chwili wejścia). Zakres „od” po „do” (kwoty filtra Operacji, daty eksportu) – zamiana ze słowem (`orderRange`), nie
+  skasowanie końca. Pusty eksport: „Brak operacji w okresie.” i brak pliku. Limity długości: licznik od 80 % (`LimitHint`,
+  w `TextField` / `TextArea` / `NameInput` z `maxLength`), przy limicie „dalszy tekst jest obcinany”; tagi: skrócony do 40
+  znaków i pominięty ponad 20 (`tagsLost`) z komunikatem, pełne pole mówi „najwyżej 20 tagów”. Zapis 0 zł – ostrzeżenie w
+  edytorze operacji; wyłączony przycisk (nowy kontener, przeniesienie środków celu) podaje powód. Edytor reguły importu nie
+  pokazuje „w tym za” (reguła go nie zapamiętuje). Szybki wpis nie ma toastów – każdy toast pól trafia do stopki
+  (`QuickApp`), Esc to „×” (wpisywana kwota zostaje w szkicu), a Enter po odmowie pola nie zapisuje starej wartości;
+  archiwizowany domownik czyści wybór „Finansuje” (nie podstawia pierwszego z listy). Bez zmian formatu danych.
+- **T401** Jeden wzorzec potwierdzenia i „Cofnij” (1.15.8, N4, AP-22): usunięcie, rozłączenie i zrzut, które aplikacja cofa
+  (reguły importu i słowa kluczowe `removeRule`, rozłączenie nazwy `unmergeName`, „to nie to samo” `clearDismissedSimilar`,
+  „to nie powtórzenie” `dismissCorrection`, „Zrzuć z ładowni” `archiveContainer`, nazwa domownika w banku) – toast z „Cofnij”;
+  działania nieodwracalne z aplikacji (Kosz Windows po imporcie i dla uszkodzonego pliku, token aktualizacji, przerwanie
+  kreatora) – jedno pytanie w tym samym miejscu, `ConfirmButton` („Usuń na pewno” / własny napis + „Anuluj”, Esc wycofuje, fokus
+  na potwierdzeniu; `DeleteButton` jest na nim). Pytanie przy przerwaniu kreatora mówi, co przepada, i wymienia ślady, które
+  kreator już zapisał w folderze (domownicy, cele – `WizardState.traces`). Zmiana scenariusza ICTTJ zostaje baner z
+  objaśnieniem (stan oczekujący, nie przycisk). Toast z „Cofnij” trwa co najmniej 8 s (`UNDO_MIN_MS`, AF-7).
+- **T402** „Cofnij import” (1.15.8, N4, AP-22): okno liczy „zmienione później przez Ciebie” tylko dla operacji, których nie
+  dotknął późniejszy import (jego zmiany i usunięcia – `undoPlan(…, { touched })`), a „Cofnij” cofnięcia importu ustawia mu
+  nowe `savedAt` (zapisy z powrotem nie są pracą użytkownika). Lista „Ostatnie importy” przy dziesięciu paczkach mówi, że
+  następny import usunie najstarszą (razem z jej „Cofnij import”); Ustawienia → Folder i kopie mówią o 5 ręcznych kopiach.
+  Bez zmian formatu danych.
+- **T403** Teksty interfejsu (1.15.8, N4 – AP-23, AF-55, AF-66, AF-69, AF-71–AF-73): jeden sposób pisania w `shared/format.ts`
+  – `plDate` (dd.mm.rrrr), `plDateTime` (dd.mm.rrrr, gg:mm – dwie cyfry dnia i miesiąca), `decimalText` / `percentText`
+  (przecinek, minus typograficzny „−”, zero bez znaku), `countLabel` / `plural` / `salariesText` (liczebniki); ISO dat
+  nie ma w żadnym tekście (tytuły wpisów w historii i dzienniku zmian `recordTitle`, wartości w różnicach `formatValue`,
+  zakres Operacji `periodLabel`, chwile przez `plDateTime`). Stopa oszczędności zawsze z jednym miejscem po przecinku
+  (T294: `rateText` „55,0%”, CSV „55,0”, Excel format „0.0”); pole liczby (`NumberField`) pisze przecinek („1,0”).
+  Komunikaty systemu po polsku: `shared/plainError.ts` zamienia kody systemu plików (ENOENT, EBUSY, EPERM…), błędy
+  JSON, ZIP i schematu (zod) na zdanie; stosuje je `errorMessage` okna (wywołania IPC loguje `handle` z surowym
+  tekstem), opis plików z problemami, nieudana kopia, błąd odczytu folderu ICTTJ; plik, który zajął OneDrive albo inny
+  program, ma plakietkę „zablokowany”, nie „uszkodzony”. Podsumowanie odzyskania z kopii uzgadnia imiesłów z
+  rzeczownikiem („1 plan miesiąca zmieniony”). Kody decyzji, identyfikatory i teksty robocze („spec”) tylko w
+  komentarzach – pilnuje tego `tests/unit/ui-no-codes.test.ts` (źródła) i `tests/e2e/ap23.spec.ts` (renderowane
+  ekrany i dymki). Słowniczek: osobna lista „Terminy ICT” (`ICT_GLOSSARY`, w F1) – termin po angielsku, objaśnienie po
+  polsku; wszystkie linie „Stanu okrętu” i Daily Bias mają dymek. Słowo „firma” zastąpione („sprzedawca albo osoba”),
+  przejścia 100 ms → 150 ms (120–160 ms).
+- **T404** Sprawdzenia po scaleniu N4 (1.15.8, AP-23, US.9, AF-71): (1) Esc w polach „Progi gry” (Ustawienia → Warstwy
+  i rozkazy) cofa wpis – `NumberField` z AP-15 wystarczył, dopisany test E2E; (2) cisza nocna „od” = „do” zostaje
+  przyjęta (to sposób na wyłączenie ciszy), ale pole mówi to wprost („ta sama godzina – cisza nocna wyłączona”);
+  (3) `clampZoom` zaokrągla do siatki 10 % (ręcznie wpisane 1,23 czyta się jako 120 %, nie „123%”).
+- **T405** Odprawa z hierarchią (1.15.8, N4 – AP-16, MO sp. 1, 2, DW sp. 3): `arrangeBriefing` (`calc/briefing.ts`, czyste)
+  układa pozycje odprawy: alarmy (czerwone, potem żółte – wszystkie poziomy inne niż „info”), sprawy dnia (informacje
+  wymagające ruchu dziś: start, import i nowy plik z mBanku, salda, misja, dostawa czekająca na import, folder ICTTJ,
+  firewall wyłączony, łupy), reszta (zapowiedzi i obserwacja: asteroida za 4–14 dni, PIT-38, boje w przód, koniec
+  kontenera, cena, kontener bez płatności, nowa opłata, nieznany sygnał, domownik) – w obrębie poziomu kolejność
+  `briefing()`. Na wierzchu najwyżej 8 pozycji (`BRIEFING_SHOWN`, nadmiar alarmów i spraw dnia też się zwija), czerwona
+  nigdy; reszta pod „Pokaż wszystkie (N)” (N – wszystkie pozycje; zwinięte są w stronie ukryte, `data-tier`). Jedna
+  pozycja na sprawę: nieznany sygnał kategorii albo zakupu (sygnał marki i nowego kontrahenta niesie teraz kategorię
+  zakupu – `Anomaly.categoryId`, addytywnie) z kategorią, której koperta ma alarm przekroczenia, idzie pod ten alarm
+  (`also`, poziom wyższy z obu). Sprawy, które Meldunki też pokazują – dostawa do zadokowania, zwrot po terminie, saldo
+  (dzień sprawy: `BriefingItem.since`) – starsze niż 30 dni (`BRIEFING_OLD_DAYS`) tylko w Meldunkach; w odprawie
+  odnośnik „N spraw starszych niż 30 dni – w Meldunkach ›”. Domownik (D80 e) się nie starzeje – jego przypomnienie
+  zaczyna się po 30 dniach. Osłony poniżej minimum – w grze poważne naruszenie – w odprawie czerwone (DW sp. 3;
+  poziom alarmu silnika bez zmian); w Dowództwie poważne naruszenie dnia i dziennika czerwone z plakietką „poważne”.
+  Powiadomienia biorą dalej każdą pozycję `briefing()` (własne klucze) – układ dotyczy Mostka, odłączonej Odprawy,
+  Raportów (pełna lista w tej samej kolejności) i odsłuchu.
+- **T406** Powiadomienia: odprawa pierwsza i jedno zbiorcze (1.15.8, N4 – AP-16, US sp. 1, RY sp. 4, AF-67; rozszerza
+  T56): dopóki dzisiejsza odprawa nie przyszła (klucz `briefing:<dzień>` niezapamiętany – `briefingShown`), a nie
+  jest jej chwila, pozostałe powiadomienia dnia czekają – przy odprawie „przy pierwszym otwarciu” najwyżej do 9:00
+  (`BRIEFING_HOLD_UNTIL`: okno w zasobniku przez cały ranek dostaje je wtedy, odprawę przy otwarciu), przy ustalonej
+  godzinie do niej, najwyżej do 12:00 (`BRIEFING_HOLD_MAX`). Trzy i więcej naraz (`BUNDLE_FROM`, start: 10) –
+  jedno powiadomienie (`bundleNotices`): odprawa z „Do tego N innych powiadomień: tytuły (z liczbą powtórzeń) –
+  Mostek.” albo „Powiadomienia (N)”, kliknięcie – Mostek, dźwięk alarmu, gdy któreś go ma; każdy klucz zapamiętany
+  osobno (nic nie przychodzi drugi raz). Zastępuje grupę „Nowe wypłaty w ICTTJ do zadokowania” (3+). Okno dotknięte
+  pierwszy raz po ciszy nocnej z odprawą przechodzi na Mostek jak okno pokazane z zasobnika (AF-67), chyba że otworzyło
+  je kliknięcie powiadomienia.
+- **T407** Godzina odprawy (1.15.8, N4 – D99 pkt 7, D84 C9): `NotifyPrefs.briefingTime` (config.json – komputer;
+  addytywnie, brak albo błędna = null) – null: przy pierwszym otwarciu okna po ciszy nocnej (domyślnie, jak dotąd);
+  „HH:MM”: odprawa przychodzi o tej godzinie bez otwierania okna (godzina w ciszy nocnej – na jej końcu, `briefingAt`;
+  wcześniejsze otwarcie okna jej nie wysyła – odprawa i tak jest na Mostku), okno nie przechodzi wtedy samo na Mostek.
+  Ustawienia → Powiadomienia: wybór „przy pierwszym otwarciu okna po ciszy nocnej” / „o ustalonej godzinie” (domyślnie
+  07:00, pole godziny), uwaga przy godzinie w ciszy. Telefon planuje odprawę na tę godzinę (`plannedNotices`), wyboru
+  w ustawieniach telefonu nie ma (preferencje urządzenia – null).
+- **T408** Odsłuch – skrót (1.15.8, N4 – AP-16, MO sp. 1, 7; rozszerza T214): `briefingSpeech` czyta dzień, energię
+  dziś (przy ukrytych kwotach „Energia na dziś: kwota ukryta.”, przekroczenie i powód ograniczenia jak dotąd), Daily
+  Bias, najważniejszy alarm (pierwsza pozycja `arrangeBriefing` z poziomu alarmów; brak – „Bez alarmów.”) i „Na Mostku
+  (jeszcze) N spraw.” – nigdy wszystkich pozycji. Kwoty w tekście czytane jak energia („52 złote 50 groszy”, ukryta –
+  „kwota ukryta”), strzałka „→” jako „na”. Silver Bullet bierze ten sam najważniejszy alarm.
+- **T409** Rozkazy i progi gry tylko w Ustawieniach (1.15.8, N4 – D99 pkt 7, D84 C9; zmienia T227 „rozkazy edytowalne
+  w Dowództwie” i N73): Dowództwo pokazuje rozkazy (minimalne osłony, linia zanurzenia, cisza nocna, próg dziennika,
+  firewall) i progi gry (awans, koperta poważnie ponad, degradacja, misja) do odczytu z odnośnikiem „zmień w
+  Ustawieniach → Warstwy i rozkazy ›”; progi gry przeniesione do Ustawień → Warstwy i rozkazy (panel „Progi gry”, te
+  same pola i granice). Odrzucony próg mówi dlaczego i że zostaje poprzednia wartość (AP-15, DW sp. 5:
+  `thresholdRefusal`, komunikat jak przy celach warstw). Bez zmian formatu (`settings.game`, `settings.orders`).
+- **T410** „Cofnij import” – zmiany użytkownika po zapisach importów i cofnięć (1.15.8, N4 – przegląd 1 pkt 2, 3; zmienia
+  T402): operacja paczki jest „zmieniona później przez Ciebie”, gdy jej `updatedAt` jest późniejszy niż ostatni zapis
+  aplikacji tej operacji (`appWrites`: `savedAt` paczek, które ją utworzyły albo zmieniły – import i „Cofnij” cofnięcia –
+  oraz `undoneAt` cofniętych paczek, które ją zmieniły albo usunęły), albo gdy jakiś zapis aplikacji zastał ją ze zmianą
+  użytkownika – paczka, która pisała, zapamiętuje ją w nowym polu `edited` (lista id, addytywnie): import – operacje
+  wcześniejszych importów, które zmienia albo usuwa; cofnięcie – te, które usuwa albo zapisuje z powrotem (`editedOf`).
+  `undoneAt` i nowe `savedAt` „Cofnij” są brane po zapisach (`flushSaves`), więc stemple zapisów aplikacji nigdy nie są
+  późniejsze. Zastępuje wykluczanie operacji dotkniętych przez późniejszy import (zmiana użytkownika po cofnięciu tamtego
+  importu nie ostrzegała) i samo nowe `savedAt` przy „Cofnij” (zmiany sprzed cofnięcia przestawały się liczyć). Granice:
+  zapis, który dotarł do folderu dopiero przy ponowieniu, liczy się jak zmiana użytkownika (ostrzeżenie w nadmiarze);
+  paczki sprzed 1.15.8 nie mają `edited` – zmiana przykryta wtedy późniejszym importem nie ostrzega; czasy z różnych
+  komputerów porównywane jak dotąd. Bez podbicia `SCHEMA_VERSION`. **Zastąpione przez T415** (przegląd 2 N4): porównanie
+  czasów miało dalsze dziury (zapis użytkownika w trakcie `flushSaves` ze stemplem sprzed czasu paczki, zapis samych
+  kluczy drugiego formatu bez paczki, zegary komputerów) – pole `edited`, `appWrites` i nowe `savedAt` przy „Cofnij”
+  usunięte przed wydaniem.
+- **T411** Pierwszy dotyk okna po ciszy nocnej (1.15.8, N4 – przegląd 1 pkt 6; zmienia T406): poranny tylko po przerwie –
+  poprzedni dotyk przed końcem ciszy i co najmniej 30 min wcześniej (`MORNING_IDLE_MS`, `morningTouch`). Praca przez
+  koniec ciszy (04:59 → 05:00) nie przenosi na Mostek; okno zostawione na noc – tak, jak dotąd.
+- **T412** Eksport i wyszukiwanie usuniętych (1.15.8, N4 – przegląd 1 pkt 7, 8): „Excel (operacje + miesiące)” zapisuje
+  plik, gdy którykolwiek arkusz ma wiersze (`budgetWorkbook` – okres bez operacji ma swoje miesiące); bez niczego –
+  „Brak operacji i miesięcy w okresie.” i brak pliku; wiersze liczone raz na kliknięcie. „Usunięte wpisy” szukają dat
+  w obu zapisach (`deletedSearchText`): tytuł jak na ekranie (dd.mm.rrrr) i daty rekordu rrrr-mm-dd, chwila usunięcia jak
+  na liście („dd.mm.rrrr, gg:mm”) i rrrr-mm-dd tego samego dnia.
+- **T413** Słowa pól w szybkim wpisie (1.15.8, N4 – przegląd 1 pkt 5; uzupełnia T400; zawężone przez T417): Enter wstrzymuje tylko odmowa pola
+  (toast „error”); słowo o wartości przyjętej, ale zmienionej (tag skrócony do 40 znaków, tag ponad 20 pominięty) idzie do
+  stopki zwykłym kolorem, Enter zapisuje, a słowo jest dopisane do odpowiedzi zapisu („Zapisano. Tag … został skrócony.”)
+  i okno czeka 4 s, by dało się je przeczytać.
+- **T414** Nazwy domownika w banku (1.15.8, N4 – przegląd 1 pkt 4; uzupełnia T401; porównanie nazw – T416): „Cofnij” usunięcia nazwy przywraca
+  tylko tę nazwę, na jej miejsce wśród nazw z chwili cofnięcia (dopisane w międzyczasie zostają, inne usunięte nie
+  wracają); nie wraca, gdy domownik ma ją znowu albo ma ją teraz inny domownik (komunikat – jedna nazwa nie wskazuje dwóch
+  osób). Najwyżej 20 nazw na domownika (`MAX_BANK_NAMES`, granica schematu – ponad nią lista czytała się jako pusta i
+  znikała przy zapisie): 21. odmówiona z komunikatem.
+- **T415** „Cofnij import” po treści, nie po czasie (1.15.8, N4 – przegląd 2 pkt 1, 4, 5; zastępuje mechanizm T410): paczka
+  importu zapisuje odcisk treści każdej utworzonej operacji (`createdHashes`, addytywnie; `contentHash` – rekord po
+  schemacie, bez `updatedAt` / `updatedBy` / `schemaVersion` / `computed` i bez kluczy drugiego formatu `altKeys`, pola
+  w stałej kolejności, 53-bitowy skrót). „Zmienione później przez Ciebie” = treść inna niż zapisana przez import – kto
+  i kiedy ją zapisał, nie gra roli: późniejszy import i jego cofnięcie oddają treść, „Cofnij” cofnięcia zapisuje ją
+  z powrotem, import w drugim formacie dopisuje tylko `altKeys` – nic z tego się nie liczy; zmiana użytkownika liczy się
+  zawsze, także ze stemplem sprzed chwili paczki (zapis w trakcie `flushSaves`, inny zegar komputera, zapis ponowiony
+  później). Import sprzed 1.15.8 (bez odcisków): stempel po `savedAt` to zmiana (więcej ostrzeżeń, nigdy mniej), a przy
+  jego cofnięciu operacje nietknięte według stempla dostają odcisk (`UndoPlan.hashes`) – jego „Cofnij” i następne
+  cofnięcie porównują już treść. „Cofnij” cofnięcia nie nadpisuje i nie usuwa zmian zrobionych po cofnięciu
+  (`redoneAs`): operacja zapisana z powrotem – trójstronnie (podstawa: jak cofnięcie ją zapisało; zmiana użytkownika
+  zostaje, zmiana importu wraca na wierzch, przy kolizji wygrywa użytkownik); operacja przywrócona przez cofnięcie
+  (usunięta przez import) – zmieniona od cofnięcia zostaje, a import przy następnym cofnięciu jej nie dubluje; toast mówi
+  „Zmiany wprowadzone po cofnięciu zostają (N operacji)”. `savedAt` nie zmienia się przy „Cofnij”. Bez podbicia
+  `SCHEMA_VERSION`. **Dopisek (przegląd 3 N4):** „Cofnij” cofnięcia odmawia ze słowem, gdy przywróciłby operacje obok tych
+  samych wierszy banku (`redoRefusal`): po cofnięciu stoi późniejszy import (ten sam plik znowu, inny – tu albo na drugim
+  komputerze) albo klucze wierszy (`bank` / `counterBank`, także `altKeys`) są w budżecie inną drogą – import nie wraca
+  wcale (nie częściowo); wczytuje się go ponownie z pliku. Nigdy w ciszy: folder tylko do odczytu albo otwieranie innego,
+  import już z powrotem, import, który wypadł z listy dziesięciu – każde ze zdaniem.
+- **T416** Jedno porównanie nazw w banku (1.15.8, N4 – przegląd 2 pkt 2, 3, 8): `sameBankName` (`calc/household.ts`) –
+  te same słowa co w `memberOf` (`bankNameWords`: bez wielkości liter i polskich znaków, słowa od dwóch znaków), w dowolnej
+  kolejności („JAN ŻÓŁW” = „jan zolw” = „ŻÓŁW JAN”). Dodanie nazwy, którą ma inny domownik, jest odmówione z komunikatem
+  („Nazwę … ma już …”), to samo przy „Cofnij” jej usunięcia (T414); „+ domownik” z importu dla nazwy, którą ktoś już ma,
+  przypisuje tego domownika zamiast tworzyć drugiego. Granica 20 nazw – jedna stała `MAX_BANK_NAMES` w schemacie i w oknie.
+  Nazwy częściowo wspólne („ANNA KOWALSKA” i „KOWALSKA ANNA MARIA”) nie są odmawiane – `memberOf` bierze pierwszego.
+  **Dopisek (przegląd 3 N4, zmienia zdanie wyżej):** reguła „ta sama osoba” jest regułą `memberOf` – `bankNamesClash`:
+  nazwa, którą import znalazłby w nazwie innego domownika albo odwrotnie („JAN KOWALSKI” w „JAN KOWALSKI SENIOR”, „JAN”
+  w „JAN JAN”, te same słowa w innej kolejności), jest odmawiana przy dodaniu, przy „Cofnij” usunięcia, w „+ domownik”
+  importu (`offersNewMember` – przycisku nie ma) i w domowniku z importu (przypisany ten, którego nazwę import odnajduje).
+  Ta sama nazwa tego samego domownika w innej pisowni (`sameBankName`) – słowo „… ma już nazwę …”, nic nie dopisane.
+- **T417** Słowa pól w szybkim wpisie należą do jednego działania (1.15.8, N4 – przegląd 2 pkt 6; zawęża T413): słowo
+  o przyjętej, ale zmienionej wartości (skrócony tag) idzie z odpowiedzią zapisu tylko wtedy, gdy padło w tym samym
+  działaniu (ten sam Enter, to samo kliknięcie „Zapisz”) – każdy nowy klawisz albo kliknięcie zaczyna od zera, bo słowo
+  powiedziane wcześniej było już w stopce. Odmowa zapisu (brak kwoty, cisza nocna…) też dopisuje słowa tego działania.
+  Tag równy już dodanemu nie jest liczony jako „skrócony” (nic nie przybywa). **Dopisek (przegląd 3 N4):** słowa działania
+  są brane w chwili wysłania zapisu (`fieldWords`, `features/quick/fieldWords.ts`) – klawisze wpisane, zanim przyjdzie
+  odpowiedź (kolejna kwota po Ctrl+Enter), ich nie gubią.
+- **T418** „Cofnij” nie nadpisuje zmian zrobionych po działaniu (1.15.8, N4 – przegląd 3 pkt 6, 7, 8; reguły importu
+  i domownicy, uzupełnia T401): „Cofnij” cofa tylko to, co nadal jest takie, jak działanie to zostawiło; zmienione od tego
+  czasu zostaje, a toast to mówi (`undoKept`: „Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.” albo
+  „Cofnięte operacje: N; zmienione od tego czasu zostają, jak są: M.”). Dotyczy: zmiany reguły i „spłata” z przeglądu
+  reguł (`editRule`, `repayingRule` – reguła zmieniona albo usunięta od tego czasu zostaje), nowej reguły kwotowej (nie
+  jest usuwana, gdy zmieniona), „zostaje zaliczką” reguły (zdejmuje tylko swój znak), „Zastosuj do historii”, rozłączenia
+  i połączenia nazw (klucze zmienione od tego czasu zostają), „Spłać” zaliczek, przypisania zwrotu (gdy wskazane zakupy się
+  zmieniły), zwrotu gotówką (nie jest usuwany, gdy zmieniony), dnia „zwroty spłacają tylko wskazane zakupy”, startu
+  rozliczeń (wraca tylko start, jego operacje i saldo na start domowników nadal przeliczone – domownicy dodani albo zmienieni
+  potem zostają; dawniej całe ustawienia domowników z chwili kliknięcia). „zostaw” zaliczek liczy meldunek jak skrzynka
+  (zostawione już się nie liczą) – na meldunku zostawionym gdzie indziej mówi „nic do zmiany”. Inne ekrany (Ładownia, Radar,
+  Operacje) – poza tym przeglądem.

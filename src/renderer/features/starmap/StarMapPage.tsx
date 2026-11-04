@@ -286,6 +286,12 @@ function GoalMoneyDialog({
             )}
           </label>
         )}
+        {/* The button is off for this amount: said why (AP-15, MG.8), not left grey. */}
+        {to !== 'stay' && (chosenAmount <= 0 || chosenAmount > amount) && (
+          <p className="text-[11.5px] text-accent" data-testid="starmap-money-error">
+            Podaj kwotę od 0,01 zł do {zl(amount)}.
+          </p>
+        )}
         <label className="flex items-center gap-2">
           <input type="radio" checked={to === 'shields'} onChange={() => setTo('shields')} data-testid="starmap-money-shields" />
           do osłon (bufor)

@@ -6,13 +6,15 @@ import { COLLECTIONS, type Collection } from '@shared/paths'
 import { newerSide, newestResolutions } from '@shared/conflicts'
 import { chooser, deepEqual, diffRecords, fieldLabel, formatValue, isAmountPath, merge3, pathKey, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText } from '../../components/fields'
-import { recordTitle } from '../../lib/recordTitle'
+import { plDateTime } from '../../lib/format'
+import { deletedSearchText, recordTitle } from '../../lib/recordTitle'
 import { ChangeList, HistoryButton, useDictNames } from '../history/HistoryDialog'
 import { restoreVersion } from '../history/actions'
 import { api, errorMessage } from '../../lib/api'
 import { saveFirst, useData, useFolderLocked } from '../../store/data'
 import { toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
+import { ConfirmButton } from '../../components/ConfirmButton'
 import { Badge, Panel, cx } from '../../components/ui'
 import { ChangeLogPanel } from './ChangeLog'
 
@@ -35,6 +37,9 @@ const PROBLEM_LABEL: Record<string, string> = {
   'too-new': 'nowszy format',
   'unknown-file': 'nieznany plik'
 }
+
+/** A file OneDrive still brings or another program holds is „zablokowany”, not damaged (AP-23). */
+export const problemLabel = (p: Pick<Problem, 'kind' | 'unreadable'>): string => (p.unreadable ? 'zablokowany' : (PROBLEM_LABEL[p.kind] ?? p.kind))
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
@@ -180,8 +185,8 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
         )}
       </div>
       <div className="num text-[11px] text-dim">
-        zmieniony: {s.updatedAt ? new Date(s.updatedAt).toLocaleString('pl-PL') : '—'}
-        {s.mtimeMs ? ` · plik: ${new Date(s.mtimeMs).toLocaleString('pl-PL')}` : ''}
+        zmieniony: {s.updatedAt ? plDateTime(s.updatedAt, true) : '—'}
+        {s.mtimeMs ? ` · plik: ${plDateTime(s.mtimeMs, true)}` : ''}
       </div>
       {s.error && <div className="text-[11.5px] text-down">{s.error}</div>}
       <button className="btn self-start" disabled={busy || readOnly || !s.record} title={!s.record ? 'Tej wersji nie da się odczytać – zachowaj drugą.' : undefined} onClick={() => resolve(keep)} data-testid={`keep-${keep}`}>
@@ -236,12 +241,6 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
  * neither goes to the bin; a broken one does, after a second click.
  */
 function ProblemAction({ p, locked }: { p: Problem; locked: boolean }) {
-  const [sure, setSure] = useState(false)
-  useEffect(() => {
-    if (!sure) return
-    const t = setTimeout(() => setSure(false), 4000)
-    return () => clearTimeout(t)
-  }, [sure])
   if (p.unreadable)
     return (
       <button className="btn h-[22px]" onClick={() => api.rescan().then(() => toast('Folder przeczytany ponownie.', 'success'), (e) => toast(errorMessage(e), 'error'))} data-testid="problem-reread">
@@ -255,18 +254,17 @@ function ProblemAction({ p, locked }: { p: Problem; locked: boolean }) {
       </span>
     )
   return (
-    <button
-      className={cx('btn h-[22px]', sure ? 'border-down/60 text-down' : 'hover:text-down')}
+    <ConfirmButton
+      className="btn h-[22px] hover:text-down"
       disabled={locked}
-      onClick={() => {
-        if (!sure) return setSure(true)
-        setSure(false)
-        void api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))
-      }}
-      data-testid="problem-trash"
+      confirmLabel="Do Kosza na pewno"
+      onConfirm={() => void api.trashProblemFile(p.relPath).then(() => toast('Plik przeniesiony do Kosza.', 'success'), (e) => toast(errorMessage(e), 'error'))}
+      testId="problem-trash"
     >
-      <IconTrash size={12} /> {sure ? 'Do Kosza na pewno' : 'Do Kosza'}
-    </button>
+      <span className="flex items-center gap-1">
+        <IconTrash size={12} /> Do Kosza
+      </span>
+    </ConfirmButton>
   )
 }
 
@@ -276,13 +274,13 @@ type Deleted = HistoryEntry & { id: string; record: unknown; kind: Collection }
 function DeletedRecords() {
   const [items, setItems] = useState<Deleted[] | null>(null)
   const [busy, setBusy] = useState(false)
-  // A search over the titles and who deleted them.
+  // A search over the titles, who deleted them and when – the dates as shown and as rrrr-mm-dd.
   const [query, setQuery] = useState('')
   const readOnly = useFolderLocked()
   const parts = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = items?.filter((d) => {
     if (!parts.length) return true
-    const hay = `${recordTitle(d.kind, d.record)} ${d.savedBy ?? ''} ${d.savedAt.slice(0, 10)}`.toLowerCase()
+    const hay = deletedSearchText(d.kind, d.record, d.savedAt, d.savedBy ?? null)
     return parts.every((p) => hay.includes(p))
   })
   const load = async () => {
@@ -321,7 +319,7 @@ function DeletedRecords() {
             <div key={`${d.kind}:${d.id}`} className="flex items-center gap-3 border-b border-line/60 py-1 text-[12px] last:border-b-0" data-testid="deleted-row">
               <span className="min-w-0 flex-1 truncate">{recordTitle(d.kind, d.record)}</span>
               <span className="num text-[11px] text-muted">
-                {d.reason === 'undo' ? 'usunięty przy cofnięciu importu' : d.byImport ? 'usunięty przez import' : 'usunięty'} {new Date(d.savedAt).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })} · {d.savedBy ?? '?'}
+                {d.reason === 'undo' ? 'usunięty przy cofnięciu importu' : d.byImport ? 'usunięty przez import' : 'usunięty'} {plDateTime(d.savedAt)} · {d.savedBy ?? '?'}
               </span>
               <button
                 className="btn h-[22px]"
@@ -441,7 +439,7 @@ export function SyncPage() {
             ))}
             {lastRemote && (
               <div className="text-[12px] text-muted" data-testid="sync-last-remote">
-                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {new Date(lastRemote.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {plDateTime(lastRemote.at)}
               </div>
             )}
           </Panel>
@@ -473,7 +471,7 @@ export function SyncPage() {
           <div className="border border-line bg-panel">
             {problems.map((p) => (
               <div key={p.relPath} className="grid grid-cols-[110px_minmax(0,1fr)_auto] items-center gap-3 border-b border-line/70 px-2.5 py-1.5 last:border-b-0" data-testid="problem-row">
-                <Badge tone={p.kind === 'unknown-file' ? 'default' : 'down'}>{PROBLEM_LABEL[p.kind]}</Badge>
+                <Badge tone={p.kind === 'unknown-file' ? 'default' : 'down'}>{problemLabel(p)}</Badge>
                 <div className="min-w-0">
                   <div className="num truncate text-[12px] text-fg-strong">{p.relPath}</div>
                   <div className={cx('truncate text-[11.5px]', p.kind === 'unknown-file' ? 'text-muted' : 'text-down')} title={p.message}>

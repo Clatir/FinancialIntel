@@ -2,11 +2,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { RELEASES_PAGE, type UpdateState } from '@shared/update'
 import { api, errorMessage } from '../../lib/api'
-import { fmtBytes } from '../../lib/format'
+import { fmtBytes, plDateTime } from '../../lib/format'
 import { checkForUpdates, downloadUpdate, restartToUpdate, setUpdatePrefs, setUpdateToken, useUpdate } from '../../store/update'
 import { toast } from '../../store/ui'
 import { installWhen, useTray } from '../../store/tray'
 import { IconExternal, IconSync } from '../../components/icons'
+import { ConfirmButton } from '../../components/ConfirmButton'
 import { Badge, Field, Panel, Toggle, cx } from '../../components/ui'
 
 /** GitHub's page for a new fine-grained token (only this repository, Contents: read-only). */
@@ -51,9 +52,15 @@ function TokenPanel({ s }: { s: UpdateState }) {
             Zapisz i sprawdź
           </button>
           {s.token.present && (
-            <button className="btn btn-ghost" onClick={() => void setUpdateToken(null)} data-testid="update-token-remove">
+            <ConfirmButton
+              className="btn btn-ghost"
+              confirmLabel="Usuń token"
+              message="Token jest zapisany tylko na tym komputerze – nowy trzeba utworzyć na GitHubie."
+              onConfirm={() => void setUpdateToken(null)}
+              testId="update-token-remove"
+            >
               Usuń token
-            </button>
+            </ConfirmButton>
           )}
           <button className="btn btn-ghost" onClick={() => openExternalSafe(NEW_TOKEN_PAGE)}>
             <IconExternal size={13} /> Utwórz token na GitHubie
@@ -192,7 +199,7 @@ export function UpdatesTab() {
           <Field label="Status">
             <div className="flex flex-col gap-1" data-testid="update-status">
               <StatusLine s={s} />
-              {s.lastCheckAt && <span className="num text-[11px] text-dim">ostatnie sprawdzenie: {new Date(s.lastCheckAt).toLocaleString('pl-PL')}</span>}
+              {s.lastCheckAt && <span className="num text-[11px] text-dim">ostatnie sprawdzenie: {plDateTime(s.lastCheckAt, true)}</span>}
             </div>
           </Field>
           <div className="flex flex-wrap items-center gap-2">

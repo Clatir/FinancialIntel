@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { layersEffect, type LayersLine } from '@shared/calc/effect'
+import { salariesText } from '@shared/format'
 import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel, type NotifyPrefs } from '@shared/machine'
-import { eveningAt } from '@shared/notify'
-import type { LayersSettings, Orders } from '@shared/schema'
+import { briefingAt, eveningAt } from '@shared/notify'
+import { BRIEFING_FROM } from '@shared/notifyPlan'
+import type { GameSettings, LayersSettings, Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { playSound } from '../../lib/sounds'
 import { updateSettings, useData, useFolderLocked } from '../../store/data'
@@ -61,19 +63,20 @@ export function LayersTab() {
               commitOnBlur
               isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries}
               onChange={(v) => v != null && setLayers({ shieldSalaries: v })}
-              onReject={(v) => toast(v != null && v >= 1 && v < orders.minShieldSalaries ? `Cel osłon nie może być mniejszy niż minimalne osłony (${orders.minShieldSalaries} pensji) – najpierw zmniejsz minimum.` : 'Cel osłon to od 1 do 24 pensji – zostaje poprzedni.', 'error', 6000)}
+              onReject={(v) => toast(v != null && v >= 1 && v < orders.minShieldSalaries ? `Cel osłon nie może być mniejszy niż minimalne osłony (${salariesText(orders.minShieldSalaries)}) – najpierw zmniejsz minimum.` : 'Cel osłon to od 1 do 24 pensji – zostaje poprzedni.', 'error', 6000)}
               onDraft={(v) => setDraft((d) => ({ ...d, shieldSalaries: v }))}
               aria-label="Osłony w pensjach"
               data-testid="layers-shields"
             />
           </Field>
-          <Field label="Kadłub – cel" labelWidth={200} hint="Fundusz awaryjny: tyle miesięcy średnich kosztów netto (D12).">
+          <Field label="Kadłub – cel" labelWidth={200} hint="Fundusz awaryjny: tyle miesięcy średnich kosztów netto.">
             <NumberField
               className="w-[80px]"
               value={layers.hullMonths}
               decimals={0}
               step={1}
               commitOnBlur
+              range={[1, 36]}
               isValid={(v) => v != null && v >= 1 && v <= 36}
               onChange={(v) => v != null && setLayers({ hullMonths: v })}
               onDraft={(v) => setDraft((d) => ({ ...d, hullMonths: v }))}
@@ -89,6 +92,10 @@ export function LayersTab() {
       </Panel>
       <Panel title="Rozkazy">
         <OrdersFields labelWidth={200} />
+      </Panel>
+      {/* The orders and the game's thresholds only here (D84 C9, D99 pkt 7): Dowództwo reads them. */}
+      <Panel title="Progi gry" testId="settings-game">
+        <GameFields labelWidth={200} />
       </Panel>
     </fieldset>
   )
@@ -145,7 +152,7 @@ function LayersPreview({ shieldSalaries, hullMonths, saved }: { shieldSalaries: 
 }
 
 /**
- * The orders' fields (fi.json): in Ustawienia → Warstwy i rozkazy and in Dowództwo (spec: „do zmiany w Dowództwie” – N73).
+ * The orders' fields (fi.json): only in Ustawienia → Warstwy i rozkazy (D84 C9, D99 pkt 7 – Dowództwo reads them).
  * Disabled by the fieldset around them in a folder only to read.
  */
 export function OrdersFields({ labelWidth }: { labelWidth: number }) {
@@ -168,7 +175,7 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
           commitOnBlur
           isValid={(v) => v != null && v >= 0 && v <= 24 && v <= layers.shieldSalaries}
           onChange={(v) => v != null && setOrders({ minShieldSalaries: v })}
-          onReject={(v) => toast(v != null && v > layers.shieldSalaries ? `Minimalne osłony nie mogą przekraczać celu osłon (${layers.shieldSalaries} pensji) – zostaje poprzednie.` : 'Minimalne osłony to od 0 do 24 pensji – zostaje poprzednie.', 'error', 6000)}
+          onReject={(v) => toast(v != null && v > layers.shieldSalaries ? `Minimalne osłony nie mogą przekraczać celu osłon (${salariesText(layers.shieldSalaries)}) – zostaje poprzednie.` : 'Minimalne osłony to od 0 do 24 pensji – zostaje poprzednie.', 'error', 6000)}
           aria-label="Minimalne osłony"
           data-testid="orders-min-shields"
         />
@@ -176,17 +183,25 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
       <Field label="Linia zanurzenia (% pensji)" labelWidth={labelWidth}>
         <NumberField className="w-[80px]" value={orders.cargoLimitPct} decimals={0} step={5} commitOnBlur isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} aria-label="Linia zanurzenia" data-testid="orders-cargo" />
       </Field>
-      <Field label="Cisza nocna" labelWidth={labelWidth} hint="Zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu (D40).">
-        <div className="flex items-center gap-2">
-          <TimeField className="w-[70px]" value={orders.quietHours.from} onChange={(from) => from && setOrders({ quietHours: { ...orders.quietHours, from } })} aria-label="Cisza od" />
-          –
-          <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" />
+      <Field label="Cisza nocna" labelWidth={labelWidth} hint="Zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu.">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <TimeField className="w-[70px]" value={orders.quietHours.from} onChange={(from) => from && setOrders({ quietHours: { ...orders.quietHours, from } })} aria-label="Cisza od" />
+            –
+            <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" />
+          </div>
+          {/* US.9 (AP-23): the same hour twice is a window of no length – accepted, but said: no quiet hours at all. */}
+          {orders.quietHours.from === orders.quietHours.to && (
+            <span className="text-[11.5px] text-accent" role="status" data-testid="orders-quiet-off">
+              „Od” i „do” to ta sama godzina – cisza nocna wyłączona: zakupy o każdej porze bez potwierdzenia i wpisu.
+            </span>
+          )}
         </div>
       </Field>
-      <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty (D41); 0 albo puste – dziennik nie pyta.">
+      <Field label="Dziennik kapitański od kwoty" labelWidth={labelWidth} hint="„Plan czy impuls?” od tej kwoty; 0 albo puste – dziennik nie pyta.">
         <AmountField className="w-[120px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
       </Field>
-      <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne (D23)" data-testid="orders-firewall" />
+      <Toggle checked={orders.firewall} onChange={(firewall) => setOrders({ firewall })} label="Firewall: dopłata do XTB tylko z „wolnego do decyzji”, gdy osłony i kadłub są pełne" data-testid="orders-firewall" />
       {/* DW.12 (AP-17): switched off, nothing checks a top-up – said here, on the bridge and in the briefing. */}
       {orders.firewall ? (
         <p className="text-[11px] text-muted">Kadłub od 99 % celu liczy się jako pełny – cel rośnie ze średnimi kosztami.</p>
@@ -195,6 +210,87 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
           Firewall wyłączony – dopłaty do XTB nie są sprawdzane: bez czerwonego alarmu i bez naruszenia w grze, choćby osłony albo kadłub nie były pełne.
         </p>
       )}
+    </div>
+  )
+}
+
+type Threshold = 'promoteDays' | 'windowDays' | 'seriousEnvelopePct' | 'demoteSerious' | 'missionDays'
+
+/** The game's thresholds (fi.json): their limits, and why a value is refused (AP-15 – never back without a word, DW sp. 5). */
+const THRESHOLDS: Record<Threshold, { min: number; max: number; what: string }> = {
+  promoteDays: { min: 1, max: 366, what: 'Dni zgodnych do awansu' },
+  windowDays: { min: 1, max: 366, what: 'Okno awansu' },
+  seriousEnvelopePct: { min: 0, max: 500, what: 'Próg poważnego przekroczenia koperty' },
+  demoteSerious: { min: 1, max: 31, what: 'Degradacja' },
+  missionDays: { min: 0, max: 30, what: 'Dni za wykonaną misję' }
+}
+
+/** Why a threshold typed is refused – the previous one stays. */
+export function thresholdRefusal(key: Threshold, v: number | null, game: Pick<GameSettings, 'promoteDays' | 'windowDays'>): string {
+  const t = THRESHOLDS[key]
+  if (v == null) return `${t.what}: pole nie może być puste – zostaje poprzednia wartość.`
+  if (!Number.isInteger(v)) return `${t.what}: tylko liczby całkowite – zostaje poprzednia wartość.`
+  if (v < t.min || v > t.max) return `${t.what}: od ${t.min} do ${t.max} – zostaje poprzednia wartość.`
+  if (key === 'promoteDays' && v > game.windowDays) return `Dni zgodnych do awansu nie może być więcej niż dni okna (${game.windowDays}) – zostaje poprzednia wartość.`
+  if (key === 'windowDays' && v < game.promoteDays) return `Okno awansu nie może być krótsze niż dni zgodnych do awansu (${game.promoteDays}) – zostaje poprzednia wartość.`
+  return `${t.what}: wartość odrzucona – zostaje poprzednia.`
+}
+
+/** A threshold the game takes (the same rules as its refusal). */
+const thresholdOk = (key: Threshold, v: number | null, game: Pick<GameSettings, 'promoteDays' | 'windowDays'>) =>
+  v != null && Number.isInteger(v) && v >= THRESHOLDS[key].min && v <= THRESHOLDS[key].max && (key !== 'promoteDays' || v <= game.windowDays) && (key !== 'windowDays' || v >= game.promoteDays)
+
+/**
+ * The game's thresholds (fi.json): only in Ustawienia → Warstwy i rozkazy since AP-16 (D84 C9 – Dowództwo reads them).
+ * Disabled by the fieldset around them in a folder only to read.
+ */
+function GameFields({ labelWidth }: { labelWidth: number }) {
+  const game = useData((s) => s.fi?.settings.game ?? null)
+  if (!game) return null
+  const setGame = (patch: Partial<GameSettings>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, game: { ...f.settings.game, ...patch } } }))
+  const field = (key: Threshold, testId: string) => (
+    <NumberField
+      className="h-[24px] w-[64px]"
+      value={game[key]}
+      decimals={0}
+      step={1}
+      commitOnBlur
+      isValid={(v) => thresholdOk(key, v, game)}
+      onChange={(v) => v != null && setGame({ [key]: v })}
+      onReject={(v) => toast(thresholdRefusal(key, v, game), 'error', 6000)}
+      aria-label={testId}
+      data-testid={testId}
+    />
+  )
+  return (
+    <div className="flex flex-col gap-2 text-[12px]">
+      <Field label="Awans: dni zgodnych" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('promoteDays', 'game-promote-days')}
+          <span className="text-muted">w ostatnich</span>
+          {field('windowDays', 'game-window-days')}
+          <span className="text-muted">dniach</span>
+        </div>
+      </Field>
+      <Field label="Koperta poważnie ponad" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('seriousEnvelopePct', 'game-serious-pct')}
+          <span className="text-muted">% limitu</span>
+        </div>
+      </Field>
+      <Field label="Degradacja po" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('demoteSerious', 'game-demote')}
+          <span className="text-muted">poważnych w miesiącu</span>
+        </div>
+      </Field>
+      <Field label="Wykonana misja" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('missionDays', 'game-mission-days')}
+          <span className="text-muted">dni zgodnych</span>
+        </div>
+      </Field>
+      <span className="text-[11px] text-dim">Progi działają od kolejnych zamrożonych dni – zamrożone oceny i awanse zostają.</span>
     </div>
   )
 }
@@ -312,7 +408,7 @@ function VolumeSlider() {
 }
 
 const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
-  ['briefing', 'Odprawa poranna – przy pierwszym otwarciu okna po ciszy nocnej'],
+  ['briefing', 'Odprawa poranna – przed innymi powiadomieniami'],
   ['evening', 'Wieczorne dopisanie wydatków'],
   ['low', 'Energia dziś poniżej 20% albo koperta powyżej 80%'],
   ['overrun', 'Przekroczenie przydziału albo koperty'],
@@ -349,6 +445,8 @@ export function NotifyTab() {
   const quiet = useData((st) => st.fi?.settings.orders.quietHours)
   // The evening reminder's hour in the quiet hours (N104): it comes before them – said where it is set.
   const eveningShift = quiet && eveningAt(n.eveningTime, quiet) !== n.eveningTime ? eveningAt(n.eveningTime, quiet) : null
+  // The briefing's hour in the quiet hours (D99 pkt 7): it comes at their end – said where it is set.
+  const briefingShift = quiet && n.briefingTime && briefingAt(n.briefingTime, quiet) !== n.briefingTime ? briefingAt(n.briefingTime, quiet) : null
   return (
     <>
       <Panel title="Szybki wpis">
@@ -378,6 +476,27 @@ export function NotifyTab() {
           {NOTIFY_ROWS.map(([key, label]) => (
             <div key={key} className="flex items-center gap-3">
               <Toggle checked={n[key] as boolean} onChange={(on) => void setMachinePrefs({ notify: { ...n, [key]: on } })} label={label} data-testid={`notify-${key}`} />
+              {/* When the briefing comes (D99 pkt 7, D84 C9): at the first opening (the default) or at its hour. */}
+              {key === 'briefing' && (
+                <select
+                  className="input h-[24px] w-[260px]"
+                  value={n.briefingTime ? 'time' : 'open'}
+                  onChange={(e) => void setMachinePrefs({ notify: { ...n, briefingTime: e.currentTarget.value === 'time' ? BRIEFING_FROM : null } })}
+                  aria-label="Kiedy odprawa poranna"
+                  data-testid="notify-briefing-when"
+                >
+                  <option value="open">przy pierwszym otwarciu okna po ciszy nocnej</option>
+                  <option value="time">o ustalonej godzinie</option>
+                </select>
+              )}
+              {key === 'briefing' && n.briefingTime && (
+                <TimeField className="w-[70px]" value={n.briefingTime} onChange={(briefingTime) => briefingTime && void setMachinePrefs({ notify: { ...n, briefingTime } })} aria-label="Godzina odprawy porannej" data-testid="notify-briefing-time" />
+              )}
+              {key === 'briefing' && briefingShift && quiet && (
+                <span className="text-[11px] text-accent" data-testid="notify-briefing-quiet">
+                  w ciszy nocnej ({quiet.from}–{quiet.to}) – przyjdzie o {briefingShift}
+                </span>
+              )}
               {key === 'evening' && (
                 <TimeField className="w-[70px]" value={n.eveningTime} onChange={(eveningTime) => eveningTime && void setMachinePrefs({ notify: { ...n, eveningTime } })} aria-label="Godzina wieczornego dopisania" data-testid="notify-evening-time" />
               )}

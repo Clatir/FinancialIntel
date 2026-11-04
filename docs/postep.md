@@ -27,9 +27,9 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | 0 – przygotowanie | – | `claude/audyt-1.15.4` | ✅ D101, porządek tego pliku, PR audytu scalony (bez wydania); poprawka E2E telefonu w nocy | #49 | 0,5 h |
 | N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ✅ wydane 04.11 07:33 (wpis w archiwum `postep-od-1.15.4.md`) | #50 | ok. 5,5 h (01:53–07:33) |
 | N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis w archiwum `postep-od-1.15.4.md`) | #51 | ok. 8 h zegara (05:05–13:06) |
-| N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | 🔄 poprawki po 2 przeglądach, wyrocznia bez rozbieżności; ostatni przegląd high, PR, wydanie | – | – |
-| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | 🔄 przegląd 1 poprawiony; runda 2 (10 uwag) w toku | – | – |
-| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-n5*` | 🔄 8 z 13 AP gotowe (AP-27, 28 po wznowieniu); AP-19, 20, 24, 25, 26, 34 w toku | – | – |
+| N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | ✅ wydane 04.11 18:02 (wpis w archiwum `postep-od-1.15.4.md`) | #52 | ok. 10,5 h zegara (07:15–18:02, z przerwą 14:00–14:20) |
+| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | 🔄 scalone z N3; przegląd 3 (11 uwag) w poprawce, potem PR | – | – |
+| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | 🔄 13 z 13 AP gotowe; integracja (N4, n5a, n5b) w toku | – | – |
 | R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
 | R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
 
@@ -41,14 +41,12 @@ podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` �
 (`[System.IO.Directory]::Delete(<łącze>, $false)`; `.claude/rules/testy.md`). Po przerwie: `git worktree list`, ten plik,
 notatki, dalej od pierwszej grupy niewydanej.
 
-- **N3 (1.15.7)** – gałąź `claude/1.15.7-oplaty` (ten katalog): przegląd high poprawek (9 uwag) → poprawki 2cf22ba (T398,
-  T399) → przegląd high 2cf22ba → PR, CI, wydanie.
-- **N4 (1.15.8)** – gałąź `claude/1.15.8-interfejs` (drzewo `FI-wt\n4a`): poprawki przeglądu 1 d877273 (T410–T414),
-  przegląd high poprawek – 10 uwag (`_notatki/n4-review2.md`, „Cofnij import”), runda 2 w toku; potem scalenie N3 (z N2) do N4,
-  pełne testy, PR, wydanie.
-- **N5 (1.15.9)** – gałęzie `claude/1.15.9-n5a` (AP-21, 33, 36), `-n5b` (AP-29, 37, 38 + AP-27, 28 – ac3caf5), `-n5d` (AP-19,
-  26), `-n5e` (AP-20, 34), `-n5f` (AP-24, 25 + KR.29 częściowo); n5a i n5b na bazie `main` 1.15.6, reszta na N4. Po wydaniu
-  N4: scalenie wszystkich na N4, przegląd high całości, poprawki, wydanie.
+- **N3 (1.15.7)** – ✅ wydane 04.11 18:02 (PR #52).
+- **N4 (1.15.8)** – gałąź `claude/1.15.8-interfejs` (drzewo `FI-wt\n4a`): przeglądy 1 i 2 poprawione (d877273, c1eace1 –
+  T410–T417), scalone N3 z N2 (56306cb, ea74a89) i `main` 1.15.7 (b849b1b), wersja i CHANGELOG (87b6518); przegląd 3
+  (11 uwag – `_notatki/n4-review3.md`) w poprawce; potem PR, CI, wydanie.
+- **N5 (1.15.9)** – gałąź integracji `claude/1.15.9-sciezki` (drzewo `FI-wt\n5`): n5d + n5e + n5f scalone (8b71968);
+  w toku scalenie N4, n5a, n5b; potem przegląd high całości, poprawki, wydanie.
 - **R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
@@ -64,6 +62,14 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
+| N4 | Odmowy i „Cofnij” | zamiana „od” / „do” z komunikatem zamiast odmowy; 0 zł zapisywane z ostrzeżeniem; „Cofnij” najmniej 8 s, licznik długości od 80 %; usunięcie tokenu i przeniesienie do Kosza pytają; przełącznik scenariusza ICTTJ zostaje z banerem | T400–T402 |
+| N4 | Odprawa z hierarchią | „sprawy dnia” i najwyżej 8 linii; inne powiadomienia czekają na odprawę do 09:00 (albo jej godziny, najpóźniej 12:00); 3 i więcej naraz = jedno, klik otwiera Mostek; progi gry przeniesione do Ustawień; z ustawioną godziną wcześniejsze otwarcie nie wysyła odprawy, wybór opcji ustawia 07:00 | T405–T409 |
+| N4 | Poranny dotyk | okno zostawione na noc przechodzi na Mostek przy pierwszym dotyku po co najmniej 30 min bez dotyku | T411 |
+| N4 | Teksty | zoom do siatki 10 %; inflacja i drill bez wymuszonego jednego miejsca po przecinku; cisza nocna „od = do” przyjmowana z komunikatem (wyłączona) | T403, T404 |
+| N4 | Szybki wpis – słowa pól | informacja o przyjętej, ale zmienionej wartości dopisana do „Zapisano” (okno czeka 4 s), tylko z tego samego działania | T413, T417 |
+| N4 | Nazwy w banku | nazwa, którą import przypisałby innemu domownikowi (także zawierająca jego nazwę – „JAN KOWALSKI SENIOR” przy „JAN KOWALSKI”), nie wraca po „Cofnij” i nie da się jej dopisać (komunikat); „+ domownik” nie pojawia się dla takiej nazwy; najwyżej 20 nazw | T414, T416 |
+| N4 | „Cofnij import” i eksport | operacja przywrócona przez cofnięcie i zmieniona przez Ciebie zostaje po „Cofnij”; ponowienie cofniętego importu po późniejszym imporcie odmawiane w całości (nie część wierszy); pusty Excel – „Brak operacji i miesięcy w okresie.” | T412, T415 |
+| N4 | Meldunek „Zaliczki przy długu” | „Spłać” / „zostaw” na nieaktualnym meldunku – komunikat „nic do zmiany” | T400 |
 | N3 | Opłata zapłacona z celu albo zakupem do zwrotu | zapłacona w Ładowni i silniku – cykl zamknięty, zbiornik nietknięty (zebrane zostaje na następny termin), zwrot domownika to spłata długu; dawny przelew z ukrytym kontenerem nie płaci nigdzie | T393 |
 | N3 | Zaległe opłaty | liczone od startu budżetu albo miesiąca dodania kontenera – po aktualizacji stare luki w historii pojawią się od razu („Zapłacone poza budżetem” je czyści); opłata ustawiona jako miesięczna, a płacona co 2 miesiące, pokaże pominięte miesiące; płatność przed dniem następnego terminu idzie najpierw na zaległy | T375, T376 |
 | N3 | Boje i pole „Płatność” | boja zamyka się tylko operacją z jej nazwą; pole „Płatność” pokazuje następny termin; silnik trzyma w zbiorniku pieniądze na niezapłacony cykl (tylko notka) | T376, T378 |
@@ -96,30 +102,27 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
 
-## N3 – Opłaty, energia, gra (1.15.7, 04.11.2026)
-- **Zakres:** AP-13 energia dziś w granicach miesiąca, zwrot dawnego zakupu od jutra (T370, T371), AP-17 kadłub od 99 %,
-  „Dopełnij kadłub z osłon”, podgląd celów warstw (T372–T374), AP-10 jeden stan opłaty i zaległości (T375–T379), AP-14
-  zamrażanie dni po przerwie porcjami, pytanie bez importu, „Nowa klasa” (T380–T382), AP-30 misje i droga do awansu
-  (T383, T384), AP-18 kurs bez osłon poniżej zera, „teraz” = Mostek (T385–T387), AP-31 trend poduszki (T388, T389);
-  integracja (T390–T392), jedna reguła „która płatność płaci opłatę” – silnik = Ładownia = kreator (T393, T394), płatność
-  z datą po dziś (T398), wydajność stanu opłat i boi (T399).
-- **Wykonawcy:** 4 strumienie w osobnych drzewach (AP-13 + AP-17 max, AP-10, AP-14 + AP-30, AP-18 + AP-31 – xhigh),
-  integracja max, scalenie z N2 (max) – razem z N2 w jednej regule płatności opłat.
-- **Przegląd:** xhigh całości (15 uwag – przyczyna: dwie reguły płatność ↔ cykl; poprawki R max i S xhigh), high na
-  poprawkach i rozwiązaniu konfliktów z N2 (9 uwag: 8 poprawionych, 1 z innym skutkiem niż w recenzji – poprawiony
-  skutek odwrotny; kreator z rachunkiem zmiennym o cykl w tyle, płatność z datą po dziś zapłacona tylko w Ładowni,
-  „Cofnij” dopełnienia kadłuba mógł usunąć plan miesiąca z cudzą zmianą), high na tych poprawkach (9 uwag – reguła
-  płatności wpisanej z wyprzedzeniem uproszczona do jednego zbioru terminów zaplanowanych w oknie Radaru, co zamknęło też
-  podwójne liczenie w saldach naprzód od 1.8.0; „Cofnij” bez planu nic nie tworzy); trzecia runda sprawdzona przez
-  koordynatora na diffie.
-- **Wyrocznia:** 412 przypadków, 28 963 kwoty, 2 852 porównania ekranów – bez rozbieżności; AF-15 zamknięte.
-- **Testy:** typecheck (także `typecheck:audyt`), `npm test` 1424 (lokalnie pod obciążeniem pada tylko `folder-speed`
-  ZIP64), build, E2E zmienionych ekranów; pełne E2E – CI (Linux zielone na 2cf22ba).
-- **Otwarte:** zaległy termin zamknięty dopiero przesunięciem przez drugą płatność okna wpisaną naprzód zostaje „po
-  terminie” do jej dnia (w saldach naprzód podwójnie); `priceChanges` liczy płatności wpisane naprzód; dni zamrożone przed 1.15.7 bez `clsBefore`;
-  kalibracja progów gry (D99 pkt 12) – za osobną zgodą.
-- **Czas:** 07:15–ok. 13:50 kod i dwa przeglądy (przerwa 14:00–14:20), 14:20–ok. 16:45 przegląd poprawek, poprawki,
-  wydanie – plan 2,5–3,5 h pracy; zegar dłuższy przez scalenie z N2 i trzy rundy przeglądu.
+## N4 – Zasady interfejsu (1.15.8, 04.11.2026)
+- **Zakres:** AP-15 komunikat przy każdej odmowie i przycięciu (T400–T402), AP-22 „Cofnij” wszędzie, AP-16 odprawa
+  z hierarchią, godzina odprawy, progi gry w Ustawieniach (T405–T409), AP-23 teksty – daty dd.mm.rrrr, bez kodów, błędy
+  po polsku, odmiana, „−” (T403, T404); po przeglądach: „Cofnij import” po odcisku treści (T415 zamiast T410), jedna
+  reguła „ta sama osoba” jak `memberOf` (T416), słowa pól szybkiego wpisu (T413, T417), żadne „Cofnij” reguł
+  i domowników nie nadpisuje późniejszych zmian (T418), poranny dotyk (T411), eksport i wyszukiwanie usuniętych (T412),
+  limit 20 nazw w banku (T414).
+- **Wykonawcy:** N4-a (AP-15, AP-22 – Sonnet high), N4-b (AP-16 – Opus high), N4-c (AP-23 – Sonnet high); poprawki
+  przeglądów – Opus xhigh; scalenie N3 z N2 do N4 – Opus max (10 konfliktów, m.in. księga domowników – bez zmian).
+- **Przegląd:** high całości (10 uwag), high na poprawkach (10 – m.in. „Cofnij import” mógł usunąć zmianę użytkownika
+  bez ostrzeżenia; przeprojektowane na odcisk treści), high na poprawkach i scaleniu z N3 (10 + 1 – m.in. ponowienie po
+  cofnięciu dublowało operacje, nazwa domownika, którą import przypisałby innej osobie) – wszystkie poprawione z testem,
+  który przed poprawką padał; trzecia runda sprawdzona przez koordynatora na diffie.
+- **Testy:** typecheck, `npm test` 1517 (pod obciążeniem pada tylko `folder-speed` ZIP64), build, E2E komputera 106/108
+  po scaleniu (lokalnie `ictj.spec`, `series.spec` – osobno zielony), telefonu 10/10, wyrocznia bez rozbieżności.
+- **Otwarte:** „Cofnij” poza regułami i domownikami (Ładownia, Radar, Operacje, Kategorie) może nadpisywać zmiany zrobione
+  po działaniu; paczki importu sprzed 1.15.8 ostrzegają w nadmiarze, dopóki nie wypadną z 10 ostatnich; chip „+ #tag
+  ostatnich dni” zasłania pole tagów w wąskim oknie; krótkie daty dd.mm (58 miejsc) zostają; „Ctrl K” przy wysokim
+  kontraście; telefon bez własnej godziny odprawy.
+- **Czas:** 12:09–ok. 13:50 kod (przed przerwą), 14:20–18:45 trzy rundy poprawek, scalenie z N3, wydanie – plan 2–3 h
+  pracy; zegar dłuższy przez rundy przeglądu i scalenie z N2/N3.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.

@@ -12,18 +12,20 @@ import { setReportTab, setWatchMonday, useReportsUi, watchMondayOf, type ReportT
 import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
-import { BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
+import { arrangeBriefing, BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
 import { sum } from '@shared/calc/operations'
 import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
 import { netAdjustments } from '@shared/calc/netWorth'
-import { monthRows, monthsCsv, monthsSheet, operationRows, operationsCsv, operationsSheet, reportHtml, type ReportSection } from '@shared/export/budget'
+import { budgetWorkbook, monthRows, monthsCsv, operationRows, operationsCsv, reportHtml, type ReportSection } from '@shared/export/budget'
 import { formatPln, rangeText } from '@shared/format'
+import { ictOf } from '@shared/glossary'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useGameView } from '../../store/game'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { api } from '../../lib/api'
+import { orderRange, swappedText } from '../../lib/guards'
 import { DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
 import { Empty, Panel, Segmented, cx } from '../../components/ui'
@@ -48,6 +50,9 @@ const TABS: Array<{ value: Tab; label: string }> = [
 const saved = (path: string | null) => {
   if (path) toast(`Zapisano: ${path}`, 'success', 6000)
 }
+const NO_OPERATIONS = 'Brak operacji w okresie.'
+const NO_MONTHS = 'Brak miesięcy w okresie.'
+const NO_DATA = 'Brak operacji i miesięcy w okresie.'
 const failed = (e: unknown) => toast(`Nie udało się zapisać: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
 
 /** The costs linked to the cargo's containers (N72): one name in every report – monthly and periodic fees alike. */
@@ -96,17 +101,20 @@ function BriefingReport() {
   const items = useBriefingItems(fleet)
   if (!fleet) return null
   const bias = dailyBias(fleet)
+  // The whole briefing in the bridge's order (AP-16): alarms, the day's matters, the rest – one line per matter.
+  const view = arrangeBriefing(items, fleet.today)
+  const rows = [...view.shown, ...view.rest]
   return (
     <Columns id="reports-briefing" tracks={['minmax(420px,1fr)']} className="grid items-start">
       <Panel title={`Odprawa – ${dayLabel(fleet.today)}`} name="Odprawa" testId="reports-briefing">
         <div className="flex flex-col text-[12px]">
           {fleet.daily && <Line label="Energia dziś" value={zl(fleet.daily.energy)} strong />}
           {/* The briefing's first element (spec, N26) – as on the bridge. */}
-          {bias && <Line label="Daily Bias" value={BIAS_LABEL[bias]} testId="reports-briefing-bias" />}
-          {!items.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
-          {items.map((i) => (
-            <span key={i.key} className={cx('py-0.5', i.level === 'red' ? 'text-down' : 'text-fg')} data-testid="reports-briefing-item">
-              {i.text}
+          {bias && <Line label={<span title={ictOf('Daily Bias')}>Daily Bias</span>} value={`${bias === 'bullish' ? '▲' : bias === 'bearish' ? '▼' : '◆'} ${BIAS_LABEL[bias]}`} testId="reports-briefing-bias" />}
+          {!rows.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
+          {rows.map((i) => (
+            <span key={i.key} className={cx('py-0.5', i.level === 'red' ? 'text-down' : 'text-fg')} data-testid="reports-briefing-item" data-tier={i.tier}>
+              {[i.text, ...i.also].join(' ')}
             </span>
           ))}
         </div>
@@ -155,7 +163,7 @@ function WatchReport() {
               )}
             </div>
             <Line label="Koszty netto" value={zl(w.costs)} strong testId="reports-watch-costs" />
-            <Line label={<span title="Przychód (D81): praca i trading netto – bez zwrotów, pożyczek i pieniędzy domowników">Przychody</span>} value={zl(w.income)} />
+            <Line label={<span title="Przychód: praca i trading netto – bez zwrotów, pożyczek i pieniędzy domowników">Przychody</span>} value={zl(w.income)} />
             <div className="flex flex-col pt-1">
               {w.days.map((d) => {
                 const g = days.get(d.date)
@@ -512,6 +520,16 @@ function ExportPanel() {
   const months = () =>
     monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
+  // „Od” after „do” swap with a word (AP-15, AF-36): a range read backwards is no empty file with „Zapisano”.
+  const setEnds = (nextFrom: string, nextTo: string) => {
+    const r = orderRange(nextFrom, nextTo)
+    setFrom(r.from!)
+    setTo(r.to!)
+    if (r.swapped) toast(swappedText('daty', plDate(r.from!), plDate(r.to!)), 'info', 6000)
+  }
+  // Nothing in the period: said, no empty file (RE sp. 5). The rows counted once – the same ones written.
+  const save = <R,>(rows: R | null, none: string, write: (rows: R) => Promise<string | null>) => (rows == null ? toast(none, 'info', 5000) : write(rows).then(saved, failed))
+  const some = <R,>(rows: readonly R[]) => (rows.length ? rows : null)
   const csv = { name: 'CSV', extensions: ['csv'] }
   return (
     <Columns id="reports-export" tracks={['minmax(420px,1fr)']} className="grid items-start">
@@ -519,18 +537,18 @@ function ExportPanel() {
         <div className="flex flex-col gap-2 text-[12px]">
           <div className="flex items-center gap-2">
             <span className="text-muted">Okres</span>
-            <DateField className="h-[24px] w-[100px]" value={from} onChange={setFrom} aria-label="Od" data-testid="export-from" />
+            <DateField className="h-[24px] w-[100px]" value={from} onChange={(d) => setEnds(d, to)} aria-label="Od" data-testid="export-from" />
             <span className="text-muted">–</span>
-            <DateField className="h-[24px] w-[100px]" value={to} onChange={setTo} aria-label="Do" data-testid="export-to" />
+            <DateField className="h-[24px] w-[100px]" value={to} onChange={(d) => setEnds(from, d)} aria-label="Do" data-testid="export-to" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="btn h-[26px]" onClick={() => api.saveTextFile(name('operacje', 'csv'), operationsCsv(ops()), csv).then(saved, failed)} data-testid="export-operations-csv">
+            <button className="btn h-[26px]" onClick={() => save(some(ops()), NO_OPERATIONS, (rows) => api.saveTextFile(name('operacje', 'csv'), operationsCsv(rows), csv))} data-testid="export-operations-csv">
               Operacje – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(months()), csv).then(saved, failed)} data-testid="export-months-csv">
+            <button className="btn h-[26px]" onClick={() => save(some(months()), NO_MONTHS, (rows) => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(rows), csv))} data-testid="export-months-csv">
               Miesiące – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => api.saveXlsx(name('budzet', 'xlsx'), [operationsSheet(ops()), monthsSheet(months())]).then(saved, failed)} data-testid="export-xlsx">
+            <button className="btn h-[26px]" onClick={() => save(budgetWorkbook(ops(), months()), NO_DATA, (sheets) => api.saveXlsx(name('budzet', 'xlsx'), sheets))} data-testid="export-xlsx">
               Excel (operacje + miesiące)
             </button>
             <button className="btn h-[26px]" onClick={() => api.exportZip().then(saved, failed)} data-testid="export-zip">

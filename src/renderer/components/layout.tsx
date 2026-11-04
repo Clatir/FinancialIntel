@@ -205,7 +205,7 @@ export function PaneEdge({ pane, side, testId = 'pane-edge' }: { pane: { width: 
         aria-label={`${what[0]!.toUpperCase()}${what.slice(1)} panelu (przeciągnij; dwuklik – domyślna)`}
         title={`Przeciągnij, by zmienić ${what}; dwuklik – domyślna`}
         tabIndex={0}
-        className={`absolute outline-none transition-colors duration-100 hover:bg-accent/50 focus-visible:bg-accent/50 ${vertical ? 'inset-x-0 -top-[3px] h-[6px] cursor-ns-resize' : 'inset-y-0 -left-[3px] w-[6px] cursor-ew-resize'}`}
+        className={`absolute outline-none transition-colors duration-150 hover:bg-accent/50 focus-visible:bg-accent/50 ${vertical ? 'inset-x-0 -top-[3px] h-[6px] cursor-ns-resize' : 'inset-y-0 -left-[3px] w-[6px] cursor-ew-resize'}`}
         onPointerDown={(e) => {
           let last = pane.width
           startDrag(

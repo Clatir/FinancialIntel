@@ -12,7 +12,7 @@ import { shareOf } from '@shared/calc/share'
 import { membersNow } from '../household/actions'
 import { shareNames } from '../household/ShareEditor'
 import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, canWrite, replaceRecords, updateSettings, useData } from '../../store/data'
-import { toast } from '../../store/ui'
+import { toast, undoKept } from '../../store/ui'
 import { countLabel } from '../../lib/format'
 import { plnText } from '../../components/fields'
 import { advanceRuleKey } from '@shared/import/audit'
@@ -133,6 +133,29 @@ export function deleteRule(id: string): void {
   setRules((rules) => rules.filter((r) => r.id !== id))
 }
 
+/**
+ * A rule deleted by hand (the rules' lists – AP-22, AF-29): with „Cofnij”, which puts it back where it was (not twice,
+ * when it came back some other way meanwhile).
+ */
+export function removeRule(id: string): void {
+  if (!canWrite()) return
+  const rules = useData.getState().fi?.settings.import.rules ?? []
+  const at = rules.findIndex((r) => r.id === id)
+  const rule = rules[at]
+  if (!rule) return
+  deleteRule(id)
+  toast(`Reguła „${rule.label || rule.match}” usunięta.`, 'info', 8000, {
+    label: 'Cofnij',
+    run: () =>
+      setRules((now) => {
+        if (now.some((r) => r.id === id)) return now
+        const next = [...now]
+        next.splice(Math.min(at, next.length), 0, rule)
+        return next
+      })
+  })
+}
+
 function setRules(next: (rules: ImportRule[]) => ImportRule[]): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next(f.settings.import.rules) } } }))
 }
@@ -176,7 +199,15 @@ export function editRule(id: string, patch: { direction: 'in' | 'out' | null; ch
     updatedAt: new Date().toISOString()
   }
   setRules((rules) => rules.map((r) => (r.id === id ? next : r)))
-  toast(`Reguła „${rule.label || rule.match}” zmieniona.`, 'success', 6000, { label: 'Cofnij', run: () => setRules((rules) => rules.map((r) => (r.id === id ? rule : r))) })
+  toast(`Reguła „${rule.label || rule.match}” zmieniona.`, 'success', 6000, { label: 'Cofnij', run: () => ruleBack(rule, next) })
+}
+
+/** „Cofnij” of a rule's change (AP-22): the rule as it was – only while still as the change left it (review 3 of N4). */
+function ruleBack(was: ImportRule, set: ImportRule): void {
+  const now = useData.getState().fi?.settings.import.rules.find((r) => r.id === was.id)
+  if (!now) return toast(`Reguły „${was.label || was.match}” już nie ma – nic do cofnięcia.`, 'info', 5000)
+  if (!sameContentAs(now, set)) return toast(`Reguła „${was.label || was.match}” zmieniła się od tego czasu – zostaje, jak jest.`, 'info', 6000)
+  setRules((rules) => rules.map((r) => (r.id === was.id ? was : r)))
 }
 
 /**
@@ -192,11 +223,13 @@ export function repayingRule(rule: ImportRule): void {
 export function keepAdvanceRule(rule: Pick<ImportRule, 'id' | 'label' | 'match'>): void {
   if (!canWrite()) return
   const key = advanceRuleKey(rule.id)
+  const at = new Date().toISOString()
+  // „Cofnij” takes back only its own mark (one set again since – here or on the other computer – stays).
   const set = (on: boolean) =>
     updateSettings((f) => {
       const notDuplicates = { ...f.settings.import.notDuplicates }
-      if (on) notDuplicates[key] = new Date().toISOString()
-      else delete notDuplicates[key]
+      if (on) notDuplicates[key] = at
+      else if (notDuplicates[key] === at) delete notDuplicates[key]
       return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates } } }
     })
   if (set(true)) toast(`Reguła „${rule.label || rule.match}” zostaje zaliczką na przyszłość.`, 'info', 6000, { label: 'Cofnij', run: () => set(false) })
@@ -222,7 +255,16 @@ export function addAmountRule(input: { brand: string; label: string; maxAmount: 
     updatedAt: new Date().toISOString()
   })
   setRules((rules) => [...rules, rule])
-  toast(`Nowa reguła: ${input.label} do ${(input.maxAmount / 100).toLocaleString('pl-PL')} zł.`, 'success', 6000, { label: 'Cofnij', run: () => deleteRule(rule.id) })
+  toast(`Nowa reguła: ${input.label} do ${(input.maxAmount / 100).toLocaleString('pl-PL')} zł.`, 'success', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      // Deleted only while as it was added (an edit since stays – review 3 of N4).
+      const now = useData.getState().fi?.settings.import.rules.find((r) => r.id === rule.id)
+      if (!now) return
+      if (!sameContentAs(now, rule)) return toast(`Reguła „${input.label}” zmieniła się od dodania – zostaje, jak jest.`, 'info', 6000)
+      deleteRule(rule.id)
+    }
+  })
 }
 
 /**
@@ -244,10 +286,12 @@ export function applyRuleToHistory(items: ReadonlyArray<{ before: Transaction; a
   )
   const undo = () => {
     const current = useData.getState().records.transactions
+    const back = now.filter((x) => sameContentAs(current[x.after.id]?.record, x.after))
     replaceRecords(
       'transactions',
-      now.filter((x) => sameContentAs(current[x.after.id]?.record, x.after)).map((x) => x.before)
+      back.map((x) => x.before)
     )
+    undoKept(back.length, now.length - back.length)
   }
   toast(`Reguła „${label}” zastosowana do historii: ${countLabel(now.length, 'operacja', 'operacje', 'operacji')}.`, 'success', 8000, { label: 'Cofnij', run: undo })
 }
@@ -333,16 +377,28 @@ function changeAliases(fn: (a: BrandAliases) => Record<string, BrandAlias>): (()
   const after = fn(before)
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => before[k] !== after[k])
   if (!keys.length) return null
-  const write = (from: BrandAliases) =>
+  // `only` – the keys still as `only` has them (its „Cofnij”: a name merged or parted again since stays – review 3 of N4).
+  const write = (from: BrandAliases, only?: BrandAliases): number => {
+    let kept = 0
     updateSettings((f) => {
       const next: Record<string, BrandAlias> = { ...f.settings.import.aliases }
-      for (const k of keys)
+      for (const k of keys) {
+        if (only && !sameContentAs(next[k], only[k])) {
+          kept++
+          continue
+        }
         if (from[k]) next[k] = from[k]!
         else delete next[k]
+      }
       return { ...f, settings: { ...f.settings, import: { ...f.settings.import, aliases: next } } }
     })
+    return kept
+  }
   write(after)
-  return () => write(before)
+  return () => {
+    const kept = write(before, after)
+    undoKept(keys.length - kept, kept, 'nazwy')
+  }
 }
 
 /**
@@ -354,13 +410,15 @@ export function mergeNames(merges: ReadonlyArray<{ into: BrandName; from: readon
   return changeAliases((a) => merges.reduce<Record<string, BrandAlias>>((acc, m) => withMerged(acc, m.into, m.from, now), { ...a }))
 }
 
-/** A merged name back on its own (Ustawienia → Import z banku). */
+/** A merged name back on its own (Ustawienia → Import z banku – AP-22, AF-60: with „Cofnij”). */
 export const unmergeName = (key: string): void => {
-  changeAliases((a) => {
+  const label = aliasesNow()[key]?.label || key
+  const undo = changeAliases((a) => {
     const next = { ...a }
     delete next[key]
     return next
   })
+  if (undo) toast(`Rozłączono „${label}” – wraca do własnej grupy.`, 'success', 8000, { label: 'Cofnij', run: undo })
 }
 
 /** Every merged name back on its own; returns an undo. */
@@ -382,7 +440,13 @@ export function dismissSimilar(key: string): void {
 
 /** The pairs said to be two offered again. */
 export function clearDismissedSimilar(): void {
-  updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: {} } } }))
+  const before = useData.getState().fi?.settings.import.notSimilar ?? {}
+  if (!updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: {} } } }))) return
+  if (Object.keys(before).length)
+    toast('Pary „to nie to samo” będą znowu proponowane.', 'info', 7000, {
+      label: 'Cofnij',
+      run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, notSimilar: { ...before, ...f.settings.import.notSimilar } } } }))
+    })
 }
 
 /**

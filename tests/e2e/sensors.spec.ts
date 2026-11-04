@@ -190,6 +190,13 @@ test('plik z mBanku w Pobranych (1.9.0, F14): meldunek w odprawie, import jednym
       }) as typeof shell.trashItem
     })
     await page.getByTestId('import-trash-file').click()
+    // The Recycle Bin from the app is asked about first (AP-22); Esc withdraws it, nothing moved.
+    await expect(page.getByTestId('import-trash-file-confirm')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('import-trash-file')).toBeVisible()
+    expect(await app.evaluate(() => (globalThis as { trashed?: string[] }).trashed)).toEqual([])
+    await page.getByTestId('import-trash-file').click()
+    await page.getByTestId('import-trash-file-confirm').click()
     await expect(page.getByTestId('import-trash')).toHaveCount(0)
     expect(await app.evaluate(() => (globalThis as { trashed?: string[] }).trashed)).toEqual([first])
 

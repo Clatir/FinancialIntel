@@ -21,7 +21,7 @@ import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, deleteRule, directionText, editRule, keepAdvanceRule, repayingRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, directionText, editRule, keepAdvanceRule, removeRule, repayingRule, ruleDecisionText } from './rules'
 import { restNotOfRule } from './options'
 
 const NO_RULES: ImportRule[] = []
@@ -97,7 +97,7 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
           <option value="">oba kierunki</option>
         </select>
         {/* A member's money: the rest the person's setting gives only – the rule keeps none (AP-4, D80 b). */}
-        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={(o) => forRule(o, direction, repayable) || restNotOfRule(o, members)} testId="import-rule-edit" />
+        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={(o) => forRule(o, direction, repayable) || restNotOfRule(o, members)} noShares testId="import-rule-edit" />
         {rule.mode === 'amount' && (
           <label className="flex items-center gap-1 text-muted">
             do kwoty
@@ -271,7 +271,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                     type="button"
                     className="btn btn-ghost h-[22px] px-1.5 text-[11px] text-accent"
                     onClick={() => setOpen(open === r.id ? null : r.id)}
-                    title="Zaliczka na przyszłość – wpłaty nie spłacają długu (AP-4)"
+                    title="Zaliczka na przyszłość – wpłaty nie spłacają długu"
                     data-testid="import-rule-review"
                   >
                     do przeglądu
@@ -301,7 +301,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                 <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px]" disabled={readOnly} onClick={() => setEditing(editing === r.id ? null : r.id)} data-testid="import-rule-edit">
                   zmień
                 </button>
-                <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" disabled={readOnly} onClick={() => deleteRule(r.id)} data-testid="import-rule-delete">
+                <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" disabled={readOnly} onClick={() => removeRule(r.id)} data-testid="import-rule-delete">
                   usuń
                 </button>
               </span>

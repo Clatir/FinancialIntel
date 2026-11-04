@@ -5,7 +5,7 @@ import { useData } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { TextField } from '../../components/ui'
 import { CategorySelect, useCategories } from '../operations/pickers'
-import { deleteRule, directionText, ruleDecisionText, saveKeywordRule } from './rules'
+import { directionText, removeRule, ruleDecisionText, saveKeywordRule } from './rules'
 import { useMembers } from '../household/actions'
 
 const NO_RULES: ImportRule[] = []
@@ -61,7 +61,7 @@ export function KeywordRules() {
           <span className="text-fg-strong">„{r.label || r.match}”</span>
           <span className="text-muted">{directionText(r.direction)} →</span>
           <span className="min-w-0 flex-1 truncate text-muted">{decision(r)}</span>
-          <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => deleteRule(r.id)} data-testid="keyword-rule-delete">
+          <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => removeRule(r.id)} data-testid="keyword-rule-delete">
             usuń
           </button>
         </div>

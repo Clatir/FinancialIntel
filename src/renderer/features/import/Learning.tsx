@@ -60,7 +60,7 @@ export function SimilarPanel() {
     <Panel title="Podobne nazwy">
       <div className="flex flex-col gap-1 text-[12px]" data-testid="similar-names">
         <p className="text-[11.5px] text-muted">
-          Te nazwy wyglądają na jedną firmę albo osobę (inna kolejność słów, ucięta nazwa, literówka). Sprawdź każdą parę: „Połącz” – jedna grupa i jedna reguła,
+          Te nazwy wyglądają na jednego sprzedawcę albo jedną osobę (inna kolejność słów, ucięta nazwa, literówka). Sprawdź każdą parę: „Połącz” – jedna grupa i jedna reguła,
           także w kolejnych importach; połączenie cofniesz w Ustawieniach → Import z banku.
         </p>
         {pairs.map((p) => (

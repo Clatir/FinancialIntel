@@ -113,7 +113,7 @@ export function ShareEditor({
                   decimals={l.value % 1 ? 2 : 0}
                   step={5}
                   commitOnBlur
-                  isValid={(v) => v != null && v >= 0 && v <= 100}
+                  range={[0, 100]} isValid={(v) => v != null && v >= 0 && v <= 100}
                   onChange={(v) => setLine(i, { value: percent(v ?? 0) })}
                   aria-label={`Procent osoby ${i + 1}`}
                   data-testid={`${testId}-percent`}

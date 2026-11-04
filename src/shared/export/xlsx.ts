@@ -4,7 +4,7 @@
  * with yazl (no extra dependency). Texts are inline strings; numbers keep full precision with a display format.
  */
 
-export type XlsxKind = 'text' | 'int' | 'money' | 'pct' | 'number'
+export type XlsxKind = 'text' | 'int' | 'money' | 'pct' | 'number' | 'rate'
 export type XlsxCell = string | number | null
 
 export interface XlsxColumn {
@@ -28,8 +28,8 @@ export interface XlsxPart {
   content: string
 }
 
-/** Style ids in styles.xml: 0 default, 1 bold header, 2 money, 3 return in percent (4 places), 4 whole number, 5 number. */
-const STYLE: Record<XlsxKind, number> = { text: 0, money: 2, pct: 3, int: 4, number: 5 }
+/** Style ids in styles.xml: 0 default, 1 bold header, 2 money, 3 return in percent (4 places), 4 whole number, 5 number, 6 rate (one place – T294). */
+const STYLE: Record<XlsxKind, number> = { text: 0, money: 2, pct: 3, int: 4, number: 5, rate: 6 }
 
 const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 
@@ -88,18 +88,19 @@ function sheetXml(sheet: XlsxSheet): string {
 
 const STYLES =
   `${XML_HEADER}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
-  '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0000"/></numFmts>' +
+  '<numFmts count="2"><numFmt numFmtId="164" formatCode="0.0000"/><numFmt numFmtId="165" formatCode="0.0"/></numFmts>' +
   '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
   '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
   '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-  '<cellXfs count="6">' +
+  '<cellXfs count="7">' +
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
   '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
   '<xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
 
 /** All parts of the workbook (paths inside the ZIP). */

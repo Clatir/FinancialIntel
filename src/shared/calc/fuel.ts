@@ -4,6 +4,7 @@
  * balance in % of the income). Beside it the variant „bez tradingu”: does the work alone cover the costs. Pure; Wywiad,
  * the debriefing, the reports and the months' export read it.
  */
+import { percentText } from '../format'
 import type { Transaction } from '../schema/records'
 import { addMonths } from './dates'
 import { incomeOfPeriod, type IncomeContext } from './income'
@@ -85,5 +86,5 @@ export function fuelSummary(transactions: readonly Transaction[], ctx: IncomeCon
 /** The 12 months up to `month` (oldest first): Wywiad's „Bilans paliwa”. */
 export const fuelWindow = (month: string, count = 12): string[] => Array.from({ length: count }, (_, i) => addMonths(month, i - count + 1))
 
-/** „23%” – a rate in words (a comma, as Polish writes it); „—” without one. */
-export const rateText = (rate: number | null): string => (rate == null ? '—' : `${String(rate).replace('.', ',')}%`)
+/** „23,0%” – a rate with one place after the comma (T294), the minus typographic; „—” without one. */
+export const rateText = (rate: number | null): string => (rate == null ? '—' : percentText(rate))

@@ -1,3 +1,4 @@
+import { bankNamesClash } from '@shared/calc/household'
 import { isOwnName } from '@shared/import/classify'
 import { opKindOf, sameChoice, shareWho, type Choice, type ImportGroup } from '@shared/import/reconcile'
 import { HOUSE_MEMBER_ID, inflowOf, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
@@ -212,7 +213,8 @@ export function offersNewMember(
   if (choice.kind !== 'income' || choice.household || isOwnName(name, ownNames)) return false
   // Their money repaying a loan (D100): a loan's repayment – no new member of it.
   if (choice.shares?.some((x) => x.loanId)) return false
-  return !members.some((m) => m.bankNames.some((b) => b.trim().toUpperCase() === name.toUpperCase()))
+  // A name the import could not tell from a member's (T416): that member's money – no second member of it.
+  return !members.some((m) => m.bankNames.some((b) => bankNamesClash(b, name)))
 }
 
 /** The lines of „w tym za” as one text – of 0 zł too (`sameChoice` leaves those out); a loan's part by its loan (D100). */

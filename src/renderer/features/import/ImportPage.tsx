@@ -14,6 +14,7 @@ import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { IconChevronDown, IconChevronRight, IconImport, IconSearch } from '../../components/icons'
 import { Columns } from '../../components/layout'
+import { ConfirmButton } from '../../components/ConfirmButton'
 import { Badge, Panel, ShowMore, cx } from '../../components/ui'
 import { ConfirmTodayAsk, useConfirmToday } from '../balances/ConfirmToday'
 import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../operations/pickers'
@@ -27,7 +28,7 @@ import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { bulkOptions, bulkResultText, fits, hasCategory, MEMBER_MONEY_TEXT, memberMoneyOf, offersNewMember, type LoanPick, type Option } from './options'
-import { countLabel } from '../../lib/format'
+import { countLabel, plDateTime } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
@@ -1003,7 +1004,7 @@ function BulkBar({ groups }: { groups: readonly ImportGroup[] }) {
           type="button"
           className="btn h-[24px]"
           disabled={readOnly}
-          title="Zaznaczone grupy to jedna firma albo osoba pod różnymi nazwami: jedna grupa i jedna reguła, także w kolejnych importach"
+          title="Zaznaczone grupy to jeden sprzedawca albo jedna osoba pod różnymi nazwami: jedna grupa i jedna reguła, także w kolejnych importach"
           onClick={() => mergeSelectedNames(groups, selected.groups)}
           data-testid="import-bulk-merge"
         >
@@ -1215,9 +1216,15 @@ function TrashFile() {
   return (
     <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted" data-testid="import-trash">
       <span>Plik „{name}” zawiera numer konta i operacje – po imporcie nie jest potrzebny.</span>
-      <button type="button" className="btn h-[22px]" onClick={() => void trashImportFile()} data-testid="import-trash-file">
+      <ConfirmButton
+        className="btn h-[22px]"
+        confirmLabel="Przenieś do Kosza"
+        message={`„${name}” trafi do Kosza Windows – z aplikacji nie wrócisz go.`}
+        onConfirm={() => void trashImportFile()}
+        testId="import-trash-file"
+      >
         Przenieś plik do Kosza
-      </button>
+      </ConfirmButton>
     </div>
   )
 }
@@ -1282,7 +1289,7 @@ export function ImportPage() {
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()
   const last = Object.entries(lastImport ?? {})
-    .map(([id, at]) => `${accounts.find((a) => a.id === id)?.name ?? '?'}: ${new Date(at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}`)
+    .map(([id, at]) => `${accounts.find((a) => a.id === id)?.name ?? '?'}: ${plDateTime(at)}`)
     .join(' · ')
   const wizard = useWizard((w) => w.active)
   return (

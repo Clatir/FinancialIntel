@@ -60,6 +60,8 @@ interface NumberFieldProps {
    */
   commitOnBlur?: boolean
   onReject?: (v: number | null) => void
+  /** The accepted numbers, for the message of a refused one (AP-15): „Dozwolone: od 1 do 24 – zostaje poprzednia.” */
+  range?: readonly [number, number]
   /**
    * The value typed and not saved yet (`commitOnBlur` – a preview of what it would do, AP-17): the number the field
    * would take, null for one it would refuse – and null once the field is left.
@@ -69,15 +71,28 @@ interface NumberFieldProps {
   'data-testid'?: string
 }
 
+/** Why a number was refused and what stays (AP-15): nothing a field gives back is left unsaid. */
+export function refusal(parsed: number | null | undefined, decimals: number | undefined, range?: readonly [number, number]): string {
+  if (parsed === undefined) return 'To nie jest liczba – zostaje poprzednia.'
+  if (parsed === null) return 'Pole nie może być puste – zostaje poprzednia.'
+  if (decimals === 0 && !Number.isInteger(parsed)) return 'Tu tylko liczby całkowite – zostaje poprzednia.'
+  return range ? `Dozwolone: od ${range[0]} do ${range[1]} – zostaje poprzednia.` : 'Wartość spoza dozwolonego zakresu – zostaje poprzednia.'
+}
+
 /** Places of a step like 0.25 or 0.01 (at most 10). */
 const stepPlaces = (step: number) => Math.min(10, (String(step).split('.')[1] ?? '').length)
 
 export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(function NumberField(
-  { value, onChange, decimals, step, placeholder, className, readOnly, id, autoFocus, isValid, typographicMinus, commitOnBlur, onReject, onDraft, ...aria },
+  { value, onChange, decimals, step, placeholder, className, readOnly, id, autoFocus, isValid, typographicMinus, commitOnBlur, onReject, range, onDraft, ...aria },
   ref
 ) {
   const [draft, setDraft] = useState<string | null>(null)
-  const formatted = value == null ? '' : decimals != null ? value.toFixed(decimals) : String(value)
+  // Escape: the blur it causes runs with this render's draft – it must not save it. The value the field had when it got
+  // the focus: a field saving at every valid key goes back to it.
+  const cancelled = useRef(false)
+  const atFocus = useRef<number | null>(null)
+  // A decimal comma, as the app writes numbers everywhere (AP-23): „1,0”, never „1.0” (the field reads both).
+  const formatted = value == null ? '' : (decimals != null ? value.toFixed(decimals) : String(value)).replace('.', ',')
   const shown = draft ?? (typographicMinus ? formatted.replace('-', '\u2212') : formatted)
   // A field of whole numbers (decimals 0 – B26) never takes a fraction: 2,5 raty would save as a schedule losing a part.
   const fits = (v: number | null) => v == null || decimals !== 0 || Number.isInteger(v)
@@ -100,7 +115,10 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
       aria-invalid={invalid}
       aria-label={aria['aria-label']}
       data-testid={aria['data-testid']}
-      onFocus={(e) => e.currentTarget.select()}
+      onFocus={(e) => {
+        atFocus.current = value
+        e.currentTarget.select()
+      }}
       onChange={(e) => {
         const t = e.currentTarget.value
         setDraft(t)
@@ -110,16 +128,28 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
         if (ok) onChange(parsed ?? null)
       }}
       onBlur={() => {
-        if (commitOnBlur && draft != null && !readOnly) {
+        if (draft != null && !readOnly && !cancelled.current) {
           const parsed = parseNumberInput(draft)
           if (parsed !== undefined && fits(parsed) && (!isValid || isValid(parsed))) {
-            if (parsed !== value) onChange(parsed)
-          } else onReject?.(parsed ?? null)
+            if (commitOnBlur && parsed !== value) onChange(parsed)
+          } else if (onReject) onReject(parsed ?? null)
+          else toast(refusal(parsed, decimals, range), 'error', 6000)
         }
+        cancelled.current = false
         setDraft(null)
         onDraft?.(null)
       }}
       onKeyDown={(e) => {
+        // Esc takes the typing back (AP-15, AF-38): nothing is saved, a field saving at every key returns to what it had.
+        if (e.key === 'Escape' && draft != null && !readOnly) {
+          e.stopPropagation()
+          cancelled.current = true
+          if (!commitOnBlur && atFocus.current !== value) onChange(atFocus.current)
+          setDraft(null)
+          onDraft?.(null)
+          e.currentTarget.blur()
+          return
+        }
         if (readOnly || !step || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) {
           if (e.key === 'Enter') {
             if (commitOnBlur) e.currentTarget.blur()
@@ -178,6 +208,20 @@ function useTextDraft(value: string, onChange: (v: string) => void, commit: bool
   }
 }
 
+/**
+ * The counter of a field with a length limit (AP-15): shown from 80 % of it, and at the limit it says that the rest is cut –
+ * a longer text pasted is never shortened without a word.
+ */
+export function LimitHint({ length, max }: { length: number; max: number }) {
+  if (length < Math.ceil(max * 0.8)) return null
+  const full = length >= max
+  return (
+    <span className={cx('num block text-right text-[10.5px]', full ? 'text-accent' : 'text-dim')} role="status" data-testid="limit-hint" data-full={full}>
+      {full ? `Limit ${max} znaków – dalszy tekst jest obcinany` : `${length} / ${max}`}
+    </span>
+  )
+}
+
 export function TextField({
   value,
   onChange,
@@ -199,7 +243,12 @@ export function TextField({
   'data-testid'?: string
 }) {
   const text = useTextDraft(value, onChange, commit, false)
-  return <input className={cx('input', mono && 'num', className)} placeholder={placeholder} spellCheck={false} {...text} {...rest} />
+  return (
+    <>
+      <input className={cx('input', mono && 'num', className)} placeholder={placeholder} spellCheck={false} {...text} {...rest} />
+      {rest.maxLength != null && <LimitHint length={text.value.length} max={rest.maxLength} />}
+    </>
+  )
 }
 
 export function TextArea({
@@ -232,7 +281,12 @@ export function TextArea({
     el.style.height = 'auto'
     el.style.height = `${Math.min(260, Math.max(el.scrollHeight + 2, rows * 18 + 12))}px`
   }, [text.value, rows])
-  return <textarea ref={ref} className={cx('input', className)} rows={rows} placeholder={placeholder} spellCheck lang="pl" {...text} {...rest} />
+  return (
+    <>
+      <textarea ref={ref} className={cx('input', className)} rows={rows} placeholder={placeholder} spellCheck lang="pl" {...text} {...rest} />
+      {rest.maxLength != null && <LimitHint length={text.value.length} max={rest.maxLength} />}
+    </>
+  )
 }
 
 export function Segmented<T extends string>({
@@ -265,7 +319,7 @@ export function Segmented<T extends string>({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cx(
-              'px-2.5 transition-colors duration-100 flex items-center justify-center text-center',
+              'px-2.5 transition-colors duration-150 flex items-center justify-center text-center',
               isFull && 'flex-1',
               size === 'sm' ? 'min-h-[22px] py-1 text-[11.5px] leading-tight' : 'min-h-[24px] py-1 leading-tight',
               i > 0 && 'border-l border-line-strong',
@@ -462,27 +516,30 @@ export const NameInput = forwardRef<
     onChange(next)
   }
   return (
-    <input
-      ref={ref}
-      className={cx('input', className)}
-      value={draft ?? value}
-      spellCheck={false}
-      maxLength={maxLength}
-      placeholder={placeholder}
-      aria-label={rest['aria-label']}
-      data-testid={rest['data-testid']}
-      onChange={(e) => setDraft(e.currentTarget.value)}
-      onBlur={apply}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape' && draft != null) {
-          e.stopPropagation()
-          cancelled.current = true
-          setDraft(null)
-          e.currentTarget.blur()
-        }
-      }}
-    />
+    <>
+      <input
+        ref={ref}
+        className={cx('input', className)}
+        value={draft ?? value}
+        spellCheck={false}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        aria-label={rest['aria-label']}
+        data-testid={rest['data-testid']}
+        onChange={(e) => setDraft(e.currentTarget.value)}
+        onBlur={apply}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape' && draft != null) {
+            e.stopPropagation()
+            cancelled.current = true
+            setDraft(null)
+            e.currentTarget.blur()
+          }
+        }}
+      />
+      {maxLength != null && <LimitHint length={(draft ?? value).length} max={maxLength} />}
+    </>
   )
 })
 

@@ -225,6 +225,7 @@ test('US.27 folder i kopie / US.28 aktualizacje / US.29 token', async () => {
     say('US.29 jawny token w folderze danych', grep(dataDir))
     say('US.29 config.updates', configOf(N).updates)
     await page.getByTestId('update-token-remove').click()
+    await page.getByTestId('update-token-remove-confirm').click()
     await page.waitForTimeout(800)
     say('US.29 po „Usuń token”', { panel: await text(page, '[data-testid="update-token-panel"]'), config: configOf(N).updates })
   } finally {

@@ -7,7 +7,7 @@ import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
 import { costsByMonth, firstFullMonth, fullMonthsBefore, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments } from '@shared/calc/plan'
 import { startPaidDays, startSplit, startTankItems, startTanks, startTargets } from '@shared/calc/start'
-import { plural } from '@shared/format'
+import { countLabel, plural, salariesText } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { READ_ONLY_MESSAGE, SWITCHING_MESSAGE, useData, useFolderLocked } from '../../store/data'
@@ -24,7 +24,8 @@ import { plDate } from '../../lib/format'
 import { useAccounts, useCategories } from '../operations/pickers'
 import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
-import { cancelWizard, finishWizard, patchWizard, useWizard, WIZARD_STEPS } from './state'
+import { ConfirmButton } from '../../components/ConfirmButton'
+import { cancelWizard, cancelWizardText, finishWizard, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const HULL_MONTHS = 12
@@ -154,7 +155,7 @@ export function WizardPage() {
                     ? 'Gotówka w portfelu – puste = 0 zł.'
                     : 'Potrzebne – 0, jeśli konto jest puste.'
                   : ahead
-                    ? `Na koncie ${ahead} ${plural(ahead, 'operacja', 'operacje', 'operacji')} z datą po dziś – saldo „teraz” ich nie obejmuje, silnik odejmie je w ich dniu.`
+                    ? `Na koncie ${countLabel(ahead, 'operacja', 'operacje', 'operacji')} z datą po dziś – saldo „teraz” ${ahead === 1 ? 'jej nie obejmuje, silnik odejmie ją w jej dniu' : 'ich nie obejmuje, silnik odejmie je w ich dniu'}.`
                     : undefined
             }
           >
@@ -213,14 +214,14 @@ export function WizardPage() {
       )}
       <Field label="Osłony (bufor na pensje) – cel w pensjach" labelWidth={170} hint={targets.shields != null ? `Cel osłon: ${zl(targets.shields)}.` : undefined}>
         {/* Never under the minimum of the orders (B84): the shields would stay below it for good. */}
-        <NumberField className="w-[70px]" value={w.shieldSalaries} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries} onChange={(v) => v != null && patchWizard({ shieldSalaries: v })} aria-label="Osłony w pensjach" />
+        <NumberField className="w-[70px]" value={w.shieldSalaries} decimals={0} step={1} range={[Math.max(1, orders.minShieldSalaries), 24]} isValid={(v) => v != null && v >= 1 && v <= 24 && v >= orders.minShieldSalaries} onChange={(v) => v != null && patchWizard({ shieldSalaries: v })} aria-label="Osłony w pensjach" />
       </Field>
       <Field
         label="Kadłub (fundusz awaryjny) – cel w miesiącach"
         labelWidth={170}
         hint={targets.hull != null ? `Cel kadłuba: ${zl(targets.hull)} (średnie koszty ${zl(usedCosts ?? 0)} × ${w.hullMonths}).` : 'Kadłub potrzebuje średnich kosztów.'}
       >
-        <NumberField className="w-[70px]" value={w.hullMonths} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 36} onChange={(v) => v != null && patchWizard({ hullMonths: v })} aria-label="Kadłub w miesiącach" />
+        <NumberField className="w-[70px]" value={w.hullMonths} decimals={0} step={1} range={[1, 36]} isValid={(v) => v != null && v >= 1 && v <= 36} onChange={(v) => v != null && patchWizard({ hullMonths: v })} aria-label="Kadłub w miesiącach" />
       </Field>
       {costs.months < 3 && (
         <Field label="Średnie koszty miesięczne" labelWidth={170} hint="Historia ma mniej niż 3 pełne miesiące: przyjęta kwota posłuży do celu kadłuba i zasięgu, dopóki historia nie urośnie.">
@@ -392,11 +393,11 @@ export function WizardPage() {
         <TextField value={w.shipName} onChange={(shipName) => patchWizard({ shipName })} maxLength={40} data-testid="wizard-ship" />
       </Field>
       <span className="label mt-1">Rozkazy (zmienisz je później)</span>
-      <Field label="Minimalne osłony (pensje)" labelWidth={170} hint={`Najwyżej cel osłon (${w.shieldSalaries} pensji).`}>
+      <Field label="Minimalne osłony (pensje)" labelWidth={170} hint={`Najwyżej cel osłon (${salariesText(w.shieldSalaries)}).`}>
         <NumberField className="w-[70px]" value={orders.minShieldSalaries} decimals={1} step={0.5} isValid={(v) => v != null && v >= 0 && v <= 24 && v <= w.shieldSalaries} onChange={(v) => v != null && setOrders({ minShieldSalaries: v })} />
       </Field>
       <Field label="Linia zanurzenia (% pensji)" labelWidth={170}>
-        <NumberField className="w-[70px]" value={orders.cargoLimitPct} decimals={0} step={5} isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} />
+        <NumberField className="w-[70px]" value={orders.cargoLimitPct} decimals={0} step={5} range={[1, 100]} isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} />
       </Field>
       <Field label="Cisza nocna" labelWidth={170}>
         <span className="num text-fg">
@@ -434,9 +435,11 @@ export function WizardPage() {
           </button>
         ))}
         <div className="flex-1" />
-        <button className="m-3 text-[11.5px] text-dim hover:text-fg-strong" onClick={cancelWizard}>
-          Przerwij kreator
-        </button>
+        <div className="m-3 flex flex-col gap-1.5">
+          <ConfirmButton className="text-left text-[11.5px] text-dim hover:text-fg-strong" confirmLabel="Przerwij kreator" message={cancelWizardText(w.traces)} onConfirm={cancelWizard} testId="wizard-cancel">
+            Przerwij kreator
+          </ConfirmButton>
+        </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-auto">
@@ -492,7 +495,7 @@ function WizardHouseholdSection({ readOnly }: { readOnly: boolean }) {
   const [name, setName] = useState('')
   const add = () => {
     if (readOnly || !name.trim()) return
-    addMember(name)
+    if (addMember(name)) noteTrace(`domownik „${name.trim()}”`)
     setName('')
   }
   return (
@@ -565,6 +568,7 @@ function IctjGoalsStep({ goals }: { goals: Goal[] }) {
   const add = () => {
     if (readOnly || !name.trim() || !target || target <= 0) return
     addGoal({ name, target, deadline: null })
+    noteTrace(`cel „${name.trim()}”`)
     setName('')
     setTarget(null)
   }

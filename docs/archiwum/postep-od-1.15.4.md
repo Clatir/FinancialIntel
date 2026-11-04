@@ -178,3 +178,28 @@ dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1
   i pożyczki (lab ich nie ma).
 - **Czas:** 05:05–ok. 13:00 do PR (strumienie 55–100 min, scalenia i przeglądy, 3 rundy poprawek) – plan 3–4,5 h pracy;
   zegar dłuższy przez rundy przeglądu i scalenia równoległych gałęzi.
+
+## N3 – Opłaty, energia, gra (1.15.7, 04.11.2026) – wydane 04.11 18:02, PR #52
+- **Zakres:** AP-13 energia dziś w granicach miesiąca, zwrot dawnego zakupu od jutra (T370, T371), AP-17 kadłub od 99 %,
+  „Dopełnij kadłub z osłon”, podgląd celów warstw (T372–T374), AP-10 jeden stan opłaty i zaległości (T375–T379), AP-14
+  zamrażanie dni po przerwie porcjami, pytanie bez importu, „Nowa klasa” (T380–T382), AP-30 misje i droga do awansu
+  (T383, T384), AP-18 kurs bez osłon poniżej zera, „teraz” = Mostek (T385–T387), AP-31 trend poduszki (T388, T389);
+  integracja (T390–T392), jedna reguła „która płatność płaci opłatę” – silnik = Ładownia = kreator (T393, T394), płatność
+  z datą po dziś (T398), wydajność stanu opłat i boi (T399).
+- **Wykonawcy:** 4 strumienie w osobnych drzewach (AP-13 + AP-17 max, AP-10, AP-14 + AP-30, AP-18 + AP-31 – xhigh),
+  integracja max, scalenie z N2 (max) – razem z N2 w jednej regule płatności opłat.
+- **Przegląd:** xhigh całości (15 uwag – przyczyna: dwie reguły płatność ↔ cykl; poprawki R max i S xhigh), high na
+  poprawkach i rozwiązaniu konfliktów z N2 (9 uwag: 8 poprawionych, 1 z innym skutkiem niż w recenzji – poprawiony
+  skutek odwrotny; kreator z rachunkiem zmiennym o cykl w tyle, płatność z datą po dziś zapłacona tylko w Ładowni,
+  „Cofnij” dopełnienia kadłuba mógł usunąć plan miesiąca z cudzą zmianą), high na tych poprawkach (9 uwag – reguła
+  płatności wpisanej z wyprzedzeniem uproszczona do jednego zbioru terminów zaplanowanych w oknie Radaru, co zamknęło też
+  podwójne liczenie w saldach naprzód od 1.8.0; „Cofnij” bez planu nic nie tworzy); trzecia runda sprawdzona przez
+  koordynatora na diffie.
+- **Wyrocznia:** 412 przypadków, 28 963 kwoty, 2 852 porównania ekranów – bez rozbieżności; AF-15 zamknięte.
+- **Testy:** typecheck (także `typecheck:audyt`), `npm test` 1424 (lokalnie pod obciążeniem pada tylko `folder-speed`
+  ZIP64), build, E2E zmienionych ekranów; pełne E2E – CI (Linux zielone na 2cf22ba).
+- **Otwarte:** zaległy termin zamknięty dopiero przesunięciem przez drugą płatność okna wpisaną naprzód zostaje „po
+  terminie” do jej dnia (w saldach naprzód podwójnie); `priceChanges` liczy płatności wpisane naprzód; dni zamrożone przed 1.15.7 bez `clsBefore`;
+  kalibracja progów gry (D99 pkt 12) – za osobną zgodą.
+- **Czas:** 07:15–ok. 13:50 kod i dwa przeglądy (przerwa 14:00–14:20), 14:20–ok. 16:45 przegląd poprawek, poprawki,
+  wydanie – plan 2,5–3,5 h pracy; zegar dłuższy przez scalenie z N2 i trzy rundy przeglądu.

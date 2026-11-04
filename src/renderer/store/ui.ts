@@ -66,10 +66,29 @@ export function goBack(): void {
 }
 
 let toastSeq = 0
+/** A toast with „Cofnij” stays at least this long (AP-22, AF-7): 6 s was too short to notice and decide. */
+export const UNDO_MIN_MS = 8000
+
 export function toast(text: string, kind: Toast['kind'] = 'info', ms = 3200, action?: Toast['action']): void {
   const id = ++toastSeq
+  if (action) ms = Math.max(ms, UNDO_MIN_MS)
   useUi.setState((s) => ({ toasts: [...s.toasts.filter((t) => t.text !== text).slice(-2), { id, kind, text, ...(action ? { action } : {}) }] }))
   setTimeout(() => closeToast(id), ms)
+}
+
+/**
+ * What a „Cofnij” left as it is (AP-22, AP-15 – review 3 of N4): it takes back only what is still as its action left it –
+ * what changed since stays, and that is said. `back` – taken back, `kept` – changed since, `what` – their name in the
+ * plural („operacje”).
+ */
+export function undoKept(back: number, kept: number, what = 'operacje'): void {
+  if (!kept) return
+  const text = back
+    ? `Cofnięte ${what}: ${back}; zmienione od tego czasu zostają, jak są: ${kept}.`
+    : kept === 1
+      ? 'Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.'
+      : `Nic nie cofnięto – ${what} zmienione od tego czasu zostają, jak są (${kept}).`
+  toast(text, 'info', 7000)
 }
 
 export function closeToast(id: number): void {

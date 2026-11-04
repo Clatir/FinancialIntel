@@ -382,7 +382,8 @@ export function DecisionFields({
   exclude,
   own,
   sharesFrom,
-  sharesInBrands
+  sharesInBrands,
+  noShares
 }: {
   choice: Choice
   direction: 'in' | 'out'
@@ -396,6 +397,8 @@ export function DecisionFields({
   sharesFrom?: DecisionKeys
   /** Its „w tym za” are its brands' own (a theme showing their common decision – `themeShows` 'brands', T336): said, not edited. */
   sharesInBrands?: boolean
+  /** A rule's editor (AP-15): a rule does not keep „w tym za” – it is said, not offered and lost. */
+  noShares?: boolean
 }) {
   const members = useMembers()
   const loans = useRecordList('loans')
@@ -456,7 +459,15 @@ export function DecisionFields({
         ) : sharesFrom ? (
           <DecisionShares from={sharesFrom} choice={choice} members={members} onChange={onChange} testId={testId} />
         ) : (
-          <RuleShares choice={choice} onChange={onChange} testId={testId} />
+          <>
+            {/* A rule does not keep other members' parts (AP-15): said, not offered and lost – its loan part it keeps (T358). */}
+            {noShares && choice.household && members.length > 1 && (
+              <span className="text-[11px] text-muted" data-testid={`${testId}-no-shares`}>
+                „w tym za” – reguła tego nie zapamiętuje, ustawisz przy imporcie
+              </span>
+            )}
+            <RuleShares choice={choice} onChange={onChange} testId={testId} />
+          </>
         ))}
     </>
   )
@@ -464,7 +475,7 @@ export function DecisionFields({
 
 /**
  * A rule's part repaying a loan (D100, T358 – the rule's editor): one loan of the Radar and the amount of each inflow;
- * other members' parts a rule does not keep – not offered.
+ * other members' parts a rule does not keep – not offered (`noShares` says so).
  */
 function RuleShares({ choice, onChange, testId }: { choice: Choice; onChange: (c: Choice) => void; testId: string }) {
   const loans = useLoanChoices((choice.shares ?? []).flatMap((x) => (x.loanId ? [x.loanId] : [])))

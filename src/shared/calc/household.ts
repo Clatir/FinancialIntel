@@ -369,12 +369,47 @@ export const settlesHousehold = (t: Transaction): boolean =>
 export const OPENING_TX = 'opening:'
 export const isOpeningItem = (txId: string): boolean => txId.startsWith(OPENING_TX)
 
+/** A name in the bank as the import reads it (D80 a): its words, without case and Polish marks, of two characters or more. */
+export const bankNameWords = (name: string): string[] => fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
+
+/** A counterparty's words a name in the bank is looked for among (`memberOf`, `nameIn`). */
+const counterpartyWords = (counterparty: string): string[] => fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
+
+/**
+ * A name's words (`bankNameWords`, at least one) among a counterparty's (`counterpartyWords`): all of them, in any order –
+ * a name of one word only when it is the whole counterparty („MAMA”). The one rule of `memberOf` and `nameIn`.
+ */
+const wordsIn = (parts: readonly string[], who: readonly string[]): boolean =>
+  parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))
+
+/**
+ * Two names in the bank the import cannot tell apart (T416): the same words in any order („Kowalska  ANNA” = „ANNA
+ * KOWALSKA”, „JAN ŻÓŁW” = „JAN ZOLW”) – the one comparison of adding a name, of its „Cofnij” and of a member from the import.
+ */
+export function sameBankName(a: string, b: string): boolean {
+  const key = (s: string) => [...new Set(bankNameWords(s))].sort().join(' ') || fold(s.trim())
+  return key(a) === key(b)
+}
+
+/**
+ * Two names in the bank of whom the import could take one for the other (T416, review 3 of N4): one found in the other
+ * as `memberOf` finds a name in a counterparty – the bank writing either, the transfer could go to the other's member
+ * („JAN KOWALSKI” in „JAN KOWALSKI SENIOR”, „JAN” in „JAN JAN”, the same words in any order, without Polish marks).
+ */
+export const bankNamesClash = (a: string, b: string): boolean => sameBankName(a, b) || nameIn(a, b) || nameIn(b, a)
+
+/**
+ * The member (not `except`) whose name in the bank the import could not tell from `name` (`bankNamesClash`); null –
+ * none. The one rule of adding a name, of its „Cofnij”, of „+ domownik” and of a member from the import.
+ */
+export function bankNameHolder<M extends Pick<HouseholdMember, 'id' | 'bankNames'>>(members: readonly M[], name: string, except?: string): M | null {
+  return members.find((m) => m.id !== except && m.bankNames.some((n) => bankNamesClash(n, name))) ?? null
+}
+
 /** All words of a person's name in a counterparty, in any order – a name of one word only when it is the whole counterparty. */
 export function nameIn(name: string, counterparty: string): boolean {
-  const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
-  if (!parts.length) return false
-  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
-  return parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))
+  const parts = bankNameWords(name)
+  return parts.length > 0 && wordsIn(parts, counterpartyWords(counterparty))
 }
 
 /**
@@ -386,16 +421,16 @@ export function memberOf<M extends Pick<HouseholdMember, 'bankNames'>>(counterpa
   // The members' names split once per list, each counterparty answered once (W12: the engine asks for every income).
   let cache = memberCache.get(members)
   if (!cache) {
-    const names = members.flatMap((m) => m.bankNames.map((name) => ({ m, parts: fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2) })).filter((n) => n.parts.length))
+    const names = members.flatMap((m) => m.bankNames.map((name) => ({ m, parts: bankNameWords(name) })).filter((n) => n.parts.length))
     memberCache.set(members, (cache = { names, by: new Map() }))
   }
   const known = cache.by.get(counterparty)
   if (known !== undefined) return known as M | null
-  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
+  const who = counterpartyWords(counterparty)
   let found: M | null = null
   if (who.length)
     for (const { m, parts } of cache.names)
-      if (parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))) {
+      if (wordsIn(parts, who)) {
         found = m as M
         break
       }

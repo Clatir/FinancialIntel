@@ -5,7 +5,7 @@
  * briefing use it.
  */
 import { DateTime } from 'luxon'
-import { dm, formatPln } from '../format'
+import { dm, formatPln, plural } from '../format'
 import { ICTJ_POOL_LABEL } from '../ictj'
 import type { Account, HouseholdMember } from '../schema/budget'
 import type { Balance, Container } from '../schema/records'
@@ -72,6 +72,13 @@ export interface BriefingItem {
   text: string
   /** Stable key (the notifications send each once). */
   key: string
+  /**
+   * The matter's day when the inbox lists it too (a delivery to dock, a return late, a balance's last confirmation): older
+   * than `BRIEFING_OLD_DAYS` it is only in Meldunki (AP-16, MO sp. 1).
+   */
+  since?: string
+  /** The category the matter is about (an envelope's alarm, an unknown signal): one line per matter (AP-16, MO sp. 2). */
+  ref?: string
 }
 
 const zlotych = (grosze: number) => `${formatPln(grosze)} zł`
@@ -205,7 +212,7 @@ export function deliveryItem(d: Delivery, today: string, zl: (grosze: number) =>
           ? `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}, pula Podatek) do potwierdzenia – wraca z rezerwy na PIT-38.`
           : `Zwrot do masy z ICTTJ ${zl(d.amount)} (${dm(d.date)}) do potwierdzenia – firewall.`
       : `Wpływ z XTB ${zl(d.amount)} (${dm(d.date)}) do zadokowania${d.missingEntry ? ' – dopisz wypłatę w ICTTJ' : ''}.`
-    return { level: 'yellow', kind: 'dock', key: `dock:${d.key}`, text }
+    return { level: 'yellow', kind: 'dock', key: `dock:${d.key}`, text, since: d.date }
   }
   const what = e?.kind === 'return' ? 'Zwrot do masy' : 'Wypłata'
   if (d.state === 'waiting' && e) return { level: 'info', kind: 'dock', key: `dock:${d.key}`, text: `${what} z ICTTJ ${zl(d.amount)} (${dm(d.date)}) czeka na import z mBanku.` }
@@ -262,7 +269,9 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     else if (!prev) summed.set(key, a)
   }
   for (const [key, a] of summed) {
-    items.push({ level: a.level, kind: 'alarm', key: `alarm:${key}:${f.month}`, text: alarmText(a, o.label, zl) })
+    // The shields under their minimum are a serious violation of the game (DW sp. 3): red, as the game counts it.
+    const level = a.kind === 'shields-below-min' ? 'red' : a.level
+    items.push({ level, kind: 'alarm', key: `alarm:${key}:${f.month}`, text: alarmText(a, o.label, zl), ...(a.kind === 'envelope-over' && a.ref ? { ref: a.ref } : {}) })
   }
   // The firewall switched off (AP-17, DW.12): a top-up of XTB today is not checked – said so, once per operation (a
   // return of the pool „Podatek” is the reserve's money: never the firewall's – with the reserve empty too, `tax`).
@@ -317,6 +326,7 @@ export function briefing(o: BriefingInput): BriefingItem[] {
         level: 'info',
         kind: 'balances',
         key: `balances:${a.accountId}:${f.today}`,
+        ...(a.last ? { since: a.last } : {}),
         text: days == null ? `${a.name}: potwierdź saldo z bankiem (raz w tygodniu).` : `${a.name}: saldo potwierdzone ${days} dni temu – sprawdź z bankiem.`
       })
     }
@@ -400,10 +410,10 @@ export function briefing(o: BriefingInput): BriefingItem[] {
   // The radar of anomalies (F31): a recent unknown signal – a possible double charge first.
   for (const a of o.anomalies ?? []) {
     if (daysBetween(a.date, f.today) > ANOMALY_BRIEFING_DAYS) continue
-    items.push({ level: a.kind === 'double' ? 'yellow' : 'info', kind: 'anomaly', key: `anomaly:${a.key}`, text: `Nieznany sygnał na radarze – ${anomalyText(a, zl)}` })
+    items.push({ level: a.kind === 'double' ? 'yellow' : 'info', kind: 'anomaly', key: `anomaly:${a.key}`, text: `Nieznany sygnał na radarze – ${anomalyText(a, zl)}`, ...(a.categoryId ? { ref: a.categoryId } : {}) })
   }
   // A return not come by its day (F34): said every day until it comes or is closed.
-  for (const r of o.returns ?? []) if (r.state === 'late') items.push({ level: 'yellow', kind: 'return', key: `return:${r.tx.id}:${r.until}`, text: lateReturnText(r, zl) })
+  for (const r of o.returns ?? []) if (r.state === 'late') items.push({ level: 'yellow', kind: 'return', key: `return:${r.tx.id}:${r.until}`, text: lateReturnText(r, zl), since: r.until })
   // An account short before a payment (F26): the money is on another account.
   for (const a of o.accounts ?? []) {
     if (!a.short) continue
@@ -411,4 +421,133 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     items.push({ level: 'yellow', kind: 'account', key: `account:${a.accountId}:${a.short.date}`, text: `Na koncie ${a.name} zabraknie ${zl(a.short.amount)} na płatność ${dm(a.short.date)} (${a.short.cause})${from}.` })
   }
   return items
+}
+
+/** A matter older than this many days is only in Meldunki (AP-16, MO sp. 1): the inbox lists it until it is done. */
+export const BRIEFING_OLD_DAYS = 30
+/** The briefing's lines shown at once (AP-16): the alarms, then the day's matters; the rest folds – a red one never. */
+export const BRIEFING_SHOWN = 8
+
+/**
+ * The lines of information asking for something today (AP-16): the start, an import, a balance, the mission, a payout
+ * waiting, ICTTJ's folder, the firewall switched off. Each other one – a look ahead, the hold's watch, a signal – folds.
+ */
+const DAY_KINDS: ReadonlySet<BriefingItem['kind']> = new Set<BriefingItem['kind']>(['start', 'import', 'balances', 'mission', 'dock', 'ictj', 'alarm', 'loot'])
+
+/** Where a line stands (AP-16): the alarms (red, then yellow), the day's matters, the rest folded. */
+export type BriefingTier = 'alarm' | 'day' | 'rest'
+
+export interface BriefingRow extends BriefingItem {
+  tier: BriefingTier
+  /** The same matter's other lines, said under it (an unknown signal of an envelope over its limit – MO sp. 2). */
+  also: string[]
+}
+
+export interface BriefingView {
+  /** Shown at once. */
+  shown: BriefingRow[]
+  /** Folded: „Pokaż wszystkie (N)”. */
+  rest: BriefingRow[]
+  /** The matters older than `BRIEFING_OLD_DAYS` – only in Meldunki. */
+  older: number
+}
+
+const LEVEL_RANK: Record<BriefingItem['level'], number> = { red: 0, yellow: 1, info: 2 }
+const TIER_RANK: Record<BriefingTier, number> = { alarm: 0, day: 1, rest: 2 }
+
+/**
+ * The briefing in its order (AP-16, MO sp. 1, 2): the alarms first – red, then yellow – then the day's matters, the rest
+ * folded; one line per matter (an unknown signal of a category whose envelope is over its limit is said with that alarm);
+ * a matter the inbox lists, older than 30 days, only there. Within a tier and a level – the briefing's order. Pure; the
+ * bridge, its detached panel, the reports and the spoken briefing use it – the notifications keep every line (own keys).
+ */
+export function arrangeBriefing(items: readonly BriefingItem[], today: string): BriefingView {
+  let older = 0
+  const rows: BriefingRow[] = []
+  const byRef = new Map<string, BriefingRow>()
+  for (const i of items) {
+    if (i.since && daysBetween(i.since, today) > BRIEFING_OLD_DAYS) {
+      older++
+      continue
+    }
+    const row: BriefingRow = { ...i, tier: 'rest', also: [] }
+    if (i.kind === 'alarm' && i.ref && !byRef.has(i.ref)) byRef.set(i.ref, row)
+    rows.push(row)
+  }
+  const merged: BriefingRow[] = []
+  for (const r of rows) {
+    const host = r.kind === 'anomaly' && r.ref ? byRef.get(r.ref) : undefined
+    if (!host) {
+      merged.push(r)
+      continue
+    }
+    host.also.push(r.text)
+    if (LEVEL_RANK[r.level] < LEVEL_RANK[host.level]) host.level = r.level
+  }
+  for (const r of merged) r.tier = r.level !== 'info' ? 'alarm' : DAY_KINDS.has(r.kind) ? 'day' : 'rest'
+  // A stable sort: the briefing's order within a tier and a level.
+  const ordered = merged
+    .map((r, n) => ({ r, n }))
+    .sort((a, b) => TIER_RANK[a.r.tier] - TIER_RANK[b.r.tier] || LEVEL_RANK[a.r.level] - LEVEL_RANK[b.r.level] || a.n - b.n)
+    .map((x) => x.r)
+  const cut = Math.max(BRIEFING_SHOWN, ordered.filter((r) => r.level === 'red').length)
+  const shown: BriefingRow[] = []
+  const rest: BriefingRow[] = []
+  for (const r of ordered) (r.tier !== 'rest' && shown.length < cut ? shown : rest).push(r)
+  return { shown, rest, older }
+}
+
+/** The most important line of the briefing (AP-16, T214): the first alarm – none, when nothing is red or yellow. */
+export const topAlarm = (view: BriefingView): BriefingRow | null => (view.shown[0]?.tier === 'alarm' ? view.shown[0] : null)
+
+/** An amount as read aloud: „1 234 złote 50 groszy” (the grosze too – N27). */
+export function spokenPln(grosze: number): string {
+  const zl = Math.floor(Math.abs(grosze) / 100)
+  const gr = Math.abs(grosze) % 100
+  return `${zl} ${plural(zl, 'złoty', 'złote', 'złotych')}${gr ? ` ${gr} ${plural(gr, 'grosz', 'grosze', 'groszy')}` : ''}`
+}
+
+/**
+ * A line's text as read aloud (MO sp. 7): its amounts like the energy's („52 złote 50 groszy”, not „52,50 złotych”), a
+ * hidden one „kwota ukryta”, no arrows.
+ */
+export function spokenText(text: string, mask: string): string {
+  return text
+    .replaceAll(`${mask} zł`, 'kwota ukryta')
+    .replace(/([−-]?)(\d{1,3}(?:[   ]\d{3})*),(\d{2}) zł/g, (_m, sign: string, int: string, gr: string) => `${sign ? 'minus ' : ''}${spokenPln(Number(int.replace(/\D/g, '')) * 100 + Number(gr))}`)
+    .replace(/\s*→\s*/g, ' na ')
+}
+
+export interface SpeechInput {
+  /** „4 listopada”. */
+  day: string
+  daily: { energy: number } | null
+  /** Why today's energy is capped (AP-13, `CAP_REASON`) – none when it is not. */
+  capReason?: string | null
+  bias: DailyBias | null
+  view: BriefingView
+  /** The amounts hidden (Ctrl+$): said „kwota ukryta”, never left out (MO sp. 7). */
+  hidden: boolean
+  /** The hidden amount's mask in the texts. */
+  mask: string
+}
+
+/**
+ * The spoken briefing (AP-16, MO sp. 1, T214): a short one – the energy, the Daily Bias, the most important alarm and how
+ * many more matters wait on the bridge; never every line (15 of them took about a minute and a half).
+ */
+export function briefingSpeech(o: SpeechInput): string {
+  const parts = [`Odprawa, ${o.day}.`]
+  const d = o.daily
+  if (d) {
+    if (o.hidden) parts.push('Energia na dziś: kwota ukryta.')
+    // Over the day it is said so (N27) – never „0 złotych”; capped by the month's energy – with its reason (AP-13).
+    else parts.push(d.energy < 0 ? `Energia na dziś przekroczona o ${spokenPln(-d.energy)}.` : `Energia na dziś: ${spokenPln(d.energy)}${o.capReason ? `, ${o.capReason}` : ''}.`)
+  }
+  if (o.bias) parts.push(`Daily Bias: ${BIAS_LABEL[o.bias]}.`)
+  const top = topAlarm(o.view)
+  parts.push(top ? `Najważniejsze: ${spokenText(top.text, o.mask)}` : 'Bez alarmów.')
+  const more = o.view.shown.length + o.view.rest.length - (top ? 1 : 0)
+  if (more > 0) parts.push(`Na Mostku ${top ? 'jeszcze ' : ''}${more} ${plural(more, 'sprawa', 'sprawy', 'spraw')}.`)
+  return parts.join(' ')
 }

@@ -58,8 +58,8 @@ describe('różnice pól', () => {
       '2 pozycje',
       '1 pozycja',
       '5 pozycji',
-      '1.5',
-      'true',
+      '1,5',
+      'tak',
       'aaaaaaaaa…',
       '{"a":1}'
     ])

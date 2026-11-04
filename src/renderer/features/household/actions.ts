@@ -6,8 +6,8 @@ import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
 import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
 import { linkRepayments, repayingAdvancesOf, withNamed, type CoverFields } from '@shared/calc/repayments'
-import { balanceOf, memberName, skippedDebtsOf, skippedKey } from '@shared/calc/household'
-import { CASH_ACCOUNT_ID, inflowOf, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
+import { balanceOf, bankNameHolder, memberName, sameBankName, skippedDebtsOf, skippedKey } from '@shared/calc/household'
+import { CASH_ACCOUNT_ID, inflowOf, MAX_BANK_NAMES, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
 import { sameContentAs } from '@shared/merge'
@@ -15,7 +15,7 @@ import { addRecord, canWrite, deleteRecords, replaceRecords, updateRecord, updat
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
 import { countLabel, plDate } from '../../lib/format'
-import { toast } from '../../store/ui'
+import { toast, undoKept } from '../../store/ui'
 import { usePresence } from '../../store/presence'
 
 const NO_MEMBERS: HouseholdMember[] = []
@@ -46,12 +46,18 @@ export function sureCoversOf(t: Transaction): CoverFields | null {
 export function assignRepayment(paymentId: string, purchaseId: string, label: string): boolean {
   const before = useData.getState().records.transactions[paymentId]?.record
   if (!before) return false
+  const fields = (t: Transaction | undefined) => ({ covers: t?.covers, coversOpening: t?.coversOpening, coversOpeningMembers: t?.coversOpeningMembers })
   const was = { covers: before.covers, coversOpening: before.coversOpening, coversOpeningMembers: before.coversOpeningMembers }
   const ok = updateRecord('transactions', paymentId, (r) => ({ ...r, ...withNamed(r, purchaseId, true) }))
+  const set = fields(useData.getState().records.transactions[paymentId]?.record)
   if (ok)
     toast(`Zwrot przypisany: ${label}.`, 'success', 5000, {
       label: 'Cofnij',
-      run: () => void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
+      run: () => {
+        // Only while still as it named them (a change since stays – review 3 of N4).
+        if (!sameContentAs(fields(useData.getState().records.transactions[paymentId]?.record), set)) return undoKept(0, 1)
+        void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
+      }
     })
   return ok
 }
@@ -59,25 +65,27 @@ export function assignRepayment(paymentId: string, purchaseId: string, label: st
 /**
  * „Spłać” (AP-4, the inbox): a member's advances for the future that left their debt unpaid (not those kept) repay what
  * is still owed because of them – no more (`repayingAdvancesOf`, review 2 of N2: a debt a later repayment paid back is
- * not settled again); with „Cofnij”. False – nothing changed.
+ * not settled again); with „Cofnij”. False – nothing changed (said – AP-15).
  */
 export function repayAdvances(memberId: string): boolean {
   const input = canWrite() ? fleetInputNow() : null
   const s = useData.getState()
   if (!input || !s.fi) return false
   const after = repayingAdvancesOf(input, memberId, s.fi.settings.import.notDuplicates, warsawNow().date)
-  if (!after.length) return false
+  if (!after.length) {
+    noAdvancesLeft(memberId)
+    return false
+  }
   const was = after.map((t) => s.records.transactions[t.id]?.record).filter((t): t is Transaction => !!t)
   if (!replaceRecords('transactions', after)) return false
   toast(`${memberName(memberId, s.fi.settings.household.members)}: ${countLabel(after.length, 'wpłata spłaca', 'wpłaty spłacają', 'wpłat spłaca')} dług, reszta zostaje zaliczką.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
-      // Only the ones as it left them (a change since stays).
+      // Only the ones as it left them (a change since stays – and is said, AP-15).
       const current = useData.getState().records.transactions
-      replaceRecords(
-        'transactions',
-        was.filter((t) => sameContentAs(current[t.id]?.record, after.find((a) => a.id === t.id)))
-      )
+      const back = was.filter((t) => sameContentAs(current[t.id]?.record, after.find((a) => a.id === t.id)))
+      replaceRecords('transactions', back)
+      undoKept(back.length, was.length - back.length, 'wpłaty')
     }
   })
   return true
@@ -91,8 +99,10 @@ export function keepAdvances(memberId: string): void {
   const input = canWrite() ? fleetInputNow() : null
   if (!input) return
   const ledger = householdOf(input, warsawNow().date)
-  const keys = (skippedDebtsOf(ledger, ledger.members, {}).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
-  if (!keys.length) return
+  // As the inbox reads them: the advances kept already (here or on the other computer) are no question (review 3 of N4).
+  const kept = useData.getState().fi?.settings.import.notDuplicates ?? {}
+  const keys = (skippedDebtsOf(ledger, ledger.members, kept).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
+  if (!keys.length) return noAdvancesLeft(memberId)
   const at = new Date().toISOString()
   const set = (on: boolean) =>
     updateSettings((f) => {
@@ -103,6 +113,14 @@ export function keepAdvances(memberId: string): void {
       return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates } } }
     })
   if (set(true)) toast('Zaliczki zostają – meldunek nie wróci dla tych wpłat.', 'info', 7000, { label: 'Cofnij', run: () => set(false) })
+}
+
+/**
+ * The inbox's „Spłać” or „zostaw” on a report no longer so (its operations changed meanwhile – an edit, another computer):
+ * nothing is changed, and that is said (AP-15 – never a click that does nothing in silence).
+ */
+function noAdvancesLeft(memberId: string): void {
+  toast(`${memberName(memberId, membersNow())}: nic do zmiany – zaliczki na przyszłość nie zostawiają już długu.`, 'info', 5000)
 }
 
 /**
@@ -142,7 +160,13 @@ export function repayInCash(purchase: Pick<Transaction, 'id' | 'date' | 'counter
   if (!addRecord('transactions', record)) return null
   toast(`Oddane gotówką (${who}): ${formatPln(amount)} zł.`, 'success', 6000, {
     label: 'Cofnij',
-    run: () => void deleteRecords('transactions', [record.id])
+    run: () => {
+      // Deleted only while as it wrote it (an edit since stays – review 3 of N4).
+      const now = useData.getState().records.transactions[record.id]?.record
+      if (!now) return
+      if (!sameContentAs(now, record)) return undoKept(0, 1)
+      void deleteRecords('transactions', [record.id])
+    }
   })
   return record.id
 }
@@ -162,9 +186,17 @@ function freeName(name: string): string {
   return out
 }
 
-/** A member from a counterparty of the import (D80 a): the bank's name is theirs; the id, or null (read-only folder). */
+/**
+ * A member from a counterparty of the import (D80 a): the bank's name is theirs; the id, or null (read-only folder). A
+ * member holding that name already (T416) is the one – no second member the import could not tell apart.
+ */
 export function addMemberFromBank(bankName: string): string | null {
   if (!canWrite()) return null
+  const holder = bankNameHolder(membersNow(), bankName)
+  if (holder) {
+    toast(`Nazwę „${bankName.trim()}” ma już ${holder.name} – przypisano tej osobie.`, 'info', 6000)
+    return holder.id
+  }
   const id = newId()
   const name = freeName(nameOf(bankName))
   patchMembers((ms) => [...ms, { id, name, bankNames: [bankName.trim().slice(0, 120)], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
@@ -181,6 +213,63 @@ export function addMember(name: string): string | null {
 
 export function patchMember(id: string, patch: Partial<Omit<HouseholdMember, 'id'>>): void {
   patchMembers((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+}
+
+export { MAX_BANK_NAMES }
+
+/**
+ * A member's name in the bank added (D80): once, at most `MAX_BANK_NAMES`, never one another member holds (T416 – the
+ * import could not tell them apart) – each refusal said (AP-15). false – refused (the field keeps what was typed).
+ */
+export function addBankName(memberId: string, name: string): boolean {
+  const ms = membersNow()
+  const m = ms.find((x) => x.id === memberId)
+  const v = name.trim().slice(0, 120)
+  if (!m || !v) return true
+  const own = m.bankNames.find((x) => sameBankName(x, v))
+  if (own) {
+    toast(own === v ? `${m.name} ma już nazwę „${v}”.` : `${m.name} ma już nazwę „${own}” – „${v}” to dla importu ta sama.`, 'info', 5000)
+    return true
+  }
+  const holder = bankNameHolder(ms, v, memberId)
+  if (holder) {
+    toast(`Import nie odróżni „${v}” od nazwy, którą ma ${holder.name} – jedna nazwa w banku nie może wskazywać dwóch osób.`, 'error', 7000)
+    return false
+  }
+  if (m.bankNames.length >= MAX_BANK_NAMES) {
+    toast(`Najwyżej ${MAX_BANK_NAMES} nazw w banku na domownika – usuń którąś, by dodać nową.`, 'error', 6000)
+    return false
+  }
+  patchMember(memberId, { bankNames: [...m.bankNames, v] })
+  return true
+}
+
+/**
+ * A member's name in the bank taken off (AP-22, T414): „Cofnij” brings back that one name, at its place among the names
+ * as they are then (one added meanwhile stays) – not when the member has it again, nor when another member holds it now
+ * (said: one name never points at two members – `sameBankName`, T416).
+ */
+export function removeBankName(memberId: string, name: string): void {
+  const m = membersNow().find((x) => x.id === memberId)
+  const at = m ? m.bankNames.indexOf(name) : -1
+  if (!m || at < 0) return
+  patchMember(memberId, { bankNames: m.bankNames.filter((x) => x !== name) })
+  toast(`Nazwa „${name}” nie wskazuje już ${m.name}.`, 'info', 8000, { label: 'Cofnij', run: () => bankNameBack(memberId, m.name, name, at) })
+}
+
+function bankNameBack(memberId: string, who: string, name: string, at: number): void {
+  const ms = membersNow()
+  const m = ms.find((x) => x.id === memberId)
+  // Never in silence (AP-15): the member gone, the name there again.
+  if (!m) return toast(`${who} nie ma już wśród domowników – nazwa „${name}” nie wróciła.`, 'info', 6000)
+  const own = m.bankNames.find((x) => sameBankName(x, name))
+  if (own) return toast(`${m.name} ma już nazwę „${own}” – nic do przywrócenia.`, 'info', 5000)
+  const holder = bankNameHolder(ms, name, memberId)
+  if (holder) return toast(`Import nie odróżni „${name}” od nazwy, którą ma teraz ${holder.name} – zostaje tam, ${m.name} jej nie odzyskuje.`, 'info', 7000)
+  if (m.bankNames.length >= MAX_BANK_NAMES) return toast(`Najwyżej ${MAX_BANK_NAMES} nazw w banku na domownika – nazwa „${name}” nie wróciła.`, 'error', 6000)
+  const names = [...m.bankNames]
+  names.splice(Math.min(at, names.length), 0, name)
+  patchMember(memberId, { bankNames: names })
 }
 
 /**
@@ -232,9 +321,31 @@ export function setHouseholdSince(since: string | null): void {
   }))
   if (!changed.length) return
   const shown = changed.slice(0, 3).map((m) => `${m.name}: ${openingText(openings!.get(m.id)!)} (było ${openingText(m.opening)})`)
+  const set = useData.getState().fi!.settings.household
   toast(`Saldo na start rozliczeń przeliczone – ${shown.join(', ')}${changed.length > 3 ? ` i ${changed.length - 3} innych` : ''}.`, 'info', 8000, {
     label: 'Cofnij',
-    run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, household: before } }))
+    run: () => {
+      // Only what is still as it set it: the start, its operations, each member's balance on it (members added or
+      // changed since stay – review 3 of N4).
+      let kept = 0
+      updateSettings((f) => {
+        const h = f.settings.household
+        const same = h.since === set.since && sameContentAs(h.openingIds, set.openingIds)
+        if (!same) kept++
+        const members = h.members.map((m) => {
+          const was = before.members.find((x) => x.id === m.id)
+          const now = set.members.find((x) => x.id === m.id)
+          if (!was || !now || sameOpening(was.opening, now.opening)) return m
+          if (!sameOpening(m.opening, now.opening)) {
+            kept++
+            return m
+          }
+          return { ...m, opening: was.opening }
+        })
+        return { ...f, settings: { ...f.settings, household: { ...h, ...(same ? { since: before.since, openingIds: before.openingIds } : {}), members } } }
+      })
+      if (kept) toast('Część rozliczeń zmieniła się od tego czasu – zostaje, jak jest; reszta cofnięta.', 'info', 7000)
+    }
   })
 }
 
@@ -254,7 +365,11 @@ export function setAssignFrom(assignFrom: string | null): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom } } }))
   toast(assignFrom ? `Zwroty od ${plDate(assignFrom)} spłacają tylko wskazane zakupy.` : 'Wszystkie zwroty spłacają tylko wskazane zakupy – dawne bez wskazania czekają na przypisanie.', 'info', 6000, {
     label: 'Cofnij',
-    run: () => updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom: before } } }))
+    run: () => {
+      // Only while still as it set it (review 3 of N4).
+      if (useData.getState().fi?.settings.household.assignFrom !== assignFrom) return undoKept(0, 1)
+      updateSettings((f) => ({ ...f, settings: { ...f.settings, household: { ...f.settings.household, assignFrom: before } } }))
+    }
   })
 }
 

@@ -1,12 +1,14 @@
 /**
  * The notifications due now (spec, „Powiadomienia”, D70): pure – the main window asks every minute and on opening, and
  * shows each once (`key`, remembered on this computer). Nothing during the quiet hours; the morning briefing waits for
- * the first opening of the window after them.
+ * the first opening of the window after them – or its hour, when one is set (D99 pkt 7) – and comes before the others
+ * (AP-16): until then the day's other notices wait, at most to `BRIEFING_HOLD_UNTIL`.
  */
 import { briefing, dm, type BriefingInput } from './calc/briefing'
 import { WATCH_TIME } from './calc/intel'
-import { dayOfMonth, daysBetween, inClockWindow, monthOf, warsawNow, weekdayOf } from './calc/dates'
+import { addDays, dayOfMonth, daysBetween, inClockWindow, monthOf, WARSAW, warsawNow, weekdayOf } from './calc/dates'
 import { envelopeOverrun, SERIOUS_ENVELOPE_PCT, type FleetState } from './calc/fleet'
+import { DateTime } from 'luxon'
 import { CAP_REASON } from './calc/why'
 import { ICTJ_POOL_LABEL } from './ictj'
 import { plural } from './format'
@@ -85,6 +87,25 @@ export interface NotifyInput extends Omit<BriefingInput, 'fleet'> {
   evening?: EveningState
   /** The game's serious overrun threshold (N102, `settings.game.seriousEnvelopePct`); none – the default 20%. */
   seriousPct?: number
+  /** Today's briefing shown already on this computer (its key remembered): the other notices no longer wait for it. */
+  briefingShown?: boolean
+}
+
+/**
+ * The day's other notices wait for the morning briefing (AP-16, RY sp. 4) at most until this hour – a window never opened
+ * all morning gets them then, the briefing still at its opening.
+ */
+export const BRIEFING_HOLD_UNTIL = '09:00'
+/** With its hour set (D99 pkt 7) they wait for it – never past noon (a briefing set for the evening holds nothing back). */
+export const BRIEFING_HOLD_MAX = '12:00'
+
+/**
+ * When the morning briefing comes on its own (D99 pkt 7): its hour – or the end of the quiet hours, when the hour falls in
+ * them; null – at the first opening of the window after the quiet hours (the default, T56).
+ */
+export function briefingAt(briefingTime: string | null, quietHours: { from: string; to: string }): string | null {
+  if (!briefingTime) return null
+  return inClockWindow(briefingTime, quietHours.from, quietHours.to) ? quietHours.to : briefingTime
 }
 
 export function dueNotices(o: NotifyInput): Notice[] {
@@ -95,7 +116,10 @@ export function dueNotices(o: NotifyInput): Notice[] {
   const today = f.today
   const items = briefing(o)
   const d = f.daily
-  if (p.briefing && o.opened) {
+  // The briefing at its hour, when one is set (D99 pkt 7) – else at the first opening after the quiet hours (T56).
+  const at = briefingAt(p.briefingTime, o.quietHours)
+  const briefingDue = p.briefing && (at ? o.time >= at : o.opened)
+  if (briefingDue) {
     const alarms = items.filter((i) => i.level !== 'info').length
     out.push({
       key: `briefing:${today}`,
@@ -104,6 +128,10 @@ export function dueNotices(o: NotifyInput): Notice[] {
       body: [d ? `Energia dziś: ${o.money(d.energy)}.` : 'Bez planu tego miesiąca.', alarms ? `Alarmy: ${alarms}.` : 'Bez alarmów.'].join(' ')
     })
   }
+  // The briefing first (AP-16, RY sp. 4): not shown yet today and not due now – the others wait for it (to its hour, at
+  // most noon; to `BRIEFING_HOLD_UNTIL` when it waits for the window's opening).
+  const hold = at ? (at < BRIEFING_HOLD_MAX ? at : BRIEFING_HOLD_MAX) : BRIEFING_HOLD_UNTIL
+  if (p.briefing && !briefingDue && !o.briefingShown && o.time < hold) return []
   // The evening report (F13): not when the day is done; put off – again from its time, under a new key.
   const ev = o.evening
   if (p.evening && o.time >= eveningAt(o.prefs.eveningTime, o.quietHours) && !ev?.done && (!ev?.snooze || o.time >= ev.snooze.until))
@@ -196,4 +224,45 @@ export function dueNotices(o: NotifyInput): Notice[] {
       )
     }
   return out
+}
+
+/** This many notices at once come as one (AP-16, US sp. 1): at the start there were 10 of them. */
+export const BUNDLE_FROM = 3
+
+/**
+ * The notices due at once, as shown (AP-16): the briefing first; from `BUNDLE_FROM` of them one notification – the
+ * briefing with the others named in its body, or „Powiadomienia (N)” – its click leads to the bridge, an alarm's sound
+ * if any of them has one. Each key stays its own (remembered once – never shown again apart).
+ */
+export function bundleNotices(fresh: readonly Notice[]): Notice[] {
+  const ordered = [...fresh].sort((a, b) => Number(b.tag === 'briefing') - Number(a.tag === 'briefing'))
+  if (ordered.length < BUNDLE_FROM) return ordered
+  const head = ordered[0]!.tag === 'briefing' ? ordered[0]! : null
+  const others = head ? ordered.slice(1) : ordered
+  // The same title once, with its count: „Nowa wypłata w ICTTJ do zadokowania (5)”.
+  const titles = new Map<string, number>()
+  for (const n of others) titles.set(n.title, (titles.get(n.title) ?? 0) + 1)
+  const named = [...titles].map(([t, n]) => (n > 1 ? `${t} (${n})` : t)).join(', ')
+  const alarm = ordered.some((n) => n.alarm)
+  const more = `${others.length} ${plural(others.length, 'inne powiadomienie', 'inne powiadomienia', 'innych powiadomień')}`
+  return [
+    head
+      ? { key: head.key, tag: 'briefing', title: head.title, body: `${head.body} Do tego ${more}: ${named} – Mostek.`, ...(alarm ? { alarm } : {}) }
+      : { key: 'bundle', tag: 'briefing', title: `Powiadomienia (${others.length})`, body: `${named} – Mostek.`, ...(alarm ? { alarm } : {}) }
+  ]
+}
+
+/** The window untouched this long across the quiet hours' end: left for the night, not worked in through it (T411). */
+export const MORNING_IDLE_MS = 30 * 60_000
+
+/**
+ * A touch of the window is the morning's opening (AF-67, T56): its touch before was before today's quiet hours ended
+ * (yesterday's, before their end today) and at least `MORNING_IDLE_MS` ago – the window left on screen through the night
+ * goes to the bridge; the user working through the quiet hours' end stays where they are (T411). Without quiet hours –
+ * never. `now.ms` – the moment of the touch (epoch ms).
+ */
+export function morningTouch(prevTouch: number, now: { date: string; time: string; ms: number }, quiet: { from: string; to: string }): boolean {
+  if (quiet.from === quiet.to || now.ms - prevTouch < MORNING_IDLE_MS) return false
+  const day = now.time >= quiet.to ? now.date : addDays(now.date, -1)
+  return prevTouch < DateTime.fromISO(`${day}T${quiet.to}`, { zone: WARSAW }).toMillis()
 }

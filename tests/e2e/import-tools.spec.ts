@@ -84,7 +84,11 @@ test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; nume
     // „Cofnij” of the undo: the import as it was.
     await page.getByRole('status').filter({ hasText: 'Import cofnięty' }).getByTestId('toast-action').click()
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
+    await expect(page.getByRole('status').filter({ hasText: 'Import znowu w budżecie.' })).toBeVisible()
+    // IM.30: the operations the „Cofnij” wrote back are the import's own – none „zmienione później przez Ciebie”.
     await page.getByTestId('import-undo').click()
+    await expect(page.getByTestId('import-undo-plan')).toContainText('269')
+    await expect(page.getByTestId('import-undo-changed')).toHaveCount(0)
     await page.getByTestId('import-undo-confirm').click()
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(0)
 

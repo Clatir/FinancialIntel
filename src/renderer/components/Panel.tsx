@@ -279,13 +279,13 @@ export function Panel({
 }
 
 /** Edges to drag: invisible until the pointer is over them, then an accent line. */
-const EDGE = 'absolute z-10 outline-none transition-colors duration-100 hover:bg-accent/50 focus-visible:bg-accent/50 active:bg-accent/70'
+const EDGE = 'absolute z-10 outline-none transition-colors duration-150 hover:bg-accent/50 focus-visible:bg-accent/50 active:bg-accent/70'
 
 function PanelButton({ title, onClick, children, testId }: { title: string; onClick: () => void; children: ReactNode; testId: string }) {
   return (
     <button
       type="button"
-      className="flex h-[22px] w-[22px] items-center justify-center text-dim transition-colors duration-100 hover:bg-hover hover:text-fg-strong"
+      className="flex h-[22px] w-[22px] items-center justify-center text-dim transition-colors duration-150 hover:bg-hover hover:text-fg-strong"
       title={title}
       aria-label={title}
       onClick={onClick}

@@ -11,6 +11,7 @@ import { diffRecords } from '@shared/merge'
 import type { Transaction } from '@shared/schema'
 import { Badge, Panel, ShowMore } from '../../components/ui'
 import { api } from '../../lib/api'
+import { plDateTime } from '../../lib/format'
 import { recordTitle } from '../../lib/recordTitle'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useMinute } from '../../store/fleet'
@@ -23,7 +24,7 @@ type Period = 'today' | 'week' | 'month'
 const PERIOD_LABEL: Record<Period, string> = { today: 'dziś', week: '7 dni', month: '30 dni' }
 const PAGE = 50
 
-const when = (iso: string) => new Date(iso).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
+const when = (iso: string) => plDateTime(iso)
 
 export function ChangeLogPanel() {
   const records = useData((s) => s.records)

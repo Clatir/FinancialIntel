@@ -19,7 +19,7 @@ import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useGameRecords } from '../../store/game'
 import { useRecordList } from '../../store/records'
-import { plnText } from '../../components/fields'
+import { amountsHidden, plnText, signedPln } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Empty, Panel, Segmented, cx } from '../../components/ui'
@@ -206,7 +206,8 @@ export function IntelPage() {
                       <span className="num text-dim">
                         {plnText(e.spent)} / {plnText(e.limit)}
                       </span>
-                      <span className={cx('num w-[96px] text-right', e.gap < 0 ? 'text-down' : 'text-up')}>{e.gap >= 0 ? `+${zl(e.gap)}` : zl(e.gap)}</span>
+                      {/* Neutral and without a sign while the amounts are hidden (B61, WY sp. 5) – as on the screens of the month. */}
+                      <span className={cx('num w-[96px] text-right', !amountsHidden() && (e.gap < 0 ? 'text-down' : 'text-up'))}>{e.gap >= 0 && !amountsHidden() ? `+${plnText(e.gap)} zł` : `${signedPln(e.gap)} zł`}</span>
                     </div>
                     <Meter value={e.spent} max={e.limit} over />
                   </div>

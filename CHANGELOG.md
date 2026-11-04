@@ -1,5 +1,52 @@
 # Financial Intel – zmiany
 
+## 1.15.8
+
+Poprawki po audycie – zasady interfejsu: nic nie dzieje się po cichu, „Cofnij” wszędzie, czytelne teksty, odprawa
+z hierarchią:
+
+- **Odmowy i przycięcia zawsze z komunikatem przy polu:** kwoty, liczby poza zakresem, limity długości z licznikiem, tagi,
+  kwoty „od” po „do” zamieniane. Esc cofa wpis w polach liczbowych. Operacja na 0 zł ma ostrzeżenie, a wyłączone przyciski
+  podają powód. „Spłać” i „zostaw” w nieaktualnym meldunku „Zaliczki przy długu” mówią, że nie ma nic do zmiany.
+- **Szybki wpis:** komunikaty pól w stopce, Esc działa jak „×”, Enter po odrzuconej kwocie nie zapisuje starej, a skrócony
+  tag nie wstrzymuje zapisu – informacja o skróceniu pojawia się przy „Zapisano” tylko wtedy, gdy dotyczy tego zapisu.
+  Komunikat o skróconych albo pominiętych tagach nie myli się już przy tagach z literą „s”, z podwójnymi spacjami ani przy
+  tagu równym już dodanemu.
+- **„Cofnij” wszędzie:** przy usunięciu reguły, rozłączeniu nazwy, zrzucie z ładowni i zamknięciu zgłoszenia; toasty
+  z „Cofnij” trwają dłużej. „Cofnij” przy regułach importu i domownikach (zmiana reguły, „spłata”, reguła kwotowa,
+  „Zastosuj do historii”, łączenie nazw, „Spłać”, zwrot gotówką, przypisanie zwrotu, dzień zwrotów, start rozliczeń) nie
+  nadpisuje zmian zrobionych później – zostają, a komunikat mówi ile. Kosz, token i przerwanie kreatora pytają o potwierdzenie, a kreator pokazuje, co zostaje
+  w folderze.
+- **„Cofnij import” ostrzega o każdej Twojej zmianie** w operacjach importu – także zapisanej w trakcie cofania, na
+  komputerze z innym zegarem albo po późniejszych importach, które te operacje rozliczyły – i nie liczy jako Twoich zmian
+  zapisów samej aplikacji ani importu tego samego okresu w drugim formacie. „Cofnij” po cofnięciu importu nie nadpisuje
+  i nie usuwa operacji zmienionych po cofnięciu – zostają z Twoimi zmianami, a komunikat mówi, ile ich jest – i nie
+  dubluje operacji: gdy po cofnięciu był kolejny import albo te wiersze banku są już w budżecie, import nie wraca
+  i aplikacja mówi dlaczego (tak samo przy folderze tylko do odczytu). Lista importów ostrzega, że następny usunie
+  najstarszy.
+- **Domownicy – nazwy w banku:** „Cofnij” usunięcia nazwy przywraca tylko tę nazwę (nazwy dopisane w międzyczasie zostają).
+  Domownikowi nie da się dopisać nazwy w banku, którą import przypisałby innej osobie – także bez polskich znaków,
+  w innym szyku albo zawierającej jej nazwę („JAN KOWALSKI SENIOR” przy „JAN KOWALSKI”) – z komunikatem, a „+ domownik”
+  przy imporcie nie pojawia się dla takiej nazwy. Domownik
+  ma najwyżej 20 nazw w banku – kolejna jest odmówiona (wcześniej mogła zniknąć cała lista).
+- **Odprawa z hierarchią:** najpierw alarmy, potem sprawy dnia, reszta zwinięta pod „Pokaż wszystkie”; sprawy starsze
+  niż 30 dni tylko w Meldunkach, jedna pozycja na sprawę, poważne naruszenia na czerwono (także w Dowództwie). Odsłuch
+  czyta skrót: energia, Daily Bias i najważniejszy alarm. Przy starcie jedno powiadomienie zamiast kilku, a odprawa
+  przychodzi przed innymi powiadomieniami. Godzina odprawy do wyboru w Ustawieniach → Powiadomienia (domyślnie przy
+  pierwszym otwarciu). Okno zostawione na noc przechodzi rano na Mostek przy pierwszym dotyku, ale nie w trakcie pracy
+  przez koniec ciszy nocnej.
+- **Rozkazy i progi gry** zmienia się w Ustawieniach → Warstwy i rozkazy; Dowództwo je pokazuje.
+- **Teksty:** daty w całej aplikacji jako dd.mm.rrrr (także w historii zmian, dzienniku zmian i zakresie Operacji);
+  z podpowiedzi zniknęły kody decyzji i teksty robocze; błędy systemu (brak pliku, zajęty plik, uszkodzony JSON lub ZIP)
+  są po polsku, a plik zajęty przez OneDrive ma plakietkę „zablokowany”. Stopa oszczędności ma zawsze jedno miejsce po
+  przecinku (55,0%), liczby mają przecinek („1,0”), minus jest typograficzny „−” (także na listach zmian). Poprawna
+  odmiana: „3 pensje”, „1 plan miesiąca zmieniony”. Cisza nocna z takimi samymi godzinami „od” i „do” mówi, że jest
+  wyłączona.
+- **Pomoc (F1)** ma słowniczek „Terminy ICT”, a każda linia „Stanu okrętu” ma objaśnienie.
+- **Eksport i Synchronizacja:** pusty eksport mówi „Brak operacji w okresie”, a „Excel (operacje + miesiące)” działa także
+  dla okresu bez operacji – z arkuszem miesięcy. Wyszukiwanie usuniętych wpisów znajduje daty wpisane jako 01.10.2026
+  i w zapisie rok-miesiąc-dzień.
+
 ## 1.15.7
 
 Poprawki po audycie – opłaty, energia, kadłub, kurs i gra:

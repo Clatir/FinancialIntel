@@ -250,11 +250,11 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
             </div>
           </Field>
           <Field label="Bez wypłat z XTB" labelWidth={130} hint="Przez tyle miesięcy od następnego.">
-            <NumberField className="h-[24px] w-[60px]" value={f.noXtb} decimals={0} step={1} isValid={(v) => v == null || (v >= 0 && v <= 12)} onChange={(noXtb) => set({ noXtb })} aria-label="Miesiące bez wypłat z XTB" data-testid="maneuver-noxtb" />
+            <NumberField className="h-[24px] w-[60px]" value={f.noXtb} decimals={0} step={1} range={[0, 12]} isValid={(v) => v == null || (v >= 0 && v <= 12)} onChange={(noXtb) => set({ noXtb })} aria-label="Miesiące bez wypłat z XTB" data-testid="maneuver-noxtb" />
           </Field>
           <Field label="Koszty wyższe o" labelWidth={130} hint={input.costs == null ? 'Średnie koszty jeszcze nieznane (bez pełnego miesiąca) – kurs liczy wydatki jako pensję; zmiana kosztów i kontener bez skutku.' : undefined}>
             <div className="flex items-center gap-1">
-              <NumberField className="h-[24px] w-[60px]" value={f.costsPct} decimals={0} step={5} isValid={(v) => v == null || (v >= -50 && v <= 200)} onChange={(costsPct) => set({ costsPct })} aria-label="Koszty wyższe o procent" data-testid="maneuver-costs" />
+              <NumberField className="h-[24px] w-[60px]" value={f.costsPct} decimals={0} step={5} range={[-50, 200]} isValid={(v) => v == null || (v >= -50 && v <= 200)} onChange={(costsPct) => set({ costsPct })} aria-label="Koszty wyższe o procent" data-testid="maneuver-costs" />
               <span className="text-muted">%</span>
             </div>
           </Field>
@@ -278,7 +278,7 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
             <div className="flex items-center gap-2">
               <AmountField className="h-[24px] w-[100px]" value={f.container} allowEmpty onChange={(container) => set({ container })} aria-label="Kwota nowego kontenera" data-testid="maneuver-container" />
               <span className="text-muted">co</span>
-              <NumberField className="h-[24px] w-[50px]" value={f.containerCycle} decimals={0} step={1} isValid={(v) => v != null && v >= 1 && v <= 60} onChange={(v) => v != null && set({ containerCycle: v })} aria-label="Cykl nowego kontenera" />
+              <NumberField className="h-[24px] w-[50px]" value={f.containerCycle} decimals={0} step={1} range={[1, 60]} isValid={(v) => v != null && v >= 1 && v <= 60} onChange={(v) => v != null && set({ containerCycle: v })} aria-label="Cykl nowego kontenera" />
               <span className="text-muted">mies.</span>
             </div>
           </Field>

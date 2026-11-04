@@ -94,10 +94,11 @@ test('Synchronizacja (1.6.5, N94, N95): kopia konfliktu jako lista zmienionych p
     const trash = page.getByTestId('problem-trash')
     await expect(trash).toHaveCount(1)
     await trash.click()
-    // The first click only asks.
-    await expect(trash).toHaveText(/Do Kosza na pewno/)
+    // The first click only asks (the one confirmation – AP-22).
+    const sure = page.getByTestId('problem-trash-confirm')
+    await expect(sure).toHaveText(/Do Kosza na pewno/)
     expect(readdirSync(dir).some((n) => n.startsWith(`${today}_01JB`))).toBe(true)
-    await trash.click()
+    await sure.click()
     await expect(page.getByTestId('problem-row')).toHaveCount(1)
     expect(readdirSync(dir).some((n) => n.startsWith(`${today}_01JB`))).toBe(false)
     // The newer version's file stays where it is.

@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/renderer/app/ShortcutsHelp.tsx @ 84a8339
 import { useEffect, useState } from 'react'
 import { shortcutLabel } from '@shared/machine'
-import { GLOSSARY } from '@shared/glossary'
+import { GLOSSARY, ICT_GLOSSARY } from '@shared/glossary'
 import { IconClose } from '../components/icons'
 import { Kbd } from '../components/ui'
 import { PAGES } from '../features/screens/pages'
@@ -113,6 +113,17 @@ export function ShortcutsHelp() {
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
               {GLOSSARY.map((g) => (
                 <div key={g.term} className="text-[12px]" data-testid="glossary-term">
+                  <span className="text-fg-strong">{g.term}</span> <span className="text-muted">– {g.meaning}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* AP-23: the ICT terms of the screens – the term stays in English, what it means for the money in Polish. */}
+          <div className="col-span-3 flex flex-col gap-1 border-t border-line pt-3" data-testid="shortcuts-ict-glossary">
+            <span className="label mb-1 text-accent">Terminy ICT</span>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              {ICT_GLOSSARY.map((g) => (
+                <div key={g.term} className="text-[12px]" data-testid="ict-term">
                   <span className="text-fg-strong">{g.term}</span> <span className="text-muted">– {g.meaning}</span>
                 </div>
               ))}

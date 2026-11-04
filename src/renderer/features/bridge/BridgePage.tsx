@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/shallow'
-import { BIAS_LABEL, briefing, confirmationsOf, dailyBias, silverBullet, type BriefingItem } from '@shared/calc/briefing'
+import { arrangeBriefing, BIAS_LABEL, briefing, briefingSpeech, confirmationsOf, dailyBias, silverBullet, topAlarm, type BriefingItem, type BriefingRow } from '@shared/calc/briefing'
 import { daysBetween, isoWeekOf } from '@shared/calc/dates'
 import { financersText, memberName, payerOf } from '@shared/calc/household'
 import { missionText, missionTitle } from '@shared/calc/game'
@@ -41,7 +41,7 @@ import { useMembers } from '../household/actions'
 import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
 import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
-import { glossaryOf } from '@shared/glossary'
+import { glossaryOf, ictOf } from '@shared/glossary'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 // Cut down (N56): never the threshold of a class the ship has not reached.
@@ -95,7 +95,7 @@ export type BridgeDetachProps =
   | { panel: 'envelopes'; rows: BridgeFleet['envelopes']; labels: Record<string, string>; elapsed?: number }
 
 /** Where a click on the bridge leads: a briefing line (by its kind; its key names a delivery) or the cargo's mass. */
-type BridgeTarget = BriefingItem['kind'] | 'cargo'
+type BridgeTarget = BriefingItem['kind'] | 'cargo' | 'inbox'
 
 function openTarget(t: BridgeTarget, key?: string): void {
   if (t === 'asteroid' || t === 'cargo') navigate({ page: 'cargo' })
@@ -121,6 +121,8 @@ function openTarget(t: BridgeTarget, key?: string): void {
   else if (t === 'house') openRefundables()
   else if (t === 'mission') navigate({ page: 'command' })
   else if (t === 'alarm') openAlarm(key)
+  // The matters older than 30 days (AP-16): only in Meldunki.
+  else if (t === 'inbox') navigate({ page: 'inbox' })
   else navigate({ page: 'month' })
 }
 
@@ -199,13 +201,6 @@ function BridgeDetachSender({ keys }: { keys: string[] }) {
 function HostedPanel({ panelKey, spec }: { panelKey: string; spec: DetachSpec | null }) {
   useHostedDetach(panelKey, spec ? { kind: spec.kind, title: spec.title ?? '', props: spec.props } : null, onBridgeEvent)
   return null
-}
-
-/** An amount as read aloud: „1 234 złote 50 groszy” (the grosze too – N27). */
-function spokenPln(grosze: number): string {
-  const zl = Math.floor(Math.abs(grosze) / 100)
-  const gr = Math.abs(grosze) % 100
-  return `${zl} ${plural(zl, 'złoty', 'złote', 'złotych')}${gr ? ` ${gr} ${plural(gr, 'grosz', 'grosze', 'groszy')}` : ''}`
 }
 
 /** Is there a Polish voice of the system (T7)? null = the voices are not listed yet (Chromium lists them a moment later). */
@@ -430,17 +425,11 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
 
 function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
   const [spoken, setSpoken] = useState(true)
+  // A short one (AP-16, T214): the energy, the Daily Bias, the most important alarm and how many more matters there are.
   const say = () => {
-    const hidden = amountsHidden()
-    const bias = dailyBias(fleet)
     const d = fleet.daily
-    const parts = [`Odprawa, ${dayLabel(fleet.today)}.`]
-    // Over the day it is said so (N27) – never „0 złotych”; capped by the month's energy – with its reason (AP-13).
-    if (d && !hidden) parts.push(d.energy < 0 ? `Energia na dziś przekroczona o ${spokenPln(-d.energy)}.` : `Energia na dziś: ${spokenPln(d.energy)}${d.cap ? `, ${CAP_REASON[d.cap.why]}` : ''}.`)
-    if (bias) parts.push(`Daily Bias: ${BIAS_LABEL[bias]}.`)
-    for (const i of items) parts.push(i.text.replaceAll(`${AMOUNT_MASK} zł`, 'kwota ukryta').replace(/zł/g, 'złotych'))
-    if (!items.length) parts.push('Bez alarmów.')
-    setSpoken(speak(parts.join(' ')))
+    const view = arrangeBriefing(items, fleet.today)
+    setSpoken(speak(briefingSpeech({ day: dayLabel(fleet.today), daily: d, capReason: d?.cap ? CAP_REASON[d.cap.why] : null, bias: dailyBias(fleet), view, hidden: amountsHidden(), mask: AMOUNT_MASK })))
   }
   return { spoken, say }
 }
@@ -456,7 +445,7 @@ function SpeakButton({ onClick }: { onClick: () => void }) {
       </span>
     )
   return (
-    <button className="btn h-[22px]" onClick={onClick} title="Przeczytaj odprawę głosem systemu" data-testid="briefing-speak">
+    <button className="btn h-[22px]" onClick={onClick} title="Skrót odprawy głosem systemu: energia, Daily Bias i najważniejszy alarm" data-testid="briefing-speak">
       Odsłuchaj
     </button>
   )
@@ -475,6 +464,10 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
   const bias = dailyBias(fleet)
   const d = fleet.daily
   const [why, setWhy] = useState(false)
+  // Alarms → the day's matters → the rest folded (AP-16); the old matters only in Meldunki.
+  const [all, setAll] = useState(false)
+  const view = useMemo(() => arrangeBriefing(items, fleet.today), [items, fleet.today])
+  const total = view.shown.length + view.rest.length
   return (
     <div className="flex flex-col gap-2 text-[12px]">
       {fleet.started && (
@@ -499,14 +492,14 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
             )}
           </div>
           {bias && (
-            <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-accent' : bias === 'bullish' ? 'text-fg-strong' : 'text-muted')} data-testid="bridge-bias" title="Daily Bias (spec, Wywiad)">
+            <span className={cx('ml-auto text-[13px] font-medium', bias === 'bearish' ? 'text-accent' : bias === 'bullish' ? 'text-fg-strong' : 'text-muted')} data-testid="bridge-bias" title={ictOf('Daily Bias')}>
               {bias === 'bullish' ? '▲' : bias === 'bearish' ? '▼' : '◆'} {BIAS_LABEL[bias]}
             </span>
           )}
         </div>
       )}
       {fleet.started && d && why && <WhyList lines={energyWhy(d, fleet.month)} testId="bridge-energy-lines" />}
-      {fleet.started && silverBullet() && <SilverBullet fleet={fleet} items={items} />}
+      {fleet.started && silverBullet() && <SilverBullet fleet={fleet} top={topAlarm(view)} />}
       {!fleet.started && (
         <div className="flex items-center gap-3 border border-accent/40 bg-accent-soft px-3 py-2">
           <span className="flex-1 text-fg-strong">Budżet jeszcze nie wystartował.</span>
@@ -516,18 +509,52 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
         </div>
       )}
       <div className="flex flex-col" data-testid="briefing-items">
-        {fleet.started && !items.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
-        {items
-          .filter((i) => i.kind !== 'start')
-          .map((i) => (
-            <button key={i.key} className="flex items-start gap-2 py-0.5 text-left hover:text-fg-strong" onClick={() => onOpen(i.kind, i.key)} data-testid="briefing-item" data-kind={i.kind}>
-              <span className={cx('mt-[5px] h-[6px] w-[6px] shrink-0', i.level === 'red' ? 'bg-down' : i.level === 'yellow' ? 'bg-accent' : 'bg-line-strong')} />
-              <span className={cx(i.level === 'red' ? 'text-down' : 'text-fg')}>{i.text}</span>
-            </button>
-          ))}
+        {fleet.started && !total && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
+        {view.shown.map((i) => (
+          <BriefingLine key={i.key} row={i} onOpen={onOpen} />
+        ))}
+        {/* The folded rest stays in the page, hidden – „Pokaż wszystkie” only shows it. */}
+        {view.rest.map((i) => (
+          <BriefingLine key={i.key} row={i} onOpen={onOpen} hidden={!all} />
+        ))}
+        {view.rest.length > 0 && (
+          <button type="button" className="self-start py-0.5 text-[11.5px] text-accent hover:underline" onClick={() => setAll(!all)} aria-expanded={all} data-testid="briefing-all" data-count={total}>
+            {all ? 'Zwiń' : `Pokaż wszystkie (${total})`}
+          </button>
+        )}
+        {fleet.started && view.older > 0 && (
+          <button type="button" className="self-start py-0.5 text-[11px] text-dim hover:text-fg-strong" onClick={() => onOpen('inbox')} data-testid="briefing-older" data-count={view.older}>
+            {view.older} {plural(view.older, 'sprawa starsza', 'sprawy starsze', 'spraw starszych')} niż 30 dni – w Meldunkach ›
+          </button>
+        )}
       </div>
       {!spoken && <span className="text-[11px] text-dim">Brak głosu systemu do odsłuchu.</span>}
     </div>
+  )
+}
+
+/** A line of the briefing (AP-16): its level's mark; the same matter's other lines under it. */
+function BriefingLine({ row, onOpen, hidden = false }: { row: BriefingRow; onOpen: (t: BridgeTarget, key?: string) => void; hidden?: boolean }) {
+  if (row.kind === 'start') return null
+  return (
+    <button
+      className={cx(hidden ? 'hidden' : 'flex', 'items-start gap-2 py-0.5 text-left hover:text-fg-strong')}
+      onClick={() => onOpen(row.kind, row.key)}
+      data-testid="briefing-item"
+      data-kind={row.kind}
+      data-tier={row.tier}
+      data-level={row.level}
+    >
+      <span className={cx('mt-[5px] h-[6px] w-[6px] shrink-0', row.level === 'red' ? 'bg-down' : row.level === 'yellow' ? 'bg-accent' : 'bg-line-strong')} />
+      <span className="flex min-w-0 flex-col">
+        <span className={cx(row.level === 'red' ? 'text-down' : 'text-fg')}>{row.text}</span>
+        {row.also.map((t) => (
+          <span key={t} className="text-[11px] text-dim" data-testid="briefing-item-also">
+            {t}
+          </span>
+        ))}
+      </span>
+    </button>
   )
 }
 
@@ -588,10 +615,11 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
 }
 
 /** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */
-function SilverBullet({ fleet, items }: { fleet: BridgeFleet; items: BriefingItem[] }) {
+function SilverBullet({ fleet, top }: { fleet: BridgeFleet; top: BriefingRow | null }) {
   const bias = dailyBias(fleet)
   const d = fleet.daily
-  const first = items.find((i) => i.level !== 'info') ?? null
+  // The most important alarm – the same the spoken briefing says (AP-16).
+  const first = top
   return (
     <div className="flex flex-col gap-0.5 border-l-2 border-accent pl-2 text-[11.5px]" data-testid="briefing-silver-bullet">
       <span className="label text-accent">Silver Bullet · 10:00–11:00 NY</span>
@@ -714,12 +742,12 @@ function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t:
       </div>
       {why === 'targets' && <WhyList lines={targetsWhy(fleet, fleet.layers)} testId="state-targets-lines" />}
       {why === 'delivery' && fleet.lastDelivery && <WhyList lines={fleet.lastDelivery.lines} testId="state-delivery-lines" />}
-      {fleet.goals.length > 0 && <Line metaphor="Układy gwiezdne" name="cele" value={zl(goals)} />}
-      {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" value={zl(tanks)} />}
-      {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" value={zl(fleet.taxHold)} />}
-      {fleet.deposit !== 0 && <Line metaphor="Depozyt domowników" name="ich zaliczki – nie do wydania na siebie" value={zl(fleet.deposit)} testId="state-deposit" />}
-      {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" value={zl(fleet.loot.amount)} />}
-      {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" value={zl(fleet.debt)} testId="state-debt" />}
+      {fleet.goals.length > 0 && <Line metaphor="Układy gwiezdne" name="cele" hint={glossaryOf('Układy gwiezdne')} value={zl(goals)} />}
+      {fleet.tanks.length > 0 && <Line metaphor="Zbiorniki" name="odkładki na opłaty okresowe" hint={glossaryOf('Zbiornik')} value={zl(tanks)} />}
+      {fleet.taxHold > 0 && <Line metaphor="Podatek" name="poza budżetem (PIT-38)" hint={glossaryOf('Podatek')} value={zl(fleet.taxHold)} />}
+      {fleet.deposit !== 0 && <Line metaphor="Depozyt domowników" name="ich zaliczki – nie do wydania na siebie" hint={glossaryOf('Depozyt')} value={zl(fleet.deposit)} testId="state-deposit" />}
+      {fleet.loot.amount > 0 && <Line metaphor="Łupy" name="do podziału" hint={glossaryOf('Łupy')} value={zl(fleet.loot.amount)} />}
+      {fleet.debt > 0 && <Line metaphor="Dług" name="pożyczki wzięte – odjęte od zasięgu" hint={glossaryOf('Dług')} value={zl(fleet.debt)} testId="state-debt" />}
       {fleet.toDock.count > 0 && (
         // The pairs of ICTTJ payouts not docked yet (AP-12): in the layers above already, by their entry's pool – said apart.
         <Line
@@ -744,12 +772,12 @@ function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t:
           </span>
           <span className="text-[10.5px] text-dim">{fleet.debt > 0 ? '(osłony − dług + kadłub) / koszty' : '(osłony + kadłub) / koszty'}</span>
         </button>
-        <div className="flex flex-col">
+        <div className="flex flex-col" title={glossaryOf('Klasa okrętu')}>
           <span className="label">Klasa</span>
           <span className="text-[14px] text-fg-strong">{fleet.shipClass ? SHIP_CLASS_LABEL[fleet.shipClass] : '—'}</span>
           <span className="text-[10.5px] text-dim">średnie koszty {fleet.costs.average != null ? zl(fleet.costs.average) : '—'}</span>
         </div>
-        <button className="flex flex-col text-left hover:text-accent" onClick={() => onOpen('cargo')}>
+        <button className="flex flex-col text-left hover:text-accent" onClick={() => onOpen('cargo')} title={glossaryOf('Masa ładunku')}>
           <span className="label">Masa ładunku</span>
           <span className={cx('num text-[14px]', fleet.cargo.over ? 'text-down' : 'text-fg-strong')}>{fleet.cargo.pct != null ? `${fleet.cargo.pct.toFixed(1).replace('.', ',')}%` : '—'}</span>
           <span className="text-[10.5px] text-dim" data-testid="state-cargo">

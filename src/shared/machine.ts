@@ -18,6 +18,8 @@ export const SOUND_LABEL: Record<SoundKind, string> = {
 export interface NotifyPrefs {
   /** The morning briefing: at the first opening of the window after the quiet hours. */
   briefing: boolean
+  /** Its hour (D99 pkt 7, D84 C9 – 'HH:MM'): it comes then with its notification; null – at the first opening (default). */
+  briefingTime: string | null
   /** „Raport wachty dnia: dopisz dzisiejsze wydatki” at this time. */
   evening: boolean
   eveningTime: string
@@ -110,8 +112,8 @@ export const ZOOM_MIN = 0.9
 export const ZOOM_MAX = 1.5
 export const ZOOM_STEP = 0.1
 
-/** A size within the bounds, to a whole per cent. */
-export const clampZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100))
+/** A size within the bounds, on the grid of 10 % (AP-23, AF-71: a hand-edited 1,23 reads 120 %, never 123 %). */
+export const clampZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10))
 
 /** One step bigger or smaller, on the grid of 10 % (an odd size from a hand-edited file snaps to it). */
 export const zoomStep = (z: number, dir: 1 | -1): number => clampZoom((dir > 0 ? Math.floor(z * 10 + 1e-6) + 1 : Math.ceil(z * 10 - 1e-6) - 1) / 10)
@@ -161,7 +163,7 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   zoom: 1,
   highContrast: false,
   bankFiles: true,
-  notify: { briefing: true, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, cargo: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true, plans: true, accounts: true, cargoWatch: true, anomalies: true, returns: true },
+  notify: { briefing: true, briefingTime: null, evening: true, eveningTime: '21:00', low: true, overrun: true, asteroid: true, cargo: true, importOverdue: true, balances: true, debriefing: true, watch: true, ictj: true, loans: true, pit38: true, house: true, plans: true, accounts: true, cargoWatch: true, anomalies: true, returns: true },
   // Sounds on and quiet (D70).
   sounds: { enabled: true, volume: 0.3, events: { entry: true, docking: true, alarm: true, promotion: true, plus: true } }
 }
@@ -189,6 +191,8 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     bankFiles: bool(r.bankFiles, d.bankFiles),
     notify: {
       briefing: bool(n.briefing, d.notify.briefing),
+      // Additive (AP-16): an older config.json has none – the first opening, as before.
+      briefingTime: clock(n.briefingTime, '') || null,
       evening: bool(n.evening, d.notify.evening),
       eveningTime: clock(n.eveningTime, d.notify.eveningTime),
       low: bool(n.low, d.notify.low),
