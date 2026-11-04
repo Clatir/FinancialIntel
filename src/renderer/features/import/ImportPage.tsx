@@ -8,7 +8,7 @@ import { memberName } from '@shared/calc/household'
 import { keywordMatcher } from '@shared/import/brands'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
-import { useWizard } from '../wizard/state'
+import { noteImportTrace, useWizard } from '../wizard/state'
 import { useFleet } from '../../store/fleet'
 import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
@@ -306,7 +306,11 @@ function Summary() {
         <button
           className="btn btn-accent h-[30px] justify-center"
           disabled={busy || readOnly}
-          onClick={() => void runImport()}
+          onClick={() => {
+            // An import made while the start wizard runs stays when it is broken off (AP-25): the wizard says so.
+            const before = useImport.getState().done?.batchId ?? null
+            void runImport().then(() => noteImportTrace(before, useImport.getState().done?.batchId ?? null))
+          }}
           // A file with nothing new is imported too (N13): the time of the import and what the file covers are saved.
           title={nothing ? 'W pliku nie ma nic nowego – zapis zapamięta czas importu i okres pliku (odprawa, Portfel XTB, misja „Łączność z bazą”)' : undefined}
           data-testid="import-run"

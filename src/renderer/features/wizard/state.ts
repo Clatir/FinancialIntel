@@ -4,11 +4,12 @@ import { draftFromPayment } from '../cargo/actions'
 import { addContainer } from '../cargo/actions'
 import { openingFromNow } from '@shared/calc/start'
 import { openingOf } from '@shared/calc/balances'
+import { counterpartyKey } from '@shared/import/classify'
 import type { RecurringPayment } from '@shared/calc/plan'
 import type { Orders } from '@shared/schema'
 import { DEFAULT_QUICK_SHORTCUT } from '@shared/machine'
-import { api } from '../../lib/api'
-import { unsavedNote, updateSettings, useData } from '../../store/data'
+import { api, errorMessage } from '../../lib/api'
+import { listOf, saveFirst, takeBackSettings, unsavedNote, unsavedOf, updateSettings, useData, writeNow } from '../../store/data'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { setTrayPrefs } from '../../store/tray'
 import { navigate, toast } from '../../store/ui'
@@ -177,9 +178,21 @@ export const patchWizard = (p: Partial<WizardState>) => useWizard.setState(p)
 /** Something the wizard wrote at once (a member, a goal): said when it is broken off, for it stays in the folder. */
 export const noteTrace = (text: string): void => useWizard.setState((w) => (w.traces.includes(text) ? w : { traces: [...w.traces, text] }))
 
-/** The question when the wizard is broken off (AP-22, KR.30): what is lost and what stays. */
-export const cancelWizardText = (traces: readonly string[]): string =>
-  `Odpowiedzi kreatora (salda, plan, wybór kontenerów) przepadną, budżet się nie uruchomi.${traces.length ? ` Zostaje w folderze: ${traces.join(', ')} – usuniesz to w Ustawieniach albo na Mapie gwiezdnej.` : ''}`
+/** The traces the wizard knows of besides its members and goals (AP-25): ICTTJ's folder chosen, an import made meanwhile. */
+export const ICTJ_TRACE = 'cele prognozy ICT Trade Journal (folder ICTTJ zostaje wybrany na tym komputerze)'
+export const IMPORT_TRACE = 'operacje z importu'
+
+/** An import done (its batch `after`, none before it or another) while the wizard runs: a trace of it (AP-25, KR sp. 6). */
+export function noteImportTrace(before: string | null, after: string | null): void {
+  if (after && after !== before && useWizard.getState().active) noteTrace(IMPORT_TRACE)
+}
+
+/** The question when the wizard is broken off (AP-22, KR.30): what is lost and what stays – and where it goes away. */
+export function cancelWizardText(traces: readonly string[]): string {
+  const where = ['w Ustawieniach', 'na Mapie gwiezdnej', ...(traces.includes(IMPORT_TRACE) ? ['w Imporcie („Cofnij import”)'] : [])]
+  const whereText = `${where.slice(0, -1).join(', ')} albo ${where.at(-1)}`
+  return `Odpowiedzi kreatora (salda, plan, wybór kontenerów) przepadną, budżet się nie uruchomi.${traces.length ? ` Zostaje w folderze: ${traces.join(', ')} – usuniesz to ${whereText}.` : ''}`
+}
 
 export function cancelWizard(): void {
   useWizard.setState(initial())
@@ -187,32 +200,105 @@ export function cancelWizard(): void {
   navigate({ page: 'bridge' })
 }
 
+/** What „Uruchom budżet” still needs (AF-14): only what is missing – never the whole list when the steps are filled in. */
+export function finishBlockers(o: { missing: readonly string[]; salary: number | null; overSplit: boolean }): string[] {
+  return [
+    ...(o.missing.length ? [`saldo teraz (krok 1): ${o.missing.join(', ')}`] : []),
+    ...(o.salary == null || o.salary <= 0 ? ['pensja (krok 3)'] : []),
+    ...(o.overSplit ? ['kadłub, cele i zbiorniki w granicach środków (krok 6)'] : [])
+  ]
+}
+
+/** How long the start waits for fi.json on the disk before it counts it as written later (a slow folder). */
+const START_WRITE_MS = 15_000
+
+/** The wizard's answers kept for the folder shown again (a start the folder refused – they must outlive a restart). */
+function keepShownDraft(): void {
+  const dir = shownDir()
+  const w = useWizard.getState()
+  if (dir && w.active) keepDraft(dir, w)
+}
+
+/** The budget did not start (AF-14): said with the reason, the answers kept for „Uruchom budżet” once more. */
+function notStarted(text: string): false {
+  keepShownDraft()
+  toast(`Budżet nie wystartował – ${text.charAt(0).toLowerCase()}${text.slice(1)}`, 'error', 12_000)
+  return false
+}
+
 /**
  * Start the budget: the opening balances at the start of today (the balance now without today's operations), the
  * settings (the ship, the layers, the orders, the start and its split), this month's plan, the chosen containers, the
  * shortcut and the start with Windows (D64: the wizard asks about it).
+ *
+ * Whole or not at all (AF-14, KR.29): what waited from before is written first (a folder that refuses it refuses the
+ * start – nothing of it written); then the start's records (the openings, the plan, the containers with their payments)
+ * and only when they are on the disk fi.json with `budget.start` – the mark of a running budget. A folder that refuses
+ * fi.json: the settings taken back in the window, the answers kept – the records written are the same at the next
+ * „Uruchom budżet” (an opening and a plan updated, a container of the payee found, not added twice).
  */
 export async function finishWizard(o: { salary: number; hull: number; goals: Record<string, number>; tanks?: Record<string, number>; envelopes: Record<string, number> }): Promise<boolean> {
-  const s = useData.getState()
-  if (!s.fi || s.status?.readOnly || s.switching) {
-    toast('Folder jest tylko do odczytu – budżetu nie można uruchomić.', 'error')
+  const s0 = useData.getState()
+  if (!s0.fi || s0.status?.readOnly || s0.switching) {
+    toast(s0.switching ? 'Trwa otwieranie innego folderu – budżetu nie można teraz uruchomić.' : `${s0.status?.readOnlyReason ?? 'Folder jest tylko do odczytu.'} Budżetu nie można uruchomić.`, 'error', 8000)
     return false
   }
   const w = useWizard.getState()
   const { date: today, month } = warsawNow()
-  const txs = Object.values(s.records.transactions).map((e) => e.record)
-  const balances = Object.values(s.records.balances).map((e) => e.record)
   // The cash (D83) has no history of the bank: empty = 0 zł.
-  const missing = s.fi.settings.accounts.filter((a) => !a.archived && a.kind !== 'cash' && w.balances[a.id] == null && !openingOf(a.id, balances))
+  const missing = s0.fi.settings.accounts.filter((a) => !a.archived && a.kind !== 'cash' && w.balances[a.id] == null && !openingOf(a.id, listOf(s0.records.balances)))
   if (missing.length) {
     toast(`Wpisz saldo teraz (krok 1): ${missing.map((a) => a.name).join(', ')} – 0, jeśli konto jest puste.`, 'error', 6000)
     useWizard.setState({ step: 0 })
     return false
   }
+  // 1. What waited from before (a member, a goal of the wizard, any change): the folder takes it, or nothing starts.
+  try {
+    await saveFirst('start budżetu')
+  } catch (e) {
+    return notStarted(errorMessage(e))
+  }
+  const s = useData.getState()
+  if (!s.fi || s.status?.readOnly || s.switching) return notStarted(s.status?.readOnlyReason ?? 'folder jest tylko do odczytu.')
+  const txs = listOf(s.records.transactions)
+  // 2. The start's records: on the disk before the settings.
   for (const [accountId, now] of Object.entries(w.balances)) if (now != null) setOpening(accountId, openingFromNow(accountId, now, today, txs), today)
+  editPlan(month, (p) => ({ ...p, salary: o.salary, envelopes: { ...o.envelopes } }))
   const initialTanks: Record<string, number> = {}
   for (const [k, v] of Object.entries(o.tanks ?? {})) if (v > 0 && s.records.containers[k]) initialTanks[k] = v
-  updateSettings((f) => ({
+  // A chosen proposal becomes a container, its payments linked from the month before the start (T379 – the cargo, not an
+  // envelope; a fee paid early for this month's due is paid). One of its payee already there (a start the folder refused
+  // before) is that one – never a second.
+  const containers = listOf(s.records.containers)
+  const made: Record<string, string> = {}
+  for (const p of Object.values(w.cargo)) {
+    const id = containers.find((c) => !c.archived && counterpartyKey(c.counterparty) === p.key)?.id ?? addContainer(draftFromPayment(p), { start: today })
+    if (!id) continue
+    made[p.key] = id
+    const tank = o.tanks?.[p.key] ?? 0
+    if (tank > 0) initialTanks[id] = tank
+  }
+  // The proposals are containers now: the answers say so (the next try must not count them twice).
+  if (Object.keys(made).length)
+    useWizard.setState((x) => {
+      const cargo = { ...x.cargo }
+      const tanks = { ...(x.tanks ?? {}) }
+      for (const [key, id] of Object.entries(made)) {
+        delete cargo[key]
+        if (tanks[key] != null) {
+          tanks[id] = tanks[key]!
+          delete tanks[key]
+        }
+      }
+      return { cargo, tanks }
+    })
+  try {
+    await saveFirst('start budżetu')
+  } catch (e) {
+    return notStarted(`${errorMessage(e)} Salda otwarcia, plan i kontenery czekają na zapis – „Uruchom budżet” ponownie dokończy start.`)
+  }
+  // 3. The mark of a running budget.
+  const ok = updateSettings((f) => ({
     ...f,
     settings: {
       ...f.settings,
@@ -234,26 +320,13 @@ export async function finishWizard(o: { salary: number; hull: number; goals: Rec
       }
     }
   }))
-  editPlan(month, (p) => ({ ...p, salary: o.salary, envelopes: { ...o.envelopes } }))
-  // After the start: a container links its counterparty's payments from the month before this one (T379 – the cargo, not
-  // an envelope; a fee paid early for this month's due is paid).
-  let addedProposalTanks = false
-  for (const p of Object.values(w.cargo)) {
-    const id = addContainer(draftFromPayment(p))
-    const tank = o.tanks?.[p.key] ?? 0
-    if (id && tank > 0) {
-      initialTanks[id] = tank
-      addedProposalTanks = true
-    }
-  }
-  if (addedProposalTanks) {
-    updateSettings((f) => ({
-      ...f,
-      settings: {
-        ...f.settings,
-        budget: { ...f.settings.budget, initial: f.settings.budget.initial ? { ...f.settings.budget.initial, tanks: { ...initialTanks } } : null }
-      }
-    }))
+  const marked = useData.getState().fi
+  if (!ok || !marked) return notStarted(useData.getState().status?.readOnlyReason ?? 'folder jest tylko do odczytu.')
+  if (!(await writeNow('fi', 'fi', START_WRITE_MS))) {
+    const reason = unsavedOf('fi', 'fi') ?? 'zapis jeszcze trwa'
+    // Refused by the folder: taken back – the window shows what the folder has. On its way still (a slow folder): it is
+    // written later, as every change, and said so below.
+    if (takeBackSettings(marked)) return notStarted(`nie udało się zapisać ustawień w folderze (${reason}). Salda otwarcia, plan i kontenery są już zapisane – „Uruchom budżet” ponownie dokończy start.`)
   }
   await setMachinePrefs({ quickShortcut: w.shortcut })
   try {

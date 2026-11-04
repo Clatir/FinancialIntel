@@ -3132,3 +3132,62 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   niezaznaczona (`pairTickedFirst`) – zaznacza ją użytkownik; „zaznacz wszystkie” jak dotąd. (6) ME.8: ten sam wiersz
   banku zapisany w dwóch operacjach (ten sam klucz albo klucz drugiego formatu z `altKeys`) to duplikat do scalenia,
   nie sygnał „Dwa obciążenia z banku” – meldunki już sobie nie przeczą.
+- **T445** Kreator – podział i pierwszy miesiąc (1.15.9, N5 – AP-25, AF-10, KR.12, KR.23, R-4, KR.14, KR sp. 3, 5, 6):
+  krok 6 dzieli środki na początek dnia startu (`startMoney` w `calc/start.ts`: saldo wpisane „teraz” minus dzisiejsze
+  operacje – `openingFromNow`, ta sama reguła co zapis „Uruchom budżet”; puste pole konta z saldem otwarcia – saldo
+  otwarcia i operacje do wczoraj), napis „Środki na początek dnia startu”. Pod podziałem wiersze „W dniu startu”
+  (`startEffect` – kolejność silnika: podział, pierwsza pensja z osłon, brak z kadłuba – `paySalary`, potem zaliczki
+  domowników do depozytu jak `drawShields`): „Pierwsza pensja do energii” (pensja miesiąca minus wydane przed startem –
+  T45), „Depozyt domowników”, „Osłony po starcie (na Mostku)” – na czerwono i z ostrzeżeniem poniżej minimum z rozkazów
+  (`shieldsMinimum` = jak alarm silnika), pensja z kadłuba – żółte, częściowa – czerwone. Propozycje kopert dopasowane do
+  pensji (`fitEnvelopes`): gdy średnie 3 mies. (T47) przekraczają to, co pensja zostawia po ładowni, odkładkach i
+  kopertach wpisanych ręcznie, każda propozycja maleje proporcjonalnie, w dół do pełnych 10 zł (reszta zostaje
+  niezaplanowana – łupy); propozycja pensji (D70) bez zmian, kopert wpisanych ręcznie nie zmienia, z informacją pod
+  listą. Bez kopert codziennych – ostrzeżenie w kroku 4 („Energia dziś” 0,00 zł od startu) z kwotą do rozdzielenia; bez
+  historii nagłówek „bez historii: wpisz je sam” zamiast „średnie z 0 pełnych mies.”. Ślady przerwanego kreatora (AP-22
+  bez zmian) uzupełnione o folder ICTTJ wybrany w kroku 5 (cele jego prognozy w folderze) i import zrobiony w trakcie
+  (`noteImportTrace` po nowej paczce importu) – z „Cofnij import” w treści pytania.
+- **T446** Start budżetu w całości albo wcale (1.15.9, N5 – KR.29 / AF-14, część „zapis częściowy”; rozszerza T51):
+  `finishWizard` najpierw zapisuje wszystko, co czekało (`saveFirst` – członek, cel, inna zmiana; folder, który tego nie
+  przyjmuje, nie dostaje niczego ze startu), potem rekordy startu (salda otwarcia, plan miesiąca, wybrane kontenery
+  z połączonymi płatnościami – `addContainer(…, { start })`), i dopiero gdy są na dysku – `fi.json` z `budget.start`
+  (znacznik działającego budżetu, `writeNow` do 15 s). `fi.json` odrzucony: ustawienia cofnięte w oknie
+  (`takeBackSettings` – tylko gdy ostatni zapis padł, żaden nie jest w drodze, nic nie zmieniło `fi.json` po starcie),
+  odpowiedzi zostają (także szkic na tym komputerze), toast „Budżet nie wystartował – …” z powodem; zapis jeszcze w drodze
+  (wolny folder) – jak dotąd, ponawiany. Ponowienie jest bezpieczne: saldo otwarcia i plan aktualizowane, propozycja,
+  która już ma kontener tego odbiorcy, używa go (bez drugiego), wybór propozycji przechodzi na kontener (zbiornik pod
+  jego id). Przycisk „Uruchom budżet” podaje obok tylko to, czego brakuje (`finishBlockers` – nazwy kont bez salda,
+  pensja, podział ponad środki), w folderze tylko do odczytu – powód folderu, a gdy zapisy teraz padają – że start
+  poczeka. Wykrywanie i zdejmowanie atrybutu „tylko do odczytu” z plików – czeka na decyzję użytkownika (bez zmian).
+- **T447** Propozycje z historii i pierwsze dni (1.15.9, N5 – AP-25, AF-13, KR.19, KR sp. 9, ME sp. 3, AF-53; rozszerza
+  T286): rachunek o zmiennej kwocie także co 2 miesiące (`VARIABLE_MID_CYCLES`) – co najmniej 3 ostatnie płatności w
+  odstępie cyklu (±12 dni), kwoty ±60% mediany, w swoim dniu miesiąca (±6 dni), kwota = 75. percentyl roku w górę do
+  złotych, `variable`; co 3 i 6 miesięcy – dalej tylko stała kwota. Harmonogram nie powstaje z miesięcy jeden po drugim
+  (`cyclicRun` – także przez nowy rok: subskrypcja płacona co miesiąc i anulowana to nie opłata „w miesiącach”; opłata
+  sezonowa w ciągłych miesiącach – do dodania ręcznie). Nowe cele prognozy ICTTJ dostają priorytety według terminów
+  (najbliższy miesiąc pierwszy, bez terminu na końcu, przy równych – kolejność scenariusza); istniejące cele bez zmian.
+  Meldunki budżetu (bez kategorii, salda, duplikaty, przelewy…) dopiero od startu kreatora (`inboxStarted`:
+  `budget.start`), przed nim tylko sprawy folderu – także przy saldzie otwarcia z dawną historią. „Nowe dane gdzie
+  indziej” na folderze z innymi plikami nie zakłada podfolderu bez słowa: komunikat i „Utwórz podfolder FinancialIntel”
+  (jak „Otwórz istniejące”); podfolder z danymi FI otwiera się jak dotąd.
+- **T448** Raporty i plan na przełomie (1.15.9, N5 – AP-24, AF-68, RY sp. 2, 3, 6, PM sp. 3, 4, 5, 10, 12): jeden
+  „bieżący” tydzień raportu wachty – tydzień należny (`defaultWatchMonday`, od niedzieli 18:00 bieżący, wcześniej
+  poprzedni pełny); „później ›” nie przechodzi za niego (tydzień w toku nie jest raportowany), „Koperty na następny
+  tydzień” tylko przy nim. Raport wachty pokazuje pokrycia przekroczonych kopert z dni tygodnia (`weekCovers`, dzień
+  warszawski chwili pokrycia, tekst jak w dzienniku Dowództwa). Debriefing miesiąca w toku (Raporty): „Bilans paliwa –
+  miesiąc trwa – wynik po jego końcu”, bez stopy oszczędności. Łupy zmienione po decyzji (późny import) – jedna reguła
+  `lootChange` w Planie miesiąca i w Raportach → Debriefing („było / jest”, podział przeliczony). Plan miesiąca bieżącego
+  i przyszłego: debriefing podpisany „(ostatni zamknięty miesiąc)” z notką, że pokazany miesiąc trwa albo się nie zaczął.
+  „Pensja” zawsze pokazuje średnie koszty (przy pensji równej propozycji – „pensja równa propozycji”, bez przycisku).
+  „+ łupy z …” z dopiskiem „poza pensją – nie wchodzi do „Rozdzielone”” (PM sp. 3); w planie kampanii „rok wcześniej”
+  dla miesiąca sprzed pierwszej operacji – „— (przed historią)” (`YearCell.yearAgo` null), nie 0,00 zł.
+- **T449** Przegląd roczny (1.15.9, N5 – AP-24, R-19, AF-34, RY.24, RY sp. 5, RY.25): miesiące roku tylko z historią
+  (`yearSpan`: od pierwszego dnia danych – operacja albo saldo otwarcia – do bieżącego miesiąca); miesiące przed nim jednym
+  wierszem „styczeń … – sierpień …: brak historii”, przyszłe nie są w tabeli (sumy roku bez zmian). Pieniądze i siła
+  floty „na początku” w roku, w którym dane zaczynają się później niż 1 stycznia – z datą tego dnia: „saldo otwarcia
+  dd.mm.rrrr” (saldo otwarcia tego dnia) albo „początek historii dd.mm.rrrr” (kwota bez zmian – T81). Siła floty netto
+  „z należnościami, po odjęciu długu” (było „bez długu”). Cele osiągnięte w roku – z logu silnika i z `achievedAt`
+  (także zarchiwizowane później), w kolejności dojścia. Przypomnienie w styczniu: powiadomienie „Przegląd roczny” raz
+  (klucz `year:<rok>`) za rok zamknięty, gdy budżet w nim działał; własny przełącznik `NotifyPrefs.yearReview`
+  (config.json komputera, addytywnie, domyślnie włączony), kliknięcie – Raporty → Przegląd roczny (w styczniu rok
+  zamknięty); wiersz w tabeli powiadomień specyfikacji.

@@ -7,7 +7,7 @@ import { startMonthSpentOf } from '@shared/calc/fleet'
 import { byPriority } from '@shared/calc/goals'
 import { sum } from '@shared/calc/operations'
 import { costsByMonth, firstFullMonth, fullMonthsBefore, linkFromOf, monthlyShare, payeeKey, proposeEnvelopes, proposeSalary, recurringPayments, unlinkedPayments } from '@shared/calc/plan'
-import { startSplit, startTanks, startTargets } from '@shared/calc/start'
+import { fitEnvelopes, shieldsMinimum, startEffect, startMoney, startSplit, startTanks, startTargets } from '@shared/calc/start'
 import { countLabel, plural, salariesText } from '@shared/format'
 import { envelopeKind, type Goal, type Orders } from '@shared/schema'
 import { api } from '../../lib/api'
@@ -26,7 +26,7 @@ import { useAccounts, useCategories } from '../operations/pickers'
 import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
 import { ConfirmButton } from '../../components/ConfirmButton'
-import { cancelWizard, cancelWizardText, finishWizard, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
+import { cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const HULL_MONTHS = 12
@@ -47,6 +47,7 @@ export function WizardPage() {
   const readOnly = useFolderLocked()
   // Why nothing can be started now (AF-14): the folder's own reason, not the steps' – they may all be filled in.
   const lockedReason = useData((s) => (s.switching ? SWITCHING_MESSAGE : (s.status?.readOnlyReason ?? READ_ONLY_MESSAGE)))
+  const saveError = useData((s) => s.save.error)
   const transactions = useRecordList('transactions')
   const containers = useRecordList('containers')
   const accounts = useAccounts().filter((a) => !a.archived)
@@ -111,8 +112,14 @@ export function WizardPage() {
   // An account with its opening balance and the field left empty (B8): what the engine will take at the start – the
   // opening and the operations up to yesterday.
   const fromOpening = (id: string) => balanceAt(id, addDays(today, -1), transactions, balanceRecords)
-  const startBalance = (id: string) => w.balances[id] ?? (openings.has(id) ? fromOpening(id) : 0)
-  const total = sum(accounts.map((a) => startBalance(a.id)))
+  // The money at the start of today (R-4, T51): a balance typed „now” less today's operations – what the engine splits.
+  const total = startMoney(
+    accounts.map((a) => a.id),
+    w.balances,
+    today,
+    transactions,
+    balanceRecords
+  )
   const proposedSplit = startSplit(total, targets, goals)
   const hull = Math.min(Math.max(0, w.hull ?? proposedSplit.hull), Math.max(0, total))
   const goalsSplit = Object.fromEntries(goals.map((g) => [g.id, Math.max(0, w.goals?.[g.id] ?? proposedSplit.goals[g.id] ?? 0)]))
@@ -131,19 +138,33 @@ export function WizardPage() {
   const tankPlan = new Map(startTanks(periodicItems.map((item) => ({ ...item, paid: paidDays.get(item.key) ?? [] })), today, tanksSplit).map((t) => [t.key, t]))
   const tanksTotal = sum(Object.values(tanksSplit))
   const overSplit = hull + goalsTotal + tanksTotal > Math.max(0, total)
-  // The proposals with what was typed over them (B75): choosing the cargo again never drops a typed envelope.
-  const envelopes: Record<string, number> = Object.fromEntries(envelopeProposals.envelopes.filter((e) => e.limit > 0).map((e) => [e.categoryId, e.limit]))
-  for (const [id, v] of Object.entries(w.envelopes)) {
-    if (v == null) delete envelopes[id]
-    else envelopes[id] = v
-  }
   const cargoMonthly = sum(containers.filter((c) => !c.archived && c.cycleMonths <= 1).map((c) => c.amount)) + sum(chosen.filter((p) => p.cycleMonths === 1).map((p) => p.amount))
   // The tanks of the first month as the engine fills them (N9, T29, N-PC-7): a fee due soon catches up unless funded at start.
   const tanksMonthly = sum([...tankPlan.values()].map((t) => t.installment))
+  // The proposals with what was typed over them (B75): choosing the cargo again never drops a typed envelope (null –
+  // cleared by hand). The proposals fitted to what the salary leaves (KR sp. 5): the averages of 3 months never put the
+  // first month's plan over the salary by themselves.
+  const typedEnvelopes = Object.fromEntries(Object.entries(w.envelopes).filter((e): e is [string, number] => e[1] != null))
+  const proposed = Object.fromEntries(envelopeProposals.envelopes.filter((e) => e.limit > 0 && !(e.categoryId in w.envelopes)).map((e) => [e.categoryId, e.limit]))
+  const fit = fitEnvelopes(proposed, salary != null && salary > 0 ? salary - cargoMonthly - tanksMonthly - sum(Object.values(typedEnvelopes)) : Infinity)
+  const envelopes: Record<string, number> = { ...Object.fromEntries(Object.entries(fit.envelopes).filter(([, v]) => v > 0)), ...typedEnvelopes }
   const tanksLater = sum(containers.filter((c) => !c.archived && c.cycleMonths > 1).map(monthlyShare)) + sum(chosen.filter((p) => p.cycleMonths > 1).map(monthlyShare))
   const envelopesTotal = sum(Object.values(envelopes))
   const unallocated = (salary ?? 0) - cargoMonthly - tanksMonthly - envelopesTotal
+  const dailyTotal = sum(cats.mains.filter((c) => envelopeKind(c) === 'daily').map((c) => envelopes[c.id] ?? 0))
   const orders: Orders = w.orders ?? fi.settings.orders
+  // What the start's day does after the split (AF-10, KR.12): the first salary from the shields to the energy, the
+  // members' advances into their deposit – the shields on the bridge after „Uruchom budżet”.
+  const effect = startEffect({
+    total,
+    hull,
+    goals: goalsTotal,
+    tanks: tanksTotal,
+    salary,
+    spentBefore: spentThisMonth,
+    deposit: sum(fi.settings.household.members.map((m) => m.opening?.deposit ?? 0)),
+    min: shieldsMinimum(salary, orders.minShieldSalaries, w.shieldSalaries)
+  })
   const setOrders = (p: Partial<Orders>) => patchWizard({ orders: { ...orders, ...p } })
   // The averages' first month as the engine reads it (B25).
   const first = history?.[0] ?? firstFullMonth(transactions)
@@ -273,7 +294,11 @@ export function WizardPage() {
         )}
       </div>
       <div className="flex flex-col">
-        <span className="label">Koperty pierwszego miesiąca – średnie z {envelopeProposals.months.length || 0} pełnych mies., do 10 zł</span>
+        <span className="label" data-testid="wizard-envelopes-title">
+          {envelopeProposals.months.length
+            ? `Koperty pierwszego miesiąca – średnie z ${envelopeProposals.months.length} pełnych mies., do 10 zł`
+            : 'Koperty pierwszego miesiąca – bez historii: wpisz je sam'}
+        </span>
         {cats.mains
           .filter((c) => !c.archived && envelopeKind(c))
           .map((c) => (
@@ -291,6 +316,17 @@ export function WizardPage() {
             </div>
           ))}
         {envelopeProposals.uncategorized > 0 && <Note>Bez kategorii średnio {zl(envelopeProposals.uncategorized)} miesięcznie – liczy się do energii dnia.</Note>}
+        {fit.fitted && (
+          <p className="text-[11.5px] text-muted" data-testid="wizard-envelopes-fitted">
+            Średnie wydatki ({zl(fit.asked)}) są wyższe niż to, co pensja zostawia na koperty – propozycje zmniejszone proporcjonalnie, do 10 zł. Każdą możesz zmienić.
+          </p>
+        )}
+        {dailyTotal === 0 && (salary ?? 0) > 0 && (
+          <p className="text-[11.5px] text-accent" data-testid="wizard-no-daily">
+            Bez kopert codziennych „Energia dziś” będzie od startu 0,00 zł i każdy codzienny wydatek przekroczy przydział. Wpisz koperty codzienne (np. Jedzenie, Transport)
+            {unallocated > 0 ? ` – do rozdzielenia zostaje ${zl(unallocated)}` : ''}.
+          </p>
+        )}
       </div>
       <div className="border-t border-line pt-1.5 text-[12px]">
         <div className="flex justify-between">
@@ -313,7 +349,7 @@ export function WizardPage() {
           <span className="text-muted">{unallocated < 0 ? 'Plan przekracza pensję o' : 'Niezaplanowane (łupy)'}</span>
           <span className={cx('num', unallocated < 0 && 'text-down')}>{zl(Math.abs(unallocated))}</span>
         </div>
-        <Note>Podstawowy przydział dzienny: {zl(Math.floor(sum(cats.mains.filter((c) => envelopeKind(c) === 'daily').map((c) => envelopes[c.id] ?? 0)) / daysInMonth(month)))}.</Note>
+        <Note>Podstawowy przydział dzienny: {zl(Math.floor(dailyTotal / daysInMonth(month)))}.</Note>
       </div>
     </div>,
     // 4 – ICTTJ and the goals (D84 C8, N7): short, to skip
@@ -321,8 +357,9 @@ export function WizardPage() {
     // 5 – the split of the money at the start
     <div key="5" className="flex flex-col gap-2.5">
       <Note>
-        Obecne środki: <span className="num text-fg-strong" data-testid="wizard-total">{zl(total)}</span> na kontach budżetu. Podział jak przy dokowaniu: najpierw osłony do celu,
-        potem kadłub, potem cele w kolejności z Mapy gwiezdnej, reszta zostaje w osłonach jako „wolne do decyzji”.
+        Środki na początek dnia startu: <span className="num text-fg-strong" data-testid="wizard-total">{zl(total)}</span> na kontach budżetu (salda z kroku 1 bez dzisiejszych
+        operacji – te pójdą z energii dnia). Podział jak przy dokowaniu: najpierw osłony do celu, potem kadłub, potem cele w kolejności z Mapy gwiezdnej, reszta zostaje w
+        osłonach jako „wolne do decyzji”.
       </Note>
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
@@ -396,10 +433,11 @@ export function WizardPage() {
         })}
         {overSplit && (
           <p className="text-[11.5px] text-down" data-testid="wizard-split-over">
-            Kadłub, cele i zbiorniki ({zl(hull + goalsTotal + tanksTotal)}) przekraczają obecne środki ({zl(Math.max(0, total))}) – zmniejsz je.
+            Kadłub, cele i zbiorniki ({zl(hull + goalsTotal + tanksTotal)}) przekraczają środki na początek dnia ({zl(Math.max(0, total))}) – zmniejsz je.
           </p>
         )}
       </div>
+      <StartEffectRows effect={effect} />
     </div>,
     // 6 – the ship and its orders
     <div key="6" className="flex flex-col gap-2">
@@ -476,7 +514,12 @@ export function WizardPage() {
           ) : (
             <FinishButton
               locked={readOnly ? lockedReason : null}
-              disabled={readOnly || overSplit || salary == null || salary <= 0 || accounts.some((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id))}
+              needs={finishBlockers({
+                missing: accounts.filter((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id)).map((a) => a.name),
+                salary,
+                overSplit
+              })}
+              saveError={saveError}
               onFinish={() => finishWizard({ salary: salary ?? 0, hull, goals: goalsSplit, tanks: tanksSplit, envelopes })}
             />
           )}
@@ -486,21 +529,83 @@ export function WizardPage() {
   )
 }
 
-function FinishButton({ disabled, locked, onFinish }: { disabled: boolean; locked: string | null; onFinish: () => Promise<boolean> }) {
-  const [busy, setBusy] = useState(false)
+/**
+ * What „Uruchom budżet” does on its day after the split (AF-10, KR.12): the first salary from the shields to the energy
+ * (short – from the hull), the members' advances into their deposit – the shields after them are the bridge's.
+ */
+function StartEffectRows({ effect }: { effect: ReturnType<typeof startEffect> }) {
+  const { salary, deposit } = effect
+  if (!salary.due && !deposit.amount) return null
+  const from = (shields: number, hull: number) => (hull ? ` (z osłon ${zl(shields)}, z kadłuba ${zl(hull)})` : '')
   return (
-    <button
-      className="btn btn-accent"
-      disabled={disabled || busy}
-      title={locked ?? (disabled ? 'Potrzebne: saldo każdego konta (krok 1), pensja (krok 3) i kadłub z celami w granicach środków (krok 6)' : undefined)}
-      onClick={() => {
-        setBusy(true)
-        void onFinish().finally(() => setBusy(false))
-      }}
-      data-testid="wizard-finish"
-    >
-      Uruchom budżet
-    </button>
+    <div className="flex flex-col gap-0.5 border-t border-line pt-1.5 text-[12px]" data-testid="wizard-effect">
+      <span className="label">W dniu startu</span>
+      {salary.due > 0 && (
+        <div className="flex items-baseline gap-2" data-testid="wizard-effect-salary">
+          <span className="min-w-0 flex-1 text-muted">Pierwsza pensja do energii{from(salary.fromShields, salary.fromHull)}</span>
+          <span className="num">−{zl(salary.paid)}</span>
+        </div>
+      )}
+      {deposit.amount > 0 && (
+        <div className="flex items-baseline gap-2" data-testid="wizard-effect-deposit">
+          <span className="min-w-0 flex-1 text-muted">Depozyt domowników – ich zaliczki z kroku 1{from(deposit.fromShields, deposit.fromHull)}</span>
+          <span className="num">−{zl(deposit.amount)}</span>
+        </div>
+      )}
+      <div className="flex items-baseline gap-2">
+        <span className="min-w-0 flex-1 text-fg">Osłony po starcie (na Mostku)</span>
+        <span className={cx('num', effect.shields < 0 || effect.belowMin ? 'text-down' : 'text-fg-strong')} data-testid="wizard-effect-shields">
+          {zl(effect.shields)}
+        </span>
+      </div>
+      {salary.alarm === 'red' && (
+        <p className="text-[11.5px] text-down" data-testid="wizard-effect-partial">
+          Na pierwszą pensję brakuje {zl(salary.due - salary.paid)} – zmniejsz kadłub, cele albo zbiorniki.
+        </p>
+      )}
+      {salary.alarm === 'yellow' && <p className="text-[11.5px] text-accent">Osłony nie starczają na pierwszą pensję – brak ({zl(salary.fromHull)}) weźmie kadłub (żółty alarm).</p>}
+      {effect.belowMin && salary.alarm !== 'red' && (
+        <p className="text-[11.5px] text-accent" data-testid="wizard-effect-below-min">
+          Osłony po starcie są poniżej minimum z rozkazów – odprawa od pierwszego dnia pokaże alarm. Zmniejsz kadłub albo cele, jeśli osłony mają być pełniejsze.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * „Uruchom budżet” with its reason beside it (AP-15, AF-14): the folder's own reason when nothing can be written, else
+ * what the steps still need; a write the folder refuses now – said before the click (the start waits for it).
+ */
+function FinishButton({ locked, needs, saveError, onFinish }: { locked: string | null; needs: readonly string[]; saveError: string | null; onFinish: () => Promise<boolean> }) {
+  const [busy, setBusy] = useState(false)
+  const why = locked ?? (needs.length ? `Potrzebne: ${needs.join('; ')}.` : null)
+  return (
+    <>
+      {why ? (
+        <span className="max-w-[420px] text-right text-[11.5px] text-muted" data-testid="wizard-finish-why">
+          {why}
+        </span>
+      ) : (
+        saveError && (
+          <span className="max-w-[420px] text-right text-[11.5px] text-accent" data-testid="wizard-finish-save-error">
+            Zapis w folderze teraz się nie udaje ({saveError}) – budżet wystartuje dopiero, gdy folder przyjmie zmiany.
+          </span>
+        )
+      )}
+      <button
+        className="btn btn-accent"
+        disabled={!!why || busy}
+        title={why ?? undefined}
+        onClick={() => {
+          setBusy(true)
+          void onFinish().finally(() => setBusy(false))
+        }}
+        data-testid="wizard-finish"
+      >
+        Uruchom budżet
+      </button>
+    </>
   )
 }
 
@@ -575,9 +680,14 @@ function IctjGoalsStep({ goals }: { goals: Goal[] }) {
   useEffect(() => {
     void api.ictjSuggest().then(setSuggested, () => setSuggested(null))
   }, [])
+  // The folder of ICTTJ stays this computer's when the wizard is broken off – and the goals of its forecast in the data.
+  const use = async (dir: string) => {
+    await setIctjDir(dir)
+    noteTrace(ICTJ_TRACE)
+  }
   const pick = async () => {
     const dir = await api.ictjPickDir()
-    if (dir) await setIctjDir(dir)
+    if (dir) await use(dir)
   }
   const add = () => {
     if (readOnly || !name.trim() || !target || target <= 0) return
@@ -595,7 +705,7 @@ function IctjGoalsStep({ goals }: { goals: Goal[] }) {
         </span>
         <Badge tone={snap.status === 'ok' ? 'up' : 'default'}>{snap.status === 'ok' ? 'czytany' : snap.dir ? 'niedostępny' : 'nie wybrano'}</Badge>
         {suggested && suggested !== snap.dir && (
-          <button className="btn btn-accent h-[24px]" disabled={readOnly} onClick={() => void setIctjDir(suggested)} data-testid="wizard-ictj-suggested" title={suggested}>
+          <button className="btn btn-accent h-[24px]" disabled={readOnly} onClick={() => void use(suggested)} data-testid="wizard-ictj-suggested" title={suggested}>
             Użyj folderu ICTTJ z tego komputera
           </button>
         )}

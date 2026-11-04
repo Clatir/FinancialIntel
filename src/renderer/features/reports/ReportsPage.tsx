@@ -5,11 +5,11 @@
  * amounts (the hidden amounts are the screen's).
  */
 import { useMemo, useState, type ReactNode } from 'react'
-import { addDays, addMonths, isoWeekOf, mondayOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
+import { addDays, addMonths, isoWeekOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
-import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekNumbers, yearNumbers, yearWealth } from '@shared/calc/intel'
+import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekCovers, weekNumbers, yearNumbers, yearSpan, yearWealth } from '@shared/calc/intel'
 import { setReportTab, setWatchMonday, useReportsUi, watchMondayOf, type ReportTab } from './state'
-import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
+import { debriefing, lootApplied, lootChange, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
 import { arrangeBriefing, BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
@@ -140,8 +140,11 @@ function WatchReport() {
   const mission = game?.view.missions.find((m) => m.week === week) ?? null
   const status = useMemo(() => (mission && game ? missionStatus(game.input, mission, fleet.today) : null), [mission, game, fleet.today])
   const days = game ? new Map(game.input.game.flatMap((g) => Object.entries(g.days))) : new Map()
-  const current = monday === mondayOf(fleet.today)
-  const next = current || addDays(monday, 7) === mondayOf(fleet.today) ? nextWeekEnvelopes(fleet.envelopes, fleet.today) : []
+  // One „current” week (AP-24, RY sp. 2): the week due – its plan for the next days; a week in progress is not reported.
+  const next = monday === due ? nextWeekEnvelopes(fleet.envelopes, fleet.today) : []
+  // The covers of the week's overruns (PM sp. 12, F28): as the command's log says them.
+  const plans = useRecordList('months')
+  const covers = useMemo(() => weekCovers(plans, monday, (iso) => warsawNow(iso).date), [plans, monday])
   const maxDay = Math.max(1, ...w.days.map((d) => d.costs))
   return (
     <Columns id="reports-watch" tracks={['minmax(420px,1fr)', 'minmax(340px,1fr)']} className="grid items-start">
@@ -152,7 +155,7 @@ function WatchReport() {
               <button className="btn h-[22px]" onClick={() => setMonday(addDays(monday, -7))} data-testid="reports-watch-prev">
                 ‹ tydzień wcześniej
               </button>
-              <button className="btn h-[22px]" disabled={monday >= mondayOf(fleet.today)} onClick={() => setMonday(addDays(monday, 7))}>
+              <button className="btn h-[22px]" disabled={monday >= due} onClick={() => setMonday(addDays(monday, 7))} data-testid="reports-watch-next">
                 później ›
               </button>
               {monday !== due && (
@@ -185,6 +188,14 @@ function WatchReport() {
                 <span className="label pb-0.5">Kategorie tygodnia</span>
                 {w.categories.slice(0, 6).map((c) => (
                   <Line key={c.id} label={c.id === 'cargo' ? CARGO_LABEL : c.id === '-' ? 'bez kategorii' : cats.label(c.id)} value={zl(c.cost)} />
+                ))}
+              </div>
+            )}
+            {covers.length > 0 && (
+              <div className="flex flex-col border-t border-line pt-1.5" data-testid="reports-watch-covers">
+                <span className="label pb-0.5">Pokrycia przekroczonych kopert</span>
+                {covers.map((c, i) => (
+                  <Line key={i} label={`${plDate(c.date).slice(0, 5)} ${cats.label(c.to)} z koperty ${cats.label(c.from)}`} value={`${zl(c.amount)} limitu`} />
                 ))}
               </div>
             )}
@@ -272,8 +283,10 @@ function DebriefReport() {
   const b = d.brief
   // AP-31: the shields and the hull at the end of the 12 months up to this one (a month running – up to the one before).
   const cushion = useCushion(addMonths(month, 1))
-  // The split as the engine made it (B10): the loot now, a late import included.
+  // The split as the engine made it (B10): the loot now, a late import included – and said, when it changed after the
+  // decision (AP-24, RY sp. 3), as the month's plan says it.
   const loot = lootApplied(fleet.log, month)
+  const changed = lootChange(d.plan?.month === month ? d.plan.loot : null, loot)
   const sections = (money: (g: number) => string, label: (id: string) => string): ReportSection[] => [
     {
       title: 'Wynik wobec planu',
@@ -293,12 +306,15 @@ function DebriefReport() {
               ['Wydane z energii (i ponad nią z osłon)', money(b.energy.used)]
             ] as Array<[string, string]>)
           : []),
-        // F25: what the month added to the ship and its savings rate beside the median of the 6 months before.
+        // F25: what the month added to the ship and its savings rate beside the median of the 6 months before – a month in
+        // progress has no balance yet (AP-24, RY sp. 6: before the salary from work it is only a minus).
         ...(d.fuel.month
-          ? ([
-              ['Bilans paliwa (przychód − koszty netto)', signed(money, d.fuel.month.balance)],
-              ['Stopa oszczędności', `${rateText(d.fuel.month.rate)}${d.fuel.median6 != null ? ` (mediana 6 mies.: ${rateText(d.fuel.median6)})` : ''}`]
-            ] as Array<[string, string]>)
+          ? !b.ended
+            ? ([['Bilans paliwa (przychód − koszty netto)', 'miesiąc trwa – wynik po jego końcu']] as Array<[string, string]>)
+            : ([
+                ['Bilans paliwa (przychód − koszty netto)', signed(money, d.fuel.month.balance)],
+                ['Stopa oszczędności', `${rateText(d.fuel.month.rate)}${d.fuel.median6 != null ? ` (mediana 6 mies.: ${rateText(d.fuel.median6)})` : ''}`]
+              ] as Array<[string, string]>)
           : []),
         // A month in progress is never „na plus” yet (N65).
         ['Miesiąc zamknięty na plus', !b.ended ? 'miesiąc trwa' : b.plus == null ? '—' : b.plus ? 'tak' : 'nie'],
@@ -345,7 +361,10 @@ function DebriefReport() {
               ['Na następny miesiąc', money(loot.nextMonth)],
               ['Do celów', money(loot.goals)],
               ['Do osłon', money(loot.shields)]
-            ] as Array<[string, string]>
+            ] as Array<[string, string]>,
+            ...(changed
+              ? { text: `Łupy zmieniły się po decyzji (było ${money(changed.decided)}, jest ${money(changed.now)} – późniejszy import operacji miesiąca): podział przeliczony – cele, następny miesiąc, reszta do osłon.` }
+              : {})
           }
         ]
       : [])
@@ -429,6 +448,9 @@ function YearReport() {
   const [year, setYear] = useState(() => (fleet.today.slice(5, 7) === '01' ? String(Number(thisYear) - 1) : thisYear))
   const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.incomeContext), [transactions, settings, year, fleet.incomeContext])
   const today = fleet.today
+  // The year's months with history only (AP-24, R-19): before the data's first day – „brak historii”, never 0,00 zł.
+  const span = useMemo(() => yearSpan(transactions, balances, year, today), [transactions, balances, year, today])
+  const goalRecords = useRecordList('goals')
   const wealth = useMemo(() => yearWealth(transactions, balances, settings.accounts.map((a) => a.id), year, today), [transactions, balances, settings, year, today])
   // F24: „Siła floty netto” at both ends – the loans' open amounts and the household's balance beside the accounts.
   const loans = useRecordList('loans')
@@ -439,7 +461,10 @@ function YearReport() {
     return { start: wealth.start + adj[0]!, end: wealth.end + adj[1]! }
   }, [wealth, year, today, loans, transactions, containers, fleet.household])
   const achievements = (game?.input.game ?? []).flatMap((g) => g.achievements).filter((a) => (a.day ?? '').startsWith(year) && (ACHIEVEMENTS as readonly string[]).includes(a.id))
-  const reached = goalsReachedIn(fleet.log, fleet.goals, year)
+  // Every goal reached in the year – archived since, or marked achieved, too (RY sp. 5).
+  const reached = goalsReachedIn(fleet.log, goalRecords, year, (iso) => warsawNow(iso).date)
+  const endLabel = `${year}-12-31` < today ? '31.12' : 'dziś'
+  const startLabel = span.startsOn ? `${span.startsOn.opening ? 'saldo otwarcia' : 'początek historii'} ${plDate(span.startsOn.date)}` : '31.12 roku wcześniej'
   // AP-31: the year's months that ended – the shields and the hull at each one's end.
   const cushion = useCushion(`${Number(year) + 1}-01`)
   const sections = (money: (g: number) => string): ReportSection[] => [
@@ -450,10 +475,11 @@ function YearReport() {
         ['Sfinansowane przez domowników', financedText(y.financed, money, settings.household.members)],
         ['Przychody', money(y.income)],
         // The sum of the accounts' balances (T81, N63) – borrowed money and the household's advances in it.
-        ['Pieniądze na kontach na początku (31.12 roku wcześniej)', money(wealth.start)],
-        [`Pieniądze na kontach na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(wealth.end)],
-        ['Siła floty netto na początku (z należnościami, bez długu)', money(net.start)],
-        [`Siła floty netto na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(net.end)],
+        [`Pieniądze na kontach na początku (${startLabel})`, money(wealth.start)],
+        [`Pieniądze na kontach na końcu (${endLabel})`, money(wealth.end)],
+        // Net of the debt (RY sp. 5): „bez długu” read as „the debt left out”.
+        [`Siła floty netto na początku (${startLabel}; z należnościami, po odjęciu długu)`, money(net.start)],
+        [`Siła floty netto na końcu (${endLabel})`, money(net.end)],
         // F25: what the year added to the ship.
         ['Bilans paliwa roku (przychody − koszty netto)', `${signed(money, y.income - y.costs)} · stopa oszczędności ${rateText(savingsRate(y.income - y.costs, y.income))}`],
         ['Zasięg teraz', fleet.range == null ? '—' : `${rangeText(fleet.range)}${fleet.shipClass ? ` (${SHIP_CLASS_LABEL[fleet.shipClass]})` : ''}`]
@@ -461,7 +487,14 @@ function YearReport() {
     },
     {
       title: 'Miesiące',
-      table: { head: ['Miesiąc', 'Koszty', 'Przychody'], rows: y.months.map((m) => [monthLabel(m.month), money(m.costs), money(m.income)]), numeric: [1, 2] },
+      table: {
+        head: ['Miesiąc', 'Koszty', 'Przychody'],
+        rows: [
+          ...(span.before.length ? [[span.before.length > 1 ? `${monthLabel(span.before[0]!)} – ${monthLabel(span.before.at(-1)!)}` : monthLabel(span.before[0]!), 'brak historii', '—']] : []),
+          ...y.months.filter((m) => span.months.includes(m.month)).map((m) => [monthLabel(m.month), money(m.costs), money(m.income)])
+        ],
+        numeric: [1, 2]
+      },
       // Why the months do not add up to the year's income (N66, T119).
       text: 'Trading netto liczony w każdym miesiącu osobno (dopłaty do XTB nie schodzą poniżej zera); przychody roku nettują dopłaty z całego roku. Pieniądze na kontach to suma sald – z pożyczonymi i depozytem domowników.'
     },
@@ -491,7 +524,7 @@ function YearReport() {
         }
       >
         <div className="flex flex-col gap-2 text-[12px]">
-          <select className="input h-[24px] self-start" value={year} onChange={(e) => setYear(e.currentTarget.value)} aria-label="Rok przeglądu">
+          <select className="input h-[24px] self-start" value={year} onChange={(e) => setYear(e.currentTarget.value)} aria-label="Rok przeglądu" data-testid="reports-year-select">
             {years.map((x) => (
               <option key={x} value={x}>
                 {x}

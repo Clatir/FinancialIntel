@@ -2,7 +2,7 @@
  * The notifications of this computer (`shared/notify.ts`): checked every minute and when the window opens, each shown
  * once (remembered in localStorage), clicking leads to its screen. Only the main window runs it.
  */
-import { openWatchReport } from '../features/reports/state'
+import { openWatchReport, openYearReview } from '../features/reports/state'
 import { warsawNow } from '@shared/calc/dates'
 import { categoryIndex } from '@shared/calc/operations'
 import { bundleNotices, dueNotices, morningTouch, type Notice } from '@shared/notify'
@@ -80,6 +80,7 @@ export function openTag(tag: string): void {
   // The phone (T310): a balance to confirm in its report.
   else if (tag === 'inbox') navigate({ page: 'inbox' })
   else if (tag === 'reports') openWatchReport()
+  else if (tag === 'year') openYearReview()
   else {
     navigate({ page: 'bridge' })
     if (tag === 'dock' || tag.startsWith('dock:')) openDockingTag(tag)

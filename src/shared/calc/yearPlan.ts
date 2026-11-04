@@ -20,8 +20,8 @@ export interface YearCell {
   own: boolean
   /** The fact: the month's spending (null – a month still ahead). */
   spent: number | null
-  /** The same month a year before. */
-  yearAgo: number
+  /** The same month a year before; null – before the history (AP-24, PM sp. 10: no „0,00 zł” for a month not known). */
+  yearAgo: number | null
   /** Over the engine's limit (the plan's with `extra`). */
   over: boolean
   /** The current month and the ones ahead: a month past keeps its plan (the engine ran it). */
@@ -61,6 +61,10 @@ export function yearPlan(
   const cats = categoryIndex(input.categories)
   const containerIds = new Set(input.containers.map((c) => c.id))
   const own = new Set(input.plans.map((p) => p.month))
+  // The history's first month: a month a year before it is no fact of 0 zł.
+  let firstDay: string | null = null
+  for (const t of input.transactions) if (!firstDay || t.date < firstDay) firstDay = t.date
+  const known = (m: string) => firstDay != null && m >= firstDay.slice(0, 7)
   const spending = new Map<string, Map<string, number>>()
   const costs = new Map<string, number>()
   for (const m of [...months, ...months.map((x) => addMonths(x, -12))]) {
@@ -76,7 +80,7 @@ export function yearPlan(
       // The engine's limit: the plan's with what the month added (an envelope without one – the extra alone).
       const engine = limit == null && !extra ? null : Math.max(0, (limit ?? 0) + extra)
       const spent = m <= current ? factOf(m) : null
-      return { month: m, limit, extra, own: own.has(m), spent, yearAgo: factOf(addMonths(m, -12)), over: spent != null && engine != null && spent > engine, editable: m >= current }
+      return { month: m, limit, extra, own: own.has(m), spent, yearAgo: known(addMonths(m, -12)) ? factOf(addMonths(m, -12)) : null, over: spent != null && engine != null && spent > engine, editable: m >= current }
     })
     return { id, kind, cells, total: sum(cells.map((c) => c.limit ?? 0)), spent: sum(cells.map((c) => c.spent ?? 0)) }
   }

@@ -1215,7 +1215,7 @@ export function unsavedReport(): FlushResult {
 }
 
 /** A record's change not on the disk yet (AP-1): why – its last write's error, or its write on the way; null = saved. */
-export function unsavedOf(collection: Collection, id: string): string | null {
+export function unsavedOf(collection: Collection | 'fi', id: string): string | null {
   const key = keyOf(collection, id)
   return dirty.has(key) ? (failed.get(key) ?? 'zapis jeszcze trwa') : null
 }
@@ -1224,7 +1224,7 @@ export function unsavedOf(collection: Collection, id: string): string | null {
  * A record's write now, awaited (AP-1 – the quick entry says „Zapisano.” only once it is on the disk): true = written;
  * false = not yet (its error kept, retried as every write). Waits `limitMs` at most – a slow folder answers later.
  */
-export async function writeNow(collection: Collection, id: string, limitMs = 5000): Promise<boolean> {
+export async function writeNow(collection: Collection | 'fi', id: string, limitMs = 5000): Promise<boolean> {
   const key = keyOf(collection, id)
   if (!dirty.has(key)) return true
   const t = timers.get(key)
@@ -1234,6 +1234,21 @@ export async function writeNow(collection: Collection, id: string, limitMs = 500
   let timer: ReturnType<typeof setTimeout> | undefined
   await Promise.race([enqueue(key), new Promise<void>((r) => (timer = setTimeout(r, limitMs)))]).finally(() => clearTimeout(timer))
   return !dirty.has(key)
+}
+
+/**
+ * A change of fi.json the folder refused (AF-14, KR.29 – the budget's start written whole or not at all): back to the
+ * version on the disk, its retries dropped, so the window never shows what the folder does not have. Only when its last
+ * write failed, none is on its way, no decision about another computer's change waits and nothing changed fi.json after
+ * `expected`; false – the change stays, retried as every write.
+ */
+export function takeBackSettings(expected: SettingsFile): boolean {
+  const base = bases.get(FI_KEY) as SettingsFile | undefined
+  if (!base || get().fi !== expected || !failed.has(FI_KEY) || inFlight.has(FI_KEY) || pendingFor(FI_KEY)) return false
+  forget(FI_KEY)
+  set({ fi: base })
+  bumpPending(0, { error: saveError() })
+  return true
 }
 
 /** The window closing (B108): everything written, the reason of what is not – a waiting decision's dialog opened behind the question. */

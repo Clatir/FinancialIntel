@@ -347,6 +347,7 @@ w tle, bo FI startuje z Windows ukryty w zasobniku.
 | Zaległy import z mBanku | po 3 dniach |
 | Potwierdzenie sald | w niedzielę |
 | Raport wachty i debriefing | w niedzielę i 1. dnia miesiąca |
+| Przegląd roczny | w styczniu, raz – za rok zamknięty |
 | Nowa wypłata w ICTTJ do zadokowania | włączone |
 
 **Dźwięki** – osobno dla każdego zdarzenia (wpis, dokowanie, alarm, awans), z głośnością. Syntezowane w aplikacji
