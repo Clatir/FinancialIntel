@@ -9,6 +9,7 @@ import {
   keysOnly,
   owedWithFile,
   planImport,
+  rememberKept,
   remembersByDefault,
   rowShares,
   sameChoice,
@@ -358,7 +359,15 @@ export function setImportAccount(accountId: string): void {
   useImport.setState({
     accountId,
     plan: file ? planNow(file, accountId, deletedKeys) : null,
-    choices: { ...emptyChoices(), themes: choices.themes, rememberThemes: choices.rememberThemes, groups: choices.groups, remember: choices.remember },
+    choices: {
+      ...emptyChoices(),
+      themes: choices.themes,
+      rememberThemes: choices.rememberThemes,
+      rememberThemesBeforeLoan: choices.rememberThemesBeforeLoan,
+      groups: choices.groups,
+      remember: choices.remember,
+      rememberBeforeLoan: choices.rememberBeforeLoan
+    },
     selected: { groups: useImport.getState().selected.groups, rows: {} }
   })
 }
@@ -469,7 +478,18 @@ export function replanImport(): void {
   const { lastDecided } = useImport.getState()
   useImport.setState({
     plan,
-    choices: { ...choices, themes: keptOf(choices.themes), rememberThemes: keptOf(choices.rememberThemes), groups, remember, rows, implicit },
+    choices: {
+      ...choices,
+      themes: keptOf(choices.themes),
+      rememberThemes: keptOf(choices.rememberThemes),
+      rememberThemesBeforeLoan: keptOf(choices.rememberThemesBeforeLoan ?? {}),
+      groups,
+      remember,
+      // Of the groups decided still (a decision carried to a new group by its operations – the default there).
+      rememberBeforeLoan: Object.fromEntries(Object.entries(choices.rememberBeforeLoan ?? {}).filter(([g]) => groups[g])),
+      rows,
+      implicit
+    },
     selected: { groups: tickedGroups, rows: tickedRows },
     accepted: { themes: keptOf(accepted.themes), groups: stillWeak },
     lastDecided: lastDecided && keys.has(lastDecided) ? lastDecided : null
@@ -508,6 +528,13 @@ function patchChoices(fn: (c: ImportChoices) => ImportChoices): void {
 
 type GroupsState = Pick<ImportSession, 'choices' | 'accepted' | 'lastDecided'>
 
+/** „zapamiętaj” kept before a loan's repayment (`rememberKept`): set, or gone (undefined). */
+function setKept(m: Record<string, boolean>, key: string, v: boolean | undefined): Record<string, boolean> {
+  if (v === undefined) delete m[key]
+  else m[key] = v
+  return m
+}
+
 /**
  * Groups decided, one state for all (W32) – every way a group's decision is set or taken back goes through it (przegląd
  * N1 5). A choice: the user's own – remembered as a rule by default (its `remember` given: as given – per group, a bulk
@@ -520,22 +547,27 @@ type GroupsState = Pick<ImportSession, 'choices' | 'accepted' | 'lastDecided'>
 function groupsDecided(s: GroupsState, decided: Iterable<readonly [group: string, choice: Choice | null, remember?: boolean]>, opts: { closesProposal?: boolean } = {}): GroupsState {
   const groups = { ...s.choices.groups }
   const remember = { ...s.choices.remember }
+  const beforeLoan = { ...s.choices.rememberBeforeLoan }
   const implicit = { ...s.choices.implicit }
   const accepted = { ...s.accepted.groups }
   let lastDecided = s.lastDecided
   for (const [group, choice, given] of decided) {
     if (choice) {
+      const [prev, was, kept] = [s.choices.groups[group], s.choices.remember[group], beforeLoan[group]]
       groups[group] = choice
-      remember[group] = given ?? (accepted[group] ? true : remembersByDefault(choice, s.choices.groups[group], s.choices.remember[group]))
+      remember[group] = given ?? (accepted[group] ? true : remembersByDefault(choice, prev, was, kept))
+      // The user's own „zapamiętaj” while a loan's repayment is chosen (przegląd N2 3.1): back without it.
+      setKept(beforeLoan, group, rememberKept(choice, prev, was, kept))
     } else {
       delete groups[group]
       delete remember[group]
+      delete beforeLoan[group]
     }
     delete implicit[group]
     delete accepted[group]
     if (group === lastDecided && (!choice || opts.closesProposal)) lastDecided = null
   }
-  return { choices: { ...s.choices, groups, remember, implicit }, accepted: { ...s.accepted, groups: accepted }, lastDecided }
+  return { choices: { ...s.choices, groups, remember, rememberBeforeLoan: beforeLoan, implicit }, accepted: { ...s.accepted, groups: accepted }, lastDecided }
 }
 
 /**
@@ -599,7 +631,13 @@ export function clearGroup(group: string): void {
 export function chooseTheme(theme: string, choice: Choice, remember?: boolean, accepted = false): void {
   // The user's own choice after an accepted hint (B97): remembered by default.
   const wasHint = !accepted && !!useImport.getState().accepted.themes[theme]
-  patchChoices((c) => ({ ...c, themes: { ...c.themes, [theme]: choice }, rememberThemes: { ...c.rememberThemes, [theme]: remember ?? (wasHint ? true : remembersByDefault(choice, c.themes[theme], c.rememberThemes[theme])) } }))
+  patchChoices((c) => {
+    const [prev, was, kept] = [c.themes[theme], c.rememberThemes[theme], c.rememberThemesBeforeLoan?.[theme]]
+    const on = remember ?? (wasHint ? true : remembersByDefault(choice, prev, was, kept))
+    // As a group's (przegląd N2 3.1): the user's own „zapamiętaj” back after a loan's repayment.
+    const beforeLoan = setKept({ ...c.rememberThemesBeforeLoan }, theme, rememberKept(choice, prev, was, kept))
+    return { ...c, themes: { ...c.themes, [theme]: choice }, rememberThemes: { ...c.rememberThemes, [theme]: on }, rememberThemesBeforeLoan: beforeLoan }
+  })
   if (accepted) useImport.setState((s) => ({ accepted: { ...s.accepted, themes: { ...s.accepted.themes, [theme]: true } } }))
   else unaccept('themes', theme)
 }

@@ -536,6 +536,13 @@ export function openingIdsOf(input: Pick<FleetInput, 'settings' | 'balances' | '
 
 // ------------------------------------------------------------------ the whole state
 
+/**
+ * An operation the engine counts by its ICTTJ pair's pool until it is docked (AP-12, T341 – `pairOf`): the bank's payout
+ * or an inflow typed on Portfel XTB (B69); of another kind the usual order. The docking of such a pair counts from the
+ * operation, as the pair did (`countedFrom`, T363) – only then (przegląd N2 3.2).
+ */
+export const countsByPool = (t: Pick<Transaction, 'kind'>): boolean => t.kind === 'trading' || t.kind === 'income'
+
 /** An ICTTJ payout's pair not docked yet (AP-12): its entry's pool and day (the month of a goal without a price – N46). */
 export interface PendingPair {
   pool: IctjPool
@@ -761,7 +768,7 @@ export function computeFleet(input: FleetInput): FleetState {
   const plans = [...(input.months ?? [])].sort((a, b) => a.month.localeCompare(b.month))
   const dockingByTx = dockingsByTx(input.dockings ?? [])
   /** The pair of an operation not docked yet (AP-12): its ICTTJ entry's pool counts until a docking decides. */
-  const pairOf = (t: Transaction): PendingPair | undefined => (input.pendingPairs?.size && !dockingByTx.has(t.id) && (t.kind === 'trading' || t.kind === 'income') ? input.pendingPairs.get(t.id) : undefined)
+  const pairOf = (t: Transaction): PendingPair | undefined => (input.pendingPairs?.size && !dockingByTx.has(t.id) && countsByPool(t) ? input.pendingPairs.get(t.id) : undefined)
   const loansById = new Map((input.loans ?? []).map((l) => [l.id, l]))
   const txs = input.transactions.filter((t) => t.date <= today)
 

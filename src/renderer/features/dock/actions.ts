@@ -4,6 +4,7 @@
  * (AP-9 – `undockDelivery`).
  */
 import { asPayout, type Delivery } from '@shared/calc/dock'
+import { countsByPool } from '@shared/calc/fleet'
 import { dockingIdOf, undockingOf, walletOperationId } from '@shared/calc/undock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { newId } from '@shared/ids'
@@ -45,8 +46,9 @@ export function dockingOf(d: Delivery, tx: Transaction, split: SplitDraft | null
   const others = split ? split.hull + split.taxHold + Object.values(split.goals).reduce((a, b) => a + b, 0) : 0
   // A payout's docking has one id too (B17); one whose entry was deleted in ICTTJ leaves its pool behind (B21).
   const kept = d.entryGone ? null : d.docking
-  // A pair counted by its entry's pool already (T341): its money counts from its operation's arrival, as until now (T363).
-  const pair = d.state === 'pending' && d.entry && d.transaction ? d.transaction : null
+  // A pair counted by its entry's pool already (T341): its money counts from its operation's arrival, as until now (T363) –
+  // only a pair the engine counts so (`countsByPool`, przegląd N2 3.2), else from the docking as any.
+  const pair = d.state === 'pending' && d.entry && d.transaction && countsByPool(d.transaction) ? d.transaction : null
   return dockingSchema.parse({
     ...(d.docking ?? { schemaVersion: SCHEMA_VERSION, id: d.entry ? dockingIdOf(d.entry.id) : newId(), createdAt: now, ...(pair ? { countedFrom: pair.createdAt } : {}) }),
     updatedAt: now,

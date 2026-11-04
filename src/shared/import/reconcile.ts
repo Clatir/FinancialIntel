@@ -1025,10 +1025,18 @@ export const repaysLoan = (c: Pick<Choice, 'kind' | 'loanId' | 'shares'> | undef
 /**
  * Is a decision remembered as a rule unless the user says no (the import's „zapamiętaj”)? Yes – except a loan's
  * repayment (D100, T358: a rule of it only when asked – N14 stays the default) chosen over a decision that did not repay one;
- * a decision repaying none chosen over one that did – back to the default (przegląd N2 2.9: the „no” was the loan's).
+ * a decision repaying none chosen over one that did – back to what the user had before the loan's (`kept` – przegląd N2
+ * 3.1: their own „no” stays), none kept – the default (przegląd N2 2.9: the „no” was the loan's).
  */
-export const remembersByDefault = (c: Choice, before: Choice | undefined, was: boolean | undefined): boolean =>
-  repaysLoan(c) !== repaysLoan(before) ? !repaysLoan(c) : (was ?? true)
+export const remembersByDefault = (c: Choice, before: Choice | undefined, was: boolean | undefined, kept?: boolean): boolean =>
+  repaysLoan(c) !== repaysLoan(before) ? (repaysLoan(c) ? false : (kept ?? true)) : (was ?? true)
+
+/**
+ * The user's „zapamiętaj” kept while a decision repays a loan (przegląd N2 3.1 – `remembersByDefault`'s `kept`): as it was
+ * before the loan's repayment was chosen; undefined – none (a decision repaying none, or nothing the user had).
+ */
+export const rememberKept = (c: Choice, before: Choice | undefined, was: boolean | undefined, kept: boolean | undefined): boolean | undefined =>
+  !repaysLoan(c) ? undefined : repaysLoan(before) ? kept : was
 
 export interface ImportChoices {
   /** Per theme (`ImportGroup.theme`): the decision for all its groups… */
@@ -1041,6 +1049,12 @@ export interface ImportChoices {
   rows: Record<string, Choice>
   /** Groups whose decision becomes a rule (`ImportRule`). */
   remember: Record<string, boolean>
+  /**
+   * Groups' and themes' „zapamiętaj” as the user had it before a loan's repayment was chosen for them (`rememberKept`,
+   * przegląd N2 3.1): back with a decision repaying none.
+   */
+  rememberBeforeLoan?: Record<string, boolean>
+  rememberThemesBeforeLoan?: Record<string, boolean>
   /**
    * Manual entries matched (`RowPlan.key`): true = stay separate (the row is imported as a new operation); false =
    * joined though the match asks (`ask`, a possible duplicate); missing = as proposed.

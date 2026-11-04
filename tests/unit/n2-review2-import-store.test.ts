@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FolderStatus, QuickData, Snapshot } from '@shared/api'
 import { categoryIndex } from '@shared/calc/operations'
-import { balanceOf, settleHousehold } from '@shared/calc/household'
+import { balanceOf, namesFor, settleHousehold } from '@shared/calc/household'
 import { createDefaultSettings } from '@shared/defaults'
 import { classifyRow } from '@shared/import/classify'
 import { importGroups, type Choice } from '@shared/import/reconcile'
@@ -37,7 +37,6 @@ const state = await import('../../src/renderer/features/import/state')
 const options = await import('../../src/renderer/features/import/options')
 const { changedLine, rowPartsOf } = await import('../../src/renderer/features/import/DecisionFields')
 const { loanToName } = await import('../../src/renderer/features/radar/loanChoices')
-const { namesPurchases } = await import('../../src/renderer/features/household/MemberPickers')
 const { quickLoanPart, typedLoan } = await import('../../src/renderer/features/quick/QuickApp')
 
 const AT = '2026-09-01T10:00:00.000Z'
@@ -154,9 +153,9 @@ describe('przegląd N2 2 w oknie: edytor wpływu i szybki wpis', () => {
   it('2.10: uwaga „poza wskazanymi wcześniej zakupami: te spłaca” – jak księga: dług startowy wskazanych domowników (coversOpeningMembers)', () => {
     const t = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: '01KN2SADV00000000000000001', createdAt: AT, updatedAt: AT, date: '2026-10-10', accountId: MBANK_ACCOUNT_ID, kind: 'income', amount: 30000, memberId: MAMA, inflowKind: 'advance', advance: true, coversOpening: true, coversOpeningMembers: [TATA] }) as Transaction
     // Before: true for Mama too – the note said her advance repays, the ledger does not.
-    expect([namesPurchases(t, MAMA), namesPurchases(t, TATA)]).toEqual([false, true])
-    expect(namesPurchases({ ...t, coversOpeningMembers: undefined }, MAMA)).toBe(true)
-    expect(namesPurchases({ ...t, coversOpening: undefined, coversOpeningMembers: undefined, covers: ['01KN2SSHP00000000000000001'] }, MAMA)).toBe(true)
+    expect([namesFor(t, MAMA), namesFor(t, TATA)]).toEqual([false, true])
+    expect(namesFor({ ...t, coversOpeningMembers: undefined }, MAMA)).toBe(true)
+    expect(namesFor({ ...t, coversOpening: undefined, coversOpeningMembers: undefined, covers: ['01KN2SSHP00000000000000001'] }, MAMA)).toBe(true)
     // The ledger agrees: Mama's opening debt is not repaid by it – her advance holds all of it.
     const members = [person(MAMA, 'Mama', { opening: { owed: 10000, deposit: 0 } }), person(TATA, 'Tata')]
     expect(balanceOf(settleHousehold([t], { members, from: '2026-09-01' }), MAMA)).toMatchObject({ owed: 10000, deposit: 30000 })
