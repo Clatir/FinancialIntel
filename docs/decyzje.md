@@ -2937,3 +2937,47 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   ÷ dni do końca miesiąca (z dziś); energia dziś = przydział − wydane dziś, nie więcej niż zostało energii miesiąca
   (T371); naruszenie – dopiero wydatki dnia ponad przydział (energia dziś poniżej zera; `daily.left`, jak alarm i gra).
   Bez zmian reguły gry.
+- **T405** Odprawa z hierarchią (1.15.8, N4 – AP-16, MO sp. 1, 2, DW sp. 3): `arrangeBriefing` (`calc/briefing.ts`, czyste)
+  układa pozycje odprawy: alarmy (czerwone, potem żółte – wszystkie poziomy inne niż „info”), sprawy dnia (informacje
+  wymagające ruchu dziś: start, import i nowy plik z mBanku, salda, misja, dostawa czekająca na import, folder ICTTJ,
+  firewall wyłączony, łupy), reszta (zapowiedzi i obserwacja: asteroida za 4–14 dni, PIT-38, boje w przód, koniec
+  kontenera, cena, kontener bez płatności, nowa opłata, nieznany sygnał, domownik) – w obrębie poziomu kolejność
+  `briefing()`. Na wierzchu najwyżej 8 pozycji (`BRIEFING_SHOWN`, nadmiar alarmów i spraw dnia też się zwija), czerwona
+  nigdy; reszta pod „Pokaż wszystkie (N)” (N – wszystkie pozycje; zwinięte są w stronie ukryte, `data-tier`). Jedna
+  pozycja na sprawę: nieznany sygnał kategorii albo zakupu (sygnał marki i nowego kontrahenta niesie teraz kategorię
+  zakupu – `Anomaly.categoryId`, addytywnie) z kategorią, której koperta ma alarm przekroczenia, idzie pod ten alarm
+  (`also`, poziom wyższy z obu). Sprawy, które Meldunki też pokazują – dostawa do zadokowania, zwrot po terminie, saldo
+  (dzień sprawy: `BriefingItem.since`) – starsze niż 30 dni (`BRIEFING_OLD_DAYS`) tylko w Meldunkach; w odprawie
+  odnośnik „N spraw starszych niż 30 dni – w Meldunkach ›”. Domownik (D80 e) się nie starzeje – jego przypomnienie
+  zaczyna się po 30 dniach. Osłony poniżej minimum – w grze poważne naruszenie – w odprawie czerwone (DW sp. 3;
+  poziom alarmu silnika bez zmian); w Dowództwie poważne naruszenie dnia i dziennika czerwone z plakietką „poważne”.
+  Powiadomienia biorą dalej każdą pozycję `briefing()` (własne klucze) – układ dotyczy Mostka, odłączonej Odprawy,
+  Raportów (pełna lista w tej samej kolejności) i odsłuchu.
+- **T406** Powiadomienia: odprawa pierwsza i jedno zbiorcze (1.15.8, N4 – AP-16, US sp. 1, RY sp. 4, AF-67; rozszerza
+  T56): dopóki dzisiejsza odprawa nie przyszła (klucz `briefing:<dzień>` niezapamiętany – `briefingShown`), a nie
+  jest jej chwila, pozostałe powiadomienia dnia czekają – przy odprawie „przy pierwszym otwarciu” najwyżej do 9:00
+  (`BRIEFING_HOLD_UNTIL`: okno w zasobniku przez cały ranek dostaje je wtedy, odprawę przy otwarciu), przy ustalonej
+  godzinie do niej, najwyżej do 12:00 (`BRIEFING_HOLD_MAX`). Trzy i więcej naraz (`BUNDLE_FROM`, start: 10) –
+  jedno powiadomienie (`bundleNotices`): odprawa z „Do tego N innych powiadomień: tytuły (z liczbą powtórzeń) –
+  Mostek.” albo „Powiadomienia (N)”, kliknięcie – Mostek, dźwięk alarmu, gdy któreś go ma; każdy klucz zapamiętany
+  osobno (nic nie przychodzi drugi raz). Zastępuje grupę „Nowe wypłaty w ICTTJ do zadokowania” (3+). Okno dotknięte
+  pierwszy raz po ciszy nocnej z odprawą przechodzi na Mostek jak okno pokazane z zasobnika (AF-67), chyba że otworzyło
+  je kliknięcie powiadomienia.
+- **T407** Godzina odprawy (1.15.8, N4 – D99 pkt 7, D84 C9): `NotifyPrefs.briefingTime` (config.json – komputer;
+  addytywnie, brak albo błędna = null) – null: przy pierwszym otwarciu okna po ciszy nocnej (domyślnie, jak dotąd);
+  „HH:MM”: odprawa przychodzi o tej godzinie bez otwierania okna (godzina w ciszy nocnej – na jej końcu, `briefingAt`;
+  wcześniejsze otwarcie okna jej nie wysyła – odprawa i tak jest na Mostku), okno nie przechodzi wtedy samo na Mostek.
+  Ustawienia → Powiadomienia: wybór „przy pierwszym otwarciu okna po ciszy nocnej” / „o ustalonej godzinie” (domyślnie
+  07:00, pole godziny), uwaga przy godzinie w ciszy. Telefon planuje odprawę na tę godzinę (`plannedNotices`), wyboru
+  w ustawieniach telefonu nie ma (preferencje urządzenia – null).
+- **T408** Odsłuch – skrót (1.15.8, N4 – AP-16, MO sp. 1, 7; rozszerza T214): `briefingSpeech` czyta dzień, energię
+  dziś (przy ukrytych kwotach „Energia na dziś: kwota ukryta.”, przekroczenie i powód ograniczenia jak dotąd), Daily
+  Bias, najważniejszy alarm (pierwsza pozycja `arrangeBriefing` z poziomu alarmów; brak – „Bez alarmów.”) i „Na Mostku
+  (jeszcze) N spraw.” – nigdy wszystkich pozycji. Kwoty w tekście czytane jak energia („52 złote 50 groszy”, ukryta –
+  „kwota ukryta”), strzałka „→” jako „na”. Silver Bullet bierze ten sam najważniejszy alarm.
+- **T409** Rozkazy i progi gry tylko w Ustawieniach (1.15.8, N4 – D99 pkt 7, D84 C9; zmienia T227 „rozkazy edytowalne
+  w Dowództwie” i N73): Dowództwo pokazuje rozkazy (minimalne osłony, linia zanurzenia, cisza nocna, próg dziennika,
+  firewall) i progi gry (awans, koperta poważnie ponad, degradacja, misja) do odczytu z odnośnikiem „zmień w
+  Ustawieniach → Warstwy i rozkazy ›”; progi gry przeniesione do Ustawień → Warstwy i rozkazy (panel „Progi gry”, te
+  same pola i granice). Odrzucony próg mówi dlaczego i że zostaje poprzednia wartość (AP-15, DW sp. 5:
+  `thresholdRefusal`, komunikat jak przy celach warstw). Bez zmian formatu (`settings.game`, `settings.orders`).

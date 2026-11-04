@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { layersEffect, type LayersLine } from '@shared/calc/effect'
 import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel, type NotifyPrefs } from '@shared/machine'
-import { eveningAt } from '@shared/notify'
-import type { LayersSettings, Orders } from '@shared/schema'
+import { briefingAt, eveningAt } from '@shared/notify'
+import { BRIEFING_FROM } from '@shared/notifyPlan'
+import type { GameSettings, LayersSettings, Orders } from '@shared/schema'
 import { api } from '../../lib/api'
 import { playSound } from '../../lib/sounds'
 import { updateSettings, useData, useFolderLocked } from '../../store/data'
@@ -90,6 +91,10 @@ export function LayersTab() {
       <Panel title="Rozkazy">
         <OrdersFields labelWidth={200} />
       </Panel>
+      {/* The orders and the game's thresholds only here (D84 C9, D99 pkt 7): Dowództwo reads them. */}
+      <Panel title="Progi gry" testId="settings-game">
+        <GameFields labelWidth={200} />
+      </Panel>
     </fieldset>
   )
 }
@@ -132,7 +137,7 @@ function LayersPreview({ shieldSalaries, hullMonths, saved }: { shieldSalaries: 
 }
 
 /**
- * The orders' fields (fi.json): in Ustawienia → Warstwy i rozkazy and in Dowództwo (spec: „do zmiany w Dowództwie” – N73).
+ * The orders' fields (fi.json): only in Ustawienia → Warstwy i rozkazy (D84 C9, D99 pkt 7 – Dowództwo reads them).
  * Disabled by the fieldset around them in a folder only to read.
  */
 export function OrdersFields({ labelWidth }: { labelWidth: number }) {
@@ -182,6 +187,87 @@ export function OrdersFields({ labelWidth }: { labelWidth: number }) {
           Firewall wyłączony – dopłaty do XTB nie są sprawdzane: bez czerwonego alarmu i bez naruszenia w grze, choćby osłony albo kadłub nie były pełne.
         </p>
       )}
+    </div>
+  )
+}
+
+type Threshold = 'promoteDays' | 'windowDays' | 'seriousEnvelopePct' | 'demoteSerious' | 'missionDays'
+
+/** The game's thresholds (fi.json): their limits, and why a value is refused (AP-15 – never back without a word, DW sp. 5). */
+const THRESHOLDS: Record<Threshold, { min: number; max: number; what: string }> = {
+  promoteDays: { min: 1, max: 366, what: 'Dni zgodnych do awansu' },
+  windowDays: { min: 1, max: 366, what: 'Okno awansu' },
+  seriousEnvelopePct: { min: 0, max: 500, what: 'Próg poważnego przekroczenia koperty' },
+  demoteSerious: { min: 1, max: 31, what: 'Degradacja' },
+  missionDays: { min: 0, max: 30, what: 'Dni za wykonaną misję' }
+}
+
+/** Why a threshold typed is refused – the previous one stays. */
+export function thresholdRefusal(key: Threshold, v: number | null, game: Pick<GameSettings, 'promoteDays' | 'windowDays'>): string {
+  const t = THRESHOLDS[key]
+  if (v == null) return `${t.what}: pole nie może być puste – zostaje poprzednia wartość.`
+  if (!Number.isInteger(v)) return `${t.what}: tylko liczby całkowite – zostaje poprzednia wartość.`
+  if (v < t.min || v > t.max) return `${t.what}: od ${t.min} do ${t.max} – zostaje poprzednia wartość.`
+  if (key === 'promoteDays' && v > game.windowDays) return `Dni zgodnych do awansu nie może być więcej niż dni okna (${game.windowDays}) – zostaje poprzednia wartość.`
+  if (key === 'windowDays' && v < game.promoteDays) return `Okno awansu nie może być krótsze niż dni zgodnych do awansu (${game.promoteDays}) – zostaje poprzednia wartość.`
+  return `${t.what}: wartość odrzucona – zostaje poprzednia.`
+}
+
+/** A threshold the game takes (the same rules as its refusal). */
+const thresholdOk = (key: Threshold, v: number | null, game: Pick<GameSettings, 'promoteDays' | 'windowDays'>) =>
+  v != null && Number.isInteger(v) && v >= THRESHOLDS[key].min && v <= THRESHOLDS[key].max && (key !== 'promoteDays' || v <= game.windowDays) && (key !== 'windowDays' || v >= game.promoteDays)
+
+/**
+ * The game's thresholds (fi.json): only in Ustawienia → Warstwy i rozkazy since AP-16 (D84 C9 – Dowództwo reads them).
+ * Disabled by the fieldset around them in a folder only to read.
+ */
+function GameFields({ labelWidth }: { labelWidth: number }) {
+  const game = useData((s) => s.fi?.settings.game ?? null)
+  if (!game) return null
+  const setGame = (patch: Partial<GameSettings>) => updateSettings((f) => ({ ...f, settings: { ...f.settings, game: { ...f.settings.game, ...patch } } }))
+  const field = (key: Threshold, testId: string) => (
+    <NumberField
+      className="h-[24px] w-[64px]"
+      value={game[key]}
+      decimals={0}
+      step={1}
+      commitOnBlur
+      isValid={(v) => thresholdOk(key, v, game)}
+      onChange={(v) => v != null && setGame({ [key]: v })}
+      onReject={(v) => toast(thresholdRefusal(key, v, game), 'error', 6000)}
+      aria-label={testId}
+      data-testid={testId}
+    />
+  )
+  return (
+    <div className="flex flex-col gap-2 text-[12px]">
+      <Field label="Awans: dni zgodnych" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('promoteDays', 'game-promote-days')}
+          <span className="text-muted">w ostatnich</span>
+          {field('windowDays', 'game-window-days')}
+          <span className="text-muted">dniach</span>
+        </div>
+      </Field>
+      <Field label="Koperta poważnie ponad" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('seriousEnvelopePct', 'game-serious-pct')}
+          <span className="text-muted">% limitu</span>
+        </div>
+      </Field>
+      <Field label="Degradacja po" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('demoteSerious', 'game-demote')}
+          <span className="text-muted">poważnych w miesiącu</span>
+        </div>
+      </Field>
+      <Field label="Wykonana misja" labelWidth={labelWidth}>
+        <div className="flex items-center gap-2">
+          {field('missionDays', 'game-mission-days')}
+          <span className="text-muted">dni zgodnych</span>
+        </div>
+      </Field>
+      <span className="text-[11px] text-dim">Progi działają od kolejnych zamrożonych dni – zamrożone oceny i awanse zostają.</span>
     </div>
   )
 }
@@ -299,7 +385,7 @@ function VolumeSlider() {
 }
 
 const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
-  ['briefing', 'Odprawa poranna – przy pierwszym otwarciu okna po ciszy nocnej'],
+  ['briefing', 'Odprawa poranna – przed innymi powiadomieniami'],
   ['evening', 'Wieczorne dopisanie wydatków'],
   ['low', 'Energia dziś poniżej 20% albo koperta powyżej 80%'],
   ['overrun', 'Przekroczenie przydziału albo koperty'],
@@ -336,6 +422,8 @@ export function NotifyTab() {
   const quiet = useData((st) => st.fi?.settings.orders.quietHours)
   // The evening reminder's hour in the quiet hours (N104): it comes before them – said where it is set.
   const eveningShift = quiet && eveningAt(n.eveningTime, quiet) !== n.eveningTime ? eveningAt(n.eveningTime, quiet) : null
+  // The briefing's hour in the quiet hours (D99 pkt 7): it comes at their end – said where it is set.
+  const briefingShift = quiet && n.briefingTime && briefingAt(n.briefingTime, quiet) !== n.briefingTime ? briefingAt(n.briefingTime, quiet) : null
   return (
     <>
       <Panel title="Szybki wpis">
@@ -365,6 +453,27 @@ export function NotifyTab() {
           {NOTIFY_ROWS.map(([key, label]) => (
             <div key={key} className="flex items-center gap-3">
               <Toggle checked={n[key] as boolean} onChange={(on) => void setMachinePrefs({ notify: { ...n, [key]: on } })} label={label} data-testid={`notify-${key}`} />
+              {/* When the briefing comes (D99 pkt 7, D84 C9): at the first opening (the default) or at its hour. */}
+              {key === 'briefing' && (
+                <select
+                  className="input h-[24px] w-[260px]"
+                  value={n.briefingTime ? 'time' : 'open'}
+                  onChange={(e) => void setMachinePrefs({ notify: { ...n, briefingTime: e.currentTarget.value === 'time' ? BRIEFING_FROM : null } })}
+                  aria-label="Kiedy odprawa poranna"
+                  data-testid="notify-briefing-when"
+                >
+                  <option value="open">przy pierwszym otwarciu okna po ciszy nocnej</option>
+                  <option value="time">o ustalonej godzinie</option>
+                </select>
+              )}
+              {key === 'briefing' && n.briefingTime && (
+                <TimeField className="w-[70px]" value={n.briefingTime} onChange={(briefingTime) => briefingTime && void setMachinePrefs({ notify: { ...n, briefingTime } })} aria-label="Godzina odprawy porannej" data-testid="notify-briefing-time" />
+              )}
+              {key === 'briefing' && briefingShift && quiet && (
+                <span className="text-[11px] text-accent" data-testid="notify-briefing-quiet">
+                  w ciszy nocnej ({quiet.from}–{quiet.to}) – przyjdzie o {briefingShift}
+                </span>
+              )}
               {key === 'evening' && (
                 <TimeField className="w-[70px]" value={n.eveningTime} onChange={(eveningTime) => eveningTime && void setMachinePrefs({ notify: { ...n, eveningTime } })} aria-label="Godzina wieczornego dopisania" data-testid="notify-evening-time" />
               )}

@@ -12,7 +12,7 @@ import { setReportTab, setWatchMonday, useReportsUi, watchMondayOf, type ReportT
 import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
-import { BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
+import { arrangeBriefing, BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
 import { sum } from '@shared/calc/operations'
 import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
 import { netAdjustments } from '@shared/calc/netWorth'
@@ -96,6 +96,9 @@ function BriefingReport() {
   const items = useBriefingItems(fleet)
   if (!fleet) return null
   const bias = dailyBias(fleet)
+  // The whole briefing in the bridge's order (AP-16): alarms, the day's matters, the rest – one line per matter.
+  const view = arrangeBriefing(items, fleet.today)
+  const rows = [...view.shown, ...view.rest]
   return (
     <Columns id="reports-briefing" tracks={['minmax(420px,1fr)']} className="grid items-start">
       <Panel title={`Odprawa – ${dayLabel(fleet.today)}`} name="Odprawa" testId="reports-briefing">
@@ -103,10 +106,10 @@ function BriefingReport() {
           {fleet.daily && <Line label="Energia dziś" value={zl(fleet.daily.energy)} strong />}
           {/* The briefing's first element (spec, N26) – as on the bridge. */}
           {bias && <Line label="Daily Bias" value={BIAS_LABEL[bias]} testId="reports-briefing-bias" />}
-          {!items.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
-          {items.map((i) => (
-            <span key={i.key} className={cx('py-0.5', i.level === 'red' ? 'text-down' : 'text-fg')} data-testid="reports-briefing-item">
-              {i.text}
+          {!rows.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}
+          {rows.map((i) => (
+            <span key={i.key} className={cx('py-0.5', i.level === 'red' ? 'text-down' : 'text-fg')} data-testid="reports-briefing-item" data-tier={i.tier}>
+              {[i.text, ...i.also].join(' ')}
             </span>
           ))}
         </div>
