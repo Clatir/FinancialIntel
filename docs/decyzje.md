@@ -2923,3 +2923,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zapisywało 600 zł na każdą przyszłą wpłatę (do 3× więcej). Rozważone i odrzucone: kwota podzielona przez liczbę wpłat
   albo to, co rozkład dał każdej – „po kolei” daje wpłatom różne kwoty, żadna nie jest tym, co użytkownik wpisał. Edytor
   reguły w Ustawieniach – jedna wpłata (`rows` 1): kwota jak wpisana.
+- **T420** „-” i „_” w tagu jak spacja (AP-21, AF-18; zmienia T291): `tagKey` – bez wielkości liter, polskich znaków,
+  a „-” i „_” to spacja („#wakacje-chorwacja” w nazwie = tag „Wakacje Chorwacja”; „#słowo” nie ma spacji, więc wyprawa
+  z kilku słów rozdwajała się). Bez migracji: tagi operacji zostają jak zapisane (pierwsza pisownia jest etykietą), klucze
+  zapisane w ustawieniach przed 1.15.9 czytane przez `tagKey` jeszcze raz – cel wyprawy (`tagGoalOf`; `setTagGoal` usuwa
+  dawny klucz tego tagu), filtr zapisanego widoku i filtr tego komputera (`filterOf`). Tag z samych „-” / „_” – żaden.

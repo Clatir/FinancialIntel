@@ -3,7 +3,7 @@
  * expeditions' money and the tag used last – once per list of operations –, a tag's goal of the star map, a tag's
  * operations in Operacje.
  */
-import { knownTags, lastTag, tagKey, tagLabel, tagsOf, tagSummaries, type TagSummary } from '@shared/calc/tags'
+import { knownTags, lastTag, tagGoalKeys, tagKey, tagLabel, tagsOf, tagSummaries, type TagSummary } from '@shared/calc/tags'
 import { categoryIndex, type CategoryIndex } from '@shared/calc/operations'
 import { noNarrowing } from '@shared/operationsView'
 import { plural } from '@shared/format'
@@ -58,6 +58,8 @@ export function setTagGoal(tag: string, goalId: string | null): void {
   if (!key) return
   updateSettings((f) => {
     const tagGoals = { ...f.settings.intel.tagGoals }
+    // The same tag under a key stored before 1.15.9 (AP-21) goes: one goal per tag.
+    for (const k of tagGoalKeys(tagGoals, tag)) delete tagGoals[k]
     if (goalId) tagGoals[key] = goalId
     else delete tagGoals[key]
     return { ...f, settings: { ...f.settings, intel: { ...f.settings.intel, tagGoals } } }

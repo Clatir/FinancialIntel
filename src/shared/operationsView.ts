@@ -10,7 +10,7 @@ import { loanIdsOf } from './calc/loans'
 import type { BrandAliases } from './import/aliases'
 import { ruleTargetOf } from './import/classify'
 import { fold } from './fold'
-import { hasTag, tagsOf } from './calc/tags'
+import { hasTag, tagKey, tagsOf } from './calc/tags'
 
 /** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
 export const OPERATION_MARKS = ['refundable', 'owed', 'partlyRepaid', 'repaid', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
@@ -220,7 +220,8 @@ export function filterOf(raw: unknown, month: string): OperationsFilter {
     goals: strings(f.goals),
     loans: strings(f.loans),
     transferAccounts: strings(f.transferAccounts),
-    tags: strings(f.tags),
+    // By the key of now (AP-21): a view saved before 1.15.9 with „wakacje-chorwacja” finds „Wakacje Chorwacja”.
+    tags: [...new Set(strings(f.tags).map(tagKey).filter(Boolean))],
     sort: (OPERATION_SORTS as readonly unknown[]).includes(f.sort) ? (f.sort as OperationSort) : 'date'
   }
 }
