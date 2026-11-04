@@ -26,7 +26,7 @@ import { UndoImportButton } from './RecentImports'
 import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
-import { bulkOptions, bulkResultText, fits, hasCategory, offersNewMember, type LoanPick, type Option } from './options'
+import { bulkOptions, bulkResultText, fits, hasCategory, MEMBER_MONEY_TEXT, memberMoneyOf, offersNewMember, type LoanPick, type Option } from './options'
 import { countLabel } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
@@ -556,10 +556,13 @@ function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | 
   }
   const text = (() => {
     if (c.kind === 'income') {
-      const shares = c.household ? (c.shares ?? []).filter((s) => s.amount > 0) : []
+      const shares = c.household ? (c.shares ?? []).filter((s) => s.amount > 0 && !s.loanId) : []
       const via = shares.length ? ` (w tym za: ${shares.map((s) => `${memberName(s.memberId, members)} ${plnText(s.amount)} zł`).join(', ')})` : ''
-      const kindText = c.inflowKind === 'income' ? ' – niezależny przychód' : c.inflowKind === 'advance' ? ' – zaliczka' : c.advance ? ' – zaliczka' : ''
-      return c.household ? `od domownika: ${memberName(c.memberId, members)}${kindText}${via}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'
+      // Its parts repaying a loan (D100), of any income.
+      const toLoans = (c.shares ?? []).filter((s) => s.amount > 0 && s.loanId)
+      const loanText = toLoans.length ? ` (w tym spłata pożyczki: ${toLoans.map((s) => `${loans.find((l) => l.id === s.loanId)?.name ?? 'pożyczka'} ${plnText(s.amount)} zł`).join(', ')})` : ''
+      // The list's name of the choice (AP-4: one name in the import).
+      return `${c.household ? `od domownika: ${memberName(c.memberId, members)} – ${MEMBER_MONEY_TEXT[memberMoneyOf(c)]}${via}` : title ? 'wpływy (przychód)' : 'wpływ (przychód)'}${loanText}`
     }
     if (c.kind === 'transfer') {
       // To / from another account of the budget (F10): its name.
@@ -670,8 +673,9 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
             </option>
           ))}
         </select>
-      ) : c.kind === 'income' && c.household && members.length > 1 ? (
-        // „w tym za” of this transfer (AF-27): its own decision stays while typed; else its part of the group's spread.
+      ) : c.kind === 'income' && p.row.amount > 0 && ((c.household && members.length > 1) || loans.some((l) => l.direction === 'given' && !l.closedAt) || !!c.shares?.some((x) => x.loanId)) ? (
+        // „w tym za” of this transfer (AF-27) and its part repaying a loan (D100): its own decision stays while typed; else
+        // its part of the group's spread.
         <RowShares p={p} choice={choice} mine={mine} />
       ) : (
         <span />
@@ -736,10 +740,10 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-12">
         <DecisionFields choice={choice} direction={g.direction} onChange={(c) => decideGroup(g.group, c)} own={fileAccount} sharesFrom={`g:${g.group}`} testId="import-group" />
-        <Badge tone={implicit || (g.source === 'none' && !own && !themeDecided) ? 'warn' : 'default'} title={implicit ? 'Wybierz „reszta jako zaliczka” albo „reszta jako przychód” – odpowiedź zostanie zapamiętana dla tej osoby' : g.reason}>
+        <Badge tone={implicit || (g.source === 'none' && !own && !themeDecided) ? 'warn' : 'default'} title={implicit ? `Wybierz „${MEMBER_MONEY_TEXT.advance}” albo „${MEMBER_MONEY_TEXT.income}” – odpowiedź zostanie zapamiętana dla tej osoby` : g.reason}>
           {badge}
         </Badge>
-        {own && !g.byTitle && learnable(own) && (
+        {own && !g.byTitle && learnable(own, g.direction) && (
           <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają tę markę same">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(g.group, e.currentTarget.checked)} data-testid="import-group-remember" />
             zapamiętaj
@@ -848,7 +852,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
               ? 'Twoje decyzje marek'
               : THEME_SOURCE[t.source]}
         </Badge>
-        {decided && !byTitle && learnable(decided) && (
+        {decided && !byTitle && learnable(decided, t.direction) && (
           <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają marki tego tematu same">
             <input type="checkbox" checked={remember} onChange={(e) => setRememberTheme(t.theme, e.currentTarget.checked)} data-testid="import-theme-remember" />
             zapamiętaj

@@ -56,13 +56,27 @@ paths:
   **Pułapka:** kwota tematu jest dla wszystkich jego wierszy razem, kwota marki – dla jej wierszy: nie składaj linii marek
   w jedną decyzję tematu (przeglądy N1 2–4: raz o połowę mniej, raz więcej, raz zgubiona kwota). **Pułapka:** `sameChoice`
   pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
-- Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą. Kategoria mBanku tylko jako podpowiedź (`hintFor`).
+- Wpłata domownika (AP-4, T351): opcje `household:<osoba>:income|advance|all-income|all-advance`, jedna nazwa wyboru
+  (`MEMBER_MONEY_TEXT` – lista, temat, podgląd, reguła). „spłata, reszta jako …” = `inflowKind: 'repay'` + `advance`.
+  Reguła reszty nie zapamiętuje – „spłata” bierze ją z ustawienia osoby (D80 b, `restNotOfRule` w edytorze reguły).
+  **Pułapka:** opcja „reszta jako zaliczka” nigdy `inflowKind: 'advance'` (AF-8 – reguła uczyła się omijać dług).
+  **Pułapka:** zmiana w liście w obrębie tej samej osoby zostawia linie „w tym za” i części pożyczki (`listChoice` – cel
+  wpłaty, T336); `choiceFor` sam linii nie niesie (inny rodzaj).
+- Spłata pożyczki częścią (D100, T357): linia „w tym” z `loanId` (`memberId` '') przy każdym wpływie (domownika i
+  zwykłym); w `rowShares` pożyczka to klucz `loanKey` – dług z `owedWithFile(…, loans)`, spłaty całością pliku jak własne
+  pieniądze. `sharesView` wszędzie z `fleet.loans` (jedna pamięć). **Pułapka:** linie porównuj po `shareWho`, nie
+  `memberId`; bez pożyczki w `owed` część grupy = 0 (zamknięta – słusznie).
+- Rodzaje `PER_OPERATION_KINDS` (pożyczka, PIT-38, XTB) nigdy regułą – poza spłatą pożyczki z Radaru (T358: `loanId`,
+  `loanAmount`; tylko otwarta od swojego dnia – `ruleLoanFor`; „zapamiętaj” domyślnie wyłączone – `remembersByDefault`
+  w `groupsDecided`, jedynym księgowaniu decyzji grup).
+  Kategoria mBanku tylko jako podpowiedź (`hintFor`).
 - Nazwy czyszczone `cleanBankName`; klucze sprzed 1.2.3 (`bankName`, `RuleTarget.legacy`) muszą dalej pasować –
   zmiana kluczy nie może osierocić reguł zapisanych w folderach użytkownika.
 - Łączenie i duplikaty: `looseMatch` (kwota, ±3 dni, podobieństwo kontrahenta), także między kontami; decyzja
   użytkownika („Nie łącz”, `notDuplicates`, `notSimilar`) zawsze wygrywa. **Pułapka:** `notDuplicates` trzyma też
-  „zostaw” innych meldunków (`back:`, `correction:`, `transfer:`, `transfer-lone:`) – pary panelu duplikatów tylko przez
-  `isDuplicatePairKey`; klucz nowego meldunku – z przedrostkiem dopisanym do `REPORT_KEY_PREFIXES` (`import/duplicates.ts`).
+  „zostaw” innych meldunków (`back:`, `correction:`, `transfer:`, `transfer-lone:`, AP-4: `advanceRule:`, `advanceKept:`) –
+  pary panelu duplikatów tylko przez `isDuplicatePairKey`; klucz nowego meldunku – z przedrostkiem dopisanym do
+  `REPORT_KEY_PREFIXES` (`import/duplicates.ts`).
 - Tożsamość wiersza między formatami (B5) to miara, nie klucz – stosuj ją wszędzie, gdzie działa klucz: przy usuniętych
   (T320), na kontach tego samego numeru rachunku (T321), przy rozliczeniu (stary klucz w `altKeys`, T323). Kolejność
   przejść planu ma znaczenie: B5 tutaj bierze też wiersze `elsewhere` z B35 (kopia → `RowCopy`, „usuń duplikat”), a

@@ -519,6 +519,8 @@ export interface QuickData {
    * their money comes through (D81: „w tym za …” at that member's money).
    */
   members: Array<{ id: string; name: string; owed: number; deposit: number; inflow: 'ask' | 'advance' | 'income'; via: string | null }>
+  /** The Radar's open loans given (D100): an inflow – whoever sent it – may repay one, whole or a part; `open` – what is left. */
+  loans?: Array<{ id: string; name: string; open: number }>
   hideAmounts: boolean
   /** Nothing is taken now: a read-only folder, the folder gone (AP-1), another one opening (AF-75) – why. */
   readOnly: boolean

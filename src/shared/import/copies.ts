@@ -36,8 +36,9 @@ function decision(t: Transaction): string | null {
   return [
     t.kind,
     t.categoryId ?? '',
-    // An income's parts are its members' money (D81): the member and the rest as an advance decide too.
-    t.splits.map((s) => `${s.categoryId}:${s.amount}:${member(s.refundable || t.kind === 'income', s.memberId)}:${t.kind === 'income' && s.advance ? 'a' : ''}`).join(','),
+    // An income's parts are its members' money (D81): the member and the rest as an advance decide too – a part repaying
+    // a loan (D100) its loan.
+    t.splits.map((s) => `${s.categoryId}:${s.amount}:${member(s.refundable || t.kind === 'income', s.memberId)}:${t.kind === 'income' && s.advance ? 'a' : ''}${t.kind === 'income' && s.loanId ? `:l=${s.loanId}` : ''}`).join(','),
     t.refundable,
     member(t.refundable || t.kind === 'income', t.memberId),
     t.counterAccountId ?? '',
@@ -78,10 +79,11 @@ export const coversOtherwise = (keep: Transaction, copy: Transaction): boolean =
 
 /**
  * The members whose purchases an operation's money pays back, as the ledger reads it (`settleHousehold`, D91): an
- * income's shares of members that repay (not their income nor advance), a product return's lines of a member's purchase.
+ * income's shares of members that repay (not their income nor advance, never a part repaying a loan – D100), a product
+ * return's lines of a member's purchase.
  */
 function repayers(t: Transaction): ReadonlySet<string> {
-  if (t.kind === 'income') return new Set(incomeShares(t).flatMap((s) => (s.memberId && s.inflowKind !== 'income' && s.inflowKind !== 'advance' ? [s.memberId] : [])))
+  if (t.kind === 'income') return new Set(incomeShares(t).flatMap((s) => (s.memberId && !s.loanId && s.inflowKind !== 'income' && s.inflowKind !== 'advance' ? [s.memberId] : [])))
   if (t.kind !== 'expense' || t.amount <= 0) return new Set()
   return new Set(partsOf(t).flatMap((p) => (p.refundable && !p.gift && p.amount > 0 ? [financerOf(p)] : [])))
 }

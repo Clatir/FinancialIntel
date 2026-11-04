@@ -16,10 +16,10 @@ import { deadText, priceText, type DeadContainer, type PriceChange } from './car
 import { anomalyText, type Anomaly } from './anomalies'
 import { lateReturnText, type AwaitedReturn } from './returns'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'refunds' | 'returns' | 'cargo' | 'balances'
+export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'advances' | 'refunds' | 'returns' | 'cargo' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
@@ -32,6 +32,7 @@ export const INBOX_TITLE: Record<InboxKind, string> = {
   corrections: 'Podwójne korekty',
   anomalies: 'Nieznane sygnały',
   repayments: 'Zwroty do przypisania',
+  advances: 'Zaliczki przy długu',
   refunds: 'Do zwrotu',
   returns: 'Zwroty w drodze',
   cargo: 'Ładownia',
@@ -47,7 +48,7 @@ export interface InboxItem {
   /** Its button. */
   action: string
   /**
-   * The delivery's key ('dock'), the member's id ('refunds'), the account's id ('balances'), the operation's
+   * The delivery's key ('dock'), the member's id ('refunds', 'advances'), the account's id ('balances'), the operation's
    * ('corrections', the member's money waiting to be assigned – 'repayments', one come back after its deletion –
    * 'returned'); a transfer's report – its key (`transferKey`, none for all the pairs together).
    */
@@ -56,6 +57,9 @@ export interface InboxItem {
 
 /** A balance not confirmed for longer is a report (D86). */
 export const INBOX_BALANCE_DAYS = 30
+
+/** The advances of a member a report lists by name (AP-4); the rest – their number. */
+const ADVANCES_SHOWN = 4
 
 /** The expenses without a category (the operations' mark „bez kategorii”) from `from` on, drafts aside. */
 export interface Uncategorized {
@@ -119,6 +123,12 @@ export interface InboxInput {
   returns?: readonly AwaitedReturn[]
   /** The bank's operations come back after their deletion (AF-1): each one a report – „Usuń” or „zostaw”. */
   returned?: readonly ReturnedOperation[]
+  /**
+   * A member's explicit advances for the future that repaid nothing of their debt (AP-4 – the option „reszta jako
+   * zaliczka” of 1.15.3–1.15.5 saved them so; D99 S4 lets one skip it): one report a member while they owe – „Spłać”
+   * or „zostaw”. Those said „zostaw” left out by the caller.
+   */
+  advances?: ReadonlyArray<{ memberId: string; owed: number; items: ReadonlyArray<{ txId: string; date: string; amount: number }> }>
   /**
    * Folders of FI's records without fi.json among this computer's data folders of before (AP-1): a „folder-widmo” a write
    * of 1.15.4 or older made while the data folder was away – its records are in no budget.
@@ -231,6 +241,19 @@ export function inboxItems(o: InboxInput): InboxItem[] {
         text: `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} – wskaż, które zakupy spłaca${m.open.length ? ` (do oddania: ${m.open.length} ${plural(m.open.length, 'zakup', 'zakupy', 'zakupów')})` : ''}.`,
         action: 'Przypisz'
       })
+  // A member's advances for the future that left their debt unpaid (AP-4): repay it now, or keep them as they are.
+  for (const a of o.advances ?? []) {
+    if (a.owed <= 0 || !a.items.length) continue
+    const n = a.items.length
+    const list = a.items.slice(0, ADVANCES_SHOWN).map((x) => `${dm(x.date)} ${zl(x.amount)}`).join(', ') + (n > ADVANCES_SHOWN ? ` i ${n - ADVANCES_SHOWN} więcej` : '')
+    out.push({
+      kind: 'advances',
+      key: `advances:${a.memberId}`,
+      ref: a.memberId,
+      text: `${o.memberName(a.memberId)}: ${n === 1 ? 'wpłata' : `${n} ${plural(n, 'wpłata', 'wpłaty', 'wpłat')}`} jako zaliczka na przyszłość nie ${n === 1 ? 'spłaciła' : plural(n, 'spłaciła', 'spłaciły', 'spłaciło')} długu (${list}) – ma oddać ${zl(a.owed)}. Spłacić?`,
+      action: 'Spłać'
+    })
+  }
   for (const m of o.members) {
     if (m.owed <= 0) continue
     const days = m.since ? Math.max(0, daysBetween(m.since, o.today)) : null

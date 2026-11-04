@@ -1,7 +1,8 @@
 import { incomeShares, memberName } from '@shared/calc/household'
+import { loanParts } from '@shared/calc/loans'
 import { amountOn, isTwoSided, touchesAccount, type CategoryIndex } from '@shared/calc/operations'
 import { shareOf } from '@shared/calc/share'
-import { TX_KIND_LABEL, type Account, type HouseholdMember, type Transaction } from '@shared/schema'
+import { TX_KIND_LABEL, type Account, type HouseholdMember, type Loan, type Transaction } from '@shared/schema'
 import { plural } from '../../lib/format'
 import { shareNames } from '../household/ShareEditor'
 
@@ -28,23 +29,29 @@ export interface RowContext {
   members: readonly HouseholdMember[]
   /** The one account the list shows (a filter of one account), else null. */
   view: string | null
+  /** The Radar's loans: an inflow's part repaying one says which (D100); none given – „pożyczka”. */
+  loans?: ReadonlyArray<Pick<Loan, 'id' | 'name'>>
 }
 
 /** What a list's row says of an operation – the computer's list and the phone's cards alike. */
 export function operationRowText(t: Transaction, o: RowContext): RowText {
   // A member's money says whose (D80, D81: the parts of a split income – the sender's rest last).
   const whose = t.kind === 'income' ? [...new Set(incomeShares(t).map((x) => x.memberId))].filter((x): x is string => !!x) : []
+  // Its parts repaying a loan (D100): which loans.
+  const repays = [...new Set(loanParts(t).map((x) => o.loans?.find((l) => l.id === x.loanId)?.name ?? 'pożyczka'))]
+  const loanText = repays.length ? `spłata pożyczki: ${repays.join(', ')}` : ''
   // A purchase financed by several people (D83): its category and who.
   const share = t.kind === 'expense' ? shareOf(t) : null
   const category = whose.length
-    ? `od: ${whose.map((id) => memberName(id, o.members)).join(', ')}`
-    : share
-      ? `${o.categories.label(t.categoryId) || 'bez kategorii'} · wspólnie: ${shareNames(share, o.members)}`
-      : t.splits.length
-        ? `${t.splits.length} ${plural(t.splits.length, 'część', 'części', 'części')}`
-        : t.kind === 'expense'
-          ? o.categories.label(t.categoryId)
-          : TX_KIND_LABEL[t.kind]
+    ? `od: ${whose.map((id) => memberName(id, o.members)).join(', ')}${loanText ? ` · ${loanText}` : ''}`
+    : loanText ||
+      (share
+        ? `${o.categories.label(t.categoryId) || 'bez kategorii'} · wspólnie: ${shareNames(share, o.members)}`
+        : t.splits.length
+          ? `${t.splits.length} ${plural(t.splits.length, 'część', 'części', 'części')}`
+          : t.kind === 'expense'
+            ? o.categories.label(t.categoryId)
+            : TX_KIND_LABEL[t.kind])
   const none = t.kind === 'expense' && !t.categoryId && !t.splits.length
   const shown = none ? (t.refundable ? 'domownik' : t.containerId ? 'ładownia' : t.goalId ? 'z celu' : 'bez kategorii') : category
   const nameOf = (id: string | null) => o.accounts.find((a) => a.id === id)?.name ?? '?'

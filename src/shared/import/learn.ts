@@ -137,9 +137,9 @@ export function keywordProposals(
   // An expense without a category teaches nothing; a loan, XTB, the tax are decided operation by operation (a keyword
   // holds an expense, money in or an own transfer – as in the settings).
   if ((choice.kind === 'expense' && !choice.categoryId) || !KEYWORD_KINDS.includes(choice.kind)) return []
-  // A person's money – a member's purchase or money in, several people paying – is a decision about the counterparty,
-  // never a word of other operations' names (N16).
-  if (choice.refundable || choice.household || choice.share) return []
+  // A person's money – a member's purchase or money in, several people paying, a part repaying a loan (D100) – is a
+  // decision about the counterparty, never a word of other operations' names (N16).
+  if (choice.refundable || choice.household || choice.share || choice.shares?.some((x) => x.loanId)) return []
   // A bank's fee without a name: its title tells of another operation („PROWIZJA ZA ZAKUP” – the shop of the purchase),
   // not of what was decided (as `ruleTargetOf` reads it).
   if (group.rows.every((p) => !p.row.counterparty && isFeeOperation(p.row.operation))) return []

@@ -2713,6 +2713,100 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   racie – wcześniej historia zostawała, a zmiana działała dopiero po ostatnim jej wpisie); kreator startu liczy Ładownię
   pierwszego miesiąca kwotą tego miesiąca (`amountIn`), nie ostatniej raty. „Termin … – kwota” i „Zapłacone (…)”
   w Ładowni kontenera raty nie dotyczą (`cargoStatuses` pomija kontenery pożyczki – bez zmian).
+- **T350** Jeden plan części wpłaty domownika i naprawa zapisanych „zaliczek” przy odczycie (AP-4, AF-8 K, MG sp. 6; D99 S4):
+  `incomeShares` mówi, czyje są pieniądze, `inflowPlanOf` – co robią: `debt` (spłata długu – wskazane, inaczej jak
+  `assignFrom`; reszta wg `advance`), `named` (jawny niezależny przychód albo zaliczka na przyszłość, które mimo to wskazują
+  zakupy – `covers`, dług startowy: spłacają tylko wskazane, także późniejsze jako rezerwacja D94, nigdy najstarsze, nic nie
+  czeka na przypisanie; reszta – ich przychód / zaliczka), `none` (jawny rodzaj bez wskazanych – omija dług, jak 1.15.3).
+  Zapisane `inflowKind: 'advance'` z wskazanym zakupem (opcja „reszta jako zaliczka” 1.15.3–1.15.5 i wskazanie z wersji
+  sprzed 1.15.3) spłacają go deterministycznie, bez przepisywania rekordów – każdy komputer liczy to samo; `inflowKind:
+  'income'` ze wskazanym tak samo (ten sam sprzeczny zapis starszej wersji: wskazanie zakupu = ta wpłata go spłaca).
+  `repaymentShares` i `repayers` (`copies.ts`) bez zmian – edytor nie proponuje jawnym rodzajom nowych zakupów. Addytywnie,
+  bez `SCHEMA_VERSION`.
+- **T351** „reszta jako zaliczka” w imporcie = spłata, reszta do depozytu (AP-4, AF-8, IM.23, IM sp. 4): opcja
+  `household:<osoba>:advance` daje `inflowKind: 'repay'` i `advance: true` (wcześniej `inflowKind: 'advance'` – reguła
+  uczyła się „całość jako zaliczka”); jawne rodzaje to osobne opcje `:all-income` i `:all-advance`; `optionOf`
+  (`memberMoneyOf`) rozróżnia wszystkie cztery. Jedna nazwa wyboru w imporcie (`MEMBER_MONEY_TEXT`: „spłata, reszta jako
+  przychód / zaliczka”, „niezależny przychód (bez spłaty)”, „zaliczka na przyszłość (bez spłaty)”) – lista, temat, podgląd,
+  tekst reguły; przełącznik „spłata / niezależny przychód / zaliczka” obok listy usunięty. Jawny rodzaj przy długu osoby –
+  uwaga w imporcie (`skipsDebtText`). Reguła „spłata” (`'repay'` albo brak) bierze resztę z ustawienia osoby (D80 b; od
+  1.15.3 dawała zawsze przychód) – reguła reszty nie zapamiętuje, więc jej edytor pokazuje tylko resztę z ustawienia osoby
+  (`restNotOfRule`, `choiceOfRule`). Na „zaliczka czy przychód?” odpowiada tylko wybór „spłata” (`inflowVotes`).
+  Po scaleniu z T336 (N2): zmiana w liście między wyborami tej samej osoby (cel wpłaty i reszta – dawniej przełącznik
+  obok listy) zostawia linie „w tym za” i części pożyczki jak wpisane (`listChoice`) – także w temacie marek, w każdej
+  marce; inny rodzaj albo inna osoba – bez linii (`choiceFor`, jak dotąd).
+- **T352** Meldunek „Zaliczki przy długu” (AP-4, naprawa danych): silnik zbiera `HouseholdLedger.skipped` – części
+  `inflowKind: 'advance'`, które przy długu osoby nic nie spłaciły ani nie zarezerwowały (od ostatniego startu sald);
+  meldunek na osobę, dopóki ma oddać (`skippedDebtsOf`). „Spłać” to jawna akcja z „Cofnij”: części tej osoby →
+  „spłata, reszta jako zaliczka” (`repayingAdvance`), pewne zakupy wskazane jak w imporcie (`linkRepayments`), reszta
+  czeka na przypisanie (D91 a); „Cofnij” przywraca tylko wpisy niezmienione od tamtej pory. „zostaw” – klucz
+  `advanceKept:<operacja>:<osoba>` w `settings.import.notDuplicates` (z „Cofnij”); kolejna taka wpłata – pyta znowu (jawna
+  zaliczka wolno omijać dług – D99 S4, meldunek tylko pyta). Klucze AP-4 nie są parami „to nie duplikat”
+  (`isDuplicatePairKey`).
+- **T353** Reguły z „zaliczką na przyszłość” do przeglądu (AP-4): audyt reguł (`review`) – reguły wpłaty domownika
+  z `inflowKind: 'advance'`, poza słowami kluczowymi z Operacji (tam „zaliczka” obok „spłata zakupów” była wyborem
+  jawnym), w „niespójne” po jednej, z „do przeglądu”: „Zmień na spłatę” (`repayingRule` – reguła „spłata”, reszta
+  z ustawienia osoby; `editRule` z „Cofnij”) albo „zostaw zaliczkę na przyszłość” (klucz `advanceRule:<reguła>`). Do tego
+  czasu import z taką regułą pokazuje jej jawną nazwę i uwagę o długu. Bez migracji reguł.
+- **T354** Saldo osoby w obie strony (AF-16, AP-4): Mostek, Radar, Ustawienia → Domownicy i edytor wpłaty pokazują naraz
+  „ma oddać” i „zaliczka” (`balanceText`), gdy osoba ma oba (jawna zaliczka może omijać dług – D99 S4; rezerwacja D94) –
+  depozyt domowników to suma tego, co widać przy osobach.
+- **T355** Spłata pożyczki częścią wpłaty – zapis i silnik (D100 (2); doprecyzowuje T70, T350): część dowolnego wpływu
+  (`kind: 'income'`) spłacająca pożyczkę udzieloną to linia podziału z `loanId` bez domownika (`Split.loanId`,
+  `memberId: null`) – pieniądze pożyczki, kimkolwiek jest nadawca; spłata całą wpłatą zostaje operacją rodzaju
+  „Pożyczka” z `loanId` (import „Zwrot pożyczki – X”, Radar „spłata otrzymana”) – bez zmian. `incomeShares` daje linię
+  jako część z `loanId` (ucięta kwotą wpłaty w kolejności linii, jak części domowników); księga domowników jej nie czyta
+  (`repaymentShares`, `repayers` pomijają ją jawnie), reszta wpłaty jak dotąd – spłata domownika, depozyt albo przychód.
+  Jedno czytanie spłat pożyczki – `loanParts` / `forEachLoanOperation` (stan pożyczki, wartość netto F24, filtr Operacji
+  `loanIdsOf`); silnik (`fleet.ts` `repayLoanParts`): do osłon do wysokości długu (kwota pożyczki − spłacone, spłaty
+  sprzed startu też – jak spłata całością), nadwyżka dokuje jako przychód z resztą wpłaty (T70). Linia pożyczki nieznanej
+  albo wziętej – przychód (tak czyta ją starsza wersja). Statystyki przychodów: spłata pożyczki nigdy nie jest przychodem,
+  całością ani częścią (z nadwyżką – jak rodzaj „Pożyczka”); tagi (F17): to nie zwrot pieniędzy na wyprawie. Lista
+  Operacji mówi „spłata pożyczki: X”; pożyczki z taką linią nie da się usunąć (linia stałaby się przychodem) – tylko
+  zamknąć. Kopia z innego konta: linia pożyczki należy do decyzji (`copies.ts` – inna decyzja niż bez niej, operacja bez
+  decyzji ją przejmuje). Addytywnie, bez `SCHEMA_VERSION`: starsza wersja czyta linię jako „mój przychód” (dokuje,
+  pożyczka u niej zostaje otwarta).
+- **T356** Kto zapłacił (D100 (2)): `LoanState.payments` – każda spłata pożyczki udzielonej (całością i częścią) z nadawcą
+  operacji (`memberId` wpłaty domownika, inaczej kontrahent); `loanPayers` – po osobie z sumą, w kolejności pierwszej
+  wpłaty: domownik po imieniu (jego wpłata albo jego nazwa w banku – `memberOf`), reszta po nazwie z operacji. Wiersz
+  pożyczki na Radarze: „kto zapłacił: Mama 200,00 zł · EWA KOWALSKA 250,00 zł”, gdy zapłacił ktoś inny niż
+  pożyczkobiorca (pożyczkobiorca – wszystkie słowa kontrahenta pożyczki w nazwie nadawcy, jak `loanFor`, wspólne `nameIn`);
+  same spłaty pożyczkobiorcy – bez tej linii (mówi to „oddane … z …”).
+- **T357** Spłata pożyczki częścią w imporcie (D100 (2); doprecyzowuje T327, T328): linia „w tym spłata pożyczki” decyzji
+  wpływu – pieniędzy domownika albo zwykłego przychodu (`SharePart.loanId`, `memberId` '') – w wierszu, grupie i temacie.
+  W `rowShares` pożyczka stoi za domownika pod kluczem `loan:<id>` (`loanKey`, porównania linii po `shareWho`): jej dług
+  to kwota otwarta teraz (silnik – `owedWithFile(…, loans)`, `sharesView(…, fleet.loans)` wszędzie tak samo), jej
+  „własne pieniądze” w pliku – wiersze spłaty całością tej pożyczki. Własna linia wiersza – jak wpisana (nadwyżka to
+  przychód, T70); linia grupy i tematu – razem dla pożyczki, po kolei od najstarszej wpłaty, nigdy ponad dług pomniejszony
+  o spłaty całością z pliku i własne linie wierszy; pożyczka zamknięta – bez części. Nowa linia startuje od tego, co
+  pożyczka ma jeszcze do spłaty, najwyżej to, co zostało we wpłatach. Decyzja zbiorcza nie zmienia decyzji z częścią
+  pożyczki (AP-6, `bulkKeeps` – tylko spłata całością tej samej pożyczki), „+ domownik” przy niej się nie pojawia, słowo
+  kluczowe z niej się nie uczy. Spłata całością – jak dotąd („Zwrot pożyczki – X (Radar)”, każda otwarta pożyczka przy
+  każdym wpływie). W temacie marek z liniami ('brands', T336) linie pożyczki jak linie domowników: zostają w markach
+  (wiersz tematu: „w tym spłata pożyczki – ustawiona w markach”, `linesInBrands`), uwagi przy każdej marce z jej klucza
+  (`lineSpreads` – dług pożyczki pod `loanKey`), nic nie sumowane.
+- **T358** Reguła importu ze spłatą pożyczki (D100 (2); dla pożyczki z Radaru zmienia N14 / T98, doprecyzowuje T325):
+  reguła może nazwać pożyczkę udzieloną – `loanId` przy regule rodzaju „Pożyczka” (cała wpłata) albo `loanId` +
+  `loanAmount` przy regule wpływu (ta część każdej wpłaty, reszta jak mówi reguła). Działa tylko, gdy pożyczka jest
+  otwarta i udzielona do dnia wiersza (`ruleLoanFor` – warunki `loanFor`); inaczej reguła spłaty całością ustępuje (jak
+  bez reguły), a część reguły odpada. Część z reguły to propozycja wiersza: liczona dla każdego wiersza osobno, nigdy
+  ponad dług (po kolei z innymi częściami pliku); zmieniona przy grupie staje się decyzją grupy (razem dla grupy – T328).
+  Reguła z częścią pożyczki pożyczkobiorcy nie ustępuje rozpoznaniu tej pożyczki (czynsz i rata w jednym przelewie),
+  reguła spłaty całością nie ustępuje pieniądzom domownika (użytkownik powiedział, że jego pieniądze spłacają pożyczkę);
+  dawna reguła pożyczki bez `loanId` – jak dotąd (propozycja, ustępuje domownikowi). Uczy się tylko na życzenie:
+  „zapamiętaj” przy decyzji ze spłatą pożyczki (całością albo częścią) wybranej w miejsce innej zaczyna wyłączone
+  (`remembersByDefault`, także decyzja zbiorcza). Edytor reguły w Ustawieniach oferuje dla wpływów „Zwrot pożyczki – X”
+  otwartych pożyczek i jedną część pożyczki (części domowników reguła nie trzyma – nie pokazane). Audyt reguł bez zmian
+  (reguły pożyczki poza „bez trafień” i „Zastosuj do historii”). Addytywnie: starsza wersja czyta regułę pożyczki jako
+  propozycję sprzed 1.5.1, części nie widzi. „zapamiętaj” liczy jedno księgowanie decyzji grup (`groupsDecided`, T336):
+  decyzja grupy, zbiorcza (każda grupa według tego, co pokazywała) i zmiana w temacie marek.
+- **T359** Szybki wpis i edytor Operacji (D100 (2)): w szybkim wpisie przy wpływie „Spłata pożyczki” – otwarta pożyczka
+  udzielona z listy (`QuickData.loans` z tym, co zostało) i kwota (pusta = to, co pożyczka ma do spłaty, najwyżej reszta
+  wpłaty po częściach domowników); zapis – linia pożyczki wpływu, także na całą kwotę (wpłata zostaje wpływem z nadawcą –
+  domownikiem albo nazwą, więc „kto zapłacił” go zna); okno odmawia, gdy części przekraczają kwotę albo pożyczka została
+  zamknięta lub usunięta w międzyczasie (lista okna starsza – jak przy domownikach, B125). Edytor wpływu: „+ spłata
+  pożyczki” (linia z pierwszą otwartą pożyczką, kwota – to, co ma do spłaty, najwyżej reszta), pożyczki w liście „czyja
+  część” obok domowników, przy linii „do spłaty … zł” i nadwyżka jako przychód (dług bez tej operacji – `openWithout`).
 - **T360** „Wycofaj dokowanie” (AP-9, AF-7 / MO.29 / DO.7; realizuje D95 N-PC-2, uzupełnia B15, B17, B69): przycisk
   w oknie zadokowanej dostawy (`docking-undock`) i „wycofaj” w jej wierszu na Mostku (`docking-row-undock`, obok
   przycisku wiersza, nie w nim). Zabiera (`calc/undock.ts` `undockingOf`): dokowanie dostawy i nadmiarowe dokowania
@@ -2763,3 +2857,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zmienił się między importem a dokowaniem; samo ustawienie przeniesień T340 względem wpływu pary – zmiana celu (C1)
   dalej zmieniałaby podział. Pole addytywne (`z.looseObject`), bez `SCHEMA_VERSION` – starsza wersja liczy takie
   dokowanie od jego utworzenia; etykieta historii „Liczone od chwili”.
+- **T367** Wyrocznia jako regresja silnika pieniędzy (AP-32, N2; raport audytu sek. 6 – W1, S1–S4, C19 / R-15, C24,
+  PR sp. 9): wyrocznia (`tests/audyt/wyrocznia`, u3) zostaje ślepa – wymagania i kopia schematów `lib/schemat.mjs` (pola,
+  wartości domyślne, brak ≠ null; `src/` nie czyta), zmiana reguły pieniędzy wchodzi do niej z tekstu T-decyzji, nigdy
+  z kodu. Regresja `npm run test:wyrocznia` (`vitest.wyrocznia.config.mts`) – lokalnie, po każdej grupie silnika i przed
+  jej PR: stany persony i migawki odczytów audytu z laboratorium (`FI_AUDIT_LAB`, domyślnie `C:\FI-audyt` – dane
+  syntetyczne poza repozytorium, D97), wyrocznia i `computeFleet` (z parami ICTTJ jak okno, `monthAhead`) na tych samych
+  plikach w tej samej chwili; każda liczba pieniędzy wyroczni = aplikacji, „ten sam stan – ta sama liczba na każdym
+  ekranie”, kopia schematów = parsowanie aplikacji; ok. 2 min, poza CI (migawek nie ma w repozytorium). Znane rozbieżności
+  – lista `KNOWN` z powodem i grupą naprawy; znana, która zniknęła, też zatrzymuje test. Szybka część w `npm test` (CI):
+  `tests/unit/wyrocznia-ap32.test.ts` – scenariusze reguł N2 (wyrocznia = silnik) i ekrany; otwarty błąd jako `it.fails`
+  (AF-15 – termin asteroidy w odprawie, N3 AP-10). Nowa rozbieżność rozstrzyga wymaganie: błąd aplikacji albo luka
+  wyroczni – nigdy dopasowanie wyroczni do wyniku.

@@ -11,6 +11,7 @@ import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, opensPairs, tran
 import { dismissAnomaly } from '../sensors/state'
 import { keepReturned, readDeletedBank } from '../import/returned'
 import { useData } from '../../store/data'
+import { keepAdvances } from '../household/actions'
 import { TransferPairs } from './TransferPairs'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -23,6 +24,8 @@ const HINT: Partial<Record<InboxKind, string>> = {
     'Operacje z banku, które usunąłeś, a import pliku w drugim formacie (lista operacji ↔ historia rachunku) wpisał je znowu jako nowe (przed wersją 1.15.5). „Usuń” usuwa je znowu (z „Cofnij”), „zostaw” – zostają i nie będą zgłaszane.',
   transfers:
     'Od 1.7.0 przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane wcześniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
+  advances:
+    'Wpłaty zapisane jako zaliczka na przyszłość idą w całości do depozytu i nie spłacają długu – do wersji 1.15.5 tak zapisywał się też wybór „reszta jako zaliczka” w imporcie. „Spłać” – najpierw wyrównają to, co osoba ma oddać, reszta zostanie zaliczką (z „Cofnij”); „zostaw” – zostają zaliczką i nie będą zgłaszane.',
   refunds: 'Zakupy finansowane pieniędzmi osłon, których domownik jeszcze nie oddał (Ustawienia → Domownicy).',
   balances: 'Salda potwierdzone z bankiem ponad 30 dni temu – potwierdzenie pokazuje, czy operacje zgadzają się z kontem.'
 }
@@ -102,6 +105,12 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
             zostaw
           </button>
         </>
+      )}
+      {/* A member's advances for the future that left the debt unpaid (AP-4): „zostaw” – kept so, never asked again. */}
+      {item.kind === 'advances' && item.ref && (
+        <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => keepAdvances(item.ref!)} data-testid="inbox-dismiss">
+          zostaw
+        </button>
       )}
       {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}
       {item.kind === 'transfers' && item.ref && <TransferButtons item={item} />}

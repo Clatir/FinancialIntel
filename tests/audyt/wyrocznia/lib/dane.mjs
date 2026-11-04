@@ -2,6 +2,7 @@
 // T18, T62): kopie konfliktów chmury, pliki tymczasowe, game/, .history/, backups/, .presence/ są pomijane.
 import fs from 'node:fs'
 import path from 'node:path'
+import { normalizeBalance, normalizeContainer, normalizeDocking, normalizeGoal, normalizeLoan, normalizeMonth, normalizeScheduled, normalizeSettings, normalizeTransaction } from './schemat.mjs'
 
 const ULID = '[0-9A-HJKMNP-TV-Z]{26}'
 const DATED = new RegExp(`^\\d{4}-\\d{2}-\\d{2}_${ULID}\\.json$`)
@@ -19,6 +20,8 @@ const COLLECTIONS = {
   scheduled: 'id',
   imports: 'id'
 }
+// AP-32: rekordy z wartościami domyślnymi schematu (kopia `schemat.mjs`), jak po odczycie w aplikacji
+const NORMALIZE = { transactions: normalizeTransaction, containers: normalizeContainer, goals: normalizeGoal, months: normalizeMonth, dockings: normalizeDocking, loans: normalizeLoan, balances: normalizeBalance, scheduled: normalizeScheduled, imports: (x) => x }
 
 function readJson(file, problems) {
   try {
@@ -50,17 +53,29 @@ function listCanonical(dir, layout, problems) {
   return out.sort()
 }
 
-/** Folder danych FI → { settings, fiMeta, <kolekcje>, problems }. */
-export function loadFolder(dir) {
+/** Folder danych FI bez wartości domyślnych: { dir, fi, settings, <kolekcje>, problems } – pliki tak, jak są. */
+export function readFolderRaw(dir) {
   const problems = []
   const fi = readJson(path.join(dir, 'fi.json'), problems)
   if (!fi) throw new Error(`Brak albo nieczytelny fi.json w ${dir}`)
-  const out = { dir, fiMeta: { createdAt: fi.createdAt, updatedAt: fi.updatedAt }, settings: fi.settings ?? {}, problems }
+  const out = { dir, fi, fiMeta: { createdAt: fi.createdAt, updatedAt: fi.updatedAt }, settings: fi.settings ?? {}, problems }
   for (const [name, layout] of Object.entries(COLLECTIONS)) {
     out[name] = listCanonical(path.join(dir, name), layout, problems)
       .map((f) => readJson(f, problems))
       .filter(Boolean)
   }
+  return out
+}
+
+/** Folder danych FI → { settings, fiMeta, <kolekcje>, problems } z wartościami domyślnymi schematu. */
+export function loadFolder(dir) {
+  return normalizeInput(readFolderRaw(dir))
+}
+
+/** Rekordy w pamięci (testy, regresja) – te same wartości domyślne co `loadFolder`. */
+export function normalizeInput(input) {
+  const out = { ...input, settings: normalizeSettings(input.settings ?? {}) }
+  for (const name of Object.keys(COLLECTIONS)) out[name] = (input[name] ?? []).map(NORMALIZE[name])
   return out
 }
 

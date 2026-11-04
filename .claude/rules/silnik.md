@@ -8,11 +8,13 @@ paths:
   - "src/renderer/features/sensors/**"
   - "tests/unit/fleet.test.ts"
   - "tests/unit/household.test.ts"
+  - "tests/unit/household-n2-*.test.ts"
   - "tests/unit/repayments.test.ts"
   - "tests/unit/share.test.ts"
   - "tests/unit/plan*.test.ts"
   - "tests/unit/goals.test.ts"
   - "tests/unit/loans.test.ts"
+  - "tests/unit/loans-n2-*.test.ts"
   - "tests/unit/numbers-agree.test.ts"
 ---
 
@@ -55,6 +57,15 @@ paths:
   (także płatnością sprzed startu – `paidBeforeStart` z dniami `feePaymentDays`, silnik i kreator `startPaidDays`, T345)
   nie ma rat, zbiornik zbiera na następny. Miesiąc przed
   silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
+- Wpłata domownika (AP-4, T350): `incomeShares` (czyje pieniądze) → `inflowPlanOf` (spłata długu / tylko wskazane / bez
+  spłaty) → `repay` (które zakupy). Jawny niezależny przychód i zaliczka na przyszłość omijają dług (D99 S4), ale
+  wskazane zakupy spłacają (naprawa liczona przy odczycie); omijające dług – `ledger.skipped` → meldunek (T352). Nowy
+  sposób wpłaty dopisz jako część albo plan tutaj, nie obok. **Pułapka:** przy osobie dług i zaliczka naraz
+  (`balanceText`, AF-16) – inaczej depozyt ≠ suma przy osobach.
+- Spłata pożyczki częścią wpłaty (D100, T355–T356): linia wpływu `Split.loanId` bez domownika – część `incomeShares`
+  z `loanId`, poza księgą domowników. Spłaty pożyczki czytaj tylko przez `loanParts` / `forEachLoanOperation` /
+  `loanIdsOf` (stan, silnik `repayLoanParts`, wartość netto, statystyki, filtr), nigdy samo `t.loanId`. **Pułapka:** linia
+  ma `memberId: null` – kod, który bierze takie części za „mój przychód” (statystyki, tagi), musi pominąć `loanId`.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

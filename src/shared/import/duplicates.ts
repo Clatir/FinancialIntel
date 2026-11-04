@@ -47,10 +47,11 @@ export const rowKey = (accountId: string, bankKey: string): string => `row:${acc
 /**
  * The other reports' „zostaw” kept in the same map (`settings.import.notDuplicates` – przegląd N1 5), each under its own
  * prefix: a correction said to be no repeat (`correction:<id>` – B129), a transfer left as it is (`transfer:<keep>:<drop>`,
- * `transfer-lone:<id>` – F10), an operation back after its deletion and one brought back on purpose (`back:<id>` – T324).
+ * `transfer-lone:<id>` – F10), an operation back after its deletion and one brought back on purpose (`back:<id>` – T324), a rule and a member's
+ * money kept as an advance for the future (`advanceRule:<id>`, `advanceKept:<tx>:<member>` – AP-4, T352).
  * A new report's key takes a prefix registered here (`tests/unit/n2-review-misc.test.ts` checks the builders).
  */
-export const REPORT_KEY_PREFIXES = ['correction:', 'transfer:', 'transfer-lone:', 'back:'] as const
+export const REPORT_KEY_PREFIXES = ['correction:', 'transfer:', 'transfer-lone:', 'back:', 'advanceRule:', 'advanceKept:'] as const
 
 /** The panel's key of a hand-typed operation and its copy (`duplicateKey`): two ids or more – nothing else. */
 const ID_PAIR = /^[^:|]+(?:\|[^:|]+)+$/

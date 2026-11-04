@@ -60,6 +60,12 @@ export const splitSchema = z.looseObject({
   containerId: ulidSchema.nullable().optional().catch(undefined),
   /** Paid from a goal's money on this line alone (N-PC-13). */
   goalId: ulidSchema.nullable().optional().catch(undefined),
+  /**
+   * A part of an income repaying a loan given (D100, T355 – its sender may be anyone, not the borrower only): no member's
+   * money (`memberId` null); back to the shields up to the loan's debt, the rest income (T70). Absent = none; an older
+   * version reads the line as income of mine.
+   */
+  loanId: ulidSchema.nullable().optional().catch(undefined),
   note: text,
   /** The line's own tags (1.10.0, F17) besides the operation's: one receipt for two trips. */
   tags: tagListSchema.optional().catch(undefined)

@@ -731,12 +731,23 @@ function Receivables({ fleet }: { fleet: FleetState }) {
     <Panel title="Rozliczenia z domownikami" testId="bridge-receivables">
       <div className="flex flex-col gap-1 text-[12px]">
         {shown.map((m) => (
-          <div key={m.memberId} className="flex items-baseline gap-2" data-testid="bridge-member">
+          // Both at once (AF-16): an advance beside a debt is in the deposit too – the sum at the persons is the deposit.
+          <div key={m.memberId} className="flex items-baseline gap-x-2 flex-wrap" data-testid="bridge-member">
             <span className="text-fg-strong">{memberName(m.memberId, members)}</span>
-            <span className="text-[11px] text-dim">
-              {m.owed > 0 ? `ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${countLabel(daysBetween(m.since, fleet.today), 'dzień', 'dni', 'dni')})` : ''}` : 'zaliczka – czeka na wydatki'}
+            <span className="flex min-w-0 flex-1 flex-col">
+              {m.owed > 0 && (
+                <span className="flex items-baseline gap-2">
+                  <span className="text-[11px] text-dim">{`ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${countLabel(daysBetween(m.since, fleet.today), 'dzień', 'dni', 'dni')})` : ''}`}</span>
+                  <span className="num ml-auto text-fg-strong">{zl(m.owed)}</span>
+                </span>
+              )}
+              {m.deposit > 0 && (
+                <span className="flex items-baseline gap-2" data-testid="bridge-member-deposit">
+                  <span className="text-[11px] text-dim">zaliczka – czeka na wydatki</span>
+                  <span className="num ml-auto text-muted">{zl(m.deposit)}</span>
+                </span>
+              )}
             </span>
-            <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>
           </div>
         ))}
         <div className="flex items-baseline gap-2 border-t border-line/60 pt-1">

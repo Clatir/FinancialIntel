@@ -3,7 +3,7 @@
  * is – the rest beyond their debt as income or their advance, the purchases it pays back – and what the ledger made of
  * it.
  */
-import { balanceOf, incomeShares, memberName, payerOf } from '@shared/calc/household'
+import { balanceOf, balanceText, incomeShares, memberName, payerOf } from '@shared/calc/household'
 import { assignsOn, keptCovers, moreSureCovers } from '@shared/calc/repayments'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, inflowOf, type HouseholdMember, type Split, type Transaction } from '@shared/schema'
@@ -14,6 +14,7 @@ import { IconClose, IconPlus } from '../../components/icons'
 import { Segmented, cx } from '../../components/ui'
 import { rememberInflows, sureCoversOf, useMembers } from './actions'
 import { RepaymentPicker, useLedgerBefore } from './Repayments'
+import { useLoanChoices } from '../radar/loanChoices'
 
 /** The members offered: the active ones and the one already chosen (archived or unknown – it stays as it was). */
 function useOffered(current: string | null) {
@@ -104,6 +105,9 @@ export function FinancedNote({ t }: { t: Transaction }) {
 }
 
 
+/** An explicit kind still naming purchases (AP-4 – a record of an older version): those it pays back all the same. */
+const NAMED_NOTE = ' – poza wskazanymi wcześniej zakupami: te spłaca.'
+
 const INCOME_REST = [
   { value: 'income', label: 'przychód' },
   { value: 'advance', label: 'zaliczka' }
@@ -111,8 +115,9 @@ const INCOME_REST = [
 
 /**
  * An income from household members (D80, D81): whose money (the sender – „Od domownika”), its parts of other members
- * (one transfer carrying the money of several: „+ także za …” for whom the sender passes money, or any split), the
- * rest beyond what each owes as income or their advance, the purchases it pays back – and what the ledger made of it.
+ * (one transfer carrying the money of several: „+ także za …” for whom the sender passes money, or any split) and of
+ * loans given (D100 – „+ spłata pożyczki”, whoever sent it), the rest beyond what each owes as income or their advance,
+ * the purchases it pays back – and what the ledger made of it.
  */
 export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<Transaction>) => void }) {
   const members = useMembers()
@@ -126,6 +131,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const assignFrom = useData((s) => s.fi?.settings.household.assignFrom)
   const parts = t.splits
   const partsSum = parts.reduce((a, x) => a + x.amount, 0)
+  // An explicit kind naming purchases (AP-4: an older version's record) pays them back – `inflowPlanOf`.
+  const namedBefore = t.covers.length > 0 || !!t.coversOpening
   const rest = t.amount - partsSum
   // Who passes money through the sender (D81): a hint, one click each – never applied by itself.
   const through = payer ? members.filter((m) => !m.archived && m.via === payer && !parts.some((x) => x.memberId === m.id)) : []
@@ -150,6 +157,20 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const addPart = (m: Pick<HouseholdMember, 'id' | 'inflow'> | null, amount: number) =>
     setParts([...parts, { id: newId(), amount, categoryId: null, refundable: false, memberId: m?.id ?? null, advance: !!m && inflowOf(m) === 'advance', note: '' }])
   const setPart = (id: string, p: Partial<Split>) => setParts(parts.map((x) => (x.id === id ? { ...x, ...p } : x)))
+  // The loans given its parts may repay (D100): the open ones and the ones named – a part starts at what is open, at most
+  // what the inflow has left.
+  const loans = useLoanChoices(parts.flatMap((x) => (x.loanId ? [x.loanId] : [])))
+  const openLoans = loans.filter((l) => !l.closed)
+  const addLoanPart = () => {
+    const l = openLoans.find((x) => !parts.some((y) => y.loanId === x.id)) ?? openLoans[0]
+    if (l) setParts([...parts, { id: newId(), amount: Math.max(0, Math.min(l.open, rest)), categoryId: null, refundable: false, memberId: null, advance: false, loanId: l.id, note: '' }])
+  }
+  // A line's „whose”: mine, a member's, a loan's (D100 – no member's money).
+  const setWhose = (x: Split, value: string) => {
+    if (value.startsWith('loan:')) return setPart(x.id, { memberId: null, advance: false, inflowKind: undefined, loanId: value.slice('loan:'.length) })
+    const m = members.find((y) => y.id === value)
+    setPart(x.id, { memberId: m?.id ?? null, advance: !!m && inflowOf(m) === 'advance', loanId: undefined })
+  }
   return (
     <div className="flex flex-col gap-1.5 border-t border-line pt-2" data-testid="operation-member-income">
       <span className="label">Od domownika</span>
@@ -211,12 +232,12 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
       )}
       {payer && t.inflowKind === 'income' && (
         <div className="pt-1.5 text-[11px] text-dim" data-testid="inflow-kind-note">
-          Niezależny przychód do budżetu od {memberName(payer, members)} – nie spłaca zakupów, dług domownika pozostaje bez zmian.
+          Niezależny przychód do budżetu od {memberName(payer, members)} – nie spłaca zakupów, dług domownika pozostaje bez zmian{namedBefore ? NAMED_NOTE : '.'}
         </div>
       )}
       {payer && t.inflowKind === 'advance' && (
         <div className="pt-1.5 text-[11px] text-dim" data-testid="inflow-kind-note">
-          Zaliczka na przyszłe zakupy od {memberName(payer, members)} – zasila depozyt, nie spłaca dotychczasowych zakupów.
+          Zaliczka na przyszłe zakupy od {memberName(payer, members)} – zasila depozyt, nie spłaca dotychczasowych zakupów{namedBefore ? NAMED_NOTE : '.'}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
@@ -239,19 +260,29 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
         <button type="button" className="flex items-center gap-1 text-dim hover:text-fg-strong" onClick={() => addPart(members.find((m) => !m.archived && m.id !== payer) ?? null, 0)} data-testid="operation-income-split">
           <IconPlus size={11} /> podziel na osoby
         </button>
+        {openLoans.length > 0 && (
+          <button
+            type="button"
+            className="flex items-center gap-1 text-dim hover:text-fg-strong"
+            onClick={addLoanPart}
+            title="Część tej wpłaty spłaca pożyczkę udzieloną z Radaru – także gdy płaci ktoś inny niż pożyczkobiorca"
+            data-testid="operation-loan-part"
+          >
+            <IconPlus size={11} /> spłata pożyczki
+          </button>
+        )}
       </div>
       {parts.length > 0 && (
         <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2" data-testid="income-split">
-          {parts.map((x, i) => (
+          {parts.map((x, i) => {
+            const loan = x.loanId ? loans.find((l) => l.id === x.loanId) : undefined
+            return (
             <div key={x.id} className="flex flex-wrap items-center gap-1.5" data-testid="income-split-line">
               <AmountField className="w-[96px]" value={x.amount} onChange={(v) => setPart(x.id, { amount: Math.max(0, v ?? 0) })} aria-label={`Kwota części ${i + 1}`} data-testid="income-split-amount" />
               <select
-                className="input h-[22px] w-[130px] py-0 text-[11px]"
-                value={x.memberId ?? ''}
-                onChange={(e) => {
-                  const m = members.find((y) => y.id === e.currentTarget.value)
-                  setPart(x.id, { memberId: m?.id ?? null, advance: !!m && inflowOf(m) === 'advance' })
-                }}
+                className="input h-[22px] w-[160px] py-0 text-[11px]"
+                value={x.loanId ? `loan:${x.loanId}` : (x.memberId ?? '')}
+                onChange={(e) => setWhose(x, e.currentTarget.value)}
                 aria-label="Czyja część"
                 data-testid="income-split-member"
               >
@@ -263,8 +294,25 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
                       {m.name}
                     </option>
                   ))}
+                {loans.map((l) => (
+                  <option key={l.id} value={`loan:${l.id}`}>
+                    spłata pożyczki: {l.name}
+                  </option>
+                ))}
+                {x.loanId && !loan && <option value={`loan:${x.loanId}`}>spłata pożyczki spoza Radaru</option>}
               </select>
-              {x.memberId && (
+              {x.loanId &&
+                (() => {
+                  // What the loan owed for this inflow; beyond it the part is income (T70).
+                  const owes = loan && !loan.closed ? loan.openWithout(t.id) : 0
+                  const over = loan && !loan.closed ? x.amount - owes : 0
+                  return (
+                    <span className={cx('text-[11px]', over > 0 ? 'text-accent' : 'text-dim')} data-testid="income-split-loan-note">
+                      {!loan ? 'pożyczki nie ma na Radarze – liczy się jako przychód' : loan.closed ? 'pożyczka zamknięta' : `do spłaty ${plnText(owes)} zł${over > 0 ? ` · ponad dług ${plnText(over)} zł – przychód` : ''}`}
+                    </span>
+                  )
+                })()}
+              {x.memberId && !x.loanId && (
                 <Segmented
                   size="sm"
                   value={x.inflowKind ?? 'repay'}
@@ -277,14 +325,15 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
                   aria-label="Cel części domownika"
                 />
               )}
-              {x.memberId && (!x.inflowKind || x.inflowKind === 'repay') && (
+              {x.memberId && !x.loanId && (!x.inflowKind || x.inflowKind === 'repay') && (
                 <Segmented size="sm" value={x.advance ? 'advance' : 'income'} onChange={(v) => setPart(x.id, { advance: v === 'advance' })} options={[...INCOME_REST]} aria-label="Reszta części domownika" />
               )}
               <button type="button" className="btn btn-ghost h-[22px] px-1" title="Usuń część" onClick={() => setParts(parts.filter((y) => y.id !== x.id))} data-testid="income-split-remove">
                 <IconClose size={12} />
               </button>
             </div>
-          ))}
+            )
+          })}
           <div className={cx('text-[11px]', rest < 0 ? 'text-down' : 'text-muted')} data-testid="income-split-rest">
             {rest < 0 ? `Części przekraczają kwotę o ${plnText(-rest)} zł.` : `Reszta ${plnText(rest)} zł – ${payer ? memberName(payer, members) : 'mój przychód'}.`}
           </div>
@@ -305,7 +354,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
           const balance = balanceOf(ledger, id)
           return (
             <div key={id} className="text-[11px] text-dim" data-testid="operation-member-balance">
-              {memberName(id, members)} teraz: {balance.owed ? `ma oddać ${plnText(balance.owed)} zł` : balance.deposit ? `zaliczka ${plnText(balance.deposit)} zł` : 'rozliczony'}
+              {/* Both at once (AF-16). */}
+              {memberName(id, members)} teraz: {balanceText(balance, plnText)}
             </div>
           )
         })}

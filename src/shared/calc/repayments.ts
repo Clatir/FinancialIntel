@@ -94,9 +94,13 @@ export interface RepaymentShare {
   isReturn: boolean
 }
 
-/** The parts of an operation that pay back a member's purchases (D91): an income's members' shares, a return's lines. */
+/**
+ * The parts of an operation that pay back a member's purchases (D91): an income's members' shares – never a part
+ * repaying a loan (D100: the loan's, whoever sent it) –, a return's lines.
+ */
 export function repaymentShares(t: Transaction): RepaymentShare[] {
-  if (t.kind === 'income') return incomeShares(t).flatMap((s) => (s.memberId && !s.limit && s.inflowKind !== 'income' && s.inflowKind !== 'advance' ? [{ memberId: s.memberId, amount: s.amount, isReturn: false }] : []))
+  if (t.kind === 'income')
+    return incomeShares(t).flatMap((s) => (s.memberId && !s.loanId && !s.limit && s.inflowKind !== 'income' && s.inflowKind !== 'advance' ? [{ memberId: s.memberId, amount: s.amount, isReturn: false }] : []))
   if (t.kind !== 'expense' || t.amount <= 0) return []
   return partsOf(t).flatMap((p) => (p.refundable && !p.gift && p.amount > 0 ? [{ memberId: financerOf(p), amount: p.amount, isReturn: true }] : []))
 }
