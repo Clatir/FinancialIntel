@@ -1,4 +1,6 @@
 // adapted from ICTTJ src/shared/merge.ts @ 84a8339
+import { warsawStamp } from './calc/dates'
+import { formatPln } from './format'
 /**
  * Field-level differences and three-way merges of records (JSON values).
  * - Objects are compared key by key; arrays of objects with a string `id` (split lines, categories,
@@ -352,7 +354,30 @@ const LABELS: Record<string, string> = {
   'settings.import.coveredTo': 'Zasięg plików z banku',
   'settings.import.accountNumbers': 'Numery rachunków',
   'settings.import.log': 'Dziennik importów',
-  'settings.seeded': 'Ustawienia startowe'
+  'settings.seeded': 'Ustawienia startowe',
+  // AP-27: every field of a record by a Polish name (the audit found „tags” and the id).
+  id: 'Identyfikator wpisu',
+  tags: 'Tagi',
+  'bank.format': 'Dane z banku – format pliku',
+  'bank.source': 'Dane z banku – źródło',
+  'bank.altKeys': 'Dane z banku – inne klucze wiersza',
+  'counterBank.counterparty': 'Dane z banku drugiego konta – kontrahent',
+  'counterBank.operation': 'Dane z banku drugiego konta – rodzaj operacji',
+  'counterBank.key': 'Dane z banku drugiego konta – klucz wiersza',
+  awaitReturn: 'Czeka na zwrot',
+  'awaitReturn.amount': 'Czeka na zwrot – kwota',
+  inflowKind: 'Rodzaj wpływu',
+  coversOpeningMembers: 'Spłaca saldo na start – domownicy',
+  priceIgnored: 'Nowa cena pominięta',
+  variable: 'Kwota zmienna',
+  status: 'Stan',
+  frozenAt: 'Zamrożony',
+  aliveAt: 'Ostatnia płatność',
+  violations: 'Naruszenia',
+  'splits.tags': 'Podział – tagi',
+  'share.lines.memberId': 'Wspólnie – domownik',
+  'share.lines.value': 'Wspólnie – udział',
+  'share.lines.gift': 'Wspólnie – prezent'
 }
 
 /** A path's part that is an id (ULID, `#id` of a list item): named by `names` when it is known (N92). */
@@ -423,13 +448,83 @@ export function isAmountPath(path: Path): boolean {
 /** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */
 export const isAmountKey = (key: string): boolean => isAmountPath(key.replace(/\[\d+\]/g, '').split('.').filter(Boolean))
 
-/** Short text of a value for the diff lists. */
-export function formatValue(v: unknown, max = 80): string {
+/** How a value is written in the diff lists: amounts (hidden with Ctrl+$ in the window) and names of ids. */
+export interface ValueText {
+  /** Where the value is (a field's label inside an object, an amount by its path). */
+  path?: Path
+  /** An amount in grosze as the window writes it (masked with the amounts); default `formatPln` + „ zł”. */
+  amount?: (grosze: number) => string
+  names?: ReadonlyMap<string, string>
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+const ISO_MONTH = /^\d{4}-\d{2}$/
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
+const plDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
+
+/** A date, a month or a moment of a record as the app writes them (AP-27, AP-23): „14.10.2026”, „03.11.2026, 12:24”. */
+export function dateValueText(v: string): string | null {
+  if (ISO_DATE.test(v)) return plDay(v)
+  if (ISO_MONTH.test(v)) return `${v.slice(5, 7)}.${v.slice(0, 4)}`
+  if (ISO_TIME.test(v)) {
+    const stamp = warsawStamp(v)
+    return stamp === v ? null : `${plDay(stamp.slice(0, 10))}, ${stamp.slice(11)}`
+  }
+  return null
+}
+
+/**
+ * Short text of a value for the diff lists (AP-27): Polish words for yes / no, a decimal comma, dates as dd.mm.rrrr, a
+ * list of words as the words, an object as its fields by their Polish names – never JSON.
+ */
+export function formatValue(v: unknown, max = 80, opts: ValueText = {}): string {
+  const cut = (s: string) => (s.length > max ? `${s.slice(0, max - 1)}…` : s)
   if (v === undefined) return '—'
   if (v === null || v === '') return 'puste'
-  if (typeof v === 'string') return v.length > max ? `${v.slice(0, max - 1)}…` : v
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
-  if (Array.isArray(v)) return v.length === 0 ? 'puste' : `${v.length} ${v.length === 1 ? 'pozycja' : v.length < 5 ? 'pozycje' : 'pozycji'}`
-  const s = JSON.stringify(v)
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+  if (typeof v === 'number' && opts.path && isAmountPath(opts.path)) return opts.amount ? opts.amount(v) : `${formatPln(v)} zł`
+  if (typeof v === 'string') return opts.names?.get(v) ?? dateValueText(v) ?? cut(v)
+  if (typeof v === 'number') return String(v).replace('.', ',')
+  if (typeof v === 'boolean') return v ? 'tak' : 'nie'
+  if (Array.isArray(v)) {
+    if (v.length === 0) return 'puste'
+    if (v.every((x) => typeof x === 'string')) return cut(v.map((x) => opts.names?.get(x as string) ?? (x as string)).join(', '))
+    return `${v.length} ${v.length === 1 ? 'pozycja' : v.length < 5 ? 'pozycje' : 'pozycji'}`
+  }
+  if (isObject(v)) {
+    const path = opts.path ?? []
+    const prefix = fieldLabelOf(path)
+    const parts = Object.entries(v)
+      .filter(([k, x]) => k !== 'id' && x !== undefined)
+      .map(([k, x]) => {
+        const full = fieldLabelOf([...path, k])
+        const label = path.length && full.startsWith(`${prefix} – `) ? full.slice(prefix.length + 3) : full
+        return `${label.charAt(0).toLowerCase()}${label.slice(1)}: ${formatValue(x, 40, { ...opts, path: [...path, k] })}`
+      })
+    return parts.length ? cut(parts.join(', ')) : 'puste'
+  }
+  return cut(String(v))
+}
+
+/**
+ * The differences as a person reads them (AP-27): an object on one side only (bank data added, a split line removed)
+ * by its own fields, each with its Polish name, and never the record's id (two plans of one month have two – the card
+ * says which record it is).
+ */
+export function readableChanges(changes: readonly FieldChange[]): FieldChange[] {
+  const out: FieldChange[] = []
+  const add = (path: Path, before: unknown, after: unknown) => {
+    const a = isObject(before)
+    const b = isObject(after)
+    const obj = (a ? before : after) as Record<string, unknown>
+    if (a === b || Object.keys(obj).length === 0) {
+      out.push({ path, before, after })
+      return
+    }
+    for (const k of Object.keys(obj)) {
+      if (k === 'id' || (path.length === 0 && BOOKKEEPING.has(k))) continue
+      add([...path, k], a ? obj[k] : undefined, a ? undefined : obj[k])
+    }
+  }
+  for (const c of changes) if (!(c.path.length === 1 && c.path[0] === 'id')) add(c.path, c.before, c.after)
+  return out
 }

@@ -67,3 +67,57 @@ export function newestResolutions(conflicts: readonly ConflictEntry[], ids: Iter
   }
   return { resolutions: out, skipped }
 }
+
+const MONTHS = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
+const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+const day = (v: unknown): string => (/^\d{4}-\d{2}-\d{2}$/.test(str(v)) ? `${str(v).slice(8, 10)}.${str(v).slice(5, 7)}.${str(v).slice(0, 4)}` : '')
+const monthText = (v: unknown): string => (/^\d{4}-\d{2}$/.test(str(v)) ? `${MONTHS[Number(str(v).slice(5, 7)) - 1] ?? ''} ${str(v).slice(0, 4)}`.trim() : '')
+
+/** How the card writes an amount and an id (the window: amounts masked with Ctrl+$, names of accounts and categories). */
+export interface SubjectText {
+  /** grosze → „−25,50 zł”. */
+  amount: (grosze: number) => string
+  names?: ReadonlyMap<string, string>
+}
+
+/**
+ * Which record a conflict is about (AP-27, DA sp. 3) – what a person recognises instead of a file name with a ULID:
+ * an operation by its counterparty (else its title or category), date and amount; a plan or the game by the month; a
+ * container, goal or loan by its name. From the original, or the copy when the original cannot be read; '' = neither.
+ */
+export function conflictSubject(c: Pick<ConflictEntry, 'kind' | 'canonical' | 'copy'>, t: SubjectText): string {
+  const r = (c.canonical.record ?? c.copy.record) as Record<string, unknown> | null
+  if (!r || typeof r !== 'object') return ''
+  const amount = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? t.amount(v) : '')
+  const name = (id: unknown) => (typeof id === 'string' ? (t.names?.get(id) ?? '') : '')
+  const parts = (...xs: string[]) => xs.filter(Boolean).join(' · ')
+  switch (c.kind) {
+    case 'transactions': {
+      const who = str(r.counterparty) || str(r.title) || name(r.categoryId) || 'bez kontrahenta'
+      return parts(who, day(r.date), amount(r.amount), name(r.accountId))
+    }
+    case 'containers':
+    case 'goals':
+      return parts(str(r.name), amount(c.kind === 'goals' ? r.target : r.amount))
+    case 'loans':
+      return parts(str(r.name), str(r.counterparty), amount(r.amount))
+    case 'months':
+      return parts(monthText(r.month))
+    case 'game':
+      return parts(monthText(r.month))
+    case 'balances':
+      return parts(r.kind === 'opening' ? 'saldo otwarcia' : 'potwierdzenie salda', name(r.accountId), day(r.date), amount(r.amount))
+    case 'dockings':
+      return parts('dostawa', day(r.date))
+    case 'scheduled':
+      return parts(str(r.name), day(r.date), amount(r.amount))
+    case 'imports':
+      return parts(str(r.fileName), day(str(r.at).slice(0, 10)))
+    case 'fi': {
+      const settings = r.settings as { shipName?: unknown } | undefined
+      return parts('ustawienia budżetu', str(settings?.shipName) ? `okręt ${str(settings?.shipName)}` : '')
+    }
+    default:
+      return ''
+  }
+}

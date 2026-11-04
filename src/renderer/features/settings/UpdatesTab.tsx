@@ -1,6 +1,7 @@
 // adapted from ICTTJ src/renderer/features/settings/UpdatesTab.tsx @ 84a8339
 import { useEffect, useState, type ReactNode } from 'react'
 import { RELEASES_PAGE, type UpdateState } from '@shared/update'
+import { notesOf } from '@shared/releaseNotes'
 import { api, errorMessage } from '../../lib/api'
 import { fmtBytes } from '../../lib/format'
 import { checkForUpdates, downloadUpdate, restartToUpdate, setUpdatePrefs, setUpdateToken, useUpdate } from '../../store/update'
@@ -8,6 +9,7 @@ import { toast } from '../../store/ui'
 import { installWhen, useTray } from '../../store/tray'
 import { IconExternal, IconSync } from '../../components/icons'
 import { Badge, Field, Panel, Toggle, cx } from '../../components/ui'
+import { MachineOnly } from './MachineOnly'
 
 /** GitHub's page for a new fine-grained token (only this repository, Contents: read-only). */
 const NEW_TOKEN_PAGE = 'https://github.com/settings/personal-access-tokens/new'
@@ -19,7 +21,7 @@ function TokenPanel({ s }: { s: UpdateState }) {
     if (await setUpdateToken(token.trim())) setToken('')
   }
   return (
-    <Panel title="Dostęp do prywatnego repozytorium (ten komputer)" name="Token GitHub">
+    <Panel title="Dostęp do prywatnego repozytorium" name="Token GitHub" actions={<MachineOnly />}>
       <div className="flex flex-col gap-2" data-testid="update-token-panel">
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <span className="text-muted">Token GitHub:</span>
@@ -159,6 +161,15 @@ function StatusLine({ s }: { s: UpdateState }) {
   }
 }
 
+/**
+ * „Co nowego” from the CHANGELOG built into the window (AP-28, AF-40): after an update from outside the app (a new
+ * installer, a copied portable) or with GitHub out of reach – this version's notes, and those of every version since `from`.
+ */
+function builtInNotes(version: string, from?: string): { version: string; text: string } | null {
+  const text = typeof __FI_CHANGELOG__ === 'string' ? notesOf(__FI_CHANGELOG__, version, from) : ''
+  return text ? { version, text } : null
+}
+
 export function UpdatesTab() {
   const s = useUpdate((x) => x.state)
   useEffect(() => {
@@ -173,10 +184,10 @@ export function UpdatesTab() {
     ? { version: s.release.version, text: s.release.notes }
     : s.justUpdated?.notes
       ? { version: s.justUpdated.version, text: s.justUpdated.notes }
-      : null
+      : builtInNotes(s.justUpdated?.version ?? s.currentVersion, s.justUpdated?.from)
   return (
     <>
-      <Panel title="Aktualizacje z GitHuba">
+      <Panel title="Aktualizacje z GitHuba" actions={<MachineOnly />}>
         <div className="flex flex-col gap-2.5" data-testid="updates">
           <Field label="Ta wersja">
             <span className="num text-fg-strong" data-testid="current-version">
@@ -243,7 +254,7 @@ export function UpdatesTab() {
       </Panel>
       <TokenPanel s={s} />
       {notes && (
-        <Panel title={`Co nowego w wersji ${notes.version}${notes.version === s.currentVersion ? ' (ta wersja)' : ''}`} name="Co nowego">
+        <Panel title={`Co nowego w wersji ${notes.version}${notes.version === s.currentVersion ? ' (ta wersja)' : ''}`} name="Co nowego" testId="whats-new">
           <ReleaseNotes text={notes.text} />
         </Panel>
       )}

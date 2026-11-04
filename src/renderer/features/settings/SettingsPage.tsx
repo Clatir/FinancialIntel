@@ -20,6 +20,8 @@ import { RecoverDialog } from './RecoverDialog'
 import { IconFolder, IconPlus, IconSync } from '../../components/icons'
 import { Field, NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
+import { MachineOnly } from './MachineOnly'
+import { openMachineSetup } from './MachineSetup'
 
 /**
  * Tabs of the settings: the foundation's and the budget's (accounts, categories, layers and orders, the import's rules)
@@ -49,7 +51,8 @@ export function SettingsPage() {
   const switching = useData((s) => s.switching)
   if (!fi) return null
   // The budget's settings (fi.json) in a read-only folder: to look at only (N2); this computer's ones stay at hand.
-  const locked = readOnly && (tab === 'general' || tab === 'accounts' || tab === 'categories' || tab === 'layers' || tab === 'household')
+  const budgetTab = tab === 'general' || tab === 'accounts' || tab === 'categories' || tab === 'layers' || tab === 'household'
+  const locked = readOnly && budgetTab
   return (
     <div className="flex h-full min-h-0">
       <nav className="flex shrink-0 flex-col border-r border-line bg-panel py-1" style={{ width: nav.width }}>
@@ -71,9 +74,14 @@ export function SettingsPage() {
       <PaneEdge pane={nav} side="left" />
       <div className="min-w-0 flex-1 overflow-y-auto p-3">
         <div className="mx-auto flex max-w-[980px] flex-col gap-3">
+          {/* On every tab (AP-28, US.31): Import z banku and ICTTJ hold the budget's settings beside this computer's. */}
           {locked && (
-            <p className="text-[11.5px] text-accent" data-testid="settings-read-only">
-              {switching ? 'Trwa otwieranie innego folderu – ustawień budżetu nie można teraz zmieniać.' : 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.'}
+            <p className="text-[11.5px] text-accent" data-testid="settings-read-only" data-tab={budgetTab ? 'budget' : 'mixed'}>
+              {switching
+                ? 'Trwa otwieranie innego folderu – ustawień budżetu nie można teraz zmieniać.'
+                : budgetTab
+                  ? 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać.'
+                  : 'Folder jest tylko do odczytu – ustawienia budżetu można tylko oglądać; ustawienia oznaczone „tylko ten komputer” działają.'}
             </p>
           )}
           <fieldset disabled={locked} className="contents">
@@ -203,6 +211,22 @@ function BackupAge({ files, failure }: { files: readonly BackupInfo[]; failure: 
   )
 }
 
+function BackupRow({ b, disabled, onRecover }: { b: BackupInfo; disabled: boolean; onRecover: (b: BackupInfo) => void }) {
+  return (
+    <div className="grid grid-cols-[120px_minmax(0,1fr)_90px_150px_auto] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="backup-row">
+      <span className="text-muted">{BACKUP_KIND[b.kind]}</span>
+      <button className="num truncate text-left hover:text-fg-strong" onClick={() => api.showPath(b.path)} title={b.path}>
+        {b.name}
+      </button>
+      <span className="num text-right text-muted">{fmtBytes(b.bytes)}</span>
+      <span className="num text-right text-dim">{new Date(b.mtimeMs).toLocaleString('pl-PL')}</span>
+      <button className="btn h-[20px] px-1.5 text-[11px]" disabled={disabled} title="Porównaj z bieżącym folderem i odzyskaj wybrane wpisy albo cały folder (F3)" onClick={() => onRecover(b)} data-testid="backup-recover">
+        Odzyskaj…
+      </button>
+    </div>
+  )
+}
+
 function FolderTab() {
   const status = useData((s) => s.status)
   const info = useData((s) => s.appInfo)
@@ -305,7 +329,12 @@ function FolderTab() {
             </span>
           </Field>
           <Field label="Ten komputer">
-            <span className="num">{info?.machineName}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="num">{info?.machineName}</span>
+              <button type="button" className="btn h-[22px] shrink-0 text-[11px]" onClick={openMachineSetup} title="ICTTJ, skrót, start z Windows, powiadomienia, token – ustawienia tego komputera" data-testid="machine-setup-open">
+                Ustaw na tym komputerze…
+              </button>
+            </span>
           </Field>
           <Field label="Wczytanie">
             <span className="num">
@@ -362,19 +391,25 @@ function FolderTab() {
           tygodniowych); przed każdym importem z banku (10 ostatnich) i przed migracją formatu zawsze. Folder:{' '}
           <span className="num">{backups?.dir}</span>
         </p>
-        {backups && <BackupAge files={backups.files} failure={backups.failure} />}
-        {backups && backups.files.length === 0 && <span className="text-[11.5px] text-dim">Brak kopii.</span>}
-        {backups?.files.map((b) => (
-          <div key={b.path} className="grid grid-cols-[120px_minmax(0,1fr)_90px_150px_auto] items-center gap-2 border-b border-line/60 py-[3px] text-[12px] last:border-b-0" data-testid="backup-row">
-            <span className="text-muted">{BACKUP_KIND[b.kind]}</span>
-            <button className="num truncate text-left hover:text-fg-strong" onClick={() => api.showPath(b.path)} title={b.path}>
-              {b.name}
-            </button>
-            <span className="num text-right text-muted">{fmtBytes(b.bytes)}</span>
-            <span className="num text-right text-dim">{new Date(b.mtimeMs).toLocaleString('pl-PL')}</span>
-            <button className="btn h-[20px] px-1.5 text-[11px]" disabled={switching} title="Porównaj z bieżącym folderem i odzyskaj wybrane wpisy albo cały folder (F3)" onClick={() => setRecovering(b)} data-testid="backup-recover">
-              Odzyskaj…
-            </button>
+        {backups && <BackupAge files={[...backups.files, ...(backups.earlier ?? []).flatMap((e) => e.files)]} failure={backups.failure} />}
+        {backups && backups.files.length === 0 && (
+          <span className="text-[11.5px] text-dim">{backups.earlier?.length ? 'W tym folderze kopii jeszcze nie ma – wcześniejsze są niżej.' : 'Brak kopii.'}</span>
+        )}
+        {backups?.files.map((b) => <BackupRow key={b.path} b={b} disabled={switching} onRecover={setRecovering} />)}
+        {/* The folder of backups changed (AP-28, DA.14): the backups made before stay on the list, under their folder. */}
+        {backups?.earlier?.map((e) => (
+          <div key={e.dir} className="mt-2" data-testid="backup-earlier">
+            <div className="mb-1 flex items-center gap-2 text-[11.5px] text-muted">
+              <span className="min-w-0 truncate">
+                Wcześniejszy folder kopii ({countLabel(e.files.length, 'kopia', 'kopie', 'kopii')}): <span className="num">{e.dir}</span>
+              </span>
+              <button className="btn btn-ghost h-[20px] shrink-0 px-1.5" title="Pokaż ten folder" onClick={() => api.showPath(e.dir)}>
+                <IconFolder size={12} />
+              </button>
+            </div>
+            {e.files.map((b) => (
+              <BackupRow key={b.path} b={b} disabled={switching} onRecover={setRecovering} />
+            ))}
           </div>
         ))}
         {recovering && (
@@ -449,7 +484,7 @@ function SystemTab() {
   const change = (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin'>>) => setTrayPrefs(patch).catch((e: unknown) => toast(`Nie udało się zapisać: ${errorMessage(e)}`, 'error'))
   if (!prefs) return <Panel title="Zasobnik i start z Windows">Wczytywanie…</Panel>
   return (
-    <Panel title="Zasobnik i start z Windows (ten komputer)">
+    <Panel title="Zasobnik i start z Windows" name="Zasobnik i start z Windows (ten komputer)" actions={<MachineOnly />}>
       <div className="flex flex-col gap-2.5 text-[12px]">
         <Toggle
           checked={prefs.closeToTray}

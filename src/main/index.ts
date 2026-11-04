@@ -13,7 +13,7 @@ import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
-import { ConfigStore, publicConfig } from './config'
+import { BACKUP_DIRS_KEPT, ConfigStore, publicConfig } from './config'
 import { ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { IN_USE_MS, PresenceKeeper, readOtherMachines } from './datastore/presence'
@@ -597,9 +597,16 @@ const sameDir = (a: string, b: string): boolean => {
 /** This computer's data folder now or before (B53): found empty or missing, it gets no new data unasked. */
 const rememberedDir = (dir: string): boolean => [config.get().dataDir, ...config.get().recentDirs].some((d) => !!d && sameDir(d, dir))
 
+/** The folders of backups this data folder used before the current one (AP-28): their backups listed too. */
+function earlierBackupDirs(s: DataStore): string[] {
+  return (config.get().backupDirsBefore ?? []).filter((e) => sameDir(e.dataDir, s.root) && !sameDir(e.dir, s.backupsDir)).map((e) => e.dir)
+}
+
 /** A backup of the list (F3): only a ZIP the backups folder holds is read. */
 async function listedBackup(s: DataStore, path: string): Promise<BackupInfo> {
-  const listed = (await listBackups(s.backupsDir)).find((f) => f.path === path)
+  let listed: BackupInfo | undefined
+  // Only a backup on the list – of the current folder of backups or of one used before (AP-28) – is ever read.
+  for (const dir of [s.backupsDir]) if (!listed) listed = (await listBackups(dir)).find((f) => f.path === path)
   if (!listed) throw new Error('Tej kopii nie ma już na liście kopii (mogła zostać usunięta) – odśwież listę.')
   return listed
 }
@@ -1072,7 +1079,8 @@ function registerIpc(): void {
     }
     await config.update({ tray: next })
     const view = trayView()
-    applyLoginItem(view, log)
+    // Only a switch of the setting writes the system's entry (AP-28): the tray's or the question's answer leaves it alone.
+    if (next.launchAtLogin !== cur.launchAtLogin) applyLoginItem(view, log, true)
     if (view.closeToTray) appTray().ensure()
     else tray?.destroy()
     log('info', `zasobnik: zamykaj do zasobnika ${view.closeToTray ? 'tak' : 'nie'}, z systemem ${next.launchAtLogin ? 'tak' : 'nie'}`)
@@ -1124,7 +1132,12 @@ function registerIpc(): void {
   })
   handle('listBackups', async () => {
     const s = requireStore()
-    return { dir: s.backupsDir, files: await listBackups(s.backupsDir), failure: backupFailure?.dir === s.backupsDir ? backupFailure : null }
+    const earlier: Array<{ dir: string; files: BackupInfo[] }> = []
+    for (const dir of earlierBackupDirs(s)) {
+      const files = await listBackups(dir)
+      if (files.length) earlier.push({ dir, files })
+    }
+    return { dir: s.backupsDir, files: await listBackups(s.backupsDir), failure: backupFailure?.dir === s.backupsDir ? backupFailure : null, earlier }
   })
   handle('backupNow', async () => {
     const s = requireStore()
@@ -1218,8 +1231,12 @@ function registerIpc(): void {
       // Financial Intel never writes in ICT Trade Journal's data folder (B121) – its backups neither.
       if ((await DataStore.inspect(dir)) === 'ictj' || (await insideIctj(dir))) throw new Error('To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder na kopie.')
     }
-    await config.update({ backupDirOverride: dir })
+    const before = s.backupsDir
     s.setBackupDir(dir)
+    // The backups made so far stay listed under the folder they are in (AP-28, DA.14) – never „Brak kopii.” after a change.
+    const kept = (config.get().backupDirsBefore ?? []).filter((e) => !(e.dataDir === s.root && (sameDir(e.dir, before) || sameDir(e.dir, s.backupsDir))))
+    const backupDirsBefore = sameDir(before, s.backupsDir) ? kept : [{ dataDir: s.root, dir: before }, ...kept].slice(0, BACKUP_DIRS_KEPT)
+    await config.update({ backupDirOverride: dir, backupDirsBefore })
     return s.backupsDir
   })
   handle('showPath', async (abs: string) => {
@@ -1682,7 +1699,7 @@ function retryConfig(): void {
       if (config.loadFailed) return
       clearInterval(timer)
       log('info', 'config.json odczytany ponownie – ustawienia tego komputera wczytane')
-      applyLoginItem(trayView(), log)
+      applyLoginItem(trayView(), log, false)
       if (config.get().tray.closeToTray) appTray().ensure()
       else tray?.destroy()
       quick?.applyShortcut(config.get().prefs.quickShortcut)
@@ -1715,8 +1732,8 @@ app.whenReady().then(async () => {
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
   watchBankFiles()
-  // The autostart only from a config.json read (B114): defaults in its place would remove the entry.
-  if (!config.loadFailed) applyLoginItem(trayView(), log)
+  // The autostart only from a config.json read (B114); a start never removes an entry, of any copy (AP-28, 03.11.2026).
+  if (!config.loadFailed) applyLoginItem(trayView(), log, false)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()
   createWindow()

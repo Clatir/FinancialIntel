@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/renderer/features/history/HistoryDialog.tsx @ 84a8339
 import { useEffect, useMemo, useState } from 'react'
 import type { HistoryEntry, HistoryKind } from '@shared/api'
-import { diffRecords, fieldLabel, formatValue, isAmountPath, type FieldChange, type Path } from '@shared/merge'
+import { diffRecords, fieldLabel, formatValue, isAmountPath, readableChanges, type FieldChange, type Path } from '@shared/merge'
 import type { SettingsFile } from '@shared/schema'
 import { api } from '../../lib/api'
 import { recordTitle } from '../../lib/recordTitle'
@@ -18,7 +18,8 @@ const REASON: Record<HistoryEntry['reason'], string> = {
   restore: 'przed przywróceniem',
   import: 'przed importem',
   merge: 'przed scaleniem',
-  discarded: 'odrzucona przy scalaniu',
+  // The version not kept when a conflict or a change from the other computer was decided (AP-27, DA.27).
+  discarded: 'wersja niezachowana',
   undo: 'usunięty przy cofnięciu importu'
 }
 
@@ -55,14 +56,15 @@ export function dictNames(fi: SettingsFile | null, records: readonly Named[] = [
 export function displayValue(v: unknown, names: Map<string, string>, path?: Path): string {
   // An amount in grosze (B7): in złoty, hidden with the amounts (Ctrl+$).
   if (path && typeof v === 'number' && isAmountPath(path)) return `${plnText(v)} zł`
-  if (typeof v === 'string' && names.has(v)) return names.get(v)!
-  if (Array.isArray(v) && v.length && v.every((x) => typeof x === 'string' && names.has(x))) return v.map((x) => names.get(x as string)).join(', ')
-  return formatValue(v)
+  // Ids by their names, dates as dd.mm.rrrr, an object by its fields – never JSON (AP-27).
+  return formatValue(v, 80, { path, names, amount: (g) => `${plnText(g)} zł` })
 }
 
 /** Field-by-field list of changes: label, value before, value after. */
-export function ChangeList({ changes, beforeLabel, afterLabel, testId }: { changes: FieldChange[]; beforeLabel: string; afterLabel: string; testId?: string }) {
+export function ChangeList({ changes: all, beforeLabel, afterLabel, testId }: { changes: FieldChange[]; beforeLabel: string; afterLabel: string; testId?: string }) {
   const names = useDictNames()
+  // An object added or removed by its fields, the record's id never (AP-27).
+  const changes = useMemo(() => readableChanges(all), [all])
   if (changes.length === 0) return <div className="py-3 text-center text-[12px] text-muted">Bez różnic w treści (zmienił się tylko czas zapisu).</div>
   return (
     <div className="border border-line text-[11.5px]" data-testid={testId}>

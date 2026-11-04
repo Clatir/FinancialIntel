@@ -69,7 +69,8 @@ export interface UpdateState {
   error: string | null
   lastCheckAt: string | null
   /** Shown once after the app was updated. */
-  justUpdated: { version: string; notes: string } | null
+  /** `from`: the version run before (AP-28 – „Co nowego” of every version between them, from CHANGELOG offline). */
+  justUpdated: { version: string; notes: string; from?: string } | null
   prefs: UpdatePrefs
   /** GitHub token of this computer (only for a private repository): never the token itself, only its end. */
   token: UpdateTokenState

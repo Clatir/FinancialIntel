@@ -12,6 +12,7 @@ import { updateSettings, useData, useFolderLocked } from '../../store/data'
 import { openIctj, setIctjDir, useIctj } from '../../store/ictj'
 import { navigate, toast } from '../../store/ui'
 import { Badge, Field, Panel } from '../../components/ui'
+import { MachineOnly } from './MachineOnly'
 
 const STATUS: Record<string, { label: string; tone: 'up' | 'down' | 'warn' | 'default' }> = {
   ok: { label: 'czytany', tone: 'up' },
@@ -51,7 +52,7 @@ export function IctjTab() {
   const withdrawals = snap.entries.filter((e) => e.kind === 'withdrawal').length
   return (
     <>
-      <Panel title="Folder ICT Trade Journal">
+      <Panel title="Folder ICT Trade Journal" actions={<MachineOnly />}>
         <div className="flex flex-col gap-2 text-[12px]">
           <div className="flex items-baseline gap-2">
             <span className="num min-w-0 flex-1 truncate text-fg-strong" data-testid="ictj-dir" title={snap.dir ?? ''}>
@@ -155,7 +156,7 @@ export function IctjTab() {
           )}
         </div>
       </Panel>
-      <Panel title="Program ICT Trade Journal">
+      <Panel title="Program ICT Trade Journal" actions={<MachineOnly />}>
         <div className="flex flex-col gap-2 text-[12px]">
           <p className="text-muted" data-testid="ictj-program">
             {program?.exe ? (

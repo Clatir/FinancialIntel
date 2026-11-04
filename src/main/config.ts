@@ -36,6 +36,14 @@ function loadTray(raw: unknown): MachineConfig['tray'] {
   }
 }
 
+/** The folders of backups used before (AP-28): a few, each with its data folder. */
+export const BACKUP_DIRS_KEPT = 4
+function loadBackupDirsBefore(raw: unknown): Array<{ dataDir: string; dir: string }> {
+  if (!Array.isArray(raw)) return []
+  const ok = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length < 1000
+  return raw.filter((x) => x && typeof x === 'object' && ok((x as { dataDir?: unknown }).dataDir) && ok((x as { dir?: unknown }).dir)).slice(0, BACKUP_DIRS_KEPT) as Array<{ dataDir: string; dir: string }>
+}
+
 function loadIctj(raw: unknown): MachineConfig['ictj'] {
   const t = (raw && typeof raw === 'object' ? raw : {}) as Partial<MachineConfig['ictj']>
   const path = (v: unknown) => (typeof v === 'string' && v.length > 0 && v.length < 1000 ? v : null)
@@ -120,7 +128,8 @@ export class ConfigStore {
       tray: loadTray(raw.tray),
       prefs: machinePrefsFrom(raw.prefs),
       ictj: loadIctj(raw.ictj),
-      importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null
+      importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null,
+      backupDirsBefore: loadBackupDirsBefore(raw.backupDirsBefore)
     }
     if (this.held.length) {
       const held = this.held

@@ -11,6 +11,7 @@ import { KeywordRules } from '../import/KeywordRules'
 import { RecentImports } from '../import/RecentImports'
 import { MixedBrandsPanel, RulesPanel, useRuleAudit } from '../import/RulesAudit'
 import { clearDismissedSimilar, clearNotDuplicates, inactiveAlias, removeInactive, setOwnNames, unmergeAll, unmergeName } from '../import/rules'
+import { MachineOnly } from './MachineOnly'
 
 const NO_NAMES: string[] = []
 const NO_ALIASES: Record<string, BrandAlias> = {}
@@ -107,7 +108,7 @@ function MergedNames() {
 function BankFilesWatch() {
   const on = useMachine((s) => s.prefs.bankFiles)
   return (
-    <Panel title="Pliki z mBanku w Pobranych">
+    <Panel title="Pliki z mBanku w Pobranych" actions={<MachineOnly />}>
       <div className="flex flex-col gap-1.5 text-[12px]">
         <Toggle checked={on} onChange={(bankFiles) => void setMachinePrefs({ bankFiles })} label="Szukaj nowych plików z mBanku w folderze Pobrane (na tym komputerze)" data-testid="settings-bank-files" />
         <p className="text-[11.5px] text-dim">
