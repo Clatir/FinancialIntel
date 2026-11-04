@@ -1770,8 +1770,8 @@ app.whenReady().then(async () => {
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
   watchBankFiles()
-  // The autostart only from a config.json read (B114); a start removes only this exe's own entry, when switched off – never
-  // another copy's (AP-28, 03.11.2026; T433).
+  // The autostart only from a config.json read (B114); a start never removes an entry, of any copy (AP-28, 03.11.2026;
+  // T433 – „off” may be the defaults of a broken or missing config.json).
   if (!config.loadFailed) applyLoginItem(trayView(), log, false)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()

@@ -5,12 +5,13 @@
  * off) removed the user's „Financial Intel”. The rules:
  * - a profile other than the app's own (user data moved by `FI_USER_DATA` – tests, the lab) never writes: the entry would
  *   start the app's own profile anyway;
- * - removing only the entries of this very exe – an entry of another copy (the installed app, another portable) is never
- *   touched, whatever its name;
- * - at a start (the setting not changed) the entry follows the setting: on – only a missing entry of this exe is written
- *   (a portable copy moved to another folder starts again from its new place); off – only this exe's entry under its own
- *   name goes (the system said otherwise than the setting: a switch-off whose config.json write was refused – AP-28);
- *   old entries of this exe under other names (B52) go only with a change of the setting.
+ * - removing only when the setting was switched off just now on this computer, and only the entries of this very exe – an
+ *   entry of another copy (the installed app, another portable) is never touched;
+ * - at a start (the setting not changed) nothing is removed – „off” there may be no choice of the user at all (config.json
+ *   broken and set aside, gone with a cleaned AppData: the defaults – przegląd 2 N5); with the setting on, only a missing
+ *   entry of this exe is written (a portable copy moved to another folder starts again from its new place); old entries
+ *   of this exe under other names (B52) go only with a change of the setting. The switch applies to the system before
+ *   config.json's write (`config.ts` `changeTray`), so a refused write never leaves the entry behind the setting.
  */
 
 /** An entry of the Run key as Electron gives it (`getLoginItemSettings({ path, args }).launchItems` – of this exe). */
@@ -58,7 +59,7 @@ export function loginItemWrites(c: LoginContext): LoginWrite[] {
   const own = mine.find((i) => i.name === c.name)
   // Entries of this exe under other names (before 1.5.3 named after a temporary folder – B52): they would start it twice.
   const stale = mine.filter((i) => i.name !== c.name).map((i): LoginWrite => ({ openAtLogin: false, name: i.name, path: i.path, args: i.args }))
-  if (!c.want) return [...(own ? [{ openAtLogin: false, ...entry }] : []), ...(c.changed ? stale : [])]
+  if (!c.want) return c.changed ? [...(own ? [{ openAtLogin: false, ...entry }] : []), ...stale] : []
   // Ours first: a failed write never leaves the computer without any entry of this exe.
   const write = !own || !sameArgs(own.args, c.args) ? [{ openAtLogin: true, ...entry }] : []
   return [...write, ...(c.changed ? stale : [])]

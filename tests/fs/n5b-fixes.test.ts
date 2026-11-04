@@ -56,7 +56,7 @@ describe('start z Windows przy zajętym config.json (uwaga 1, T433)', () => {
   const own: LaunchItem = { name: 'Financial Intel', path: INSTALLED, args: ['--hidden'] }
   const other: LaunchItem = { name: 'Financial Intel (portable)', path: PORTABLE, args: ['--hidden'] }
 
-  it('wyłączenie działa w systemie od razu, choć zapis się nie udał; zapis ponawia się sam; start przy „wyłączone” usuwa tylko własny wpis', async () => {
+  it('wyłączenie działa w systemie od razu, choć zapis się nie udał; zapis ponawia się sam; start niczego nie usuwa', async () => {
     const dir = await configDir()
     const config = new ConfigStore(dir, 0, 40)
     await config.load()
@@ -80,18 +80,35 @@ describe('start z Windows przy zajętym config.json (uwaga 1, T433)', () => {
     expect(config.get().tray.launchAtLogin).toBe(false)
     refuse.on = false
     expect(await until(async () => (await onDisk(dir)).tray?.launchAtLogin === false)).toBe(true)
-    // A start with the setting off while the system still has this exe's entry (a switch-off lost by an older version):
-    // the entry goes – only this exe's own, the portable copy's (another name) stays.
+    // A start with the setting off: nothing removed (przegląd 2 N5 – only the switch removes).
     runKey = [own, other]
     const next = new ConfigStore(dir)
     expect((await next.load()).tray.launchAtLogin).toBe(false)
     apply(next.get().tray.launchAtLogin, false)
-    expect(runKey).toEqual([other])
+    expect(runKey).toEqual([own, other])
     // The tray's switch alone never touches the entry.
     setLoginItemSettings.mockClear()
     runKey = [own]
     await changeTray(next, { closeToTray: false }, (tray, login) => login && apply(tray.launchAtLogin, true))
     expect(setLoginItemSettings).not.toHaveBeenCalled()
+  })
+
+  it('„wyłączone” z ustawień domyślnych (config.json uszkodzony i odłożony, usunięty z AppData) – start nie usuwa wpisu użytkownika (przegląd 2 N5, incydent 03.11)', async () => {
+    const items = [own]
+    const startWrites = (c: InstanceType<typeof ConfigStore>) => loginItemWrites({ want: c.get().tray.launchAtLogin, changed: false, ownProfile: true, windows: true, name: own.name, path: INSTALLED, args: ['--hidden'], items })
+    // Broken (a power cut while it was written): set aside, the defaults – the start with Windows off.
+    const broken = await configDir()
+    await fs.writeFile(join(broken, 'config.json'), '{ "tray": { "launchAtLo')
+    const a = new ConfigStore(broken)
+    await a.load()
+    expect(a.setAside).toBeTruthy()
+    expect(a.get().tray.launchAtLogin).toBe(false)
+    expect(startWrites(a)).toEqual([])
+    // Gone (AppData cleaned): the first start's defaults.
+    const b = new ConfigStore(await configDir())
+    await b.load()
+    expect(b.loadFailed).toBeNull()
+    expect(startWrites(b)).toEqual([])
   })
 })
 
@@ -139,6 +156,50 @@ describe('folder kopii przy zajętym config.json (uwaga 4, T434)', () => {
     // The retry (nothing new to write) lands before the folder is removed.
     await new Promise((r) => setTimeout(r, 200))
     expect((await onDisk(dir)).backupDirOverride).toBe('F:/Najnowsze')
+  })
+})
+
+describe('pamięć przy nieczytelnym albo zajętym config.json (przegląd 2 N5, pkt 4 i 5)', () => {
+  it('kolejne nieudane odczyty: działa i widać to, co ustawiono w tej sesji, nie ustawienia domyślne; plik uszkodzony przy odczycie – zmiany na domyślnych i zapisane', async () => {
+    const dir = await configDir()
+    await fs.mkdir(join(dir, 'config.json'))
+    await fs.writeFile(join(dir, 'config.json', 'blokada'), 'x')
+    const config = new ConfigStore(dir, 0, 40)
+    await config.load()
+    expect(config.loadFailed).toBeTruthy()
+    await config.update({ tray: { ...config.get().tray, launchAtLogin: true, closeToTray: false } })
+    await config.update({ ictj: { dir: 'D:/ICTTJ', exe: null } })
+    await config.update({ backupDirOverride: 'E:/Kopie' })
+    const chosen = { tray: { launchAtLogin: true, closeToTray: false }, ictj: { dir: 'D:/ICTTJ' }, backupDirOverride: 'E:/Kopie' }
+    // The retry of the read (every 15 s), still not readable: before, the defaults came back in memory and on the screen.
+    await config.load()
+    expect(config.loadFailed).toBeTruthy()
+    expect(config.get()).toMatchObject(chosen)
+    // Readable – but broken: set aside, the session's choices on the defaults, and written.
+    await fs.rm(join(dir, 'config.json'), { recursive: true })
+    await fs.writeFile(join(dir, 'config.json'), '{ "tray": { "launchAtLo')
+    await config.load()
+    expect(config.setAside).toBeTruthy()
+    expect(config.get()).toMatchObject(chosen)
+    expect(await onDisk(dir)).toMatchObject(chosen)
+  })
+
+  it('zmiana zabrana przez wcześniejszy zapis tego samego stanu – zapisana: bez „nie zapamiętano” i bez cofania', async () => {
+    const dir = await configDir()
+    const config = new ConfigStore(dir, 30, 40)
+    await config.load()
+    // The window's size written (a slow disk) – the folder of backups chosen meanwhile goes with it (the latest state).
+    const bounds = config.update({ window: { x: 1, y: 2, width: 800, height: 600, maximized: false } })
+    const backups = config.update({ backupDirOverride: 'E:/Kopie' })
+    await bounds
+    expect((await onDisk(dir)).backupDirOverride).toBe('E:/Kopie')
+    // The folder's own write refused: the folder is on the disk – before, „nie została zapamiętana” and Ustawienia took it
+    // back while the next start used it.
+    refuse.on = true
+    await expect(backups).resolves.toMatchObject({ backupDirOverride: 'E:/Kopie' })
+    expect(config.get().backupDirOverride).toBe('E:/Kopie')
+    refuse.on = false
+    await new Promise((r) => setTimeout(r, 200))
   })
 })
 

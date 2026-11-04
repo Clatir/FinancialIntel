@@ -202,7 +202,9 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
       // A side whose content moved on during the flush (OneDrive's copy the watcher brought meanwhile) refuses here – the
       // card shows it now; one only stamped anew by this save goes with the file times this window knows after it, and
       // main refuses a file changed on the disk since (the watcher not there yet).
-      const seen = seenFor(shown, useData.getState().conflicts.find((x) => x.id === shown.id))
+      // This window's own save of the original is no outside change (przegląd 2 N5): its machine's name tells it.
+      const { conflicts, appInfo } = useData.getState()
+      const seen = seenFor(shown, conflicts.find((x) => x.id === shown.id), keep, appInfo?.machineName ?? null)
       if (!seen) return toast(CONFLICT_CHANGED_TEXT, 'error', 8000)
       await api.resolveConflict(shown.id, keep, seen)
       toast('Konflikt rozstrzygnięty – odrzucona wersja jest w historii wpisu (i w Koszu).', 'success')
@@ -410,7 +412,7 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
         return
       }
       // After the flush: a version the watcher brought meanwhile is never decided unseen.
-      plan = newestOnShown(shown, useData.getState().conflicts, ids)
+      plan = newestOnShown(shown, useData.getState().conflicts, ids, useData.getState().appInfo?.machineName ?? null)
       // The newest copy of a file could not be kept (or a version changed): the others of that file stay.
       if (plan.resolutions.length)
         for (const r of await api.resolveConflicts(plan.resolutions)) {

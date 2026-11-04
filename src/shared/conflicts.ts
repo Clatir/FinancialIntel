@@ -152,41 +152,72 @@ export interface ConflictSeen {
 const seenOf = (c: Pick<ConflictEntry, 'canonical' | 'copy'>): ConflictSeen => ({ canonical: c.canonical.mtimeMs, copy: c.copy.mtimeMs })
 
 /**
- * The versions a decision on `shown` (what the card showed at the click) goes with after this window's own save
- * (`saveFirst`, AP-27, T431): a side whose content moved on meanwhile – OneDrive's copy the watcher brought during the
- * save – refuses here (null), as „Scal…” does; one only stamped anew by that save goes with its file time `now`, and
- * the main process refuses what changed after. Gone from the window (`now` none): the times shown – the main process
- * says it is gone.
+ * The original as this computer saved it (its `updatedBy` – `me`, this computer's name): the window's own save before a
+ * decision (`saveFirst` of unsaved edits) is no version brought from outside (przegląd 2 N5). A copy is never this
+ * window's write – OneDrive's (or another program's) only.
  */
-export function seenFor(shown: Pick<ConflictEntry, 'canonical' | 'copy'>, now: Pick<ConflictEntry, 'canonical' | 'copy'> | undefined): ConflictSeen | null {
+const ownSave = (side: ConflictSide, me: string | null): boolean => !!me && (side.record as { updatedBy?: unknown } | null)?.updatedBy === me
+
+/**
+ * The versions a decision on `shown` (what the card showed at the click) goes with after this window's own save
+ * (`saveFirst`, AP-27, T431). Refused here (null) only for a side whose unseen content the decision would let go: the
+ * copy changed (OneDrive brought another one during the save – kept unseen, or binned unseen), or – keeping the copy,
+ * which replaces the original – the original changed from outside. The original changed by this window's own save
+ * (`me`) is no surprise: kept, or let go into the history at the user's choice; the original kept, a newer
+ * original from outside is kept too, nothing replaced. Otherwise the file times `now`, and the main process refuses
+ * what changed after. Gone from the window (`now` none): the times shown – the main process says it is gone.
+ */
+export function seenFor(
+  shown: Pick<ConflictEntry, 'canonical' | 'copy'>,
+  now: Pick<ConflictEntry, 'canonical' | 'copy'> | undefined,
+  keep: Keep,
+  me: string | null
+): ConflictSeen | null {
   if (!now) return seenOf(shown)
-  return changedSince(shown, now) ? null : seenOf(now)
+  const side = changedSince(shown, now)
+  if (side === 'copy' || side === 'both') return null
+  if (side === 'canonical' && keep === 'copy' && !ownSave(now.canonical, me)) return null
+  return seenOf(now)
 }
 
 /**
  * „Zaakceptuj nowsze” on the versions the window showed (AP-27, T431): the newest of each is chosen on `shown` (the
  * cards at the click, `newestResolutions`), and each resolution goes with the file times known `now` (after this
- * window's save). A group (one original's copies, decided together) with any conflict changed in content since, or
- * gone, is left whole for the user (`changed`) – its newest version was chosen on what is no longer there.
+ * window's save). A group (one original's copies, decided together) is left whole for the user (`changed`) when a copy
+ * of it changed in content since, or is gone, or when its original changed from outside and the newest chosen is a
+ * copy (it would replace an original not seen). An original changed by this window's own save (`me` – przegląd 2 N5)
+ * is no change from outside: the group's newest is chosen on it as saved (its own edits are what the user knows).
  */
 export function newestOnShown(
   shown: readonly ConflictEntry[],
   now: readonly ConflictEntry[],
-  ids: Iterable<string>
+  ids: Iterable<string>,
+  me: string | null = null
 ): { resolutions: Array<{ id: string; keep: Keep; group: string; seen: ConflictSeen }>; skipped: string[]; changed: string[] } {
-  const plan = newestResolutions(shown, ids)
-  const shownById = new Map(shown.map((c) => [c.id, c]))
+  const chosen = new Set(ids)
   const nowById = new Map(now.map((c) => [c.id, c]))
-  const moved = new Set<string>()
-  for (const r of plan.resolutions) {
-    const was = shownById.get(r.id)!
-    const is = nowById.get(r.id)
-    if (!is || changedSince(was, is)) moved.add(r.group)
+  // Per group (the original's path, as `newestResolutions` groups): what changed since the cards were shown.
+  const moved = new Map<string, { copy: boolean; outside: boolean; own: boolean }>()
+  for (const c of shown) {
+    if (!chosen.has(c.id)) continue
+    const g = moved.get(c.canonical.relPath) ?? { copy: false, outside: false, own: false }
+    const is = nowById.get(c.id)
+    const side = is ? changedSince(c, is) : 'both'
+    if (!is || side === 'copy' || side === 'both') g.copy = true
+    else if (side === 'canonical') {
+      if (ownSave(is.canonical, me)) g.own = true
+      else g.outside = true
+    }
+    moved.set(c.canonical.relPath, g)
   }
+  const basis = shown.map((c) => (moved.get(c.canonical.relPath)?.own ? (nowById.get(c.id) ?? c) : c))
+  const plan = newestResolutions(basis, ids)
+  const keepsCopy = new Set(plan.resolutions.filter((r) => r.keep === 'copy').map((r) => r.group))
   const resolutions: Array<{ id: string; keep: Keep; group: string; seen: ConflictSeen }> = []
   const changed: string[] = []
   for (const r of plan.resolutions) {
-    if (moved.has(r.group)) changed.push(r.id)
+    const g = moved.get(r.group)
+    if (g?.copy || (g?.outside && keepsCopy.has(r.group))) changed.push(r.id)
     else resolutions.push({ ...r, seen: seenOf(nowById.get(r.id)!) })
   }
   return { resolutions, skipped: plan.skipped, changed }

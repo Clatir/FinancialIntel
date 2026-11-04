@@ -138,15 +138,29 @@ export class ConfigStore {
   }
 
   async load(): Promise<MachineConfig> {
+    const base = await this.read()
+    this.saved = base
+    // The changes held from while config.json could not be read (B114) on top: on the file's settings once read – and
+    // on the defaults while it is still not readable (each retry of the read), gone or set aside – what the user set in
+    // this session is what the app does and shows, never the defaults beside it (przegląd 2 N5).
+    let next = base
+    for (const [path, value] of this.held) next = withValueAt(next, path, value) as MachineConfig
+    this.config = next
+    // Read (or gone, or set aside), but refused for writing (an antivirus holds it – AP-28): the changes work and stay
+    // held till a write takes them – the retry writes them, a read again puts them on the file's settings once more.
+    if (this.held.length && !this.loadFailed) await this.queueWrite().catch(() => this.retryLater())
+    return this.config
+  }
+
+  /** config.json's settings; the defaults when it is missing (the first start), not readable now (`loadFailed`) or broken. */
+  private async read(): Promise<MachineConfig> {
     let text: string
     try {
       text = await withRetry(() => fs.readFile(this.file, 'utf8'), 10)
     } catch (e) {
       // No file: the first start on this computer. Any other error: the file is there – never replaced by defaults.
       this.loadFailed = (e as NodeJS.ErrnoException).code === 'ENOENT' ? null : e instanceof Error ? e.message : String(e)
-      this.config = { ...DEFAULTS }
-      this.saved = this.config
-      return this.config
+      return { ...DEFAULTS }
     }
     this.loadFailed = null
     let raw: Partial<MachineConfig>
@@ -158,13 +172,11 @@ export class ConfigStore {
       const aside = `config.uszkodzony-${new Date().toISOString().replace(/[-:.]/g, '')}.json`
       await fs.rename(this.file, join(this.userDataDir, aside)).catch(() => undefined)
       this.setAside = aside
-      this.config = { ...DEFAULTS }
-      this.saved = this.config
-      return this.config
+      return { ...DEFAULTS }
     }
     const shortcut = (raw.prefs as { quickShortcut?: unknown } | undefined)?.quickShortcut
     this.replacedShortcut = typeof shortcut === 'string' && altGrConflict(shortcut) ? shortcut : null
-    this.config = {
+    return {
       ...DEFAULTS,
       ...raw,
       recentDirs: Array.isArray(raw.recentDirs) ? raw.recentDirs.filter((d) => typeof d === 'string').slice(0, 8) : [],
@@ -175,17 +187,6 @@ export class ConfigStore {
       importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null,
       backupDirsBefore: loadBackupDirsBefore(raw.backupDirsBefore)
     }
-    this.saved = this.config
-    if (this.held.length) {
-      let next = this.config
-      for (const [path, value] of this.held) next = withValueAt(next, path, value) as MachineConfig
-      this.config = next
-      // Read, but refused for writing (an antivirus holds it – AP-28): the changes work and stay held till a write takes
-      // them – the retry writes them, a read again puts them on the file's settings once more, never the file's old
-      // values over them. Before, they were dropped first and lost with the failed write.
-      await this.queueWrite().catch(() => this.retryLater())
-    }
-    return this.config
   }
 
   get(): MachineConfig {
@@ -208,24 +209,26 @@ export class ConfigStore {
     } catch (e) {
       // config.json held for a while (an antivirus, a backup tool – US.33): the settings work, and are written later –
       // but for those that count only once saved, taken back.
-      const undone = this.undo(before, patch)
       this.retryLater()
-      if (undone) throw new ConfigNotSavedError(e)
+      const changes = leafChanges(before, { ...before, ...patch })
+      // Taken along by a write queued before this one (each writes the latest state): on the disk – saved, nothing to
+      // say or take back (przegląd 2 N5).
+      if (changes.every(([path, value]) => same(valueAt(this.saved, path), value))) return this.config
+      if (this.undo(changes)) throw new ConfigNotSavedError(e)
       throw e
     }
     return this.config
   }
 
   /**
-   * The fields of `patch` that count only once written (`ONLY_ONCE_SAVED`) taken back in memory after a refused write
-   * (AP-28, T434): the window says the change was not saved, so the retried write never brings it back after a restart.
-   * Back to what config.json has (or a change held for it from while it was not readable) – never to an earlier change
-   * refused too; a field changed again meanwhile keeps the newer value. True = something was taken back.
+   * The changes of a refused write that count only once written (`ONLY_ONCE_SAVED`) taken back in memory (AP-28, T434):
+   * the window says the change was not saved, so the retried write never brings it back after a restart. Back to what
+   * config.json has (or a change held for it from while it was not readable) – never to an earlier change refused too;
+   * a field changed again meanwhile keeps the newer value. True = something was taken back.
    */
-  private undo(before: MachineConfig, patch: Partial<MachineConfig>): boolean {
-    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+  private undo(changes: ReadonlyArray<[string[], unknown]>): boolean {
     let undone = false
-    for (const [path, value] of leafChanges(before, { ...before, ...patch })) {
+    for (const [path, value] of changes) {
       if (!ONLY_ONCE_SAVED.some((p) => p.every((k, i) => path[i] === k)) || !same(valueAt(this.config, path), value)) continue
       this.held = this.held.filter(([p, v]) => !(same(p, path) && same(v, value)))
       const held = this.held.filter(([p]) => same(p, path)).at(-1)
@@ -303,6 +306,7 @@ export async function changeTray(config: ConfigStore, patch: TrayPatch | undefin
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
 
 /** The fields `after` changed against `before`, each with its new value (a list or a value as a whole). */
 function leafChanges(before: unknown, after: unknown, path: string[] = [], out: Array<[string[], unknown]> = []): Array<[string[], unknown]> {

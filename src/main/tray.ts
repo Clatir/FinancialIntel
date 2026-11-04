@@ -107,8 +107,8 @@ export const loginItemName = (portable: boolean): string => (portable ? 'Financi
 
 /**
  * Start at login (Windows / macOS; packaged app only – in development it would register electron.exe). `changed`: the
- * setting was switched just now on this computer; a start of the app or a late read of config.json is not a change – it
- * only brings this exe's own entry in line with the setting, never another copy's (AP-28 – the rules in `loginItem.ts`).
+ * setting was switched just now on this computer; a start of the app or a late read of config.json is not a change, and
+ * never removes an entry (AP-28 – the rules in `loginItem.ts`).
  */
 export function applyLoginItem(prefs: TrayPrefs, log: TrayDeps['log'], changed: boolean): void {
   if (!app.isPackaged || (process.platform !== 'win32' && process.platform !== 'darwin')) return

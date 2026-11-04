@@ -3534,7 +3534,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   pokazanych; grupa kopii jednego pliku ze zmienioną (albo zniknięta) pozycją zostaje cała dla użytkownika, odmowa
   w procesie głównym też zostawia resztę grupy („Pozostawione bez zmian…”); oryginał przepisany zachowaną kopią tej samej
   paczki liczy się z czasem po tym zapisie (`own`). Zmiana z zewnątrz z odmowy idzie do okna osobno, po zapisach paczki
-  wysłanych jako zmiana tego komputera (`beforeRefusal`) – własny zapis nigdy nie przychodzi jako cudzy.
+  wysłanych jako zmiana tego komputera (`beforeRefusal`) – własny zapis nigdy nie przychodzi jako cudzy. Dopisek (przegląd 2
+  N5): własny zapis okna przed decyzją (`saveFirst` – niezapisane zmiany oryginału, także `fi.json`) nie jest „nowszą
+  kopią z OneDrive” – oryginał zmieniony z `updatedBy` tego komputera (`appInfo.machineName`) nie odmawia. Odmowa tylko
+  po stronie, którą decyzja odda bez wiedzy użytkownika: kopia zmieniona – zawsze (kopii okno nie pisze); oryginał
+  zmieniony z zewnątrz – tylko przy zachowaniu kopii (zastąpiłaby go); zachowanie oryginału zatrzymuje go, jaki jest.
+  Zbiorczo: grupa z własnym zapisem oryginału wybiera najnowszą na zapisanym oryginale; z oryginałem zmienionym
+  z zewnątrz zostaje dla użytkownika tylko, gdy najnowsza to kopia. „Scal…” bez zmian (wybory na obu pokazanych
+  stronach). Wcześniej E2E `sync` (kopia `fi.json`) padał: okno zapisało `fi.json` w `saveFirst` i odmawiało samo sobie.
 - **T432** Nowy komputer (AP-28, US.1, US.13, US.31, SW sp. 8): panele ustawień zapisanych w `config.json` mają jeden
   znak „tylko ten komputer” (`MachineOnly` – rozmiar, prywatność kwot, szybki wpis, powiadomienia, dźwięki, ICTTJ: folder
   i program, pliki z mBanku, bieżący i ostatnie foldery, zasobnik i start, aktualizacje, token). Pierwsze otwarcie
@@ -3568,7 +3575,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   exe pod jego własną nazwą (tylko taki – `launchItems` po ścieżce exe; wpis innej kopii, także o tej samej nazwie, i
   druga wersja instalator / portable z inną nazwą zostają); stare wpisy pod inną nazwą (B52) dalej tylko przy zmianie.
   Zapis, który nie zdążył przed wyjściem, przepada jak każda zmiana `config.json` – następny start ustawia system według
-  pliku, więc ekran i system się zgadzają.
+  pliku, więc ekran i system się zgadzają. Dopisek (przegląd 2 N5 – **cofa** zdanie o usuwaniu przy starcie): start aplikacji
+  i późny odczyt `config.json` znów nigdy niczego nie usuwają – „wyłączone” przy starcie bywa nie wyborem użytkownika,
+  a ustawieniem domyślnym (`config.json` uszkodzony i odłożony, usunięty z AppData, nieczytelny), a usunięcie po nazwie
+  to klasa incydentu 03.11. Wpis usuwa tylko przełącznik (Ustawienia, kreator, baner, lista nowego komputera), od razu,
+  przed zapisem `config.json` (`changeTray`), więc odrzucony zapis nie zostawia wpisu za ustawieniem. Zostaje znana
+  rozbieżność: wpis z wersji sprzed poprawki albo drugiej kopii przy „wyłączone” – usuwa go dopiero przełącznik
+  (włącz i wyłącz) w tej kopii.
 - **T434** „Co nowego” bez sieci, kopie po zmianie folderu kopii, zapis `config.json` ponawiany (AP-28, AF-40, IN.26,
   DA.14, DA.11, US.33): okno ma wbudowane 15 najnowszych sekcji CHANGELOG (`electron.vite.config.mts` `__FI_CHANGELOG__`,
   `releaseNotes.ts` `notesOf`) – panel „Co nowego w wersji X” pokazuje się z nich, gdy notatek z GitHuba nie ma
@@ -3588,7 +3601,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   instalacji, a nie „nie udało się pobrać”, gdy tylko `config.json` odmówił). Zmiany z chwili nieczytelnego `config.json` (`held`, B114) zostają, aż zapis je
   weźmie: odczyt, po którym zapis jest odrzucony, kończy się (ustawienia działają, odczyt nie jest ponawiany), zmiany
   idą do ponawianego zapisu, a kolejny odczyt nakłada je na plik jeszcze raz (także zmiany zrobione po odczycie, do
-  udanego zapisu) – wcześniej odczyt je zdejmował i przepadały z nieudanym zapisem.
+  udanego zapisu) – wcześniej odczyt je zdejmował i przepadały z nieudanym zapisem. Dopisek (przegląd 2 N5): pamięć
+  zawsze = to, co ustawiono w tej sesji – każdy odczyt (także nieudany co 15 s, plik usunięty albo uszkodzony i odłożony)
+  nakłada zmiany `held` na swoją podstawę (plik albo domyślne), a plik usunięty albo odłożony dostaje je od razu; zasobnik,
+  ICTTJ, folder kopii i pobrana aktualizacja nie wracają do domyślnych. „Nie została zapamiętana” tylko wtedy, gdy
+  `config.json` naprawdę nie ma nowej wartości: zmiana zabrana przez wcześniejszy zapis z kolejki (każdy pisze najnowszy
+  stan) jest zapisana – bez komunikatu i bez cofania (`ConfigStore.update` porównuje z `saved`, stanem pliku).
 - **T435** Wpis ICTTJ z pierwszych dni budżetu (1.15.9, N5 – AP-26, AF-47 = C15, DO sp. 2; D72, T63; **zmienia zdanie T162**
   „bez Portfela XTB dla okna zaczętego przed startem”): „sprzed startu” tylko wpis z datą przed startem (`deliveries`:
   `!counted(e.date)`); wpis od startu, którego okno pary (−3 dni) zaczyna się przed startem, czeka na import jak każdy

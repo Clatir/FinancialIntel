@@ -18,9 +18,9 @@ const ctx = (patch: Partial<LoginContext>): LoginContext => ({
 const own = { name: 'Financial Intel', path: INSTALLED, args: ['--hidden'] }
 
 describe('autostart przy dwóch profilach (AP-28)', () => {
-  it('start z ustawieniem wyłączonym usuwa tylko własny wpis tego exe – nigdy wpisu innej kopii ani starego pod inną nazwą', () => {
-    // The system says otherwise than the setting (a switch-off whose config.json write was refused – przegląd N5): in line.
-    expect(loginItemWrites(ctx({ want: false, changed: false, items: [own] }))).toEqual([{ openAtLogin: false, ...own }])
+  it('start z ustawieniem wyłączonym nie usuwa żadnego wpisu – także wpisu tego samego exe (przegląd 2 N5: „wyłączone” bywa domyślne)', () => {
+    // „Off” at a start may be no choice at all (config.json broken and set aside, or gone): the user's entry stays.
+    expect(loginItemWrites(ctx({ want: false, changed: false, items: [own] }))).toEqual([])
     expect(loginItemWrites(ctx({ want: false, changed: false, items: [] }))).toEqual([])
     // Another copy (the lab's unpacked build) with the user's entry of the installed app in the Run key: not even asked.
     expect(loginItemWrites(ctx({ want: false, changed: false, path: LAB, items: [] }))).toEqual([])
