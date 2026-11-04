@@ -6,7 +6,7 @@ export const GLOSSARY = [
   { term: 'Osłony', meaning: 'Bufor na pensje: pieniądze na pensję od siebie na kolejne miesiące (cel – kilka pensji).' },
   { term: 'Kadłub', meaning: 'Fundusz awaryjny: kilka miesięcy kosztów na nieprzewidziane (cel – miesiące × koszty miesiąca).' },
   { term: 'Pensja', meaning: 'Stała kwota, którą budżet wypłaca sobie co miesiąc z osłon – nie wypłata z XTB.' },
-  { term: 'Energia', meaning: 'Pieniądze miesiąca z pensji, w kopertach; energia dziś – dzienny przydział z kopert codziennych.' },
+  { term: 'Energia', meaning: 'Pieniądze miesiąca z pensji, w kopertach; energia dziś – dzienny przydział z kopert codziennych, nie więcej niż zostało energii miesiąca.' },
   { term: 'Koperty', meaning: 'Limity wydatków miesiąca na kategorie: codzienne (dzienny przydział) i planowe.' },
   { term: 'Ładownia', meaning: 'Stałe opłaty (kontenery): abonamenty, rachunki, raty; linia zanurzenia – ich część pensji.' },
   { term: 'Zbiornik', meaning: 'Odkładka na opłatę okresową (co kwartał, co rok): co miesiąc rata z pensji.' },

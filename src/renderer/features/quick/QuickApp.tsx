@@ -275,7 +275,9 @@ export function QuickApp() {
         ? lines
         : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift }]
     let daily = 0
-    // A category without an envelope (N3): the month's energy only – today's energy stays.
+    /** The daily parts by main category ('' – none): today's refund of an earlier purchase of it is taken first (T370). */
+    const dailyBy = new Map<string, number>()
+    // A category without an envelope (N3): the month's energy only – today's energy stays (unless that caps it – AP-13).
     let outside = 0
     const planned = new Map<string, number>()
     const financed = new Map<string, { amount: number; gift: boolean }>()
@@ -289,20 +291,28 @@ export function QuickApp() {
       }
       const c = p.categoryId ? cats.get(p.categoryId) : undefined
       // As the engine (T30): no category = a daily purchase (careful), a category without an envelope is neither.
-      if (!c || c.envelope === 'daily') daily += p.amount
-      else if (c.envelope === 'planned') planned.set(c.mainId, (planned.get(c.mainId) ?? 0) + p.amount)
+      if (!c || c.envelope === 'daily') {
+        daily += p.amount
+        dailyBy.set(c?.mainId ?? '', (dailyBy.get(c?.mainId ?? '') ?? 0) + p.amount)
+      } else if (c.envelope === 'planned') planned.set(c.mainId, (planned.get(c.mainId) ?? 0) + p.amount)
       else outside += p.amount
     }
     const out: ReactNode[] = []
     const today = data.daily?.today ?? warsawNow().date
     const otherMonth = d.date.slice(0, 7) !== today.slice(0, 7) || d.date > today
-    if (daily && data.daily) {
-      const e = energyAfter(data.daily, d.date, daily)
+    // Today's energy as the engine counts it (N3, AP-13): never more than the month's energy – a planned purchase and one
+    // outside the envelopes take that too, so they may lower today's energy.
+    let otherTotal = outside
+    for (const v of planned.values()) otherTotal += v
+    const e = data.daily ? energyAfter(data.daily, d.date, dailyBy, otherTotal) : null
+    const todayChanges = !!e && e.after !== e.before
+    if (data.daily && (daily || todayChanges)) {
       out.push(
         e ? (
           <div key="daily" data-testid="quick-preview-energy">
             Energia dziś: <span className="num">{money(e.before)}</span> → <span className={cx('num', e.after < 0 ? 'text-down' : 'text-fg-strong')}>{money(e.after)}</span>
-            {d.date < today && <span className="text-dim"> (wydatek z {dm(d.date)} – rozłożony na pozostałe dni)</span>}
+            {daily > 0 && d.date < today && <span className="text-dim"> (wydatek z {dm(d.date)} – rozłożony na pozostałe dni)</span>}
+            {!daily && <span className="text-dim"> (nie więcej niż zostanie energii miesiąca)</span>}
           </div>
         ) : (
           <div key="daily" data-testid="quick-preview-energy">
@@ -316,7 +326,7 @@ export function QuickApp() {
       const mEnergy = !otherMonth ? data.monthEnergy : null
       out.push(
         <div key="outside" data-testid="quick-preview-outside">
-          Poza kopertami {money(outside)} – energia dziś bez zmian (zmniejsza energię miesiąca
+          Poza kopertami {money(outside)} – {todayChanges ? 'zmniejsza energię miesiąca' : 'energia dziś bez zmian (zmniejsza energię miesiąca'}
           {mEnergy != null && (
             <>
               : <span className="num">{money(mEnergy)}</span> →{' '}
@@ -324,7 +334,7 @@ export function QuickApp() {
               {outside > Math.max(0, mEnergy) && <span className="text-down">; z osłon {money(outside - Math.max(0, mEnergy))}</span>}
             </>
           )}
-          ).
+          {todayChanges ? '.' : ').'}
         </div>
       )
     }

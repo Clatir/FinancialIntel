@@ -10,7 +10,7 @@ export interface Change {
 }
 
 export interface Effect {
-  /** Today's energy after today's spending (`daily.left`); null – no plan of the month, or no change. */
+  /** Today's energy as shown (`daily.energy` – AP-13); null – no plan of the month, or no change. */
   energy: Change | null
   shields: Change | null
   /** The envelopes of this month whose rest changes. */
@@ -37,7 +37,7 @@ export function effectOf(before: FleetState, after: FleetState): Effect {
   // An account the change brings in (an operation moved onto one without any yet).
   for (const a of after.accounts) if (!before.accounts.some((b) => b.id === a.id) && a.balance) accounts.push({ id: a.id, name: a.name, before: 0, after: a.balance })
   return {
-    energy: before.daily && after.daily ? change(before.daily.left, after.daily.left) : null,
+    energy: before.daily && after.daily ? change(before.daily.energy, after.daily.energy) : null,
     shields: before.started && after.started ? change(before.shields.amount, after.shields.amount) : null,
     envelopes,
     accounts

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { glossaryOf } from '@shared/glossary'
-import type { FleetState } from '@shared/calc/fleet'
+import { energyAfterLimit, type FleetState } from '@shared/calc/fleet'
+import { capNote } from '@shared/calc/why'
 import { debriefing, envelopeExtraOf, lootApplied, lootDeadline, lootExtraOf, monthAhead, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { fuelSummary, rateText } from '@shared/calc/fuel'
@@ -350,15 +351,22 @@ function DailyPanel({ fleet }: { fleet: FleetState }) {
         <div className="flex flex-col gap-1 text-[12px]">
           <div className="flex items-baseline gap-2">
             <span className="text-muted">Energia dziś</span>
-            <span className={cx('num text-[20px]', d.left < 0 ? 'text-down' : 'text-fg-strong')} data-testid="month-energy-today">
-              {zl(d.left)}
+            <span className={cx('num text-[20px]', d.energy < 0 ? 'text-down' : 'text-fg-strong')} data-testid="month-energy-today">
+              {zl(d.energy)}
             </span>
             <span className="text-[11.5px] text-dim">z {zl(d.allowance)}</span>
           </div>
-          <Meter value={d.allowance - Math.max(0, d.left)} max={d.allowance} over />
+          {/* Less than the daily pool says (AP-13, T371): the month's energy – and why it is short. */}
+          {d.cap && (
+            <p className="text-[11.5px] text-accent" data-testid="month-energy-cap" data-why={d.cap.why}>
+              {capNote(d.cap, zl)}
+            </p>
+          )}
+          <Meter value={d.allowance - Math.max(0, d.energy)} max={d.allowance} over />
           <Row label="Wydane dziś (koperty codzienne)" value={zl(d.spentToday)} />
+          {d.returned > 0 && <Row label="Zwroty dziś za wcześniejsze zakupy – od jutra na pozostałe dni" value={zl(d.returned)} testId="month-daily-returned" />}
           <Row label="Podstawowy przydział" value={zl(d.base)} />
-          <Row label={`Koperty codzienne: wydane / limit`} sub={lootExtraOf(fleet.log, fleet.month) > 0 ? `w tym łupy ${zl(lootExtraOf(fleet.log, fleet.month))}` : undefined} value={`${zl(d.spentBefore + d.spentToday)} / ${zl(d.limit)}`} />
+          <Row label={`Koperty codzienne: wydane / limit`} sub={lootExtraOf(fleet.log, fleet.month) > 0 ? `w tym łupy ${zl(lootExtraOf(fleet.log, fleet.month))}` : undefined} value={`${zl(d.spentBefore + d.spentToday - d.returned)} / ${zl(d.limit)}`} />
           <Row label="Dni do końca miesiąca (z dziś)" value={d.daysLeft} />
           <Row label="Energia miesiąca (pensja do wydania)" value={zl(fleet.energy)} />
           {d.limit === 0 && (
@@ -391,17 +399,19 @@ function EnvelopesPanel({ month, current, fleet, brief, readOnly }: { month: str
         <EnvelopeBars rows={rows} elapsed={month === current ? monthElapsed(fleet.today) : undefined} onCover={month === current && !readOnly ? setCovering : undefined} />
       )}
       {outside.length > 0 && <OutsideRow outside={outside} label={cats.label} />}
-      {covering && <CoverDialog month={month} to={covering} rows={fleet.envelopes} onClose={() => setCovering(null)} />}
+      {covering && <CoverDialog month={month} to={covering} fleet={fleet} onClose={() => setCovering(null)} />}
     </Panel>
   )
 }
 
 /**
  * „Pokryj z koperty…” (F28): the overrun of a planned envelope covered from one with a reserve – its limit moved (two
- * changes of the plan, „Cofnij”); the game rates the day by the limits before it (D73).
+ * changes of the plan, „Cofnij”); the game rates the day by the limits before it (D73). A daily envelope's limit is the
+ * daily pool's: the dialog says what the cover does to today's energy (AP-13, PM sp. 6).
  */
-function CoverDialog({ month, to, rows, onClose }: { month: string; to: string; rows: FleetState['envelopes']; onClose: () => void }) {
+function CoverDialog({ month, to, fleet, onClose }: { month: string; to: string; fleet: FleetState; onClose: () => void }) {
   const cats = useCategories()
+  const rows = fleet.envelopes
   const target = rows.find((e) => e.categoryId === to)
   const sources = rows.filter((e) => e.categoryId !== to && e.left > 0).sort((a, b) => b.left - a.left)
   const [from, setFrom] = useState(sources[0]?.categoryId ?? '')
@@ -410,6 +420,7 @@ function CoverDialog({ month, to, rows, onClose }: { month: string; to: string; 
   const [amount, setAmount] = useState<number | null>(Math.min(over, source?.left ?? 0) || null)
   const max = source?.left ?? 0
   const ok = !!source && amount != null && amount > 0 && amount <= max
+  const energy = source && amount != null && amount > 0 ? energyAfterLimit(fleet, (source.kind === 'daily' ? -amount : 0) + (target?.kind === 'daily' ? amount : 0)) : null
   return (
     <Modal
       title={`Pokryj przekroczenie: ${cats.label(to)}`}
@@ -459,6 +470,21 @@ function CoverDialog({ month, to, rows, onClose }: { month: string; to: string; 
               <AmountField className="h-[24px] w-[120px]" value={amount} allowEmpty onChange={setAmount} aria-label="Kwota pokrycia" data-testid="cover-amount" />
               <span className="text-[11px] text-dim">najwyżej {zl(max)}</span>
             </label>
+            {energy && (
+              <p className="text-[11.5px] text-muted" data-testid="cover-energy">
+                {energy.after === energy.before ? (
+                  <>
+                    Energia dziś bez zmian: <span className="num text-fg-strong">{zl(energy.before)}</span>
+                    {source?.kind !== 'daily' ? ' – koperta planowa nie należy do puli dziennej.' : fleet.daily?.cap ? ' – ogranicza ją energia miesiąca.' : ' – kwota za mała na grosz przydziału dnia.'}
+                  </>
+                ) : (
+                  <>
+                    Energia dziś: <span className="num">{zl(energy.before)}</span> → <span className={cx('num', energy.after < 0 ? 'text-down' : 'text-fg-strong')}>{zl(energy.after)}</span> – koperta codzienna
+                    oddaje limit puli dziennej, kolejne dni też dostaną mniej.
+                  </>
+                )}
+              </p>
+            )}
           </>
         )}
       </div>

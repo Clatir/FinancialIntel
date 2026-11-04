@@ -2691,3 +2691,29 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: kontener „Prąd”.” z „Cofnij” (operacja sprzed zmiany,
   dopóki ma nowy rodzaj). Zmiana kategorii nie rusza celu ani kontenera (jak dotąd). Zmiana zbiorcza rodzaju (F11) –
   przez `withKind`, z własnym „Cofnij”. Istniejące operacje z ukrytym `containerId` nie są poprawiane (bez migracji).
+- **T370** Zwrot wcześniejszego zakupu nie do energii dziś (1.15.7, AP-13 – MO sp. 6; realizuje D99 pkt 4, doprecyzowuje
+  T30 / T295): dzisiejsze części puli dziennej (koperty codzienne i bez kategorii) liczone osobno na kategorię główną (bez
+  kategorii – jedna grupa); zwrot (dodatni wydatek) najpierw pomniejsza dzisiejsze zakupy swojej kategorii (towar oddany
+  tego samego dnia), a to, co zwraca ponad nie (`daily.returned`, `returnedBy`), nie wchodzi do „wydane dziś” – od jutra
+  jest w wydanych wcześniej (mniej), więc rozkłada się na kolejne dni (dziś bez udziału). Wydane dziś nigdy poniżej 0,
+  kolejność w dniu bez znaczenia; suma miesiąca, koperty, debriefing i łupy bez zmian; energia miesiąca dostaje zwrot od
+  razu (pieniądze na koncie, N-PC-3 bez zmian). Rozważone i odrzucone: (a) każdy dzisiejszy zwrot na kolejne dni – zwrot
+  towaru kupionego dziś dawałby przekroczenie dnia, zamrażane w grze; (b) dopasowanie po kontrahencie – inna nazwa tego
+  samego sklepu (wpis ręczny i bank) robiłaby z dzisiejszego zwrotu dawny; (c) cała pula jako jedna grupa – zwrot butów
+  pokrywałby dzisiejszą kawę. Gra: dzień ze zwrotem dawnego zakupu i wydatkami ponad przydział łamie przydział (przedtem
+  zwrot to zasłaniał); dni zamrożone bez zmian. Bez zmian formatu.
+- **T371** Energia dziś nie większa niż energia miesiąca (1.15.7, AP-13 – S6, PM sp. 1, PM.3, MO sp. 5, PM sp. 6;
+  realizuje D99 pkt 4, potwierdza T295): `daily.energy` = `min(daily.left, energia miesiąca)` (`cappedEnergy`), gdy warstwy
+  się liczą (`started`); `daily.left` (przydział − wydane dziś, T295) zostaje miarą przekroczenia dnia – alarm
+  `daily-over`, naruszenie gry i jego kwota (energia miesiąca nigdy < 0, więc energia dziś < 0 dokładnie wtedy, gdy
+  `left` < 0); znacznik gry „Liquidity sweep” liczy dalej z `left`. Powód (`daily.cap`): `partial` – pensja częściowa
+  (D14), `none` – bez wypłaconej pensji w tym miesiącu (plan 0 zł), `spent` – pensja wypłacona, energię wzięły koperty
+  planowe, ładownia, odkładki, raty celów. `energy` czytają: Mostek (z dopiskiem „pensja częściowa – energia miesiąca
+  0,00 zł”), Plan miesiąca, „Skąd ta liczba?” (wiersze „Przydział po dzisiejszych wydatkach” i „Energia miesiąca …
+  – powód”), odsłuch, Silver Bullet, dymek zasobnika, Raporty, powiadomienia (odprawa; „na wyczerpaniu” z powodem),
+  Daily Bias (MO sp. 5: Bearish przy 0 zł miesiąca, nie Neutral), podgląd zmian zbiorczych (F11). Podgląd szybkiego wpisu
+  (`energyAfter`) liczy tak samo: zakup bierze energię miesiąca (przy wypłaconej pensji), więc także zakup z koperty
+  planowej albo spoza kopert może obniżyć energię dziś – podgląd to mówi; zakup kategorii z dzisiejszym zwrotem dawnego
+  zakupu najpierw bierze ten zwrot (T370). „Pokryj z koperty…” (PM sp. 6) mówi skutek dla energii dziś
+  (`energyAfterLimit`: koperta codzienna oddaje limit puli dziennej, planowa – bez zmian); domyślna koperta źródłowa
+  jak dotąd (największy zapas). Przed startem budżetu bez ograniczenia. Bez zmian formatu.

@@ -99,7 +99,7 @@ function BriefingReport() {
     <Columns id="reports-briefing" tracks={['minmax(420px,1fr)']} className="grid items-start">
       <Panel title={`Odprawa – ${dayLabel(fleet.today)}`} name="Odprawa" testId="reports-briefing">
         <div className="flex flex-col text-[12px]">
-          {fleet.daily && <Line label="Energia dziś" value={zl(fleet.daily.left)} strong />}
+          {fleet.daily && <Line label="Energia dziś" value={zl(fleet.daily.energy)} strong />}
           {/* The briefing's first element (spec, N26) – as on the bridge. */}
           {bias && <Line label="Daily Bias" value={BIAS_LABEL[bias]} testId="reports-briefing-bias" />}
           {!items.length && <span className="text-muted">Bez alarmów – kurs stabilny.</span>}

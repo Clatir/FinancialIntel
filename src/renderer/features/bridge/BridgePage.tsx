@@ -39,7 +39,7 @@ import { useGameRecords } from '../../store/game'
 import { useMembers } from '../household/actions'
 import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
-import { deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
+import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
 import { glossaryOf } from '@shared/glossary'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
@@ -427,8 +427,8 @@ function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
     const bias = dailyBias(fleet)
     const d = fleet.daily
     const parts = [`Odprawa, ${dayLabel(fleet.today)}.`]
-    // Over the day it is said so (N27) – never „0 złotych”.
-    if (d && !hidden) parts.push(d.left < 0 ? `Energia na dziś przekroczona o ${spokenPln(-d.left)}.` : `Energia na dziś: ${spokenPln(d.left)}.`)
+    // Over the day it is said so (N27) – never „0 złotych”; capped by the month's energy – with its reason (AP-13).
+    if (d && !hidden) parts.push(d.energy < 0 ? `Energia na dziś przekroczona o ${spokenPln(-d.energy)}.` : `Energia na dziś: ${spokenPln(d.energy)}${d.cap ? `, ${CAP_REASON[d.cap.why]}` : ''}.`)
     if (bias) parts.push(`Daily Bias: ${BIAS_LABEL[bias]}.`)
     for (const i of items) parts.push(i.text.replaceAll(`${AMOUNT_MASK} zł`, 'kwota ukryta').replace(/zł/g, 'złotych'))
     if (!items.length) parts.push('Bez alarmów.')
@@ -473,9 +473,15 @@ function BriefingBody({ fleet, items, spoken, onOpen }: { fleet: BridgeFleet; it
         <div className="flex items-baseline gap-3">
           <div className="flex flex-col">
             <span className="label">Energia dziś</span>
-            <span className={cx('num text-[24px] leading-tight', d && d.left < 0 ? 'text-down' : 'text-fg-strong')} data-testid="bridge-energy">
-              {d ? zl(d.left) : '—'}
+            <span className={cx('num text-[24px] leading-tight', d && d.energy < 0 ? 'text-down' : 'text-fg-strong')} data-testid="bridge-energy">
+              {d ? zl(d.energy) : '—'}
             </span>
+            {/* Less than the daily pool says (AP-13, T371): the month's energy – and why it is short. */}
+            {d?.cap && (
+              <span className="text-[11px] text-accent" data-testid="bridge-energy-cap" data-why={d.cap.why}>
+                {capNote(d.cap, zl)}
+              </span>
+            )}
             {d ? (
               <button type="button" className="self-start text-[11px] text-dim hover:text-fg-strong" onClick={() => setWhy(!why)} aria-expanded={why} title={glossaryOf('Energia')} data-testid="bridge-energy-why">
                 przydział {zl(d.allowance)} · podstawowy {zl(d.base)} · <span className="text-accent">{why ? 'zwiń' : 'skąd ta liczba?'}</span>
@@ -576,7 +582,7 @@ function SilverBullet({ fleet, items }: { fleet: BridgeFleet; items: BriefingIte
     <div className="flex flex-col gap-0.5 border-l-2 border-accent pl-2 text-[11.5px]" data-testid="briefing-silver-bullet">
       <span className="label text-accent">Silver Bullet · 10:00–11:00 NY</span>
       <span>
-        {d ? `Energia dziś ${zl(d.left)}.` : 'Bez planu tego miesiąca.'} {bias ? `Daily Bias: ${BIAS_LABEL[bias]}.` : ''} {first ? first.text : 'Bez alarmów.'}
+        {d ? `Energia dziś ${zl(d.energy)}${d.cap ? ` (${CAP_REASON[d.cap.why]})` : ''}.` : 'Bez planu tego miesiąca.'} {bias ? `Daily Bias: ${BIAS_LABEL[bias]}.` : ''} {first ? first.text : 'Bez alarmów.'}
       </span>
     </div>
   )

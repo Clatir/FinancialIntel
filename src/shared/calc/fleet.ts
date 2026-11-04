@@ -271,16 +271,60 @@ export function dailyAllowance(o: { limit: number; spentBefore: number; spentTod
 }
 
 /**
- * Today's energy after a purchase of `amount` (N3 – the quick entry's preview, as the engine counts it): one of today
- * takes it all today; one of an earlier day of this month lowers the allowance of the days left; another month or a day
- * ahead leaves today's energy as it is (null).
+ * Today's energy as shown (AP-13, D99 pkt 4 – T371): the allowance less today's spending (T295), never more than the
+ * month's energy left (`month`; null – no cap: the layers do not run). Over the day (below 0) it stays as it is – the
+ * month's energy is never below 0.
  */
-export function energyAfter(d: { today: string; limit: number; spentBefore: number; spentToday: number; days: number }, date: string, amount: number): { before: number; after: number } | null {
+export const cappedEnergy = (left: number, month: number | null | undefined): number => (month != null && month < left ? month : left)
+
+/** The parts of today's energy (the engine's `daily`, the quick entry's – N3): what its preview counts with. */
+export interface EnergyPreview {
+  today: string
+  limit: number
+  spentBefore: number
+  spentToday: number
+  days: number
+  /**
+   * The month's energy left (AP-13, T371) – today's is never more; absent / null: no cap. `spends` – a purchase takes it
+   * (the month's salary paid; without one the shields pay and the month's energy stays).
+   */
+  month?: { energy: number; spends: boolean } | null
+  /** Today's refunds of earlier purchases by main category ('' – none, T370): a purchase of its category today takes them first. */
+  returned?: Readonly<Record<string, number>>
+}
+
+/**
+ * Today's energy after a purchase (N3, AP-13 – the quick entry's preview, as the engine counts it): `daily` – its parts
+ * of the daily pool by main category ('' – none; a number – one part, no refund of today taken into account), `other` –
+ * its parts of the month's energy beyond the pool (a planned envelope, a category without one). One of today takes its
+ * daily part today – less what a refund of an earlier purchase of its category returned today (T370); one of an earlier
+ * day of this month lowers the allowance of the days left; both take the month's energy, and today's is never more
+ * (T371). Another month or a day ahead leaves today's energy as it is (null).
+ */
+export function energyAfter(d: EnergyPreview, date: string, daily: number | ReadonlyMap<string, number>, other = 0): { before: number; after: number } | null {
   if (date > d.today || date.slice(0, 7) !== d.today.slice(0, 7)) return null
   const base = { limit: d.limit, spentBefore: d.spentBefore, spentToday: d.spentToday, day: dayOfMonth(d.today), daysInMonth: d.days }
-  const before = dailyAllowance(base).left
-  const after = date === d.today ? dailyAllowance({ ...base, spentToday: d.spentToday + amount }).left : dailyAllowance({ ...base, spentBefore: d.spentBefore + amount }).left
-  return { before, after }
+  let total = 0
+  let today = 0
+  for (const [key, v] of typeof daily === 'number' ? [[null, daily] as const] : daily) {
+    total += v
+    today += key == null ? v : Math.max(0, v - (d.returned?.[key] ?? 0))
+  }
+  const left = date === d.today ? dailyAllowance({ ...base, spentToday: d.spentToday + today }).left : dailyAllowance({ ...base, spentBefore: d.spentBefore + total }).left
+  const month = d.month ? (d.month.spends ? Math.max(0, d.month.energy - total - other) : d.month.energy) : null
+  return { before: cappedEnergy(dailyAllowance(base).left, d.month?.energy), after: cappedEnergy(left, month) }
+}
+
+/**
+ * Today's energy after the daily pool's limit changes by `delta` (AP-13, PM sp. 6 – „Pokryj z koperty…”: a daily
+ * envelope's limit moved to a planned one shrinks the pool): its spending as it is, the month's energy as it is (a cover
+ * moves no money). null – no plan of the month.
+ */
+export function energyAfterLimit(f: Pick<FleetState, 'daily' | 'energy' | 'started'>, delta: number): { before: number; after: number } | null {
+  const d = f.daily
+  if (!d) return null
+  const allowance = Math.max(0, Math.floor((d.limit + delta - d.spentBefore) / d.daysLeft))
+  return { before: d.energy, after: f.started ? cappedEnergy(allowance - d.spentToday, f.energy) : allowance - d.spentToday }
 }
 
 /**
@@ -672,9 +716,36 @@ export interface FleetState {
   /** This month's salary as paid. */
   salary: SalaryPayment | null
   envelopes: EnvelopeState[]
-  daily: (DailyAllowance & { limit: number; spentBefore: number; spentToday: number }) | null
+  daily: DailyState | null
   alarms: Alarm[]
   log: FleetEvent[]
+}
+
+/**
+ * Today's energy (D16, T30, T295; AP-13): `left` – the allowance less today's spending (below 0 = over the day: the
+ * engine's alarm and the game's violation); `energy` – what every screen shows as „Energia dziś”: `left`, never more than
+ * the month's energy left (T371) – `cap` says by how much and why.
+ */
+export interface DailyState extends DailyAllowance {
+  limit: number
+  /** Spent from the daily pool before today (refunds of those days netted). */
+  spentBefore: number
+  /** Spent today – each main category's purchases less its refunds of today, never below 0 (T370). */
+  spentToday: number
+  /**
+   * What today's refunds of earlier purchases returned (AP-13, D99 pkt 4 – T370): beyond the day's purchases of their
+   * category – not today's energy; from tomorrow on in the days' pool (spent before), spread over the days left.
+   */
+  returned: number
+  /** …by main category ('' – none): a purchase of its category today takes it first (the quick entry's preview). */
+  returnedBy: Record<string, number>
+  /** Today's energy as shown (AP-13, T371). */
+  energy: number
+  /**
+   * The month's energy left capped today's (T371): its amount and why it is short – 'partial' a partial salary (D14),
+   * 'none' no salary paid this month, 'spent' the planned envelopes, the cargo and the rest took it. null = not capped.
+   */
+  cap: { month: number; why: 'partial' | 'none' | 'spent' } | null
 }
 
 /**
@@ -1518,7 +1589,8 @@ export function computeFleet(input: FleetInput): FleetState {
   if (plan) {
     const spentBy = new Map<string, { before: number; today: number }>()
     let dailyBefore = 0
-    let dailyToday = 0
+    /** Today's daily spending by main category ('' – none): its refunds net its purchases first (T370). */
+    const todayBy = new Map<string, number>()
     for (const t of txs) {
       if (monthOf(t.date) !== month || t.kind !== 'expense' || t.goalId || isCargoPayment(t, containerIds)) continue
       for (const p of partsOf(t)) {
@@ -1534,9 +1606,22 @@ export function computeFleet(input: FleetInput): FleetState {
         }
         // Spending without a category counts against today's energy: most likely a daily purchase.
         if (kind === 'daily') {
-          if (t.date === today) dailyToday += cost
+          if (t.date === today) todayBy.set(main?.id ?? '', (todayBy.get(main?.id ?? '') ?? 0) + cost)
           else dailyBefore += cost
         }
+      }
+    }
+    // A refund of an earlier purchase (AP-13, D99 pkt 4 – T370): today's refunds of a category return its purchases of
+    // today first (goods taken back the same day); what they return beyond them is not today's energy – from tomorrow it
+    // is spent before (less), so the days left share it.
+    let dailyToday = 0
+    let returned = 0
+    const returnedBy: Record<string, number> = {}
+    for (const [key, v] of todayBy) {
+      if (v >= 0) dailyToday += v
+      else {
+        returned -= v
+        returnedBy[key] = -v
       }
     }
     let dailyLimit = dailyExtra.get(month) ?? 0
@@ -1559,7 +1644,12 @@ export function computeFleet(input: FleetInput): FleetState {
       if (over?.over) alarms.push({ kind: 'envelope-over', level: over.serious ? 'red' : 'yellow', date: today, amount: spent - limit, ref: main.id })
     }
     const d = dailyAllowance({ limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, day: dayOfMonth(today), daysInMonth: daysInMonth(month) })
-    daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday }
+    // Never more than the month's energy left (AP-13, D99 pkt 4 – T371): a partial salary, none, or the month's energy
+    // taken by the planned envelopes and the cargo leave less for today than the daily pool says. The layers run only.
+    const shown = started ? cappedEnergy(d.left, energy) : d.left
+    const paid = salaryOfMonth.get(month)
+    const cap: DailyState['cap'] = shown < d.left ? { month: energy, why: !paid ? 'none' : paid.alarm === 'red' ? 'partial' : 'spent' } : null
+    daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, returned, returnedBy, energy: shown, cap }
     if (d.left < 0) alarms.push({ kind: 'daily-over', level: 'yellow', date: today, amount: -d.left })
   }
 

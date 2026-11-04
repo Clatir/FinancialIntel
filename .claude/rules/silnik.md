@@ -7,6 +7,7 @@ paths:
   - "src/renderer/store/game.ts"
   - "src/renderer/features/sensors/**"
   - "tests/unit/fleet.test.ts"
+  - "tests/unit/fleet-n*.test.ts"
   - "tests/unit/household.test.ts"
   - "tests/unit/repayments.test.ts"
   - "tests/unit/share.test.ts"
@@ -52,6 +53,10 @@ paths:
 - Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
   (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Miesiąc przed
   silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
+- Energia dziś (AP-13, od 1.15.7): ekrany, podglądy i Daily Bias czytają `daily.energy` – `daily.left`, nie więcej niż
+  energia miesiąca (`cappedEnergy`, powód `daily.cap` – T371); `left` zostaje miarą przekroczenia dnia (alarm, gra).
+  Zwrot ponad dzisiejsze zakupy swojej kategorii głównej (`returned`) nie wchodzi do dziś, od jutra jest w puli (T370).
+  Podgląd szybkiego wpisu – `energyAfter` (z `month`, `returned`), „Pokryj z koperty…” – `energyAfterLimit`.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

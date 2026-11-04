@@ -494,15 +494,29 @@ export interface QuickData {
   accounts: Array<{ id: string; name: string }>
   /** The account used last on this computer. */
   accountId: string
-  /** Today's energy left (null = no plan this month), the month's remaining energy (N-PC-2) and the envelopes left. */
+  /**
+   * Today's energy as shown (null = no plan this month – never more than the month's energy, AP-13), the month's
+   * remaining energy (N-PC-2) and the envelopes left.
+   */
   energyLeft: number | null
   monthEnergy?: number | null
   envelopesLeft: Record<string, number>
   /**
    * Today's energy as the engine counts it (N3): the daily envelopes' limit, what they spent before today and today,
-   * the day of the month – a purchase of an earlier day of the month lowers today's energy by its share of the days left.
+   * the day of the month – a purchase of an earlier day of the month lowers today's energy by its share of the days left;
+   * `month` – the month's energy that caps it (AP-13; `spends` – a purchase takes it), `returned` – today's refunds of
+   * earlier purchases by main category ('' – none), taken first by a purchase of their category (`calc/fleet.ts`
+   * `energyAfter`).
    */
-  daily?: { today: string; limit: number; spentBefore: number; spentToday: number; days: number } | null
+  daily?: {
+    today: string
+    limit: number
+    spentBefore: number
+    spentToday: number
+    days: number
+    month?: { energy: number; spends: boolean } | null
+    returned?: Record<string, number>
+  } | null
   quietHours: { from: string; to: string }
   impulseThreshold: number
   /**

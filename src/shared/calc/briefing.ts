@@ -34,9 +34,11 @@ export function dailyBias(f: Pick<FleetState, 'daily' | 'envelopes' | 'shields' 
   if (!f.daily || !f.started) return null
   const base = f.daily.base
   const belowMin = f.shields.min != null && f.shields.amount < f.shields.min
-  if (f.daily.left < base / 2 || belowMin) return 'bearish'
+  // Today's energy as shown – never more than the month's energy left (AP-13, MO sp. 5: no Neutral at 0 zł of the month).
+  const energy = f.daily.energy
+  if (energy < base / 2 || belowMin) return 'bearish'
   // The planned envelopes on plan; the daily ones are the energy itself (N102 – D16: their pool decides).
-  if (f.daily.left >= base && f.envelopes.every((e) => e.kind !== 'planned' || e.spent <= e.limit)) return 'bullish'
+  if (energy >= base && f.envelopes.every((e) => e.kind !== 'planned' || e.spent <= e.limit)) return 'bullish'
   return 'neutral'
 }
 
