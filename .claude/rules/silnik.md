@@ -46,6 +46,8 @@ paths:
 - Kurs i symulator (1.15.7, T385–T387): osłony w kursie nigdy poniżej zera – czego brak, to `short`, pensja bez
   pieniędzy `partial`; „teraz” symulatora = stan silnika (`rangeNow` z `courseInputOf`), boje i spłaty reszty miesiąca
   tylko w `rangeRest`; warstwa pełna teraz – data tego miesiąca.
+- Osłony + kadłub na koniec miesiąca (`cushion.ts`, T388–T389) to sumy `moves` logu silnika: **każdy ruch osłon
+  i kadłuba w silniku ma wpis w logu** (`record`) – inaczej trend przechodzi na przebieg silnika na każdy miesiąc (wolno).
 - Schematy (zod) są źródłem typów; zmiany addytywne (`openEnum`, `lenientRecord`, `z.looseObject`).
 - Pewne dopasowanie zwrotu (D91 b, T329): każda osoba wpłaty osobno (`repaymentSharesByMember`) – import i szybki wpis
   `linkRepayments`, edytor przy zmianie części `moreSureCovers` / `keptCovers`; wpłata ≥ cały dług osoby wiąże wszystkie.
@@ -75,11 +77,11 @@ miesiąca, debriefing, łupy, kreator), `briefing.ts` (odprawa, Daily Bias), `do
 przypisane do zakupów), `share.ts` (wspólne finansowanie), `income.ts` (przychody), `history.ts` (zakres historii do
 średnich), `balances.ts` (salda otwarcia, potwierdzenia), `operations.ts` (części operacji, koszt, przelewy dwustronne),
 `transfers.ts`, `kinds.ts`, `radar.ts` (radar 90 dni), `scheduled.ts` (boje), `ahead.ts` (salda kont naprzód),
-`course.ts` (kurs i manewry), `yearPlan.ts` (plan roczny), `cargoStatus.ts` / `cargoWatch.ts` (opłaty, ceny, ciche
-kontenery), `anomalies.ts`, `returns.ts` (zwroty w drodze), `tags.ts` (tagi i wyprawy), `drill.ts`, `fuel.ts` (bilans
-paliwa), `netWorth.ts`, `inflation.ts`, `why.ts` („skąd ta liczba?”), `game.ts` (oceny dni, stopnie, misje),
-`intel.ts` (analizy ICT), `inbox.ts` (meldunki), `quick.ts` (szablony szybkiego wpisu), `effect.ts` (skutek zmiany
-zbiorczej).
+`course.ts` (kurs i manewry), `cushion.ts` (osłony + kadłub i zasięg na koniec miesięcy), `yearPlan.ts` (plan
+roczny), `cargoStatus.ts` / `cargoWatch.ts` (opłaty, ceny, ciche kontenery), `anomalies.ts`, `returns.ts` (zwroty
+w drodze), `tags.ts` (tagi i wyprawy), `drill.ts`, `fuel.ts` (bilans paliwa), `netWorth.ts`, `inflation.ts`, `why.ts`
+(„skąd ta liczba?”), `game.ts` (oceny dni, stopnie, misje), `intel.ts` (analizy ICT), `inbox.ts` (meldunki), `quick.ts`
+(szablony szybkiego wpisu), `effect.ts` (skutek zmiany zbiorczej).
 
 Szczegóły funkcji i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji) i `docs/decyzje.md`
 (T-decyzje).

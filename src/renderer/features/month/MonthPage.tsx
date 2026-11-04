@@ -27,6 +27,7 @@ import { EnvelopeBars, monthElapsed } from './EnvelopeBars'
 import { IncomePanel } from './IncomePanel'
 import { playSound } from '../../lib/sounds'
 import { HistoryButton } from '../history/HistoryDialog'
+import { CushionLine } from '../intel/Cushion'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const KIND_TITLE: Record<EnvelopeKind, string> = { planned: 'Koperty planowe', daily: 'Koperty codzienne' }
@@ -555,6 +556,7 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
         )}
         {brief.plus === null && <div className="text-[11.5px] text-dim">{brief.salary ? 'Miesiąc trwa – wynik po jego końcu.' : `Bez pensji w tym miesiącu – nie ma z czym porównać kosztów (${zl(brief.costs)}).`}</div>}
         <FuelLine month={brief.month} fleet={fleet} running={!brief.ended} />
+        <CushionLine month={brief.month} />
         {brief.energy && (
           <div className="flex flex-col" data-testid="debrief-energy">
             <Row

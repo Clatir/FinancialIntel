@@ -2756,3 +2756,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i podpowiedź („cel liczy się bez terminu i bez raty”). Prognoza zasięgu: oba zdania nazywają miesiąc wyczerpania jedną
   regułą – ostatni miesiąc, który zaczyna się z paliwem (`rangeForecast.emptyMonth`, `plansEmpty`); równa liczba
   miesięcy kończy się na początku następnego.
+- **T388** „Osłony + kadłub i zasięg” na koniec miesiąca (1.15.7, AP-31, kryterium 2, WY.3, RY.23): `calc/cushion.ts`
+  `cushionTrend` – osłony + kadłub w ostatnim dniu miesiąca i zasięg tego dnia (jak Mostek tego dnia: średnie koszty
+  według reguły `costsFor` – 12 objętych miesięcy przed nim, poniżej 3 przyjęte koszty – i dług pożyczek wziętych z dniem
+  nie późniejszym), zmiana m/m kwoty (strzałka ↑ / ↓ / →, zieleń / czerwień jak kwoty) i zasięgu (w dziesiątych, po
+  obcięciu T218). Tylko miesiące zakończone: bieżący jest po wypłacie pensji do energii, a przed łupami – wobec końca
+  miesiąca zawsze by spadał. Miesiące przed startem budżetu pominięte, pierwszy bez zmiany („—”). Wywiad – panel
+  „Osłony i kadłub – 12 miesięcy” (najnowszy u góry, „rosną w N z M mies.”); Raporty → Debriefing – sekcja 12 miesięcy
+  do debriefowanego (także PDF); Plan miesiąca → debriefing – wiersz miesiąca; Przegląd roczny – zakończone miesiące
+  roku. Przy ukrytych kwotach zmiana kwoty bez znaku i strzałki (zasięg – jak dotąd – widoczny).
+- **T389** Stany końca miesiąca z logu silnika (1.15.7, AP-31, T4, „Wydajność”): osłony i kadłub to sumy `moves` logu
+  jednego przebiegu silnika (`fleet.log`) do końca każdego miesiąca – żadnego przebiegu na miesiąc (12 przebiegów to
+  ok. 1,8 s przy 30 tys. operacji); sumy w pamięci po logu (`WeakMap`), hak `useCushion` liczy raz na przebieg silnika
+  i rekordy, które czyta. Bezpiecznik: log, który nie sumuje się do stanu silnika teraz (ruch warstwy bez wpisu
+  w logu), przełącza na przebieg silnika na koniec każdego miesiąca (`engineAt`). Test: każdy koniec miesiąca =
+  `computeFleet` z `now` tego dnia (dostawy, łupy, wydatek ponad energię, pensja z kadłuba, pożyczki, konto dołączone
+  później). Nowy ruch warstwy w silniku – zawsze z wpisem w logu.

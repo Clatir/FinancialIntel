@@ -3,7 +3,8 @@
  * week with its drawdown and BOS / CHoCH (1.10.0: beside it the net worth – F24), the fuel balance of the months (F25),
  * the killzones of spending, the FVG of the envelopes (plan against fact), the spending over time with the cargo as the
  * Order Block – to the detail (F20) –, the brands, a month against its averages, the range forecast without any payout,
- * the expeditions (F17), the personal inflation (F36), the captain's log.
+ * the expeditions (F17), the personal inflation (F36), the captain's log; the shields and the hull at each month's end
+ * (AP-31).
  */
 import { useMemo, useState } from 'react'
 import { addDays, addMonths, isoWeekOf, monthOf, monthRange } from '@shared/calc/dates'
@@ -26,6 +27,7 @@ import { monthGenLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { KillzoneMap, WealthChart } from './charts'
 import { CoursePanel, ManeuverPanel, useCourseInput } from './Course'
+import { CushionPanel } from './Cushion'
 import { useNetWorth, useWealth } from './wealth'
 import { ComparisonPanel, SpendingTable, TargetsPanel } from './Drill'
 import { ExpeditionsPanel } from './Expeditions'
@@ -168,6 +170,7 @@ export function IntelPage() {
               )}
             </Panel>
             <FuelPanel fleet={fleet} />
+            <CushionPanel month={fleet.month} />
             <Panel title="Wydatki w czasie" testId="intel-spending">
               <SpendingTable months={months} spending={spending} max={maxSpend} />
             </Panel>
