@@ -31,7 +31,7 @@ import { topUpHull } from '../month/actions'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
-import { useCargoDays, useCargoStatuses, useCargoWatch } from '../cargo/status'
+import { useCargoDays, useCargoPlanned, useCargoStatuses, useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
 import { useFuture } from '../radar/future'
@@ -582,6 +582,8 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
   const game = useGameRecords()
   const cargo = useCargoStatuses()
   const days = useCargoDays()
+  // The dues a payment written ahead pays (T398): no asteroid of them – as on the Radar.
+  const planned = useCargoPlanned()
   // The cargo hold's watch (F9, F23); the new files of mBank in the downloads (F14).
   const watch = useCargoWatch()
   const bankFiles = useNewBankFiles()
@@ -611,6 +613,7 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
       members: fi.settings.household.members,
       cargo,
       payDays: days,
+      planned,
       scheduled: future.reminders,
       accounts: future.accounts,
       watch,
@@ -620,7 +623,7 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
       firewallOff: !fi.settings.orders.firewall
     })
     // `hidden`: the amounts of the texts mask on a change.
-  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, days, future, watch, bankFiles, anomalies, returns])
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, days, planned, future, watch, bankFiles, anomalies, returns])
 }
 
 /** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */
@@ -823,12 +826,23 @@ function Receivables({ fleet }: { fleet: FleetState }) {
     <Panel title="Rozliczenia z domownikami" testId="bridge-receivables">
       <div className="flex flex-col gap-1 text-[12px]">
         {shown.map((m) => (
-          <div key={m.memberId} className="flex items-baseline gap-2" data-testid="bridge-member">
+          // Both at once (AF-16): an advance beside a debt is in the deposit too – the sum at the persons is the deposit.
+          <div key={m.memberId} className="flex items-baseline gap-x-2 flex-wrap" data-testid="bridge-member">
             <span className="text-fg-strong">{memberName(m.memberId, members)}</span>
-            <span className="text-[11px] text-dim">
-              {m.owed > 0 ? `ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${countLabel(daysBetween(m.since, fleet.today), 'dzień', 'dni', 'dni')})` : ''}` : 'zaliczka – czeka na wydatki'}
+            <span className="flex min-w-0 flex-1 flex-col">
+              {m.owed > 0 && (
+                <span className="flex items-baseline gap-2">
+                  <span className="text-[11px] text-dim">{`ma oddać${m.since ? ` · od ${m.since.slice(8, 10)}.${m.since.slice(5, 7)} (${countLabel(daysBetween(m.since, fleet.today), 'dzień', 'dni', 'dni')})` : ''}`}</span>
+                  <span className="num ml-auto text-fg-strong">{zl(m.owed)}</span>
+                </span>
+              )}
+              {m.deposit > 0 && (
+                <span className="flex items-baseline gap-2" data-testid="bridge-member-deposit">
+                  <span className="text-[11px] text-dim">zaliczka – czeka na wydatki</span>
+                  <span className="num ml-auto text-muted">{zl(m.deposit)}</span>
+                </span>
+              )}
             </span>
-            <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>
           </div>
         ))}
         <div className="flex items-baseline gap-2 border-t border-line/60 pt-1">

@@ -451,12 +451,14 @@ async function noticeStaleBackups(s: DataStore): Promise<void> {
 /** The longest quitting waits for the writes already queued (B43). */
 const QUIT_DRAIN_MS = 30_000
 /**
- * The longest closing a folder waits for its presence cleared (przegląd N1 5): one removal, behind at most a heartbeat's
- * write there – a slow OneDrive or a file held never holds the quit nor the next folder's open (the removal goes on).
+ * The longest closing a folder for another waits for its presence cleared (przegląd N1 5): one removal, behind at most a
+ * heartbeat's write there – a slow OneDrive or a file held never holds the next folder's open (the removal goes on).
+ * Quitting waits for it within the quit's drain (`QUIT_DRAIN_MS`, this at least): the process ends right after it.
  */
 const PRESENCE_CLEAR_MS = 5_000
 
-async function closeStore(): Promise<void> {
+/** `quit` – the app quits right after (its presence's removal waited for within the quit's drain – przegląd N2). */
+async function closeStore(quit = false): Promise<void> {
   // Detach everything first: an open that switches meanwhile is never undone by this close resuming later.
   const closing = store
   watcher?.stop()
@@ -470,12 +472,13 @@ async function closeStore(): Promise<void> {
   storePresence?.()
   storePresence = null
   if (!closing) return
+  const quitBy = quit ? Date.now() + QUIT_DRAIN_MS : undefined
   // The writes the window sent before closing finish first (a rescan ahead of them in the queue takes seconds – B43).
   const drained = await Promise.race([closing.idle().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), QUIT_DRAIN_MS).unref?.())])
   if (!drained) log('warn', `zamykanie: zapisy trwały ponad ${QUIT_DRAIN_MS / 1000} s`)
   // The same folder opening again keeps it (its write probe may have written it meanwhile) – checked in its turn, also
-  // when no longer waited for.
-  if (!(await presenceKept.clearWithin(closing.root, PRESENCE_CLEAR_MS))) log('warn', `zamykanie: usunięcie obecności trwa ponad ${PRESENCE_CLEAR_MS / 1000} s – idzie dalej w tle`)
+  // when no longer waited for; a delay said in the log by the keeper.
+  await presenceKept.clearAtClose(closing.root, { ms: PRESENCE_CLEAR_MS, quitBy })
 }
 
 async function heartbeat(force = false): Promise<void> {
@@ -1769,7 +1772,7 @@ app.on('window-all-closed', () => {
   tray?.destroy()
   ictj?.stop()
   quitting = true
-  void closeStore()
+  void closeStore(true)
     .catch(() => undefined)
     .finally(() => app.quit())
 })

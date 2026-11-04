@@ -22,7 +22,7 @@ const container = (over: Partial<Container>): Container => containerSchema.parse
 const pay = (c: Container, date: string, amount = c.amount, over: Partial<Transaction> = {}): Transaction =>
   transactionSchema.parse({ ...base(), date, accountId: c.accountId ?? MBANK_ACCOUNT_ID, amount: -amount, containerId: c.id, ...over })
 const money = (g: number) => `${(g / 100).toFixed(2)} zł`
-const input = (over: Partial<CargoInput>): CargoInput => ({ containers: [], transactions: [], today: '2026-11-03', tanks: [], coveredTo: {}, ...over })
+const input = (over: Partial<CargoInput>): CargoInput => ({ containers: [], transactions: [], today: '2026-11-03', coveredTo: {}, ...over })
 const states = (list: ReturnType<typeof cargoStatuses>) => list.map((s) => [s.due, s.state, s.carried])
 
 // RA.4: Telefon Play 50 zł on the 20th (its history), the payment of 20 October missing; the bank imported to 26.10.

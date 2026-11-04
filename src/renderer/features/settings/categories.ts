@@ -8,6 +8,7 @@ import type { Category } from '@shared/schema'
 import { canWrite, listOf, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { dropEnvelope, restoreEnvelope } from '../month/actions'
+import { useImport } from '../import/state'
 
 export function patchCategory(id: string, p: Partial<Category>): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, categories: f.settings.categories.map((c) => (c.id === id ? { ...c, ...p } : c)) } }))
@@ -36,6 +37,7 @@ const USE_LABEL: Record<CategoryUseKind, [string, string, string]> = {
   parts: ['część paragonu', 'części paragonów', 'części paragonów'],
   plans: ['plan miesiąca', 'plany miesięcy', 'planów miesięcy'],
   rules: ['reguła importu', 'reguły importu', 'reguł importu'],
+  import: ['decyzja otwartego importu', 'decyzje otwartego importu', 'decyzji otwartego importu'],
   containers: ['kontener Ładowni', 'kontenery Ładowni', 'kontenerów Ładowni'],
   scheduled: ['boja', 'boje', 'boi'],
   views: ['widok Operacji', 'widoki Operacji', 'widoków Operacji'],
@@ -45,7 +47,7 @@ const USE_LABEL: Record<CategoryUseKind, [string, string, string]> = {
 /** „3 operacje, 1 reguła importu” – where a category is used. */
 export const usesText = (uses: readonly CategoryUse[]): string => uses.map((u) => `${u.count} ${plural(u.count, ...USE_LABEL[u.kind])}`).join(', ')
 
-/** The uses of a category with its subcategories, in the records and settings in memory now. */
+/** The uses of a category with its subcategories, in the records and settings in memory now – and the open import's decisions. */
 export function usesOf(id: string): CategoryUse[] {
   const s = useData.getState()
   if (!s.fi) return []
@@ -57,7 +59,8 @@ export function usesOf(id: string): CategoryUse[] {
     scheduled: listOf(s.records.scheduled ?? {}),
     game: listOf(s.records.game ?? {}),
     rules: s.fi.settings.import.rules,
-    views: s.fi.settings.operationViews
+    views: s.fi.settings.operationViews,
+    importing: importDecisions()
   })
 }
 
@@ -94,4 +97,13 @@ export function deleteCategory(id: string): boolean {
       })
   })
   return true
+}
+
+/**
+ * The decisions of the import in progress (przegląd N2): its themes, groups and rows – a category deleted meanwhile would
+ * be written into its operations, gone from the tree. None while no file is open.
+ */
+function importDecisions(): Array<{ categoryId: string | null }> {
+  const { plan, choices } = useImport.getState()
+  return plan ? [...Object.values(choices.themes), ...Object.values(choices.groups), ...Object.values(choices.rows)] : []
 }

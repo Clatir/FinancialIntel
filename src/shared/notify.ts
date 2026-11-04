@@ -262,13 +262,17 @@ export function bundleNotices(fresh: readonly Notice[]): Notice[] {
   ]
 }
 
+/** The window untouched this long across the quiet hours' end: left for the night, not worked in through it (T411). */
+export const MORNING_IDLE_MS = 30 * 60_000
+
 /**
  * A touch of the window is the morning's opening (AF-67, T56): its touch before was before today's quiet hours ended
- * (yesterday's, before their end today) – the window left on screen through the night goes to the bridge. Without quiet
- * hours – never.
+ * (yesterday's, before their end today) and at least `MORNING_IDLE_MS` ago – the window left on screen through the night
+ * goes to the bridge; the user working through the quiet hours' end stays where they are (T411). Without quiet hours –
+ * never. `now.ms` – the moment of the touch (epoch ms).
  */
-export function morningTouch(prevTouch: number, now: { date: string; time: string }, quiet: { from: string; to: string }): boolean {
-  if (quiet.from === quiet.to) return false
+export function morningTouch(prevTouch: number, now: { date: string; time: string; ms: number }, quiet: { from: string; to: string }): boolean {
+  if (quiet.from === quiet.to || now.ms - prevTouch < MORNING_IDLE_MS) return false
   const day = now.time >= quiet.to ? now.date : addDays(now.date, -1)
   return prevTouch < DateTime.fromISO(`${day}T${quiet.to}`, { zone: WARSAW }).toMillis()
 }

@@ -90,12 +90,13 @@ describe('okno zostawione na noc: pierwszy dotyk po ciszy nocnej prowadzi na Mos
   const at = (iso: string) => Date.parse(iso)
   it('ostatni dotyk przed końcem ciszy – poranny; po nim – już nie (kreator, praca w ciągu dnia)', () => {
     // 05:00 Warsaw on 14.10 = 03:00 UTC.
-    expect(morningTouch(at('2026-10-13T20:00:00Z'), { date: '2026-10-14', time: '06:10' }, quiet)).toBe(true)
-    expect(morningTouch(0, { date: '2026-10-14', time: '10:00' }, quiet)).toBe(true)
-    expect(morningTouch(at('2026-10-14T03:30:00Z'), { date: '2026-10-14', time: '10:00' }, quiet)).toBe(false)
+    // 06:10 Warsaw = 04:10 UTC, 10:00 = 08:00 UTC, 01:00 = 23:00 UTC the day before.
+    expect(morningTouch(at('2026-10-13T20:00:00Z'), { date: '2026-10-14', time: '06:10', ms: at('2026-10-14T04:10:00Z') }, quiet)).toBe(true)
+    expect(morningTouch(0, { date: '2026-10-14', time: '10:00', ms: at('2026-10-14T08:00:00Z') }, quiet)).toBe(true)
+    expect(morningTouch(at('2026-10-14T03:30:00Z'), { date: '2026-10-14', time: '10:00', ms: at('2026-10-14T08:00:00Z') }, quiet)).toBe(false)
     // Before the quiet hours end today: yesterday's end counts.
-    expect(morningTouch(at('2026-10-13T12:00:00Z'), { date: '2026-10-14', time: '01:00' }, quiet)).toBe(false)
-    expect(morningTouch(0, { date: '2026-10-14', time: '10:00' }, { from: '00:00', to: '00:00' })).toBe(false)
+    expect(morningTouch(at('2026-10-13T12:00:00Z'), { date: '2026-10-14', time: '01:00', ms: at('2026-10-13T23:00:00Z') }, quiet)).toBe(false)
+    expect(morningTouch(0, { date: '2026-10-14', time: '10:00', ms: at('2026-10-14T08:00:00Z') }, { from: '00:00', to: '00:00' })).toBe(false)
   })
 })
 

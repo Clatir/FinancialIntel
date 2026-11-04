@@ -1,5 +1,141 @@
 # Financial Intel – zmiany
 
+## 1.15.8
+
+Poprawki po audycie – zasady interfejsu: nic nie dzieje się po cichu, „Cofnij” wszędzie, czytelne teksty, odprawa
+z hierarchią:
+
+- **Odmowy i przycięcia zawsze z komunikatem przy polu:** kwoty, liczby poza zakresem, limity długości z licznikiem, tagi,
+  kwoty „od” po „do” zamieniane. Esc cofa wpis w polach liczbowych. Operacja na 0 zł ma ostrzeżenie, a wyłączone przyciski
+  podają powód. „Spłać” i „zostaw” w nieaktualnym meldunku „Zaliczki przy długu” mówią, że nie ma nic do zmiany.
+- **Szybki wpis:** komunikaty pól w stopce, Esc działa jak „×”, Enter po odrzuconej kwocie nie zapisuje starej, a skrócony
+  tag nie wstrzymuje zapisu – informacja o skróceniu pojawia się przy „Zapisano” tylko wtedy, gdy dotyczy tego zapisu.
+  Komunikat o skróconych albo pominiętych tagach nie myli się już przy tagach z literą „s”, z podwójnymi spacjami ani przy
+  tagu równym już dodanemu.
+- **„Cofnij” wszędzie:** przy usunięciu reguły, rozłączeniu nazwy, zrzucie z ładowni i zamknięciu zgłoszenia; toasty
+  z „Cofnij” trwają dłużej. Kosz, token i przerwanie kreatora pytają o potwierdzenie, a kreator pokazuje, co zostaje
+  w folderze.
+- **„Cofnij import” ostrzega o każdej Twojej zmianie** w operacjach importu – także zapisanej w trakcie cofania, na
+  komputerze z innym zegarem albo po późniejszych importach, które te operacje rozliczyły – i nie liczy jako Twoich zmian
+  zapisów samej aplikacji ani importu tego samego okresu w drugim formacie. „Cofnij” po cofnięciu importu nie nadpisuje
+  i nie usuwa operacji zmienionych po cofnięciu – zostają z Twoimi zmianami, a komunikat mówi, ile ich jest. Lista
+  importów ostrzega, że następny usunie najstarszy.
+- **Domownicy – nazwy w banku:** „Cofnij” usunięcia nazwy przywraca tylko tę nazwę (nazwy dopisane w międzyczasie zostają).
+  Nazwy, którą ma już inny domownik – także zapisanej bez polskich znaków albo z innym szykiem słów – nie da się dopisać
+  drugiej osobie (z komunikatem), a „+ domownik” przy imporcie dla takiej nazwy wybiera istniejącego domownika. Domownik
+  ma najwyżej 20 nazw w banku – kolejna jest odmówiona (wcześniej mogła zniknąć cała lista).
+- **Odprawa z hierarchią:** najpierw alarmy, potem sprawy dnia, reszta zwinięta pod „Pokaż wszystkie”; sprawy starsze
+  niż 30 dni tylko w Meldunkach, jedna pozycja na sprawę, poważne naruszenia na czerwono (także w Dowództwie). Odsłuch
+  czyta skrót: energia, Daily Bias i najważniejszy alarm. Przy starcie jedno powiadomienie zamiast kilku, a odprawa
+  przychodzi przed innymi powiadomieniami. Godzina odprawy do wyboru w Ustawieniach → Powiadomienia (domyślnie przy
+  pierwszym otwarciu). Okno zostawione na noc przechodzi rano na Mostek przy pierwszym dotyku, ale nie w trakcie pracy
+  przez koniec ciszy nocnej.
+- **Rozkazy i progi gry** zmienia się w Ustawieniach → Warstwy i rozkazy; Dowództwo je pokazuje.
+- **Teksty:** daty w całej aplikacji jako dd.mm.rrrr (także w historii zmian, dzienniku zmian i zakresie Operacji);
+  z podpowiedzi zniknęły kody decyzji i teksty robocze; błędy systemu (brak pliku, zajęty plik, uszkodzony JSON lub ZIP)
+  są po polsku, a plik zajęty przez OneDrive ma plakietkę „zablokowany”. Stopa oszczędności ma zawsze jedno miejsce po
+  przecinku (55,0%), liczby mają przecinek („1,0”), minus jest typograficzny „−” (także na listach zmian). Poprawna
+  odmiana: „3 pensje”, „1 plan miesiąca zmieniony”. Cisza nocna z takimi samymi godzinami „od” i „do” mówi, że jest
+  wyłączona.
+- **Pomoc (F1)** ma słowniczek „Terminy ICT”, a każda linia „Stanu okrętu” ma objaśnienie.
+- **Eksport i Synchronizacja:** pusty eksport mówi „Brak operacji w okresie”, a „Excel (operacje + miesiące)” działa także
+  dla okresu bez operacji – z arkuszem miesięcy. Wyszukiwanie usuniętych wpisów znajduje daty wpisane jako 01.10.2026
+  i jako 2026-10-01.
+
+## 1.15.7
+
+Poprawki po audycie – opłaty, energia, kadłub, kurs i gra:
+
+- **Opłaty – jeden stan w całej aplikacji:** niezapłacona opłata zostaje „po terminie” w kolejnych miesiącach, aż do
+  zapłaty – w Ładowni, na Radarze i w odprawie, także czynsz płacony 28.–31. dnia. Odprawa podaje ten sam termin co
+  Ładownia i Radar, a data wpisana w polu „Płatność” wygrywa z historią płatności. Ładownia i odkładki liczą zapłatę tak
+  samo: spóźniona zamyka zaległy termin, wcześniejsza – następny (przy opłacie co 2 miesiące płatność przed dniem terminu
+  zamyka najpierw zaległy); zbiornik nie odkłada drugi raz opłaty pokazanej jako zapłacona, także po „Zapłacone poza
+  budżetem” i przy kontenerze dodanym później. Termin sprzed dnia startu budżetu nie jest „po terminie”, a „Zapłacone
+  (dziś)” stoi przy terminie, który ta płatność naprawdę zamknie. Opłata zapłacona wydatkiem wpisanym z wyprzedzeniem
+  liczy się jako zapłacona dopiero w dniu tej płatności – do tego czasu Ładownia pokazuje „zaplanowane”, Radar
+  i odprawa nie przypominają o niej drugi raz, a prognoza sald liczy ją raz (także wpisaną na kolejny miesiąc). Kreator startu liczy rachunki o zmiennej kwocie (np. woda co 2 miesiące)
+  tak jak budżet po starcie.
+- **Opłata zapłacona z celu albo zakupem do zwrotu** zamyka termin także w odkładkach – zbiornik zostaje nietknięty
+  (zebrane czeka na następny termin), zwrot domownika to zwykła spłata długu. Dawny przelew z kontenerem nie płaci opłaty
+  nigdzie.
+- Opłata zapłacona miesiąc przed terminem nie daje już fałszywej „nowej ceny” (+100 %). Podpowiedź raty odkładki liczy
+  stan zbiornika, a debriefing pokazuje „Za mało w zbiorniku”. Boja nie zamyka się operacją o tej samej kwocie i innej
+  nazwie ani operacją innej boi; dawne boje mówią „minęła bez operacji”. Kreator łączy płatności z miesiąca przed startem
+  (opłata zapłacona 28.10 za termin 03.11).
+- **Energia dziś w granicach miesiąca:** nie jest większa niż to, co zostało z pensji w miesiącu – przy pensji częściowej
+  Mostek pokazuje 0,00 zł z dopiskiem „pensja częściowa”; Daily Bias, odprawa, powiadomienia i Dowództwo mówią to samo
+  (naruszenie – dopiero wydatki ponad przydział). Zwrot towaru kupionego wcześniej nie podnosi energii dziś – od jutra
+  rozkłada się na pozostałe dni (zwrot tego samego dnia dalej znosi zakup), a „Skąd ta liczba?” pokazuje go w nawiasie
+  obok sumy. „Pokryj z koperty…” pokazuje, jak zmieni się energia dziś.
+- **Kadłub:** kadłub, któremu brakuje mniej niż 1 % celu, liczy się jako pełny (także w kursie) – dopłata do XTB z wolnego
+  do decyzji nie łamie firewalla. Nowy przycisk „Dopełnij kadłub z osłon” na Mostku, z „Cofnij” (usuwa też plan miesiąca,
+  jeśli przycisk go założył i nic się w nim od tego czasu nie zmieniło – także na drugim komputerze; gdy planu już nie
+  ma, nic nie robi). Ustawienia → Warstwy i rozkazy: podgląd skutku zmiany celu osłon i kadłuba przed zapisem,
+  po zmianie „Cofnij”. Wyłączony firewall widać w Ustawieniach, na Mostku i w odprawie przy dopłacie do XTB; zwrot puli
+  „Podatek” przy pustej rezerwie nie jest dopłatą do XTB.
+- **Kurs i symulator manewrów:** kurs na 12 miesięcy nie pokazuje osłon poniżej zera – gdy zabraknie pieniędzy, widać
+  miesiące z pensją częściową i ile brakuje na koszty. Resztka miesiąca liczy się z energii miesiąca: koperty i opłaty
+  ponad nią idą z osłon. W symulatorze „teraz” to ten sam zasięg co na Mostku, a boje i spodziewane spłaty tego miesiąca
+  są w osobnym wierszu „Zasięg po resztce miesiąca” (boja z kategorią koperty planowej liczy się raz). Warstwa albo cel
+  już pełne mają „teraz” zamiast następnego miesiąca. „Wyczyść manewr” czyści cały formularz, błędny termin celu jest
+  oznaczony, a prognoza zasięgu podaje w obu zdaniach ten sam miesiąc wyczerpania paliwa.
+- **Nowe: trend poduszki** – osłony + kadłub i zasięg na koniec każdego miesiąca ze strzałką zmiany: w Wywiadzie
+  (12 miesięcy), w debriefingu i w przeglądzie rocznym.
+- **Gra:** po przerwie gra pyta przed zamrożeniem dni bez importu z banku – „Zaimportuj najpierw” albo „Zamroź bez
+  danych”; bez odpowiedzi dni czekają najwyżej 7 dni. Długa zaległość dni (po kilku miesiącach przerwy) nie zawiesza już
+  okna – dni zamarzają porcjami w tle. Ekran „Nowa klasa” nie pojawia się, gdy klasa urosła tylko przez import historii
+  (w dzienniku wachty z dopiskiem). Panel misji nie podaje daty z przeszłości, a droga do awansu po awansie mówi „dni
+  zgodne 0 (liczone od …)”. „Inwentaryzacja” zalicza saldo z pliku mBanku w tygodniu importu i liczy chwilę potwierdzenia
+  salda – edycja ani scalenie starego potwierdzenia jej nie zaliczają (potwierdzenia sprzed aktualizacji liczą się jak
+  dotąd). „Dziś bez wydatków” od razu zalicza dzień w misji „Dzień bez wydatków”, a przy wydatku z dziś ostrzega, że
+  dzień się nie liczy. Misja ciszy nocnej nazywa się „Zaciemnienie” (osiągnięcie zostaje „Cisza w eterze”); killzone
+  misji i Wywiadu z podanym okresem.
+
+## 1.15.6
+
+Poprawki po audycie – silnik pieniędzy, rozliczenia z domownikami i pożyczki:
+
+- **Przeniesienie środków celu działa od razu także w obliczeniach:** wydatek z celu wpisany po przeniesieniu płaci
+  z celu tyle, ile widać na Mapie gwiezdnej, a dostawa z tego samego dnia dopełnia cel tylko do jego kwoty. Dni,
+  w których przenosiłeś środki celu i tego samego dnia wydawałeś z celu albo dokowałeś dostawę, przeliczą się inaczej.
+  Przy przenoszeniu do celu pełnego (albo ponad to, czego mu brakuje) – ostrzeżenie i przycisk „tylko brakujące”.
+- **Wypłata z ICTTJ liczona od razu według puli:** sparowana z bankiem liczy się jeszcze przed „Zadokuj” – Cele w celach,
+  Podatek w rezerwie na PIT-38 (bez przychodu); zwrot do masy z puli Podatek – z rezerwy, bez alarmu firewalla i bez
+  naruszenia w grze. Mostek pokazuje osobno „Do zadokowania” (bez części spłacającej pożyczkę), Mapa gwiezdna – „w tym do
+  zadokowania” (tylko to, co z tych wypłat jest jeszcze w celach), a „Zadokuj” bez zmian nie przesuwa pieniędzy, także
+  po przeniesieniu środków albo zmianie celu. „Ostatnia dostawa” pokazuje też wypłatę wpisaną na Portfelu XTB.
+- **„Wycofaj dokowanie”** w oknie zadokowanej dostawy i w jej wierszu na Mostku: usuwa dokowanie i operację, którą
+  dokowanie założyło na Portfelu XTB; operacja z mBanku zostaje i czeka na ponowne dokowanie. Z „Cofnij” (bez drugiego
+  dokowania). Folder ICTTJ bez zmian.
+- **Opłaty:** opłata okresowa zapłacona przed startem budżetu nie jest już odkładana drugi raz z pierwszej pensji (bez
+  asteroidy „dziś”), a spóźniona zapłata zamyka zaległy termin, nie następny – kreator i silnik liczą to samo. Plan
+  kolejnych miesięcy pokazuje odkładki, które naprawdę zostaną pobrane; miesiąc z pensją 0 zł – odkładki 0 zł, przy każdej
+  rata wymagana i ostrzeżenie. Kontener raty pożyczki ma kwoty z harmonogramu (np. 33,33 / 33,33 / 33,34 zł), a „Kwota”
+  zmieniona w Ładowni liczy się od bieżącego miesiąca.
+- **Wpłaty domowników:** „Od domownika – spłata, reszta jako zaliczka” najpierw spłaca to, co osoba ma oddać (dotąd cała
+  wpłata szła do depozytu). Jedna lista wyboru: spłata (reszta jako przychód albo zaliczka), niezależny przychód albo
+  zaliczka na przyszłość bez spłaty – z uwagą, gdy osoba ma dług. Zapisane zaliczki wskazujące zakup spłacają go. Nowy
+  meldunek „Zaliczki przy długu”: pyta tylko o dług nadal do oddania przez zaliczkę, „Spłać” (z „Cofnij”) spłaca tylko
+  tyle, „zostaw” – zostawia. Mostek, Radar i Ustawienia → Domownicy pokazują naraz dług i zaliczkę osoby. Reguła wpłaty
+  domownika bierze resztę ponad dług z ustawienia osoby.
+- **Pożyczkę udzieloną może spłacić każda wpłata** – też od mamy pożyczkobiorcy, domownika albo kogoś spoza listy:
+  szybki wpis „Spłata pożyczki”, Operacje „+ spłata pożyczki”, import „w tym spłata pożyczki” (wiersz, grupa, temat),
+  całością albo częścią. Pożyczka maleje o spłatę, grupa w imporcie nigdy nie spłaci więcej, niż zostało. Radar pokazuje
+  „kto zapłacił”, gdy płacił ktoś inny niż pożyczkobiorca. Reguła importu może spłacać pożyczkę stałą częścią każdej
+  wpłaty, dopóki pożyczka jest otwarta („zapamiętaj” przy spłacie pożyczki domyślnie wyłączone).
+- **Przychody:** nadwyżka spłaty pożyczki ponad dług (odsetki) i część wpłaty dla pożyczki nieznanej liczą się jako
+  przychód także w Przychodach, Bilansie paliwa i średniej do ostrzeżenia o pensji – jak w warstwach.
+- **Ustawienia → Kategorie:** „usuń” kategorię albo podkategorię, której nic nie używa (także otwarty import), z „Cofnij”.
+  Używanej aplikacja nie usuwa – mówi, gdzie jest użyta, i proponuje archiwizację.
+- Zmiana rodzaju wydatku z celu albo z Ładowni (np. na przelew własny) mówi, co odpięła, z „Cofnij” – także po pytaniu
+  o potwierdzone saldo; „Cofnij” nie cofa zmian wpisanych w międzyczasie.
+- Ustawienia → Import: „to nie duplikat” i „pokazuj znowu” dotyczą tylko par z panelu duplikatów – zostawione meldunki
+  „Wróciły po usunięciu” i przelewy „zostaw tak” już nie wracają.
+- Wyjście z aplikacji usuwa obecność komputera także przy wolnym OneDrive.
+- **Sprostowanie notatek 1.15.2:** „Wycofaj dokowanie”, usuwanie kategorii i ochrona celu / Ładowni przy zmianie rodzaju
+  weszły dopiero teraz (opis 1.15.2 poprawiony).
+
 ## 1.15.5
 
 Poprawki po audycie – folder danych, szkice i import z mBanku:
@@ -77,11 +213,11 @@ Audyt funkcjonalny PC (N-PC-1 do N-PC-20, D95): spójność i ergonomia codzienn
 
 - **Dokowanie i finanse (pakiet A):**
   - Częściowe dokowanie z ICTTJ: możliwość zasilenia celów lub pozostawienia części kwoty „wolnej do decyzji” bez konieczności rozładowywania całego wpływu naraz (N-PC-1).
-  - Wycofanie i korekta dokowania: przycisk „Wycofaj dokowanie” na Mostku przywraca operację do stanu oczekującego, a odpięcie transakcji z ICTTJ nie usuwa ręcznych transakcji dokowania (N-PC-2).
-  - Precyzyjne zasilenie celów w oknie dokowania: pole kwoty obok checkboxa celu umożliwia zasilenie konkretną kwotą zamiast całego celu (N-PC-3).
-  - Ochrona transakcji przeniesienia do Celu / Ładowni przy zmianie kategorii lub rodzaju na wydatek / przelew (N-PC-4).
+  - Wycofanie dokowania (N-PC-2): w tej wersji nie weszło – zadokowaną dostawę można było tylko poprawić („Zapisz podział”) albo cofnąć w powiadomieniu tuż po dokowaniu. „Wycofaj dokowanie” jest od 1.15.6.
+  - Zasilenie celów konkretną kwotą w oknie dokowania (N-PC-3): bez zmian w tej wersji – okno już wcześniej miało przy każdym celu pole kwoty (bez pola wyboru); reszta dostawy idzie do osłon.
+  - Ochrona operacji z celu i z Ładowni przy zmianie rodzaju (N-PC-4): w tej wersji nie weszła; od 1.15.6 zmiana rodzaju wydatku z celu albo z Ładowni mówi, co odpięła, z „Cofnij”.
   - Wybór i zmiana konta docelowego w oknie Szybkiego Wpisu (N-PC-5).
-  - Usuwanie nieużywanych kategorii i podkategorii bezpośrednio w Ustawieniach z zachowaniem integralności archiwalnych operacji (N-PC-7).
+  - Usuwanie nieużywanych kategorii (N-PC-7): w tej wersji nie weszło – była tylko archiwizacja. „Usuń” kategorii i podkategorii, której nic nie używa, jest od 1.15.6.
 - **Import, rozliczenia i pozycje paragonu (pakiet B):**
   - Rozliczenia wcześniejszych wpłat z zamkniętych miesięcy: wcześniejsza wpłata z zamkniętego miesiąca w „Przypisz zwrot…” nie blokuje rozliczenia i sortuje się intuicyjnie (N-PC-9).
   - Podział wpłaty od wielu domowników w regułach i oknie importu z mBanku („w tym za…”, N-PC-10).

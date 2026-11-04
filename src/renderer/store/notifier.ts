@@ -19,7 +19,7 @@ import { useIctj } from './ictj'
 import { usePresence } from './presence'
 import { showFilter } from '../features/operations/state'
 import { deliveriesNow, openDockingTag } from '../features/dock/state'
-import { cargoDaysNow, cargoStatusesNow, cargoWatchNow } from '../features/cargo/status'
+import { cargoDaysNow, cargoPlannedNow, cargoStatusesNow, cargoWatchNow } from '../features/cargo/status'
 import { futureNow } from '../features/radar/future'
 import { newBankFilesNow, openBankFile } from './bankFiles'
 import { openSensor } from '../features/sensors/open'
@@ -116,6 +116,7 @@ function check(opened: boolean, toBridge = false): void {
     members: fi.settings.household.members,
     cargo: cargoStatusesNow(),
     payDays: cargoDaysNow(),
+    planned: cargoPlannedNow(),
     // The buoys (F16) and the accounts ahead (F26).
     scheduled: futureNow().reminders,
     accounts: futureNow().accounts,
@@ -169,9 +170,10 @@ export function initNotifier(): void {
   const touched = () => {
     const now = Date.now()
     if (now - touchedAt < 30_000 || document.visibilityState !== 'visible') return
-    // Its last touch before the quiet hours ended (or none since the start): the morning's first one.
+    // Its last touch before the quiet hours ended and long enough ago (or none since the start): the morning's first one –
+    // never a touch of the user working through their end (T411).
     const quiet = useData.getState().fi?.settings.orders.quietHours
-    const first = !!quiet && morningTouch(touchedAt, warsawNow(), quiet)
+    const first = !!quiet && morningTouch(touchedAt, { ...warsawNow(new Date(now)), ms: now }, quiet)
     touchedAt = now
     check(true, first)
   }

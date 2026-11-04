@@ -2,11 +2,11 @@
  * „Ostatnie importy” and „Cofnij import” (1.5.1, F4): the last ten imports of the bank's files; the latest one that
  * stands can be taken back, with what it does said before.
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ImportBatch } from '@shared/schema'
 import { Modal } from '../../components/Modal'
 import { Panel } from '../../components/ui'
-import { useFolderLocked } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
 import { plDate, plDateTime } from '../../lib/format'
 import { useAccounts } from '../operations/pickers'
 import { KEEP_IMPORTS } from '@shared/import/batch'
@@ -19,8 +19,12 @@ export function UndoImportButton({ batch, testId = 'import-undo' }: { batch: Imp
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const readOnly = useFolderLocked()
-  // Counted when the dialog opens (the operations may change while it is closed).
-  const plan = open ? undoPreview(batch) : null
+  // Counted when the dialog opens and again only when what it counts changes (the operations may change while it is open).
+  const txs = useData((s) => s.records.transactions)
+  const dockings = useData((s) => s.records.dockings)
+  const balances = useData((s) => s.records.balances)
+  const rules = useData((s) => s.fi?.settings.import.rules)
+  const plan = useMemo(() => (open ? undoPreview(batch) : null), [open, batch, txs, dockings, balances, rules])
   const confirm = async () => {
     setBusy(true)
     const ok = await undoImport(batch.id)

@@ -14,7 +14,7 @@ import type { Container, Loan, Share } from '../schema/records'
 import { CASH_CATEGORY_ID, defaultCategoryId, HOUSE_MEMBER_ID, inflowOf } from '../schema/budget'
 import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
-import { memberOf } from '../calc/household'
+import { memberOf, nameIn } from '../calc/household'
 import type { MbankRow } from './mbank'
 
 export { counterpartyKey }
@@ -23,7 +23,8 @@ export type Direction = 'in' | 'out'
 export const directionOf = (row: Pick<MbankRow, 'amount'>): Direction => (row.amount < 0 ? 'out' : 'in')
 
 /** What a decision remembered as a rule says (`upsertRule`). */
-export type LearnedRule = Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'>
+export type LearnedRule = Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'> &
+  Partial<Pick<ImportRule, 'loanId' | 'loanAmount'>>
 
 /**
  * A decision remembered as a rule (the import's „zapamiętaj”, „Zapamiętaj” in Operacje): the exact rule of that key and
@@ -52,9 +53,12 @@ export function upsertRules(rules: readonly ImportRule[], items: ReadonlyArray<{
     const rule: ImportRule = {
       ...prev,
       ...r,
-      // The decision is the new one whole: one remembered without a gift or a share has none (a rule's old split never stays).
+      // The decision is the new one whole: one remembered without a gift or a share has none (a rule's old split never stays),
+      // nor a loan it repaid before (D100).
       gift: r.gift || undefined,
       share: r.share ?? undefined,
+      loanId: r.loanId ?? undefined,
+      loanAmount: r.loanAmount ?? undefined,
       id: prev?.id ?? opts.makeId(),
       mode: 'exact',
       learned: prev?.learned ?? true,
@@ -304,6 +308,11 @@ export interface ImportDecision {
   counterAccountId: string | null
   /** The loan of the Radar an operation of kind 'loan' belongs to (B34): its repayment, its money. */
   loanId: string | null
+  /**
+   * A rule's part of an income repaying a loan given (D100, T358): its loan (open, given by the row's day) and amount –
+   * at most the row's money and the loan's debt (`rowShares`). Absent = none.
+   */
+  loanPart?: { loanId: string; amount: number }
   /** A payment of a container of the cargo (its counterparty): the cargo's, not an envelope's spending. */
   containerId: string | null
   /**
@@ -348,14 +357,6 @@ export interface ClassifyContext {
  */
 export const PER_OPERATION_KINDS: readonly string[] = ['loan', 'tax', 'trading']
 
-/** All words of a person's name in the bank's counterparty – a name of one word only when it is the whole counterparty. */
-function nameIn(name: string, counterparty: string): boolean {
-  const parts = fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
-  if (!parts.length) return false
-  const who = fold(counterparty).split(/[^a-z0-9]+/).filter(Boolean)
-  return parts.length === 1 ? who.length === 1 && who[0] === parts[0] : parts.every((w) => who.includes(w))
-}
-
 /**
  * The loan of the Radar a transfer from the person repays (B34): given to them by the transfer's day – a loan exists
  * only from the day it was given, the person's money before it is no repayment of it – and open now (a closed one takes
@@ -363,14 +364,27 @@ function nameIn(name: string, counterparty: string): boolean {
  * (review N1 2: the audit reports only what the import gives way to now).
  */
 export function loanFor<L extends Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>>(counterparty: string, loans: readonly L[] | undefined, date: string): L | null {
-  const open = (loans ?? []).filter((l) => l.direction === 'given' && !l.closedAt && l.date <= date && nameIn(l.counterparty || l.name, counterparty))
+  const open = (loans ?? []).filter((l) => repayableOn(l, date) && nameIn(l.counterparty || l.name, counterparty))
   return open.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))[0] ?? null
+}
+
+/** May money of a day repay a loan (B34, D100): given, open now, given by that day – `loanFor`'s conditions. */
+const repayableOn = (l: Pick<Loan, 'direction' | 'date' | 'closedAt'>, date: string): boolean => l.direction === 'given' && !l.closedAt && l.date <= date
+
+/**
+ * The loan a rule names (D100, T358 – a rule of a loan's repayment, whole or a part): only while it may take the row's
+ * money (`repayableOn`) – else none, and the rule gives way (a part is left out).
+ */
+export function ruleLoanFor<L extends Pick<Loan, 'id' | 'direction' | 'date' | 'closedAt'>>(rule: Pick<ImportRule, 'loanId'>, loans: readonly L[] | undefined, date: string): L | null {
+  if (!rule.loanId) return null
+  const l = (loans ?? []).find((x) => x.id === rule.loanId)
+  return l && repayableOn(l, date) ? l : null
 }
 
 /**
  * What the app recognizes by a row's name before a rule of another kind (AP-6, AF-26): a loan of the Radar (money back
- * from the person it was given to – B34), a household member's money (D80), XTB (T37, B106). The place to extend when
- * other money than the borrower's may repay a loan (D100): the recognition by name stays this one.
+ * from the person it was given to – B34), a household member's money (D80), XTB (T37, B106). Other money than the
+ * borrower's repays a loan by the user's choice or a rule naming it (D100, T358) – the recognition by name stays this one.
  */
 export type Recognized = { kind: 'loan'; loanId: string } | { kind: 'member'; memberId: string } | { kind: 'trading' }
 
@@ -379,13 +393,15 @@ export type Recognized = { kind: 'loan'; loanId: string } | { kind: 'member'; me
  * return on a borrower's name, and it took every later repayment by itself)? A rule of another kind on the same name
  * does. A keyword of the title stays the rule's (it is about that payment: „ZA PIZZĘ” from a borrower), an own transfer
  * too for a member's and XTB's name (the user's own money moved so – the wallet at XTB; B106); a rule of the same kind
- * (a member named, a loan or XTB of before 1.5.1 – N14) is the rule's as before.
+ * (a member named, a loan or XTB of before 1.5.1 – N14) is the rule's as before. A rule naming a loan (D100, T358) is a
+ * loan's: it stays before the borrower's loan when it names that one (a part of the borrower's transfer), and before a
+ * member's money when it repays a loan whole (the user said this person's money repays it).
  */
-export function ruleGivesWay(rule: Pick<ImportRule, 'kind' | 'memberId'>, recognized: Recognized | null, byTitle: boolean): boolean {
+export function ruleGivesWay(rule: Pick<ImportRule, 'kind' | 'memberId'> & Partial<Pick<ImportRule, 'loanId'>>, recognized: Recognized | null, byTitle: boolean): boolean {
   if (!recognized || byTitle) return false
-  if (recognized.kind === 'loan') return rule.kind !== 'loan'
+  if (recognized.kind === 'loan') return rule.kind !== 'loan' && rule.loanId !== recognized.loanId
   if (recognized.kind === 'trading') return rule.kind !== 'trading' && rule.kind !== 'transfer'
-  return rule.kind !== 'transfer' && !(rule.kind === 'income' && rule.memberId)
+  return rule.kind !== 'transfer' && !(rule.kind === 'income' && rule.memberId) && !(rule.kind === 'loan' && rule.loanId)
 }
 
 const XTB = /\bxtb\b|x-trade brokers/i
@@ -509,10 +525,16 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const recognized: Recognized | null = lent ? { kind: 'loan', loanId: lent.id } : own ? null : member ? { kind: 'member', memberId: member.id } : isXtb(row) ? { kind: 'trading' } : null
   const rule = findRule(ctx.rules, target, direction, row.amount)
   const byTitle = !!rule && rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
+  // A rule naming a loan given (D100, T358): only while the loan may take the row's money (open, given by its day) – a
+  // rule of its whole repayment gives way otherwise (as no rule), a rule's part is left out.
+  const ruleLoan = rule && direction === 'in' ? ruleLoanFor(rule, ctx.loans, row.date) : null
+  const loanRuleGone = !!rule?.loanId && rule.kind === 'loan' && !ruleLoan
   // A rule of plain income naming no member (learned before the person became a member, or before 1.3.0) gives way to
   // the member: their money repays what they owe first.
-  if (rule && !(member && rule.kind === 'income' && !rule.memberId) && !ruleGivesWay(rule, recognized, byTitle)) {
+  if (rule && !loanRuleGone && !(member && rule.kind === 'income' && !rule.memberId) && !ruleGivesWay(rule, recognized, byTitle)) {
     const kind = rule.kind as TxKind
+    // The loan's whole repayment the rule names (D100): decided by it while the loan is open.
+    if (kind === 'loan' && ruleLoan) return out(decision('loan', `reguła – zwrot pożyczki: ${ruleLoan.name}`, { source: 'rule', ruleId: rule.id, byTitle, loanId: ruleLoan.id }))
     // A loan, the tax, XTB from a rule of before 1.5.1 (N14): proposed only – the user checks it for each operation.
     if (PER_OPERATION_KINDS.includes(kind))
       return out(
@@ -530,8 +552,12 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     // choice remembered changes the rule).
     const categoryId = kind === 'expense' && rule.categoryId ? usable(rule.categoryId, ctx.categories) : null
     const archived = kind === 'expense' && !!rule.categoryId && !categoryId
+    // The rule's part repaying a loan (D100): while the loan is open – at most its debt (`rowShares`).
+    const loanPart = kind === 'income' && ruleLoan && rule.loanAmount ? { loanId: ruleLoan.id, amount: rule.loanAmount } : null
+    const said = archived ? 'kategoria reguły zarchiwizowana – wybierz nową' : rule.mode === 'keyword' ? `Twoje słowo „${rule.label || rule.match}”${byTitle ? ' w tytule' : ''}` : 'reguła'
     return out(
-      decision(kind, archived ? 'kategoria reguły zarchiwizowana – wybierz nową' : rule.mode === 'keyword' ? `Twoje słowo „${rule.label || rule.match}”${byTitle ? ' w tytule' : ''}` : 'reguła', {
+      decision(kind, loanPart ? `${said} – w tym spłata pożyczki: ${ruleLoan!.name}` : said, {
+        ...(loanPart ? { loanPart } : {}),
         source: archived ? 'none' : 'rule',
         ruleId: rule.id,
         byTitle,
@@ -542,8 +568,10 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
         inflowKind: household ? (rule.inflowKind ?? 'repay') : undefined,
         gift: refundable && !!rule.gift,
         share: kind === 'expense' && !refundable ? (rule.share ?? null) : null,
-        // What the member's money beyond their debt is, as the member's setting says (D80 b; „ask” = income, D20).
-        advance: household && (rule.inflowKind === 'advance' || (!rule.inflowKind && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance')),
+        // What the member's money beyond their debt is, as the member's setting says (D80 b; „ask” = income, D20) – a rule
+        // of „spłata” too (AP-4: a rule learned from „spłata, reszta jako zaliczka” of 1.15.3+ gave the rest as income);
+        // an explicit advance for the future – all of it.
+        advance: household && (rule.inflowKind === 'advance' || (rule.inflowKind !== 'income' && inflowOf(ctx.members?.find((m) => m.id === (memberId ?? HOUSE_MEMBER_ID))) === 'advance')),
         counterAccountId: kind === 'transfer' ? rule.counterAccountId : null
       })
     )

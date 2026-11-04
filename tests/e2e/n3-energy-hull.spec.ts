@@ -119,11 +119,40 @@ test('AP-17: „Dopełnij kadłub z osłon” z „Cofnij”, podgląd celów wa
     await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Cel kadłuba' })).toHaveText(/18\s000,00\szł\s*→\s*36\s000,00\szł/)
     await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Wolne do decyzji' })).toHaveText(/2\s100,00\szł\s*→\s*0,00\szł/)
     expect((await json(join(dir, 'fi.json'))).settings.layers.hullMonths).toBe(6)
+    // Another value typed (przegląd 2–3 N3): the box never leaves the page on a key (before: gone for 300 ms on every key,
+    // the layout jumping) and, until the new value is counted, says so – the numbers of the last one dimmed under
+    // „Po zmianie – liczę…”, never shown as the change's.
+    await page.evaluate(`(() => {
+      window.__previewGone = false
+      window.__previewCounting = false
+      new MutationObserver(() => {
+        const box = document.querySelector('[data-testid="layers-preview"]')
+        if (!box) window.__previewGone = true
+        else if (box.getAttribute('data-pending') === 'yes' && box.textContent.includes('Po zmianie – liczę…')) window.__previewCounting = true
+      }).observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true })
+    })()`)
+    await page.getByTestId('layers-hull').fill('10')
+    await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Cel kadłuba' })).toHaveText(/18\s000,00\szł\s*→\s*30\s000,00\szł/)
+    await expect(preview).not.toHaveAttribute('data-pending', 'yes')
+    await expect(preview.getByTestId('layers-preview-head')).toHaveText(/^Po zmianie \(zapisze się po wyjściu z pola/)
+    expect(await page.evaluate('window.__previewGone')).toBe(false)
+    expect(await page.evaluate('window.__previewCounting')).toBe(true)
+    await page.getByTestId('layers-hull').fill('12')
+    await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Cel kadłuba' })).toHaveText(/18\s000,00\szł\s*→\s*36\s000,00\szł/)
     await page.getByTestId('layers-hull').press('Enter')
     await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.layers.hullMonths).toBe(12)
     await expect(preview).toHaveCount(0)
     await page.getByRole('status').filter({ hasText: 'Cele warstw zmienione: Wolne do decyzji 2 100,00 → 0,00 zł.' }).getByTestId('toast-action').click()
     await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.layers.hullMonths).toBe(6)
+    await expect(preview).toHaveCount(0)
+    // The first key after a save (przegląd 3 N3): the box at once, „liczę…” – before: nothing until the value settled.
+    await page.evaluate('window.__previewCounting = false')
+    await page.getByTestId('layers-hull').fill('8')
+    await expect(preview.getByTestId('layers-preview-line').filter({ hasText: 'Cel kadłuba' })).toHaveText(/18\s000,00\szł\s*→\s*24\s000,00\szł/)
+    expect(await page.evaluate('window.__previewCounting')).toBe(true)
+    await page.getByTestId('layers-hull').fill('6')
+    await expect(preview).toHaveCount(0)
+    await page.getByTestId('layers-hull').press('Enter')
 
     // The firewall switched off (DW.12): said at the order and on the bridge.
     await expect(page.getByTestId('orders-firewall-off')).toHaveCount(0)

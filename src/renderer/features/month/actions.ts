@@ -2,8 +2,10 @@ import { useMemo } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
 import { copyOnMonths } from '@shared/calc/yearPlan'
+import { sameContentAs } from '@shared/merge'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, monthTooNew, tooNewMonths, updateRecord, useData } from '../../store/data'
+import { useRemote } from '../../store/remote'
 import { commitActiveField, toast } from '../../store/ui'
 import { newId } from '@shared/ids'
 import { plnText } from '../../components/fields'
@@ -118,8 +120,8 @@ export function coverEnvelope(month: string, from: string, to: string, amount: n
 /**
  * „Dopełnij kadłub z osłon” (AP-17, D99 pkt 6 – T373): `amount` (what the hull lacks, at most the shields' surplus over
  * their target) moved now – an entry of this month's plan the engine counts at its moment; „Cofnij” takes it back, and
- * the month's own plan it made (a copy of the plan in force – T46), when nothing else changed it meanwhile: the month
- * follows the earlier plan again. false = nothing written (no toast of success).
+ * the month's own plan it made (a copy of the plan in force – T46) while that plan is still just what the top-up wrote:
+ * the month follows the earlier plan again. false = nothing written (no toast of success).
  */
 export function topUpHull(amount: number): boolean {
   if (!canWrite() || amount <= 0) return false
@@ -127,17 +129,22 @@ export function topUpHull(amount: number): boolean {
   const month = warsawNow().month
   const made = !allPlans().some((p) => p.month === month)
   if (!editPlan(month, (p) => ({ ...p, hullTopUps: [...(p.hullTopUps ?? []), { id, amount, at: new Date().toISOString() }] }))) return false
+  // The plan as the top-up made it (its own copy of the plan in force): the whole file goes back only while it is that.
+  const wrote = made ? allPlans().find((p) => p.month === month) : undefined
   toast(`Kadłub dopełniony z osłon: ${plnText(amount)} zł.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
-      const plans = allPlans()
-      const own = plans.find((p) => p.month === month)
-      if (!own || !canWrite()) return
-      const inForce = planFor(plans.filter((p) => p !== own), month)
-      const left = (own.hullTopUps ?? []).filter((u) => u.id !== id)
-      // Only the copy the top-up made, nothing else in it: gone, as it came.
-      const bare = !left.length && !own.loot && !own.envelopeCovers.length && !own.note && own.salary === (inForce?.salary ?? 0) && sameEnvelopes(own.envelopes, inForce?.envelopes ?? {})
-      if (made && bare) deleteOrSay('months', own.id)
+      if (!canWrite()) return
+      const own = allPlans().find((p) => p.month === month)
+      // Nothing to take back – the month's plan gone meanwhile (another computer, the month back on the plan in force) or
+      // the entry no longer in it: never a plan made anew (przegląd 3 N3 – T46 would pin the month to a copy).
+      if (!own || !(own.hullTopUps ?? []).some((u) => u.id === id)) return
+      const entry = useData.getState().records.months[own.id]
+      // Gone, as it came – only when nothing changed it since, to the last field (przegląd 2 N3): one from another
+      // computer or a newer version (kept by `looseObject`), an edit here, a change of another computer waiting for a
+      // decision. Anything else – the entry only, the file stays.
+      const untouched = !!wrote && own.id === wrote.id && !!entry && !entry.readOnly && sameContentAs(own, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === own.id)
+      if (untouched) deleteOrSay('months', own.id)
       else editPlan(month, (p) => ({ ...p, hullTopUps: (p.hullTopUps ?? []).filter((u) => u.id !== id) }))
     }
   })

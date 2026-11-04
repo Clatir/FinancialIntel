@@ -12,6 +12,7 @@ const MBANK = '01KDEFACC00000000000000001'
 const PHONE = '01K9N3H00000000000000000C1'
 const OC = '01K9N3H00000000000000000C2'
 const WASTE = '01K9N3H00000000000000000C3'
+const NET = '01K9N3H00000000000000000C4'
 
 /**
  * AP-10 (1.15.7): one state of a fee on the bridge, in Ładownia and on the Radar – a due of last month still unpaid stays
@@ -38,14 +39,17 @@ test('AP-10: zaległa opłata zostaje po terminie (odprawa, Ładownia, Radar), j
         { id: PHONE, name: 'Telefon Play', amount: zl(50), cycleMonths: 1, dueMonth: start.slice(0, 7), dueDay: 20, accountId: MBANK, counterparty: 'PLAY' },
         { id: OC, name: 'OC auta', amount: zl(1240), cycleMonths: 12, dueMonth: addMonths(due.slice(0, 7), -12), dueDay: ocDay, accountId: MBANK, counterparty: 'PZU' },
         // Wywóz 240 zł a quarter, due last month: paid 300 zł with 240 zł in its tank – 60 zł from the energy.
-        { id: WASTE, name: 'Wywóz śmieci', amount: zl(240), cycleMonths: 3, dueMonth: addMonths(month, -1), dueDay: 15, accountId: MBANK, counterparty: 'MPO' }
+        { id: WASTE, name: 'Wywóz śmieci', amount: zl(240), cycleMonths: 3, dueMonth: addMonths(month, -1), dueDay: 15, accountId: MBANK, counterparty: 'MPO' },
+        // Internet from this month, due today: its payment written ahead for tomorrow (T398) – planned, not paid yet.
+        { id: NET, name: 'Internet', amount: zl(60), cycleMonths: 1, dueMonth: month, dueDay: Number(today.slice(8, 10)), from: month, accountId: MBANK, counterparty: 'ORANGE' }
       ],
       transactions: [
         { date: `${addMonths(month, -3)}-20`, accountId: MBANK, kind: 'expense', amount: -zl(50), counterparty: 'PLAY', containerId: PHONE },
         { date: `${addMonths(month, -2)}-20`, accountId: MBANK, kind: 'expense', amount: -zl(50), counterparty: 'PLAY', containerId: PHONE },
         { date: `${addMonths(due.slice(0, 7), -12)}-${due.slice(8, 10)}`, accountId: MBANK, kind: 'expense', amount: -zl(1240), counterparty: 'PZU', containerId: OC },
         { date: `${addMonths(month, -1)}-15`, accountId: MBANK, kind: 'expense', amount: -zl(300), counterparty: 'MPO', containerId: WASTE },
-        { date: addDays(today, -4), accountId: MBANK, kind: 'expense', amount: -zl(250), counterparty: 'ZALANDO' }
+        { date: addDays(today, -4), accountId: MBANK, kind: 'expense', amount: -zl(250), counterparty: 'ZALANDO' },
+        { date: addDays(today, 1), accountId: MBANK, kind: 'expense', amount: -zl(60), counterparty: 'ORANGE', containerId: NET }
       ],
       scheduled: [
         { name: 'Przegląd komina', date: addDays(today, -5), amount: -zl(250), accountId: MBANK },
@@ -93,6 +97,15 @@ test('AP-10: zaległa opłata zostaje po terminie (odprawa, Ładownia, Radar), j
     // The OC editor's „Płatność”: its next due on the day of its history (LA sp. 8, W2).
     await page.locator('[data-testid="cargo-row"][data-name="OC auta"]').click()
     await expect(page.getByTestId('container-due')).toHaveValue(`${due.slice(8, 10)}.${due.slice(5, 7)}.${due.slice(0, 4)}`)
+    // Internet (T398): the payment written ahead for tomorrow pays today's due on its day – planned, not „zapłacone”;
+    // no „Zapłacone (dziś)” beside it (a second payment).
+    const net = page.locator('[data-testid="cargo-row"][data-name="Internet"]')
+    await expect(net.getByTestId('cargo-state')).toHaveAttribute('data-state', 'waiting')
+    await expect(net.getByTestId('cargo-state')).toHaveAttribute('data-planned', addDays(today, 1))
+    await expect(net.getByTestId('cargo-state')).toHaveText(`zaplanowane ${dm(addDays(today, 1))}`)
+    await net.click()
+    await expect(page.getByTestId('container-planned')).toHaveText(`Zaplanowana płatność: 60,00 zł (${dm(addDays(today, 1))}) – zapłaci termin ${dm(today)} w swoim dniu.`)
+    await expect(page.getByTestId('container-paid')).toHaveCount(0)
 
     await page.keyboard.press('Control+1')
     await expect(lateAlert).toHaveCount(0)

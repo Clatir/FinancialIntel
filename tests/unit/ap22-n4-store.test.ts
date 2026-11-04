@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RecordEntry, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
-import { undoPlan } from '@shared/import/batch'
+import { contentHash, undoPlan } from '@shared/import/batch'
 import { COLLECTIONS } from '@shared/paths'
 import { containerSchema, defaultCategoryId, importBatchSchema, importRuleSchema, SCHEMA_VERSION, transactionSchema, type Container, type ImportRule, type Transaction } from '@shared/schema'
 
@@ -143,10 +143,14 @@ describe('AP-22: przerwanie kreatora i okno „Cofnij import”', () => {
       [T1, tx(T1, later)],
       [T2, tx(T2, later)]
     ])
-    const plan = (touched?: ReadonlySet<string>) => undoPlan(batch(), { tx: (id) => rows.get(id), rules: [], ...(touched ? { touched } : {}) })
+    // Written again later with the content the import wrote (a later import's undo, the „Cofnij”) – T415: no change; an
+    // import without fingerprints (before 1.15.8) – by the stamp.
+    const hashes = { [T1]: contentHash(tx(T1, NOW)), [T2]: contentHash(tx(T2, NOW)) }
+    const plan = (over: Partial<Parameters<typeof importBatchSchema.parse>[0]> = {}) => undoPlan(batch(over), { tx: (id) => rows.get(id), rules: [] })
     expect(plan().changed).toBe(2)
-    expect(plan(new Set([T1])).changed).toBe(1)
-    expect(plan(new Set([T1, T2])).changed).toBe(0)
+    expect(plan({ createdHashes: hashes }).changed).toBe(0)
+    rows.set(T2, { ...tx(T2, later), note: 'moja' })
+    expect(plan({ createdHashes: hashes }).changed).toBe(1)
   })
 
   it('okno cofania pomija ślady późniejszych importów, a lista pełn(IM.31)', () => {
@@ -161,12 +165,14 @@ describe('AP-22: przerwanie kreatora i okno „Cofnij import”', () => {
       accountId: '01KDEFACC00000000000000001',
       fileName: 'L2.csv',
       created: [],
-      updated: [{ before: tx(T1, NOW), after: tx(T1, NOW) }]
+      updated: [{ before: tx(T1, NOW), after: tx(T1, NOW) }],
+      // Taken back: its undo wrote T1 back as it was (T415 – the content tells, not the stamp).
+      undoneAt: '2026-10-04T10:00:00.000Z'
     })
-    data.addRecord('imports', batch())
+    data.addRecord('imports', batch({ createdHashes: { [T1]: contentHash(tx(T1, NOW)), [T2]: contentHash(tx(T2, NOW)) } }))
     data.addRecord('imports', later)
     data.addRecord('transactions', tx(T1, '2026-10-04T10:00:00.000Z'))
-    data.addRecord('transactions', tx(T2, '2026-10-04T10:00:00.000Z'))
+    data.addRecord('transactions', { ...tx(T2, '2026-10-04T10:00:00.000Z'), note: 'moja' })
     // T1 was rewritten by the later import (and its undo), T2 is the user's.
     expect(batches.undoPreview(data.useData.getState().records.imports['01K7B0000000000000000000B1']!.record).changed).toBe(1)
   })

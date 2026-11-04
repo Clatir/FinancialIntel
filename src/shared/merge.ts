@@ -211,6 +211,7 @@ const LABELS: Record<string, string> = {
   'splits.refundable': 'Podział – finansuje domownik',
   'splits.memberId': 'Podział – domownik',
   'splits.advance': 'Podział – reszta jako zaliczka',
+  'splits.loanId': 'Podział – spłata pożyczki',
   counterparty: 'Kontrahent',
   title: 'Tytuł',
   impulse: 'Plan czy impuls',
@@ -298,6 +299,7 @@ const LABELS: Record<string, string> = {
   source: 'Źródło',
   'source.ictjEntryId': 'Źródło – wpis ICTTJ',
   entryDate: 'Data wpisu ICTTJ',
+  countedFrom: 'Liczone od chwili',
   ictjEntryId: 'Wpis ICTTJ',
   activeFrom: 'Od chwili',
   achievedAt: 'Osiągnięty',
@@ -416,7 +418,8 @@ const AMOUNT_FIELDS = [
   'settings.budget.initial.tanks.*',
   'settings.household.members.opening.owed',
   'settings.household.members.opening.deposit',
-  'settings.import.rules.maxAmount'
+  'settings.import.rules.maxAmount',
+  'settings.import.rules.loanAmount'
 ].map((f) => f.split('.'))
 
 /** Is the field at `path` an amount in grosze (B7)? Items of lists (`#id`, `[n]`) do not count as keys. */
@@ -442,7 +445,8 @@ export function formatValue(v: unknown, max = 80): string {
     return v.length > max ? `${v.slice(0, max - 1)}…` : v
   }
   if (typeof v === 'boolean') return v ? 'tak' : 'nie'
-  if (typeof v === 'number') return String(v).replace('.', ',')
+  // As written, never rounded: the comma and the typographic minus (AP-23).
+  if (typeof v === 'number') return String(v).replace(/^-/, '−').replace('.', ',')
   if (Array.isArray(v)) return v.length === 0 ? 'puste' : countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')
   const s = JSON.stringify(v)
   return s.length > max ? `${s.slice(0, max - 1)}…` : s

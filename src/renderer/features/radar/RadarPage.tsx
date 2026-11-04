@@ -9,7 +9,7 @@ import { glossaryOf } from '@shared/glossary'
 import type { AccountAhead } from '@shared/calc/ahead'
 import { dm } from '@shared/calc/briefing'
 import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates'
-import { HOUSE_DAYS, type LoanState } from '@shared/calc/loans'
+import { HOUSE_DAYS, loanPayers, type LoanState } from '@shared/calc/loans'
 import { pit38Deadline, type RadarItem } from '@shared/calc/radar'
 import { onTheWay } from '@shared/calc/returns'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
@@ -118,6 +118,13 @@ export function RadarPage() {
                           <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : m.deposit > 0 ? 'zaliczka (depozyt)' : 'rozliczony'}</span>
                           {(m.owed > 0 || m.deposit > 0) && <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>}
                         </div>
+                        {/* Both at once (AF-16): their advance beside the debt – in the deposit too. */}
+                        {m.owed > 0 && m.deposit > 0 && (
+                          <div className="flex items-baseline gap-2" data-testid="radar-member-deposit">
+                            <span className="text-[11px] text-dim">zaliczka (depozyt)</span>
+                            <span className="num ml-auto text-muted">{zl(m.deposit)}</span>
+                          </div>
+                        )}
                         {m.since && m.owed > 0 && (
                           <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
                             {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({countLabel(days ?? 0, 'dzień', 'dni', 'dni')})
@@ -329,6 +336,10 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
   const [amount, setAmount] = useState<number | null>(s.next?.amount ?? s.open)
   const [date, setDate] = useState(today)
   const [fromShields, setFromShields] = useState(false)
+  // Who paid (D100, T356): said when someone else than the borrower paid too – each payer with their sum.
+  const members = useMembers()
+  const payers = taken ? [] : loanPayers(s, members)
+  const othersPaid = payers.some((p) => !p.borrower)
   return (
     <div className="flex flex-col gap-1 border-b border-line/60 py-1.5 last:border-b-0" data-testid="loan-row" data-name={s.loan.name} data-focus={`loan:${s.loan.id}`}>
       <div className="flex items-baseline gap-2">
@@ -384,6 +395,11 @@ function LoanRow({ s, today, readOnly: folderLocked }: { s: LoanState; today: st
         )}
         <HistoryButton kind="loans" id={s.loan.id} current={s.loan} variant="link" />
       </div>
+      {othersPaid && (
+        <div className="truncate text-[11px] text-dim" data-testid="loan-payers">
+          kto zapłacił: {payers.map((p) => `${p.name} ${zl(p.amount)}`).join(' · ')}
+        </div>
+      )}
       <NewerNote show={newer} />
       {paying && !readOnly && (
         <div className="flex flex-wrap items-center gap-2">

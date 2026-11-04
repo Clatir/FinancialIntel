@@ -140,6 +140,8 @@ export interface BriefingInput {
   cargo?: readonly CargoStatus[]
   /** Each container's payment day (`cargoDays`, T376): the asteroids ahead on it – as the Radar and Ładownia count them. */
   payDays?: ReadonlyMap<string, number>
+  /** The dues a payment written ahead pays (`plannedDues`, T398): no asteroid of them – as on the Radar. */
+  planned?: ReadonlyMap<string, ReadonlySet<string>>
   /** The planned operations' days (F16, `scheduledWindow`): each one's reminders, a late one. */
   scheduled?: readonly ScheduledDay[]
   /** The accounts ahead (F26, `accountsAhead`): a payment taking one below zero. */
@@ -304,7 +306,7 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     const tankOf = f.tanks.find((t) => t.containerId === c.id)
     // The next payment still to make (a cycle paid early has none – B55), of the container's life (`from` – `until`):
     // this month's from its state (the day of its history – T208), the next ones on that day (T376).
-    const date = nextDueOf(c, f.today, { day: o.payDays?.get(c.id), paidDue: tankOf?.paidDue, status: current.get(c.id) })
+    const date = nextDueOf(c, f.today, { day: o.payDays?.get(c.id), paidDue: tankOf?.paidDue, status: current.get(c.id), planned: o.planned?.get(c.id) })
     if (!activeIn(c, date.slice(0, 7))) continue
     const days = daysBetween(f.today, date)
     if (days < 0 || days > ASTEROID_DAYS) continue
@@ -317,8 +319,9 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     })
   }
   // A fixed fee 3 days after its due without a payment (F1, D86) – once per due; an earlier month's until paid (D99 pkt 3).
+  // One a payment written ahead pays on its day (T398) is no alert: Ładownia shows it planned.
   for (const s of o.cargo ?? []) {
-    if (s.state !== 'overdue') continue
+    if (s.state !== 'overdue' || s.planned) continue
     items.push({ level: 'yellow', kind: 'cargo', key: `cargo:${s.containerId}:${s.due}`, text: `Kontener niezaładowany: ${s.name} ${zl(s.amount)} – termin ${dm(s.due)} minął, brak płatności.` })
   }
   for (const imp of o.imports) {

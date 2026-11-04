@@ -1,78 +1,193 @@
 // Złożenie wszystkich wielkości wyroczni (P1–P4) z przebiegu silnika i gry. Kwoty: { gr, zl }.
 import { addDays, addMonths, addWorkingDays, dayNum, dayOfMonth, daysInMonth, diffDays, fromWarsaw, monthDiff, monthOf, toWarsaw, weekday } from './daty.mjs'
 import { kw, median, round1, sum, trunc1, zl } from './kwoty.mjs'
-import { aliveIn, amountIn, classifyOwn, cycleOf, goalAt, isDueMonth, monthlyWeight, partsOf, runFleet, tankInstallment } from './silnik.mjs'
+import { aliveIn, amountIn, classifyOwn, cycleOf, goalAt, goalInstallment, isDueMonth, monthlyWeight, opOrder, partsOf, runFleet, startOf, tankInstallment } from './silnik.mjs'
 import { missionsModel, playGame, rangeOf, shipClass, MISSION_NAMES } from './gra.mjs'
-import { radarOf, payDayOf, duePaid } from './radar.mjs'
+import { radarOf, payDayOf, duePaid, platnosciKontenera } from './radar.mjs'
 
-export const WERSJA = '2026-11-03 u2'
+export const WERSJA = '2026-11-04 u3'
 
 const pctTxt = (x) => (x == null ? null : `${(Math.floor(x * 1000 + 1e-9) / 10).toFixed(1).replace('.', ',')}%`)
 
-// ------------------------------------------------------------------ ICTTJ: pary i stany dostaw (T63, T162, T164, T224)
-export function ictjDeliveries(r, input, ictj, today) {
-  if (!ictj) return { entries: [], withoutEntry: [], note: 'folder ICTTJ nie podany (--ictj)' }
+// ------------------------------------------------------------------ ICTTJ: pary i stany dostaw (T63, T162, T164, T224, T341)
+/**
+ * Pary wpisów ICTTJ z operacjami – przed przebiegiem silnika (T341: para niezadokowana idzie do silnika jako
+ * `pendingPairs`). Okno: od 3 dni przed wpisem do 3 dni roboczych po nim (T63, T164); najbliższa data, każda operacja
+ * raz; kandydat – operacja XTB tej kwoty (zwrot do masy – wypływ), a dla wypłaty także wpływ wpisany na Portfelu XTB bez
+ * domownika, zaliczki, podziału i „Pokrywa” (T224) – operacja z banku ma pierwszeństwo; para „inna kwota” (≤ max(5 zł, 1 %),
+ * do 4 dni po oknie, nigdy Portfel XTB) dopiero po wszystkich dokładnych (T162); wpis pominięty – po wszystkich
+ * pozostałych (T224); dokowanie decyduje nad parą (T64). Sprzed startu – para z datą sprzed startu (T162, przegląd N9),
+ * bez pary – wpis sprzed startu (D72, R-6).
+ */
+export function pairIctj(input, ictj, today) {
+  if (!ictj) return null
   const S = input.settings
+  const budgetStart = startOf(input, today)
   const skipped = new Set(S.ictj?.skipped ?? [])
-  const covered = S.import?.coveredTo ?? {}
-  const mbankId = (S.accounts ?? []).find((a) => a.importFormat === 'mbank')?.id
+  const accounts = S.accounts ?? []
+  const walletIds = new Set(accounts.filter((a) => a.kind === 'wallet').map((a) => a.id))
+  const ops = [...input.transactions].sort(opOrder)
+  const byId = new Map(ops.map((t) => [t.id, t]))
   const used = new Set()
-  const ops = r.ops
   const dockByEntry = new Map()
-  for (const d of input.dockings) if (d.ictjEntryId && !dockByEntry.has(d.ictjEntryId) && ops.some((t) => t.id === d.transactionId)) dockByEntry.set(d.ictjEntryId, d)
-  for (const d of dockByEntry.values()) used.add(d.transactionId)
-  const entries = []
-  for (const e of ictj.payouts) {
+  for (const d of [...input.dockings].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))) {
+    if (!byId.has(d.transactionId)) continue // T162: dokowanie bez operacji nic nie dokuje
+    used.add(d.transactionId)
+    if (d.ictjEntryId && !dockByEntry.has(d.ictjEntryId)) dockByEntry.set(d.ictjEntryId, d)
+  }
+  const pairs = new Map()
+  const fits = (e, t, exact) => {
+    if (used.has(t.id)) return false
     const sign = e.kind === 'return' ? -1 : 1
     const amount = sign * e.amountGr
     const winFrom = addDays(e.date, -3)
     const winTo = addWorkingDays(e.date, 3)
-    const out = { id: e.id, date: e.date, kind: e.kind, pool: e.pool, amount: kw(e.amountGr), window: { od: winFrom, do: winTo } }
+    if (t.date < winFrom || t.date > (exact ? winTo : addDays(winTo, 4))) return false
+    if (exact ? t.amount !== amount : Math.sign(t.amount) !== sign || Math.abs(t.amount - amount) > Math.max(500, Math.floor(e.amountGr / 100))) return false
+    if (t.kind === 'trading') return true
+    return exact && e.kind === 'withdrawal' && t.kind === 'income' && t.amount > 0 && walletIds.has(t.accountId) && !t.memberId && !t.advance && !(t.splits?.length) && !(t.covers?.length)
+  }
+  const pick = (e, exact) => {
+    const c = ops.filter((t) => fits(e, t, exact)).sort((a, b) => (walletIds.has(a.accountId) && a.kind !== 'trading' ? 1 : 0) - (walletIds.has(b.accountId) && b.kind !== 'trading' ? 1 : 0) || Math.abs(diffDays(e.date, a.date)) - Math.abs(diffDays(e.date, b.date)) || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    return c[0] ?? null
+  }
+  const order = [...ictj.payouts]
+  for (const e of order) {
     const dk = dockByEntry.get(e.id)
-    let pair = dk ? ops.find((t) => t.id === dk.transactionId) : null
-    if (!pair) {
-      const cands = ops
-        .filter((t) => !used.has(t.id) && t.amount === amount && t.date >= winFrom && t.date <= winTo && (t.kind === 'trading' || (e.kind === 'withdrawal' && t.kind === 'income' && !t.memberId && !t.splits?.length && t.accountId !== mbankId)))
-        .sort((a, b) => Math.abs(diffDays(e.date, a.date)) - Math.abs(diffDays(e.date, b.date)) || (a.accountId === mbankId ? -1 : 1))
-      pair = cands[0] ?? null
-      if (pair) used.add(pair.id)
+    if (dk) pairs.set(e.id, { t: byId.get(dk.transactionId), docked: dk })
+  }
+  for (const group of [order.filter((e) => !skipped.has(e.id)), order.filter((e) => skipped.has(e.id))]) {
+    for (const exact of [true, false]) {
+      for (const e of group) {
+        if (pairs.has(e.id)) continue
+        const t = pick(e, exact)
+        if (!t) continue
+        used.add(t.id)
+        pairs.set(e.id, { t, other: !exact })
+      }
     }
-    if (pair) out.para = { txId: pair.id, data: pair.date, konto: (S.accounts ?? []).find((a) => a.id === pair.accountId)?.name ?? pair.accountId }
-    if (pair) out.txId = pair.id
+  }
+  const pendingPairs = new Map()
+  const entries = []
+  for (const e of order) {
+    const winFrom = addDays(e.date, -3)
+    const winTo = addWorkingDays(e.date, 3)
+    const p = pairs.get(e.id) ?? null
+    const pair = p?.t ?? null
+    const out = { id: e.id, date: e.date, kind: e.kind, pool: e.pool, amount: kw(e.amountGr), window: { od: winFrom, do: winTo } }
+    if (pair) {
+      out.para = { txId: pair.id, data: pair.date, konto: accounts.find((a) => a.id === pair.accountId)?.name ?? pair.accountId, kwota: kw(pair.amount) }
+      out.txId = pair.id
+      if (p.other) out.innaKwota = true
+    }
     if (skipped.has(e.id)) out.stan = 'pominięty'
-    else if (e.date < r.budgetStart && ((pair && pair.date < r.budgetStart) || (!pair && winTo < r.budgetStart))) out.stan = 'sprzed startu (w saldach otwarcia)'
-    else if (e.date < r.budgetStart && !pair) {
+    else if (p?.docked) out.stan = 'zadokowany'
+    else if (pair && pair.date < budgetStart) out.stan = 'sprzed startu (w saldach otwarcia)'
+    else if (!pair && e.date < budgetStart) {
       // u1 (R-6): D72 – wpis sprzed startu pomijany („sprzed startu”), póki para po starcie (T162) go nie zadokuje
       out.stan = 'sprzed startu (w saldach otwarcia)'
       out.stanZ11 = 'czeka na import (okno sięga za start – Z11)'
       out.uwaga = `okno pary do ${winTo}`
-    }
-    else if (dk) out.stan = 'zadokowany'
-    else if (pair) out.stan = e.kind === 'return' ? 'do zadokowania – zwrot do masy (firewall do potwierdzenia)' : 'do zadokowania (para w banku)'
-    else {
-      const cov = covered[mbankId] ?? null
-      out.stan = today > winTo && cov && cov > winTo ? 'propozycja Portfela XTB (do potwierdzenia)' : 'czeka na import'
+    } else if (pair) {
+      out.stan = e.kind === 'return' ? 'do zadokowania – zwrot do masy' : 'do zadokowania (para w banku)'
+      pendingPairs.set(pair.id, { pool: e.pool ?? null, entryDate: e.date, entryId: e.id })
+    } else {
+      const mbankId = accounts.find((a) => a.importFormat === 'mbank')?.id
+      const cov = S.import?.coveredTo?.[mbankId] ?? null
+      // T162: „Portfel XTB?” dopiero, gdy plik banku sięga dalej niż okno; nigdy dla okna zaczętego przed startem
+      out.stan = winFrom >= budgetStart && today > winTo && cov && cov > winTo ? 'propozycja Portfela XTB (do potwierdzenia)' : 'czeka na import'
       // u2 (C14): wariant – zasięg plików = coveredTo albo ostatni wiersz z banku (jak T208, T285)
       const lastRow = ops.filter((t) => t.bank && t.accountId === mbankId).reduce((a, t) => (t.date > a ? t.date : a), '')
       const cov2 = cov && cov > lastRow ? cov : lastRow || cov
-      out.stanOstatniWiersz = today > winTo && cov2 && cov2 > winTo ? 'propozycja Portfela XTB (do potwierdzenia)' : 'czeka na import'
+      out.stanOstatniWiersz = winFrom >= budgetStart && today > winTo && cov2 && cov2 > winTo ? 'propozycja Portfela XTB (do potwierdzenia)' : 'czeka na import'
       out.uwaga = `okno pary do ${winTo}; pliki mBanku do ${cov ?? '—'}`
     }
-    const del = pair ? r.deliveries.find((x) => x.txId === pair.id) : null
-    if (del)
-      out.podzial = {
+    entries.push(out)
+  }
+  return { entries, pendingPairs, used, budgetStart }
+}
+
+/** Dostawy ICTTJ w raporcie: podział z przebiegu silnika, wpływy z XTB bez wpisu (T63). */
+export function ictjDeliveries(r, input, pairing, today) {
+  if (!pairing) return { entries: [], withoutEntry: [], note: 'folder ICTTJ nie podany (--ictj)' }
+  const entries = pairing.entries.map((e) => {
+    const del = e.txId ? r.deliveries.find((x) => x.txId === e.txId) : null
+    if (!del) return e
+    return {
+      ...e,
+      podzial: {
         oslony: kw(del.toShields ?? 0),
         kadlub: kw(del.toHull ?? 0),
         cele: Object.fromEntries(Object.entries(del.toGoals ?? {}).map(([g, x]) => [r.goals.get(g)?.name ?? g, kw(x)])),
         rezerwaPodatku: kw(del.toTax ?? 0),
         pula: del.pool ?? null
       }
-    entries.push(out)
-  }
-  const withoutEntry = ops
-    .filter((t) => t.kind === 'trading' && t.amount > 0 && !used.has(t.id) && t.date >= r.budgetStart && t.date <= today)
+    }
+  })
+  const withoutEntry = r.ops
+    .filter((t) => t.kind === 'trading' && t.amount > 0 && !pairing.used.has(t.id) && t.date >= r.budgetStart && t.date <= today)
     .map((t) => ({ txId: t.id, data: t.date, kwota: kw(t.amount), przypomnienie: diffDays(t.date, today) <= 30 ? `tak (do ${addDays(t.date, 30)})` : 'nie (ponad 30 dni)' }))
   return { entries, withoutEntry }
+}
+
+// ------------------------------------------------------------------ plan następnych miesięcy (T346, T345, T29, T272)
+/**
+ * Miesiące po bieżącym od stanu silnika teraz: opłata z terminem w miesiącu, jeszcze niezapłacona, schodzi ze zbiornika
+ * w tym miesiącu (bieżący – gdy płatność jej nie zamknęła); na przełomie pensja z planu w mocy (cała) daje zbiornikom
+ * ratę T29 (`tankInstallment`) w kolejności kontenerów do wyczerpania pensji, potem celom z terminem i ratami po
+ * priorytecie (`goalInstallment` od kwoty po wcześniejszych ratach; przy założeniu pełnych osłon i kadłuba). Bez pensji –
+ * nic pobrane, cele bez rat; „wymagana” – rata T29 obok pobranej.
+ */
+export function monthsAhead(r, today, nowMs, n = 3) {
+  const curMonth = monthOf(today)
+  const bsm = monthOf(r.budgetStart)
+  const T = new Map(r.state.T)
+  const G = new Map(r.state.G)
+  const paid = new Map([...r.paidCycles].map(([k, v]) => [k, new Set(v)]))
+  const periodic = [...r.containers.values()].filter((c) => (c.cycleMonths ?? 1) > 1)
+  const pay = (m) => {
+    for (const c of periodic) {
+      if (!aliveIn(c, m, bsm) || !isDueMonth(c, m) || paid.get(c.id)?.has(m)) continue
+      const tank = T.get(c.id) ?? 0
+      T.set(c.id, tank - Math.min(amountIn(c, m), Math.max(tank, 0)))
+      if (!paid.has(c.id)) paid.set(c.id, new Set())
+      paid.get(c.id).add(m)
+    }
+  }
+  pay(curMonth)
+  const goalsNow = [...r.goals.values()].map((g) => ({ g, s: goalAt(g, nowMs) })).filter((x) => x.s && !x.s.archived && x.s.target > 0)
+  const out = []
+  for (let k = 1; k <= n; k++) {
+    const m = addMonths(curMonth, k)
+    const salary = r.salaryOf(m) ?? 0
+    let left = salary
+    const tanks = []
+    for (const c of periodic) {
+      if (!aliveIn(c, m, bsm)) continue
+      const tank = T.get(c.id) ?? 0
+      const cyc = cycleOf(c, m)
+      const want = paid.get(c.id)?.has(cyc.due) ? 0 : tankInstallment(c, m, tank).installment
+      const taken = Math.min(want, Math.max(left, 0))
+      left -= taken
+      T.set(c.id, tank + taken)
+      tanks.push({ kontener: c.name, id: c.id, pobrane: kw(taken), wymagana: kw(want) })
+    }
+    const goals = []
+    if (salary > 0) {
+      for (const { g, s } of [...goalsNow].sort((a, b) => a.s.priority - b.s.priority || (a.g.id < b.g.id ? -1 : 1))) {
+        if (!s.deadline || !(g.rates ?? []).some((x) => x.from <= m && (x.until == null || m <= x.until))) continue
+        const inst = goalInstallment(Math.max(0, s.target - (G.get(g.id) ?? 0)), m, s.deadline)
+        const x = Math.min(inst, Math.max(left, 0))
+        if (x <= 0) continue
+        left -= x
+        G.set(g.id, (G.get(g.id) ?? 0) + x)
+        goals.push({ cel: g.name, id: g.id, rata: kw(x) })
+      }
+    }
+    pay(m)
+    out.push({ miesiac: m, pensja: kw(salary), odkladki: tanks, odkladkiPobrane: kw(sum(tanks.map((x) => x.pobrane.gr))), odkladkiWymagane: kw(sum(tanks.map((x) => x.wymagana.gr))), ratyCelow: goals, ratyCelowRazem: kw(sum(goals.map((x) => x.rata.gr))) })
+  }
+  return out
 }
 
 // ------------------------------------------------------------------ przychody (D81, T119, T120, T186)
@@ -84,19 +199,32 @@ function incomeMonths(r, input, taxTx = new Set()) {
   for (const t of r.ops) {
     const m = monthOf(t.date)
     if (t.kind === 'income') {
+      // T341 / C13: wpływ na Portfelu XTB w parze z wpisem z puli Podatek – poza przychodem także przed dokowaniem
+      if (taxTx.has(t.id)) continue
       let x = 0
-      for (const p of partsOf(t)) if (p.memberId == null && p.amount > 0) x += p.amount
+      for (const p of partsOf(t)) {
+        if (p.memberId != null || p.amount <= 0) continue
+        // T355: spłata pożyczki (udzielonej) częścią wpłaty nie jest przychodem do wysokości długu (nadwyżka – niżej);
+        // linia pożyczki nieznanej / wziętej – przychód
+        if (p.loanId && r.loansState.has(p.loanId) && input.loans.find((l) => l.id === p.loanId)?.direction === 'given') continue
+        x += p.amount
+      }
       x += hhIncome.get(t.id) ?? 0
+      // T70, T355 (AF-5): nadwyżka spłaty ponad dług (odsetki) – przychód
+      x += r.loanExtra?.get(t.id) ?? 0
       if (x) praca.set(m, (praca.get(m) ?? 0) + x)
     } else if (t.kind === 'trading') {
       const dk = r.dockByTx.get(t.id)
-      // u2 (C1): pula Podatek z podziałem – podatkiem jest tylko część z podziału (T224, taxHold)
+      // u2 (C1): pula Podatek z podziałem – podatkiem jest tylko część z podziału (T224, taxHold); C13 / T341 – para do
+      // zadokowania z puli Podatek też poza przychodem
       if ((dk?.pool === 'tax' && !dk?.split) || taxTx.has(t.id)) continue
       let x = t.amount
       if (dk?.split?.taxHold) x -= Math.sign(t.amount) * Math.min(Math.abs(t.amount), dk.split.taxHold)
       trading.set(m, (trading.get(m) ?? 0) + x)
-    } else if (t.kind === 'loan' && t.loanId) {
-      // nadwyżka spłaty pożyczki udzielonej = przychód (T70)
+    } else if (t.kind === 'loan') {
+      // pożyczki (rodzaj „Pożyczka”) – poza przychodem, poza nadwyżką spłaty udzielonej ponad dług (T70, T355 – AF-5)
+      const x = r.loanExtra?.get(t.id) ?? 0
+      if (x) praca.set(m, (praca.get(m) ?? 0) + x)
     }
   }
   return { praca, trading }
@@ -134,17 +262,24 @@ export function buildReport(input, ictj, chwila, opt = {}) {
   const nowTime = chwila.time
   const curMonth = monthOf(today)
   if (chwila.ms == null) chwila.ms = fromWarsaw(chwila.date, chwila.time ?? '12:00') + 59_999
-  const rA = runFleet(input, { today, household: 'A' })
-  if (rA.error) return { blad: rA.error }
-  const rB = runFleet(input, { today, household: 'B' })
-  const rZ6 = runFleet(input, { today, household: 'A', excludeLoanInstallments: true })
-  const r = rA
+  // T341: pary ICTTJ przed przebiegiem – niezadokowane liczone według puli wpisu
+  const pairing = pairIctj(input, ictj, today)
+  const pendingPairs = pairing?.pendingPairs ?? new Map()
+  // główny wariant – wymaganie po audycie (D99 pkt 1, T350); obok spec (A) i 1.15.3 (B); `opt.warianty: false` – tylko główny
+  const rD = runFleet(input, { today, household: 'D99', pendingPairs })
+  if (rD.error) return { blad: rD.error }
+  const sides = opt.warianty !== false
+  const rA = sides ? runFleet(input, { today, household: 'A', pendingPairs }) : rD
+  const rB = sides ? runFleet(input, { today, household: 'B', pendingPairs }) : rD
+  const rZ6 = sides ? runFleet(input, { today, household: 'D99', pendingPairs, excludeLoanInstallments: true }) : rD
+  const r = rD
   const st = r.state
   const accName = (id) => (S.accounts ?? []).find((a) => a.id === id)?.name ?? id
   const goalName = (id) => r.goals.get(id)?.name ?? id
   const contName = (id) => r.containers.get(id)?.name ?? id
   const catName = (id) => r.ctx.cats.name(id) ?? id
-  const uwagi = [...r.notes, ...(input.problems ?? []).slice(0, 20)]
+  // przegląd N11: problemy odczytu folderu ICTTJ też w uwagach
+  const uwagi = [...r.notes, ...(input.problems ?? []).slice(0, 20), ...(ictj?.problems ?? []).slice(0, 20).map((x) => `ICTTJ: ${x}`)]
 
   // ---------------- P1: salda kont
   const later = new Map()
@@ -189,6 +324,16 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     suma: kw(r.layersSum),
     sumaKont: kw(sumaKont),
     roznica: kw(r.layersSum - sumaKont),
+    wariantGlowny: 'D99 (D99 pkt 1, T350): „spłata” najpierw spłaca, jawny przychód / zaliczka wskazujące zakupy tej osoby spłacają tylko je, bez wskazania omijają dług',
+    wariantA_spec: {
+      opis: 'domownicy wg spec / D80 b / D91 (każda wpłata najpierw spłaca)',
+      oslony: kw(rA.state.S),
+      kadlub: kw(rA.state.H),
+      energia: kw(rA.state.E),
+      cele: Object.fromEntries([...rA.state.G].map(([g, x]) => [goalName(g), kw(x)])),
+      depozyt: Object.fromEntries([...rA.household.members.values()].map((m) => [m.name, kw(m.deposit)])),
+      suma: kw(rA.layersSum)
+    },
     wariantB_1153: {
       opis: 'domownicy wg inflowKind 1.15.3 (zaliczka / niezależny przychód bez spłaty)',
       oslony: kw(rB.state.S),
@@ -260,9 +405,14 @@ export function buildReport(input, ictj, chwila, opt = {}) {
   })
 
   // ---------------- przychody
-  const dokowanie = ictjDeliveries(r, input, ictj, today)
-  // T224: wypłaty z puli Podatek sparowane z bankiem (także przed startem) nie są przychodem z tradingu
-  const taxTx = new Set((dokowanie.entries ?? []).filter((e) => e.pool === 'tax' && e.txId && e.para && e.para.data < r.budgetStart).map((e) => e.txId))
+  const dokowanie = ictjDeliveries(r, input, pairing, today)
+  // T224: wypłaty z puli Podatek sparowane z bankiem przed startem nie są przychodem z tradingu; C13 / T341 – para do
+  // zadokowania z puli Podatek też nie (dokowanie decyduje nad parą)
+  const taxTx = new Set(
+    (dokowanie.entries ?? [])
+      .filter((e) => e.pool === 'tax' && e.txId && e.para && !r.dockByTx.has(e.txId) && (e.para.data < r.budgetStart || pendingPairs.has(e.txId)))
+      .map((e) => e.txId)
+  )
   const inc = incomeStats(r, input, curMonth, taxTx)
   const salaryNow = r.salaryOf(curMonth)
   const przychody = {
@@ -296,10 +446,10 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     brakuje: kw(rec ? (plan?.salary ?? 0) - (rec.firstMonthReduction ?? 0) - rec.salaryPaid : null),
     alarm: rec?.salaryPartial ? 'czerwony – pensja częściowa' : rec?.salaryFromHull > 0 ? 'żółty – pensja z kadłuba' : 'brak',
     pierwszyMiesiacPomniejszenie: kw(rec?.firstMonthReduction ?? 0),
-    ratyOdkladek: Object.entries(rec?.tanks ?? {}).map(([id, x]) => ({ kontener: contName(id), rata: kw(x), planowana: kw(rec.tankDetails[id].installment), nominalna: kw(rec.tankDetails[id].nominal), wyrownanie: kw(rec.tankDetails[id].share), termin: rec.tankDetails[id].due, cyklZaplacony: !!rec.tankDetails[id].paidCycle })),
+    ratyOdkladek: Object.entries(rec?.tanks ?? {}).map(([id, x]) => ({ id, kontener: contName(id), rata: kw(x), planowana: kw(rec.tankDetails[id].installment), nominalna: kw(rec.tankDetails[id].nominal), wyrownanie: kw(rec.tankDetails[id].share), termin: rec.tankDetails[id].due, cyklZaplacony: !!rec.tankDetails[id].paidCycle })),
     ratyOdkladekPlanRazem: kw(sum(Object.values(rec?.tankDetails ?? {}).map((x) => x.installment))),
     ratyOdkladekRazem: kw(sum(Object.values(rec?.tanks ?? {}))),
-    ratyCelow: Object.entries(rec?.goalRates ?? {}).map(([id, x]) => ({ cel: goalName(id), rata: kw(x) })),
+    ratyCelow: Object.entries(rec?.goalRates ?? {}).map(([id, x]) => ({ id, cel: goalName(id), rata: kw(x) })),
     ratyCelowWarunek: rec?.ratesCondition ? { pelneOslonyIKadlubPrzedPensja: rec.ratesCondition.fullBefore, oslony: kw(rec.ratesCondition.shieldsBefore), celOslon: kw(rec.ratesCondition.shieldTarget), kadlub: kw(rec.ratesCondition.hullBefore), celKadluba: kw(rec.ratesCondition.hullTarget) } : null,
     kopertyCodzienne: envDaily,
     kopertyCodzienneRazem: kw(sum(envDaily.map((x) => x.limit.gr))),
@@ -324,6 +474,9 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     przydzialDzis: kw(allowance),
     wydaneDzis: kw(spentToday),
     energiaDzis_T295: kw(allowance == null ? null : allowance - spentToday),
+    // u3 (D99 pkt 9 – S8 wariant B: ujemny przydział jak 0): przydział dziś nie poniżej zera, energia dziś = przydział − wydane dziś
+    przydzialDzisNieUjemny: kw(allowance == null ? null : Math.max(0, allowance)),
+    energiaDzis: kw(allowance == null ? null : Math.max(0, allowance) - spentToday),
     energiaDzis_spec: kw(allowance),
     podstawowyPrzydzial: kw(Math.floor(basic)),
     podstawowyDokladnie: Math.round(basic * 100) / 100,
@@ -388,7 +541,10 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     klasa: shipClass(trunc1(rng)),
     klasaZaokraglenie: shipClass(round1(rng)),
     zLupamiWOslonach: { dokladnie: rngL, obciecie: trunc1(rngL), zaokraglenie: round1(rngL), klasa: shipClass(trunc1(rngL)) },
-    wariantB_1153: rangeOf(rB.state.S, rB.state.H, debt, avg.value)
+    wariantB_1153: rangeOf(rB.state.S, rB.state.H, debt, avg.value),
+    // u3 (C19 / R-15 sprostowane, AF-33): ta sama liczba na każdym ekranie (T71, T218, F35) – także „teraz” symulatora
+    // manewrów; 7,9 w 1.15.4 to zasięg po resztce bieżącego miesiąca (boje, zaległe spłaty), nie zaokrąglenie
+    wszedzie: 'Mostek, Dowództwo, Wywiad (prognoza i „teraz” symulatora), Raporty, Ustawienia – obcięcie T218'
   }
   const avgZ6 = rZ6.hist.avgCosts(curMonth).value
   const wariantZ6 = {
@@ -409,14 +565,18 @@ export function buildReport(input, ictj, chwila, opt = {}) {
       const owed = hh.owedNet(m)
       const oldest = owed > 0 ? m.purchases.find((p) => p.remaining > 0) : null
       return {
+        id: m.id,
         osoba: m.name,
         wariant: label,
+        // T354: przy osobie naraz „ma oddać” i zaliczka (depozyt domowników = suma zaliczek przy osobach)
         maOddac: kw(owed),
         najstarszyOtwartyZakup: oldest ? { dzien: oldest.date, dni: diffDays(oldest.date, today), przypomnienie30dni: diffDays(oldest.date, today) > 30 } : null,
         zaliczka: kw(m.deposit),
         doPrzypisania: kw(m.unassigned),
         sumaSplatDoDzis: kw(m.repaidTotal),
-        prezentyZOslon: kw(m.giftsFromShields)
+        prezentyZOslon: kw(m.giftsFromShields),
+        // T352: jawne zaliczki na przyszłość, które przy długu nic nie spłaciły ani nie zarezerwowały (meldunek, póki ma oddać)
+        zaliczkiPrzyDlugu: owed > 0 ? [...m.skipped] : []
       }
     })
 
@@ -433,14 +593,22 @@ export function buildReport(input, ictj, chwila, opt = {}) {
       const status = p >= x.amount ? 'zapłacona' : today >= overdueFrom ? 'zaległa' : x.date < today ? 'po terminie (do 3 dni)' : 'przyszła'
       return { dzien: x.date, kwota: kw(x.amount), zaplacono: kw(p), stan: status, zaleglaOd: status === 'zaległa' ? overdueFrom : null }
     })
-    const zalegle = raty.filter((x) => x.stan === 'zaległa')
+    // T70: zamknięta – bez należności i rat
+    const closed = !!l.closedAt && toWarsaw(l.closedAt).date <= today
+    const zalegle = closed ? [] : raty.filter((x) => x.stan === 'zaległa')
+    // T356: kto zapłacił – nadawcy spłat pożyczki udzielonej (całością i częścią), w kolejności pierwszej wpłaty
+    const payers = new Map()
+    if (l.direction === 'given') for (const p of ls.payments) if (p.payer != null || p.txId) payers.set(p.payer ?? '?', (payers.get(p.payer ?? '?') ?? 0) + p.amount)
     return {
+      id: l.id,
       nazwa: l.name,
       kierunek: l.direction === 'given' ? 'udzielona' : 'wzięta',
       kwota: kw(l.amount),
       doSplatyRazem: kw(total),
       splacono: kw(paid),
-      zostalo: kw(Math.max(0, total - paid)),
+      zostalo: kw(closed ? 0 : Math.max(0, total - paid)),
+      zamknieta: closed,
+      ktoZaplacil: [...payers].map(([kto, x]) => ({ kto, kwota: kw(x) })),
       raty,
       zalegle: { liczba: zalegle.length, kwota: kw(sum(zalegle.map((x) => x.kwota.gr - x.zaplacono.gr))), od: zalegle[0]?.zaleglaOd ?? null, terminNajstarszej: zalegle[0]?.dzien ?? null }
     }
@@ -466,7 +634,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
         }
       }
     }
-    const paidNow = r.ops.filter((t) => t.containerId === c.id && monthOf(t.date) === curMonth)
+    const paidNow = platnosciKontenera(r, c).filter((t) => monthOf(t.date) === curMonth)
     const covered = S.import?.coveredTo?.[c.accountId] ?? null
     let stanZaplaty = null
     if (alive && isDueMonth(c, curMonth)) {
@@ -477,6 +645,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     }
     const rec2 = r.months.get(curMonth)
     return {
+      id: c.id,
       nazwa: c.name,
       kwota: kw(amountIn(c, curMonth)),
       cyklMiesiecy: cyc,
@@ -488,7 +657,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
       stanZbiornika: tank == null ? null : kw(tank),
       najblizszaPlatnosc: nextDue,
       stanZaplatyWMiesiacu: stanZaplaty,
-      platnosciWMiesiacu: paidNow.map((t) => ({ dzien: t.date, kwota: kw(-t.amount) }))
+      platnosciWMiesiacu: paidNow.map((t) => ({ dzien: t.date, kwota: kw(t.amount) }))
     }
   })
   const masa = sum([...r.containers.values()].filter((c) => aliveIn(c, curMonth, bsm)).map((c) => monthlyWeight(c, curMonth)))
@@ -496,7 +665,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
   const sygnaly = []
   for (const c of r.containers.values()) {
     if (c.loanId || !aliveIn(c, curMonth, bsm) || (c.cycleMonths ?? 1) !== 1) continue
-    const pays = r.ops.filter((t) => t.containerId === c.id).sort((a, b) => (a.date < b.date ? -1 : 1))
+    const pays = platnosciKontenera(r, c)
     if (!pays.length) continue
     const covered = S.import?.coveredTo?.[c.accountId] ?? today
     const days = pays.slice(-6).map((t) => dayOfMonth(t.date)).sort((a, b) => a - b)
@@ -510,7 +679,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     const paidFor = (due) => pays.some((t) => t.date >= addDays(due, -14) && t.date < addDays(due, 17))
     if (last2.length === 2 && last2.every((d) => !paidFor(d))) sygnaly.push({ kontener: c.name, sygnal: 'cichy kontener – brak płatności w dwóch ostatnich terminach (T285)', terminy: last2, ostatniaPlatnosc: pays[pays.length - 1].date })
     const cyc = {}
-    for (const t of pays) cyc[monthOf(t.date)] = (cyc[monthOf(t.date)] ?? 0) - t.amount
+    for (const t of pays) cyc[monthOf(t.date)] = (cyc[monthOf(t.date)] ?? 0) + t.amount
     const months2 = Object.keys(cyc).sort().filter((m) => m < curMonth).slice(-2)
     if (months2.length === 2) {
       const [a1, a2] = months2.map((m) => cyc[m])
@@ -588,7 +757,8 @@ export function buildReport(input, ictj, chwila, opt = {}) {
   const gameOptA = { allowanceNegNoSpend: 'T227', envelopeMode: 'kazdy', night: 'NPC19', holdDays }
   const gameOptB = { allowanceNegNoSpend: 'D73', envelopeMode: 'przekroczenie', night: 'NPC19', holdDays }
   let gra = null
-  if (S.game?.start && S.game.start <= addDays(today, -2)) {
+  // `opt.gra: false` – bez gry (regresja liczb pieniędzy)
+  if (opt.gra !== false && S.game?.start && S.game.start <= addDays(today, -2)) {
     const missions = missionsModel(r, S, today, gameOptA)
     const gA = playGame(r, S, today, gameOptA)
     const gA_m = playGame(r, S, today, { ...gameOptA, missionsDone: missions.filter((w) => w.evaluated).map((w) => ({ sunday: w.sunday, done: w.done })) })
@@ -716,7 +886,7 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     miesiaceZHistoria: [...r.hist.withOps].filter((m) => m.startsWith(String(y))).sort(),
     uwaga: 'u1 (R-19): przed początkiem historii saldo = saldo otwarcia liczone wstecz (T81); miesiące bez historii – brak danych, nie 0'
   }))
-  const tempoCelow = { wariantA: goalsPace(r, today, chwila.ms), wariantB_1153: goalsPace(rB, today, chwila.ms) }
+  const tempoCelow = { wariantD99: goalsPace(r, today, chwila.ms), wariantA: goalsPace(rA, today, chwila.ms), wariantB_1153: goalsPace(rB, today, chwila.ms) }
   const prognozaZasiegu = avg.value ? { paliwo: kw(Math.max(0, st.S + st.H - debt)), miesiecyBezWyplat: rng, koniecPaliwa: addMonthsFrac(today, rng) } : null
 
   return {
@@ -726,13 +896,14 @@ export function buildReport(input, ictj, chwila, opt = {}) {
       ictj: ictj?.dir ?? null,
       chwila: `${today} ${nowTime}`,
       startBudzetu: r.budgetStart,
-      wariantGlowny: 'A (spec, D80 b, D91 – wpłata domownika najpierw spłaca; łupy = niewydana energia T28; energia dziś T295)',
+      wariantGlowny: 'D99 (D99 pkt 1, T350 – „spłata” najpierw spłaca, jawny przychód / zaliczka spłacają tylko wskazane zakupy; łupy = niewydana energia T28; energia dziś T295; pary ICTTJ według puli wpisu T341)',
       zrodlo: 'wyrocznia AU-9 – liczona z wymagań i danych, bez kodu aplikacji',
       wersja: WERSJA
     },
     konta,
     sumaKont: kw(sumaKont),
-    kontrolaSald: { potwierdzenia, plikMbanku: { dzien: '2026-10-26', saldo: kw(6979678), uwaga: 'saldo końcowe historii mBanku z zadania (rok-historia.csv)' } },
+    // przegląd N17: saldo pliku mBanku tylko podane z zewnątrz (stała persony – test „persona rok”)
+    kontrolaSald: { potwierdzenia, plikMbanku: opt.plikMbanku ?? null },
     warstwy,
     celeWarstw,
     koszty,
@@ -744,7 +915,9 @@ export function buildReport(input, ictj, chwila, opt = {}) {
     lupy,
     zasieg,
     wariantZ6,
-    domownicy: { wariantA: domownicy(r.household, 'A'), wariantB_1153: domownicy(rB.household, 'B') },
+    domownicy: { wariantD99: domownicy(r.household, 'D99'), wariantA: domownicy(rA.household, 'A'), wariantB_1153: domownicy(rB.household, 'B') },
+    doZadokowania: { liczba: r.toDock.count, wplyw: kw(r.toDock.inflow), wyplyw: kw(r.toDock.outflow), wCelach: kw(r.toDock.inGoals), uwaga: 'T342: pary liczone według puli wpisu (bez rekordu dokowania)' },
+    planNaprzod: monthsAhead(r, today, chwila.ms, 3),
     pozyczki,
     ladownia,
     dokowanie,

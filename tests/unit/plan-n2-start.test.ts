@@ -70,7 +70,7 @@ describe('AP-5: opłata okresowa zapłacona przed startem (AF-12, T135)', () => 
     const items = briefing({ fleet: s, containers: [pzu], imports: [], lastConfirmation: null, label: () => '' })
     expect(items.filter((i) => i.kind === 'asteroid')).toEqual([])
     expect(nextUnpaidOf(pzu, '2026-11-03', s.tanks[0]?.paidDue)).toBe('2027-11-03')
-    expect(cargoStatuses({ containers: [pzu], transactions: before, today: '2026-11-03', tanks: s.tanks, coveredTo: {} })[0]).toMatchObject({ state: 'paid', paid: zl(1240) })
+    expect(cargoStatuses({ containers: [pzu], transactions: before, today: '2026-11-03', coveredTo: {} })[0]).toMatchObject({ state: 'paid', paid: zl(1240) })
   })
 
   it('cykl ≥ 3 mies. zapłacony przed startem w miesiącu przed terminem też jest zamknięty; zaległa zapłata poprzedniego cyklu – nie', () => {

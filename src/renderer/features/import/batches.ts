@@ -3,7 +3,7 @@
  * brings it again as it was.
  */
 import { useMemo } from 'react'
-import { latestImport, settingsRedone, settingsUndone, undoPlan, type UndoPlan } from '@shared/import/batch'
+import { latestImport, redoneAs, sameContent, settingsRedone, settingsUndone, undoPlan, type UndoPlan } from '@shared/import/batch'
 import type { Balance, ImportBatch, Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { countLabel } from '../../lib/format'
@@ -28,14 +28,7 @@ export function useLatestImport(): ImportBatch | null {
 export function undoPreview(batch: ImportBatch): UndoPlan {
   const s = useData.getState()
   const docked = new Set(listOf(s.records.dockings).map((d) => d.transactionId))
-  // What a later import changed or removed – and what its undo wrote back – is not the user's work (IM.30, IM.31).
-  const touched = new Set<string>()
-  for (const b of listOf(s.records.imports)) {
-    if (b.id === batch.id || b.at <= batch.at) continue
-    for (const u of b.updated) touched.add(u.after.id)
-    for (const t of b.removed) touched.add(t.id)
-  }
-  return undoPlan(batch, { tx: (id) => s.records.transactions[id]?.record, docked, rules: s.fi?.settings.import.rules ?? [], balance: (id) => s.records.balances[id], touched })
+  return undoPlan(batch, { tx: (id) => s.records.transactions[id]?.record, docked, rules: s.fi?.settings.import.rules ?? [], balance: (id) => s.records.balances[id] })
 }
 
 /** What taking an import back changed, as it was before (its „Cofnij”). */
@@ -43,10 +36,11 @@ interface Undone {
   batch: ImportBatch
   /** The operations it deleted, as they were. */
   deleted: Transaction[]
-  /** The operations it set back, as they were. */
+  /** The operations it set back, as they were – and as it wrote them (a change since is the user's – T415). */
   restored: Transaction[]
-  /** The operations it brought back. */
-  readded: string[]
+  wrote: Transaction[]
+  /** The operations it brought back, as it wrote them. */
+  readded: Transaction[]
   /** The balances confirmed by the file it deleted, as they were. */
   confirmations: Balance[]
 }
@@ -98,7 +92,8 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
       batch,
       deleted: (removal?.deleted ?? []).map(tx).filter((t): t is Transaction => !!t),
       restored: plan.restore.map((t) => tx(t.id)).filter((t): t is Transaction => !!t),
-      readded: plan.readd.map((t) => t.id),
+      wrote: plan.restore,
+      readded: plan.readd,
       confirmations: plan.confirmations.map((id) => s.records.balances[id]!.record)
     }
     replaceRecords('transactions', plan.restore)
@@ -106,7 +101,8 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
     if (plan.confirmations.length) await deleteRecords('balances', plan.confirmations)
     updateSettings((f) => ({ ...f, settings: settingsUndone(f.settings, batch) }))
     const at = new Date().toISOString()
-    updateRecord('imports', batch.id, (b) => ({ ...b, undoneAt: at }))
+    // An import written before 1.15.8: the fingerprints of its operations not changed since, for its „Cofnij” (T415).
+    updateRecord('imports', batch.id, (b) => ({ ...b, undoneAt: at, ...(plan.hashes ? { createdHashes: plan.hashes } : {}) }))
     const note = await unsavedNote()
     const parts = [
       `usunięte operacje: ${undone.deleted.length}`,
@@ -123,31 +119,54 @@ export async function undoImport(batchId: string, force = false): Promise<boolea
   }
 }
 
-/** „Cofnij” of taking an import back: the import as it was – the settings only where the undo changed them. */
+/**
+ * „Cofnij” of taking an import back: the import as it was – the settings only where the undo changed them. What the user
+ * changed since the undo stays (T415): an operation it set back – their change kept, the import's applied over it; one
+ * it brought back – not deleted again.
+ */
 async function redoImport(u: Undone): Promise<void> {
   const s = useData.getState()
   if (s.status?.readOnly || s.switching || !s.fi) return
-  const has = (id: string) => !!s.records.transactions[id]
+  const cur = (id: string) => s.records.transactions[id]?.record
+  const has = (id: string) => !!cur(id)
   addRecords(
     'transactions',
     u.deleted.filter((t) => !has(t.id))
   )
-  replaceRecords(
-    'transactions',
-    u.restored.filter((t) => has(t.id))
-  )
+  const wrote = new Map(u.wrote.map((t) => [t.id, t]))
+  let kept = 0
+  const again = u.restored.flatMap((t) => {
+    const now = cur(t.id)
+    if (!now) return []
+    const r = redoneAs(t, wrote.get(t.id), now)
+    if (r.kept) kept++
+    return [r.record]
+  })
+  replaceRecords('transactions', again)
   addRecords(
     'balances',
     u.confirmations.filter((b) => !s.records.balances[b.id])
   )
-  // The import's own deletions again (vanished pending ones, copies on another account – T331): no deletion of the user's.
-  const again = u.readded.filter(has)
-  const removal = again.length ? await deleteRecords('transactions', again, { reason: 'import' }) : null
+  // The import's own deletions again (vanished pending ones, copies on another account – T331): no deletion of the user's –
+  // one changed since the undo brought it back stays.
+  const gone = u.readded.filter((t) => {
+    const now = cur(t.id)
+    if (!now) return false
+    if (sameContent(t, now)) return true
+    kept++
+    return false
+  })
+  const removal = gone.length
+    ? await deleteRecords(
+        'transactions',
+        gone.map((t) => t.id),
+        { reason: 'import' }
+      )
+    : null
   updateSettings((f) => ({ ...f, settings: settingsRedone(f.settings, u.batch) }))
-  // The records written back are the import's own, not the user's changes: its writing time is now (IM.30).
-  const rewritten = new Date().toISOString()
-  updateRecord('imports', u.batch.id, (b) => ({ ...b, undoneAt: null, savedAt: rewritten }))
+  updateRecord('imports', u.batch.id, (b) => ({ ...b, undoneAt: null }))
   await flushSaves()
-  if (removal?.error) toast(`Import znowu w budżecie, ale części plików nie dało się usunąć: ${removal.error}`, 'error', 8000)
-  else toast('Import znowu w budżecie.', 'success')
+  const yours = kept ? ` Zmiany wprowadzone po cofnięciu zostają (${countLabel(kept, 'operacja', 'operacje', 'operacji')}).` : ''
+  if (removal?.error) toast(`Import znowu w budżecie, ale części plików nie dało się usunąć: ${removal.error}${yours}`, 'error', 8000)
+  else toast(`Import znowu w budżecie.${yours}`, 'success', yours ? 8000 : 3200)
 }

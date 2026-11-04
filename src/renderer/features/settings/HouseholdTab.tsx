@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { warsawNow } from '@shared/calc/dates'
-import { balanceOf } from '@shared/calc/household'
+import { balanceOf, balanceText } from '@shared/calc/household'
 import { inflowOf, type HouseholdMember, type MemberInflow } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
 import { useFleet, useHousehold } from '../../store/fleet'
-import { toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { IconPlus } from '../../components/icons'
 import { NameInput, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
-import { addMember, patchMember, setAssignFrom, setHouseholdSince, useMembers } from '../household/actions'
+import { addBankName, addMember, patchMember, removeBankName, setAssignFrom, setHouseholdSince, useMembers } from '../household/actions'
 import { useFocusRecord } from '../../components/focus'
 
 const INFLOW_OPTIONS: Array<{ value: MemberInflow; label: string }> = [
@@ -179,11 +178,8 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
   const ledger = useHousehold()
   const [bankName, setBankName] = useState('')
   const b = ledger ? balanceOf(ledger, m.id) : null
-  const addBankName = () => {
-    const v = bankName.trim()
-    if (!v || m.bankNames.some((x) => x.toLowerCase() === v.toLowerCase())) return setBankName('')
-    patchMember(m.id, { bankNames: [...m.bankNames, v.slice(0, 120)] })
-    setBankName('')
+  const add = () => {
+    if (addBankName(m.id, bankName)) setBankName('')
   }
   return (
     <div className={cx('flex flex-col gap-1.5 border-b border-line/70 py-2 last:border-b-0', m.archived && 'opacity-60')} data-testid="member-row" data-name={m.name} data-focus={`member:${m.id}`}>
@@ -203,7 +199,8 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
         <span className="flex-1" />
         {b && (b.owed > 0 || b.deposit > 0) && (
           <span className={cx('num text-[11.5px]', b.owed > 0 ? 'text-accent' : 'text-muted')} data-testid="member-balance">
-            {b.owed > 0 ? `ma oddać ${plnText(b.owed)} zł` : `zaliczka ${plnText(b.deposit)} zł`}
+            {/* Both at once (AF-16). */}
+            {balanceText(b, plnText)}
           </span>
         )}
         {b && b.unassigned.length > 0 && (
@@ -218,12 +215,7 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
         {m.bankNames.map((n) => (
           <span key={n} className="flex items-center gap-1 border border-line px-1.5 py-[1px]" data-testid="member-bank-name">
             {n}
-            <button type="button" className="text-dim hover:text-down" onClick={() => {
-                const before = m.bankNames
-                patchMember(m.id, { bankNames: before.filter((x) => x !== n) })
-                // AP-22: a name taken off is brought back by „Cofnij”.
-                toast(`Nazwa „${n}” nie wskazuje już ${m.name}.`, 'info', 8000, { label: 'Cofnij', run: () => patchMember(m.id, { bankNames: before }) })
-              }} aria-label={`Usuń ${n}`}>
+            <button type="button" className="text-dim hover:text-down" onClick={() => removeBankName(m.id, n)} aria-label={`Usuń ${n}`}>
               ×
             </button>
           </span>
@@ -233,14 +225,14 @@ function MemberRow({ m, taken, others }: { m: HouseholdMember; taken: Set<string
           value={bankName}
           onChange={(e) => setBankName(e.currentTarget.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') addBankName()
+            if (e.key === 'Enter') add()
           }}
           placeholder="np. ANNA KOWALSKA"
           maxLength={120}
           aria-label="Nazwa domownika w banku"
           data-testid="member-bank-input"
         />
-        <button type="button" className="btn h-[22px]" onClick={addBankName} data-testid="member-bank-add">
+        <button type="button" className="btn h-[22px]" onClick={add} data-testid="member-bank-add">
           Dodaj
         </button>
       </div>

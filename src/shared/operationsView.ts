@@ -6,6 +6,7 @@ import type { Account, OperationView, Orders } from './schema/budget'
 import { TX_KINDS, type Transaction, type TxKind } from './schema/records'
 import { asksImpulse, costOf, financedOf, isNight, isTwoSided, notesOf, partsOf, touchesAccount, type CategoryIndex, type Part } from './calc/operations'
 import { incomeShares } from './calc/household'
+import { loanIdsOf } from './calc/loans'
 import type { BrandAliases } from './import/aliases'
 import { ruleTargetOf } from './import/classify'
 import { fold } from './fold'
@@ -350,7 +351,8 @@ export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterCo
   if (f.members.length && !membersIn(t).some((m) => f.members.includes(m))) return false
   if (f.containers.length && !partsOf(t).some((p) => p.containerId && f.containers.includes(p.containerId))) return false
   if (f.goals.length && !partsOf(t).some((p) => p.goalId && f.goals.includes(p.goalId))) return false
-  if (f.loans.length && !(t.loanId && f.loans.includes(t.loanId))) return false
+  // A loan's own operations and the inflows with a part repaying it (D100).
+  if (f.loans.length && !loanIdsOf(t).some((id) => f.loans.includes(id))) return false
   if (f.transferAccounts.length && !transferAccountsOf(t).some((a) => f.transferAccounts.includes(a))) return false
   if (f.brands.length && !f.brands.includes(brandKeyOf(t, ctx.aliases))) return false
   if (f.tags.length && !f.tags.some((k) => hasTag(t, k))) return false

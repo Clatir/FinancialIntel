@@ -84,7 +84,11 @@ test('„Cofnij import” z „Cofnij”, ponowny import wczytuje wszystko; nume
     // „Cofnij” of the undo: the import as it was.
     await page.getByRole('status').filter({ hasText: 'Import cofnięty' }).getByTestId('toast-action').click()
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(269)
+    await expect(page.getByRole('status').filter({ hasText: 'Import znowu w budżecie.' })).toBeVisible()
+    // IM.30: the operations the „Cofnij” wrote back are the import's own – none „zmienione później przez Ciebie”.
     await page.getByTestId('import-undo').click()
+    await expect(page.getByTestId('import-undo-plan')).toContainText('269')
+    await expect(page.getByTestId('import-undo-changed')).toHaveCount(0)
     await page.getByTestId('import-undo-confirm').click()
     await expect.poll(async () => (await records(dataDir, 'transactions')).length, MASS).toBe(0)
 
@@ -166,6 +170,9 @@ test('Telemetria z banku: historia rachunku zgodna – saldo potwierdzone samo; 
     await importDone(page, userData)
     await expect(page.getByTestId('bank-telemetry-match')).toContainText('Saldo potwierdzone')
     await expect.poll(async () => (await records(dataDir, 'balances')).filter((b) => b.kind === 'confirmation').map((b) => [b.date, b.amount])).toEqual([['2026-09-05', zl(1000 - 12.5 - 40 - 7.99)]])
+    // Its moment of confirming (T383, przegląd 2 N3): „Inwentaryzacja” counts the day of the import, not the file's last day.
+    const confirmed = (await records(dataDir, 'balances')).find((b) => b.kind === 'confirmation')!
+    expect(confirmed.confirmedAt).toBe(confirmed.createdAt)
 
     // A purchase typed by hand on 04.09 that the bank has not: the difference, from that day, with the operation.
     await page.keyboard.press('Control+2')

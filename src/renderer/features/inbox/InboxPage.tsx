@@ -11,6 +11,7 @@ import { dismissCorrection, DUPLICATES_AFTER_MS, openInboxItem, opensPairs, tran
 import { dismissAnomaly } from '../sensors/state'
 import { keepReturned, readDeletedBank } from '../import/returned'
 import { useData } from '../../store/data'
+import { keepAdvances } from '../household/actions'
 import { TransferPairs } from './TransferPairs'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -25,6 +26,8 @@ const HINT: Partial<Record<InboxKind, string>> = {
     'Od 1.7.0 przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane wcześniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
   firewall:
     'Dopłata do konta tradingowego, gdy osłony albo kadłub nie są pełne, łamie rozkaz firewall – czerwony alarm i poważne naruszenie w grze. „Potwierdź” mówi, że to Twoja decyzja (z „Cofnij”); naruszenie zostaje.',
+  advances:
+    'Wpłaty zapisane jako zaliczka na przyszłość idą w całości do depozytu i nie spłacają długu – do wersji 1.15.5 tak zapisywał się też wybór „reszta jako zaliczka” w imporcie. „Spłać” – najpierw wyrównają to, co osoba ma oddać, reszta zostanie zaliczką (z „Cofnij”); „zostaw” – zostają zaliczką i nie będą zgłaszane.',
   refunds: 'Zakupy finansowane pieniędzmi osłon, których domownik jeszcze nie oddał (Ustawienia → Domownicy).',
   balances: 'Salda potwierdzone z bankiem ponad 30 dni temu – potwierdzenie pokazuje, czy operacje zgadzają się z kontem.'
 }
@@ -109,6 +112,12 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
       {item.kind === 'firewall' && item.ref && (
         <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => showReturned(item.ref!)} data-testid="inbox-firewall-show">
           Pokaż
+        </button>
+      )}
+      {/* A member's advances for the future that left the debt unpaid (AP-4): „zostaw” – kept so, never asked again. */}
+      {item.kind === 'advances' && item.ref && (
+        <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => keepAdvances(item.ref!)} data-testid="inbox-dismiss">
+          zostaw
         </button>
       )}
       {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}

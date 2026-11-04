@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
 import { effectOf, type Effect } from '@shared/calc/effect'
 import { computeFleet } from '@shared/calc/fleet'
-import { withKind } from '@shared/calc/kinds'
+import { kindUndone, unlinkedBy, withKind } from '@shared/calc/kinds'
+import { confirmedChanges } from '@shared/calc/balances'
 import { newId } from '@shared/ids'
 import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, refundablesFilter, showsView, viewFilter, type OperationsFilter, type PeriodFilter } from '@shared/operationsView'
 import { lastAccountOf } from '@shared/calc/quick'
@@ -10,8 +11,9 @@ import type { BrandAliases } from '@shared/import/aliases'
 import { shareOf, withShare } from '@shared/calc/share'
 import { stripDeletedCovers } from '@shared/calc/repayments'
 import { deepEqual } from '@shared/merge'
-import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KINDS, transactionSchema, type ImportRule, type OperationView, type Share, type Transaction, type TxKind } from '@shared/schema'
-import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateSettings, useData } from '../../store/data'
+import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KIND_LABEL, TX_KINDS, transactionSchema, type ImportRule, type OperationView, type Share, type Transaction, type TxKind } from '@shared/schema'
+import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
+import { askGuard } from '../../store/guard'
 import { fleetInputNow, fleetNow } from '../../store/fleet'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
@@ -352,6 +354,60 @@ export function newOperation(over: Partial<Transaction> = {}): string {
   useOperationsUi.setState({ keptId: record.id })
   selectOperation(record.id)
   return record.id
+}
+
+/**
+ * An edit of an operation in its editor: written at once – or asked first when it changes a confirmed balance or the
+ * bank's amount (F12; the question waits in `store/guard.ts` – AP-8). `direct` – a new entry being written (the user's own
+ * first writing: nothing to ask). `done` runs once the edit is written: at once or after „Zmień mimo to”. false = not
+ * written now.
+ */
+export function updateOperation(id: string, fn: (r: Transaction) => Transaction, direct: boolean, done?: () => void): boolean {
+  const write = () => {
+    const ok = updateRecord('transactions', id, fn)
+    if (ok) done?.()
+    return ok
+  }
+  const { records } = useData.getState()
+  const t = records.transactions[id]?.record
+  if (direct || !t) return write()
+  const next = fn(t)
+  const changes = confirmedChanges([[t, next]], listOf(records.balances ?? {}))
+  // The bank's amount of either side.
+  const bank = (!!t.bank || !!t.counterBank) && next.amount !== t.amount
+  if (!changes.length && !bank) return write()
+  askGuard({ id, run: () => void write(), changes, bankAmount: bank ? t.amount : null })
+  return false
+}
+
+/**
+ * Another kind of an operation (N-PC-4, T362): only an expense is paid from a goal or a container of the cargo – a change
+ * that unlinks one says so once it is written (after „Zmień mimo to” too – przegląd N2), with „Cofnij”: the fields the
+ * change set, back while the operation still has the new kind; an edit made since stays (`kindUndone`).
+ */
+export function changeKind(id: string, kind: TxKind, direct: boolean): boolean {
+  let before: Transaction | null = null
+  let after: Transaction | null = null
+  const change = (r: Transaction) => {
+    before = r
+    after = withKind(r, kind)
+    return after
+  }
+  return updateOperation(id, change, direct, () => {
+    const was = before!
+    const made = after!
+    const lost = unlinkedBy(was, made)
+    if (!lost.goals.length && !lost.containers.length) return
+    const { records } = useData.getState()
+    const names = [
+      ...lost.goals.map((g) => `cel „${records.goals?.[g]?.record.name ?? '?'}”`),
+      ...lost.containers.map((c) => `kontener „${records.containers?.[c]?.record.name ?? '?'}”`)
+    ]
+    toast(`Rodzaj „${TX_KIND_LABEL[kind]}” nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: ${names.join(', ')}.`, 'info', 8000, {
+      label: 'Cofnij',
+      run: () => void updateRecord('transactions', id, (r) => kindUndone(r, was, made))
+    })
+  })
 }
 
 export async function deleteOperation(t: Transaction, label: string): Promise<void> {

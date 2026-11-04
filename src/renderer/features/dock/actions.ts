@@ -4,11 +4,12 @@
  * (AP-9 – `undockDelivery`).
  */
 import { asPayout, dockedText, type Delivery } from '@shared/calc/dock'
+import { countsByPool } from '@shared/calc/fleet'
 import { dockingIdOf, undockingOf, walletOperationId } from '@shared/calc/undock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { derivedId, newId } from '@shared/ids'
 import { dockingSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
-import { addRecord, canWrite, deleteOrSay, NEWER_RECORD_MESSAGE, updateRecord, updateSettings, useData } from '../../store/data'
+import { addRecord, canWrite, deleteOrSay, listOf, NEWER_RECORD_MESSAGE, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
@@ -45,8 +46,11 @@ export function dockingOf(d: Delivery, tx: Transaction, split: SplitDraft | null
   const others = split ? split.hull + split.taxHold + Object.values(split.goals).reduce((a, b) => a + b, 0) : 0
   // A payout's docking has one id too (B17); one whose entry was deleted in ICTTJ leaves its pool behind (B21).
   const kept = d.entryGone ? null : d.docking
+  // A pair counted by its entry's pool already (T341): its money counts from its operation's arrival, as until now (T363) –
+  // only a pair the engine counts so (`countsByPool`, przegląd N2 3.2), else from the docking as any.
+  const pair = d.state === 'pending' && d.entry && d.transaction && countsByPool(d.transaction) ? d.transaction : null
   return dockingSchema.parse({
-    ...(d.docking ?? { schemaVersion: SCHEMA_VERSION, id: d.entry ? dockingIdOf(d.entry.id) : newId(), createdAt: now }),
+    ...(d.docking ?? { schemaVersion: SCHEMA_VERSION, id: d.entry ? dockingIdOf(d.entry.id) : newId(), createdAt: now, ...(pair ? { countedFrom: pair.createdAt } : {}) }),
     updatedAt: now,
     date: tx.date,
     transactionId: tx.id,
@@ -143,8 +147,13 @@ export function undockDelivery(d: Delivery): boolean {
   toast(`Wycofano dokowanie ${plnText(d.transaction ? Math.abs(d.transaction.amount) : d.amount)} zł${what} – ${then}.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
-      // Docked again meanwhile (the same ids – B17): that docking stays.
+      // Docked again meanwhile – the same ids (B17), or another docking of its entry or its operation (one without a fixed
+      // id: an XTB inflow without an entry, one docked before B17 – przegląd N2): that docking stays and nothing comes
+      // back – else a second docking (and operation) for the same money.
       const now = useData.getState().records
+      const entries = new Set(dockings.flatMap((x) => (x.ictjEntryId ? [x.ictjEntryId] : [])))
+      const operations = new Set(dockings.map((x) => x.transactionId))
+      if (listOf(now.dockings ?? {}).some((x) => (x.ictjEntryId != null && entries.has(x.ictjEntryId)) || operations.has(x.transactionId))) return
       for (const t of ops) if (!now.transactions[t.id]) addRecord('transactions', t)
       for (const x of dockings) if (!now.dockings?.[x.id]) addRecord('dockings', x)
     }

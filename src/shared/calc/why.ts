@@ -89,9 +89,11 @@ export function targetsWhy(f: Pick<FleetState, 'shields' | 'hull' | 'costs' | 'p
 
 /**
  * The last delivery's split (a payout docked – D13): where its money went, layer by layer; null – none docked yet.
- * Docked only (AP-26, PR sp. 2 – T437): a pair counted by its entry's pool before „Zadokuj” (`pending`, AP-12) and an
- * XTB inflow without its docking (`docked` – the operations with a docking record) are the bridge's „Do zadokowania”,
- * never „ostatnia dostawa”.
+ * Docked only (AP-26, PR sp. 2 – T437, changes T342's „ostatnia dostawa (do zadokowania)”): a pair counted by its entry's
+ * pool before „Zadokuj” (`pending`, AP-12 – an inflow typed on Portfel XTB too, B69) and an XTB inflow without its docking
+ * (`docked` – the operations with a docking record) are the bridge's „Do zadokowania” (`toDock` – without a household
+ * member's or a loan's part, T342), never „ostatnia dostawa”. A docked inflow typed on Portfel XTB is the trading
+ * account's operation (`asPayout`) – one too.
  */
 export function deliveryWhy(log: readonly FleetEvent[], goalName: (id: string) => string, docked?: (txId: string) => boolean): { date: string; lines: WhyLine[] } | null {
   for (let i = log.length - 1; i >= 0; i--) {

@@ -7,7 +7,6 @@ import {
   dockAmount,
   layersSum,
   nextUnpaidOf,
-  paidCycleOf,
   paySalary,
   rangeMonths,
   shipClass,
@@ -16,6 +15,7 @@ import {
   type FleetInput,
   type FleetState
 } from '@shared/calc/fleet'
+import { dueWindow } from '@shared/calc/cargoStatus'
 import { addMonths } from '@shared/calc/dates'
 import { transferGoal } from '@shared/calc/goals'
 import { lootApplied } from '@shared/calc/plan'
@@ -269,9 +269,13 @@ describe('odkładki (spec: OC 1 240 zł rocznie)', () => {
     const paid = fleet({ ...input, containers: [oct], transactions: [tx('2026-10-15', -zl(1200), { containerId: oct.id })], now: '2026-10-16T12:00:00+02:00' })
     expect(paid.tanks[0]).toMatchObject({ amount: 0, paidDue: '2026-10', dueMonth: '2027-10' })
     expect(nextUnpaidOf(oct, '2026-10-16', paid.tanks[0]!.paidDue)).toBe('2027-10-25')
-    // A payment two months early is no payment of the cycle: the tank still collects for it.
-    expect(paidCycleOf(fee, '2027-01')).toBeNull()
-    expect(paidCycleOf({ cycleMonths: 2, dueMonth: '2027-03' }, '2027-02')).toBeNull()
+    // A payment two months early is no payment of the cycle: the tank still collects for it (its window – T135, T375:
+    // from the month before for a cycle of 3 months and more, 14 days before its day for one of 2; T393).
+    const twoEarly = fleet({ ...input, transactions: [tx('2027-01-20', -zl(1200), { containerId: fee.id })], now: '2027-03-10T12:00:00+01:00' })
+    expect(twoEarly.tanks[0]).toMatchObject({ paidDue: null, dueMonth: '2027-03' })
+    expect(twoEarly.log.some((e) => e.kind === 'sinking' && e.date === '2027-03-01')).toBe(true)
+    expect(dueWindow(fee, '2027-03', 1).from).toBe('2027-02-01')
+    expect(dueWindow({ cycleMonths: 2, dueMonth: '2027-03' }, '2027-03', 1).from).toBe('2027-02-15')
   })
 
   it('zaległa zapłata poprzedniego cyklu w miesiącu przed terminem nie zamyka następnego (B55)', () => {

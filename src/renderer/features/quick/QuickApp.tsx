@@ -73,6 +73,28 @@ function MemberPick({ data, value, onChange, none, testId, compact }: { data: Qu
   )
 }
 
+/** The loan a quick entry's part repays (D100, T359): its id and the amount typed – null: none typed. */
+export type QuickLoan = { loanId: string; amount: number | null }
+
+/**
+ * The part repaying a loan (D100, T359): its loan of the list and its amount – typed, else what the loan still owes, at
+ * most what the inflow has left beyond the others' parts.
+ */
+export function quickLoanPart(
+  loan: QuickLoan | null,
+  data: Pick<QuickData, 'loans' | 'members'> | null,
+  d: Pick<QuickDraft, 'kind' | 'household' | 'memberId' | 'amount'>,
+  shares: Readonly<Record<string, number>>
+): { loan: NonNullable<QuickData['loans']>[number]; amount: number } | null {
+  const l = loan && d.kind === 'income' ? (data?.loans ?? []).find((x) => x.id === loan.loanId) : undefined
+  if (!l || !data) return null
+  const others = d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).reduce((a, m) => a + shares[m.id]!, 0) : 0
+  return { loan: l, amount: loan!.amount ?? Math.min(l.open, Math.max(0, d.amount - others)) }
+}
+
+/** The part's amount typed: an emptied field – back to what the loan owes (null, przegląd N2 2.12), never 0 zł. */
+export const typedLoan = (x: QuickLoan | null, v: number | null): QuickLoan | null => (x ? { ...x, amount: v } : x)
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-2">
@@ -95,15 +117,24 @@ export function QuickApp() {
   const [share, setShare] = useState<Share | null>(null)
   // Others' money in a member's transfer (D81, „w tym za …”), by member.
   const [shares, setShares] = useState<Record<string, number>>({})
+  // The part repaying a loan given (D100, T359 – whoever sent it): its loan; its amount typed, else what the loan still
+  // owes, at most what the inflow has left (null).
+  const [loan, setLoan] = useState<QuickLoan | null>(null)
+  const loanRef = useRef(loan)
+  loanRef.current = loan
   const [nightOk, setNightOk] = useState(false)
   // Sending, or saved and closing (B51): no second save until the window opens again.
   const [busy, setBusy] = useState(false)
   const sending = useRef(false)
   // Hiding after „Zapisano”: never the window opened again meanwhile.
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // `info`: a field's word about a value it took changed (a tag cut to 40 characters) – no refusal.
+  const [msg, setMsg] = useState<{ ok: boolean; text: string; info?: boolean } | null>(null)
   // A field refused what was typed in it (the Enter that left it does not save the old value in its place – AP-15).
   const refused = useRef(false)
+  // What the fields said about values they took changed during the action that saves (an Enter, a click): said again with
+  // its answer (T400, T413 – never silently). A new key or click starts afresh: a word said before was read in the footer.
+  const notes = useRef<string[]>([])
   const [officer, setOfficer] = useState<{ categoryId: string; source: OfficerSource } | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const [opened, setOpened] = useState(0)
@@ -129,15 +160,19 @@ export function QuickApp() {
     if (opened) amountRef.current?.focus()
   }, [opened])
 
-  // This window has no toasts (AP-15, AF-17): what a field says about a refused value („Nieprawidłowa kwota…”) goes to the footer.
+  // This window has no toasts (AP-15, AF-17, T413): what a field says goes to the footer – a refusal („Nieprawidłowa kwota…”)
+  // holds back the Enter that left the field; a word about a value taken changed („Tag … skrócony”) does not, it is said
+  // with the save's answer too.
   useEffect(
     () =>
       useUi.subscribe((s) => {
         const t = s.toasts.at(-1)
         if (!t) return
         useUi.setState({ toasts: [] })
-        refused.current = true
-        setMsg({ ok: false, text: t.text })
+        const refusal = t.kind === 'error'
+        if (refusal) refused.current = true
+        else if (!notes.current.includes(t.text)) notes.current.push(t.text)
+        setMsg({ ok: false, text: t.text, ...(refusal ? {} : { info: true }) })
       }),
     []
   )
@@ -157,11 +192,13 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setLoan(null)
         setNightOk(false)
         setOfficer(null)
       } else if (fresh && !fresh.accounts.some((a) => a.id === k.d.accountId)) setD((x) => ({ ...x, accountId: fresh.accountId }))
       setRestored(keep)
       setMsg(null)
+      notes.current = []
       setSeries(0)
       setBusy(false)
       sending.current = false
@@ -169,8 +206,10 @@ export function QuickApp() {
       setOpened((n) => n + 1)
     })
     const offResult = api.onQuickResult((r: QuickResult) => {
-      // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”.
-      setMsg({ ok: r.ok && !r.pending, text: r.message })
+      // Taken but not on the disk yet (AP-1): said as a warning, never as „Zapisano.”. The fields' words with it.
+      const said = notes.current
+      notes.current = []
+      setMsg({ ok: r.ok && !r.pending, text: [r.message, ...said].join(' ') })
       setRestored(false)
       if (r.ok && next.current) {
         // „Zapisz i następny” (F7): a fresh draft of the same account, day, kind and tags (a trip's receipts – F17); the
@@ -181,6 +220,7 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setLoan(null)
         setNightOk(false)
         setOfficer(null)
         kept.current.at = 0
@@ -197,16 +237,17 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setLoan(null)
         // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
         // opened again meanwhile.
         if (closing.current) clearTimeout(closing.current)
-        // Not on the disk yet (AP-1): the window stays long enough to read why.
+        // Not on the disk yet (AP-1), or a field's word with it: the window stays long enough to read it.
         closing.current = setTimeout(
           () => {
             closing.current = null
             void api.quickClose()
           },
-          r.pending ? 4000 : 450
+          r.pending || said.length ? 4000 : 450
         )
       } else {
         sending.current = false
@@ -238,7 +279,10 @@ export function QuickApp() {
         setShare((sh) => (sh && sh.lines.some((l) => !member(l.memberId)) ? null : sh))
         setShares((xs) => Object.fromEntries(Object.entries(xs).filter(([id]) => member(id))))
       }
-      const changed = [account && 'kont', category && 'kategorii', people && 'domowników'].filter((x): x is string => !!x)
+      // A loan closed or gone meanwhile (D100): its part is chosen again.
+      const loanGone = !!loanRef.current && !(fresh.loans ?? []).some((l) => l.id === loanRef.current!.loanId)
+      if (loanGone) setLoan(null)
+      const changed = [account && 'kont', category && 'kategorii', people && 'domowników', loanGone && 'pożyczek'].filter((x): x is string => !!x)
       if (changed.length) setMsg({ ok: false, text: `Lista ${changed.length > 1 ? `${changed.slice(0, -1).join(', ')} i ${changed.at(-1)}` : changed[0]} się zmieniła – sprawdź wybór.` })
     })
     // Ctrl+$ in the main window (B61): the preview's and the window's amounts change at once, not at the next opening.
@@ -281,16 +325,37 @@ export function QuickApp() {
     return withTags([], [...hashTags(d.counterparty), ...hashTags(d.note)]).filter((x) => !have.has(tagKey(x)))
   }, [d.counterparty, d.note, d.tags])
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
+  // The part repaying a loan (D100): its loan of the list and its amount (`quickLoanPart`).
+  const loanNow = useMemo(
+    () => quickLoanPart(loan, data, { kind: d.kind, household: d.household, memberId: d.memberId, amount: d.amount }, shares),
+    [loan, data, d.kind, d.household, d.memberId, d.amount, shares]
+  )
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
     if (!data || d.amount <= 0) return null
     if (d.kind === 'income') {
       const m = d.household ? data.members.find((x) => x.id === d.memberId) : undefined
-      if (!m) return <span>Wpływ – dokuje w warstwach okrętu.</span>
+      // A loan's part (D100): back to the shields up to what it owes, beyond it income (T70).
+      const toLoan = loanNow?.amount ?? 0
+      const loanLine = loanNow && toLoan > 0 && (
+        <span data-testid="quick-preview-loan">
+          Spłata pożyczki {loanNow.loan.name}: {money(Math.min(toLoan, loanNow.loan.open))} wraca do osłon (zostało {money(loanNow.loan.open)} → {money(Math.max(0, loanNow.loan.open - toLoan))})
+          {toLoan > loanNow.loan.open ? `; ponad dług ${money(toLoan - loanNow.loan.open)} jako przychód (dokuje)` : ''}.
+        </span>
+      )
+      if (!m) {
+        const rest = d.amount - toLoan
+        return (
+          <div className="flex flex-col">
+            {rest < 0 ? <span className="text-down">Spłata pożyczki przekracza kwotę.</span> : loanLine}
+            {rest > 0 && <span>{toLoan ? `Reszta ${money(rest)} – wpływ, dokuje w warstwach okrętu.` : 'Wpływ – dokuje w warstwach okrętu.'}</span>}
+          </div>
+        )
+      }
       // Others' money in it first (D81), then the sender's: what each owes first, the rest their advance or income.
       const others = data.members.filter((x) => x.via === m.id && (shares[x.id] ?? 0) > 0)
-      const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0)
+      const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0) - toLoan
       const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean | null) => {
         const back = Math.min(amount, who.owed)
         const rest = amount - back
@@ -299,12 +364,13 @@ export function QuickApp() {
       }
       return (
         <div className="flex flex-col">
-          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : <span data-testid="quick-preview-member">Od: {line(m, own, restOpen ? null : d.advance)}</span>}
+          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : own > 0 || !toLoan ? <span data-testid="quick-preview-member">Od: {line(m, own, restOpen ? null : d.advance)}</span> : null}
           {others.map((x) => (
             <span key={x.id} data-testid="quick-preview-share">
               W tym za: {line(x, shares[x.id]!, x.inflow === 'advance')}
             </span>
           ))}
+          {own >= 0 && loanLine}
         </div>
       )
     }
@@ -396,28 +462,34 @@ export function QuickApp() {
       )
     }
     return out
-  }, [data, d, parts, cats, money, shares, restOpen])
+  }, [data, d, parts, cats, money, shares, restOpen, loanNow])
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
-    if (data.readOnly) return setMsg({ ok: false, text: data.readOnlyReason ?? 'Folder jest tylko do odczytu.' })
-    if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
-    if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
-    if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
+    // Not saved: why – with the fields' words of this action (they would be gone under it).
+    const refuse = (text: string) => setMsg({ ok: false, text: [text, ...notes.current].join(' ') })
+    if (data.readOnly) return refuse(data.readOnlyReason ?? 'Folder jest tylko do odczytu.')
+    if (d.amount <= 0) return refuse('Wpisz kwotę.')
+    if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return refuse('Części paragonu nie sumują się do kwoty.')
+    if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return refuse('Wybierz domownika, który finansuje zakup.')
     // A member „pytaj” (D80 b, AP-19): the rest beyond what they owe is chosen – never saved as income unasked.
-    if (askRest > 0) return setMsg({ ok: false, text: `Wybierz, czym jest reszta ${money(askRest)} ponad to, co ${payer!.name} ma oddać: przychód czy zaliczka.` })
-    if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
-    if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
+    if (askRest > 0) return refuse(`Wybierz, czym jest reszta ${money(askRest)} ponad to, co ${payer!.name} ma oddać: przychód czy zaliczka.`)
+    if (share && !shareComplete(share, d.amount)) return refuse(share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.')
+    if (night && (!nightOk || !d.logNote.trim())) return refuse('Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.')
+    // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
+    const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
+    // A loan's part (D100): with an amount, within the inflow beside the others' parts.
+    if (d.kind === 'income' && loan && (loanNow?.amount ?? 0) <= 0) return refuse('Wpisz kwotę spłaty pożyczki.')
+    if (loanNow && parts.reduce((a, x) => a + x.amount, 0) + loanNow.amount > d.amount) return refuse('Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.')
     sending.current = true
     next.current = andNext
     setBusy(true)
     setMsg(null)
-    // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
-    const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
+    const loanPart = loanNow ? { loanId: loanNow.loan.id, amount: loanNow.amount } : null
     // „Plan czy impuls” only where the log asks – of my own part (AP-19); Alt+P / Alt+I may be pressed before the amount
     // is known (AP-20).
-    void api.quickAdd({ ...d, impulse: asks ? d.impulse : null, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts } satisfies QuickDraft)
-  }, [busy, data, d, lines, share, night, nightOk, shares, askRest, payer, money, asks])
+    void api.quickAdd({ ...d, impulse: asks ? d.impulse : null, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts, loanPart } satisfies QuickDraft)
+  }, [busy, data, d, lines, share, night, nightOk, shares, askRest, payer, money, asks, loan, loanNow])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -460,10 +532,19 @@ export function QuickApp() {
     const onFocus = () => {
       refused.current = false
     }
+    // Each key or click its own action: the fields' words said before it are no part of its answer (a tag cut, then
+    // taken off – a later save says nothing of it).
+    const onAction = () => {
+      notes.current = []
+    }
+    window.addEventListener('keydown', onAction, true)
+    window.addEventListener('pointerdown', onAction, true)
     window.addEventListener('focusin', onFocus)
     window.addEventListener('keydown', onEscape, true)
     window.addEventListener('keydown', onKey)
     return () => {
+      window.removeEventListener('keydown', onAction, true)
+      window.removeEventListener('pointerdown', onAction, true)
       window.removeEventListener('focusin', onFocus)
       window.removeEventListener('keydown', onEscape, true)
       window.removeEventListener('keydown', onKey)
@@ -476,6 +557,7 @@ export function QuickApp() {
     setLines([])
     setShare(null)
     setShares({})
+    setLoan(null)
     setNightOk(false)
     setOfficer(null)
     setRestored(false)
@@ -489,6 +571,7 @@ export function QuickApp() {
     setLines([])
     setShare(null)
     setShares({})
+    setLoan(null)
     setOfficer(null)
     setRestored(false)
     setD((x) => fromTemplate(withAmount ? t : { ...t, amount: x.amount }, data, { ...blank(data), accountId: x.accountId || data.accountId }))
@@ -743,6 +826,40 @@ export function QuickApp() {
                   </div>
                 </Row>
               ))}
+          {/* D100: any inflow – whoever sent it – may repay a loan given, all of it or a part; the rest as above. */}
+          {d.kind === 'income' && (data.loans?.length ?? 0) > 0 && (
+            <Row label="Spłata pożyczki">
+              <div className="flex items-center gap-1.5">
+                <select
+                  className="input min-w-0 flex-1"
+                  value={loan?.loanId ?? ''}
+                  onChange={(e) => {
+                    const id = e.currentTarget.value
+                    setLoan(id ? { loanId: id, amount: null } : null)
+                  }}
+                  aria-label="Spłata pożyczki"
+                  data-testid="quick-loan"
+                >
+                  <option value="">— nie —</option>
+                  {data.loans!.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} (zostało {money(l.open)})
+                    </option>
+                  ))}
+                </select>
+                {loan && (
+                  <AmountField
+                    className="w-[110px]"
+                    value={loanNow?.amount || null}
+                    allowEmpty
+                    onChange={(v) => setLoan((x) => typedLoan(x, v))}
+                    aria-label="Kwota spłaty pożyczki"
+                    data-testid="quick-loan-amount"
+                  />
+                )}
+              </div>
+            </Row>
+          )}
           <Row label="Notatka">
             <input className="input" value={d.note} onChange={(e) => set({ note: e.currentTarget.value })} maxLength={500} data-testid="quick-note" />
             <LimitHint length={d.note.length} max={500} />
@@ -800,7 +917,7 @@ export function QuickApp() {
       )}
       <div className="flex shrink-0 items-center gap-2 border-t border-line px-3 py-2">
         {msg && (
-          <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : 'text-accent')} data-testid="quick-message">
+          <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', msg.ok ? 'text-fg-strong' : msg.info ? 'text-fg' : 'text-accent')} data-testid="quick-message" data-kind={msg.ok ? 'ok' : msg.info ? 'info' : 'refusal'}>
             {msg.text}
             {msg.ok && series > 0 && (
               <span className="text-muted" data-testid="quick-series">

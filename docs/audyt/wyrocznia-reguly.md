@@ -16,7 +16,9 @@ sprzeczne, liczy oba warianty i zapisuje sprzeczność (lista na końcu).
 4. **Parowanie z bankiem:** okno od 3 dni przed wpisem do 3 dni roboczych po nim (bez weekendów i świąt PL; T63, T164);
    bez pary po oknie i z importem obejmującym dni po oknie → propozycja Portfela XTB z potwierdzeniem (D56, T162);
    „inna kwota”: różnica ≤ max(5 zł, 1 %), do 4 dni po oknie, liczy się kwota z banku (T162, T176); wpis sprzed startu
-   rozstrzyga data pieniędzy w banku.
+   rozstrzyga data pieniędzy w banku. **Od 1.15.6 (T341, D99 pkt 2):** para niezadokowana liczy się od razu jak dokowanie
+   z pulą wpisu (Cele → cele, Podatek → rezerwa i poza przychodem, zwrot z puli Podatek z rezerwy bez firewalla); rekord
+   dokowania decyduje nad parą; „Do zadokowania” – ile, wpływ, wypływ, część w celach (T342).
 5. **Pensja 1. dnia:** z osłon; brak → z kadłuba (żółty alarm); dalej brak → częściowa (czerwony) (D11, D14). Pierwszy
    miesiąc: pensja − koszty netto dni przed startem, bez opłat okresowych (T45, T220).
 6. **Energia i przydział:** energia = pensja − raty odkładek − raty celów + łupy „na następny miesiąc”; wydatek ponad
@@ -37,14 +39,20 @@ sprzeczne, liczy oba warianty i zapisuje sprzeczność (lista na końcu).
     pozostałe miesiące (T29); kontener dodany w trakcie zbiera od bieżącego miesiąca; zapłata przed terminem zamyka cykl;
     resztka po końcu życia → osłony (T135, T136); harmonogram: cykl = odstęp między miesiącami, waga = kwota × liczba
     miesięcy / 12; rachunek zmienny = 75. percentyl roku w górę do zł (T286, T284); kwota w miesiącu według historii kwot
-    (T283); masa ładunku = suma wag miesięcznych / pensja, linia 40 %.
+    (T283); masa ładunku = suma wag miesięcznych / pensja, linia 40 %. **Od 1.15.6:** płatność sprzed startu zamyka swój cykl
+    (T345); plan następnych miesięcy od stanu silnika teraz, bez pensji nic pobrane, wymagana obok (T346); rata pożyczki
+    z harmonogramu w historii kwot (T347); kontener z `from` null – bez dolnej granicy (schemat). **Od 1.15.7:** który
+    termin płaci płatność – jedna reguła stanu Ładowni (okna T375, zaległa najpierw, terminy budżetu od dnia startu –
+    T393, T394); płatności opłaty – części wydatku z kontenerem, jedna na operację, także z celu i „do zwrotu” (rachunek
+    zapłacony, zbiornik nietknięty), inny rodzaj z kontenerem nigdy (T393 po scaleniu N2 z N3, T362).
 11. **Łupy:** = niewydana energia (T28; spec: „niewydane z kopert”); decyzja do 7. dnia: cele → zapas kopert planowych →
     następny miesiąc → reszta do osłon; bez decyzji do osłon 8. dnia (D18, T52, T278); późna zmiana danych: cele
     i następny miesiąc zostają, zmienia się reszta (T139).
 12. **„Na plus”:** wynik energii ≥ 0 (T178, D86) – spec: koszty netto ≤ pensja; czerwony alarm koperty od 20 %; limit 0 zł
     bez naruszenia poważnego (T216); pokrycie przesuwa limity (T279).
 13. **Cele:** pieniądze zostają tam, gdzie trafiły; zmiany od chwili zmiany (T128); przeniesienie = min(kwota, stan)
-    (T129); wydatek z celu – cel płaci, ile ma, resztę osłony (T131); tempo = średnia wpłat do celów z ostatnich pełnych
+    w chwili `at` wśród zdarzeń dnia – przed pierwszym, które przyszło do FI później, czego cel wtedy nie ma – na koniec
+    dnia (**T340**, od 1.15.6 zamiast „na koniec dnia” z T129); wydatek z celu – cel płaci, ile ma, resztę osłony (T131); tempo = średnia wpłat do celów z ostatnich pełnych
     miesięcy (do 6), bez środków na start; rata do terminu = brak / liczba miesięcy w dół, reszta w ostatniej; rata
     z pensji tylko przy pełnych osłonach i kadłubie na przełomie miesiąca (T272).
 14. **Domownicy:** zakup finansowany – najpierw z zaliczki osoby, resztę pożyczają osłony; wpłata spłaca najwyżej to, co
@@ -52,8 +60,12 @@ sprzeczne, liczy oba warianty i zapisuje sprzeczność (lista na końcu).
     rezerwuje kwotę na wskazany późniejszy zakup; wspólny zakup równo z resztą w ostatniej części; prezent – z zaliczki,
     resztę osłony; przed datą rozliczeń salda na start, przelewy domowników nie są przychodem; przypomnienie po 30 dniach
     od najstarszego otwartego zakupu (D80, D81, D83, D91, D94, T105–T107, T115, T304, T312). Sprzeczność: 1.15.3
-    („niezależne wpłaty”, `inflowKind`) – patrz `raport/0-przygotowanie.md` P.3.
-15. **Pożyczki:** udzielona – wypływ z osłon, spłaty do osłon do wysokości długu, nadwyżka to przychód, zaległa po 3 dniach;
+    („niezależne wpłaty”, `inflowKind`) – patrz `raport/0-przygotowanie.md` P.3. **Rozstrzygnięte (D99 pkt 1, T350):**
+    „spłata” (i „reszta jako zaliczka”) najpierw spłaca, jawny przychód / zaliczka na przyszłość wskazujące zakupy tej
+    osoby spłacają tylko je (późniejsze – rezerwacja D94), bez wskazania omijają dług (meldunek T352); przy osobie naraz
+    dług i zaliczka (T354); operacje domowników sprzed rozliczeń spoza `openingIds` – zaraz po saldach na start (T159).
+15. **Pożyczki:** udzielona – wypływ z osłon, spłaty do osłon do wysokości długu (także sprzed startu), nadwyżka to przychód,
+    zaległa po 3 dniach; spłata częścią dowolnej wpłaty – linia `loanId` (D100, T355, T356 – kto zapłacił);
     wzięta – kwota do osłon, dług = suma harmonogramu, raty w ładowni; harmonogram z resztą w ostatniej racie, w krótkim
     miesiącu jego ostatni dzień (D72, T70–T72, T174).
 16. **Firewall:** dopłata do XTB tylko gdy osłony po dopłacie ≥ celu i kadłub pełny; inaczej czerwony alarm i poważne

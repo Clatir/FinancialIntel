@@ -30,7 +30,7 @@ function fleetOf(containers: Container[], transactions: Transaction[], now: stri
 /** The asteroids of the briefing and of the Radar, as the bridge and the radar screen get them (`cargo`, `payDays`). */
 function asteroids(containers: Container[], transactions: Transaction[], today: string, now: string) {
   const fleet = fleetOf(containers, transactions, now)
-  const cargo = cargoStatuses({ containers, transactions, today, tanks: fleet.tanks, coveredTo: {}, start: START })
+  const cargo = cargoStatuses({ containers, transactions, today, coveredTo: {}, start: START })
   const payDays = cargoDays({ containers, transactions, today })
   const brief = briefing({ fleet, containers, imports: [], lastConfirmation: today, label: () => '', cargo, payDays, money }).filter((i) => i.kind === 'asteroid')
   const items = radar({ today, plans: [], containers, tanks: fleet.tanks, loans: [], money, cargo, payDays, days: 60 }).filter((i) => i.kind === 'asteroid')
@@ -77,9 +77,9 @@ describe('AP-10: jeden termin opłaty w odprawie, w Ładowni i na Radarze (AF-15
   it('LA sp. 8: najbliższy niezapłacony termin kontenera miesięcznego – ten miesiąc, po zapłacie następny (nie data sprzed roku)', () => {
     const rent = container({ name: 'Czynsz', amount: zl(1450), dueDay: 10, dueMonth: '2025-09' })
     const paid = ['2026-08-10', '2026-09-10', '2026-10-10'].map((d) => pay(rent, d))
-    const now = cargoStatuses({ containers: [rent], transactions: paid, today: '2026-11-03', tanks: [], coveredTo: {}, start: START })
+    const now = cargoStatuses({ containers: [rent], transactions: paid, today: '2026-11-03', coveredTo: {}, start: START })
     expect(nextDueOf(rent, '2026-11-03', { day: 10, status: now[0] })).toBe('2026-11-10')
-    const after = cargoStatuses({ containers: [rent], transactions: [...paid, pay(rent, '2026-11-09')], today: '2026-11-12', tanks: [], coveredTo: {}, start: START })
+    const after = cargoStatuses({ containers: [rent], transactions: [...paid, pay(rent, '2026-11-09')], today: '2026-11-12', coveredTo: {}, start: START })
     expect(nextDueOf(rent, '2026-11-12', { day: 10, status: after[0] })).toBe('2026-12-10')
   })
 })

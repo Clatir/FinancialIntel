@@ -68,6 +68,8 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
           { memberId: 'M1', owed: zl(120), deposit: 0, open: [{ txId: 'x', date: '2026-10-03', amount: zl(120) }], since: '2026-10-03', unassigned: [{ txId: 'p', date: '2026-10-05', amount: zl(30) }] },
           { memberId: 'M2', owed: 0, deposit: zl(50), open: [], since: null, unassigned: [] }
         ],
+        // A member's advance for the future that left the debt unpaid (AP-4, 1.15.6).
+        advances: [{ memberId: 'M1', owed: zl(120), items: [{ txId: 'A1', date: '2026-10-06', amount: zl(100) }] }],
         confirmations: [
           { accountId: MBANK_ACCOUNT_ID, name: 'mBank', last: '2026-09-10', opened: '2026-09-01' },
           { accountId: XTB_WALLET_ACCOUNT_ID, name: 'Portfel XTB', last: null, opened: '2026-09-01' }
@@ -107,7 +109,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         }
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'firewall', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'firewall', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
@@ -135,6 +137,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     // A balance confirmed twice on two computers (B129).
     expect(text('corrections')).toEqual(['mBank: korekta salda 50.00 zł z 12.10 wygląda na powtórzoną – taka sama z 11.10 (LAPTOP); saldo potwierdzone dwa razy, zanim OneDrive przyniósł pierwszą.'])
     expect(text('refunds')).toEqual(['Babcia: do oddania 120.00 zł – najstarszy zakup z 03.10 (16 dni).'])
+    expect(items.filter((i) => i.kind === 'advances').map((i) => [i.ref, i.text, i.action])).toEqual([['M1', 'Babcia: wpłata jako zaliczka na przyszłość nie spłaciła długu (06.10 100.00 zł) – ma oddać 120.00 zł. Spłacić?', 'Spłać']])
     expect(text('cargo')).toEqual([
       'Cięższy niż w manifeście – Netflix: 43.00 zł → 49.00 zł co miesiąc (+14%, +72.00 zł rocznie).',
       'Siłownia: brak płatności od 12.07 (2 terminy bez płatności) – subskrypcja anulowana?'
@@ -145,6 +148,15 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     // Only a late return is a report.
     expect(text('returns')).toEqual(['ALLEGRO: 249.00 zł zwrotu nie dotarło od 4 dni (termin 15.10, zakup 01.10).'])
     expect(text('balances')).toEqual(['mBank: saldo potwierdzone 39 dni temu – sprawdź z bankiem.', 'Portfel XTB: saldo bez potwierdzenia od salda otwarcia z 01.09.2026 (48 dni) – sprawdź z bankiem.'])
+  })
+
+  it('zaliczki przy długu: „Spłać” spłaci mniej niż mogłyby (przegląd 2 N2) – meldunek mówi ile', () => {
+    const text = (repays: number, owed: number) =>
+      inboxItems(input({ advances: [{ memberId: 'M1', owed: zl(owed), repays: zl(repays), items: [{ txId: 'A1', date: '2026-10-06', amount: zl(100) }] }] })).find((i) => i.kind === 'advances')?.text
+    expect(text(50, 150)).toBe('Babcia: wpłata jako zaliczka na przyszłość nie spłaciła długu (06.10 100.00 zł) – ma oddać 150.00 zł; ta wpłata spłaci z tego 50.00 zł. Spłacić?')
+    // All they could – the advance's 100 zł, the debt's 40 zł: as before.
+    expect(text(100, 150)).toBe('Babcia: wpłata jako zaliczka na przyszłość nie spłaciła długu (06.10 100.00 zł) – ma oddać 150.00 zł. Spłacić?')
+    expect(text(40, 40)).toBe('Babcia: wpłata jako zaliczka na przyszłość nie spłaciła długu (06.10 100.00 zł) – ma oddać 40.00 zł. Spłacić?')
   })
 
   it('saldo: do 30 dni po potwierdzeniu bez meldunku; konto bez salda otwarcia i potwierdzenia – też nie', () => {

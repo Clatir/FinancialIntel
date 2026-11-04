@@ -201,6 +201,15 @@ export const importRuleSchema = z.looseObject({
   /** A purchase financed by several people (D83): each row's amount split so (`calc/share.ts`). Absent / null = none. */
   share: shareSchema.nullable().optional().catch(undefined),
   counterAccountId: ulidSchema.nullable().default(null),
+  /**
+   * A loan given of the Radar the money repays (D100, T358): of a rule of kind 'loan' – the whole inflow; of an income's
+   * rule with `loanAmount` – that part of each inflow, the rest as the rule says. Only while the loan is open, from its
+   * day (`loanFor`'s conditions); otherwise the rule gives way (its part is left out). Absent = none (an older version
+   * reads a rule of kind 'loan' as a proposal of before 1.5.1, the part – not at all).
+   */
+  loanId: ulidSchema.nullable().optional().catch(undefined),
+  /** The part of each inflow repaying `loanId` (grosze, D100); absent = the whole inflow (a rule of kind 'loan'). */
+  loanAmount: z.number().int().positive().nullable().optional().catch(undefined),
   /** Tags the rule gives (1.10.0, F17 – „Netia → #ulga-internet”); absent = none. An older version ignores them. */
   tags: tagListSchema.optional().catch(undefined),
   /** false = written or edited by the user in the settings (never overwritten by learning). */
@@ -293,11 +302,14 @@ export const memberOpeningSchema = z.looseObject({
 })
 export type MemberOpening = z.infer<typeof memberOpeningSchema>
 
+/** The most names in the bank a member keeps (beyond it the list would be read as empty – kept below by the screens). */
+export const MAX_BANK_NAMES = 20
+
 export const householdMemberSchema = z.looseObject({
   id: ulidSchema,
   name: z.string().trim().min(1).max(40),
   /** The member's names as the bank writes them: the import knows their transfers by them. */
-  bankNames: z.array(z.string().trim().min(1).max(120)).max(20).catch([]).default([]),
+  bankNames: z.array(z.string().trim().min(1).max(120)).max(MAX_BANK_NAMES).catch([]).default([]),
   inflow: openEnum(MEMBER_INFLOWS).catch('ask').default('ask'),
   archived: z.boolean().default(false),
   /**

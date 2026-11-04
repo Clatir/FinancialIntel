@@ -5,15 +5,16 @@
 import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
 import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
-import { linkRepayments, withNamed, type CoverFields } from '@shared/calc/repayments'
-import { balanceOf, CASH_REPAY_TITLE, memberName } from '@shared/calc/household'
-import { CASH_ACCOUNT_ID, inflowOf, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
+import { linkRepayments, repayingAdvancesOf, withNamed, type CoverFields } from '@shared/calc/repayments'
+import { balanceOf, bankNameHolder, CASH_REPAY_TITLE, memberName, sameBankName, skippedDebtsOf, skippedKey } from '@shared/calc/household'
+import { CASH_ACCOUNT_ID, inflowOf, MAX_BANK_NAMES, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
-import { addRecord, canWrite, deleteRecords, updateRecord, updateSettings, useData, writesInBackground } from '../../store/data'
+import { sameContentAs } from '@shared/merge'
+import { addRecord, canWrite, deleteRecords, replaceRecords, updateRecord, updateSettings, useData, writesInBackground } from '../../store/data'
 import { fleetInputNow } from '../../store/fleet'
 import { timed } from '../../lib/timing'
-import { plDate } from '../../lib/format'
+import { countLabel, plDate } from '../../lib/format'
 import { toast } from '../../store/ui'
 import { usePresence } from '../../store/presence'
 
@@ -53,6 +54,66 @@ export function assignRepayment(paymentId: string, purchaseId: string, label: st
       run: () => void updateRecord('transactions', paymentId, (r) => ({ ...r, ...was }))
     })
   return ok
+}
+
+/**
+ * „Spłać” (AP-4, the inbox): a member's advances for the future that left their debt unpaid (not those kept) repay what
+ * is still owed because of them – no more (`repayingAdvancesOf`, review 2 of N2: a debt a later repayment paid back is
+ * not settled again); with „Cofnij”. False – nothing changed (said – AP-15).
+ */
+export function repayAdvances(memberId: string): boolean {
+  const input = canWrite() ? fleetInputNow() : null
+  const s = useData.getState()
+  if (!input || !s.fi) return false
+  const after = repayingAdvancesOf(input, memberId, s.fi.settings.import.notDuplicates, warsawNow().date)
+  if (!after.length) {
+    noAdvancesLeft(memberId)
+    return false
+  }
+  const was = after.map((t) => s.records.transactions[t.id]?.record).filter((t): t is Transaction => !!t)
+  if (!replaceRecords('transactions', after)) return false
+  toast(`${memberName(memberId, s.fi.settings.household.members)}: ${countLabel(after.length, 'wpłata spłaca', 'wpłaty spłacają', 'wpłat spłaca')} dług, reszta zostaje zaliczką.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      // Only the ones as it left them (a change since stays).
+      const current = useData.getState().records.transactions
+      replaceRecords(
+        'transactions',
+        was.filter((t) => sameContentAs(current[t.id]?.record, after.find((a) => a.id === t.id)))
+      )
+    }
+  })
+  return true
+}
+
+/**
+ * „zostaw” (AP-4, the inbox): a member's advances for the future the report asks of (`skippedDebtsOf`) stay so – not asked
+ * again; with „Cofnij”.
+ */
+export function keepAdvances(memberId: string): void {
+  const input = canWrite() ? fleetInputNow() : null
+  if (!input) return
+  const ledger = householdOf(input, warsawNow().date)
+  const keys = (skippedDebtsOf(ledger, ledger.members, {}).find((m) => m.memberId === memberId)?.items ?? []).map((i) => skippedKey({ txId: i.txId, memberId }))
+  if (!keys.length) return noAdvancesLeft(memberId)
+  const at = new Date().toISOString()
+  const set = (on: boolean) =>
+    updateSettings((f) => {
+      const notDuplicates = { ...f.settings.import.notDuplicates }
+      for (const k of keys)
+        if (on) notDuplicates[k] ??= at
+        else if (notDuplicates[k] === at) delete notDuplicates[k]
+      return { ...f, settings: { ...f.settings, import: { ...f.settings.import, notDuplicates } } }
+    })
+  if (set(true)) toast('Zaliczki zostają – meldunek nie wróci dla tych wpłat.', 'info', 7000, { label: 'Cofnij', run: () => set(false) })
+}
+
+/**
+ * The inbox's „Spłać” or „zostaw” on a report no longer so (its operations changed meanwhile – an edit, another computer):
+ * nothing is changed, and that is said (AP-15 – never a click that does nothing in silence).
+ */
+function noAdvancesLeft(memberId: string): void {
+  toast(`${memberName(memberId, membersNow())}: nic do zmiany – zaliczki na przyszłość nie zostawiają już długu.`, 'info', 5000)
 }
 
 /**
@@ -112,9 +173,17 @@ function freeName(name: string): string {
   return out
 }
 
-/** A member from a counterparty of the import (D80 a): the bank's name is theirs; the id, or null (read-only folder). */
+/**
+ * A member from a counterparty of the import (D80 a): the bank's name is theirs; the id, or null (read-only folder). A
+ * member holding that name already (T416) is the one – no second member the import could not tell apart.
+ */
 export function addMemberFromBank(bankName: string): string | null {
   if (!canWrite()) return null
+  const holder = bankNameHolder(membersNow(), bankName)
+  if (holder) {
+    toast(`Nazwę „${bankName.trim()}” ma już ${holder.name} – przypisano tej osobie.`, 'info', 6000)
+    return holder.id
+  }
   const id = newId()
   const name = freeName(nameOf(bankName))
   patchMembers((ms) => [...ms, { id, name, bankNames: [bankName.trim().slice(0, 120)], inflow: 'ask', archived: false, via: null, opening: { owed: 0, deposit: 0 } }])
@@ -131,6 +200,55 @@ export function addMember(name: string): string | null {
 
 export function patchMember(id: string, patch: Partial<Omit<HouseholdMember, 'id'>>): void {
   patchMembers((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+}
+
+export { MAX_BANK_NAMES }
+
+/**
+ * A member's name in the bank added (D80): once, at most `MAX_BANK_NAMES`, never one another member holds (T416 – the
+ * import could not tell them apart) – each refusal said (AP-15). false – refused (the field keeps what was typed).
+ */
+export function addBankName(memberId: string, name: string): boolean {
+  const ms = membersNow()
+  const m = ms.find((x) => x.id === memberId)
+  const v = name.trim().slice(0, 120)
+  if (!m || !v || m.bankNames.some((x) => sameBankName(x, v))) return true
+  const holder = bankNameHolder(ms, v, memberId)
+  if (holder) {
+    toast(`Nazwę „${v}” ma już ${holder.name} – jedna nazwa w banku nie może wskazywać dwóch osób.`, 'error', 6000)
+    return false
+  }
+  if (m.bankNames.length >= MAX_BANK_NAMES) {
+    toast(`Najwyżej ${MAX_BANK_NAMES} nazw w banku na domownika – usuń którąś, by dodać nową.`, 'error', 6000)
+    return false
+  }
+  patchMember(memberId, { bankNames: [...m.bankNames, v] })
+  return true
+}
+
+/**
+ * A member's name in the bank taken off (AP-22, T414): „Cofnij” brings back that one name, at its place among the names
+ * as they are then (one added meanwhile stays) – not when the member has it again, nor when another member holds it now
+ * (said: one name never points at two members – `sameBankName`, T416).
+ */
+export function removeBankName(memberId: string, name: string): void {
+  const m = membersNow().find((x) => x.id === memberId)
+  const at = m ? m.bankNames.indexOf(name) : -1
+  if (!m || at < 0) return
+  patchMember(memberId, { bankNames: m.bankNames.filter((x) => x !== name) })
+  toast(`Nazwa „${name}” nie wskazuje już ${m.name}.`, 'info', 8000, { label: 'Cofnij', run: () => bankNameBack(memberId, name, at) })
+}
+
+function bankNameBack(memberId: string, name: string, at: number): void {
+  const ms = membersNow()
+  const m = ms.find((x) => x.id === memberId)
+  if (!m || m.bankNames.some((x) => sameBankName(x, name))) return
+  const holder = bankNameHolder(ms, name, memberId)
+  if (holder) return toast(`Nazwa „${name}” wskazuje teraz ${holder.name} – zostaje tam, ${m.name} jej nie odzyskuje.`, 'info', 6000)
+  if (m.bankNames.length >= MAX_BANK_NAMES) return toast(`Najwyżej ${MAX_BANK_NAMES} nazw w banku na domownika – nazwa „${name}” nie wróciła.`, 'error', 6000)
+  const names = [...m.bankNames]
+  names.splice(Math.min(at, names.length), 0, name)
+  patchMember(memberId, { bankNames: names })
 }
 
 /**
