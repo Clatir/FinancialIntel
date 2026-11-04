@@ -10,13 +10,13 @@ import { ICTJ_POOL_LABEL } from '../ictj'
 import type { Account, HouseholdMember } from '../schema/budget'
 import type { Balance, Container } from '../schema/records'
 import { lastConfirmation } from './balances'
-import type { CargoStatus } from './cargoStatus'
+import { nextDueOf, type CargoStatus } from './cargoStatus'
 import { daysBetween, firstDayOf, warsawNow } from './dates'
 import type { Delivery } from './dock'
 import { isOpeningItem, memberName } from './household'
 import { HOUSE_DAYS } from './loans'
 import { lastPaymentOf, pit38Deadline } from './radar'
-import { activeIn, amountIn, monthlyWeight, nextPaymentOf, nextUnpaidOf, type Alarm, type FleetState } from './fleet'
+import { activeIn, amountIn, monthlyWeight, nextPaymentOf, type Alarm, type FleetState } from './fleet'
 import type { AccountAhead } from './ahead'
 import { remindStep, type ScheduledDay } from './scheduled'
 import { cycleText, deadText, priceText, type DeadContainer, type PriceChange } from './cargoWatch'
@@ -129,8 +129,10 @@ export interface BriefingInput {
   mission?: { week: string; title: string; text: string } | null
   /** The household (D80): the members' names, whom their money comes through (D81). */
   members?: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'> & { via?: string | null }>
-  /** The fixed fees of this month (F1, `cargoStatuses`): an overdue one is an alert. */
+  /** The fixed fees of this month and the earlier dues still unpaid (F1, D99 pkt 3 – `cargoStatuses`): an overdue one is an alert. */
   cargo?: readonly CargoStatus[]
+  /** Each container's payment day (`cargoDays`, T376): the asteroids ahead on it – as the Radar and Ładownia count them. */
+  payDays?: ReadonlyMap<string, number>
   /** The planned operations' days (F16, `scheduledWindow`): each one's reminders, a late one. */
   scheduled?: readonly ScheduledDay[]
   /** The accounts ahead (F26, `accountsAhead`): a payment taking one below zero. */
@@ -266,11 +268,14 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     for (const e of f.log)
       if (e.kind === 'trading' && e.amount < 0 && e.date === f.today && e.txId && !e.moves.taxHold)
         items.push({ level: 'info', kind: 'alarm', key: `alarm:firewall:off:${e.txId}:${f.month}`, text: `Firewall wyłączony: dopłata do XTB ${zl(-e.amount)} bez sprawdzania osłon i kadłuba.` })
+  // The fees' state of this month (AF-15): a periodic fee's due as Ładownia and the Radar have it.
+  const current = new Map((o.cargo ?? []).filter((s) => !s.carried).map((s) => [s.containerId, s]))
   for (const c of o.containers) {
     if (c.cycleMonths <= 1) continue
     const tankOf = f.tanks.find((t) => t.containerId === c.id)
-    // The next payment still to make (a cycle paid early has none – B55), of the container's life (`from` – `until`).
-    const date = nextUnpaidOf(c, f.today, tankOf?.paidDue)
+    // The next payment still to make (a cycle paid early has none – B55), of the container's life (`from` – `until`):
+    // this month's from its state (the day of its history – T208), the next ones on that day (T376).
+    const date = nextDueOf(c, f.today, { day: o.payDays?.get(c.id), paidDue: tankOf?.paidDue, status: current.get(c.id) })
     if (!activeIn(c, date.slice(0, 7))) continue
     const days = daysBetween(f.today, date)
     if (days < 0 || days > ASTEROID_DAYS) continue
@@ -282,7 +287,7 @@ export function briefing(o: BriefingInput): BriefingItem[] {
       text: `Asteroida: ${c.name} ${days === 0 ? 'dziś' : `za ${days} ${days === 1 ? 'dzień' : 'dni'}`} – ${zl(amountIn(c, date.slice(0, 7)))}, w zbiorniku ${zl(tank)}.`
     })
   }
-  // A fixed fee 3 days after its due without a payment (F1, D86) – once per due.
+  // A fixed fee 3 days after its due without a payment (F1, D86) – once per due; an earlier month's until paid (D99 pkt 3).
   for (const s of o.cargo ?? []) {
     if (s.state !== 'overdue') continue
     items.push({ level: 'yellow', kind: 'cargo', key: `cargo:${s.containerId}:${s.due}`, text: `Kontener niezaładowany: ${s.name} ${zl(s.amount)} – termin ${dm(s.due)} minął, brak płatności.` })

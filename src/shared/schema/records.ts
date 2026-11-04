@@ -252,6 +252,11 @@ export const containerSchema = z.looseObject({
    */
   amountAt: isoDateTime.optional().catch(undefined),
   /**
+   * When its payment day was last set by hand (1.15.7, T376): the payments before it no longer say its day – none =
+   * never set (its day comes from its payments, T208).
+   */
+  dueAt: isoDateTime.optional().catch(undefined),
+  /**
    * Its earlier amounts (1.9.0, F9): each up to its month, `amount` from the month after the last one – a raise counts
    * from its month, the months before keep the old amount. Empty = `amount` always.
    */

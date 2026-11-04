@@ -481,6 +481,32 @@ export function sinkingOf(log: readonly FleetEvent[], month: string): Map<string
   return out
 }
 
+/** A tank's installment of a month (`tankRate`): what it wants, the schedule's one of the month, a catch-up or not. */
+export interface TankRate {
+  /** What it wants from the month's energy (T29); 0 – the cycle paid already. */
+  rate: number
+  /** The schedule's installment of this month of the cycle (the last one with the rest of the grosze – T3). */
+  nominal: number
+  /** It catches up (a fee added late, a smaller salary) or gives back a surplus: other than the schedule's by over 1 grosz. */
+  catchUp: boolean
+  /** The cycle is paid already (B55, T345): nothing to collect for it. */
+  paid: boolean
+}
+
+/**
+ * A tank's installment of `month` as the engine takes it (AP-10, AF-43 / LA.3, LA sp. 2 – Ładownia's hint and row): the
+ * engine's `want` of the month's turn (T29 – the tank before its installment), without it counted from the tank before
+ * the installment (`tank` less `taken` – a fee not saved yet: an empty tank); a cycle paid none (`paidDue`). A catch-up
+ * only when it is not the schedule's installment of this month – the last one carrying the rest of the grosze is not.
+ */
+export function tankRate(c: Parameters<typeof tankWant>[0], month: string, o: { want?: number; tank?: number; taken?: number; paidDue?: string | null } = {}): TankRate {
+  const pos = cyclePosition(c, month)
+  const nominal = sinkingSchedule(amountIn(c, month), pos.length)[pos.index] ?? 0
+  if (o.paidDue && o.paidDue === pos.dueMonth) return { rate: 0, nominal, catchUp: false, paid: true }
+  const rate = o.want ?? tankWant(c, month, Math.max(0, (o.tank ?? 0) - (o.taken ?? 0)), null)
+  return { rate, nominal, catchUp: Math.abs(rate - nominal) > 1, paid: false }
+}
+
 /** A month ahead of the engine's as it will run it (`monthAhead`). */
 export interface MonthAhead {
   /** Each periodic fee's installment: what the salary will give (`amount`) and what its tank wants (`want`, T29). */
@@ -597,6 +623,11 @@ export interface Debriefing {
   loot: number | null
   /** What household members financed this month (D80): apart from my costs, by member (the most first). */
   financed: Array<{ memberId: string; amount: number }>
+  /**
+   * The periodic fees whose tank lacked when paid (`sinking-short`, LA sp. 5): what the month's energy paid for each,
+   * the most first – the alarm of the briefing kept in the month's debriefing.
+   */
+  tanksShort: Array<{ containerId: string; amount: number }>
 }
 
 /**
@@ -729,8 +760,16 @@ export function debriefing(
     cargo,
     uncategorized,
     loot,
-    financed: financedBy(txs)
+    financed: financedBy(txs),
+    tanksShort: tanksShortOf(input.alarms ?? [], month)
   }
+}
+
+/** The engine's „za mało w zbiorniku” of a month (LA sp. 5): per fee, what its energy paid – the most first. */
+export function tanksShortOf(alarms: readonly Alarm[], month: string): Debriefing['tanksShort'] {
+  const by = new Map<string, number>()
+  for (const a of alarms) if (a.kind === 'sinking-short' && a.ref && monthOf(a.date) === month) by.set(a.ref, (by.get(a.ref) ?? 0) + a.amount)
+  return [...by].map(([containerId, amount]) => ({ containerId, amount })).sort((a, b) => b.amount - a.amount || a.containerId.localeCompare(b.containerId))
 }
 
 /** The loot decision (D18) as the month plan stores it; what is not given away stays in the shields. */
@@ -815,6 +854,13 @@ export function simulateCargo(
     rangeAfter: o.costs != null ? range(Math.max(1, o.costs + delta)) : null
   }
 }
+
+/**
+ * Where linking a counterparty's payments to a container starts (T379, N2 – AP-10): the 1st of the month before the
+ * budget's first month – a rent paid on 28.10 for its due on 03.11, a periodic fee paid the month before its due month
+ * (T135, T345) are this due's, so the start sees them paid; the payments before still tell its payment day.
+ */
+export const linkFromOf = (start: string): string => firstDayOf(addMonths(monthOf(start), -1))
 
 /**
  * Expense payments of a counterparty not linked to any container yet, from `from` on (the import links new ones itself);

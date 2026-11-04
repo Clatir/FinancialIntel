@@ -1,10 +1,12 @@
 /**
  * The planned operations and terms ahead (1.8.0, F16 – „Boje nawigacyjne”): each one's days (once, or every year), and
  * what is still ahead of the budget – an operation of the bank matched to a day (the amount and ±3 days, as the import
- * joins a hand entry: `looseMatch`), or one made from it („Wykonaj teraz”), or a day ticked off closes it. A day past
- * for more than `LAPSE_DAYS` without either lapses: a yearly one waits for its next year. Pure.
+ * joins a hand entry: `looseMatch` – and a similar name, T378), or one made from it („Wykonaj teraz”), or a day ticked
+ * off closes it. A day past for more than `LAPSE_DAYS` without either lapses: a yearly one waits for its next year. Pure.
  */
 import type { Scheduled, Transaction } from '../schema/records'
+import { fold } from '../fold'
+import { counterpartyKey } from '../import/names'
 import { looseMatch, MATCH_DAYS } from '../import/reconcile'
 import { addDays, daysBetween, daysInMonth } from './dates'
 
@@ -44,6 +46,23 @@ export interface ScheduledDay {
   matched: boolean
   /** Days from today to it (< 0 – past). */
   days: number
+}
+
+/** Words of the bank's rows that tell no payee (a payment, a transfer, a month of its title) – no match by them. */
+const OPERATION_WORDS = new Set(
+  (
+    'zakup zakupy platnosc platnosci przelew przelewu przelewy oplata oplaty wplata wyplata faktura faktury rachunek rachunku ' +
+    'zamowienie zamowienia transakcja karta karty blik polska sklep spolka styczen stycznia luty lutego marzec marca kwiecien ' +
+    'kwietnia czerwiec czerwca lipiec lipca sierpien sierpnia wrzesien wrzesnia pazdziernik pazdziernika listopad listopada ' +
+    'grudzien grudnia'
+  ).split(' ')
+)
+const wordsOf = (s: string): string[] => fold(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !OPERATION_WORDS.has(w) && !/^\d+$/.test(w))
+/** One word the same, or its first 5 letters („komina” – KOMINIARZ): a buoy's name told in the operation's (T378). */
+const sameWord = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && a.slice(0, 5) === b.slice(0, 5))
+function sharesWord(own: readonly string[], theirs: readonly string[]): boolean {
+  const ours = own.flatMap(wordsOf)
+  return theirs.flatMap(wordsOf).some((w) => ours.some((o) => sameWord(o, w)))
 }
 
 /**
@@ -109,10 +128,15 @@ export function scheduledDays(list: readonly Scheduled[], transactions: readonly
     for (let d = -MATCH_DAYS; d <= MATCH_DAYS; d++)
       for (const t of index.get(addDays(day.date, d)) ?? []) {
         if (used.has(t.id) || !MATCHABLE.has(t.kind) || s.notMatched.includes(t.id) || (s.accountId && t.accountId !== s.accountId)) continue
-        const m = looseMatch(own, { amount: t.amount, date: t.date, name: t.counterparty || t.title })
-        if (!m) continue
+        const name = t.counterparty || t.title
+        const m = looseMatch(own, { amount: t.amount, date: t.date, name })
+        // Its name too (RA sp. 1, T378): the amount alone never closes a buoy with an operation of another name (ZALANDO
+        // is no „Przegląd komina”) – a similar name, or a word of the buoy's in the operation's („Serwis auta” – AUTO
+        // SERWIS KOWALSKI); one without a name (written by hand, ahead: the forecast counts it once – T282) by its amount.
+        const named = !!counterpartyKey(name) && !!counterpartyKey(own.counterparty)
+        if (!m || (named ? !m.similar && !(m.exact && sharesWord([s.name, s.counterparty], [t.counterparty, t.title])) : !m.exact)) continue
         // A similar name before the exact amount alone, then the closer day.
-        const rank = (m.strong ? 0 : m.similar ? 10 : 20) + m.days
+        const rank = (m.strong ? 0 : named ? 10 : 20) + m.days
         if (!best || rank < best.rank || (rank === best.rank && t.id < best.t.id)) best = { t, rank }
       }
     if (!best) continue
@@ -143,6 +167,16 @@ export function remindStep(s: Pick<Scheduled, 'remind'>, days: number): number |
   if (days < 0) return null
   const fit = s.remind.filter((r) => days <= r).sort((a, b) => a - b)
   return fit.length ? fit[0]! : null
+}
+
+/**
+ * A one-off whose day is past (RA sp. 4 – „Pozostałe boje”, T378): done (an operation made from it or matched, ticked
+ * off) or lapsed – its day more than `LAPSE_DAYS` past without one, off the radar; null – not past (or a yearly one).
+ */
+export function pastStateOf(s: Scheduled, transactions: readonly Transaction[], today: string): 'done' | 'late' | 'lapsed' | null {
+  if (s.yearly || s.date >= today) return null
+  const state = scheduledDays([s], transactions, today, s.date, s.date)[0]?.state
+  return state === 'done' || state === 'late' || state === 'lapsed' ? state : null
 }
 
 /** The next day of a planned one from `today` on (its next year's for a yearly one); null = a one-off past. */

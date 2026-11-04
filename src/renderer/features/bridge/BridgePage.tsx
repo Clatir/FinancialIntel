@@ -31,7 +31,7 @@ import { topUpHull } from '../month/actions'
 import { startWizard } from '../wizard/state'
 import { DockPanel } from '../dock/DockPanel'
 import { openDocking, useDeliveries } from '../dock/state'
-import { useCargoStatuses, useCargoWatch } from '../cargo/status'
+import { useCargoDays, useCargoStatuses, useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
 import { useFuture } from '../radar/future'
@@ -542,6 +542,7 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
   const ictjProblem = useIctj((s) => (s.snap.dir && s.snap.status !== 'ok' ? s.snap.message : null))
   const game = useGameRecords()
   const cargo = useCargoStatuses()
+  const days = useCargoDays()
   // The cargo hold's watch (F9, F23); the new files of mBank in the downloads (F14).
   const watch = useCargoWatch()
   const bankFiles = useNewBankFiles()
@@ -570,6 +571,7 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
       mission,
       members: fi.settings.household.members,
       cargo,
+      payDays: days,
       scheduled: future.reminders,
       accounts: future.accounts,
       watch,
@@ -579,7 +581,7 @@ export function useBriefingItems(fleet: FleetState | null): BriefingItem[] {
       firewallOff: !fi.settings.orders.firewall
     })
     // `hidden`: the amounts of the texts mask on a change.
-  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, future, watch, bankFiles, anomalies, returns])
+  }, [fleet, fi, containers, balances, cats, hidden, deliveries, ictjProblem, game, cargo, days, future, watch, bankFiles, anomalies, returns])
 }
 
 /** Silver Bullet (D73, ICT): opened between 10:00 and 11:00 New York time – the briefing in three sentences. */

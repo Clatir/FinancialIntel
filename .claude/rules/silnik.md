@@ -53,6 +53,8 @@ paths:
 - Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
   (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Miesiąc przed
   silnikiem – `monthAhead` od jego stanu teraz (T346), nigdy rata nominalna; bez pensji pobrane 0, wymagana obok.
+  Podpowiedź raty w Ładowni – `tankRate` (T377: `want` silnika, cykl zapłacony bez raty), nigdy `sinkingInstallment`
+  od pustego zbiornika.
 - Energia dziś (AP-13, od 1.15.7): ekrany, podglądy i Daily Bias czytają `daily.energy` – `daily.left`, nie więcej niż
   energia miesiąca (`cappedEnergy`, powód `daily.cap` – T371); `left` zostaje miarą przekroczenia dnia (alarm, gra).
   Zwrot ponad dzisiejsze zakupy swojej kategorii głównej (`returned`) nie wchodzi do dziś, od jutra jest w puli (T370).
@@ -60,6 +62,10 @@ paths:
 - Kadłub pełny dla firewalla i „wolnego do decyzji” od 99 % celu (`hullCountsFull`, T372) – dokowanie dalej do 100 %,
   raty celów (T272) przy 100 %. „Dopełnij kadłub z osłon” (T373): wpis `hullTopUps` planu miesiąca, silnik w jego chwili
   (kolejka przeniesień T340), nigdy więcej niż nadwyżka osłon i brak kadłuba.
+- Jeden stan opłaty (T375, T376, od 1.15.7): płatności do terminów tylko przez `feeDues` / `dueWindow`
+  (`calc/cargoStatus.ts` – stan, Radar, odprawa, straż ładowni); niezapłacony termin wcześniejszego miesiąca zostaje
+  (`CargoStatus.carried`) do zapłaty – konsument mapujący stan po kontenerze filtruje `!carried`. Terminy naprzód na
+  dniu z historii (`cargoDays` → `payDays`, `nextDueOf`), nigdy wprost z `dueDay`; `dueAt` – dzień ustawiony ręcznie.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`); wyniki tylko do odczytu.

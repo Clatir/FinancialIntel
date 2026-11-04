@@ -6,13 +6,12 @@
 import type { Container, Transaction } from '../schema/records'
 import { dm, formatPln, plural } from '../format'
 import { addDays, addMonths, firstDayOf, monthOf, warsawNow } from './dates'
-import { activeIn, cyclePosition, paymentsPerYear, scheduleOf } from './fleet'
-import { dueIn, EARLY_DAYS, paymentDay, paymentsIndex, type CargoPayment, type Linked } from './cargoStatus'
+import { activeIn, amountIn, cyclePosition, paymentsPerYear, scheduleOf } from './fleet'
+import { dueIn, dueWindow, feeDues, paymentDay, paymentsIndex, priceTolerance, type CargoPayment, type Linked } from './cargoStatus'
 import { OVERDUE_DAYS } from './loans'
 import { p75 } from './plan'
 
-/** A payment this far from the container's amount is another price (F9): 5%, at least 2 zł. */
-export const priceTolerance = (amount: number): number => Math.max(Math.round(amount * 0.05), 200)
+export { priceTolerance }
 
 /** A variable bill's amount (F23) is out of date this far from its year's 75th percentile: 10%, at least 2 zł. */
 export const variableTolerance = (amount: number): number => Math.max(Math.round(amount * 0.1), 200)
@@ -74,30 +73,33 @@ interface CyclePaid {
 }
 
 /**
- * Its payments by the due they are for – as the fee's state counts them (`cargoStatuses`): a payment up to 14 days before
- * a due is that due's. The latest cycle only once it is whole: its days over, or as many payments as the cycle before it
- * (the second transfer of the rent not come yet – no lower price).
+ * Its payments by the due they are for – as the fee's state counts them (`feeDues`, T375): a payment up to 14 days
+ * before a due is that due's, a periodic fee's of 3 months and more from the month before (T135, AF-45 – when the due
+ * before is paid), a late one and a second payment the unpaid due's before. The latest cycle only once it is whole: its
+ * days over, or as many payments as the cycle before it (the second transfer of the rent not come yet – no lower price).
  */
 function cyclesPaid(c: Container, linked: readonly Linked[], day: number, today: string): CyclePaid[] {
-  const out: CyclePaid[] = []
-  for (const p of linked) {
-    const shifted = addDays(p.date, EARLY_DAYS)
-    let due = cyclePosition(c, monthOf(shifted)).dueMonth
-    for (let n = 0; n < 24 && dueIn(due, day) > shifted; n++) due = addMonths(due, -cyclePosition(c, due).length)
-    const payment = { id: p.id, date: p.date, amount: p.amount }
-    const last = out[out.length - 1]
-    if (last?.due === due) {
-      last.amount += p.amount
-      last.payments.push(payment)
-    } else out.push({ due, amount: p.amount, payments: [payment] })
+  if (!linked.length) return []
+  const firstPaid = linked[0]!.date
+  // From a cycle before the first payment (its due before is not known – paid) to the one after the latest.
+  const dues = feeDues(c, day, linked, {
+    first: addMonths(monthOf(firstPaid), -Math.max(1, c.cycleMonths)),
+    last: addMonths(monthOf(linked[linked.length - 1]!.date), 1),
+    amountAt: (m) => amountIn(c, m),
+    variable: c.variable,
+    open: (d) => d.from > firstPaid
+  })
+  const out: Array<CyclePaid & { ends: string }> = []
+  for (let i = 0; i < dues.length - 1; i++) {
+    const d = dues[i]!
+    if (!d.payments.length) continue
+    const payments = d.payments.map(({ id, date, amount }) => ({ id, date, amount }))
+    out.push({ due: d.month, amount: payments.reduce((s, p) => s + p.amount, 0), payments, ends: dues[i + 1]!.from })
   }
   const last = out[out.length - 1]
   const before = out[out.length - 2]
-  if (last && before && last.payments.length < before.payments.length) {
-    const ends = addDays(dueIn(cyclePosition(c, addMonths(last.due, 1)).dueMonth, day), -EARLY_DAYS)
-    if (ends > today) out.pop()
-  }
-  return out
+  if (last && before && last.payments.length < before.payments.length && last.ends > today) out.pop()
+  return out.map(({ due, amount, payments }) => ({ due, amount, payments }))
 }
 
 /**
@@ -169,7 +171,7 @@ export interface DeadContainer {
 /**
  * The containers gone quiet (F9): paid before, but no payment for its last `DEAD_CYCLES` dues – each past its 3 days of
  * grace, and the account's files from the bank reaching past it (an account without them: today) – a subscription
- * cancelled? The dues on the day its payments come (`paymentDay`); a payment up to 14 days before a due is that due's.
+ * cancelled? The dues on the day its payments come (`paymentDay`); a payment of a due's window is that due's (`dueWindow`).
  * „Nadal płacę” (`aliveAt`) counts as a payment that day.
  */
 export function deadContainers(o: CargoWatchInput): DeadContainer[] {
@@ -192,7 +194,8 @@ export function deadContainers(o: CargoWatchInput): DeadContainer[] {
       const date = dueIn(due, day)
       const graceEnd = addDays(date, OVERDUE_DAYS - 1)
       if (graceEnd >= o.today || graceEnd > covered) break
-      if (addDays(date, -EARLY_DAYS) > from) missed.push(date)
+      // A payment of its window paid it (T135: a periodic fee's from the month before – AF-45).
+      if (dueWindow(c, due, day).from > from) missed.push(date)
     }
     if (missed.length >= DEAD_CYCLES) out.push({ containerId: c.id, name: c.name, last: latest.date, missed, key: `dead:${c.id}:${missed[DEAD_CYCLES - 1]}` })
   }

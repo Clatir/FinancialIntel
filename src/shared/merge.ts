@@ -300,6 +300,7 @@ const LABELS: Record<string, string> = {
   achievedAt: 'Osiągnięty',
   archivedAt: 'Zarchiwizowany',
   amountAt: 'Masa od dnia',
+  dueAt: 'Dzień płatności ustawiony',
   past: 'Wcześniejsze stany',
   transfers: 'Przeniesienia',
   'transfers.amount': 'Przeniesienia – kwota',

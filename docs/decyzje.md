@@ -2366,7 +2366,7 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   decyduje, a próba nie zakłada własnego pliku (wcześniej `.fi-zapis.tmp-…` w korzeniu przy każdym otwarciu – wpis
   w koszu online OneDrive, przy blokadzie usuwania plik zostawał). Zakładanie nowych plików (każdy zapis to plik
   tymczasowy i zamiana) sprawdza zapis obecności tego komputera w `.presence/` (`DataStoreOptions.presence` =
-  `writeOwnPresence` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
+  `presenceKept.write` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
   więc folder, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie uprawnienia), jest tylko do odczytu
   z powodem i bez migracji, której nie da się dokończyć (wcześniej: bez banera, każdy zapis z własnym błędem, migracja
   przerywała otwarcie). Po przeglądzie 3: z zapisu obecności o trybie tylko do odczytu decyduje tylko odmowa założenia
@@ -2388,7 +2388,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i heartbeat, `clear`; inne foldery nie czekają), a usunięcie sprawdza trzymanie dopiero w swojej kolejce, tuż przed
   `rm` (wcześniej przy wywołaniu: usunięcie ustępującego otwarcia, puszczone bez czekania, mogło na wolnym OneDrive dojść
   po zapisie próby nowszego otwarcia tego folderu, które zaczęło się w międzyczasie – drugi komputer nie widział tego do
-  następnego heartbeatu, w zasobniku do 5 min). Telefon (lustro folderu) i testy bez `presence` – tylko `fi.json`.
+  następnego heartbeatu, w zasobniku do 5 min). Po przeglądzie N1 5: kolejka `PresenceKeeper` uruchamia tylko jego
+  własne zapisy i usunięcia – obecność zapisuje sam (`write(folder, próby)`, `beat(folder)`; wersja i ostatni ruch w oknie
+  z `content`), nigdy operacji wołającego, więc żaden zapis nie czeka w niej na siebie (wcześniej pilnował tego tylko
+  komentarz: operacja wołająca kolejkę zakleszczyłaby folder); zamknięcie folderu (zmiana folderu, wyjście) czeka na
+  usunięcie obecności najwyżej 5 s (`PRESENCE_CLEAR_MS`, `clearWithin`; wcześniej bez limitu za wszystkimi zapisami
+  obecności folderu – wolny OneDrive wstrzymywał wyjście i otwarcie następnego folderu), potem usunięcie idzie dalej
+  w swojej kolejce i sprawdza trzymanie w swojej kolei – obecność nowszego otwarcia zostaje. Krok zapisu niesie sam błąd:
+  `writeFileAtomic` odrzuca `AtomicWriteError { step, cause }` z kodem i komunikatem błędu fs, `atomicFailure` /
+  `atomicStep` znajdują go także w błędzie opakowanym (`cause`) – wcześniej krok w `WeakMap` po obiekcie błędu i
+  opakowanie go gubiło (folder naprawdę tylko do odczytu nierozpoznany). Telefon (lustro folderu) i testy bez
+  `presence` – tylko `fi.json`.
   W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
   podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
 - **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
@@ -2449,7 +2459,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
   mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu (gdy jest
   po co – T332), od razu na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je
-  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie.
+  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie. Po przeglądzie N1 5
+  Ustawienia → Import („Pary oznaczone „to nie duplikat”: N”, „pokazuj znowu”) liczą i zapominają tylko pary panelu
+  duplikatów (`isDuplicatePairKey` w `shared/import/duplicates.ts` – klucz `row:…` albo id pary): klucze `back:<id>`,
+  a także `correction:` (B129), `transfer:` i `transfer-lone:` (F10) zostają – wcześniej liczone jako pary, a „pokazuj
+  znowu” przywracało meldunki operacji zostawionych i przywróconych świadomie oraz przelewów „zostaw tak”.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
   rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
@@ -2554,7 +2568,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`writeFileAtomic(…, attempts)`: katalog, plik tymczasowy, zamiana): przy otwarciu i powrocie ok. 0,1 s na krok,
   w spoczynku i w kolejce jedna próba bez czekania. Wcześniej plik tymczasowy raz (jeden chwilowy EPERM na `.presence/`
   dawał tryb tylko do odczytu), a zamiana zawsze 8 razy (ok. 1,4 s co 5 s w spoczynku i w kolejce magazynu). Zwykłe
-  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy.
+  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy. Po przeglądzie 4 naprawa pliku obecności tylko do
+  odczytu (T337) to jeden `access`, `chmod` i drugi zapis z tymi samymi próbami – tylko gdy plik naprawdę nie ma prawa
+  zapisu; plik trzymany nie dostaje drugiego zapisu (czas jak dotąd).
 - **T336** Temat z jednakową decyzją marek z „w tym za” (przegląd N1 4; doprecyzowuje T235 – N78, T327, T328): gdy
   kilka marek tematu ma tę samą decyzję z liniami „w tym za” z kwotą (`themeShows` 'brands'), wiersz tematu pokazuje ich
   decyzję bez edytora linii – „w tym za – ustawione w markach”; linie, kwoty i uwagi rozkładu są przy każdej marce (jej
@@ -2566,10 +2582,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   to, co marki dają teraz – zmiana obok, np. kategorii, zapisywała kwotę obciętą do długu, a gdy dług potem rósł, X
   dostawał mniej, niż marki wpisały, albo nic). Jedna marka albo marki bez linii z kwotą – jak dotąd: zmiana w temacie to
   decyzja tematu (te same wiersze i kwoty). Wiersz tematu nie czyta rozkładu (`themeCommon` – decyzja pierwszej marki,
-  bez sumowania), uwagi przy linii zawsze z jednej decyzji – kilku kluczy razem nikt nie składa.
-  zapisy bez zmian: katalog i plik tymczasowy raz, zamiana 8 razy. Po przeglądzie 4 naprawa pliku obecności tylko do
-  odczytu (T337) to jeden `access`, `chmod` i drugi zapis z tymi samymi próbami – tylko gdy plik naprawdę nie ma prawa
-  zapisu; plik trzymany nie dostaje drugiego zapisu (czas jak dotąd).
+  bez sumowania), uwagi przy linii zawsze z jednej decyzji – kilku kluczy razem nikt nie składa. Po przeglądzie N1 5
+  księgowanie decyzji grupy (B97 – własna po przyjętej podpowiedzi zapamiętana, pytanie „zaliczka czy przychód?” nowego
+  domownika, przyjęta podpowiedź, propozycja słowa D78) jest w jednym miejscu (`groupsDecided` w
+  `features/import/state.ts`) dla decyzji grupy, zbiorczej, tematu nad markami ('same'), marek z liniami ('brands') i
+  „jak temat”; grupa wracająca do tematu traci też pytanie domownika i propozycję słowa (wcześniej „jak temat” po
+  „+ domownik” zostawiał pytanie – plakietka i temat „do zrobienia”).
 - **T337** Własny plik obecności, którego nie da się zastąpić (przegląd 4 AP-1; doprecyzowuje T316): zamiana
   `.presence/<komputer>.json` odmówiona (EPERM / EACCES w kroku zamiany – `atomicStep`), a plik bez prawa zapisu
   (`access(…, W_OK)`; na Windows atrybut „tylko do odczytu”, np. po przywróceniu kopii) → `writePresence` oddaje mu
@@ -2578,6 +2596,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   minie sama, ponawia następny heartbeat. Błąd zapisu obecności w heartbeacie nie jest połykany
   (`PresenceKeeper.beat`): wpis w logu, gdy zaczyna się nie udawać w danym folderze (z błędem), i gdy znów się udaje –
   nie przy każdej próbie (co minutę, w zasobniku co 5 min; tygodnie w zasobniku wypchnęłyby resztę z logu 1 MB).
+  Seria kończy się bez wpisu, gdy folder zamknięto – obecność z niego usunięta albo heartbeat pisze w innym folderze:
+  błąd w nim po powrocie to nowa seria z wpisem (przegląd N1 5; wcześniej jeden znacznik dla wszystkich folderów – po
+  powrocie z B błąd w A bez wpisu, a potem mylące „presence written again”).
   Wcześniej plik tylko do odczytu zostawał na zawsze ze starym `lastSeen` (próba i heartbeat tylko odnotowywały albo
   połykały błąd) – drugi komputer po 11 min uznawał ten za niedziałający i oba robiły zapisy w tle naraz. Bez komunikatu
   w oknie: przyczynę trwałą naprawia sam zapis, chwilowa mija; zostaje wpis w logu.
@@ -2747,3 +2768,55 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   XTB bez sprawdzania osłon i kadłuba” (bez „nie do dopłaty XTB”), w odprawie dzisiejsza dopłata do XTB – informacja
   „Firewall wyłączony: dopłata do XTB X zł bez sprawdzania osłon i kadłuba.” (zwrot puli Podatek – nie). Bez zmian
   formatu.
+- **T375** Jeden stan opłaty i zaległość do zapłaty (1.15.7, AP-10 – AF-50 / RA.4, AF-80, AF-45 / LA.10, LA sp. 1, 6;
+  realizuje D99 pkt 3 i rekomendację F1 / T208 wobec D86 / D4 z sekcji 5 wniosków; zmienia T208 „tylko w bieżącym
+  miesiącu” i okno 14 dni dla opłat okresowych): płatności przypisuje do terminów jedna funkcja `feeDues`
+  (`calc/cargoStatus.ts`) – stan w Ładowni, Radar, odprawa, powiadomienia, salda naprzód i straż ładowni (`cyclesPaid`,
+  `deadContainers` – `dueWindow`) liczą to samo. Okno terminu: opłata miesięczna i co 2 miesiące od 14 dni przed dniem
+  płatności do 14 dni przed następnym (jak T208); opłata okresowa ≥ 3 mies. od 1. dnia miesiąca przed miesiącem
+  terminu (T135 – jak silnik `paidCycleOf`). Płatność z okna przed dniem terminu (opłata okresowa – przed miesiącem
+  terminu) idzie najpierw do poprzedniego terminu, gdy ten jest niezapłacony („zaległa zapłata poprzedniego cyklu”,
+  T135); druga płatność okna (gdy późniejsze same pokrywają kwotę terminu minus tolerancja ceny 5 %, min. 2 zł;
+  rachunek zmienny – każda) spłaca najstarszy niezapłacony termin wcześniej. Niezapłacony termin wcześniejszego
+  miesiąca zostaje (`carried`) – „po terminie” 3 dni po dniu płatności, w okresie łaski albo bez pliku banku „czeka na
+  import” – aż do zapłaty; liczony od miesiąca startu budżetu (`FleetState.start`), `from` kontenera i miesiąca jego
+  dodania (`createdAt`), w życiu kontenera; „Zapłacone poza budżetem” (`settleDue`) ustawia `aliveAt` na dzień po
+  terminie (jak „Nadal płacę”) – ten termin i starsze znikają. Termin 28.–31. dnia dostaje „po terminie” w następnym
+  miesiącu (AF-80). Bez startu budżetu – tylko termin tego miesiąca (jak dotąd). Odprawa: pozycja `cargo` raz na
+  termin (klucz bez zmian); Radar: pozycja zaległa w swoim dniu (`fixed` / `asteroid`, `overdue`), notatka „czeka na
+  import” albo „po terminie N dni” (RA sp. 2 – także w 3 dniach łaski; `importPending` liczony od dnia po terminie);
+  salda naprzód liczą ją dziś. Ładownia: znaczek wiersza – najstarsza zaległa „po terminie · dd.mm”; w edytorze blok
+  „Zaległe” (`container-late`) z „Zapłacone (kwota, dziś)” tylko, gdy płatność dziś zamknie ten termin (`payToday`),
+  i „Zapłacone poza budżetem”; „Zapłacone” bieżącego terminu – gdy płatność dziś jest jego (inaczej „Płatność dziś
+  zamknie najpierw zaległą opłatę”). Odkładki: notka „Opłata za … niezapłacona – zbiornik trzyma na nią pieniądze”
+  (LA sp. 6 – silnik bez zmian: zbiornik trzyma pieniądze niezapłaconego cyklu, następny cykl dozbiera po zapłacie,
+  T29). Kwota i zapłata cyklu z płatności (LA.10: „zapłacone 22.10”, lista „Zapłacone”). Bez zmian formatu i migracji.
+- **T376** Dzień płatności opłaty (1.15.7, AP-10 – AF-15 / MO.11, MO.15, R-20; W2 – pole „Płatność”, LA sp. 8;
+  doprecyzowuje T208): dzień z historii płatności (`paymentDay`) liczy się z płatności od chwili ustawienia dnia ręcznie
+  – nowe pole kontenera `dueAt` (ISO, addytywnie, bez `SCHEMA_VERSION`; zapisuje je zmiana `dueDay` / `dueMonth`
+  w edytorze); bez płatności po niej – dzień kontenera („ustawiony”). Ten sam dzień dla terminów naprzód: `cargoDays`
+  → Radar (`RadarInput.payDays`, asteroidy i opłaty miesięczne kolejnych miesięcy), odprawa (`BriefingInput.payDays`)
+  i Ładownia; najbliższy termin do zapłaty – `nextDueOf` (ten miesiąc ze stanu, zapłacony – następny, cykl zapłacony
+  przez silnik – pominięty). Odprawa bierze asteroidę z tego stanu, nie z dnia kontenera. Pole „Płatność” zapisanego
+  kontenera pokazuje najbliższy niezapłacony termin (nie pierwszą datę sprzed roku), podpowiedź: dzień i jego źródło
+  („z historii płatności (zmień datę, gdy bank pobiera innego dnia)”); nowy kontener – data wpisana jak dotąd.
+- **T377** Podpowiedź raty zbiornika (1.15.7, AP-10 – AF-43 / LA.3, PR sp. 7, LA sp. 2): `tankRate` (`calc/plan.ts`) –
+  rata miesiąca jak w silniku: `want` z przełomu miesiąca (`FleetState.tanks[].want`, T29, zbiornik sprzed raty), bez
+  niego `tankWant` od stanu zbiornika sprzed raty (`amount` − pobrane w miesiącu); cykl zapłacony (`paidDue`) – 0, bez
+  wyrównania; „wyrównanie” tylko, gdy rata różni się od raty harmonogramu tego miesiąca cyklu o więcej niż 1 gr –
+  ostatnia rata z resztą groszy (103,37 zł) i rata harmonogramu F23 (75,00 zł) nie są wyrównaniem. Edytor (pole „Cykl”)
+  i wiersz Ładowni („(…)”, dymek) czytają to samo; nowy kontener (szkic) – pusty zbiornik, jak dotąd (225 zł przy
+  opłacie dodanej w trakcie cyklu).
+- **T378** Debriefing i boje (1.15.7, AP-10 – LA sp. 5, RA sp. 1, RA sp. 4): debriefing miesiąca ma `tanksShort`
+  (alarmy `sinking-short` miesiąca na opłatę, suma) – wiersz „Za mało w zbiorniku (odkładce) X – brak zapłacony
+  z energii” (`debrief-tank-short`). Boja zamyka się operacją z banku o tej samej kwocie tylko z podobną nazwą: podobną
+  według importu (`looseMatch` `similar`) albo ze słowem nazwy boi (lub jej odbiorcy) w nazwie / tytule operacji – to
+  samo słowo ≥ 4 liter albo te same pierwsze 5 liter („komina” – KOMINIARZ), bez słów płatności i miesięcy („opłata”,
+  „przelew”, „listopad”); operacja bez nazwy (wpisana ręcznie, z wyprzedzeniem – T282) – dokładną kwotą jak dotąd;
+  bliska kwota – tylko z podobną nazwą (jak dotąd). „Pozostałe boje”: boja jednorazowa po dniu mówi, co z nią
+  (`pastStateOf`: „zrobiona”, „po terminie”, „minęła bez operacji – po 30 dniach zniknęła z radaru”).
+- **T379** Łączenie płatności od miesiąca przed startem (1.15.7, AP-10 – otwarte z N2, T345): `linkFromOf` – kontener
+  łączy płatności odbiorcy od 1. dnia miesiąca przed miesiącem startu budżetu (dodanie kontenera, „Połącz płatności”,
+  kreator – `paidDays` propozycji): płatność 28.10 za termin 03.11 (start 04.11) jest tego terminu – stan „zapłacone”,
+  przy opłacie okresowej ≥ 3 mies. cykl zapłacony (T135, T345), kreator i silnik nie odkładają jej drugi raz.
+  Płatności sprzed startu nie przechodzą przez przebieg (jak dotąd), wcześniejsze tylko mówią o dniu płatności.

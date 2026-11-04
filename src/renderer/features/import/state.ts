@@ -503,19 +503,43 @@ function patchChoices(fn: (c: ImportChoices) => ImportChoices): void {
   useImport.setState((s) => ({ choices: fn(s.choices) }))
 }
 
+type GroupsState = Pick<ImportSession, 'choices' | 'accepted' | 'lastDecided'>
+
+/**
+ * Groups decided, one state for all (W32) – every way a group's decision is set or taken back goes through it (przegląd
+ * N1 5). A choice: the user's own – remembered as a rule by default (`remember` given: as given; after an accepted hint
+ * remembered as any of theirs – B97), no longer a new member's open question (`implicit`, N85) nor an accepted offer.
+ * Null: back to its theme's decision (or the proposal) – its decision, remembering, question and offer gone, and the
+ * keyword proposed for it (D78) with them. `closesProposal` – a decision of several groups at once proposes no keyword:
+ * the one proposed for one of them closes.
+ */
+function groupsDecided(s: GroupsState, decided: Iterable<readonly [string, Choice | null]>, opts: { remember?: boolean; closesProposal?: boolean } = {}): GroupsState {
+  const groups = { ...s.choices.groups }
+  const remember = { ...s.choices.remember }
+  const implicit = { ...s.choices.implicit }
+  const accepted = { ...s.accepted.groups }
+  let lastDecided = s.lastDecided
+  for (const [group, choice] of decided) {
+    if (choice) {
+      groups[group] = choice
+      remember[group] = opts.remember ?? (accepted[group] ? true : (s.choices.remember[group] ?? true))
+    } else {
+      delete groups[group]
+      delete remember[group]
+    }
+    delete implicit[group]
+    delete accepted[group]
+    if (group === lastDecided && (!choice || opts.closesProposal)) lastDecided = null
+  }
+  return { choices: { ...s.choices, groups, remember, implicit }, accepted: { ...s.accepted, groups: accepted }, lastDecided }
+}
+
 /**
  * A decision for a whole group: the user's own is remembered as a rule by default (they can untick it); `remember`
  * false = not by default (the bank's hints taken in one click are no decision of the user – D68).
  */
 export function chooseGroup(group: string, choice: Choice, remember?: boolean): void {
-  // The user's own choice after an accepted hint (B97): remembered by default, as any of theirs.
-  const wasHint = !!useImport.getState().accepted.groups[group]
-  patchChoices((c) => {
-    const implicit = { ...c.implicit }
-    delete implicit[group]
-    return { ...c, groups: { ...c.groups, [group]: choice }, remember: { ...c.remember, [group]: remember ?? (wasHint ? true : (c.remember[group] ?? true)) }, implicit }
-  })
-  unaccept('groups', group)
+  useImport.setState((s) => groupsDecided(s, [[group, choice]], { remember }))
 }
 
 /**
@@ -558,14 +582,9 @@ function unaccept(kind: 'themes' | 'groups', key: string): void {
   useImport.setState({ accepted: { ...accepted, [kind]: next } })
 }
 
-/** A group back to its theme's decision (or the proposal). */
+/** A group back to its theme's decision (or the proposal) – a new member's question with its decision (N85). */
 export function clearGroup(group: string): void {
-  patchChoices((c) => {
-    const groups = { ...c.groups }
-    delete groups[group]
-    return { ...c, groups }
-  })
-  unaccept('groups', group)
+  useImport.setState((s) => groupsDecided(s, [[group, null]]))
 }
 
 /**
@@ -585,22 +604,7 @@ export function chooseTheme(theme: string, choice: Choice, remember?: boolean, a
  * shown as the theme's, `themeCommon`): theirs give way – the theme decides them all, as the screen shows.
  */
 function chooseThemeOverGroups(t: ImportTheme, choice: Choice): void {
-  patchChoices((c) => {
-    const groups = { ...c.groups }
-    const remember = { ...c.remember }
-    const implicit = { ...c.implicit }
-    for (const g of t.groups) {
-      delete groups[g.group]
-      delete remember[g.group]
-      delete implicit[g.group]
-    }
-    return { ...c, groups, remember, implicit }
-  })
-  useImport.setState((s) => {
-    const groups = { ...s.accepted.groups }
-    for (const g of t.groups) delete groups[g.group]
-    return { accepted: { ...s.accepted, groups } }
-  })
+  useImport.setState((s) => groupsDecided(s, t.groups.map((g) => [g.group, null] as const)))
   chooseTheme(t.theme, choice)
 }
 
@@ -624,25 +628,11 @@ export function chooseThemeRow(t: ImportTheme, next: Choice): void {
  * (another kind – `choiceFor` – has none: as that change in each brand).
  */
 function chooseBrandsAlike(t: ImportTheme, next: Choice): void {
-  const { choices, accepted, lastDecided } = useImport.getState()
-  const shown = choices.groups[t.groups[0]!.group]
-  const keepsLines = linesKey(next.shares) === linesKey(shown?.shares)
-  const groups = { ...choices.groups }
-  const remember = { ...choices.remember }
-  const implicit = { ...choices.implicit }
-  const acceptedGroups = { ...accepted.groups }
-  for (const g of t.groups) {
-    groups[g.group] = keepsLines ? { ...next, shares: choices.groups[g.group]?.shares } : next
-    // The user's own choice after an accepted hint (B97): remembered by default, as any of theirs.
-    remember[g.group] = acceptedGroups[g.group] ? true : (choices.remember[g.group] ?? true)
-    delete implicit[g.group]
-    delete acceptedGroups[g.group]
-  }
-  useImport.setState({
-    choices: { ...choices, groups, remember, implicit },
-    accepted: { ...accepted, groups: acceptedGroups },
+  useImport.setState((s) => {
+    const keepsLines = linesKey(next.shares) === linesKey(s.choices.groups[t.groups[0]!.group]?.shares)
+    const decided = t.groups.map((g) => [g.group, keepsLines ? { ...next, shares: s.choices.groups[g.group]?.shares } : next] as const)
     // A decision of several brands proposes no keyword (D78): the one proposed for a brand decided apart closes.
-    ...(lastDecided && t.groups.some((g) => g.group === lastDecided) ? { lastDecided: null } : {})
+    return groupsDecided(s, decided, { closesProposal: true })
   })
 }
 
@@ -711,19 +701,13 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
     return false
   }
   // One state for all (W32): copies made once, not one per group – each copy and each listener for every group.
-  const nextGroups = { ...choices.groups }
-  const remember = { ...choices.remember }
-  const implicit = { ...choices.implicit }
+  const decided: string[] = []
   const rows = { ...choices.rows }
-  const acceptedGroups = { ...accepted.groups }
   const rowGroup = new Map(groups.flatMap((g) => g.rows.map((p) => [p.key, g] as const)))
   for (const g of groups) {
     if (!selected.groups[g.group]) continue
     if (takes(g.direction, shown(g))) {
-      nextGroups[g.group] = choice
-      remember[g.group] = true
-      delete implicit[g.group]
-      delete acceptedGroups[g.group]
+      decided.push(g.group)
       applied++
     } else unfit++
   }
@@ -735,12 +719,9 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
       applied++
     } else unfit++
   }
-  useImport.setState({
-    choices: { ...choices, groups: nextGroups, remember, implicit, rows },
-    accepted: { ...accepted, groups: acceptedGroups },
-    // A bulk decision proposes no keyword (D78): the one proposed for a group decided apart closes when it changes.
-    ...(lastDecided && selected.groups[lastDecided] ? { lastDecided: null } : {})
-  })
+  // The ticked groups' own, remembered; a bulk decision proposes no keyword (D78) – the one proposed for a group decided
+  // apart closes when it changes.
+  useImport.setState(groupsDecided({ choices: { ...choices, rows }, accepted, lastDecided }, decided.map((g) => [g, choice] as const), { remember: true, closesProposal: true }))
   return { applied, unfit, kept }
 }
 

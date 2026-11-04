@@ -232,10 +232,12 @@ describe('boje: zaplanowane operacje i terminy (1.8.0, F16)', () => {
     expect(scheduledDays(list, [], TODAY, '2026-07-01', '2027-01-01').find((d) => d.scheduled.name === 'Paszport')).toMatchObject({ state: 'late' })
   })
 
-  it('operacja z banku dopasowana: kwota i ±3 dni (inna kwota tylko z podobną nazwą), konto, „to nie ta”, jedna operacja – jeden dzień', () => {
+  it('operacja z banku dopasowana: kwota i ±3 dni z podobną nazwą (AP-10, T378), konto, „to nie ta”, jedna operacja – jeden dzień', () => {
     const wesele = sched({ name: 'Wesele Kasi', date: '2026-10-16', amount: -zl(1500) })
-    const exact = tx('2026-10-14', -zl(1500), { counterparty: 'Restauracja' })
+    const exact = tx('2026-10-14', -zl(1500), { counterparty: 'Sala Wesele Kasi' })
     expect(scheduledDays([wesele], [exact], TODAY, '2026-10-01', '2026-11-01')[0]).toMatchObject({ state: 'done', txId: exact.id, matched: true })
+    // The same amount under another name – no (RA sp. 1).
+    expect(scheduledDays([wesele], [tx('2026-10-14', -zl(1500), { counterparty: 'Restauracja' })], TODAY, '2026-10-01', '2026-11-01')[0]!.state).toBe('late')
     // 5 days off – no.
     expect(scheduledDays([wesele], [tx('2026-10-11', -zl(1500))], TODAY, '2026-10-01', '2026-11-01')[0]!.state).toBe('late')
     // A close amount: with a similar name only.
