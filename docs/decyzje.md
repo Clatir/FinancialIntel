@@ -2334,7 +2334,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T314** Folder danych znika w trakcie pracy (1.15.5, AP-1, AF-2, AF-42): zapis nigdy nie zakłada samego folderu danych –
   `writeFileAtomic(cel, dane, within)` / `mkdirWithin` robią brakujące katalogi tylko pod istniejącym korzeniem (rekordy,
   kopie konfliktu, `.history/`, `.presence/`, kopie ZIP w `backups/` – `writeZipFile(…, within)`, kopia tygodniowa
-  `mkdirOne`); folder kopii ustawiony na komputerze gdzie indziej – jak dotąd. Przed każdą paczką zapisów `ensureWritable`
+  `mkdirOne`); folder kopii ustawiony na komputerze gdzie indziej – jak dotąd. `within` jest obowiązkowy (`string | null`,
+  `mkdirFor`; po przeglądzie): `null` tylko poza folderem danych (`config.json`, eksport w okienku zapisu, folder kopii
+  gdzie indziej) – pominięte miejsce zapisu to błąd kompilacji, nie folder-widmo; `zipFolder` sam podaje swój korzeń, gdy
+  ZIP leży w nim (kopia przed migracją – folder przeniesiony w trakcie otwarcia: otwarcie pada, nic nie powstaje). Przed każdą paczką zapisów `ensureWritable`
   sprawdza `fi.json` (`rootPresent`, jeden `stat`): brak → `FolderUnavailableError` (podklasa `ReadOnlyError`, komunikat
   `FOLDER_UNAVAILABLE_MESSAGE` w `shared/api.ts`), `available = false` i od razu zestaw zmian do okna
   (`DataStoreOptions.onStatus`); pusty folder założony w starym miejscu (bez `fi.json`) też jest niedostępny. Brak pliku
@@ -2342,21 +2345,29 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`saveRecords`, `deleteRecords`) przerwana w połowie – reszta z tym samym błędem, stan folderu w zestawie zmian paczki.
 - **T315** Sprawdzanie folderu w spoczynku i powrót (1.15.5, AP-1): `checkFolder` w `main/index.ts` co `FI_FOLDER_CHECK_MS`
   (domyślnie 5 s) woła `DataStore.stale()` (stat `fi.json`; przy blokadzie zapisu – próba); różnica → pełne odświeżenie w
-  `RefreshQueue` (w logu „folder danych niedostępny” / „znów dostępny”), po powrocie obserwator od nowa (`watchFolder`).
+  `RefreshQueue`. Przejście ocenia każde odświeżenie (`folderSeen` po odświeżeniu w kolejce; po przeglądzie): powrót
+  zauważony najpierw przez obserwatora, obecność, fokus okna czy Synchronizację też daje obserwatora od nowa
+  (`watchFolder`; `DataStore.regained` liczy powroty) i wpis w logu („folder danych niedostępny” / „znów dostępny”).
   Okno: przejście `available` false → true w `applyChange` → `resumeSaves` – wszystko, co czekało, zapisane od razu
   (`saveBatch` po kolekcjach; bez wpisów czekających na decyzję z drugiego komputera i wpisów nowszej wersji). W czasie
   niedostępności folder jest tylko do odczytu jak dotąd: nowe zmiany odrzucane z powodem (`UNAVAILABLE_NOTICE`), zapisane
   wcześniej w pamięci czekają; pytanie przy zamknięciu z błędem folderu – własna gałąź `unsavedQuestion`.
 - **T316** Tryb tylko do odczytu z próby zapisu (1.15.5, AP-1, AF-14): przy otwarciu (przed migracją) i po powrocie folderu
-  `writeProbe` – `access(fi.json, W_OK)` (na Windows atrybut „tylko do odczytu” pliku), potem plik `.fi-zapis.tmp-…`
-  założony i usunięty w korzeniu; EPERM / EACCES / EROFS → `writeBlocked` (`FOLDER_NOT_WRITABLE_MESSAGE`) i
-  `status.readOnly` – bez migracji i bez połowicznego startu kreatora. W spoczynku sprawdzane znowu (dopóki blokada
-  trwa, pada już `access` – żaden plik nie powstaje co kilka sekund). Telefon: `constants` w `mobile/node/fs.ts`. Kreator:
+  `writeProbe` – `access(fi.json, W_OK)` (na Windows atrybut „tylko do odczytu” pliku, bez ponawiania), potem `fi.json`
+  otwarty do zapisu (`r+`) i zamknięty bez zapisu (brak prawa zapisu – uprawnienia, udział albo dysk tylko do odczytu);
+  EPERM / EACCES / EROFS → `writeBlocked` (`FOLDER_NOT_WRITABLE_MESSAGE`) i `status.readOnly` – bez migracji i bez
+  połowicznego startu kreatora. Po przeglądzie: otwarcie ponawiane jak każdy zapis (`withRetry` – chwilowa blokada
+  antywirusa albo OneDrive to nie tryb tylko do odczytu), zamknięcie o niczym nie decyduje, a próba nie zakłada żadnego
+  pliku w korzeniu (wcześniej `.fi-zapis.tmp-…` przy każdym otwarciu – wpis w koszu online OneDrive, przy blokadzie
+  usuwania plik zostawał). Nie wykryje folderu, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie
+  uprawnienia) – wtedy błąd mówi sam zapis. W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i
+  `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
   podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
 - **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
   najwyżej 5 s); niezapisany → `QuickResult.pending` („Wpis przyjęty, ale jeszcze niezapisany (powód) – zapisze się sam”,
   okno zostaje 4 s); szkic wysłany ponownie – według stanu na dysku (`unsavedOf`). `QuickData.folder` wraca ze szkicem:
-  szkic z listami innego folderu (otwartego w międzyczasie) odrzucony; w trakcie zmiany folderu `readOnly` z powodem.
+  szkic z listami innego folderu (otwartego w międzyczasie) odrzucony; w trakcie zmiany folderu `readOnly` z powodem
+  (otwarte okno szybkiego wpisu dostaje go od razu – `switching` w subskrypcji `initQuickHost`, po przeglądzie).
   Ctrl+S / „Zapisz teraz” w folderze tylko do odczytu – powód zamiast „Zapisano.”. Ekran brakującego zapamiętanego
   folderu ponawia otwarcie co 30 s jak przy niedostępnym (`features/setup/retry.ts` `retriesBySelf`).
 - **T318** Folder-widmo starszej wersji (1.15.5, AP-1): `ghostFolders` w `main/index.ts` – zapamiętane foldery danych
@@ -2379,8 +2390,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   formatu miarą B5 (ta sama kwota, ±3 dni, podobna nazwa, dzień objęty plikiem) – w swoim formacie wiersz ma jej klucz.
   Pary od najbliższej, każda usunięta i każdy wiersz raz; wiersz już w budżecie w formacie pliku (po kluczu) zabiera swoją
   usuniętą – kopia usunięta przy podwójnym imporcie sprzed 1.4.2 nie ukrywa innego zakupu tego sklepu. Usunięte przez
-  import (paczka `imports/…removed`: zniknięte nierozliczone, kopie z innego konta – T321) to nie usunięcie użytkownika:
-  tylko ich klucze. Wiersz ma status `deleted` z `other` („usunięta z historii rachunku” w podglądzie); „importuj mimo
+  import (zniknięte nierozliczone, kopie z innego konta – T321; znak `byImport` w historii – T334, wcześniejsze – paczka
+  `imports/…removed`) to nie usunięcie użytkownika: tylko ich klucze. Wiersz ma status `deleted` z `other` („usunięta z historii rachunku” w podglądzie); „importuj mimo
   to” – jak przy T39.
 - **T321** Ten sam rachunek na dwóch kontach budżetu (AP-2, AF-9): przejście B5 obejmuje też konta, na które trafiał numer
   rachunku pliku (oba numery znane i równe – inaczej dwa rachunki nigdy się nie mieszają, T166): wiersz drugiego formatu
@@ -2403,13 +2414,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   siatką zostaje panel duplikatów). Import, który tylko zapamiętuje klucze wierszy (`keysOnly` – różnica wyłącznie
   w `altKeys`), zapisuje je, ale bez kopii przed importem i bez paczki do cofnięcia (jak N13); panel wyniku nie pokazuje
   pustej ścieżki kopii.
-- **T324** Meldunek „Wróciły po usunięciu” (AP-2, AF-1 – dane sprzed 1.15.5, bez migracji): operacja z banku zaksięgowana
-  w innym formacie niż usunięta, to samo konto i kwota, ±3 dni, podobna nazwa, zaimportowana po usunięciu importem, którego
+- **T324** Meldunek „Wróciły po usunięciu” (AP-2, AF-1 – dane sprzed 1.15.5, bez migracji): operacja, którą zrobił import
+  z jej wiersza (T333), zaksięgowana w innym formacie niż usunięta, to samo konto i kwota, ±3 dni, podobna nazwa, zaimportowana po usunięciu importem, którego
   dni (pierwsza i ostatnia operacja) obejmują dzień usuniętej (`returnedOf`; pary od najbliższej). Jeden meldunek na
   operację (rodzaj `returned`, po „Możliwych duplikatach”): „Usuń” – jak w Operacjach (z dokowaniami, „Cofnij”), „Pokaż”,
   „zostaw” – klucz `back:<id>` w `settings.import.notDuplicates` (z „Cofnij”); wiersz przywrócony świadomie („importuj
-  mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu, od razu
-  na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je w „Na komputerze”.
+  mimo to” przy `deleted` z `other`) dostaje ten klucz sam. Usunięte czytane z historii 10 s po otwarciu folderu (gdy jest
+  po co – T335), od razu na ekranie Meldunków i przy każdym pliku importu (`features/import/returned.ts`); telefon liczy je
+  w „Na komputerze”. „zostaw” w folderze tylko do odczytu – odmowa bez komunikatu o sukcesie.
 - **T325** Rozpoznanie przed regułą innego rodzaju (AP-6, AF-26; doprecyzowuje T167 / N14 i wyjątek domownika z 1.3.0):
   reguła dopasowana po nazwie (marka, cała nazwa, „zawiera”, próg kwoty, słowo w nazwie) ustępuje temu, co aplikacja
   rozpoznaje sama (`ruleGivesWay`, `Recognized` w `classify.ts`) – otwartej pożyczce z Radaru udzielonej nadawcy do dnia
@@ -2455,3 +2467,24 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   usunięta zdejmuje wskazane zakupy tej osoby (`keptCovers`). Import i szybki wpis wiązały już każdą osobę osobno
   (`linkRepayments`). Pewne jest też wpłata co najmniej równa wszystkim otwartym zakupom osoby (do 500) – spłaca wszystkie
   (`matchCovers`; reszta jak dotąd: zaliczka albo przychód według osoby), zamiast „rozliczony” przy zakupach „do oddania”.
+- **T333** „Wróciły po usunięciu” tylko dla kopii, którą zrobił import (przegląd N1; doprecyzowuje T324): kandydat to
+  wyłącznie operacja utworzona przez import razem z jej wierszem i bez innego wiersza od tamtej pory (`madeByItsImport`:
+  zaksięgowana, `createdAt` = `bank.importedAt`). Ręcznie wpisana połączona z wierszem (import – „połącz”, panel
+  duplikatów – „scal”) i nierozliczona rozliczona późniejszym plikiem mają w `bank` czas i format tamtego pliku, ale to
+  operacje użytkownika – nigdy meldunek (wcześniej „Usuń” mogło skasować jedyną prawdziwą kopię). „Usuń” sprawdza to
+  jeszcze raz przy kliknięciu (inaczej komunikat, operacja zostaje). W razie wątpliwości bez meldunku – siatką zostaje panel
+  duplikatów.
+- **T334** Usunięcie przez sam import w historii (przegląd N1; doprecyzowuje T320, T321): nierozliczone, których bank już
+  nie pokazuje, i kopie z innego konta (AF-9) import usuwa z powodem 'import' (`deleteRecords(…, { reason: 'import' })`):
+  wersja w `.history/` ze znakiem `byImport: true`, plik dalej `_delete_` – starsza wersja aplikacji dalej trzyma klucze
+  wiersza poza importem. `deletedBankRows` bierze z takich tylko klucze, niezależnie od tego, czy paczka importu jest
+  jeszcze wśród 10 ostatnich (wcześniej po rotacji paczek liczyły się jako usunięcia użytkownika); usunięte przez import
+  przed 1.15.5 – po paczkach, jak dotąd. Synchronizacja → Usunięte wpisy: „usunięty przez import”. Addytywnie, bez
+  `SCHEMA_VERSION`.
+- **T335** Koszt meldunku „Wróciły po usunięciu” (przegląd N1; doprecyzowuje T324): operacja wraca tylko z importem po
+  usunięciu, więc usunięte czytane 10 s po otwarciu folderu tylko wtedy, gdy ostatnie sprawdzenie tego komputera coś
+  zgłosiło albo od niego był import folderu (najnowszy `settings.import.lastImport`, także z drugiego komputera). Stan
+  w `localStorage` komputera (`fi.returned.checked:<folder>` – najnowszy import, z którym nie było nic do zgłoszenia; brak
+  – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
+  czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
+  tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.

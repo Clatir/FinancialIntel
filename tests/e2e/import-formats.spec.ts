@@ -86,15 +86,18 @@ test('AP-2: usunięta operacja nie wraca z plikiem drugiego formatu; meldunek dl
     await app.close()
   }
 
-  // As 1.15.4 left it: the deleted one's row of the list imported again as a new operation.
+  // As 1.15.4 left it: the deleted one's row of the list imported again as a new operation (made by that import – T333).
   const zabka = buys[2]!
+  const cameBackAt = new Date(Date.parse(deletedAt) + 60_000).toISOString()
   writeRecords(dataDir, 'transactions', [
     {
+      createdAt: cameBackAt,
+      updatedAt: cameBackAt,
       date: zabka.date,
       accountId: MBANK_ACCOUNT_ID,
       amount: -3195,
       counterparty: 'ZABKA Z1234',
-      bank: { format: 'mbank', key: 'mbank:e2e00000000000a1:0', description: 'ZABKA Z1234 ZAKUP PRZY UŻYCIU KARTY W KRAJU', counterparty: 'ZABKA Z1234', operation: 'ZAKUP PRZY UŻYCIU KARTY W KRAJU', category: '', pending: false, importedAt: new Date(Date.parse(deletedAt) + 60_000).toISOString(), source: 'lista' }
+      bank: { format: 'mbank', key: 'mbank:e2e00000000000a1:0', description: 'ZABKA Z1234 ZAKUP PRZY UŻYCIU KARTY W KRAJU', counterparty: 'ZABKA Z1234', operation: 'ZAKUP PRZY UŻYCIU KARTY W KRAJU', category: '', pending: false, importedAt: cameBackAt, source: 'lista' }
     }
   ])
   ;({ app, page, errors } = await launch({ dataDir, userData }))

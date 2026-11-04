@@ -1,8 +1,8 @@
 // adapted from ICTTJ src/main/datastore/zip.ts @ 84a8339 (the writer replaced: W7)
 import { promises as fs, type Stats } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import zlib from 'node:zlib'
-import { mkdirWithin, tempPathFor, withRetry } from './atomic'
+import { dataRootOf, mkdirFor, tempPathFor, withRetry } from './atomic'
 import { mapLimit, walkFiles } from './fsutil'
 
 /**
@@ -241,11 +241,11 @@ export function diskSource(abs: string, name: string): ZipSource {
 /**
  * Write the files in the order given into `outFile`, atomically (a temp file renamed over it). Already-compressed
  * images are stored; the contents of a batch are got side by side (disk reads), compressed and appended in order.
- * `within` – the data folder holding `outFile` (its `backups/`): directories made only below it, never it (AP-1).
+ * `within` – the data folder holding `outFile` (its `backups/`), null when none: directories made only below it, never
+ * it (AP-1, `mkdirFor`).
  */
-export async function writeZipFile(outFile: string, items: readonly ZipSource[], within?: string): Promise<ZipResult> {
-  if (within) await mkdirWithin(within, dirname(outFile))
-  else await fs.mkdir(dirname(outFile), { recursive: true })
+export async function writeZipFile(outFile: string, items: readonly ZipSource[], within: string | null): Promise<ZipResult> {
+  await mkdirFor(outFile, within)
   const tmp = tempPathFor(outFile)
   try {
     const fh = await fs.open(tmp, 'w')
@@ -281,14 +281,16 @@ export async function writeZipFile(outFile: string, items: readonly ZipSource[],
  * Zip files under `root` (relative paths accepted by `include`; directories `skip` says are not walked – `.history/`
  * with a directory per record, W7) into `outFile`, atomically. Each file is read whole at once, so one rewritten
  * meanwhile (an atomic write replaces it) goes in old or new, never half; one gone before its turn is left out. A file
- * locked while zipping (sync tools) fails the attempt; it is retried once with a fresh listing before giving up.
+ * locked while zipping (sync tools) fails the attempt; it is retried once with a fresh listing before giving up. A zip
+ * written inside `root` (the backup before a migration, in `backups/`) never makes `root` itself (AP-1): gone meanwhile,
+ * the zip fails instead of a new folder in its old place.
  */
 export async function zipFolder(root: string, outFile: string, include: (rel: string) => boolean, skip?: (rel: string) => boolean): Promise<ZipResult> {
   for (let attempt = 1; ; attempt++) {
     const rels = (await walkFiles(root, root, skip)).filter(include).sort()
     const items = rels.map((rel) => diskSource(join(root, ...rel.split('/')), rel))
     try {
-      return await writeZipFile(outFile, items)
+      return await writeZipFile(outFile, items, dataRootOf(root, outFile))
     } catch (e) {
       if (attempt >= 2) throw e
     }

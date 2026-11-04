@@ -43,7 +43,7 @@ import { toast } from '../../store/ui'
 import { fleetInputNow, fleetNow } from '../../store/fleet'
 import { bulkKeeps, choiceFor, fits, type Option } from './options'
 import { rememberInflows } from '../household/actions'
-import { readDeletedBank } from './returned'
+import { checkedWithImport, readDeletedBank } from './returned'
 
 export interface ImportDone {
   counts: ImportCounts
@@ -978,8 +978,9 @@ export async function runImport(): Promise<void> {
     const before: ImportBatchSettings = { lastImport: imp.lastImport[acc] ?? null, coveredTo: imp.coveredTo[acc] ?? null, accountNumber: imp.accountNumbers[acc] ?? null, inflows: {} }
     addRecords('transactions', result.create)
     replaceRecords('transactions', result.update as Transaction[])
-    // One call for all (W1); a file the disk refused stays – said after the rest is done.
-    const removal = result.remove.length ? await deleteRecords('transactions', result.remove) : null
+    // One call for all (W1); a file the disk refused stays – said after the rest is done. Deleted as the import's own
+    // (T334): its versions in the history are no deletion of the user's, whether its batch is kept or not.
+    const removal = result.remove.length ? await deleteRecords('transactions', result.remove, { reason: 'import' }) : null
     const removed = (removal?.deleted ?? []).flatMap((id) => (txBefore[id] ? [txBefore[id]!.record] : []))
     const client = st.file.client
     const ownName = client && !imp.ownNames.some((n) => n.toLowerCase() === client.toLowerCase()) ? client : null
@@ -1014,6 +1015,8 @@ export async function runImport(): Promise<void> {
         }
       }
     }))
+    // Run with the deleted ones just read: nothing came back with it – no reading of the history at the next opening (T335).
+    checkedWithImport(now)
     // A household member's money the user decided here (zaliczka / przychód): asked once, remembered for them (D80 b) –
     // one answer per operation (N84).
     rememberInflows(inflowVotes(groupsOf(plan, cur.choices.restoreDeleted), cur.choices))

@@ -1,7 +1,7 @@
 // AP-1 and AP-8 (1.15.5, grupa N1) in the window: the data folder gone – what waited goes once it is back, nothing says
 // „Zapisano.” before it is on the disk; an edit waiting for „Zmień mimo to” and the wizard's answers count as changes.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FOLDER_UNAVAILABLE_MESSAGE, type FolderStatus, type QuickResult, type RecordEntry, type Snapshot } from '@shared/api'
+import { FOLDER_UNAVAILABLE_MESSAGE, type FolderStatus, type QuickData, type QuickResult, type RecordEntry, type Snapshot } from '@shared/api'
 import { warsawNow } from '@shared/calc/dates'
 import { createDefaultSettings } from '@shared/defaults'
 import { COLLECTIONS } from '@shared/paths'
@@ -18,6 +18,11 @@ const api = {
   deleteRecords: vi.fn(),
   historyKeep: vi.fn(),
   quickResult: vi.fn(async (_r: QuickResult) => undefined),
+  onQuickRequest: vi.fn((_cb: () => void) => () => undefined),
+  onQuickVisible: vi.fn((_cb: (on: boolean) => void) => () => undefined),
+  onQuickAdd: vi.fn((_cb: (raw: unknown) => void) => () => undefined),
+  quickData: vi.fn(async (_d: QuickData | null) => undefined),
+  quickUpdate: vi.fn(async (_d: QuickData | null) => undefined),
   trayPrefs: vi.fn(async () => ({ closeToTray: false, launchAtLogin: false, autostartAsked: true, notified: false, loginSupported: false }))
 }
 const storage = new Map<string, string>()
@@ -26,7 +31,7 @@ vi.stubGlobal('window', { fi: api })
 const store = await import('../../src/renderer/store/data')
 const guard = await import('../../src/renderer/store/guard')
 const { useUi } = await import('../../src/renderer/store/ui')
-const { quickAdd, quickData } = await import('../../src/renderer/store/quickHost')
+const { initQuickHost, quickAdd, quickData } = await import('../../src/renderer/store/quickHost')
 const wizard = await import('../../src/renderer/features/wizard/state')
 const { retriesBySelf } = await import('../../src/renderer/features/setup/retry')
 
@@ -170,6 +175,20 @@ describe('folder danych niedostępny w oknie (AP-1)', () => {
     })
     expect(api.quickResult.mock.calls.at(-1)![0]).toMatchObject({ ok: false, message: expect.stringMatching(/inny folder danych/) })
     expect(api.saveRecord).not.toHaveBeenCalled()
+  })
+
+  it('okno szybkiego wpisu otwarte, gdy zaczyna się otwieranie innego folderu: od razu „Trwa otwieranie innego folderu”, po nim znowu zapis (AF-75, przegląd)', async () => {
+    vi.useFakeTimers()
+    load()
+    initQuickHost()
+    api.onQuickVisible.mock.calls.at(-1)![0](true)
+    // Only `switching` changes – the status stays the old folder's until the new one is open.
+    store.useData.setState({ switching: true })
+    await vi.advanceTimersByTimeAsync(600)
+    expect(api.quickUpdate.mock.calls.at(-1)?.[0]).toMatchObject({ readOnly: true, readOnlyReason: expect.stringMatching(/innego folderu/) })
+    store.useData.setState({ switching: false })
+    await vi.advanceTimersByTimeAsync(600)
+    expect(api.quickUpdate.mock.calls.at(-1)?.[0]).toMatchObject({ readOnly: false, readOnlyReason: null })
   })
 
   it('meldunek o folderze-widmie starszej wersji: gdzie i ile plików wpisów – także przed startem budżetu', () => {

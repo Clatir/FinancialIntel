@@ -26,11 +26,14 @@ paths:
   `resolveConflict`, `mergeConflict`).
 - Wpis albo plik nowszej wersji → tylko do odczytu (`NewerFileError`, `SettingsFileError` 'too-new'); nigdy nie nadpisuj.
 - **Zapis nigdy nie zakłada folderu danych** (AP-1, T314): każdy zapis pod korzeniem idzie przez
-  `writeFileAtomic(…, within)` / `mkdirWithin` (nowy zapis do folderu – też obecność, historia, ZIP w `backups/`); zwykłe
-  `fs.mkdir(…, { recursive: true })` pod korzeniem to błąd (folder-widmo). Nowa metoda zapisu `DataStore` – przez
-  `writing()` (sprawdza `fi.json`, błąd zniknięcia → `FolderUnavailableError` i `onStatus`).
+  `writeFileAtomic(…, within)` / `writeZipFile(…, within)` / `mkdirWithin` (nowy zapis do folderu – też obecność, historia,
+  ZIP w `backups/`); `within` obowiązkowy, `null` tylko poza folderem danych; zwykłe `fs.mkdir(…, { recursive: true })` pod
+  korzeniem to błąd (folder-widmo). Nowa metoda zapisu `DataStore` – przez `writing()` (sprawdza `fi.json`, błąd
+  zniknięcia → `FolderUnavailableError` i `onStatus`).
 - Niedostępność: `stale()` co `FI_FOLDER_CHECK_MS` w spoczynku, próba zapisu przy otwarciu (`writeBlocked`, T316); brak
-  korzenia nie jest „usunięty na innym komputerze”.
+  korzenia nie jest „usunięty na innym komputerze”; powrót – obserwator od nowa po każdym odświeżeniu (`folderSeen`).
+- **Pułapka (przegląd AP-1):** na Windows i OneDrive EPERM bywa chwilowy (antywirus, synchronizacja) – sprawdzenie
+  „tylko do odczytu” ponawia (`withRetry`) i ocenia tylko krok zapisu, nigdy sprzątanie; nie zakłada plików w korzeniu.
 - Usuwanie: plik z wersją w historii usuwany od razu, bez niej – do Kosza; `removeRecord` odmawia przy drugiej kopii id.
 - Kopie ZIP: dzienne (14) i tygodniowe (8), przed importem (10), przed migracją; pełna kontrola folderu przed kopią
   dzienną i ręczną (`checkedData`); nieczytelny rekord przerywa kopię.

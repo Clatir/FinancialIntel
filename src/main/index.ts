@@ -496,21 +496,29 @@ function watchFolder(s: DataStore, queue: RefreshQueue): void {
 }
 
 /**
+ * A refresh of the open folder done (AP-1) – whichever saw the folder go or come back first: the idle check, the
+ * watcher, the heartbeat, the window's focus, Synchronizacja. Said in the log; back, watched anew (a watcher may have
+ * followed the folder renamed away, or failed with the drive). `was`, `regained` – as before the refresh.
+ */
+function folderSeen(s: DataStore, queue: RefreshQueue, was: boolean, regained: number): void {
+  if (s !== store) return
+  const back = s.regained !== regained
+  if (back) log('info', `folder danych znów dostępny: ${s.root}`)
+  else if (was && !s.status().available) log('warn', `folder danych niedostępny: ${s.root}`)
+  if (back && s.status().available) watchFolder(s, queue)
+}
+
+/**
  * The idle check (AP-1): a folder gone or back, or one that took no writes taking them again (AF-14) – a full check says
- * it to the window. Back: watched anew (a watcher may have followed the folder renamed away, or failed with the drive).
+ * it to the window (and `folderSeen` the rest).
  */
 let folderChecking = false
 async function checkFolder(s: DataStore): Promise<void> {
   if (s !== store || folderChecking || windowClosing || opening) return
   folderChecking = true
   try {
-    const was = s.status().available
     if (!(await s.stale()) || s !== store) return
-    const queue = refreshes
-    await queue?.request()
-    const now = s.status().available
-    if (now !== was) log(now ? 'info' : 'warn', now ? `folder danych znów dostępny: ${s.root}` : `folder danych niedostępny: ${s.root}`)
-    if (now && !was && s === store && queue) watchFolder(s, queue)
+    await refreshes?.request()
   } catch (e) {
     log('warn', 'folder check failed', e)
   } finally {
@@ -734,8 +742,11 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       // Closing: no rescan before the last writes (B43); another folder opened meanwhile: nothing to read here.
       if (store !== opened || windowClosing) return
       try {
+        const was = opened.status().available
+        const regained = opened.regained
         // A refresh finishing after another folder opened is that folder's no more (B31).
         sendFrom(opened, await opened.refresh(paths))
+        folderSeen(opened, queue, was, regained)
       } catch (e) {
         log('error', 'refresh failed', e)
         throw e
@@ -945,8 +956,9 @@ function registerIpc(): void {
   })
   handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown) => {
     const s = writableStore()
-    // 'drop' (no version in the history) only for the imports' batches: never the user's records.
-    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
+    // 'drop' (no version in the history) only for the imports' batches: never the user's records; 'import' – the
+    // import's own deletion of operations (T334).
+    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
     sendFrom(s, change)
     return results
   })
@@ -1052,7 +1064,8 @@ function registerIpc(): void {
   handle('saveTextFile', async (name: string, content: string, filter: { name: string; extensions: string[] }) => {
     const res = await dialog.showSaveDialog(mainWindow!, { defaultPath: name, filters: [filter] })
     if (res.canceled || !res.filePath) return null
-    await writeFileAtomic(res.filePath, content)
+    // A file the user named in the dialog (its folder is there): no data folder's file.
+    await writeFileAtomic(res.filePath, content, null)
     return res.filePath
   })
   handle('saveXlsx', async (name: string, sheets: XlsxSheet[]) => {
@@ -1064,7 +1077,7 @@ function registerIpc(): void {
   handle('savePdf', async (name: string, html: string) => {
     const res = await dialog.showSaveDialog(mainWindow!, { defaultPath: name, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
     if (res.canceled || !res.filePath) return null
-    await writeFileAtomic(res.filePath, await htmlToPdf(html))
+    await writeFileAtomic(res.filePath, await htmlToPdf(html), null)
     return res.filePath
   })
   handle('listBackups', async () => {

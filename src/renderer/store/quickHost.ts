@@ -195,7 +195,8 @@ export function initQuickHost(): void {
     visible = on
   })
   useData.subscribe((s, p) => {
-    if (s.fi !== p.fi || s.status !== p.status || s.phase !== p.phase || s.records.transactions !== p.records.transactions) push()
+    // `switching` too (AF-75): another folder opening keeps the status of the old one until it is open.
+    if (s.fi !== p.fi || s.status !== p.status || s.phase !== p.phase || s.switching !== p.switching || s.records.transactions !== p.records.transactions) push()
   })
   useMachine.subscribe((s, p) => {
     if (s.prefs !== p.prefs) push()

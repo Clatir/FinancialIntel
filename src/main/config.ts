@@ -148,7 +148,8 @@ export class ConfigStore {
     const write = this.writing.then(async () => {
       if (this.writeDelayMs) await new Promise((r) => setTimeout(r, this.writeDelayMs))
       await fs.mkdir(this.userDataDir, { recursive: true })
-      await writeFileAtomic(this.file, `${JSON.stringify(this.config, null, 2)}\n`)
+      // This computer's settings (userData): no data folder's file.
+      await writeFileAtomic(this.file, `${JSON.stringify(this.config, null, 2)}\n`, null)
     })
     this.writing = write.catch(() => undefined)
     await write

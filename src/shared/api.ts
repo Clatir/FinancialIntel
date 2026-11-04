@@ -100,6 +100,8 @@ export interface HistoryEntry {
   /** Computer that replaced it. */
   savedBy: string | null
   reason: HistoryReason
+  /** A deletion by the import itself (T334: pending ones gone from the bank, copies on another account) – not the user's. */
+  byImport?: boolean
   /** updatedAt / updatedBy of the kept version itself. */
   updatedAt: string | null
   updatedBy: string | null
@@ -275,13 +277,13 @@ export const FOLDER_UNAVAILABLE_MESSAGE =
 export const OPEN_ABORTED_MESSAGE =
   'Przerwano wczytywanie folderu – nic w nim nie zostało zmienione. Jeśli pliki pobiera OneDrive, ustaw na folderze „Zawsze zachowuj na tym urządzeniu”, poczekaj na zielone ptaszki i spróbuj ponownie.'
 
-/** What a flush before closing left unsaved and why (B108): closing tells the user the real reason. */
 /** A folder of FI's records without fi.json (AP-1): where, and how many records' files it holds. */
 export interface GhostFolder {
   dir: string
   files: number
 }
 
+/** What a flush before closing left unsaved and why (B108): closing tells the user the real reason. */
 export interface FlushResult {
   saved: boolean
   /** Unsaved records held by a decision about another computer's change – only that decision saves them. */
@@ -317,8 +319,11 @@ export interface FiApi {
   saveRecords<C extends Collection>(collection: C, records: readonly RecordTypes[C][]): Promise<Array<{ id: string; entry?: RecordEntry<RecordTypes[C]>; error?: string; newer?: boolean }>>
   deleteRecord(collection: Collection, id: string): Promise<void>
   /** Many records deleted with one call (W1): each deleted, or why not. */
-  /** `reason` 'undo': taken back with its import (F4); 'drop': an old batch of `imports` – no version in the history. */
-  deleteRecords(collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop'): Promise<Array<{ id: string; error?: string }>>
+  /**
+   * `reason` 'undo': taken back with its import (F4); 'drop': an old batch of `imports` – no version in the history;
+   * 'import': operations the import deleted itself – their deletion kept as `byImport` (T334).
+   */
+  deleteRecords(collection: Collection, ids: readonly string[], reason?: 'delete' | 'undo' | 'drop' | 'import'): Promise<Array<{ id: string; error?: string }>>
   /** Kept versions of a record, newest first (the settings: `kind` 'fi', `id` = the id of fi.json). */
   historyList(kind: HistoryKind, id: string): Promise<HistoryEntry[]>
   /** The record of one kept version (null when gone). */
