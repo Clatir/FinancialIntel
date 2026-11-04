@@ -64,6 +64,14 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
+| N4 | Odmowy i „Cofnij” | zamiana „od” / „do” z komunikatem zamiast odmowy; 0 zł zapisywane z ostrzeżeniem; „Cofnij” najmniej 8 s, licznik długości od 80 %; usunięcie tokenu i przeniesienie do Kosza pytają; przełącznik scenariusza ICTTJ zostaje z banerem | T400–T402 |
+| N4 | Odprawa z hierarchią | „sprawy dnia” i najwyżej 8 linii; inne powiadomienia czekają na odprawę do 09:00 (albo jej godziny, najpóźniej 12:00); 3 i więcej naraz = jedno, klik otwiera Mostek; progi gry przeniesione do Ustawień; z ustawioną godziną wcześniejsze otwarcie nie wysyła odprawy, wybór opcji ustawia 07:00 | T405–T409 |
+| N4 | Poranny dotyk | okno zostawione na noc przechodzi na Mostek przy pierwszym dotyku po co najmniej 30 min bez dotyku | T411 |
+| N4 | Teksty | zoom do siatki 10 %; inflacja i drill bez wymuszonego jednego miejsca po przecinku; cisza nocna „od = do” przyjmowana z komunikatem (wyłączona) | T403, T404 |
+| N4 | Szybki wpis – słowa pól | informacja o przyjętej, ale zmienionej wartości dopisana do „Zapisano” (okno czeka 4 s), tylko z tego samego działania | T413, T417 |
+| N4 | Nazwy w banku | nazwa zajęta przez innego domownika nie wraca po „Cofnij” (komunikat) i nie da się jej dopisać; „+ domownik” przy takiej nazwie przypisuje tę osobę; nazwy częściowo wspólne nie są odmawiane; najwyżej 20 nazw | T414, T416 |
+| N4 | „Cofnij import” i eksport | operacja przywrócona przez cofnięcie i zmieniona przez Ciebie zostaje po „Cofnij”; pusty Excel – „Brak operacji i miesięcy w okresie.” | T412, T415 |
+| N4 | Meldunek „Zaliczki przy długu” | „Spłać” / „zostaw” na nieaktualnym meldunku – komunikat „nic do zmiany” | T400 |
 | N3 | Opłata zapłacona z celu albo zakupem do zwrotu | zapłacona w Ładowni i silniku – cykl zamknięty, zbiornik nietknięty (zebrane zostaje na następny termin), zwrot domownika to spłata długu; dawny przelew z ukrytym kontenerem nie płaci nigdzie | T393 |
 | N3 | Zaległe opłaty | liczone od startu budżetu albo miesiąca dodania kontenera – po aktualizacji stare luki w historii pojawią się od razu („Zapłacone poza budżetem” je czyści); opłata ustawiona jako miesięczna, a płacona co 2 miesiące, pokaże pominięte miesiące; płatność przed dniem następnego terminu idzie najpierw na zaległy | T375, T376 |
 | N3 | Boje i pole „Płatność” | boja zamyka się tylko operacją z jej nazwą; pole „Płatność” pokazuje następny termin; silnik trzyma w zbiorniku pieniądze na niezapłacony cykl (tylko notka) | T376, T378 |
