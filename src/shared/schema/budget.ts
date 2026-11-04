@@ -293,11 +293,14 @@ export const memberOpeningSchema = z.looseObject({
 })
 export type MemberOpening = z.infer<typeof memberOpeningSchema>
 
+/** The most names in the bank a member keeps (beyond it the list would be read as empty – kept below by the screens). */
+export const MAX_BANK_NAMES = 20
+
 export const householdMemberSchema = z.looseObject({
   id: ulidSchema,
   name: z.string().trim().min(1).max(40),
   /** The member's names as the bank writes them: the import knows their transfers by them. */
-  bankNames: z.array(z.string().trim().min(1).max(120)).max(20).catch([]).default([]),
+  bankNames: z.array(z.string().trim().min(1).max(120)).max(MAX_BANK_NAMES).catch([]).default([]),
   inflow: openEnum(MEMBER_INFLOWS).catch('ask').default('ask'),
   archived: z.boolean().default(false),
   /**

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { MAX_TAGS, MAX_TAG_LENGTH, parseTags, tagsLost } from '@shared/calc/tags'
 import { budgetWorkbook, type MonthRow } from '@shared/export/budget'
-import { plDateTime } from '@shared/format'
-import { appWrites, editedOf, undoPlan, userWork, withIds } from '@shared/import/batch'
+import { localDay, plDateTime } from '@shared/format'
+import { contentHash, redoneAs, undoPlan } from '@shared/import/batch'
 import { formatValue } from '@shared/merge'
 import { morningTouch, MORNING_IDLE_MS } from '@shared/notify'
 import { importBatchSchema, SCHEMA_VERSION, transactionSchema, type ImportBatch, type Transaction } from '@shared/schema'
@@ -28,6 +28,12 @@ describe('przegląd N4 1, 1 i 9: tagi – jedno dzielenie i jedno porządkowanie
     expect(tagsLost([], `${'s'.repeat(MAX_TAG_LENGTH)}s`)).toEqual({ cut: 1, over: 0 })
   })
 
+  it('długi tag równy temu, który już jest: nic nie dodane – bez „skrócony” (2, 7)', () => {
+    const long = 'x'.repeat(MAX_TAG_LENGTH)
+    expect(tagsLost([long], `${long}yyyy`)).toEqual({ cut: 0, over: 0 })
+    expect(tagsLost([], `${long}yyyy, ${long}zzzz`)).toEqual({ cut: 1, over: 0 })
+  })
+
   it('komunikat liczy te same tagi, które pole doda', () => {
     for (const text of ['#wakacje #remont łazienki', 'Wakacje, remont, wakacje', 'sss, ss  s', '#a, #b', 'jeden']) {
       const added = parseTags(text)
@@ -39,70 +45,58 @@ describe('przegląd N4 1, 1 i 9: tagi – jedno dzielenie i jedno porządkowanie
   })
 })
 
-describe('przegląd N4 1, 2 i 3: „Cofnij import” – zmiany użytkownika po zapisach importów i cofnięć (T410)', () => {
+describe('przegląd N4 1, 2 i 3 oraz 2, 1, 4, 5: „Cofnij import” – zmiana użytkownika to inna treść niż zapisana przez import (T415)', () => {
   const ACC = '01KDEFACC00000000000000001'
   const X = '01K7T00000000000000000000X'
   const Y = '01K7T00000000000000000000Y'
   const T = (h: number) => `2026-10-01T${String(h).padStart(2, '0')}:00:00.000Z`
   const tx = (id: string, updatedAt: string, over: Partial<Transaction> = {}): Transaction =>
     transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id, createdAt: T(1), updatedAt, date: '2026-09-30', accountId: ACC, amount: -1000, ...over })
-  const batch = (id: string, at: string, over: Partial<ImportBatch> = {}): ImportBatch =>
-    importBatchSchema.parse({ schemaVersion: SCHEMA_VERSION, id, createdAt: at, updatedAt: at, at, savedAt: at, accountId: ACC, fileName: 'L.csv', ...over })
-  const A = (over: Partial<ImportBatch> = {}) => batch('01K7B0000000000000000000BA', T(1), { created: [X, Y], ...over })
-  // B (a later import) settled X: its change of X before and after.
-  const B = (over: Partial<ImportBatch> = {}) => batch('01K7B0000000000000000000BB', T(3), { updated: [{ before: tx(X, T(1)), after: tx(X, T(1), { pending: false }) }], ...over })
-  const plan = (rows: Transaction[], batches: ImportBatch[]) => {
+  // A (an import at 01:00) created X and Y, as written then.
+  const A = (over: Partial<ImportBatch> = {}): ImportBatch =>
+    importBatchSchema.parse({ schemaVersion: SCHEMA_VERSION, id: '01K7B0000000000000000000BA', createdAt: T(1), updatedAt: T(1), at: T(1), savedAt: T(1), accountId: ACC, fileName: 'L.csv', created: [X, Y], createdHashes: { [X]: contentHash(tx(X, T(1))), [Y]: contentHash(tx(Y, T(1))) }, ...over })
+  const plan = (rows: Transaction[], batch = A()) => {
     const byId = new Map(rows.map((t) => [t.id, t]))
-    return undoPlan(batches[0]!, { tx: (id) => byId.get(id), rules: [], batches })
+    return undoPlan(batch, { tx: (id) => byId.get(id), rules: [] })
   }
 
-  it('B zmienił X, B cofnięty, potem użytkownik zmienił X – ostrzega (dawniej: X na zawsze „dotknięty” przez B, bez ostrzeżenia)', () => {
-    const b = B({ undoneAt: T(5) })
-    expect(plan([tx(X, T(6)), tx(Y, T(1))], [A(), b]).changed).toBe(1)
-    // Only the writes of B and its undo: nothing of the user's (IM.31).
-    expect(plan([tx(X, T(5)), tx(Y, T(1))], [A(), b]).changed).toBe(0)
-    expect(plan([tx(X, T(3)), tx(Y, T(1))], [A(), B()]).changed).toBe(0)
+  it('treść, nie stempel: zapisy aplikacji (późniejszy import i jego cofnięcie, „Cofnij”, sam zapis kluczy) nic nie liczą', () => {
+    // The same content written again later by anyone – no change of the user's (IM.30, IM.31, 2, 5: keys of the other format only).
+    expect(plan([tx(X, T(9)), tx(Y, T(9), { bank: { key: 'k1', importedAt: T(1), source: 'lista', altKeys: ['k2'] } as Transaction['bank'] })], A({ createdHashes: { [X]: contentHash(tx(X, T(1))), [Y]: contentHash(tx(Y, T(1), { bank: { key: 'k1', importedAt: T(1), source: 'lista' } as Transaction['bank'] })) } })).changed).toBe(0)
+    expect(plan([tx(X, T(9)), tx(Y, T(1))]).changed).toBe(0)
   })
 
-  it('zmiana użytkownika przed późniejszym importem: zapis B ją niesie – B zapamiętuje ją przy zapisie, okno cofania A ostrzega', () => {
-    const before = tx(X, T(2), { note: 'moja' })
-    // At B's import (its batch written): X as B found it was the user's work since A wrote it.
-    const edited = editedOf([before], appWrites([A()]))
-    expect(edited).toEqual([X])
-    const b = B({ undoneAt: T(5), edited, updated: [{ before, after: { ...before, pending: false } }] })
-    expect(plan([tx(X, T(5), { note: 'moja' }), tx(Y, T(1))], [A(), b]).changed).toBe(1)
-    // Without B's word (an import written before 1.15.8): its write hides the change.
-    expect(plan([tx(X, T(5), { note: 'moja' }), tx(Y, T(1))], [A(), { ...b, edited: [] }]).changed).toBe(0)
+  it('zmiana użytkownika ze stemplem sprzed chwili paczki (zapis w trakcie zapisu, inny zegar) – liczy się (dawniej: nie)', () => {
+    // The user's change stamped before the batch's time (2, 4: saved while the undo's writes were flushed; a computer whose
+    // clock is behind): the content tells it.
+    expect(plan([tx(X, T(0), { note: 'moja' }), tx(Y, T(1))]).changed).toBe(1)
+    expect(plan([tx(X, T(1), { categoryId: null, counterparty: 'Inny' }), tx(Y, T(1))]).changed).toBe(1)
   })
 
-  it('cofnij → „Cofnij” → cofnij: zmiany sprzed pierwszego cofnięcia ostrzegają dalej (dawniej: nowe savedAt je ukrywało)', () => {
-    // A undone at 04:00: X changed by the user (03:00), Y not.
-    const first = plan([tx(X, T(3)), tx(Y, T(1))], [A()])
-    expect(first).toMatchObject({ changed: 1, edited: [X] })
-    // Its „Cofnij” at 05:00 wrote both back (stamped 05:00) and set savedAt then; the undo's word kept.
-    const redone = A({ savedAt: T(5), edited: withIds([], first.edited) })
-    expect(plan([tx(X, T(5)), tx(Y, T(5))], [redone]).changed).toBe(1)
-    // A change after the „Cofnij” counts too; the app's own writes never.
-    expect(plan([tx(X, T(5)), tx(Y, T(6))], [redone]).changed).toBe(2)
-    expect(plan([tx(X, T(5)), tx(Y, T(5))], [A({ savedAt: T(5) })]).changed).toBe(0)
+  it('import sprzed 1.15.8 (bez odcisków): stempel po zapisie to zmiana; nietknięte dostają odcisk przy cofnięciu', () => {
+    const old = A({ createdHashes: {} })
+    const p = plan([tx(X, T(2), { note: 'moja' }), tx(Y, T(1))], old)
+    expect(p.changed).toBe(1)
+    expect(p.hashes).toEqual({ [Y]: contentHash(tx(Y, T(1))) })
+    // Its „Cofnij” wrote Y again (stamp 05:00): by content now – no change; X stays counted by its stamp.
+    expect(plan([tx(X, T(5), { note: 'moja' }), tx(Y, T(5))], { ...old, createdHashes: p.hashes! }).changed).toBe(1)
+    expect(plan([tx(X, T(1)), tx(Y, T(1))]).hashes).toBeNull()
   })
 
-  it('cofnięcie B zapamiętuje operacje A zapisane z powrotem ze zmianą użytkownika – nawet gdy zapis jej nie zmienił', () => {
-    // The user changed X after B (04:00); B's undo keeps that change – its write (or none) never hides it.
-    const p = plan([tx(X, T(4), { pending: false, note: 'moja' })], [B(), A()])
-    expect(p.edited).toEqual([X])
-    // An operation no import created (typed by hand) is not kept: no import's undo deletes it.
-    const own = B({ updated: [{ before: tx(Y, T(1)), after: tx(Y, T(1), { pending: false }) }] })
-    expect(plan([tx(Y, T(4), { pending: false })], [own]).edited).toEqual([])
+  it('odcisk: bez stempli i kluczy drugiego formatu, niezależny od kolejności pól; inna treść – inny', () => {
+    const t = tx(X, T(1), { note: 'a' })
+    const reordered = Object.fromEntries(Object.entries(t).reverse()) as Transaction
+    expect(contentHash({ ...reordered, updatedAt: T(7), updatedBy: 'LAPTOP' })).toBe(contentHash(t))
+    expect(contentHash({ ...t, note: 'b' })).not.toBe(contentHash(t))
   })
 
-  it('pomocnicze: ostatni zapis aplikacji, zmiana użytkownika i zbiór bez powtórzeń', () => {
-    const w = appWrites([A(), B({ undoneAt: T(5) })])
-    expect(w.at.get(X)).toBe(T(5))
-    expect(w.at.get(Y)).toBe(T(1))
-    expect(userWork(tx(Y, T(1)), w)).toBe(false)
-    expect(userWork(tx(Y, T(2)), w)).toBe(true)
-    expect(withIds([X], [X, Y, Y])).toEqual([X, Y])
+  it('„Cofnij” cofnięcia: operacja nietknięta od cofnięcia wraca jak była, zmieniona – ze zmianą użytkownika i zmianą importu (2, 1)', () => {
+    const before = tx(X, T(1), { pending: false, note: '' })
+    const wrote = tx(X, T(4), { pending: true, note: '' })
+    expect(redoneAs(before, wrote, tx(X, T(4), { pending: true, note: '' }))).toEqual({ record: before, kept: false })
+    const r = redoneAs(before, wrote, tx(X, T(5), { pending: true, note: 'po cofnięciu' }))
+    expect(r.kept).toBe(true)
+    expect(r.record).toMatchObject({ id: X, pending: false, note: 'po cofnięciu' })
   })
 })
 
@@ -139,7 +133,9 @@ describe('przegląd N4 1, 8: wyszukiwanie usuniętych wpisów – daty w obu zap
     expect(hay).toContain('01.10.2026')
     expect(hay).toContain(plDateTime(savedAt).toLowerCase())
     const d = new Date(savedAt)
-    expect(hay).toContain(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+    expect(localDay(savedAt)).toBe(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+    expect(hay).toContain(localDay(savedAt))
+    expect(localDay('nie data')).toBe('')
     expect(hay).toContain('laptop')
     expect(deletedSearchText('months', { month: '2026-10' }, savedAt, null)).toContain('2026-10')
   })
@@ -152,5 +148,8 @@ describe('przegląd N4 1, 10: liczby w różnicach z minusem typograficznym', ()
     expect(formatValue(1.5)).toBe('1,5')
     expect(formatValue(-0)).toBe('0')
     expect(formatValue(1250)).toBe('1250')
+    // As written, never rounded: an exponent's form too (2, 9).
+    expect(formatValue(-1e-7)).toBe('−1e-7')
+    expect(formatValue(0.1 + 0.2)).toBe('0,30000000000000004')
   })
 })

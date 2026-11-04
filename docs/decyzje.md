@@ -3036,7 +3036,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   importu nie ostrzegała) i samo nowe `savedAt` przy „Cofnij” (zmiany sprzed cofnięcia przestawały się liczyć). Granice:
   zapis, który dotarł do folderu dopiero przy ponowieniu, liczy się jak zmiana użytkownika (ostrzeżenie w nadmiarze);
   paczki sprzed 1.15.8 nie mają `edited` – zmiana przykryta wtedy późniejszym importem nie ostrzega; czasy z różnych
-  komputerów porównywane jak dotąd. Bez podbicia `SCHEMA_VERSION`.
+  komputerów porównywane jak dotąd. Bez podbicia `SCHEMA_VERSION`. **Zastąpione przez T415** (przegląd 2 N4): porównanie
+  czasów miało dalsze dziury (zapis użytkownika w trakcie `flushSaves` ze stemplem sprzed czasu paczki, zapis samych
+  kluczy drugiego formatu bez paczki, zegary komputerów) – pole `edited`, `appWrites` i nowe `savedAt` przy „Cofnij”
+  usunięte przed wydaniem.
 - **T411** Pierwszy dotyk okna po ciszy nocnej (1.15.8, N4 – przegląd 1 pkt 6; zmienia T406): poranny tylko po przerwie –
   poprzedni dotyk przed końcem ciszy i co najmniej 30 min wcześniej (`MORNING_IDLE_MS`, `morningTouch`). Praca przez
   koniec ciszy (04:59 → 05:00) nie przenosi na Mostek; okno zostawione na noc – tak, jak dotąd.
@@ -3045,12 +3048,38 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Brak operacji i miesięcy w okresie.” i brak pliku; wiersze liczone raz na kliknięcie. „Usunięte wpisy” szukają dat
   w obu zapisach (`deletedSearchText`): tytuł jak na ekranie (dd.mm.rrrr) i daty rekordu rrrr-mm-dd, chwila usunięcia jak
   na liście („dd.mm.rrrr, gg:mm”) i rrrr-mm-dd tego samego dnia.
-- **T413** Słowa pól w szybkim wpisie (1.15.8, N4 – przegląd 1 pkt 5; uzupełnia T400): Enter wstrzymuje tylko odmowa pola
+- **T413** Słowa pól w szybkim wpisie (1.15.8, N4 – przegląd 1 pkt 5; uzupełnia T400; zawężone przez T417): Enter wstrzymuje tylko odmowa pola
   (toast „error”); słowo o wartości przyjętej, ale zmienionej (tag skrócony do 40 znaków, tag ponad 20 pominięty) idzie do
   stopki zwykłym kolorem, Enter zapisuje, a słowo jest dopisane do odpowiedzi zapisu („Zapisano. Tag … został skrócony.”)
   i okno czeka 4 s, by dało się je przeczytać.
-- **T414** Nazwy domownika w banku (1.15.8, N4 – przegląd 1 pkt 4; uzupełnia T401): „Cofnij” usunięcia nazwy przywraca
+- **T414** Nazwy domownika w banku (1.15.8, N4 – przegląd 1 pkt 4; uzupełnia T401; porównanie nazw – T416): „Cofnij” usunięcia nazwy przywraca
   tylko tę nazwę, na jej miejsce wśród nazw z chwili cofnięcia (dopisane w międzyczasie zostają, inne usunięte nie
   wracają); nie wraca, gdy domownik ma ją znowu albo ma ją teraz inny domownik (komunikat – jedna nazwa nie wskazuje dwóch
   osób). Najwyżej 20 nazw na domownika (`MAX_BANK_NAMES`, granica schematu – ponad nią lista czytała się jako pusta i
   znikała przy zapisie): 21. odmówiona z komunikatem.
+- **T415** „Cofnij import” po treści, nie po czasie (1.15.8, N4 – przegląd 2 pkt 1, 4, 5; zastępuje mechanizm T410): paczka
+  importu zapisuje odcisk treści każdej utworzonej operacji (`createdHashes`, addytywnie; `contentHash` – rekord po
+  schemacie, bez `updatedAt` / `updatedBy` / `schemaVersion` / `computed` i bez kluczy drugiego formatu `altKeys`, pola
+  w stałej kolejności, 53-bitowy skrót). „Zmienione później przez Ciebie” = treść inna niż zapisana przez import – kto
+  i kiedy ją zapisał, nie gra roli: późniejszy import i jego cofnięcie oddają treść, „Cofnij” cofnięcia zapisuje ją
+  z powrotem, import w drugim formacie dopisuje tylko `altKeys` – nic z tego się nie liczy; zmiana użytkownika liczy się
+  zawsze, także ze stemplem sprzed chwili paczki (zapis w trakcie `flushSaves`, inny zegar komputera, zapis ponowiony
+  później). Import sprzed 1.15.8 (bez odcisków): stempel po `savedAt` to zmiana (więcej ostrzeżeń, nigdy mniej), a przy
+  jego cofnięciu operacje nietknięte według stempla dostają odcisk (`UndoPlan.hashes`) – jego „Cofnij” i następne
+  cofnięcie porównują już treść. „Cofnij” cofnięcia nie nadpisuje i nie usuwa zmian zrobionych po cofnięciu
+  (`redoneAs`): operacja zapisana z powrotem – trójstronnie (podstawa: jak cofnięcie ją zapisało; zmiana użytkownika
+  zostaje, zmiana importu wraca na wierzch, przy kolizji wygrywa użytkownik); operacja przywrócona przez cofnięcie
+  (usunięta przez import) – zmieniona od cofnięcia zostaje, a import przy następnym cofnięciu jej nie dubluje; toast mówi
+  „Zmiany wprowadzone po cofnięciu zostają (N operacji)”. `savedAt` nie zmienia się przy „Cofnij”. Bez podbicia
+  `SCHEMA_VERSION`.
+- **T416** Jedno porównanie nazw w banku (1.15.8, N4 – przegląd 2 pkt 2, 3, 8): `sameBankName` (`calc/household.ts`) –
+  te same słowa co w `memberOf` (`bankNameWords`: bez wielkości liter i polskich znaków, słowa od dwóch znaków), w dowolnej
+  kolejności („JAN ŻÓŁW” = „jan zolw” = „ŻÓŁW JAN”). Dodanie nazwy, którą ma inny domownik, jest odmówione z komunikatem
+  („Nazwę … ma już …”), to samo przy „Cofnij” jej usunięcia (T414); „+ domownik” z importu dla nazwy, którą ktoś już ma,
+  przypisuje tego domownika zamiast tworzyć drugiego. Granica 20 nazw – jedna stała `MAX_BANK_NAMES` w schemacie i w oknie.
+  Nazwy częściowo wspólne („ANNA KOWALSKA” i „KOWALSKA ANNA MARIA”) nie są odmawiane – `memberOf` bierze pierwszego.
+- **T417** Słowa pól w szybkim wpisie należą do jednego działania (1.15.8, N4 – przegląd 2 pkt 6; zawęża T413): słowo
+  o przyjętej, ale zmienionej wartości (skrócony tag) idzie z odpowiedzią zapisu tylko wtedy, gdy padło w tym samym
+  działaniu (ten sam Enter, to samo kliknięcie „Zapisz”) – każdy nowy klawisz albo kliknięcie zaczyna od zera, bo słowo
+  powiedziane wcześniej było już w stopce. Odmowa zapisu (brak kwoty, cisza nocna…) też dopisuje słowa tego działania.
+  Tag równy już dodanemu nie jest liczony jako „skrócony” (nic nie przybywa).

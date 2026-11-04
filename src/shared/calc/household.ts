@@ -212,6 +212,23 @@ export const settlesHousehold = (t: Transaction): boolean =>
 export const OPENING_TX = 'opening:'
 export const isOpeningItem = (txId: string): boolean => txId.startsWith(OPENING_TX)
 
+/** A name in the bank as the import reads it (D80 a): its words, without case and Polish marks, of two characters or more. */
+export const bankNameWords = (name: string): string[] => fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2)
+
+/**
+ * Two names in the bank the import cannot tell apart (T416): the same words in any order („Kowalska  ANNA” = „ANNA
+ * KOWALSKA”, „JAN ŻÓŁW” = „JAN ZOLW”) – the one comparison of adding a name, of its „Cofnij” and of a member from the import.
+ */
+export function sameBankName(a: string, b: string): boolean {
+  const key = (s: string) => [...new Set(bankNameWords(s))].sort().join(' ') || fold(s.trim())
+  return key(a) === key(b)
+}
+
+/** The member (not `except`) holding a name in the bank the import reads as `name`; null – none. */
+export function bankNameHolder<M extends Pick<HouseholdMember, 'id' | 'bankNames'>>(members: readonly M[], name: string, except?: string): M | null {
+  return members.find((m) => m.id !== except && m.bankNames.some((n) => sameBankName(n, name))) ?? null
+}
+
 /**
  * The household member a counterparty is (D80 a): all words of one of their bank names in it, in any order – a name of
  * one word only when it is the whole counterparty („MAMA”). Archived members too: their money is still theirs.
@@ -221,7 +238,7 @@ export function memberOf<M extends Pick<HouseholdMember, 'bankNames'>>(counterpa
   // The members' names split once per list, each counterparty answered once (W12: the engine asks for every income).
   let cache = memberCache.get(members)
   if (!cache) {
-    const names = members.flatMap((m) => m.bankNames.map((name) => ({ m, parts: fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2) })).filter((n) => n.parts.length))
+    const names = members.flatMap((m) => m.bankNames.map((name) => ({ m, parts: bankNameWords(name) })).filter((n) => n.parts.length))
     memberCache.set(members, (cache = { names, by: new Map() }))
   }
   const known = cache.by.get(counterparty)

@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FolderStatus, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
+import { memberOf } from '@shared/calc/household'
 import { latestImport } from '@shared/import/batch'
 import { COLLECTIONS } from '@shared/paths'
-import type { HouseholdMember, SettingsFile } from '@shared/schema'
-import { listaCsv, type CsvBuy } from '../e2e/mbank-csv'
+import { householdMemberSchema, MAX_BANK_NAMES, type HouseholdMember, type SettingsFile } from '@shared/schema'
+import { historiaCsv, listaCsv, type CsvBuy } from '../e2e/mbank-csv'
 
-// The first code review of N4 (1.15.8): its findings in the window's stores, each with the scenario that failed before
-// the fix. The stores talk to the main process through window.fi (preload): a mock stamping every write with its time,
+// The first and second code reviews of N4 (1.15.8): their findings in the window's stores, each with the scenario that
+// failed before the fix. The stores talk to the main process through window.fi (preload): a mock stamping every write with its time,
 // as the main process does (`updatedAt` = the moment of the write), a few milliseconds after the call (the IPC's way).
 const ipc = () => new Promise((r) => setTimeout(r, 3))
 const stamped = <T extends { id: string }>(record: T) => ({ ...record, updatedAt: new Date().toISOString() })
@@ -56,14 +57,18 @@ async function undo(id: string): Promise<void> {
   expect(await batches.undoImport(id)).toBe(true)
   await later()
 }
-async function redo(): Promise<void> {
-  ui.useUi.getState().toasts.find((t) => t.action?.label === 'Cofnij' && t.text.startsWith('Import cofnięty'))!.action!.run()
-  await vi.waitFor(() => expect(ui.useUi.getState().toasts.map((t) => t.text)).toContain('Import znowu w budżecie.'))
+async function redo(): Promise<string> {
+  const run = ui.useUi.getState().toasts.find((t) => t.action?.label === 'Cofnij' && t.text.startsWith('Import cofnięty'))!.action!.run
+  ui.useUi.setState({ toasts: [] })
+  run()
+  let said = ''
+  await vi.waitFor(() => expect((said = ui.useUi.getState().toasts.map((t) => t.text).find((t) => t.startsWith('Import znowu w budżecie.')) ?? '')).not.toBe(''))
   await later()
+  return said
 }
-async function runFile(name: string, buys: CsvBuy[], period: { from: string; to: string }): Promise<string> {
+async function runFile(name: string, buys: CsvBuy[], period: { from: string; to: string }, csv = listaCsv): Promise<string> {
   await later()
-  await state.loadImportFile(name, bytes(listaCsv(buys, period)))
+  await state.loadImportFile(name, bytes(csv(buys, period)))
   await state.runImport()
   await later()
   return latest().id
@@ -75,7 +80,7 @@ beforeEach(() => {
   ui.useUi.setState({ toasts: [] })
 })
 
-describe('przegląd N4 1, 2 i 3: „Cofnij import” ostrzega o zmianach użytkownika po cofnięciach i późniejszych importach (T410)', () => {
+describe('przegląd N4 1, 2 i 3 oraz 2, 1 i 5: „Cofnij import” i jego „Cofnij” nie gubią zmian użytkownika (T415)', () => {
   const PERIOD = { from: '2026-10-19', to: '2026-10-26' }
   const BUYS: CsvBuy[] = [
     { date: '2026-10-20', amount: 87.91, name: 'SLUSARZ KOWAL' },
@@ -125,7 +130,6 @@ describe('przegląd N4 1, 2 i 3: „Cofnij import” ostrzega o zmianach użytko
     const a = await runFile('lista.csv', [...BUYS, KIOSK], PERIOD)
     await edit(kiosk().id, 'przed B')
     const b = await runFile('lista-2.csv', [...BUYS, { ...KIOSK, pending: false }], { from: '2026-10-19', to: '2026-10-27' })
-    expect(batchOf(b).edited).toEqual([kiosk().id])
     expect(changed(a)).toBe(1)
     await undo(b)
     expect(kiosk().note).toBe('przed B')
@@ -133,6 +137,53 @@ describe('przegląd N4 1, 2 i 3: „Cofnij import” ostrzega o zmianach użytko
     // B's „Cofnij” and its undo again: the change is still the user's.
     await redo()
     await undo(b)
+    expect(changed(a)).toBe(1)
+  })
+
+  it('import tego samego okresu w drugim formacie (same klucze, bez paczki): nic „zmienionego przez Ciebie” (2, 5)', async () => {
+    open()
+    const a = await runFile('lista.csv', BUYS, PERIOD)
+    await state.loadImportFile('historia.csv', bytes(historiaCsv(BUYS, PERIOD)))
+    await state.runImport()
+    await later()
+    // The other format's keys written into A's operations – no batch of its own.
+    expect(operations().every((t) => (t.bank?.altKeys ?? []).length > 0)).toBe(true)
+    expect(latest().id).toBe(a)
+    expect(changed(a)).toBe(0)
+  })
+
+  it('B usunął nierozliczoną operację A; cofnięcie B ją przywraca, użytkownik ją zmienia, „Cofnij” – zostaje (2, 1)', async () => {
+    open()
+    await runFile('lista.csv', [...BUYS, KIOSK], PERIOD)
+    const id = kiosk().id
+    await state.loadImportFile('lista-2.csv', bytes(listaCsv(BUYS, { from: '2026-10-19', to: '2026-10-27' })))
+    state.setRemoveVanished(id, true)
+    await state.runImport()
+    const b = latest().id
+    expect(operations().some((t) => t.id === id)).toBe(false)
+    await undo(b)
+    await edit(id, 'po cofnięciu')
+    const said = await redo()
+    // Before: deleted again as the import's own, the user's note gone with it.
+    expect(operations().find((t) => t.id === id)?.note).toBe('po cofnięciu')
+    expect(said).toContain('Zmiany wprowadzone po cofnięciu zostają (1 operacja)')
+  })
+
+  it('B rozliczył operację A; cofnięcie B, zmiana użytkownika, „Cofnij”: rozliczenie wraca, zmiana zostaje (2, 1)', async () => {
+    open()
+    const a = await runFile('lista.csv', [...BUYS, KIOSK], PERIOD)
+    const b = await runFile('lista-2.csv', [...BUYS, { ...KIOSK, pending: false }], { from: '2026-10-19', to: '2026-10-27' })
+    expect(kiosk().bank?.pending).toBe(false)
+    await undo(b)
+    expect(kiosk().bank?.pending).toBe(true)
+    await edit(kiosk().id, 'po cofnięciu B')
+    const said = await redo()
+    expect(kiosk()).toMatchObject({ note: 'po cofnięciu B' })
+    expect(kiosk().bank?.pending).toBe(false)
+    expect(said).toContain('(1 operacja)')
+    // Untouched after its undo: its „Cofnij” sets it back as it was, and says nothing more.
+    await undo(b)
+    expect(await redo()).toBe('Import znowu w budżecie.')
     expect(changed(a)).toBe(1)
   })
 })
@@ -149,12 +200,12 @@ describe('przegląd N4 1, 4: „Cofnij” usunięcia nazwy w banku przywraca tyl
     openHouse(['ANNA KOWALSKA', 'A KOWALSKA'])
     household.removeBankName(ANNA, 'ANNA KOWALSKA')
     const back = undoToast()
-    household.addBankName(ANNA, 'KOWALSKA ANNA')
-    expect(names(ANNA)).toEqual(['A KOWALSKA', 'KOWALSKA ANNA'])
+    household.addBankName(ANNA, 'ANNA NOWAK')
+    expect(names(ANNA)).toEqual(['A KOWALSKA', 'ANNA NOWAK'])
     back.action!.run()
-    expect(names(ANNA)).toEqual(['ANNA KOWALSKA', 'A KOWALSKA', 'KOWALSKA ANNA'])
+    expect(names(ANNA)).toEqual(['ANNA KOWALSKA', 'A KOWALSKA', 'ANNA NOWAK'])
     back.action!.run()
-    expect(names(ANNA)).toEqual(['ANNA KOWALSKA', 'A KOWALSKA', 'KOWALSKA ANNA'])
+    expect(names(ANNA)).toEqual(['ANNA KOWALSKA', 'A KOWALSKA', 'ANNA NOWAK'])
   })
 
   it('dwa usunięcia, „Cofnij” pierwszego: druga nazwa nie wraca razem z nim', () => {
@@ -175,6 +226,38 @@ describe('przegląd N4 1, 4: „Cofnij” usunięcia nazwy w banku przywraca tyl
     expect(names(ANNA)).toEqual([])
     expect(names(OLA)).toEqual(['anna kowalska'])
     expect(ui.useUi.getState().toasts.at(-1)!.text).toContain('wskazuje teraz Ola')
+  })
+
+  it('nazwa, którą ma inny domownik – także bez polskich znaków albo w innej kolejności słów – odmówiona (2, 2 i 3)', () => {
+    openHouse(['JAN ŻÓŁW'])
+    for (const typed of ['jan zolw', 'ŻÓŁW  JAN']) {
+      expect(household.addBankName(OLA, typed)).toBe(false)
+      expect(ui.useUi.getState().toasts.at(-1)).toMatchObject({ kind: 'error', text: expect.stringContaining('ma już Anna') })
+    }
+    expect(names(OLA)).toEqual([])
+    // The same comparison as the import's: these are the names it would give Anna.
+    const members = data.useData.getState().fi!.settings.household.members
+    expect(memberOf('ZOLW JAN', members)?.id).toBe(ANNA)
+    // The same member again („Jan Żółw” for Anna): nothing added twice.
+    expect(household.addBankName(ANNA, 'jan żółw')).toBe(true)
+    expect(names(ANNA)).toEqual(['JAN ŻÓŁW'])
+  })
+
+  it('domownik z importu o nazwie, którą ktoś już ma: ten sam domownik, nie drugi (2, 2)', () => {
+    openHouse(['ANNA KOWALSKA'])
+    const before = data.useData.getState().fi!.settings.household.members.length
+    expect(household.addMemberFromBank('KOWALSKA ANNA')).toBe(ANNA)
+    expect(data.useData.getState().fi!.settings.household.members).toHaveLength(before)
+    expect(household.addMemberFromBank('PIOTR NOWAK')).not.toBe(ANNA)
+    expect(data.useData.getState().fi!.settings.household.members).toHaveLength(before + 1)
+  })
+
+  it('granica nazw jedna ze schematem: tyle przechodzi, o jedną więcej – lista znika (2, 8)', () => {
+    const base = { id: ANNA, name: 'Anna' }
+    const list = (n: number) => Array.from({ length: n }, (_, i) => `NAZWA ${i}`)
+    expect(householdMemberSchema.parse({ ...base, bankNames: list(MAX_BANK_NAMES) }).bankNames).toHaveLength(MAX_BANK_NAMES)
+    expect(householdMemberSchema.parse({ ...base, bankNames: list(MAX_BANK_NAMES + 1) }).bankNames).toEqual([])
+    expect(household.MAX_BANK_NAMES).toBe(MAX_BANK_NAMES)
   })
 
   it('najwyżej 20 nazw: 21. odmówiona z komunikatem – lista się nie zeruje przy zapisie', () => {

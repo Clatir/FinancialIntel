@@ -46,10 +46,11 @@ export function tagsLost(list: readonly string[], text: string): { cut: number; 
   for (const t of splitTags(text)) {
     const label = tidyTag(t)
     if (!label) continue
-    if (label.length > MAX_TAG_LENGTH) cut++
+    // One there already (cut or not): nothing added, nothing to say.
     const key = tagKey(label)
     if (have.has(key)) continue
     have.add(key)
+    if (label.length > MAX_TAG_LENGTH) cut++
     fresh++
   }
   return { cut, over: Math.max(0, list.length + fresh - MAX_TAGS) }

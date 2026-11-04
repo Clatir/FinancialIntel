@@ -1,6 +1,7 @@
 // adapted from ICTTJ src/renderer/lib/recordTitle.ts @ 84a8339
 import type { HistoryKind } from '@shared/api'
 import { signedPln } from '../components/fields'
+import { localDay } from '@shared/format'
 import { monthLabel, plDate, plDateTime } from './format'
 
 const s = (v: unknown) => (typeof v === 'string' ? v : '')
@@ -43,15 +44,11 @@ export function recordTitle(kind: HistoryKind, record: unknown): string {
   }
 }
 
-const two = (n: number) => String(n).padStart(2, '0')
-
 /**
  * What the search of the deleted records looks in (AP-23, T412): the title as shown (dates dd.mm.rrrr) and its dates as
  * rrrr-mm-dd too, who deleted it, and when – as shown („dd.mm.rrrr, gg:mm”) and as rrrr-mm-dd of the same day.
  */
 export function deletedSearchText(kind: HistoryKind, record: unknown, savedAt: string, savedBy: string | null): string {
   const r = (record ?? {}) as Record<string, unknown>
-  const at = new Date(savedAt)
-  const day = Number.isNaN(at.getTime()) ? '' : `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}`
-  return [recordTitle(kind, record), s(r.date), s(r.month), s(r.at).slice(0, 10), savedBy ?? '', plDateTime(savedAt), day].join(' ').toLowerCase()
+  return [recordTitle(kind, record), s(r.date), s(r.month), s(r.at).slice(0, 10), savedBy ?? '', plDateTime(savedAt), localDay(savedAt)].join(' ').toLowerCase()
 }

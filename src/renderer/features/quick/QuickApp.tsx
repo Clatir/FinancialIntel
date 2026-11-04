@@ -103,7 +103,8 @@ export function QuickApp() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string; info?: boolean } | null>(null)
   // A field refused what was typed in it (the Enter that left it does not save the old value in its place – AP-15).
   const refused = useRef(false)
-  // What the fields said about values they took changed: said again with the save's answer (T400, T413 – never silently).
+  // What the fields said about values they took changed during the action that saves (an Enter, a click): said again with
+  // its answer (T400, T413 – never silently). A new key or click starts afresh: a word said before was read in the footer.
   const notes = useRef<string[]>([])
   const [officer, setOfficer] = useState<{ categoryId: string; source: OfficerSource } | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
@@ -390,12 +391,14 @@ export function QuickApp() {
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
-    if (data.readOnly) return setMsg({ ok: false, text: data.readOnlyReason ?? 'Folder jest tylko do odczytu.' })
-    if (d.amount <= 0) return setMsg({ ok: false, text: 'Wpisz kwotę.' })
-    if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return setMsg({ ok: false, text: 'Części paragonu nie sumują się do kwoty.' })
-    if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return setMsg({ ok: false, text: 'Wybierz domownika, który finansuje zakup.' })
-    if (share && !shareComplete(share, d.amount)) return setMsg({ ok: false, text: share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.' })
-    if (night && (!nightOk || !d.logNote.trim())) return setMsg({ ok: false, text: 'Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.' })
+    // Not saved: why – with the fields' words of this action (they would be gone under it).
+    const refuse = (text: string) => setMsg({ ok: false, text: [text, ...notes.current].join(' ') })
+    if (data.readOnly) return refuse(data.readOnlyReason ?? 'Folder jest tylko do odczytu.')
+    if (d.amount <= 0) return refuse('Wpisz kwotę.')
+    if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return refuse('Części paragonu nie sumują się do kwoty.')
+    if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return refuse('Wybierz domownika, który finansuje zakup.')
+    if (share && !shareComplete(share, d.amount)) return refuse(share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.')
+    if (night && (!nightOk || !d.logNote.trim())) return refuse('Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.')
     sending.current = true
     next.current = andNext
     setBusy(true)
@@ -438,10 +441,19 @@ export function QuickApp() {
     const onFocus = () => {
       refused.current = false
     }
+    // Each key or click its own action: the fields' words said before it are no part of its answer (a tag cut, then
+    // taken off – a later save says nothing of it).
+    const onAction = () => {
+      notes.current = []
+    }
+    window.addEventListener('keydown', onAction, true)
+    window.addEventListener('pointerdown', onAction, true)
     window.addEventListener('focusin', onFocus)
     window.addEventListener('keydown', onEscape, true)
     window.addEventListener('keydown', onKey)
     return () => {
+      window.removeEventListener('keydown', onAction, true)
+      window.removeEventListener('pointerdown', onAction, true)
       window.removeEventListener('focusin', onFocus)
       window.removeEventListener('keydown', onEscape, true)
       window.removeEventListener('keydown', onKey)

@@ -31,7 +31,7 @@ import { duplicateKey } from '@shared/import/duplicates'
 import { decodeText, IMPORT_MAX_BYTES } from '@shared/import/text'
 import { shareComplete } from '@shared/calc/share'
 import { deepEqual } from '@shared/merge'
-import { appWrites, batchesToDrop, editedOf, importBatch, type BatchFacts } from '@shared/import/batch'
+import { batchesToDrop, importBatch, type BatchFacts } from '@shared/import/batch'
 import { accountForNumber, accountNumberOf } from '@shared/import/mbank'
 import { statementCheck, statementOf, type Statement } from '@shared/import/statement'
 import { countLabel } from '../../lib/format'
@@ -982,11 +982,8 @@ function writeBatch(
     }
   }
   const imp = f.importAfter
-  // The earlier imports' operations it changed or deleted with the user's changes in them: the user's work still (T410).
-  const edited = editedOf([...f.updated.map((u) => u.before), ...f.removed], appWrites(listOf(useData.getState().records.imports)))
   const batch = importBatch({
     ...f,
-    edited,
     id: newId(),
     savedAt: new Date().toISOString(),
     machine: null,
