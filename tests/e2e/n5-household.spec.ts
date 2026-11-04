@@ -1,6 +1,6 @@
 // N5 (1.15.9), AP-19: the quick entry asks a member „pytaj” for the rest of their money (SW sp. 3), never asks „plan czy
 // impuls?” of a member's purchase (AF-22) nor names a member nobody chose (SW.12); „Pokaż zakupy” in Meldunki shows that
-// member's purchases still to be paid back (AF-58).
+// member's purchases still to be paid back (AF-58); Alt+P of AP-20 marks nothing on a member's purchase.
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -90,6 +90,22 @@ test('AP-19: domownik „pytaj” wybiera resztę, zakup za domownika bez „pla
     await expect(page.getByTestId('page-operations')).toBeVisible()
     await expect(page.getByTestId('operation-row')).toHaveCount(1)
     await expect(page.getByTestId('operation-row')).toContainText('Kiosk Taty')
+
+    // N5 integration (AP-19 × AP-20): Alt+P on a member's purchase above the threshold – the log asks of my own part only,
+    // so nothing is marked when it is saved.
+    quick = await quickWindow(app, page)
+    await quick.getByRole('radio', { name: 'Za domownika' }).click()
+    await quick.getByTestId('quick-amount').fill('250')
+    await quick.getByTestId('quick-amount').press('Tab')
+    await quick.getByTestId('quick-time').fill('12:00')
+    await quick.getByTestId('quick-time').press('Tab')
+    await quick.getByTestId('quick-financer').selectOption({ label: 'Tata' })
+    await quick.getByTestId('quick-counterparty').fill('Księgarnia Taty')
+    await quick.keyboard.press('Alt+KeyP')
+    await quick.getByTestId('quick-save').click()
+    await expect
+      .poll(async () => (await records(dir, 'transactions')).filter((t) => t.counterparty === 'Księgarnia Taty').map((t) => [t.amount, t.memberId, t.impulse ?? null]))
+      .toEqual([[-zl(250), TATA, null]])
     expect(errors).toEqual([])
   } finally {
     await app.close()

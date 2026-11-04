@@ -9,7 +9,7 @@ import { deliveryDay, deliveries, dockedText, pendingPairsOf, waitingText, type 
 import { againstFirewall, deliveryItem } from '@shared/calc/briefing'
 import { computeFleet, layersSum, type FleetEvent, type FleetInput, type FleetState } from '@shared/calc/fleet'
 import { rateDay, type GameInput } from '@shared/calc/game'
-import { inboxItems, topUpsToConfirm, type InboxInput } from '@shared/calc/inbox'
+import { inboxItems, inboxStarted, topUpsToConfirm, type InboxInput } from '@shared/calc/inbox'
 import { deliveryWhy } from '@shared/calc/why'
 import { createDefaultSettings } from '@shared/defaults'
 import type { IctjEntry } from '@shared/ictj'
@@ -152,6 +152,8 @@ describe('DO sp. 12 (T438): dopłata wykryta tylko z mBanku – meldunek do potw
     expect(due).toEqual([{ txId: topUp.id, date: '2026-10-15', amount: zl(200) }])
     const items = inboxItems(inboxInput({ topUps: due, today: s.today }))
     expect(items.map((i) => [i.kind, i.ref, i.action])).toEqual([['firewall', topUp.id, 'Potwierdź']])
+    // Before the wizard's start (N5 integration – AP-25, ME sp. 3): the budget's reports wait, the firewall's too.
+    expect(inboxItems(inboxInput({ topUps: due, today: s.today, started: inboxStarted(true, null) }))).toEqual([])
     // Confirmed: a docking of the operation without an entry – the money, the alarm and the game's violation as they were.
     const confirm = docking(topUp)
     const after = ship({ transactions: [topUp], dockings: [confirm] })
