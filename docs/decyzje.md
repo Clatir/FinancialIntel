@@ -428,6 +428,14 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   wpis, Operacje, import – wiersz i grupa, reguła importu) wybór „spłata pożyczki …” z listy otwartych pożyczek, także
   część wpłaty (reszta – jak dziś: spłata domownika, depozyt albo przychód); pożyczka maleje o spłatę, nadwyżka ponad dług
   to przychód (T70); w wierszu pożyczki widać, kto zapłacił. Szczegóły techniczne – T-decyzja w N2.
+- **D101** (04.11.2026) Ciąg prac po audycie: (1) grupy N1 → N2 → N3 → N4 → N5 → R1 → R2 jednym ciągiem, bez pauz między
+  grupami (komenda z 04.11); sesja główna koordynuje, pracę wykonują podagenci z modelem i thinking według D96; (2) kart
+  kredytowych ani rat 0 % nie używam – AP-41 w R2 to tylko plan spłaty pożyczek, bez konta karty z cyklem wyciągu
+  (pytanie 11 z D99 zamknięte); (3) wydanie po każdej grupie (1.15.5 … 1.15.9, 1.16.0, 1.17.0); (4) zasada wątpliwości:
+  zachowanie widoczne dla użytkownika, którego nie rozstrzygają D99 i D100 – wariant rekomendowany, zapisany „do
+  potwierdzenia” w `docs/postep.md`, ciąg idzie dalej; przerwa tylko przy wyborze trudnym do cofnięcia (np. zmiana formatu
+  danych), przy CI czerwonym dwa razy w tej samej grupie albo krytycznym znalezisku w nowym kodzie bez naprawy; (5) procentu
+  limitu tygodniowego nie podaję – bez szacunku zużycia.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
