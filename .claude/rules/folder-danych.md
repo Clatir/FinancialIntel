@@ -37,8 +37,11 @@ paths:
   „tylko do odczytu” ponawia każdy krok krótko tylko przy otwarciu i powrocie (w spoczynku i w kolejce raz, bez czekania
   – folder naprawdę tylko do odczytu sprawdzany co 5 s, T335) i ocenia tylko krok zapisu, nigdy sprzątanie; nie zakłada
   własnych plików – zakładanie sprawdza zapis obecności tego komputera (`DataStoreOptions.presence`, T316), ale blokuje
-  tylko odmowa założenia nowego pliku (`mkdir` / `open`); jeden plik, którego nie da się zastąpić, nigdy nie blokuje
-  folderu. Usunięcie obecności – przez `PresenceKeeper` (folder otwarty albo otwierany ją trzyma).
+  tylko odmowa założenia nowego pliku – krok naszego zapisu (`atomicStep`: 'dir' / 'create'), nigdy pole `syscall`
+  błędu; jeden plik, którego nie da się zastąpić, nigdy nie blokuje folderu (własny plik obecności tylko do odczytu zapis
+  naprawia sam – T337). Każdy zapis i usunięcie obecności w main – przez `PresenceKeeper` (`write` / `clear` / `beat`, po
+  kolei w folderze; usunięcie sprawdza trzymanie w swojej kolejce), nigdy `writePresence` / `clearPresence` wprost; op
+  kolejki nie woła kolejki (czekałby na siebie). Błąd heartbeatu nie jest połykany – w logu na początku i końcu serii.
 - Usuwanie: plik z wersją w historii usuwany od razu, bez niej – do Kosza; `removeRecord` odmawia przy drugiej kopii id.
 - Kopie ZIP: dzienne (14) i tygodniowe (8), przed importem (10), przed migracją; pełna kontrola folderu przed kopią
   dzienną i ręczną (`checkedData`); nieczytelny rekord przerywa kopię.

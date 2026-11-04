@@ -67,8 +67,9 @@ let presenceTimer: NodeJS.Timeout | null = null
 /**
  * The folders this computer's presence stays in (T316, przegląd 3): the open one (`storePresence`) and each one an open in
  * progress has – a failed or superseded open, a closed store and the heartbeat of the store before never clear it there.
+ * Every write and clear of the presence goes through it – one at a time per folder (przegląd 4).
  */
-const presenceKept = new PresenceKeeper(machineName, (a, b) => sameDir(a, b))
+const presenceKept = new PresenceKeeper(machineName, (a, b) => sameDir(a, b), log)
 let storePresence: (() => void) | null = null
 /** This computer's presence file written last; in the tray (not in use) it is written this seldom (N20). */
 let presenceWrittenAt = 0
@@ -466,9 +467,15 @@ async function closeStore(): Promise<void> {
 
 /**
  * This computer's presence in `root`, as the heartbeat writes it – also the write probe's check that new files can be
- * made at a folder's open (`DataStoreOptions.presence`, with the probe's `attempts` – T316, T335).
+ * made at a folder's open (`DataStoreOptions.presence`, with the probe's `attempts` – T316, T335). In its turn among the
+ * presence writes and clears of that folder (`presenceKept`, przegląd 4).
  */
 function writeOwnPresence(root: string, attempts?: number): Promise<void> {
+  return presenceKept.write(root, () => ownPresence(root, attempts))
+}
+
+/** The write itself – only as a `presenceKept` op (passing `writeOwnPresence` there would wait for itself). */
+function ownPresence(root: string, attempts?: number): Promise<void> {
   return writePresence(root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null, attempts)
 }
 
@@ -480,7 +487,9 @@ async function heartbeat(force = false): Promise<void> {
     // In use: every minute; only in the tray: every 5 minutes – OneDrive is not woken all night for it (N20).
     if (!s.status().readOnly && (force || inUseNow() || Date.now() - presenceWrittenAt >= TRAY_PRESENCE_MS)) {
       presenceWrittenAt = Date.now()
-      await writeOwnPresence(s.root).catch(() => undefined)
+      // A failure in the log when it starts and ends (T337) – never swallowed: the other computer meanwhile takes this
+      // one for not running.
+      await presenceKept.beat(s.root, () => ownPresence(s.root))
     }
     // Another folder opened meanwhile (B116): nothing of the closed one goes on – its presence cleared stays cleared; the
     // same folder open again or opening keeps the presence its new store or its write probe wrote.
@@ -825,6 +834,7 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     if (opening === controller) opening = null
     // Failed or given way after its write probe (T316): no presence of this computer left in a folder it has not open –
     // but none taken from the folder open or from a newer open of the same folder (its probe may have written it already).
+    // Not awaited: kept or not is checked in its turn, and a newer open's probe writes after it (przegląd 4).
     unkeep?.()
     const probed = next?.root
     if (probed && store !== next) void presenceKept.clear(probed).catch(() => undefined)

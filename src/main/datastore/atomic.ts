@@ -86,25 +86,49 @@ export async function mkdirFor(target: string, within: string | null): Promise<v
   else await fs.mkdir(dirname(target), { recursive: true })
 }
 
+/** The step of `writeFileAtomic` that failed: its directory made, the temp file made, written, or the target replaced. */
+export type AtomicStep = 'dir' | 'create' | 'write' | 'replace'
+
+const failedSteps = new WeakMap<object, AtomicStep>()
+
+/**
+ * Which step of `writeFileAtomic` failed with `e` (T316, przegląd 4) – known from our own steps, not from the error's
+ * fields (an fs error's `syscall` may name another call, or be missing). Undefined: no error of `writeFileAtomic`.
+ */
+export function atomicStep(e: unknown): AtomicStep | undefined {
+  return typeof e === 'object' && e !== null ? failedSteps.get(e) : undefined
+}
+
+async function step<T>(name: AtomicStep, op: () => Promise<T>): Promise<T> {
+  try {
+    return await op()
+  } catch (e) {
+    if (typeof e === 'object' && e !== null) failedSteps.set(e, name)
+    throw e
+  }
+}
+
 /**
  * Atomic write: write to a temp file in the same directory, fsync, then rename over the target.
  * A crash leaves either the old or the new file, never a truncated one. `within` – the data folder the target lies in,
  * null when none (`mkdirFor`). `attempts` – given (the write probe's presence, T335): each step a lock may refuse for a
  * moment – the directory, the temp file, the replacement – tried that many times; by default the directory and the temp
- * file once, the replacement 8 times.
+ * file once, the replacement 8 times. The step that failed: `atomicStep`.
  */
 export async function writeFileAtomic(target: string, data: string | Uint8Array, within: string | null, attempts?: number): Promise<void> {
-  await withRetry(() => mkdirFor(target, within), attempts ?? 1)
+  await step('dir', () => withRetry(() => mkdirFor(target, within), attempts ?? 1))
   const tmp = tempPathFor(target)
-  const handle = await withRetry(() => fs.open(tmp, 'w'), attempts ?? 1)
+  const handle = await step('create', () => withRetry(() => fs.open(tmp, 'w'), attempts ?? 1))
   try {
-    try {
-      await handle.writeFile(data)
-      await handle.sync()
-    } finally {
-      await handle.close()
-    }
-    await withRetry(() => fs.rename(tmp, target), attempts)
+    await step('write', async () => {
+      try {
+        await handle.writeFile(data)
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
+    })
+    await step('replace', () => withRetry(() => fs.rename(tmp, target), attempts))
   } catch (e) {
     // e.g. disk full or the target locked for too long: never leave a half-written temp file behind.
     await fs.rm(tmp, { force: true }).catch(() => undefined)
