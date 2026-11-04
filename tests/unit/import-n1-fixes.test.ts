@@ -149,10 +149,13 @@ describe('AP-2 (AF-1): meldunek – operacje, które już wróciły (przed 1.15.
     expect(returnedOf(after, rows).map((r) => [r.tx.id, r.deleted.date])).toEqual([[back.id, '2026-10-25']])
     expect(returnedOf(after, rows, { [returnedKey(back.id)]: T3 })).toEqual([])
     // Imported before the deletion (both formats before 1.4.2, one copy deleted): no operation that came back.
-    expect(returnedOf(after.map((t) => (t.id === back.id ? { ...t, bank: { ...t.bank!, importedAt: '2026-10-26T10:00:00.000Z' } } : t)), rows)).toEqual([])
+    const earlier = '2026-10-26T10:00:00.000Z'
+    expect(returnedOf(after.map((t) => (t.id === back.id ? { ...t, createdAt: earlier, bank: { ...t.bank!, importedAt: earlier } } : t)), rows)).toEqual([])
     // The same format as the deleted one, or a day outside its import's days: not its row.
     expect(returnedOf([...left, { ...back, bank: { ...back.bank!, source: 'historia' } }], rows)).toEqual([])
-    const elsewhere = { ...back, date: '2026-10-27', bank: { ...back.bank!, importedAt: '2026-10-30T10:00:00.000Z' } }
+    const later = '2026-10-30T10:00:00.000Z'
+    const elsewhere = { ...back, date: '2026-10-27', createdAt: later, bank: { ...back.bank!, importedAt: later } }
+    expect(returnedOf([...left, { ...elsewhere, date: back.date }], rows).map((r) => r.tx.id)).toEqual([back.id])
     expect(returnedOf([...left, elsewhere], rows)).toEqual([])
     // The inbox: one report per operation – „Usuń”.
     const items = inboxItems({

@@ -945,8 +945,9 @@ function registerIpc(): void {
   })
   handle('deleteRecords', async (collection: Collection, ids: string[], reason?: unknown) => {
     const s = writableStore()
-    // 'drop' (no version in the history) only for the imports' batches: never the user's records.
-    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
+    // 'drop' (no version in the history) only for the imports' batches: never the user's records; 'import' – the
+    // import's own deletion of operations (T334).
+    const { results, change } = await s.deleteRecords(collection, ids, reason === 'undo' ? 'undo' : reason === 'import' && collection === 'transactions' ? 'import' : reason === 'drop' && collection === 'imports' ? 'drop' : 'delete')
     sendFrom(s, change)
     return results
   })
