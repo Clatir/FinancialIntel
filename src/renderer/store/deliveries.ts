@@ -6,7 +6,7 @@
  */
 import { deliveries, type Delivery } from '@shared/calc/dock'
 import type { IctjSnapshot } from '@shared/ictj'
-import { MBANK_ACCOUNT_ID, type Transaction } from '@shared/schema'
+import { MBANK_ACCOUNT_ID, type Docking, type Transaction } from '@shared/schema'
 import { listOf, useData } from './data'
 
 type Records = ReturnType<typeof useData.getState>['records']
@@ -48,11 +48,28 @@ function coveredToOf(transactions: readonly Transaction[], covered: Readonly<Rec
 export function deliveriesFor(records: Pick<Records, 'transactions' | 'dockings'>, skipped: readonly string[], snap: IctjSnapshot, start: string | null, today: string, covered: Readonly<Record<string, string>>): Delivery[] {
   const hit = memos.find((m) => m.tx === records.transactions && m.dk === records.dockings && m.skipped === skipped && m.snap === snap && m.start === start && m.today === today && m.covered === covered)
   if (hit) return hit.list
-  const transactions = listOf(records.transactions)
-  const list = deliveries({
+  const list = deliveriesOfLists(listOf(records.transactions), listOf(records.dockings), skipped, snap, start, today, covered)
+  memos = [{ tx: records.transactions, dk: records.dockings, skipped, snap, start, today, covered, list }, ...memos].slice(0, MEMOS)
+  return list
+}
+
+/**
+ * The deliveries of these operations and dockings (no memo): a change not made yet – the preview of a bulk change
+ * (AP-38) – against the deliveries now.
+ */
+export function deliveriesOfLists(
+  transactions: readonly Transaction[],
+  dockings: readonly Docking[],
+  skipped: readonly string[],
+  snap: IctjSnapshot,
+  start: string | null,
+  today: string,
+  covered: Readonly<Record<string, string>>
+): Delivery[] {
+  return deliveries({
     entries: snap.status === 'ok' ? snap.entries : [],
     transactions,
-    dockings: listOf(records.dockings),
+    dockings,
     start,
     today,
     skipped,
@@ -62,6 +79,4 @@ export function deliveriesFor(records: Pick<Records, 'transactions' | 'dockings'
     unreadEntries: snap.unread,
     coveredTo: coveredToOf(transactions, covered)
   })
-  memos = [{ tx: records.transactions, dk: records.dockings, skipped, snap, start, today, covered, list }, ...memos].slice(0, MEMOS)
-  return list
 }

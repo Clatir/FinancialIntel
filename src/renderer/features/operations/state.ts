@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
-import { effectOf, type Effect } from '@shared/calc/effect'
-import { computeFleet } from '@shared/calc/fleet'
+import { effectOf, monthsEffectOf, noEffect, pairsLost, type Effect, type LostPair, type MonthEffect } from '@shared/calc/effect'
+import { pendingPairsOf } from '@shared/calc/dock'
+import { budgetStartOf, computeFleet } from '@shared/calc/fleet'
 import { kindUndone, unlinkedBy, withKind } from '@shared/calc/kinds'
 import { confirmedChanges } from '@shared/calc/balances'
 import { newId } from '@shared/ids'
@@ -14,6 +15,8 @@ import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KIND_LABEL, TX_KINDS, transactionS
 import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
 import { askGuard } from '../../store/guard'
 import { fleetInputNow, fleetNow } from '../../store/fleet'
+import { deliveriesFor, deliveriesOfLists } from '../../store/deliveries'
+import { useIctj } from '../../store/ictj'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
@@ -542,11 +545,21 @@ export function bulkPlan(visibleIds: readonly string[], change: BulkChange): Bul
   return plan
 }
 
+/** The preview's effect (F11, AP-38): the engine's now against with the change, the months gone by it moves, the pairs lost. */
+export interface BulkEffect extends Effect {
+  months: MonthEffect[]
+  pairs: LostPair[]
+}
+
+/** Does the preview have nothing to show? */
+export const noBulkEffect = (e: BulkEffect): boolean => noEffect(e) && !e.months.length && !e.pairs.length
+
 /**
- * What the change does to today's energy, the envelopes, the balances and the shields: the state the screens show (the
- * engine's, computed once) against the engine run with the change.
+ * What the change does to today's energy, the envelopes, the balances, the shields and the goals; the loot and the
+ * envelopes of the months it leaves (AP-38); the ICTTJ payouts losing their pair: the state the screens show (the
+ * engine's, computed once) against the engine run with the change – its pairs not docked yet as the change leaves them.
  */
-export function bulkEffect(plan: BulkPlan): Effect | null {
+export function bulkEffect(plan: BulkPlan): BulkEffect | null {
   const input = fleetInputNow()
   const now = fleetNow()
   if (!input || !now || !plan.before.length) return null
@@ -555,7 +568,26 @@ export function bulkEffect(plan: BulkPlan): Effect | null {
   const changed = new Map(plan.after.map((t) => [t.id, t]))
   const transactions = input.transactions.flatMap((t) => (gone.has(t.id) ? [] : [changed.get(t.id) ?? stripped?.get(t.id) ?? t]))
   const dockings = (input.dockings ?? []).filter((d) => !gone.has(d.transactionId))
-  return effectOf(now, computeFleet({ ...input, transactions, dockings }))
+  // The ICTTJ payouts and their pairs (T341): as now and as the change leaves them – the same list the panel Dokowanie reads.
+  const { fi, records } = useData.getState()
+  const snap = useIctj.getState().snap
+  const start = fi ? budgetStartOf(fi.settings, listOf(records.balances), now.today) : null
+  const ictj = fi && snap.status === 'ok' && snap.entries.length && start && start <= now.today
+  const deliveriesBefore = ictj ? deliveriesFor(records, fi.settings.ictj.skipped, snap, start, now.today, fi.settings.import.coveredTo) : []
+  const deliveriesAfter = ictj ? deliveriesOfLists(transactions, dockings, fi.settings.ictj.skipped, snap, start, now.today, fi.settings.import.coveredTo) : []
+  const after = computeFleet({ ...input, transactions, dockings, ...(ictj ? { pendingPairs: pendingPairsOf(deliveriesAfter) } : {}) })
+  return {
+    ...effectOf(now, after),
+    months: monthsEffectOf(now, after, {
+      categories: input.settings.categories,
+      plans: input.months ?? [],
+      containers: input.containers,
+      transactionsBefore: input.transactions,
+      transactionsAfter: transactions,
+      changed: [...plan.before, ...plan.after]
+    }),
+    pairs: pairsLost(deliveriesBefore, deliveriesAfter)
+  }
 }
 
 /** The fields a change set (F11): „Cofnij” takes back these, while they are still the ones set (B66). */

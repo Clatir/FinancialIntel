@@ -2951,3 +2951,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i ma „dopełnij ostatniej do 100 %” (`share.ts` `fillLastPercent`: ostatnia osoba dostaje 100 − suma pozostałych, z
   groszami procentów; brak przycisku, gdy pozostali mają już ponad 100 %). Kwoty innych ponad całość – bez zmian (reszta
   0 zł): ich pełność zależy od kwoty operacji, która może się jeszcze zmienić.
+- **T429** Podgląd zmiany zbiorczej – cały skutek (AP-38, AF-24, OP sp. 2, rozszerza T265): obok energii dziś, kopert
+  bieżącego miesiąca, osłon i sald – cele (`effectOf` `goals`: pieniądze celu przed i po), miniony miesiąc, z którego
+  operacje wychodzą albo do którego przychodzą, i każdy, którego łupy silnik kończy inaczej (`monthsEffectOf`: debriefing
+  z dziennika silnika przed i po – łupy i „zostało” kopert, tylko miesiące zakończone; bieżący ma swoje linie kopert) oraz
+  wypłaty i zwroty ICTTJ, które tracą parę w banku (`pairsLost`: dostawy jak panel Dokowanie – `deliveriesFor` teraz,
+  `deliveriesOfLists` ze zmianą; para przed, brak operacji po). Silnik ze zmianą liczy pary niezadokowane z dostaw po
+  zmianie (`pendingPairsOf`), nie z obecnych. Tylko odczyt wyników silnika – reguły pieniędzy bez zmian.
