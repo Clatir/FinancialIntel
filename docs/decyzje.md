@@ -2345,9 +2345,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`saveRecords`, `deleteRecords`) przerwana w połowie – reszta z tym samym błędem, stan folderu w zestawie zmian paczki.
 - **T315** Sprawdzanie folderu w spoczynku i powrót (1.15.5, AP-1): `checkFolder` w `main/index.ts` co `FI_FOLDER_CHECK_MS`
   (domyślnie 5 s) woła `DataStore.stale()` (stat `fi.json`; przy blokadzie zapisu – próba); różnica → pełne odświeżenie w
-  `RefreshQueue`. Przejście ocenia każde odświeżenie (`folderSeen` po odświeżeniu w kolejce; po przeglądzie): powrót
-  zauważony najpierw przez obserwatora, obecność, fokus okna czy Synchronizację też daje obserwatora od nowa
-  (`watchFolder`; `DataStore.regained` liczy powroty) i wpis w logu („folder danych niedostępny” / „znów dostępny”).
+  `RefreshQueue`. Przejście ocenia każde odświeżenie (`folderSeen` po każdym odświeżeniu w kolejce, także nieudanym –
+  `finally`; po przeglądzie): powrót zauważony najpierw przez obserwatora, obecność, fokus okna czy Synchronizację też
+  daje obserwatora od nowa (`watchFolder`; `DataStore.regained` liczy powroty – tylko odświeżenia, które folder
+  przeczytały, T335) i wpis w logu („folder danych niedostępny” / „znów dostępny”).
   Okno: przejście `available` false → true w `applyChange` → `resumeSaves` – wszystko, co czekało, zapisane od razu
   (`saveBatch` po kolekcjach; bez wpisów czekających na decyzję z drugiego komputera i wpisów nowszej wersji). W czasie
   niedostępności folder jest tylko do odczytu jak dotąd: nowe zmiany odrzucane z powodem (`UNAVAILABLE_NOTICE`), zapisane
@@ -2356,12 +2357,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `writeProbe` – `access(fi.json, W_OK)` (na Windows atrybut „tylko do odczytu” pliku, bez ponawiania), potem `fi.json`
   otwarty do zapisu (`r+`) i zamknięty bez zapisu (brak prawa zapisu – uprawnienia, udział albo dysk tylko do odczytu);
   EPERM / EACCES / EROFS → `writeBlocked` (`FOLDER_NOT_WRITABLE_MESSAGE`) i `status.readOnly` – bez migracji i bez
-  połowicznego startu kreatora. Po przeglądzie: otwarcie ponawiane jak każdy zapis (`withRetry` – chwilowa blokada
-  antywirusa albo OneDrive to nie tryb tylko do odczytu), zamknięcie o niczym nie decyduje, a próba nie zakłada żadnego
-  pliku w korzeniu (wcześniej `.fi-zapis.tmp-…` przy każdym otwarciu – wpis w koszu online OneDrive, przy blokadzie
-  usuwania plik zostawał). Nie wykryje folderu, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie
-  uprawnienia) – wtedy błąd mówi sam zapis. W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i
-  `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
+  połowicznego startu kreatora. Po przeglądzie: otwarcie ponawiane (chwilowa blokada antywirusa albo OneDrive to nie
+  tryb tylko do odczytu; przy otwarciu i powrocie kilka prób, w spoczynku jedna – T336), zamknięcie o niczym nie
+  decyduje, a próba nie zakłada własnego pliku (wcześniej `.fi-zapis.tmp-…` w korzeniu przy każdym otwarciu – wpis
+  w koszu online OneDrive, przy blokadzie usuwania plik zostawał). Zakładanie nowych plików (każdy zapis to plik
+  tymczasowy i zamiana) sprawdza zapis obecności tego komputera w `.presence/` (`DataStoreOptions.presence` =
+  `writeOwnPresence` w `main/index.ts`; przegląd 2) – zapis, który otwarcie i tak robi (zaraz po nim `heartbeat(true)`),
+  więc folder, w którym wolno zmienić `fi.json`, a nie wolno zakładać plików (rzadkie uprawnienia), jest tylko do odczytu
+  z powodem i bez migracji, której nie da się dokończyć (wcześniej: bez banera, każdy zapis z własnym błędem, migracja
+  przerywała otwarcie). Otwarcie nieudane albo ustępujące nowszemu po próbie usuwa tę obecność (`openFolder`,
+  `finally`), chyba że ten folder jest otwarty. Telefon (lustro folderu) i testy bez `presence` – tylko `fi.json`.
+  W spoczynku sprawdzane znowu, dopóki blokada trwa. Telefon: `constants` i `open(…, 'r+')` w `mobile/node/fs.ts`. Kreator:
   podpowiedź „Uruchom budżet” podaje powód folderu, nie brakujące kroki.
 - **T317** „Zapisano.” dopiero po zapisie (1.15.5, AP-1, AF-39, AF-75, AF-41): szybki wpis czeka na swój zapis (`writeNow`,
   najwyżej 5 s); niezapisany → `QuickResult.pending` („Wpis przyjęty, ale jeszcze niezapisany (powód) – zapisze się sam”,
@@ -2488,3 +2494,18 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   – czytaj; nieudany odczyt historii go kasuje). Import na tym komputerze czyta usunięte sam i przesuwa sprawdzenie na swój
   czas (`checkedWithImport`). Ekran Meldunków i import czytają jak dotąd. `returnedOf` przy każdej zmianie operacji ogląda
   tylko operacje kwoty usuniętej, dni i format liczy tylko dla importów kandydatów.
+- **T335** Powrót folderu dopiero po jego przeczytaniu (przegląd 2 AP-1; doprecyzowuje T315): odświeżenie, które znalazło
+  `fi.json`, ale folderu nie przeczytało (EBUSY – OneDrive dopiero sprowadza pliki), zostawia go niedostępnym (`available`
+  z powrotem false w `refreshInQueue`) – sprawdzanie w spoczynku widzi różnicę i za kilka sekund próbuje znowu;
+  `regained` podbija dopiero odświeżenie, które folder przeczytało, i to ono mówi oknu „dostępny”, a main obserwuje folder
+  od nowa. Błąd już po przeczytaniu (próba zapisu, przepisanie pliku po migracji) powrotu nie cofa – `folderSeen`
+  w `finally` kolejki i tak obserwuje folder od nowa. Wcześniej: `regained` podbite, odświeżenie padało przed
+  `folderSeen`, a następne zastawało podbitą już liczbę – zostawał stary obserwator (zmiany z drugiego komputera dopiero
+  co 5 min), okno nie wiedziało o powrocie.
+- **T336** Ile prób w próbie zapisu (przegląd 2 AP-1; doprecyzowuje T316): `fi.json` otwierany do zapisu przy otwarciu
+  folderu i przy jego powrocie najwyżej 4 razy (`PROBE_ATTEMPTS`, ok. 0,1 s czekania), w spoczynku (`stale()` co 5 s) i
+  przy odświeżeniu w kolejce, dopóki blokada trwa – raz. Wcześniej `withRetry` 8 razy (EPERM / EACCES są w nim
+  chwilowe): w folderze naprawdę tylko do odczytu ok. 1,4 s przy otwarciu, co 5 s w spoczynku i przy każdym odświeżeniu
+  w kolejce magazynu (zapisy czekały). Blokada dłuższa niż próby przy otwarciu daje baner na kilka sekund – zdejmuje go
+  następne sprawdzenie w spoczynku. Zapis obecności w próbie bez dodatkowego ponawiania: nowego pliku antywirus nie
+  trzyma, zamianę ponawia sam zapis.

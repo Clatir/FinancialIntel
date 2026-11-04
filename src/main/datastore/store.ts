@@ -153,7 +153,16 @@ export interface DataStoreOptions {
    * write's own answer is only its error.
    */
   onStatus?: (change: ChangeSet) => void
+  /**
+   * This computer's presence written in the folder (the main process's heartbeat write – T316): the write probe's check
+   * that new files can be made (temp + rename in `.presence/`), at the open and while the folder takes no writes – no
+   * file of the probe's own. Without it (the phone's mirror, tests) only fi.json is tried.
+   */
+  presence?: () => Promise<void>
 }
+
+/** The write probe's tries of fi.json at the open and at the folder's return (T316): a lock for a moment; idle – one. */
+const PROBE_ATTEMPTS = 4
 
 /**
  * 'partial' = FI's folders without fi.json (OneDrive has not synced it yet – never initialize over it);
@@ -381,8 +390,9 @@ export class DataStore {
   private tracker: ReadTracker | null = null
   /** How the last open went (logged by the main process). */
   loadStats: LoadStats | null = null
-  private readonly opts: Required<Omit<DataStoreOptions, 'backupDir' | 'log' | 'onStatus'>> & { backupDir: string | null }
+  private readonly opts: Required<Omit<DataStoreOptions, 'backupDir' | 'log' | 'onStatus' | 'presence'>> & { backupDir: string | null }
   private readonly onStatus?: (change: ChangeSet) => void
+  private readonly presence?: () => Promise<void>
   fi!: SettingsFile
   private folderReadOnlyReason: string | null = null
   /** The folder takes no writes (AF-14 – the write probe at the open, tried again while so): why; null = it does. */
@@ -390,7 +400,7 @@ export class DataStore {
   private folderSchemaVersion = SCHEMA_VERSION
   private available = true
   /**
-   * How many times a refresh found the folder back after it was gone (AP-1): whichever refresh sees it first, the main
+   * How many times a refresh found the folder back after it was gone (AP-1): whichever refresh reads it first, the main
    * process watches the folder anew (a watcher may have followed the folder renamed away, or failed with the drive).
    */
   regained = 0
@@ -409,6 +419,7 @@ export class DataStore {
       backupDir: opts.backupDir ?? null
     }
     this.onStatus = opts.onStatus
+    this.presence = opts.presence
     this.history = new RecordHistory(root, this.opts.machineName, this.opts.now, (e) => opts.log?.('warn', 'history snapshot failed', e))
   }
 
@@ -534,7 +545,7 @@ export class DataStore {
         this.applySettingsState()
         // A folder that takes no writes (the attribute „tylko do odczytu”, no right to write – AF-14) is read-only from
         // the start: no half-written step (the wizard's start) and no migration that cannot be finished.
-        this.writeBlocked = this.folderReadOnlyReason ? null : await this.writeProbe()
+        this.writeBlocked = this.folderReadOnlyReason ? null : await this.writeProbe(PROBE_ATTEMPTS)
         tracker.step = 'migrate'
         const tm = performance.now()
         if (!this.folderReadOnlyReason && !this.writeBlocked) await this.migrateIfNeeded()
@@ -586,18 +597,21 @@ export class DataStore {
    * Whether the folder takes writes (AF-14, T316): fi.json without the attribute „tylko do odczytu” (on Windows that
    * attribute lets new files be made beside it, but not a file replaced – one look, never retried), then fi.json opened
    * for writing and closed, nothing written: no right to write (permissions, a share or a drive read-only) refuses it.
-   * No file is made in the folder (on OneDrive each would go to its online recycle bin), so none can be left behind. The
-   * open is retried like every write (`withRetry`): an antivirus or OneDrive holding fi.json a moment is no read-only
-   * folder. Null = it takes writes; else why not. Any other failure (the folder gone, a file held for long) is no
-   * read-only folder – the write itself says it.
+   * Then new files (every write is temp + rename): this computer's presence written – a write the open makes anyway, so
+   * the probe makes no file of its own (on OneDrive each would go to its online recycle bin) and none can be left behind.
+   * fi.json's open is tried `attempts` times – at the open and the return a few (an antivirus or OneDrive holding it a
+   * moment is no read-only folder), idle once (a folder read-only for real, every few seconds – T336); the presence
+   * write retries its rename as every write. Null = it takes writes; else why not. Any other failure (the folder gone,
+   * a file held for long) is no read-only folder – the write itself says it.
    */
-  private async writeProbe(): Promise<string | null> {
+  private async writeProbe(attempts = 1): Promise<string | null> {
     const fi = join(this.root, SETTINGS_FILE)
     try {
       await fs.access(fi, fsConstants.W_OK)
-      const handle = await withRetry(() => fs.open(fi, 'r+'))
+      const handle = await withRetry(() => fs.open(fi, 'r+'), attempts)
       // Its close says nothing about the folder.
       await handle.close().catch(() => undefined)
+      await this.presence?.()
       return null
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code
@@ -1176,12 +1190,21 @@ export class DataStore {
       // Keep everything in memory; the folder may come back (pendrive, network drive).
       return wasAvailable ? this.diff(this.buildViews(), false, 'external') : null
     }
+    let settingsChanged: boolean
+    try {
+      const settingsBefore = this.files.get(SETTINGS_FILE)?.hash
+      if (!paths || !wasAvailable || !(await this.rescanPaths(paths))) await this.rescanAll(listing)
+      settingsChanged = this.files.get(SETTINGS_FILE)?.hash !== settingsBefore && this.refreshSettingsState()
+    } catch (e) {
+      // Back but not read (OneDrive still bringing its files – EBUSY): still away, so the idle check tries again in a few
+      // seconds and the refresh that reads it is the one that finds it back – the window told, the folder watched anew
+      // (T335). Never back without that: no later refresh would see the return.
+      if (!wasAvailable) this.available = false
+      throw e
+    }
     if (!wasAvailable) this.regained++
-    const settingsBefore = this.files.get(SETTINGS_FILE)?.hash
-    if (!paths || !wasAvailable || !(await this.rescanPaths(paths))) await this.rescanAll(listing)
-    const settingsChanged = this.files.get(SETTINGS_FILE)?.hash !== settingsBefore && this.refreshSettingsState()
     // Back after a while away, or not taking writes before (AF-14): whether it takes them now.
-    if (!wasAvailable || this.writeBlocked) this.writeBlocked = this.folderReadOnlyReason ? null : await this.writeProbe()
+    if (!wasAvailable || this.writeBlocked) this.writeBlocked = this.folderReadOnlyReason ? null : await this.writeProbe(wasAvailable ? 1 : PROBE_ATTEMPTS)
     if (!this.folderReadOnlyReason && !this.writeBlocked && this.files.migratedPaths.size) {
       const migrated = [...this.files.migratedPaths].map((rel) => this.files.get(rel)!)
       await this.backupOriginals(migrated)

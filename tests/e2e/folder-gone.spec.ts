@@ -2,13 +2,25 @@
 import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test, type ElectronApplication } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { warsawNow } from '../../src/shared/calc/dates'
 import { launch, withMainLog } from './app'
 import { records } from './files'
 import { seedFolder, writeRecords, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
+
+/**
+ * Operacje by Ctrl+2 – once the budget is on screen: the shortcuts wait for the folder's data (`phase` 'ready'), so one
+ * pressed while it still opens (a slow start under load) is lost and the test stays on Mostek. Pressed again until there.
+ */
+async function toOperations(page: Page): Promise<void> {
+  await expect(page.getByTestId('page-bridge')).toBeVisible({ timeout: 30_000 })
+  await expect(async () => {
+    await page.keyboard.press('Control+2')
+    await expect(page.getByTestId('page-operations')).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 20_000 })
+}
 
 /** A folder renamed from outside; Windows may hold it a moment (an antivirus, the indexer). */
 async function renameRetrying(from: string, to: string): Promise<void> {
@@ -43,7 +55,7 @@ test('folder danych znika w trakcie pracy: baner „niedostępny”, nic nie pow
   const away = `${dataDir}-odlaczony`
   const { app, page, userData } = await launch({ dataDir, env: { FI_FOLDER_CHECK_MS: '400' } })
   try {
-    await page.keyboard.press('Control+2')
+    await toOperations(page)
     await page.getByTestId('operation-row').filter({ hasText: 'Lody Grycan' }).click()
     // The change typed just before the folder goes: its write comes after it (the autosave held back a moment).
     await page.evaluate(() => ((globalThis as { __FI_SAVE_DELAY__?: number }).__FI_SAVE_DELAY__ = 2500))
@@ -96,7 +108,7 @@ test('folder z powrotem zauważony przez inne odświeżenie niż sprawdzanie w s
   // The idle check never comes in this test: the folder's going and return seen by other refreshes (Synchronizacja).
   const { app, page } = await launch({ dataDir, env: { FI_FOLDER_CHECK_MS: '600000' } })
   try {
-    await page.keyboard.press('Control+2')
+    await toOperations(page)
     await expect(page.getByTestId('operation-row').filter({ hasText: 'Lody Grycan' })).toBeVisible()
     await renameRetrying(dataDir, away)
     await page.evaluate('window.fi.rescan()')

@@ -455,6 +455,14 @@ async function closeStore(): Promise<void> {
   await clearPresence(closing.root, machineName).catch(() => undefined)
 }
 
+/**
+ * This computer's presence in `root`, as the heartbeat writes it – also the write probe's check that new files can be
+ * made at a folder's open (`DataStoreOptions.presence`, T316).
+ */
+function writeOwnPresence(root: string): Promise<void> {
+  return writePresence(root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null)
+}
+
 async function heartbeat(force = false): Promise<void> {
   tellInUse()
   const s = store
@@ -463,7 +471,7 @@ async function heartbeat(force = false): Promise<void> {
     // In use: every minute; only in the tray: every 5 minutes – OneDrive is not woken all night for it (N20).
     if (!s.status().readOnly && (force || inUseNow() || Date.now() - presenceWrittenAt >= TRAY_PRESENCE_MS)) {
       presenceWrittenAt = Date.now()
-      await writePresence(s.root, machineName, app.getVersion(), activeAt ? new Date(activeAt).toISOString() : null).catch(() => undefined)
+      await writeOwnPresence(s.root).catch(() => undefined)
     }
     // Another folder opened meanwhile (B116): nothing of the closed one goes on – its presence cleared stays cleared; the
     // same folder opened again keeps the presence its new store wrote.
@@ -712,7 +720,8 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       onStatus: (change) => {
         log('warn', `folder danych niedostępny przy zapisie: ${target}`)
         sendFrom(created, change)
-      }
+      },
+      presence: () => writeOwnPresence(target)
     })
     next = created
     step = 'list'
@@ -741,15 +750,17 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
     const queue = new RefreshQueue(async (paths) => {
       // Closing: no rescan before the last writes (B43); another folder opened meanwhile: nothing to read here.
       if (store !== opened || windowClosing) return
+      const was = opened.status().available
+      const regained = opened.regained
       try {
-        const was = opened.status().available
-        const regained = opened.regained
         // A refresh finishing after another folder opened is that folder's no more (B31).
         sendFrom(opened, await opened.refresh(paths))
-        folderSeen(opened, queue, was, regained)
       } catch (e) {
         log('error', 'refresh failed', e)
         throw e
+      } finally {
+        // Also after a failure past the return (the write probe, a migrated file's rewrite): watched anew all the same.
+        folderSeen(opened, queue, was, regained)
       }
     })
     refreshes = queue
@@ -799,6 +810,9 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
   } finally {
     clearInterval(ticker)
     if (opening === controller) opening = null
+    // Failed or given way after its write probe (T316): no presence of this computer left in a folder it has not open.
+    const probed = next?.root
+    if (probed && store !== next && store?.root !== probed) void clearPresence(probed, machineName).catch(() => undefined)
   }
 }
 
