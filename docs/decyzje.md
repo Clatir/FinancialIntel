@@ -3516,6 +3516,16 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`conflicts.ts` `changedSince` – zapis tego komputera tuż przed decyzją, `saveFirst`, który tylko odświeżył znaczniki,
   zmianą nie jest; decyzja idzie z czasami plików, które okno zna po tym zapisie), proces główny – po skrócie treści
   pliku przy czasie, który okno podało (okno za stanem procesu – odmowa). Odmowa jest w logu (strona i czasy).
+  Dopisek (przegląd N5): każda decyzja idzie z wersją pokazaną – także „Zachowaj tę wersję” i zbiorcze „Zaakceptuj
+  nowsze” (zmienia zdanie „bez wersji okna”). Okno zapamiętuje wersje z chwili kliknięcia (karta, lista kart), po
+  `saveFirst` porównuje je po treści z tym, co zna teraz (`conflicts.ts` `seenFor`, `newestOnShown`): strona zmieniona
+  w trakcie zapisu (watcher przyniósł nowszą kopię) – odmowa w oknie („Jedna z wersji zmieniła się w trakcie… wybierz od
+  nowa”, `CONFLICT_CHANGED_TEXT`; karta pokazuje już nową wersję), inaczej decyzja z czasami po zapisie i odmowa procesu
+  głównego jak dla „Scal…” (`resolveConflicts` z `asOf` każdej pozycji). Zbiorczo „nowsza” wybierana jest na wersjach
+  pokazanych; grupa kopii jednego pliku ze zmienioną (albo zniknięta) pozycją zostaje cała dla użytkownika, odmowa
+  w procesie głównym też zostawia resztę grupy („Pozostawione bez zmian…”); oryginał przepisany zachowaną kopią tej samej
+  paczki liczy się z czasem po tym zapisie (`own`). Zmiana z zewnątrz z odmowy idzie do okna osobno, po zapisach paczki
+  wysłanych jako zmiana tego komputera (`beforeRefusal`) – własny zapis nigdy nie przychodzi jako cudzy.
 - **T432** Nowy komputer (AP-28, US.1, US.13, US.31, SW sp. 8): panele ustawień zapisanych w `config.json` mają jeden
   znak „tylko ten komputer” (`MachineOnly` – rozmiar, prywatność kwot, szybki wpis, powiadomienia, dźwięki, ICTTJ: folder
   i program, pliki z mBanku, bieżący i ostatnie foldery, zasobnik i start, aktualizacje, token). Pierwsze otwarcie
@@ -3541,7 +3551,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   są po ścieżce exe) – wpis o tej samej nazwie innej kopii zostaje; stare wpisy tego exe pod inną nazwą (B52) – tylko przy
   zmianie ustawienia, po zapisie własnego. macOS: zapis przy zmianie albo przy włączonym. Do sprawdzenia w maszynie: dwie
   kopie (zainstalowana i przenośna) dzielą `config.json`, a wpisy mają różne nazwy – wyłączenie w jednej nie usuwa wpisu
-  drugiej.
+  drugiej. Dopisek (przegląd N5 – **zmienia zdanie** „start aplikacji i późny odczyt `config.json` nigdy niczego nie
+  usuwają”): wpis w systemie odpowiada przełącznikowi. Zmiana przełącznika stosuje się do systemu i zasobnika od razu,
+  przed zapisem `config.json` (`config.ts` `changeTray`) – zapis odrzucony (plik zajęty, ponawiany – T434) nie zostawia
+  wpisu innego niż ustawienie; okno pokazuje ustawienie, które działa, z komunikatem „działają, a zapis ponawia się sam”
+  (`store/tray.ts`, jak `setMachinePrefs`). Start aplikacji i późny odczyt przy ustawieniu wyłączonym usuwają wpis tego
+  exe pod jego własną nazwą (tylko taki – `launchItems` po ścieżce exe; wpis innej kopii, także o tej samej nazwie, i
+  druga wersja instalator / portable z inną nazwą zostają); stare wpisy pod inną nazwą (B52) dalej tylko przy zmianie.
+  Zapis, który nie zdążył przed wyjściem, przepada jak każda zmiana `config.json` – następny start ustawia system według
+  pliku, więc ekran i system się zgadzają.
 - **T434** „Co nowego” bez sieci, kopie po zmianie folderu kopii, zapis `config.json` ponawiany (AP-28, AF-40, IN.26,
   DA.14, DA.11, US.33): okno ma wbudowane 15 najnowszych sekcji CHANGELOG (`electron.vite.config.mts` `__FI_CHANGELOG__`,
   `releaseNotes.ts` `notesOf`) – panel „Co nowego w wersji X” pokazuje się z nich, gdy notatek z GitHuba nie ma
@@ -3551,7 +3569,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Ostatnia kopia” i dają się odzyskać (`listedBackup` czyta tylko kopie z folderów listy); powrót do folderu zdejmuje go
   z listy; nieudany zapis ustawienia cofa folder kopii. Tekst panelu mówi o 5 ostatnich kopiach ręcznych. Nieudany zapis
   `config.json` (plik zajęty) ponawia się sam co 5 s z najnowszym stanem, aż się uda (`ConfigStore.retryLater`) –
-  komunikat w oknie to mówi.
+  komunikat w oknie to mówi. Dopisek (przegląd N5): ustawienia ważne dopiero po zapisie (`config.ts` `ONLY_ONCE_SAVED`:
+  folder kopii i lista wcześniejszych, folder i program ICTTJ, token GitHub, sprawdzanie i pobieranie aktualizacji) przy
+  odrzuconym zapisie wracają w pamięci do tego, co ma `config.json` (pole zmienione w trakcie zostaje przy nowszej
+  wartości), z komunikatem „config.json jest zajęty… zmiana nie została zapamiętana. Spróbuj ponownie” (`ConfigNotSavedError`) –
+  ponowiony zapis nie przywraca ich po restarcie, a ekran (folder kopii w magazynie, odczyt ICTTJ, panel tokenu,
+  przełączniki aktualizacji) zostaje przy zapamiętanych. Reszta działa od razu i zapisuje się później: zasobnik i start
+  z Windows (T433), preferencje komputera, okno, folder danych i plików z mBanku, pobrana aktualizacja (gotowa do
+  instalacji, a nie „nie udało się pobrać”, gdy tylko `config.json` odmówił). Zmiany z chwili nieczytelnego `config.json` (`held`, B114) zostają, aż zapis je
+  weźmie: odczyt, po którym zapis jest odrzucony, kończy się (ustawienia działają, odczyt nie jest ponawiany), zmiany
+  idą do ponawianego zapisu, a kolejny odczyt nakłada je na plik jeszcze raz (także zmiany zrobione po odczycie, do
+  udanego zapisu) – wcześniej odczyt je zdejmował i przepadały z nieudanym zapisem.
 - **T435** Wpis ICTTJ z pierwszych dni budżetu (1.15.9, N5 – AP-26, AF-47 = C15, DO sp. 2; D72, T63; **zmienia zdanie T162**
   „bez Portfela XTB dla okna zaczętego przed startem”): „sprzed startu” tylko wpis z datą przed startem (`deliveries`:
   `!counted(e.date)`); wpis od startu, którego okno pary (−3 dni) zaczyna się przed startem, czeka na import jak każdy

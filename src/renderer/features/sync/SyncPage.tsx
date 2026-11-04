@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSelection, type Selection } from '../../lib/selection'
 import type { ConflictEntry, HistoryEntry, HistoryKind, Problem } from '@shared/api'
 import { COLLECTIONS, type Collection } from '@shared/paths'
-import { changedSince, conflictSubject, newerSide, newestResolutions } from '@shared/conflicts'
+import { CONFLICT_CHANGED_TEXT, changedSince, conflictSubject, newerSide, newestOnShown, seenFor } from '@shared/conflicts'
 import { chooser, deepEqual, diffRecords, fieldLabel, formatValue, merge3, pathKey, readableChanges, valueAt, type MergeConflict, type Side } from '@shared/merge'
 import { plnText, signedPln } from '../../components/fields'
 import { plDateTime } from '../../lib/format'
@@ -193,14 +193,18 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
   // Which record it is (AP-27): counterparty, date and amount – the file name only on hover.
   const subject = conflictSubject(c, { amount: zl, signed: (g) => `${signedPln(g)} zł`, names })
   const resolve = async (keep: 'canonical' | 'copy') => {
+    // The versions the card shows at the click (AP-27, T431) – the decision is about them.
+    const shown = c
     setBusy(true)
     try {
       // Unsaved local edits would be written over the version kept here (e.g. a kept copy of fi.json).
       await saveFirst('rozstrzygnięcie konfliktu')
-      // The versions this window knows after the flush (its own save is no surprise – AP-27): a file changed on the disk
-      // since (OneDrive, the watcher not there yet) refuses in main, and the card shows the new one.
-      const now = useData.getState().conflicts.find((x) => x.id === c.id) ?? c
-      await api.resolveConflict(c.id, keep, { canonical: now.canonical.mtimeMs, copy: now.copy.mtimeMs })
+      // A side whose content moved on during the flush (OneDrive's copy the watcher brought meanwhile) refuses here – the
+      // card shows it now; one only stamped anew by this save goes with the file times this window knows after it, and
+      // main refuses a file changed on the disk since (the watcher not there yet).
+      const seen = seenFor(shown, useData.getState().conflicts.find((x) => x.id === shown.id))
+      if (!seen) return toast(CONFLICT_CHANGED_TEXT, 'error', 8000)
+      await api.resolveConflict(shown.id, keep, seen)
       toast('Konflikt rozstrzygnięty – odrzucona wersja jest w historii wpisu (i w Koszu).', 'success')
     } catch (e) {
       toast(errorMessage(e), 'error', 6000)
@@ -384,14 +388,17 @@ function DeletedRecords() {
 /**
  * "Zaakceptuj nowsze" for the chosen conflicts or all: the version changed later of each (`newestResolutions` –
  * several copies of one file decided together), in one request (W23); the other versions go to the bin as with the
- * buttons.
+ * buttons. Decided on the versions the cards showed (AP-27, T431 – `newestOnShown`): one changed since is left for the
+ * user, here or in main.
  */
 function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictEntry[]; sel: Selection; busy: boolean; setBusy: (b: boolean) => void }) {
   const chosen = conflicts.filter((c) => sel.selected.has(c.id))
   const readOnly = useFolderLocked()
   const run = async (ids: string[]) => {
+    // The versions the cards show at the click: the newest of each is chosen on them.
+    const shown = conflicts
     setBusy(true)
-    const plan = newestResolutions(conflicts, ids)
+    let plan: ReturnType<typeof newestOnShown> = { resolutions: [], skipped: [], changed: [] }
     let done = 0
     let untouched = 0
     const errors = new Set<string>()
@@ -402,22 +409,28 @@ function BulkConflicts({ conflicts, sel, busy, setBusy }: { conflicts: ConflictE
         toast(errorMessage(e), 'error', 7000)
         return
       }
-      // The newest copy of a file could not be kept: the older ones of that file stay (nothing newer is binned).
-      for (const r of await api.resolveConflicts(plan.resolutions)) {
-        if (r.skipped) untouched++
-        else if (r.error) errors.add(r.error)
-        else done++
-      }
+      // After the flush: a version the watcher brought meanwhile is never decided unseen.
+      plan = newestOnShown(shown, useData.getState().conflicts, ids)
+      // The newest copy of a file could not be kept (or a version changed): the others of that file stay.
+      if (plan.resolutions.length)
+        for (const r of await api.resolveConflicts(plan.resolutions)) {
+          if (r.skipped) untouched++
+          else if (r.error) errors.add(r.error)
+          else done++
+        }
     } catch (e) {
       errors.add(errorMessage(e))
     } finally {
       setBusy(false)
       sel.drop()
     }
-    const skipped = plan.skipped.length ? ` Nieczytelna wersja – wybierz ręcznie: ${plan.skipped.length}.` : ''
-    const left = untouched ? ` Pozostawione bez zmian (nie udało się zachować nowszej kopii tego pliku): ${untouched}.` : ''
-    if (errors.size) toast(`Rozstrzygnięto ${done} z ${ids.length}. ${[...errors].join(' ')}${left}${skipped}`, 'error', 8000)
-    else toast(`Zaakceptowano nowsze wersje: ${done} – odrzucone są w historii wpisów (i w Koszu).${skipped}`, plan.skipped.length ? 'info' : 'success', plan.skipped.length ? 6000 : 3200)
+    const skipped = plan.skipped.length ? `Nieczytelna wersja – wybierz ręcznie: ${plan.skipped.length}.` : ''
+    const parts = [...errors]
+    if (plan.changed.length) parts.push(`Zmieniły się w trakcie (np. OneDrive przyniósł nowszą kopię) – nic w nich nie zapisano, sprawdź wersje jeszcze raz i wybierz od nowa: ${plan.changed.length}.`)
+    if (untouched) parts.push(`Pozostawione bez zmian (nowszej wersji tego pliku nie udało się zachować albo zmieniła się w trakcie): ${untouched}.`)
+    if (skipped) parts.push(skipped)
+    if (errors.size || plan.changed.length) toast(`Rozstrzygnięto ${done} z ${ids.length}. ${parts.join(' ')}`, 'error', 8000)
+    else toast(`Zaakceptowano nowsze wersje: ${done} – odrzucone są w historii wpisów (i w Koszu).${skipped ? ` ${skipped}` : ''}`, skipped ? 'info' : 'success', skipped ? 6000 : 3200)
   }
   return (
     <div className="flex flex-wrap items-center gap-2 border border-line bg-panel px-2.5 py-1.5" data-testid="conflicts-bulk">

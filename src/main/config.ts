@@ -1,7 +1,7 @@
 // adapted from ICTTJ src/main/config.ts @ 84a8339
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
-import type { MachineConfig } from '@shared/api'
+import type { MachineConfig, TrayPrefs } from '@shared/api'
 import { DEFAULT_UPDATE_PREFS, type PendingUpdate } from '@shared/update'
 import { DEFAULT_MACHINE_PREFS, altGrConflict, machinePrefsFrom } from '@shared/machine'
 import { withRetry, writeFileAtomic } from './datastore/atomic'
@@ -84,8 +84,27 @@ function loadUpdates(raw: unknown): MachineConfig['updates'] {
   }
 }
 
+/**
+ * The settings that count only once written (AP-28, T434): chosen in a dialog or a field and confirmed – the folder of
+ * backups, ICT Trade Journal's folder and program, the GitHub token, the update checks. A refused write of config.json
+ * takes them back in memory and says so (`ConfigNotSavedError`): the screen, the memory and the next start agree, the
+ * user tries again. Every other setting works at once and is written later (US.33 – the tray and the start with
+ * Windows, the preferences, the window, the folder of data and of mBank's files, a downloaded update).
+ */
+const ONLY_ONCE_SAVED: ReadonlyArray<readonly string[]> = [['backupDirOverride'], ['backupDirsBefore'], ['ictj'], ['updates', 'token'], ['updates', 'tokenEncrypted'], ['updates', 'prefs']]
+
+/** A change of `ONLY_ONCE_SAVED` refused by config.json and taken back: the window says it was not saved. */
+export class ConfigNotSavedError extends Error {
+  constructor(cause: unknown) {
+    super(`Nie udało się zapisać ustawień tego komputera – config.json jest zajęty (np. przez antywirus albo program kopii), więc zmiana nie została zapamiętana. Spróbuj ponownie za chwilę. (${cause instanceof Error ? cause.message : String(cause)})`, { cause })
+    this.name = 'ConfigNotSavedError'
+  }
+}
+
 export class ConfigStore {
   private config: MachineConfig = { ...DEFAULTS }
+  /** The settings as config.json has them (read or last written): what a change refused for good goes back to. */
+  private saved: MachineConfig = { ...DEFAULTS }
   /** The quick entry's shortcut config.json had, replaced by the default: it took a Polish letter (B29); null = none. */
   replacedShortcut: string | null = null
   /**
@@ -98,6 +117,7 @@ export class ConfigStore {
   /**
    * The changes made while config.json could not be read (B114), field by field: put onto the file's settings once it is
    * read – a choice made meanwhile (an update downloaded, the tray, a folder) is kept, never the defaults beside it.
+   * Kept till a write of them lands (AP-28): a write refused after the read loses none of them.
    */
   private held: Array<[string[], unknown]> = []
   /** Writes are queued and always write the latest state, so an older snapshot never lands last. */
@@ -125,6 +145,7 @@ export class ConfigStore {
       // No file: the first start on this computer. Any other error: the file is there – never replaced by defaults.
       this.loadFailed = (e as NodeJS.ErrnoException).code === 'ENOENT' ? null : e instanceof Error ? e.message : String(e)
       this.config = { ...DEFAULTS }
+      this.saved = this.config
       return this.config
     }
     this.loadFailed = null
@@ -138,6 +159,7 @@ export class ConfigStore {
       await fs.rename(this.file, join(this.userDataDir, aside)).catch(() => undefined)
       this.setAside = aside
       this.config = { ...DEFAULTS }
+      this.saved = this.config
       return this.config
     }
     const shortcut = (raw.prefs as { quickShortcut?: unknown } | undefined)?.quickShortcut
@@ -153,12 +175,15 @@ export class ConfigStore {
       importDir: typeof raw.importDir === 'string' && raw.importDir.length > 0 && raw.importDir.length < 1000 ? raw.importDir : null,
       backupDirsBefore: loadBackupDirsBefore(raw.backupDirsBefore)
     }
+    this.saved = this.config
     if (this.held.length) {
-      const held = this.held
-      this.held = []
       let next = this.config
-      for (const [path, value] of held) next = withValueAt(next, path, value) as MachineConfig
-      await this.update(next)
+      for (const [path, value] of this.held) next = withValueAt(next, path, value) as MachineConfig
+      this.config = next
+      // Read, but refused for writing (an antivirus holds it – AP-28): the changes work and stay held till a write takes
+      // them – the retry writes them, a read again puts them on the file's settings once more, never the file's old
+      // values over them. Before, they were dropped first and lost with the failed write.
+      await this.queueWrite().catch(() => this.retryLater())
     }
     return this.config
   }
@@ -176,14 +201,38 @@ export class ConfigStore {
       this.held.push(...leafChanges(before, this.config))
       return this.config
     }
+    // Changes held from before the read and not written yet (AP-28): this one joins them, in order.
+    if (this.held.length) this.held.push(...leafChanges(before, this.config))
     try {
       await this.queueWrite()
     } catch (e) {
-      // config.json held for a while (an antivirus, a backup tool – US.33): the settings work, and are written later.
+      // config.json held for a while (an antivirus, a backup tool – US.33): the settings work, and are written later –
+      // but for those that count only once saved, taken back.
+      const undone = this.undo(before, patch)
       this.retryLater()
+      if (undone) throw new ConfigNotSavedError(e)
       throw e
     }
     return this.config
+  }
+
+  /**
+   * The fields of `patch` that count only once written (`ONLY_ONCE_SAVED`) taken back in memory after a refused write
+   * (AP-28, T434): the window says the change was not saved, so the retried write never brings it back after a restart.
+   * Back to what config.json has (or a change held for it from while it was not readable) – never to an earlier change
+   * refused too; a field changed again meanwhile keeps the newer value. True = something was taken back.
+   */
+  private undo(before: MachineConfig, patch: Partial<MachineConfig>): boolean {
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+    let undone = false
+    for (const [path, value] of leafChanges(before, { ...before, ...patch })) {
+      if (!ONLY_ONCE_SAVED.some((p) => p.every((k, i) => path[i] === k)) || !same(valueAt(this.config, path), value)) continue
+      this.held = this.held.filter(([p, v]) => !(same(p, path) && same(v, value)))
+      const held = this.held.filter(([p]) => same(p, path)).at(-1)
+      this.config = withValueAt(this.config, path, held ? held[1] : valueAt(this.saved, path)) as MachineConfig
+      undone = true
+    }
+    return undone
   }
 
   /** The latest settings written, after the writes queued before. */
@@ -191,8 +240,13 @@ export class ConfigStore {
     const write = this.writing.then(async () => {
       if (this.writeDelayMs) await new Promise((r) => setTimeout(r, this.writeDelayMs))
       await fs.mkdir(this.userDataDir, { recursive: true })
+      // The held changes in this state; those made after it wait for their own write.
+      const held = this.held.length
+      const state = this.config
       // This computer's settings (userData): no data folder's file.
-      await writeFileAtomic(this.file, `${JSON.stringify(this.config, null, 2)}\n`, null)
+      await writeFileAtomic(this.file, `${JSON.stringify(state, null, 2)}\n`, null)
+      this.saved = state
+      this.held.splice(0, held)
       if (this.retryTimer) clearTimeout(this.retryTimer)
       this.retryTimer = null
     })
@@ -224,6 +278,30 @@ export class ConfigStore {
   }
 }
 
+export type TrayPatch = Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>
+
+/**
+ * The tray's settings changed here (AP-28, T433): in effect at once – the start with the system and the icon, `apply` –
+ * whether config.json takes them now or later. Before, a refused write (US.33) threw before the system's entry was
+ * changed, while the setting in memory and the retried write said otherwise: switched off, the app kept starting with
+ * Windows. `login` = the start with the system chosen here (only that writes its entry); a failed write is thrown after
+ * `apply`.
+ */
+export async function changeTray(config: ConfigStore, patch: TrayPatch | undefined, apply: (tray: TrayPrefs, login: boolean) => void): Promise<TrayPrefs> {
+  const next: TrayPrefs = {
+    ...config.get().tray,
+    ...(typeof patch?.closeToTray === 'boolean' ? { closeToTray: patch.closeToTray } : {}),
+    // The start with Windows set or answered here: chosen on this computer, never asked again (N100).
+    ...(typeof patch?.launchAtLogin === 'boolean' ? { launchAtLogin: patch.launchAtLogin, autostartAsked: true } : {}),
+    ...(patch?.autostartAsked === true ? { autostartAsked: true } : {})
+  }
+  const saved = config.update({ tray: next })
+  saved.catch(() => undefined)
+  apply(next, typeof patch?.launchAtLogin === 'boolean')
+  await saved
+  return next
+}
+
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** The fields `after` changed against `before`, each with its new value (a list or a value as a whole). */
@@ -232,6 +310,13 @@ function leafChanges(before: unknown, after: unknown, path: string[] = [], out: 
     for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) leafChanges(before[k], after[k], [...path, k], out)
   } else if (JSON.stringify(before) !== JSON.stringify(after)) out.push([path, after])
   return out
+}
+
+/** The value at `path` of `obj` (undefined when not there). */
+function valueAt(obj: unknown, path: readonly string[]): unknown {
+  let v = obj
+  for (const k of path) v = isPlain(v) ? v[k] : undefined
+  return v
 }
 
 /** `obj` with `value` at `path` (objects made on the way, the rest kept). */

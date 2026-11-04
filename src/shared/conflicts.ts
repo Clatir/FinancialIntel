@@ -139,3 +139,55 @@ export function changedSince(shown: Pick<ConflictEntry, 'canonical' | 'copy'>, n
   const copy = !sameSide(shown.copy, now.copy)
   return canonical && copy ? 'both' : canonical ? 'canonical' : copy ? 'copy' : null
 }
+
+/** A decision refused: a side changed since the window showed it (AP-27, T431) – the main process and the window say it. */
+export const CONFLICT_CHANGED_TEXT = 'Jedna z wersji zmieniła się w trakcie (np. OneDrive przyniósł nowszą kopię) – nic nie zostało zapisane. Sprawdź wersje jeszcze raz i wybierz od nowa.'
+
+/** The file times of a conflict's two sides a decision goes with (the main process refuses a side changed since). */
+export interface ConflictSeen {
+  canonical: number
+  copy: number
+}
+
+const seenOf = (c: Pick<ConflictEntry, 'canonical' | 'copy'>): ConflictSeen => ({ canonical: c.canonical.mtimeMs, copy: c.copy.mtimeMs })
+
+/**
+ * The versions a decision on `shown` (what the card showed at the click) goes with after this window's own save
+ * (`saveFirst`, AP-27, T431): a side whose content moved on meanwhile – OneDrive's copy the watcher brought during the
+ * save – refuses here (null), as „Scal…” does; one only stamped anew by that save goes with its file time `now`, and
+ * the main process refuses what changed after. Gone from the window (`now` none): the times shown – the main process
+ * says it is gone.
+ */
+export function seenFor(shown: Pick<ConflictEntry, 'canonical' | 'copy'>, now: Pick<ConflictEntry, 'canonical' | 'copy'> | undefined): ConflictSeen | null {
+  if (!now) return seenOf(shown)
+  return changedSince(shown, now) ? null : seenOf(now)
+}
+
+/**
+ * „Zaakceptuj nowsze” on the versions the window showed (AP-27, T431): the newest of each is chosen on `shown` (the
+ * cards at the click, `newestResolutions`), and each resolution goes with the file times known `now` (after this
+ * window's save). A group (one original's copies, decided together) with any conflict changed in content since, or
+ * gone, is left whole for the user (`changed`) – its newest version was chosen on what is no longer there.
+ */
+export function newestOnShown(
+  shown: readonly ConflictEntry[],
+  now: readonly ConflictEntry[],
+  ids: Iterable<string>
+): { resolutions: Array<{ id: string; keep: Keep; group: string; seen: ConflictSeen }>; skipped: string[]; changed: string[] } {
+  const plan = newestResolutions(shown, ids)
+  const shownById = new Map(shown.map((c) => [c.id, c]))
+  const nowById = new Map(now.map((c) => [c.id, c]))
+  const moved = new Set<string>()
+  for (const r of plan.resolutions) {
+    const was = shownById.get(r.id)!
+    const is = nowById.get(r.id)
+    if (!is || changedSince(was, is)) moved.add(r.group)
+  }
+  const resolutions: Array<{ id: string; keep: Keep; group: string; seen: ConflictSeen }> = []
+  const changed: string[] = []
+  for (const r of plan.resolutions) {
+    if (moved.has(r.group)) changed.push(r.id)
+    else resolutions.push({ ...r, seen: seenOf(nowById.get(r.id)!) })
+  }
+  return { resolutions, skipped: plan.skipped, changed }
+}

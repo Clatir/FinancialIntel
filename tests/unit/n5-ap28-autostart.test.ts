@@ -18,10 +18,18 @@ const ctx = (patch: Partial<LoginContext>): LoginContext => ({
 const own = { name: 'Financial Intel', path: INSTALLED, args: ['--hidden'] }
 
 describe('autostart przy dwóch profilach (AP-28)', () => {
-  it('start z ustawieniem wyłączonym nie usuwa żadnego wpisu – także wpisu tego samego exe', () => {
-    expect(loginItemWrites(ctx({ want: false, changed: false, items: [own] }))).toEqual([])
+  it('start z ustawieniem wyłączonym usuwa tylko własny wpis tego exe – nigdy wpisu innej kopii ani starego pod inną nazwą', () => {
+    // The system says otherwise than the setting (a switch-off whose config.json write was refused – przegląd N5): in line.
+    expect(loginItemWrites(ctx({ want: false, changed: false, items: [own] }))).toEqual([{ openAtLogin: false, ...own }])
+    expect(loginItemWrites(ctx({ want: false, changed: false, items: [] }))).toEqual([])
     // Another copy (the lab's unpacked build) with the user's entry of the installed app in the Run key: not even asked.
     expect(loginItemWrites(ctx({ want: false, changed: false, path: LAB, items: [] }))).toEqual([])
+    // The portable copy beside the installed one (T433: another name of the entry) – the installed app's entry is not its.
+    const portable = { name: 'Financial Intel (portable)', path: 'D:\\Programy\\Financial-Intel-portable.exe' }
+    expect(loginItemWrites(ctx({ want: false, changed: false, ...portable, items: [] }))).toEqual([])
+    // An old entry of this exe under another name (B52) – only with a change of the setting.
+    const old = { name: 'app.financialintel.desktop', path: INSTALLED, args: [] }
+    expect(loginItemWrites(ctx({ want: false, changed: false, items: [old] }))).toEqual([])
   })
 
   it('profil testowy (FI_USER_DATA) nigdy nie pisze – ani przy starcie, ani po przełączeniu', () => {

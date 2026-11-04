@@ -14,7 +14,7 @@ import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
-import { ConfigStore, backupDirsAfter, earlierBackupDirsOf, publicConfig } from './config'
+import { ConfigStore, backupDirsAfter, changeTray, earlierBackupDirsOf, publicConfig, type TrayPatch } from './config'
 import { ConflictChangedError, ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError, type ConflictVersions } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { IN_USE_MS, PresenceKeeper, readOtherMachines } from './datastore/presence'
@@ -226,7 +226,10 @@ function updateTokenState(): UpdateTokenState {
   return { present: !!token, hint: token ? `…${token.slice(-4)}` : null, encrypted: config.get().updates.tokenEncrypted }
 }
 
-/** Saves (or removes) the GitHub token of this computer, encrypted when the system allows it. */
+/**
+ * Saves (or removes) the GitHub token of this computer, encrypted when the system allows it. Only once saved
+ * (`ONLY_ONCE_SAVED`, AP-28): config.json refused takes it back and says so – the token panel and the next start agree.
+ */
 async function saveUpdateToken(token: string | null): Promise<void> {
   const value = typeof token === 'string' ? token.trim() : ''
   if (value && !validUpdateToken(value)) throw new Error('Token GitHub ma niepoprawny format (litery, cyfry i „_”, np. github_pat_…).')
@@ -1072,10 +1075,11 @@ function registerIpc(): void {
     const s = writableStore()
     await conflictDecision(s, () => s.mergeConflict(id, merged, conflictVersions(seen)))
   })
-  handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
+  handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string; seen?: unknown }>) => {
     const s = writableStore()
-    const { results, change } = await s.resolveConflicts(items)
-    sendFrom(s, change)
+    // Each with the versions the window showed (AP-27, T431): a side changed since refuses that decision.
+    const { results, changes } = await s.resolveConflicts((Array.isArray(items) ? items : []).map((i) => ({ id: i.id, keep: i.keep, group: i.group, asOf: conflictVersions(i.seen) })))
+    for (const change of changes) sendFrom(s, change)
     return results
   })
   handle('trashProblemFile', async (rel: string) => {
@@ -1098,23 +1102,17 @@ function registerIpc(): void {
     if (err) throw new Error(err)
   })
   handle('trayPrefs', () => trayView())
-  handle('setTrayPrefs', async (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>) => {
-    const cur = config.get().tray
-    const next: TrayPrefs = {
-      ...cur,
-      ...(typeof patch?.closeToTray === 'boolean' ? { closeToTray: patch.closeToTray } : {}),
-      // The start with Windows set or answered here: chosen on this computer, never asked again (N100).
-      ...(typeof patch?.launchAtLogin === 'boolean' ? { launchAtLogin: patch.launchAtLogin, autostartAsked: true } : {}),
-      ...(patch?.autostartAsked === true ? { autostartAsked: true } : {})
-    }
-    await config.update({ tray: next })
-    const view = trayView()
-    // Only the setting chosen here writes the system's entry (AP-28, T433): the tray's switch or „zapytano” leaves it alone.
-    if (typeof patch?.launchAtLogin === 'boolean') applyLoginItem(view, log, true)
-    if (view.closeToTray) appTray().ensure()
-    else tray?.destroy()
-    log('info', `zasobnik: zamykaj do zasobnika ${view.closeToTray ? 'tak' : 'nie'}, z systemem ${next.launchAtLogin ? 'tak' : 'nie'}`)
-    return view
+  handle('setTrayPrefs', async (patch: TrayPatch | undefined) => {
+    // In effect before config.json's write (AP-28): a refused write (retried – US.33) never leaves the system's entry
+    // other than the setting the window shows.
+    await changeTray(config, patch, (next, login) => {
+      // Only the setting chosen here writes the system's entry (AP-28, T433): the tray's switch or „zapytano” leaves it alone.
+      if (login) applyLoginItem(next, log, true)
+      if (next.closeToTray) appTray().ensure()
+      else tray?.destroy()
+      log('info', `zasobnik: zamykaj do zasobnika ${next.closeToTray ? 'tak' : 'nie'}, z systemem ${next.launchAtLogin ? 'tak' : 'nie'}`)
+    })
+    return trayView()
   })
   handle('openLogs', async () => {
     const dir = join(app.getPath('userData'), 'logs')
@@ -1267,6 +1265,7 @@ function registerIpc(): void {
     // The backups made so far stay listed under the folder they are in (AP-28, DA.14) – never „Brak kopii.” after a change.
     const backupDirsBefore = backupDirsAfter(config.get().backupDirsBefore ?? [], s.root, before, s.backupsDir, sameDir)
     try {
+      // Taken back in memory too (AP-28, `ONLY_ONCE_SAVED`): the retried write never makes it the folder after a restart.
       await config.update({ backupDirOverride: dir, backupDirsBefore })
     } catch (e) {
       // Not remembered on this computer: the backups stay where they were.
@@ -1335,12 +1334,15 @@ function registerIpc(): void {
       if (kind === 'data') throw new Error('To folder danych Financial Intel – wskaż folder ICT Trade Journal.')
       if (kind !== 'ictj') throw new Error('W tym folderze nie ma danych ICT Trade Journal (brak pliku journal.json).')
     }
+    // Remembered first (`ONLY_ONCE_SAVED`, AP-28): a refused write of config.json takes it back and says so – the folder
+    // read stays the one the screen and the next start have.
     await config.update({ ictj: { ...config.get().ictj, dir: next } })
     log('info', `ICTTJ: folder ${next ? 'wybrany' : 'wyłączony'}`)
     return ictjSource().setDir(next)
   })
   handle('ictjProgram', () => findIctjExe(config.get().ictj.exe))
   handle('ictjPickExe', async (mode: 'pick' | 'clear') => {
+    // As the folder: a refused write takes the program back (`ONLY_ONCE_SAVED`) – the screen keeps the one remembered.
     if (mode === 'clear') await config.update({ ictj: { ...config.get().ictj, exe: null } })
     else {
       const res = await dialog.showOpenDialog(mainWindow!, {
@@ -1768,7 +1770,8 @@ app.whenReady().then(async () => {
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
   watchBankFiles()
-  // The autostart only from a config.json read (B114); a start never removes an entry, of any copy (AP-28, 03.11.2026).
+  // The autostart only from a config.json read (B114); a start removes only this exe's own entry, when switched off – never
+  // another copy's (AP-28, 03.11.2026; T433).
   if (!config.loadFailed) applyLoginItem(trayView(), log, false)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()

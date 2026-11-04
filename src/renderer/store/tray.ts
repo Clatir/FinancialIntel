@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { TrayPrefs } from '@shared/api'
 import { api } from '../lib/api'
+import { configSaveFailed } from './machine'
 
 export type TrayView = TrayPrefs & { loginSupported: boolean }
 
@@ -20,10 +21,22 @@ export function loadTrayPrefs(): Promise<void> {
   return loading
 }
 
+/**
+ * The main process applies the change – the start with Windows too – before config.json's write (AP-28, T433): a write
+ * refused (retried by itself) leaves it working, so the screen shows what this computer has now, with the reason.
+ */
 export async function setTrayPrefs(patch: Parameters<typeof api.setTrayPrefs>[0]): Promise<TrayView> {
-  const prefs = await api.setTrayPrefs(patch)
-  useTray.setState({ prefs })
-  return prefs
+  try {
+    const prefs = await api.setTrayPrefs(patch)
+    useTray.setState({ prefs })
+    return prefs
+  } catch (e) {
+    const prefs = await api.trayPrefs().catch(() => null)
+    if (!prefs) throw e
+    useTray.setState({ prefs })
+    configSaveFailed(e)
+    return prefs
+  }
 }
 
 /**
