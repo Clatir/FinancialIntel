@@ -15,6 +15,9 @@ export const dm = (date: string): string => `${date.slice(8, 10)}.${date.slice(5
 /** '2026-10-16' → '16.10.2026': the one way the app writes a date (AP-23) – never the ISO form. */
 export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
 
+/** '2027-03' → '03.2027': a month in the tables (the payoff plan, the forecast, the course, the window of changes). */
+export const plMonth = (month: string): string => `${month.slice(5, 7)}.${month.slice(0, 4)}`
+
 const two = (n: number) => String(n).padStart(2, '0')
 
 /** The day of a moment in the computer's time as 'RRRR-MM-DD' ('' – none): the same day `plDateTime` writes. */

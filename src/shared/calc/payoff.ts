@@ -93,7 +93,7 @@ export interface PayoffPlan {
   debts: PayoffResult[]
   /** The month the last loan is paid off; null – not all within the plan. */
   end: string | null
-  /** Interest together – of the loans with a rate. */
+  /** Interest together – of the loans with a rate; a plan never ending (`end` null) – up to its last month, no total. */
   interest: number
   /** Paid together. */
   paid: number
@@ -190,9 +190,9 @@ function plan(input: PayoffInput, principal: Readonly<Record<string, number>>, v
   const byId = new Map(runs.map((r) => [r.d.id, r]))
   const lastDue = Math.max(-1, ...runs.map((r) => r.last))
   const months: PayoffMonth[] = []
+  const interestOf = (r: Run) => (r.bp ? Math.round((r.balance * r.bp) / MONTH_BP) : 0)
   for (let k = 0; k < PAYOFF_MAX_MONTHS; k++) {
-    const before = sum(runs.map((r) => Math.max(0, r.balance)))
-    if (before <= 0) break
+    if (runs.every((r) => r.balance <= 0)) break
     const month = addMonths(input.month, k)
     const lines = new Map<string, PayoffLine>()
     // The installments the schedules still have for the loans paid off already: free for the others (the roll).
@@ -203,7 +203,7 @@ function plan(input: PayoffInput, principal: Readonly<Record<string, number>>, v
         free += due
         continue
       }
-      const interest = r.bp ? Math.round((r.balance * r.bp) / MONTH_BP) : 0
+      const interest = interestOf(r)
       r.balance += interest
       r.interest += interest
       const pay = k === r.last ? r.balance : Math.min(due, r.balance)
@@ -229,10 +229,16 @@ function plan(input: PayoffInput, principal: Readonly<Record<string, number>>, v
     }
     for (const r of runs) if (r.balance <= 0 && r.paidOff == null) r.paidOff = month
     const list = runs.flatMap((r) => lines.get(r.d.id) ?? [])
-    const after = sum(runs.map((r) => Math.max(0, r.balance)))
-    months.push({ month, lines: list, paid: sum(list.map((l) => l.installment + l.extra)), balance: after })
-    // Past every schedule only the money over the installments pays: none, or the interest eating it – never paid off.
-    if (k >= lastDue && after >= before) break
+    months.push({ month, lines: list, paid: sum(list.map((l) => l.installment + l.extra)), balance: sum(runs.map((r) => Math.max(0, r.balance))) })
+    // Past every schedule (review of R2: loan by loan, never the sum of all): from the next month only the extra pays –
+    // all of it to the first loan of the order still open, the next ones get it only once that one is paid off. Without
+    // the extra, or with the first one's interest not less than it (that loan never gets less), nothing is ever paid off
+    // again – the plan ends; a loan the extra still makes less goes on, while the ones waiting behind it grow.
+    if (k >= lastDue) {
+      const next = over ? extra : 0
+      const first = order.map((id) => byId.get(id)!).find((r) => r.balance > 0)
+      if (!next || !first || next <= interestOf(first)) break
+    }
   }
   const debts = runs.map((r) => ({ id: r.d.id, paidOff: r.balance <= 0 ? r.paidOff : null, interest: r.interest, paid: r.paid }))
   const end = debts.every((x) => x.paidOff != null) ? debts.reduce((m, x) => (x.paidOff! > m ? x.paidOff! : m), input.month) : null

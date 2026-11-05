@@ -23,7 +23,7 @@ import { IconPlus } from '../../components/icons'
 import { DeleteButton } from '../history/DeleteButton'
 import { HistoryButton } from '../history/HistoryDialog'
 import { AccountSelect, CategorySelect } from '../operations/pickers'
-import { monthGenLabel, monthLabel } from '../../lib/format'
+import { monthGenLabel, monthLabel, plMonth } from '../../lib/format'
 import {
   addContainer,
   archiveContainer,
@@ -560,8 +560,6 @@ function ContainerEditor({
   )
 }
 
-const mmyyyy = (month: string) => `${month.slice(5, 7)}.${month.slice(0, 4)}`
-
 /**
  * „Kontener cięższy niż w manifeście” (F9): its latest payments at a new price – the simulation of the new amount
  * before it is taken (T50), „Zaktualizuj” from this month on or „To nie zmiana ceny”.
@@ -614,13 +612,13 @@ function AmountHistory({ c }: { c: Container }) {
   const linked = useMemo(() => (paymentsIndex(listOf(transactions)).byContainer.get(c.id) ?? []).slice(-6), [transactions, c.id])
   const past = [...c.past].sort((a, b) => a.until.localeCompare(b.until))
   if (!past.length && !linked.length) return null
-  const since = past.length ? `od ${mmyyyy(addMonths(past[past.length - 1]!.until, 1))}: ` : ''
+  const since = past.length ? `od ${plMonth(addMonths(past[past.length - 1]!.until, 1))}: ` : ''
   return (
     <div className="flex flex-col gap-0.5 text-[11.5px]" data-testid="container-history">
       <span className="label">Historia kwot</span>
       {past.length > 0 && (
         <span data-testid="container-history-amounts">
-          {past.map((x) => `do ${mmyyyy(x.until)}: ${zl(x.amount)}`).join(' · ')} · {since}
+          {past.map((x) => `do ${plMonth(x.until)}: ${zl(x.amount)}`).join(' · ')} · {since}
           {zl(c.amount)}
         </span>
       )}

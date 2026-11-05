@@ -5,6 +5,7 @@
 import { coverAmount, type AccountAhead } from '@shared/calc/ahead'
 import { warsawNow } from '@shared/calc/dates'
 import { installmentAmounts, monthlySchedule, type LoanState } from '@shared/calc/loans'
+import { percentText } from '@shared/format'
 import { newId } from '@shared/ids'
 import { containerSchema, loanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Loan, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, deleteRecord, updateRecord, useData } from '../../store/data'
@@ -35,10 +36,23 @@ export interface NewLoan {
   rate?: number | null
 }
 
-/** A yearly percent as the loan keeps it (T483): to 0,01 %, 0–100; anything else – not known (null). */
+/**
+ * A yearly percent as the loan keeps it (T481, T483): to 0,01 %, half up as typed (7,255 → 7,26 – the decimal, not its
+ * binary neighbour 7,2549…), 0–100; anything else – not known (null).
+ */
 export function loanRateOf(rate: number | null | undefined): number | null {
   if (rate == null || !Number.isFinite(rate) || rate < 0 || rate > 100) return null
-  return Math.round(rate * 100) / 100
+  return Math.round(Number((rate * 100).toPrecision(12))) / 100
+}
+
+/**
+ * A rate typed in a field (review of R2, AP-15 – T481): kept to 0,01 % – a longer one rounded with a word at the field,
+ * never in silence; the rate the field gives back (null – emptied).
+ */
+export function typedLoanRate(rate: number | null): number | null {
+  const kept = loanRateOf(rate)
+  if (rate != null && kept != null && kept !== rate) toast(`Oprocentowanie liczy się z dokładnością do 0,01 % – przyjęte ${percentText(kept, 2)}.`, 'info', 6000)
+  return kept
 }
 
 /**
