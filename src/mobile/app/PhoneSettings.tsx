@@ -153,7 +153,20 @@ export function PhoneSettings() {
         </Row>
       </Panel>
       <Panel title="Powiadomienia">
-        <Row label="Odprawa poranna (po ciszy nocnej, nie przed 7:00)">
+        <Row label={prefs.notify.briefingTime ? `Odprawa poranna (o ${prefs.notify.briefingTime})` : 'Odprawa poranna (przy pierwszym otwarciu, po ciszy nocnej)'}>
+          <input
+            type="time"
+            className="input h-[32px] w-[96px] text-[13px]"
+            value={prefs.notify.briefingTime ?? ''}
+            onChange={(e) => notify({ briefingTime: /^\d{2}:\d{2}$/.test(e.target.value) ? e.target.value : null })}
+            aria-label="Godzina odprawy porannej"
+            data-testid="phone-briefing-time"
+          />
+          {prefs.notify.briefingTime && (
+            <button type="button" className="btn btn-ghost h-[32px] px-1.5 text-[11px]" onClick={() => notify({ briefingTime: null })} title="Powiadomienie przy pierwszym otwarciu po ciszy nocnej">
+              przy otwarciu
+            </button>
+          )}
           <Toggle on={prefs.notify.briefing} onChange={(v) => notify({ briefing: v })} testId="phone-notify-briefing" />
         </Row>
         <Row label="Raport wachty wieczorem">

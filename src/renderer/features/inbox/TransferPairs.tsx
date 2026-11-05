@@ -5,6 +5,7 @@
  */
 import { useMemo, useState } from 'react'
 import { dm } from '@shared/calc/briefing'
+import type { TransferIssue } from '@shared/calc/transfers'
 import type { Transaction } from '@shared/schema'
 import { plnText } from '../../components/fields'
 import { Modal } from '../../components/Modal'
@@ -12,9 +13,10 @@ import { ShowMore } from '../../components/ui'
 import { plDate, plural } from '../../lib/format'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useAccounts } from '../operations/pickers'
-import { dismissTransfer, joinTransfers, pairTickedFirst, transferIssuesOf, transferKey, type JoinIssue } from '../operations/transfers'
+import { addOtherSide, dismissTransfer, joinTransfers, pairTickedFirst, transferIssuesOf, transferKey, type JoinIssue } from '../operations/transfers'
 
 type Pair = Extract<JoinIssue, { kind: 'pair' }>
+type SingleIssue = Exclude<TransferIssue, Pair>
 const PAGE = 100
 
 /** Neither side names the other account: a pair by the amount and the days only. */
@@ -27,7 +29,9 @@ export function TransferPairs({ onClose }: { onClose: () => void }) {
   const readOnly = useFolderLocked()
   const accounts = useAccounts()
   // The pairs as they are now: a pair said „zostaw tak” goes from the list.
-  const pairs = useMemo(() => (fi ? transferIssuesOf(listOf(transactions), useData.getState()).filter((i): i is Pair => i.kind === 'pair') : []), [transactions, balances, fi])
+  const allIssues = useMemo(() => (fi ? transferIssuesOf(listOf(transactions), useData.getState()) : []), [transactions, balances, fi])
+  const pairs = useMemo(() => allIssues.filter((i): i is Pair => i.kind === 'pair'), [allIssues])
+  const singles = useMemo(() => allIssues.filter((i): i is SingleIssue => i.kind !== 'pair'), [allIssues])
   // The user's ticks by pair; a pair not ticked by hand is as `pairTickedFirst` says (AP-34).
   const [ticks, setTicks] = useState<Readonly<Record<string, boolean>>>({})
   const [limit, setLimit] = useState(PAGE)
@@ -111,6 +115,40 @@ export function TransferPairs({ onClose }: { onClose: () => void }) {
           })}
           <ShowMore shown={Math.min(limit, pairs.length)} total={pairs.length} page={PAGE} onMore={() => setLimit((n) => n + PAGE)} testId="inbox-pairs-more" />
         </div>
+        {singles.length > 0 && (
+          <div className="flex flex-col gap-1.5 border-t border-line pt-2" data-testid="inbox-pairs-singles">
+            <span className="label">Pojedyncze zgłoszenia przelewów ({singles.length})</span>
+            {singles.map((s) => {
+              const key = transferKey(s)
+              const tx = s.kind === 'lone' ? s.tx : s.keep
+              const fromAcc = s.kind === 'lone' ? (tx.amount < 0 ? tx.accountId : tx.counterAccountId!) : tx.accountId
+              const toAcc = s.kind === 'lone' ? (tx.amount < 0 ? tx.counterAccountId! : tx.accountId) : s.drop.accountId
+              return (
+                <div key={key} className="flex items-start gap-2 border-b border-line/60 py-1.5 last:border-b-0" data-testid="inbox-single-transfer">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span>
+                      <span className="num">{plDate(tx.date)}</span> {name(fromAcc)} → {name(toAcc)} ·{' '}
+                      <span className="num text-fg-strong">{plnText(Math.abs(tx.amount))} zł</span>
+                    </span>
+                    <span className="truncate text-[11px] text-muted">
+                      {s.kind === 'lone' ? who(s.tx) : `${who(s.keep)} / ${who(s.drop)}`}
+                    </span>
+                  </div>
+                  {!readOnly && (
+                    <>
+                      <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => dismissTransfer(s)}>
+                        zostaw tak
+                      </button>
+                      <button type="button" className="btn h-[22px] shrink-0" onClick={() => (s.kind === 'lone' ? addOtherSide(s.tx) : void joinTransfers([s]))}>
+                        {s.kind === 'lone' ? 'Dopisz drugą stronę' : 'Połącz'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </Modal>
   )

@@ -213,7 +213,7 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
             options={[
               { value: 'repay', label: 'spłata zakupów', title: 'Wpłata najpierw spłaca to, co domownik ma oddać' },
               { value: 'income', label: 'niezależny przychód', title: 'Przychód do budżetu od tego domownika – nie spłaca zakupów' },
-              { value: 'advance', label: 'depozyt na przyszłość', title: 'Zaliczka do depozytu – nie spłaca dotychczasowych zakupów' }
+              { value: 'advance', label: 'zaliczka na przyszłość', title: 'Zaliczka do depozytu – nie spłaca dotychczasowych zakupów' }
             ]}
             aria-label="Cel wpłaty domownika"
           />

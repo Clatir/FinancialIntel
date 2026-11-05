@@ -50,6 +50,7 @@ test('AP-20: szybki wpis – „plan” klawiszem (ok. 12 klawiszy), tagi z „#
     await type('250')
     await press('Tab')
     await type('Orlen')
+    await expect(quick.getByTestId('quick-impulse')).toBeVisible()
     await expect(quick.getByTestId('quick-impulse')).toHaveAttribute('data-state', 'none')
     await expect(quick.getByTestId('quick-impulse-keys')).toHaveText('Alt+P / Alt+I')
     await press('Alt+KeyP')

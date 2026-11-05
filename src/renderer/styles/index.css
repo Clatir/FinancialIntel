@@ -220,6 +220,18 @@
   }
 }
 
+:root[data-contrast='high'] .kbd {
+  color: var(--color-fg-strong);
+  border-color: var(--color-fg);
+}
+
+@media (prefers-contrast: more) {
+  .kbd {
+    color: var(--color-fg-strong);
+    border-color: var(--color-fg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -78,7 +78,7 @@ export function balancesAt(dates: readonly string[], transactions: readonly Tran
 /** The wealth at the end of every week from the first known data to today, with the drawdown. */
 export function wealthCurve(transactions: readonly Transaction[], balances: readonly Balance[], accountIds: readonly string[], today: string): WealthPoint[] {
   const first = [...transactions.map((t) => t.date), ...balances.map((b) => b.date)].filter((d) => d <= today).sort()[0]
-  if (!first) return []
+  if (!first || daysBetween(first, today) < 14) return []
   const dates: string[] = []
   for (let d = addDays(mondayOf(first), 6); d < today; d = addDays(d, 7)) dates.push(d)
   dates.push(today)

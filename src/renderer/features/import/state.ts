@@ -349,7 +349,7 @@ function restore(snap: Snapshot): void {
 let loadSeq = 0
 
 /** A file's error beside the open one (N12: a wrong file never closes the open one). */
-function fileError(name: string, error: string): void {
+export function fileError(name: string, error: string): void {
   if (useImport.getState().file) useImport.setState({ error, errorName: name })
   else useImport.setState({ fileName: name, file: null, plan: null, error, errorName: name, done: null })
 }
@@ -554,13 +554,17 @@ export async function dropImportFile(f: File): Promise<void> {
     return
   }
   if (f.size > IMPORT_MAX_BYTES) {
-    toast(`„${f.name}” ma ${Math.round(f.size / 1024 / 1024)} MB – to nie wygląda na plik z mBanku (najwyżej ${IMPORT_MAX_BYTES / 1024 / 1024} MB).`, 'error', 7000)
+    const msg = `„${f.name}” ma ${Math.round(f.size / 1024 / 1024)} MB – to nie wygląda na plik z mBanku (najwyżej ${IMPORT_MAX_BYTES / 1024 / 1024} MB).`
+    fileError(f.name, msg)
+    toast(msg, 'error', 7000)
     return
   }
   try {
     await loadImportFile(f.name, new Uint8Array(await f.arrayBuffer()))
   } catch (e) {
-    toast(`Nie udało się odczytać pliku „${f.name}”: ${errorMessage(e)}`, 'error', 7000)
+    const msg = `Nie udało się odczytać pliku „${f.name}”: ${errorMessage(e)}`
+    fileError(f.name, msg)
+    toast(msg, 'error', 7000)
   }
 }
 

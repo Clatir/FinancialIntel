@@ -420,6 +420,8 @@ export function OperationsPage() {
   const records = useData((s) => s.records.transactions)
   const drafts = useData((s) => s.drafts)
   const fi = useData((s) => s.fi)
+  const folderLocked = useFolderLocked()
+  const lockedReason = useData((s) => s.status?.readOnlyReason ?? null)
   const filter = useOperationsUi((s) => s.filter)
   const selectedId = useOperationsUi((s) => s.selectedId)
   const shown = useOperationsUi((s) => s.shown)
@@ -552,7 +554,12 @@ export function OperationsPage() {
             >
               <IconSidebarRight size={14} />
             </button>
-            <button className="btn btn-accent" onClick={() => newOperation()} title="Nowa operacja (Ctrl+N)" data-testid="operation-new">
+            <button
+              className={cx('btn btn-accent', folderLocked && 'opacity-50')}
+              onClick={() => newOperation()}
+              title={folderLocked ? (lockedReason ?? 'Folder jest tylko do odczytu – zmiany nie są zapisywane.') : 'Nowa operacja (Ctrl+N)'}
+              data-testid="operation-new"
+            >
               <IconPlus size={13} /> Nowa
             </button>
           </div>

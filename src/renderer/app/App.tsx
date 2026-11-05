@@ -161,8 +161,8 @@ function NavItem({
         <span className="truncate text-[12.5px]">{label}</span>
         {sub && <span className={cx('truncate text-[10.5px]', active ? 'text-accent/70' : 'text-dim')}>{sub}</span>}
       </span>
+      {keys && <span className="num text-[10px] text-dim">{keys}</span>}
       {badge ? <span className="num min-w-[16px] bg-accent px-1 text-center text-[10px] text-bg">{badge}</span> : null}
-      {keys && !badge && <span className="num text-[10px] text-dim">{keys}</span>}
     </button>
   )
 }
@@ -214,7 +214,7 @@ function SideMenu({ route }: { route: Route }) {
           sub="ICT Trade Journal"
           testId="nav-open-ictj"
         />
-        <NavItem active={route.page === 'sync'} onClick={() => navigate({ page: 'sync' })} icon={<IconSync size={16} />} label="Synchronizacja" badge={issues} testId="nav-sync" />
+        <NavItem active={route.page === 'sync'} onClick={() => navigate({ page: 'sync' })} icon={<IconSync size={16} />} label="Synchronizacja" keys="Ctrl Shift Y" badge={issues} testId="nav-sync" />
         <NavItem active={route.page === 'settings'} onClick={() => navigate({ page: 'settings' })} icon={<IconGear size={16} />} label="Ustawienia" keys="Ctrl ," testId="nav-settings" />
         <button
           className="mx-3 my-1.5 flex h-[22px] items-center justify-center border border-line-strong text-[11px] text-muted hover:text-fg-strong"

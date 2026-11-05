@@ -932,7 +932,7 @@ export function QuickApp() {
           {/* F17: a trip's, a project's tags – „#słowo” in the name or the note adds one too; the last one in a click. */}
           <Row label="Tagi">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <TagsField className="flex-1" value={d.tags ?? []} onChange={(tags) => set({ tags })} known={data.knownTags ?? []} compact testId="quick-tags" />
+              <TagsField className="w-full basis-full" value={d.tags ?? []} onChange={(tags) => set({ tags })} known={data.knownTags ?? []} compact testId="quick-tags" />
               {/* „#słowo” typed in the name or the note (AP-20, SW sp. 5): shown before saving – it is saved as a tag too. */}
               {hashed.map((tag) => (
                 <span key={tag} className="chip h-[20px] shrink-0 px-1.5 text-[11px] text-muted" title="Z „#” w nazwie albo notatce – zapisze się jako tag; usuń „#” z tekstu, by go nie dodawać" data-testid="quick-tag-hash" data-tag={tag}>

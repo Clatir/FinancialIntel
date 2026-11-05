@@ -220,7 +220,7 @@ export function SortHeader({ sort, by, children, className }: { sort: OperationS
 export function ViewsBar({ filter, active }: { filter: OperationsFilter; active: boolean }) {
   const views = useData((s) => s.fi?.settings.operationViews)
   const locked = useFolderLocked()
-  if (!views?.length && !active) return null
+  if (!views?.length && !active && locked) return null
   return (
     <div className="flex min-h-[30px] shrink-0 flex-wrap items-center gap-1.5 border-b border-line px-2 py-1 text-[11.5px]" data-testid="operations-views">
       <span className="text-muted">Widoki:</span>
@@ -240,7 +240,14 @@ export function ViewsBar({ filter, active }: { filter: OperationsFilter; active:
         )
       })}
       {!views?.length && <span className="text-dim">brak – zapisz bieżące filtry jako widok</span>}
-      {active && !locked && <SaveView />}
+      {!locked &&
+        (active ? (
+          <SaveView />
+        ) : (
+          <button type="button" className="btn h-[22px] px-1.5" disabled title="Ustaw filtr, aby zapisać widok" data-testid="operations-view-save">
+            + Zapisz widok
+          </button>
+        ))}
     </div>
   )
 }
@@ -278,9 +285,10 @@ function SaveView() {
 /** The visible list to CSV / Excel (F18): the operations shown, in the list's order. */
 export function ExportVisible({ rows, view }: { rows: readonly Transaction[]; view: string | null }) {
   const fi = useData((s) => s.fi)
+  const loans = useRecordList('loans')
   if (!fi || !rows.length) return null
   // The list of one account: a transfer's money on it, as the list shows it.
-  const out = () => operationRowsOf(rows, fi.settings.categories, fi.settings.accounts, fi.settings.household.members, view)
+  const out = () => operationRowsOf(rows, fi.settings.categories, fi.settings.accounts, fi.settings.household.members, view, loans)
   const day = warsawNow().date
   // What the window shows – the records in memory, the list's order (nothing to save first: no file of the folder).
   const run = (save: () => Promise<string | null>) =>
@@ -293,7 +301,7 @@ export function ExportVisible({ rows, view }: { rows: readonly Transaction[]; vi
       <button type="button" className="btn h-[22px] px-1.5" onClick={() => void run(() => api.saveTextFile(`operacje_${day}.csv`, operationsCsv(out()), { name: 'CSV', extensions: ['csv'] }))} data-testid="operations-export-csv">
         CSV
       </button>
-      <button type="button" className="btn h-[22px] px-1.5" onClick={() => void run(() => api.saveXlsx(`operacje_${day}.xlsx`, [operationsSheet(out()), partsSheet(partRowsOf(rows, fi.settings.categories, fi.settings.accounts, fi.settings.household.members, view))]))} data-testid="operations-export-xlsx">
+      <button type="button" className="btn h-[22px] px-1.5" onClick={() => void run(() => api.saveXlsx(`operacje_${day}.xlsx`, [operationsSheet(out()), partsSheet(partRowsOf(rows, fi.settings.categories, fi.settings.accounts, fi.settings.household.members, view, loans))]))} data-testid="operations-export-xlsx">
         Excel
       </button>
     </span>

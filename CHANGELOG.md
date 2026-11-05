@@ -1,5 +1,15 @@
 # Financial Intel – zmiany
 
+## 1.18.1
+
+Wykres Sankey w Planie miesiąca, telefon i eksport pożyczek:
+
+- **Wykres Sankey w Planie miesiąca:** wizualizacja przepływu planowanych środków od planowanej pensji i wpływów przez koszty stałe, kontenery Ładowni i koperty do osłon i kadłuba okrętu.
+- **Wersja mobilna:** prezentacja konkretnej nazwy pożyczki na ekranie Radaru zamiast ogólnego napisu „pożyczka”; możliwość konfiguracji własnej godziny odprawy dnia.
+- **Eksport operacji:** rozszerzenie eksportu CSV i Excel o kolumny z podziałem części spłat pożyczek.
+- **Interfejs i dostępność:** uporządkowanie edytora operacji (usunięcie zbędnego stanu „depozyt na przyszłość”), poprawiona responsywność chipów tagów w wąskim oknie oraz czytelność skrótu „Ctrl K” w trybie wysokiego kontrastu.
+
+
 ## 1.18.0
 
 Reguły z warunkami, audyt importu i plan spłaty:

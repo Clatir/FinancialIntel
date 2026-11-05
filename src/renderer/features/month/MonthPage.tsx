@@ -3,10 +3,13 @@ import { addMonths, warsawNow } from '@shared/calc/dates'
 import { glossaryOf } from '@shared/glossary'
 import { energyAfterLimit, type FleetState } from '@shared/calc/fleet'
 import { capNote } from '@shared/calc/why'
-import { debriefing, envelopeExtraOf, lootApplied, lootChange, lootDeadline, lootExtraOf, monthAhead, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
+import { debriefing, envelopeExtraOf, lootApplied, lootChange, lootDeadline, lootExtraOf, monthAhead, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, transactionsOfMonth, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { fuelSummary, rateText } from '@shared/calc/fuel'
+import { categoryIndex } from '@shared/calc/operations'
+import { energyFlows, monthFlows, outsideMoney } from '@shared/calc/sankey'
 import { useMembers } from '../household/actions'
+import { MonthSankey, type SankeyView } from '../reports/MonthSankey'
 import { envelopeKind, type EnvelopeKind, type MonthPlan } from '@shared/schema'
 import { tooNewMonths, useData, useFolderLocked } from '../../store/data'
 import { NewerNote } from '../../components/NewerNote'
@@ -65,6 +68,7 @@ export function MonthPage() {
   const own = plans.find((p) => p.month === month) ?? null
   const goalRecords = useRecordList('goals')
   const [year, setYear] = useState(false)
+  const [sankeyView, setSankeyView] = useState<SankeyView>('money')
   // The tanks' and the goals' installments, the loot given to the month and the envelopes' extras as the engine took them
   // (N11, F15, F28); a month ahead – as the engine will take them from its state now (AP-11: the tanks catching up within
   // their cycles, nothing without a salary; the goals' only with the shields and the hull full).
@@ -93,6 +97,17 @@ export function MonthPage() {
     () => (!categories || month > current ? null : month === briefMonth ? brief : briefOf(month)),
     [month, current, briefMonth, brief, transactions, categories, plans, fleet, today, containers]
   )
+  const sankey = useMemo(() => {
+    if (!fleet || !categories || !shownBrief) return null
+    const fuel = fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths, today)
+    const ops = transactionsOfMonth(transactions, month).filter((t) => t.date <= today)
+    const cats = categoryIndex(categories)
+    return {
+      money: monthFlows({ brief: shownBrief, fuel: fuel.month, outside: outsideMoney(ops, month, fleet.incomeContext, shownBrief.financed), label: (id) => cats.label(id) }),
+      energy: energyFlows(shownBrief)
+    }
+  }, [fleet, categories, shownBrief, transactions, month, today])
+  const ratesSkipped = month <= current && split != null && split.rates.items.length === 0 && goalRecords.some((g) => !g.archived && !g.achievedAt && !!g.deadline)
   if (!fleet || !categories) return <Empty>Wczytywanie…</Empty>
 
   return (
@@ -132,7 +147,7 @@ export function MonthPage() {
             <SalaryPanel month={month} plan={plan} fleet={fleet} current={current} readOnly={readOnly} transactions={transactions} />
             {month === current && <IncomePanel fleet={fleet} salary={plan?.salary ?? null} />}
             {split && plan ? (
-              <SplitPanel month={month} plan={plan} split={split} readOnly={readOnly} onPropose={() => applyProposals(month)} />
+              <SplitPanel month={month} plan={plan} split={split} ratesSkipped={ratesSkipped} readOnly={readOnly} onPropose={() => applyProposals(month)} />
             ) : (
               <Panel title="Podział pensji">
                 <Empty>Najpierw pensja – potem jej podział na ładownię, odkładki i koperty.</Empty>
@@ -142,6 +157,11 @@ export function MonthPage() {
           <div className="flex min-w-0 flex-col">
             {month === current && <DailyPanel fleet={fleet} />}
             <EnvelopesPanel month={month} current={current} fleet={fleet} brief={shownBrief} readOnly={readOnly} />
+            {sankey && (
+              <Panel title="Przepływ miesiąca (Sankey)" testId="month-plan-sankey">
+                <MonthSankey money={sankey.money} energy={sankey.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={sankeyView} onView={setSankeyView} />
+              </Panel>
+            )}
             {brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? (
               <DebriefPanel brief={brief} shown={month} fleet={fleet} today={today} plans={plans} readOnly={readOnly} />
             ) : (
@@ -220,7 +240,7 @@ function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { 
   )
 }
 
-function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string; plan: MonthPlan; split: NonNullable<ReturnType<typeof salarySplit>>; readOnly: boolean; onPropose: () => void }) {
+function SplitPanel({ month, plan, split, ratesSkipped, readOnly, onPropose }: { month: string; plan: MonthPlan; split: NonNullable<ReturnType<typeof salarySplit>>; ratesSkipped: boolean; readOnly: boolean; onPropose: () => void }) {
   const cats = useCategories()
   // An archived category whose envelope the plan still has (N8): it still counts – shown, so it can be cleared.
   const mains = cats.mains.filter((c) => envelopeKind(c) && (!c.archived || plan.envelopes[c.id] != null))
@@ -276,6 +296,11 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
               <Row key={r.goalId} className="pl-3 text-[11.5px]" label={r.name} sub={r.deadline ? `do ${monthGenLabel(r.deadline)}` : undefined} value={zl(r.amount)} />
             ))}
           </>
+        )}
+        {ratesSkipped && (
+          <p className="text-[11.5px] text-muted" data-testid="split-rates-skipped">
+            Kurs przechwycenia (raty celów): 0,00 zł – w dniu 1. miesiąca osłony lub kadłub nie były pełne.
+          </p>
         )}
         {(['planned', 'daily'] as const).map((kind) => (
           <div key={kind} className="mt-2 flex flex-col">
