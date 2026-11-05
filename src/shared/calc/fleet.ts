@@ -780,6 +780,20 @@ export interface DailyState extends DailyAllowance {
    * 'none' no salary paid this month, 'spent' the planned envelopes, the cargo and the rest took it. null = not capped.
    */
   cap: { month: number; why: 'partial' | 'none' | 'spent' } | null
+  /** Each day of the month from the 1st to today, today last (AP-42, T472): the calendar on Radar. */
+  days: DayEnergy[]
+}
+
+/**
+ * A day's energy (AP-42, T472): the daily pool's limit, the allowance and the spending of that day – as the game rated it
+ * at the day's end (`rateDay`: the covers made before the day, the loot kept from the day of its decision); today's –
+ * the engine's `daily` (Mostek). Over the day: `spent` above `allowance`.
+ */
+export interface DayEnergy {
+  date: string
+  limit: number
+  allowance: number
+  spent: number
 }
 
 /**
@@ -947,6 +961,11 @@ export function computeFleet(input: FleetInput): FleetState {
   const dailyExtra = new Map<string, number>()
   /** The loot kept in the planned envelopes (F28): month → category → grosze. */
   const envelopeExtra = new Map<string, Map<string, number>>()
+  /**
+   * The day the loot decision kept for a month was made (AP-42, T472): a day of the month before it rated its energy
+   * without the loot kept (as `rateDay` at that day's end sees it) – month → its Warsaw date.
+   */
+  const extraFrom = new Map<string, string>()
   const alarms: Alarm[] = []
   const log: FleetEvent[] = []
   const toDock: FleetState['toDock'] = { count: 0, inflow: 0, outflow: 0, goals: 0 }
@@ -1510,6 +1529,7 @@ export function computeFleet(input: FleetInput): FleetState {
           at: Date.parse(decision.decidedAt),
           run: () => {
             if (lootMonth !== prev || !loot) return
+            extraFrom.set(m, decidedDate)
             const moves: Moves = { loot: -loot }
             let rest = loot
             for (const [id, g] of Object.entries(decision.goals)) {
@@ -1699,6 +1719,8 @@ export function computeFleet(input: FleetInput): FleetState {
     let dailyBefore = 0
     /** Today's daily spending by main category ('' – none): its refunds net its purchases first (T370). */
     const todayBy = new Map<string, number>()
+    /** The same for each earlier day of the month (AP-42, T472): the calendar's energy of the days past. */
+    const pastBy = new Map<string, Map<string, number>>()
     for (const t of txs) {
       if (monthOf(t.date) !== month || t.kind !== 'expense' || t.goalId || isCargoPayment(t, containerIds)) continue
       for (const p of partsOf(t)) {
@@ -1715,7 +1737,12 @@ export function computeFleet(input: FleetInput): FleetState {
         // Spending without a category counts against today's energy: most likely a daily purchase.
         if (kind === 'daily') {
           if (t.date === today) todayBy.set(main?.id ?? '', (todayBy.get(main?.id ?? '') ?? 0) + cost)
-          else dailyBefore += cost
+          else {
+            dailyBefore += cost
+            let day = pastBy.get(t.date)
+            if (!day) pastBy.set(t.date, (day = new Map()))
+            day.set(main?.id ?? '', (day.get(main?.id ?? '') ?? 0) + cost)
+          }
         }
       }
     }
@@ -1735,13 +1762,19 @@ export function computeFleet(input: FleetInput): FleetState {
     let dailyLimit = dailyExtra.get(month) ?? 0
     // The loot kept in the envelopes (F28) and the covers of the month's own plan – the game's day without its own (D73).
     const kept = envelopeExtra.get(month)
-    const moved = coverMoves(plans.find((p) => p.month === month), nowMs, input.coversBefore ? Date.parse(input.coversBefore) : Infinity)
+    const own = plans.find((p) => p.month === month)
+    const cut = input.coversBefore ? Date.parse(input.coversBefore) : Infinity
+    const moved = coverMoves(own, nowMs, cut)
+    /** A main category's limit (null – none) with the loot kept and the covers moved (one rule – today and the days past). */
+    const limitOf = (id: string, keptIn: number, movedIn: number): number | null => {
+      const base = plan.envelopes[id]
+      const extra = keptIn + movedIn
+      return base == null && !extra ? null : Math.max(0, (base ?? 0) + extra)
+    }
     for (const main of cats.mains) {
       const kind = envelopeKind(main)
       if (!kind) continue
-      const base = plan.envelopes[main.id]
-      const extra = (kept?.get(main.id) ?? 0) + (moved.get(main.id) ?? 0)
-      const limit = base == null && !extra ? null : Math.max(0, (base ?? 0) + extra)
+      const limit = limitOf(main.id, kept?.get(main.id) ?? 0, moved.get(main.id) ?? 0)
       if (kind === 'daily') dailyLimit += limit ?? 0
       if (limit == null) continue
       const s = spentBy.get(main.id) ?? { before: 0, today: 0 }
@@ -1757,7 +1790,29 @@ export function computeFleet(input: FleetInput): FleetState {
     const shown = started ? cappedEnergy(d.left, energy) : d.left
     const paid = salaryOfMonth.get(month)
     const cap: DailyState['cap'] = shown < d.left ? { month: energy, why: !paid ? 'none' : paid.alarm === 'red' ? 'partial' : 'spent' } : null
-    daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, returned, returnedBy, energy: shown, cap }
+    // The days of the month so far (AP-42, T472): each as the game rates it at its end (`rateDay`) – its own spending of
+    // the daily pool (a category's refunds net its purchases, never below 0), the days before it netted, the limit with
+    // the covers made before that day and the loot kept from the day it was decided; today – the numbers above.
+    const days: DayEnergy[] = []
+    let before = 0
+    const lootFrom = extraFrom.get(month)
+    for (let date = firstDayOf(month); date < today; date = addDays(date, 1)) {
+      const lootIn = lootFrom != null && lootFrom <= date
+      const movedThen = coverMoves(own, nowMs, Math.min(cut, warsawStartOf(date).getTime()))
+      let limit = lootIn ? (dailyExtra.get(month) ?? 0) : 0
+      for (const main of cats.mains) if (envelopeKind(main) === 'daily') limit += limitOf(main.id, lootIn ? (kept?.get(main.id) ?? 0) : 0, movedThen.get(main.id) ?? 0) ?? 0
+      let spent = 0
+      let net = 0
+      for (const v of pastBy.get(date)?.values() ?? []) {
+        net += v
+        if (v > 0) spent += v
+      }
+      const a = dailyAllowance({ limit, spentBefore: before, spentToday: spent, day: dayOfMonth(date), daysInMonth: daysInMonth(month) })
+      days.push({ date, limit, allowance: a.allowance, spent })
+      before += net
+    }
+    days.push({ date: today, limit: dailyLimit, allowance: d.allowance, spent: dailyToday })
+    daily = { ...d, limit: dailyLimit, spentBefore: dailyBefore, spentToday: dailyToday, returned, returnedBy, energy: shown, cap, days }
     if (d.left < 0) alarms.push({ kind: 'daily-over', level: 'yellow', date: today, amount: -d.left })
   }
 

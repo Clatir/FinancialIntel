@@ -3869,3 +3869,27 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (klucz `year:<rok>`) za rok zamknięty, gdy budżet w nim działał; własny przełącznik `NotifyPrefs.yearReview`
   (config.json komputera, addytywnie, domyślnie włączony), kliknięcie – Raporty → Przegląd roczny (w styczniu rok
   zamknięty); wiersz w tabeli powiadomień specyfikacji.
+- **T472** Energia dnia w kalendarzu Radaru (1.16.0, R1 – AP-42): dni minione bieżącego miesiąca z silnika
+  (`DailyState.days`, wynik – nic nie jest zapisywane): przydział i wydane z puli dziennej tak, jak ocena dnia w grze liczy
+  dzień na jego koniec (`rateDay`: pokrycia zrobione przed tym dniem – D73, łupy zatrzymane w kopertach od dnia decyzji,
+  zwroty kategorii netto z jej zakupami dnia, nigdy poniżej zera – T370); dziś – liczby Mostku (`daily`: przydział,
+  wydane dziś, energia dziś z ograniczeniem energii miesiąca – T371). Plan miesiąca zmieniony później liczy się w dniach
+  minionych od 1. dnia (jak w ocenie dnia liczonej dziś); dzień zamrożony w Dowództwie przed taką zmianą może mieć inny
+  przydział – jego ocena zostaje. Test: dzień po dniu równe silnikowi na koniec dnia z `coversBefore` (jak `rateDay`).
+- **T473** Prognoza energii dni naprzód (1.16.0, R1 – AP-42): każdy dalszy dzień bieżącego miesiąca – przydział, jaki
+  silnik policzy jutro, gdy dziś nic więcej nie wydasz (`dayAhead`: pula zostawiona ÷ dni od jutra; zwrot ponad
+  dzisiejsze zakupy wchodzi od jutra), nie więcej niż energia miesiąca, która została; ta sama kwota w każdym dniu („≈”).
+  Dni następnych miesięcy – bez energii („przydział tego miesiąca policzy jego plan po pensji 1. dnia”), bez nowego
+  liczenia planu; ostatni dzień miesiąca – bez prognozy.
+- **T474** Kalendarz-siatka na Radarze (1.16.0, R1 – AP-42): przełącznik „lista / kalendarz” w nagłówku panelu „Na
+  radarze” (domyślnie lista; wybór i miesiąc w szkicu okna – zostają przy przejściu do innego ekranu, do zmiany folderu
+  albo restartu). Siatka z jednej listy pozycji Radaru (`calendarMonth` z `useFuture().items` – te same obiekty, ten sam
+  porządek), tydzień od poniedziałku; miesiące od bieżącego do miesiąca końca okna 90 dni (dalej / wcześniej – przycisk
+  wyłączony, obok „Radar do dd.mm.rrrr” – AP-15), dni po oknie przygaszone. Pozycje dat sprzed miesiąca (niezapłacone terminy
+  wcześniejszych miesięcy – D99 pkt 3) nad siatką bieżącego miesiąca. Komórka: dzień (dziś w akcencie z obwódką),
+  przydział, wydane (ponad przydział – akcent, nie czerwień: to nie kwota na minus), suma płatności „−” i wpływów „+”
+  (zieleń), „•” – terminy bez kwoty, „!” – po terminie; dymek z nazwami i kwotami. Klik dnia – pod siatką dzień tygodnia,
+  data, energia słowami, pozycje dnia (rodzaj, nazwa, notatka, kwota) i „operacje tego dnia ›” – Operacje z okresem tego
+  dnia jako widok (zapisany filtr zostaje – B88); bez klika – dziś. Ukryte kwoty (Ctrl+$) – maska w komórkach i w dniu
+  (`plnText`). Telefon: ta sama siatka (7 kolumn mieści się w szerokości iPhone'a), w komórce dzień, przydział i znaczniki
+  płatności / wpływów, reszta pod siatką.
