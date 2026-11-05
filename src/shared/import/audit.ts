@@ -46,6 +46,8 @@ export interface RuleAudit {
    * learned them so – their money never repays the debt. To review („niespójne”) until changed or kept (`kept`).
    */
   review: ImportRule[]
+  /** Rules whose `loanId` points to a closed (`'closed'`) or deleted (`'missing'`) loan (T506). */
+  closedLoan: Map<string, { status: 'closed' | 'missing'; loan?: AuditLoan }>
 }
 
 /** A rule of a member's money as an advance for the future (AP-4): it may be one learned from „reszta jako zaliczka”. */
@@ -84,6 +86,7 @@ export interface AuditRun {
   rules: readonly ImportRule[]
   aliases: BrandAliases
   loans: readonly AuditLoan[]
+  allLoans: readonly AuditLoan[]
   /** The rules of an advance for the future the user kept so (AP-4: `advanceRuleKey`). */
   kept: (key: string) => boolean
   hits: RuleAudit['hits']
@@ -103,6 +106,7 @@ export const startAudit = (rules: readonly ImportRule[], aliases: BrandAliases, 
   rules,
   aliases,
   loans: loans.filter((l) => l.direction === 'given'),
+  allLoans: loans,
   kept,
   hits: new Map(),
   differ: new Map(),
@@ -159,7 +163,16 @@ export function finishAudit(run: AuditRun): RuleAudit {
   // A keyword (the operation's „Zapamiętaj” – its own „zaliczka” beside „spłata zakupów”, 1.15.3) was chosen so.
   // A rule this version cannot read whole (przegląd R1 2.3) – never offered to change („Zmień na spłatę” would write it).
   const review = run.rules.filter((r) => advanceRule(r) && r.mode !== 'keyword' && !unreadableRule(r) && !run.kept(advanceRuleKey(r.id)))
-  return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, borrower: run.borrower, mixed, idle, review }
+  const loanById = new Map(run.allLoans.map((l) => [l.id, l]))
+  const closedLoan = new Map<string, { status: 'closed' | 'missing'; loan?: AuditLoan }>()
+  for (const r of run.rules) {
+    if (typeof r.loanId === 'string' && r.loanId) {
+      const l = loanById.get(r.loanId)
+      if (!l) closedLoan.set(r.id, { status: 'missing' })
+      else if (l.closedAt != null) closedLoan.set(r.id, { status: 'closed', loan: l })
+    }
+  }
+  return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, borrower: run.borrower, mixed, idle, review, closedLoan }
 }
 
 /** The operations from the bank (`bank`) against the rules (`aliases` – the user's merged names, `loans` – the Radar's), at once. */
@@ -177,15 +190,15 @@ export function inAuditView(r: Pick<ImportRule, 'id'>, audit: RuleAudit | null, 
   if (view === 'all') return true
   if (!audit) return false
   if (view === 'idle') return idleIdsOf(audit).has(r.id)
-  return (audit.differ.get(r.id)?.length ?? 0) > 0 || (audit.otherKind.get(r.id)?.length ?? 0) > 0 || (audit.borrower.get(r.id)?.length ?? 0) > 0 || audit.review.some((x) => x.id === r.id)
+  return (audit.differ.get(r.id)?.length ?? 0) > 0 || (audit.otherKind.get(r.id)?.length ?? 0) > 0 || (audit.borrower.get(r.id)?.length ?? 0) > 0 || audit.review.some((x) => x.id === r.id) || (audit.closedLoan?.has(r.id) ?? false)
 }
 
 /**
- * What „niespójne” counts: the operations decided otherwise than their rule, a borrower's money a rule keeps (AP-6) and
- * the rules of an advance for the future to review – one each (AP-4).
+ * What „niespójne” counts: the operations decided otherwise than their rule, a borrower's money a rule keeps (AP-6),
+ * the rules of an advance for the future to review (AP-4), and rules pointing to a closed or deleted loan (T506).
  */
 export const inconsistentCount = (audit: RuleAudit): number =>
-  [...audit.differ.values()].reduce((s, xs) => s + xs.length, 0) + [...audit.borrower.values()].reduce((s, xs) => s + xs.length, 0) + audit.review.length
+  [...audit.differ.values()].reduce((s, xs) => s + xs.length, 0) + [...audit.borrower.values()].reduce((s, xs) => s + xs.length, 0) + audit.review.length + (audit.closedLoan?.size ?? 0)
 
 const idleIds = new WeakMap<RuleAudit, ReadonlySet<string>>()
 function idleIdsOf(audit: RuleAudit): ReadonlySet<string> {

@@ -116,7 +116,7 @@ export function priceChanges(o: CargoWatchInput): PriceChange[] {
   const out: PriceChange[] = []
   for (const c of o.containers) {
     if (c.archived || c.loanId || c.amount <= 0 || !activeIn(c, month)) continue
-    const linked = index.byContainer.get(c.id) ?? []
+    const linked = (index.byContainer.get(c.id) ?? []).filter((p) => p.date <= o.today)
     if (!linked.length) continue
     const { day } = paymentDay(c, linked, addMonths(month, 1))
     let to: number

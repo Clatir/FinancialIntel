@@ -5,6 +5,7 @@
 import { coverAmount, type AccountAhead } from '@shared/calc/ahead'
 import { warsawNow } from '@shared/calc/dates'
 import { installmentAmounts, monthlySchedule, type LoanState } from '@shared/calc/loans'
+import { sameContentAs } from '@shared/merge'
 import { percentText } from '@shared/format'
 import { newId } from '@shared/ids'
 import { containerSchema, loanSchema, SCHEMA_VERSION, transactionSchema, type Container, type Loan, type Transaction } from '@shared/schema'
@@ -132,6 +133,8 @@ export function addLoan(o: NewLoan): Loan {
   return loan
 }
 
+const undoChanged = () => toast('Nie cofnięto – wpis został w międzyczasie zmieniony.', 'info', 6000)
+
 /** Create or restore a cargo container for a taken loan's installments so repayments come from monthly salary (N-PC-17). */
 export function ensureLoanContainer(s: LoanState): Container | null {
   if (!canWrite() || s.loan.direction !== 'taken') return null
@@ -142,11 +145,16 @@ export function ensureLoanContainer(s: LoanState): Container | null {
   if (existing && !existing.archived) return existing
   if (existing && existing.archived) {
     patchContainer(existing.id, { archived: false, archivedAt: null })
+    const after = useData.getState().records.containers[existing.id]?.record
     toast(`Kontener „${existing.name}” przywrócony do Ładowni.`, 'success', 5000, {
       label: 'Cofnij',
-      run: () => patchContainer(existing.id, { archived: true, archivedAt: existing.archivedAt })
+      run: () => {
+        const cur = useData.getState().records.containers[existing.id]?.record
+        if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+        patchContainer(existing.id, { archived: true, archivedAt: existing.archivedAt })
+      }
     })
-    return useData.getState().records.containers[existing.id]?.record ?? existing
+    return after ?? existing
   }
   const first = s.next ?? s.loan.schedule[0]
   const last = s.left.at(-1) ?? s.loan.schedule.at(-1) ?? first
@@ -171,7 +179,11 @@ export function ensureLoanContainer(s: LoanState): Container | null {
   addRecord('containers', c)
   toast(`Utworzono kontener „${c.name}” w Ładowni – raty zejdą z pensji.`, 'success', 5000, {
     label: 'Cofnij',
-    run: () => deleteOrSay('containers', c.id)
+    run: () => {
+      const cur = useData.getState().records.containers[c.id]?.record
+      if (!cur || !sameContentAs(cur, c)) return undoChanged()
+      void deleteOrSay('containers', c.id)
+    }
   })
   return c
 }
@@ -204,7 +216,14 @@ export function recordPayment(s: LoanState, amount: number, date: string, opts: 
   })
   addRecord('transactions', t)
   playSound('entry')
-  toast(`${taken ? 'Rata' : 'Spłata'} ${plnText(amount)} zł zapisana.`, 'success', 5000, { label: 'Cofnij', run: () => deleteOrSay('transactions', t.id) })
+  toast(`${taken ? 'Rata' : 'Spłata'} ${plnText(amount)} zł zapisana.`, 'success', 5000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.transactions[t.id]?.record
+      if (!cur || !sameContentAs(cur, t)) return undoChanged()
+      void deleteOrSay('transactions', t.id)
+    }
+  })
   return t
 }
 
@@ -239,6 +258,8 @@ export async function deleteLoan(loan: Loan): Promise<void> {
   toast(`Pożyczka „${loan.name}” usunięta.`, 'info', 6000, {
     label: 'Cofnij',
     run: () => {
+      const recs = useData.getState().records
+      if (recs.loans[loan.id] || containers.some((c) => recs.containers[c.id])) return undoChanged()
       addRecord('loans', loan)
       for (const c of containers) addRecord('containers', c)
     }
@@ -261,10 +282,19 @@ export function closeLoan(loan: Loan, closed: boolean): void {
     .filter((c) => c.loanId === loan.id && (closed ? !c.archived : !!c.archived && (c.archivedAt == null || c.archivedAt === before.closedAt)))
   updateRecord('loans', loan.id, (l) => ({ ...l, closedAt: closed ? now : null, updatedAt: now }))
   for (const c of changed) patchContainer(c.id, { archived: closed, archivedAt: closed ? now : null })
+  const afterLoan = useData.getState().records.loans[loan.id]?.record
+  const afterContainers = new Map(changed.map((c) => [c.id, useData.getState().records.containers[c.id]?.record]))
   const what = loan.direction === 'given' ? 'należność' : 'dług'
   toast(closed ? `Pożyczka „${loan.name}” zamknięta – ${what} znika z Radaru i zasięgu.` : `Pożyczka „${loan.name}” otwarta ponownie.`, 'info', 6000, {
     label: 'Cofnij',
     run: () => {
+      const curLoan = useData.getState().records.loans[loan.id]?.record
+      const containersUnchanged = changed.every((c) => {
+        const curC = useData.getState().records.containers[c.id]?.record
+        const afterC = afterContainers.get(c.id)
+        return !!curC && !!afterC && sameContentAs(curC, afterC)
+      })
+      if (!curLoan || !afterLoan || !sameContentAs(curLoan, afterLoan) || !containersUnchanged) return undoChanged()
       const at = new Date().toISOString()
       updateRecord('loans', loan.id, () => ({ ...before, updatedAt: at }))
       for (const c of changed) updateRecord('containers', c.id, () => ({ ...c, updatedAt: at }))
@@ -293,5 +323,12 @@ export function planTransfer(a: AccountAhead): void {
   addRecord('transactions', t)
   playSound('entry')
   openOperation(t)
-  toast(`Przelew ${plnText(-t.amount)} zł z konta ${a.source.name} na konto ${a.name} zapisany – zmień dzień, gdy zrobisz go później.`, 'success', 7000, { label: 'Cofnij', run: () => deleteOrSay('transactions', t.id) })
+  toast(`Przelew ${plnText(-t.amount)} zł z konta ${a.source.name} na konto ${a.name} zapisany – zmień dzień, gdy zrobisz go później.`, 'success', 7000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.transactions[t.id]?.record
+      if (!cur || !sameContentAs(cur, t)) return undoChanged()
+      void deleteOrSay('transactions', t.id)
+    }
+  })
 }

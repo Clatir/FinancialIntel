@@ -1,5 +1,27 @@
 # Financial Intel – zmiany
 
+## 1.18.0
+
+Reguły z warunkami, audyt importu i plan spłaty:
+
+- **Ochrona rozszerzonych pól reguł i zgodność w przód:** pola reguł nie są już bezpowrotnie czyszczone przy wczytywaniu starszą wersją aplikacji (`keptField`), zachowując dane nowszych struktur; audyt reguł weryfikuje czytelność wszystkich pól.
+- **Audyt reguł – zamknięte i usunięte pożyczki:** automatyczne wykrywanie reguł importu powiązanych z pożyczką, która została zamknięta lub usunięta z Radaru, wraz z oznaczeniem w widoku reguł niespójnych.
+- **Podpowiedź oprocentowania z harmonogramu:** funkcja szacowania efektywnego oprocentowania rocznego pożyczki na podstawie jej rat i kwoty głównej (`impliedLoanRate`) ułatwia uzupełnienie danych w Planie spłaty pożyczek.
+- **Automatyczne rozpoznawanie PIT-38:** podatek od zysków kapitałowych jest poprawnie klasyfikowany na podstawie kontrahenta, tytułu przelewu lub opisu operacji.
+- **Wzorce regex i kolejność reguł z warunkami:** możliwość definiowania reguł z wyrażeniami regularnymi na bazie wiersza bankowego (z automatycznym uogólnianiem numerów faktur do `\d+`) oraz ręcznego zmieniania kolejności reguł warunkowych w Ustawieniach.
+
+
+## 1.17.1
+
+Poprawki silnika i ochrony danych:
+
+- **Terminy naprzód i zmiana cen w Ładowni:** opłata okresowa z dniem wypadającym po końcu danego miesiąca poprawnie przesuwa się na kolejny miesiąc; zmiana ceny kontenera filtruje przyszłe spłaty po dacie.
+- **Kurs na 12 miesięcy i prognoza:** boja roczna nie dubluje kwot przy uśrednionych 12-miesięcznych wydatkach; zrealizowane cele nie obciążają niepotrzebnie prognozy; ukryty `containerId` jest filtrowany wyłącznie do operacji kosztowych.
+- **Pliki tylko do odczytu i ochrona zapisu:** wykrywanie atrybutu „tylko do odczytu” na plikach JSON bazy danych z jasnym komunikatem ostrzegawczym oraz możliwością zdjęcia blokady bezpośrednio w aplikacji (Synchronizacja / Ustawienia).
+- **Bezpieczne „Cofnij” w całym systemie:** cofnięcie operacji w Ładowni, Radarze, terminach, kategoriach czy widokach operacji odmawia nadpisania, jeśli wpis został w międzyczasie zmodyfikowany przez użytkownika.
+- **Import bankowy i dopasowania:** automatyczne czyszczenie nieaktualnych numerów rachunków, precyzyjne wykrywanie duplikatów między kontami w różnych formatach bankowych oraz zachowywanie linii „w tym za” i spłat przy zmianie decyzji zbiorczej dla tej samej osoby.
+
+
 ## 1.17.0
 
 Rozwojowe 2 – plan spłaty pożyczek, prognoza wieloletnia, wykres „Skąd i dokąd” i kwota w walucie:

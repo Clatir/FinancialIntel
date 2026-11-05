@@ -802,11 +802,11 @@ export function runFleet(input, opt) {
     out.toShields += rest
     return out
   }
-  // T128 / T340: chwila, w której pieniądze przyszły do FI – utworzenie dokowania, bez niego operacji (para do
-  // zadokowania – operacji, T341), nigdy przed początkiem dnia (druga strona przelewu – jej dnia)
+  // T128 / T340 / T363: chwila, w której pieniądze przyszły do FI – countedFrom dokowania (albo jego utworzenie), bez
+  // niego utworzenie operacji (para do zadokowania – operacji, T341), nigdy przed początkiem dnia (druga strona przelewu – jej dnia)
   const cameInOf = (t, day = t.date) => {
     const d = dockByTx.get(t.id)
-    const c = Date.parse(d ? d.createdAt : t.createdAt)
+    const c = Date.parse(d ? (d.countedFrom ?? d.createdAt) : t.createdAt)
     return Math.max(c, warsawDayStart(day))
   }
   /** Dokowanie operacji: rekord, inaczej para do zadokowania z pulą wpisu (T341) – rekord decyduje nad parą. */
@@ -1214,19 +1214,32 @@ export function runFleet(input, opt) {
       return
     }
     if (t.kind === 'income') {
-      // T341 / B69: wpływ wpisany na Portfelu XTB w parze z wpisem ICTTJ – jak dokowanie z pulą wpisu
+      // T341 / B69 / T499: wpływ wpisany na Portfelu XTB w parze z wpisem ICTTJ – najpierw rozlicza części pożyczek
+      // udzielonych i domowników, a pozostałą część własnego przychodu kieruje do tradingInflow z pulą wpisu
       const pend = !dockByTx.has(t.id) && pendingPairs.has(t.id) ? dockOf(t) : null
-      if (pend && t.amount > 0) {
-        tradingInflow(t, pend, cameIn)
-        return
-      }
+      let pendingOwn = 0
       for (const p of partsOf(t)) {
         if (p.amount === 0) continue
         if (p.loanId && p.amount > 0) {
           const loan = loans.get(p.loanId)
           // T355: część pożyczki udzielonej – do osłon do wysokości długu, nadwyżka dokuje; pożyczka nieznana / wzięta – przychód
           if (loan && loan.direction === 'given') {
-            repayGiven(t, loan, p.amount, cameIn, true)
+            if (pend) {
+              const ls = loansState.get(loan.id)
+              const due = Math.max(0, loan.amount - ls.received)
+              const back = Math.min(p.amount, due)
+              ls.received += back
+              ls.payments.push({ date: t.date, amount: p.amount, payer: payerOf(t), txId: t.id, part: true })
+              st.S += back
+              dayCtx.decisionsSH += back
+              if (p.amount - back > 0) {
+                ls.extraIncome += p.amount - back
+                addExtra(t, p.amount - back)
+                pendingOwn += p.amount - back
+              }
+            } else {
+              repayGiven(t, loan, p.amount, cameIn, true)
+            }
             continue
           }
           if (!loan) note(`linia wpływu ${t.id} spłaca nieznaną pożyczkę ${p.loanId} – liczona jako przychód (T355)`)
@@ -1236,21 +1249,31 @@ export function runFleet(input, opt) {
           const r = hh.inflow(p.memberId ?? t.memberId, p.amount, p.advance, p.inflowKind, t.covers, t)
           st.S += r.repay
           if (r.income > 0) {
-            const o = dock(r.income, t.date, cameIn, { txId: t.id, source: 'przychód od domownika' })
-            deliveries.push(o)
-            dayCtx.decisionsSH += o.toShields + o.toHull
+            if (pend) pendingOwn += r.income
+            else {
+              const o = dock(r.income, t.date, cameIn, { txId: t.id, source: 'przychód od domownika' })
+              deliveries.push(o)
+              dayCtx.decisionsSH += o.toShields + o.toHull
+            }
           }
           // spłata należności domownika nie jest decyzją zabierającą z osłon
           continue
         }
         if (p.amount > 0) {
-          const o = dock(p.amount, t.date, cameIn, { txId: t.id })
-          deliveries.push(o)
-          dayCtx.decisionsSH += o.toShields + o.toHull
+          if (pend) pendingOwn += p.amount
+          else {
+            const o = dock(p.amount, t.date, cameIn, { txId: t.id })
+            deliveries.push(o)
+            dayCtx.decisionsSH += o.toShields + o.toHull
+          }
         } else {
           takeChain(-p.amount)
           dayCtx.decisionsSH += p.amount
         }
+      }
+      if (pend && t.amount > 0) {
+        if (pendingOwn > 0) tradingInflow({ ...t, amount: pendingOwn }, pend, cameIn)
+        else toDock.push({ txId: t.id, amount: 0, toGoals: 0, pool: pend.pool ?? null })
       }
       return
     }

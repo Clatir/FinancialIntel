@@ -11,7 +11,7 @@ import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarr
 import type { BrandAliases } from '@shared/import/aliases'
 import { shareOf, withShare } from '@shared/calc/share'
 import { stripDeletedCovers } from '@shared/calc/repayments'
-import { deepEqual } from '@shared/merge'
+import { deepEqual, sameContentAs } from '@shared/merge'
 import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KIND_LABEL, TX_KINDS, transactionSchema, type ImportRule, type OperationView, type Share, type Transaction, type TxKind } from '@shared/schema'
 import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
 import { askGuard } from '../../store/guard'
@@ -229,8 +229,14 @@ const financers = (t: Transaction): unknown => [t.refundable, t.refundable ? t.m
 /** Ticked operations a newer version of the app wrote (B67): left as they are, said in the toast. */
 const newerNote = (n: number): string => (n ? `, bez zmian (zapisane przez nowszą wersję aplikacji): ${n}` : '')
 
+const undoChanged = () => toast('Nie cofnięto – wpis został w międzyczasie zmieniony.', 'info', 6000)
+
 /** „Cofnij” of a bulk change that left out operations changed since (B66): said, never a silent half. */
 function undoneNote(done: number, of: number): void {
+  if (done === 0 && of === 1) {
+    undoChanged()
+    return
+  }
   if (done < of) toast(`Cofnięto ${done} z ${of} – ${of - done === 1 ? 'jedna zmieniła' : 'pozostałe zmieniły'} się w międzyczasie i ${of - done === 1 ? 'zostaje' : 'zostają'} bez zmian.`, 'info', 6000)
 }
 
@@ -407,7 +413,11 @@ export function changeKind(id: string, kind: TxKind, direct: boolean): boolean {
     ]
     toast(`Rodzaj „${TX_KIND_LABEL[kind]}” nie bierze pieniędzy z celu ani z Ładowni – operację odpięto: ${names.join(', ')}.`, 'info', 8000, {
       label: 'Cofnij',
-      run: () => void updateRecord('transactions', id, (r) => kindUndone(r, was, made))
+      run: () => {
+        const cur = useData.getState().records.transactions[id]?.record
+        if (!cur || !sameContentAs(cur, made)) return undoChanged()
+        void updateRecord('transactions', id, (r) => kindUndone(r, was, made))
+      }
     })
   })
 }
@@ -475,6 +485,8 @@ export function applyView(view: OperationView): void {
 /** Is the list showing this view now (its chip marked). */
 export const isShownView = (filter: OperationsFilter, view: OperationView): boolean => showsView(filter, view, currentMonth)
 
+export const saveCurrentView = (name: string, withPeriod = false): boolean => saveView(name, withPeriod)
+
 /** The list's filter saved as a view of the folder (F18): a chip on every computer; a view of the same name is replaced. */
 export function saveView(name: string, withPeriod: boolean): boolean {
   const n = name.trim().slice(0, 80)
@@ -498,12 +510,15 @@ export function deleteView(id: string): void {
   if (!updateSettings((f) => ({ ...f, settings: { ...f.settings, operationViews: without(f.settings.operationViews) } }))) return
   toast(`Widok „${view.name}” usunięty.`, 'info', 7000, {
     label: 'Cofnij',
-    run: () =>
+    run: () => {
+      const curViews = useData.getState().fi?.settings.operationViews ?? []
+      if (curViews.some((v) => v.id === view.id || v.name.toLowerCase() === view.name.toLowerCase())) return undoChanged()
       void updateSettings((f) => {
         const list = without(f.settings.operationViews)
         list.splice(Math.min(at, list.length), 0, view)
         return { ...f, settings: { ...f.settings, operationViews: list } }
       })
+    }
   })
 }
 

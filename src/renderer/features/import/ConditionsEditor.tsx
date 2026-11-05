@@ -6,6 +6,8 @@
  */
 import { useMemo, useState } from 'react'
 import { combineOf, conditionsOf, MAX_RULE_CONDITIONS, type ImportRule, type Loan, type RuleCondition } from '@shared/schema'
+import { conditionsFromRow, regexFromRow } from '@shared/import/conditions'
+import type { Choice } from '@shared/import/reconcile'
 import type { RecordEntry } from '@shared/api'
 import { listOf, useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { useDraft } from '../../store/drafts'
@@ -31,13 +33,22 @@ const FIELD_LABEL: Record<RuleCondition['field'], string> = {
 }
 const FIELDS = Object.keys(FIELD_LABEL) as Array<RuleCondition['field']>
 
-/** A new rule's draft: one empty condition of the counterparty, an expense. */
-const blankDraft = (): ConditionsDraft => ({
-  label: '',
-  direction: 'out',
-  conditions: [blankCondition('counterparty')],
+export interface ConditionsRowSeed {
+  counterparty?: string
+  title?: string
+  amount?: number
+  direction?: 'in' | 'out'
+  accountId?: string | null
+  choice?: Choice
+}
+
+/** A new rule's draft: one empty condition of the counterparty, an expense – or prefilled from an import row (T508). */
+const blankDraft = (fromRow?: ConditionsRowSeed): ConditionsDraft => ({
+  label: (fromRow?.counterparty || fromRow?.title || '').trim().slice(0, 200),
+  direction: fromRow?.direction ?? 'out',
+  conditions: fromRow ? conditionsFromRow(fromRow) : [blankCondition('counterparty')],
   combine: 'all',
-  choice: { kind: 'expense', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null },
+  choice: fromRow?.choice ?? { kind: 'expense', categoryId: null, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null },
   manual: false,
   tags: []
 })
@@ -60,9 +71,10 @@ const draftOf = (r: ImportRule): ConditionsDraft => ({
 const notForRule = (o: string, direction: 'in' | 'out' | null, repayable: ReadonlySet<string>) =>
   o === 'loan' || (o.startsWith('loan:') && !(direction === 'in' && repayable.has(o.slice('loan:'.length)))) || o === 'tax' || o === 'trading'
 
-/** `rule` – the one changed; none – a new one. `onDone` after „Zapisz” or „Anuluj”. */
-export function ConditionsEditor({ rule, onDone }: { rule?: ImportRule; onDone: () => void }) {
-  const [d, setD, clear] = useDraft<ConditionsDraft>(`import-rule-conditions:${rule?.id ?? 'new'}`, () => (rule ? draftOf(rule) : blankDraft()))
+/** `rule` – the one changed; none – a new one (optionally seeded from an import row, `fromRow`). `onDone` after „Zapisz” or „Anuluj”. */
+export function ConditionsEditor({ rule, fromRow, onDone }: { rule?: ImportRule; fromRow?: ConditionsRowSeed; onDone: () => void }) {
+  const draftKey = `import-rule-conditions:${rule?.id ?? (fromRow ? `row:${fromRow.counterparty ?? ''}:${fromRow.title ?? ''}` : 'new')}`
+  const [d, setD, clear] = useDraft<ConditionsDraft>(draftKey, () => (rule ? draftOf(rule) : blankDraft(fromRow)))
   const readOnly = useFolderLocked()
   const locked = useLockedReason()
   const accounts = useAccounts()
@@ -128,14 +140,31 @@ export function ConditionsEditor({ rule, onDone }: { rule?: ImportRule; onDone: 
               {i === 0 && <span className="w-[26px]" />}
               <span className="w-[120px] text-muted">{FIELD_LABEL[c.field as RuleCondition['field']] ?? 'warunek nowszej wersji'}</span>
               {(c.field === 'counterparty' || c.field === 'title') && (
-                <TextField
-                  className="w-[200px]"
-                  value={c.value ?? ''}
-                  onChange={(value) => setCondition(i, { ...c, value })}
-                  placeholder={c.field === 'title' ? 'słowo z tytułu, np. czynsz' : 'fragment nazwy, np. orlen'}
-                  maxLength={200}
-                  data-testid="import-rule-condition-text"
-                />
+                <>
+                  <TextField
+                    className="w-[200px]"
+                    value={c.value ?? ''}
+                    onChange={(value) => setCondition(i, { ...c, value })}
+                    placeholder={c.field === 'title' ? 'słowo z tytułu, np. czynsz' : 'fragment nazwy, np. orlen'}
+                    maxLength={200}
+                    data-testid="import-rule-condition-text"
+                  />
+                  {((c.value && !c.value.startsWith('/')) || (c.field === 'title' ? fromRow?.title : fromRow?.counterparty)) && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost h-[22px] px-1.5 text-[11px] text-accent"
+                      title="Zamień tekst na wyrażenie regularne (/…/i), w którym liczby (np. numer faktury lub miesiąc) pasują do dowolnych cyfr"
+                      onClick={() => {
+                        const raw = (c.value && !c.value.startsWith('/') ? c.value : c.field === 'title' ? fromRow?.title : fromRow?.counterparty) ?? ''
+                        const rx = regexFromRow(raw)
+                        if (rx) setCondition(i, { ...c, value: rx })
+                      }}
+                      data-testid="import-rule-condition-regex"
+                    >
+                      wzorzec /…/
+                    </button>
+                  )}
+                </>
               )}
               {c.field === 'amount' && (
                 <span className="flex items-center gap-1 text-muted">

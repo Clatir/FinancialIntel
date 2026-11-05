@@ -478,6 +478,7 @@ export function SyncPage() {
   const sel = useSelection(conflicts.map((c) => c.id))
   // One resolution at a time (a card's button or the bulk action).
   const [busy, setBusy] = useState(false)
+  const [unlocking, setUnlocking] = useState(false)
   const problems = useData((s) => s.problems)
   const status = useData((s) => s.status)
   const locked = useFolderLocked()
@@ -502,6 +503,38 @@ export function SyncPage() {
           Gdy ten sam plik zmieni się na dwóch komputerach, usługa synchronizacji (OneDrive, Dropbox, Google Drive) tworzy jego kopię zamiast
           nadpisywać. Aplikacja pokazuje takie kopie tutaj – wybierz, którą wersję zachować; druga trafia do historii wpisu (widać ją na każdym komputerze) i do Kosza.
         </p>
+        {(status?.readOnlyFiles ?? 0) > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border border-warn/50 bg-raised px-3 py-2 text-[12px]" data-testid="sync-readonly-files">
+            <div>
+              <div className="font-semibold text-warn">
+                Pliki z atrybutem „tylko do odczytu”: {status!.readOnlyFiles}
+              </div>
+              <div className="mt-0.5 text-muted">
+                Niektóre pliki JSON w folderze budżetu mają włączony w systemie atrybut „tylko do odczytu”, co blokuje zapis zmian w tych wpisach.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn h-[26px]"
+              disabled={unlocking}
+              onClick={async () => {
+                setUnlocking(true)
+                try {
+                  const n = await api.unlockReadOnlyFiles()
+                  await api.rescan()
+                  toast(n > 0 ? `Zdjęto atrybut „tylko do odczytu” (${n}).` : 'Brak plików z blokadą „tylko do odczytu”.', 'success')
+                } catch (e) {
+                  toast(errorMessage(e), 'error', 8000)
+                } finally {
+                  setUnlocking(false)
+                }
+              }}
+              data-testid="sync-unlock-readonly"
+            >
+              {unlocking ? 'Zdejmuję…' : 'Zdejmij blokadę'}
+            </button>
+          </div>
+        )}
         {((status && status.otherMachines.length > 0) || lastRemote) && (
           <Panel title="Inne komputery">
             {status?.otherMachines.map((m) => (

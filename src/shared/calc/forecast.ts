@@ -123,9 +123,11 @@ export function forecastInputOf(
   const add = (month: string, v: number) => {
     if (month > yearEnd && month <= end && v) later.set(month, (later.get(month) ?? 0) + v)
   }
-  // The buoys after the course's year (its own come from `courseInputOf`): their open days, a yearly one each year.
+  // The buoys after the course's year (its own come from `courseInputOf`): their open days, a yearly one each year
+  // unless a full 12-month history average holds it already (T276, T497).
+  const fullYearAvg = fleet.costs.source === 'history' && fleet.costs.months >= 12
   for (const d of openDays(scheduledDays(r.scheduled, r.transactions, fleet.today, `${addMonths(yearEnd, 1)}-01`, lastDayOf(end))))
-    if (d.scheduled.amount != null) add(monthOf(d.date), d.scheduled.amount)
+    if (d.scheduled.amount != null && !(fullYearAvg && d.scheduled.yearly)) add(monthOf(d.date), d.scheduled.amount)
   // The loans given still open and their installments back, by month – the receivable falls by them (the money comes back
   // by the course's `loanFlows`; a late one this month, as there).
   const repayments: Array<{ month: string; amount: number }> = []
@@ -249,7 +251,11 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
             month: start,
             shields: from.shields,
             hull: from.hull,
-            goals: c.goals.map((g) => ({ ...g, amount: from.goals[g.id] ?? g.amount })),
+            goals: c.goals.map((g) => {
+              const amount = from.goals[g.id] ?? g.amount
+              const done = g.deadline != null && from.month >= g.deadline && goalEta[g.id] != null
+              return { ...g, amount: done ? 0 : amount, target: done ? 0 : g.target }
+            }),
             salaryOf: (m: string) => {
               const s = c.salaryOf(m)
               return s == null ? null : Math.round(s * inflation)

@@ -173,8 +173,16 @@ export function removeRule(id: string): void {
   })
 }
 
+import { reorderConditionalRule } from '@shared/import/learn'
+
 function setRules(next: (rules: ImportRule[]) => ImportRule[]): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next(f.settings.import.rules) } } }))
+}
+
+/** Reorder a conditional rule up (`-1`) or down (`1`) among the conditional rules in `fi.settings.import.rules` (T508). */
+export function moveConditionalRule(id: string, delta: -1 | 1): void {
+  if (!canWrite()) return
+  setRules((now) => reorderConditionalRule(now, id, delta))
 }
 
 /**

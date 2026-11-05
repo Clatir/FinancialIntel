@@ -291,6 +291,23 @@ export const ruleCombineSchema = openEnum(['all', 'any'] as const)
 const kept = <T extends z.ZodType>(schema: T) => z.union([schema, z.unknown()]).optional()
 
 /**
+ * A rule field a newer version may extend (T504): kept as-is in fi.json instead of being erased by `.catch(undefined)`,
+ * while keeping its TypeScript type and format-folderu metadata (`_keptInner`). `readableRuleFields` tells whether all
+ * such fields on a parsed rule are understood by this version; otherwise `unreadableRule` marks the rule read-only.
+ */
+const keptField = <T extends z.ZodType>(schema: T): z.ZodOptional<T> => {
+  const union = z.union([schema, z.unknown()])
+  ;(union as unknown as { _keptInner?: T })._keptInner = schema
+  return union.optional() as unknown as z.ZodOptional<T>
+}
+
+const keptDefault = <T extends z.ZodType>(schema: T, def: z.output<T>): z.ZodDefault<T> => {
+  const union = z.union([schema, z.unknown()])
+  ;(union as unknown as { _keptInner?: T })._keptInner = schema
+  return union.default(def) as unknown as z.ZodDefault<T>
+}
+
+/**
  * A rule of the import (E2): an operation of this counterparty becomes … Learned from the user's decisions (the
  * group categorization) or written in the settings. The bank's own categories are a weak hint only (D68).
  */
@@ -308,7 +325,7 @@ export const importRuleSchema = z.looseObject({
    */
   mode: openEnum(['exact', 'contains', 'keyword', 'amount', 'conditions'] as const).default('exact'),
   /** The 'amount' rule's limit: the operation's amount up to it (grosze, without the sign). */
-  maxAmount: z.number().int().positive().nullable().optional().catch(undefined),
+  maxAmount: keptField(z.number().int().positive().nullable()),
   /**
    * 'conditions' (1.16.0, AP-45, T467): the rule's conditions, joined by `combine` – 'all' (I), 'any' (LUB); `match` is
    * then only the rule's text for the search. The mode is the field of compatibility: a version before 1.16.0 does not
@@ -321,11 +338,11 @@ export const importRuleSchema = z.looseObject({
    * rule's decision (category, who pays) once the name or the title fits it – to accept, never saved by itself. Absent =
    * the import only.
    */
-  manual: z.boolean().optional().catch(undefined),
+  manual: keptField(z.boolean()),
   /** Money in or out; null = both. */
   direction: openEnum(['in', 'out'] as const).nullable().default(null),
   /** An optional counterparty constraint for a keyword rule (e.g. transfer from person X with title Y). */
-  counterparty: z.string().max(300).optional().catch(undefined),
+  counterparty: keptField(z.string().max(300)),
   /** The counterparty as the bank writes it (for the list of rules). */
   label: z.string().max(200).default(''),
   kind: openEnum(TX_KINDS).default('expense'),
@@ -334,13 +351,13 @@ export const importRuleSchema = z.looseObject({
   /** A household member (D20): money from them proposes repaying the house receivable first. */
   household: z.boolean().default(false),
   /** The household member (D80): who finances an expense („refundable”), whose money an income is („household”); null = the first. */
-  memberId: ulidSchema.nullable().catch(null).default(null),
+  memberId: keptDefault(ulidSchema.nullable(), null),
   /** Purpose of an incoming transfer: 'repay' (default), 'income' (independent income), 'advance' (deposit). */
-  inflowKind: z.enum(['repay', 'income', 'advance']).optional().catch(undefined),
+  inflowKind: keptField(z.enum(['repay', 'income', 'advance'])),
   /** A purchase the member gives (D83, with `refundable`): nobody owes it. Absent = no. */
-  gift: z.boolean().optional().catch(undefined),
+  gift: keptField(z.boolean()),
   /** A purchase financed by several people (D83): each row's amount split so (`calc/share.ts`). Absent / null = none. */
-  share: shareSchema.nullable().optional().catch(undefined),
+  share: keptField(shareSchema.nullable()),
   counterAccountId: ulidSchema.nullable().default(null),
   /**
    * A loan given of the Radar the money repays (D100, T358): of a rule of kind 'loan' – the whole inflow; of an income's
@@ -348,17 +365,37 @@ export const importRuleSchema = z.looseObject({
    * day (`loanFor`'s conditions); otherwise the rule gives way (its part is left out). Absent = none (an older version
    * reads a rule of kind 'loan' as a proposal of before 1.5.1, the part – not at all).
    */
-  loanId: ulidSchema.nullable().optional().catch(undefined),
+  loanId: keptField(ulidSchema.nullable()),
   /** The part of each inflow repaying `loanId` (grosze, D100); absent = the whole inflow (a rule of kind 'loan'). */
-  loanAmount: z.number().int().positive().nullable().optional().catch(undefined),
+  loanAmount: keptField(z.number().int().positive().nullable()),
   /** Tags the rule gives (1.10.0, F17 – „Netia → #ulga-internet”); absent = none. An older version ignores them. */
-  tags: tagListSchema.optional().catch(undefined),
+  tags: keptField(tagListSchema),
   /** false = written or edited by the user in the settings (never overwritten by learning). */
   learned: z.boolean().default(true),
   hits: z.number().int().min(0).default(0),
   updatedAt: isoDateTime
 })
 export type ImportRule = z.infer<typeof importRuleSchema>
+
+const RULE_MODES: ReadonlySet<string> = new Set(['exact', 'contains', 'keyword', 'amount', 'conditions'])
+
+/** Do all decision and match fields of a rule conform to this version's schema (T504)? */
+export function readableRuleFields(rule: ImportRule): boolean {
+  if (!RULE_MODES.has(rule.mode)) return false
+  if (!(TX_KINDS as readonly string[]).includes(rule.kind)) return false
+  if (rule.direction !== null && rule.direction !== 'in' && rule.direction !== 'out') return false
+  if (rule.maxAmount !== undefined && rule.maxAmount !== null && (typeof rule.maxAmount !== 'number' || !Number.isInteger(rule.maxAmount) || rule.maxAmount <= 0)) return false
+  if (rule.manual !== undefined && typeof rule.manual !== 'boolean') return false
+  if (rule.counterparty !== undefined && (typeof rule.counterparty !== 'string' || rule.counterparty.length > 300)) return false
+  if (rule.memberId !== null && !ulidSchema.safeParse(rule.memberId).success) return false
+  if (rule.inflowKind !== undefined && rule.inflowKind !== 'repay' && rule.inflowKind !== 'income' && rule.inflowKind !== 'advance') return false
+  if (rule.gift !== undefined && typeof rule.gift !== 'boolean') return false
+  if (rule.share !== undefined && rule.share !== null && !shareSchema.safeParse(rule.share).success) return false
+  if (rule.loanId !== undefined && rule.loanId !== null && !ulidSchema.safeParse(rule.loanId).success) return false
+  if (rule.loanAmount !== undefined && rule.loanAmount !== null && (typeof rule.loanAmount !== 'number' || !Number.isInteger(rule.loanAmount) || rule.loanAmount <= 0)) return false
+  if (rule.tags !== undefined && !tagListSchema.safeParse(rule.tags).success) return false
+  return true
+}
 
 const conditionsMemo = new WeakMap<object, RuleCondition[] | null>()
 /**
@@ -393,9 +430,10 @@ export const brandAliasSchema = z.looseObject({
 export type BrandAlias = z.infer<typeof brandAliasSchema>
 
 /** A record of the settings one bad entry of which (a hand-edited fi.json) drops itself, not the others. */
-const lenientRecord = <T extends z.ZodType>(value: T) =>
-  z
-    .record(z.string(), z.unknown())
+const lenientRecord = <T extends z.ZodType>(value: T) => {
+  const rec = z.record(z.string(), z.unknown())
+  ;(rec as unknown as { _lenientValue?: T })._lenientValue = value
+  const pipe = rec
     .catch({})
     .default({})
     .transform((r) => {
@@ -406,6 +444,18 @@ const lenientRecord = <T extends z.ZodType>(value: T) =>
       }
       return out
     })
+  ;(pipe as unknown as { _lenientValue?: T })._lenientValue = value
+  return pipe
+}
+
+const notDuplicatesRecord = () => {
+  const rec = z.record(z.string(), z.unknown())
+  ;(rec as unknown as { _lenientValue?: z.ZodString })._lenientValue = z.string()
+  return rec
+    .catch({})
+    .default({})
+    .transform((r) => Object.fromEntries(Object.entries(r).filter((e): e is [string, string] => e[0].length <= 300 && typeof e[1] === 'string')))
+}
 
 export const importSettingsSchema = z.looseObject({
   /** The account holder's names as the bank writes them: transfers to / from them are own transfers. */
@@ -432,11 +482,7 @@ export const importSettingsSchema = z.looseObject({
    * Groups of operations the user said are no duplicates (`duplicateKey` / `rowKey` → when, 1.2.1): not offered again.
    * One bad entry (a hand-edited fi.json) drops itself, not the others.
    */
-  notDuplicates: z
-    .record(z.string(), z.unknown())
-    .catch({})
-    .default({})
-    .transform((r) => Object.fromEntries(Object.entries(r).filter((e): e is [string, string] => e[0].length <= 300 && typeof e[1] === 'string'))),
+  notDuplicates: notDuplicatesRecord(),
   /**
    * Names merged by the user (1.2.2, D78): a brand key → the key it is one with („MOKKA CAFE” = „KAWIARNIA MOKKA”) –
    * one group in the import, one rule. A record, so two computers' merges join key by key.

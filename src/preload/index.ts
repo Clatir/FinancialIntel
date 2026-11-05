@@ -47,6 +47,7 @@ const api: FiApi = {
   trayPrefs: () => invoke('trayPrefs'),
   setTrayPrefs: (patch) => invoke('setTrayPrefs', patch),
   rescan: () => invoke('rescan'),
+  unlockReadOnlyFiles: () => invoke('unlockReadOnlyFiles'),
   exportZip: () => invoke('exportZip'),
   saveTextFile: (name, content, filter) => invoke('saveTextFile', name, content, filter),
   saveXlsx: (name, sheets) => invoke('saveXlsx', name, sheets),
