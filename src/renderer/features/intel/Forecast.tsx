@@ -19,7 +19,7 @@ import {
   type ForecastAssumptions,
   type ForecastScenario
 } from '@shared/calc/forecast'
-import { countLabel, decimalText, percentText, rangeText } from '@shared/format'
+import { countLabel, decimalText, percentText, plMonth as mm, rangeText } from '@shared/format'
 import { AmountField, amountsHidden, plnText } from '../../components/fields'
 import { NumberField, Panel, Segmented, cx } from '../../components/ui'
 import { updateSettings, useData } from '../../store/data'
@@ -28,7 +28,6 @@ import { toast } from '../../store/ui'
 import { useCargoStatuses } from '../cargo/status'
 
 const zl = (g: number) => `${plnText(g)} zł`
-const mm = (m: string) => `${m.slice(5, 7)}.${m.slice(0, 4)}`
 /** A month of the forecast: this month – „teraz” (as the course). */
 const eta = (m: string | null, now: string, none: string) => (m == null ? none : m === now ? 'teraz' : mm(m))
 const signedPct = (v: number) => (v > 0 ? `+${percentText(v)}` : percentText(v))

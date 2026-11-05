@@ -45,6 +45,8 @@ test('Plan spłaty pożyczek: harmonogram, lawina i kula śnieżna z nadpłatą,
   const m = (n: number) => mmyyyy(addMonths(month, n))
   const { app, page, dataDir: dir, errors } = await launch({ dataDir })
   try {
+    // The window takes the shortcut once its first screen is there (a cold start of the run).
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
     await page.keyboard.press('Control+7')
     await expect(page.getByTestId('page-radar')).toBeVisible()
     const panel = page.getByTestId('radar-payoff')
@@ -116,13 +118,15 @@ test('Plan spłaty pożyczek: harmonogram, lawina i kula śnieżna z nadpłatą,
     await once.press('Enter')
     await expect(cells('radar-payoff-end')).toHaveText(['Spłata wszystkich', m(3), m(2), m(2)])
 
-    // The parents' loan at 6 %: the loan's own field (its file), the plan counts its interest; cleared – not known again.
+    // The parents' loan at 7,255 %: kept to 0,01 % – rounded with a word at the field (review of R2, AP-15), the loan's
+    // own field (its file), the plan counts its interest; cleared – not known again.
     const rate = panel.locator('[data-testid="radar-payoff-loan"][data-name="Pożyczka od rodziców"]').getByTestId('radar-payoff-rate')
     await rate.click()
-    await rate.fill('6')
+    await rate.fill('7,255')
     await rate.press('Tab')
-    await expect.poll(async () => (await records(dir, 'loans')).find((l) => l.id === A)?.rate).toBe(6)
-    await expect(rate).toHaveValue('6,00')
+    await expect(page.getByRole('status').filter({ hasText: 'Oprocentowanie liczy się z dokładnością do 0,01 % – przyjęte 7,26%.' })).toBeVisible()
+    await expect.poll(async () => (await records(dir, 'loans')).find((l) => l.id === A)?.rate).toBe(7.26)
+    await expect(rate).toHaveValue('7,26')
     await expect(panel.getByTestId('radar-payoff-unrated')).toHaveCount(0)
     await expect(cells('radar-payoff-interest')).not.toHaveText(['Odsetki (zł)', '17,82', '14,83', '15,83'])
     await rate.click()
@@ -131,24 +135,70 @@ test('Plan spłaty pożyczek: harmonogram, lawina i kula śnieżna z nadpłatą,
     await expect.poll(async () => (await records(dir, 'loans')).find((l) => l.id === A)?.rate).toBeNull()
     await expect(cells('radar-payoff-interest')).toHaveText(['Odsetki (zł)', '17,82', '14,83', '15,83'])
 
-    // A new taken loan with its interest typed: in the plan with it.
+    // A new taken loan with its interest typed – 9,505 % is 9,51 % with the same word: in the plan with it.
     await page.getByRole('radio', { name: 'Biorę pożyczkę' }).click()
     await page.getByTestId('loan-name').fill('Kredyt na rower')
     await page.getByTestId('loan-amount').fill('1200')
     await page.getByTestId('loan-amount').press('Tab')
     await page.getByTestId('loan-installments').fill('2')
     await page.getByTestId('loan-installments').press('Tab')
-    await page.getByTestId('loan-rate').fill('9,5')
+    await page.getByTestId('loan-rate').fill('9,505')
     await page.getByTestId('loan-rate').press('Tab')
+    await expect(page.getByRole('status').filter({ hasText: 'przyjęte 9,51%.' })).toBeVisible()
+    await expect(page.getByTestId('loan-rate')).toHaveValue('9,51')
     await page.getByTestId('loan-save').click()
-    await expect.poll(async () => (await records(dir, 'loans')).find((l) => l.name === 'Kredyt na rower')?.rate).toBe(9.5)
+    await expect.poll(async () => (await records(dir, 'loans')).find((l) => l.name === 'Kredyt na rower')?.rate).toBe(9.51)
     await expect(panel.getByTestId('radar-payoff-loan')).toHaveCount(4)
-    await expect(panel.locator('[data-testid="radar-payoff-loan"][data-name="Kredyt na rower"]').getByTestId('radar-payoff-rate')).toHaveValue('9,50')
+    await expect(panel.locator('[data-testid="radar-payoff-loan"][data-name="Kredyt na rower"]').getByTestId('radar-payoff-rate')).toHaveValue('9,51')
 
     // The plan itself wrote nothing: the only operation is the new loan's money in, no container or buoy of its own.
     await expect.poll(async () => (await records(dir, 'transactions')).map((t) => [t.kind, t.amount])).toEqual([['loan', zl(1200)]])
     expect((await records(dir, 'scheduled')).length).toBe(0)
     expect((await records(dir, 'containers')).map((c) => c.name)).toEqual(['Rata: Kredyt na rower'])
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Plan spłaty – przegląd R2: kula śnieżna spłaca małą pożyczkę, choć duża rośnie; plan bez końca bez sumy odsetek', async () => {
+  // The review's case: 100 000 zł at 24 % and 3 000 zł without a rate, neither with a schedule; 1 500 zł a month.
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-payoff-never-')), 'FinancialIntel')
+  const { month } = warsawNow()
+  const start = `${addMonths(month, -2)}-01`
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start }, layers: { ...s.layers, assumedCosts: zl(3000) } }),
+    records: {
+      balances: [{ date: start, accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(20000) }],
+      months: [{ month: addMonths(month, -2), salary: zl(4000), envelopes: {} }],
+      loans: [
+        { name: 'Kredyt konsolidacyjny', direction: 'taken', counterparty: 'Bank', amount: zl(100000), date: start, accountId: MBANK_ACCOUNT_ID, rate: 24 },
+        { name: 'Pożyczka od brata', direction: 'taken', counterparty: 'Brat', amount: zl(3000), date: start, accountId: MBANK_ACCOUNT_ID }
+      ]
+    }
+  })
+  const m = (n: number) => mmyyyy(addMonths(month, n))
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+7')
+    await expect(page.getByTestId('page-radar')).toBeVisible()
+    const panel = page.getByTestId('radar-payoff')
+    const cells = (testId: string) => panel.getByTestId(testId).locator('td')
+    const extra = panel.getByTestId('radar-payoff-extra')
+    await extra.click()
+    await extra.fill('1500')
+    await extra.press('Enter')
+    // The snowball: the brother's 3 000 zł in two months; the 24 % loan never (2 000 zł of interest a month), the
+    // avalanche puts everything on it – both never; without an end the interest has no total.
+    await expect(panel.locator('[data-testid="radar-payoff-loan-end"][data-name="Pożyczka od brata"] td')).toHaveText(['Spłata: Pożyczka od brata', 'nigdy', 'nigdy', m(1)])
+    await expect(panel.locator('[data-testid="radar-payoff-loan-end"][data-name="Kredyt konsolidacyjny"] td')).toHaveText(['Spłata: Kredyt konsolidacyjny', 'nigdy', 'nigdy', 'nigdy'])
+    await expect(cells('radar-payoff-end')).toHaveText(['Spłata wszystkich', 'nigdy', 'nigdy', 'nigdy'])
+    await expect(cells('radar-payoff-interest')).toHaveText(['Odsetki (zł)', '—', '—', '—'])
+    await expect(cells('radar-payoff-less')).toHaveText(['Mniej odsetek (zł)', '—', '—', '—'])
+    await panel.getByRole('radio', { name: 'kula śnieżna' }).click()
+    await expect(panel.getByTestId('radar-payoff-month')).toHaveCount(2)
+    await expect(panel.getByTestId('radar-payoff-month').nth(1).locator('[data-testid="radar-payoff-month-line"][data-name="Pożyczka od brata"]')).toHaveAttribute('data-state', 'paid-off')
     expect(errors).toEqual([])
   } finally {
     await app.close()

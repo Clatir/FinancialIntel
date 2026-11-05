@@ -1,11 +1,11 @@
 // adapted from ICTTJ src/renderer/lib/format.ts @ 84a8339
 import { addDays, warsawNow } from '@shared/calc/dates'
-import { countLabel, plDate, plDateTime, plural } from '@shared/format'
+import { countLabel, plDate, plDateTime, plMonth, plural } from '@shared/format'
 import type { PeriodFilter } from '@shared/operationsView'
 const MINUS = '−'
 
 /** Plural forms, counts and dates live in `shared/format.ts` (the notifications and the inbox use them too). */
-export { countLabel, plDate, plDateTime, plural }
+export { countLabel, plDate, plDateTime, plMonth, plural }
 
 export function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

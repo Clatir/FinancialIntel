@@ -14,12 +14,12 @@ import { Field, NumberField, Panel, Segmented, Toggle, cx } from '../../componen
 import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
-import { monthLabel } from '../../lib/format'
+import { monthLabel, plMonth } from '../../lib/format'
 import { useCargoStatuses } from '../cargo/status'
 import { setSalary } from '../month/actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
-const mm = (m: string | null) => (m ? `${m.slice(5, 7)}.${m.slice(0, 4)}` : '—')
+const mm = (m: string | null) => (m ? plMonth(m) : '—')
 /** A month of the course: this month – „teraz” (a layer or a goal full now, PR sp. 8). */
 const eta = (m: string | null, now: string) => (m === now ? 'teraz' : mm(m))
 const monthsText = (v: readonly string[]) => (v.length ? v.map(mm).join(', ') : 'nie')

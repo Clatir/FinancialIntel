@@ -1,5 +1,5 @@
 // adapted from ICTTJ src/shared/merge.ts @ 84a8339
-import { countLabel, formatPln, plDate, plDateTime } from './format'
+import { countLabel, formatPln, plDate, plDateTime, plMonth } from './format'
 import { ICTJ_POOL_LABEL } from './ictj'
 import { TX_KIND_LABEL } from './schema/records'
 /**
@@ -680,7 +680,7 @@ const ISO_MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
  */
 export function dateValueText(v: string): string | null {
   if (ISO_DATE.test(v)) return plDate(v)
-  if (ISO_MONTH.test(v)) return `${v.slice(5)}.${v.slice(0, 4)}`
+  if (ISO_MONTH.test(v)) return plMonth(v)
   if (ISO_MOMENT.test(v) && !Number.isNaN(Date.parse(v))) return plDateTime(v)
   return null
 }

@@ -16,7 +16,7 @@ paths:
   - "tests/unit/goals.test.ts"
   - "tests/unit/loans.test.ts"
   - "tests/unit/loans-n2-*.test.ts"
-  - "tests/unit/payoff.test.ts"
+  - "tests/unit/payoff*.test.ts"
   - "tests/unit/numbers-agree.test.ts"
 ---
 
@@ -120,7 +120,9 @@ paths:
   (tagi), musi pominąć `loanId`.
 - Plan spłaty pożyczek wziętych (AP-41, T480–T482): `calc/payoff.ts` – propozycja z `LoanState` (`open`, `left`) i pola
   `rate` pożyczki; nic nie zapisuje, silnik `rate` nigdy nie czyta. Raty harmonogramu zawierają odsetki – kapitał to ich
-  wartość obecna (`principalOf`), ostatnia rata płaci resztę; bez nadpłaty strategie = harmonogram.
+  wartość obecna (`principalOf`), ostatnia rata płaci resztę; bez nadpłaty strategie = harmonogram. **Pułapka (przegląd
+  R2):** koniec planu („nigdy”) tylko pożyczka po pożyczce – pierwsza otwarta w kolejności, której odsetki nie są mniejsze
+  od nadpłaty; nigdy suma sald (`payoff-fixes.test.ts` – własność na losowych zestawach).
 
 - Miesiąc w toku liczony do dziś (AP-36, T421): debriefing, przegląd roczny, bilans paliwa i „Wydatki w czasie” czytają
   operacje do dnia budżetu (`upToDay`), późniejsze – osobno `planned` („Zaplanowane”); nowe zestawienie miesiąca w toku

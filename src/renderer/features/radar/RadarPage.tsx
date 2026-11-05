@@ -27,7 +27,7 @@ import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName, openText } from '@shared/calc/household'
 import { openOperation, openRefundables } from '../operations/state'
 import { closeReturn, useReturns } from '../sensors/state'
-import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, type NewLoan } from './actions'
+import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, typedLoanRate, type NewLoan } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 import { useFocusRecord } from '../../components/focus'
 import { BuoysPanel, NewBuoyPanel } from './Buoys'
@@ -534,7 +534,8 @@ function NewLoanPanel({ today }: { today: string }) {
                 step={0.25}
                 range={[0, 100]}
                 isValid={(v) => v == null || (v >= 0 && v <= 100)}
-                onChange={(v) => set({ rate: v })}
+                commitOnBlur
+                onChange={(v) => set({ rate: typedLoanRate(v) })}
                 placeholder="—"
                 aria-label="Oprocentowanie roczne"
                 data-testid="loan-rate"

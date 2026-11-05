@@ -4087,7 +4087,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   przed planem – zaległa – w pierwszym); ostatnia rata harmonogramu płaci całą resztę (różnica zaokrągleń – reszta w
   ostatniej części: 2 × 100,23 zł przy 12 % to 100,23 + 100,24 zł), potem nadpłata (T482). Wariant bez nadpłat to więc
   harmonogram; odsetki tylko z pożyczek z oprocentowaniem („—”, gdy żadna go nie ma). Uproszczenie: miesiąc = 1/12 roku,
-  nie dni jak w banku – liczby banku mogą różnić się o grosze.
+  nie dni jak w banku – liczby banku mogą różnić się o grosze. Przegląd R2: oprocentowanie wpisane dokładniej niż 0,01 %
+  zaokrągla się połówką w górę od wpisanej liczby dziesiętnej (7,255 → 7,26 %, `loanRateOf`) i nigdy po cichu – przy polu
+  komunikat „Oprocentowanie liczy się z dokładnością do 0,01 % – przyjęte 7,26%.” (plan i „Nowa pożyczka”, zapis po
+  wyjściu z pola – AP-15).
 - **T482** Strategie planu spłaty (1.17.0, R2 – AP-41): lawina – najpierw najwyższe oprocentowanie (nieznane = 0 %), przy
   równym mniejsze do spłaty; kula śnieżna – najpierw najmniejsze do spłaty (kwota z Radaru, z odsetkami harmonogramu), przy
   równym wyższe oprocentowanie; dalej starsza pożyczka, id; kolejność stała przez cały plan. Ponad raty każdego miesiąca
@@ -4098,7 +4101,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   budżetu) – do potwierdzenia (klasyczna kula trzyma całą miesięczną sumę rat do spłaty wszystkich). Bez nadpłaty i
   jednorazowej strategie to harmonogram (nic, także grosz reszty, nie przechodzi na inną pożyczkę). „Nigdy”: pożyczka bez
   harmonogramu bez nadpłat albo odsetki nie mniejsze niż pieniądze ponad raty – plan kończy się na tym miesiącu (najwyżej
-  600 miesięcy).
+  600 miesięcy). Przegląd R2: koniec planu pożyczka po pożyczce, nigdy po sumie sald – po ostatniej racie harmonogramów
+  płaci już tylko nadpłata co miesiąc, cała pierwszej otwartej pożyczce w kolejności (dalszym dopiero po jej spłacie);
+  plan kończy się, gdy nadpłaty nie ma albo odsetki tej pożyczki nie są mniejsze od niej (ona i dalsze – „nigdy”). Mała
+  pożyczka spłacana nadpłatą ma więc datę, choć duża obok rośnie (100 000 zł przy 24 % i 3 000 zł, 1 500 zł miesięcznie:
+  kula – 3 000 zł w drugim miesiącu, 100 000 zł „nigdy”; lawina – obie „nigdy”), a każda pożyczka, którą pula zmniejsza,
+  ma tę samą datę co liczenie przez cały horyzont (test własności na losowych zestawach). Plan bez końca nie ma sumy
+  odsetek – „Odsetki” i „Mniej odsetek” to „—”.
 - **T483** Oprocentowanie w oknie (1.17.0, R2 – AP-41): pole „% rocznie” przy pożyczce w planie (zapis po wyjściu z pola
   albo Enter, Esc cofa; folder tylko do odczytu albo wpis nowszej wersji – sam tekst) i „Oprocentowanie” w „Nowa pożyczka”
   przy „Biorę pożyczkę” (puste = nieznane, przy udzielonej nie ma pola). Zapis w rekordzie pożyczki (`setLoanRate`) do

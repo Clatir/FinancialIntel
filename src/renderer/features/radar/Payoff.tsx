@@ -15,11 +15,11 @@ import { AmountField, plnText } from '../../components/fields'
 import { NumberField, Panel, Segmented, ShowMore } from '../../components/ui'
 import { useEntryNewer } from '../../store/data'
 import { useDraft } from '../../store/drafts'
-import { countLabel, monthLabel, plDate } from '../../lib/format'
-import { setLoanRate } from './actions'
+import { countLabel, monthLabel, plDate, plMonth } from '../../lib/format'
+import { setLoanRate, typedLoanRate } from './actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
-const mm = (m: string | null) => (m ? `${m.slice(5, 7)}.${m.slice(0, 4)}` : 'nigdy')
+const mm = (m: string | null) => (m ? plMonth(m) : 'nigdy')
 const PAGE = 100
 
 const PAYOFF_LABEL: Record<PayoffVariant, string> = { none: 'bez nadpłat', avalanche: 'lawina', snowball: 'kula śnieżna' }
@@ -50,8 +50,9 @@ export function PayoffPanel({ fleet, readOnly }: { fleet: FleetState; readOnly: 
   const plan = plans[view]
   const rated = debts.filter((d) => d.rate != null).length
   const free = fleet.shields.free
-  const interest = (p: PayoffPlan) => (rated ? plnText(p.interest) : '—')
-  const less = (p: PayoffPlan) => (p.variant === 'none' || !rated ? '—' : plnText(plans.none.interest - p.interest))
+  // A plan that never ends has no interest together (review of R2, T482): what it counted up to its end is not the sum.
+  const interest = (p: PayoffPlan) => (rated && p.end ? plnText(p.interest) : '—')
+  const less = (p: PayoffPlan) => (p.variant === 'none' || !rated || !p.end || !plans.none.end ? '—' : plnText(plans.none.interest - p.interest))
   const sooner = (p: PayoffPlan) => {
     // Never, or the schedule never ends (a loan without one): the row „Spłata wszystkich” says it.
     if (p.variant === 'none' || !p.end || !plans.none.end) return '—'
@@ -198,7 +199,7 @@ function PayoffLoanRow({ s, principal, readOnly: folderLocked }: { s: LoanState;
             range={[0, 100]}
             isValid={(v) => v == null || (v >= 0 && v <= 100)}
             commitOnBlur
-            onChange={(v) => setLoanRate(s.loan, v)}
+            onChange={(v) => setLoanRate(s.loan, typedLoanRate(v))}
             placeholder="—"
             aria-label={`Oprocentowanie roczne: ${s.loan.name}`}
             data-testid="radar-payoff-rate"
