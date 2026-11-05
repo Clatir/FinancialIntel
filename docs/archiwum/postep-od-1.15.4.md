@@ -252,3 +252,47 @@ dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1
   OneDrive, powiadomienie o starych wpisach przy pierwszym wyborze folderu ICTTJ.
 - **Czas:** 12:45–ok. 14:00 pierwsze gałęzie, 14:20–02:28 dokończenie, integracja, cztery rundy przeglądu, wydanie –
   plan 3–4,5 h pracy; zegar dłuższy przez 6 gałęzi na dwóch bazach i rundy poprawek w obszarze startu budżetu.
+
+## R1 – Rozwojowe 1 (1.16.0, 05.11.2026) – wydane 05.11 06:05, PR #55
+- **Zakres:** AP-43 import CSV innego banku z kreatorem kolumn (T460–T462), AP-35 analiza i plan importu w Web Workerze
+  z paskiem postępu (T463–T466), AP-45 reguły importu z warunkami I / LUB i dla wpisów ręcznych (T467–T471), AP-42
+  kalendarz-siatka miesiąca na Radarze (T472–T474), AP-47 opis formatu folderu generowany ze schematów i przykładowy
+  skrypt odczytu (T475, T476).
+- **Wykonawcy:** 3 strumienie równolegle (AP-43 + AP-35, AP-45 – Opus xhigh; AP-42 + AP-47 – Opus high), poprawki po
+  przeglądach w dwóch strumieniach (CSV / Worker; reguły / schemat / dokumenty).
+- **Przegląd:** xhigh całości (15 uwag – m.in. tożsamość wiersza CSV zależna od ról kolumn, kreator nadpisujący
+  mapowanie innego konta, migawka bez odwołania do pliku, nieczytelne nowsze pola gubione przy zapisie), high na
+  poprawkach (10 – m.in. przelew własny na to samo konto, długi wiersz poza schematem, usunięta operacja wracająca,
+  brak powrotu do okna po błędzie Workera) – wszystkie poprawione z testem, który przed poprawką padał; ostatnia runda
+  sprawdzona przez koordynatora na diffie.
+- **Testy:** typecheck (+ `typecheck:audyt`), `npm test` ok. 1790 (pod obciążeniem pada tylko `folder-speed` ZIP64),
+  build, E2E komputera 129/130 (lokalnie `ictj.spec`), telefonu 10/10, wyrocznia bez rozbieżności; test „przed i po”
+  reguł na imporcie 1.15.9.
+- **Otwarte:** pomiar Workera w maszynie (IM.55); regex z wiersza AP-45, podpowiedź „od domownika” przy wpływach, ręczna
+  kolejność reguł z warunkami; inne pola reguł z `.catch(undefined)` (udział, tagi, rodzaj wpływu) gubią nieczytelną
+  wartość przy odczycie (jak dotąd); mapy `lenientRecord` w opisie folderu jako „dowolna wartość”.
+- **Czas:** ok. 01:50–ok. 06:30 (równolegle z końcem N5 i początkiem R2) – plan 3–4,5 h pracy.
+
+## R2 – Rozwojowe 2 (1.17.0, 05.11.2026) – wydane po CI na `main`, PR #56
+- **Zakres:** AP-41 plan spłaty pożyczek wziętych na Radarze – harmonogram, lawina, kula śnieżna, nadpłata co miesiąc i
+  jednorazowa, oprocentowanie `loan.rate` (T480–T484); AP-44 prognoza wieloletnia w Wywiadzie – 3 scenariusze, rok 1 =
+  kurs, założenia w `settings.intel.forecast` (T485–T489); AP-46 Sankey miesiąca w Debriefingu – „Przychód i koszty” i
+  „Pensja i energia”, także w PDF (T490, T491); AP-48 kwota w walucie przy operacji – pole informacyjne `foreign`
+  (T492–T494; wyjątek od „tylko PLN” w CLAUDE.md). Bez karty kredytowej (D101).
+- **Wykonawcy:** 3 strumienie równolegle (AP-41 – Opus max; AP-44, AP-46 + AP-48 – Opus xhigh), poprawki w trzech
+  gałęziach (plan spłaty; kurs i prognoza; Sankey), druga runda w dwóch.
+- **Przegląd:** xhigh całości (15 uwag – m.in. raty pożyczek bez kontenera nigdy niepłacone w roku 1 prognozy, plan spłaty
+  zatrzymany przy rosnącej sumie sald, czerwony węzeł Sankeya z wypływami spoza deficytu, PDF ucinający kwotę), high na
+  poprawkach (8 – m.in. rata pożyczki z kontenerem pomijana w kursie, podwójna rata przy przyjętych kosztach, skok celu
+  kadłuba na granicy roku 2, rata i spłata w jednym miesiącu znoszące się) – wszystkie poprawione z testem, który przed
+  poprawką padał (`CourseInput.loanFlows`, wspólne `roomOf` / `fitLabel` ekranu i PDF).
+- **Scalenie:** z `main` 1.16.0 – konflikt tylko w `.claude/rules/import.md`; `npm run docs:format`.
+- **Testy:** typecheck, build, `npm test` 1865/1866 (lokalnie `folder-speed` ZIP64 – osobno 12/12), CI Linux / Windows /
+  iPhone zielone. Na CI dwa czerwone runy: Windows – E2E Sankeya oczekiwał pełnej nazwy, a ekran 1024×768 ją ucina
+  (poprawiony test, T491: kwota zawsze cała); Linux – `ap20.spec.ts:53` (pytanie „Plan czy impuls?” nie w 10 s),
+  niestabilny – po ponownym uruchomieniu zielony, ten sam kod zielony w runie wcześniej.
+- **Otwarte:** Sankey w Planie miesiąca; import kwoty w walucie z mBanku (czeka na zanonimizowany plik); podpowiedź
+  oprocentowania z harmonogramu; boja roczna w prognozie może dublować się ze średnimi (T276); osiągnięty cel w prognozie
+  zostaje w pieniądzach; `ap20.spec.ts:53` – obserwować, przy drugim razie poprawić czekanie na okno.
+- **Czas:** ok. 02:40–06:45 strumienie i dwie rundy przeglądu, 10:50–13:31 scalenie z 1.16.0, wersja, PR, CI (dwa
+  czerwone runy) – plan 3–5 h pracy.

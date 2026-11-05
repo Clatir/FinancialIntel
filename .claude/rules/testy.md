@@ -39,6 +39,10 @@ paths:
   w `tests/e2e-mobile/phone.spec.ts`), inaczej CI w nocy pada.
 - **Lokalnie na komputerze użytkownika:** `ictj.spec.ts` (krok „Nie znaleziono ICT Trade Journal”) pada, bo ICTTJ jest
   zainstalowany – CI to nie dotyczy. `folder-speed` ZIP64 (ok. 20 s) przekracza 60 s, gdy obok idą E2E – powtórz osobno.
+  Systemowy Node 20 nie przejdzie `check-node.mjs` – testy i build z `.tools\node-v24.21.0-win-x64` na początku `PATH`.
+- **Pułapka (05.11.2026):** Windows CI ma ekran 1024×768 – długie etykiety (np. Sankey) są tam ucięte „…”, choć lokalnie
+  i na Linuksie nie; E2E sprawdza kwotę dokładnie, a nazwę wzorcem. Wzorzec `toHaveText(/…/)` nie normalizuje spacji jak
+  tekst – twarda spacja w kwocie („1 050,00”) wymaga `\s`.
   Równoległe drzewa robocze: `node_modules` i `.tools` jako junction do głównego repozytorium; przed
   `git worktree remove` usuń same łącza (`[System.IO.Directory]::Delete(<łącze>, $false)` w PowerShell).
 - **Wyrocznia (AP-32, T367):** po każdej grupie silnika pieniędzy `npm run test:wyrocznia` (lokalnie, migawki audytu

@@ -9,8 +9,9 @@ Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarza
 plan N1–N5 (`docs/audyt/raport.md`, `docs/audyt/wnioski.md`; przebieg w archiwum). Odpowiedzi 04.11: D98 (iPhone
 wstrzymany), D99 (wnioski przyjęte, S4), D100 (konto Gotówka, wpłata od dowolnej osoby spłaca pożyczkę), D101 (ciąg
 N1–R2 bez pauz, bez kart kredytowych, wydanie po każdej grupie, zasada wątpliwości).
-**Następny krok:** ciąg N1 → N2 → N3 → N4 → N5 → R1 → R2 (D101) **przerwany 04.11 ok. 14:00** – po wznowieniu zacznij od
-sekcji „WZNOWIENIE” niżej. Otwarte poza ciągiem: raport maszyny wirtualnej i lista „Tylko Ty” (`docs/audyt/ty.md`) – dopiszą się
+**Ciąg N1–R2 (D101) zakończony 05.11.2026:** 1.15.5–1.17.0 scalone (PR #50–#56; 1.17.0 – wydanie z CI na `main` po
+scaleniu PR #56, sprawdź `gh release list`). **Następny krok:** wybór kolejnej pracy przez użytkownika – ciąg D101 nie
+obejmuje niczego dalej (D67: bez komendy nie zaczynam); propozycje niżej w „Po ciągu N1–R2”. Otwarte poza ciągiem: raport maszyny wirtualnej i lista „Tylko Ty” (`docs/audyt/ty.md`) – dopiszą się
 do wniosków, gdy będą; kalibracja progów gry po N3 (D99 pkt 12, za osobną zgodą). iPhone (iD, iE, AP-39, AP-40)
 wstrzymany (D98) – „Przed grupą iD” niżej zostaje jako zapis na później. Odrzucone (D88): F32, F38, F39, F41, F43.
 
@@ -30,8 +31,8 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | ✅ wydane 04.11 18:02 (wpis w archiwum `postep-od-1.15.4.md`) | #52 | ok. 10,5 h zegara (07:15–18:02, z przerwą 14:00–14:20) |
 | N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | ✅ wydane 04.11 21:40 (wpis w archiwum `postep-od-1.15.4.md`) | #53 | ok. 9 h zegara (12:09–21:40, z przerwą) |
 | N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | ✅ wydane 05.11 02:28 (wpis w archiwum `postep-od-1.15.4.md`) | #54 | ok. 13 h zegara (12:45–02:28, z przerwą) |
-| R1 Rozwojowe 1 | 1.16.0 | `claude/1.16.0-rozwojowe` | ✅ wydane 05.11 06:05 | #55 | – |
-| R2 Rozwojowe 2 | 1.17.0 | `claude/1.17.0-rozwojowe` | 🔄 kod, przegląd xhigh + 2 rundy poprawek, wersja i CHANGELOG gotowe, scalone z `main` 1.16.0; PR, CI, wydanie | – | od ok. 02:40 |
+| R1 Rozwojowe 1 | 1.16.0 | `claude/1.16.0-rozwojowe` | ✅ wydane 05.11 06:05 (wpis w archiwum `postep-od-1.15.4.md`) | #55 | ok. 4,5 h zegara (01:50–06:30, równolegle z N5) |
+| R2 Rozwojowe 2 | 1.17.0 | `claude/1.17.0-rozwojowe` | ✅ scalone 05.11 13:31, wydanie z CI na `main` (wpis w archiwum `postep-od-1.15.4.md`) | #56 | ok. 4 h + 2,5 h zegara (02:40–06:45, 10:50–13:31) |
 
 ## Stan ciągu (wznowione 04.11.2026 ok. 14:20 po przerwie na prośbę użytkownika)
 
@@ -41,19 +42,12 @@ podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` �
 (`[System.IO.Directory]::Delete(<łącze>, $false)`; `.claude/rules/testy.md`). Po przerwie: `git worktree list`, ten plik,
 notatki, dalej od pierwszej grupy niewydanej.
 
-- **N3 (1.15.7)** – ✅ wydane 04.11 18:02 (PR #52).
-- **N4 (1.15.8)** – ✅ wydane 04.11 21:40 (PR #53); **N5 (1.15.9)** – ✅ wydane 05.11 02:28 (PR #54).
-- **R1 (1.16.0)** – gałąź integracji `claude/1.16.0-rozwojowe` (drzewo `FI-wt\n5`, od `main` 1.15.9); strumienie (baza 9d285e3 = 1.15.9):
-  `claude/1.16.0-r1a` (`FI-wt\n5e` – AP-43 dowolny CSV, AP-35 Web Worker, T460–T466), `claude/1.16.0-r1c` (`FI-wt\n5f` – AP-45
-  reguły I / LUB, T467–T471), `claude/1.16.0-r1d` (`FI-wt\n5b` – AP-42 kalendarz Radaru, AP-47 opis folderu, T472–T476).
-- **R1 (1.16.0)** – ✅ wydane 05.11 06:05 (PR #55).
-- **R2 (1.17.0)** – gałąź integracji `claude/1.17.0-rozwojowe` (drzewo `FI-wt\n5d`): AP-41 plan spłaty pożyczek (T480–T484),
-  AP-44 prognoza wieloletnia (T485–T489), AP-46 Sankey miesiąca (T490–T491), AP-48 kwota w walucie (T492–T494). Przegląd
-  xhigh (15 uwag) i `/code-review` high na poprawkach (8 uwag) poprawione z testami (`fixa`, `fixb`, `fixb2`, `fixc`,
-  `fixc2`). Scalone z `main` 1.16.0 (konflikt tylko w `.claude/rules/import.md`, `npm run docs:format`). Lokalnie na
-  Node 24 z `.tools`: typecheck, build, `npm test` 1865/1866 (jedyny czerwony – `folder-speed` ZIP64, limit 60 s przy
-  równoległym zestawie; osobno 12/12 zielone). E2E – na CI (Linux, Windows); lokalnie nieprzepuszczone na zintegrowanej
-  gałęzi. Notatki i „do potwierdzenia”: `_notatki/notatki-r2.md`, uwagi: `r2-review1.md`, `r2-review2.md`.
+- **N1–N5, R1, R2** – ✅ wszystkie scalone i wydane (PR #50–#56); wpisy grup w archiwum `postep-od-1.15.4.md`.
+- **Drzewa robocze po ciągu** (`git worktree list`): `FI-wt\n4a`, `n5`, `n5b`, `n5d`, `n5e`, `n5f` – gałęzie scalone,
+  bez niezapisanych zmian; do usunięcia (najpierw łącza `node_modules` / `.tools`). Lokalny `main` w
+  `C:\CC-Projekty\FinancialIntel` – `git pull` przed nową pracą.
+- **Node lokalnie:** systemowy 20.12 jest za stary (`check-node.mjs` blokuje `npm test` / `build`) – w sesji dopisz na
+  początek `PATH` folder `.tools\node-v24.21.0-win-x64` (typecheck działa i na 20).
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
 całości + jeden high na poprawkach, dalej tylko przy poważnych uwagach; numery T przydzielaj podagentom z góry.
@@ -68,6 +62,11 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
+| R2 | Plan spłaty pożyczek | plan nie chce więcej niż raty harmonogramu + nadpłata; przechodzi tylko rata pożyczki spłaconej wcześniej; lawina bez oprocentowania liczy jak 0 %, kula – najmniejsza „do spłaty” z Radaru; plan od bieżącego miesiąca, miesiąc = 1/12 roku; nadpłata zapisywana jak dotąd w wierszu pożyczki; plan bez końca – „—” zamiast sumy odsetek | T480–T484 |
+| R2 | Prognoza wieloletnia | „pensja × wzrost” = wpływy z pracy × wzrost, pensja planu rośnie z inflacją kosztów; domyślne: ostrożny 0 % / 5 %, bazowy 4 % / 3 %, optymistyczny 7 % / 2,5 %, dostawy i jednorazowe 0, od roku 2; jednorazowe – w ostatnim miesiącu roku z osłon × inflacja; siła floty netto odejmuje braki, bez rezerwy PIT-38; domyślnie 5 lat, panel pod kursem | T485–T489 |
+| R2 | Kurs i prognoza – pożyczki | przyjęte średnie koszty (historia < 3 mies.) traktowane jak średnia z ratą pożyczki z kontenerem (kurs odejmuje ratę i płaci ją w jej miesiącach); spłata pożyczki udzielonej wraca do osłon bez dokowania (jak silnik, T70) | T486–T488 |
+| R2 | Sankey miesiąca | dwa widoki przełącznikiem (domyślnie „Przychód i koszty”); przepływy spoza przychodu i kosztów od źródła prosto do celu, pod własnym nagłówkiem; procent od wszystkich przepływów, „Pozostałe” tylko dla kategorii; miesiąc w toku „Ponad koszty (do dziś)”; długa nazwa ucięta, kwota zawsze cała | T490, T491 |
+| R2 | Kwota w walucie | nowa kwota startuje z waluty ostatniej takiej operacji (bez niej EUR); „Zapisz i następny” zostawia walutę rozwiniętą; w eksporcie znak jak kwota w złotych; wyszukiwanie po kodzie i kwocie | T492–T494 |
 | R1 | Import CSV innego banku | domyślna nazwa konta „Drugi bank”; kreator proponuje nowe konto, zastąpienie kolumn – potwierdzenie; kolumny zapisane przy „Zapisz”; konto mBanku z mapowaniem zostaje „mBank”; przypomnienia o imporcie i szukanie w Pobranych tylko dla mBanku; „Opis z banku” operacji CSV = cały wiersz pliku; goły „BLIK” na wpływie = przelew od osoby; wpłata we wpłatomacie – przychód do decyzji; panel „Plik z banku” | T460–T462 |
 | R1 | Import w Web Workerze | bez pomiaru w maszynie wirtualnej (lokalnie 20 000 wierszy: okno bez odpowiedzi ok. 560 → 200 ms, całość dłużej o ok. 0,3–0,8 s) – pomiar w maszynie (IM.55) do zrobienia | T463–T465 |
 | R1 | Reguły z warunkami | „wszystkie” z ≥ 2 warunkami przed regułami marek, jeden warunek i „którykolwiek” po słowach; kierunek tylko w „Dla”; „Tytuł zawiera” – całe słowa, „kontrahent zawiera” – fragment; „Zapamiętaj” zmienia regułę z warunkami, która zdecydowała; wpisy ręczne – tylko wydatki (kategoria, kto płaci); reguła nieczytelna (z nowszej wersji) – tylko „usuń”; starsza wersja reguły z warunkami nie stosuje | T467–T471 |
@@ -126,25 +125,16 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
 
-## R1 – Rozwojowe 1 (1.16.0, 05.11.2026)
-- **Zakres:** AP-43 import CSV innego banku z kreatorem kolumn (T460–T462), AP-35 analiza i plan importu w Web Workerze
-  z paskiem postępu (T463–T466), AP-45 reguły importu z warunkami I / LUB i dla wpisów ręcznych (T467–T471), AP-42
-  kalendarz-siatka miesiąca na Radarze (T472–T474), AP-47 opis formatu folderu generowany ze schematów i przykładowy
-  skrypt odczytu (T475, T476).
-- **Wykonawcy:** 3 strumienie równolegle (AP-43 + AP-35, AP-45 – Opus xhigh; AP-42 + AP-47 – Opus high), poprawki po
-  przeglądach w dwóch strumieniach (CSV / Worker; reguły / schemat / dokumenty).
-- **Przegląd:** xhigh całości (15 uwag – m.in. tożsamość wiersza CSV zależna od ról kolumn, kreator nadpisujący
-  mapowanie innego konta, migawka bez odwołania do pliku, nieczytelne nowsze pola gubione przy zapisie), high na
-  poprawkach (10 – m.in. przelew własny na to samo konto, długi wiersz poza schematem, usunięta operacja wracająca,
-  brak powrotu do okna po błędzie Workera) – wszystkie poprawione z testem, który przed poprawką padał; ostatnia runda
-  sprawdzona przez koordynatora na diffie.
-- **Testy:** typecheck (+ `typecheck:audyt`), `npm test` ok. 1790 (pod obciążeniem pada tylko `folder-speed` ZIP64),
-  build, E2E komputera 129/130 (lokalnie `ictj.spec`), telefonu 10/10, wyrocznia bez rozbieżności; test „przed i po”
-  reguł na imporcie 1.15.9.
-- **Otwarte:** pomiar Workera w maszynie (IM.55); regex z wiersza AP-45, podpowiedź „od domownika” przy wpływach, ręczna
-  kolejność reguł z warunkami; inne pola reguł z `.catch(undefined)` (udział, tagi, rodzaj wpływu) gubią nieczytelną
-  wartość przy odczycie (jak dotąd); mapy `lenientRecord` w opisie folderu jako „dowolna wartość”.
-- **Czas:** ok. 01:50–ok. 06:30 (równolegle z końcem N5 i początkiem R2) – plan 3–4,5 h pracy.
+## Po ciągu N1–R2 – co dalej (do wyboru przez użytkownika)
+
+Ciąg D101 kończy się na R2; dalszej grupy nie ma w planie. Propozycje (żadna nie jest zaczęta):
+1. **Porządek po ciągu** (Sonnet 5.5 · medium, ok. 0,25 h): usunięcie drzew `FI-wt\*` i scalonych gałęzi lokalnych i
+   zdalnych `claude/1.15.*`–`1.17.*`, `git pull` w głównym repozytorium.
+2. **Odbiór 1.15.5–1.17.0 przez użytkownika:** tabela „Do potwierdzenia” wyżej (warianty wybrane bez Ciebie) i „Do Twojej
+   decyzji” (rekordy tylko do odczytu) – odpowiedzi trafią do jednej grupy poprawek.
+3. **Rzeczy otwarte z grup** (archiwum, punkty „Otwarte” N1–R2) – np. Sankey w Planie miesiąca, podpowiedź oprocentowania,
+   pomiar Workera w maszynie (IM.55), niestabilny `ap20.spec.ts:53`; raport maszyny wirtualnej i `docs/audyt/ty.md`.
+4. **iPhone iD / iE** – wstrzymane (D98), tylko na osobną decyzję.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
@@ -169,7 +159,7 @@ prac” (razem ok. 63 h; ciąg M–V zmierzone ok. 17 h przy planie ok. 24–25 
 | **N4** | Zasady interfejsu: komunikat przy każdym odrzuceniu, „Cofnij” wszędzie, teksty, odprawa z hierarchią (AP-15, 16, 22, 23) | Sonnet 5.5 | high (Opus high przy logice) | 2–3 h (z górką 3,5 h) | 1.15.8 | – | ⏳ |
 | **N5** | Ścieżki i ergonomia: kreator, domownicy, szybki wpis, debriefing, dokowanie, konflikty, nowy komputer, eksport, Operacje (AP-19–21, 24–29, 33, 34, 36–38) | Opus 5.5 | high (xhigh przy silniku) | 3–4,5 h (z górką 5 h) | 1.15.9 | – (D99, D100) | ⏳ |
 | **R1** | Rozwojowe 1: import w Web Workerze (AP-35, po pomiarze w maszynie), kalendarz miesiąca na Radarze (AP-42), dowolny CSV – drugi bank (AP-43), reguły I / LUB i dla wpisów ręcznych (AP-45), opis formatu folderu (AP-47) | Opus 5.5 | xhigh (high przy UI) | 3–4,5 h (z górką 5 h) | 1.16.0 | D101 | ⏳ |
-| **R2** | Rozwojowe 2: plan spłaty pożyczek (AP-41, bez karty kredytowej – D101), prognoza wieloletnia bez IKE / IKZE / PPK (AP-44), Sankey miesiąca (AP-46), kwota w walucie (AP-48) | Opus 5.5 | **max** (plan spłaty – silnik) / xhigh | 3–5 h (z górką 6 h) | 1.17.0 | – (D101) | ⏳ |
+| **R2** | Rozwojowe 2: plan spłaty pożyczek (AP-41, bez karty kredytowej – D101), prognoza wieloletnia bez IKE / IKZE / PPK (AP-44), Sankey miesiąca (AP-46), kwota w walucie (AP-48) | Opus 5.5 | **max** (plan spłaty – silnik) / xhigh | 3–5 h (z górką 6 h) | 1.17.0 | – (D101) | ✅ PR #56 |
 | **iD** | iPhone: Ładownia i gwiazdy – dokowanie z ICTTJ, Ładownia, Mapa gwiezdna (IP15–IP17) | Opus 5.5 | **max** (z IP15; bez niego xhigh) | 1,25–1,75 h z IP15, 0,5–0,75 h bez (z górką 2 h; plan był 4–4,5 h – grupy iA–iC trwały 0,15–0,3 planu) | później | odpowiedź: czy folder danych ICTTJ jest na OneDrive (bez tego IP15 odpada); limit tygodniowy po iC; komenda | ⏸ wstrzymane (D98) |
 | **iE** | iPhone: Dowództwo – Dowództwo, Wywiad, kreator, Ustawienia, zapisy w tle (IP18, IP19, IP21, IP22, IP24) | Opus 5.5 | **xhigh** (D96; max tylko w krokach silnika pieniędzy albo granicy ICTTJ) | 5,5–7,5 h (z górką 8 h) | później | decyzje: IP21 (kreator – propozycja: bez), IP24 (zapisy w tle z telefonu) | ⏸ wstrzymane (D98) |
 | | **iPhone iA–iE (D92)** | | | **24–31,5 h (z górką 34 h)** | | | |
