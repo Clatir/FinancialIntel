@@ -3869,6 +3869,70 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (klucz `year:<rok>`) za rok zamknięty, gdy budżet w nim działał; własny przełącznik `NotifyPrefs.yearReview`
   (config.json komputera, addytywnie, domyślnie włączony), kliknięcie – Raporty → Przegląd roczny (w styczniu rok
   zamknięty); wiersz w tabeli powiadomień specyfikacji.
+- **T467** Reguły importu z warunkami I / LUB (1.16.0, R1 – AP-45): reguła z trybem `conditions` ma listę warunków
+  (`conditions`, najwyżej 10) łączonych `combine` – „wszystkie (I)” albo „którykolwiek (LUB)”: kontrahent zawiera
+  (litery i cyfry nazwy jak dotychczasowe „zawiera” – `counterpartyKey`, klucze marki, nazwy i całej nazwy), tytuł zawiera
+  (całe słowa jak słowo kluczowe, ostatnie może być dłuższe – „czynsz” = „czynszu”; tylko tytuł, nie nazwa), kwota od–do
+  (bez znaku, końce włącznie, jeden z nich może nie być podany; kwota nieznana – warunek nie jest spełniony), konto
+  (konto operacji; w imporcie konto pliku – `ClassifyContext.accountId` z `planImport`). Kierunek nie jest warunkiem listy,
+  tylko polem reguły jak dotąd (wydatki / wpływy / oba) i zawsze obowiązuje razem z warunkami – „wpływy LUB …” łapałoby
+  każdy wpływ. Pierwszeństwo (`findRule`): reguła „wszystkie” z co najmniej dwoma warunkami przed każdą regułą jednego
+  dopasowania (jest węższa – jak marka do kwoty przed marką; więcej warunków – wcześniej, przy równej liczbie kolejność
+  listy); reguła z jednym warunkiem albo „którykolwiek” po wszystkich dotychczasowych (marka, marka do kwoty, „zawiera”,
+  słowa) – działa tylko tam, gdzie żadna z nich nie pasuje (jest tak szeroka jak jedno dopasowanie albo szersza), między
+  sobą w kolejności listy. Dotychczasowe reguły (marka, „zawiera”, słowo, słowo z kontrahentem, marka do kwoty) czytane
+  bez zmian – to reguły jednego warunku, z tym samym dopasowaniem i tą samą kolejnością (`findOneMatch` to kod sprzed
+  1.16.0); test `rules-ap45-golden` porównuje cały import obu fixture'ów (decyzje wierszy, operacje, reguły po imporcie,
+  audyt) z wynikiem zapisanym kodem 1.15.9. Format addytywny, bez `SCHEMA_VERSION`: pola `conditions`, `combine`, `manual`
+  opcjonalne, dotychczasowa reguła ich nie dostaje. Zgodność ze starszą wersją: polem zgodności jest tryb – wersja przed
+  1.16.0 nie zna trybu `conditions` i reguły nie stosuje (pomija nieznany tryb – ten sam `ruleIndexOf`), zamiast dopasować
+  ją po samym `match` (dla reguły kilku warunków – za szeroko); pola zachowuje (`looseObject`), edycja decyzji reguły na
+  starszej wersji zostawia warunki. Znane ograniczenie: na komputerze ze starszą wersją reguła z warunkami nie działa
+  (wiersze czekają na decyzję albo bierze je reguła marki) i jej audyt pokazuje „bez trafień”; „zapamiętaj” na starszej
+  wersji może dołożyć regułę marki, którą nowa wersja stawia za regułą „wszystkie” (dwa warunki i więcej). Warunek
+  nieznany tej wersji (nowszej wersji, zepsuty) zostaje w pliku, a reguła nie działa wcale – nigdy „do połowy”
+  (`compileRule` null, na liście „Warunek nowszej wersji aplikacji – ta wersja tej reguły nie stosuje”); zepsuta lista
+  warunków – reguła bez warunków, nieaktywna, pozostałe reguły czytane. Kwoty warunku (`conditions.min`, `.max`) są
+  kwotami historii i konfliktów (`AMOUNT_FIELDS`), pola mają polskie nazwy (`Warunki`, `Łączenie warunków`).
+- **T468** Edytor reguły z warunkami (1.16.0, R1 – AP-45): Ustawienia → Import z banku → „Reguły importu” → „+ Nowa
+  reguła z warunkami” (nad listą) i „zmień” przy regule z warunkami (`ConditionsEditor`): nazwa (pusta – z pierwszego
+  warunku z tekstem, inaczej „Reguła z warunkami”), „Dla” (wydatki / wpływy / oba kierunki), „gdy spełnione” – wszystkie
+  warunki (I) / którykolwiek warunek (LUB), warunki dodawane z listy rodzajów („+ warunek”, najwyżej 10) i usuwane („×”),
+  decyzja jak w edytorze reguły (bez rodzajów decydowanych operacja po operacji, bez „w tym za” i reszty wpłaty domownika),
+  tagi, „także dla wpisów ręcznych”. Szkic w pamięci okna (`useDraft`, AP-8) do „Zapisz” albo „Anuluj”. Odmowy przy polu
+  i przy „Zapisz” (AP-15): bez warunku, kontrahent bez liter i cyfr, tytuł bez słowa, kwota bez obu końców, konto spoza
+  listy, warunek nowszej wersji, wydatek bez kategorii (i bez domownika / kilku osób); „od” po „do” – zamiana ze słowem
+  (`orderRange`). Reguła z edytora jest Twoja (`learned` false), nowa na końcu listy; zapis z „Cofnij” – nowa usuwana,
+  zmieniona wraca, tylko gdy od tego czasu się nie zmieniła (T418). Dotychczasowe reguły edytuje dotychczasowy edytor
+  (dopasowanie się nie zmienia – zamiana reguły marki na regułę z warunkami zmieniłaby, co łapie); na liście reguła
+  z warunkami ma je opisane słowami („kontrahent zawiera „bolt” i kwota do 10,00 zł”), wyszukiwanie obejmuje ten opis.
+- **T469** Import, audyt i „Zastosuj do historii” z regułami z warunkami (1.16.0, R1 – AP-45; rozszerza T169, T325,
+  T326, T418): import przekazuje regułom konto pliku i kwotę wiersza (także zwrot towaru szukający reguły zakupu); powód
+  „Twoja reguła „…””. Reguła z warunkiem tytułu, który jest spełniony, decyduje „o tytule” (`decidedByTitle`, jak słowo
+  z tytułu): nie ustępuje pożyczce, domownikowi ani XTB rozpoznanym po nazwie (T325) i nie uczy reguły kontrahenta;
+  reguła bez niego ustępuje jak każda inna. Decyzja grupy wierszy jednej reguły z warunkami z „zapamiętaj” zmienia tę
+  regułę (decyzja, liczba użyć – warunki zostają), nie dokłada reguły marki, która stałaby za nią (jak reguła marki do
+  kwoty, F22). Propozycje słów (uczenie, D78) liczą wiersz reguły jednego warunku albo „którykolwiek” jako taki, który
+  słowo by przejęło (stoi po słowach), i czytają konto pliku. Audyt reguł (`feedAudit`) szuka reguły z kontem i kwotą
+  operacji: trafienia, „inaczej” z „Zastosuj do historii” i „Cofnij” (T418), „do poprawy” przy wpływie od osoby
+  z pożyczką (słowo z tytułu – nie, T326) i „bez trafień” działają dla reguł z warunkami bez zmian w ich kodzie.
+- **T470** Reguły dla wpisów ręcznych (1.16.0, R1 – AP-45): reguła z polem `manual` („także dla wpisów ręcznych” –
+  w edytorze reguły z warunkami, w edytorze reguły marki i przełącznik „też ręczne” na liście słów kluczowych; na liście
+  reguł znak „· też ręczne”) podpowiada w szybkim wpisie i w edytorze operacji wpisanej ręcznie (bez danych z banku)
+  decyzję wydatku po wpisaniu kontrahenta albo tytułu (w szybkim wpisie – notatki): kategorię i kto płaci (ja, domownik
+  – z prezentem, kilka osób), przyciskiem „z reguły „…”: kategoria · finansuje: …” – dopiero kliknięcie ją przyjmuje,
+  nic nie zapisuje się samo. Reguła szukana tak jak w imporcie (`findRule` na samych regułach `manual`, kwota i konto
+  wpisu – warunek kwoty nie jest spełniony, dopóki kwoty nie ma), tylko reguła wydatku; kategoria zarchiwizowana –
+  podpowiedź samego „kto płaci”, domownik usunięty – samej kategorii; nic do podpowiedzenia, albo wpis ma już tę
+  decyzję – podpowiedzi nie ma (`hintChanges`). Gdy reguła podpowiada, oficer (F8) w szybkim wpisie nie wpisuje swojej
+  kategorii sam, a jego przycisk znika – jedna podpowiedź naraz, ta z reguły użytkownika. Paragon podzielony ręcznie –
+  bez podpowiedzi. Starsza wersja pole `manual` pomija (reguła działa tam w imporcie jak dotąd).
+- **T471** Test „przed i po” dla dotychczasowych reguł (1.16.0, R1 – AP-45): `tests/fixtures/rules/ap45-before.json` –
+  wynik importu obu fixture'ów mBanku z regułami każdego dotychczasowego rodzaju (marka, marka do kwoty, „zawiera”,
+  słowo, słowo z kontrahentem, oba kierunki, zwrot towaru, domownik, pożyczka z Radaru, XTB, kategoria zarchiwizowana,
+  wspólny zakup, część pożyczki, tagi) zapisany kodem 1.15.9 przed zmianą `findRule`; `rules-ap45-golden` porównuje
+  z nim decyzje wierszy, operacje z importu, reguły po imporcie i audyt. Plik zapisuje się ponownie
+  (`FI_GOLDEN_WRITE=1`) tylko kodem sprzed zmiany dopasowania reguł – nigdy po to, by test przeszedł.
 - **T472** Energia dnia w kalendarzu Radaru (1.16.0, R1 – AP-42): dni minione bieżącego miesiąca z silnika
   (`DailyState.days`, wynik – nic nie jest zapisywane): przydział i wydane z puli dziennej tak, jak ocena dnia w grze liczy
   dzień na jego koniec (`rateDay`: pokrycia zrobione przed tym dniem – D73, łupy zatrzymane w kopertach od dnia decyzji,

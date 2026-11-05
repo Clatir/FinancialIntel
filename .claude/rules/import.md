@@ -9,6 +9,7 @@ paths:
   - "tests/unit/duplicates.test.ts"
   - "tests/unit/officer.test.ts"
   - "tests/unit/rules-audit.test.ts"
+  - "tests/unit/rules-ap45*.test.ts"
   - "tests/unit/bank-files.test.ts"
   - "tests/fs/bank-files.test.ts"
   - "tests/e2e/import*.spec.ts"
@@ -51,6 +52,12 @@ paths:
   i od dnia jej udzielenia – z regułą i bez (`loanFor`). Reguła innego rodzaju ustępuje pożyczce, domownikowi i XTB
   (`ruleGivesWay`, T325); słowo z tytułu i przelew własny zostają regułą. Audyt reguł (`audit.ts`) zgłasza tylko to,
   czemu reguła ustępuje teraz – ta sama `loanFor`.
+- Reguły z warunkami (AP-45, T467–T471, `shared/import/conditions.ts`): tryb `conditions` (starsza wersja go pomija),
+  „wszystkie” z ≥ 2 warunkami przed regułami jednego dopasowania, jeden warunek i „którykolwiek” po słowach; kierunek to
+  pole reguły (zawsze I). Każde wywołanie `findRule` z wiersza / operacji podaje kwotę i konto – bez nich warunek kwoty
+  i konta nie jest spełniony. „O tytule” – `decidedByTitle`, nigdy `mode === 'keyword'` wprost. **Pułapka:** zmiana
+  dopasowania reguł jednego warunku – `rules-ap45-golden` (wynik sprzed 1.16.0) musi przejść bez zapisu od nowa.
+  Wpisy ręczne: tylko reguły `manual`, podpowiedź do kliknięcia (`manualRuleHint`, `hintChanges`).
 - Decyzja zbiorcza nie zmienia pożyczki, PIT-38, XTB ani pieniędzy domownika decyzją innego rodzaju (`bulkKeeps`, T326);
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
 - „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X

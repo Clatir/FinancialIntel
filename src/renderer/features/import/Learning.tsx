@@ -124,12 +124,17 @@ export function RuleProposal({ g, choice }: { g: ImportGroup; choice: Choice }) 
   const groups = useImportGroups()
   const choices = useImport((s) => s.choices)
   const file = useImport((s) => s.file)
+  // The file's account: a rule's condition of it (AP-45) – as the plan read the rows.
+  const accountId = useImport((s) => s.accountId)
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const own = useData((s) => s.fi?.settings.import.ownNames ?? NO_NAMES)
   const readOnly = useFolderLocked()
   const cats = useCategories()
   // The holder's names (the settings' and the file's) are no keyword.
-  const proposals = useMemo(() => keywordProposals(groups, g, choice, { rules, choices, ownNames: ownNamesWith(own, file) }), [groups, g, choice, rules, choices, file, own])
+  const proposals = useMemo(
+    () => keywordProposals(groups, g, choice, { rules, choices, ownNames: ownNamesWith(own, file), accountId }),
+    [groups, g, choice, rules, choices, file, own, accountId]
+  )
   if (!proposals.length) return null
   const label = (group: string) => groups.find((x) => x.group === group)?.label ?? ''
   // The decision as the settings write the rule (N16): what the keyword will hold.

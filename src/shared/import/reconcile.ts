@@ -729,7 +729,8 @@ export function planImport(
 
   // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is). The cash
   // is another account than the file's (AP-33): never a transfer onto itself.
-  const classifyCtx = ctx.cash && ctx.cash.id === accountId ? { ...ctx, cash: null } : ctx
+  // The file's account: a rule's condition of it (AP-45).
+  const classifyCtx: ClassifyContext = { ...ctx, accountId, ...(ctx.cash && ctx.cash.id === accountId ? { cash: null } : {}) }
   const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, classifyCtx)))
   shareMerged(classified, file.rows)
   const plannedOf = (i: number): Planned => {
@@ -1628,12 +1629,13 @@ export function buildImport(
   // decision of a theme teaches every brand in it. Nothing new to learn when the group's own rule or the app's own
   // recognition says the same; a keyword of a title is about that payment, not the counterparty. One brand split
   // into groups with other decisions: the decision of the most operations is the rule.
-  // A group decided by a rule up to an amount (F22): its decision changes that rule, never the brand's plain one.
+  // A group decided by a rule up to an amount (F22) or a rule of conditions (AP-45, T469): its decision changes that
+  // rule, never the brand's plain one (it would stay behind the rule – the next import deciding as before).
   const amountRuleOf = (g: ImportGroup): ImportRule | null => {
     const ids = new Set(g.rows.map((p) => p.decision.ruleId))
     const id = ids.size === 1 ? [...ids][0] : null
     const r = id ? opts.rules.find((x) => x.id === id) : undefined
-    return r?.mode === 'amount' ? r : null
+    return r?.mode === 'amount' || r?.mode === 'conditions' ? r : null
   }
   const learned = new Map<string, { g: ImportGroup; c: Choice; rows: number; total: number; rule: ImportRule | null; together: number }>()
   for (const g of groups) {
