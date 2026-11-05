@@ -73,7 +73,9 @@ test('Debriefing (AP-46): Sankey miesiąca – przychód i koszty, pensja i ener
     await sankey.getByRole('radio', { name: 'Pensja i energia' }).click()
     await expect(sankey).toHaveAttribute('data-view', 'energy')
     await expect(label('salary')).toHaveText('Pensja od siebie · 3 000,00 zł')
-    await expect(label('used')).toHaveText('Wydane (z energii i ponad nią) · 1 050,00 zł')
+    // A long name is cut to the chart's width (Windows CI's 1024×768 screen cuts this one) – its amount never (T491, D73).
+    // A pattern is not whitespace-normalised like a string: the amount's thousands are apart by a no-break space.
+    await expect(label('used')).toHaveText(/^Wydane\s\(z\senergii(?:\si\sponad\snią\)|.*…)\s·\s1\s050,00\szł$/)
     await expect(label('left')).toHaveText('Zostało – łupy · 1 950,00 zł')
 
     // The PDF draws it too (the debriefing's file).
