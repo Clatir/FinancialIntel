@@ -205,7 +205,10 @@ function checkPayToday(k: Case, transactions: Transaction[], today: string, tall
     expect(target.carried ? !then || closed(then) : closed(then), `${why}: „Zapłacone” ${target.due}`).toBe(true)
     // The open ones before it stay as they were.
     for (const s of shown) if (s.due < target.due && open(s)) expect(now.some((x) => x.due === s.due && open(x)), `${why}: ${s.due} before ${target.due}`).toBe(true)
-  } else for (const s of shown) if (open(s)) expect(now.some((x) => x.due === s.due && open(x)), `${why}: ${s.due} closed, no „Zapłacone” shown`).toBe(true)
+  } else for (const s of shown) if (open(s)) {
+    // Under T495 an open due may become planned by a forward payment shifting an earlier payment (without payToday under T398).
+    expect(now.some((x) => x.due === s.due && (open(x) || (x.state !== 'paid' && !!x.planned))), `${why}: ${s.due} closed, no „Zapłacone” shown`).toBe(true)
+  }
   const f = fleetOf(k, after, today)
   checkToday(k, f, after, today, tally, `${why} + zapłata dziś`)
 }
@@ -225,16 +228,20 @@ function checkPayTodayRef(k: Case, transactions: Transaction[], today: string, w
   const follow = { start, month }
   const view = { start, month, until: monthOf(addDays(today, AHEAD_DAYS)) }
   const payment = { id: '', date: today, amount: amountIn(k.c, month), accountId: '' }
-  type Dues = ReturnType<typeof feeDuesOf>['dues']
-  const closed = (dues: Dues, outlook: Dues | null) => {
-    const out = new Set<string>()
-    for (const d of dues.slice(0, -1)) if (d.payments.length) out.add(d.month)
-    for (const d of outlook?.slice(0, -1) ?? []) if (d.payments.some((p) => p.date > today)) out.add(d.month)
-    return out
-  }
+  const planBefore: ReadonlySet<string> = ahead.length ? (plannedDues({ containers: [k.c], transactions, today, start: k.start }).get(k.c.id) ?? new Set<string>()) : new Set<string>()
   const dues = feeDuesOf(k.c, upTo, day, follow).dues
-  const before = closed(dues, ahead.length ? feeDuesOf(k.c, all, day, view).dues : null)
-  const after = closed(feeDuesOf(k.c, [...upTo, payment], day, follow).dues, ahead.length ? feeDuesOf(k.c, [...upTo, payment, ...ahead], day, view).dues : null)
+  const before = new Set<string>()
+  for (const d of dues.slice(0, -1)) if (d.payments.length) before.add(d.month)
+  for (const m of planBefore) before.add(m)
+
+  const stateAfter = feeDuesOf(k.c, [...upTo, payment], day, follow).dues
+  const after = new Set<string>()
+  for (const d of stateAfter.slice(0, -1)) if (d.payments.length) after.add(d.month)
+  if (ahead.length) {
+    for (const d of feeDuesOf(k.c, [...upTo, payment, ...ahead], day, view).dues.slice(0, -1)) {
+      if (d.payments.some((p) => p.date > today)) after.add(d.month)
+    }
+  }
   const ref = dues.slice(0, -1).find((d) => !before.has(d.month) && after.has(d.month))?.month ?? null
   for (const s of cargoAt(k, transactions, today)) expect(s.payToday, `${why}: „Zapłacone (dziś)” ${s.due}`).toBe(ref === monthOf(s.due))
 }

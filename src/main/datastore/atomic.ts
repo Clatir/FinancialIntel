@@ -119,7 +119,7 @@ export class AtomicWriteError extends Error {
 async function isTargetReadOnly(target: string): Promise<boolean> {
   try {
     const st = await fs.stat(target)
-    return st.isFile() && (st.mode & 0o200) === 0
+    return st.isFile() && typeof st.mode === 'number' && (st.mode & 0o222) === 0
   } catch {
     return false
   }

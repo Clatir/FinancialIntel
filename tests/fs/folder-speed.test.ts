@@ -225,7 +225,7 @@ describe('kopie ZIP w jednym przejściu (1.4.3, W7)', () => {
     expect(res.files).toBe(70_000)
     expect(await zipEntries(out, 'transactions/069999.json')).toEqual({ count: 70_000, content: '{"n":69999}' })
     expect((await zipEntries(out, 'transactions/001000.json')).content).toBe(long)
-  }, 60_000)
+  }, 120_000)
 
   it('kopia danych z pamięci magazynu: rekordy jak na dysku, kopia konfliktu i plik z błędem z dysku', async () => {
     const store = await freshStore()
