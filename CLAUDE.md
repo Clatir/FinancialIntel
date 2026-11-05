@@ -106,7 +106,8 @@ backups/  .history/  .presence/          kopie ZIP, poprzednie wersje, obecnoś�
 - Każdy rekord: `schemaVersion`, `id`, `createdAt`, `updatedAt`, `updatedBy` (nazwa komputera). Nieznane pola
   zachowywane (`z.looseObject`).
 - **Kwoty: liczby całkowite w groszach, tylko PLN.** Podział kwot (np. odkładka roczna na 12 miesięcy) w groszach
-  z resztą w ostatniej części.
+  z resztą w ostatniej części. Wyjątek tylko informacyjny: `foreign` przy operacji (kwota w walucie, T492) – silnik,
+  warstwy i sumy go nie czytają.
 - Data operacji = data warszawska; godzina opcjonalna (import z mBanku nie ma godzin).
 - Zapis atomowy, historia `.history/`, konflikty chmury i scalanie trójstronne – jak ICTTJ. Bez szyfrowania.
 - Nowe pole albo kolekcja – addytywnie, **bez** podbijania `SCHEMA_VERSION` (od 0.1.0 wszystkie zmiany tak szły; podbicie
