@@ -1223,7 +1223,7 @@ function registerIpc(): void {
   })
   handle('pickImportFile', async () => {
     const res = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Plik CSV z mBanku (lista operacji albo historia rachunku)',
+      title: 'Plik CSV z banku (z mBanku: lista operacji albo historia rachunku)',
       properties: ['openFile'],
       filters: [
         { name: 'CSV z banku', extensions: ['csv', 'txt'] },

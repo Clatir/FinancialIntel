@@ -3869,6 +3869,72 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (klucz `year:<rok>`) za rok zamknięty, gdy budżet w nim działał; własny przełącznik `NotifyPrefs.yearReview`
   (config.json komputera, addytywnie, domyślnie włączony), kliknięcie – Raporty → Przegląd roczny (w styczniu rok
   zamknięty); wiersz w tabeli powiadomień specyfikacji.
+- **T460** Kreator CSV innego banku (1.16.0, R1 – AP-43, raport 2.2 c): plik, który nie jest plikiem mBanku i do którego
+  nie pasuje mapowanie żadnego konta, otwiera na ekranie Import kreator kolumn – podgląd pierwszych wierszy, separator
+  (; , tabulator |), kodowanie (wykryj / UTF-8 / Windows-1250), wiersze przed nagłówkiem, wiersz nagłówka, format daty
+  (7 zapisów), znak dziesiętny („1 234,56” / „1,234.56”), role kolumn: data operacji (wymagana), data księgowania, kwota
+  ze znakiem albo uznania + obciążenia (obie), opis / tytuł albo kontrahent (co najmniej jedno), rodzaj operacji, saldo
+  po operacji, numer rachunku kontrahenta, waluta; propozycja z nazw nagłówka (`guessCsv`), podgląd wyniku pierwszych
+  operacji i brakująca rola przy przycisku. „Zapisz kolumny i wczytaj plik” zapisuje mapowanie przy koncie w `fi.json`
+  (`importFormat: 'csv'`, `csvMapping` – addytywnie, bez `SCHEMA_VERSION`; wartości nowszej wersji zostają – `openEnum`,
+  `looseObject`; mapowanie nieczytelne dla tej wersji odpada, konto zostaje), potem czyta nim plik; konto z importem
+  mBanku zostaje `'mbank'` (mapowanie dopisane – przypomnienia o imporcie i misja „Łączność z bazą” działają dalej),
+  „Nowe konto…” zakłada konto rodzaju „konto bankowe”. Następny plik: najpierw mBank, potem konta (niezarchiwizowane)
+  z mapowaniem, którego nagłówek jest wśród pierwszych 60 wierszy pliku (linia dopisana przez bank nad nim nie
+  przeszkadza; bez nagłówka – pierwsze operacje czytelne), konto wybrane wcześniej pierwsze; „Zmień kolumny” otwiera
+  kreator z mapowaniem pliku. Wiersz: uznania na plus, obciążenia na minus bez względu na znak w pliku; waluta z kolumny
+  albo z kwoty – inna niż PLN pominięta z powodem (jak w mBanku); godzina przy dacie nie jest czytana (import bez
+  godzin); kontrahent z kolumny bez dopisków banku (`cleanBankName`), bez kolumny – z opisu. Ustawienia → Konta: wybór
+  „bez importu / CSV z mBanku / CSV innego banku” zamiast pola „import CSV z mBanku”. Plik, który nie jest tabelą –
+  błąd obok otwartego pliku (N12).
+- **T461** Tożsamość wiersza CSV innego banku (1.16.0, R1 – AP-43): `bank.key` = `csv:<odcisk(konto|data|OPIS|kwota)>:<n>`;
+  OPIS – rodzaj operacji, kontrahent i opis jak w pliku (to samo pole `bank.description`, więc B35 – ten sam wiersz na
+  innym koncie – liczy go jak dla mBanku); `n` – numer wiersza w obrębie dnia wśród wierszy o tej samej dacie, opisie
+  i kwocie (dwa „ŻABKA 12,99” jednego dnia to dwie operacje), nie pozycja w dniu – pozycja zmienia się, gdy plik
+  zaczyna się później albo bank dopisze operację w środku dnia. Ponowny import pliku – wszystko „już zaimportowane”,
+  plik zachodzącego okresu – wspólne dni znane, reszta nowa. Format wiersza mówi przedrostek klucza (`keyKindOf`,
+  `formatOfBanks` → 'csv'), bo klucz zachowuje każda wersja: `bank.format` zostaje 'mbank' (w 1.15.9 zamknięty enum –
+  inna wartość zrobiłaby operację nieczytelną), `bank.source` nie jest zapisywane (1.15.9 by je zgubiło przy zapisie).
+  B5 (ten sam wiersz w innym formacie: kwota, ±3 dni, podobna nazwa) działa między CSV a plikami mBanku na tym samym
+  koncie jak między listą a historią rachunku. Zmiana ról opisu, kontrahenta albo rodzaju operacji w mapowaniu zmienia
+  klucze – ponowny import dni już wczytanych dałby kopie (panel duplikatów je pokaże).
+- **T462** CSV innego banku – ten sam przebieg co mBank (1.16.0, R1 – AP-43): plik czytany do `MbankFile` w formacie 'csv'
+  (bez właściciela rachunku, numeru rachunku i okresu – okres z dat wierszy), dalej `planImport` → `buildImport`:
+  reguły i nauka, przelew własny po nazwiskach z ustawień, domownicy, pożyczki, bankomat, łączenie z wpisami ręcznymi,
+  duplikaty, kopia przed importem, paczka i „Cofnij import”; kolumna salda daje telemetrię salda i potwierdzenie salda
+  jak historia rachunku (kolejność sald po dacie księgowania; notatka „Saldo z pliku banku (CSV)”). CSV nie ma operacji
+  nierozliczonych – bez propozycji usunięcia zniknionych (tylko lista operacji mBanku). Nie zmienia się: pliki innych
+  banków nie są szukane w Pobranych (F14 – tylko mBank), przypomnienia o zaległym imporcie i misja liczą konta z importem
+  mBanku.
+- **T463** Import w Web Workerze (1.16.0, R1 – AP-35, AF-30, IM.55): otwarcie pliku – dekodowanie, odczyt wierszy, wybór
+  konta, mapowanie konta i plan – w Workerze (`renderer/features/import/worker.ts`, klient `analysis.ts`); jedna czysta
+  funkcja `shared/import/analyze.ts` (`analyzeImport`) w Workerze i w oknie, dane budżetu jako `PlanSource` (zwykłe dane
+  – kopia strukturalna wiadomości, bez indeksów i funkcji). Pasek postępu: „Odczyt wierszy” 0–60 %, „Rozpoznawanie
+  operacji” 60–100 % (komunikat Workera najwyżej co 60 ms). Bez Workera – okno jak przed 1.16.0, po klatce na
+  „Wczytywanie…” (Node w testach, WebKit bez Workera, skrypt Workera nie wstał – `error`: od tej chwili okno; błąd
+  w Workerze – okno próbuje samo). Jedna analiza naraz: nowy plik, „Zamknij plik” i inny folder przerywają ją
+  (`terminate`); zmiany danych w trakcie – plan od nowa zaraz po niej (`replanIfChanged`); „Importuj” w trakcie
+  wczytywania innego pliku – odmowa z komunikatem. Ponowne plany otwartego pliku (inne konto, słowo kluczowe, scalenie
+  nazw, przed zapisem) zostają w oknie – są synchroniczne z decyzjami; plik jest już odczytany (większa część pracy).
+  Worker jako moduł ES (`worker.format: 'es'` – electron-vite i telefon; telefon nie importuje plików, build go ma).
+- **T464** Plan przez wiadomość Workera (1.16.0, R1 – AP-35): operacje planu jadą jako odnośniki (`txRef`: id i widok –
+  druga strona przelewu w jednej operacji `sideOf`, strona przelewu sprzed 1.7.0 `legacySideOf`) i wracają z listy
+  okna, z której plan powstał (`txOfRef`, `planFromWire`) – te same obiekty co w planie liczonym w oknie, wiersze planu
+  i pliku wspólne (jedna wiadomość). **Pułapka:** widok strony poznaje się po obiekcie (`isSideView`, `realOf`) – kopia
+  z wiadomości nie byłaby widokiem i zapis wziąłby stronę drugiego konta za samą operację. Test: plan z Workera równy
+  planowi okna na liście, historii i CSV z wpisami ręcznymi, przelewami obu rodzajów i nierozliczoną zniknioną; zapis
+  `buildImport` z obu – ten sam (`tests/unit/import-worker-ap35.test.ts`).
+- **T465** Wydajność importu – próg i pomiar (1.16.0, R1 – AP-35): test 20 000 wierszy przy 20 000 operacji w budżecie –
+  cała analiza poniżej 30 s, część okna przy Workerze (kopia prośby i kopia odpowiedzi liczone w całości) krótsza niż
+  analiza w oknie; tu (komputer deweloperski, sam test) analiza w oknie ok. 630 ms, okno przy Workerze ok. 280 ms
+  (w pełnym zestawie testów 890 / 450 ms). E2E (aplikacja zbudowana, 20 000 wierszy): okno bez Workera ok. 650 ms,
+  najdłużej nie odpowiada ok. 590 ms; z Workerem ok. 900 ms (pierwszy raz ok. 1,3 s – start Workera), najdłużej nie
+  odpowiada ok. 200 ms (odbiór planu i rysowanie), pasek postępu się przesuwa. Pomiar w maszynie (IM.55) – do zrobienia.
+- **T466** Ekran importu – teksty (1.16.0, R1 – AP-43, AP-35): panel „Plik z banku” (było „Plik z mBanku”) z jednym
+  zdaniem o pliku innego banku; plik opisany „CSV innego banku · N operacji”; przy wierszach znalezionych miarą B5
+  w pliku CSV – „z pliku w innym formacie”; okno wyboru pliku „Plik CSV z banku (z mBanku: lista operacji albo historia
+  rachunku)”; nagłówek ekranu „CSV z mBanku i innych banków”. Pasek postępu z `role="status"`, stan w `data-phase`,
+  `data-pct`; otwarty plik – `data-format`, `data-via` ('worker' / 'window').
 - **T467** Reguły importu z warunkami I / LUB (1.16.0, R1 – AP-45): reguła z trybem `conditions` ma listę warunków
   (`conditions`, najwyżej 10) łączonych `combine` – „wszystkie (I)” albo „którykolwiek (LUB)”: kontrahent zawiera
   (litery i cyfry nazwy jak dotychczasowe „zawiera” – `counterpartyKey`, klucze marki, nazwy i całej nazwy), tytuł zawiera
