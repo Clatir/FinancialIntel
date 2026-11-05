@@ -7,7 +7,7 @@
  */
 import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import type { Flows } from '@shared/calc/sankey'
-import { fitText, layoutOf, sankeySvg, textWidth, type LaidNode } from '@shared/sankeyLayout'
+import { fitLabel, headingRoomOf, layoutOf, roomOf, sankeySvg, type LaidNode } from '@shared/sankeyLayout'
 import { percentText } from '@shared/format'
 import { plnText } from '../../components/fields'
 import { Segmented } from '../../components/ui'
@@ -57,7 +57,7 @@ export function MonthSankey({ money, energy, empty, view, onView }: { money: Flo
   }, [])
   const flows = view === 'energy' ? energy : money
   const shown = flows && flows.links.length ? flows : null
-  // Laid out once per flows and width (przegląd R2 pkt 12): a move of the pointer renders, never lays out again.
+  // Laid out once per flows and width (R2 review, item 12): a move of the pointer renders, never lays out again.
   const layout = useMemo(() => (shown ? layoutOf(shown, width) : null), [shown, width])
   const labelOf = useMemo(() => new Map(layout?.nodes.map((n) => [n.id, n.label]) ?? []), [layout])
   const zl = (g: number) => `${plnText(g)} zł`
@@ -121,15 +121,14 @@ export function MonthSankey({ money, energy, empty, view, onView }: { money: Flo
               const x = h.column === 0 ? layout.columns[0]! - 6 : layout.columns[h.column]! + layout.bar + 6
               return (
                 <text key={`${h.column}:${h.group}`} x={x} y={h.y} textAnchor={h.column === 0 ? 'end' : 'start'} fontSize={10.5} fill={COLORS.muted} className="pointer-events-none" data-testid="reports-sankey-heading">
-                  {h.group} · <tspan className="num">{zl(h.value)}</tspan>
+                  {fitLabel({ name: h.group, amount: zl(h.value) }, headingRoomOf(layout, h))} · <tspan className="num">{zl(h.value)}</tspan>
                 </text>
               )
             })}
             {layout.nodes.map((n) => {
               const amount = zl(nodeAmount(n))
-              const last = n.column === layout.columns.length - 1
-              const room = n.column === 0 ? layout.columns[0]! - 10 : last ? layout.width - n.x1 - 10 : layout.columns[n.column + 1]! - n.x1 - 10
-              const name = fitText(n.label, room - textWidth(` · ${amount}`))
+              // The PDF's cut (R2 review 2, item 5): the same room, the name cut, the amount whole.
+              const name = fitLabel({ name: n.label, amount }, roomOf(layout, n))
               const tone = n.tone === 'up' ? COLORS.up : n.tone === 'down' ? COLORS.down : COLORS.text
               return (
                 <text

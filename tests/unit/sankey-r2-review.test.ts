@@ -4,7 +4,7 @@ import { fuelSummary } from '@shared/calc/fuel'
 import { categoryIndex } from '@shared/calc/operations'
 import { debriefing, transactionsOfMonth, type Debriefing } from '@shared/calc/plan'
 import { energyFlows, monthFlows, MONTH_NODE, nodeValues, OUTSIDE_GROUP, outsideMoney, type Flows } from '@shared/calc/sankey'
-import { layoutOf, sankeyLayout, sankeySvg, type SankeyLayout } from '@shared/sankeyLayout'
+import { fitLabel, headingRoomOf, labelText, layoutOf, roomOf, sankeyLayout, sankeySvg, type SankeyLayout } from '@shared/sankeyLayout'
 import { FOREIGN_AMOUNT_FIELDS, isAmountPath, isForeignAmountPath } from '@shared/merge'
 import { createDefaultSettings } from '@shared/defaults'
 import {
@@ -23,9 +23,10 @@ import {
 } from '@shared/schema'
 
 /**
- * Przegląd R2 (1.17.0 – T490, T491, T492): the Sankey's order and nodes (pkt 3, 6, 9), the energy always balanced
- * (pkt 7), the PDF's labels keeping the amount (pkt 4), the layout once per flows and width (pkt 12), the foreign amount's
- * path by the amounts' one rule (pkt 14); on random months: every node balanced, the sums the debriefing's.
+ * R2 review (1.17.0 – T490, T491, T492): the Sankey's order and nodes (items 3, 6, 9), the energy always balanced
+ * (item 7), the PDF's labels keeping the amount (item 4), the layout once per flows and width (item 12), the foreign
+ * amount's path by the amounts' one rule (item 14); on random months: every node balanced, the sums the debriefing's.
+ * Review 2: the screen and the PDF cut a label alike (item 5), one layout per flows (item 6).
  */
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-08-01T00:00:00.000Z'
@@ -76,15 +77,24 @@ function balanced(f: Flows) {
   expect(sources).toBe(f.total)
 }
 
+/** A band's top edge at each column it touches, read from its path (its start, then each curve's end before the „L”). */
+function pointsOf(d: string): Array<{ x: number; y: number }> {
+  const top = d.slice(0, d.indexOf(' L'))
+  const start = /^M([\d.-]+),([\d.-]+)/.exec(top)!
+  const ends = [...top.matchAll(/C[\d.-]+,[\d.-]+ [\d.-]+,[\d.-]+ ([\d.-]+),([\d.-]+)/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }))
+  return [{ x: Number(start[1]), y: Number(start[2]) }, ...ends]
+}
+
 /** No two bands cross between two neighbouring columns: their order at one column is their order at the next. */
 function noCrossing(l: SankeyLayout) {
   for (let c = 0; c < l.columns.length - 1; c++) {
     const at = (x: number) => Math.abs(x - l.columns[c]!) < l.bar + 1 || Math.abs(x - (l.columns[c]! + l.bar / 2)) < 1
     const next = (x: number) => Math.abs(x - l.columns[c + 1]!) < l.bar + 1
     const spans = l.links.flatMap((k) => {
-      const i = k.points.findIndex((p) => at(p.x))
-      const j = k.points.findIndex((p, n) => n > i && next(p.x))
-      return i >= 0 && j === i + 1 ? [{ a: k.points[i]!.y, b: k.points[j]!.y, id: `${k.from}>${k.to}` }] : []
+      const points = pointsOf(k.d)
+      const i = points.findIndex((p) => at(p.x))
+      const j = points.findIndex((p, n) => n > i && next(p.x))
+      return i >= 0 && j === i + 1 ? [{ a: points[i]!.y, b: points[j]!.y, id: `${k.from}>${k.to}` }] : []
     })
     for (const s of spans) for (const t of spans) if (s.a < t.a) expect(s.b, `${s.id} / ${t.id}`).toBeLessThanOrEqual(t.b)
   }
@@ -254,6 +264,35 @@ describe('przegląd R2: PDF, układ raz, ścieżki kwot (pkt 4, 12, 14)', () => 
     expect(layoutOf(flows, 700)).toBe(a)
     expect(layoutOf(flows, 800)).not.toBe(a)
     expect(layoutOf({ ...flows }, 700)).not.toBe(a)
+    // Review 2, item 6: the last layout of a flows only – another width replaces it (the same content laid out again).
+    const again = layoutOf(flows, 700)
+    expect(again).not.toBe(a)
+    expect(again).toEqual(a)
+  })
+
+  it('przegląd 2, pkt 5: ekran i PDF tną tę samą etykietę tak samo (wspólne miejsce i cięcie nazwy)', () => {
+    const long: Flows = {
+      nodes: [
+        { id: 'a', label: 'Bardzo długie źródło pieniędzy miesiąca, które się nie zmieści po lewej stronie', column: 0, group: 'Bardzo długi nagłówek grupy źródeł, który też się nie zmieści' },
+        { id: MONTH_NODE, label: 'Miesiąc o nazwie dłuższej niż odstęp między kolumnami wykresu', column: 1 },
+        { id: 'b', label: 'Bardzo długa nazwa kategorii, która nie mieści się w miejscu na etykiety po prawej stronie wykresu', column: 2 }
+      ],
+      links: [
+        { from: 'a', to: MONTH_NODE, value: 123456 },
+        { from: MONTH_NODE, to: 'b', value: 123456 }
+      ],
+      total: 123456
+    }
+    const l = layoutOf(long, 640)
+    const amount = '1 234,56 zł'
+    const svg = sankeySvg(l, { label: (n) => ({ name: n.label, amount }), heading: (h) => ({ name: h.group, amount }), colors: { band: '#999', bandOpacity: 0.4, bar: '#555', text: '#111', muted: '#666', up: '#2ebd85', down: '#f6465d', halo: '#fff' } })
+    // What the screen draws: `fitLabel` in `roomOf` / `headingRoomOf`, then the amount.
+    const shown = [...l.nodes.map((n) => fitLabel({ name: n.label, amount }, roomOf(l, n))), ...l.headings.map((h) => fitLabel({ name: h.group, amount }, headingRoomOf(l, h)))]
+    expect(shown.filter((x) => x.endsWith('…'))).toHaveLength(4)
+    for (const name of shown) {
+      expect(svg).toContain(`>${name} · ${amount}<`)
+      expect(labelText({ name: 'x', amount }, 10)).toContain(amount)
+    }
   })
 
   it('pkt 14: kwota w walucie – ta sama reguła ścieżek co kwoty w groszach (pozycje list pominięte)', () => {

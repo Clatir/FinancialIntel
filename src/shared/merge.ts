@@ -658,7 +658,7 @@ export function isAmountPath(path: Path): boolean {
 /** The amounts in another currency (AP-48, T492): hundredths of its unit, never złoty – written as the field writes them. */
 export const FOREIGN_AMOUNT_FIELDS = ['foreign.amount'].map((f) => f.split('.'))
 
-/** Is the field at `path` an amount in another currency? The amounts' one rule of paths (przegląd R2 pkt 14). */
+/** Is the field at `path` an amount in another currency? The amounts' one rule of paths (R2 review, item 14). */
 export const isForeignAmountPath = (path: Path): boolean => pathIn(FOREIGN_AMOUNT_FIELDS, path)
 
 /** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */

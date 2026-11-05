@@ -189,7 +189,7 @@ export function monthFlows(input: MonthFlowsInput): Flows {
   const total = work + trading + returns + deficit + sum(passes.map((v) => Math.max(0, v)))
   const small = total * SMALL_SHARE
   if (work) node({ id: 'work', label: 'Przychody z pracy', column: 0 })
-  // Bilans paliwa's trading net (przegląd R2 pkt 9): „netto” when the month topped XTB up.
+  // Bilans paliwa's trading net (R2 review, item 9): „netto” when the month topped XTB up.
   if (trading) node({ id: 'trading', label: o.topUpsGross ? 'Dostawy z ICTTJ (netto)' : 'Dostawy z ICTTJ', column: 0 })
   if (returns) node({ id: 'returns', label: 'Zwroty ponad zakupy', column: 0, detail: returned })
   if (deficit) node({ id: 'reserve', label: 'Z osłon i kadłuba', column: 0, tone: 'down' })
@@ -223,7 +223,7 @@ export function monthFlows(input: MonthFlowsInput): Flows {
     link(MONTH_NODE, 'ship', surplus)
   }
   // Outside the income and the costs: from its source straight to its end (the layout passes the month by), under their
-  // own heading on both sides – the shields' and the hull's money for them its own source (przegląd R2 pkt 6): the red
+  // own heading on both sides – the shields' and the hull's money for them its own source (R2 review, item 6): the red
   // „Z osłon i kadłuba” of the month is its deficit alone, as Bilans paliwa.
   const pass = (from: FlowNode, to: FlowNode, value: number) => {
     if (value <= 0) return
@@ -249,7 +249,7 @@ export function monthFlows(input: MonthFlowsInput): Flows {
 }
 
 /**
- * The order in a column (przegląd R2 pkt 3): the month's own flows first, the money outside it below them – its sources in
+ * The order in a column (R2 review, item 3): the month's own flows first, the money outside it below them – its sources in
  * the order of their ends, so no two bands cross (the layout keeps the order).
  */
 const ORDER = [
@@ -307,7 +307,7 @@ export function energyFlows(brief: Debriefing): Flows | null {
   const nodes: FlowNode[] = []
   const links: FlowLink[] = []
   // salary + loot = sinking + rates + used + result (the debriefing's): a part below zero goes to the other side under
-  // its own name (przegląd R2 pkt 7 – refunds beyond the spending), so the energy's node is always balanced.
+  // its own name (R2 review, item 7 – refunds beyond the spending), so the energy's node is always balanced.
   const source = (id: string, label: string, value: number, tone?: 'up' | 'down') => {
     if (value <= 0) return
     nodes.push({ id, label, column: 0, ...(tone ? { tone } : {}) })
