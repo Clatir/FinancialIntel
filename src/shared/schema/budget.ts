@@ -186,6 +186,30 @@ export type BudgetStart = z.infer<typeof budgetStartSchema>
 // ------------------------------------------------------------------ import
 
 /**
+ * What a condition of a rule (1.16.0, AP-45) looks at; the direction is the rule's own `direction` – always with the
+ * others („wpływy LUB …” would catch every inflow). A field this version does not know makes the rule inactive.
+ */
+export const RULE_CONDITION_FIELDS = ['counterparty', 'title', 'amount', 'account'] as const
+export type RuleConditionField = (typeof RULE_CONDITION_FIELDS)[number]
+
+/**
+ * One condition of a rule of conditions (1.16.0, AP-45, T467): 'counterparty' – the name contains `value` (as a rule
+ * „contains” – letters and digits, without the marks); 'title' – the title has the words of `value` (as a keyword – the
+ * last word may go on); 'amount' – the amount without the sign from `min` to `max` (grosze, either may be absent);
+ * 'account' – the operation's account `value`.
+ */
+export const ruleConditionSchema = z.looseObject({
+  field: openEnum(RULE_CONDITION_FIELDS),
+  value: z.string().max(200).optional().catch(undefined),
+  min: grosze.min(0).nullable().optional().catch(undefined),
+  max: grosze.min(0).nullable().optional().catch(undefined)
+})
+export type RuleCondition = z.infer<typeof ruleConditionSchema>
+
+/** At most this many conditions of one rule. */
+export const MAX_RULE_CONDITIONS = 10
+
+/**
  * A rule of the import (E2): an operation of this counterparty becomes … Learned from the user's decisions (the
  * group categorization) or written in the settings. The bank's own categories are a weak hint only (D68).
  */
@@ -201,9 +225,22 @@ export const importRuleSchema = z.looseObject({
    * 'amount' (1.5.1, F22): the brand key as 'exact', for an operation up to `maxAmount` – before the brand's 'exact' one
    * („Orlen do 40 zł → kawa”, the rest „paliwo”); an older version ignores it and takes the brand's plain rule.
    */
-  mode: openEnum(['exact', 'contains', 'keyword', 'amount'] as const).default('exact'),
+  mode: openEnum(['exact', 'contains', 'keyword', 'amount', 'conditions'] as const).default('exact'),
   /** The 'amount' rule's limit: the operation's amount up to it (grosze, without the sign). */
   maxAmount: z.number().int().positive().nullable().optional().catch(undefined),
+  /**
+   * 'conditions' (1.16.0, AP-45, T467): the rule's conditions, joined by `combine` – 'all' (I), 'any' (LUB); `match` is
+   * then only the rule's text for the search. The mode is the field of compatibility: a version before 1.16.0 does not
+   * know it and applies no such rule (reading `match` alone, a rule of more conditions would catch too much).
+   */
+  conditions: z.array(ruleConditionSchema).max(MAX_RULE_CONDITIONS).optional().catch(undefined),
+  combine: openEnum(['all', 'any'] as const).optional().catch(undefined),
+  /**
+   * Also for the entries typed by hand (1.16.0, AP-45, T470): the quick entry and the operation's editor propose the
+   * rule's decision (category, who pays) once the name or the title fits it – to accept, never saved by itself. Absent =
+   * the import only.
+   */
+  manual: z.boolean().optional().catch(undefined),
   /** Money in or out; null = both. */
   direction: openEnum(['in', 'out'] as const).nullable().default(null),
   /** An optional counterparty constraint for a keyword rule (e.g. transfer from person X with title Y). */

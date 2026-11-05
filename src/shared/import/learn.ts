@@ -7,7 +7,7 @@
 import { fold } from '../fold'
 import { isCityWord, isGenericWord, isKeywordWord, keywordMatcher, sameWord, tokens, withoutProcessor, words } from './brands'
 import { withoutLegalForms } from './names'
-import { findRule, isFeeOperation } from './classify'
+import { afterKeywords, findRule, isFeeOperation } from './classify'
 import { choiceOf, opKindOf, sameChoice, type Choice, type ImportChoices, type ImportGroup } from './reconcile'
 import type { ImportRule } from '../schema/budget'
 
@@ -131,7 +131,7 @@ export function keywordProposals(
   groups: readonly ImportGroup[],
   group: ImportGroup,
   choice: Choice,
-  ctx: { rules: readonly ImportRule[]; choices: ImportChoices; ownNames?: readonly string[] },
+  ctx: { rules: readonly ImportRule[]; choices: ImportChoices; ownNames?: readonly string[]; accountId?: string | null },
   limit = 3
 ): KeywordProposal[] {
   // An expense without a category teaches nothing; a loan, XTB, the tax are decided operation by operation (a keyword
@@ -155,7 +155,7 @@ export function keywordProposals(
   const current = new Map<string, ImportRule | null>()
   const ruleOf = (p: (typeof others)[number]) => {
     let r = current.get(p.key)
-    if (r === undefined) current.set(p.key, (r = findRule(ctx.rules, p.target, p.direction, p.row.amount)))
+    if (r === undefined) current.set(p.key, (r = findRule(ctx.rules, p.target, p.direction, p.row.amount, ctx.accountId)))
     return r
   }
   for (const [word, text] of candidates(groups, group, ctx.rules, ctx.ownNames ?? [])) {
@@ -166,7 +166,8 @@ export function keywordProposals(
     for (const p of others) {
       if (!matches(p.target.name) && !matches(p.target.title)) continue
       const r = ruleOf(p)
-      if ((r && !(r.mode === 'keyword' && word.length > r.match.length)) || sameChoice(choiceOf(p.decision), choice)) continue
+      // A rule of one condition or „którykolwiek” (AP-45) stands after the keywords: the word would decide its row.
+      if ((r && !(r.mode === 'keyword' && word.length > r.match.length) && !afterKeywords(r)) || sameChoice(choiceOf(p.decision), choice)) continue
       // A word that would decide another word's operations („auto” → „AUTOMATSPEC”) is not offered: the count would
       // say one thing, the rule do another.
       if (catchOf(p.target.name, word) !== 'near' && catchOf(p.target.title, word) !== 'near') {

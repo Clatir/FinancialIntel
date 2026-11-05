@@ -23,7 +23,8 @@ import { AccountSelect, CategorySelect, useAccounts } from './pickers'
 import { changeKind as changeOperationKind, deleteOperation, openOperation, rememberAccount, showBrand, updateOperation } from './state'
 import { addOtherSide, joinTransfers, transferEdits, transferIssuesOf, type JoinIssue } from './transfers'
 import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
-import { OFFICER_SOURCE_LABEL, officerHint } from '@shared/import/officer'
+import { hintChanges, manualRuleHint, OFFICER_SOURCE_LABEL, officerHint, ruleHintText, type RuleHint } from '@shared/import/officer'
+import { memberName } from '@shared/calc/household'
 import { officerNow } from '../../store/officer'
 import { useCategories } from './pickers'
 import { FinancedNote, FinancerSelect, MemberIncome } from '../household/MemberPickers'
@@ -117,6 +118,24 @@ export function OperationEditor({ id }: { id: string }) {
           usable: (c) => !!cats.byId.get(c) && !cats.byId.get(c)!.archived
         })
       : null
+  // AP-45 (T470): an expense typed by hand – the rule „także dla wpisów ręcznych” its name or title fits proposes its
+  // decision (category, who pays), to accept; never written by itself. Before the officer's guess.
+  const hint =
+    !t.bank && t.kind === 'expense' && (t.splits.length === 0 || shareOf(t)) && rules && !readOnly
+      ? manualRuleHint(
+          { counterparty: t.counterparty, title: t.title, direction: t.amount > 0 ? 'in' : 'out', amount: t.amount || null, accountId: t.accountId },
+          { rules, aliases: aliases ?? {}, usable: (c) => !!cats.byId.get(c) && !cats.byId.get(c)!.archived, members: members.filter((m) => !m.archived) }
+        )
+      : null
+  const ruleHint = hint && hintChanges({ categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, gift: !!t.gift, share: shareOf(t) ?? null }, hint) ? hint : null
+  const takeHint = (h: RuleHint) =>
+    update((r) => {
+      const categoryId = h.categoryId ?? r.categoryId
+      if (!h.pays) return shareOf(r) ? withShare({ ...r, categoryId }, r.share!) : { ...r, categoryId }
+      if (h.share) return withShare({ ...r, categoryId, refundable: false, memberId: null, gift: undefined }, h.share)
+      const plain = shareOf(r) ? withShare(r, null) : r
+      return { ...plain, categoryId, refundable: h.refundable, memberId: h.refundable ? h.memberId : null, gift: h.refundable && h.gift ? true : undefined }
+    })
   const abs = Math.abs(t.amount)
   const sign: 1 | -1 = t.amount < 0 ? -1 : t.amount > 0 ? 1 : t.kind === 'income' ? 1 : (zeroSign ?? DEFAULT_SIGN[t.kind])
   const setDirection = (s: 1 | -1) => {
@@ -340,7 +359,18 @@ export function OperationEditor({ id }: { id: string }) {
                     Zapamiętaj: „{bankNameOf(t)}”{t.counterparty && t.counterparty !== bankNameOf(t) ? ` (${t.counterparty})` : ''} → {cats.label(t.categoryId)}
                   </button>
                 )}
-                {officer && (
+                {ruleHint && (
+                  <button
+                    type="button"
+                    className="self-start text-left text-[11.5px] text-accent hover:underline"
+                    onClick={() => takeHint(ruleHint)}
+                    title="Reguła importu „także dla wpisów ręcznych” – kliknij, by przyjąć"
+                    data-testid="operation-rule-hint"
+                  >
+                    {ruleHintText(ruleHint, { category: (c) => cats.label(c), member: (m) => memberName(m, members) })}
+                  </button>
+                )}
+                {officer && !ruleHint && (
                   <button
                     type="button"
                     className="self-start text-[11.5px] text-accent hover:underline"
