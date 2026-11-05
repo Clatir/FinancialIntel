@@ -5,15 +5,21 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.15.4 wydane** (25.10.2026). Audyt funkcjonalny 1.15.4 (D97) zakończony 03.11 – 80 znalezisk, 48 AP,
-plan N1–N5 (`docs/audyt/raport.md`, `docs/audyt/wnioski.md`; przebieg w archiwum). Odpowiedzi 04.11: D98 (iPhone
-wstrzymany), D99 (wnioski przyjęte, S4), D100 (konto Gotówka, wpłata od dowolnej osoby spłaca pożyczkę), D101 (ciąg
-N1–R2 bez pauz, bez kart kredytowych, wydanie po każdej grupie, zasada wątpliwości).
-**Ciąg N1–R2 (D101) zakończony 05.11.2026:** 1.15.5–1.17.0 scalone (PR #50–#56; 1.17.0 – wydanie z CI na `main` po
-scaleniu PR #56, sprawdź `gh release list`). **Następny krok:** wybór kolejnej pracy przez użytkownika – ciąg D101 nie
-obejmuje niczego dalej (D67: bez komendy nie zaczynam); propozycje niżej w „Po ciągu N1–R2”. Otwarte poza ciągiem: raport maszyny wirtualnej i lista „Tylko Ty” (`docs/audyt/ty.md`) – dopiszą się
-do wniosków, gdy będą; kalibracja progów gry po N3 (D99 pkt 12, za osobną zgodą). iPhone (iD, iE, AP-39, AP-40)
-wstrzymany (D98) – „Przed grupą iD” niżej zostaje jako zapis na później. Odrzucone (D88): F32, F38, F39, F41, F43.
+**Stan:** **1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
+**Gotowe do odbioru zbiorczego:**
+- Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
+- Pakiet odbioru GD przygotowany: tabela „Do potwierdzenia” uzupełniona o decyzje GA, GB i GC; lista „Tylko Ty” (`docs/audyt/ty.md`) i instrukcja maszyny wirtualnej (`docs/audyt/maszyna.md`) zaktualizowane.
+Otwarte poza ciągiem: odbiór w maszynie wirtualnej przez Cowork (48 punktów) oraz sesje Ty (`docs/audyt/ty.md`); iPhone (iD, iE) wstrzymany (D98). Odrzucone (D88): F32, F38, F39, F41, F43.
+
+## Ciąg G0–GD – stan (05.11.2026)
+
+| Grupa | Wersja | Gałąź | Stan | PR | Zakres |
+| --- | --- | --- | --- | --- | --- |
+| G0 Porządek i triaż | – | – | ✅ wykonane | – | Triaż punktów audytu (SW.26, IM sp. 6–8, IN sp. 1, OP.10, OP.20, OP.42, ME sp. 4, PM sp. 2, AF-54, WY.14); usunięcie 60 lokalnych i 21 zdalnych gałęzi; czyszczenie worktree |
+| GA Silnik i dane | 1.17.1 | `claude/1.17.1-silnik-dane` | ✅ wydane | #58 | Terminy naprzód, cena w Ładowni, boja roczna i cele w prognozie, ukryty containerId, wyrocznia T363/T341; pliki tylko do odczytu z przyciskiem odblokowania, bezpieczne Cofnij, duplikaty między kontami, zachowanie „w tym za” (T495–T503) |
+| GB Reguły, schemat, import | 1.18.0 | `claude/1.18.0-reguly` | ✅ wydane | #59 | Zachowanie pól reguł `keptField` bez utraty danych, audyt reguły z zamkniętą/usuniętą pożyczką, impliedLoanRate z harmonogramu, rozpoznawanie PIT-38, regex z wiersza z `\d+`, ręczna kolejność reguł warunkowych (T504–T511) |
+| GC Interfejs i drobne | 1.18.1 | `claude/1.18.1-interfejs` | ✅ wydane | #60 | Sankey w Planie miesiąca, telefon: nazwa pożyczki i własna godzina odprawy, eksport części pożyczek, edytor operacji bez depozytu na przyszłość, poprawki kontrastu i tagów (T512–T518) |
+| GD Pakiet odbioru | – | – | ✅ gotowy | – | Aktualizacja tabeli „Do potwierdzenia”, `docs/postep.md`, `docs/audyt/ty.md`, `docs/audyt/maszyna.md` |
 
 ## Ciąg N1–R2 (D101) – stan
 
@@ -62,6 +68,9 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
+| GC | Sankey Planu miesiąca | wizualizacja przepływu pensji i wpływów na koszty stałe, kontenery i rezerwy; podział części pożyczek w eksporcie; telefon z nazwą pożyczki i czasem odprawy | T512–T518 |
+| GB | Ochrona pól reguł i audyt | zachowanie nieznanych pól reguł bez kasowania (`keptField`); audyt reguły oznacza zamknięte/usunięte pożyczki; `impliedLoanRate` z harmonogramu; PIT-38 rozpoznawany po tytule/kontrahencie | T504–T511 |
+| GA | Rekordy tylko do odczytu i Cofnij | przycisk „Zdejmij blokadę” w Synchronizacji / Ustawieniach; Cofnij odmawia nadpisania zmienionego wpisu; duplikaty między kontami bez względu na format; zbiorcza decyzja domownika zachowuje shares | T495–T503 |
 | R2 | Plan spłaty pożyczek | plan nie chce więcej niż raty harmonogramu + nadpłata; przechodzi tylko rata pożyczki spłaconej wcześniej; lawina bez oprocentowania liczy jak 0 %, kula – najmniejsza „do spłaty” z Radaru; plan od bieżącego miesiąca, miesiąc = 1/12 roku; nadpłata zapisywana jak dotąd w wierszu pożyczki; plan bez końca – „—” zamiast sumy odsetek | T480–T484 |
 | R2 | Prognoza wieloletnia | „pensja × wzrost” = wpływy z pracy × wzrost, pensja planu rośnie z inflacją kosztów; domyślne: ostrożny 0 % / 5 %, bazowy 4 % / 3 %, optymistyczny 7 % / 2,5 %, dostawy i jednorazowe 0, od roku 2; jednorazowe – w ostatnim miesiącu roku z osłon × inflacja; siła floty netto odejmuje braki, bez rezerwy PIT-38; domyślnie 5 lat, panel pod kursem | T485–T489 |
 | R2 | Kurs i prognoza – pożyczki | przyjęte średnie koszty (historia < 3 mies.) traktowane jak średnia z ratą pożyczki z kontenerem (kurs odejmuje ratę i płaci ją w jej miesiącach); spłata pożyczki udzielonej wraca do osłon bez dokowania (jak silnik, T70) | T486–T488 |
