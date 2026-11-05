@@ -29,6 +29,12 @@ const ownPlan = (month: string, from: MonthPlan | null, now: string): MonthPlan 
 
 const sameEnvelopes = (a: Record<string, number>, b: Record<string, number>) => Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v)
 
+/** A month's own plan as `editPlan` makes it, checked by the schema (the start wizard's – built before fi.json, T446). */
+export function plannedOf(month: string, fn: (p: MonthPlan) => MonthPlan, now = new Date().toISOString()): MonthPlan {
+  const plans = allPlans()
+  return monthPlanSchema.parse(fn(plans.find((p) => p.month === month) ?? ownPlan(month, planFor(plans, month), now)))
+}
+
 /**
  * Change a month's own plan. A month living on an earlier plan gets its own first – a copy of the salary and the
  * envelopes in force – so the change does not reach other months (T46); a month gone by changed, the next month living

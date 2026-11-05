@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import { useData } from '../store/data'
 import { navigate, useUi } from '../store/ui'
-import { startWizard, useWizard, WIZARD_STEPS } from '../features/wizard/state'
+import { finishStart, startLeftText, startWizard, useWizard, WIZARD_STEPS } from '../features/wizard/state'
 import { dismissUpdateNotice, downloadUpdate, restartToUpdate, useUpdate } from '../store/update'
 import { asksAutostart, installWhen, loadTrayPrefs, setTrayPrefs, useTray } from '../store/tray'
 import { openExternalSafe } from '../features/settings/UpdatesTab'
@@ -93,6 +93,9 @@ export function Banners() {
   const wizardStep = useWizard((w) => (w.active ? w.step : null))
   const tray = useTray((s) => s.prefs)
   const machineSetup = useMachineSetup((s) => s.pending)
+  // The budget's start not whole in the folder (T446): what it lacks – „Dokończ” writes it.
+  const startLeft = useData((s) => s.startLeft)
+  const startMissing = useData((s) => s.startMissing)
   useEffect(() => {
     void loadTrayPrefs()
   }, [])
@@ -125,6 +128,12 @@ export function Banners() {
             ? 'Budżet liczy się na razie od salda otwarcia, bez planu: kreator startu ustawi od dziś salda, pensję, warstwy okrętu i koperty. Dowództwo zacznie się po kreatorze.'
             : 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
       actions: [{ label: wizardStep != null ? 'Wróć do kreatora' : 'Kreator startu', onClick: startWizard, accent: true, testId: 'banner-wizard-start' }]
+    })
+  if (startLeft && startMissing.length && !status?.readOnly)
+    items.push({
+      key: 'start-left',
+      text: startLeftText(startLeft, startMissing),
+      actions: [{ label: 'Dokończ', onClick: () => void finishStart(), accent: true, testId: 'banner-start-finish' }]
     })
   // A budget opened on a new computer (AP-28): what is set on every computer apart – the start with Windows among them.
   const setupHere = machineSetup && !!budgetStart
