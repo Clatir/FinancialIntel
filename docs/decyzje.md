@@ -3779,36 +3779,48 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   z ostrzeżeniem pod spodem; na czerwono tylko kwota poniżej zera – zieleń i czerwień tylko dla kwot na plus i minus
   (zmienia „na czerwono i z ostrzeżeniem poniżej minimum”).
 - **T446** Start budżetu w całości albo wcale (1.15.9, N5 – KR.29 / AF-14, część „zapis częściowy”; rozszerza T51;
-  przegląd 3 N5 – najpierw `fi.json`, zastępuje wycofanie startu z przeglądów 1 i 2):
+  przeglądy 3 i 4 N5 – najpierw `fi.json`, zastępuje wycofanie startu z przeglądów 1 i 2):
   `finishWizard` najpierw zapisuje wszystko, co czekało (`saveFirst` – członek, cel, inna zmiana; folder, który tego nie
-  przyjmuje, nie dostaje niczego ze startu), potem **`fi.json` z `budget.start`** i resztą ustawień startu (statek,
-  warstwy, rozkazy, podział środków – zbiornik kontenera z propozycji pod id nadanym przed zapisem) jako następny zapis
-  `fi.json` (`writeStart`, `store/data.ts`) i czeka na odpowiedź folderu – do 15 s, dłużej z toastem „Folder zapisuje wolno
-  – start czeka…” i czekaniem dalej. Okno dostaje start dopiero po odpowiedzi folderu, od razu razem z rekordami startu –
-  ani folder, ani okno nie mają `budget.start` bez nich (silnik, gra, powiadomienia nie widzą stanu pośredniego). Odmowa:
-  w oknie i w folderze nie zmienia się nic – nie ma czego wycofywać ani cofać; odpowiedzi zostają (także szkic na tym
-  komputerze), toast „Budżet nie wystartował – nie udało się zapisać ustawień w folderze (powód). Nic ze startu nie
-  trafiło do folderu – …”, ponowne „Uruchom budżet” zaczyna od nowa (bez drugiego kontenera). Przyjęty: rekordy startu –
-  salda otwarcia (zastane saldo otwarcia zmienione), plan miesiąca, wybrane kontenery z połączonymi płatnościami (T379;
-  propozycja, której odbiorca ma już kontener, używa go) – zwykłym zapisem aplikacji: zapis odrzucony – toast „Budżet
-  uruchomiony – część zmian nie zapisała się jeszcze w folderze (…)”, autozapis ponawia sam. Zmiana `fi.json` w oknie
-  w trakcie zapisu (edycja, wersja z drugiego komputera) zostaje – start nałożony na nią, zapisany razem z nią. „Przerwij
-  kreator” jak w N4: odpowiedzi przepadają, ślady (domownicy, cele, folder ICTTJ, import) zostają i są wymienione – tekst
-  mówi prawdę, bo przed przyjętym `fi.json` nic ze startu nie jest zapisane. Przycisk „Uruchom budżet” podaje obok tylko to,
-  czego brakuje (`finishBlockers` – nazwy kont bez salda, pensja, podział ponad środki), w folderze tylko do odczytu – powód
-  folderu, a gdy zapisy teraz padają – że start poczeka. Wykrywanie i zdejmowanie atrybutu „tylko do odczytu” z plików –
-  czeka na decyzję użytkownika (bez zmian).
-  Zabezpieczenie silnika w chwili między zapisami (`budget.start` na dysku, salda jeszcze nie albo ich zapis padł): do
-  zapisu na dysku wszystkich rekordów startu na tym komputerze żaden zapis w tle nie rusza (`startKeys` w `writeStart`,
-  `writesInBackground` false) – gra nie ustawia swojego startu ani nie zamraża dni, cele ICTTJ i start rozliczeń domowników
-  nie liczą się z budżetu, którego folder nie ma w całości. Zapis wszystkiego (zamknięcie okna, zmiana folderu, Ctrl+S)
-  czeka na zapis `fi.json` startu w drodze i zapisuje rekordy, które przyszły z jego odpowiedzią – okno zamknięte w trakcie
-  nie zostawia `fi.json` bez nich. Rekord, którego folder nie przyjął, a użytkownik zamknął okno „bez zapisu” po pytaniu
-  o niezapisane zmiany, przepada jak każda niezapisana zmiana (saldo otwarcia – Ustawienia → Konta, plan – Plan miesiąca).
-  Drugi komputer, który zobaczy `fi.json` przed saldami, dostaje je chwilę później przez OneDrive jak każdą zmianę; do tego
-  czasu liczy budżet bez nich tylko na ekranie: zapisy w tle robi tylko komputer „w użyciu” (D86), pierwsze zamrożenie dni
-  czeka po otwarciu folderu i po każdej zmianie z drugiego komputera (B33, T199), a pierwszy dzień gry to dzień po starcie,
-  zamrażany najwcześniej dwa dni później.
+  przyjmuje, nie dostaje niczego ze startu), potem buduje rekordy startu i sprawdza każdy schematem – salda otwarcia
+  (zastane saldo otwarcia z nową kwotą i dniem), plan miesiąca, kontener każdej wybranej propozycji (kontener odbiorcy już
+  jest – ten; nowy z id nadanym przed zapisem, więc `fi.json` trzyma jego zbiornik). Rekord odrzucony: start odmawia
+  („nie da się zapisać rekordu startu: kontener „…” (pole …)”), nic nie zapisane. Dalej **`fi.json` z `budget.start`**
+  i resztą ustawień startu jako następny zapis `fi.json` (`writeStart`, `store/data.ts`) z odpowiedzią folderu – do 15 s,
+  dłużej z toastem „Folder zapisuje wolno – start czeka…” i czekaniem dalej. Decyzja o zmianie `fi.json` z drugiego
+  komputera czeka – start odmawia z komunikatem (okno decyzji otwarte), nigdy nie zapisuje na wersji niewidzianej. Okno
+  dostaje start dopiero po odpowiedzi folderu, od razu razem z rekordami startu; zmiana `fi.json` z main z własnego zapisu
+  w trakcie startu do okna nie wchodzi (ta sama treść – bez drugiego zapisu). Od kliknięcia do rekordów startu zapisy
+  w tle są wstrzymane. Odmowa: w oknie i w folderze nie zmienia się nic – nie ma czego wycofywać; odpowiedzi zostają (także
+  szkic na tym komputerze), toast „Budżet nie wystartował – … Nic ze startu nie trafiło do folderu – …”, ponowne „Uruchom
+  budżet” zaczyna od nowa (bez drugiego kontenera). Przyjęty: rekordy startu zwykłym zapisem aplikacji (zapis odrzucony –
+  toast „Budżet uruchomiony – część zmian nie zapisała się jeszcze w folderze (…)”, autozapis ponawia sam); kontener
+  dopasowany do odbiorcy po odpowiedzi folderu – kontener odbiorcy dodany w czasie czekania jest tym kontenerem (zbiornik
+  przechodzi na niego, jedyny przypadek drugiego zapisu `fi.json`), płatności połączone (T379). Zmiana `fi.json` w oknie
+  w trakcie zapisu (edycja, wersja z drugiego komputera) zostaje – start nałożony na nią, zapisany razem z nią. Inny folder
+  pokazany w trakcie zapisu: „Budżet wystartował w poprzednim folderze (ustawienia zapisane), ale … dopisze baner
+  „Dokończ” po ponownym otwarciu tamtego folderu”. „Przerwij kreator” jak w N4: odpowiedzi przepadają, ślady (domownicy,
+  cele, folder ICTTJ, import) zostają i są wymienione – przed przyjętym `fi.json` nic ze startu nie jest zapisane.
+  Przycisk „Uruchom budżet” podaje obok tylko to, czego brakuje (`finishBlockers` – nazwy kont bez salda, pensja, podział
+  ponad środki), w folderze tylko do odczytu – powód folderu, a gdy zapisy teraz padają – że start poczeka. Wykrywanie
+  i zdejmowanie atrybutu „tylko do odczytu” z plików – czeka na decyzję użytkownika (bez zmian).
+  Start niedokończony (przegląd 4 N5): rekordy startu są zapisane na tym komputerze (pamięć okna, klucz `fi.start.left:`
+  z folderem – jak szkic kreatora) od przed wysłaniem `fi.json` do chwili, gdy każdy jest w folderze; do tego czasu żaden
+  zapis w tle nie rusza (gra – start i zamrażanie dni, cele ICTTJ, start rozliczeń). Okno zamknięte „bez zapisu” po pytaniu
+  o niezapisane, awaria albo inny folder w trakcie: po ponownym otwarciu folderu z tym `budget.start` baner „Start budżetu
+  niedokończony – w folderze brakuje: … Do ich zapisu gra, cele ICTTJ i rozliczenia czekają.” z „Dokończ” – zapisuje tylko
+  rekordy, których w folderze nie ma (po id; rekord zastany, który folder ma w starej wersji – saldo otwarcia albo plan
+  sprzed kreatora – zostaje, jak jest), kontenerowi dopasowuje odbiorcę jak start i łączy jego niepołączone płatności; w tym
+  samym oknie, gdy zapis rekordu startu padł, ten sam baner z powodem („Dokończ” ponawia zapis). Rekord startu, który
+  folder ma w swojej wersji – czeka decyzja o zmianie z drugiego komputera, zapisała go nowsza wersja (B67) – nie
+  wstrzymuje dłużej zapisów w tle, z komunikatem „folder ma już swoją wersję części rekordów startu (…)”; rekord usunięty
+  przez użytkownika nie wraca. Zapisane – pamięć znika. `fi.json` bez `budget.start` (start nigdy nie dotarł) – pamięć
+  znika przy otwarciu folderu. Pamięć jest tego komputera: drugi komputer, który zobaczy `fi.json` przed saldami, dostaje je
+  chwilę później przez OneDrive jak każdą zmianę i do tego czasu liczy budżet bez nich tylko na ekranie – zapisy w tle robi
+  tylko komputer „w użyciu” (D86), pierwsze zamrożenie dni czeka po otwarciu folderu i po każdej zmianie z drugiego
+  komputera (B33, T199), a pierwszy dzień gry to dzień po starcie, zamrażany najwcześniej dwa dni później. Zapis wszystkiego
+  (zamknięcie okna, zmiana folderu, Ctrl+S) czeka na zapis `fi.json` startu w drodze i zapisuje rekordy, które przyszły
+  z jego odpowiedzią. Rekordy startu (pamięć i czekanie) to zmiany z `apply` – klucze zapisów przed nim i po nim, bez
+  haka w zapisach; kolejka `fi.json` w `writeStart` własna, bo zwraca odpowiedź startu (`enqueue` zapisuje stan okna).
   Zastąpione (przeglądy N5 1–3): rekordy startu przed `fi.json` i ich wycofanie przy odmowie (`refusedStart`,
   `withdrawStart`, `WizardState.startWrites` / `startContainers` w szkicu, znacznik salda `byStart` w `budgetStartOf`,
   banerze N23 i wyroczni, usunięcie warunkowe `deleteRecords(…, expected)` z `contentMark` i `ChangedSinceError` w procesie
@@ -3816,10 +3828,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nowe przypadki – odczyt z pamięci zamiast pliku, błąd `stat` jako brak pliku, starsza wersja ignorująca `byStart`, ponowny
   zapis nieaktualnej wersji po odmowie, salda `byStart` w warstwach, błąd przypisany innemu rekordowi. Odwrócona kolejność
   zamyka tę klasę: przy odmowie nie ma czego wycofywać, a stan pośredni (`budget.start` przed saldami) niczego nie zapisuje
-  w tle. Pole `byStart` nie zostało wydane – usunięte ze schematu bez śladu (bez `SCHEMA_VERSION`). Rozważone i odrzucone:
-  `fi.json` najpierw w oknie i zapis `writeNow` (okno liczyłoby budżet bez sald przez czas zapisu, a odmowa wymagała
-  cofania); trwały znacznik „start w toku” (w folderze albo w szkicu) – po restarcie bez rekordów nie ma czego dokończyć;
-  zapis wielu plików naraz w jednym kroku – folder (OneDrive) tego nie ma.
+  w tle i daje się dokończyć. Pole `byStart` nie zostało wydane – usunięte ze schematu bez śladu (bez `SCHEMA_VERSION`).
+  Rozważone i odrzucone: `fi.json` najpierw w oknie i zapis `writeNow` (okno liczyłoby budżet bez sald przez czas zapisu,
+  a odmowa wymagała cofania); znacznik „start w toku” w folderze (pole schematu, widoczne dla starszych wersji) – pamięć na
+  tym komputerze wystarcza, bo dokończyć może tylko komputer, który start zaczął; zapis wielu plików naraz w jednym kroku –
+  folder (OneDrive) tego nie ma.
 - **T447** Propozycje z historii i pierwsze dni (1.15.9, N5 – AP-25, AF-13, KR.19, KR sp. 9, ME sp. 3, AF-53; rozszerza
   T286): rachunek o zmiennej kwocie także co 2 miesiące (`VARIABLE_MID_CYCLES`) – co najmniej 3 ostatnie płatności w
   odstępie cyklu (±12 dni), kwoty ±60% mediany, w swoim dniu miesiąca (±6 dni), kwota = 75. percentyl roku w górę do
