@@ -104,7 +104,27 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.accounts[].id` | ULID | wymagane | Identyfikator konta – `accountId` w operacjach i saldach. |
 | `settings.accounts[].name` | tekst | wymagane | Nazwa konta. |
 | `settings.accounts[].kind` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"bank"` | Rodzaj: `bank`, `wallet` (portfel z kartą), `cash` (gotówka), `other`. |
-| `settings.accounts[].importFormat` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `null`, może być `null` | Format pliku z banku, który import czyta dla konta (`mbank`); `null` – bez importu. |
+| `settings.accounts[].importFormat` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `null`, może być `null` | Format pliku z banku, który import czyta dla konta: `mbank` (CSV z mBanku) albo `csv` (CSV innego banku według `csvMapping`); `null` – bez importu. |
+| `settings.accounts[].csvMapping` | obiekt | opcjonalne | CSV innego banku (`importFormat` = `csv`): jak czytać plik – ustawione raz w kreatorze importu. Mapowanie, którego wersja aplikacji nie umie przeczytać, jest pomijane (konto zostaje). |
+| `settings.accounts[].csvMapping.separator` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `";"` | Separator kolumn: `;`, `,`, tabulator albo `\|`. |
+| `settings.accounts[].csvMapping.encoding` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"auto"` | Kodowanie pliku: `auto` (rozpoznane), `utf-8` albo `windows-1250`. |
+| `settings.accounts[].csvMapping.skipRows` | liczba całkowita | domyślnie `0` | Ile wierszy pominąć przed nagłówkiem (nazwa banku, dane konta). |
+| `settings.accounts[].csvMapping.header` | tak / nie (`true` / `false`) | domyślnie `true` | `true` – pierwszy wiersz po pominiętych to nagłówek kolumn; `false` – od niego zaczynają się operacje. |
+| `settings.accounts[].csvMapping.headers` | lista: tekst | domyślnie pusta lista | Komórki nagłówka, jak pisze je bank – po nich aplikacja poznaje plik tego samego układu. |
+| `settings.accounts[].csvMapping.dateFormat` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"RRRR-MM-DD"` | Format daty w pliku, np. `RRRR-MM-DD` albo `DD.MM.RRRR`. |
+| `settings.accounts[].csvMapping.decimal` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `","` | Znak dziesiętny kwot: `,` albo `.`. |
+| `settings.accounts[].csvMapping.columns` | obiekt | wymagane | Numery kolumn (od 0) z poszczególnymi danymi; `null` – kolumny nie ma. |
+| `settings.accounts[].csvMapping.columns.date` | liczba całkowita | wymagane | Kolumna daty operacji. |
+| `settings.accounts[].csvMapping.columns.booked` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna daty księgowania (opcjonalna). |
+| `settings.accounts[].csvMapping.columns.amount` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna kwoty ze znakiem (albo `credit` i `debit`). |
+| `settings.accounts[].csvMapping.columns.credit` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna uznań (wpływy), gdy bank podaje je osobno. |
+| `settings.accounts[].csvMapping.columns.debit` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna obciążeń (wydatki), gdy bank podaje je osobno. |
+| `settings.accounts[].csvMapping.columns.description` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna opisu albo tytułu. |
+| `settings.accounts[].csvMapping.columns.counterparty` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna kontrahenta. |
+| `settings.accounts[].csvMapping.columns.operation` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna rodzaju operacji (przelew, karta, bankomat…). |
+| `settings.accounts[].csvMapping.columns.balance` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna salda po operacji (opcjonalna). |
+| `settings.accounts[].csvMapping.columns.accountNo` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna numeru rachunku kontrahenta (opcjonalna). |
+| `settings.accounts[].csvMapping.columns.currency` | liczba całkowita | domyślnie `null`, może być `null` | Kolumna waluty (opcjonalna). |
 | `settings.accounts[].archived` | tak / nie (`true` / `false`) | domyślnie `false` | Konto zarchiwizowane (nie przyjmuje nowych operacji). |
 | `settings.categories` | lista: obiekt | domyślnie zestaw startowy | Kategorie: główne i podkategorie. |
 | `settings.categories[].id` | ULID | wymagane | Identyfikator kategorii – `categoryId` w operacjach. |
@@ -137,8 +157,15 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.import.rules` | lista: obiekt | domyślnie pusta lista | Reguły importu: operacja tego kontrahenta staje się… |
 | `settings.import.rules[].id` | ULID | wymagane | Identyfikator reguły. |
 | `settings.import.rules[].match` | tekst | wymagane | Czego szuka: klucz marki albo nazwy, jej fragment albo słowa (zależnie od `mode`). |
-| `settings.import.rules[].mode` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"exact"` | Dopasowanie: `exact` (marka), `contains` (fragment), `keyword` (słowa w nazwie albo tytule), `amount` (marka do kwoty `maxAmount`). |
+| `settings.import.rules[].mode` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"exact"` | Dopasowanie: `exact` (marka), `contains` (fragment), `keyword` (słowa w nazwie albo tytule), `amount` (marka do kwoty `maxAmount`), `conditions` (warunki `conditions`, 1.16.0). |
 | `settings.import.rules[].maxAmount` | liczba całkowita | opcjonalne, może być `null` | Reguły `amount`: operacja do tej kwoty (grosze, bez znaku). |
+| `settings.import.rules[].conditions` | lista: obiekt | opcjonalne | Reguły z warunkami (`mode` = `conditions`, 1.16.0): najwyżej 10 warunków łączonych według `combine`. Starsza wersja aplikacji takiej reguły nie stosuje. |
+| `settings.import.rules[].conditions[].field` | tekst z listy (nowsza wersja może dodać wartość) | wymagane | Czego dotyczy warunek: `counterparty` (kontrahent zawiera), `title` (tytuł zawiera słowa), `amount` (kwota od–do), `account` (konto). |
+| `settings.import.rules[].conditions[].value` | tekst | opcjonalne | Warunki `counterparty` i `title`: szukany tekst; `account`: identyfikator konta. |
+| `settings.import.rules[].conditions[].min` | grosze (liczba całkowita) | opcjonalne, może być `null` | Warunek `amount`: kwota bez znaku od (grosze); brak – bez dolnej granicy. |
+| `settings.import.rules[].conditions[].max` | grosze (liczba całkowita) | opcjonalne, może być `null` | Warunek `amount`: kwota bez znaku do (grosze); brak – bez górnej granicy. |
+| `settings.import.rules[].combine` | tekst z listy (nowsza wersja może dodać wartość) | opcjonalne | Jak łączyć warunki: `all` – wszystkie (I), `any` – którykolwiek (LUB). |
+| `settings.import.rules[].manual` | tak / nie (`true` / `false`) | opcjonalne | `true` – reguła podpowiada też kategorię i to, kto płaci, przy wpisach ręcznych (szybki wpis, edytor operacji). |
 | `settings.import.rules[].direction` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `null`, może być `null` | Kierunek: `in` (wpływ), `out` (wydatek); `null` – oba. |
 | `settings.import.rules[].counterparty` | tekst | opcjonalne | Reguły słów: dodatkowo ten kontrahent. |
 | `settings.import.rules[].label` | tekst | domyślnie `""` | Kontrahent, jak pisze go bank (na liście reguł). |
