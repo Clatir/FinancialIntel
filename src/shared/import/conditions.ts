@@ -11,6 +11,7 @@
 import { keywordMatcher, normalizeKeyword } from './brands'
 import { counterpartyKey } from './names'
 import { combineOf, conditionsOf, MAX_RULE_CONDITIONS, type ImportRule, type RuleCondition } from '../schema/budget'
+import { TX_KINDS } from '../schema/records'
 
 /** What a rule's condition is tried on – a row of the bank, an operation, an entry typed by hand. */
 export interface RuleSubject {
@@ -109,5 +110,11 @@ export function compiledOf(rule: ImportRule): CompiledRule | null {
   return c
 }
 
-/** A rule of conditions this version cannot apply (a newer version's condition, a broken one): shown so in the settings. */
-export const inactiveConditions = (rule: ImportRule): boolean => rule.mode === 'conditions' && !compiledOf(rule)
+/**
+ * A rule of conditions with anything this version cannot read (przegląd R1 2.3): its conditions or a condition of a newer
+ * version, its way of joining, its kind, its direction. Kept in the file as it is, never applied – and never written by
+ * this version (the editor, a change of its decision, „Zmień na spłatę”, „też ręczne” refuse): only deleted.
+ */
+export const unreadableRule = (rule: ImportRule): boolean =>
+  rule.mode === 'conditions' &&
+  (!compiledOf(rule) || !(TX_KINDS as readonly string[]).includes(rule.kind) || (rule.direction != null && rule.direction !== 'in' && rule.direction !== 'out'))

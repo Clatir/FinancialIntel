@@ -4013,6 +4013,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   przyciski mówią obok dlaczego – raz na listę reguł („+ Nowa reguła z warunkami”, „zmień”, „usuń”), przy „Zapisz”
   edytora i raz na listę słów („też ręczne”); powód folderu (`status.readOnlyReason`) albo „trwa otwieranie innego
   folderu” (`useLockedReason`).
+  Przegląd R1 2 (pkt 3): „tylko usunięcie” dotyczy reguły z warunkami z czymkolwiek nieczytelnym (`unreadableRule`:
+  warunki, warunek nowszej wersji, `combine`, rodzaj, kierunek) – „zmień” wyłączony z powodem, a każdy zapis reguły odmawia
+  ze słowem (`LOCKED_RULE_TEXT`): „Zapisz” edytora (dawniej `combine` nowszej wersji stawało się „all”), zmiana decyzji
+  (`editRule`), „Zmień na spłatę” (takiej reguły przegląd już nie podsuwa) i „też ręczne”. Uczenie z importu zmienia tylko
+  regułę, która zdecydowała grupę, a nieczytelnej import nie stosuje; „Zastosuj do historii” zapisuje operacje, nie regułę;
+  „Cofnij” przywraca regułę w całości.
 - **T469** Import, audyt i „Zastosuj do historii” z regułami z warunkami (1.16.0, R1 – AP-45; rozszerza T169, T325,
   T326, T418): import przekazuje regułom konto pliku i kwotę wiersza (także zwrot towaru szukający reguły zakupu); powód
   „Twoja reguła „…””. Reguła z warunkiem tytułu, który jest spełniony, decyduje „o tytule” (`decidedByTitle`, jak słowo

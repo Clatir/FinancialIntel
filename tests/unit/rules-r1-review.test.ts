@@ -143,3 +143,31 @@ describe('przegląd R1 12: podpowiedź tej samej decyzji to nie zmiana („Dom�
     expect(hintChanges(hintedOf({ ...t, refundable: false, memberId: null }), h)).toBe(true)
   })
 })
+
+describe('przegląd R1 2.3: reguła z warunkami z czymkolwiek nieczytelnym – nikt jej nie zapisuje po swojemu, tylko usunięcie', () => {
+  const locked = (over: Record<string, unknown>) => importRuleSchema.parse({ ...rule({ conditions: [cp('bolt')] }), id: '01K6RXXE000000000000000010', ...over })
+
+  it('nieczytelne `combine`, kierunek, rodzaj, warunki – reguła nieczytelna; czytelna – nie', async () => {
+    const { unreadableRule } = await import('@shared/import/conditions')
+    expect(unreadableRule(locked({ combine: 'none' }))).toBe(true)
+    expect(unreadableRule(locked({ direction: 'both' }))).toBe(true)
+    expect(unreadableRule(locked({ kind: 'przyszly' }))).toBe(true)
+    expect(unreadableRule(locked({ conditions: Array.from({ length: 12 }, () => cp('x')) }))).toBe(true)
+    expect(unreadableRule(locked({ conditions: [{ field: 'waluta', value: 'EUR' }] }))).toBe(true)
+    expect(unreadableRule(locked({}))).toBe(false)
+    expect(unreadableRule(importRuleSchema.parse({ ...rule({}), mode: 'exact', match: 'bolt', combine: 'none' }))).toBe(false)
+  })
+
+  it('import nigdy nią nie decyduje – więc „zapamiętaj” (które zmienia tylko regułę, która zdecydowała grupę) jej nie dotknie', () => {
+    const target = ruleTargetOf({ counterparty: 'BOLT', title: '' }).target
+    for (const over of [{ combine: 'none' }, { direction: 'both' }, { kind: 'przyszly' }]) expect(findRule([locked(over)], target, 'out', -100, MBANK_ACCOUNT_ID)).toBeNull()
+    expect(findRule([locked({})], target, 'out', -100, MBANK_ACCOUNT_ID)).not.toBeNull()
+  })
+
+  it('przegląd reguł („do przeglądu” – „Zmień na spłatę”) nie podsuwa nieczytelnej reguły zaliczki', async () => {
+    const { auditRules } = await import('@shared/import/audit')
+    const advance = { direction: 'in', kind: 'income', categoryId: null, household: true, memberId: HOUSE_MEMBER_ID, inflowKind: 'advance' }
+    expect(auditRules([locked({ ...advance, combine: 'none' })], [], {}).review).toEqual([])
+    expect(auditRules([locked(advance)], [], {}).review).toHaveLength(1)
+  })
+})

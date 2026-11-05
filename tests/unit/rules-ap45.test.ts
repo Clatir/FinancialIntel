@@ -5,7 +5,7 @@ import { categoryIndex } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
 import { auditRules, withRule } from '@shared/import/audit'
 import { classifyRow, decidedByTitle, findRule, ruleTargetOf } from '@shared/import/classify'
-import { compileRule, inactiveConditions } from '@shared/import/conditions'
+import { compileRule, unreadableRule } from '@shared/import/conditions'
 import { keywordProposals } from '@shared/import/learn'
 import { parseMbank, type MbankFile, type MbankRow } from '@shared/import/mbank'
 import { hintChanges, manualRuleHint, ruleHintText } from '@shared/import/officer'
@@ -69,7 +69,7 @@ describe('AP-45: format reguły z warunkami w fi.json – addytywnie, bez SCHEMA
     expect((r.conditions as unknown[])[1]).toEqual({ field: 'waluta', value: 'EUR' })
     expect((r as Record<string, unknown>).future).toBe(1)
     expect(compileRule(r)).toBeNull()
-    expect(inactiveConditions(r)).toBe(true)
+    expect(unreadableRule(r)).toBe(true)
     expect(findRule([r], target('ORLEN STACJA'), 'out', -1000)).toBeNull()
     // A broken list of conditions (a hand-edited fi.json): the rule stays, none applied – the others are read.
     const parsed = importSettingsSchema.parse({ rules: [{ ...r, conditions: 'zepsute' }, rule({})] })

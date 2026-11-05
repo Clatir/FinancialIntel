@@ -10,7 +10,7 @@ import { fold } from '@shared/fold'
 import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
 import type { RecordEntry } from '@shared/api'
-import { conditionsOf, type ImportRule, type Loan } from '@shared/schema'
+import type { ImportRule, Loan } from '@shared/schema'
 import { listOf, useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { Panel, ShowMore, TextField, cx } from '../../components/ui'
@@ -21,10 +21,10 @@ import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, conditionsText, directionText, editRule, keepAdvanceRule, removeRule, repayingRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, conditionsText, directionText, editRule, keepAdvanceRule, LOCKED_RULE_TEXT, removeRule, repayingRule, ruleDecisionText } from './rules'
 import { restNotOfRule } from './options'
 import { ConditionsEditor } from './ConditionsEditor'
-import { inactiveConditions } from '@shared/import/conditions'
+import { unreadableRule } from '@shared/import/conditions'
 
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
@@ -33,11 +33,10 @@ const NO_LOANS: Record<string, RecordEntry<Loan>> = {}
 const STEP = 2000
 const SHOWN = 20
 /**
- * A rule of conditions whose conditions this version cannot read (a newer version's, more than it reads – przegląd R1 9):
- * kept in the file, not applied, not edited here (the editor would write them over) – only deleted.
+ * A rule of conditions with anything this version cannot read (przegląd R1 9, 2.3 – `unreadableRule`): kept in the file,
+ * not applied, not edited here (the editor would write it over) – only deleted.
  */
-const unreadable = (r: ImportRule): boolean => r.mode === 'conditions' && !conditionsOf(r)
-const UNREADABLE_TEXT = 'Warunki zapisane przez nowszą wersję aplikacji – ta wersja tej reguły nie stosuje ani nie zmienia (możesz ją usunąć).'
+const unreadable = (r: ImportRule): boolean => unreadableRule(r)
 /** The rules list's page (W35). */
 const RULES_PAGE = 100
 
@@ -344,7 +343,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                   type="button"
                   className="btn btn-ghost h-[22px] px-1.5 text-[11px]"
                   disabled={readOnly || unreadable(r)}
-                  title={unreadable(r) ? UNREADABLE_TEXT : undefined}
+                  title={unreadable(r) ? LOCKED_RULE_TEXT : undefined}
                   onClick={() => setEditing(editing === r.id ? null : r.id)}
                   data-testid="import-rule-edit"
                 >
@@ -357,7 +356,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
             </div>
             {r.mode === 'conditions' && (
               <span className="truncate pl-2 text-[11px] text-muted" data-testid="import-rule-conditions-text">
-                {unreadable(r) ? UNREADABLE_TEXT : inactiveConditions(r) ? 'Warunek nowszej wersji aplikacji – ta wersja tej reguły nie stosuje. ' : ''}
+                {unreadable(r) ? `${LOCKED_RULE_TEXT} ` : ''}
                 {conditionsText(r, accountName)}
               </span>
             )}

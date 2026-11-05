@@ -9,6 +9,7 @@ import { deepEqual } from '../merge'
 import type { BrandAliases } from './aliases'
 import { decidedByTitle, findRule, loanFor, PER_OPERATION_KINDS, ruleGivesWay } from './classify'
 import { officerTarget } from './officer'
+import { unreadableRule } from './conditions'
 
 /** A loan as the audit reads it (the Radar's given loans – AP-6). */
 export type AuditLoan = Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>
@@ -156,7 +157,8 @@ export function finishAudit(run: AuditRun): RuleAudit {
   const idle = run.rules.filter((r) => !run.hits.has(r.id) && !(PER_OPERATION_KINDS as readonly string[]).includes(r.kind))
   for (const list of run.borrower.values()) list.sort((a, b) => a.t.date.localeCompare(b.t.date) || a.t.id.localeCompare(b.t.id))
   // A keyword (the operation's „Zapamiętaj” – its own „zaliczka” beside „spłata zakupów”, 1.15.3) was chosen so.
-  const review = run.rules.filter((r) => advanceRule(r) && r.mode !== 'keyword' && !run.kept(advanceRuleKey(r.id)))
+  // A rule this version cannot read whole (przegląd R1 2.3) – never offered to change („Zmień na spłatę” would write it).
+  const review = run.rules.filter((r) => advanceRule(r) && r.mode !== 'keyword' && !unreadableRule(r) && !run.kept(advanceRuleKey(r.id)))
   return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, borrower: run.borrower, mixed, idle, review }
 }
 

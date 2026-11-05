@@ -3,7 +3,7 @@ import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
 import { findRule, ruleTargetOf, upsertRule, upsertRules, type LearnedRule } from '@shared/import/classify'
 import { isDuplicatePairKey } from '@shared/import/duplicates'
 import { cleanBankName, counterpartyKey } from '@shared/import/names'
-import { compileRule } from '@shared/import/conditions'
+import { compileRule, unreadableRule } from '@shared/import/conditions'
 import { newId } from '@shared/ids'
 import {
   combineOf,
@@ -205,6 +205,8 @@ export function editRule(id: string, patch: { direction: 'in' | 'out' | null; ch
   if (!canWrite()) return
   const rule = useData.getState().fi?.settings.import.rules.find((r) => r.id === id)
   if (!rule) return
+  // Anything of it this version cannot read (przegląd R1 2.3): never written its own way – said.
+  if (unreadableRule(rule)) return void toast(LOCKED_RULE_TEXT, 'info', 6000)
   const next: ImportRule = {
     ...rule,
     direction: patch.direction,
@@ -239,6 +241,9 @@ export function repayingRule(rule: ImportRule): void {
 }
 
 // ------------------------------------------------------------------ rules of conditions (1.16.0, AP-45)
+
+/** Why a rule of conditions with anything this version cannot read is not changed here (`unreadableRule`, przegląd R1 2.3). */
+export const LOCKED_RULE_TEXT = 'Tę regułę zapisała nowsza wersja aplikacji (warunki, sposób łączenia, rodzaj albo kierunek, których ta wersja nie zna) – ta wersja jej nie stosuje ani nie zmienia; możesz ją usunąć.'
 
 /** A rule of conditions as its editor holds it (Ustawienia → Import z banku → „Nowa reguła z warunkami”, T467). */
 export interface ConditionsDraft {
@@ -305,6 +310,8 @@ export function saveConditionsRule(id: string | null, d: ConditionsDraft): strin
   const rules = useData.getState().fi?.settings.import.rules ?? []
   const was = id ? rules.find((r) => r.id === id) : undefined
   if (id && !was) return 'Tej reguły już nie ma – usunięto ją w międzyczasie.'
+  // Its conditions, way of joining, kind or direction of a newer version (przegląd R1 2.3): the draft would write them over.
+  if (was && unreadableRule(was)) return LOCKED_RULE_TEXT
   const label = labelOf(d)
   const rule = importRuleSchema.parse({
     ...(was ?? {}),
@@ -348,6 +355,8 @@ export function saveConditionsRule(id: string | null, d: ConditionsDraft): strin
 /** A rule's „także dla wpisów ręcznych” switched (the keywords' list, T470) – a switch, undone by the same switch. */
 export function setRuleManual(id: string, on: boolean): void {
   if (!canWrite()) return
+  const rule = useData.getState().fi?.settings.import.rules.find((r) => r.id === id)
+  if (rule && unreadableRule(rule)) return void toast(LOCKED_RULE_TEXT, 'info', 6000)
   setRules((rules) => rules.map((r) => (r.id === id ? { ...r, manual: on || undefined, learned: false, updatedAt: new Date().toISOString() } : r)))
 }
 
