@@ -228,3 +228,27 @@ dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1
   poprawiony tylko test.
 - **Czas:** 12:09–ok. 13:50 kod (przed przerwą), 14:20–21:40 trzy rundy poprawek, scalenie z N3, CI, wydanie – plan
   2–3 h pracy; zegar dłuższy przez rundy przeglądu, scalenie z N2/N3 i czerwone CI.
+
+## N5 – Ścieżki i ergonomia (1.15.9, 04–05.11.2026) – wydane 05.11 02:28, PR #54
+- **Zakres:** AP-21 tagi, AP-33 konto Gotówka, AP-36 koszty do dziś (T420–T423), AP-29 eksport części, AP-37 procenty,
+  AP-38 podgląd zmian zbiorczych (T425–T429), AP-27 konflikty, AP-28 nowy komputer i autostart (T430–T434), AP-19
+  domownicy, AP-26 dokowanie (T435–T439), AP-20 szybki wpis, AP-34 Operacje i klawiatura (T440–T444), AP-25 kreator,
+  AP-24 debriefing i przegląd roczny, KR.29 start budżetu (T445–T449).
+- **Wykonawcy:** 6 gałęzi (n5a, n5b, n5d, n5e, n5f – dwie dokończone z WIP po przerwie), Opus xhigh / high; integracja
+  w dwóch częściach (gałęzie na N4, potem N4 z N2/N3 i gałęzie na `main` – Opus max); poprawki w dwóch strumieniach
+  równolegle (`config.json` / konflikty – xhigh; kreator / dokowanie / eksport – max).
+- **Przegląd:** xhigh całości (11 uwag), high na poprawkach w trzech rundach (9, 10, 10 uwag). Najpoważniejsze:
+  autostart wyłączany albo usuwany wbrew ustawieniu przy zajętym lub uszkodzonym `config.json`, „Zachowaj nowsze”
+  wyrzucające niewidzianą wersję, potwierdzenie dopłaty zmieniające kolejność w silniku, odrzucony start budżetu
+  zostawiający salda i plan. Mechanizm wycofania startu po trzech rundach zastąpiony odwróceniem kolejności zapisów
+  (najpierw `fi.json`, T446) – wszystkie poprawione z testem, który przed poprawką padał; ostatnia runda sprawdzona przez
+  koordynatora na diffie.
+- **Testy:** typecheck (+ `typecheck:audyt`), `npm test` 1686 (pod obciążeniem pada tylko `folder-speed` ZIP64), build,
+  E2E komputera 122/123 (lokalnie `ictj.spec`), telefonu 10/10, wyrocznia bez rozbieżności.
+- **Otwarte:** „Co nowego” po aktualizacji z ≤ 1.15.2 pokaże stare sekcje z kodami D…; DM sp. 4 (na który zakup poszła
+  zaliczka); SW.26, IM sp. 6–8, IN sp. 1, OP.20, OP.42, OP.10, ME sp. 4; PM sp. 2, AF-54, WY.14 (poza wierszami AP);
+  wyrocznia bez `countedFrom` (T363); do sprawdzenia w maszynie – autostart instalator / portable, klucz Run, blokada
+  `config.json` (FileShare.None), „Co nowego” offline po aktualizacji instalatorem, „nowy komputer” na prawdziwym
+  OneDrive, powiadomienie o starych wpisach przy pierwszym wyborze folderu ICTTJ.
+- **Czas:** 12:45–ok. 14:00 pierwsze gałęzie, 14:20–02:28 dokończenie, integracja, cztery rundy przeglądu, wydanie –
+  plan 3–4,5 h pracy; zegar dłuższy przez 6 gałęzi na dwóch bazach i rundy poprawek w obszarze startu budżetu.

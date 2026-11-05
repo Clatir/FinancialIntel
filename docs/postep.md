@@ -29,8 +29,8 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis w archiwum `postep-od-1.15.4.md`) | #51 | ok. 8 h zegara (05:05–13:06) |
 | N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | ✅ wydane 04.11 18:02 (wpis w archiwum `postep-od-1.15.4.md`) | #52 | ok. 10,5 h zegara (07:15–18:02, z przerwą 14:00–14:20) |
 | N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | ✅ wydane 04.11 21:40 (wpis w archiwum `postep-od-1.15.4.md`) | #53 | ok. 9 h zegara (12:09–21:40, z przerwą) |
-| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | 🔄 przegląd xhigh + 3 rundy poprawione; PR, CI, wydanie | – | – |
-| R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
+| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | ✅ wydane 05.11 02:28 (wpis w archiwum `postep-od-1.15.4.md`) | #54 | ok. 13 h zegara (12:45–02:28, z przerwą) |
+| R1 Rozwojowe 1 | 1.16.0 | `claude/1.16.0-rozwojowe` | 🔄 3 strumienie w toku (AP-43 + AP-35, AP-45, AP-42 + AP-47) | – | – |
 | R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
 
 ## Stan ciągu (wznowione 04.11.2026 ok. 14:20 po przerwie na prośbę użytkownika)
@@ -42,11 +42,11 @@ podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` �
 notatki, dalej od pierwszej grupy niewydanej.
 
 - **N3 (1.15.7)** – ✅ wydane 04.11 18:02 (PR #52).
-- **N4 (1.15.8)** – ✅ wydane 04.11 21:40 (PR #53).
-- **N5 (1.15.9)** – gałąź integracji `claude/1.15.9-sciezki` (drzewo `FI-wt\n5`): wszystkie gałęzie N5 i N4 scalone, wersja
-  i CHANGELOG (eab4d36); przegląd xhigh – 11 uwag (`_notatki/n5-review1.md`) w poprawce w `claude/1.15.9-fixa` (`FI-wt\n5b`)
-  i `claude/1.15.9-fixb` (`FI-wt\n5d`); potem scalenie, PR, CI, wydanie.
-- **R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
+- **N4 (1.15.8)** – ✅ wydane 04.11 21:40 (PR #53); **N5 (1.15.9)** – ✅ wydane 05.11 02:28 (PR #54).
+- **R1 (1.16.0)** – gałąź integracji `claude/1.16.0-rozwojowe` (drzewo `FI-wt\n5`, od `main` 1.15.9); strumienie (baza 9d285e3 = 1.15.9):
+  `claude/1.16.0-r1a` (`FI-wt\n5e` – AP-43 dowolny CSV, AP-35 Web Worker, T460–T466), `claude/1.16.0-r1c` (`FI-wt\n5f` – AP-45
+  reguły I / LUB, T467–T471), `claude/1.16.0-r1d` (`FI-wt\n5b` – AP-42 kalendarz Radaru, AP-47 opis folderu, T472–T476).
+- **R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; bez karty kredytowej – D101).
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
 całości + jeden high na poprawkach, dalej tylko przy poważnych uwagach; numery T przydzielaj podagentom z góry.
@@ -113,30 +113,6 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Meldunek „Zaliczki przy długu” | pyta tylko o dług nadal do oddania przez zaliczkę, także o zaliczki wybrane świadomie; „zostaw” raz na wpłatę | T352 |
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
-
-## N5 – Ścieżki i ergonomia (1.15.9, 04–05.11.2026)
-- **Zakres:** AP-21 tagi, AP-33 konto Gotówka, AP-36 koszty do dziś (T420–T423), AP-29 eksport części, AP-37 procenty,
-  AP-38 podgląd zmian zbiorczych (T425–T429), AP-27 konflikty, AP-28 nowy komputer i autostart (T430–T434), AP-19
-  domownicy, AP-26 dokowanie (T435–T439), AP-20 szybki wpis, AP-34 Operacje i klawiatura (T440–T444), AP-25 kreator,
-  AP-24 debriefing i przegląd roczny, KR.29 start budżetu (T445–T449).
-- **Wykonawcy:** 6 gałęzi (n5a, n5b, n5d, n5e, n5f – dwie dokończone z WIP po przerwie), Opus xhigh / high; integracja
-  w dwóch częściach (gałęzie na N4, potem N4 z N2/N3 i gałęzie na `main` – Opus max); poprawki w dwóch strumieniach
-  równolegle (`config.json` / konflikty – xhigh; kreator / dokowanie / eksport – max).
-- **Przegląd:** xhigh całości (11 uwag), high na poprawkach w trzech rundach (9, 10, 10 uwag). Najpoważniejsze:
-  autostart wyłączany albo usuwany wbrew ustawieniu przy zajętym lub uszkodzonym `config.json`, „Zachowaj nowsze”
-  wyrzucające niewidzianą wersję, potwierdzenie dopłaty zmieniające kolejność w silniku, odrzucony start budżetu
-  zostawiający salda i plan. Mechanizm wycofania startu po trzech rundach zastąpiony odwróceniem kolejności zapisów
-  (najpierw `fi.json`, T446) – wszystkie poprawione z testem, który przed poprawką padał; ostatnia runda sprawdzona przez
-  koordynatora na diffie.
-- **Testy:** typecheck (+ `typecheck:audyt`), `npm test` 1686 (pod obciążeniem pada tylko `folder-speed` ZIP64), build,
-  E2E komputera 122/123 (lokalnie `ictj.spec`), telefonu 10/10, wyrocznia bez rozbieżności.
-- **Otwarte:** „Co nowego” po aktualizacji z ≤ 1.15.2 pokaże stare sekcje z kodami D…; DM sp. 4 (na który zakup poszła
-  zaliczka); SW.26, IM sp. 6–8, IN sp. 1, OP.20, OP.42, OP.10, ME sp. 4; PM sp. 2, AF-54, WY.14 (poza wierszami AP);
-  wyrocznia bez `countedFrom` (T363); do sprawdzenia w maszynie – autostart instalator / portable, klucz Run, blokada
-  `config.json` (FileShare.None), „Co nowego” offline po aktualizacji instalatorem, „nowy komputer” na prawdziwym
-  OneDrive, powiadomienie o starych wpisach przy pierwszym wyborze folderu ICTTJ.
-- **Czas:** 12:45–ok. 14:00 pierwsze gałęzie, 14:20–ok. 03:00 dokończenie, integracja, cztery rundy przeglądu, wydanie –
-  plan 3–4,5 h pracy; zegar dłuższy przez 6 gałęzi na dwóch bazach i rundy poprawek w obszarze startu budżetu.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.
