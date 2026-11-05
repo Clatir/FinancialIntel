@@ -29,9 +29,9 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis w archiwum `postep-od-1.15.4.md`) | #51 | ok. 8 h zegara (05:05–13:06) |
 | N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | ✅ wydane 04.11 18:02 (wpis w archiwum `postep-od-1.15.4.md`) | #52 | ok. 10,5 h zegara (07:15–18:02, z przerwą 14:00–14:20) |
 | N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | ✅ wydane 04.11 21:40 (wpis w archiwum `postep-od-1.15.4.md`) | #53 | ok. 9 h zegara (12:09–21:40, z przerwą) |
-| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | 🔄 przegląd xhigh + 3 rundy poprawione; PR, CI, wydanie | – | – |
-| R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
-| R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
+| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | ✅ wydane 05.11 02:28 (wpis w archiwum `postep-od-1.15.4.md`) | #54 | ok. 13 h zegara (12:45–02:28, z przerwą) |
+| R1 Rozwojowe 1 | 1.16.0 | `claude/1.16.0-rozwojowe` | 🔄 przegląd xhigh + runda poprawek; PR, CI, wydanie | – | – |
+| R2 Rozwojowe 2 | 1.17.0 | `claude/1.17.0-rozwojowe` | 🔄 3 strumienie gotowe i scalone (AP-41, AP-44, AP-46 + AP-48); przegląd po wydaniu R1 | – | – |
 
 ## Stan ciągu (wznowione 04.11.2026 ok. 14:20 po przerwie na prośbę użytkownika)
 
@@ -42,11 +42,11 @@ podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` �
 notatki, dalej od pierwszej grupy niewydanej.
 
 - **N3 (1.15.7)** – ✅ wydane 04.11 18:02 (PR #52).
-- **N4 (1.15.8)** – ✅ wydane 04.11 21:40 (PR #53).
-- **N5 (1.15.9)** – gałąź integracji `claude/1.15.9-sciezki` (drzewo `FI-wt\n5`): wszystkie gałęzie N5 i N4 scalone, wersja
-  i CHANGELOG (eab4d36); przegląd xhigh – 11 uwag (`_notatki/n5-review1.md`) w poprawce w `claude/1.15.9-fixa` (`FI-wt\n5b`)
-  i `claude/1.15.9-fixb` (`FI-wt\n5d`); potem scalenie, PR, CI, wydanie.
-- **R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
+- **N4 (1.15.8)** – ✅ wydane 04.11 21:40 (PR #53); **N5 (1.15.9)** – ✅ wydane 05.11 02:28 (PR #54).
+- **R1 (1.16.0)** – gałąź integracji `claude/1.16.0-rozwojowe` (drzewo `FI-wt\n5`, od `main` 1.15.9); strumienie (baza 9d285e3 = 1.15.9):
+  `claude/1.16.0-r1a` (`FI-wt\n5e` – AP-43 dowolny CSV, AP-35 Web Worker, T460–T466), `claude/1.16.0-r1c` (`FI-wt\n5f` – AP-45
+  reguły I / LUB, T467–T471), `claude/1.16.0-r1d` (`FI-wt\n5b` – AP-42 kalendarz Radaru, AP-47 opis folderu, T472–T476).
+- **R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; bez karty kredytowej – D101).
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
 całości + jeden high na poprawkach, dalej tylko przy poważnych uwagach; numery T przydzielaj podagentom z góry.
@@ -61,6 +61,11 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
+| R1 | Import CSV innego banku | domyślna nazwa konta „Drugi bank”; kreator proponuje nowe konto, zastąpienie kolumn – potwierdzenie; kolumny zapisane przy „Zapisz”; konto mBanku z mapowaniem zostaje „mBank”; przypomnienia o imporcie i szukanie w Pobranych tylko dla mBanku; „Opis z banku” operacji CSV = cały wiersz pliku; goły „BLIK” na wpływie = przelew od osoby; wpłata we wpłatomacie – przychód do decyzji; panel „Plik z banku” | T460–T462 |
+| R1 | Import w Web Workerze | bez pomiaru w maszynie wirtualnej (lokalnie 20 000 wierszy: okno bez odpowiedzi ok. 560 → 200 ms, całość dłużej o ok. 0,3–0,8 s) – pomiar w maszynie (IM.55) do zrobienia | T463–T465 |
+| R1 | Reguły z warunkami | „wszystkie” z ≥ 2 warunkami przed regułami marek, jeden warunek i „którykolwiek” po słowach; kierunek tylko w „Dla”; „Tytuł zawiera” – całe słowa, „kontrahent zawiera” – fragment; „Zapamiętaj” zmienia regułę z warunkami, która zdecydowała; wpisy ręczne – tylko wydatki (kategoria, kto płaci); reguła nieczytelna (z nowszej wersji) – tylko „usuń”; starsza wersja reguły z warunkami nie stosuje | T467–T471 |
+| R1 | Kalendarz Radaru | domyślnie lista; widok i miesiąc w szkicu okna; dni przyszłych miesięcy bez energii, dni naprzód bieżącego – jedna prognoza „≈”; wydane ponad przydział kolorem akcentu; dni minione z planu w obecnym stanie | T472–T474 |
+| R1 | Opis formatu folderu | link do GitHuba (offline się nie otworzy), w Ustawieniach → Folder i kopie zamiast F1 | T475, T476 |
 | N5 | Start budżetu (KR.29) | najpierw `fi.json` ze startem, potem salda, plan i kontenery; odmowa – nic w folderze, ponowne kliknięcie od nowa; niedokończony start – baner „Start budżetu niedokończony – Dokończ” (tylko brakujące rekordy, bez „Pomiń”; do tego czasu gra, cele ICTTJ i rozliczenia czekają; per komputer); wolny folder > 15 s – toast i czekanie; osłony poniżej minimum kolorem akcentu | T445, T446 |
 | N5 | Autostart i ustawienia komputera | start nigdy nie usuwa wpisu autostartu (wpis z wersji sprzed poprawki albo drugiej kopii przy „wyłączone” zostaje, dopóki nie przełączysz w tej kopii); przełącznik pokazuje prawdziwy wpis z notką; przy zajętym `config.json` przełącznik zostaje w nowym położeniu z komunikatem „działa, zapis ponawia się”; folder ICTTJ, program, token, folder kopii i aktualizacje – „zmiana nie została zapamiętana” | T433, T434 |
 | N5 | Konflikty – decyzje | „Zaakceptuj nowsze” według kart; przy nowszej kopii i świeżych zmianach oryginału grupa zostaje dla Ciebie z komunikatem; zachowanie oryginału przy oryginale zmienionym z zewnątrz zatrzymuje go w nowej postaci | T431 |
@@ -114,29 +119,25 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
 
-## N5 – Ścieżki i ergonomia (1.15.9, 04–05.11.2026)
-- **Zakres:** AP-21 tagi, AP-33 konto Gotówka, AP-36 koszty do dziś (T420–T423), AP-29 eksport części, AP-37 procenty,
-  AP-38 podgląd zmian zbiorczych (T425–T429), AP-27 konflikty, AP-28 nowy komputer i autostart (T430–T434), AP-19
-  domownicy, AP-26 dokowanie (T435–T439), AP-20 szybki wpis, AP-34 Operacje i klawiatura (T440–T444), AP-25 kreator,
-  AP-24 debriefing i przegląd roczny, KR.29 start budżetu (T445–T449).
-- **Wykonawcy:** 6 gałęzi (n5a, n5b, n5d, n5e, n5f – dwie dokończone z WIP po przerwie), Opus xhigh / high; integracja
-  w dwóch częściach (gałęzie na N4, potem N4 z N2/N3 i gałęzie na `main` – Opus max); poprawki w dwóch strumieniach
-  równolegle (`config.json` / konflikty – xhigh; kreator / dokowanie / eksport – max).
-- **Przegląd:** xhigh całości (11 uwag), high na poprawkach w trzech rundach (9, 10, 10 uwag). Najpoważniejsze:
-  autostart wyłączany albo usuwany wbrew ustawieniu przy zajętym lub uszkodzonym `config.json`, „Zachowaj nowsze”
-  wyrzucające niewidzianą wersję, potwierdzenie dopłaty zmieniające kolejność w silniku, odrzucony start budżetu
-  zostawiający salda i plan. Mechanizm wycofania startu po trzech rundach zastąpiony odwróceniem kolejności zapisów
-  (najpierw `fi.json`, T446) – wszystkie poprawione z testem, który przed poprawką padał; ostatnia runda sprawdzona przez
-  koordynatora na diffie.
-- **Testy:** typecheck (+ `typecheck:audyt`), `npm test` 1686 (pod obciążeniem pada tylko `folder-speed` ZIP64), build,
-  E2E komputera 122/123 (lokalnie `ictj.spec`), telefonu 10/10, wyrocznia bez rozbieżności.
-- **Otwarte:** „Co nowego” po aktualizacji z ≤ 1.15.2 pokaże stare sekcje z kodami D…; DM sp. 4 (na który zakup poszła
-  zaliczka); SW.26, IM sp. 6–8, IN sp. 1, OP.20, OP.42, OP.10, ME sp. 4; PM sp. 2, AF-54, WY.14 (poza wierszami AP);
-  wyrocznia bez `countedFrom` (T363); do sprawdzenia w maszynie – autostart instalator / portable, klucz Run, blokada
-  `config.json` (FileShare.None), „Co nowego” offline po aktualizacji instalatorem, „nowy komputer” na prawdziwym
-  OneDrive, powiadomienie o starych wpisach przy pierwszym wyborze folderu ICTTJ.
-- **Czas:** 12:45–ok. 14:00 pierwsze gałęzie, 14:20–ok. 03:00 dokończenie, integracja, cztery rundy przeglądu, wydanie –
-  plan 3–4,5 h pracy; zegar dłuższy przez 6 gałęzi na dwóch bazach i rundy poprawek w obszarze startu budżetu.
+## R1 – Rozwojowe 1 (1.16.0, 05.11.2026)
+- **Zakres:** AP-43 import CSV innego banku z kreatorem kolumn (T460–T462), AP-35 analiza i plan importu w Web Workerze
+  z paskiem postępu (T463–T466), AP-45 reguły importu z warunkami I / LUB i dla wpisów ręcznych (T467–T471), AP-42
+  kalendarz-siatka miesiąca na Radarze (T472–T474), AP-47 opis formatu folderu generowany ze schematów i przykładowy
+  skrypt odczytu (T475, T476).
+- **Wykonawcy:** 3 strumienie równolegle (AP-43 + AP-35, AP-45 – Opus xhigh; AP-42 + AP-47 – Opus high), poprawki po
+  przeglądach w dwóch strumieniach (CSV / Worker; reguły / schemat / dokumenty).
+- **Przegląd:** xhigh całości (15 uwag – m.in. tożsamość wiersza CSV zależna od ról kolumn, kreator nadpisujący
+  mapowanie innego konta, migawka bez odwołania do pliku, nieczytelne nowsze pola gubione przy zapisie), high na
+  poprawkach (10 – m.in. przelew własny na to samo konto, długi wiersz poza schematem, usunięta operacja wracająca,
+  brak powrotu do okna po błędzie Workera) – wszystkie poprawione z testem, który przed poprawką padał; ostatnia runda
+  sprawdzona przez koordynatora na diffie.
+- **Testy:** typecheck (+ `typecheck:audyt`), `npm test` ok. 1790 (pod obciążeniem pada tylko `folder-speed` ZIP64),
+  build, E2E komputera 129/130 (lokalnie `ictj.spec`), telefonu 10/10, wyrocznia bez rozbieżności; test „przed i po”
+  reguł na imporcie 1.15.9.
+- **Otwarte:** pomiar Workera w maszynie (IM.55); regex z wiersza AP-45, podpowiedź „od domownika” przy wpływach, ręczna
+  kolejność reguł z warunkami; inne pola reguł z `.catch(undefined)` (udział, tagi, rodzaj wpływu) gubią nieczytelną
+  wartość przy odczycie (jak dotąd); mapy `lenientRecord` w opisie folderu jako „dowolna wartość”.
+- **Czas:** ok. 01:50–ok. 06:30 (równolegle z końcem N5 i początkiem R2) – plan 3–4,5 h pracy.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { BRANDS, KEYWORDS } from '@shared/import/brands'
 import { defaultCategoryId, type ImportRule, type TxKind } from '@shared/schema'
-import { useData } from '../../store/data'
+import { useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { TextField } from '../../components/ui'
 import { CategorySelect, useCategories } from '../operations/pickers'
-import { directionText, removeRule, ruleDecisionText, saveKeywordRule } from './rules'
+import { directionText, removeRule, ruleDecisionText, saveKeywordRule, setRuleManual } from './rules'
 import { useMembers } from '../household/actions'
 
 const NO_RULES: ImportRule[] = []
@@ -38,6 +38,8 @@ export function KeywordRules() {
   const members = useMembers()
   const options = keywordOptions(members)
   const cats = useCategories()
+  const readOnly = useFolderLocked()
+  const locked = useLockedReason()
   const mine = rules.filter((r) => r.mode === 'keyword')
   const [word, setWord] = useState('')
   const [option, setOption] = useState('expense')
@@ -56,11 +58,22 @@ export function KeywordRules() {
         Słowo w nazwie albo w tytule operacji („cukiernia”, „czynsz”) → decyzja. Twoje słowa mają pierwszeństwo przed wbudowanymi i przed słownikiem sieci;
         reguły konkretnych kontrahentów przed nimi. Wielkość liter i polskie znaki bez znaczenia, końcówka słowa może być dłuższa.
       </p>
+      {/* AP-15: why „też ręczne” is off – once for the list. */}
+      {locked && (
+        <span className="text-[11px] text-dim" data-testid="keyword-rules-locked">
+          {locked}
+        </span>
+      )}
       {mine.map((r) => (
         <div key={r.id} className="flex items-center gap-2 border-b border-line/60 py-[2px] last:border-b-0" data-testid="keyword-rule">
           <span className="text-fg-strong">„{r.label || r.match}”</span>
           <span className="text-muted">{directionText(r.direction)} →</span>
           <span className="min-w-0 flex-1 truncate text-muted">{decision(r)}</span>
+          {/* AP-45 (T470): the quick entry and the operation's editor propose its decision – to accept. */}
+          <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted" title="Także dla wpisów ręcznych: szybki wpis i edytor operacji podpowiedzą tę decyzję">
+            <input type="checkbox" checked={!!r.manual} disabled={readOnly} onChange={(e) => setRuleManual(r.id, e.currentTarget.checked)} data-testid="keyword-rule-manual" />
+            też ręczne
+          </label>
           <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => removeRule(r.id)} data-testid="keyword-rule-delete">
             usuń
           </button>

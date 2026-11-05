@@ -1,7 +1,7 @@
 {
   "name": "financial-intel",
   "productName": "Financial Intel",
-  "version": "1.15.9",
+  "version": "1.16.0",
   "description": "Osobisty budżet kapitana okrętu – Financial Intel",
   "private": true,
   "author": "Financial Intel",
@@ -23,6 +23,7 @@
     "pretest": "node scripts/check-node.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "docs:format": "vitest run tests/unit/format-folderu.test.ts -u",
     "test:wyrocznia": "vitest run -c vitest.wyrocznia.config.mts && node --test tests/audyt/wyrocznia/wyrocznia.test.mjs tests/audyt/wyrocznia/wyrocznia-u3.test.mjs",
     "test:e2e": "npm run build && playwright test",
     "dist:win": "npm run build && electron-builder --win --x64 --publish never",

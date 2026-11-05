@@ -31,6 +31,7 @@ import { bulkOptions, bulkResultText, fits, hasCategory, MEMBER_MONEY_TEXT, memb
 import { countLabel, plDateTime } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
 import { CashOffer } from './cash'
+import { CsvSetupPanel } from './CsvSetup'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
   acceptGroupHint,
@@ -47,6 +48,7 @@ import {
   decideGroup,
   decideNewMember,
   dropImportFile,
+  editCsvMapping,
   hintable,
   pickImportFile,
   planInputsNow,
@@ -92,6 +94,32 @@ const OP_LABEL: Record<'in' | 'out', Record<OpKind, string>> = {
 }
 const STATUS_LABEL: Record<ThemeStatus, string> = { todo: 'Do decyzji', check: 'Rozpoznane – sprawdź', done: 'Gotowe' }
 
+/** What a file is (AP-43): mBank's list of operations, its account history, another bank's CSV. */
+const FORMAT_TEXT = { lista: 'lista operacji', historia: 'historia rachunku', csv: 'CSV innego banku' } as const
+
+/** Where a row found by the B5 measure came from – the other format of the file than this plan's. */
+const otherFormatText = (format: keyof typeof FORMAT_TEXT): string => (format === 'historia' ? 'z listy operacji' : format === 'lista' ? 'z historii rachunku' : 'z innego pliku – po kwocie, dacie i nazwie')
+
+/** How far the open file is read (AP-35): the phase and its share of the bar – reading the rows, recognizing them. */
+function LoadingBar() {
+  const loading = useImport((s) => s.loading)
+  if (!loading) return null
+  const share = loading.total > 0 ? Math.min(1, loading.done / loading.total) : 0
+  // Reading the rows is most of the work (T463): 0–60 %, recognizing them 60–100 %.
+  const pct = Math.round(loading.phase === 'plan' ? 60 + share * 40 : loading.phase === 'read' ? share * 60 : 0)
+  const what = loading.phase === 'plan' ? 'Rozpoznawanie operacji' : loading.phase === 'read' ? 'Odczyt wierszy' : 'Wczytywanie pliku'
+  return (
+    <div className="flex flex-col gap-1" role="status" data-testid="import-progress" data-phase={loading.phase ?? 'start'} data-pct={pct}>
+      <span className="text-[11.5px] text-muted">
+        {what} „{loading.name}”…{loading.phase ? <span className="num"> {pct} %</span> : null}
+      </span>
+      <div className="h-[4px] w-full bg-raised">
+        <div className="h-full bg-accent transition-[width] duration-150" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
 const count = (n: number, one: string, few: string, many: string) => `${n} ${n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many}`
 const operations = (n: number) => count(n, 'operacja', 'operacje', 'operacji')
 
@@ -118,7 +146,9 @@ function AccountWarning({ account, accountId }: { account: string | null; accoun
 }
 
 function FilePanel() {
-  const { fileName, file, error, errorName, accountId, busy } = useImport(useShallow((s) => ({ fileName: s.fileName, file: s.file, error: s.error, errorName: s.errorName, accountId: s.accountId, busy: s.busy })))
+  const { fileName, file, error, errorName, accountId, busy, via } = useImport(
+    useShallow((s) => ({ fileName: s.fileName, file: s.file, error: s.error, errorName: s.errorName, accountId: s.accountId, busy: s.busy, via: s.via }))
+  )
   const accounts = useAccounts()
   const [over, setOver] = useState(false)
   const onDrop = (e: DragEvent) => {
@@ -130,7 +160,7 @@ function FilePanel() {
   }
   const importable = accounts.filter((a) => !a.archived)
   return (
-    <Panel title="Plik z mBanku">
+    <Panel title="Plik z banku">
       <div
         className={cx('flex flex-col gap-2 text-[12px]', over && 'outline outline-1 outline-accent/60')}
         onDragOver={(e) => {
@@ -153,10 +183,12 @@ function FilePanel() {
           )}
         </div>
         <p className="text-[11.5px] text-dim">
-          mBank → Historia → lista operacji → „Eksportuj” CSV (albo historia rachunku CSV). Kolejne importy mogą się nakładać: operacje już wczytane są
-          rozpoznawane i pomijane. Przed zapisem powstaje kopia zapasowa.
+          mBank → Historia → lista operacji → „Eksportuj” CSV (albo historia rachunku CSV). Plik innego banku (CSV): przy pierwszym wskażesz kolumny –
+          zapamiętane przy koncie. Kolejne importy mogą się nakładać: operacje już wczytane są rozpoznawane i pomijane. Przed zapisem powstaje kopia zapasowa.
         </p>
         <NewBankFiles />
+        <LoadingBar />
+        <CsvSetupPanel />
         {error && (
           <div className="border border-down/50 px-2 py-1.5 text-down" data-testid="import-error">
             {errorName ?? fileName}: {error}
@@ -164,20 +196,25 @@ function FilePanel() {
           </div>
         )}
         {file && (
-          <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="import-file">
+          <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="import-file" data-format={file.format} data-via={via ?? ''}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="num text-fg-strong">{fileName}</span>
               <span className="text-muted">
-                {file.format === 'lista' ? 'lista operacji' : 'historia rachunku'} · {countLabel(file.rows.length, 'operacja', 'operacje', 'operacji')}
+                {FORMAT_TEXT[file.format]} · {countLabel(file.rows.length, 'operacja', 'operacje', 'operacji')}
                 {file.period ? ` · ${fullDay(file.period.from)} – ${fullDay(file.period.to)}` : ''}
               </span>
+              {file.format === 'csv' && (
+                <button className="btn h-[22px]" disabled={busy} onClick={editCsvMapping} data-testid="import-csv-edit">
+                  Zmień kolumny
+                </button>
+              )}
             </div>
             {file.client && <span className="text-[11.5px] text-muted">Właściciel rachunku: {file.client} – przelewy z tym nazwiskiem to przelewy własne.</span>}
             <label className="flex items-center gap-2 text-muted">
               Konto w budżecie
               <AccountSelect className="w-[180px]" value={accountId} onChange={(id) => id && setImportAccount(id)} data-testid="import-account" />
             </label>
-            {importable.length > 1 && <span className="text-[11px] text-dim">Plik z mBanku trafia na wybrane konto; Portfel XTB nie ma eksportu – jego operacje dopisujesz ręcznie.</span>}
+            {importable.length > 1 && <span className="text-[11px] text-dim">Plik z banku trafia na wybrane konto; Portfel XTB nie ma eksportu – jego operacje dopisujesz ręcznie.</span>}
             <AccountWarning account={file.account} accountId={accountId} />
             <CashOffer accountName={accounts.find((a) => a.id === accountId)?.name ?? 'konto'} />
             {file.skipped.length > 0 && (
@@ -275,7 +312,7 @@ function Summary() {
           {otherFormat > 0 && (
             <>
               <span className="pl-3 text-dim" title="Ta sama operacja z drugiego formatu pliku (lista operacji ↔ historia rachunku): opis jest tam inny, więc FI łączy ją po kwocie, dacie (±3 dni) i nazwie.">
-                w tym z {plan.format === 'historia' ? 'listy operacji' : 'historii rachunku'}
+                w tym {otherFormatText(plan.format)}
               </span>
               <span className="num text-right text-dim" data-testid="import-count-other-format">
                 {otherFormat}
@@ -350,7 +387,7 @@ function MatchesPanel() {
   const withCopy = plan.rows.filter((p): p is Extract<RowPlan, { status: 'known' }> => p.status === 'known' && !!p.copy)
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '?'
   // The file's other format (B5): where a row was found in it (AF-1, AF-9).
-  const otherFormat = plan.format === 'historia' ? 'z listy operacji' : 'z historii rachunku'
+  const otherFormat = otherFormatText(plan.format)
   // A matched hand-typed operation left apart (B36): what its row comes in as – its group's, theme's or the proposal.
   const decidedAs = (p: Extract<RowPlan, { status: 'merge' }>) => {
     const c = choices.rows[p.key] ?? choices.groups[p.planned.group] ?? choiceOf(p.planned.decision)
@@ -1306,7 +1343,7 @@ export function ImportPage() {
     <div className="flex h-full min-h-0 flex-col" data-testid="page-import">
       <div className="flex shrink-0 items-baseline gap-3 border-b border-line px-4 py-2.5">
         <h1 className="text-[15px] font-medium text-fg-strong">Import</h1>
-        <span className="text-[12px] text-muted">CSV z mBanku</span>
+        <span className="text-[12px] text-muted">CSV z mBanku i innych banków</span>
         <span className="flex-1" />
         {last && <span className="text-[11px] text-dim">ostatni import – {last}</span>}
         {wizard && (
@@ -1337,7 +1374,7 @@ export function ImportPage() {
             <ThemesPanel />
             {!plan && (
               <Panel title="Kategoryzacja">
-                <div className="p-4 text-center text-[12px] text-dim">Wybierz plik CSV z mBanku – operacje pojawią się tu w tematach (kategoriach) i grupach marek.</div>
+                <div className="p-4 text-center text-[12px] text-dim">Wybierz plik CSV z banku – operacje pojawią się tu w tematach (kategoriach) i grupach marek.</div>
               </Panel>
             )}
           </fieldset>

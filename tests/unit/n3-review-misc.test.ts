@@ -167,7 +167,7 @@ describe('11: boja jednorazowa po dniu – „zrobiona” tylko własną operacj
 
 describe('12: „Skąd ta liczba?” energii dziś sumuje się przy zwrocie dawnego zakupu (T370)', () => {
   it('przydział 100, wydane dziś 30, zwrot 50 – wiersze dodawane dają 70, zwrot obok sumy', () => {
-    const lines = energyWhy({ limit: zl(3100), spentBefore: zl(1000), spentToday: zl(30), base: zl(100), allowance: zl(100), left: zl(70), daysLeft: 21, returned: zl(50), returnedBy: { '': zl(50) }, energy: zl(70), cap: null }, '2026-11')
+    const lines = energyWhy({ limit: zl(3100), spentBefore: zl(1000), spentToday: zl(30), base: zl(100), allowance: zl(100), left: zl(70), daysLeft: 21, returned: zl(50), returnedBy: { '': zl(50) }, energy: zl(70), cap: null, days: [] }, '2026-11')
     const from = lines.findIndex((l) => l.label === 'Przydział na dziś')
     const total = lines.at(-1)!
     expect(total).toEqual({ label: 'Energia dziś', amount: zl(70), total: true })

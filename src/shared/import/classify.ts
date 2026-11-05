@@ -16,6 +16,7 @@ import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
 import { memberOf, nameIn } from '../calc/household'
 import type { MbankRow } from './mbank'
+import { byTitleOf, compiledOf, goesFirst, holds, type CompiledRule, type RuleFacts } from './conditions'
 
 export { counterpartyKey }
 
@@ -88,12 +89,22 @@ export interface RuleTarget {
 }
 
 /**
- * The rule for a row: an exact rule of the brand key, then of the brand the name was merged from (1.2.2), then of the
- * whole name's key (learned before 1.2.1), then the longest „contains” fragment, then the longest keyword of the user
- * (in the name or the title); a rule of the other direction does not count.
+ * The rule for a row: a rule of conditions of „wszystkie” of two and more (AP-45, T467 – narrower than one match), then
+ * an exact rule of the brand key, then of the brand the name was merged from (1.2.2), then of the whole name's key
+ * (learned before 1.2.1), then the longest „contains” fragment, then the longest keyword of the user (in the name or the
+ * title), then a rule of one condition or „którykolwiek”; a rule of the other direction does not count. `amount` and
+ * `accountId` – of the row, for a rule's conditions of them (unknown – such a condition does not hold).
  */
-export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction, amount?: number): ImportRule | null {
+export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction: Direction, amount?: number, accountId?: string | null): ImportRule | null {
   const usable = ruleIndexOf(rules, direction)
+  const facts: RuleFacts = { direction, amount, accountId }
+  // 0. A rule of conditions „wszystkie” of two and more (AP-45): the more conditions, the earlier.
+  for (const c of usable.first) if (holds(c, t, facts)) return c.rule
+  return findOneMatch(usable, t, direction, amount) ?? usable.last.find((c) => holds(c, t, facts))?.rule ?? null
+}
+
+/** The rules of one match (all of them before AP-45), in their order of before (`findRule`). */
+function findOneMatch(usable: RuleIndex, t: RuleTarget, direction: Direction, amount?: number): ImportRule | null {
   const keys = new Set([t.brand, t.raw, ...(t.legacy ?? []), t.key].filter(Boolean))
 
   // 1. A rule matching BOTH a specific counterparty and a title keyword (highest priority)
@@ -126,6 +137,23 @@ export function findRule(rules: readonly ImportRule[], t: RuleTarget, direction:
   return best
 }
 
+/** A rule of conditions after every rule of one match (`findRule`): one condition, or „którykolwiek” (AP-45). */
+export const afterKeywords = (rule: ImportRule): boolean => {
+  const c = compiledOf(rule)
+  return !!c && !goesFirst(c)
+}
+
+/**
+ * Was a rule's decision about the payment's title, not its counterparty (a keyword of the title, a rule of conditions by
+ * its condition of the title – AP-45)? No rule for the counterparty is learned from it, nor does it give way to what the
+ * app recognizes by the name (`ruleGivesWay`, T325).
+ */
+export function decidedByTitle(rule: ImportRule, t: RuleTarget, direction: Direction, amount?: number, accountId?: string | null): boolean {
+  if (rule.mode === 'keyword') return !keywordMatches(t.name, rule.match)
+  const c = compiledOf(rule)
+  return !!c && byTitleOf(c, t, { direction, amount, accountId })
+}
+
 /**
  * The rules of one direction by how they are looked up, in their order (W20: one pass over the rules per list). A
  * keyword's pattern made at its first use – only when no exact or „contains” rule decides.
@@ -135,6 +163,9 @@ interface RuleIndex {
   amount: ImportRule[]
   contains: ImportRule[]
   keyword: Array<{ rule: ImportRule; matches?: (ws: readonly string[]) => boolean }>
+  /** Rules of conditions (AP-45): „wszystkie” of two and more – the more conditions first; the others after the rest. */
+  first: CompiledRule[]
+  last: CompiledRule[]
 }
 
 const ruleIndexes = new WeakMap<readonly ImportRule[], Partial<Record<Direction, RuleIndex>>>()
@@ -145,7 +176,7 @@ function ruleIndexOf(rules: readonly ImportRule[], direction: Direction): RuleIn
   if (!byDirection) ruleIndexes.set(rules, (byDirection = {}))
   let out = byDirection[direction]
   if (out) return out
-  out = { exact: new Map(), amount: [], contains: [], keyword: [] }
+  out = { exact: new Map(), amount: [], contains: [], keyword: [], first: [], last: [] }
   for (const r of rules) {
     if (!(r.direction == null || r.direction === direction) || !(TX_KINDS as readonly string[]).includes(r.kind)) continue
     if (r.mode === 'exact') {
@@ -158,7 +189,13 @@ function ruleIndexOf(rules: readonly ImportRule[], direction: Direction): RuleIn
     } else if (r.mode === 'contains') {
       if (r.match) out.contains.push(r)
     } else if (r.mode === 'keyword' && r.match) out.keyword.push({ rule: r })
+    else if (r.mode === 'conditions') {
+      const c = compiledOf(r)
+      if (c) (goesFirst(c) ? out.first : out.last).push(c)
+    }
   }
+  // Stable: the list's order within the same number of conditions.
+  out.first.sort((a, b) => b.tests.length - a.tests.length)
   byDirection[direction] = out
   return out
 }
@@ -190,6 +227,17 @@ export function isCashExpenseRule(rule: Pick<ImportRule, 'kind' | 'categoryId' |
  */
 /** A bank's fee, interest or tax (no shop, no person – `opKindOf` 'fee'). */
 export const isFeeOperation = (operation: string): boolean => /^(PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK)/.test(operation)
+
+/** A product's return by the type of operation (spec: a negative expense of the purchase's category). */
+export const isReturnOperation = (operation: string): boolean => /^(POS )?ZWROT/.test(operation)
+
+/**
+ * A transfer between people by the type of operation, as the recognition reads it: out – an own transfer; in – also a
+ * household member's money and a loan's repayment (D80, B34). Another bank's CSV gets its type in these words
+ * (`csv.ts` `operationOf`, przegląd R1 2).
+ */
+export const isTransferOperation = (operation: string, direction: Direction): boolean =>
+  (direction === 'in' ? /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/ : /^(PRZELEW|BLIK P2P|ZLECENIE)/).test(operation)
 
 export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string; bankName?: string }, aliases: BrandAliases = NO_ALIASES): { target: RuleTarget; brand: BrandMatch } {
   // Once per name, title and type of operation with these merged names (W20): a history repeats them thousands of
@@ -347,6 +395,8 @@ export interface ClassifyContext {
   rules: readonly ImportRule[]
   /** The account holder's names: the file's `#Klient` and the ones in the settings. */
   ownNames: readonly string[]
+  /** The account of the rows (the import's – `planImport` sets it): a rule's condition of the account (AP-45). */
+  accountId?: string | null
   categories: CategoryIndex
   /** The cargo's containers: a payment to one of their counterparties belongs to it. */
   containers?: ReadonlyArray<Pick<Container, 'id' | 'name' | 'counterparty' | 'categoryId' | 'archived'>>
@@ -449,7 +499,7 @@ export { memberOf } from '../calc/household'
 
 /** Does the bank say an own transfer (its kind, or a transfer to / from one of the holder's names)? */
 export const isOwnTransferRow = (row: Pick<MbankRow, 'operation' | 'counterparty'>, ownNames: readonly string[]): boolean =>
-  /^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(row.operation) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(row.operation) && isOwnName(row.counterparty, ownNames))
+  /^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(row.operation) || (isTransferOperation(row.operation, 'out') && isOwnName(row.counterparty, ownNames))
 
 const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = {}): ImportDecision => ({
   kind,
@@ -532,7 +582,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const op = row.operation
   const out = (d: ImportDecision): Classified => ({ key, brand, target, direction, hint, decision: d })
   // A household member's money (D80): by their names in the bank.
-  const transferIn = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op)
+  const transferIn = direction === 'in' && isTransferOperation(op, 'in')
   const member = transferIn ? memberOf(row.counterparty, ctx.members) : null
   // Money back from the person a loan of the Radar was given to (B34): its repayment – only from the day it was given,
   // with a rule or without (`loanFor`, as the rules' audit): the person's money before it is no repayment of it.
@@ -541,8 +591,8 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   // Recognized by the name before a rule of another kind (AP-6), in the app's own order: an own transfer and a member's
   // money before XTB (B106 – their title may name it).
   const recognized: Recognized | null = lent ? { kind: 'loan', loanId: lent.id } : own ? null : member ? { kind: 'member', memberId: member.id } : isXtb(row) ? { kind: 'trading' } : null
-  const rule = findRule(ctx.rules, target, direction, row.amount)
-  const byTitle = !!rule && rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
+  const rule = findRule(ctx.rules, target, direction, row.amount, ctx.accountId)
+  const byTitle = !!rule && decidedByTitle(rule, target, direction, row.amount, ctx.accountId)
   // A rule naming a loan given (D100, T358): only while the loan may take the row's money (open, given by its day) – a
   // rule of its whole repayment gives way otherwise (as no rule), a rule's part is left out.
   const ruleLoan = rule && direction === 'in' ? ruleLoanFor(rule, ctx.loans, row.date) : null
@@ -576,7 +626,13 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     const archived = kind === 'expense' && !!rule.categoryId && !categoryId
     // The rule's part repaying a loan (D100): while the loan is open – at most its debt (`rowShares`).
     const loanPart = kind === 'income' && ruleLoan && rule.loanAmount ? { loanId: ruleLoan.id, amount: rule.loanAmount } : null
-    const said = archived ? 'kategoria reguły zarchiwizowana – wybierz nową' : rule.mode === 'keyword' ? `Twoje słowo „${rule.label || rule.match}”${byTitle ? ' w tytule' : ''}` : 'reguła'
+    const said = archived
+      ? 'kategoria reguły zarchiwizowana – wybierz nową'
+      : rule.mode === 'keyword'
+        ? `Twoje słowo „${rule.label || rule.match}”${byTitle ? ' w tytule' : ''}`
+        : rule.mode === 'conditions'
+          ? `Twoja reguła „${rule.label || rule.match}”`
+          : 'reguła'
     return out(
       decision(kind, loanPart ? `${said} – w tym spłata pożyczki: ${ruleLoan!.name}` : said, {
         ...(loanPart ? { loanPart } : {}),
@@ -602,11 +658,15 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (lent) return out(decision('loan', `zwrot pożyczki: ${lent.name}`, { loanId: lent.id }))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
   if (own) {
-    const descDigits = row.description.replace(/\D/g, '')
-    const counterAccountId =
-      ctx.accountNumbers && descDigits.length >= 10
-        ? (Object.entries(ctx.accountNumbers).find(([, n]) => n && n.length >= 10 && descDigits.includes(n))?.[0] ?? null)
+    // The other account by its number – the other side's first, then the description's – never the file's own account
+    // (drugi przegląd R1, 6: a CSV's description is its whole row, the account's own number in it).
+    const numbered = (text: string) => {
+      const digits = text.replace(/\D/g, '')
+      return ctx.accountNumbers && digits.length >= 10
+        ? (Object.entries(ctx.accountNumbers).find(([id, n]) => id !== ctx.accountId && n && n.length >= 10 && digits.includes(n))?.[0] ?? null)
         : null
+    }
+    const counterAccountId = numbered(row.accountNo) ?? numbered(row.description)
     return out(decision('transfer', 'przelew własny', counterAccountId ? { counterAccountId } : {}))
   }
   // A member's money: asked once what the rest beyond their debt is (D80 b).
@@ -626,10 +686,10 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (cash) return out(decision('transfer', `wypłata z bankomatu – przelew własny → ${cash.name}`, { counterAccountId: cash.id }))
   if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
-  if (/^(POS )?ZWROT/.test(op) && direction === 'in') {
+  if (isReturnOperation(op) && direction === 'in') {
     // A product return: a negative expense of the purchase's category (spec) – the purchases' rule says which, else the
     // chain's category.
-    const bought = findRule(ctx.rules, target, 'out', row.amount)
+    const bought = findRule(ctx.rules, target, 'out', row.amount, ctx.accountId)
     if (bought) {
       // Of a purchase a member finances – their money (B40); of a shared one – split as the purchase (D83).
       const expense = bought.kind === 'expense'

@@ -9,6 +9,8 @@ import { z } from 'zod'
 export const UPDATE_REPO = { owner: 'Clatir', repo: 'FinancialIntel' } as const
 export const GITHUB_API = 'https://api.github.com'
 export const RELEASES_PAGE = `https://github.com/${UPDATE_REPO.owner}/${UPDATE_REPO.repo}/releases`
+/** The data folder's format for one's own tools (AP-47, T476): `docs/format-folderu.md` of the public repository. */
+export const FOLDER_FORMAT_PAGE = `https://github.com/${UPDATE_REPO.owner}/${UPDATE_REPO.repo}/blob/main/docs/format-folderu.md`
 /** Portable build keeps one file name across versions, so shortcuts keep working after an update. */
 export const PORTABLE_ASSET = 'Financial-Intel-portable.exe'
 export const SETUP_ASSET = 'Financial-Intel-Setup.exe'

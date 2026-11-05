@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { lastConfirmation, openingOf } from '@shared/calc/balances'
 import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
-import { ACCOUNT_KINDS, type Account, type AccountKind, type Balance } from '@shared/schema'
+import { ACCOUNT_KINDS, readCsvMapping, type Account, type AccountKind, type Balance } from '@shared/schema'
 import { updateSettings, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useDraft } from '../../store/drafts'
@@ -64,6 +64,37 @@ export function AccountsTab() {
   )
 }
 
+/**
+ * The account's import (E2, AP-43): none, mBank's CSV, another bank's CSV – its columns set in Import at its first file
+ * (`csvMapping`, kept when the import changes – back to „CSV innego banku” they read its files again).
+ */
+function ImportFormatSelect({ account: a }: { account: Account }) {
+  const known = a.importFormat == null || a.importFormat === 'mbank' || a.importFormat === 'csv'
+  return (
+    <label className="flex items-center gap-1.5 text-[11.5px] text-muted" title="Skąd import historii z pliku (ekran Import)">
+      import
+      <select
+        className="input w-[150px]"
+        value={a.importFormat ?? ''}
+        onChange={(e) => patchAccount(a.id, { importFormat: e.currentTarget.value || null })}
+        aria-label="Import z pliku"
+        data-testid="account-import-format"
+      >
+        <option value="">bez importu</option>
+        <option value="mbank">CSV z mBanku</option>
+        <option value="csv">CSV innego banku</option>
+        {!known && <option value={a.importFormat!}>{a.importFormat} (nowsza wersja)</option>}
+      </select>
+      {a.importFormat === 'csv' && (
+        <span className="text-dim" data-testid="account-csv-mapping">
+          {/* A mapping this version cannot read (przegląd R1 9) stays in the file – here as none. */}
+          {readCsvMapping(a) ? 'kolumny ustawione' : a.csvMapping ? 'kolumny z nowszej wersji aplikacji – wskażesz je przy pierwszym pliku (Import)' : 'kolumny wskażesz przy pierwszym pliku (Import)'}
+        </span>
+      )}
+    </label>
+  )
+}
+
 function AccountRow({ account: a, opening, confirmed, balance, taken }: { account: Account; opening: Balance | null; confirmed: Balance | null; balance: number; taken: Set<string> }) {
   // The balance typed from the bank (AP-8, SA.4): a draft – another screen and back, it is still there until confirmed.
   const [bank, setBank, clearBank] = useDraft<number | null>(`account-bank:${a.id}`, () => null)
@@ -91,10 +122,7 @@ function AccountRow({ account: a, opening, confirmed, balance, taken }: { accoun
           ))}
           {!(ACCOUNT_KINDS as readonly string[]).includes(a.kind) && <option value={a.kind}>{a.kind} (nowsza wersja)</option>}
         </select>
-        <label className="flex items-center gap-1.5 text-[11.5px] text-muted" title="Import historii z pliku CSV mBanku (ekran Import)">
-          <input type="checkbox" checked={a.importFormat === 'mbank'} onChange={(e) => patchAccount(a.id, { importFormat: e.currentTarget.checked ? 'mbank' : null })} />
-          import CSV z mBanku
-        </label>
+        <ImportFormatSelect account={a} />
         <span className="flex-1" />
         <span className="text-[11.5px] text-muted">
           saldo teraz{' '}

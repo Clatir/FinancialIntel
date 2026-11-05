@@ -11,7 +11,7 @@ import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
 import type { RecordEntry } from '@shared/api'
 import type { ImportRule, Loan } from '@shared/schema'
-import { listOf, useData, useFolderLocked } from '../../store/data'
+import { listOf, useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { Panel, ShowMore, TextField, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
@@ -21,8 +21,10 @@ import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, directionText, editRule, keepAdvanceRule, removeRule, repayingRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, conditionsText, directionText, editRule, keepAdvanceRule, LOCKED_RULE_TEXT, removeRule, repayingRule, ruleDecisionText } from './rules'
 import { restNotOfRule } from './options'
+import { ConditionsEditor } from './ConditionsEditor'
+import { unreadableRule } from '@shared/import/conditions'
 
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
@@ -30,6 +32,11 @@ const NO_LOANS: Record<string, RecordEntry<Loan>> = {}
 /** Operations audited per step: a large folder never stops the screen. */
 const STEP = 2000
 const SHOWN = 20
+/**
+ * A rule of conditions with anything this version cannot read (przegląd R1 9, 2.3 – `unreadableRule`): kept in the file,
+ * not applied, not edited here (the editor would write it over) – only deleted.
+ */
+const unreadable = (r: ImportRule): boolean => unreadableRule(r)
 /** The rules list's page (W35). */
 const RULES_PAGE = 100
 
@@ -83,9 +90,10 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
   const [choice, setChoice] = useState<Choice>(() => choiceOfRule(rule))
   const [limit, setLimit] = useState<number | null>(rule.maxAmount ?? null)
   const [tags, setTags] = useState<string[]>(() => [...(rule.tags ?? [])])
+  const [manual, setManual] = useState(!!rule.manual)
   const known = useKnownTags()
   const save = () => {
-    editRule(rule.id, { direction, choice, maxAmount: limit, tags })
+    editRule(rule.id, { direction, choice, maxAmount: limit, tags, manual })
     onDone()
   }
   return (
@@ -111,6 +119,11 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
         <span className="shrink-0">Tagi operacji</span>
         <TagsField className="flex-1" value={tags} onChange={setTags} known={known} compact placeholder="#ulga-internet…" testId="import-rule-tags" />
       </div>
+      {/* AP-45 (T470): the quick entry and the operation's editor propose its decision – to accept. */}
+      <label className="flex items-center gap-1.5 text-muted" title="Szybki wpis i edytor operacji podpowiedzą decyzję tej reguły – do zatwierdzenia jednym kliknięciem">
+        <input type="checkbox" checked={manual} onChange={(e) => setManual(e.currentTarget.checked)} data-testid="import-rule-manual" />
+        także dla wpisów ręcznych (podpowiedź w szybkim wpisie i w edytorze operacji)
+      </label>
       <div className="flex items-center gap-2">
         <button type="button" className="btn btn-accent h-[24px]" disabled={rule.mode === 'amount' && !limit} onClick={save} data-testid="import-rule-save">
           Zapisz
@@ -170,7 +183,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
       )}
       {differ.length > 0 && (
         <>
-          <span className="text-muted">Operacje tej marki z inną kategorią albo innym finansującym niż reguła:</span>
+          <span className="text-muted">Operacje tej {rule.mode === 'conditions' ? 'reguły' : 'marki'} z inną kategorią albo innym finansującym niż reguła:</span>
           {differ.slice(0, SHOWN).map(({ before, after }) => (
             <button key={before.id} type="button" className="flex gap-2 text-left hover:bg-hover" onClick={() => openOperation(before)} title="Otwórz w Operacjach" data-testid="import-rule-differ-row">
               <span className="num w-[78px] text-dim">{plDate(before.date)}</span>
@@ -208,21 +221,25 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
 export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progress: number }) {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const readOnly = useFolderLocked()
+  const locked = useLockedReason()
   const cats = useCategories()
   const members = useMembers()
   const [query, setQuery] = useState('')
   const [show, setShow] = useState<'all' | 'differ' | 'idle'>('all')
   const [open, setOpen] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  // A new rule of conditions (AP-45): its editor above the list – a draft until „Zapisz” or „Anuluj”.
+  const [adding, setAdding] = useState(false)
   const hitsOf = (r: ImportRule) => audit?.hits.get(r.id)?.length ?? 0
   const differOf = (r: ImportRule) => audit?.differ.get(r.id)?.length ?? 0
   const accounts = useAccounts()
   const decision = (r: ImportRule) => ruleDecisionText(r, cats.label, members)
+  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? 'konto spoza listy'
   const listed = useMemo(() => {
     const q = fold(query.trim())
     return rules
       .filter((r) => r.mode !== 'keyword')
-      .filter((r) => !q || fold(`${r.label} ${r.match} ${decision(r)}`).includes(q))
+      .filter((r) => !q || fold(`${r.label} ${r.match} ${decision(r)} ${r.mode === 'conditions' ? conditionsText(r, accountName) : ''}`).includes(q))
       // „Bez trafień” = its count (AF-64: never a rule of a loan, PIT-38 or XTB – a proposal only).
       .filter((r) => inAuditView(r, audit, show))
       .sort((a, b) => hitsOf(b) - hitsOf(a) || (a.label || a.match).localeCompare(b.label || b.match))
@@ -237,7 +254,8 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
     <Panel title="Reguły importu">
       <p className="mb-2 text-[11.5px] text-muted">
         Powstają z Twoich decyzji przy imporcie z mBanku („zapamiętaj”, „Przyjmij pewne”) i z przycisku „Zapamiętaj” w Operacjach – dla marki: sieć w każdym
-        mieście to jedna reguła. Kategoria mBanku nie tworzy reguł – jest tylko podpowiedzią. Liczba przy regule to operacje z banku, które łapie dziś.
+        mieście to jedna reguła. Kategoria mBanku nie tworzy reguł – jest tylko podpowiedzią. Liczba przy regule to operacje z banku, które łapie dziś. Własną regułę z kilkoma
+        warunkami (kontrahent, tytuł, kwota, konto – wszystkie albo którykolwiek) dodasz przyciskiem „Nowa reguła z warunkami”.
       </p>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <TextField className="w-[240px]" value={query} onChange={setQuery} placeholder="szukaj reguły, marki, kategorii" maxLength={80} data-testid="import-rules-search" />
@@ -247,15 +265,38 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
           </button>
         ))}
         {!audit && <span className="text-[11px] text-dim">sprawdzam reguły… {Math.round(progress * 100)}%</span>}
+        <span className="flex-1" />
+        <button type="button" className="btn h-[22px] px-2 text-[11px]" disabled={readOnly} onClick={() => setAdding(!adding)} data-testid="import-rule-new">
+          + Nowa reguła z warunkami
+        </button>
+        {/* AP-15: why the rules' buttons are off – once for the list. */}
+        {locked && (
+          <span className="text-[11px] text-dim" data-testid="import-rules-locked">
+            {locked}
+          </span>
+        )}
       </div>
+      {adding && (
+        <div className="mb-2">
+          <ConditionsEditor onDone={() => setAdding(false)} />
+        </div>
+      )}
       {listed.length === 0 && <span className="text-[11.5px] text-dim">{rules.length ? 'Brak reguł dla tego wyboru.' : 'Brak reguł – pojawią się po pierwszym imporcie.'}</span>}
       <div className="flex flex-col" data-testid="import-rules">
         {listed.slice(0, limit).map((r) => (
-          <div key={r.id} className="flex flex-col border-b border-line/60 py-[3px] last:border-b-0" data-testid="import-rule" data-match={r.match}>
+          <div key={r.id} className="flex flex-col border-b border-line/60 py-[3px] last:border-b-0" data-testid="import-rule" data-match={r.match} data-mode={r.mode}>
             <div className="grid grid-cols-[minmax(0,1.2fr)_70px_minmax(0,1.5fr)_64px_auto] items-center gap-2 text-[12px]">
-              <span className="truncate text-fg-strong" title={`klucz: ${r.match}${r.mode === 'contains' ? ' (zawiera)' : ''} · nauczona na ${r.hits} operacjach`}>
+              <span
+                className="truncate text-fg-strong"
+                title={r.mode === 'conditions' ? `${conditionsText(r, accountName)}${r.manual ? ' · także dla wpisów ręcznych' : ''}` : `klucz: ${r.match}${r.mode === 'contains' ? ' (zawiera)' : ''} · nauczona na ${r.hits} operacjach${r.manual ? ' · także dla wpisów ręcznych' : ''}`}
+              >
                 {r.label || r.match}
                 {r.mode === 'amount' && r.maxAmount ? <span className="ml-1 text-[11px] text-accent">do {plnText(r.maxAmount)} zł</span> : null}
+                {r.manual ? (
+                  <span className="ml-1 text-[11px] text-muted" data-testid="import-rule-manual-mark">
+                    · też ręczne
+                  </span>
+                ) : null}
               </span>
               <span className="text-muted">{directionText(r.direction)}</span>
               <span className="truncate text-muted">
@@ -298,7 +339,14 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                     inny rodzaj
                   </button>
                 )}
-                <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px]" disabled={readOnly} onClick={() => setEditing(editing === r.id ? null : r.id)} data-testid="import-rule-edit">
+                <button
+                  type="button"
+                  className="btn btn-ghost h-[22px] px-1.5 text-[11px]"
+                  disabled={readOnly || unreadable(r)}
+                  title={unreadable(r) ? LOCKED_RULE_TEXT : undefined}
+                  onClick={() => setEditing(editing === r.id ? null : r.id)}
+                  data-testid="import-rule-edit"
+                >
                   zmień
                 </button>
                 <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" disabled={readOnly} onClick={() => removeRule(r.id)} data-testid="import-rule-delete">
@@ -306,7 +354,13 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                 </button>
               </span>
             </div>
-            {editing === r.id && <RuleEditor rule={r} onDone={() => setEditing(null)} />}
+            {r.mode === 'conditions' && (
+              <span className="truncate pl-2 text-[11px] text-muted" data-testid="import-rule-conditions-text">
+                {unreadable(r) ? `${LOCKED_RULE_TEXT} ` : ''}
+                {conditionsText(r, accountName)}
+              </span>
+            )}
+            {editing === r.id && (r.mode === 'conditions' ? <ConditionsEditor rule={r} onDone={() => setEditing(null)} /> : <RuleEditor rule={r} onDone={() => setEditing(null)} />)}
             {open === r.id && audit && <RuleDetails rule={r} audit={audit} label={cats.label} />}
           </div>
         ))}

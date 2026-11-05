@@ -4,7 +4,7 @@ import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
 import { energyAfter } from '@shared/calc/fleet'
 import { impulseAmount } from '@shared/calc/operations'
 import { dm } from '@shared/calc/briefing'
-import { OFFICER_SOURCE_LABEL, officerHint, type OfficerSource } from '@shared/import/officer'
+import { hintChanges, manualRuleHint, OFFICER_SOURCE_LABEL, officerHint, ruleHintText, type OfficerSource, type RuleHint } from '@shared/import/officer'
 import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
@@ -577,13 +577,37 @@ export function QuickApp() {
     setD((x) => fromTemplate(withAmount ? t : { ...t, amount: x.amount }, data, { ...blank(data), accountId: x.accountId || data.accountId }))
     setOpened((n) => n + 1)
   }
+  /**
+   * AP-45 (T470): the rule „także dla wpisów ręcznych” the name or the note fits – its decision (category, who pays)
+   * proposed, to accept with a click; never taken by itself. Of a purchase without a receipt's lines.
+   */
+  const ruleHintOf = (x: QuickDraft): RuleHint | null =>
+    data && x.kind !== 'income' && lines.length <= 1
+      ? manualRuleHint(
+          { counterparty: withoutHashTags(x.counterparty), title: withoutHashTags(x.note), direction: 'out', amount: x.amount || null, accountId: x.accountId },
+          { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id), members: data.members }
+        )
+      : null
+  const manualHint = ruleHintOf(d)
+  const ruleHint =
+    manualHint && hintChanges({ categoryId: d.categoryId, refundable: d.kind === 'refundable' && !share, memberId: d.kind === 'refundable' && !share ? d.memberId : null, gift: d.kind === 'refundable' && !share && !!d.gift, share }, manualHint)
+      ? manualHint
+      : null
+  const takeHint = (h: RuleHint) => {
+    const categoryId = h.categoryId ?? d.categoryId
+    if (!h.pays) return set({ categoryId })
+    setShare(h.share)
+    if (h.share) set({ kind: 'expense', categoryId, memberId: null, gift: false })
+    else set({ kind: h.refundable ? 'refundable' : 'expense', categoryId, memberId: h.refundable ? h.memberId : null, gift: h.refundable && h.gift })
+  }
   const onCounterparty = (counterparty: string) => {
     set({ counterparty })
     // F8: by the brand – what was used with it last, the import's rule, the chain's category.
-    // The brand is the name without its „#słowo” (F17).
-    const hint = data ? officerHint({ counterparty: withoutHashTags(counterparty) }, data, { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id) }) : null
+    // The brand is the name without its „#słowo” (F17). A rule for the entries typed by hand fitting it (AP-45) is
+    // proposed instead – no guess of the officer filled in beside it.
+    const hint = data ? officerHint({ counterparty: withoutHashTags(counterparty), amount: d.amount, accountId: d.accountId }, data, { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id) }) : null
     setOfficer(hint)
-    if (hint && !d.categoryId) set({ counterparty, categoryId: hint.categoryId })
+    if (hint && !d.categoryId && !ruleHintOf({ ...d, counterparty })) set({ counterparty, categoryId: hint.categoryId })
   }
 
   return (
@@ -711,7 +735,17 @@ export function QuickApp() {
                   </button>
                 )}
               </div>
-              {officer && officer.categoryId !== d.categoryId && (
+              {ruleHint && (
+                <button
+                  className="mt-0.5 text-left text-[11px] text-accent hover:underline"
+                  onClick={() => takeHint(ruleHint)}
+                  title="Reguła importu „także dla wpisów ręcznych” – kliknij, by przyjąć"
+                  data-testid="quick-rule-hint"
+                >
+                  {ruleHintText(ruleHint, { category: (id) => cats.get(id)?.label ?? '', member: (id) => data.members.find((m) => m.id === id)?.name ?? 'domownik' })}
+                </button>
+              )}
+              {officer && !ruleHint && officer.categoryId !== d.categoryId && (
                 <button className="mt-0.5 text-[11px] text-accent hover:underline" onClick={() => set({ categoryId: officer.categoryId })} title={OFFICER_SOURCE_LABEL[officer.source]} data-testid="quick-officer">
                   oficer: {cats.get(officer.categoryId)?.label}
                 </button>

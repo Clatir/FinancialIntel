@@ -387,6 +387,20 @@ const LABELS: Record<string, string> = {
   system: 'Kategoria systemowa',
   envelope: 'Koperta',
   importFormat: 'Format importu',
+  // AP-43 (T460): the columns of another bank's CSV at the account.
+  csvMapping: 'Kolumny pliku CSV',
+  separator: 'Znak między kolumnami',
+  encoding: 'Kodowanie',
+  skipRows: 'Wiersze do pominięcia',
+  header: 'Wiersz nagłówka',
+  headers: 'Nagłówki kolumn',
+  dateFormat: 'Format daty',
+  decimal: 'Znak dziesiętny',
+  credit: 'Uznania',
+  debit: 'Obciążenia',
+  balance: 'Saldo',
+  accountNo: 'Numer rachunku',
+  booked: 'Data księgowania',
   page: 'Ekran',
   panels: 'Panele',
   collapsed: 'Zwinięty',
@@ -400,6 +414,9 @@ const LABELS: Record<string, string> = {
   match: 'Dopasowanie',
   mode: 'Sposób',
   maxAmount: 'Kwota najwyżej',
+  conditions: 'Warunki',
+  combine: 'Łączenie warunków',
+  manual: 'Także dla wpisów ręcznych',
   label: 'Nazwa',
   household: 'Domownik',
   loanAmount: 'Część pożyczki',
@@ -550,7 +567,8 @@ const VALUE_LABELS: Record<string, Record<string, string>> = {
   'settings.accounts.kind': { bank: 'bank', wallet: 'portfel', cash: 'gotówka', other: 'inne' },
   type: { fixed: 'stały', subscription: 'abonament', installment: 'rata' },
   mode: { equal: 'po równo', percent: 'procenty', amounts: 'kwoty' },
-  'settings.import.rules.mode': { exact: 'nazwa kontrahenta', contains: 'nazwa zawiera', keyword: 'słowo w opisie', amount: 'kwota' },
+  'settings.import.rules.mode': { exact: 'nazwa kontrahenta', contains: 'nazwa zawiera', keyword: 'słowo w opisie', amount: 'kwota', conditions: 'warunki' },
+  combine: { all: 'wszystkie warunki', any: 'którykolwiek warunek' },
   inflowKind: { repay: 'spłata', income: 'przychód', advance: 'zaliczka' },
   inflow: { ask: 'pytaj', advance: 'zaliczka', income: 'przychód' },
   impulse: { plan: 'plan', impulse: 'impuls' },
@@ -602,7 +620,10 @@ const AMOUNT_FIELDS = [
   'settings.household.members.opening.owed',
   'settings.household.members.opening.deposit',
   'settings.import.rules.maxAmount',
-  'settings.import.rules.loanAmount'
+  'settings.import.rules.loanAmount',
+  // AP-45: a rule's condition „kwota od–do”.
+  'settings.import.rules.conditions.min',
+  'settings.import.rules.conditions.max'
 ].map((f) => f.split('.'))
 
 /** Is the field at `path` an amount in grosze (B7)? Items of lists (`#id`, `[n]`) do not count as keys. */

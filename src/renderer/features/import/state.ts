@@ -1,7 +1,9 @@
 import { create } from 'zustand'
-import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
-import { MbankFormatError, parseMbank, type MbankFile } from '@shared/import/mbank'
+import type { MbankFile } from '@shared/import/mbank'
+import { contextFor, ownNamesWith, type AnalyzePhase, type PlanSource } from '@shared/import/analyze'
+import { accountMapping, columnsFor, completeMapping, draftOf, guessCsv, previewRows, withHeaders, type CsvDraft, type CsvRole } from '@shared/import/csv'
+import type { Rows } from '@shared/import/text'
 import {
   buildImport,
   importGroups,
@@ -32,15 +34,15 @@ import { returnedKey } from '@shared/import/deleted'
 import { warsawNow } from '@shared/calc/dates'
 import { linkRepayments } from '@shared/calc/repayments'
 import { duplicateKey } from '@shared/import/duplicates'
-import { decodeText, IMPORT_MAX_BYTES } from '@shared/import/text'
+import { IMPORT_MAX_BYTES } from '@shared/import/text'
 import { shareComplete } from '@shared/calc/share'
 import { deepEqual } from '@shared/merge'
 import { batchesToDrop, importBatch, type BatchFacts } from '@shared/import/batch'
-import { accountForNumber, accountNumberOf } from '@shared/import/mbank'
+import { accountNumberOf } from '@shared/import/mbank'
 import { statementCheck, statementOf, type Statement } from '@shared/import/statement'
 import { countLabel } from '../../lib/format'
 import { openingOf } from '@shared/calc/balances'
-import { balanceSchema, cashAccountOf, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Balance, type HouseholdMember, type ImportBatchSettings, type ImportSettings, type Share, type Transaction } from '@shared/schema'
+import { balanceSchema, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, type Balance, type CsvMapping, type HouseholdMember, type ImportBatchSettings, type ImportSettings, type Share, type Transaction } from '@shared/schema'
 import { api, errorMessage } from '../../lib/api'
 import { addRecord, addRecords, deleteRecords, flushSaves, listOf, replaceRecords, saveFirst, unsavedNote, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -48,6 +50,7 @@ import { fleetInputNow, fleetNow } from '../../store/fleet'
 import { bulkKeeps, choiceFor, fits, linesKey, type Option } from './options'
 import { rememberInflows } from '../household/actions'
 import { checkedWithImport, importsMark, readDeletedBank } from './returned'
+import { AnalysisCancelled, analyzeFile, cancelAnalysis, hasWorker, replanInWorker, type AnalyzedVia } from './analysis'
 
 export interface ImportDone {
   counts: ImportCounts
@@ -62,11 +65,46 @@ export interface ImportDone {
   confirmed: string | null
 }
 
+/** The wizard of another bank's CSV (AP-43, T460): a file no mapping fits, waiting for its columns. */
+export interface CsvSetup {
+  name: string
+  ref: string | null
+  bytes: Uint8Array
+  draft: CsvDraft
+  /** The account the mapping is kept at; '' – a new one (`newName`). */
+  accountId: string
+  newName: string
+  /** The account whose mapping read the open file („Zmień kolumny”): its own columns changed – no question (przegląd R1 3). */
+  editing: string | null
+  /** The file's first rows split by the draft (the preview). */
+  rows: Rows
+}
+
+/** A file being read (AP-35): its name and how far it is – the bar (`phase` null – not started, or in the window). */
+export interface ImportLoading {
+  name: string
+  phase: AnalyzePhase | null
+  done: number
+  total: number
+}
+
 interface ImportSession {
   fileName: string | null
   /** The open file's id in the main process (F14 – found in the downloads or chosen): moved to the Recycle Bin after the import. */
   fileRef: string | null
   file: MbankFile | null
+  /** The open file's bytes – of another bank's CSV only (its columns set again: `editCsvMapping`). */
+  bytes: Uint8Array | null
+  /** The mapping the open file was read by (AP-43); null – mBank's file. */
+  mapping: CsvMapping | null
+  /** The account that mapping is kept at (przegląd R1 10 – „Zmień kolumny” changes it there, whatever account is chosen now). */
+  mappingAccountId: string | null
+  /** Where the open file was analyzed (AP-35): the Worker, or the window. */
+  via: AnalyzedVia | null
+  /** A file being read (AP-35, T463). */
+  loading: ImportLoading | null
+  /** The wizard of another bank's CSV (AP-43). */
+  csvSetup: CsvSetup | null
   error: string | null
   /** The file the error is about (another than the open one – N12: a wrong file never closes the open one). */
   errorName: string | null
@@ -107,6 +145,12 @@ export const useImport = create<ImportSession>(() => ({
   fileName: null,
   fileRef: null,
   file: null,
+  bytes: null,
+  mapping: null,
+  mappingAccountId: null,
+  via: null,
+  loading: null,
+  csvSetup: null,
   error: null,
   errorName: null,
   accountId: '',
@@ -179,38 +223,38 @@ function dockedOf(map: Record<string, { record: { transactionId: string } }>): R
   return set
 }
 
-/** The account holder's names: the settings' and the file's `#Klient`. */
-export const ownNamesWith = (names: readonly string[], file: MbankFile | null): string[] => [...names, ...(file?.client ? [file.client] : [])]
+export { ownNamesWith }
+
+/**
+ * What a plan reads of the budget as the store has it now (`PlanSource`): the store's lists (W18) – the same while the
+ * records are, so a plan again after a keyword reads their indexes as they are.
+ */
+function sourceNow(): PlanSource | null {
+  const s = useData.getState()
+  if (!s.fi) return null
+  const { rules, aliases, ownNames, accountNumbers } = s.fi.settings.import
+  return {
+    transactions: listOf(s.records.transactions),
+    containers: listOf(s.records.containers),
+    loans: listOf(s.records.loans ?? {}),
+    accounts: s.fi.settings.accounts,
+    categories: s.fi.settings.categories,
+    rules,
+    aliases,
+    members: s.fi.settings.household.members,
+    ownNames,
+    accountNumbers,
+    locked: lockedOf(s.records.transactions),
+    docked: dockedOf(s.records.dockings ?? NO_DOCKINGS)
+  }
+}
 
 /** The plan of `file` against the operations in memory now (rules, merged names and the holder's names from the settings). */
 function planNow(file: MbankFile, accountId: string, deletedKeys: ReadonlySet<string>, deletedRows: readonly DeletedRow[] = useImport.getState().deletedRows): ImportPlan | null {
-  const s = useData.getState()
-  if (!s.fi) return null
-  const { rules, aliases } = s.fi.settings.import
-  const { members } = s.fi.settings.household
+  const source = sourceNow()
+  if (!source) return null
   useImport.setState({ planInputs: planInputsNow() })
-  // The store's lists (W18): the same while the records are – a plan again after a keyword reads their indexes as they are.
-  return planImport(
-    file,
-    accountId,
-    listOf(s.records.transactions),
-    {
-      rules,
-      ownNames: ownNamesWith(s.fi.settings.import.ownNames, file),
-      categories: categoryIndex(s.fi.settings.categories),
-      containers: listOf(s.records.containers),
-      aliases,
-      members,
-      loans: listOf(s.records.loans ?? {}),
-      accountNumbers: s.fi.settings.import.accountNumbers,
-      // The cash kept on its account (D100 (1), AP-33): an ATM withdrawal is an own transfer onto it.
-      cash: cashAccountOf(s.fi.settings.accounts),
-      locked: lockedOf(s.records.transactions),
-      docked: dockedOf(s.records.dockings ?? NO_DOCKINGS)
-    },
-    deletedKeys,
-    deletedRows
-  )
+  return planImport(file, accountId, source.transactions, contextFor(source, file), deletedKeys, deletedRows)
 }
 
 /**
@@ -261,20 +305,6 @@ async function deletedBankRows(): Promise<{ deletedKeys: ReadonlySet<string>; de
   return { deletedKeys: keys, deletedRows: rows }
 }
 
-/**
- * The account a file goes to (AP-2): the one its bank account's number was imported to (`accountForNumber`), else the
- * one chosen before, else the one with the mBank import (the first), else mBank.
- */
-function importAccount(file: MbankFile, chosen: string): string {
-  const s = useData.getState().fi?.settings
-  const accounts = s?.accounts ?? []
-  return (
-    accountForNumber(accounts, s?.import.accountNumbers ?? {}, accountNumberOf(file.account), chosen) ||
-    chosen ||
-    (accounts.find((a) => !a.archived && a.importFormat === 'mbank')?.id ?? MBANK_ACCOUNT_ID)
-  )
-}
-
 /** What of a session the user decided (N12): never thrown away without „Cofnij”. */
 function hasDecisions(s: ImportSession): boolean {
   const c = s.choices
@@ -282,10 +312,31 @@ function hasDecisions(s: ImportSession): boolean {
 }
 
 /** The open file and its decisions, as they are (N12: „Cofnij” brings them back). */
-type Snapshot = Pick<ImportSession, 'fileName' | 'file' | 'accountId' | 'deletedKeys' | 'deletedRows' | 'plan' | 'planInputs' | 'choices' | 'query' | 'selected' | 'accepted' | 'lastDecided' | 'noProposal'>
+type Snapshot = Pick<
+  ImportSession,
+  | 'fileName'
+  | 'fileRef'
+  | 'file'
+  | 'bytes'
+  | 'mapping'
+  | 'mappingAccountId'
+  | 'via'
+  | 'accountId'
+  | 'deletedKeys'
+  | 'deletedRows'
+  | 'plan'
+  | 'planInputs'
+  | 'choices'
+  | 'query'
+  | 'selected'
+  | 'accepted'
+  | 'lastDecided'
+  | 'noProposal'
+>
+/** The file with its reference too (przegląd R1 2): „Przenieś do Kosza” after „Cofnij” moves the file brought back. */
 function snapshot(s: ImportSession): Snapshot {
-  const { fileName, file, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal } = s
-  return { fileName, file, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal }
+  const { fileName, fileRef, file, bytes, mapping, mappingAccountId, via, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal } = s
+  return { fileName, fileRef, file, bytes, mapping, mappingAccountId, via, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal }
 }
 
 /** The session before an action back, re-planned against the data now (it may have changed meanwhile). */
@@ -294,25 +345,81 @@ function restore(snap: Snapshot): void {
   replanImport()
 }
 
-export async function loadImportFile(name: string, bytes: Uint8Array, ref: string | null = null): Promise<void> {
-  const before = useImport.getState()
+/** The load of a file running (AP-35): a later one – another file, „Zamknij plik”, another folder – wins over it. */
+let loadSeq = 0
+
+/** A file's error beside the open one (N12: a wrong file never closes the open one). */
+function fileError(name: string, error: string): void {
+  if (useImport.getState().file) useImport.setState({ error, errorName: name })
+  else useImport.setState({ fileName: name, file: null, plan: null, error, errorName: name, done: null })
+}
+
+/** An account's name at most (`accountSchema`). */
+const NAME_MAX = 40
+
+/**
+ * A new account's name not taken yet („Drugi bank”, „Drugi bank 2”…) within the limit of a name – a longer one shortened
+ * before its number (przegląd R1 5: a name past it made the account unreadable – its operations without it).
+ */
+export function freeAccountName(base: string, accounts: ReadonlyArray<{ name: string }> = useData.getState().fi?.settings.accounts ?? []): string {
+  const taken = new Set(accounts.map((a) => a.name.toLowerCase()))
+  const clean = base.trim().slice(0, NAME_MAX).trim() || 'Drugi bank'
+  let name = clean
+  for (let i = 2; taken.has(name.toLowerCase()); i++) name = `${clean.slice(0, NAME_MAX - String(i).length - 1).trimEnd()} ${i}`
+  return name
+}
+
+/**
+ * Open a bank's file (AP-35, T463: read and planned in the Worker, the bar shows how far): mBank's, another bank's CSV
+ * whose account's mapping fits it (AP-43), or – of neither – the wizard of its columns. `mapping` – read by it onto its
+ * account (the wizard's „Zapisz i wczytaj”).
+ */
+export async function loadImportFile(name: string, bytes: Uint8Array, ref: string | null = null, opts: { mapping?: { accountId: string; mapping: CsvMapping } } = {}): Promise<void> {
+  const mine = ++loadSeq
+  const chosen = useImport.getState().accountId
+  useImport.setState({ loading: { name, phase: null, done: 0, total: 0 } })
   try {
-    const file = parseMbank(decodeText(bytes))
-    // By the file's bank account first (AP-2): the account chosen for the file before does not stick to the next one.
-    const accountId = importAccount(file, before.accountId)
     const { deletedKeys, deletedRows } = await deletedBankRows()
-    const prev = before.file && hasDecisions(before) ? snapshot(before) : null
+    const source = mine === loadSeq ? sourceNow() : null
+    if (!source) return
+    const inputs = planInputsNow()
+    const { analysis, via } = await analyzeFile({ bytes, chosen, fallback: MBANK_ACCOUNT_ID, mapping: opts.mapping ?? null, source, deletedKeys, deletedRows }, (phase, done, total) => {
+      if (mine === loadSeq) useImport.setState({ loading: { name, phase, done, total } })
+    })
+    if (mine !== loadSeq) return
+    if (analysis.kind === 'error') return fileError(name, analysis.message)
+    if (analysis.kind === 'csv') {
+      // Another bank's CSV no account reads yet (AP-43): its columns asked – the open file stays as it is (N12).
+      const guess = guessCsv(bytes)
+      if (!guess) return fileError(name, 'To nie jest plik CSV z banku: nie widać w nim kolumn. Pobierz w banku historię operacji jako CSV (w mBanku: lista operacji albo historia rachunku).')
+      // No account's mapping reads it – another bank, or a bank's new layout: a new account by default (przegląd R1 3); an
+      // account chosen whose columns these would replace is asked about (`csvReplaces`).
+      useImport.setState({ csvSetup: { name, ref, bytes, draft: guess.draft, accountId: '', newName: freeAccountName('Drugi bank'), editing: null, rows: guess.rows }, error: null, errorName: null })
+      return
+    }
+    const cur = useImport.getState()
+    // An import being written (B93): its session stays until it is done.
+    if (cur.busy) return void toast('Trwa import – poczekaj, aż się skończy.', 'info', 4000)
+    const prev = cur.file && hasDecisions(cur) ? snapshot(cur) : null
+    const { file, accountId, mapping, plan } = analysis
     // Nothing is ticked by itself: pending operations the list no longer shows may only be filtered out of it.
     useImport.setState({
       fileName: name,
       fileRef: ref,
       file,
+      bytes: file.format === 'csv' ? bytes : null,
+      mapping,
+      mappingAccountId: mapping ? accountId : null,
+      via,
+      loading: null,
+      csvSetup: null,
       error: null,
       errorName: null,
       accountId,
       deletedKeys,
       deletedRows,
-      plan: planNow(file, accountId, deletedKeys, deletedRows),
+      plan,
+      planInputs: inputs,
       choices: emptyChoices(),
       query: '',
       selected: noSelection(),
@@ -323,12 +430,121 @@ export async function loadImportFile(name: string, bytes: Uint8Array, ref: strin
     })
     // Another file over decisions not imported yet (N12): one click back to them.
     if (prev) toast(`Otwarto „${name}” – decyzje pliku „${prev.fileName}” nie zostały zaimportowane.`, 'info', 10000, { label: 'Cofnij', run: () => restore(prev) })
+    // What changed while the file was analyzed (a save here, a change from another computer – B38): planned again.
+    replanIfChanged(planInputsNow())
   } catch (e) {
-    const error = e instanceof MbankFormatError ? e.message : `Nie udało się odczytać pliku: ${errorMessage(e)}`
-    // A wrong file never closes the open one (N12): the error is shown beside it.
-    if (before.file) useImport.setState({ error, errorName: name })
-    else useImport.setState({ fileName: name, file: null, plan: null, error, errorName: name, done: null })
+    if (e instanceof AnalysisCancelled || mine !== loadSeq) return
+    fileError(name, `Nie udało się odczytać pliku: ${errorMessage(e)}`)
+  } finally {
+    if (mine === loadSeq) useImport.setState({ loading: null })
   }
+}
+
+// ------------------------------------------------------------------ the wizard of another bank's CSV (AP-43)
+
+/** A change of the wizard's draft: the preview read again when the separator or the encoding changed, the header's cells too. */
+export function setCsvDraft(patch: Partial<Omit<CsvDraft, 'columns'>>): void {
+  const setup = useImport.getState().csvSetup
+  if (!setup) return
+  let draft: CsvDraft = { ...setup.draft, ...patch }
+  const reread = patch.separator !== undefined || patch.encoding !== undefined
+  const rows = reread ? previewRows(setup.bytes, draft) : setup.rows
+  // Another separator – other columns (przegląd R1 11): the roles beyond them go, the user's within them stay; another
+  // encoding moves no column – the roles stay (drugi przegląd R1, 4).
+  if (patch.separator !== undefined) draft = { ...draft, columns: columnsFor(draft, rows) }
+  if (reread || patch.skipRows !== undefined || patch.header !== undefined) draft = withHeaders(draft, rows)
+  useImport.setState({ csvSetup: { ...setup, draft, rows } })
+}
+
+/** A column's role (null – none): a column has one role at most – the role it had before is given up. */
+export function setCsvColumn(role: CsvRole, column: number | null): void {
+  const setup = useImport.getState().csvSetup
+  if (!setup) return
+  const columns = { ...setup.draft.columns }
+  if (column != null) for (const r of Object.keys(columns) as CsvRole[]) if (columns[r] === column) columns[r] = null
+  columns[role] = column
+  // One signed amount or two columns (money in and out) – never both.
+  if (role === 'amount' && column != null) columns.credit = columns.debit = null
+  if ((role === 'credit' || role === 'debit') && column != null) columns.amount = null
+  useImport.setState({ csvSetup: { ...setup, draft: { ...setup.draft, columns } } })
+}
+
+export function setCsvAccount(accountId: string): void {
+  const setup = useImport.getState().csvSetup
+  if (setup) useImport.setState({ csvSetup: { ...setup, accountId } })
+}
+
+export function setCsvNewName(newName: string): void {
+  const setup = useImport.getState().csvSetup
+  if (setup) useImport.setState({ csvSetup: { ...setup, newName } })
+}
+
+/** The wizard closed without its file (the open one stays). */
+export const cancelCsvSetup = (): void => useImport.setState({ csvSetup: null })
+
+/**
+ * The account whose own columns saving the wizard would replace (przegląd R1 3): an existing account with a mapping –
+ * another than these, read or not by this version – and not the one whose mapping read the open file („Zmień kolumny”).
+ * null – nothing replaced.
+ */
+export function csvReplaces(setup: CsvSetup | null): { name: string } | null {
+  if (!setup?.accountId || setup.accountId === setup.editing) return null
+  const account = useData.getState().fi?.settings.accounts.find((a) => a.id === setup.accountId)
+  if (!account || account.csvMapping == null) return null
+  const done = completeMapping(setup.draft)
+  const mine = accountMapping(account)
+  return mine && 'mapping' in done && deepEqual(mine, done.mapping) ? null : { name: account.name }
+}
+
+/**
+ * „Zapisz i wczytaj” (AP-43, T460): the mapping kept at the account (a new one made – `kind` 'bank'; an account with
+ * mBank's import keeps it: its files are mBank's still, the reminders of its import too), then the file read by it.
+ * Another account's own columns only with `replace` (the question „Zastąp kolumny” – przegląd R1 3). false – not saved
+ * (a column missing, a question not answered – said; a folder read only).
+ */
+export async function saveCsvSetup(opts: { replace?: boolean } = {}): Promise<boolean> {
+  const setup = useImport.getState().csvSetup
+  if (!setup) return false
+  const done = completeMapping(setup.draft)
+  if (!('mapping' in done)) {
+    toast(done.missing, 'error', 6000)
+    return false
+  }
+  const replaces = csvReplaces(setup)
+  if (replaces && !opts.replace) {
+    toast(`Konto „${replaces.name}” ma już kolumny innego pliku – potwierdź „Zastąp kolumny” albo wybierz nowe konto.`, 'error', 7000)
+    return false
+  }
+  const { mapping } = done
+  const accountId = setup.accountId || newId()
+  const wanted = setup.newName.trim() || 'Drugi bank'
+  const name = freeAccountName(wanted)
+  const saved = updateSettings((f) => ({
+    ...f,
+    settings: {
+      ...f.settings,
+      accounts: setup.accountId
+        ? f.settings.accounts.map((a) => (a.id === accountId ? { ...a, importFormat: a.importFormat === 'mbank' ? 'mbank' : 'csv', csvMapping: mapping } : a))
+        : [...f.settings.accounts, { id: accountId, name, kind: 'bank', importFormat: 'csv', csvMapping: mapping, archived: false }]
+    }
+  }))
+  if (!saved) return false
+  // Nothing renamed by itself without a word (AP-15).
+  if (!setup.accountId && name !== wanted) toast(`Konto nazwane „${name}” – „${wanted.slice(0, NAME_MAX)}” jest już zajęte albo za długie.`, 'info', 6000)
+  await loadImportFile(setup.name, setup.bytes, setup.ref, { mapping: { accountId, mapping } })
+  return true
+}
+
+/**
+ * „Zmień kolumny”: the open CSV's wizard again, with the mapping it was read by – kept at the account it is of (przegląd
+ * R1 10), not the one chosen for the file since.
+ */
+export function editCsvMapping(): void {
+  const { file, bytes, mapping, mappingAccountId, fileName, fileRef, accountId } = useImport.getState()
+  if (!file || file.format !== 'csv' || !bytes || !mapping) return
+  const draft = draftOf(mapping)
+  const owner = mappingAccountId ?? accountId
+  useImport.setState({ csvSetup: { name: fileName ?? 'plik.csv', ref: fileRef, bytes, draft, accountId: owner, newName: freeAccountName('Drugi bank'), editing: owner, rows: previewRows(bytes, draft) } })
 }
 
 /** A file dropped on the panel (B94): within the limit of a chosen one, read here – a folder or a file gone is said. */
@@ -384,15 +600,60 @@ export function replanIfChanged(inputs: PlanInputs | null): void {
   const { plan, planInputs, busy } = useImport.getState()
   // The import writing its own records: planned once more by it (and after it, when the file stays open).
   if (!plan || !inputs || !planInputs || busy) return
-  const changed = (Object.keys(inputs) as Array<keyof PlanInputs>).filter((k) => inputs[k] !== planInputs[k])
-  if (!changed.length) return
+  const changed = inputsChanged(inputs, planInputs)
+  if (changed === 'none') return
   // The settings' parts in new objects of the same content (W18: the settings saved here or on another computer, another
   // of their parts changed): nothing to plan again – the new objects kept, so the next look is by reference again.
-  if (changed.every((k) => BY_CONTENT.has(k) && deepEqual(inputs[k], planInputs[k]))) {
-    useImport.setState({ planInputs: inputs })
+  if (changed === 'same') return void useImport.setState({ planInputs: inputs })
+  // In the Worker when the window has one (przegląd R1 15): a save or a change from another computer never stops it.
+  if (hasWorker()) return void replanAsync()
+  replanImport()
+}
+
+/** How what a plan reads changed: not at all, only into new objects of the same content (`BY_CONTENT`), or really. */
+function inputsChanged(inputs: PlanInputs, planInputs: PlanInputs): 'none' | 'same' | 'changed' {
+  const changed = (Object.keys(inputs) as Array<keyof PlanInputs>).filter((k) => inputs[k] !== planInputs[k])
+  if (!changed.length) return 'none'
+  return changed.every((k) => BY_CONTENT.has(k) && deepEqual(inputs[k], planInputs[k])) ? 'same' : 'changed'
+}
+
+/** The plan again in the Worker running (przegląd R1 15): one at a time – what changed meanwhile is planned after it. */
+let replanning: { again: boolean } | null = null
+
+/**
+ * The open file planned again in the Worker, the decisions carried over when it comes (`replanImport` with its plan –
+ * also the ones made meanwhile). Given up when the file, its account or the folder changed meanwhile, or the import
+ * writes (it plans itself); the Worker not answering – the window plans it, as before.
+ */
+async function replanAsync(): Promise<void> {
+  if (replanning) {
+    replanning.again = true
     return
   }
-  replanImport()
+  const me = { again: false }
+  replanning = me
+  try {
+    for (;;) {
+      const st = useImport.getState()
+      const source = sourceNow()
+      if (!st.file || !st.plan || !source || st.busy || st.loading) return
+      const inputs = planInputsNow()
+      const { file, accountId, deletedKeys, deletedRows } = st
+      const plan = await replanInWorker({ file, accountId, source, deletedKeys, deletedRows })
+      const now = useImport.getState()
+      if (now.file !== file || now.accountId !== accountId || now.deletedKeys !== deletedKeys || now.busy || !now.plan) return
+      if (plan) replanImport(plan, inputs ?? undefined)
+      else replanImport()
+      const later = planInputsNow()
+      const planned = useImport.getState().planInputs
+      if (!me.again || !later || !planned || inputsChanged(later, planned) !== 'changed') return
+      me.again = false
+    }
+  } catch (e) {
+    if (!(e instanceof AnalysisCancelled)) toast(`Nie udało się przeliczyć podglądu importu: ${errorMessage(e)}`, 'error', 7000)
+  } finally {
+    if (replanning === me) replanning = null
+  }
 }
 
 /** What a plan reads from the settings (small, compared by content); the records' maps change only with their content. */
@@ -401,12 +662,14 @@ const BY_CONTENT: ReadonlySet<keyof PlanInputs> = new Set(['rules', 'aliases', '
 /**
  * The plan once more (the rules changed – a keyword added, a rule deleted – or the operations did): the decisions stay;
  * a group whose proposal changed (another key) keeps its decision under the group of the same brand and direction.
+ * `planned` – the plan made in the Worker with `inputs` (przegląd R1 15); none – made here now.
  */
-export function replanImport(): void {
+export function replanImport(planned?: ImportPlan, inputs?: PlanInputs): void {
   const { file, accountId, deletedKeys, plan: old, choices, selected, accepted } = useImport.getState()
   if (!file || !old) return
-  const plan = planNow(file, accountId, deletedKeys)
+  const plan = planned ?? planNow(file, accountId, deletedKeys)
   if (!plan) return
+  if (planned && inputs) useImport.setState({ planInputs: inputs })
   const before = groupsOf(old)
   const fresh = groupsOf(plan)
   const keys = new Set(fresh.map((g) => g.group))
@@ -521,7 +784,30 @@ export function closeImport(): void {
   // An import being written (B93): the file stays until it is done.
   if (before.busy) return
   const prev = before.file && hasDecisions(before) ? snapshot(before) : null
-  useImport.setState({ fileName: null, fileRef: null, file: null, error: null, errorName: null, plan: null, choices: emptyChoices(), query: '', selected: noSelection(), accepted: { themes: {}, groups: {} }, lastDecided: null, noProposal: {}, done: null })
+  // A file being read goes too (AP-35): nothing opens after „Zamknij plik”.
+  loadSeq++
+  cancelAnalysis()
+  useImport.setState({
+    fileName: null,
+    fileRef: null,
+    file: null,
+    bytes: null,
+    mapping: null,
+    mappingAccountId: null,
+    via: null,
+    loading: null,
+    csvSetup: null,
+    error: null,
+    errorName: null,
+    plan: null,
+    choices: emptyChoices(),
+    query: '',
+    selected: noSelection(),
+    accepted: { themes: {}, groups: {} },
+    lastDecided: null,
+    noProposal: {},
+    done: null
+  })
   // Decisions not imported (N12): back in one click.
   if (prev) toast(`Zamknięto „${prev.fileName}” bez importu.`, 'info', 10000, { label: 'Cofnij', run: () => restore(prev) })
 }
@@ -1014,7 +1300,7 @@ export function inflowVotes(groups: readonly ImportGroup[], c: ImportChoices): A
  * The balance the bank's file says, confirmed when the budget is the same at the end of its last day (F5): a confirmation
  * of that day – none when the account has no opening balance yet (the wizard sets it) or the day is confirmed so already.
  */
-function confirmFromStatement(st: Statement): Balance | null {
+function confirmFromStatement(st: Statement, format: MbankFile['format']): Balance | null {
   const s = useData.getState()
   const txs = listOf(s.records.transactions)
   const balances = listOf(s.records.balances)
@@ -1025,7 +1311,7 @@ function confirmFromStatement(st: Statement): Balance | null {
   if (balances.some((b) => b.kind === 'confirmation' && b.accountId === st.accountId && b.date === st.end.date && b.amount === st.end.balance)) return null
   const now = new Date().toISOString()
   // Its moment of confirming (T383): „Inwentaryzacja” counts the day of the import, not the file's last day.
-  const record = balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, confirmedAt: now, date: st.end.date, accountId: st.accountId, kind: 'confirmation', amount: st.end.balance, correctionId: null, note: 'Saldo z pliku banku (historia rachunku)' })
+  const record = balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now, confirmedAt: now, date: st.end.date, accountId: st.accountId, kind: 'confirmation', amount: st.end.balance, correctionId: null, note: format === 'csv' ? 'Saldo z pliku banku (CSV)' : 'Saldo z pliku banku (historia rachunku)' })
   addRecord('balances', record)
   return record
 }
@@ -1079,6 +1365,8 @@ function writeBatch(
 export async function runImport(): Promise<void> {
   const st = useImport.getState()
   if (!st.file || st.busy) return
+  // Another file being read (AP-35): its plan would take the session's place under the import.
+  if (st.loading) return void toast(`Trwa wczytywanie pliku „${st.loading.name}” – poczekaj, aż się skończy.`, 'info', 5000)
   useImport.setState({ busy: true })
   try {
     const status = useData.getState().status
@@ -1176,7 +1464,7 @@ export async function runImport(): Promise<void> {
       if (p.status === 'known' || p.status === 'settle' || p.status === 'elsewhere' || (p.status === 'merge' && joins(p, cur.choices))) return p.tx.id
       return createdByKey.get(key) ?? null
     })
-    const confirmation = statement ? confirmFromStatement(statement) : null
+    const confirmation = statement ? confirmFromStatement(statement, plan.format) : null
     // Its batch even when the folder did not take the saves yet (they are retried): the stack of imports stays whole.
     const batchId =
       changes || confirmation
@@ -1218,9 +1506,18 @@ export async function runImport(): Promise<void> {
  */
 useData.subscribe((s, prev) => {
   if (!prev.status || !s.status || s.status.dataDir === prev.status.dataDir || useImport.getState().busy) return
+  // A file being read for the old folder (AP-35): given up.
+  loadSeq++
+  cancelAnalysis()
   useImport.setState({
     fileName: null,
     file: null,
+    bytes: null,
+    mapping: null,
+    mappingAccountId: null,
+    via: null,
+    loading: null,
+    csvSetup: null,
     error: null,
     errorName: null,
     accountId: '',

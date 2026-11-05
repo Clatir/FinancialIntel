@@ -3869,3 +3869,242 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (klucz `year:<rok>`) za rok zamknięty, gdy budżet w nim działał; własny przełącznik `NotifyPrefs.yearReview`
   (config.json komputera, addytywnie, domyślnie włączony), kliknięcie – Raporty → Przegląd roczny (w styczniu rok
   zamknięty); wiersz w tabeli powiadomień specyfikacji.
+- **T460** Kreator CSV innego banku (1.16.0, R1 – AP-43, raport 2.2 c): plik, który nie jest plikiem mBanku i do którego
+  nie pasuje mapowanie żadnego konta, otwiera na ekranie Import kreator kolumn – podgląd pierwszych wierszy, separator
+  (; , tabulator |), kodowanie (wykryj / UTF-8 / Windows-1250), wiersze przed nagłówkiem, wiersz nagłówka, format daty
+  (7 zapisów), znak dziesiętny („1 234,56” / „1,234.56”), role kolumn: data operacji (wymagana), data księgowania, kwota
+  ze znakiem albo uznania + obciążenia (obie), opis / tytuł albo kontrahent (co najmniej jedno), rodzaj operacji, saldo
+  po operacji, numer rachunku kontrahenta, waluta; propozycja z nazw nagłówka (`guessCsv`), podgląd wyniku pierwszych
+  operacji i brakująca rola przy przycisku. „Zapisz kolumny i wczytaj plik” zapisuje mapowanie przy koncie w `fi.json`
+  (`importFormat: 'csv'`, `csvMapping` – addytywnie, bez `SCHEMA_VERSION`; wartości nowszej wersji zostają – `openEnum`,
+  `looseObject`; mapowanie nieczytelne dla tej wersji odpada, konto zostaje), potem czyta nim plik; konto z importem
+  mBanku zostaje `'mbank'` (mapowanie dopisane – przypomnienia o imporcie i misja „Łączność z bazą” działają dalej),
+  „Nowe konto…” zakłada konto rodzaju „konto bankowe”. Następny plik: najpierw mBank, potem konta (niezarchiwizowane)
+  z mapowaniem, którego nagłówek jest wśród pierwszych 60 wierszy pliku (linia dopisana przez bank nad nim nie
+  przeszkadza; bez nagłówka – pierwsze operacje czytelne), konto wybrane wcześniej pierwsze; „Zmień kolumny” otwiera
+  kreator z mapowaniem pliku. Wiersz: uznania na plus, obciążenia na minus bez względu na znak w pliku; waluta z kolumny
+  albo z kwoty – inna niż PLN pominięta z powodem (jak w mBanku); godzina przy dacie nie jest czytana (import bez
+  godzin); kontrahent z kolumny bez dopisków banku (`cleanBankName`), bez kolumny – z opisu. Ustawienia → Konta: wybór
+  „bez importu / CSV z mBanku / CSV innego banku” zamiast pola „import CSV z mBanku”. Plik, który nie jest tabelą –
+  błąd obok otwartego pliku (N12). Przegląd R1: kreator pliku, do którego nie pasuje żadne mapowanie, proponuje zawsze
+  nowe konto (3); wybór istniejącego konta z innymi kolumnami pyta „Zastąp kolumny” (`csvReplaces`, bez odpowiedzi –
+  odmowa ze słowem), „Zmień kolumny” zmienia mapowanie konta, którym plik był czytany (`mappingAccountId` – nie konta
+  wybranego potem; 10). Mapowanie konta „bez importu” nie czyta plików, mapowanie nieczytelne dla tej wersji jest
+  pomijane (`accountMapping` – `safeParse`; 7). Mapowanie, którego `fi.json` nie zachowa (kolumna od 200, nagłówek ponad
+  200 komórek albo komórka ponad 200 znaków), nie jest zapisywane – kreator mówi dlaczego; nazwa nowego konta skracana
+  przed numerem do 40 znaków („… 2”), zmieniona – ze słowem (5). Inny separator albo kodowanie: role po nazwach nowego
+  nagłówka, inaczej tylko te w kolumnach pliku (`columnsFor`; 11). Drugi przegląd R1 (4, zmienia 11): inne kodowanie
+  nie rusza ról; inny separator – znikają tylko role poza kolumnami pliku, ustawione ręcznie zostają (żadna nie została –
+  po nazwach nagłówka). Kwota z drugim znakiem dziesiętnym poza tysiącami
+  („12.50” przy „,”) – nieczytelna, wiersz pominięty z powodem (14).
+- **T461** Tożsamość wiersza CSV innego banku (1.16.0, R1 – AP-43; przegląd R1 1): `bank.key` =
+  `csv:<odcisk(konto|data|WIERSZ|kwota)>:<n>`; WIERSZ – wszystkie komórki wiersza w ich kolejności (bez pustych na
+  końcu), jak w pliku, niezależnie od ról kolumn – zmiana mapowania nie zmienia kluczy (`rowText`; to samo pole
+  `bank.description`, więc B35 – ten sam wiersz na innym koncie – liczy go jak dla mBanku); `n` – numer wiersza w obrębie
+  dnia wśród wierszy o tej samej dacie, treści i kwocie (dwa takie same wiersze jednego dnia to dwie operacje), nie
+  pozycja w dniu – pozycja zmienia się, gdy plik zaczyna się później albo bank dopisze operację w środku dnia. Bank,
+  który zmienia komórki wiersza (operacja w toku zaksięgowana – saldo, stan, data zakończenia), daje mu inny klucz: miara
+  B5 (kwota, ±3 dni, podobna nazwa, dzień w okresie pliku) obejmuje dla CSV także operacje tego samego formatu
+  (`byMeasure`) – tylko te, których klucz pliku nie znalazł; nowy klucz dopisany do `altKeys`. Drugi przegląd R1 (1,
+  zmienia): usunięte operacje CSV tego samego formatu też – tylko te, których wiersza plik nie ma po kluczu
+  (`DeletedRow.keys`: `bank.key` i `altKeys`); wiersz usuniętej obecny po kluczu zostaje poza importem po kluczu, a nowy
+  taki sam zakup dzień później wchodzi. Drugi przegląd R1 (7): pola banku w granicach wpisu (`bankRowSchema`,
+  `transactionSchema` – opis 2000, kontrahent 300, rodzaj 200, tytuł 1000 znaków); dłuższy opis skrócony z odciskiem
+  całego tekstu na końcu (`within`) – tożsamość z pełnego wiersza, ta sama przy B35 i w panelu duplikatów. Klucze
+  `csv:` sprzed przeglądu nie były wydane (R1 bez wydania) – bez migracji. Ponowny import pliku – wszystko „już zaimportowane”,
+  plik zachodzącego okresu – wspólne dni znane, reszta nowa. Format wiersza mówi przedrostek klucza (`keyKindOf`,
+  `formatOfBanks` → 'csv'), bo klucz zachowuje każda wersja: `bank.format` zostaje 'mbank' (w 1.15.9 zamknięty enum –
+  inna wartość zrobiłaby operację nieczytelną), `bank.source` nie jest zapisywane (1.15.9 by je zgubiło przy zapisie).
+  B5 (ten sam wiersz w innym formacie: kwota, ±3 dni, podobna nazwa) działa między CSV a plikami mBanku na tym samym
+  koncie jak między listą a historią rachunku. Opis z banku operacji CSV to cały wiersz pliku („Opis z banku” w edytorze
+  operacji, słowa reguł tytułu).
+- **T462** CSV innego banku – ten sam przebieg co mBank (1.16.0, R1 – AP-43): plik czytany do `MbankFile` w formacie 'csv'
+  (bez właściciela rachunku, numeru rachunku i okresu – okres z dat wierszy), dalej `planImport` → `buildImport`:
+  reguły i nauka, przelew własny po nazwiskach z ustawień, domownicy, pożyczki, bankomat, łączenie z wpisami ręcznymi,
+  duplikaty, kopia przed importem, paczka i „Cofnij import”; kolumna salda daje telemetrię salda i potwierdzenie salda
+  jak historia rachunku (kolejność sald po dacie księgowania; notatka „Saldo z pliku banku (CSV)”). CSV nie ma operacji
+  nierozliczonych – bez propozycji usunięcia zniknionych (tylko lista operacji mBanku). Nie zmienia się: pliki innych
+  banków nie są szukane w Pobranych (F14 – tylko mBank), przypomnienia o zaległym imporcie i misja liczą konta z importem
+  mBanku. Przegląd R1 4: rozpoznanie (domownik, spłata pożyczki, przelew własny, bankomat, zwrot towaru, opłata banku)
+  czyta rodzaj operacji słowami mBanku – CSV dostaje go przy odczycie (`operationOf`): rodzaj z pliku, gdy zaczyna się
+  słowem, które import zna („Płatność kartą”, „Przelew przychodzący”, „Wypłata z bankomatu”), inaczej ze słów rodzaju,
+  kontrahenta i opisu (także angielskich: CARD_PAYMENT, TRANSFER, TOPUP, ATM, FEE, REFUND): bankomat, zwrot (wpływ),
+  opłata banku (wydatek: prowizja, odsetki, „opłata za kartę / prowadzenie”), przelew, płatność kartą; bez słowa – każdy
+  wpływ i wydatek z numerem rachunku kontrahenta to przelew (wpłata domownika, spłata, przelew własny – po nazwie),
+  wydatek bez słowa zostaje bez rodzaju (zakup – po nazwie). Kreator bez kolumny rodzaju mówi o tym i pokazuje rodzaj
+  w podglądzie. Drugi przegląd R1 (2, 8, 9): jedno rozpoznanie rodzaju – rodzaj banku zostaje tylko, gdy czyta go
+  `classify.ts` (`readsOperation`: `isAtmOperation`, `isFeeOperation`, `isReturnOperation`, `isTransferOperation` w kierunku
+  wiersza, `opKindOf` 'card'); goły „BLIK” czy „OBCIĄŻENIE” – ze słów jak bez kolumny (wpływ z „BLIK” to przelew osoby,
+  nie karta); bankomat po kierunku – wypływ to wypłata, wpływ „WPŁATA WE WPŁATOMACIE” (nie przelew na konto gotówki);
+  podgląd kreatora nazywa rodzaj tym samym (`operationKindText`). (6) Przelew własny bierze konto drugiej strony z numeru
+  rachunku kontrahenta, potem z opisu – nigdy konto pliku (opis CSV to cały wiersz, z numerem własnego rachunku).
+- **T463** Import w Web Workerze (1.16.0, R1 – AP-35, AF-30, IM.55): otwarcie pliku – dekodowanie, odczyt wierszy, wybór
+  konta, mapowanie konta i plan – w Workerze (`renderer/features/import/worker.ts`, klient `analysis.ts`); jedna czysta
+  funkcja `shared/import/analyze.ts` (`analyzeImport`) w Workerze i w oknie, dane budżetu jako `PlanSource` (zwykłe dane
+  – kopia strukturalna wiadomości, bez indeksów i funkcji). Pasek postępu: „Odczyt wierszy” 0–60 %, „Rozpoznawanie
+  operacji” 60–100 % (komunikat Workera najwyżej co 60 ms). Bez Workera – okno jak przed 1.16.0, po klatce na
+  „Wczytywanie…” (Node w testach, WebKit bez Workera, skrypt Workera nie wstał – `error`: od tej chwili okno; błąd
+  w Workerze – okno próbuje samo). Jedna analiza naraz: nowy plik, „Zamknij plik” i inny folder przerywają ją
+  (`terminate`); zmiany danych w trakcie – plan od nowa zaraz po niej (`replanIfChanged`); „Importuj” w trakcie
+  wczytywania innego pliku – odmowa z komunikatem. Przegląd R1 15 (zmienia): ponowny plan po zmianie danych (zapis,
+  zmiana z drugiego komputera, słowo kluczowe, scalenie nazw – `replanIfChanged`) idzie do Workera, gdy jest
+  (`replanInWorker`: plik bez odczytu, odpowiedź bez wierszy pliku – wracają wiersze okna), a decyzje przenosi na nowy
+  plan po jego przyjściu – także podjęte w międzyczasie (`replanImport(plan)`); jeden naraz, zmiana w trakcie – plan
+  jeszcze raz po nim; inny plik, konto albo folder albo zapis importu w międzyczasie – plan odrzucony. W oknie zostają:
+  zmiana konta pliku, „Cofnij” innego pliku i plan przed zapisem (`runImport` – synchroniczny z podpisem planu).
+  Drugi przegląd R1 (10): Worker trzyma plik swojej analizy i ostatnio wysłane operacje (`answerer` – sesja to id prośby
+  analizy); ponowny plan wysyła tylko konto, ustawienia, usunięte i zmiany operacji (`operationsDelta`: kolejność id
+  i rekordy inne niż wysłane – rekord sklepu nie zmienia się w miejscu); Worker bez tej sesji (inny plik, nowy Worker) –
+  plan w oknie. (5) Każde niepowodzenie drogi przez Workera – błąd, odpowiedź niepasująca do danych okna („plan bez
+  operacji”, „plan nie z tego pliku”) – analiza albo plan w oknie, nigdy błąd importu ani stary plan.
+  Worker jako moduł ES (`worker.format: 'es'` – electron-vite i telefon; telefon nie importuje plików, build go ma).
+- **T464** Plan przez wiadomość Workera (1.16.0, R1 – AP-35): operacje planu jadą jako odnośniki (`txRef`: id i widok –
+  druga strona przelewu w jednej operacji `sideOf`, strona przelewu sprzed 1.7.0 `legacySideOf`) i wracają z listy
+  okna, z której plan powstał (`txOfRef`, `planFromWire`) – te same obiekty co w planie liczonym w oknie, wiersze planu
+  i pliku wspólne (jedna wiadomość). **Pułapka:** widok strony poznaje się po obiekcie (`isSideView`, `realOf`) – kopia
+  z wiadomości nie byłaby widokiem i zapis wziąłby stronę drugiego konta za samą operację. Test: plan z Workera równy
+  planowi okna na liście, historii i CSV z wpisami ręcznymi, przelewami obu rodzajów i nierozliczoną zniknioną; zapis
+  `buildImport` z obu – ten sam (`tests/unit/import-worker-ap35.test.ts`).
+- **T465** Wydajność importu – próg i pomiar (1.16.0, R1 – AP-35): test 20 000 wierszy przy 20 000 operacji w budżecie –
+  cała analiza poniżej 30 s, każdy z dwóch przestojów okna przy Workerze (kopia prośby, kopia odpowiedzi – liczone
+  w całości) krótszy niż analiza w oknie (przegląd R1: suma obu pod obciążeniem pełnego zestawu bywała bliska progu); tu (komputer deweloperski, sam test) analiza w oknie ok. 630 ms, okno przy Workerze ok. 280 ms
+  (w pełnym zestawie testów 890 / 450 ms). E2E (aplikacja zbudowana, 20 000 wierszy): okno bez Workera ok. 650 ms,
+  najdłużej nie odpowiada ok. 590 ms; z Workerem ok. 900 ms (pierwszy raz ok. 1,3 s – start Workera), najdłużej nie
+  odpowiada ok. 200 ms (odbiór planu i rysowanie), pasek postępu się przesuwa. Pomiar w maszynie (IM.55) – do zrobienia.
+- **T466** Ekran importu – teksty (1.16.0, R1 – AP-43, AP-35): panel „Plik z banku” (było „Plik z mBanku”) z jednym
+  zdaniem o pliku innego banku; plik opisany „CSV innego banku · N operacji”; przy wierszach znalezionych miarą B5
+  w pliku CSV – „z innego pliku – po kwocie, dacie i nazwie” (przegląd R1 1: także wiersz tego samego banku o zmienionych
+  komórkach); kreator: pytanie „Zastąp kolumny”, zdanie o rozpoznaniu bez kolumny rodzaju operacji, rodzaj w podglądzie; okno wyboru pliku „Plik CSV z banku (z mBanku: lista operacji albo historia
+  rachunku)”; nagłówek ekranu „CSV z mBanku i innych banków”. Pasek postępu z `role="status"`, stan w `data-phase`,
+  `data-pct`; otwarty plik – `data-format`, `data-via` ('worker' / 'window').
+- **T467** Reguły importu z warunkami I / LUB (1.16.0, R1 – AP-45): reguła z trybem `conditions` ma listę warunków
+  (`conditions`, najwyżej 10) łączonych `combine` – „wszystkie (I)” albo „którykolwiek (LUB)”: kontrahent zawiera
+  (litery i cyfry nazwy jak dotychczasowe „zawiera” – `counterpartyKey`, klucze marki, nazwy i całej nazwy), tytuł zawiera
+  (całe słowa jak słowo kluczowe, ostatnie może być dłuższe – „czynsz” = „czynszu”; tylko tytuł, nie nazwa), kwota od–do
+  (bez znaku, końce włącznie, jeden z nich może nie być podany; kwota nieznana – warunek nie jest spełniony), konto
+  (konto operacji; w imporcie konto pliku – `ClassifyContext.accountId` z `planImport`). Kierunek nie jest warunkiem listy,
+  tylko polem reguły jak dotąd (wydatki / wpływy / oba) i zawsze obowiązuje razem z warunkami – „wpływy LUB …” łapałoby
+  każdy wpływ. Pierwszeństwo (`findRule`): reguła „wszystkie” z co najmniej dwoma warunkami przed każdą regułą jednego
+  dopasowania (jest węższa – jak marka do kwoty przed marką; więcej warunków – wcześniej, przy równej liczbie kolejność
+  listy); reguła z jednym warunkiem albo „którykolwiek” po wszystkich dotychczasowych (marka, marka do kwoty, „zawiera”,
+  słowa) – działa tylko tam, gdzie żadna z nich nie pasuje (jest tak szeroka jak jedno dopasowanie albo szersza), między
+  sobą w kolejności listy. Dotychczasowe reguły (marka, „zawiera”, słowo, słowo z kontrahentem, marka do kwoty) czytane
+  bez zmian – to reguły jednego warunku, z tym samym dopasowaniem i tą samą kolejnością (`findOneMatch` to kod sprzed
+  1.16.0); test `rules-ap45-golden` porównuje cały import obu fixture'ów (decyzje wierszy, operacje, reguły po imporcie,
+  audyt) z wynikiem zapisanym kodem 1.15.9. Format addytywny, bez `SCHEMA_VERSION`: pola `conditions`, `combine`, `manual`
+  opcjonalne, dotychczasowa reguła ich nie dostaje. Zgodność ze starszą wersją: polem zgodności jest tryb – wersja przed
+  1.16.0 nie zna trybu `conditions` i reguły nie stosuje (pomija nieznany tryb – ten sam `ruleIndexOf`), zamiast dopasować
+  ją po samym `match` (dla reguły kilku warunków – za szeroko); pola zachowuje (`looseObject`), edycja decyzji reguły na
+  starszej wersji zostawia warunki. Znane ograniczenie: na komputerze ze starszą wersją reguła z warunkami nie działa
+  (wiersze czekają na decyzję albo bierze je reguła marki) i jej audyt pokazuje „bez trafień”; „zapamiętaj” na starszej
+  wersji może dołożyć regułę marki, którą nowa wersja stawia za regułą „wszystkie” (dwa warunki i więcej). Warunek
+  nieznany tej wersji (nowszej wersji, zepsuty) zostaje w pliku, a reguła nie działa wcale – nigdy „do połowy”
+  (`compileRule` null, na liście „Warunek nowszej wersji aplikacji – ta wersja tej reguły nie stosuje”); zepsuta lista
+  warunków – reguła bez warunków, nieaktywna, pozostałe reguły czytane. Kwoty warunku (`conditions.min`, `.max`) są
+  kwotami historii i konfliktów (`AMOUNT_FIELDS`), pola mają polskie nazwy (`Warunki`, `Łączenie warunków`).
+  Przegląd R1 (pkt 6, 9): warunki i sposób łączenia, których ta wersja nie umie przeczytać (więcej niż 10 warunków,
+  wartość nowszej wersji, zepsute), zostają w `fi.json` bez zmian – proces główny parsuje plik przed każdym zapisem, więc
+  `.catch(undefined)` je kasował. Pola `conditions` i `combine` mają typ `unknown` (unia schematu z dowolną wartością)
+  i są czytane tylko przez `conditionsOf` / `combineOf` (null – „nieznane”: reguła nie działa); schemat warunku bez
+  `.catch` – nieczytelna lista w całości zostaje surowa, nigdy „do połowy”. Reguły z nieczytelnymi warunkami nie da się
+  zmienić w edytorze (zapisałby je od nowa) – lista mówi dlaczego, można ją usunąć. Tak samo mapowanie CSV konta
+  (`accountSchema.csvMapping`, T460): nieczytelne zostaje w pliku surowe, czytane tylko przez `readCsvMapping` (null –
+  import pyta o kolumny); typ pola bez zmian, więc kod importu CSV musi czytać przez `readCsvMapping` / `safeParse`.
+  Każde szukanie reguły z operacji podaje jej kwotę i konto – także `ruleFor` („Zapamiętaj” w edytorze operacji) i oficer
+  (`officerHint`; 0 zł – kwota niewpisana, warunek kwoty nie jest spełniony); pilnuje tego test w kodzie
+  (`rules-r1-review`: każde wywołanie `findRule` ma pięć argumentów, poza `matchRule` – sam klucz).
+- **T468** Edytor reguły z warunkami (1.16.0, R1 – AP-45): Ustawienia → Import z banku → „Reguły importu” → „+ Nowa
+  reguła z warunkami” (nad listą) i „zmień” przy regule z warunkami (`ConditionsEditor`): nazwa (pusta – z pierwszego
+  warunku z tekstem, inaczej „Reguła z warunkami”), „Dla” (wydatki / wpływy / oba kierunki), „gdy spełnione” – wszystkie
+  warunki (I) / którykolwiek warunek (LUB), warunki dodawane z listy rodzajów („+ warunek”, najwyżej 10) i usuwane („×”),
+  decyzja jak w edytorze reguły (bez rodzajów decydowanych operacja po operacji, bez „w tym za” i reszty wpłaty domownika),
+  tagi, „także dla wpisów ręcznych”. Szkic w pamięci okna (`useDraft`, AP-8) do „Zapisz” albo „Anuluj”. Odmowy przy polu
+  i przy „Zapisz” (AP-15): bez warunku, kontrahent bez liter i cyfr, tytuł bez słowa, kwota bez obu końców, konto spoza
+  listy, warunek nowszej wersji, wydatek bez kategorii (i bez domownika / kilku osób); „od” po „do” – zamiana ze słowem
+  (`orderRange`). Reguła z edytora jest Twoja (`learned` false), nowa na końcu listy; zapis z „Cofnij” – nowa usuwana,
+  zmieniona wraca, tylko gdy od tego czasu się nie zmieniła (T418). Dotychczasowe reguły edytuje dotychczasowy edytor
+  (dopasowanie się nie zmienia – zamiana reguły marki na regułę z warunkami zmieniłaby, co łapie); na liście reguła
+  z warunkami ma je opisane słowami („kontrahent zawiera „bolt” i kwota do 10,00 zł”), wyszukiwanie obejmuje ten opis.
+  Przegląd R1 (pkt 13, AP-15): w folderze tylko do odczytu (także gdy zniknie przy otwartym edytorze) wyłączone
+  przyciski mówią obok dlaczego – raz na listę reguł („+ Nowa reguła z warunkami”, „zmień”, „usuń”), przy „Zapisz”
+  edytora i raz na listę słów („też ręczne”); powód folderu (`status.readOnlyReason`) albo „trwa otwieranie innego
+  folderu” (`useLockedReason`).
+  Przegląd R1 2 (pkt 3): „tylko usunięcie” dotyczy reguły z warunkami z czymkolwiek nieczytelnym (`unreadableRule`:
+  warunki, warunek nowszej wersji, `combine`, rodzaj, kierunek) – „zmień” wyłączony z powodem, a każdy zapis reguły odmawia
+  ze słowem (`LOCKED_RULE_TEXT`): „Zapisz” edytora (dawniej `combine` nowszej wersji stawało się „all”), zmiana decyzji
+  (`editRule`), „Zmień na spłatę” (takiej reguły przegląd już nie podsuwa) i „też ręczne”. Uczenie z importu zmienia tylko
+  regułę, która zdecydowała grupę, a nieczytelnej import nie stosuje; „Zastosuj do historii” zapisuje operacje, nie regułę;
+  „Cofnij” przywraca regułę w całości.
+- **T469** Import, audyt i „Zastosuj do historii” z regułami z warunkami (1.16.0, R1 – AP-45; rozszerza T169, T325,
+  T326, T418): import przekazuje regułom konto pliku i kwotę wiersza (także zwrot towaru szukający reguły zakupu); powód
+  „Twoja reguła „…””. Reguła z warunkiem tytułu, który jest spełniony, decyduje „o tytule” (`decidedByTitle`, jak słowo
+  z tytułu): nie ustępuje pożyczce, domownikowi ani XTB rozpoznanym po nazwie (T325) i nie uczy reguły kontrahenta;
+  reguła bez niego ustępuje jak każda inna. Decyzja grupy wierszy jednej reguły z warunkami z „zapamiętaj” zmienia tę
+  regułę (decyzja, liczba użyć – warunki zostają), nie dokłada reguły marki, która stałaby za nią (jak reguła marki do
+  kwoty, F22). Propozycje słów (uczenie, D78) liczą wiersz reguły jednego warunku albo „którykolwiek” jako taki, który
+  słowo by przejęło (stoi po słowach), i czytają konto pliku. Audyt reguł (`feedAudit`) szuka reguły z kontem i kwotą
+  operacji: trafienia, „inaczej” z „Zastosuj do historii” i „Cofnij” (T418), „do poprawy” przy wpływie od osoby
+  z pożyczką (słowo z tytułu – nie, T326) i „bez trafień” działają dla reguł z warunkami bez zmian w ich kodzie.
+- **T470** Reguły dla wpisów ręcznych (1.16.0, R1 – AP-45): reguła z polem `manual` („także dla wpisów ręcznych” –
+  w edytorze reguły z warunkami, w edytorze reguły marki i przełącznik „też ręczne” na liście słów kluczowych; na liście
+  reguł znak „· też ręczne”) podpowiada w szybkim wpisie i w edytorze operacji wpisanej ręcznie (bez danych z banku)
+  decyzję wydatku po wpisaniu kontrahenta albo tytułu (w szybkim wpisie – notatki): kategorię i kto płaci (ja, domownik
+  – z prezentem, kilka osób), przyciskiem „z reguły „…”: kategoria · finansuje: …” – dopiero kliknięcie ją przyjmuje,
+  nic nie zapisuje się samo. Reguła szukana tak jak w imporcie (`findRule` na samych regułach `manual`, kwota i konto
+  wpisu – warunek kwoty nie jest spełniony, dopóki kwoty nie ma), tylko reguła wydatku; kategoria zarchiwizowana –
+  podpowiedź samego „kto płaci”, domownik usunięty – samej kategorii; nic do podpowiedzenia, albo wpis ma już tę
+  decyzję – podpowiedzi nie ma (`hintChanges`). Gdy reguła podpowiada, oficer (F8) w szybkim wpisie nie wpisuje swojej
+  kategorii sam, a jego przycisk znika – jedna podpowiedź naraz, ta z reguły użytkownika. Paragon podzielony ręcznie –
+  bez podpowiedzi. Starsza wersja pole `manual` pomija (reguła działa tam w imporcie jak dotąd).
+  Przegląd R1 (pkt 12): decyzja operacji porównywana z podpowiedzią przez `hintedOf` – zakup domownika zapisany
+  z `memberId` null to zakup pierwszego domownika („Dom”), jak reguła z `memberId` null; ta sama decyzja nie jest zmianą
+  (podpowiedź się nie pokazuje i nie zasłania oficera).
+- **T471** Test „przed i po” dla dotychczasowych reguł (1.16.0, R1 – AP-45): `tests/fixtures/rules/ap45-before.json` –
+  wynik importu obu fixture'ów mBanku z regułami każdego dotychczasowego rodzaju (marka, marka do kwoty, „zawiera”,
+  słowo, słowo z kontrahentem, oba kierunki, zwrot towaru, domownik, pożyczka z Radaru, XTB, kategoria zarchiwizowana,
+  wspólny zakup, część pożyczki, tagi) zapisany kodem 1.15.9 przed zmianą `findRule`; `rules-ap45-golden` porównuje
+  z nim decyzje wierszy, operacje z importu, reguły po imporcie i audyt. Plik zapisuje się ponownie
+  (`FI_GOLDEN_WRITE=1`) tylko kodem sprzed zmiany dopasowania reguł – nigdy po to, by test przeszedł.
+- **T472** Energia dnia w kalendarzu Radaru (1.16.0, R1 – AP-42): dni minione bieżącego miesiąca z silnika
+  (`DailyState.days`, wynik – nic nie jest zapisywane): przydział i wydane z puli dziennej tak, jak ocena dnia w grze liczy
+  dzień na jego koniec (`rateDay`: pokrycia zrobione przed tym dniem – D73, łupy zatrzymane w kopertach od dnia decyzji,
+  zwroty kategorii netto z jej zakupami dnia, nigdy poniżej zera – T370); dziś – liczby Mostku (`daily`: przydział,
+  wydane dziś, energia dziś z ograniczeniem energii miesiąca – T371). Plan miesiąca zmieniony później liczy się w dniach
+  minionych od 1. dnia (jak w ocenie dnia liczonej dziś); dzień zamrożony w Dowództwie przed taką zmianą może mieć inny
+  przydział – jego ocena zostaje. Test: dzień po dniu równe silnikowi na koniec dnia z `coversBefore` (jak `rateDay`).
+- **T473** Prognoza energii dni naprzód (1.16.0, R1 – AP-42): każdy dalszy dzień bieżącego miesiąca – przydział, jaki
+  silnik policzy jutro, gdy dziś nic więcej nie wydasz (`dayAhead`: pula zostawiona ÷ dni od jutra; zwrot ponad
+  dzisiejsze zakupy wchodzi od jutra), nie więcej niż energia miesiąca, która została; ta sama kwota w każdym dniu („≈”).
+  Dni następnych miesięcy – bez energii („przydział tego miesiąca policzy jego plan po pensji 1. dnia”), bez nowego
+  liczenia planu; ostatni dzień miesiąca – bez prognozy.
+- **T474** Kalendarz-siatka na Radarze (1.16.0, R1 – AP-42): przełącznik „lista / kalendarz” w nagłówku panelu „Na
+  radarze” (domyślnie lista; wybór i miesiąc w szkicu okna – zostają przy przejściu do innego ekranu, do zmiany folderu
+  albo restartu). Siatka z jednej listy pozycji Radaru (`calendarMonth` z `useFuture().items` – te same obiekty, ten sam
+  porządek), tydzień od poniedziałku; miesiące od bieżącego do miesiąca końca okna 90 dni (dalej / wcześniej – przycisk
+  wyłączony, obok „Radar do dd.mm.rrrr” – AP-15), dni po oknie przygaszone. Pozycje dat sprzed miesiąca (niezapłacone terminy
+  wcześniejszych miesięcy – D99 pkt 3) nad siatką bieżącego miesiąca. Komórka: dzień (dziś w akcencie z obwódką),
+  przydział, wydane (ponad przydział – akcent, nie czerwień: to nie kwota na minus), suma płatności „−” i wpływów „+”
+  (zieleń), „•” – terminy bez kwoty, „!” – po terminie; dymek z nazwami i kwotami. Klik dnia – pod siatką dzień tygodnia,
+  data, energia słowami, pozycje dnia (rodzaj, nazwa, notatka, kwota) i „operacje tego dnia ›” – Operacje z okresem tego
+  dnia jako widok (zapisany filtr zostaje – B88); bez klika – dziś. Ukryte kwoty (Ctrl+$) – maska w komórkach i w dniu
+  (`plnText`). Telefon: ta sama siatka (7 kolumn mieści się w szerokości iPhone'a), w komórce dzień, przydział i znaczniki
+  płatności / wpływów, reszta pod siatką.
+- **T475** Opis formatu folderu (1.16.0, R1 – AP-47, bez AI – D74): `docs/format-folderu.md` generowany ze schematów
+  (`scripts/format-folderu.ts` – `SCHEMAS`, typy po kontrolach wspólnych typów z `schema/common.ts`: ULID, data, miesiąc,
+  godzina, grosze; obecność – wymagane / opcjonalne / domyślnie …) i polskich słów pól (`scripts/format-folderu-pola.ts`,
+  klucz `rodzaj:ścieżka`); plik to migawka Vitest (`toMatchFileSnapshot`), `npm run docs:format` zapisuje go od nowa.
+  `tests/unit/format-folderu.test.ts` pada na pole schematu bez słów, na słowa pola, którego nie ma, i na plik
+  nieaktualny. Części wspólne (wiersz z banku, wspólny zakup, ustawienia importu przed / po) opisane raz, operacja
+  w paczce importu – odsyłacz do `transactions/`; mapy z `lenientRecord` mają typ „dowolna wartość” (wartość sprawdza
+  transformacja) – jej postać w słowach. Przykładowy skrypt `docs/przyklady/odczyt.mjs` (Node 18+, bez zależności, tylko
+  odczyt): wydatki (`kind` = `expense`) miesiąca po kategoriach głównych, linie paragonu osobno, bez linii finansowanych
+  przez domowników, tylko pliki o kanonicznej nazwie (kopie konfliktów i pliki tymczasowe pominięte); test na folderze
+  zapisanym schematami aplikacji (`seedFolder`) z kopią konfliktu, plikiem tymczasowym i historią – sumy, wiersz
+  poleceń i folder bez zmian po odczycie.
+  Przegląd R1 (pkt 8): skrypt liczy części jak silnik (`partsOf`) – część kwoty, której linie paragonu nie pokrywają
+  (`amount` minus suma linii), idzie pod `categoryId` operacji z jej finansowaniem; opis pola mówi to samo zamiast
+  „linie sumują się do `amount`”. Test porównuje sumy skryptu z częściami silnika na tych samych rekordach.
+- **T476** Link do opisu formatu (1.16.0, R1 – AP-47): Ustawienia → Folder i kopie, panel „Bieżący folder danych” –
+  zdanie o zasadzie „tylko do odczytu, nie zapisuj, gdy aplikacja działa” i „Opis formatu folderu i przykładowy skrypt ›”,
+  otwiera w przeglądarce `FOLDER_FORMAT_PAGE` (plik w publicznym repozytorium – D61; `shared/update.ts`). Opisu nie ma
+  w aplikacji (bez sieci link się nie otworzy) – w Ustawieniach, nie w F1, bo dotyczy folderu.

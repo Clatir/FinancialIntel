@@ -2,9 +2,25 @@ import { withMerged, type BrandAliases, type BrandName } from '@shared/import/al
 import { isGenericWord, normalizeKeyword } from '@shared/import/brands'
 import { findRule, ruleTargetOf, upsertRule, upsertRules, type LearnedRule } from '@shared/import/classify'
 import { isDuplicatePairKey } from '@shared/import/duplicates'
-import { cleanBankName } from '@shared/import/names'
+import { cleanBankName, counterpartyKey } from '@shared/import/names'
+import { compileRule, unreadableRule } from '@shared/import/conditions'
 import { newId } from '@shared/ids'
-import { HOUSE_MEMBER_ID, importRuleSchema, inflowOf, TX_KIND_LABEL, type BrandAlias, type HouseholdMember, type ImportRule, type Share, type Transaction, type TxKind } from '@shared/schema'
+import {
+  combineOf,
+  conditionsOf,
+  HOUSE_MEMBER_ID,
+  importRuleSchema,
+  inflowOf,
+  MAX_RULE_CONDITIONS,
+  TX_KIND_LABEL,
+  type BrandAlias,
+  type HouseholdMember,
+  type ImportRule,
+  type RuleCondition,
+  type Share,
+  type Transaction,
+  type TxKind
+} from '@shared/schema'
 import { ruleDecisionOf, type Choice } from '@shared/import/reconcile'
 import { sameContentAs } from '@shared/merge'
 import { memberName } from '@shared/calc/household'
@@ -35,7 +51,8 @@ export const bankNameOf = (t: Pick<Transaction, 'bank' | 'counterparty'>): strin
 export function ruleFor(t: Transaction): ImportRule | null {
   const rules = useData.getState().fi?.settings.import.rules ?? []
   const { target } = targetOf(t)
-  return target.key ? findRule(rules, target, t.amount < 0 ? 'out' : 'in', t.amount) : null
+  // Its amount and account (przegląd R1 6): a rule's conditions of them – as the import read its row.
+  return target.key ? findRule(rules, target, t.amount < 0 ? 'out' : 'in', t.amount, t.accountId) : null
 }
 
 /**
@@ -184,10 +201,12 @@ export const choiceOfRule = (r: ImportRule, members: ReadonlyArray<Pick<Househol
  * A rule changed in the settings (F22): its direction, decision and – a rule up to an amount – its limit; the user's
  * own from now on (`learned` false), with „Cofnij”.
  */
-export function editRule(id: string, patch: { direction: 'in' | 'out' | null; choice: Choice; maxAmount?: number | null; tags?: readonly string[] }): void {
+export function editRule(id: string, patch: { direction: 'in' | 'out' | null; choice: Choice; maxAmount?: number | null; tags?: readonly string[]; manual?: boolean }): void {
   if (!canWrite()) return
   const rule = useData.getState().fi?.settings.import.rules.find((r) => r.id === id)
   if (!rule) return
+  // Anything of it this version cannot read (przegląd R1 2.3): never written its own way – said.
+  if (unreadableRule(rule)) return void toast(LOCKED_RULE_TEXT, 'info', 6000)
   const next: ImportRule = {
     ...rule,
     direction: patch.direction,
@@ -195,6 +214,8 @@ export function editRule(id: string, patch: { direction: 'in' | 'out' | null; ch
     ...(rule.mode === 'amount' && patch.maxAmount ? { maxAmount: patch.maxAmount } : {}),
     // Its tags (F17 – „Netia → #ulga-internet”): the operations it makes carry them; none – the field goes.
     ...(patch.tags ? { tags: patch.tags.length ? [...patch.tags] : undefined } : {}),
+    // Also for the entries typed by hand (AP-45, T470); off – the field goes (as before 1.16.0).
+    ...(patch.manual !== undefined ? { manual: patch.manual || undefined } : {}),
     learned: false,
     updatedAt: new Date().toISOString()
   }
@@ -217,6 +238,142 @@ function ruleBack(was: ImportRule, set: ImportRule): void {
 export function repayingRule(rule: ImportRule): void {
   const direction = rule.direction === 'in' ? 'in' : rule.direction === 'out' ? 'out' : null
   editRule(rule.id, { direction, choice: { ...choiceOfRule(rule), inflowKind: 'repay' }, maxAmount: rule.maxAmount, tags: rule.tags })
+}
+
+// ------------------------------------------------------------------ rules of conditions (1.16.0, AP-45)
+
+/** Why a rule of conditions with anything this version cannot read is not changed here (`unreadableRule`, przegląd R1 2.3). */
+export const LOCKED_RULE_TEXT = 'Tę regułę zapisała nowsza wersja aplikacji (warunki, sposób łączenia, rodzaj albo kierunek, których ta wersja nie zna) – ta wersja jej nie stosuje ani nie zmienia; możesz ją usunąć.'
+
+/** A rule of conditions as its editor holds it (Ustawienia → Import z banku → „Nowa reguła z warunkami”, T467). */
+export interface ConditionsDraft {
+  /** The rule's name in the list; empty – made of its first condition. */
+  label: string
+  /** Wydatki / wpływy / oba kierunki – always with the conditions (the rule's `direction`). */
+  direction: 'in' | 'out' | null
+  conditions: RuleCondition[]
+  combine: 'all' | 'any'
+  choice: Choice
+  /** Also for the entries typed by hand (T470). */
+  manual: boolean
+  tags: string[]
+}
+
+/** A new condition of a field, empty. */
+export const blankCondition = (field: RuleCondition['field']): RuleCondition => (field === 'amount' ? { field, min: null, max: null } : { field, value: '' })
+
+/** What a condition cannot be saved for (said at it – AP-15), null = it can. */
+export function conditionRefusal(c: RuleCondition, accounts: ReadonlyArray<{ id: string }> = useData.getState().fi?.settings.accounts ?? []): string | null {
+  switch (c.field) {
+    case 'counterparty':
+      return counterpartyKey(c.value ?? '') ? null : 'Wpisz fragment nazwy kontrahenta – litery albo cyfry.'
+    case 'title':
+      return normalizeKeyword(c.value ?? '').replace(/[^a-z0-9?]/g, '') ? null : 'Wpisz słowo z tytułu.'
+    case 'amount':
+      return c.min == null && c.max == null ? 'Podaj kwotę „od”, „do” albo obie.' : null
+    case 'account':
+      return c.value && accounts.some((a) => a.id === c.value) ? null : 'Wybierz konto.'
+    default:
+      return 'Warunek nowszej wersji aplikacji – usuń go albo zaktualizuj aplikację.'
+  }
+}
+
+/** The draft's first refusal (the editor's „Zapisz” says it), null = it can be saved. */
+export function conditionsRefusal(d: ConditionsDraft): string | null {
+  if (!d.conditions.length) return 'Dodaj co najmniej jeden warunek.'
+  if (d.conditions.length > MAX_RULE_CONDITIONS) return `Najwyżej ${MAX_RULE_CONDITIONS} warunków.`
+  for (const c of d.conditions) {
+    const why = conditionRefusal(c)
+    if (why) return why
+  }
+  if (d.choice.kind === 'expense' && !d.choice.categoryId && !d.choice.refundable && !d.choice.share) return 'Wybierz kategorię.'
+  return null
+}
+
+/** The rule's name: the user's, else its first condition with a text (a counterparty, a title). */
+function labelOf(d: ConditionsDraft): string {
+  const own = d.label.trim().replace(/\s+/g, ' ')
+  if (own) return own.slice(0, 200)
+  const text = d.conditions.find((c) => (c.field === 'counterparty' || c.field === 'title') && c.value?.trim())?.value?.trim()
+  return (text ?? 'Reguła z warunkami').slice(0, 200)
+}
+
+/**
+ * A rule of conditions saved (T467): a new one at the end of the list, a changed one in its place – the user's own
+ * (`learned` false), with „Cofnij” (a new one is removed, a changed one back – only while still as saved, T418). The
+ * mode 'conditions' keeps it from a version before 1.16.0 (`importRuleSchema.conditions`). Returns a refusal, or null.
+ */
+export function saveConditionsRule(id: string | null, d: ConditionsDraft): string | null {
+  const why = conditionsRefusal(d)
+  if (why) return why
+  if (!canWrite()) return useData.getState().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE
+  const rules = useData.getState().fi?.settings.import.rules ?? []
+  const was = id ? rules.find((r) => r.id === id) : undefined
+  if (id && !was) return 'Tej reguły już nie ma – usunięto ją w międzyczasie.'
+  // Its conditions, way of joining, kind or direction of a newer version (przegląd R1 2.3): the draft would write them over.
+  if (was && unreadableRule(was)) return LOCKED_RULE_TEXT
+  const label = labelOf(d)
+  const rule = importRuleSchema.parse({
+    ...(was ?? {}),
+    ...ruleDecisionOf({ ...d.choice, shares: undefined }),
+    id: was?.id ?? newId(),
+    match: label,
+    mode: 'conditions',
+    maxAmount: undefined,
+    counterparty: undefined,
+    conditions: d.conditions.map((c) => (c.field === 'amount' ? { field: c.field, min: c.min ?? null, max: c.max ?? null } : { field: c.field, value: (c.value ?? '').trim() })),
+    combine: d.combine,
+    direction: d.direction,
+    label,
+    manual: d.manual || undefined,
+    tags: d.tags.length ? [...d.tags] : undefined,
+    learned: false,
+    hits: was?.hits ?? 0,
+    updatedAt: new Date().toISOString()
+  })
+  // A rule this version could not apply is never written (the refusals above say why first).
+  if (!compileRule(rule)) return 'Tej reguły nie da się zastosować – sprawdź warunki.'
+  if (was) {
+    setRules((list) => list.map((r) => (r.id === rule.id ? rule : r)))
+    toast(`Reguła „${label}” zmieniona.`, 'success', 6000, { label: 'Cofnij', run: () => ruleBack(was, rule) })
+  } else {
+    setRules((list) => [...list, rule])
+    toast(`Nowa reguła: „${label}”.`, 'success', 6000, {
+      label: 'Cofnij',
+      run: () => {
+        // Deleted only while as it was added (an edit since stays – T418).
+        const now = useData.getState().fi?.settings.import.rules.find((r) => r.id === rule.id)
+        if (!now) return
+        if (!sameContentAs(now, rule)) return toast(`Reguła „${label}” zmieniła się od dodania – zostaje, jak jest.`, 'info', 6000)
+        deleteRule(rule.id)
+      }
+    })
+  }
+  return null
+}
+
+/** A rule's „także dla wpisów ręcznych” switched (the keywords' list, T470) – a switch, undone by the same switch. */
+export function setRuleManual(id: string, on: boolean): void {
+  if (!canWrite()) return
+  const rule = useData.getState().fi?.settings.import.rules.find((r) => r.id === id)
+  if (rule && unreadableRule(rule)) return void toast(LOCKED_RULE_TEXT, 'info', 6000)
+  setRules((rules) => rules.map((r) => (r.id === id ? { ...r, manual: on || undefined, learned: false, updatedAt: new Date().toISOString() } : r)))
+}
+
+/** A rule's conditions in words, for its list („kontrahent zawiera „orlen” i kwota do 40,00 zł”). */
+export function conditionsText(
+  r: Pick<ImportRule, 'conditions' | 'combine'>,
+  accountName: (id: string) => string = (id) => useData.getState().fi?.settings.accounts.find((a) => a.id === id)?.name ?? 'konto spoza listy'
+): string {
+  const one = (c: RuleCondition): string => {
+    if (c.field === 'counterparty') return `kontrahent zawiera „${c.value ?? ''}”`
+    if (c.field === 'title') return `tytuł zawiera „${c.value ?? ''}”`
+    if (c.field === 'account') return `konto ${c.value ? accountName(c.value) : '—'}`
+    if (c.field === 'amount')
+      return c.min != null && c.max != null ? `kwota ${plnText(c.min)}–${plnText(c.max)} zł` : c.min != null ? `kwota od ${plnText(c.min)} zł` : `kwota do ${plnText(c.max ?? 0)} zł`
+    return 'warunek nowszej wersji'
+  }
+  return (conditionsOf(r) ?? []).map(one).join(combineOf(r) === 'any' ? ' lub ' : ' i ')
 }
 
 /** A rule of an advance for the future kept so (AP-4): never to review again – with „Cofnij”. */

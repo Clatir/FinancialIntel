@@ -54,6 +54,8 @@ export default defineConfig(({ mode }) => ({
     'process.env.FI_VERIFY_VIEWS': 'undefined'
   },
   plugins: [react(), tailwindcss(), cspPlugin(mode)],
+  // The import's Web Worker (AP-35) as on the computers: an ES module (the phone imports no files – it is built all the same).
+  worker: { format: 'es' },
   build: {
     outDir: resolve(root, 'out/mobile'),
     emptyOutDir: true,

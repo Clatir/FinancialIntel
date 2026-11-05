@@ -7,9 +7,9 @@ import { HOUSE_MEMBER_ID, type ImportRule, type Loan, type Transaction } from '.
 import { shareOf, withShare } from '../calc/share'
 import { deepEqual } from '../merge'
 import type { BrandAliases } from './aliases'
-import { keywordMatches } from './brands'
-import { findRule, loanFor, PER_OPERATION_KINDS, ruleGivesWay } from './classify'
+import { decidedByTitle, findRule, loanFor, PER_OPERATION_KINDS, ruleGivesWay } from './classify'
 import { officerTarget } from './officer'
+import { unreadableRule } from './conditions'
 
 /** A loan as the audit reads it (the Radar's given loans – AP-6). */
 export type AuditLoan = Pick<Loan, 'id' | 'name' | 'direction' | 'counterparty' | 'date' | 'closedAt'>
@@ -117,7 +117,7 @@ export function feedAudit(run: AuditRun, transactions: readonly Transaction[]): 
     if (!t.bank || !t.amount) continue
     const direction = t.amount < 0 ? 'out' : 'in'
     const { target, brand } = officerTarget(t, run.aliases)
-    const rule = findRule(run.rules, target, direction, t.amount)
+    const rule = findRule(run.rules, target, direction, t.amount, t.accountId)
     // Lines of a receipt split by hand: no one category to compare.
     const split = t.splits.length > 0 && !shareOf(t)
     if (rule) {
@@ -127,7 +127,7 @@ export function feedAudit(run: AuditRun, transactions: readonly Transaction[]): 
       // rule's decision) and `ruleGivesWay` (a keyword of the title stays the rule's, T325).
       if (direction === 'in' && rule.kind === t.kind && run.loans.length) {
         const loan = loanFor(t.bank.counterparty || t.counterparty, run.loans, t.date)
-        const byTitle = rule.mode === 'keyword' && !keywordMatches(target.name, rule.match)
+        const byTitle = decidedByTitle(rule, target, direction, t.amount, t.accountId)
         if (loan && ruleGivesWay(rule, { kind: 'loan', loanId: loan.id }, byTitle)) push(run.borrower, rule.id, { t, loan })
       }
       if (!(PER_OPERATION_KINDS as readonly string[]).includes(rule.kind) && !split) {
@@ -157,7 +157,8 @@ export function finishAudit(run: AuditRun): RuleAudit {
   const idle = run.rules.filter((r) => !run.hits.has(r.id) && !(PER_OPERATION_KINDS as readonly string[]).includes(r.kind))
   for (const list of run.borrower.values()) list.sort((a, b) => a.t.date.localeCompare(b.t.date) || a.t.id.localeCompare(b.t.id))
   // A keyword (the operation's „Zapamiętaj” – its own „zaliczka” beside „spłata zakupów”, 1.15.3) was chosen so.
-  const review = run.rules.filter((r) => advanceRule(r) && r.mode !== 'keyword' && !run.kept(advanceRuleKey(r.id)))
+  // A rule this version cannot read whole (przegląd R1 2.3) – never offered to change („Zmień na spłatę” would write it).
+  const review = run.rules.filter((r) => advanceRule(r) && r.mode !== 'keyword' && !unreadableRule(r) && !run.kept(advanceRuleKey(r.id)))
   return { hits: run.hits, differ: run.differ, otherKind: run.otherKind, borrower: run.borrower, mixed, idle, review }
 }
 

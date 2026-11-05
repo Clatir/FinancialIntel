@@ -38,9 +38,9 @@ test('AP-34: klawiatura – fokus w palecie i oknie, Ctrl+N nie zeruje wyszukiwa
     await page.keyboard.press('Control+k')
     await expect(page.getByTestId('palette-input')).toBeFocused()
     for (let i = 0; i < 3; i++) await page.keyboard.press('Tab')
-    expect(await focusIn(page, 'palette')).toBe(true)
+    await expect.poll(() => focusIn(page, 'palette')).toBe(true)
     await page.keyboard.press('Shift+Tab')
-    expect(await focusIn(page, 'palette')).toBe(true)
+    await expect.poll(() => focusIn(page, 'palette')).toBe(true)
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('palette')).toHaveCount(0)
     await expect(search).toBeFocused()
@@ -48,10 +48,10 @@ test('AP-34: klawiatura – fokus w palecie i oknie, Ctrl+N nie zeruje wyszukiwa
     // A dialog takes the focus; Tab goes round its own buttons; Esc – back where it was.
     await page.keyboard.press('F1')
     await expect(page.getByTestId('shortcuts')).toBeVisible()
-    expect(await focusIn(page, 'shortcuts')).toBe(true)
+    await expect.poll(() => focusIn(page, 'shortcuts')).toBe(true)
     for (let i = 0; i < 4; i++) {
       await page.keyboard.press('Tab')
-      expect(await focusIn(page, 'shortcuts')).toBe(true)
+      await expect.poll(() => focusIn(page, 'shortcuts')).toBe(true)
     }
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('shortcuts')).toHaveCount(0)

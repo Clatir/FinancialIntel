@@ -25,7 +25,7 @@ import { transactionSchema, type BankRow, type Share, type Split, type Transacti
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isAtmOperation, isCashExpenseRule, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
-import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
+import { accountNumberOf, keyKindOf, keyKindOfFile, keyOccurrence, keyOnAccount, otherBankAccount, PROGRESS_EVERY, rowIdentity, rowKeys, type MbankFile, type MbankRow, type Progress } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
 /** Days around the bank's date a manual entry may be (spec: ±3). */
@@ -67,6 +67,26 @@ function legacySideOf(t: Transaction, accountId: string): Transaction {
 
 /** The operation a plan's row is about (`sideOf` gives back its operation). */
 export const realOf = (t: Transaction): Transaction => realOfView.get(t) ?? t
+
+/**
+ * A plan's operation as it crosses to another thread (AP-35, T464): the record's id and the view of it the plan took –
+ * its other side (`sideOf`) or a one-sided transfer's side (`legacySideOf`, on `account`). A view is known by its object
+ * only (`isSideView`): a copy made by the message would be the other account's side taken for the operation itself.
+ */
+export type TxRef = { id: string; view?: 'side' | 'legacy'; account?: string }
+
+export function txRef(t: Transaction): TxRef {
+  const real = realOfView.get(t)
+  if (!real) return { id: t.id }
+  return sideViews.get(real) === t ? { id: real.id, view: 'side' } : { id: real.id, view: 'legacy', account: t.accountId }
+}
+
+/** The plan's operation of a reference (`txRef`) among the budget's (`byId`): the same object a plan here would take; null – none. */
+export function txOfRef(ref: TxRef, byId: ReadonlyMap<string, Transaction>): Transaction | null {
+  const t = byId.get(ref.id)
+  if (!t) return null
+  return ref.view === 'side' ? sideOf(t) : ref.view === 'legacy' ? legacySideOf(t, ref.account ?? '') : t
+}
 
 /** Is a plan's operation the other side of a transfer in one operation (F10)? */
 export const isSideView = (t: Transaction): boolean => realOfView.has(t)
@@ -113,8 +133,8 @@ export function looseMatch(own: { amount: number; date: string; counterparty: st
 export const looseSure = (m: Pick<LooseMatch, 'similar' | 'strong' | 'days'>, operation: string): boolean =>
   (m.similar && m.strong) || (m.days <= 1 && /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC)/.test(operation))
 
-/** What a bank's row tells of the file it came from (`formatOfBanks`). */
-export type FormatBank = Pick<BankRow, 'source' | 'operation' | 'description' | 'importedAt'>
+/** What a bank's row tells of the file it came from (`formatOfBanks`); `key` – another bank's CSV (`csv:`, T461). */
+export type FormatBank = Pick<BankRow, 'source' | 'operation' | 'description' | 'importedAt'> & { key?: string }
 
 /**
  * The file format of bank's rows (B5): a row's own (`bank.source`, 1.4.2), else the format of the import it came with –
@@ -123,13 +143,15 @@ export type FormatBank = Pick<BankRow, 'source' | 'operation' | 'description' | 
  */
 export function formatOfBanks(banks: Iterable<FormatBank | null | undefined>): (bank: FormatBank | null | undefined) => MbankFile['format'] {
   const votes = new Map<string, number>()
+  const csv = (b: FormatBank) => !!b.key && keyKindOf(b.key) === 'csv'
   for (const b of banks) {
-    if (!b || b.source) continue
+    if (!b || b.source || csv(b)) continue
     const op = b.operation.trim().toUpperCase()
     const history = !!op && b.description.trim().toUpperCase().startsWith(op)
     votes.set(b.importedAt, (votes.get(b.importedAt) ?? 0) + (history ? 1 : -1))
   }
-  return (b) => b?.source ?? ((votes.get(b?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')
+  // Another bank's CSV (AP-43) by its row's key – written by every version, `source` of it is none (T461).
+  return (b) => (b && csv(b) ? 'csv' : (b?.source ?? ((votes.get(b?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')))
 }
 
 /** The file format of each bank's operation (B5, `formatOfBanks`). */
@@ -137,6 +159,16 @@ export function formatsOf(txs: readonly Transaction[]): (t: Transaction) => Mban
   const of = formatOfBanks(txs.map((t) => t.bank))
   return (t) => of(t.bank)
 }
+
+/**
+ * The bank's operations a file's rows are matched to by the B5 measure (the same row in other words – the amount, ±3
+ * days, a similar name) when no key finds them: of mBank's other format; of another bank's CSV any – its own too (T461,
+ * przegląd R1 1): a bank that rewrote a row's cells (a pending one booked – its balance, its state) gives it another
+ * key, the measure finds it still – never a second operation. A deleted one of the CSV's own format only when the file
+ * has not its row by its key (`DeletedRow.keys`): by the measure a new purchase like it (the same shop and amount a day
+ * later) would stay out with it.
+ */
+export const byMeasure = (operation: MbankFile['format'], file: MbankFile['format']): boolean => operation !== file || file === 'csv'
 
 /** The days a file covers: its period, else its rows' first and last day. */
 export function coverageOf(file: Pick<MbankFile, 'period' | 'rows'>): (date: string) => boolean {
@@ -418,13 +450,14 @@ function budgetedOf(existing: readonly Transaction[], accountId: string): Budget
   return out
 }
 
-/** The keys of a file's rows on an account (`rowKeys`), once per file and account (W18). */
+/** The keys of a file's rows on an account (`rowKeys` – of mBank's or another bank's CSV), once per file and account (W18). */
 const keysMemo = new WeakMap<readonly MbankRow[], Map<string, string[]>>()
-function keysOf(rows: readonly MbankRow[], accountId: string): string[] {
+function keysOf(rows: readonly MbankRow[], accountId: string, format: MbankFile['format']): string[] {
   let byAccount = keysMemo.get(rows)
   if (!byAccount) keysMemo.set(rows, (byAccount = new Map()))
-  let keys = byAccount.get(accountId)
-  if (!keys) byAccount.set(accountId, (keys = rowKeys(rows, accountId)))
+  const kind = keyKindOfFile(format)
+  let keys = byAccount.get(`${kind}|${accountId}`)
+  if (!keys) byAccount.set(`${kind}|${accountId}`, (keys = rowKeys(rows, accountId, kind)))
   return keys
 }
 
@@ -442,11 +475,16 @@ export interface DeletedRow {
   deletedAt: string
   /** A booked one: the format of the file it came from (none = a pending one). */
   format?: MbankFile['format']
+  /**
+   * Its row's keys (`bank.key`, `altKeys`): a file holding one of them has its row by the key – another bank's CSV
+   * matches by the measure only the deleted ones it does not (drugi przegląd R1, 1).
+   */
+  keys?: readonly string[]
 }
 
-/** The key a bank's operation has on an account (B35): its date, the bank's description and amount, its occurrence. */
+/** The key a bank's operation has on an account (B35): its date, the bank's description and amount, its occurrence – of its kind (T461). */
 const keyOnFor = (account: string, t: Transaction): string =>
-  keyOnAccount(account, rowIdentity({ date: t.date, description: t.bank!.description, amount: t.amount }), keyOccurrence(t.bank!.key))
+  keyOnAccount(account, rowIdentity({ date: t.date, description: t.bank!.description, amount: t.amount }), keyOccurrence(t.bank!.key), keyKindOf(t.bank!.key))
 
 /** Every account's operations' formats, once per list of operations (AF-9: the other format on another account). */
 const allFormatsMemo = new WeakMap<readonly Transaction[], (t: Transaction) => MbankFile['format']>()
@@ -475,9 +513,11 @@ export function planImport(
   existing: readonly Transaction[],
   ctx: ClassifyContext,
   deletedKeys: ReadonlySet<string> = new Set(),
-  deletedRows: readonly DeletedRow[] = []
+  deletedRows: readonly DeletedRow[] = [],
+  /** The rows recognized of the file's (AP-35: the import's progress bar). */
+  progress?: Progress
 ): ImportPlan {
-  const keys = keysOf(file.rows, accountId)
+  const keys = keysOf(file.rows, accountId, file.format)
   const budget = budgetedOf(existing, accountId)
   const { byKey, formatOf } = budget
   const used = new Set<string>()
@@ -572,7 +612,7 @@ export function planImport(
   const other = new Map<string, Transaction[]>()
   for (const [date, list] of budget.booked) {
     if (!covers(date)) continue
-    for (const t of list) if (!used.has(t.id) && formatOf(t) !== file.format) push(other, `${t.date}|${t.amount}`, t)
+    for (const t of list) if (!used.has(t.id) && byMeasure(formatOf(t), file.format)) push(other, `${t.date}|${t.amount}`, t)
   }
   const openHere = (i: number) => {
     const p = plans[i]
@@ -596,7 +636,7 @@ export function planImport(
     const there = new Map<string, Transaction[]>()
     for (const [date, list] of budget.described) {
       if (!covers(date)) continue
-      for (const t of list) if (sameNumber.has(t.accountId) && !used.has(t.id) && !t.bank!.pending && formatAll(t) !== file.format) push(there, `${t.date}|${t.amount}`, t)
+      for (const t of list) if (sameNumber.has(t.accountId) && !used.has(t.id) && !t.bank!.pending && byMeasure(formatAll(t), file.format)) push(there, `${t.date}|${t.amount}`, t)
     }
     if (there.size)
       for (const c of formatPairs(there, (i) => !plans[i])) {
@@ -616,7 +656,11 @@ export function planImport(
   //   format (by its key) takes its deleted one as well – the row is there, its deleted copy hides no other purchase.
   const deletedOut = new Set<number>()
   const deletedOther = new Set<number>()
-  const gone = deletedRows.filter((d) => d.accountId === accountId && (!d.format || (d.format !== file.format && covers(d.date))))
+  // Of another bank's CSV also of its own format (drugi przegląd R1, 1 – a row whose cells the bank changed, another key):
+  // only a deleted one whose row the file has not by its key – else a new purchase like it would stay out with it.
+  const fileKeys = file.format === 'csv' ? new Set(keys) : null
+  const byKeyHere = (d: DeletedRow) => !!fileKeys && !!d.keys?.some((k) => fileKeys.has(k))
+  const gone = deletedRows.filter((d) => d.accountId === accountId && (!d.format || (byMeasure(d.format, file.format) && !byKeyHere(d) && covers(d.date))))
   if (gone.length) {
     const goneOn = new Map<string, number[]>()
     gone.forEach((d, at) => push(goneOn, d.date, at))
@@ -729,8 +773,12 @@ export function planImport(
 
   // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is). The cash
   // is another account than the file's (AP-33): never a transfer onto itself.
-  const classifyCtx = ctx.cash && ctx.cash.id === accountId ? { ...ctx, cash: null } : ctx
-  const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, classifyCtx)))
+  // The file's account: a rule's condition of it (AP-45).
+  const classifyCtx: ClassifyContext = { ...ctx, accountId, ...(ctx.cash && ctx.cash.id === accountId ? { cash: null } : {}) }
+  const classified = file.rows.map((row, i) => {
+    if (progress && i % PROGRESS_EVERY === 0) progress(i, file.rows.length)
+    return plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, classifyCtx)
+  })
   shareMerged(classified, file.rows)
   const plannedOf = (i: number): Planned => {
     const { decision, hint, brand, direction, target } = classified[i]!
@@ -1459,7 +1507,8 @@ export function buildImport(
     category: p.row.category,
     pending: p.row.pending,
     importedAt: opts.now,
-    source: plan.format
+    // Another bank's CSV: told by its key (`csv:`, T461) – no value of `source` an older version would drop.
+    ...(plan.format === 'csv' ? {} : { source: plan.format })
   })
   const create: Transaction[] = []
   const update: Transaction[] = []
@@ -1628,12 +1677,13 @@ export function buildImport(
   // decision of a theme teaches every brand in it. Nothing new to learn when the group's own rule or the app's own
   // recognition says the same; a keyword of a title is about that payment, not the counterparty. One brand split
   // into groups with other decisions: the decision of the most operations is the rule.
-  // A group decided by a rule up to an amount (F22): its decision changes that rule, never the brand's plain one.
+  // A group decided by a rule up to an amount (F22) or a rule of conditions (AP-45, T469): its decision changes that
+  // rule, never the brand's plain one (it would stay behind the rule – the next import deciding as before).
   const amountRuleOf = (g: ImportGroup): ImportRule | null => {
     const ids = new Set(g.rows.map((p) => p.decision.ruleId))
     const id = ids.size === 1 ? [...ids][0] : null
     const r = id ? opts.rules.find((x) => x.id === id) : undefined
-    return r?.mode === 'amount' ? r : null
+    return r?.mode === 'amount' || r?.mode === 'conditions' ? r : null
   }
   const learned = new Map<string, { g: ImportGroup; c: Choice; rows: number; total: number; rule: ImportRule | null; together: number }>()
   for (const g of groups) {
